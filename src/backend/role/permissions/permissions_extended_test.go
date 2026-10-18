@@ -6,13 +6,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestAllPermissionNames_Count42 documents roles/threads (docs/features/roles.md) canonical permission set.
-func TestAllPermissionNames_Count42(t *testing.T) {
+// TestAllPermissionNames_Count43 includes the accepted dedicated admission permission.
+func TestAllPermissionNames_Count43(t *testing.T) {
 	t.Parallel()
 	all, err := AllMask()
 	require.NoError(t, err)
 	names := NamesFor(all)
-	require.Len(t, names, 42)
+	require.Len(t, names, 43)
 }
 
 func TestNamesFor_ReturnsCanonicalBitOrder(t *testing.T) {
@@ -63,6 +63,7 @@ func TestNamesFor_ReturnsCanonicalBitOrder(t *testing.T) {
 		VoiceUsePTT,
 		VoicePrioritySpeaker,
 		ModerationManageReports,
+		SpaceApproveJoinRequests,
 	}, NamesFor(all))
 }
 

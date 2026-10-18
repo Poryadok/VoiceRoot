@@ -522,6 +522,15 @@ func (s *SpaceStore) UpdateSpace(ctx context.Context, spaceID uuid.UUID, in Upda
 			return scoped.UpdateSpace(ctx, spaceID, in)
 		})
 	}
+	if in.EntryRequirement != nil || in.EntryQuestionsJSON != nil {
+		exists, err := entryPolicyTable(ctx, s.db())
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			return nil, ErrLegacyEntryPolicyWrite
+		}
+	}
 	if in.Name == nil && in.Description == nil && in.IconURL == nil && in.BannerURL == nil &&
 		in.Visibility == nil && in.EntryRequirement == nil && in.EntryQuestionsJSON == nil && in.MMConfigJSON == nil && in.AllowGuests == nil {
 		return s.GetSpace(ctx, spaceID)

@@ -239,6 +239,281 @@ not evict existing guests, revoke their memberships, or retroactively remove
 downstream access. It does not implement `entry_policy`, the Space+Chat effective
 access rule, Chat R3-A15, or Chat/Messaging/Realtime enforcement.
 
+### Versioned entry policy (target)
+
+The accepted product contract is [Space entry verification](../features/spaces.md#верификация-при-вступлении).
+The implementation must replace the single legacy `entry_requirement` with a
+monotonic policy revision and composable AND configuration. Questions are
+machine-checked against configured answers; a wrong answer fails. Questions
+never imply manual approval. Manual approve never substitutes for automatic
+requirements. `SPACE_APPROVE_JOIN_REQUESTS` is the separate delegable permission
+for moderator request/answer reads and approve/reject, defaulting to
+Owner/Admin/Moderator. Settings, invite and ban powers are insufficient alone.
+
+All direct, invite and approval paths use the same ordered evaluation:
+ban/member-cap/guest admission, phone, captcha, questions, manual approval.
+Existing visibility, privacy and account-block gates remain effective. Pending
+manual review requires successful automatic stages, creates no membership and
+reserves neither invite uses nor member capacity. The existing empty-body join
+contract and pending `409 failed_precondition` response remain unchanged;
+proof submission and applicant/moderator operations require documented additive
+APIs rather than caller-controlled identity or success metadata.
+
+Verification binds purpose, authenticated account and active profile, Space,
+admission kind, exact invite when used, monotonic policy/config revision and
+immutable submission identity/digest. A policy revision is never reused after
+an A→B→A edit. Unknown/malformed legacy policy or question configuration must
+not migrate to unrestricted admission. Legacy writers must not replace an AND
+policy with a single flag. A phone value, User badge or client boolean is not
+authoritative verified-phone evidence; a missing verifier remains fail-closed.
+
+Space-owned admission state is committed in one transaction under the shared
+per-Space PostgreSQL mutation fence, not only the process-local handler lock.
+Re-read policy, ban, current cap, guest/visibility state, lifecycle/ownership
+freeze and exact invite after acquiring the fence. Sample the database clock
+after lock waits for expiry checks. Membership insertion, member_count,
+invite-use increment and durable operation outcome must agree at commit;
+rollback changes none. Pending approve cannot bypass a subsequent ban, expired
+or revoked invite, changed policy, full Space or lifecycle freeze. Successful
+retry consumes no extra use and cannot resurrect access after leave/ban/purge.
+
+Remote Auth/Role checks are not made atomic by that local transaction. The
+bounded snapshot profile below makes this limitation explicit. Default
+Role assignment and membership events need durable, idempotent completion
+with readiness and generation fences: a failure after local commit must not
+lose the consumed admission or grant a role after leave/ban/purge. The current
+post-commit `finalizeMembership` call does not prove this guarantee.
+
+#### Policy schema, answers and compatibility
+
+The private policy JSON has `schema_version:1`, required boolean fields
+`require_phone`, `require_captcha`, `require_manual_approval`, and a required
+`questions` array. Each question is
+`{id:UUID,prompt:string,kind:"exact_text",expected_answer:string}`. An empty
+array disables questions; otherwise every question must pass. There are at most
+10 questions, with unique nonzero IDs and prompts of 1–1024 UTF-8 bytes.
+Normalized configured/submitted answers are 1–256 UTF-8 bytes.
+
+Normalize answers with Unicode NFC, then trim only outer U+0009, U+000A,
+U+000D and U+0020. Preserve interior whitespace, case and punctuation; reject
+other C0 controls and DEL. Comparison is exact after normalization, with no
+numeric coercion, expression evaluation, regex or fuzzy/LLM grading. For an
+expected `4`, outer ASCII whitespace is accepted, but `04`, `4.0`, `+4`,
+`four` and a full-width digit fail. Settings explain this comparison rule.
+Reject invalid UTF-8, unknown/duplicate JSON fields, unsupported schema/kind,
+missing/duplicate/extra answer IDs, normalized blank answers and oversized
+payloads before verification. Prompt text is never executable.
+
+Configured answers and their digests are private: only settings-authorized
+reads may return the configured values. Public Space, GetInvite, requirements,
+lists and events use explicit safe DTOs. Do not serialize the private policy
+through legacy `entry_questions_json`. Submitted answers are visible only to
+the original applicant and authorized request reviewers; never log raw
+answers, captcha tokens, invite codes or answer digests.
+
+`SetEntryPolicy` accepts a complete private policy with UUID `operation_id`
+and `expected_policy_version`. It requires `SPACE_MANAGE_SETTINGS`. An exact
+operation/body replay returns its saved outcome; a changed body is
+`ALREADY_EXISTS`, revision mismatch is `FAILED_PRECONDITION`, both without
+mutation. Server-owned `entry_policy_version` is positive, monotonically
+increasing and distinct from JSON `schema_version`. Every canonical config
+change, including prompt/answer/question IDs or provider config, increments
+the revision under the Space fence; a semantic no-op preserves it.
+
+Migration maps legacy `none` to all disabled/empty questions, and legacy
+`phone`, `captcha`, `manual` to the corresponding single flag. Legacy
+`questions` needs a complete machine-checkable answer mapping. Unknown or
+malformed values, and questions without configured answers, remain explicitly
+invalid/unavailable for admission with preserved repair data. Migrated spaces
+reject legacy `entry_requirement`/`entry_questions_json` writes with
+`FAILED_PRECONDITION`; unrelated `UpdateSpace` fields continue to work.
+
+#### Additive attempts and immutable submissions
+
+The [Gateway admission routes](api-gateway.md#entry-policy-and-admission-attempts-target)
+are the public projection of `SetEntryPolicy`, `StartJoinAttempt`,
+`GetJoinAttempt`, `SubmitJoinAttempt`, `ListJoinRequests`, `GetJoinRequest`
+and `ApproveJoinRequest`. They are target RPCs, not currently shipped methods.
+Applicant exceptions to membership checks do not remove visibility, binding
+or lifecycle checks. Moderator reads/approve require current membership and
+`SPACE_APPROVE_JOIN_REQUESTS`. Private RPCs bind the exact method/request via
+the trusted principal framework; legacy identity metadata is insufficient.
+
+Start creates a server UUID/challenge nonce bound to authenticated account,
+profile, Space, admission kind/exact invite, policy revision/config digest.
+The collection window is 600 seconds from fresh database creation time;
+expiry equality is expired, and retry cannot extend it. This is a collection
+deadline, not a pending-review expiry. Reuse the collecting attempt or pending
+request for the exact binding rather than permitting unlimited active attempts
+through new operation IDs.
+
+Each attempt accepts one immutable canonical submission. Sort answers by
+question ID, normalize values and bind their digest to the exact attempt and
+token digest. Never persist the raw captcha token. A changed payload for the
+same attempt/operation returns `ALREADY_EXISTS`. A wrong answer terminally
+fails the attempt with generic `PERMISSION_DENIED`, without per-question
+correctness disclosure, pending request, membership, invite use or Role call.
+A fresh attempt is allowed; no extra cooldown/lockout is implied.
+
+Validate shape, then local gates, phone, captcha, questions and manual.
+Durably claim a captcha token digest for the exact attempt before provider
+verification. Concurrent exact retries do not start another verifier call;
+provider uncertainty or a crash before a durable positive receipt fails
+closed. An already-used provider result is never success. A saved exact pass
+receipt permits retry without consuming the token again. Pending stores
+normalized submitted answers and immutable pass receipts/digests, never phone
+numbers or captcha tokens. The new additive API explicitly permits this
+attempt/verification ledger; the old join API still permits only pending
+manual review as an intermediate effect.
+
+Old empty-body joins do not select an ambient last proof or unrelated attempt.
+They may admit a policy requiring no client-supplied input, or create manual
+pending after all automatic stages pass. Captcha/questions requiring client
+input return `FAILED_PRECONDITION`; the caller uses the additive attempt API.
+
+#### Freshness, final decision and recovery
+
+Auth-owned verified-phone/account eligibility and Role-owned approver
+authorization are mutable decisions. Fetch authenticated owner decisions for
+the exact applicant account/profile/Space/attempt/policy at submission and
+again at approval as required. A guest with phone required fails before the
+phone call. Approval authenticates the current actor/session, checks current
+local membership and online `SPACE_APPROVE_JOIN_REQUESTS`. Missing true
+verified-phone capability remains unavailable; phone/SMS scope is unchanged.
+
+Request mutable owner decisions immediately before the local final transaction,
+using 2-second RPC deadlines. The guarded local decision must occur strictly
+within 5 seconds of the earliest required owner-call start, measured with a
+local monotonic clock. Recheck after lock acquisition and honor any stricter
+owner validity. Equality/exceeded budget returns unavailable with no mutation;
+retry fetches fresh decisions. A restart cannot reuse monotonic evidence.
+This is a bounded snapshot: remote revocation after an authenticated owner
+decision may race admission. Only Space-local deny gates serialize through
+the common fence. No global current-at-commit remote guarantee or distributed
+2PC is implied.
+
+Captcha action/site/audience/nonce/expiry and one-use checks occur at submit.
+A durable authenticated positive observation is a historical fact bound to the
+immutable attempt/submission/policy, not a reusable bearer token. Delayed
+manual approval uses that exact receipt without re-consuming the provider
+token, even after token expiry. Policy/provider-config revision changes
+invalidate it. Questions similarly retain exact config/submission/pass
+bindings; approval may recompute against that same revision and cannot regrade
+against a new policy or override wrong answers.
+
+The collection deadline applies before successful automatic submission. Minimal
+admission has no automatic age-based pending-review expiry. Current policy,
+bindings, invite state, ban/cap/guest/visibility, identity eligibility and
+lifecycle still govern approval; existing Space/account data lifecycle still
+applies. Reject/cancel/cooldown and a numeric answer-retention period are
+separate product extensions, not inferred requirements for the minimal
+questions/manual protocol.
+
+The operation ledger is keyed by authenticated actor profile and UUID
+`operation_id`, with immutable request kind, target and canonical payload
+digest. Original-actor completed retry returns only its saved outcome, with
+no new checks, Role calls, counter/use/event or fresh resource projection.
+After leave/ban it cannot recreate membership. The old empty-body join remains
+subject to its ordinary code/transport checks. Another approve may return the
+stable completed decision only to a currently authorized reviewer.
+
+A new approve reloads the bound pending request, obtains fresh remote mutable
+decisions and enters the existing scoped outer transaction for all local final
+guards, snapshot budget and single pending-to-admission CAS. Exact submit retry
+with a durable successful captcha receipt may retry fresh mutable checks
+without provider reuse; it never changes answers/token. Concurrent processing
+returns `FAILED_PRECONDITION`. Wrong answers terminally fail; an unknown
+provider outcome without a durable positive receipt cannot become a pass.
+
+Approval returns success only after authoritative admission and required Role
+completion. Recovery in progress returns `UNAVAILABLE` with a stable operation
+ID/status, never a second consumed invite. Preserve a durable outbox/outcome
+and recover actual committed state after an ambiguous timeout. Generation and
+readiness fences must prevent a late completion from granting after
+leave/ban/purge; generic post-commit AssignRole plus retry is insufficient.
+
+Runtime remains open: conservative migration, additive APIs/generated contracts, approval
+authorization and transaction, Role completion, Gateway wiring and negative
+concurrency/runtime evidence. No admission capability is enabled by this
+documentation change.
+
+#### Admission Role readiness and ordinary membership generations
+
+Space stores a decided admission candidate outside `space_members`. A permanent
+ordinary-member head allocates monotonically increasing positive generations
+per `(space_id,profile_id)`; failures, removal and rejoin never reuse them.
+Existing published ordinary members backfill explicit generation zero, which
+still requires authoritative Space confirmation. Missing head/unknown source
+is not a legacy-zero fallback. Independent community membership has a durable
+per-profile episode: positive owner generation, independently monotonic
+membership generation and a UUID allocated once per episode. Continuous valid
+refresh preserves that token; roster/source revision is a heartbeat, not an
+incarnation. Removal, lease equality/gap or owner-generation change invalidates
+the old episode before a new higher generation/UUID. Its permanent head/floor
+survives roster replacement; cleanup of an old source cannot remove a new one.
+Only currently authoritative active legacy rows may initialize an explicit
+migrated episode under the Space fence and fresh DB time. Expired/unknown rows
+are not active. This does not classify historical ambiguous Role grants:
+unproven old provenance remains unresolved rather than guessed as both sources.
+
+`PREPARING_ROLE` is inert technical continuation after automatic/manual
+authorization. It is not membership, reserves no capacity/invite use, and is
+excluded from every existing ordinary membership reader. A handler-only
+`ready=false` row in `space_members` is forbidden because existing Chat/Space
+SQL readers would expose access. The candidate commits exact original
+operation, account/profile/Space, admission kind/invite, policy/submission
+binding digest and allocated generation before any Role call.
+
+Role's protected `EnsureDefaultMemberRole` receives protocol version 1, Space,
+profile, generation, stable admission operation and binding SHA-256. Role picks
+the allowed current default join role and saves an immutable exact receipt;
+callers cannot select role ID, permissions, Owner or a forged human actor.
+`READY` means only that Role prepared its own generation-qualified projection.
+It remains ineffective without matching published Space membership. Generic
+AssignRole with owner metadata is not an admission protocol.
+
+After verifying the exact READY receipt, Space gathers fresh mutable owner
+decisions before taking any local mutation lock, then re-enters the shared
+Space fence and all current final guards. It CASes the same candidate/head/
+generation and commits published membership, member_count, exact invite use,
+Role receipt, durable outcome and member-joined event together. Only published
+membership is inserted into `space_members`. Final guard failure or removal
+supersession invalidates the candidate and durably queues cleanup without a
+member/count/use/event success. Unknown COMMIT is resolved from durable state.
+
+Role obtains current eligibility through protected
+`GetMemberAdmissionAuthority`, caller `service:role` only, binding exact Space,
+profile and optionally a paired expected generation/admission operation.
+Response echoes identity, explicit ordinary head/state, published generation/
+operation/receipt digest, LIVE/ownership availability and separately typed
+community authority. The endpoint reads Space-owned state and never calls
+Role. Role queries it before its local transaction; this avoids recursive or
+opposite-order locks. PREPARING permits only inert preparation; effective
+ordinary rights require matching published generation/operation/receipt and
+fresh owner eligibility. Unknown/error is unavailable. This remains a bounded
+owner observation under the snapshot limitation above, not distributed ACID.
+
+Leave/kick/ban/purge invalidate pending candidates under the same Space fence,
+advance the permanent ordinary generation and persist typed removal work even
+if no membership row exists. Account ban invalidates all pending profile aliases
+for that account. Role's `RemoveMemberRoles` writes a generation floor even
+without existing grants. Floor `R` defeats Ensure at `g<=R` without deleting
+newer `g>R` or independently sourced community contributions. System baseline
+Member cleanup is a separate typed source operation; Owner is exclusively
+bootstrap/ownership/P3 authority. Physical cleanup may lag, but new effective
+rights cannot rely on an orphaned ordinary contribution after Space removal.
+Rejoin cannot inherit old-generation Admin/custom grants. P3 retirement
+permanently dominates every ordinary generation and late retry.
+
+Role effective role/permission/hierarchy reads and generic user/bot mutations
+must qualify ordinary contributions against this live incarnation; actor and
+target checks apply where required. Raw authority-source exports, policy epochs
+and downstream consumers must not export an inert contribution as an active
+grant. Space's own authority revision/catalog and cleanup include new head,
+candidate, receipt and outbox data. Existing published-only readers, Chat's
+legacy direct readers and community unions must be tested with candidate plus
+published fixtures; do not introduce new cross-database reads.
+
 ### Phase-0 S2S decision callers (target)
 
 `AreCoMembers`, subscription sync и новые internal decision RPC не получают actor

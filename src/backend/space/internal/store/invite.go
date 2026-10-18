@@ -386,6 +386,9 @@ WHERE space_id = $1 AND profile_id = $2
 		}
 		return existing, nil
 	}
+	if err := s.requireNonInteractiveAdmission(ctx, inv.SpaceID); err != nil {
+		return nil, err
+	}
 	if guest {
 		if err := s.validateInviteForJoin(inv, now); err != nil {
 			return nil, err
@@ -486,6 +489,9 @@ WHERE space_id = $1 AND profile_id = $2
 		return existing, nil
 	}
 
+	if err := s.requireNonInteractiveAdmission(ctx, spaceID); err != nil {
+		return nil, err
+	}
 	cap, err := memberCapTx(ctx, tx, spaceID)
 	if err != nil {
 		return nil, err

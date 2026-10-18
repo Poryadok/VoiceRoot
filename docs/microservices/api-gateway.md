@@ -462,6 +462,44 @@ a current member retry does not consume another use. Pending approval returns
 `409 failed_precondition` and no membership; the durable pending request is the
 only permitted intermediate effect of canonical entry-policy evaluation.
 
+### Entry policy and admission attempts (target)
+
+`S=/api/v1/spaces/{space_id}`. These additive routes are the accepted target;
+the existing empty-body join endpoints above do not accept proofs in hidden
+headers or find an ambient previous submission. Account/profile and approver
+identity come only from the verified principal.
+
+| Method/path | RPC / ACL | Body | Success |
+|---|---|---|---|
+| `PUT S/entry-policy` | `SetEntryPolicy`; `SPACE_MANAGE_SETTINGS` | `{operation_id,expected_policy_version,policy}` complete private policy | Saved policy/version outcome; only authorized settings reads expose configured answers |
+| `POST S/join-attempts` | `StartJoinAttempt`; authenticated direct applicant, public Space eligibility | `{operation_id}` | `201 {attempt_id,space_id,policy_version,expires_at,requirements,captcha_challenge_context?}` |
+| `POST /api/v1/invites/{code}/join-attempts` | `StartJoinAttempt`; authenticated invite applicant, canonical invite/Space eligibility | `{operation_id}` | Same `201` safe attempt projection |
+| `GET S/join-attempts/{attempt_id}` | `GetJoinAttempt`; original authenticated account **and** profile | None | `200` safe state/outcome; foreign/missing attempt is `404` |
+| `POST S/join-attempts/{attempt_id}/submit` | `SubmitJoinAttempt`; original applicant | `{operation_id,answers:[{question_id,value}],captcha_token?}` | `200 {state:"admitted",space_membership}` after completed admission, or `202 {state:"pending",request_id}` after automatic AND passes and manual is required |
+| `GET S/join-requests` | `ListJoinRequests`; current member + `SPACE_APPROVE_JOIN_REQUESTS` | Query `limit,cursor` | `200` pending-only page; limit default 50/max 100, opaque Space/order-bound cursor, stable `created_at,id` order |
+| `GET S/join-requests/{request_id}` | `GetJoinRequest`; same review permission and membership | None | `200` authorized request detail |
+| `POST S/join-requests/{request_id}/approve` | `ApproveJoinRequest`; same review permission and membership | `{operation_id}` | Durable admission outcome after final guards; no success before completion |
+
+Request IDs and operations are UUIDs; applicant/approver selectors are not
+accepted in bodies. Requirements never expose configured answers/digests.
+Submitted answers are restricted to their original applicant and authorized
+reviewers. Wrong answers return generic `403 permission_denied`, without a
+per-question correctness oracle or side effects. Exact operation/body replay
+returns the saved authorized outcome; changed payload is `409 already_exists`.
+Policy revision conflict is `409 failed_precondition`. Approval is `200` only
+after required Role completion; recovery in progress is `503 unavailable` with
+stable operation status. Invalid invite disclosure
+and pending behavior of old joins remain as specified above. Reject/cancel
+endpoints and a numeric terminal-answer-retention policy are separate product
+extensions. Minimal pending review has no automatic age-based expiry; the
+600-second collection deadline is not a moderator deadline. Exact response
+DTOs must be completed with generated contracts before exposure; no route is
+implemented merely by the review permission or this table.
+
+Policy normalization, immutable submission, collection deadline, trusted proof
+binding and admission atomicity are defined in
+[Space Service](space-service.md#versioned-entry-policy-target).
+
 ### Tree, category and room entities
 
 Tree mutations require `TEXT_CHAT_CREATE_IN_SPACE`, the existing Space tree-manage
