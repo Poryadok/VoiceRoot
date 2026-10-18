@@ -6,6 +6,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
@@ -118,6 +121,10 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 		traceMatchFoundTransport("rest-transcoder-unhandled")
 	}
 
+	if isSpaceCreateRequest(r) {
+		writeGRPCError(w, status.Error(codes.Unavailable, "Space creator transport unavailable"))
+		return
+	}
 	upstream, ok := g.config.restUpstreams[namespace]
 	if !ok {
 		traceMatchFoundTransport("rest-upstream-missing")

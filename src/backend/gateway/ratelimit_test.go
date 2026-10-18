@@ -62,6 +62,13 @@ func TestRateLimitGroups(t *testing.T) {
 			if tc.authHeader != "" {
 				headers["Authorization"] = tc.authHeader
 			}
+			if tc.group == "SpaceCreation" {
+				f := newCreatorFixture(t)
+				cfg := f.config(&creatorClient{})
+				cfg.rateLimitedGroups = map[string]bool{tc.group: true}
+				h = newGateway(cfg)
+				headers["Authorization"] = "Bearer " + signConfigJWT(t, "creator-key", f.key, f.payload)
+			}
 
 			rec := performRequest(h, tc.method, tc.target, tc.body, headers)
 			if rec.Code != http.StatusTooManyRequests {

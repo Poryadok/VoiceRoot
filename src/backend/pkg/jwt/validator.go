@@ -96,6 +96,16 @@ func (v *Validator) Validate(r *http.Request) (Claims, string) {
 	return claims, ""
 }
 
+// ValidateForDelegation requires explicit issuer/audience configuration before
+// a verified client token may be exchanged for a downstream capability.
+// Ordinary Validate retains its existing compatibility configuration.
+func (v *Validator) ValidateForDelegation(r *http.Request) (Claims, string) {
+	if v == nil || strings.TrimSpace(v.issuer) == "" || strings.TrimSpace(v.audience) == "" {
+		return Claims{}, "invalid_token"
+	}
+	return v.Validate(r)
+}
+
 func (v *Validator) validateJWT(ctx context.Context, token string) (Claims, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
@@ -241,14 +251,15 @@ func (p jwtPayload) toClaims(issuer, audience string, now time.Time, sessionEpoc
 		return Claims{}, errors.New("invalid session epoch")
 	}
 	return Claims{
-		UserID:           userID,
-		ProfileID:        p.ProfileID,
-		Roles:            p.Roles,
-		SubscriptionTier: p.SubscriptionTier,
-		AccountType:      accountType,
-		JTI:              p.JTI,
-		SessionEpoch:     p.SessionEpoch,
-		ExpiresAt:        time.Unix(p.ExpiresAt, 0).UTC(),
+		UserID:                   userID,
+		ProfileID:                p.ProfileID,
+		Roles:                    p.Roles,
+		SubscriptionTier:         p.SubscriptionTier,
+		AccountType:              accountType,
+		AuthenticatedAccountType: p.AccountType,
+		JTI:                      p.JTI,
+		SessionEpoch:             p.SessionEpoch,
+		ExpiresAt:                time.Unix(p.ExpiresAt, 0).UTC(),
 	}, nil
 }
 
