@@ -21,7 +21,7 @@ Account/session state remains Auth-owned.
 
 - Профили пользователей (аватар, имя, био, баннер, статус)
 - Мульти-профили (2 бесплатно / 5 Premium, независимые контакты и настройки)
-- Переключение активного профиля
+- Проверка принадлежности и доступности профиля для переключения сессии в Auth
 - Username система (`@username#1234`, Premium `@username`, верифицированные ✅, компании ®)
 - Настройки приватности (3 пресета + гранулярный контроль по полям)
 - Presence (online / idle / DND / invisible)
@@ -58,7 +58,7 @@ service UserService {
   rpc UpdateProfile(UpdateProfileRequest) returns (Profile);
   rpc CreateProfile(CreateProfileRequest) returns (Profile); // мульти-профиль
   rpc DeleteProfile(DeleteProfileRequest) returns (Empty);
-  rpc SwitchProfile(SwitchProfileRequest) returns (Profile);
+  rpc SwitchProfile(SwitchProfileRequest) returns (SwitchProfileResponse); // проверка профиля; сессию заменяет Auth
   rpc ListMyProfiles(Empty) returns (ProfileList);
   rpc SearchProfiles(SearchProfilesRequest) returns (SearchProfilesResponse);
 
@@ -87,6 +87,30 @@ service UserService {
 ```
 
 Канон RPC и сообщений — репозиторий `protos/voice/user/v1/user.proto`.
+
+### Переключение профиля и сессия Auth
+
+Несмотря на историческое имя, `UserService.SwitchProfile` проверяет целевой
+профиль аккаунта и возвращает `SwitchProfileResponse.profile`. Чужой,
+удалённый или замороженный профиль не допускается. RPC не выдаёт access/refresh
+tokens, не отзывает прежний JWT и сам не меняет активную identity сессии.
+В текущем runtime проверка также применяет действующий free-tier freeze;
+её нельзя считать общей read-only операцией.
+
+Заменой сессии владеет Auth: `SwitchActiveProfile` использует User-проверку,
+затем в своей security transaction повторно проверяет прежний bearer,
+отзывает его JTI и выдаёт новый `AuthSession` с выбранным `profile_id`.
+Публичный `POST /api/v1/auth/switch-profile` проходит через Auth REST;
+Gateway не подменяет его User RPC или Auth gRPC transcoding, сохраняя
+нормализацию `device_info` на REST-пути. Детали session-контракта —
+[Auth Service](auth-service.md#api-grpc).
+
+`user.profile_switched` — необязательное событие User-проверки при разных
+исходном и целевом профилях. Оно может быть опубликовано до завершения
+Auth-транзакции, поэтому не подтверждает выдачу новой сессии или отзыв старой.
+Клиент меняет session identity по успешному ответу Auth с новым `AuthSession`.
+Имена существующих RPC и событий сохраняются; их разные границы не означают
+два независимых способа переключить Auth-сессию.
 
 ### Internal Auth profile seam
 

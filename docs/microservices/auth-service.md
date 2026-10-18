@@ -364,6 +364,9 @@ session revocation, then enroll the new factor.
 the response contains the replacement `AuthSession`. The active profile claim is
 selected by Auth using the User-owned profile contract described in
 [multi-profile.md](../features/multi-profile.md).
+The legacy User `SwitchProfile` RPC supplies profile validation and a profile
+response; it does not replace an Auth session. The public switch route stays
+on Auth REST. See the [User/Auth boundary](user-service.md#переключение-профиля-и-сессия-auth).
 
 `SetAccountStatus` is the internal platform-moderation RPC. Its request carries
 `account_id`, `status` (`active` or `suspended`), and `reason`; it returns an
