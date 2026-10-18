@@ -44,9 +44,12 @@ No new agents or ordinary implementation tasks may be started.
 - [x] Inventory final source heads, associate TT evidence, dedupe ancestors.
 - [x] Merge ready dependency groups and resolve conflicts against accepted canon.
 - [x] Independently review current final identity/ACL source heads before merge.
-- [ ] Verify assembled generated contracts, migrations, and affected components.
-- [ ] Regenerate graph with `graphify update . --no-cluster`, preserve bundle and
-  portable manifest/evidence, reconcile remote develop and publish normally.
+- [x] Execute assembled contract/migration/component verification and classify
+  actual failures; full global CI remains FAIL, not a release sign-off.
+- [x] Regenerate final graph and preserve exact source6739 complete-history bundle,
+  actual fresh bare restore and portable manifest/evidence outside the lease.
+- [ ] Reconcile live remote develop and publish normally after transport recovery;
+  independent review and qualified CI/activation gates remain OPEN.
 
 ## Detailed Steps
 
@@ -115,10 +118,11 @@ existing receipt/fence overlap must remain a fail-closed upgrade blocker.
 Assembled Messaging/Space short checks and final BE106 affected Voice short
 checks PASS. Toolchain, compose config/NATS policy and Buf lint/format PASS.
 Supported Docker Linux Realtime short PASS; no native Windows Realtime run.
-Flutter analyze has no issues; full tests returned2205PASS/100SKIP/3FAIL and a
-structured rerun is collecting exact failure evidence. Global backend stopped
-at Bot regressions and resumes unaffected modules without repeating passed
-layers. No complete CI success is claimed.
+Flutter analyze has no issues; full tests returned2205PASS/100SKIP/3FAIL. Exact
+baseline698 execution reproduces the same three MatchSquad golden failures and
+pixel counts, with byte-identical actual image hashes. No golden was changed;
+the Flutter gate remains FAIL. Global backend full failure/interruption remains
+separate from later isolated PASS; no complete CI success is claimed.
 
 Bot regression: exclusive per-Space SetChatEnabled queued healthy senders behind
 one blocked webhook. Existing real-PG test reproduced RED twice; shared lifecycle
@@ -133,6 +137,47 @@ legacy empty message tokens as slash identities. Additive Bot7 excludes only
 empty tokens; real tokens remain unique. Eight lifecycle cases and a populated
 upgrade/uniqueness/unsafe-downgrade rollback test PASS. This new migration delta
 still needs independent review; prior author1 CLEAR does not cover it.
+
+Rolea6eaed371 fixes the shared protected CheckPermission dispatch collision:
+only MEMBER_MANAGE_NICKNAMES uses the existing strict nickname validator, all
+other requests retain the composite creation validator. No generic fallback or
+negative trust-boundary assertion was removed. Real TLS runtime and Role full
+short/vet/lint PASS; independent review is OPEN. b4d199aed strengthens the Auth
+report inventory for the merged observation suite; actual Maven999PASS/zero
+skips and report/self-tests PASS. caa8f2632 preserves only Windows SYSTEMROOT
+in Matchmaking's isolated child fixture; actual tracked main short/vet/lint PASS.
+Portable review packet includes BE044 merge6f6715c50, Bot7c140f416f, Rolea6eaed371,
+mechanical ecceaaecb and the CI fixture corrections. No reviewer reactivation is
+authorized; the existing independent review gates are not self-cleared.
+
+All verification test handles are terminal. Full serial Bot86675 PASS325 tests,
+12 packages, zero skips/failures; the original parallel full attempt remains FAIL.
+Portable Linux CI73645 FAIL four targets, then affected supported routes ran:
+Notification catalogc652cea3a20unit+preflight PASS, diagnostic4cd763a8c phase0
+49PASS/4explicit opt-in skips, Bot7ops6739dcb505unit and6actual PostgreSQL checks
+PASS. NATS900 test route55104 returned895PASS/1Bot7FAIL/4root-pinned-sourceERROR;
+affected Bot7 failure is corrected by the later exact-query/unit proof. Root pins
+equal baseline698Git blobs and deliberately refuse new BE102/BE211 template
+contracts; no authority pin changed. R22cached698 route49410 FAIL180 old-scope
+violations; no allowlist changed. These remain qualified CI/activation gates.
+Terminal: Chat store1053 PASS81/zero skips168.917s; other Chat62295 PASS297/zero
+skips, grpcsvc514.277s within10m and original MuteChat cleanup3.11s; Auth48773
+Maven999PASS but original wrapper inventory FAIL, later report+self-tests54216
+PASS; Role93195 full short PASS; Gateway race97057 PASS; docs7282 all148PASS;
+images26494 remaining route PASS after Role4a24 actual image PASS, total22images;
+graph25621 PASS before the final ops-only changes; final refresh97485 terminal
+PASS102398nodes213485edges (AST158/158, existing frontend header warning retained).
+No live test/graph handle remains. All67 candidate dispositions verified at final source
+6739dcb50ac37583cf1e8f90605af39767cccc20. The earlier4a24 complete-history bundle
+and fresh bare restore PASS. Final source6739 complete-history bundle61145161bytes,
+SHA2560d03927720cf2de0a99fd1d5543445a84fa0741b9e83e9268ac7afb7ab8365be,
+git verify and actual fresh bare restore exactdevelop PASS. External evidence
+has a verified per-file hash index. The final documentation carrier, TT receipt
+and guarded lease return are recorded in external RESTORE.md after this commit;
+that receipt necessarily names the commit/bundle hashes produced afterward.
+No idle polling or new ordinary claims follow closeout. Resume only on concrete
+independent review authorization/findings or actual external transport recovery.
+Independent review and external transport publication remain explicit gates.
 
 ## Decisions
 
