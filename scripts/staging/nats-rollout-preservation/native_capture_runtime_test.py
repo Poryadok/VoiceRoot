@@ -46,7 +46,7 @@ class CensusAPI:
         self.pvc={'apiVersion':'v1','kind':'PersistentVolumeClaim',
             'metadata':{'name':'voice-nats-verify-'+OP,'namespace':'voice-staging','uid':TARGET_UID,
                 'labels':{'voice.io/nats-operation':OP,'voice.io/nats-job-nonce':'f'*32,
-                    'voice.io/nats-pvc-role':'verification'}},
+                    'voice.io/nats-pvc-role':'verification','voice.io/nats-verification-attempt':'00000000'}},
             'spec':{'accessModes':['ReadWriteOnce'],'volumeMode':'Filesystem','storageClassName':'fast',
                 'resources':{'requests':{'storage':str(48<<30)}},'volumeName':'target-pv'},
             'status':{'phase':'Bound','capacity':{'storage':'48Gi'}}}
@@ -67,9 +67,12 @@ class CensusAPI:
         self.calls.append('get-pvc')
         if 'create-verification-pvc' not in self.calls: raise kube_json_api.KubeNotFound('missing')
         return copy.deepcopy(self.pvc)
-    def create_verification_pvc(self,*args):
+    def create_verification_pvc(self,operation,nonce,size_bytes,storage_class,*,attempt):
         self.calls.append('create-verification-pvc')
-        self.pvc['metadata']['labels']['voice.io/nats-job-nonce']=args[1]
+        self.pvc['metadata']['name']='voice-nats-verify-'+operation+'-'+attempt
+        self.pvc['metadata']['labels']['voice.io/nats-operation']=operation
+        self.pvc['metadata']['labels']['voice.io/nats-job-nonce']=nonce
+        self.pvc['metadata']['labels']['voice.io/nats-verification-attempt']=attempt
         return copy.deepcopy(self.pvc)
     def get_pv(self,name): self.calls.append('get-pv'); return copy.deepcopy(self.pv)
     def list_nodes_by_hostname(self,hostname): self.calls.append('list-node'); return [copy.deepcopy(self.node)]
@@ -275,8 +278,11 @@ class NativeCaptureRuntimeTests(unittest.TestCase):
         recovery=self.base/'expired-recovery-proofs'/'cut-test'
         finish=self.base/'expired-finish-proofs'/'cut-test'
         for directory in (freshness,recovery,finish):
-            directory.mkdir(parents=True,mode=0o700)
-            directory.chmod(0o700)
+            current=self.base
+            for part in directory.relative_to(self.base).parts:
+                current=current/part
+                current.mkdir(mode=0o700,exist_ok=True)
+                current.chmod(0o700)
         allowed=(self.base/'rollout-before.tar',self.base/'rollout-after.tar',
             freshness/'current.tar',recovery/'rollout-before.tar',finish/'rollout-before.tar')
         for path in allowed:
