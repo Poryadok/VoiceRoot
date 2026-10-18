@@ -20,6 +20,7 @@ import (
 )
 
 type SpaceLifecyclePurgeStore interface {
+	GetSpacePurgeResponse(context.Context, store.SpacePurgeReceiptKey) ([]byte, error)
 	SpaceManifestChatPage(context.Context, uuid.UUID, uuid.UUID, uint64, string, []byte, uint64, uint64) ([]uuid.UUID, error)
 	CompleteSpaceLifecyclePurge(context.Context, *messagingv1.PurgeSpaceRequest, string) ([]byte, error)
 }
@@ -47,14 +48,37 @@ func (s *MessagingGRPC) PurgeSpace(ctx context.Context, req *messagingv1.PurgeSp
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid Messaging Space purge binding")
 	}
-	if s == nil || s.SpaceLifecyclePurger == nil || s.ManagedChatPurger == nil || s.SpaceFileProducer == nil {
+	if s == nil || s.SpaceLifecyclePurger == nil {
 		return nil, status.Error(codes.Unavailable, "Messaging Space purge dependencies unavailable")
 	}
-	manifest := purge.GetManifest()
 	ctx, err = store.SpacePurgeContext(ctx, req)
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "bound Space purge parent required")
 	}
+	requestBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(req)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid Messaging Space purge request")
+	}
+	requestHash := domainSHA(string(req.ProtoReflect().Descriptor().FullName()), requestBytes)
+	// A committed parent receipt already proves all child effects. Recover it
+	// before contacting File or requiring dependencies needed only for new work.
+	savedBytes, err := s.SpaceLifecyclePurger.GetSpacePurgeResponse(ctx, store.SpacePurgeReceiptKey{
+		SpaceID: spaceID, DeletionOperationID: deletionID, PurgeGeneration: purge.GetGeneration(),
+		SourceScheduleGeneration: purge.GetGeneration() - 1, MessagingRequestSHA256: requestHash,
+	})
+	if err == nil {
+		return decodeSpacePurgeResponse(savedBytes, purge, requestHash)
+	}
+	if errors.Is(err, store.ErrSpacePurgeReceiptBinding) {
+		return nil, status.Error(codes.FailedPrecondition, "Messaging Space purge conflicts with saved evidence")
+	}
+	if !errors.Is(err, store.ErrSpacePurgeReceiptNotFound) {
+		return nil, status.Error(codes.Unavailable, "Messaging Space purge receipt lookup unavailable")
+	}
+	if s.ManagedChatPurger == nil || s.SpaceFileProducer == nil {
+		return nil, status.Error(codes.Unavailable, "Messaging Space purge dependencies unavailable")
+	}
+	manifest := purge.GetManifest()
 	ctx, err = s.SpaceFileProducer.ReleaseContext(ctx, purge)
 	if err != nil {
 		return nil, err
@@ -87,18 +111,17 @@ func (s *MessagingGRPC) PurgeSpace(ctx context.Context, req *messagingv1.PurgeSp
 			}
 		}
 	}
-	requestBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(req)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid Messaging Space purge request")
-	}
-	requestHash := domainSHA(string(req.ProtoReflect().Descriptor().FullName()), requestBytes)
-	savedBytes, err := s.SpaceLifecyclePurger.CompleteSpaceLifecyclePurge(ctx, req, uuid.NewString())
+	savedBytes, err = s.SpaceLifecyclePurger.CompleteSpaceLifecyclePurge(ctx, req, uuid.NewString())
 	if err != nil {
 		if errors.Is(err, store.ErrSpacePurgeReceiptBinding) {
 			return nil, status.Error(codes.FailedPrecondition, "Messaging Space purge conflicts with saved evidence")
 		}
 		return nil, status.Error(codes.Unavailable, fmt.Sprintf("Messaging Space purge completion failed: %v", err))
 	}
+	return decodeSpacePurgeResponse(savedBytes, purge, requestHash)
+}
+
+func decodeSpacePurgeResponse(savedBytes []byte, purge *commonv1.SpacePurgeRequest, requestHash []byte) (*messagingv1.PurgeSpaceResponse, error) {
 	response := &messagingv1.PurgeSpaceResponse{}
 	if err := proto.Unmarshal(savedBytes, response); err != nil || !validSpacePurgeCompletionReceipt(response.GetReceipt(), purge, requestHash) {
 		return nil, status.Error(codes.Internal, "stored Messaging Space purge receipt is invalid")
