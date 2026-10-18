@@ -42,7 +42,7 @@ fan-out даже при неизменном online status, чтобы откр�
 | Live status (online / idle / DND / invisible) | Redis session hash `voice:user:presence:{id}` | ~**5 min** heartbeat (`PresenceSessionTTL`); each `UpdatePresence` / WS activity refreshes TTL |
 | Game / custom status / in-call flag | Same Redis hash | Same session |
 | **Interim last seen** (today) | Redis key `voice:user:last_seen:{id}` (unix ts) | **30 days** TTL — written on every heartbeat upsert; used when session hash expired |
-| **Durable last seen** (spec) | **PostgreSQL `last_seen_at`** | Required for «был N назад» beyond Redis window — [user-service.md](../microservices/user-service.md) |
+| **Durable last seen** | **PostgreSQL `profile_last_seen.last_seen_at`** | Required for «был N назад» beyond Redis window — [user-service.md](../microservices/user-service.md) |
 
 **Heartbeat write:** each successful presence upsert sets session hash + refreshes interim Redis `last_seen`. Transition to offline / graceful disconnect must leave interim last_seen intact (do not delete the 30d key).
 
@@ -55,18 +55,18 @@ Messaging's scheduled `when_online` DM dispatch uses User's dedicated authentica
 | WS presence fan-out to friends and shared-chat subscribers | Realtime resolves a User-filtered snapshot per WebSocket recipient before emit; `show_online` controls sparse status fields and `show_last_seen` controls the timestamp | **Implemented (PR #332):** friend, local-chat and Redis cross-instance chat fan-out use the same fail-closed filter with a shared 2-second deadline and at most 16 concurrent User lookups. Delta fields remain a separate event-contract gap. |
 | `user.presence_changed` | JetStream payload includes `old_status`, `new_status`; consumers filter by friend graph | Proto lacks delta fields today — [user-service.md](../microservices/user-service.md) |
 
-## Interim storage (current code)
+## Redis cache and durable storage
 
-Until PostgreSQL `last_seen_at` ships, User Service persists **interim** last activity in Redis:
+User Service retains the following Redis cache alongside durable PostgreSQL observations:
 
 | Key | TTL | Written when |
 |-----|-----|--------------|
 | `voice:user:presence:{profile_id}` (hash) | **5 min** | Every heartbeat / `UpdatePresence` / WS activity |
 | `voice:user:last_seen:{profile_id}` (string, unix ts) | **30 days** | Same heartbeat — updated on **every** upsert, not only offline transition |
 
-**Read path today:** `GetPresence` / `GetBulkPresence` merge live hash (if exists) with `last_seen` string when session expired and filter that timestamp per `(viewer_profile_id, target_profile_id)` and `show_last_seen`. Viewerless calls, missing privacy rows and Social/Space lookup errors fail closed; invisible/offline cannot leak a hidden timestamp.
+**Redis read path:** `GetPresence` / `GetBulkPresence` merge live hash (if exists) with `last_seen` string when session expired and filter that timestamp per `(viewer_profile_id, target_profile_id)` and `show_last_seen`. Viewerless calls, missing privacy rows and Social/Space lookup errors fail closed; invisible/offline cannot leak a hidden timestamp.
 
-**Target (PG):** on offline transition / graceful disconnect, flush `last_seen_at` to PostgreSQL; Redis string becomes cache only. Rounding table below applies to durable PG value.
+**Durable path:** each heartbeat (including offline/invisible) persists a monotonic UTC observation to PostgreSQL before acknowledging the Redis refresh. This also survives abrupt session expiry with no disconnect callback. Single/batch reads merge PostgreSQL with Redis using the newer timestamp, then apply the existing viewer privacy filter. PostgreSQL failure returns an error rather than silently acknowledging an ephemeral-only heartbeat or serving stale cached last seen. Redis remains authoritative for live status. Migration `user_db/000020` expands the schema; no historical activity is fabricated or backfilled. Rounding below applies to the merged value.
 
 ## Heartbeat write semantics
 
@@ -108,7 +108,7 @@ Each `UpdatePresence` (client heartbeat ~60 s or WS ping):
 
 **Enforcement:** User Service `GetBulkPresence` / `GetPresence` **фильтрует** `last_seen` на read path по `(viewer_profile_id, target_profile_id)` + Social friends/contacts + `show_last_seen` audience. Live online status использует отдельное поле `show_online`. Header chat room **не** обходит фильтр.
 
-См. [privacy.md](privacy.md) § «Видимость данных» (поле `show_last_seen` есть в `PrivacySettings`; durable PG `last_seen_at` остаётся отдельной работой).
+См. [privacy.md](privacy.md) § «Видимость данных» (поле `show_last_seen` есть в `PrivacySettings`; durable PG `last_seen_at` хранится в User-owned `profile_last_seen`).
 
 ### Last seen rounding
 
