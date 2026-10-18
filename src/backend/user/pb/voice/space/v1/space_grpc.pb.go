@@ -64,6 +64,8 @@ const (
 	SpaceService_RecoverCommunityOwner_FullMethodName             = "/voice.space.v1.SpaceService/RecoverCommunityOwner"
 	SpaceService_GetAuditLog_FullMethodName                       = "/voice.space.v1.SpaceService/GetAuditLog"
 	SpaceService_AppendAuditEvent_FullMethodName                  = "/voice.space.v1.SpaceService/AppendAuditEvent"
+	SpaceService_CommitSpaceChatCreation_FullMethodName           = "/voice.space.v1.SpaceService/CommitSpaceChatCreation"
+	SpaceService_GetSpaceChatCreationOutcome_FullMethodName       = "/voice.space.v1.SpaceService/GetSpaceChatCreationOutcome"
 	SpaceService_AreCoMembers_FullMethodName                      = "/voice.space.v1.SpaceService/AreCoMembers"
 	SpaceService_ResolveVoiceRoomAccess_FullMethodName            = "/voice.space.v1.SpaceService/ResolveVoiceRoomAccess"
 	SpaceService_SyncSpaceProSubscription_FullMethodName          = "/voice.space.v1.SpaceService/SyncSpaceProSubscription"
@@ -137,6 +139,13 @@ type SpaceServiceClient interface {
 	GetAuditLog(ctx context.Context, in *GetAuditLogRequest, opts ...grpc.CallOption) (*GetAuditLogResponse, error)
 	// @voice.security=protected;callers=service:role,service:chat
 	AppendAuditEvent(ctx context.Context, in *AppendAuditEventRequest, opts ...grpc.CallOption) (*AppendAuditEventResponse, error)
+	// Chat-owned durable create intent; not an ordinary user tree mutation.
+	// @voice.security=protected;callers=service:chat
+	CommitSpaceChatCreation(ctx context.Context, in *CommitSpaceChatCreationRequest, opts ...grpc.CallOption) (*CommitSpaceChatCreationResponse, error)
+	// Exact immutable create outcome; caller authentication does not replace disclosure ACLs.
+	// Gateway uses a verified delegated-user principal and current disclosure ACL.
+	// @voice.security=protected;callers=service:chat,service:gateway
+	GetSpaceChatCreationOutcome(ctx context.Context, in *GetSpaceChatCreationOutcomeRequest, opts ...grpc.CallOption) (*GetSpaceChatCreationOutcomeResponse, error)
 	// S2S: privacy audience "space members" — shared membership between two profiles.
 	AreCoMembers(ctx context.Context, in *AreCoMembersRequest, opts ...grpc.CallOption) (*AreCoMembersResponse, error)
 	// S2S: canonical owner and exact membership evidence for Voice authorization.
@@ -610,6 +619,26 @@ func (c *spaceServiceClient) AppendAuditEvent(ctx context.Context, in *AppendAud
 	return out, nil
 }
 
+func (c *spaceServiceClient) CommitSpaceChatCreation(ctx context.Context, in *CommitSpaceChatCreationRequest, opts ...grpc.CallOption) (*CommitSpaceChatCreationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CommitSpaceChatCreationResponse)
+	err := c.cc.Invoke(ctx, SpaceService_CommitSpaceChatCreation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) GetSpaceChatCreationOutcome(ctx context.Context, in *GetSpaceChatCreationOutcomeRequest, opts ...grpc.CallOption) (*GetSpaceChatCreationOutcomeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSpaceChatCreationOutcomeResponse)
+	err := c.cc.Invoke(ctx, SpaceService_GetSpaceChatCreationOutcome_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *spaceServiceClient) AreCoMembers(ctx context.Context, in *AreCoMembersRequest, opts ...grpc.CallOption) (*AreCoMembersResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AreCoMembersResponse)
@@ -726,6 +755,13 @@ type SpaceServiceServer interface {
 	GetAuditLog(context.Context, *GetAuditLogRequest) (*GetAuditLogResponse, error)
 	// @voice.security=protected;callers=service:role,service:chat
 	AppendAuditEvent(context.Context, *AppendAuditEventRequest) (*AppendAuditEventResponse, error)
+	// Chat-owned durable create intent; not an ordinary user tree mutation.
+	// @voice.security=protected;callers=service:chat
+	CommitSpaceChatCreation(context.Context, *CommitSpaceChatCreationRequest) (*CommitSpaceChatCreationResponse, error)
+	// Exact immutable create outcome; caller authentication does not replace disclosure ACLs.
+	// Gateway uses a verified delegated-user principal and current disclosure ACL.
+	// @voice.security=protected;callers=service:chat,service:gateway
+	GetSpaceChatCreationOutcome(context.Context, *GetSpaceChatCreationOutcomeRequest) (*GetSpaceChatCreationOutcomeResponse, error)
 	// S2S: privacy audience "space members" — shared membership between two profiles.
 	AreCoMembers(context.Context, *AreCoMembersRequest) (*AreCoMembersResponse, error)
 	// S2S: canonical owner and exact membership evidence for Voice authorization.
@@ -883,6 +919,12 @@ func (UnimplementedSpaceServiceServer) GetAuditLog(context.Context, *GetAuditLog
 }
 func (UnimplementedSpaceServiceServer) AppendAuditEvent(context.Context, *AppendAuditEventRequest) (*AppendAuditEventResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AppendAuditEvent not implemented")
+}
+func (UnimplementedSpaceServiceServer) CommitSpaceChatCreation(context.Context, *CommitSpaceChatCreationRequest) (*CommitSpaceChatCreationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CommitSpaceChatCreation not implemented")
+}
+func (UnimplementedSpaceServiceServer) GetSpaceChatCreationOutcome(context.Context, *GetSpaceChatCreationOutcomeRequest) (*GetSpaceChatCreationOutcomeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSpaceChatCreationOutcome not implemented")
 }
 func (UnimplementedSpaceServiceServer) AreCoMembers(context.Context, *AreCoMembersRequest) (*AreCoMembersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AreCoMembers not implemented")
@@ -1730,6 +1772,42 @@ func _SpaceService_AppendAuditEvent_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SpaceService_CommitSpaceChatCreation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CommitSpaceChatCreationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).CommitSpaceChatCreation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_CommitSpaceChatCreation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).CommitSpaceChatCreation(ctx, req.(*CommitSpaceChatCreationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_GetSpaceChatCreationOutcome_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSpaceChatCreationOutcomeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).GetSpaceChatCreationOutcome(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_GetSpaceChatCreationOutcome_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).GetSpaceChatCreationOutcome(ctx, req.(*GetSpaceChatCreationOutcomeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SpaceService_AreCoMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AreCoMembersRequest)
 	if err := dec(in); err != nil {
@@ -2006,6 +2084,14 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AppendAuditEvent",
 			Handler:    _SpaceService_AppendAuditEvent_Handler,
+		},
+		{
+			MethodName: "CommitSpaceChatCreation",
+			Handler:    _SpaceService_CommitSpaceChatCreation_Handler,
+		},
+		{
+			MethodName: "GetSpaceChatCreationOutcome",
+			Handler:    _SpaceService_GetSpaceChatCreationOutcome_Handler,
 		},
 		{
 			MethodName: "AreCoMembers",

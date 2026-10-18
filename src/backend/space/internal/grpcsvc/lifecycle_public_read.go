@@ -10,12 +10,23 @@ import (
 	"google.golang.org/grpc/status"
 	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/pkg/principal"
+	"voice/backend/space/internal/chatcreation"
 	"voice/backend/space/internal/store"
 )
 
 // PublicLifecycleSpace is registered only on the Gateway's delegated-user listener.
 // The ordinary listener retains its storage fence and cannot return this projection.
-type PublicLifecycleSpace struct{ *SpaceGRPC }
+type PublicLifecycleSpace struct {
+	*SpaceGRPC
+	Composite *chatcreation.Server
+}
+
+func (s *PublicLifecycleSpace) GetSpaceChatCreationOutcome(ctx context.Context, req *spacev1.GetSpaceChatCreationOutcomeRequest) (*spacev1.GetSpaceChatCreationOutcomeResponse, error) {
+	if s == nil || s.Composite == nil {
+		return nil, status.Error(codes.Unavailable, "composite outcome transport unavailable")
+	}
+	return s.Composite.GetSpaceChatCreationOutcome(ctx, req)
+}
 
 func (s *PublicLifecycleSpace) GetSpace(ctx context.Context, req *spacev1.GetSpaceRequest) (*spacev1.GetSpaceResponse, error) {
 	p, ok := principal.FromContext(ctx)

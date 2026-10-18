@@ -26,7 +26,7 @@ type Verifier struct {
 }
 
 func protectedMutation(method string) bool {
-	return method == spacev1.SpaceService_DeleteSpace_FullMethodName || method == spacev1.SpaceService_RestoreSpace_FullMethodName || method == spacev1.SpaceService_GetSpaceDeletionCoordinatorStatus_FullMethodName || method == spacev1.SpaceService_UpdateMemberNickname_FullMethodName
+	return method == spacev1.SpaceService_DeleteSpace_FullMethodName || method == spacev1.SpaceService_RestoreSpace_FullMethodName || method == spacev1.SpaceService_GetSpaceDeletionCoordinatorStatus_FullMethodName || method == spacev1.SpaceService_UpdateMemberNickname_FullMethodName || method == spacev1.SpaceService_GetSpaceChatCreationOutcome_FullMethodName
 }
 
 func OrdinaryUnary() grpc.UnaryServerInterceptor {
@@ -74,9 +74,16 @@ func (v Verifier) Unary() grpc.UnaryServerInterceptor {
 		if err != nil || !canonicalID(verified.AccountID) || !canonicalID(verified.ProfileID) {
 			return nil, deny
 		}
+		accountType := "regular" // Existing lifecycle transport compatibility.
+		if info.FullMethod == spacev1.SpaceService_GetSpaceChatCreationOutcome_FullMethodName {
+			if verified.AccountType != "regular" && verified.AccountType != "guest" {
+				return nil, deny
+			}
+			accountType = verified.AccountType
+		}
 		// Legacy handlers consume this projection only after cryptographic verification.
 		// Caller-supplied identity metadata was rejected above; the projection is server-owned.
-		identity := metadata.Pairs(authctx.HeaderUserID, verified.AccountID, authctx.HeaderProfileID, verified.ProfileID, authctx.HeaderSessionEpoch, strconv.FormatInt(verified.SessionEpoch, 10), "x-voice-account-type", "regular")
+		identity := metadata.Pairs(authctx.HeaderUserID, verified.AccountID, authctx.HeaderProfileID, verified.ProfileID, authctx.HeaderSessionEpoch, strconv.FormatInt(verified.SessionEpoch, 10), "x-voice-account-type", accountType)
 		ctx = metadata.NewIncomingContext(principal.WithVerified(ctx, verified), identity)
 		return handler(ctx, req)
 	}

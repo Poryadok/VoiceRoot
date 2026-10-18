@@ -63,6 +63,23 @@ final $typed_data.Uint8List participantOperationStateDescriptor = $convert.base6
     'QVRJT05fU1RBVEVfUkVUUllBQkxFX0ZBSUxVUkUQBBIxCi1QQVJUSUNJUEFOVF9PUEVSQVRJT0'
     '5fU1RBVEVfQ09OVFJBQ1RfTUlTTUFUQ0gQBQ==');
 
+@$core.Deprecated('Use spaceChatCreationOutcomeStateDescriptor instead')
+const SpaceChatCreationOutcomeState$json = {
+  '1': 'SpaceChatCreationOutcomeState',
+  '2': [
+    {'1': 'SPACE_CHAT_CREATION_OUTCOME_STATE_UNSPECIFIED', '2': 0},
+    {'1': 'SPACE_CHAT_CREATION_OUTCOME_STATE_COMMITTED', '2': 1},
+    {'1': 'SPACE_CHAT_CREATION_OUTCOME_STATE_ABORTED', '2': 2},
+  ],
+};
+
+/// Descriptor for `SpaceChatCreationOutcomeState`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List spaceChatCreationOutcomeStateDescriptor = $convert.base64Decode(
+    'Ch1TcGFjZUNoYXRDcmVhdGlvbk91dGNvbWVTdGF0ZRIxCi1TUEFDRV9DSEFUX0NSRUFUSU9OX0'
+    '9VVENPTUVfU1RBVEVfVU5TUEVDSUZJRUQQABIvCitTUEFDRV9DSEFUX0NSRUFUSU9OX09VVENP'
+    'TUVfU1RBVEVfQ09NTUlUVEVEEAESLQopU1BBQ0VfQ0hBVF9DUkVBVElPTl9PVVRDT01FX1NUQV'
+    'RFX0FCT1JURUQQAg==');
+
 @$core.Deprecated('Use spaceDescriptor instead')
 const Space$json = {
   '1': 'Space',
@@ -2785,3 +2802,222 @@ final $typed_data.Uint8List updateMemberNicknameResponseDescriptor =
     $convert.base64Decode(
         'ChxVcGRhdGVNZW1iZXJOaWNrbmFtZVJlc3BvbnNlEkoKEHNwYWNlX21lbWJlcnNoaXAYASABKA'
         'syHy52b2ljZS5zcGFjZS52MS5TcGFjZU1lbWJlcnNoaXBSD3NwYWNlTWVtYmVyc2hpcA==');
+
+@$core.Deprecated('Use spaceChatCreationUserDescriptor instead')
+const SpaceChatCreationUser$json = {
+  '1': 'SpaceChatCreationUser',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'session_epoch', '3': 2, '4': 1, '5': 3, '10': 'sessionEpoch'},
+    {'1': 'account_type', '3': 3, '4': 1, '5': 9, '10': 'accountType'},
+  ],
+};
+
+/// Descriptor for `SpaceChatCreationUser`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceChatCreationUserDescriptor = $convert.base64Decode(
+    'ChVTcGFjZUNoYXRDcmVhdGlvblVzZXISHQoKYWNjb3VudF9pZBgBIAEoCVIJYWNjb3VudElkEi'
+    'MKDXNlc3Npb25fZXBvY2gYAiABKANSDHNlc3Npb25FcG9jaBIhCgxhY2NvdW50X3R5cGUYAyAB'
+    'KAlSC2FjY291bnRUeXBl');
+
+@$core.Deprecated('Use spaceChatCreationBotDescriptor instead')
+const SpaceChatCreationBot$json = {
+  '1': 'SpaceChatCreationBot',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'installation_id', '3': 2, '4': 1, '5': 9, '10': 'installationId'},
+    {'1': 'bot_scope', '3': 3, '4': 1, '5': 9, '10': 'botScope'},
+  ],
+};
+
+/// Descriptor for `SpaceChatCreationBot`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceChatCreationBotDescriptor = $convert.base64Decode(
+    'ChRTcGFjZUNoYXRDcmVhdGlvbkJvdBIVCgZib3RfaWQYASABKAlSBWJvdElkEicKD2luc3RhbG'
+    'xhdGlvbl9pZBgCIAEoCVIOaW5zdGFsbGF0aW9uSWQSGwoJYm90X3Njb3BlGAMgASgJUghib3RT'
+    'Y29wZQ==');
+
+@$core.Deprecated('Use spaceChatCreationBindingDescriptor instead')
+const SpaceChatCreationBinding$json = {
+  '1': 'SpaceChatCreationBinding',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'creator_profile_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'creatorProfileId'
+    },
+    {'1': 'space_id', '3': 4, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'chat_id', '3': 5, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'chat_type',
+      '3': 6,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.chat.v1.ChatType',
+      '10': 'chatType'
+    },
+    {'1': 'node_id', '3': 7, '4': 1, '5': 9, '10': 'nodeId'},
+    {'1': 'audit_event_id', '3': 8, '4': 1, '5': 9, '10': 'auditEventId'},
+    {
+      '1': 'create_request_sha256',
+      '3': 9,
+      '4': 1,
+      '5': 12,
+      '10': 'createRequestSha256'
+    },
+    {
+      '1': 'user',
+      '3': 10,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.SpaceChatCreationUser',
+      '9': 0,
+      '10': 'user'
+    },
+    {
+      '1': 'bot',
+      '3': 11,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.SpaceChatCreationBot',
+      '9': 0,
+      '10': 'bot'
+    },
+  ],
+  '8': [
+    {'1': 'initiator'},
+  ],
+};
+
+/// Descriptor for `SpaceChatCreationBinding`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceChatCreationBindingDescriptor = $convert.base64Decode(
+    'ChhTcGFjZUNoYXRDcmVhdGlvbkJpbmRpbmcSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDVIPcH'
+    'JvdG9jb2xWZXJzaW9uEiEKDG9wZXJhdGlvbl9pZBgCIAEoCVILb3BlcmF0aW9uSWQSLAoSY3Jl'
+    'YXRvcl9wcm9maWxlX2lkGAMgASgJUhBjcmVhdG9yUHJvZmlsZUlkEhkKCHNwYWNlX2lkGAQgAS'
+    'gJUgdzcGFjZUlkEhcKB2NoYXRfaWQYBSABKAlSBmNoYXRJZBI0CgljaGF0X3R5cGUYBiABKA4y'
+    'Fy52b2ljZS5jaGF0LnYxLkNoYXRUeXBlUghjaGF0VHlwZRIXCgdub2RlX2lkGAcgASgJUgZub2'
+    'RlSWQSJAoOYXVkaXRfZXZlbnRfaWQYCCABKAlSDGF1ZGl0RXZlbnRJZBIyChVjcmVhdGVfcmVx'
+    'dWVzdF9zaGEyNTYYCSABKAxSE2NyZWF0ZVJlcXVlc3RTaGEyNTYSOwoEdXNlchgKIAEoCzIlLn'
+    'ZvaWNlLnNwYWNlLnYxLlNwYWNlQ2hhdENyZWF0aW9uVXNlckgAUgR1c2VyEjgKA2JvdBgLIAEo'
+    'CzIkLnZvaWNlLnNwYWNlLnYxLlNwYWNlQ2hhdENyZWF0aW9uQm90SABSA2JvdEILCglpbml0aW'
+    'F0b3I=');
+
+@$core.Deprecated('Use spaceChatCreationOutcomeDescriptor instead')
+const SpaceChatCreationOutcome$json = {
+  '1': 'SpaceChatCreationOutcome',
+  '2': [
+    {
+      '1': 'binding',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.SpaceChatCreationBinding',
+      '10': 'binding'
+    },
+    {
+      '1': 'state',
+      '3': 2,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.space.v1.SpaceChatCreationOutcomeState',
+      '10': 'state'
+    },
+    {
+      '1': 'node',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.SpaceTreeNode',
+      '10': 'node'
+    },
+    {'1': 'failure_code', '3': 4, '4': 1, '5': 13, '10': 'failureCode'},
+  ],
+};
+
+/// Descriptor for `SpaceChatCreationOutcome`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceChatCreationOutcomeDescriptor = $convert.base64Decode(
+    'ChhTcGFjZUNoYXRDcmVhdGlvbk91dGNvbWUSQgoHYmluZGluZxgBIAEoCzIoLnZvaWNlLnNwYW'
+    'NlLnYxLlNwYWNlQ2hhdENyZWF0aW9uQmluZGluZ1IHYmluZGluZxJDCgVzdGF0ZRgCIAEoDjIt'
+    'LnZvaWNlLnNwYWNlLnYxLlNwYWNlQ2hhdENyZWF0aW9uT3V0Y29tZVN0YXRlUgVzdGF0ZRIxCg'
+    'Rub2RlGAMgASgLMh0udm9pY2Uuc3BhY2UudjEuU3BhY2VUcmVlTm9kZVIEbm9kZRIhCgxmYWls'
+    'dXJlX2NvZGUYBCABKA1SC2ZhaWx1cmVDb2Rl');
+
+@$core.Deprecated('Use commitSpaceChatCreationRequestDescriptor instead')
+const CommitSpaceChatCreationRequest$json = {
+  '1': 'CommitSpaceChatCreationRequest',
+  '2': [
+    {
+      '1': 'binding',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.SpaceChatCreationBinding',
+      '10': 'binding'
+    },
+  ],
+};
+
+/// Descriptor for `CommitSpaceChatCreationRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List commitSpaceChatCreationRequestDescriptor =
+    $convert.base64Decode(
+        'Ch5Db21taXRTcGFjZUNoYXRDcmVhdGlvblJlcXVlc3QSQgoHYmluZGluZxgBIAEoCzIoLnZvaW'
+        'NlLnNwYWNlLnYxLlNwYWNlQ2hhdENyZWF0aW9uQmluZGluZ1IHYmluZGluZw==');
+
+@$core.Deprecated('Use commitSpaceChatCreationResponseDescriptor instead')
+const CommitSpaceChatCreationResponse$json = {
+  '1': 'CommitSpaceChatCreationResponse',
+  '2': [
+    {
+      '1': 'outcome',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.SpaceChatCreationOutcome',
+      '10': 'outcome'
+    },
+  ],
+};
+
+/// Descriptor for `CommitSpaceChatCreationResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List commitSpaceChatCreationResponseDescriptor =
+    $convert.base64Decode(
+        'Ch9Db21taXRTcGFjZUNoYXRDcmVhdGlvblJlc3BvbnNlEkIKB291dGNvbWUYASABKAsyKC52b2'
+        'ljZS5zcGFjZS52MS5TcGFjZUNoYXRDcmVhdGlvbk91dGNvbWVSB291dGNvbWU=');
+
+@$core.Deprecated('Use getSpaceChatCreationOutcomeRequestDescriptor instead')
+const GetSpaceChatCreationOutcomeRequest$json = {
+  '1': 'GetSpaceChatCreationOutcomeRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+  ],
+};
+
+/// Descriptor for `GetSpaceChatCreationOutcomeRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSpaceChatCreationOutcomeRequestDescriptor =
+    $convert.base64Decode(
+        'CiJHZXRTcGFjZUNoYXRDcmVhdGlvbk91dGNvbWVSZXF1ZXN0EhkKCHNwYWNlX2lkGAEgASgJUg'
+        'dzcGFjZUlkEiEKDG9wZXJhdGlvbl9pZBgCIAEoCVILb3BlcmF0aW9uSWQ=');
+
+@$core.Deprecated('Use getSpaceChatCreationOutcomeResponseDescriptor instead')
+const GetSpaceChatCreationOutcomeResponse$json = {
+  '1': 'GetSpaceChatCreationOutcomeResponse',
+  '2': [
+    {
+      '1': 'outcome',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.SpaceChatCreationOutcome',
+      '10': 'outcome'
+    },
+  ],
+};
+
+/// Descriptor for `GetSpaceChatCreationOutcomeResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSpaceChatCreationOutcomeResponseDescriptor =
+    $convert.base64Decode(
+        'CiNHZXRTcGFjZUNoYXRDcmVhdGlvbk91dGNvbWVSZXNwb25zZRJCCgdvdXRjb21lGAEgASgLMi'
+        'gudm9pY2Uuc3BhY2UudjEuU3BhY2VDaGF0Q3JlYXRpb25PdXRjb21lUgdvdXRjb21l');

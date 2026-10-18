@@ -7,6 +7,14 @@
 **Язык**: Go
 **БД**: PostgreSQL `chat_db`
 
+Accepted Space-attached Chat audit facts use the frozen
+[external codec](space-service.md#external-audit-details-codec-v1) and
+[replay identity](space-service.md#durable-external-replay-codec-v1), shared through
+`src/backend/pkg/spaceaudit`. Build actual normalized changes once inside the
+mutation/outbox transaction; retries preserve those bytes. Composite creation
+emits its fact only after the complete Chat/tree result. Producer runtime remains
+BE-131 work; this codec contract does not activate its transport.
+
 ## Ответственность
 
 - Создание и управление DM-чатами
@@ -115,6 +123,90 @@ the empty acknowledgement it marks the item delivered. Retry keeps the same
 `audit_event_id` and exact payload. Standalone DM/group/channel mutations do not
 enter the Space ledger. Chat never writes `space_db` and cannot emit Space- or
 Role-owned actions.
+
+### Space chat creation: durable composite target (BE131-COMPOSITE-v1)
+
+This is the accepted target; the current two-call Gateway create/tree path is
+not proof of this behavior. Chat owns the durable create operation and audit
+payload in `chat_db`; Space owns the authoritative tree outcome in `space_db`.
+Gateway is a stateless transport and never authors an audit fact or receipt.
+
+Every new Space-attached `CreateChat`, including the protected direct RPC and
+generic HTTP entrypoint, follows the same composite. Standalone creation is
+unchanged. The existing `(creator_profile_id, request_id)` key and normalized
+create digest bind one execution kind and one operation, Chat, node and audit
+UUID allocated once. Changed bindings conflict. Requests without a client key
+receive a durable server operation, but independent unkeyed retries do not gain
+a deduplication guarantee. Existing successful keyed creates are explicitly
+legacy: replay preserves their original Chat without inventing a past audit.
+
+Chat first atomically writes a prepared Chat, its operation/reservation and the
+immutable `chat_created` producer payload with eligibility `HELD`. The original
+verified initiating actor, Space, target Chat, audit UUID, `{}` details and
+original creation Timestamp are frozen here. The prepared Chat is unavailable
+to ordinary reads, lists, use, mutations and tree links, and emits no ordinary
+`chat.created` notification.
+
+A dedicated protected Chat-to-Space commit/outcome protocol binds every stored
+operation/creator/Space/Chat/type/node/audit/digest field. Space rechecks current
+membership, `TEXT_CHAT_CREATE_IN_SPACE`, guest/bot scope, limits and lifecycle
+before the first tree commit. Service authentication alone is not user
+authorization. Space serializes its node insertion with an immutable
+`COMMITTED` receipt, or a deterministic refusal with an `ABORTED` receipt. These
+outcomes are mutually exclusive and terminal. This private tree insertion does
+not create a duplicate `tree_node_upserted` audit; ordinary tree APIs keep their
+audits and accept no generic audit-suppression flag.
+
+Chat authenticates the outcome, compares all bindings, then atomically marks
+the operation complete, activates its prepared Chat, changes the same outbox
+payload to `READY`, and schedules the ordinary `chat.created` event with stable
+deduplication identity. Success waits for that local finalization. The Gateway
+returns the original Space node outcome and does not issue a second unbound
+`UpsertTreeNode`. Delivery is at least once with stable identities; a transport
+exactly-once guarantee is not implied. Tree visibility after Space commit and
+before Chat activation may briefly precede Chat usability; the two databases do
+not provide atomic global read visibility.
+
+A Chat recovery worker resumes incomplete durable operations without Gateway
+or the original client. Each attempt uses fresh bound service credentials and
+holds no database transaction across network I/O. Timeout, response loss,
+missing receipt, expired lease and process crash mean unknown outcome, never
+permission to delete a prepared Chat. Only an authenticated exact `ABORTED`
+receipt permits guarded local compensation and cancellation of the held fact.
+After `COMMITTED`, recovery rolls forward even if permissions later change; a
+later node move/removal cannot be undone by replay. Public result disclosure
+still checks current caller access independently of historical completion.
+
+Full operation/outcome evidence and creator/request replay indexes have no
+ordinary TTL before terminal purge. BE131-COMPOSITE-PURGE-v1 bounds Chat's full
+copy to its own successful local P3 completion plus 30 days; Space's copy uses
+aggregate PURGED plus 30 days. Each owner fixes its deadline once, checks expiry
+using database time even before physical cleanup, and erases all duplicated
+personal fields, replay indexes and identity/content digests at expiry. Protected
+reads then return `FAILED_PRECONDITION / COMPOSITE_RESULT_EXPIRED` without a
+fabricated outcome; an expired fence never authorizes finalize or compensation.
+Permanent compact fences retain only the original server resource IDs, protocol
+and execution kind, terminal state/safe failure code, deletion operation and
+generation, completion timestamp and fixed expiry. They retain no creator,
+account/session, bot/installation, client key, content or derivative hash/HMAC.
+Permanent Space/resource nonreuse remains after owner tombstone expiry; public
+purged-resource admission remains undiscoverable.
+
+Freeze first commits the local admission fence under the preparation lock, then
+durably enters `DRAINING_COMPOSITES`. Recovery settles every PREPARED/HELD
+operation using exact authenticated Space outcomes. COMMITTED finalizes while
+publicly hidden by FROZEN; ABORTED compensates; UNKNOWN blocks progress. Only
+after a locked zero-incomplete recheck may Chat seal its immutable manifest and
+acknowledge freeze. No transaction spans RPC. Purge additionally requires actual
+delivery evidence for pre-purge audit and ordinary chat.created obligations,
+alongside existing participant prerequisites; send attempts or expired leases
+are insufficient. Unexpected incomplete work after terminal purge is a
+quarantined invariant failure and cannot extend retention or recreate resources.
+This contract does not activate deletion or purge. BE-131 owns producer
+eligibility/recovery; BE-008 consumes the complete Gateway routing/node-result
+and negative transport vertical. Required evidence includes crash recovery
+after Chat prepare and after Space tree commit, with no Gateway, one logical
+audit and no duplicate internal tree event.
 
 Composite `POST /api/v1/spaces/{space_id}/chats` exposes one `chat_created` only
 after the complete Chat+tree outcome. The internal Space tree upsert in that flow

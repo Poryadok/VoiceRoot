@@ -1,11 +1,30 @@
 # Role Service
 
+For the BE-131 composite vertical, the existing dedicated Role principal
+listener additionally accepts signed `service:space` `CheckPermission` for
+`TEXT_CHAT_CREATE_IN_SPACE` only. The exact request binds canonical nonzero
+Space and subject profile UUIDs, has no Chat or Voice room override, and uses
+fresh method/body/request-ID credentials and single-use JTI. Space derives the
+subject from its verified immutable composite intent; it cannot substitute the
+owner. The protected interceptor rejects all other principal kinds, issuers,
+permissions and scope expansion before the ordinary permission evaluator.
+Unrelated legacy decision reads keep their existing migration boundary. A
+transport/authentication failure is unknown; only a valid authenticated negative
+decision can be treated as permission denial for composite admission.
+
 ## Обзор
 
 Управление ролями и правами в пространствах. Иерархия ролей, гранулярные права, оверрайды по текстовым чатам (`group` / `channel`) и голосовым комнатам.
 
 **Язык**: Go
 **БД**: PostgreSQL `role_db`
+
+Accepted audit producer details use the frozen
+[external codec](space-service.md#external-audit-details-codec-v1) and
+[replay identity](space-service.md#durable-external-replay-codec-v1), shared through
+`src/backend/pkg/spaceaudit`. Build actual normalized changes once inside the
+mutation/outbox transaction; retries preserve those bytes. Producer runtime is
+tracked separately by BE-131; this codec contract does not activate its transport.
 
 ## Ответственность
 
@@ -421,6 +440,45 @@ Role listener rejects only this nickname selector; other legacy permission
 branches keep their existing routing. No wildcard, default-role grant or global
 CheckPermission cutover is introduced.
 `Owner` нельзя назначить, снять или переназначить через generic client/member RPC.
+
+### Audit producer initiating authority (BE131-INITIATING-AUTHORITY-v1 target)
+
+This accepted cutover is part of the consumed audit vertical, not a claim that
+the current ordinary listener verifies user or bot identity. Audit-producing
+interactive methods are `CreateRole`, `UpdateRole`, `DeleteRole`, `ReorderRoles`,
+`AssignRole`, `RevokeRole`, both set/remove override pairs, and
+`SetDefaultJoinRole`. Gateway uses the delegated-user matrix above; Bot may use
+only its three existing `bot_actor` methods/scopes. A service principal cannot
+impersonate an interactive actor. Every migrated exact method is denied on all
+ordinary/alternate listeners, including when protected configuration is absent.
+
+The signed initiating profile, rather than the target, Space owner, worker or
+service subject, becomes immutable `actor_profile_id` in the transaction's audit
+fact. User admission verifies current Auth session-epoch floor and the existing
+account/profile eligibility policy; removal of raw metadata must not default a
+guest to regular. Internal adapters may project verified identity for existing
+helpers only after the interceptor rejects raw identity metadata and the
+handler requires the verified context. Fresh delivery credentials assert only
+producer provenance and cannot repair an unverified initiating actor.
+
+Space bootstrap, default membership/community baseline projection and member
+cleanup remain distinct service lifecycle operations. Space cannot use generic
+`AssignRole`/`RevokeRole`; Role selects the bounded default or baseline Member
+role, preserves independently retained community membership, and never widens
+`RemoveMemberRoles` to Owner/system-role cleanup. Bootstrap owner is a subject
+of the persisted Space creation, not an audit actor. Existing bootstrap
+`role.created` notifications are not hooks for synthetic user audit entries.
+Join/leave and Bot mass cleanup remain outside audit v1. Signed Bot uninstall
+cleanup uses its exact durable installation intent and cannot enter interactive
+handlers. Bot Install/Uninstall must verify the initiating Gateway user, current
+epoch and `SPACE_MANAGE_BOTS` before asserting service cleanup authority.
+
+Configuration, JWKS refresh/rotation, replay and epoch checks, Gateway/Bot/Space
+caller wiring, listener denial and producer transaction hooks ship as one
+consumed cutover. Existing ownership/GIS/Voice principals retain their exact
+authority. Do not globally lock unrelated `CheckPermission` callers before
+their own migration; remaining broad S2S work belongs to BE-181. The producer
+is not enabled by a future auth-migration promise.
 Только dedicated authenticated Space transfer lifecycle меняет Owner и обязан быть
 idempotent по `operation_id`. Unknown caller/RPC, caller с неправильной audience
 или read, раскрывающий member data вне своей ACL, fail closed.

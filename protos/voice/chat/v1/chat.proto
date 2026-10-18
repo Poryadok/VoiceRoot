@@ -600,6 +600,10 @@ message GetDMResponse {
 }
 message CreateChatResponse {
   Chat chat = 1;
+  // Set only after a new Space-attached composite is COMPLETE. Empty for
+  // standalone and successful legacy keyed creates; never a node upsert hint.
+  string composite_operation_id = 2;
+  string composite_node_id = 3;
 }
 message UpdateChatResponse {
   Chat chat = 1;

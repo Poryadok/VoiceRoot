@@ -8747,6 +8747,730 @@ class UpdateMemberNicknameResponse extends $pb.GeneratedMessage {
   SpaceMembership ensureSpaceMembership() => $_ensure(0);
 }
 
+/// Immutable initiating facts copied only from Chat's verified admission context.
+/// @voice.unknown_fields=reject
+class SpaceChatCreationUser extends $pb.GeneratedMessage {
+  factory SpaceChatCreationUser({
+    $core.String? accountId,
+    $fixnum.Int64? sessionEpoch,
+    $core.String? accountType,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    if (sessionEpoch != null) result.sessionEpoch = sessionEpoch;
+    if (accountType != null) result.accountType = accountType;
+    return result;
+  }
+
+  SpaceChatCreationUser._();
+
+  factory SpaceChatCreationUser.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SpaceChatCreationUser.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SpaceChatCreationUser',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..aInt64(2, _omitFieldNames ? '' : 'sessionEpoch')
+    ..aOS(3, _omitFieldNames ? '' : 'accountType')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationUser clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationUser copyWith(
+          void Function(SpaceChatCreationUser) updates) =>
+      super.copyWith((message) => updates(message as SpaceChatCreationUser))
+          as SpaceChatCreationUser;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationUser create() => SpaceChatCreationUser._();
+  @$core.override
+  SpaceChatCreationUser createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationUser getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SpaceChatCreationUser>(create);
+  static SpaceChatCreationUser? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $fixnum.Int64 get sessionEpoch => $_getI64(1);
+  @$pb.TagNumber(2)
+  set sessionEpoch($fixnum.Int64 value) => $_setInt64(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSessionEpoch() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSessionEpoch() => $_clearField(2);
+
+  /// Explicit regular/guest; absence is never interpreted as regular.
+  @$pb.TagNumber(3)
+  $core.String get accountType => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set accountType($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasAccountType() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearAccountType() => $_clearField(3);
+}
+
+/// @voice.unknown_fields=reject
+class SpaceChatCreationBot extends $pb.GeneratedMessage {
+  factory SpaceChatCreationBot({
+    $core.String? botId,
+    $core.String? installationId,
+    $core.String? botScope,
+  }) {
+    final result = create();
+    if (botId != null) result.botId = botId;
+    if (installationId != null) result.installationId = installationId;
+    if (botScope != null) result.botScope = botScope;
+    return result;
+  }
+
+  SpaceChatCreationBot._();
+
+  factory SpaceChatCreationBot.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SpaceChatCreationBot.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SpaceChatCreationBot',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'botId')
+    ..aOS(2, _omitFieldNames ? '' : 'installationId')
+    ..aOS(3, _omitFieldNames ? '' : 'botScope')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationBot clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationBot copyWith(void Function(SpaceChatCreationBot) updates) =>
+      super.copyWith((message) => updates(message as SpaceChatCreationBot))
+          as SpaceChatCreationBot;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationBot create() => SpaceChatCreationBot._();
+  @$core.override
+  SpaceChatCreationBot createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationBot getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SpaceChatCreationBot>(create);
+  static SpaceChatCreationBot? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get botId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set botId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasBotId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearBotId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get installationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set installationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasInstallationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearInstallationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get botScope => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set botScope($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasBotScope() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearBotScope() => $_clearField(3);
+}
+
+enum SpaceChatCreationBinding_Initiator { user, bot, notSet }
+
+/// @voice.unknown_fields=reject
+class SpaceChatCreationBinding extends $pb.GeneratedMessage {
+  factory SpaceChatCreationBinding({
+    $core.int? protocolVersion,
+    $core.String? operationId,
+    $core.String? creatorProfileId,
+    $core.String? spaceId,
+    $core.String? chatId,
+    $3.ChatType? chatType,
+    $core.String? nodeId,
+    $core.String? auditEventId,
+    $core.List<$core.int>? createRequestSha256,
+    SpaceChatCreationUser? user,
+    SpaceChatCreationBot? bot,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (operationId != null) result.operationId = operationId;
+    if (creatorProfileId != null) result.creatorProfileId = creatorProfileId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (chatId != null) result.chatId = chatId;
+    if (chatType != null) result.chatType = chatType;
+    if (nodeId != null) result.nodeId = nodeId;
+    if (auditEventId != null) result.auditEventId = auditEventId;
+    if (createRequestSha256 != null)
+      result.createRequestSha256 = createRequestSha256;
+    if (user != null) result.user = user;
+    if (bot != null) result.bot = bot;
+    return result;
+  }
+
+  SpaceChatCreationBinding._();
+
+  factory SpaceChatCreationBinding.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SpaceChatCreationBinding.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static const $core.Map<$core.int, SpaceChatCreationBinding_Initiator>
+      _SpaceChatCreationBinding_InitiatorByTag = {
+    10: SpaceChatCreationBinding_Initiator.user,
+    11: SpaceChatCreationBinding_Initiator.bot,
+    0: SpaceChatCreationBinding_Initiator.notSet
+  };
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SpaceChatCreationBinding',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..oo(0, [10, 11])
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..aOS(3, _omitFieldNames ? '' : 'creatorProfileId')
+    ..aOS(4, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(5, _omitFieldNames ? '' : 'chatId')
+    ..aE<$3.ChatType>(6, _omitFieldNames ? '' : 'chatType',
+        enumValues: $3.ChatType.values)
+    ..aOS(7, _omitFieldNames ? '' : 'nodeId')
+    ..aOS(8, _omitFieldNames ? '' : 'auditEventId')
+    ..a<$core.List<$core.int>>(
+        9, _omitFieldNames ? '' : 'createRequestSha256', $pb.PbFieldType.OY)
+    ..aOM<SpaceChatCreationUser>(10, _omitFieldNames ? '' : 'user',
+        subBuilder: SpaceChatCreationUser.create)
+    ..aOM<SpaceChatCreationBot>(11, _omitFieldNames ? '' : 'bot',
+        subBuilder: SpaceChatCreationBot.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationBinding clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationBinding copyWith(
+          void Function(SpaceChatCreationBinding) updates) =>
+      super.copyWith((message) => updates(message as SpaceChatCreationBinding))
+          as SpaceChatCreationBinding;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationBinding create() => SpaceChatCreationBinding._();
+  @$core.override
+  SpaceChatCreationBinding createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationBinding getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SpaceChatCreationBinding>(create);
+  static SpaceChatCreationBinding? _defaultInstance;
+
+  @$pb.TagNumber(10)
+  @$pb.TagNumber(11)
+  SpaceChatCreationBinding_Initiator whichInitiator() =>
+      _SpaceChatCreationBinding_InitiatorByTag[$_whichOneof(0)]!;
+  @$pb.TagNumber(10)
+  @$pb.TagNumber(11)
+  void clearInitiator() => $_clearField($_whichOneof(0));
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get creatorProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set creatorProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasCreatorProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearCreatorProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get spaceId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set spaceId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasSpaceId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearSpaceId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get chatId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set chatId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasChatId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearChatId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $3.ChatType get chatType => $_getN(5);
+  @$pb.TagNumber(6)
+  set chatType($3.ChatType value) => $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasChatType() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearChatType() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get nodeId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set nodeId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasNodeId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearNodeId() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.String get auditEventId => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set auditEventId($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasAuditEventId() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearAuditEventId() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.List<$core.int> get createRequestSha256 => $_getN(8);
+  @$pb.TagNumber(9)
+  set createRequestSha256($core.List<$core.int> value) => $_setBytes(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasCreateRequestSha256() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearCreateRequestSha256() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  SpaceChatCreationUser get user => $_getN(9);
+  @$pb.TagNumber(10)
+  set user(SpaceChatCreationUser value) => $_setField(10, value);
+  @$pb.TagNumber(10)
+  $core.bool hasUser() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearUser() => $_clearField(10);
+  @$pb.TagNumber(10)
+  SpaceChatCreationUser ensureUser() => $_ensure(9);
+
+  @$pb.TagNumber(11)
+  SpaceChatCreationBot get bot => $_getN(10);
+  @$pb.TagNumber(11)
+  set bot(SpaceChatCreationBot value) => $_setField(11, value);
+  @$pb.TagNumber(11)
+  $core.bool hasBot() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearBot() => $_clearField(11);
+  @$pb.TagNumber(11)
+  SpaceChatCreationBot ensureBot() => $_ensure(10);
+}
+
+/// The original result remains stable after ordinary node moves/removal.
+/// @voice.unknown_fields=reject
+class SpaceChatCreationOutcome extends $pb.GeneratedMessage {
+  factory SpaceChatCreationOutcome({
+    SpaceChatCreationBinding? binding,
+    SpaceChatCreationOutcomeState? state,
+    SpaceTreeNode? node,
+    $core.int? failureCode,
+  }) {
+    final result = create();
+    if (binding != null) result.binding = binding;
+    if (state != null) result.state = state;
+    if (node != null) result.node = node;
+    if (failureCode != null) result.failureCode = failureCode;
+    return result;
+  }
+
+  SpaceChatCreationOutcome._();
+
+  factory SpaceChatCreationOutcome.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SpaceChatCreationOutcome.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SpaceChatCreationOutcome',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<SpaceChatCreationBinding>(1, _omitFieldNames ? '' : 'binding',
+        subBuilder: SpaceChatCreationBinding.create)
+    ..aE<SpaceChatCreationOutcomeState>(2, _omitFieldNames ? '' : 'state',
+        enumValues: SpaceChatCreationOutcomeState.values)
+    ..aOM<SpaceTreeNode>(3, _omitFieldNames ? '' : 'node',
+        subBuilder: SpaceTreeNode.create)
+    ..aI(4, _omitFieldNames ? '' : 'failureCode',
+        fieldType: $pb.PbFieldType.OU3)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationOutcome clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationOutcome copyWith(
+          void Function(SpaceChatCreationOutcome) updates) =>
+      super.copyWith((message) => updates(message as SpaceChatCreationOutcome))
+          as SpaceChatCreationOutcome;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationOutcome create() => SpaceChatCreationOutcome._();
+  @$core.override
+  SpaceChatCreationOutcome createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationOutcome getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SpaceChatCreationOutcome>(create);
+  static SpaceChatCreationOutcome? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  SpaceChatCreationBinding get binding => $_getN(0);
+  @$pb.TagNumber(1)
+  set binding(SpaceChatCreationBinding value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasBinding() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearBinding() => $_clearField(1);
+  @$pb.TagNumber(1)
+  SpaceChatCreationBinding ensureBinding() => $_ensure(0);
+
+  @$pb.TagNumber(2)
+  SpaceChatCreationOutcomeState get state => $_getN(1);
+  @$pb.TagNumber(2)
+  set state(SpaceChatCreationOutcomeState value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasState() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearState() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  SpaceTreeNode get node => $_getN(2);
+  @$pb.TagNumber(3)
+  set node(SpaceTreeNode value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasNode() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearNode() => $_clearField(3);
+  @$pb.TagNumber(3)
+  SpaceTreeNode ensureNode() => $_ensure(2);
+
+  /// Stable safe gRPC status number for ABORTED; zero for COMMITTED.
+  @$pb.TagNumber(4)
+  $core.int get failureCode => $_getIZ(3);
+  @$pb.TagNumber(4)
+  set failureCode($core.int value) => $_setUnsignedInt32(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasFailureCode() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearFailureCode() => $_clearField(4);
+}
+
+/// @voice.unknown_fields=reject
+class CommitSpaceChatCreationRequest extends $pb.GeneratedMessage {
+  factory CommitSpaceChatCreationRequest({
+    SpaceChatCreationBinding? binding,
+  }) {
+    final result = create();
+    if (binding != null) result.binding = binding;
+    return result;
+  }
+
+  CommitSpaceChatCreationRequest._();
+
+  factory CommitSpaceChatCreationRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CommitSpaceChatCreationRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CommitSpaceChatCreationRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<SpaceChatCreationBinding>(1, _omitFieldNames ? '' : 'binding',
+        subBuilder: SpaceChatCreationBinding.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CommitSpaceChatCreationRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CommitSpaceChatCreationRequest copyWith(
+          void Function(CommitSpaceChatCreationRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as CommitSpaceChatCreationRequest))
+          as CommitSpaceChatCreationRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CommitSpaceChatCreationRequest create() =>
+      CommitSpaceChatCreationRequest._();
+  @$core.override
+  CommitSpaceChatCreationRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CommitSpaceChatCreationRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CommitSpaceChatCreationRequest>(create);
+  static CommitSpaceChatCreationRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  SpaceChatCreationBinding get binding => $_getN(0);
+  @$pb.TagNumber(1)
+  set binding(SpaceChatCreationBinding value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasBinding() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearBinding() => $_clearField(1);
+  @$pb.TagNumber(1)
+  SpaceChatCreationBinding ensureBinding() => $_ensure(0);
+}
+
+/// @voice.unknown_fields=accept_preserve
+class CommitSpaceChatCreationResponse extends $pb.GeneratedMessage {
+  factory CommitSpaceChatCreationResponse({
+    SpaceChatCreationOutcome? outcome,
+  }) {
+    final result = create();
+    if (outcome != null) result.outcome = outcome;
+    return result;
+  }
+
+  CommitSpaceChatCreationResponse._();
+
+  factory CommitSpaceChatCreationResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CommitSpaceChatCreationResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CommitSpaceChatCreationResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<SpaceChatCreationOutcome>(1, _omitFieldNames ? '' : 'outcome',
+        subBuilder: SpaceChatCreationOutcome.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CommitSpaceChatCreationResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CommitSpaceChatCreationResponse copyWith(
+          void Function(CommitSpaceChatCreationResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as CommitSpaceChatCreationResponse))
+          as CommitSpaceChatCreationResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CommitSpaceChatCreationResponse create() =>
+      CommitSpaceChatCreationResponse._();
+  @$core.override
+  CommitSpaceChatCreationResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CommitSpaceChatCreationResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CommitSpaceChatCreationResponse>(
+          create);
+  static CommitSpaceChatCreationResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  SpaceChatCreationOutcome get outcome => $_getN(0);
+  @$pb.TagNumber(1)
+  set outcome(SpaceChatCreationOutcome value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOutcome() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOutcome() => $_clearField(1);
+  @$pb.TagNumber(1)
+  SpaceChatCreationOutcome ensureOutcome() => $_ensure(0);
+}
+
+/// @voice.unknown_fields=reject
+class GetSpaceChatCreationOutcomeRequest extends $pb.GeneratedMessage {
+  factory GetSpaceChatCreationOutcomeRequest({
+    $core.String? spaceId,
+    $core.String? operationId,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (operationId != null) result.operationId = operationId;
+    return result;
+  }
+
+  GetSpaceChatCreationOutcomeRequest._();
+
+  factory GetSpaceChatCreationOutcomeRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetSpaceChatCreationOutcomeRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetSpaceChatCreationOutcomeRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceChatCreationOutcomeRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceChatCreationOutcomeRequest copyWith(
+          void Function(GetSpaceChatCreationOutcomeRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetSpaceChatCreationOutcomeRequest))
+          as GetSpaceChatCreationOutcomeRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceChatCreationOutcomeRequest create() =>
+      GetSpaceChatCreationOutcomeRequest._();
+  @$core.override
+  GetSpaceChatCreationOutcomeRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceChatCreationOutcomeRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetSpaceChatCreationOutcomeRequest>(
+          create);
+  static GetSpaceChatCreationOutcomeRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+}
+
+/// @voice.unknown_fields=accept_preserve
+class GetSpaceChatCreationOutcomeResponse extends $pb.GeneratedMessage {
+  factory GetSpaceChatCreationOutcomeResponse({
+    SpaceChatCreationOutcome? outcome,
+  }) {
+    final result = create();
+    if (outcome != null) result.outcome = outcome;
+    return result;
+  }
+
+  GetSpaceChatCreationOutcomeResponse._();
+
+  factory GetSpaceChatCreationOutcomeResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetSpaceChatCreationOutcomeResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetSpaceChatCreationOutcomeResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<SpaceChatCreationOutcome>(1, _omitFieldNames ? '' : 'outcome',
+        subBuilder: SpaceChatCreationOutcome.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceChatCreationOutcomeResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceChatCreationOutcomeResponse copyWith(
+          void Function(GetSpaceChatCreationOutcomeResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetSpaceChatCreationOutcomeResponse))
+          as GetSpaceChatCreationOutcomeResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceChatCreationOutcomeResponse create() =>
+      GetSpaceChatCreationOutcomeResponse._();
+  @$core.override
+  GetSpaceChatCreationOutcomeResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceChatCreationOutcomeResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          GetSpaceChatCreationOutcomeResponse>(create);
+  static GetSpaceChatCreationOutcomeResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  SpaceChatCreationOutcome get outcome => $_getN(0);
+  @$pb.TagNumber(1)
+  set outcome(SpaceChatCreationOutcome value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOutcome() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOutcome() => $_clearField(1);
+  @$pb.TagNumber(1)
+  SpaceChatCreationOutcome ensureOutcome() => $_ensure(0);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

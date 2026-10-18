@@ -16,6 +16,11 @@ func (s *SpaceStore) CleanupLifecycleEvidence(ctx context.Context) error {
 		return err
 	}
 	defer rollbackLifecycleTx(ctx, tx)
+	// Composite full payloads have their frozen aggregate deadline. Permanent
+	// resource/Space fences contain no identities and are deliberately untouched.
+	if _, err = tx.Exec(ctx, `DELETE FROM space_chat_creation_evidence e USING space_chat_creation_fences f WHERE e.operation_id=f.operation_id AND f.full_evidence_expires_at<=clock_timestamp()`); err != nil {
+		return err
+	}
 	rows, err := tx.Query(ctx, `SELECT a.space_id FROM space_lifecycle_aggregates a WHERE (a.phase='PURGED' AND a.completed_at<=clock_timestamp()-interval '30 days' AND NOT a.evidence_compacted) OR EXISTS(SELECT 1 FROM space_lifecycle_operations o WHERE o.space_id=a.space_id AND o.state='COMPLETED' AND o.completed_at<=clock_timestamp()-interval '30 days' AND NOT(o.method='DELETE' AND o.operation_id=a.deletion_operation_id AND a.phase<>'LIVE')) ORDER BY a.space_id LIMIT 100`)
 	if err != nil {
 		return err
@@ -71,6 +76,11 @@ func (s *SpaceStore) CleanupLifecycleEvidence(ctx context.Context) error {
 		return err
 	}
 	if _, err = tx.Exec(ctx, `DELETE FROM space_deletion_tombstones WHERE retain_until<=clock_timestamp() AT TIME ZONE 'UTC'`); err != nil {
+		return err
+	}
+	// Receipt minimization takes row locks only. Keep it last so this
+	// transaction never subsequently waits on a Space or audit-ID lock.
+	if err = cleanupAuditIngressEvidence(ctx, tx); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

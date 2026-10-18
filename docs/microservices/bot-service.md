@@ -6,6 +6,22 @@
 
 ## Обзор
 
+### BE-131 current installation authority
+
+`CheckBotInstallationScope` is a protected Space-only decision read on Bot's
+existing Space lifecycle mTLS listener. Its signed request binds bot, Space,
+actor profile, exact installation UUID and `TEXT_CHAT_CREATE_IN_SPACE`. Ordinary
+and Game Integration listeners do not expose it. Bot checks its current exact
+installation, actor, live bot status, current scope and local LIVE lifecycle
+fence; missing/revoked/mismatched state returns `allowed=false` with the exact
+requested tuple. Authority/storage failure returns `UNAVAILABLE`, never a
+negative decision or permission to compensate. This read grants no user
+identity and does not bypass Space's current admission checks. Space consumes
+the response only after authenticating its transport and comparing every echoed
+field to the immutable composite intent. No raw GetBot/ListInstalledBots
+fallback is permitted. Existing Space lifecycle TLS/JWKS/replay configuration
+is reused; this does not activate P3 or change generic bot scopes.
+
 Платформа для ботов: реестр приложений, slash-команды, webhook-доставка, install в спейс, presence.
 
 **Язык**: Go  

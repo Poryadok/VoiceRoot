@@ -308,7 +308,7 @@ func (r *Runtime) VerifySpace(ctx context.Context, token, method, requestID, has
 	if r == nil || r.spaceResolver == nil || r.replayGuard == nil {
 		return principal.Principal{}, errors.New("bot Space lifecycle runtime unavailable")
 	}
-	if method != "" && method != "/voice.bot.v1.BotService/ApplySpaceLifecycleFence" && method != "/voice.bot.v1.BotService/PurgeSpace" {
+	if method != "" && method != "/voice.bot.v1.BotService/ApplySpaceLifecycleFence" && method != "/voice.bot.v1.BotService/PurgeSpace" && method != "/voice.bot.v1.BotService/CheckBotInstallationScope" {
 		return principal.Principal{}, errors.New("space principal method is not allowed")
 	}
 	parts := strings.Split(token, ".")

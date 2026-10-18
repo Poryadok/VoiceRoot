@@ -29,7 +29,9 @@ import (
 	"voice/backend/pkg/roleoverrideprincipal"
 	"voice/backend/pkg/runtimeconfig"
 	"voice/backend/pkg/socialprincipal"
+	"voice/backend/space/internal/auditprincipal"
 	"voice/backend/space/internal/authctx"
+	"voice/backend/space/internal/chatcreation"
 	grpcsvc "voice/backend/space/internal/grpcsvc"
 	"voice/backend/space/internal/lifecycleprincipal"
 	"voice/backend/space/internal/outboxdelivery"
@@ -82,6 +84,20 @@ func main() {
 	if publicEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
 		log.Fatal("Space Gateway lifecycle listener requires DATABASE_URL")
 	}
+	compositeConfig, compositeEnabled, err := chatcreation.FromEnv()
+	if err != nil {
+		log.Fatalf("Space Chat composite config: %v", err)
+	}
+	if compositeEnabled && (strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" || !publicEnabled) {
+		log.Fatal("Space Chat composite requires DATABASE_URL and protected Gateway listener")
+	}
+	auditConfig, auditEnabled, err := auditprincipal.LoadFromEnv()
+	if err != nil {
+		log.Fatalf("Space audit principal config: %v", err)
+	}
+	if auditEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+		log.Fatal("Space audit listener requires DATABASE_URL")
+	}
 	principalConfig, principalEnabled, err := socialprincipal.LoadFromEnv("space")
 	if err != nil {
 		log.Fatalf("space privacy principal config: %v", err)
@@ -117,6 +133,7 @@ func main() {
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	var grpcSrv *grpc.Server
 	var publicServer *grpc.Server
+	var auditServer *grpc.Server
 	var sourceServer *grpc.Server
 	var outboxRuntime *ownershipOutboxRuntime
 	var recoveryRuntime *ownershipRecoveryRuntime
@@ -258,6 +275,8 @@ func main() {
 		grpcOptions := append([]grpc.ServerOption{}, sharedOptions...)
 		grpcOptions = append(grpcOptions, grpc.ChainUnaryInterceptor(roleoverrideprincipal.OrdinaryUnaryInterceptor("space")))
 		grpcOptions = append(grpcOptions, grpc.ChainUnaryInterceptor(
+			chatcreation.OrdinaryUnary(),
+			auditprincipal.OrdinaryUnary(),
 			lifecycleprincipal.OrdinaryUnary(),
 			socialprincipal.OrdinaryUnaryInterceptor("space"),
 			authctx.VerifiedServiceIdentityUnaryInterceptor(os.Getenv("SPACE_VOICE_S2S_TOKEN")),
@@ -362,6 +381,67 @@ func main() {
 			defer deletionRuntime.Stop()
 		}
 		spacev1.RegisterSpaceServiceServer(grpcSrv, spaceSvc)
+		botComposite, botCompositeConnection, err := newBotCompositeTransport(principalIssuer)
+		if err != nil {
+			log.Fatalf("Space Bot composite transport: %v", err)
+		}
+		if botCompositeConnection != nil {
+			defer func() { _ = botCompositeConnection.Close() }()
+		}
+		compositeService := grpcsvc.NewChatCreationServer(spaceSvc, botComposite)
+		if compositeEnabled {
+			var compositeSchemaReady bool
+			if err := spaceStore.Pool.QueryRow(runCtx, `SELECT to_regclass('space_chat_creation_fences') IS NOT NULL AND to_regclass('space_chat_creation_evidence') IS NOT NULL AND to_regclass('space_permanent_purge_fences') IS NOT NULL AND to_regprocedure('lock_space_audit_id_v1(uuid)') IS NOT NULL`).Scan(&compositeSchemaReady); err != nil || !compositeSchemaReady {
+				log.Fatal("Space Chat composite requires migrations 000028 and 000031")
+			}
+			if spaceSvc.OwnershipRoles == nil {
+				log.Fatal("Space Chat composite requires protected Role decision transport")
+			}
+			if botComposite == nil {
+				log.Fatal("Space Chat composite requires protected Bot installation transport")
+			}
+			compositeRuntime, err := chatcreation.New(runCtx, compositeConfig)
+			if err != nil {
+				log.Fatalf("Space Chat composite runtime: %v", err)
+			}
+			defer func() { _ = compositeRuntime.Close() }()
+			compositeListener, err := net.Listen("tcp", compositeConfig.Listen)
+			if err != nil {
+				log.Fatalf("Space Chat composite listen: %v", err)
+			}
+			options := append([]grpc.ServerOption{}, sharedOptions...)
+			options = append(options, compositeRuntime.ServerOptions()...)
+			compositeServer := grpc.NewServer(options...)
+			spacev1.RegisterSpaceServiceServer(compositeServer, compositeService)
+			defer compositeServer.Stop()
+			go func() {
+				if err := compositeServer.Serve(compositeListener); err != nil {
+					logger.Error("Chat composite principal listener stopped", slog.String("error", err.Error()))
+				}
+			}()
+		}
+		if auditEnabled {
+			auditRuntime, err := auditprincipal.New(runCtx, auditConfig)
+			if err != nil {
+				log.Fatalf("Space audit principal runtime: %v", err)
+			}
+			defer func() { _ = auditRuntime.Close() }()
+			listener, err := net.Listen("tcp", auditConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("Space audit principal listen: %v", err)
+			}
+			options := append([]grpc.ServerOption{}, sharedOptions...)
+			options = append(options, auditRuntime.ServerOptions()...)
+			auditServer = grpc.NewServer(options...)
+			grpcsvc.RegisterAuditIngestionServer(auditServer, &grpcsvc.AuditIngestionGRPC{Store: spaceStore})
+			defer auditServer.Stop()
+			go func() {
+				logger.Info("audit principal listener started", slog.String("addr", auditConfig.ListenAddr))
+				if err := auditServer.Serve(listener); err != nil {
+					log.Fatalf("Space audit principal serve: %v", err)
+				}
+			}()
+		}
 		if publicEnabled {
 			publicRuntime, err := lifecycleprincipal.New(runCtx, publicConfig)
 			if err != nil {
@@ -375,7 +455,7 @@ func main() {
 			options := append([]grpc.ServerOption{}, sharedOptions...)
 			options = append(options, publicRuntime.ServerOptions()...)
 			publicServer = grpc.NewServer(options...)
-			spacev1.RegisterSpaceServiceServer(publicServer, &grpcsvc.PublicLifecycleSpace{SpaceGRPC: spaceSvc})
+			spacev1.RegisterSpaceServiceServer(publicServer, &grpcsvc.PublicLifecycleSpace{SpaceGRPC: spaceSvc, Composite: compositeService})
 			go func() {
 				logger.Info("Gateway lifecycle principal listener started", slog.String("addr", publicConfig.Listen))
 				if err := publicServer.Serve(publicListener); err != nil {
@@ -458,6 +538,9 @@ func main() {
 		}
 		if publicServer != nil {
 			publicServer.GracefulStop()
+		}
+		if auditServer != nil {
+			auditServer.GracefulStop()
 		}
 		if sourceServer != nil {
 			sourceServer.Stop()

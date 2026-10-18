@@ -51,6 +51,11 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 		if err != nil {
 			return nil, verificationStatus(err)
 		}
+		if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
+			if err := validateCreationDecision(verified, message, transport.RequestID, requestHash); err != nil {
+				return nil, err
+			}
+		}
 		return handler(principal.WithVerified(ctx, verified), request)
 	}
 }

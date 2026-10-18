@@ -277,6 +277,17 @@ blacklist-механизмом и не заменяется epoch.
 
 ## Конфигурация Gateway
 
+BE-131 initiating transports use dedicated `GATEWAY_ROLE_AUDIT_*`,
+`GATEWAY_CHAT_AUDIT_*` and `GATEWAY_BOT_ADMIN_AUDIT_*` settings. Each prefix
+requires `GRPC_ADDR`, `TLS_CA_FILE`, `TLS_SERVER_NAME`, `CLIENT_CERT_FILE` and
+`CLIENT_KEY_FILE` together. An explicitly empty, partial or invalid setting is
+a startup error. Enabled transports require Gateway principal signing keys and
+strict session epochs; startup waits for mutual-TLS readiness. The initiating
+signer uses verified request-context claims with an explicit account type and
+fresh exact method/body/request-ID credentials, replacing forwarded metadata.
+These settings do not authorize ordinary-listener mutation fallbacks; complete
+route and receiver cutover follows the exact BE-131 c8/c9 caller matrix.
+
 | Переменная | Назначение |
 |------------|------------|
 | `GATEWAY_JWKS_URL` | JWKS endpoint Auth Service |

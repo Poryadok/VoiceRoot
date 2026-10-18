@@ -246,6 +246,50 @@ See
 
 ## P3 Space deletion ownership and File references (accepted target)
 
+Space-attached Chat creation uses `BE131-COMPOSITE-v1`: Chat owns the prepared
+operation and HELD audit fact; Space owns the atomic tree node and immutable
+COMMITTED/ABORTED result. The complete original binding includes protocol
+version, operation/creator/Space/Chat/node/audit IDs, group/channel type, a
+32-byte versioned normalized-create digest and the verified original user
+(account, positive epoch, explicit regular/guest type) or bot (bot,
+installation, exact scope) context. No bearer token is persisted. A changed
+binding conflicts; missing/ambiguous evidence never authorizes compensation.
+Replay does not reinsert a moved/deleted node or re-evaluate an already committed
+decision. Gateway is stateless and returns the original typed node after Chat
+has completed; it must not create a second node through ordinary Upsert.
+
+`BE131-COMPOSITE-PURGE-v1` bounds full result replay at terminal deletion.
+Before purge, original full evidence has no ordinary TTL. Separate permanent
+fences retain only server operation/resource IDs, version/execution kind,
+Chat type, original terminal state/safe failure code, deletion operation and
+generation, local completion and fixed evidence deadline. They contain no
+creator/account/profile/session/bot identity, client replay index, content,
+full binding/create/result digest, or hash/HMAC derived from those personal
+fields. Permanent Space PURGED and operation/resource/audit-ID fences survive
+owner tombstone expiry. Full Space evidence expires at aggregate PURGED+30d;
+full Chat evidence expires at its own successful local purge completion+30d.
+The clocks are independent and retries never move either deadline.
+
+At/after the database deadline, a private Commit/Get returns
+`FAILED_PRECONDITION` with reason `COMPOSITE_RESULT_EXPIRED` and no outcome.
+It never fabricates a partial binding, changes COMMITTED to ABORTED, recreates
+resources or authorizes finalization/cleanup. Structural collisions still
+conflict; exact old personal-body comparison is no longer promised after its
+evidence is erased. The erased creator/client-key history ends: a distinct
+live Space requires fresh admission; the old Space/resource IDs stay unusable.
+Public PURGED resources remain undiscoverable even during private retention.
+
+Chat freezes new preparation under its Space lock, durably enters
+`DRAINING_COMPOSITES`, settles every prepared/HELD operation using fresh private
+credentials, then seals the immutable manifest under the same local lock.
+UNKNOWN/mismatch blocks sealing; lease expiry is not an abort. COMMITTED rolls
+forward while ordinary frozen access stays denied; ABORTED is compensated before
+sealing. Successful local purge requires authenticated prerequisite receipts,
+zero incomplete/HELD work and actual sink/PubAck evidence for pre-purge audit
+and `chat.created` obligations. Neither lock nor DB transaction spans an RPC.
+Backup restore applies permanent purge fences and passed retention deadlines
+before serving; inconsistent stale work is quarantined without payload diagnostics.
+
 Space owns lifecycle state, generation, deadline, immutable root manifest and
 participant receipts; each participant owns its fence, cleanup rows and receipt
 in its own database. No coordinator reads another service database. The fixed

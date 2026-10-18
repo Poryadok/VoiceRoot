@@ -5,9 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	chatv1 "voice.app/voice/chat/v1"
 	spacev1 "voice.app/voice/space/v1"
 )
@@ -112,41 +109,7 @@ func (t *transcoder) serveSpacesTree(w http.ResponseWriter, r *http.Request, res
 			return true
 		}
 		chatReq.SpaceId = &spaceID
-		chatResp, err := t.clients.chat.CreateChat(ctx, chatReq)
-		if err != nil {
-			writeGRPCError(w, err)
-			return true
-		}
-		chat := chatResp.GetChat()
-		if chat == nil {
-			writeGRPCError(w, status.Error(codes.Internal, "chat missing from create response"))
-			return true
-		}
-		chatType := chat.GetType()
-		nodeReq := &spacev1.UpsertTreeNodeRequest{
-			SpaceId: spaceID,
-			Kind:    "text_chat",
-			LinkedChat: &chatv1.ChatRef{
-				Id:   chat.GetId(),
-				Type: &chatType,
-			},
-		}
-		nodeResp, err := t.clients.space.UpsertTreeNode(ctx, nodeReq)
-		if err != nil {
-			writeGRPCError(w, err)
-			return true
-		}
-		if node := nodeResp.GetSpaceTreeNode(); node != nil {
-			if name := strings.TrimSpace(chat.GetName()); name != "" {
-				node.DisplayName = &name
-			}
-			if node.LinkedChat == nil {
-				node.LinkedChat = &chatv1.ChatRef{Id: chat.GetId()}
-			}
-			ct := chat.GetType()
-			node.LinkedChat.Type = &ct
-		}
-		writeProtoJSON(w, http.StatusOK, nodeResp)
+		t.createCompositeSpaceChat(w, r, spaceID, chatReq)
 		return true
 
 	default:

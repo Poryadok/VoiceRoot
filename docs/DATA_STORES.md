@@ -86,6 +86,24 @@ gRPC ingest/query или NATS consumer; это не доказательство
 
 Для `API Gateway` канонично **нет service-owned PostgreSQL**. Политика версий клиента (`/api/v1/version`) может храниться либо в managed config store, либо в отдельной control-plane БД/таблице (`client_versions`) под владением Gateway как edge-политики; это не означает появление отдельной доменной БД Gateway в inventory.
 
+The accepted external audit replay design adds a Space-owned global ID registry
+with local-origin fences or versioned external fingerprints. Its transaction
+includes audit insertion and the existing same-ID outbox. Compact receipts do not
+expire with ordinary 365-day payload retention or cascade from audit/outbox;
+authorized P3 minimization must explicitly include them and fence late imports.
+See [Space audit replay codec](microservices/space-service.md#durable-external-replay-codec-v1)
+and [external details codec](microservices/space-service.md#external-audit-details-codec-v1).
+BE-130 implements the ingestion store and migration `000027_audit_ingestion`;
+real PostgreSQL proof and normal delivery gates remain required. No deployment
+follows from this source description. Rollback refuses any nonempty receipt
+registry, so it cannot silently erase reservations retained after payload cleanup.
+Migration `000029_audit_receipt_minimization` separately erases full external
+fingerprints at aggregate `PURGED + 30 days`, verified against the permanent
+Space fence and database clock. ID/Space/origin markers remain; ordinary
+365-day cleanup never starts this deadline. The immutable trigger permits only
+that due erasure and refuses marker/key changes or deletion. BE-005's cleanup
+integration and real PostgreSQL proof remain required; this does not activate P3.
+
 ### BE-116 Space audit durable ownership (accepted target; not implemented)
 
 | Store owner | Durable responsibility |
@@ -292,6 +310,19 @@ Role ownership operation receipts remain durable in `role_db` and implement
 business idempotency independently of per-attempt JWT replay rejection.
 
 ## P3 Space lifecycle storage inventory (accepted target)
+
+Composite Space Chat creation stores a no-domain-FK
+`space_chat_creation_fences` row separately from private protobuf outcome bytes
+in `space_chat_creation_evidence`. The former permanently reserves operation,
+Chat, node and audit IDs and contains only the nonpersonal allowlist in
+[DATA_MODEL.md](DATA_MODEL.md#p3-space-deletion-ownership-and-file-references-accepted-target).
+`space_permanent_purge_fences` keeps the Space/deletion-operation/generation/time
+boundary after owner tombstone expiry. It is not the purpose-specific account
+HMAC tombstone and needs no new HMAC family. Live evidence has no ordinary TTL;
+terminal Space purge atomically fixes its deadline to aggregate PURGED+30d.
+Chat's own private evidence uses its own local purge completion+30d. Database
+time enforces the cutoff even if physical cleanup is delayed. Cleanup removes
+all full bytes/personal indexes/digests without removing compact fences.
 
 | Store owner | Additive durable data |
 |---|---|

@@ -83,6 +83,14 @@ service SpaceService {
   // @voice.security=protected;callers=service:role,service:chat
   rpc AppendAuditEvent(AppendAuditEventRequest) returns (AppendAuditEventResponse);
 
+  // Chat-owned durable create intent; not an ordinary user tree mutation.
+  // @voice.security=protected;callers=service:chat
+  rpc CommitSpaceChatCreation(CommitSpaceChatCreationRequest) returns (CommitSpaceChatCreationResponse);
+  // Exact immutable create outcome; caller authentication does not replace disclosure ACLs.
+  // Gateway uses a verified delegated-user principal and current disclosure ACL.
+  // @voice.security=protected;callers=service:chat,service:gateway
+  rpc GetSpaceChatCreationOutcome(GetSpaceChatCreationOutcomeRequest) returns (GetSpaceChatCreationOutcomeResponse);
+
   // S2S: privacy audience "space members" — shared membership between two profiles.
   rpc AreCoMembers(AreCoMembersRequest) returns (AreCoMembersResponse);
 
@@ -745,4 +753,74 @@ message UpdateMemberNicknameRequest {
 
 message UpdateMemberNicknameResponse {
   SpaceMembership space_membership = 1;
+}
+
+// Immutable initiating facts copied only from Chat's verified admission context.
+// @voice.unknown_fields=reject
+message SpaceChatCreationUser {
+  string account_id = 1;
+  int64 session_epoch = 2;
+  // Explicit regular/guest; absence is never interpreted as regular.
+  string account_type = 3;
+}
+
+// @voice.unknown_fields=reject
+message SpaceChatCreationBot {
+  string bot_id = 1;
+  string installation_id = 2;
+  string bot_scope = 3;
+}
+
+// @voice.unknown_fields=reject
+message SpaceChatCreationBinding {
+  uint32 protocol_version = 1;
+  string operation_id = 2;
+  string creator_profile_id = 3;
+  string space_id = 4;
+  string chat_id = 5;
+  voice.chat.v1.ChatType chat_type = 6;
+  string node_id = 7;
+  string audit_event_id = 8;
+  bytes create_request_sha256 = 9;
+  oneof initiator {
+    SpaceChatCreationUser user = 10;
+    SpaceChatCreationBot bot = 11;
+  }
+}
+
+enum SpaceChatCreationOutcomeState {
+  SPACE_CHAT_CREATION_OUTCOME_STATE_UNSPECIFIED = 0;
+  SPACE_CHAT_CREATION_OUTCOME_STATE_COMMITTED = 1;
+  SPACE_CHAT_CREATION_OUTCOME_STATE_ABORTED = 2;
+}
+
+// The original result remains stable after ordinary node moves/removal.
+// @voice.unknown_fields=reject
+message SpaceChatCreationOutcome {
+  SpaceChatCreationBinding binding = 1;
+  SpaceChatCreationOutcomeState state = 2;
+  SpaceTreeNode node = 3;
+  // Stable safe gRPC status number for ABORTED; zero for COMMITTED.
+  uint32 failure_code = 4;
+}
+
+// @voice.unknown_fields=reject
+message CommitSpaceChatCreationRequest {
+  SpaceChatCreationBinding binding = 1;
+}
+
+// @voice.unknown_fields=accept_preserve
+message CommitSpaceChatCreationResponse {
+  SpaceChatCreationOutcome outcome = 1;
+}
+
+// @voice.unknown_fields=reject
+message GetSpaceChatCreationOutcomeRequest {
+  string space_id = 1;
+  string operation_id = 2;
+}
+
+// @voice.unknown_fields=accept_preserve
+message GetSpaceChatCreationOutcomeResponse {
+  SpaceChatCreationOutcome outcome = 1;
 }

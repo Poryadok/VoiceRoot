@@ -367,6 +367,29 @@ class SpaceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$appendAuditEvent, request, options: options);
   }
 
+  /// Chat-owned durable create intent; not an ordinary user tree mutation.
+  /// @voice.security=protected;callers=service:chat
+  $grpc.ResponseFuture<$0.CommitSpaceChatCreationResponse>
+      commitSpaceChatCreation(
+    $0.CommitSpaceChatCreationRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$commitSpaceChatCreation, request,
+        options: options);
+  }
+
+  /// Exact immutable create outcome; caller authentication does not replace disclosure ACLs.
+  /// Gateway uses a verified delegated-user principal and current disclosure ACL.
+  /// @voice.security=protected;callers=service:chat,service:gateway
+  $grpc.ResponseFuture<$0.GetSpaceChatCreationOutcomeResponse>
+      getSpaceChatCreationOutcome(
+    $0.GetSpaceChatCreationOutcomeRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getSpaceChatCreationOutcome, request,
+        options: options);
+  }
+
   /// S2S: privacy audience "space members" — shared membership between two profiles.
   $grpc.ResponseFuture<$0.AreCoMembersResponse> areCoMembers(
     $0.AreCoMembersRequest request, {
@@ -645,6 +668,18 @@ class SpaceServiceClient extends $grpc.Client {
       '/voice.space.v1.SpaceService/AppendAuditEvent',
       ($0.AppendAuditEventRequest value) => value.writeToBuffer(),
       $0.AppendAuditEventResponse.fromBuffer);
+  static final _$commitSpaceChatCreation = $grpc.ClientMethod<
+          $0.CommitSpaceChatCreationRequest,
+          $0.CommitSpaceChatCreationResponse>(
+      '/voice.space.v1.SpaceService/CommitSpaceChatCreation',
+      ($0.CommitSpaceChatCreationRequest value) => value.writeToBuffer(),
+      $0.CommitSpaceChatCreationResponse.fromBuffer);
+  static final _$getSpaceChatCreationOutcome = $grpc.ClientMethod<
+          $0.GetSpaceChatCreationOutcomeRequest,
+          $0.GetSpaceChatCreationOutcomeResponse>(
+      '/voice.space.v1.SpaceService/GetSpaceChatCreationOutcome',
+      ($0.GetSpaceChatCreationOutcomeRequest value) => value.writeToBuffer(),
+      $0.GetSpaceChatCreationOutcomeResponse.fromBuffer);
   static final _$areCoMembers =
       $grpc.ClientMethod<$0.AreCoMembersRequest, $0.AreCoMembersResponse>(
           '/voice.space.v1.SpaceService/AreCoMembers',
@@ -1072,6 +1107,25 @@ abstract class SpaceServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.AppendAuditEventRequest.fromBuffer(value),
         ($0.AppendAuditEventResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CommitSpaceChatCreationRequest,
+            $0.CommitSpaceChatCreationResponse>(
+        'CommitSpaceChatCreation',
+        commitSpaceChatCreation_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CommitSpaceChatCreationRequest.fromBuffer(value),
+        ($0.CommitSpaceChatCreationResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetSpaceChatCreationOutcomeRequest,
+            $0.GetSpaceChatCreationOutcomeResponse>(
+        'GetSpaceChatCreationOutcome',
+        getSpaceChatCreationOutcome_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetSpaceChatCreationOutcomeRequest.fromBuffer(value),
+        ($0.GetSpaceChatCreationOutcomeResponse value) =>
+            value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.AreCoMembersRequest, $0.AreCoMembersResponse>(
             'AreCoMembers',
@@ -1510,6 +1564,25 @@ abstract class SpaceServiceBase extends $grpc.Service {
 
   $async.Future<$0.AppendAuditEventResponse> appendAuditEvent(
       $grpc.ServiceCall call, $0.AppendAuditEventRequest request);
+
+  $async.Future<$0.CommitSpaceChatCreationResponse> commitSpaceChatCreation_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.CommitSpaceChatCreationRequest> $request) async {
+    return commitSpaceChatCreation($call, await $request);
+  }
+
+  $async.Future<$0.CommitSpaceChatCreationResponse> commitSpaceChatCreation(
+      $grpc.ServiceCall call, $0.CommitSpaceChatCreationRequest request);
+
+  $async.Future<$0.GetSpaceChatCreationOutcomeResponse>
+      getSpaceChatCreationOutcome_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.GetSpaceChatCreationOutcomeRequest> $request) async {
+    return getSpaceChatCreationOutcome($call, await $request);
+  }
+
+  $async.Future<$0.GetSpaceChatCreationOutcomeResponse>
+      getSpaceChatCreationOutcome($grpc.ServiceCall call,
+          $0.GetSpaceChatCreationOutcomeRequest request);
 
   $async.Future<$0.AreCoMembersResponse> areCoMembers_Pre(
       $grpc.ServiceCall $call,
