@@ -482,6 +482,7 @@ func (s *BotGRPC) DeferResponse(ctx context.Context, req *botv1.DeferResponseReq
 
 func (s *BotGRPC) PollEvents(req *botv1.PollEventsRequest, stream botv1.BotService_PollEventsServer) error {
 	ctx := stream.Context()
+	defer releasePollingTransport(ctx)
 	botRow, err := s.botFromToken(ctx)
 	if err != nil {
 		return err

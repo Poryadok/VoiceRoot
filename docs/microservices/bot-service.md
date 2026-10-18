@@ -339,3 +339,14 @@ legacy NULL-Space message rows must resolve current whitelist authority and
 cannot bypass a known fence. Terminal canceled work cannot be rearmed by retry
 bookkeeping. This is the message-path protocol; command/deferred authority,
 manifest import, retention and full participant convergence remain target work.
+
+Every listener registering BotService installs a method-specific native gRPC
+transport tap for `PollEvents`. It caps the whole RPC at 25 seconds, preserving
+an earlier client deadline. In pinned grpc-go 1.70 the tap context is captured
+before native stream write quota initialization, so expiration terminates an
+actual flow-control-blocked `Send`, rather than only a DB/application context.
+The handler calls `Send` synchronously under the guard and cancels the tap budget
+on exit; no send goroutine survives rollback or guard release. A successful
+`Send` means transport enqueue, not receiver acknowledgement: bytes from an
+already admitted send may arrive after a fence receipt. The guarantee is no new
+post-fence admission and no active application send after releasing its guard.

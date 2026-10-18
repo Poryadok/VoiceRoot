@@ -79,3 +79,31 @@ proof, freeze-wins fresh-snapshot barrier, captured rebind rollback, atomic
 multi-recipient insertion failure, multi-Space overlap, uninstall/disable/purge
 cycles, timeout/commit-loss and non-LIVE permanent-state variants. Do not equate
 the six added source regressions with completed full participant verification.
+
+## Review P2: bound native polling flow control
+
+Independent reviewer115 found that the original synchronous polling callback
+had no server-owned native stream limit, so a stalled polling client could hold
+the shared guard indefinitely. Accepted Astra94 decision BE-269 c13/c14 fixes
+the exact seam: derive a method-specific deadline in `InTapHandle`, before pinned
+grpc-go 1.70 captures transport `ctxDone`/writeQuota. A child context in a stream
+interceptor would not suffice. Keep Send synchronous and cancel the stored tap
+CancelFunc on handler exit. All three listeners register the tap because each
+registers the full BotService. The whole-RPC limit is 25 seconds, matching the
+webhook attempt budget, and never extends an earlier client deadline.
+
+- Meaningful RED: real HTTP/2 transport, no client deadline/Recv, two 1 MiB
+  messages exhausted stream credit/write quota; unchanged no-op tap failed
+  `server-owned cap did not terminate native flow-control blocked Send`.
+- GREEN: native stalled Send plus modeled callback guard and deadline/scope/
+  cleanup tests, ten repetitions each (20 PASS). Bot short suite 86 PASS.
+- Focused `go test -race -short ./internal/grpcsvc -run TestPollingTransport`
+  2 PASS; `go vet ./...` PASS, lint zero issues, diff check PASS.
+- Added real PostgreSQL/actual `BotGRPC.PollEvents` composition source test with
+  native Send observation, advisory-wait proof and eventual actual fence receipt.
+  This test compiles but has not run here; existing Docker limitation is retained.
+- No detached Send, forced DB-only release or client-imposed deadline workaround.
+- Send nil is enqueue, not client ACK. Previously admitted queued bytes may reach
+  the receiver after receipt; no active/new application Send survives its guard.
+- Same reviewer115 must recheck the fix; full c4 runtime and exact-head CI remain
+  open. Original source/bundle5f025d7 remains preserved for provenance.
