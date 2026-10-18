@@ -29,14 +29,15 @@ import (
 )
 
 const (
-	Issuer                = "gameintegration"
-	Audience              = "chat"
-	ProvisionMethod       = "/voice.chat.v1.GameIntegrationChatService/ProvisionManagedChat"
-	SyncMembersMethod     = "/voice.chat.v1.GameIntegrationChatService/SyncManagedChatMembers"
-	ApplyLifecycleMethod  = "/voice.chat.v1.ChatService/ApplySpaceLifecycleFence"
-	PurgeSpaceMethod      = "/voice.chat.v1.ChatService/PurgeSpace"
-	PrepareManifestMethod = "/voice.chat.v1.ChatService/PrepareSpaceDeletionManifest"
-	GetManifestPageMethod = "/voice.chat.v1.ChatService/GetSpacePurgeManifestPage"
+	Issuer                         = "gameintegration"
+	Audience                       = "chat"
+	ProvisionMethod                = "/voice.chat.v1.GameIntegrationChatService/ProvisionManagedChat"
+	SyncMembersMethod              = "/voice.chat.v1.GameIntegrationChatService/SyncManagedChatMembers"
+	ApplyLifecycleMethod           = "/voice.chat.v1.ChatService/ApplySpaceLifecycleFence"
+	PurgeSpaceMethod               = "/voice.chat.v1.ChatService/PurgeSpace"
+	PrepareManifestMethod          = "/voice.chat.v1.ChatService/PrepareSpaceDeletionManifest"
+	GetManifestPageMethod          = "/voice.chat.v1.ChatService/GetSpacePurgeManifestPage"
+	ResolveRealtimeLifecycleMethod = "/voice.chat.v1.ChatRealtimeLifecycleService/ResolveChatLifecycle"
 )
 
 func spaceLifecycleMethods() []string {
@@ -121,6 +122,27 @@ func SearchManifestConfigFromEnv() (Config, string, bool, error) {
 	}
 	if listen == "" || cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || cfg.ClientCAFile == "" || cfg.JWKSURL == "" || cfg.JWKSCAFile == "" || cfg.ReplayAddr == "" || (cfg.JWKSClientCertFile == "") != (cfg.JWKSClientKeyFile == "") {
 		return Config{}, "", true, errors.New("chat Search manifest principal configuration is incomplete")
+	}
+	return cfg, listen, true, nil
+}
+
+// RealtimeLifecycleConfigFromEnv uses an independent listener and trust roots;
+// it grants structural enrollment only, never Space mutation or recipient ACL.
+func RealtimeLifecycleConfigFromEnv() (Config, string, bool, error) {
+	get := func(key string) string { return strings.TrimSpace(os.Getenv(key)) }
+	listen := get("CHAT_REALTIME_LIFECYCLE_GRPC_LISTEN")
+	cfg := Config{Issuer: "realtime", Audience: Audience, AllowedMethods: []string{ResolveRealtimeLifecycleMethod},
+		TLSCertFile: get("CHAT_REALTIME_LIFECYCLE_TLS_CERT_FILE"), TLSKeyFile: get("CHAT_REALTIME_LIFECYCLE_TLS_KEY_FILE"),
+		ClientCAFile: get("CHAT_REALTIME_LIFECYCLE_CLIENT_CA_FILE"), JWKSURL: get("CHAT_REALTIME_PRINCIPAL_JWKS_URL"),
+		JWKSCAFile: get("CHAT_REALTIME_PRINCIPAL_JWKS_CA_FILE"), ReplayAddr: get("CHAT_REALTIME_PRINCIPAL_REPLAY_REDIS_ADDR"),
+		ReplayPassword:     os.Getenv("CHAT_REALTIME_PRINCIPAL_REPLAY_REDIS_PASSWORD"),
+		JWKSClientCertFile: get("CHAT_REALTIME_PRINCIPAL_JWKS_CLIENT_CERT_FILE"), JWKSClientKeyFile: get("CHAT_REALTIME_PRINCIPAL_JWKS_CLIENT_KEY_FILE")}
+	configured := listen != "" || cfg.TLSCertFile != "" || cfg.TLSKeyFile != "" || cfg.ClientCAFile != "" || cfg.JWKSURL != "" || cfg.JWKSCAFile != "" || cfg.ReplayAddr != "" || cfg.ReplayPassword != "" || cfg.JWKSClientCertFile != "" || cfg.JWKSClientKeyFile != ""
+	if !configured {
+		return Config{}, "", false, nil
+	}
+	if listen == "" || cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || cfg.ClientCAFile == "" || cfg.JWKSURL == "" || cfg.JWKSCAFile == "" || cfg.ReplayAddr == "" || (cfg.JWKSClientCertFile == "") != (cfg.JWKSClientKeyFile == "") {
+		return Config{}, "", true, errors.New("Chat Realtime lifecycle principal configuration is incomplete")
 	}
 	return cfg, listen, true, nil
 }
@@ -286,6 +308,8 @@ func configuredMethods(issuer string, allowed []string) (map[string]struct{}, er
 		}
 	case "search":
 		approved[GetManifestPageMethod] = struct{}{}
+	case "realtime":
+		approved[ResolveRealtimeLifecycleMethod] = struct{}{}
 	default:
 		return nil, errors.New("untrusted Chat principal issuer")
 	}

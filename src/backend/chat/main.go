@@ -88,6 +88,10 @@ func main() {
 		log.Fatalf("Space lifecycle principal configuration: %v", spaceLifecycleConfigErr)
 	}
 	spacePurgeOwners := spacePurgeOwnerConfigFromEnv(os.Getenv)
+	realtimeLifecycleConfig, realtimeLifecycleListen, realtimeLifecycleConfigured, realtimeLifecycleConfigErr := gisprincipal.RealtimeLifecycleConfigFromEnv()
+	if realtimeLifecycleConfigErr != nil {
+		log.Fatalf("Realtime lifecycle principal configuration: %v", realtimeLifecycleConfigErr)
+	}
 	searchManifestConfig, searchManifestListen, searchManifestConfigured, searchManifestConfigErr := gisprincipal.SearchManifestConfigFromEnv()
 	if searchManifestConfigErr != nil {
 		log.Fatalf("Search manifest principal configuration: %v", searchManifestConfigErr)
@@ -115,6 +119,7 @@ func main() {
 	var spaceLifecycleGRPCSrv *grpc.Server
 	var spaceLifecyclePrincipalRuntime *gisprincipal.Runtime
 	var searchManifestGRPCSrv *grpc.Server
+	var realtimeLifecycleGRPCSrv *grpc.Server
 	var matchSquadGRPCSrv *grpc.Server
 	var matchSquadPrincipalRuntime *matchsquadprincipal.Runtime
 	var accountDeletedConsumerDone <-chan error
@@ -399,6 +404,25 @@ func main() {
 				}
 			}()
 		}
+		if realtimeLifecycleConfigured {
+			runtime, runtimeErr := gisprincipal.New(runCtx, realtimeLifecycleConfig)
+			if runtimeErr != nil {
+				log.Fatalf("Realtime lifecycle principal runtime: %v", runtimeErr)
+			}
+			defer func() { _ = runtime.Close() }()
+			listener, listenErr := net.Listen("tcp", realtimeLifecycleListen)
+			if listenErr != nil {
+				log.Fatalf("Realtime lifecycle listen: %v", listenErr)
+			}
+			realtimeLifecycleGRPCSrv = grpc.NewServer(runtime.ServerOptions()...)
+			chatv1.RegisterChatRealtimeLifecycleServiceServer(realtimeLifecycleGRPCSrv, &grpcsvc.RealtimeLifecycleGRPC{Store: &store.SpaceLifecycleStore{Pool: pool}})
+			go func() {
+				logger.Info("Realtime lifecycle mTLS gRPC listening", slog.String("addr", realtimeLifecycleListen))
+				if err := realtimeLifecycleGRPCSrv.Serve(listener); err != nil {
+					log.Fatalf("Realtime lifecycle serve: %v", err)
+				}
+			}()
+		}
 		if matchSquadPrincipalConfigured {
 			matchSquadPrincipalRuntime, err = matchsquadprincipal.New(runCtx, matchSquadPrincipalConfig)
 			if err != nil {
@@ -454,7 +478,7 @@ func main() {
 			}
 		}()
 	} else {
-		if gisPrincipalConfigured || spaceLifecycleConfigured || searchManifestConfigured || matchSquadPrincipalConfigured {
+		if gisPrincipalConfigured || spaceLifecycleConfigured || searchManifestConfigured || matchSquadPrincipalConfigured || realtimeLifecycleConfigured {
 			log.Fatal("protected principal listeners require DATABASE_URL")
 		}
 		logger.Warn("DATABASE_URL not set; gRPC disabled (health only)")
@@ -520,6 +544,9 @@ func main() {
 	waitForChatDeletedOutboxShutdown(ctx, chatDeletedOutboxDone, logger)
 	waitForAccountDeletedConsumerShutdown(ctx, accountDeletedConsumerDone, logger)
 	if shutdownServer {
+		if realtimeLifecycleGRPCSrv != nil {
+			realtimeLifecycleGRPCSrv.GracefulStop()
+		}
 		if matchSquadGRPCSrv != nil {
 			matchSquadGRPCSrv.GracefulStop()
 		}
