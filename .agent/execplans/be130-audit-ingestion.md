@@ -27,9 +27,11 @@ No producer domain mutations (BE131), public audit UI, P3 activation or deployme
 - [x] Freeze accepted c3/c5 behavior in owning canon and shared codec fixtures.
 - [x] Shared codec/validation/replay hash passes meaningful acceptance cases.
 - [x] Same-transaction global ID reservation and audit/outbox implementation;
-  actual PostgreSQL replay/concurrency proof remains pending.
+  actual PostgreSQL replay/concurrency/minimizer proof PASS on coherent44f76ed.
 - [x] Signed Role/Chat-only listener, body validation and no legacy fallback.
-- [ ] Independent security/concurrency review and exact-head hosted checks/PR.
+- [x] Independent security/concurrency/migration review121 CLEAR at9c2623177;
+  explicit exclusions cover later common-caller/composite correction deltas.
+- [ ] Final correction delta review/proof and sole-writer develop integration.
 
 ## Detailed Steps
 
@@ -47,7 +49,8 @@ No producer domain mutations (BE131), public audit UI, P3 activation or deployme
    callers, request binding failures and action ownership mismatch before writes.
 5. Run affected shared/Space tests and lint; real PostgreSQL tests prove concurrent
    duplicates/conflicts, rollback, retained receipt replay, local/external collision,
-   backfill and compensation. Hosted evidence replaces unavailable local Docker.
+   backfill and compensation. Recovered local Linux Docker supports actual Go
+   Testcontainers; hosted race/exact-head checks remain separate evidence.
 
 ## Validation
 
@@ -56,7 +59,9 @@ No producer domain mutations (BE131), public audit UI, P3 activation or deployme
   skips; signed gRPC positive/negative tests; race checks for concurrent receipt use.
 - Frozen fingerprint vectors include negative/year9999 seconds and nanos differing
   within one database microsecond. Every body field and origin has conflict coverage.
-- Required exact-head CI and independent review before normal merge.
+- Independent review and versioned scoped evidence; actor121 owns develop
+  integration under the user's finish-current-work directive. Local integration
+  is not hosted CI, deployment or acceptance.
 
 ## Progress
 
@@ -70,10 +75,16 @@ No producer domain mutations (BE131), public audit UI, P3 activation or deployme
   tests passed, including real local mTLS/JWKS, JWT replay and Redis fail-closed;
   facade meaningful RED then GREEN. Space short suite 402 tests and vet passed
   before the final additional PostgreSQL fixtures.
-- [ ] PostgreSQL fixtures compile under short mode but remain unexecuted: local
-  testcontainers failed before domain execution (rootless Docker unsupported on
-  Windows). Dedicated exact-head hosted workflow requires named PASS/no SKIP for
-  wire-to-store, concurrency, retention, backfill, uint64 and migration roundtrip.
+- [x] Actual Go/PostgreSQL proof on coherent44f76ed: 11 selected tests across
+  auditprincipal/grpcsvc/store PASS, zero SKIP/FAIL. Includes wire-to-store,
+  concurrent exact/changed/local collisions, rollback, retention, compensation,
+  full uint64/roundtrip, frozen drain/terminal advisory-lock race and minimizer.
+  Process-only Docker Desktop Linux npipe endpoint and host override127.0.0.1;
+  Ryuk disabled, fixture-owned containers terminate through test cleanup.
+  Raw JSON proof: tmp/swarm/be130-ingestion-pg-44f76ed.jsonl in main workspace.
+- [ ] Author18 review136 R1 global composite/audit ID correction uses migration31;
+  its final helper/trigger schema is outside the44f76ed proof. Recheck ingress
+  against that coherent successor and keep migration27 roundtrip isolated.
 
 ## Decisions
 
@@ -93,7 +104,7 @@ external full fingerprints only at permanent Space PURGED+30d, leaving nonpayloa
 global ID/Space/origin markers. Guard denies early/arbitrary mutation and rollback
 of minimized payloads. Helper uses bounded1000-row SKIP LOCKED batches; author18
 owns its call in common CleanupLifecycleEvidence. Actual PG guard/rollback and
-race cases remain required. JWKS compatibility fixture now requires client mTLS
+race cases passed on44f76ed. JWKS compatibility fixture now requires client mTLS
 as the real Role/Chat endpoints do; all31 transport tests PASS, including failure
 of a CA-only JWKS client. Graphify15902 deliberately interrupted after AST183/183
 because this accepted follow-up changes its input; no final success is claimed
@@ -106,10 +117,13 @@ persisted COMMITTED binding during freeze/purge and permanent terminal Space
 fence before both receipt lookups, including fresh collision resolution. A new
 PostgreSQL test covers changed binding, frozen original drain and a concurrent
 terminal fence blocking even receipted retries. Full Space short424 and vet pass;
-real PostgreSQL proof and independent review remain pending. Ordinary replay
+real PostgreSQL proof passed on44f76ed and ingress review121 CLEARc13 applies
+within its explicit exclusions. Ordinary replay
 c3/c5 is unchanged. This is source integration, not P3 activation or deployment.
 
-Security/concurrency/migration change requires independent review. Current GitHub
-outage blocks remote delivery/checks but not local development; do not duplicate
+Current correction deltas require scoped independent review. Current GitHub
+outage blocks remote delivery/checks but not local develop integration; do not duplicate
 uncertain pushes/probes. P3 must later include compact receipts in its explicit
-authorized minimization/fence protocol. No live environment or acceptance authority.
+authorized minimization/fence protocol. User directive: finish current work only,
+send final immutable source/proof/gaps to121, sole develop writer. No new ordinary
+claims, master intermediate PRs, live environment or acceptance authority.
