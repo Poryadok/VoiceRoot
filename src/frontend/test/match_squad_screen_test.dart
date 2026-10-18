@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -9,13 +10,18 @@ import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/matchmaking_client.dart';
+import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/call_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/settings/voice_input_settings.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/matchmaking_rating_controller.dart';
+import 'package:voice_frontend/state/social_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/matchmaking/match_squad_screen.dart';
+import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
 import 'package:voice_frontend/ui/matchmaking/match_rating_overlay.dart';
 import 'package:voice_frontend/ui/matchmaking/match_history_screen.dart';
 import 'package:voice_frontend/ui/matchmaking/queue_search_screen.dart';
@@ -25,6 +31,18 @@ import 'support/auth_test_overrides.dart';
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
+Future<void> _loadGoldenFonts() async {
+  await (FontLoader(
+    'MaterialIcons',
+  )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+  await (FontLoader('Noto Sans')
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'))
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-Medium.ttf'))
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-SemiBold.ttf'))
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-Bold.ttf')))
+      .load();
+}
+
 Widget _postMatchFixture(http.Client client) => ProviderScope(
   overrides: [
     ...voiceThemeTestOverrides(),
@@ -33,13 +51,28 @@ Widget _postMatchFixture(http.Client client) => ProviderScope(
     authControllerProvider.overrideWith(authenticatedAuthController),
     selectedChatIdProvider.overrideWith((ref) => 'inactive-chat'),
     realtimeAutoConnectProvider.overrideWithValue(false),
+    voiceInputSettingsProvider.overrideWith(_TestVoiceInputSettings.new),
     gatewayConfigProvider.overrideWithValue(
       const GatewayConfig(baseUrl: 'http://localhost:9999'),
     ),
     httpClientProvider.overrideWithValue(client),
+    profileProvider.overrideWith(
+      (ref, id) async => VoiceProfile(
+        id: id,
+        accountId: 'fixture-account-$id',
+        username: id,
+        discriminator: '0001',
+        displayName: _fixtureDisplayNames[id] ?? id,
+      ),
+    ),
   ],
   child: MaterialApp(
-    theme: voiceTestTheme(),
+    theme: voiceTestTheme().copyWith(
+      textTheme: voiceTestTheme().textTheme.apply(fontFamily: 'Noto Sans'),
+      primaryTextTheme: voiceTestTheme().primaryTextTheme.apply(
+        fontFamily: 'Noto Sans',
+      ),
+    ),
     locale: const Locale('en'),
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
@@ -61,6 +94,12 @@ MatchData _activeMatch() => MatchData(
   profileIds: const ['prof-test', 'profile-2'],
 );
 
+const _fixtureDisplayNames = {
+  'prof-test': 'Alex Chen',
+  'profile-2': 'Maria Santos',
+  'profile-3': 'Dima Petrov',
+};
+
 Future<void> _openSquadAndLeave(WidgetTester tester) async {
   Navigator.of(tester.element(find.byKey(SocialPanel.panelKey))).push<void>(
     MaterialPageRoute<void>(
@@ -73,7 +112,9 @@ Future<void> _openSquadAndLeave(WidgetTester tester) async {
 }
 
 void main() {
-  Widget testApp({required Widget home}) {
+  setUpAll(_loadGoldenFonts);
+
+  Widget testApp({required Widget home, String gatewayBaseUrl = ''}) {
     return ProviderScope(
       overrides: [
         ...voiceThemeTestOverrides(),
@@ -86,12 +127,27 @@ void main() {
         authControllerProvider.overrideWith(authenticatedAuthController),
         selectedChatIdProvider.overrideWith((ref) => 'inactive-chat'),
         realtimeAutoConnectProvider.overrideWithValue(false),
+        voiceInputSettingsProvider.overrideWith(_TestVoiceInputSettings.new),
         gatewayConfigProvider.overrideWithValue(
-          const GatewayConfig(baseUrl: ''),
+          GatewayConfig(baseUrl: gatewayBaseUrl),
+        ),
+        profileProvider.overrideWith(
+          (ref, id) async => VoiceProfile(
+            id: id,
+            accountId: 'fixture-account-$id',
+            username: id,
+            discriminator: '0001',
+            displayName: _fixtureDisplayNames[id] ?? id,
+          ),
         ),
       ],
       child: MaterialApp(
-        theme: voiceTestTheme(),
+        theme: voiceTestTheme().copyWith(
+          textTheme: voiceTestTheme().textTheme.apply(fontFamily: 'Noto Sans'),
+          primaryTextTheme: voiceTestTheme().primaryTextTheme.apply(
+            fontFamily: 'Noto Sans',
+          ),
+        ),
         locale: const Locale('en'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
@@ -100,31 +156,460 @@ void main() {
     );
   }
 
-  testWidgets(
-    'MatchSquadScreen shows voice section and chat when voiceRoomId set',
-    (tester) async {
+  testWidgets('MatchSquadScreen offers explicit voice join and chat actions', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      testApp(
+        gatewayBaseUrl: 'http://localhost:9999',
+        home: MatchSquadScreen(
+          match: MatchData(
+            id: 'match-1',
+            gameId: 'game-1',
+            gameName: 'Valorant',
+            mode: 'ranked',
+            region: 'eu',
+            status: 'active',
+            profileIds: const ['profile-1'],
+            chatId: 'chat-1',
+            voiceRoomId: 'room-1',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(MatchSquadScreen.voiceSectionKey), findsNothing);
+    expect(find.byKey(MatchSquadScreen.leaveButtonKey), findsOneWidget);
+    expect(find.byKey(MatchSquadScreen.joinVoiceButtonKey), findsOneWidget);
+  });
+
+  for (final layout in [
+    (name: 'horizontal', size: const Size(1280, 800)),
+    (name: 'vertical', size: const Size(390, 844)),
+  ]) {
+    testWidgets('MatchSquad ${layout.name} layout matches its screenshot', (
+      tester,
+    ) async {
+      tester.view.physicalSize = layout.size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
       await tester.pumpWidget(
         testApp(
+          gatewayBaseUrl: 'http://localhost:9999',
           home: MatchSquadScreen(
             match: MatchData(
-              id: 'match-1',
+              id: 'match-visual',
               gameId: 'game-1',
+              gameName: 'Valorant',
               mode: 'ranked',
               region: 'eu',
               status: 'active',
-              profileIds: const ['profile-1'],
-              chatId: 'chat-1',
-              voiceRoomId: 'room-1',
+              profileIds: const ['prof-test', 'profile-2', 'profile-3'],
+              chatId: 'chat-visual',
+              voiceRoomId: 'room-visual',
             ),
           ),
         ),
       );
-      await tester.pump();
+      await tester.pumpAndSettle();
 
-      expect(find.byKey(MatchSquadScreen.voiceSectionKey), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(MatchSquadScreen.joinVoiceButtonKey), findsOneWidget);
+      expect(find.byKey(MatchSquadScreen.openChatButtonKey), findsOneWidget);
       expect(find.byKey(MatchSquadScreen.leaveButtonKey), findsOneWidget);
+      await expectLater(
+        find.byType(MatchSquadScreen),
+        matchesGoldenFile('goldens/match_squad_${layout.name}.png'),
+      );
+      expect(find.text('Valorant · ranked'), findsOneWidget);
+      expect(find.text('Alex Chen'), findsOneWidget);
+      expect(find.text('Maria Santos'), findsOneWidget);
+      expect(find.text('Dima Petrov'), findsOneWidget);
+    });
+  }
+
+  testWidgets('MatchSquad controls expose labels and keyboard focus', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final oldHighlightStrategy = FocusManager.instance.highlightStrategy;
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(() {
+      FocusManager.instance.highlightStrategy = oldHighlightStrategy;
+    });
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    // Dispose explicitly because the test binding checks semantics handles
+    // before invoking registered tear-down callbacks.
+    await tester.pumpWidget(
+      testApp(
+        gatewayBaseUrl: 'http://localhost:9999',
+        home: MatchSquadScreen(
+          match: MatchData(
+            id: 'match-accessibility',
+            gameId: 'game-1',
+            mode: 'ranked',
+            region: 'eu',
+            status: 'active',
+            profileIds: const ['profile-1'],
+            chatId: 'chat-accessibility',
+            voiceRoomId: 'room-accessibility',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('Join voice'), findsOneWidget);
+    expect(find.bySemanticsLabel('Open chat'), findsOneWidget);
+    expect(find.bySemanticsLabel('Leave squad'), findsOneWidget);
+
+    final profileRow = find.byKey(
+      MatchSquadScreen.playerProfileKey('profile-1'),
+    );
+    final openChat = find.byKey(MatchSquadScreen.openChatButtonKey);
+    final leave = find.byKey(MatchSquadScreen.leaveButtonKey);
+    final joinVoice = find.byKey(MatchSquadScreen.joinVoiceButtonKey);
+    await _tabUntilPrimaryFocusWithin(tester, profileRow);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(_primaryFocusWithin(tester, openChat), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(_primaryFocusWithin(tester, leave), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(
+      _primaryFocusWithin(tester, joinVoice),
+      isTrue,
+      reason: _primaryFocusElementChain(),
+    );
+    await expectLater(
+      find.byType(MatchSquadScreen),
+      matchesGoldenFile('goldens/match_squad_keyboard_focus.png'),
+    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(_primaryFocusWithin(tester, leave), isTrue);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(_primaryFocusWithin(tester, openChat), isTrue);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(_primaryFocusWithin(tester, profileRow), isTrue);
+    semantics.dispose();
+  });
+
+  testWidgets(
+    'MatchSquad joins voice only after the documented Join voice action',
+    (tester) async {
+      final voicePaths = <String>[];
+      final client = MockClient((request) async {
+        if (request.url.path.contains('/voice/')) {
+          voicePaths.add(request.url.path);
+        }
+        switch (request.url.path) {
+          case '/api/v1/matchmaking/matches/match-voice/voice/join':
+            return http.Response(
+              jsonEncode({
+                'call_session': {
+                  'room_id': 'room-voice',
+                  'livekit_room_name': 'squad-room',
+                  'room_type_enum': 'VOICE_SESSION_KIND_GROUP_VOICE',
+                  'status': 'CALL_STATUS_ACTIVE',
+                },
+                'media_epoch': 'epoch-current',
+                'membership_state': 'MATCH_SQUAD_MEMBERSHIP_STATE_JOINED',
+              }),
+              200,
+            );
+          case '/api/v1/matchmaking/matches/match-voice/voice/token':
+            return http.Response(
+              jsonEncode({
+                'token': {'jwt': 'opaque'},
+                'media_epoch': 'stale-epoch',
+              }),
+              200,
+            );
+          default:
+            return http.Response('{}', 404);
+        }
+      });
+
+      await tester.pumpWidget(_postMatchFixture(client));
+      await tester.pumpAndSettle();
+      Navigator.of(tester.element(find.byKey(SocialPanel.panelKey))).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => MatchSquadScreen(
+            match: MatchData(
+              id: 'match-voice',
+              gameId: 'game-1',
+              mode: 'ranked',
+              region: 'eu',
+              status: 'active',
+              profileIds: const ['prof-test', 'profile-2'],
+              voiceRoomId: 'room-voice',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(voicePaths, isEmpty);
+      expect(find.text('Join voice'), findsOneWidget);
+
+      await tester.tap(find.text('Join voice'));
+      await tester.pumpAndSettle();
+
+      expect(voicePaths, [
+        '/api/v1/matchmaking/matches/match-voice/voice/join',
+        '/api/v1/matchmaking/matches/match-voice/voice/token',
+      ]);
     },
   );
+
+  testWidgets('MatchSquad opens its existing chat only on request', (
+    tester,
+  ) async {
+    final client = MockClient((_) async => http.Response('{}', 404));
+    await tester.pumpWidget(_postMatchFixture(client));
+    await tester.pumpAndSettle();
+    Navigator.of(tester.element(find.byKey(SocialPanel.panelKey))).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => MatchSquadScreen(
+          match: MatchData(
+            id: 'match-chat',
+            gameId: 'game-1',
+            mode: 'ranked',
+            region: 'eu',
+            status: 'active',
+            profileIds: const ['prof-test', 'profile-2'],
+            chatId: 'chat-match',
+            voiceRoomId: 'room-chat',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Open chat'), findsOneWidget);
+    expect(find.byType(ChatRoomPanel), findsNothing);
+
+    await tester.tap(find.text('Open chat'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ChatRoomPanel), findsOneWidget);
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    expect(find.text('Join voice'), findsOneWidget);
+  });
+
+  testWidgets('MatchSquad lets the user retry a failed voice join', (
+    tester,
+  ) async {
+    var joinAttempts = 0;
+    final voicePaths = <String>[];
+    final client = MockClient((request) async {
+      if (request.url.path.contains('/voice/')) {
+        voicePaths.add(request.url.path);
+      }
+      if (request.url.path.endsWith('/voice/join')) {
+        joinAttempts++;
+        if (joinAttempts == 1) return http.Response('{}', 503);
+        return http.Response(
+          jsonEncode({
+            'call_session': {
+              'room_id': 'room-voice',
+              'livekit_room_name': 'squad-room',
+              'room_type_enum': 'VOICE_SESSION_KIND_GROUP_VOICE',
+              'status': 'CALL_STATUS_ACTIVE',
+            },
+            'media_epoch': 'epoch-current',
+            'membership_state': 'MATCH_SQUAD_MEMBERSHIP_STATE_JOINED',
+          }),
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/voice/token')) {
+        return http.Response(
+          jsonEncode({
+            'token': {'jwt': 'opaque'},
+            'media_epoch': 'stale-epoch',
+          }),
+          200,
+        );
+      }
+      return http.Response('{}', 404);
+    });
+
+    await tester.pumpWidget(_postMatchFixture(client));
+    await tester.pumpAndSettle();
+    Navigator.of(tester.element(find.byKey(SocialPanel.panelKey))).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => MatchSquadScreen(
+          match: MatchData(
+            id: 'match-voice',
+            gameId: 'game-1',
+            mode: 'ranked',
+            region: 'eu',
+            status: 'active',
+            profileIds: const ['prof-test', 'profile-2'],
+            voiceRoomId: 'room-voice',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final joinButton = find.byKey(MatchSquadScreen.joinVoiceButtonKey);
+    await tester.tap(joinButton);
+    await tester.pumpAndSettle();
+    expect(joinAttempts, 1);
+    expect(joinButton, findsOneWidget);
+    expect(tester.widget<FilledButton>(joinButton).onPressed, isNotNull);
+
+    await tester.tap(joinButton);
+    await tester.pumpAndSettle();
+    expect(joinAttempts, 2);
+    expect(
+      voicePaths.where((path) => path.endsWith('/voice/join')),
+      hasLength(2),
+    );
+    expect(
+      voicePaths.where((path) => path.endsWith('/voice/token')),
+      hasLength(1),
+    );
+    expect(voicePaths.where((path) => path.endsWith('/voice/leave')), isEmpty);
+    expect(voicePaths.where((path) => path.endsWith('/complete')), isEmpty);
+  });
+
+  testWidgets('MatchSquad waits for an in-flight voice join before leaving', (
+    tester,
+  ) async {
+    final joinResponse = Completer<http.Response>();
+    final joinRequested = Completer<void>();
+    final paths = <String>[];
+    final client = MockClient((request) async {
+      paths.add(request.url.path);
+      switch (request.url.path) {
+        case '/api/v1/matchmaking/matches/match-race/voice/join':
+          joinRequested.complete();
+          return joinResponse.future;
+        case '/api/v1/matchmaking/matches/match-race/voice/token':
+          return http.Response(
+            jsonEncode({
+              'token': {'jwt': 'opaque'},
+              'media_epoch': 'stale-epoch',
+            }),
+            200,
+          );
+        case '/api/v1/matchmaking/matches/match-race/voice/leave':
+          return http.Response(
+            jsonEncode({
+              'call_session': {
+                'room_id': 'room-race',
+                'livekit_room_name': 'squad-room',
+                'room_type_enum': 'VOICE_SESSION_KIND_GROUP_VOICE',
+                'status': 'CALL_STATUS_ACTIVE',
+              },
+              'media_epoch': 'epoch-current',
+              'membership_state': 'MATCH_SQUAD_MEMBERSHIP_STATE_LEFT',
+            }),
+            200,
+          );
+        case '/api/v1/matchmaking/matches/match-race/complete':
+          return http.Response(
+            jsonEncode({
+              'match': {
+                'id': 'match-race',
+                'game_id': 'game-1',
+                'mode': 'ranked',
+                'region': 'eu',
+                'status': 'completed',
+                'profile_ids': ['prof-test', 'profile-2'],
+              },
+            }),
+            200,
+          );
+        default:
+          return http.Response('{}', 404);
+      }
+    });
+
+    await tester.pumpWidget(_postMatchFixture(client));
+    await tester.pumpAndSettle();
+    Navigator.of(tester.element(find.byKey(SocialPanel.panelKey))).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => MatchSquadScreen(
+          match: MatchData(
+            id: 'match-race',
+            gameId: 'game-1',
+            mode: 'ranked',
+            region: 'eu',
+            status: 'active',
+            profileIds: const ['prof-test', 'profile-2'],
+            voiceRoomId: 'room-race',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(MatchSquadScreen.joinVoiceButtonKey));
+    await tester.pump();
+    await joinRequested.future;
+    final leaveButton = tester.widget<OutlinedButton>(
+      find.byKey(MatchSquadScreen.leaveButtonKey),
+    );
+    expect(leaveButton.onPressed, isNull);
+
+    await tester.tap(find.byKey(MatchSquadScreen.leaveButtonKey));
+    await tester.pump();
+    expect(paths.where((path) => path.endsWith('/complete')), isEmpty);
+    expect(paths.where((path) => path.endsWith('/voice/leave')), isEmpty);
+
+    joinResponse.complete(
+      http.Response(
+        jsonEncode({
+          'call_session': {
+            'room_id': 'room-race',
+            'livekit_room_name': 'squad-room',
+            'room_type_enum': 'VOICE_SESSION_KIND_GROUP_VOICE',
+            'status': 'CALL_STATUS_ACTIVE',
+          },
+          'media_epoch': 'epoch-current',
+          'membership_state': 'MATCH_SQUAD_MEMBERSHIP_STATE_JOINED',
+        }),
+        200,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(MatchSquadScreen.leaveButtonKey));
+    await tester.pumpAndSettle();
+    expect(
+      paths.indexOf('/api/v1/matchmaking/matches/match-race/voice/leave'),
+      lessThan(
+        paths.indexOf('/api/v1/matchmaking/matches/match-race/complete'),
+      ),
+    );
+    final container = ProviderScope.containerOf(
+      tester.element(find.byKey(SocialPanel.panelKey)),
+    );
+    expect(container.read(callControllerProvider).session, isNull);
+  });
 
   testWidgets('MatchSquad leaves Voice membership before completing the match', (
     tester,
@@ -208,6 +693,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(MatchSquadScreen.joinVoiceButtonKey));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byKey(MatchSquadScreen.leaveButtonKey));
     await tester.pumpAndSettle();
 
@@ -279,12 +767,23 @@ void main() {
         ),
       ),
     );
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('match_squad_player_profile-2')),
+      160,
+    );
 
     expect(
       find.byKey(const Key('match_squad_player_profile-2')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('match_squad_player_prof-test')), findsNothing);
+    final selfRow = tester.widget<ListTile>(
+      find.byKey(const Key('match_squad_player_prof-test')),
+    );
+    expect(selfRow.onTap, isNull);
+    final teammateRow = tester.widget<ListTile>(
+      find.byKey(const Key('match_squad_player_profile-2')),
+    );
+    expect(teammateRow.onTap, isNotNull);
   });
 
   testWidgets('leaving a squad enters rating and the Social history consumer', (
@@ -549,4 +1048,47 @@ void main() {
       isEmpty,
     );
   });
+}
+
+class _TestVoiceInputSettings extends VoiceInputSettingsNotifier {
+  @override
+  VoiceInputSettings build() => const VoiceInputSettings();
+}
+
+bool _primaryFocusWithin(WidgetTester tester, Finder target) {
+  final focusContext = FocusManager.instance.primaryFocus?.context;
+  if (focusContext == null) return false;
+  final targetElement = tester.element(target);
+  var found = false;
+  focusContext.visitAncestorElements((ancestor) {
+    if (identical(ancestor, targetElement)) {
+      found = true;
+      return false;
+    }
+    return true;
+  });
+  return found;
+}
+
+String _primaryFocusElementChain() {
+  final context = FocusManager.instance.primaryFocus?.context;
+  if (context is! Element) return '$context';
+  final types = <String>[];
+  context.visitAncestorElements((ancestor) {
+    types.add(ancestor.widget.runtimeType.toString());
+    return true;
+  });
+  return types.join(' <- ');
+}
+
+Future<void> _tabUntilPrimaryFocusWithin(
+  WidgetTester tester,
+  Finder target,
+) async {
+  for (var attempt = 0; attempt < 80; attempt++) {
+    if (_primaryFocusWithin(tester, target)) return;
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+  }
+  expect(_primaryFocusWithin(tester, target), isTrue);
 }
