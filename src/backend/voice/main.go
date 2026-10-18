@@ -56,7 +56,7 @@ import (
 const serviceName = "voice"
 
 func main() {
-	logger := httpserver.NewLogger(serviceName)
+	logger := newServiceLogger()
 	metricsReg := prometheus.NewRegistry()
 	addr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
