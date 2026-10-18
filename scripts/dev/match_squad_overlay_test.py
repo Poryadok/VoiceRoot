@@ -1058,6 +1058,7 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
                             overlay.rendered_hash(target, api))
         self.assertEqual(overlay.observed_render_hash(target, local),
                          overlay.observed_render_hash(target, api))
+
         api["spec"]["ports"][0]["protocol"] = "UDP"
         self.assertNotEqual(overlay.observed_render_hash(target, local),
                             overlay.observed_render_hash(target, api))
@@ -1079,6 +1080,63 @@ class MatchSquadOverlayApplicatorTests(unittest.TestCase):
         api_spec["volumes"][0]["configMap"]["defaultMode"] = 256
         self.assertNotEqual(overlay.observed_render_hash(deployment_target, local_deployment),
                             overlay.observed_render_hash(deployment_target, api_deployment))
+
+    def test_api_readback_normalizes_omitted_empty_env_value_only(self):
+        target = overlay.TARGETS[3]
+        local = captured_deployment("voice-matchmaking", "matchmaking", "uid", "4")
+        env = local["spec"]["template"]["spec"]["containers"][0]["env"]
+        env.append({"name": "MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_PASSWORD",
+                    "value": ""})
+        api = copy.deepcopy(local)
+        del api["spec"]["template"]["spec"]["containers"][0]["env"][-1]["value"]
+
+        self.assertNotEqual(overlay.rendered_hash(target, local),
+                            overlay.rendered_hash(target, api))
+        self.assertEqual(overlay.observed_render_hash(target, local),
+                         overlay.observed_render_hash(target, api))
+
+        local["spec"]["template"]["spec"]["containers"].append({
+            "name": "nats-leaf", "image": "example.invalid/nats:1",
+            "env": [{"name": "OPTIONAL_EMPTY", "value": ""}],
+        })
+        api = copy.deepcopy(local)
+        del api["spec"]["template"]["spec"]["containers"][1]["env"][0]["value"]
+        self.assertEqual(overlay.observed_render_hash(target, local),
+                         overlay.observed_render_hash(target, api))
+
+        nonempty = copy.deepcopy(local)
+        nonempty_env = nonempty["spec"]["template"]["spec"]["containers"][0]["env"]
+        nonempty_env[-1]["value"] = "configured"
+        omitted_nonempty = copy.deepcopy(nonempty)
+        del omitted_nonempty["spec"]["template"]["spec"]["containers"][0]["env"][-1]["value"]
+        self.assertNotEqual(overlay.observed_render_hash(target, nonempty),
+                            overlay.observed_render_hash(target, omitted_nonempty))
+
+        from_value_from = copy.deepcopy(local)
+        value_from_env = from_value_from["spec"]["template"]["spec"]["containers"][0]["env"]
+        value_from_env[-1] = {"name": "MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_PASSWORD",
+                              "valueFrom": {"configMapKeyRef": {
+                                  "name": "voice-app-config", "key": "REDIS_PASSWORD"}}}
+        changed_reference = copy.deepcopy(from_value_from)
+        changed_reference["spec"]["template"]["spec"]["containers"][0]["env"][-1][
+            "valueFrom"]["configMapKeyRef"]["key"] = "OTHER_REDIS_PASSWORD"
+        self.assertNotEqual(overlay.observed_render_hash(target, from_value_from),
+                            overlay.observed_render_hash(target, changed_reference))
+
+        invalid_mixed_source = copy.deepcopy(from_value_from)
+        invalid_mixed_source["spec"]["template"]["spec"]["containers"][0]["env"][-1][
+            "value"] = ""
+        self.assertNotEqual(overlay.observed_render_hash(target, from_value_from),
+                            overlay.observed_render_hash(target, invalid_mixed_source))
+
+        invalid_type = copy.deepcopy(local)
+        invalid_type["spec"]["template"]["spec"]["containers"][0]["env"][-1][
+            "value"] = None
+        omitted_invalid_type = copy.deepcopy(invalid_type)
+        del omitted_invalid_type["spec"]["template"]["spec"]["containers"][0]["env"][-1][
+            "value"]
+        self.assertNotEqual(overlay.observed_render_hash(target, invalid_type),
+                            overlay.observed_render_hash(target, omitted_invalid_type))
 
     def fake_client(self, fail_at=None, dry_run_fail_at=None):
         class Client:

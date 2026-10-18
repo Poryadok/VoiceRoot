@@ -100,7 +100,7 @@ def rendered_hash(target, obj):
 
 
 def observed_render_hash(target, obj):
-    """Normalize only API defaults absent from kubectl's local strategic render."""
+    """Normalize API defaults and EnvVar empty-literal serialization only."""
     if target.kind == "Deployment":
         projection = copy.deepcopy(obj.get("spec", {}).get("template"))
         if projection is None:
@@ -109,6 +109,13 @@ def observed_render_hash(target, obj):
         for container in pod_spec.get("containers", []):
             for port in container.get("ports", []):
                 port.setdefault("protocol", "TCP")
+            for env in container.get("env", []):
+                if (isinstance(env, dict) and type(env.get("value")) is str and
+                        env["value"] == "" and "valueFrom" not in env):
+                    # Kubernetes serializes EnvVar.value with omitempty. Its
+                    # readback may omit this explicit empty literal; only that
+                    # exact field is equivalent, and only without valueFrom.
+                    del env["value"]
         for volume in pod_spec.get("volumes", []):
             source = volume.get("configMap") or volume.get("secret")
             if source is not None:
