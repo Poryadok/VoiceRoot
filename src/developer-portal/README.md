@@ -12,6 +12,10 @@ Production flow uses **OAuth 2.0 authorization code + PKCE** against Voice Auth 
 4. Portal exchanges the code at `POST /api/v1/auth/oauth2/token` and stores `access_token` in `sessionStorage`
 5. All API calls use `Authorization: Bearer …`
 
+BrowserRouter selects the `/callback` route and follows browser history changes;
+other paths display the portal. Successful OAuth still replaces the document at
+`/` after storing the token.
+
 Configure in `.env` (see repo root [`.env.example`](../../.env.example) — `DEVELOPER_PORTAL_*` vars):
 
 - `DEVELOPER_PORTAL_OAUTH_CLIENT_ID`
