@@ -122,5 +122,76 @@ class MemberAdmissionSourceState extends $pb.ProtobufEnum {
   const MemberAdmissionSourceState._(super.value, super.name);
 }
 
+/// Publication provenance does not grant a role or add another membership source.
+class MemberAdmissionPublicationKind extends $pb.ProtobufEnum {
+  static const MemberAdmissionPublicationKind
+      MEMBER_ADMISSION_PUBLICATION_KIND_UNSPECIFIED =
+      MemberAdmissionPublicationKind._(
+          0,
+          _omitEnumNames
+              ? ''
+              : 'MEMBER_ADMISSION_PUBLICATION_KIND_UNSPECIFIED');
+  static const MemberAdmissionPublicationKind
+      MEMBER_ADMISSION_PUBLICATION_KIND_ADMISSION_ROLE_READY =
+      MemberAdmissionPublicationKind._(
+          1,
+          _omitEnumNames
+              ? ''
+              : 'MEMBER_ADMISSION_PUBLICATION_KIND_ADMISSION_ROLE_READY');
+  static const MemberAdmissionPublicationKind
+      MEMBER_ADMISSION_PUBLICATION_KIND_LEGACY_MIGRATED =
+      MemberAdmissionPublicationKind._(
+          2,
+          _omitEnumNames
+              ? ''
+              : 'MEMBER_ADMISSION_PUBLICATION_KIND_LEGACY_MIGRATED');
+  static const MemberAdmissionPublicationKind
+      MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_OWNER_CREATE =
+      MemberAdmissionPublicationKind._(
+          3,
+          _omitEnumNames
+              ? ''
+              : 'MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_OWNER_CREATE');
+  static const MemberAdmissionPublicationKind
+      MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_COMMUNITY_OWNER_CREATE =
+      MemberAdmissionPublicationKind._(
+          4,
+          _omitEnumNames
+              ? ''
+              : 'MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_COMMUNITY_OWNER_CREATE');
+  static const MemberAdmissionPublicationKind
+      MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_COMMUNITY_OWNER_RECOVERY =
+      MemberAdmissionPublicationKind._(
+          5,
+          _omitEnumNames
+              ? ''
+              : 'MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_COMMUNITY_OWNER_RECOVERY');
+  static const MemberAdmissionPublicationKind
+      MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_BOT_INSTALL =
+      MemberAdmissionPublicationKind._(
+          6,
+          _omitEnumNames
+              ? ''
+              : 'MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_BOT_INSTALL');
+
+  static const $core.List<MemberAdmissionPublicationKind> values =
+      <MemberAdmissionPublicationKind>[
+    MEMBER_ADMISSION_PUBLICATION_KIND_UNSPECIFIED,
+    MEMBER_ADMISSION_PUBLICATION_KIND_ADMISSION_ROLE_READY,
+    MEMBER_ADMISSION_PUBLICATION_KIND_LEGACY_MIGRATED,
+    MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_OWNER_CREATE,
+    MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_COMMUNITY_OWNER_CREATE,
+    MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_COMMUNITY_OWNER_RECOVERY,
+    MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_BOT_INSTALL,
+  ];
+
+  static final $core.List<MemberAdmissionPublicationKind?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 6);
+  static MemberAdmissionPublicationKind? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const MemberAdmissionPublicationKind._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');
