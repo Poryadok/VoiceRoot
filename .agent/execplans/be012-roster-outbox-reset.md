@@ -35,10 +35,10 @@ provider activation, P3 changes, accepting/releasing a stand without TT claims.
 
 ## Milestones
 
-- [ ] Native eligibility changes and exact loss CAS have rollback/replay proof.
-- [ ] Ordinary and Space publish the accepted A3 protobuf from durable bytes,
+- [x] Native eligibility changes and exact loss CAS have rollback/replay proof.
+- [x] Ordinary and Space publish the accepted A3 protobuf from durable bytes,
       retaining compatibility delivery with distinct event UUIDs.
-- [ ] MM inbox detects duplicates and conflicting identities/room versions;
+- [x] MM inbox detects duplicates and conflicting identities/room versions;
       atomic reset covers searching, pending_accept and SOLO JOINED.
 - [ ] Recovery removes stale queue rows and reliably emits one cancellation per
       session; proposal/squad revalidation uses the BE-011 protected snapshot.
@@ -87,7 +87,21 @@ provider activation, P3 changes, accepting/releasing a stand without TT claims.
       completed CLEAR c6 without duplicate runtime while waiting.
 - [x] Acquired WT38 lease `34556080af0760fd6cbd9239158de19c`, holder
       `rudeus-147-be012`, branch `codex/be012-roster-outbox`, fresh actual develop.
-- [ ] Implement risk tests and native source changes.
+- [x] Native RED/GREEN: Space first eligible JOINED, ordinary dual-topic events,
+      exact-loss CAS, injected-outbox rollback, caller-owned room close and
+      creator departure with survivor. Native source review artifact: 9deee676f.
+- [x] MM three initial PG RED tests became GREEN at 2a0dc4581 against explicitly
+      pinned external019. Two additional rollback/concurrent-fork cases PASS
+      at backend1aa963ed7; durable NATS consumer proves ACK-after-commit and NAK
+      after database failure. Publisher keeps frozen bytes/event identity.
+- [x] Normal-merged 145's immutable 5fc1a35b5e6aa0b8aa638cde23ee5aaed3c21e6c
+      into 52f59be69ce5d35b64c4860df550c77fd1ed548c: actual019 and SourceParty
+      are now present, rather than only a test dependency artifact.
+- [x] Downgrade retention RED at ec49e91bd: both original DOWN scripts removed
+      delivered evidence. a2e336585 adds transaction/table-locked refusal; GREEN
+      results are recorded separately when complete.
+- [ ] Implement the common protected candidate gate and async abandonment saga.
+- [ ] Final graph update, affected checks, independent review and 121 acceptance.
 
 ## Decisions
 
@@ -97,6 +111,15 @@ provider activation, P3 changes, accepting/releasing a stand without TT claims.
   disclosure projection counters; a unique public call_room_id is the room key.
 - Coverage/legacy cutover is being resolved in BE-011 c5 by Astra169; native
   writer tests alone do not prove whole-source authority or authorize activation.
+- Astra169 BE012 c9 / attachment1535c157ae3296729f9b20686baeddde accepts
+  BE012-ASYNC-PROVISION-RESET-v1. Request and background coordinator both need a
+  fresh candidate-cut validation before intent, each dispatch, and activation.
+  Unknown remains unknown. Commit MAY_HAVE_CREATED before any provider Create;
+  reset atomically latches ABANDONED and a frozen issued-provider obligation set.
+  Already-issued unknown operations replay exact Create only for receipt/cleanup;
+  unissued providers never start after abandonment. Completion requires all
+  required creation and teardown receipts; generic terminal errors prove no absence.
+  145 owns candidate capture/hash/validator; 147 owns consuming coordinator/reset.
 
 ## Risks And Follow-Ups
 
@@ -106,4 +129,7 @@ provider activation, P3 changes, accepting/releasing a stand without TT claims.
   with exact actual revisions/owning actors when artifacts exist.
 - Source eligibility depends on revocation/expiry normalization, not silent
   reader filtering under an unchanged version. Every writer path must participate.
-- No shared DEV/STAGING claim, Docker runner or hosted CI has been acquired yet.
+- Owned Linux runner voice-rudeus147-be012 uses Go1.26.5, PostgreSQL16 and real
+  NATS2.11 testcontainers, Docker bridge only. Proofs are under
+  D:/Git/Voice/tmp/swarm/rudeus147-be012. No shared DEV/STAGING claim or hosted
+  CI acceptance has been acquired. Local tests do not imply deployment PASS.

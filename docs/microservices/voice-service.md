@@ -125,6 +125,18 @@ one read-only REPEATABLE READ transaction across native sources and takes no
 locks. Source coverage, Space writer integration and the trusted ordinary
 reconnect producer remain separate activation requirements.
 
+The native A3 producer saves `voice.roster_membership_changed` (protocol version
+1) in `voice_roster_outbox`, with stable event ID, occurred-at and serialized
+bytes. The publisher retries those bytes with `Nats-Msg-Id` equal to the event
+ID. It does not reuse compatibility participant-event IDs. Space increments its
+independent head `roster_version` when projection confirmation first commits
+COMMITTED/ACTIVE eligibility under the exact OPEN head. LEFT commits before
+revocation or whole-room CLOSING; replay, tentative admission and SDK-only cleanup
+produce no additional version. `BeginPartyRoomClose` uses the caller's Space
+barrier transaction and emits departures in profile UUID order. Creator departure
+retains the finalized COMMITTED/projection witness while a survivor remains in
+the OPEN room. Publication does not certify source coverage or activate snapshots.
+
 SDK create retry uses the stored intent/name. Before READY wins, uncertainty,
 cancellation, failure or restart chooses ABORTING and compensates that exact name;
 a late create cannot ring, issue tokens or revive it. If READY already won before
