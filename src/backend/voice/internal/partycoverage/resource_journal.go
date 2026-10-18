@@ -117,6 +117,7 @@ func (r *ResourceProofReader) checkReader(ctx context.Context, tx pgx.Tx) error 
  OR a.rolname IN ('pg_write_server_files','pg_read_server_files','pg_execute_server_program')
  OR pg_has_role(a.oid,c.relowner,'MEMBER') OR has_schema_privilege(a.oid,c.relnamespace,'CREATE')
  OR has_table_privilege(a.oid,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+ OR has_any_column_privilege(a.oid,c.oid,'INSERT,UPDATE,REFERENCES')
  OR EXISTS(SELECT 1 FROM pg_proc p WHERE p.prosecdef AND has_function_privilege(a.oid,p.oid,'EXECUTE'))))),true)
  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
  WHERE n.nspname=$1 AND c.relname=ANY($3::text[])`, r.schema, r.ownerOID, []string{"voice_party_resource_components", "voice_party_resource_retirements", "voice_party_resource_component_links"}).Scan(&count, &unsafe)
