@@ -1,9 +1,60 @@
 # BE-238: durable AutoMod scan count
 
+## Current correction: finite outcomes (Astra199 TTc17)
+
+Original combined FAIL is retained in attachment738ebb533dad4be5dce9151de0ed394d,
+source f453a544d4e0acd823bafbd48daf8f39d16d3d0e: one-CPU RPC batch observed11
+instead of37 and held fixture observed1 after lock release. Full original stdout
+and backend ordering were not retained. Neither permanent loss26 nor a specific
+late-commit cause is established. Earlier focused PASS/source CLEAR do not
+qualify this combined scenario.
+
+Decision attachment418eebb278a8253c685a62eb64c52e70 retains bounded best-effort
+persisted samples, clarifies canon and requires exactly one finite terminal
+outcome per eligible evaluation. No retry, worker, queue, timeout increase or
+moderation-policy change. Author142 owns fresh WT35/base8984552dd; task/CI121.
+
+- [x] Linux RED: eligible evaluation exposes no terminal outcome (0.097s).
+- [x] Private-registry collector, controlled recorder seam, real production store.
+- [x] Exact37 direct acknowledged PG increments/reopen, exact37 handler eligibility.
+- [x] Child cap/quarter/skips/no retry, original decisions/errors preserved.
+- [x] RPC terminal reconciliation and server-quiescent durable bounds; healthy ack.
+- [x] Row/table locks held through attributed backend termination, exact0,
+  separately acknowledged recovery1; committed-but-error fault injection.
+- [ ] One-CPU full grpcsvc with complete stdout, exact images/catalog/CPU/pool
+  diagnostics. Merge foreign f453 only in separate proof branch; deliver cleanfix.
+- [ ] Exact independent review, portable bundle/restore, explicit121 intake.
+
+Client cancellation, RPC completion, pgx cleanup alone, fixed sleeps or equal
+reads do not prove server quiescence. Stop submitters, keep the lock, close the
+unique-application fixture pool and observe no corresponding server backends
+before release. Finite observation failure fails the fixture. Process diagnostics
+have crash/restart limitations and do not form a lossless evaluation ledger.
+
+Owned one-CPU Linux Go1.26/PG16 focused successor PASS4.521s, zero skips:
+direct acknowledged37/newpool37, handler eligibility37/ack37/bypass0, synthetic
+commit-then-error delta1/unconfirmed1/no retry. RealRPC E37=A7+U30+S0; after
+all unique-application server backends disappeared, D9 satisfies7<=9<=37.
+This is observed uncertainty, not a claim that30 writes were lost. Row and table
+each returned clean/spam decisions under500ms caller deadlines, observedU2/A0,
+closed their unique pool and proved backend count0 while lock remained held,
+then read durable0 inside the lock transaction. Recovery acknowledged1/durable1.
+Original action history/baseline, missing table/singleton, migration down/up and
+business validation remain checked. Default resolved GOMAXPROCS2/NumCPU16,
+pool max16/min0; complete focused stdout is retained in the external delivery
+artifact. A first diagnostic-only runner expected cgroupv2 paths on actualv1;
+it ran no tests and is retained as infrastructure failure, not behavioral RED.
+
+Component short tests and Linux go vet PASS; isolated host static lint reports
+zero issues (no host tests/listeners). Diffcheck PASS. Graphify AST update was
+attempted and canceled after bounded no-output execution; own process chain
+settled, no graph-update PASS claimed. Combined full-service gate remains open.
+
 ## Purpose and context
 
-`GetAutoModStats.messages_checked` must count configured `CheckMessage` scan
-evaluations, including allowed messages, instead of action-log rows. Sources:
+`GetAutoModStats.messages_checked` counts persisted samples eligible from
+configured `CheckMessage` evaluations, including allowed messages, instead of
+action-log rows. Sources:
 `docs/microservices/moderation-service.md`, `docs/features/reports.md`,
 `docs/DATA_STORES.md`, `docs/TESTING.md`, PLAN A4 and TT BE-238. Base is actual
 develop `45cf501e85a05666b8c99813dc94c281f11552e2`; developer142 owns a separate
