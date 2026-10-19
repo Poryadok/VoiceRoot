@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"voice/backend/voice/internal/retirementproof"
+	"voice/backend/voice/internal/store"
 )
 
 var r22Tables = []string{"voice_room_instances", "voice_room_memberships", "voice_lifecycle_operations", "voice_lifecycle_effects", "voice_media_epoch_denials", "voice_event_outbox", "voice_lifecycle_redis_divergences"}
@@ -151,149 +152,10 @@ func (o *Owner) ReadCutoverDrain(ctx context.Context, ref retirementproof.OwnerW
 // Resume accepts reference identities only. The trusted verifier resolves both
 // immutable journals and reobserves installation/resources on EVERY attempt,
 // including a completed receipt read after a lost acknowledgement.
-func (o *Owner) ResumeCutoverDrain(ctx context.Context, ref retirementproof.OwnerWorkRef, proof retirementproof.ProofRef) (Receipt, error) {
-	if o == nil || o.Authority == nil || o.Inventory == nil || o.Verifier == nil {
-		return Receipt{}, retirementproof.ErrUnavailable
-	}
-	w, err := o.ReadOwnerWork(ctx, ref)
-	if err != nil {
-		return Receipt{}, err
-	}
-	if err = o.Authority.CheckMaintenance(ctx, w.Cut); err != nil {
-		return Receipt{}, err
-	}
-	inventory, err := o.Inventory.ReadClosedLegacyInventory(ctx, w.Cut)
-	if err != nil {
-		return Receipt{}, err
-	}
-	targets, err := decodeTargets(w)
-	if err != nil {
-		return Receipt{}, err
-	}
-	if !sameJSON(targets[0].Inventory, inventory) {
-		return Receipt{}, retirementproof.ErrConflict
-	}
-	verified, err := o.Verifier.VerifyForWork(ctx, proof, ref)
-	if err != nil {
-		return Receipt{}, err
-	}
-	if err = verified.ValidateFor(w); err != nil {
-		return Receipt{}, err
-	}
-	acceptance, err := json.Marshal(struct {
-		Work, Target   retirementproof.Digest
-		Proof          retirementproof.ProofRef
-		Resolution     []byte
-		ResolutionHash retirementproof.Digest
-	}{verified.WorkHash(), verified.TargetManifestHash(), proof, verified.DomainResolutionBytes(), verified.DomainResolutionHash()})
-	if err != nil {
-		return Receipt{}, err
-	}
-	acceptanceHash := retirementproof.Hash("voice.legacy.acceptance.v1", acceptance)
-	// Persist acceptance BEFORE any cleanup; crash recovery always reuses it.
-	tx, err := o.Pool.Begin(ctx)
-	if err != nil {
-		return Receipt{}, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if err = lockWork(ctx, tx, ref.WorkID); err != nil {
-		return Receipt{}, err
-	}
-	_, state, receipt, err := readWork(ctx, tx, ref)
-	if err != nil {
-		return Receipt{}, err
-	}
-	if state == "COMPLETE" {
-		r, err := decodeReceipt(w, receipt)
-		if err != nil || r.Proof != proof {
-			return Receipt{}, retirementproof.ErrConflict
-		}
-		return r, tx.Commit(ctx)
-	}
-	if state == "PREPARED" {
-		if _, err = tx.Exec(ctx, `INSERT INTO voice_legacy_owner_acceptances(work_id,acceptance_bytes,acceptance_sha256) VALUES($1,$2,$3)`, ref.WorkID, acceptance, acceptanceHash[:]); err != nil {
-			return Receipt{}, err
-		}
-		if _, err = tx.Exec(ctx, `UPDATE voice_legacy_owner_works SET state='ACCEPTED' WHERE work_id=$1`, ref.WorkID); err != nil {
-			return Receipt{}, err
-		}
-	} else {
-		var saved, digest []byte
-		if err = tx.QueryRow(ctx, `SELECT acceptance_bytes,acceptance_sha256 FROM voice_legacy_owner_acceptances WHERE work_id=$1`, ref.WorkID).Scan(&saved, &digest); err != nil {
-			return Receipt{}, err
-		}
-		if !bytes.Equal(saved, acceptance) || !bytes.Equal(digest, acceptanceHash[:]) {
-			return Receipt{}, retirementproof.ErrConflict
-		}
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return Receipt{}, err
-	}
-	// Each endpoint compares its complete captured bytes atomically. A later
-	// endpoint failure leaves ACCEPTED work; already cleaned endpoints exact-retry.
-	for _, t := range targets {
-		switch t.Kind {
-		case "REDIS":
-			if o.Endpoints == nil {
-				return Receipt{}, retirementproof.ErrUnavailable
-			}
-			if err = o.Endpoints.CompareCleanup(ctx, *t.Endpoint, *t.Snapshot); err != nil {
-				return Receipt{}, err
-			}
-		case "R22_RETAINED":
-			current, e := readR22(ctx, o.Pool, t.Table)
-			if e != nil {
-				return Receipt{}, e
-			}
-			if !sameJSON(t.Rows, current) {
-				return Receipt{}, retirementproof.ErrConflict
-			}
-		}
-	}
-	// Reobserve after bounded cleanup, before recording a terminal receipt.
-	verified, err = o.Verifier.VerifyForWork(ctx, proof, ref)
-	if err != nil {
-		return Receipt{}, err
-	}
-	if err = verified.ValidateFor(w); err != nil {
-		return Receipt{}, err
-	}
-	if err = o.Authority.CheckMaintenance(ctx, w.Cut); err != nil {
-		return Receipt{}, err
-	}
-	raw, err := json.Marshal(struct {
-		Protocol                      string
-		Work                          retirementproof.OwnerWorkRef
-		Proof                         retirementproof.ProofRef
-		WorkHash, Targets, Acceptance retirementproof.Digest
-	}{Protocol, ref, proof, verified.WorkHash(), w.SealedTargetManifestHash, acceptanceHash})
-	if err != nil {
-		return Receipt{}, err
-	}
-	hash := retirementproof.Hash("voice.legacy.receipt.v1", raw)
-	tx, err = o.Pool.Begin(ctx)
-	if err != nil {
-		return Receipt{}, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if err = lockWork(ctx, tx, ref.WorkID); err != nil {
-		return Receipt{}, err
-	}
-	_, state, existing, err := readWork(ctx, tx, ref)
-	if err != nil {
-		return Receipt{}, err
-	}
-	if state == "COMPLETE" {
-		if !bytes.Equal(existing, raw) {
-			return Receipt{}, retirementproof.ErrConflict
-		}
-	} else if _, err = tx.Exec(ctx, `UPDATE voice_legacy_owner_works SET state='COMPLETE',receipt_bytes=$2,receipt_sha256=$3 WHERE work_id=$1 AND state='ACCEPTED'`, ref.WorkID, raw, hash[:]); err != nil {
-		return Receipt{}, err
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return Receipt{}, err
-	}
-	return Receipt{ref, proof, raw, hash}, nil
+func (o *Owner) ResumeCutoverDrain(context.Context, retirementproof.OwnerWorkRef, retirementproof.ProofRef) (Receipt, error) {
+	// Superseded draft API: a resource proof alone cannot establish C/P/T,
+	// native terminal predicates or complete owner receipt reconciliation.
+	return Receipt{}, store.ErrLegacyPartitionRequired
 }
 
 type query interface {

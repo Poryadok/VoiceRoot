@@ -81,5 +81,5 @@ type target struct {
 }
 
 func ContractHash() retirementproof.Digest {
-	return retirementproof.Hash("voice.legacy.owner-contract.v1", []byte("voice024;closed-historical-inventory;raw-redis-r22-memory;all-unknown-issuance;fresh-proof;exact-compare-cleanup;immutable-receipt;no-serving"))
+	return retirementproof.Hash("voice.legacy.owner-contract.v1", []byte("voice024;BE011-REDIS-CAPTURE-PARTITION-v1;closed-historical-inventory;atomic-raw-redis-expiry-r22-memory;all-unknown-issuance;fresh-proof;two-work-partition-step-link;immutable-receipt;no-serving"))
 }

@@ -116,50 +116,39 @@ func TestLegacyOwnerRederivesUnknownEvidenceOnEveryRead(t *testing.T) {
 	require.ErrorIs(t, err, retirementproof.ErrConflict)
 }
 
-func TestLegacyOwnerProofFailureNeverCleansAndAcceptedFailureResumes(t *testing.T) {
+func TestLegacyOwnerMissingPartitionCannotCompleteWithOnlyResourceProof(t *testing.T) {
 	o, inventory, endpoints, cut := newOwnerFixture(t)
 	proof := newProofFixture(t, &cut)
 	inventory.inventory.Cut = cut
-	o.Verifier = retirementproof.TrustedVerifier{Journal: proof, Owner: o, Installation: proof, Resources: proof}
+	verifier := retirementproof.TrustedVerifier{Journal: proof, Owner: o, Installation: proof, Resources: proof}
+	o.Verifier = verifier
 	ctx := context.Background()
 	ref, err := o.PrepareCutoverDrain(ctx, cut, uuid.New())
 	require.NoError(t, err)
-	// A reference is not proof provenance.
-	forged := proof.record.Ref
-	forged.ProofID = uuid.New()
-	_, err = o.ResumeCutoverDrain(ctx, ref, forged)
-	require.ErrorIs(t, err, retirementproof.ErrConflict)
-	require.Zero(t, endpoints.cleaned)
-	endpoints.cleanupErr = retirementproof.ErrPending
+	w, err := o.ReadOwnerWork(ctx, ref)
+	require.NoError(t, err)
+	verified, err := verifier.VerifyForWork(ctx, proof.record.Ref, ref)
+	require.NoError(t, err)
+	require.NoError(t, verified.ValidateFor(w))
 	_, err = o.ResumeCutoverDrain(ctx, ref, proof.record.Ref)
-	require.ErrorIs(t, err, retirementproof.ErrPending)
+	require.ErrorIs(t, err, store.ErrLegacyPartitionRequired)
+	require.Zero(t, endpoints.cleaned)
 	var state string
 	require.NoError(t, o.Pool.QueryRow(ctx, `SELECT state FROM voice_legacy_owner_works WHERE work_id=$1`, ref.WorkID).Scan(&state))
-	require.Equal(t, "ACCEPTED", state)
+	require.Equal(t, "PREPARED", state)
 	_, err = o.ReadCutoverDrain(ctx, ref)
 	require.ErrorIs(t, err, retirementproof.ErrPending)
-	endpoints.cleanupErr = nil
-	receipt, err := o.ResumeCutoverDrain(ctx, ref, proof.record.Ref)
-	require.NoError(t, err)
-	cleaned := endpoints.cleaned
-	replayed, err := o.ResumeCutoverDrain(ctx, ref, proof.record.Ref)
-	require.NoError(t, err)
-	require.Equal(t, receipt, replayed)
-	require.Equal(t, cleaned, endpoints.cleaned)
-	read, err := o.ReadCutoverDrain(ctx, ref)
-	require.NoError(t, err)
-	require.Equal(t, receipt, read)
-	// Restored database bytes cannot override external incarnation/fence loss.
+	forged := proof.record.Ref
+	forged.ProofID = uuid.New()
+	_, err = verifier.VerifyForWork(ctx, forged, ref)
+	require.ErrorIs(t, err, retirementproof.ErrConflict)
 	proof.observationErr = retirementproof.ErrUnavailable
-	_, err = o.ResumeCutoverDrain(ctx, ref, proof.record.Ref)
+	_, err = verifier.VerifyForWork(ctx, proof.record.Ref, ref)
 	require.ErrorIs(t, err, retirementproof.ErrUnavailable)
 	proof.observationErr = nil
 	proof.installation.AuthorityIncarnation = uuid.New()
-	_, err = o.ResumeCutoverDrain(ctx, ref, proof.record.Ref)
+	_, err = verifier.VerifyForWork(ctx, proof.record.Ref, ref)
 	require.ErrorIs(t, err, retirementproof.ErrConflict)
-	// Database guards preserve historical bytes even for the cleanup role.
-	_, err = o.Pool.Exec(ctx, `UPDATE voice_legacy_owner_acceptances SET acceptance_bytes='forged' WHERE work_id=$1`, ref.WorkID)
-	require.Error(t, err)
 	_, err = o.Pool.Exec(ctx, `UPDATE voice_legacy_owner_works SET work_bytes='forged' WHERE work_id=$1`, ref.WorkID)
 	require.Error(t, err)
 }
