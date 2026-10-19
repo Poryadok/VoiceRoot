@@ -48,7 +48,7 @@ type MatchSquadProviderWorker struct {
 
 // Provision is the request-path entry to the durable provider saga. Every RPC
 // follows a committed immutable request, and activation follows both receipts.
-func (w *MatchSquadProviderWorker) Provision(ctx context.Context, matchID uuid.UUID, profileIDs []uuid.UUID) (string, string, error) {
+func (w *MatchSquadProviderWorker) provisionAttempt(ctx context.Context, matchID uuid.UUID, profileIDs []uuid.UUID) (string, string, error) {
 	if w == nil || w.Store == nil || w.Issuer == nil || w.Chat == nil || w.Voice == nil || matchID == uuid.Nil {
 		return "", "", errors.New("MatchSquad protected provider worker unavailable")
 	}
@@ -108,22 +108,28 @@ func (w *MatchSquadProviderWorker) ProvisionAndActivate(ctx context.Context, mat
 
 // RunProvisioningOnce resumes committed operations after an ambiguous response
 // or process restart. Retries always use the exact request bytes already saved.
-func (w *MatchSquadProviderWorker) RunProvisioningOnce(ctx context.Context, limit int) (int, error) {
+func (w *MatchSquadProviderWorker) RunProvisioningWithOutcomesOnce(ctx context.Context, limit int) (ProvisioningPass, error) {
 	if w == nil || w.Store == nil || w.Issuer == nil || w.Chat == nil || w.Voice == nil {
-		return 0, errors.New("MatchSquad protected provider worker unavailable")
+		return ProvisioningPass{}, errors.New("MatchSquad protected provider worker unavailable")
 	}
 	items, err := w.Store.ListPendingMatchSquadProvisioningOperations(ctx, limit)
 	if err != nil {
-		return 0, err
+		return ProvisioningPass{}, err
 	}
-	completed := 0
+	pass := ProvisioningPass{}
 	var failures []error
 	for _, item := range items {
-		if _, err := w.provisionOperation(ctx, item); err != nil {
+		outcome, err := w.provisionOperationOutcome(ctx, item)
+		if outcome.State != "" {
+			pass.Outcomes = append(pass.Outcomes, outcome)
+		}
+		if err != nil {
 			failures = append(failures, fmt.Errorf("resume MatchSquad provisioning: %w", err))
 			continue
 		}
-		completed++
+		if outcome.State == store.MatchSquadOutcomeActive {
+			pass.Active++
+		}
 	}
 	// A process can die after the final proposal response commits and before
 	// Provision() persists its immutable provider intent. Recover those matches
@@ -133,11 +139,17 @@ func (w *MatchSquadProviderWorker) RunProvisioningOnce(ctx context.Context, limi
 		failures = append(failures, fmt.Errorf("list accepted matches without provisioning intent: %w", err))
 	} else {
 		for _, match := range missingIntent {
-			if _, err := w.ProvisionAndActivate(ctx, match.ID, match.ProfileIDs()); err != nil {
+			outcome, err := w.ProvisionWithOutcome(ctx, match.ID, match.ProfileIDs())
+			if outcome.State != "" {
+				pass.Outcomes = append(pass.Outcomes, outcome)
+			}
+			if err != nil {
 				failures = append(failures, fmt.Errorf("recover accepted match %s provisioning: %w", match.ID, err))
 				continue
 			}
-			completed++
+			if outcome.State == store.MatchSquadOutcomeActive {
+				pass.Active++
+			}
 		}
 	}
 	attention, attentionErr := w.Store.MatchSquadProvisioningAttention(ctx)
@@ -146,7 +158,7 @@ func (w *MatchSquadProviderWorker) RunProvisioningOnce(ctx context.Context, limi
 	} else if attention.Stalled > 0 || attention.ContractMismatch > 0 {
 		failures = append(failures, fmt.Errorf("%w: stalled=%d contract_mismatch=%d", ErrProvisionOperatorAttention, attention.Stalled, attention.ContractMismatch))
 	}
-	return completed, errors.Join(failures...)
+	return pass, errors.Join(failures...)
 }
 
 func newProvisioningIntent(matchID uuid.UUID, profileIDs []uuid.UUID) (store.MatchSquadProvisioningIntent, error) {

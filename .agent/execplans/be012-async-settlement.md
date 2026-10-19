@@ -302,3 +302,36 @@ failed before fix (15.427s); corrected run2top+2subPASS/0skip19.405s includes
 original nonempty contradiction regression and restart/Unavailable persistence.
 No schema or original021/023 bytes changed. Typed outcome continuation is separate
 uncommitted WIP and is not part of this correction or its acceptance.
+
+### Typed provisioning outcomes and compatibility adapters
+
+Accepted169c9 return-semantics gap now has a coherent typed API. Store observation
+uses one SQL snapshot to classify ACTIVE, WAITING_FOR_VALIDATION,
+SETTLING_ABANDONED, COMPENSATION_PENDING, COMPENSATION_CLOSED, CONTRACT_MISMATCH.
+Only ACTIVE includes usable Chat/Voice IDs. Missing evidence schema fails closed;
+the result is an observation, never a cached dispatch authorization or an absence
+receipt. Late mismatch takes precedence even over an existing active/closed row;
+reading it does not auto-end an active winner or rewrite its native lifecycle.
+
+ProvisionWithOutcome and RunProvisioningWithOutcomesOnce retain typed results.
+Existing Provision, ProvisionAndActivate and RunProvisioningOnce remain compatible
+adapters. They preserve errors, expose IDs only for successful ACTIVE, and count
+only ACTIVE as successful provisioning. Closed compensation remains a pending/
+precondition result, never successful provisioning. Every background result keeps
+its MatchID. No RPC/proto, main, candidate or145 proposal-guard files changed.
+
+Real Linux PG/race: typed stub RED3.363s (pending instead of WAITING outcome),
+initial GREEN15.573s, expanded2testsPASS33.910s/0skip covering all6states, no IDs
+outsideACTIVE, closed compatibility result, schema absence, active-winner policy.
+Request/background regression3top+2subPASS22.916s/0skip includes Unknown and
+uncertain terminal Voice settlement plus empty-present Chat/Voice receipts. Scoped
+vet0, full MM production build0; scopedshort25PASS/112PGskip/0fail. All failed and
+passed logs retained separately. The unchanged earlier PG/C4/provider proofs are
+reused, not rerun. New main/startup/installed rights and full acceptance remain open.
+
+Graphify attempted after this source batch, bounded without output; canonical
+Treehouse cwd inventory and CIM proved own57208 -> 45228 -> 51188. Only these own
+child/launcher processes were stopped; terminal1, no AST PASS. No runtime command
+or scarce stand/GH resource held. Own portless Linux runner/PG remain checkpointed.
+Independent reviewer299 owns the prior evidence review; its exactc110 successor
+correction and this separate typed delta require their own actual scoped results.
