@@ -12,6 +12,7 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import voice.backend.auth.releasepolicy.ReleasePolicy;
 import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.repository.OtpCodeRepository;
 import voice.backend.auth.repository.RefreshTokenRepository;
@@ -84,6 +85,11 @@ class OtpThrottleConfigurationTest {
 
   @Configuration(proxyBeanMethods = false)
   static class OtpDependencies {
+    @Bean
+    ReleasePolicy releasePolicy() {
+      return ReleasePolicy.development();
+    }
+
     @Bean
     AuthProperties authProperties() {
       return new AuthProperties();

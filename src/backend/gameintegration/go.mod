@@ -85,6 +85,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	voice.app/voice/calls v0.0.0
 	voice.app/voice/chat v0.0.0
+	voice.app/voice/events v0.0.0 // indirect
 	voice.app/voice/file v0.0.0 // indirect
 	voice.app/voice/role v0.0.0
 	voice.app/voice/space v0.0.0 // indirect
@@ -106,3 +107,5 @@ replace voice.app/voice/space => ../voice/pb/voice/space
 replace voice.app/voice/file => ../file/pb/voice/file
 
 replace voice.app/voice/story => ../voice/pb/voice/story
+
+replace voice.app/voice/events => ../messaging/pb/voice/events

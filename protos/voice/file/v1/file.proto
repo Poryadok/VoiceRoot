@@ -6,8 +6,8 @@ import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
 import "voice/common/v1/space_lifecycle.proto";
-import "voice/story/v1/story.proto";
 import "voice/events/v1/jetstream_events.proto";
+import "voice/story/v1/story.proto";
 
 option go_package = "voice.app/voice/file/v1;filev1";
 
