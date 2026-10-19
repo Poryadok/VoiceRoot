@@ -322,3 +322,35 @@ Parent/adapter/config/TLS raw logs and XML remain outside the lease with SHA256
 manifest at tmp/swarm/rudeus172/owner-auth-parent/proof.json. Full source review,
 delivery and physical-copy acceptance remain OPEN;162 BE045 c28 NO_CANDIDATE
 does not authorize a C+P30D lease promise, invented endpoint or retimed cycles.
+
+Next selector bootstrap uses dedicated AUTH_ROLE_IDENTITY_SELECTOR_KEYS_DIR,
+AUTH_ROLE_IDENTITY_SELECTOR_KEYSET_REVISION and
+AUTH_ROLE_IDENTITY_SELECTOR_ACTIVE_VERSION. All three are absent or configured
+together. Files v<positive-version>.key contain exactly32 raw bytes, with every
+required retained version present. Keys load once outside SQL and remain an
+immutable local snapshot; they are not workload RSA signing keys or Mod keys.
+Registration must preserve every retained database fingerprint and fail closed
+on stale/replaced/missing versions before capture enforcement is enabled.
+
+Native selector settings4 + existing selector5 passed9/0skip at03:16:19Z after
+missing-class RED. Bootstrap3 real PostgreSQL cases passed/0skip at03:19:26Z:
+idempotent registration, both repository birth paths, retained-key loss/change
+rejection without journal advance, raw uncaptured birth rejection and no ambient
+transaction joining. Spring+realPG1 passed/0skip at03:26:18Z after exact missing-
+configuration-class REDv2. It covers startup before cutover, both captured births
+through the real AccountRepository bean after cutover, and failed startup when
+already-required owner keys are omitted. A first testcompile inference diagnostic
+was corrected separately and is not the accepted RED. Memory persistence does
+not activate JDBC owner capture, and workload signing/Mod packages remain untouched.
+
+Dependency merge c455560b incorporates c850's unrelated frontend/CI changes and
+was normally SSH-published121 at03:32:33UTC. The Auth mutation source was unchanged
+by that merge. Combined native compatibility uses exact156 ae4298ca migrations:
+V27 SHA256 da32e423267b418f1856eced453bac369a6d3faa13f2bb5a49a66b4b79cec880,
+V29 bdbb92dde4e56b2671832c6edbb95eca81b5221426a498c32f68a3572426d49e,
+V30 bb84293efe66359f0b7c9fc85d25bce4ee9fc58bca16e3cd8aafbf9b4c4c05a9.
+Role8 passed/0skip at03:35:28Z on all30 migrations; parent/bootstrap/Spring runs
+remain live in29047 on separate databases and must not yet be claimed complete.
+156 confirms the independent opaque Role/Mod cycle UUID namespaces bind the
+same canonical account deletion transition/deadline, without cross-purpose UUID
+equality or authority borrowing. Source review/activation remains OPEN.

@@ -62,6 +62,19 @@ INCOMPLETE, never inferred terminal. A local journal hash or an authentic old
 snapshot does not prove independent CURRENT recovery. Restore binds the accepted
 Auth/User/Role/Space vector and its actual recovery target/generation.
 
+Local selector capture is configured with all three settings:
+`AUTH_ROLE_IDENTITY_SELECTOR_KEYS_DIR`, `_KEYSET_REVISION`, `_ACTIVE_VERSION`
+(the latter names use the same `AUTH_ROLE_IDENTITY_SELECTOR` prefix). Files
+`v<positive-version>.key` contain exactly 32 raw bytes. The immutable loaded
+snapshot includes every retained version; these are owner selector secrets,
+separate from the existing workload RSA issuer and Moderation key families.
+Bootstrap registers their fingerprints transactionally before enabling required
+capture. Both ordinary and pending-email repository births use that snapshot.
+Missing/replaced retained keys or stale keyset revisions fail closed. Omitting
+settings is allowed before capture cutover; once enforcement is enabled, omitting
+the required snapshot prevents JDBC startup. There is no hot file reload or
+automatic key destruction. This wiring does not register a private RPC listener.
+
 User's canonical association/nonreuse core has its own key family and records
 profile history. Every new birth requires verified nonnull Auth parent authority;
 retained-row NOW baseline with missing parent cannot certify Role history.

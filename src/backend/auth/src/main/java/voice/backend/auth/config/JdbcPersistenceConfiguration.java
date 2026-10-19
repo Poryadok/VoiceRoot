@@ -1,6 +1,7 @@
 package voice.backend.auth.config;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -24,13 +25,17 @@ import voice.backend.auth.oauth.OAuthAuthorizationCodeStore;
 import voice.backend.auth.oauth.RedisOAuthAuthorizationCodeStore;
 import voice.backend.auth.security.RedisTokenBlacklist;
 import voice.backend.auth.security.TokenBlacklist;
+import voice.backend.auth.roleidentityauthority.AuthIdentitySelectorSettings;
 
 @Configuration
 @ConditionalOnProperty(prefix = "auth", name = "persistence", havingValue = "jdbc")
 public class JdbcPersistenceConfiguration {
   @Bean
-  AccountRepository accountRepository(NamedParameterJdbcTemplate jdbc) {
-    return new JdbcAccountRepository(jdbc);
+  AccountRepository accountRepository(NamedParameterJdbcTemplate jdbc,
+      ObjectProvider<AuthIdentitySelectorSettings> settings) {
+    var snapshot = settings.getIfAvailable();
+    return snapshot == null || snapshot.selectors() == null ? new JdbcAccountRepository(jdbc)
+        : new JdbcAccountRepository(jdbc, snapshot.selectors());
   }
 
   @Bean
