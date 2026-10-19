@@ -31,9 +31,10 @@ deployment, provider/native adapter activation or acceptance authority.
 - [x] Atomically claim task and acquire own WT33 lease from develop.
 - [x] Freeze exact source/script identity and canonical root RED.
 - [x] Versioned compiler/actor/root/receipt and four ConfigMap custody GREEN.
-- [ ] Exact all-policy census/recovery and backlog delivery/ACK proof.
-- [ ] Canonical preservation suite and actual isolated pinned native fixture.
-- [ ] Independent security/preservation review, portable restore and real121 handoff.
+- [x] Exact all-policy census/recovery and backlog delivery/ACK proof.
+- [x] Canonical preservation suite and actual isolated pinned native fixture.
+- [x] Independent security/preservation review and portable native archives.
+- [ ] Accepted real121 integration/CI handoff.
 
 ## Detailed Steps
 
@@ -79,14 +80,29 @@ Reviewer258 recorded bounded SOURCE CLEAR in the review function c1 and parent
 c8 for runtime archive c29f1167 plus inspected fixture-only v7 delta. Final
 commit applicability and native/runtime acceptance remain separate gates.
 
-Native empty10 and empty12 cases passed actual lost-UPDATE/CREATE response
-recovery, the before-CREATE-intent interruption, and fresh-cut no-op. Each
-preserved all 43 captured old consumers and three Social records. A later
-empty13 setup hit a Docker client wait timeout before compile/mutation; this
-did not invalidate completed cases. Only unrun scopes continue on a separate
-owned fixture. Stronger delivery metadata/unique-event assertions and original
-roster consumer unacked/acked cases run separately. Full native matrix remains
-open. The first native attempts identified fixture
+All eight distinct pinned native cases passed: empty10/12/13, nonmatching
+first-sequence-above-one, advanced empty, interleaved matching backlog, and
+already-existing unacked/acked roster consumers. This covers lost UPDATE and
+CREATE responses, verified UPDATE before CREATE intent, issued CREATE before
+mutation, and fresh-cut no-ops. New-roster cases preserve 43 captured old
+consumers; existing-roster cases preserve 44, including its legitimate progress.
+The populated case preserves seven original messages, M2, stream sequences4/6,
+complete frozen envelopes/IDs and actual A redelivery after withheld ACK and
+restart. Separate delivery clones retain original native message bytes,
+configuration and Created, then settle both events. No selected store is pulled
+or ACKed during its preservation interval.
+
+Eight actual-native provenance/metadata negative cases also rejected, after an
+exact baseline match: missing issue/close, wrong target/image/operation/interval,
+checksum corruption and orphan state. They start no broker and mutate no
+selected store. Signed fixture Voice publish and MM INFO/NEXT/ACK passed with
+eight wrong-scope denials; this is not installed-rights evidence. Portable
+before/after native archive copies match their manifest SHA256 values.
+
+One empty13 setup hit a Docker client wait timeout before compile/mutation;
+completed empty10/12 proofs were retained and only unrun scopes restarted on a
+separate owned fixture. No timeout or custody guard was widened. The first
+native attempts identified fixture
 setup errors (Go API signature, missing reviewed predecessor preparation/input),
 all before retained-store mutation. Their actual logs remain private evidence.
 
