@@ -14,9 +14,10 @@ func lockRevocationIdentities(ctx context.Context, tx pgx.Tx, a store.SpaceMedia
 
 func readRevocationTarget(ctx context.Context, tx pgx.Tx, op uuid.UUID, generation string, target *store.SpaceAdmissionRevocation) error {
 	a := &target.Admission
-	return tx.QueryRow(ctx, `SELECT a.operation_id,a.generation,a.account_id,a.profile_id,a.space_id,a.room_id,a.voice_room_id,a.room_generation,a.livekit_identity,o.owner_epoch
- FROM voice_space_media_admissions a JOIN voice_space_media_admission_owners o USING(operation_id)
- WHERE a.operation_id=$1 AND a.generation=$2 FOR UPDATE OF o`, op, generation).Scan(&a.OperationID, &a.Generation, &a.AccountID, &a.ProfileID, &a.SpaceID, &a.RoomID, &a.VoiceRoomID, &a.RoomGeneration, &a.Identity, &target.OwnerEpoch)
+	if err := tx.QueryRow(ctx, `SELECT owner_epoch FROM voice_space_media_admission_owners WHERE operation_id=$1 FOR UPDATE`, op).Scan(&target.OwnerEpoch); err != nil {
+		return err
+	}
+	return tx.QueryRow(ctx, `SELECT operation_id,generation,account_id,profile_id,space_id,room_id,voice_room_id,room_generation,livekit_identity FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2 FOR UPDATE`, op, generation).Scan(&a.OperationID, &a.Generation, &a.AccountID, &a.ProfileID, &a.SpaceID, &a.RoomID, &a.VoiceRoomID, &a.RoomGeneration, &a.Identity)
 }
 
 // Callers already hold Space, head, and sorted identity locks. The epoch is
@@ -72,6 +73,11 @@ func (s *PostgresAdmissionStore) FenceRestrictiveRoomLeave(ctx context.Context, 
 		return store.SpaceProjectionTicket{}, ErrAdmissionUnavailable
 	}
 	a := target.Admission
+	// Reject stale/incorrect authority before even allocating RESTORING. The
+	// loader below still rechecks after the observed gate for CAS freshness.
+	if _, _, err := s.readRestrictiveAdmissionDispatch(ctx, target); err != nil {
+		return store.SpaceProjectionTicket{}, err
+	}
 	ticket, err := gates.EnsureAdmissionDispatch(ctx, a.OperationID.String(), func(ctx context.Context, op string) (int64, bool, error) {
 		if op != a.OperationID.String() {
 			return 0, false, ErrAdmissionConflict
@@ -113,21 +119,40 @@ func (s *PostgresAdmissionStore) FenceOwnedRoomLeave(ctx context.Context, owner 
 		return store.SpaceProjectionTicket{}, ErrAdmissionConflict
 	}
 	ctx = store.WithSpaceAdmissionOwnership(ctx, owner)
-	ticket, err := gates.EnsureAdmissionDispatch(ctx, operation.String(), func(ctx context.Context, op string) (int64, bool, error) {
-		return s.readAdmissionDispatch(ctx, op, true)
-	})
+	load := func(ctx context.Context, op string) (int64, bool, error) {
+		epoch, live, err := s.readAdmissionDispatch(ctx, op, true)
+		if err != nil {
+			return 0, false, err
+		}
+		if live {
+			return 0, false, ErrAdmissionConflict
+		}
+		return epoch, false, nil
+	}
+	if _, _, err := load(ctx, operation.String()); err != nil {
+		return store.SpaceProjectionTicket{}, err
+	}
+	ticket, err := gates.EnsureAdmissionDispatch(ctx, operation.String(), load)
 	if err != nil {
 		return ticket, err
 	}
 	if ticket.AdmissionLive || ticket.AdmissionIncarnation == "" || ticket.AdmissionOwnerEpoch != owner.Epoch {
 		return ticket, ErrAdmissionConflict
 	}
-	tag, err := s.pool.Exec(ctx, `UPDATE voice_space_media_admission_owners o SET dispatch_fenced_epoch=owner_epoch,updated_at=clock_timestamp() WHERE operation_id=$1 AND owner_token=$2 AND owner_epoch=$3 AND lease_until>clock_timestamp() AND EXISTS(SELECT 1 FROM voice_space_media_admissions a WHERE a.operation_id=o.operation_id AND (a.state='ABORTING' OR a.participant_state IN ('REVOKING','ENDED')))`, operation, owner.Token, owner.Epoch)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return ticket, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := requireAdmissionOwnership(ctx, tx, operation); err != nil {
+		return ticket, err
+	}
+	tag, err := tx.Exec(ctx, `UPDATE voice_space_media_admission_owners o SET dispatch_fenced_epoch=owner_epoch,updated_at=clock_timestamp() WHERE operation_id=$1 AND owner_token=$2 AND owner_epoch=$3 AND lease_until>clock_timestamp() AND EXISTS(SELECT 1 FROM voice_space_media_admissions a WHERE a.operation_id=o.operation_id AND (a.state='ABORTING' OR a.participant_state IN ('REVOKING','ENDED')))`, operation, owner.Token, owner.Epoch)
 	if err != nil {
 		return ticket, err
 	}
 	if tag.RowsAffected() != 1 {
 		return ticket, ErrAdmissionConflict
 	}
-	return ticket, nil
+	return ticket, tx.Commit(ctx)
 }

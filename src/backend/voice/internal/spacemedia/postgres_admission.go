@@ -737,10 +737,20 @@ func (s *PostgresAdmissionStore) BeginOwnedRoomLeave(ctx context.Context, owner 
 
 // BeginRestrictiveRoomLeave is called only after the trusted leave/ACL boundary.
 // It never substitutes for failed workflow ownership.
-func (s *PostgresAdmissionStore) BeginRestrictiveRoomLeave(ctx context.Context, operationID uuid.UUID, generation string) (store.SpaceAdmissionRevocation, error) {
+func (s *PostgresAdmissionStore) BeginRestrictiveRoomLeave(ctx context.Context, expected Admission) (store.SpaceAdmissionRevocation, error) {
 	var target store.SpaceAdmissionRevocation
-	err := s.beginRoomLeave(ctx, operationID, generation, nil, func(tx pgx.Tx) error {
-		return readRevocationTarget(ctx, tx, operationID, generation, &target)
+	if expected.OperationID == uuid.Nil || expected.Generation == "" || expected.AccountID == uuid.Nil || expected.ProfileID == uuid.Nil || expected.SpaceID == uuid.Nil || expected.RoomID == "" || expected.VoiceRoomID == "" || expected.RoomGeneration == 0 || expected.Identity == "" {
+		return target, ErrAdmissionConflict
+	}
+	err := s.beginRoomLeave(ctx, expected.OperationID, expected.Generation, nil, func(tx pgx.Tx) error {
+		if err := readRevocationTarget(ctx, tx, expected.OperationID, expected.Generation, &target); err != nil {
+			return err
+		}
+		a := target.Admission
+		if a.AccountID != expected.AccountID || a.ProfileID != expected.ProfileID || a.SpaceID != expected.SpaceID || a.RoomID != expected.RoomID || a.VoiceRoomID != expected.VoiceRoomID || a.RoomGeneration != expected.RoomGeneration || a.Identity != expected.Identity {
+			return ErrAdmissionConflict
+		}
+		return nil
 	})
 	return target, err
 }

@@ -24,13 +24,16 @@ func (c *Coordinator) ResumeCapturedDrain(ctx context.Context, t spacelifecycle.
 	if err != nil {
 		return ErrAdmissionConflict
 	}
-	target, err := c.Admissions.BeginRestrictiveRoomLeave(ctx, op, t.Generation)
+	account, accountErr := uuid.Parse(t.AccountID)
+	profile, profileErr := uuid.Parse(t.ProfileID)
+	space, spaceErr := uuid.Parse(t.SpaceID)
+	if accountErr != nil || profileErr != nil || spaceErr != nil {
+		return ErrAdmissionConflict
+	}
+	expected := store.SpaceMediaAdmission{OperationID: op, Generation: t.Generation, AccountID: account, ProfileID: profile, SpaceID: space, RoomID: t.RoomID, VoiceRoomID: t.VoiceRoomID, RoomGeneration: t.RoomGeneration, Identity: t.Identity}
+	target, err := c.Admissions.BeginRestrictiveRoomLeave(ctx, expected)
 	if err != nil {
 		return err
-	}
-	a := target.Admission
-	if a.SpaceID.String() != t.SpaceID || a.RoomID != t.RoomID || a.VoiceRoomID != t.VoiceRoomID || a.RoomGeneration != t.RoomGeneration || a.AccountID.String() != t.AccountID || a.ProfileID.String() != t.ProfileID || a.Identity != t.Identity {
-		return ErrAdmissionConflict
 	}
 	gates, ok := c.ProjectionGates.(store.SpaceAdmissionProjectionGates)
 	if !ok {

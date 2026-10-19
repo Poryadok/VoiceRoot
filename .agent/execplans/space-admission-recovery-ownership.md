@@ -119,6 +119,22 @@ before and after execution; final exact-head validation remains required.
 
 ## Risks And Follow-Ups
 
+Independent review144 found two bounded P2 gaps in historical head2b89355:
+missing-gate allocation preceded strict sink validation, and captured drain
+validated its immutable tuple after beginning restrictive SQL effects. The
+successor validates before allocation and compares the full expected tuple
+inside the canonical transaction before writes. New real-PG/Redis race oracles
+failed against the historical implementation and pass after these fixes.
+
+Astra289 clarified the lease linearization contract in review task c2: acquire
+the owner row lock first, then issue a separate fresh DB-time/token/epoch check.
+Post-lock-valid transactions retain that lock to commit and may finish after
+deadline while blocked downstream. A pre-acquisition wait cannot cache freshness;
+renewal cannot resurrect expiry. Deterministic blocked-owner negatives (mutation
+and renewal), downstream-expiry ordered positive, cancellation rollback and
+next-transaction rejection cover this distinction. No final-clock scatter or
+cross-transaction authority is implied. Successor proof/review remains pending.
+
 Existing persisted rows require explicit fenced migration reconciliation; never
 invent live-owner proof for historic rows or mix old unfenced writers. Redis
 snapshot rollback/multi-primary fencing remains the existing infrastructure

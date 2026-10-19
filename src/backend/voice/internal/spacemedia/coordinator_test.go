@@ -179,8 +179,8 @@ func (f *fakeAdmissionRecovery) MarkProjectionApplied(context.Context, uuid.UUID
 func (f *fakeAdmissionRecovery) BeginOwnedRoomLeave(context.Context, store.SpaceAdmissionOwnership, uuid.UUID, string) error {
 	return nil
 }
-func (f *fakeAdmissionRecovery) BeginRestrictiveRoomLeave(_ context.Context, op uuid.UUID, generation string) (store.SpaceAdmissionRevocation, error) {
-	return store.SpaceAdmissionRevocation{Admission: store.SpaceMediaAdmission{OperationID: op, Generation: generation}, OwnerEpoch: 1}, nil
+func (f *fakeAdmissionRecovery) BeginRestrictiveRoomLeave(_ context.Context, a store.SpaceMediaAdmission) (store.SpaceAdmissionRevocation, error) {
+	return store.SpaceAdmissionRevocation{Admission: a, OwnerEpoch: 1}, nil
 }
 func (f *fakeAdmissionRecovery) CompleteRestrictiveRoomLeave(context.Context, store.SpaceAdmissionRevocation) error {
 	f.released++

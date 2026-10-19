@@ -905,7 +905,14 @@ durable journal and bounded lease for later readback/recovery.
 
 Every forward journal mutation and owner-driven abort/fence-release/cleanup
 completion verifies the current unexpired token/epoch under the existing Space
-barrier, room and sorted identity lock order. Recovery enumeration is only a
+barrier, room and sorted identity lock order. It first acquires the owner row's
+exclusive lock, then checks token, epoch and fresh PostgreSQL time in a separate
+statement. A valid transaction retains that lock through commit and may finish
+after its lease deadline while waiting for downstream rows; takeover serializes
+after it. A new transaction or renewal must acquire the lock and check freshness
+again, so a lock wait cannot preserve a pre-lock lease observation or revive an
+expired owner. SQL authority does not carry into a separate Redis effect or ACK
+transaction. Recovery enumeration is only a
 candidate list: healthy owners are filtered before the page limit. An atomic
 claim rechecks current eligibility and state under the Space barrier and room
 head, then rotates the token and increments its epoch. Expired/relinquished
@@ -934,7 +941,12 @@ arguments and an owner-bound sink loader. Missing or replaced ownership fails
 before Redis mutation and before an idempotent terminal return. Verified public
 leave, authority-loss cleanup and P3 captured drain use separate restrictive
 APIs: they persist REVOKING and obtain an exact admission tuple with the current
-owner epoch, without acquiring or borrowing a writer token. Their loader can
+owner epoch, without acquiring or borrowing a writer token. The full expected
+account/profile/Space/room/incarnation/identity tuple is compared under canonical
+locks before any restrictive SQL mutation. Both fencers validate their explicit
+owner or restrictive target before allocating even a missing Redis gate, then
+reload authority after gate observation. Owned DENY APIs reject forward LIVE
+state. Their loader can
 only publish DENY for that persisted restrictive target. A takeover invalidates
 the old target and acknowledgement; cleanup must explicitly obtain a fresh
 target and re-fence. Redis revocation transactions check the captured DENY nonce

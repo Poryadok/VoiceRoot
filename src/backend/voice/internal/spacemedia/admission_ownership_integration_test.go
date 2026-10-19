@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"sync"
 	"testing"
@@ -14,8 +15,204 @@ import (
 	callsv1 "voice.app/voice/calls/v1"
 	"voice/backend/voice/internal/grpcsvc"
 	"voice/backend/voice/internal/spacegatetest"
+	"voice/backend/voice/internal/spacelifecycle"
 	"voice/backend/voice/internal/store"
 )
+
+func TestSpaceAdmissionMissingGateRejectsStaleFencersBeforeAllocation(t *testing.T) {
+	ctx := context.Background()
+	pool := startSpaceMediaAdmissionPostgres(t, ctx)
+	s := NewPostgresAdmissionStore(pool)
+	a := admissionFixture()
+	ctx = ownAdmission(ctx, &a)
+	require.NoError(t, prepareAdmission(ctx, s, &a))
+	require.NoError(t, s.Fence(ctx, a))
+	require.NoError(t, s.MarkCommitted(ctx, a.OperationID, a.Generation))
+	require.NoError(t, s.MarkAborting(ctx, a.OperationID, a.Generation))
+	oldTarget, err := s.BeginRestrictiveRoomLeave(ctx, a)
+	require.NoError(t, err)
+	require.NoError(t, s.RelinquishAdmissionOwnership(ctx, a.OperationID))
+	current, claimed, err := s.ClaimAdmissionRecovery(context.Background(), a)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	calls, client := newP3Redis(t)
+	key := "p3:space_admission_dispatch:" + a.OperationID.String()
+	for _, mode := range []string{"owned", "restrictive"} {
+		t.Run(mode, func(t *testing.T) {
+			require.NoError(t, client.Del(ctx, key).Err())
+			if mode == "owned" {
+				_, err = s.FenceOwnedRoomLeave(context.Background(), a.Ownership, a.OperationID, calls)
+			} else {
+				_, err = s.FenceRestrictiveRoomLeave(context.Background(), oldTarget, calls)
+			}
+			require.ErrorIs(t, err, ErrAdmissionConflict)
+			require.Zero(t, client.Exists(ctx, key).Val(), "a stale fencer must reject before generic RESTORING allocation")
+		})
+	}
+	fresh := store.WithSpaceAdmissionOwnership(context.Background(), current.Ownership)
+	require.NoError(t, s.FenceAbortedAdmission(fresh, a.OperationID, calls))
+}
+
+func waitForAdmissionLeaseExpiry(t *testing.T, ctx context.Context, pool *pgxpool.Pool, op uuid.UUID) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		var expired bool
+		err := pool.QueryRow(ctx, `SELECT lease_until<=clock_timestamp() FROM voice_space_media_admission_owners WHERE operation_id=$1`, op).Scan(&expired)
+		return err == nil && expired
+	}, 4*time.Second, 10*time.Millisecond, "observe actual PostgreSQL deadline, not a scheduler sleep")
+}
+
+func TestSpaceAdmissionOwnerLockWaitCannotCarryPrelockFreshness(t *testing.T) {
+	for _, mode := range []string{"mutation", "renewal"} {
+		t.Run(mode, func(t *testing.T) {
+			ctx := context.Background()
+			pool := startSpaceMediaAdmissionPostgres(t, ctx)
+			s := NewPostgresAdmissionStore(pool)
+			a := admissionFixture()
+			ctx = ownAdmission(ctx, &a)
+			require.NoError(t, prepareAdmission(ctx, s, &a))
+			_, err := pool.Exec(ctx, `UPDATE voice_space_media_admission_owners SET lease_until=clock_timestamp()+interval '2 seconds' WHERE operation_id=$1`, a.OperationID)
+			require.NoError(t, err)
+			blocker, err := pool.Begin(ctx)
+			require.NoError(t, err)
+			defer blocker.Rollback(context.Background())
+			var op uuid.UUID
+			require.NoError(t, blocker.QueryRow(ctx, `SELECT operation_id FROM voice_space_media_admission_owners WHERE operation_id=$1 FOR UPDATE`, a.OperationID).Scan(&op))
+			result := make(chan error, 1)
+			go func() {
+				if mode == "mutation" {
+					result <- s.MarkAborting(ctx, a.OperationID, a.Generation)
+				} else {
+					result <- s.RenewAdmissionOwnership(ctx, a.OperationID)
+				}
+			}()
+			waitForPostgresLockWait(t, ctx, pool, "voice_space_media_admission_owners")
+			var beforeDeadline bool
+			require.NoError(t, pool.QueryRow(ctx, `SELECT clock_timestamp()<lease_until FROM voice_space_media_admission_owners WHERE operation_id=$1`, a.OperationID).Scan(&beforeDeadline))
+			require.True(t, beforeDeadline, "the candidate observed the owner before expiry and is now blocked on unchanged row")
+			waitForAdmissionLeaseExpiry(t, ctx, pool, a.OperationID)
+			require.NoError(t, blocker.Commit(ctx))
+			require.ErrorIs(t, <-result, ErrAdmissionConflict, "freshness must be evaluated after acquiring owner lock")
+			var state string
+			require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM voice_space_media_admissions WHERE operation_id=$1`, a.OperationID).Scan(&state))
+			require.Equal(t, AdmissionPrepared, state)
+			var expired bool
+			require.NoError(t, pool.QueryRow(ctx, `SELECT lease_until<=clock_timestamp() FROM voice_space_media_admission_owners WHERE operation_id=$1`, a.OperationID).Scan(&expired))
+			require.True(t, expired, "a renewal blocked across expiry cannot resurrect the lease")
+		})
+	}
+}
+
+func TestSpaceAdmissionAlreadyLockedTransactionMayFinishAfterExpiry(t *testing.T) {
+	ctx := context.Background()
+	pool := startSpaceMediaAdmissionPostgres(t, ctx)
+	s := NewPostgresAdmissionStore(pool)
+	a := admissionFixture()
+	ctx = ownAdmission(ctx, &a)
+	require.NoError(t, prepareAdmission(ctx, s, &a))
+	_, err := pool.Exec(ctx, `UPDATE voice_space_media_admission_owners SET lease_until=clock_timestamp()+interval '2 seconds' WHERE operation_id=$1`, a.OperationID)
+	require.NoError(t, err)
+	blocker, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	defer blocker.Rollback(context.Background())
+	var op uuid.UUID
+	require.NoError(t, blocker.QueryRow(ctx, `SELECT operation_id FROM voice_space_media_admissions WHERE operation_id=$1 FOR UPDATE`, a.OperationID).Scan(&op))
+	result := make(chan error, 1)
+	go func() { result <- s.MarkAborting(ctx, a.OperationID, a.Generation) }()
+	waitForPostgresLockWait(t, ctx, pool, "UPDATE voice_space_media_admissions SET state='ABORTING'")
+	waitForAdmissionLeaseExpiry(t, ctx, pool, a.OperationID)
+	recovered := make(chan error, 1)
+	go func() {
+		_, claimed, err := s.ClaimAdmissionRecovery(context.Background(), a)
+		if err == nil && !claimed {
+			err = ErrAdmissionConflict
+		}
+		recovered <- err
+	}()
+	waitForPostgresLockWait(t, ctx, pool, "pg_advisory_xact_lock")
+	select {
+	case err := <-recovered:
+		t.Fatalf("takeover crossed the still-locked transaction: %v", err)
+	default:
+	}
+	require.NoError(t, blocker.Commit(ctx))
+	require.NoError(t, <-result, "a transaction already checked under retained exclusive owner lock remains ordered before takeover")
+	require.NoError(t, <-recovered)
+	require.ErrorIs(t, s.MarkAborting(ctx, a.OperationID, a.Generation), ErrAdmissionConflict, "no authority carries to a subsequent transaction")
+}
+
+func TestSpaceAdmissionCancelledDownstreamWaitRollsBackAuthority(t *testing.T) {
+	ctx := context.Background()
+	pool := startSpaceMediaAdmissionPostgres(t, ctx)
+	s := NewPostgresAdmissionStore(pool)
+	a := admissionFixture()
+	ctx = ownAdmission(ctx, &a)
+	require.NoError(t, prepareAdmission(ctx, s, &a))
+	blocker, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	defer blocker.Rollback(context.Background())
+	var op uuid.UUID
+	require.NoError(t, blocker.QueryRow(ctx, `SELECT operation_id FROM voice_space_media_admissions WHERE operation_id=$1 FOR UPDATE`, a.OperationID).Scan(&op))
+	attempt, cancel := context.WithCancel(ctx)
+	result := make(chan error, 1)
+	go func() { result <- s.MarkAborting(attempt, a.OperationID, a.Generation) }()
+	waitForPostgresLockWait(t, ctx, pool, "UPDATE voice_space_media_admissions SET state='ABORTING'")
+	cancel()
+	require.ErrorIs(t, <-result, context.Canceled)
+	require.NoError(t, blocker.Commit(ctx))
+	var state string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM voice_space_media_admissions WHERE operation_id=$1`, a.OperationID).Scan(&state))
+	require.Equal(t, AdmissionPrepared, state)
+	require.NoError(t, s.RenewAdmissionOwnership(ctx, a.OperationID), "cancelled transaction released its owner lock")
+}
+
+func TestSpaceAdmissionOwnedDenyLoaderCannotCreateLiveGate(t *testing.T) {
+	ctx := context.Background()
+	pool := startSpaceMediaAdmissionPostgres(t, ctx)
+	s := NewPostgresAdmissionStore(pool)
+	a := admissionFixture()
+	ctx = ownAdmission(ctx, &a)
+	require.NoError(t, prepareAdmission(ctx, s, &a))
+	require.NoError(t, s.Fence(ctx, a))
+	require.NoError(t, s.MarkCommitted(ctx, a.OperationID, a.Generation))
+	calls, client := newP3Redis(t)
+	key := "p3:space_admission_dispatch:" + a.OperationID.String()
+	require.NoError(t, client.Del(ctx, key).Err())
+	_, err := s.FenceOwnedRoomLeave(ctx, a.Ownership, a.OperationID, calls)
+	require.ErrorIs(t, err, ErrAdmissionConflict)
+	require.Zero(t, client.Exists(ctx, key).Val(), "a deny-only API may not allocate or publish a LIVE gate")
+}
+
+func TestSpaceAdmissionCapturedWrongTupleHasNoNativeEffects(t *testing.T) {
+	ctx := context.Background()
+	pool := startSpaceMediaAdmissionPostgres(t, ctx)
+	s := NewPostgresAdmissionStore(pool)
+	a := admissionFixture()
+	ctx = ownAdmission(ctx, &a)
+	require.NoError(t, prepareAdmission(ctx, s, &a))
+	require.NoError(t, s.Fence(ctx, a))
+	require.NoError(t, s.MarkCommitted(ctx, a.OperationID, a.Generation))
+	require.NoError(t, s.MarkProjectionApplied(ctx, a.OperationID, a.Generation))
+	calls := store.NewMemoryCallStore()
+	c := &Coordinator{Calls: calls, Store: calls, Admissions: s, ProjectionGates: spacegatetest.New()}
+	target := spacelifecycle.CapturedTarget{OperationID: a.OperationID.String(), Generation: a.Generation, SpaceID: a.SpaceID.String(), AccountID: a.AccountID.String(), ProfileID: a.ProfileID.String(), RoomID: a.RoomID, VoiceRoomID: a.VoiceRoomID, RoomGeneration: a.RoomGeneration, Identity: a.Identity}
+	snapshot := func() string {
+		var result string
+		err := pool.QueryRow(ctx, `SELECT jsonb_build_object('admission',to_jsonb(a),'head',to_jsonb(h),'roster_outbox',(SELECT jsonb_agg(to_jsonb(r) ORDER BY event_id) FROM voice_roster_outbox r WHERE r.room_id::text=a.room_id),'admission_outbox',(SELECT jsonb_agg(to_jsonb(o) ORDER BY event_id) FROM voice_space_media_admission_outbox o WHERE o.operation_id=a.operation_id))::text FROM voice_space_media_admissions a JOIN voice_space_media_room_heads h USING(voice_room_id,room_generation) WHERE a.operation_id=$1`, a.OperationID).Scan(&result)
+		require.NoError(t, err)
+		return result
+	}
+	before := snapshot()
+	mutations := map[string]func(*spacelifecycle.CapturedTarget){"account": func(t *spacelifecycle.CapturedTarget) { t.AccountID = uuid.NewString() }, "profile": func(t *spacelifecycle.CapturedTarget) { t.ProfileID = uuid.NewString() }, "space": func(t *spacelifecycle.CapturedTarget) { t.SpaceID = uuid.NewString() }, "room": func(t *spacelifecycle.CapturedTarget) { t.RoomID = uuid.NewString() }, "voice-room": func(t *spacelifecycle.CapturedTarget) { t.VoiceRoomID = uuid.NewString() }, "room-generation": func(t *spacelifecycle.CapturedTarget) { t.RoomGeneration++ }, "identity": func(t *spacelifecycle.CapturedTarget) { t.Identity += "-wrong" }}
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			wrong := target
+			mutate(&wrong)
+			require.ErrorIs(t, c.ResumeCapturedDrain(ctx, wrong), ErrAdmissionConflict)
+			require.Equal(t, before, snapshot(), "a rejected captured tuple must leave participant/head/roster/outbox byte-equivalent")
+		})
+	}
+}
 
 type admissionDenyLostAck struct {
 	key  string
@@ -110,7 +307,7 @@ func TestSpaceAdmissionRestrictiveRevocationCannotAdoptTakeover(t *testing.T) {
 			require.NoError(t, s.MarkProjectionApplied(ctx, a.OperationID, a.Generation))
 			// Explicit missing workflow authority cannot become a trusted ACL call.
 			require.ErrorIs(t, s.BeginOwnedRoomLeave(context.Background(), store.SpaceAdmissionOwnership{}, a.OperationID, a.Generation), ErrAdmissionConflict)
-			target, err := s.BeginRestrictiveRoomLeave(context.Background(), a.OperationID, a.Generation)
+			target, err := s.BeginRestrictiveRoomLeave(context.Background(), a)
 			require.NoError(t, err)
 			require.Equal(t, int64(1), target.OwnerEpoch)
 			cleanupContext := func(ticket store.SpaceProjectionTicket) context.Context {
@@ -158,7 +355,7 @@ func TestSpaceAdmissionRestrictiveRevocationCannotAdoptTakeover(t *testing.T) {
 			require.Equal(t, before, after)
 			require.ErrorIs(t, s.CompleteOwnedRoomLeave(context.Background(), a.Ownership, a), ErrAdmissionConflict)
 			require.ErrorIs(t, s.CompleteRestrictiveRoomLeave(context.Background(), target), ErrAdmissionConflict)
-			fresh, err := s.BeginRestrictiveRoomLeave(context.Background(), a.OperationID, a.Generation)
+			fresh, err := s.BeginRestrictiveRoomLeave(context.Background(), a)
 			require.NoError(t, err)
 			require.Equal(t, int64(2), fresh.OwnerEpoch)
 			ticket, err := s.FenceRestrictiveRoomLeave(context.Background(), fresh, calls)

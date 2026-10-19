@@ -44,7 +44,7 @@ type AdmissionRecoveryStore interface {
 	ConfirmRoomHeadOpen(context.Context, store.SpaceMediaAdmission) error
 	BeginOwnedRoomLeave(context.Context, store.SpaceAdmissionOwnership, uuid.UUID, string) error
 	CompleteOwnedRoomLeave(context.Context, store.SpaceAdmissionOwnership, store.SpaceMediaAdmission) error
-	BeginRestrictiveRoomLeave(context.Context, uuid.UUID, string) (store.SpaceAdmissionRevocation, error)
+	BeginRestrictiveRoomLeave(context.Context, store.SpaceMediaAdmission) (store.SpaceAdmissionRevocation, error)
 	CompleteRestrictiveRoomLeave(context.Context, store.SpaceAdmissionRevocation) error
 	FenceOwnedRoomLeave(context.Context, store.SpaceAdmissionOwnership, uuid.UUID, store.SpaceAdmissionProjectionGates) (store.SpaceProjectionTicket, error)
 	FenceRestrictiveRoomLeave(context.Context, store.SpaceAdmissionRevocation, store.SpaceAdmissionProjectionGates) (store.SpaceProjectionTicket, error)
@@ -604,7 +604,14 @@ func (c *Coordinator) ejectParticipant(ctx context.Context, call store.Call, par
 	if err != nil || c.Admissions == nil {
 		return call, false, store.ErrInvalidState
 	}
-	target, err := c.Admissions.BeginRestrictiveRoomLeave(ctx, op, participant.Generation)
+	account, accountErr := uuid.Parse(participant.AccountID)
+	profile, profileErr := uuid.Parse(participant.ProfileID)
+	space, spaceErr := uuid.Parse(call.SpaceID)
+	if accountErr != nil || profileErr != nil || spaceErr != nil {
+		return call, false, store.ErrInvalidState
+	}
+	expected := store.SpaceMediaAdmission{OperationID: op, Generation: participant.Generation, AccountID: account, ProfileID: profile, SpaceID: space, RoomID: call.RoomID, VoiceRoomID: call.VoiceRoomID, RoomGeneration: participant.RoomGeneration, Identity: participant.Identity}
+	target, err := c.Admissions.BeginRestrictiveRoomLeave(ctx, expected)
 	if err != nil {
 		return call, false, err
 	}

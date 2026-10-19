@@ -36,7 +36,10 @@ func (s *PostgresAdmissionStore) closeExpiredOrphanHead(ctx context.Context, h s
 	}
 	var expired bool
 	var epoch int64
-	err = tx.QueryRow(ctx, `SELECT lease_until<=clock_timestamp(),owner_epoch FROM voice_space_media_admission_owners WHERE operation_id=$1 FOR UPDATE`, creator).Scan(&expired, &epoch)
+	if err := lockAdmissionOwnerRow(ctx, tx, creator); err != nil {
+		return err
+	}
+	err = tx.QueryRow(ctx, `SELECT lease_until<=clock_timestamp(),owner_epoch FROM voice_space_media_admission_owners WHERE operation_id=$1`, creator).Scan(&expired, &epoch)
 	if err != nil {
 		return err
 	}
@@ -63,14 +66,26 @@ func (s *PostgresAdmissionStore) closeExpiredOrphanHead(ctx context.Context, h s
 	return tx.Commit(ctx)
 }
 
+func lockAdmissionOwnerRow(ctx context.Context, tx pgx.Tx, operation uuid.UUID) error {
+	var locked uuid.UUID
+	return tx.QueryRow(ctx, `SELECT operation_id FROM voice_space_media_admission_owners WHERE operation_id=$1 FOR UPDATE`, operation).Scan(&locked)
+}
+
 func requireAdmissionOwnership(ctx context.Context, tx pgx.Tx, operation uuid.UUID) error {
 	owner, ok := store.SpaceAdmissionOwnershipFromContext(ctx, operation)
 	if !ok {
 		return ErrAdmissionConflict
 	}
+	// PostgreSQL can evaluate projected clock_timestamp() before LockRows waits.
+	// Acquire the exclusive row first, then sample time in a separate statement.
+	// Keep that same lock through commit: later downstream waits do not grant
+	// takeover permission or carry this transaction's authority into a new one.
+	if err := lockAdmissionOwnerRow(ctx, tx, operation); err != nil {
+		return ErrAdmissionConflict
+	}
 	var current bool
 	err := tx.QueryRow(ctx, `SELECT owner_token=$2 AND owner_epoch=$3 AND lease_until>clock_timestamp()
-FROM voice_space_media_admission_owners WHERE operation_id=$1 FOR UPDATE`, operation, owner.Token, owner.Epoch).Scan(&current)
+FROM voice_space_media_admission_owners WHERE operation_id=$1`, operation, owner.Token, owner.Epoch).Scan(&current)
 	if err != nil || !current {
 		return ErrAdmissionConflict
 	}
@@ -82,7 +97,15 @@ func (s *PostgresAdmissionStore) RenewAdmissionOwnership(ctx context.Context, op
 	if !s.usable() || !ok {
 		return ErrAdmissionConflict
 	}
-	tag, err := s.pool.Exec(ctx, `UPDATE voice_space_media_admission_owners
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := requireAdmissionOwnership(ctx, tx, operation); err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, `UPDATE voice_space_media_admission_owners
 SET lease_until=clock_timestamp()+$4,updated_at=clock_timestamp()
 WHERE operation_id=$1 AND owner_token=$2 AND owner_epoch=$3 AND lease_until>clock_timestamp()`, operation, owner.Token, owner.Epoch, admissionOwnershipLease)
 	if err != nil {
@@ -91,7 +114,7 @@ WHERE operation_id=$1 AND owner_token=$2 AND owner_epoch=$3 AND lease_until>cloc
 	if tag.RowsAffected() != 1 {
 		return ErrAdmissionConflict
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func (s *PostgresAdmissionStore) RelinquishAdmissionOwnership(ctx context.Context, operation uuid.UUID) error {
