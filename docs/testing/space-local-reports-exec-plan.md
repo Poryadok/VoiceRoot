@@ -52,6 +52,19 @@ The subsequently announced MASTER candidate `fd43a284a6ad312cb7443e1368286002c49
 still needs coherent source reconciliation; this proof remains scoped to the
 78bc cohort plus reviewed da3734 and exact storage prerequisite d432.
 
+Independent review144 held d8d25b9 on an inherited REPEATABLE READ DOWN race:
+an old empty snapshot could miss a subsequently committed head after taking
+the table locks. The new real PostgreSQL oracle reproduces the missing refusal
+on that source, then passes with an exact READ COMMITTED preflight before any
+destructive lock. Default READ COMMITTED first-writer and actual pinned-driver
+controls remain green. The fd43 union successor passes eight top-level tests,
+twenty subtests and store vet (race package84.035s). This correction requires
+the same existing exact-head review function to recheck the immutable successor;
+the prior HOLD is not a CLEAR. Historical migration-driver.log was appended by
+later runs: its old manifest artifact hash does not bind the current log bytes.
+New portable evidence records the appended log separately and preserves the
+original source archive and immutable driver-final test result.
+
 ## Purpose
 
 A member can explicitly complain about a readable Space message to that Space's
