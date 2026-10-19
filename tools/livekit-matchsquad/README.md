@@ -71,6 +71,10 @@ an unconditional TestMain which expects a Docker socket and creates containers
 with host ports; that unrelated integration harness is not used or changed.
 This command is explicitly a component probe, not the upstream service suite.
 
+The independent `control/go.mod` module keeps these upstream-only probes out of
+ordinary module checks. Its deterministic model checks run with `go test -race
+./...` and `go vet ./...` from `control` inside a Linux container.
+
 The MatchSquad missing-provenance case is expected to fail on stock upstream.
 Its spoofed attribute/metadata subcase must also fail closed in a future accepted
 implementation. The ordinary refresh control must retain stock behavior. Bearers
@@ -94,6 +98,40 @@ missing scope/evidence and retains lost-reply ambiguity. Its tests use explicit
 model-only readers. There is no installed native authority journal or qualified
 runtime supervisor implementation yet. Shared Voice/proto allocation and the
 first actual private forwarding/process fence proof remain explicit next steps.
+
+## Private enforcement capability probe
+
+`fixture/fence_probe.py OUTPUT.json` runs a disposable process/network boundary
+probe using a trusted host-side Docker CLI supervisor. Every peer runs in Linux;
+the orchestrator opens no host listener or published port. It uses immutable
+runtime UIDs returned by its own creates, two separate internal networks and a
+fixed image digest. It never discovers/deletes resources by labels. The worker
+and forwarding peers have no Docker socket, privileged mode or added Linux
+capabilities. The trusted, short-lived host-PID observer reads only exact known
+owned PIDs and birth times; it neither enumerates nor controls other processes.
+
+The worker's parent is paused with SIGSTOP while a child in another process group
+continues a real bounded UDP stream. The independent forwarding sandbox closes,
+its attachments are removed, then the worker sandbox terminates. The probe
+checks actual Docker running/PID/attachment state, unchanged host boot and absent
+old parent/child PID births, direct-path denial, positive TCP forwarding, and no
+new client delivery after the final owned fence marker. Container/network cleanup
+is guarded by recorded exact UIDs. An incomplete observation is a failure.
+
+This is raw evidence for a **fixture UDP/TCP process/network boundary**, not a
+LiveKit media, ICE/TURN, owner-routing or participant-epoch qualification. It
+does not emit a trusted FenceReceipt, implement native authority/supervisor
+journals or establish crash/restart recovery. Linux cgroup v1 was observed on the
+current host; no cgroup-v2 kill/events support is assumed. Bounds are recorded
+observations under a responsive trusted host/control profile, not a promised
+worst-case product SLA. Whole-host pause/partition and already delivered client
+buffers remain outside this component observation.
+
+The first successful run recorded zero post-fence frames, an old descendant
+continuing while its parent was stopped, and no cleanup failures. The initial
+run failed before fencing because a direct UDP send correctly had no route;
+the probe now treats that send error as denied and retains failure logs. Both
+outcomes belong in the task evidence; neither upgrades the full provider gate.
 
 1. Preserve exact source/probe outcomes in the owning task.
 2. Keep the existing MatchFound consumer fail-closed at the provider boundary.
