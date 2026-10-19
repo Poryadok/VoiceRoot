@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:uuid/uuid.dart';
 
 import 'gateway_http.dart';
 
@@ -555,6 +556,7 @@ class VoiceMatchmakingClient {
     required String gameId,
     required String mode,
     required Map<String, dynamic> criteria,
+    String? operationId,
   }) async {
     final result = await _gateway.postJson(
       uri: _gateway.resolve('/api/v1/matchmaking/search'),
@@ -563,6 +565,7 @@ class VoiceMatchmakingClient {
         'gameId': gameId,
         'mode': mode,
         'criteriaJson': jsonEncode(criteria),
+        'operationId': operationId ?? const Uuid().v4(),
       },
     );
     return _map(result, SearchSessionData.fromGatewayJson);
@@ -688,11 +691,12 @@ class VoiceMatchmakingClient {
     required String authorization,
     required String matchId,
     required bool accept,
+    String? operationId,
   }) async {
     final result = await _gateway.postJson(
       uri: _gateway.resolve('/api/v1/matchmaking/matches/$matchId/respond'),
       authorization: authorization,
-      body: {'accept': accept},
+      body: {'accept': accept, 'operationId': operationId ?? const Uuid().v4()},
     );
     return _map(result, RespondToMatchData.fromGatewayJson);
   }

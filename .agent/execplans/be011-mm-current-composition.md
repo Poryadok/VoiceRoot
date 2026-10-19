@@ -268,3 +268,29 @@ tests cover column-only mutation grants. Provider/Voice snapshot and lifetime
 fixtures are explicit component fixtures, not installed service authority.
 Gateway/client/native root integration and final identity-erasure custody remain
 unfinished; this source stage is not a complete MASTER delivery offer.
+
+### Gateway and Flutter operation transport
+
+The existing protected Matchmaking profile now carries StartSearch and both
+RespondToMatch decisions. Gateway strictly decodes native JSON, requires a
+client operation UUID and explicit authenticated human account type, binds the
+final URL match identity before hashing, signs a fresh delegated JWT per attempt
+and strips forwarded metadata. A configured or partially present protected path
+never invokes the ordinary client. The explicitly unconfigured pre-cut
+composition retains its old ordinary routes; existing route tests cover it.
+
+Flutter allocates an operation before sending. The match controller retains it
+across an ambiguous result, replaces it for a changed decision/context and keeps
+its existing stale-response/refresh guards. QueueSearchScreen retains one search
+intent across ambiguous retries, replaces it when criteria/actor changes, and
+does not promote a late response into a different actor's active search. A known
+successful search releases that local pending intent for the next user action.
+Client methods accept the action owner's operation and allocate one for a
+standalone invocation before GatewayHttpClient can refresh/retry its request.
+
+Native Linux Gateway signed-principal tests and Flutter client/controller/widget
+tests cover these boundaries. The initial missing SQLite native asset was a
+fixture failure; the canonical prefetch script seeded the hash-pinned Linux
+asset, after which causative tests failed for absent operation fields and passed
+with the implementation. Full cross-process mTLS/native-root/external admission
+qualification is still required; unit transports are not installed authority.

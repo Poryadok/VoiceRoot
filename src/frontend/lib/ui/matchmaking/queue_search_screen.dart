@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:convert';
+import 'package:uuid/uuid.dart';
 
 import '../../backend/matchmaking_client.dart';
 import '../../l10n/app_localizations.dart';
@@ -29,6 +31,7 @@ class QueueSearchScreen extends ConsumerStatefulWidget {
 
   final CatalogGame game;
   final GameMode mode;
+
   /// When set, uses space-scoped queue (StartSpaceQueue).
   final String? spaceId;
 
@@ -46,6 +49,8 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
   var _busy = false;
   String? _error;
   var _prefilledFromProfile = false;
+  String? _searchIntentKey;
+  String? _searchOperationId;
 
   @override
   void initState() {
@@ -58,7 +63,9 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
       _soughtMin = widget.mode.ranks.first.name;
       _soughtMax = widget.mode.ranks.last.name;
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) => _tryPrefillFromProfile());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _tryPrefillFromProfile(),
+    );
   }
 
   void _tryPrefillFromProfile() {
@@ -76,7 +83,9 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
     final matched = entry;
     setState(() {
       if (matched.region.isNotEmpty) _region = matched.region;
-      if (matched.role != null && matched.role!.isNotEmpty) _role = matched.role;
+      if (matched.role != null && matched.role!.isNotEmpty) {
+        _role = matched.role;
+      }
       if (matched.rank != null && matched.rank!.isNotEmpty) {
         _rank = matched.rank;
         _soughtMin = matched.rank;
@@ -92,7 +101,9 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
     final voice = VoiceColors.of(context);
     final myProfile = ref.watch(myPlayerProfileProvider);
     if (myProfile.hasValue && !_prefilledFromProfile) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _tryPrefillFromProfile());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _tryPrefillFromProfile(),
+      );
     }
     final globalSession = ref.watch(activeSearchSessionProvider);
     final searchState = ref.watch(matchmakingSearchControllerProvider);
@@ -112,8 +123,10 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
       }
     });
 
-    ref.listen<MatchmakingSearchState>(matchmakingSearchControllerProvider,
-        (prev, next) {
+    ref.listen<MatchmakingSearchState>(matchmakingSearchControllerProvider, (
+      prev,
+      next,
+    ) {
       if (next.recoveryReason == SearchRecoveryReason.timeout && mounted) {
         setState(() => _session = null);
       }
@@ -125,7 +138,10 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text(widget.game.name, style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            widget.game.name,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 4),
           Text(widget.mode.name, style: Theme.of(context).textTheme.bodyMedium),
           const SizedBox(height: 16),
@@ -158,9 +174,12 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: VoiceCompactBanner(
                   key: QueueSearchScreen.nudgeBannerKey,
-                  message: '${l10n.queueSearchNudgeTitle}. ${l10n.queueSearchNudgeBody}',
+                  message:
+                      '${l10n.queueSearchNudgeTitle}. ${l10n.queueSearchNudgeBody}',
                   tone: VoiceBannerTone.warning,
-                  actionLabel: MaterialLocalizations.of(context).closeButtonLabel,
+                  actionLabel: MaterialLocalizations.of(
+                    context,
+                  ).closeButtonLabel,
                   onAction: () => ref
                       .read(matchmakingSearchControllerProvider.notifier)
                       .dismissNudge(),
@@ -266,18 +285,31 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
       (criteria['self'] as Map<String, dynamic>)['rank'] = _rank;
     }
     if (_soughtMin != null && _soughtMax != null) {
-      criteria['sought'] = {
-        'rank_min': _soughtMin,
-        'rank_max': _soughtMax,
-      };
+      criteria['sought'] = {'rank_min': _soughtMin, 'rank_max': _soughtMax};
     }
     return criteria;
   }
 
   Future<void> _startSearch() async {
     final l10n = AppLocalizations.of(context)!;
-    final token = ref.read(authControllerProvider).session?.accessToken;
+    final actor = ref.read(authControllerProvider).session;
+    final token = actor?.accessToken;
     if (token == null || token.isEmpty) return;
+    if (_busy) return;
+    final criteria = _buildCriteria();
+    final intentKey = jsonEncode([
+      actor!.accountId,
+      actor.activeProfileId,
+      actor.accountType,
+      widget.game.id,
+      widget.mode.name,
+      widget.spaceId,
+      criteria,
+    ]);
+    if (_searchIntentKey != intentKey || _searchOperationId == null) {
+      _searchIntentKey = intentKey;
+      _searchOperationId = const Uuid().v4();
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -291,19 +323,30 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
         spaceId: spaceId,
         gameId: widget.game.id,
         mode: widget.mode.name,
-        criteria: _buildCriteria(),
+        criteria: criteria,
       );
     } else {
       result = await client.startSearch(
         authorization: 'Bearer $token',
         gameId: widget.game.id,
         mode: widget.mode.name,
-        criteria: _buildCriteria(),
+        criteria: criteria,
+        operationId: _searchOperationId!,
       );
     }
     if (!mounted) return;
+    final currentActor = ref.read(authControllerProvider).session;
+    if (currentActor == null ||
+        currentActor.accountId != actor.accountId ||
+        currentActor.activeProfileId != actor.activeProfileId ||
+        currentActor.accountType != actor.accountType) {
+      setState(() => _busy = false);
+      return;
+    }
     switch (result) {
       case MatchmakingApiOk(:final data):
+        _searchIntentKey = null;
+        _searchOperationId = null;
         setState(() {
           _session = data;
           _busy = false;

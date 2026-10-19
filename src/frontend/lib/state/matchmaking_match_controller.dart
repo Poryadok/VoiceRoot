@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../backend/matchmaking_client.dart';
 import '../backend/realtime_client.dart';
@@ -38,6 +39,10 @@ class MatchmakingMatchController extends Notifier<PendingMatchState> {
   String? _responseFlightMatchId;
   bool? _responseFlightAction;
   int? _responseFlightAuthGeneration;
+  String? _responseOperationId;
+  String? _responseOperationMatchId;
+  bool? _responseOperationAction;
+  int? _responseOperationAuthGeneration;
   bool _disposed = false;
 
   @override
@@ -63,6 +68,7 @@ class MatchmakingMatchController extends Notifier<PendingMatchState> {
       _responseFlightMatchId = null;
       _responseFlightAction = null;
       _responseFlightAuthGeneration = null;
+      _clearResponseOperation();
       state = const PendingMatchState();
     });
     ref.onDispose(() {
@@ -289,7 +295,15 @@ class MatchmakingMatchController extends Notifier<PendingMatchState> {
     _operationGeneration++;
     _latestLoadMatchId = null;
     _inFlightLoads.clear();
+    _clearResponseOperation();
     state = const PendingMatchState();
+  }
+
+  void _clearResponseOperation() {
+    _responseOperationId = null;
+    _responseOperationMatchId = null;
+    _responseOperationAction = null;
+    _responseOperationAuthGeneration = null;
   }
 
   Future<RespondToMatchData?> respond(bool accept) {
@@ -306,6 +320,16 @@ class MatchmakingMatchController extends Notifier<PendingMatchState> {
       return Future.value(null);
     }
     final matchId = match.id;
+    if (_responseOperationId == null ||
+        _responseOperationMatchId != matchId ||
+        _responseOperationAction != accept ||
+        _responseOperationAuthGeneration != binding.authGeneration) {
+      _responseOperationId = const Uuid().v4();
+      _responseOperationMatchId = matchId;
+      _responseOperationAction = accept;
+      _responseOperationAuthGeneration = binding.authGeneration;
+    }
+    final responseOperationId = _responseOperationId!;
     final contextGeneration = _contextGeneration;
     final operationGeneration = ++_operationGeneration;
     final client = ref.read(voiceMatchmakingClientProvider);
@@ -318,6 +342,7 @@ class MatchmakingMatchController extends Notifier<PendingMatchState> {
           binding: binding,
           contextGeneration: contextGeneration,
           operationGeneration: operationGeneration,
+          responseOperationId: responseOperationId,
         ).whenComplete(() {
           final ownsCurrentFlight =
               identical(_responseFlight, flight) &&
@@ -359,6 +384,7 @@ class MatchmakingMatchController extends Notifier<PendingMatchState> {
     required _MatchBinding binding,
     required int contextGeneration,
     required int operationGeneration,
+    required String responseOperationId,
   }) async {
     bool current() =>
         _isBindingCurrent(binding) &&
@@ -378,6 +404,7 @@ class MatchmakingMatchController extends Notifier<PendingMatchState> {
       authorization: latestSession.authorizationHeader,
       matchId: matchId,
       accept: accept,
+      operationId: responseOperationId,
     );
     if (!current() ||
         result is! MatchmakingApiOk<RespondToMatchData> ||

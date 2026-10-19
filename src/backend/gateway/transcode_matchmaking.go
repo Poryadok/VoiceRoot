@@ -17,7 +17,13 @@ func isProtectedMatchmakingRoute(r *http.Request) bool {
 		return false
 	}
 	rest := strings.TrimPrefix(r.URL.Path, "/api/v1/matchmaking/")
+	if rest == "search" {
+		return true
+	}
 	parts := strings.Split(rest, "/")
+	if len(parts) == 3 && parts[0] == "matches" && parts[1] != "" && parts[2] == "respond" {
+		return true
+	}
 	if len(parts) == 3 && parts[0] == "matches" && parts[1] != "" && parts[2] == "complete" {
 		return true
 	}
@@ -89,6 +95,9 @@ func (t *transcoder) serveMatchmakingMatches(w http.ResponseWriter, r *http.Requ
 		return true
 
 	case r.Method == http.MethodPost && len(parts) == 2 && parts[1] == "respond":
+		if t.protectedPublicMatchmaking() || t.clients.matchmaking == nil {
+			return t.serveProtectedMatchmakingResponse(w, r, matchID)
+		}
 		req := &matchmakingv1.RespondToMatchRequest{}
 		if err := readProtoJSON(r, req); err != nil {
 			writeGRPCError(w, err)
@@ -322,6 +331,9 @@ func (t *transcoder) serveMatchmakingSearch(w http.ResponseWriter, r *http.Reque
 	switch {
 	case r.Method == http.MethodPost && rest == "":
 		req := &matchmakingv1.StartSearchRequest{}
+		if t.protectedPublicMatchmaking() || t.clients.matchmaking == nil {
+			return t.serveProtectedMatchmakingSearch(w, r)
+		}
 		if err := readProtoJSON(r, req); err != nil {
 			writeGRPCError(w, err)
 			return true

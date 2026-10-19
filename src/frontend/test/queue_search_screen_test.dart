@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/matchmaking_client.dart';
@@ -54,6 +56,117 @@ CatalogGame _valorantGame() {
 }
 
 void main() {
+  testWidgets('late search response cannot promote the prior actor session', (
+    tester,
+  ) async {
+    final game = _valorantGame();
+    final started = Completer<void>();
+    final response = Completer<http.Response>();
+    final client = MockClient((r) async {
+      if (r.method == 'POST' && r.url.path == '/api/v1/matchmaking/search') {
+        started.complete();
+        return response.future;
+      }
+      return http.Response('{}', 404);
+    });
+    final container = ProviderContainer(
+      overrides: voiceAppTestOverrides(client: client),
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: QueueSearchScreen(game: game, mode: game.config.modes.first),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(QueueSearchScreen.startButtonKey));
+    await tester.pump();
+    expect(started.isCompleted, isTrue);
+    container.read(authControllerProvider.notifier).state = const AuthState(
+      session: AuthSession(
+        accessToken: 'new',
+        refreshToken: 'new',
+        accountId: 'new-account',
+        activeProfileId: 'new-profile',
+        expiresInSeconds: 900,
+      ),
+    );
+    response.complete(
+      http.Response(
+        jsonEncode({
+          'searchSession': {
+            'id': 'old-session',
+            'profileId': 'prof-test',
+            'gameId': game.id,
+            'mode': game.config.modes.first.name,
+            'criteriaJson': '{}',
+            'status': 'searching',
+          },
+        }),
+        200,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(container.read(activeSearchSessionProvider), isNull);
+    expect(find.byKey(QueueSearchScreen.searchingStateKey), findsNothing);
+  });
+
+  testWidgets(
+    'ambiguous search retry retains intent and edited criteria changes it',
+    (tester) async {
+      final game = _valorantGame();
+      final operations = <String?>[];
+      final client = MockClient((r) async {
+        if (r.method == 'POST' && r.url.path == '/api/v1/matchmaking/search') {
+          operations.add(
+            (jsonDecode(r.body) as Map<String, dynamic>)['operationId']
+                as String?,
+          );
+          return http.Response('{}', 503);
+        }
+        return http.Response('{}', 404);
+      });
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: voiceAppTestOverrides(client: client),
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: QueueSearchScreen(game: game, mode: game.config.modes.first),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (var i = 0; i < 2; i++) {
+        await tester.ensureVisible(
+          find.byKey(QueueSearchScreen.startButtonKey),
+        );
+        await tester.tap(find.byKey(QueueSearchScreen.startButtonKey));
+        await tester.pumpAndSettle();
+      }
+      expect(operations, hasLength(2));
+      expect(operations.first, isNotNull);
+      expect(operations[1], operations[0]);
+      await tester.ensureVisible(find.text('eu').first);
+      await tester.tap(find.text('eu').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('na').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(QueueSearchScreen.startButtonKey));
+      await tester.tap(find.byKey(QueueSearchScreen.startButtonKey));
+      await tester.pumpAndSettle();
+      expect(operations, hasLength(3));
+      expect(operations[2], isNot(operations[0]));
+    },
+  );
+
   testWidgets('queue search form shows start button', (tester) async {
     final game = _valorantGame();
     await tester.pumpWidget(
@@ -85,14 +198,16 @@ void main() {
           ...voiceThemeTestOverrides(),
           ..._queueSearchRealtimeOverrides(),
           authControllerProvider.overrideWith(authenticatedAuthController),
-          activeSearchSessionProvider.overrideWith((ref) => SearchSessionData(
-                id: 'sess-1',
-                profileId: 'p1',
-                gameId: game.id,
-                mode: game.config.modes.first.name,
-                criteriaJson: '{}',
-                status: 'searching',
-              )),
+          activeSearchSessionProvider.overrideWith(
+            (ref) => SearchSessionData(
+              id: 'sess-1',
+              profileId: 'p1',
+              gameId: game.id,
+              mode: game.config.modes.first.name,
+              criteriaJson: '{}',
+              status: 'searching',
+            ),
+          ),
           matchmakingSearchControllerProvider.overrideWith(
             () => _NudgeSearchController(),
           ),
@@ -111,7 +226,9 @@ void main() {
     expect(find.byKey(QueueSearchScreen.searchingStateKey), findsOneWidget);
   });
 
-  testWidgets('queue search prefills criteria from player profile', (tester) async {
+  testWidgets('queue search prefills criteria from player profile', (
+    tester,
+  ) async {
     final game = _valorantGame();
     await tester.pumpWidget(
       ProviderScope(
@@ -152,7 +269,8 @@ void main() {
     var searchPosts = 0;
     var cancelDeletes = 0;
     final client = MockClient((req) async {
-      if (req.method == 'POST' && req.url.path == '/api/v1/matchmaking/search') {
+      if (req.method == 'POST' &&
+          req.url.path == '/api/v1/matchmaking/search') {
         searchPosts++;
         return http.Response(
           jsonEncode({
@@ -246,7 +364,9 @@ void main() {
     expect(find.byKey(QueueSearchScreen.startButtonKey), findsOneWidget);
   });
 
-  testWidgets('queue search shows declined recovery while searching', (tester) async {
+  testWidgets('queue search shows declined recovery while searching', (
+    tester,
+  ) async {
     final game = _valorantGame();
     await tester.pumpWidget(
       ProviderScope(
@@ -254,14 +374,16 @@ void main() {
           ...voiceThemeTestOverrides(),
           ..._queueSearchRealtimeOverrides(),
           authControllerProvider.overrideWith(authenticatedAuthController),
-          activeSearchSessionProvider.overrideWith((ref) => SearchSessionData(
-                id: 'sess-1',
-                profileId: 'p1',
-                gameId: game.id,
-                mode: game.config.modes.first.name,
-                criteriaJson: '{}',
-                status: 'searching',
-              )),
+          activeSearchSessionProvider.overrideWith(
+            (ref) => SearchSessionData(
+              id: 'sess-1',
+              profileId: 'p1',
+              gameId: game.id,
+              mode: game.config.modes.first.name,
+              criteriaJson: '{}',
+              status: 'searching',
+            ),
+          ),
           matchmakingSearchControllerProvider.overrideWith(
             () => _DeclinedRecoverySearchController(),
           ),
@@ -297,18 +419,20 @@ class _NoopRealtimeHub extends RealtimeHub {
 
 class _TimedOutSearchController extends MatchmakingSearchController {
   @override
-  MatchmakingSearchState build() =>
-      const MatchmakingSearchState(recoveryReason: SearchRecoveryReason.timeout);
+  MatchmakingSearchState build() => const MatchmakingSearchState(
+    recoveryReason: SearchRecoveryReason.timeout,
+  );
 }
 
 class _NudgeSearchController extends MatchmakingSearchController {
   @override
-  MatchmakingSearchState build() => const MatchmakingSearchState(nudgeVisible: true);
+  MatchmakingSearchState build() =>
+      const MatchmakingSearchState(nudgeVisible: true);
 }
 
 class _DeclinedRecoverySearchController extends MatchmakingSearchController {
   @override
   MatchmakingSearchState build() => const MatchmakingSearchState(
-        recoveryReason: SearchRecoveryReason.declined,
-      );
+    recoveryReason: SearchRecoveryReason.declined,
+  );
 }

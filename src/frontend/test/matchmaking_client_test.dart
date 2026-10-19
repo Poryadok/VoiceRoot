@@ -74,6 +74,14 @@ void main() {
     );
     expect(path, '/api/v1/matchmaking/search');
     expect(body, contains('criteriaJson'));
+    expect(
+      (jsonDecode(body!) as Map<String, dynamic>)['operationId'],
+      matches(
+        RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+        ),
+      ),
+    );
     expect(result, isA<MatchmakingApiOk<SearchSessionData>>());
     final session = (result as MatchmakingApiOk<SearchSessionData>).data;
     expect(session.status, 'searching');
@@ -173,10 +181,7 @@ void main() {
           path = request.url.path;
           body = jsonDecode(request.body) as Map<String, dynamic>;
           return http.Response(
-            jsonEncode({
-              'status': 'accepted',
-              'partyId': 'party-1',
-            }),
+            jsonEncode({'status': 'accepted', 'partyId': 'party-1'}),
             200,
           );
         }),

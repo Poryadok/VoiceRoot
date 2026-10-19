@@ -857,6 +857,42 @@ void main() {
     },
   );
 
+  test(
+    'ambiguous response retry keeps operation and a new decision changes it',
+    () async {
+      final operations = <String?>[];
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('/respond')) {
+          operations.add(
+            (jsonDecode(request.body) as Map<String, dynamic>)['operationId']
+                as String?,
+          );
+          return http.Response('{}', 503);
+        }
+        return _matchResponse(id: 'match-1', deadline: true);
+      });
+      final container = ProviderContainer(
+        overrides: voiceAppTestOverrides(client: client),
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(
+        matchmakingMatchControllerProvider.notifier,
+      );
+      controller.onPushNotificationData({
+        'type': 'match_found',
+        'match_id': 'match-1',
+      });
+      await _waitForMatch(container, 'match-1');
+      await controller.respond(true);
+      await controller.respond(true);
+      await controller.respond(false);
+      expect(operations, hasLength(3));
+      expect(operations.first, isNotNull);
+      expect(operations[1], operations[0]);
+      expect(operations[2], isNot(operations[0]));
+    },
+  );
+
   testWidgets(
     'stale response cannot clear replacement flight after principal switch',
     (tester) async {

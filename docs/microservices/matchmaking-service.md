@@ -675,3 +675,14 @@ projection has no fresh stamp. These private hashes remain linked operational
 evidence, not anonymous data or installation authority. Native timeout recovery
 acknowledges this committed whole-party evidence instead of invoking scalar
 Redis recovery under SQL row locks. The pre-cut recovery composition is separate.
+
+Gateway's existing protected Matchmaking client also carries native StartSearch
+and RespondToMatch. Its strict decoder rejects unknown/duplicate fields and a
+body match different from the canonical route before signing. The client-owned
+operation is required and binds the final body, verified human actor, session
+epoch and exact RPC; each retry obtains a fresh delegated JWT. A partially
+configured protected path never falls back to ordinary MM or an HTTP proxy.
+The explicitly unconfigured pre-cut Gateway composition retains ordinary routes.
+Flutter retains one operation across an ambiguous action result, changes it for
+a changed decision/search intent or actor, and ignores a late result after actor
+change. This transport does not establish native installation admission.

@@ -102,6 +102,14 @@ void main() {
     );
     expect(path, '/api/v1/matchmaking/matches/match-1/respond');
     expect(body, contains('"accept":true'));
+    expect(
+      (jsonDecode(body!) as Map<String, dynamic>)['operationId'],
+      matches(
+        RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+        ),
+      ),
+    );
     expect(result, isA<MatchmakingApiOk<RespondToMatchData>>());
     final data = (result as MatchmakingApiOk<RespondToMatchData>).data;
     expect(data.match.status, 'active');
