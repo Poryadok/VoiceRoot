@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	grpcstatus "google.golang.org/grpc/status"
 
 	voicejwt "voice/backend/pkg/jwt"
 )
@@ -24,6 +24,10 @@ type tokenValidator interface {
 
 type presenceUpdater interface {
 	UpdatePresence(ctx context.Context, accountID, profileID, status, customStatus string) error
+}
+
+type presenceFieldsUpdater interface {
+	UpdatePresenceFields(ctx context.Context, accountID, profileID, status string, customStatus *string) error
 }
 
 func newServiceHandler(service string, tv tokenValidator, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, ready readinessDeps) http.Handler {
@@ -178,8 +182,8 @@ type deliveryAckPayload struct {
 }
 
 type presenceUpdateClientPayload struct {
-	Status       string `json:"status"`
-	CustomStatus string `json:"custom_status"`
+	Status       string  `json:"status"`
+	CustomStatus *string `json:"custom_status"`
 }
 
 var (
@@ -296,7 +300,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 		authorizedIDs := make([]string, 0, len(ids))
 		for _, id := range ids {
 			if authErr := hub.authorizeAndAddChat(lctx, reg, claims.UserID, claims.ProfileID, id); authErr != nil {
-				if status.Code(authErr) != codes.PermissionDenied {
+				if grpcstatus.Code(authErr) != codes.PermissionDenied {
 					degraded = true
 					svcLogger.Warn("ws chat bootstrap authorization failed", slog.String("error", authErr.Error()), slog.String("conn_id", connID))
 				}
@@ -659,11 +663,35 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					}
 					continue
 				}
-				custom := strings.TrimSpace(p.CustomStatus)
+				custom := ""
+				if p.CustomStatus != nil {
+					custom = strings.TrimSpace(*p.CustomStatus)
+				}
 				if len(custom) > 256 {
 					custom = custom[:256]
 				}
-				updatePresence(context.Background(), presence, claims, status, custom)
+				if custom != "" && hub.releasePolicy != nil && !hub.releasePolicy.Allows("paid") {
+					errD, _ := json.Marshal(map[string]string{"code": "capability_unavailable", "message": "capability unavailable"})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
+				var customField *string
+				if p.CustomStatus != nil {
+					customField = &custom
+				}
+				if err := updatePresenceFields(context.Background(), presence, claims, status, customField); err != nil {
+					code := "presence_unavailable"
+					if grpcstatus.Code(err) == codes.FailedPrecondition {
+						code = "capability_unavailable"
+					}
+					errD, _ := json.Marshal(map[string]string{"code": code, "message": "presence update denied"})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
 				dSelf, _ := json.Marshal(map[string]any{
 					"profile_id":    claims.ProfileID,
 					"status":        status,
@@ -716,6 +744,22 @@ func updatePresence(ctx context.Context, presence presenceUpdater, claims voicej
 			slog.String("error", err.Error()),
 		)
 	}
+}
+
+func updatePresenceFields(ctx context.Context, presence presenceUpdater, claims voicejwt.Claims, state string, custom *string) error {
+	if presence == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if fields, ok := presence.(presenceFieldsUpdater); ok {
+		return fields.UpdatePresenceFields(ctx, claims.UserID, claims.ProfileID, state, custom)
+	}
+	value := ""
+	if custom != nil {
+		value = *custom
+	}
+	return presence.UpdatePresence(ctx, claims.UserID, claims.ProfileID, state, value)
 }
 
 func canonicalPresenceStatus(status string) bool {

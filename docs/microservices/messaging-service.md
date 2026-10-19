@@ -839,9 +839,21 @@ When File Service finishes async processing (`file.processed` on JetStream), Mes
 
 | Step | Owner |
 |------|-------|
-| File publishes `file.processed` | `file.events` — `file_id`, `status`, `converted_url`, `thumb_url`, `width`, `height`, `duration_seconds`, `intent` (aligned with [file-service.md](file-service.md) § NATS table) |
-| Messaging consumer | Updates attachment JSON on `messages` / `message_attachments`; invalidates or recomputes `GetChatListMetadata` for affected `chat_id`s |
+| File publishes `file.processed` | `file_events` / `file.processed`: independent complete revisioned `preview` snapshot for plaintext non-Music files; no URL or storage key |
+| Messaging consumer | Refreshes only private exact MESSAGE-reference/slot bindings, persists monotonic snapshots before discovery, and writes ordinary `message.edited` atomically; list/history reads use persisted attachments |
 | Client | On `message_update` WS (or poll) refresh bubble + list row label |
+
+BE-080 v1 uses protected Messaging-only `ResolveMessageAttachmentPreview` after
+reference acquisition, then reconciles under local insertion fences. The resolver
+checks the exact existing destination reference and existing LIVE Space fence;
+it never invents viewer authority. Ready-only admission remains unchanged. The
+snapshot includes status, category, persisted intent, size/scan, optional dimensions
+and variant availability. Missing fields clear stale metadata; terminal snapshots
+cannot be revived. Multiple slots and forwards retain private per-slot bindings.
+E2E and URL-only attachments are excluded. Public URL reads still require the real
+viewer and exact reference. Frozen work is retained durably and legacy rows need
+bounded restartable reconciliation. See [BE-080 plan](../testing/be080-file-preview-exec-plan.md)
+for implementation progress and the all-consumers-before-publication rollout gate.
 
 **Music implementation:** explicit File Music uploads carry a persisted intent
 and monotonic metadata revision. At send/forward admission, Messaging obtains

@@ -15,12 +15,13 @@ import 'dart:core' as $core;
 import 'package:fixnum/fixnum.dart' as $fixnum;
 import 'package:protobuf/protobuf.dart' as $pb;
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart'
-    as $3;
+    as $4;
 
-import '../../chat/v1/chat.pb.dart' as $1;
-import '../../common/v1/common.pb.dart' as $4;
-import '../../common/v1/space_lifecycle.pb.dart' as $5;
-import '../../story/v1/story.pb.dart' as $2;
+import '../../chat/v1/chat.pb.dart' as $2;
+import '../../common/v1/common.pb.dart' as $5;
+import '../../common/v1/space_lifecycle.pb.dart' as $6;
+import '../../events/v1/jetstream_events.pb.dart' as $1;
+import '../../story/v1/story.pb.dart' as $3;
 import 'file.pbenum.dart';
 
 export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
@@ -28,11 +29,167 @@ export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
 export 'file.pbenum.dart';
 
 /// @voice.unknown_fields=reject
+/// @voice.hash=domain_separated_sha256
+class ResolveMessageAttachmentPreviewRequest extends $pb.GeneratedMessage {
+  factory ResolveMessageAttachmentPreviewRequest({
+    $core.int? protocolVersion,
+    FileReferenceKey? reference,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (reference != null) result.reference = reference;
+    return result;
+  }
+
+  ResolveMessageAttachmentPreviewRequest._();
+
+  factory ResolveMessageAttachmentPreviewRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ResolveMessageAttachmentPreviewRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ResolveMessageAttachmentPreviewRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOM<FileReferenceKey>(2, _omitFieldNames ? '' : 'reference',
+        subBuilder: FileReferenceKey.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveMessageAttachmentPreviewRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveMessageAttachmentPreviewRequest copyWith(
+          void Function(ResolveMessageAttachmentPreviewRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as ResolveMessageAttachmentPreviewRequest))
+          as ResolveMessageAttachmentPreviewRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ResolveMessageAttachmentPreviewRequest create() =>
+      ResolveMessageAttachmentPreviewRequest._();
+  @$core.override
+  ResolveMessageAttachmentPreviewRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ResolveMessageAttachmentPreviewRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ResolveMessageAttachmentPreviewRequest>(create);
+  static ResolveMessageAttachmentPreviewRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  FileReferenceKey get reference => $_getN(1);
+  @$pb.TagNumber(2)
+  set reference(FileReferenceKey value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReference() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReference() => $_clearField(2);
+  @$pb.TagNumber(2)
+  FileReferenceKey ensureReference() => $_ensure(1);
+}
+
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
+class ResolveMessageAttachmentPreviewResponse extends $pb.GeneratedMessage {
+  factory ResolveMessageAttachmentPreviewResponse({
+    FileReferenceKey? reference,
+    $1.FilePreviewSnapshot? snapshot,
+  }) {
+    final result = create();
+    if (reference != null) result.reference = reference;
+    if (snapshot != null) result.snapshot = snapshot;
+    return result;
+  }
+
+  ResolveMessageAttachmentPreviewResponse._();
+
+  factory ResolveMessageAttachmentPreviewResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ResolveMessageAttachmentPreviewResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ResolveMessageAttachmentPreviewResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
+      createEmptyInstance: create)
+    ..aOM<FileReferenceKey>(1, _omitFieldNames ? '' : 'reference',
+        subBuilder: FileReferenceKey.create)
+    ..aOM<$1.FilePreviewSnapshot>(2, _omitFieldNames ? '' : 'snapshot',
+        subBuilder: $1.FilePreviewSnapshot.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveMessageAttachmentPreviewResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveMessageAttachmentPreviewResponse copyWith(
+          void Function(ResolveMessageAttachmentPreviewResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ResolveMessageAttachmentPreviewResponse))
+          as ResolveMessageAttachmentPreviewResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ResolveMessageAttachmentPreviewResponse create() =>
+      ResolveMessageAttachmentPreviewResponse._();
+  @$core.override
+  ResolveMessageAttachmentPreviewResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ResolveMessageAttachmentPreviewResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ResolveMessageAttachmentPreviewResponse>(create);
+  static ResolveMessageAttachmentPreviewResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  FileReferenceKey get reference => $_getN(0);
+  @$pb.TagNumber(1)
+  set reference(FileReferenceKey value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReference() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReference() => $_clearField(1);
+  @$pb.TagNumber(1)
+  FileReferenceKey ensureReference() => $_ensure(0);
+
+  @$pb.TagNumber(2)
+  $1.FilePreviewSnapshot get snapshot => $_getN(1);
+  @$pb.TagNumber(2)
+  set snapshot($1.FilePreviewSnapshot value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSnapshot() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSnapshot() => $_clearField(2);
+  @$pb.TagNumber(2)
+  $1.FilePreviewSnapshot ensureSnapshot() => $_ensure(1);
+}
+
+/// @voice.unknown_fields=reject
 class ValidateStoryMediaRequest extends $pb.GeneratedMessage {
   factory ValidateStoryMediaRequest({
     $core.String? fileId,
     $core.String? authorProfileId,
-    $2.StoryMediaType? expectedStoryType,
+    $3.StoryMediaType? expectedStoryType,
   }) {
     final result = create();
     if (fileId != null) result.fileId = fileId;
@@ -56,8 +213,8 @@ class ValidateStoryMediaRequest extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'fileId')
     ..aOS(2, _omitFieldNames ? '' : 'authorProfileId')
-    ..aE<$2.StoryMediaType>(3, _omitFieldNames ? '' : 'expectedStoryType',
-        enumValues: $2.StoryMediaType.values)
+    ..aE<$3.StoryMediaType>(3, _omitFieldNames ? '' : 'expectedStoryType',
+        enumValues: $3.StoryMediaType.values)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -99,9 +256,9 @@ class ValidateStoryMediaRequest extends $pb.GeneratedMessage {
   void clearAuthorProfileId() => $_clearField(2);
 
   @$pb.TagNumber(3)
-  $2.StoryMediaType get expectedStoryType => $_getN(2);
+  $3.StoryMediaType get expectedStoryType => $_getN(2);
   @$pb.TagNumber(3)
-  set expectedStoryType($2.StoryMediaType value) => $_setField(3, value);
+  set expectedStoryType($3.StoryMediaType value) => $_setField(3, value);
   @$pb.TagNumber(3)
   $core.bool hasExpectedStoryType() => $_has(2);
   @$pb.TagNumber(3)
@@ -153,9 +310,9 @@ class RequestUploadRequest extends $pb.GeneratedMessage {
     $core.String? originalName,
     $core.String? mimeType,
     $fixnum.Int64? sizeBytes,
-    $1.ChatRef? contextChat,
+    $2.ChatRef? contextChat,
     $core.bool? isE2e,
-    $2.StoryRef? contextStory,
+    $3.StoryRef? contextStory,
     UploadIntent? intent,
   }) {
     final result = create();
@@ -185,11 +342,11 @@ class RequestUploadRequest extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'originalName')
     ..aOS(2, _omitFieldNames ? '' : 'mimeType')
     ..aInt64(3, _omitFieldNames ? '' : 'sizeBytes')
-    ..aOM<$1.ChatRef>(4, _omitFieldNames ? '' : 'contextChat',
-        subBuilder: $1.ChatRef.create)
+    ..aOM<$2.ChatRef>(4, _omitFieldNames ? '' : 'contextChat',
+        subBuilder: $2.ChatRef.create)
     ..aOB(6, _omitFieldNames ? '' : 'isE2e')
-    ..aOM<$2.StoryRef>(7, _omitFieldNames ? '' : 'contextStory',
-        subBuilder: $2.StoryRef.create)
+    ..aOM<$3.StoryRef>(7, _omitFieldNames ? '' : 'contextStory',
+        subBuilder: $3.StoryRef.create)
     ..aE<UploadIntent>(8, _omitFieldNames ? '' : 'intent',
         enumValues: UploadIntent.values)
     ..hasRequiredFields = false;
@@ -241,15 +398,15 @@ class RequestUploadRequest extends $pb.GeneratedMessage {
   void clearSizeBytes() => $_clearField(3);
 
   @$pb.TagNumber(4)
-  $1.ChatRef get contextChat => $_getN(3);
+  $2.ChatRef get contextChat => $_getN(3);
   @$pb.TagNumber(4)
-  set contextChat($1.ChatRef value) => $_setField(4, value);
+  set contextChat($2.ChatRef value) => $_setField(4, value);
   @$pb.TagNumber(4)
   $core.bool hasContextChat() => $_has(3);
   @$pb.TagNumber(4)
   void clearContextChat() => $_clearField(4);
   @$pb.TagNumber(4)
-  $1.ChatRef ensureContextChat() => $_ensure(3);
+  $2.ChatRef ensureContextChat() => $_ensure(3);
 
   @$pb.TagNumber(6)
   $core.bool get isE2e => $_getBF(4);
@@ -261,15 +418,15 @@ class RequestUploadRequest extends $pb.GeneratedMessage {
   void clearIsE2e() => $_clearField(6);
 
   @$pb.TagNumber(7)
-  $2.StoryRef get contextStory => $_getN(5);
+  $3.StoryRef get contextStory => $_getN(5);
   @$pb.TagNumber(7)
-  set contextStory($2.StoryRef value) => $_setField(7, value);
+  set contextStory($3.StoryRef value) => $_setField(7, value);
   @$pb.TagNumber(7)
   $core.bool hasContextStory() => $_has(5);
   @$pb.TagNumber(7)
   void clearContextStory() => $_clearField(7);
   @$pb.TagNumber(7)
-  $2.StoryRef ensureContextStory() => $_ensure(5);
+  $3.StoryRef ensureContextStory() => $_ensure(5);
 
   @$pb.TagNumber(8)
   UploadIntent get intent => $_getN(6);
@@ -441,11 +598,11 @@ class FileMetadata extends $pb.GeneratedMessage {
     $core.int? durationSeconds,
     $core.String? thumbnailR2Key,
     $core.String? convertedR2Key,
-    $1.ChatRef? chat,
+    $2.ChatRef? chat,
     $core.bool? isE2e,
-    $3.Timestamp? expiresAt,
+    $4.Timestamp? expiresAt,
     $core.String? scanResult,
-    $3.Timestamp? createdAt,
+    $4.Timestamp? createdAt,
     FileLifecycleStatus? statusEnum,
     FileMediaCategory? fileTypeEnum,
     FileScanOutcome? scanResultEnum,
@@ -516,14 +673,14 @@ class FileMetadata extends $pb.GeneratedMessage {
     ..aI(12, _omitFieldNames ? '' : 'durationSeconds')
     ..aOS(13, _omitFieldNames ? '' : 'thumbnailR2Key')
     ..aOS(14, _omitFieldNames ? '' : 'convertedR2Key')
-    ..aOM<$1.ChatRef>(15, _omitFieldNames ? '' : 'chat',
-        subBuilder: $1.ChatRef.create)
+    ..aOM<$2.ChatRef>(15, _omitFieldNames ? '' : 'chat',
+        subBuilder: $2.ChatRef.create)
     ..aOB(17, _omitFieldNames ? '' : 'isE2e')
-    ..aOM<$3.Timestamp>(18, _omitFieldNames ? '' : 'expiresAt',
-        subBuilder: $3.Timestamp.create)
+    ..aOM<$4.Timestamp>(18, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $4.Timestamp.create)
     ..aOS(19, _omitFieldNames ? '' : 'scanResult')
-    ..aOM<$3.Timestamp>(20, _omitFieldNames ? '' : 'createdAt',
-        subBuilder: $3.Timestamp.create)
+    ..aOM<$4.Timestamp>(20, _omitFieldNames ? '' : 'createdAt',
+        subBuilder: $4.Timestamp.create)
     ..aE<FileLifecycleStatus>(21, _omitFieldNames ? '' : 'statusEnum',
         enumValues: FileLifecycleStatus.values)
     ..aE<FileMediaCategory>(22, _omitFieldNames ? '' : 'fileTypeEnum',
@@ -689,15 +846,15 @@ class FileMetadata extends $pb.GeneratedMessage {
   void clearConvertedR2Key() => $_clearField(14);
 
   @$pb.TagNumber(15)
-  $1.ChatRef get chat => $_getN(14);
+  $2.ChatRef get chat => $_getN(14);
   @$pb.TagNumber(15)
-  set chat($1.ChatRef value) => $_setField(15, value);
+  set chat($2.ChatRef value) => $_setField(15, value);
   @$pb.TagNumber(15)
   $core.bool hasChat() => $_has(14);
   @$pb.TagNumber(15)
   void clearChat() => $_clearField(15);
   @$pb.TagNumber(15)
-  $1.ChatRef ensureChat() => $_ensure(14);
+  $2.ChatRef ensureChat() => $_ensure(14);
 
   @$pb.TagNumber(17)
   $core.bool get isE2e => $_getBF(15);
@@ -709,15 +866,15 @@ class FileMetadata extends $pb.GeneratedMessage {
   void clearIsE2e() => $_clearField(17);
 
   @$pb.TagNumber(18)
-  $3.Timestamp get expiresAt => $_getN(16);
+  $4.Timestamp get expiresAt => $_getN(16);
   @$pb.TagNumber(18)
-  set expiresAt($3.Timestamp value) => $_setField(18, value);
+  set expiresAt($4.Timestamp value) => $_setField(18, value);
   @$pb.TagNumber(18)
   $core.bool hasExpiresAt() => $_has(16);
   @$pb.TagNumber(18)
   void clearExpiresAt() => $_clearField(18);
   @$pb.TagNumber(18)
-  $3.Timestamp ensureExpiresAt() => $_ensure(16);
+  $4.Timestamp ensureExpiresAt() => $_ensure(16);
 
   @$pb.TagNumber(19)
   $core.String get scanResult => $_getSZ(17);
@@ -729,15 +886,15 @@ class FileMetadata extends $pb.GeneratedMessage {
   void clearScanResult() => $_clearField(19);
 
   @$pb.TagNumber(20)
-  $3.Timestamp get createdAt => $_getN(18);
+  $4.Timestamp get createdAt => $_getN(18);
   @$pb.TagNumber(20)
-  set createdAt($3.Timestamp value) => $_setField(20, value);
+  set createdAt($4.Timestamp value) => $_setField(20, value);
   @$pb.TagNumber(20)
   $core.bool hasCreatedAt() => $_has(18);
   @$pb.TagNumber(20)
   void clearCreatedAt() => $_clearField(20);
   @$pb.TagNumber(20)
-  $3.Timestamp ensureCreatedAt() => $_ensure(18);
+  $4.Timestamp ensureCreatedAt() => $_ensure(18);
 
   @$pb.TagNumber(21)
   FileLifecycleStatus get statusEnum => $_getN(19);
@@ -1147,8 +1304,8 @@ class DeleteFileRequest extends $pb.GeneratedMessage {
 
 class ListFilesRequest extends $pb.GeneratedMessage {
   factory ListFilesRequest({
-    $1.ChatRef? filterChat,
-    $4.CursorPageRequest? page,
+    $2.ChatRef? filterChat,
+    $5.CursorPageRequest? page,
   }) {
     final result = create();
     if (filterChat != null) result.filterChat = filterChat;
@@ -1169,10 +1326,10 @@ class ListFilesRequest extends $pb.GeneratedMessage {
       _omitMessageNames ? '' : 'ListFilesRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
       createEmptyInstance: create)
-    ..aOM<$1.ChatRef>(1, _omitFieldNames ? '' : 'filterChat',
-        subBuilder: $1.ChatRef.create)
-    ..aOM<$4.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
-        subBuilder: $4.CursorPageRequest.create)
+    ..aOM<$2.ChatRef>(1, _omitFieldNames ? '' : 'filterChat',
+        subBuilder: $2.ChatRef.create)
+    ..aOM<$5.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
+        subBuilder: $5.CursorPageRequest.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1195,33 +1352,33 @@ class ListFilesRequest extends $pb.GeneratedMessage {
   static ListFilesRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
-  $1.ChatRef get filterChat => $_getN(0);
+  $2.ChatRef get filterChat => $_getN(0);
   @$pb.TagNumber(1)
-  set filterChat($1.ChatRef value) => $_setField(1, value);
+  set filterChat($2.ChatRef value) => $_setField(1, value);
   @$pb.TagNumber(1)
   $core.bool hasFilterChat() => $_has(0);
   @$pb.TagNumber(1)
   void clearFilterChat() => $_clearField(1);
   @$pb.TagNumber(1)
-  $1.ChatRef ensureFilterChat() => $_ensure(0);
+  $2.ChatRef ensureFilterChat() => $_ensure(0);
 
   @$pb.TagNumber(2)
-  $4.CursorPageRequest get page => $_getN(1);
+  $5.CursorPageRequest get page => $_getN(1);
   @$pb.TagNumber(2)
-  set page($4.CursorPageRequest value) => $_setField(2, value);
+  set page($5.CursorPageRequest value) => $_setField(2, value);
   @$pb.TagNumber(2)
   $core.bool hasPage() => $_has(1);
   @$pb.TagNumber(2)
   void clearPage() => $_clearField(2);
   @$pb.TagNumber(2)
-  $4.CursorPageRequest ensurePage() => $_ensure(1);
+  $5.CursorPageRequest ensurePage() => $_ensure(1);
 }
 
 class FileList extends $pb.GeneratedMessage {
   factory FileList({
     $core.Iterable<FileMetadata>? files,
     $core.String? nextCursor,
-    $4.CursorPageResponse? page,
+    $5.CursorPageResponse? page,
   }) {
     final result = create();
     if (files != null) result.files.addAll(files);
@@ -1246,8 +1403,8 @@ class FileList extends $pb.GeneratedMessage {
     ..pPM<FileMetadata>(1, _omitFieldNames ? '' : 'files',
         subBuilder: FileMetadata.create)
     ..aOS(2, _omitFieldNames ? '' : 'nextCursor')
-    ..aOM<$4.CursorPageResponse>(3, _omitFieldNames ? '' : 'page',
-        subBuilder: $4.CursorPageResponse.create)
+    ..aOM<$5.CursorPageResponse>(3, _omitFieldNames ? '' : 'page',
+        subBuilder: $5.CursorPageResponse.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1281,15 +1438,15 @@ class FileList extends $pb.GeneratedMessage {
   void clearNextCursor() => $_clearField(2);
 
   @$pb.TagNumber(3)
-  $4.CursorPageResponse get page => $_getN(2);
+  $5.CursorPageResponse get page => $_getN(2);
   @$pb.TagNumber(3)
-  set page($4.CursorPageResponse value) => $_setField(3, value);
+  set page($5.CursorPageResponse value) => $_setField(3, value);
   @$pb.TagNumber(3)
   $core.bool hasPage() => $_has(2);
   @$pb.TagNumber(3)
   void clearPage() => $_clearField(3);
   @$pb.TagNumber(3)
-  $4.CursorPageResponse ensurePage() => $_ensure(2);
+  $5.CursorPageResponse ensurePage() => $_ensure(2);
 }
 
 class CheckQuotaRequest extends $pb.GeneratedMessage {
@@ -1531,7 +1688,7 @@ class ConfirmUploadResponse extends $pb.GeneratedMessage {
 class GetFileURLResponse extends $pb.GeneratedMessage {
   factory GetFileURLResponse({
     $core.String? presignedGetUrl,
-    $3.Timestamp? expiresAt,
+    $4.Timestamp? expiresAt,
   }) {
     final result = create();
     if (presignedGetUrl != null) result.presignedGetUrl = presignedGetUrl;
@@ -1553,8 +1710,8 @@ class GetFileURLResponse extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'presignedGetUrl')
-    ..aOM<$3.Timestamp>(2, _omitFieldNames ? '' : 'expiresAt',
-        subBuilder: $3.Timestamp.create)
+    ..aOM<$4.Timestamp>(2, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $4.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1586,15 +1743,15 @@ class GetFileURLResponse extends $pb.GeneratedMessage {
   void clearPresignedGetUrl() => $_clearField(1);
 
   @$pb.TagNumber(2)
-  $3.Timestamp get expiresAt => $_getN(1);
+  $4.Timestamp get expiresAt => $_getN(1);
   @$pb.TagNumber(2)
-  set expiresAt($3.Timestamp value) => $_setField(2, value);
+  set expiresAt($4.Timestamp value) => $_setField(2, value);
   @$pb.TagNumber(2)
   $core.bool hasExpiresAt() => $_has(1);
   @$pb.TagNumber(2)
   void clearExpiresAt() => $_clearField(2);
   @$pb.TagNumber(2)
-  $3.Timestamp ensureExpiresAt() => $_ensure(1);
+  $4.Timestamp ensureExpiresAt() => $_ensure(1);
 }
 
 class GetFileMetadataResponse extends $pb.GeneratedMessage {
@@ -2228,7 +2385,7 @@ class IssueFileAccessCapabilityRequest extends $pb.GeneratedMessage {
     FileReferenceKey? reference,
     $core.String? subjectProfileId,
     $core.Iterable<FileReadSurface>? allowedSurfaces,
-    $3.Timestamp? expiresAt,
+    $4.Timestamp? expiresAt,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -2265,8 +2422,8 @@ class IssueFileAccessCapabilityRequest extends $pb.GeneratedMessage {
         valueOf: FileReadSurface.valueOf,
         enumValues: FileReadSurface.values,
         defaultEnumValue: FileReadSurface.FILE_READ_SURFACE_UNSPECIFIED)
-    ..aOM<$3.Timestamp>(6, _omitFieldNames ? '' : 'expiresAt',
-        subBuilder: $3.Timestamp.create)
+    ..aOM<$4.Timestamp>(6, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $4.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2334,15 +2491,15 @@ class IssueFileAccessCapabilityRequest extends $pb.GeneratedMessage {
   $pb.PbList<FileReadSurface> get allowedSurfaces => $_getList(4);
 
   @$pb.TagNumber(6)
-  $3.Timestamp get expiresAt => $_getN(5);
+  $4.Timestamp get expiresAt => $_getN(5);
   @$pb.TagNumber(6)
-  set expiresAt($3.Timestamp value) => $_setField(6, value);
+  set expiresAt($4.Timestamp value) => $_setField(6, value);
   @$pb.TagNumber(6)
   $core.bool hasExpiresAt() => $_has(5);
   @$pb.TagNumber(6)
   void clearExpiresAt() => $_clearField(6);
   @$pb.TagNumber(6)
-  $3.Timestamp ensureExpiresAt() => $_ensure(5);
+  $4.Timestamp ensureExpiresAt() => $_ensure(5);
 }
 
 /// @voice.unknown_fields=accept_preserve
@@ -2420,9 +2577,9 @@ class IssueFileAccessCapabilityReceipt extends $pb.GeneratedMessage {
     FileReferenceKey? reference,
     $core.String? subjectProfileId,
     $core.Iterable<FileReadSurface>? allowedSurfaces,
-    $3.Timestamp? expiresAt,
+    $4.Timestamp? expiresAt,
     $core.List<$core.int>? requestSha256,
-    $3.Timestamp? completedAt,
+    $4.Timestamp? completedAt,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -2465,12 +2622,12 @@ class IssueFileAccessCapabilityReceipt extends $pb.GeneratedMessage {
         valueOf: FileReadSurface.valueOf,
         enumValues: FileReadSurface.values,
         defaultEnumValue: FileReadSurface.FILE_READ_SURFACE_UNSPECIFIED)
-    ..aOM<$3.Timestamp>(8, _omitFieldNames ? '' : 'expiresAt',
-        subBuilder: $3.Timestamp.create)
+    ..aOM<$4.Timestamp>(8, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $4.Timestamp.create)
     ..a<$core.List<$core.int>>(
         9, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
-    ..aOM<$3.Timestamp>(10, _omitFieldNames ? '' : 'completedAt',
-        subBuilder: $3.Timestamp.create)
+    ..aOM<$4.Timestamp>(10, _omitFieldNames ? '' : 'completedAt',
+        subBuilder: $4.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2556,15 +2713,15 @@ class IssueFileAccessCapabilityReceipt extends $pb.GeneratedMessage {
   $pb.PbList<FileReadSurface> get allowedSurfaces => $_getList(6);
 
   @$pb.TagNumber(8)
-  $3.Timestamp get expiresAt => $_getN(7);
+  $4.Timestamp get expiresAt => $_getN(7);
   @$pb.TagNumber(8)
-  set expiresAt($3.Timestamp value) => $_setField(8, value);
+  set expiresAt($4.Timestamp value) => $_setField(8, value);
   @$pb.TagNumber(8)
   $core.bool hasExpiresAt() => $_has(7);
   @$pb.TagNumber(8)
   void clearExpiresAt() => $_clearField(8);
   @$pb.TagNumber(8)
-  $3.Timestamp ensureExpiresAt() => $_ensure(7);
+  $4.Timestamp ensureExpiresAt() => $_ensure(7);
 
   @$pb.TagNumber(9)
   $core.List<$core.int> get requestSha256 => $_getN(8);
@@ -2576,15 +2733,15 @@ class IssueFileAccessCapabilityReceipt extends $pb.GeneratedMessage {
   void clearRequestSha256() => $_clearField(9);
 
   @$pb.TagNumber(10)
-  $3.Timestamp get completedAt => $_getN(9);
+  $4.Timestamp get completedAt => $_getN(9);
   @$pb.TagNumber(10)
-  set completedAt($3.Timestamp value) => $_setField(10, value);
+  set completedAt($4.Timestamp value) => $_setField(10, value);
   @$pb.TagNumber(10)
   $core.bool hasCompletedAt() => $_has(9);
   @$pb.TagNumber(10)
   void clearCompletedAt() => $_clearField(10);
   @$pb.TagNumber(10)
-  $3.Timestamp ensureCompletedAt() => $_ensure(9);
+  $4.Timestamp ensureCompletedAt() => $_ensure(9);
 }
 
 /// @voice.unknown_fields=reject
@@ -2596,7 +2753,7 @@ class PrepareSpaceDeletionReferenceManifestRequest
     $core.String? spaceId,
     $core.String? deletionOperationId,
     $fixnum.Int64? scheduleGeneration,
-    $5.ManifestBinding? chatManifest,
+    $6.ManifestBinding? chatManifest,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -2631,8 +2788,8 @@ class PrepareSpaceDeletionReferenceManifestRequest
     ..a<$fixnum.Int64>(
         4, _omitFieldNames ? '' : 'scheduleGeneration', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
-    ..aOM<$5.ManifestBinding>(5, _omitFieldNames ? '' : 'chatManifest',
-        subBuilder: $5.ManifestBinding.create)
+    ..aOM<$6.ManifestBinding>(5, _omitFieldNames ? '' : 'chatManifest',
+        subBuilder: $6.ManifestBinding.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2697,15 +2854,15 @@ class PrepareSpaceDeletionReferenceManifestRequest
   void clearScheduleGeneration() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $5.ManifestBinding get chatManifest => $_getN(4);
+  $6.ManifestBinding get chatManifest => $_getN(4);
   @$pb.TagNumber(5)
-  set chatManifest($5.ManifestBinding value) => $_setField(5, value);
+  set chatManifest($6.ManifestBinding value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasChatManifest() => $_has(4);
   @$pb.TagNumber(5)
   void clearChatManifest() => $_clearField(5);
   @$pb.TagNumber(5)
-  $5.ManifestBinding ensureChatManifest() => $_ensure(4);
+  $6.ManifestBinding ensureChatManifest() => $_ensure(4);
 }
 
 /// @voice.unknown_fields=accept_preserve
@@ -2718,9 +2875,9 @@ class PrepareSpaceDeletionReferenceManifestReceipt
     $core.String? spaceId,
     $core.String? deletionOperationId,
     $fixnum.Int64? scheduleGeneration,
-    $5.LifecycleFenceState? appliedState,
+    $6.LifecycleFenceState? appliedState,
     $core.List<$core.int>? requestSha256,
-    $3.Timestamp? appliedAt,
+    $4.Timestamp? appliedAt,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -2759,12 +2916,12 @@ class PrepareSpaceDeletionReferenceManifestReceipt
     ..a<$fixnum.Int64>(
         5, _omitFieldNames ? '' : 'scheduleGeneration', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
-    ..aE<$5.LifecycleFenceState>(6, _omitFieldNames ? '' : 'appliedState',
-        enumValues: $5.LifecycleFenceState.values)
+    ..aE<$6.LifecycleFenceState>(6, _omitFieldNames ? '' : 'appliedState',
+        enumValues: $6.LifecycleFenceState.values)
     ..a<$core.List<$core.int>>(
         7, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
-    ..aOM<$3.Timestamp>(8, _omitFieldNames ? '' : 'appliedAt',
-        subBuilder: $3.Timestamp.create)
+    ..aOM<$4.Timestamp>(8, _omitFieldNames ? '' : 'appliedAt',
+        subBuilder: $4.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2838,9 +2995,9 @@ class PrepareSpaceDeletionReferenceManifestReceipt
   void clearScheduleGeneration() => $_clearField(5);
 
   @$pb.TagNumber(6)
-  $5.LifecycleFenceState get appliedState => $_getN(5);
+  $6.LifecycleFenceState get appliedState => $_getN(5);
   @$pb.TagNumber(6)
-  set appliedState($5.LifecycleFenceState value) => $_setField(6, value);
+  set appliedState($6.LifecycleFenceState value) => $_setField(6, value);
   @$pb.TagNumber(6)
   $core.bool hasAppliedState() => $_has(5);
   @$pb.TagNumber(6)
@@ -2856,15 +3013,15 @@ class PrepareSpaceDeletionReferenceManifestReceipt
   void clearRequestSha256() => $_clearField(7);
 
   @$pb.TagNumber(8)
-  $3.Timestamp get appliedAt => $_getN(7);
+  $4.Timestamp get appliedAt => $_getN(7);
   @$pb.TagNumber(8)
-  set appliedAt($3.Timestamp value) => $_setField(8, value);
+  set appliedAt($4.Timestamp value) => $_setField(8, value);
   @$pb.TagNumber(8)
   $core.bool hasAppliedAt() => $_has(7);
   @$pb.TagNumber(8)
   void clearAppliedAt() => $_clearField(8);
   @$pb.TagNumber(8)
-  $3.Timestamp ensureAppliedAt() => $_ensure(7);
+  $4.Timestamp ensureAppliedAt() => $_ensure(7);
 }
 
 /// @voice.unknown_fields=accept_preserve
@@ -3144,7 +3301,7 @@ class RegisterSpaceDeletionReferenceChunkReceipt extends $pb.GeneratedMessage {
     $core.List<$core.int>? expectedReferencesSha256,
     $core.bool? producerSealed,
     $core.List<$core.int>? requestSha256,
-    $3.Timestamp? completedAt,
+    $4.Timestamp? completedAt,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -3207,8 +3364,8 @@ class RegisterSpaceDeletionReferenceChunkReceipt extends $pb.GeneratedMessage {
     ..aOB(12, _omitFieldNames ? '' : 'producerSealed')
     ..a<$core.List<$core.int>>(
         13, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
-    ..aOM<$3.Timestamp>(14, _omitFieldNames ? '' : 'completedAt',
-        subBuilder: $3.Timestamp.create)
+    ..aOM<$4.Timestamp>(14, _omitFieldNames ? '' : 'completedAt',
+        subBuilder: $4.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3353,15 +3510,15 @@ class RegisterSpaceDeletionReferenceChunkReceipt extends $pb.GeneratedMessage {
   void clearRequestSha256() => $_clearField(13);
 
   @$pb.TagNumber(14)
-  $3.Timestamp get completedAt => $_getN(13);
+  $4.Timestamp get completedAt => $_getN(13);
   @$pb.TagNumber(14)
-  set completedAt($3.Timestamp value) => $_setField(14, value);
+  set completedAt($4.Timestamp value) => $_setField(14, value);
   @$pb.TagNumber(14)
   $core.bool hasCompletedAt() => $_has(13);
   @$pb.TagNumber(14)
   void clearCompletedAt() => $_clearField(14);
   @$pb.TagNumber(14)
-  $3.Timestamp ensureCompletedAt() => $_ensure(13);
+  $4.Timestamp ensureCompletedAt() => $_ensure(13);
 }
 
 /// @voice.unknown_fields=accept_preserve
@@ -3594,7 +3751,7 @@ class ReleaseSpaceDeletionProducerReferencesReceipt
     $fixnum.Int64? releasedCount,
     $core.List<$core.int>? expectedReferencesSha256,
     $core.List<$core.int>? requestSha256,
-    $3.Timestamp? completedAt,
+    $4.Timestamp? completedAt,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -3649,8 +3806,8 @@ class ReleaseSpaceDeletionProducerReferencesReceipt
         _omitFieldNames ? '' : 'expectedReferencesSha256', $pb.PbFieldType.OY)
     ..a<$core.List<$core.int>>(
         10, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
-    ..aOM<$3.Timestamp>(11, _omitFieldNames ? '' : 'completedAt',
-        subBuilder: $3.Timestamp.create)
+    ..aOM<$4.Timestamp>(11, _omitFieldNames ? '' : 'completedAt',
+        subBuilder: $4.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3770,15 +3927,15 @@ class ReleaseSpaceDeletionProducerReferencesReceipt
   void clearRequestSha256() => $_clearField(10);
 
   @$pb.TagNumber(11)
-  $3.Timestamp get completedAt => $_getN(10);
+  $4.Timestamp get completedAt => $_getN(10);
   @$pb.TagNumber(11)
-  set completedAt($3.Timestamp value) => $_setField(11, value);
+  set completedAt($4.Timestamp value) => $_setField(11, value);
   @$pb.TagNumber(11)
   $core.bool hasCompletedAt() => $_has(10);
   @$pb.TagNumber(11)
   void clearCompletedAt() => $_clearField(11);
   @$pb.TagNumber(11)
-  $3.Timestamp ensureCompletedAt() => $_ensure(10);
+  $4.Timestamp ensureCompletedAt() => $_ensure(10);
 }
 
 /// @voice.unknown_fields=accept_preserve
@@ -3855,7 +4012,7 @@ class ReleaseSpaceDeletionProducerReferencesResponse
 /// @voice.hash=domain_separated_sha256
 class ApplySpaceLifecycleFenceRequest extends $pb.GeneratedMessage {
   factory ApplySpaceLifecycleFenceRequest({
-    $5.SpaceLifecycleFenceRequest? fence,
+    $6.SpaceLifecycleFenceRequest? fence,
   }) {
     final result = create();
     if (fence != null) result.fence = fence;
@@ -3875,8 +4032,8 @@ class ApplySpaceLifecycleFenceRequest extends $pb.GeneratedMessage {
       _omitMessageNames ? '' : 'ApplySpaceLifecycleFenceRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
       createEmptyInstance: create)
-    ..aOM<$5.SpaceLifecycleFenceRequest>(1, _omitFieldNames ? '' : 'fence',
-        subBuilder: $5.SpaceLifecycleFenceRequest.create)
+    ..aOM<$6.SpaceLifecycleFenceRequest>(1, _omitFieldNames ? '' : 'fence',
+        subBuilder: $6.SpaceLifecycleFenceRequest.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3903,22 +4060,22 @@ class ApplySpaceLifecycleFenceRequest extends $pb.GeneratedMessage {
   static ApplySpaceLifecycleFenceRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
-  $5.SpaceLifecycleFenceRequest get fence => $_getN(0);
+  $6.SpaceLifecycleFenceRequest get fence => $_getN(0);
   @$pb.TagNumber(1)
-  set fence($5.SpaceLifecycleFenceRequest value) => $_setField(1, value);
+  set fence($6.SpaceLifecycleFenceRequest value) => $_setField(1, value);
   @$pb.TagNumber(1)
   $core.bool hasFence() => $_has(0);
   @$pb.TagNumber(1)
   void clearFence() => $_clearField(1);
   @$pb.TagNumber(1)
-  $5.SpaceLifecycleFenceRequest ensureFence() => $_ensure(0);
+  $6.SpaceLifecycleFenceRequest ensureFence() => $_ensure(0);
 }
 
 /// @voice.unknown_fields=accept_preserve
 /// @voice.hash=domain_separated_sha256
 class ApplySpaceLifecycleFenceResponse extends $pb.GeneratedMessage {
   factory ApplySpaceLifecycleFenceResponse({
-    $5.SpaceLifecycleFenceReceipt? receipt,
+    $6.SpaceLifecycleFenceReceipt? receipt,
   }) {
     final result = create();
     if (receipt != null) result.receipt = receipt;
@@ -3939,8 +4096,8 @@ class ApplySpaceLifecycleFenceResponse extends $pb.GeneratedMessage {
       _omitMessageNames ? '' : 'ApplySpaceLifecycleFenceResponse',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
       createEmptyInstance: create)
-    ..aOM<$5.SpaceLifecycleFenceReceipt>(1, _omitFieldNames ? '' : 'receipt',
-        subBuilder: $5.SpaceLifecycleFenceReceipt.create)
+    ..aOM<$6.SpaceLifecycleFenceReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: $6.SpaceLifecycleFenceReceipt.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3967,22 +4124,22 @@ class ApplySpaceLifecycleFenceResponse extends $pb.GeneratedMessage {
   static ApplySpaceLifecycleFenceResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
-  $5.SpaceLifecycleFenceReceipt get receipt => $_getN(0);
+  $6.SpaceLifecycleFenceReceipt get receipt => $_getN(0);
   @$pb.TagNumber(1)
-  set receipt($5.SpaceLifecycleFenceReceipt value) => $_setField(1, value);
+  set receipt($6.SpaceLifecycleFenceReceipt value) => $_setField(1, value);
   @$pb.TagNumber(1)
   $core.bool hasReceipt() => $_has(0);
   @$pb.TagNumber(1)
   void clearReceipt() => $_clearField(1);
   @$pb.TagNumber(1)
-  $5.SpaceLifecycleFenceReceipt ensureReceipt() => $_ensure(0);
+  $6.SpaceLifecycleFenceReceipt ensureReceipt() => $_ensure(0);
 }
 
 /// @voice.unknown_fields=reject
 /// @voice.hash=domain_separated_sha256
 class PurgeSpaceRequest extends $pb.GeneratedMessage {
   factory PurgeSpaceRequest({
-    $5.SpacePurgeRequest? purge,
+    $6.SpacePurgeRequest? purge,
   }) {
     final result = create();
     if (purge != null) result.purge = purge;
@@ -4002,8 +4159,8 @@ class PurgeSpaceRequest extends $pb.GeneratedMessage {
       _omitMessageNames ? '' : 'PurgeSpaceRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
       createEmptyInstance: create)
-    ..aOM<$5.SpacePurgeRequest>(1, _omitFieldNames ? '' : 'purge',
-        subBuilder: $5.SpacePurgeRequest.create)
+    ..aOM<$6.SpacePurgeRequest>(1, _omitFieldNames ? '' : 'purge',
+        subBuilder: $6.SpacePurgeRequest.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4026,22 +4183,22 @@ class PurgeSpaceRequest extends $pb.GeneratedMessage {
   static PurgeSpaceRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
-  $5.SpacePurgeRequest get purge => $_getN(0);
+  $6.SpacePurgeRequest get purge => $_getN(0);
   @$pb.TagNumber(1)
-  set purge($5.SpacePurgeRequest value) => $_setField(1, value);
+  set purge($6.SpacePurgeRequest value) => $_setField(1, value);
   @$pb.TagNumber(1)
   $core.bool hasPurge() => $_has(0);
   @$pb.TagNumber(1)
   void clearPurge() => $_clearField(1);
   @$pb.TagNumber(1)
-  $5.SpacePurgeRequest ensurePurge() => $_ensure(0);
+  $6.SpacePurgeRequest ensurePurge() => $_ensure(0);
 }
 
 /// @voice.unknown_fields=accept_preserve
 /// @voice.hash=domain_separated_sha256
 class PurgeSpaceResponse extends $pb.GeneratedMessage {
   factory PurgeSpaceResponse({
-    $5.SpacePurgeReceipt? receipt,
+    $6.SpacePurgeReceipt? receipt,
   }) {
     final result = create();
     if (receipt != null) result.receipt = receipt;
@@ -4061,8 +4218,8 @@ class PurgeSpaceResponse extends $pb.GeneratedMessage {
       _omitMessageNames ? '' : 'PurgeSpaceResponse',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
       createEmptyInstance: create)
-    ..aOM<$5.SpacePurgeReceipt>(1, _omitFieldNames ? '' : 'receipt',
-        subBuilder: $5.SpacePurgeReceipt.create)
+    ..aOM<$6.SpacePurgeReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: $6.SpacePurgeReceipt.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4085,15 +4242,15 @@ class PurgeSpaceResponse extends $pb.GeneratedMessage {
   static PurgeSpaceResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
-  $5.SpacePurgeReceipt get receipt => $_getN(0);
+  $6.SpacePurgeReceipt get receipt => $_getN(0);
   @$pb.TagNumber(1)
-  set receipt($5.SpacePurgeReceipt value) => $_setField(1, value);
+  set receipt($6.SpacePurgeReceipt value) => $_setField(1, value);
   @$pb.TagNumber(1)
   $core.bool hasReceipt() => $_has(0);
   @$pb.TagNumber(1)
   void clearReceipt() => $_clearField(1);
   @$pb.TagNumber(1)
-  $5.SpacePurgeReceipt ensureReceipt() => $_ensure(0);
+  $6.SpacePurgeReceipt ensureReceipt() => $_ensure(0);
 }
 
 /// @voice.unknown_fields=reject
@@ -4198,7 +4355,7 @@ class AcquireFileReferencesReceipt extends $pb.GeneratedMessage {
     FileReferenceProducerId? producerId,
     $fixnum.Int64? referenceCount,
     $core.List<$core.int>? requestSha256,
-    $3.Timestamp? completedAt,
+    $4.Timestamp? completedAt,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -4235,8 +4392,8 @@ class AcquireFileReferencesReceipt extends $pb.GeneratedMessage {
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..a<$core.List<$core.int>>(
         6, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
-    ..aOM<$3.Timestamp>(7, _omitFieldNames ? '' : 'completedAt',
-        subBuilder: $3.Timestamp.create)
+    ..aOM<$4.Timestamp>(7, _omitFieldNames ? '' : 'completedAt',
+        subBuilder: $4.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4316,15 +4473,15 @@ class AcquireFileReferencesReceipt extends $pb.GeneratedMessage {
   void clearRequestSha256() => $_clearField(6);
 
   @$pb.TagNumber(7)
-  $3.Timestamp get completedAt => $_getN(6);
+  $4.Timestamp get completedAt => $_getN(6);
   @$pb.TagNumber(7)
-  set completedAt($3.Timestamp value) => $_setField(7, value);
+  set completedAt($4.Timestamp value) => $_setField(7, value);
   @$pb.TagNumber(7)
   $core.bool hasCompletedAt() => $_has(6);
   @$pb.TagNumber(7)
   void clearCompletedAt() => $_clearField(7);
   @$pb.TagNumber(7)
-  $3.Timestamp ensureCompletedAt() => $_ensure(6);
+  $4.Timestamp ensureCompletedAt() => $_ensure(6);
 }
 
 /// @voice.unknown_fields=accept_preserve
@@ -4491,7 +4648,7 @@ class ReleaseFileReferencesReceipt extends $pb.GeneratedMessage {
     FileReferenceProducerId? producerId,
     $fixnum.Int64? releasedCount,
     $core.List<$core.int>? requestSha256,
-    $3.Timestamp? completedAt,
+    $4.Timestamp? completedAt,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -4528,8 +4685,8 @@ class ReleaseFileReferencesReceipt extends $pb.GeneratedMessage {
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..a<$core.List<$core.int>>(
         6, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
-    ..aOM<$3.Timestamp>(7, _omitFieldNames ? '' : 'completedAt',
-        subBuilder: $3.Timestamp.create)
+    ..aOM<$4.Timestamp>(7, _omitFieldNames ? '' : 'completedAt',
+        subBuilder: $4.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4609,15 +4766,15 @@ class ReleaseFileReferencesReceipt extends $pb.GeneratedMessage {
   void clearRequestSha256() => $_clearField(6);
 
   @$pb.TagNumber(7)
-  $3.Timestamp get completedAt => $_getN(6);
+  $4.Timestamp get completedAt => $_getN(6);
   @$pb.TagNumber(7)
-  set completedAt($3.Timestamp value) => $_setField(7, value);
+  set completedAt($4.Timestamp value) => $_setField(7, value);
   @$pb.TagNumber(7)
   $core.bool hasCompletedAt() => $_has(6);
   @$pb.TagNumber(7)
   void clearCompletedAt() => $_clearField(7);
   @$pb.TagNumber(7)
-  $3.Timestamp ensureCompletedAt() => $_ensure(6);
+  $4.Timestamp ensureCompletedAt() => $_ensure(6);
 }
 
 /// @voice.unknown_fields=accept_preserve
@@ -4870,7 +5027,7 @@ class GetFileReferenceGCStatusResponse extends $pb.GeneratedMessage {
     $core.List<$core.int>? releaseRequestSha256,
     $core.List<$core.int>? requestSha256,
     $core.Iterable<FileReferenceGCStatus>? references,
-    $3.Timestamp? completedAt,
+    $4.Timestamp? completedAt,
   }) {
     final result = create();
     if (receiptId != null) result.receiptId = receiptId;
@@ -4908,8 +5065,8 @@ class GetFileReferenceGCStatusResponse extends $pb.GeneratedMessage {
         5, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
     ..pPM<FileReferenceGCStatus>(6, _omitFieldNames ? '' : 'references',
         subBuilder: FileReferenceGCStatus.create)
-    ..aOM<$3.Timestamp>(7, _omitFieldNames ? '' : 'completedAt',
-        subBuilder: $3.Timestamp.create)
+    ..aOM<$4.Timestamp>(7, _omitFieldNames ? '' : 'completedAt',
+        subBuilder: $4.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4984,15 +5141,15 @@ class GetFileReferenceGCStatusResponse extends $pb.GeneratedMessage {
   $pb.PbList<FileReferenceGCStatus> get references => $_getList(5);
 
   @$pb.TagNumber(7)
-  $3.Timestamp get completedAt => $_getN(6);
+  $4.Timestamp get completedAt => $_getN(6);
   @$pb.TagNumber(7)
-  set completedAt($3.Timestamp value) => $_setField(7, value);
+  set completedAt($4.Timestamp value) => $_setField(7, value);
   @$pb.TagNumber(7)
   $core.bool hasCompletedAt() => $_has(6);
   @$pb.TagNumber(7)
   void clearCompletedAt() => $_clearField(7);
   @$pb.TagNumber(7)
-  $3.Timestamp ensureCompletedAt() => $_ensure(6);
+  $4.Timestamp ensureCompletedAt() => $_ensure(6);
 }
 
 /// @voice.unknown_fields=reject
@@ -5125,7 +5282,7 @@ class GetSpacePurgeReceiptRequest extends $pb.GeneratedMessage {
 /// @voice.hash=domain_separated_sha256
 class GetSpacePurgeReceiptResponse extends $pb.GeneratedMessage {
   factory GetSpacePurgeReceiptResponse({
-    $5.SpacePurgeReceipt? receipt,
+    $6.SpacePurgeReceipt? receipt,
   }) {
     final result = create();
     if (receipt != null) result.receipt = receipt;
@@ -5145,8 +5302,8 @@ class GetSpacePurgeReceiptResponse extends $pb.GeneratedMessage {
       _omitMessageNames ? '' : 'GetSpacePurgeReceiptResponse',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
       createEmptyInstance: create)
-    ..aOM<$5.SpacePurgeReceipt>(1, _omitFieldNames ? '' : 'receipt',
-        subBuilder: $5.SpacePurgeReceipt.create)
+    ..aOM<$6.SpacePurgeReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: $6.SpacePurgeReceipt.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -5172,15 +5329,15 @@ class GetSpacePurgeReceiptResponse extends $pb.GeneratedMessage {
   static GetSpacePurgeReceiptResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
-  $5.SpacePurgeReceipt get receipt => $_getN(0);
+  $6.SpacePurgeReceipt get receipt => $_getN(0);
   @$pb.TagNumber(1)
-  set receipt($5.SpacePurgeReceipt value) => $_setField(1, value);
+  set receipt($6.SpacePurgeReceipt value) => $_setField(1, value);
   @$pb.TagNumber(1)
   $core.bool hasReceipt() => $_has(0);
   @$pb.TagNumber(1)
   void clearReceipt() => $_clearField(1);
   @$pb.TagNumber(1)
-  $5.SpacePurgeReceipt ensureReceipt() => $_ensure(0);
+  $6.SpacePurgeReceipt ensureReceipt() => $_ensure(0);
 }
 
 const $core.bool _omitFieldNames =
