@@ -32,28 +32,27 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	spacev1 "voice.app/voice/space/v1"
-	"voice/backend/pkg/integrationtest"
 	"voice/backend/pkg/principal"
 	"voice/backend/space/internal/botmembershipprincipal"
-	"voice/backend/space/internal/store"
 )
 
 func TestNativeBotProtectedTransport(t *testing.T) {
+	testNativeBotProtectedTransport(t, false)
+}
+
+func TestNativeBot44ProtectedTransport(t *testing.T) {
+	testNativeBotProtectedTransport(t, true)
+}
+
+func testNativeBotProtectedTransport(t *testing.T, guarded bool) {
 	if testing.Short() {
 		t.Skip("requires isolated Linux native PostgreSQL/Redis/mTLS")
 	}
 	ctx := context.Background()
-	database := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/space_db"))
-	database.Run(true, "goto", "34")
-	st := &store.SpaceStore{Pool: database.Pool}
-	space, err := st.CreateSpace(ctx, uuid.New(), "Protected native Bot", "", "public")
-	require.NoError(t, err)
-	database.Run(true, "up")
+	st, auditPool, spaceID := nativeBotTransportStore(t, ctx, guarded)
 	certFile, keyFile, caFile, clientCert, roots := nativeBotTLSMaterial(t)
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-	next, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
+	key := nativeBotFixtureSigner(t, "VOICE_BOT_NATIVE_SIGNER_KEY_FILE")
+	next := nativeBotFixtureSigner(t, "VOICE_BOT_NATIVE_NEXT_SIGNER_KEY_FILE")
 	keys := []map[string]string{}
 	for i, k := range []*rsa.PrivateKey{key, next} {
 		kid := "current"
@@ -83,6 +82,7 @@ func TestNativeBotProtectedTransport(t *testing.T) {
 	require.NoError(t, os.WriteFile(clientCertFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientCert.Certificate[0]}), 0600))
 	require.NoError(t, os.WriteFile(clientKeyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: clientKey}), 0600))
 	cfg := botmembershipprincipal.Config{ListenAddr: "127.0.0.1:0", CertFile: certFile, KeyFile: keyFile, ClientCAFile: caFile, ReplayAddr: redisAddr, JWKSCAFile: caFile, JWKSClientCertFile: clientCertFile, JWKSClientKeyFile: clientKeyFile, JWKSURLs: map[string]string{"bot": jwks.URL + "/bot"}, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: 5 * time.Second}
+	nativeBotExternalJWKS(t, &cfg)
 	handoff := os.Getenv("VOICE_BOT_NATIVE_HANDOFF_DIR")
 	if handoff != "" {
 		cfg.ListenAddr = "0.0.0.0:0"
@@ -121,7 +121,10 @@ func TestNativeBotProtectedTransport(t *testing.T) {
 		require.NoError(t, err)
 		return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token, "x-request-id", op))
 	}
-	profile := uuid.NewString()
+	profile := os.Getenv("VOICE_BOT_NATIVE_PROFILE_ID")
+	if profile == "" {
+		profile = uuid.NewString()
+	}
 	if handoff != "" {
 		host := os.Getenv("VOICE_BOT_NATIVE_ADVERTISED_HOST")
 		require.NotEmpty(t, host, "explicit private Docker alias required")
@@ -129,7 +132,7 @@ func TestNativeBotProtectedTransport(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, os.MkdirAll(handoff, 0700))
 		files := map[string]string{"ca_file": caFile, "client_cert_file": clientCertFile, "client_key_file": clientKeyFile}
-		fixture := map[string]any{"address": net.JoinHostPort(host, port), "server_name": "localhost", "space_id": space.ID.String(), "profile_id": profile, "key_id": "current"}
+		fixture := map[string]any{"address": net.JoinHostPort(host, port), "server_name": "localhost", "space_id": spaceID.String(), "profile_id": profile, "key_id": "current"}
 		for field, path := range files {
 			raw, err := os.ReadFile(path)
 			require.NoError(t, err)
@@ -166,13 +169,13 @@ func TestNativeBotProtectedTransport(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, json.Unmarshal(raw, &expected))
 				require.EqualValues(t, 2, expected.Generation)
-				observed, err := st.ReadMemberAdmissionAuthority(ctx, &spacev1.GetMemberAdmissionAuthorityRequest{ProtocolVersion: 1, SpaceId: space.ID.String(), ProfileId: profile})
+				observed, err := st.ReadMemberAdmissionAuthority(ctx, &spacev1.GetMemberAdmissionAuthorityRequest{ProtocolVersion: 1, SpaceId: spaceID.String(), ProfileId: profile})
 				require.NoError(t, err)
 				require.Equal(t, spacev1.MemberAdmissionSourceState_MEMBER_ADMISSION_SOURCE_STATE_ACTIVE, observed.GetOrdinary().GetState())
 				require.Equal(t, expected.InstallOperationID, observed.GetOrdinary().GetPublishedBinding().GetOrdinary().GetPublicationIdentity())
 				require.Equal(t, spacev1.MemberAdmissionPublicationKind_MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_BOT_INSTALL, observed.GetOrdinary().GetPublicationKind())
 				var generation, floor uint64
-				require.NoError(t, database.Pool.QueryRow(ctx, `SELECT generation,retired_through FROM space_bot_installation_heads WHERE space_id=$1 AND profile_id=$2`, space.ID, profile).Scan(&generation, &floor))
+				require.NoError(t, auditPool.QueryRow(ctx, `SELECT generation,retired_through FROM space_bot_installation_heads WHERE space_id=$1 AND profile_id=$2`, spaceID, profile).Scan(&generation, &floor))
 				require.EqualValues(t, 2, generation)
 				require.EqualValues(t, 1, floor)
 				t.Log("real Bot producer/native Space generation2 and retired predecessor verified")
@@ -180,7 +183,7 @@ func TestNativeBotProtectedTransport(t *testing.T) {
 			}
 		}
 	}
-	add := &spacev1.AddBotMemberRequest{SpaceId: space.ID.String(), ProfileId: profile, InstallationIntent: &spacev1.BotInstallationIntent{OperationId: uuid.NewString(), BotId: uuid.NewString(), InstallationId: uuid.NewString(), SpaceId: space.ID.String(), ActorProfileId: profile, Generation: 1}}
+	add := &spacev1.AddBotMemberRequest{SpaceId: spaceID.String(), ProfileId: profile, InstallationIntent: &spacev1.BotInstallationIntent{OperationId: uuid.NewString(), BotId: uuid.NewString(), InstallationId: uuid.NewString(), SpaceId: spaceID.String(), ActorProfileId: profile, Generation: 1}}
 	tokenContext := outgoing(add, false)
 	_, err = client.AddBotMember(tokenContext, add)
 	require.NoError(t, err)
