@@ -174,6 +174,9 @@ func (s *RoleGRPC) GetMemberRoles(ctx context.Context, req *rolev1.GetMemberRole
 }
 
 func (s *RoleGRPC) CheckPermission(ctx context.Context, req *rolev1.CheckPermissionRequest) (*rolev1.CheckPermissionResponse, error) {
+	if _, report := principalgrpc.ReportPermissionIssuer(req.GetPermissionName()); report {
+		return s.checkQualifiedReportPermission(ctx, req)
+	}
 	if req.GetPermissionName() == "SPACE_MANAGE_BOTS" {
 		return s.checkQualifiedBotManagement(ctx, req)
 	}

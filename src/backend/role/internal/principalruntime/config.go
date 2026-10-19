@@ -21,6 +21,7 @@ type Config struct {
 	AuthoritySourceEnabled                            bool
 	DelegatedUserEnabled                              bool
 	BotLifecycleEnabled                               bool
+	ReportPermissionEnabled                           bool
 }
 
 var issuerPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
@@ -36,6 +37,9 @@ func LoadFromEnv() (Config, bool, error) {
 		enabled = true
 	}
 	if _, present := os.LookupEnv("ROLE_BOT_LIFECYCLE_ENABLED"); present {
+		enabled = true
+	}
+	if _, present := os.LookupEnv("ROLE_REPORT_PERMISSION_ENABLED"); present {
 		enabled = true
 	}
 	for _, name := range names {
@@ -67,6 +71,12 @@ func LoadFromEnv() (Config, bool, error) {
 			return Config{}, true, errors.New("ROLE_BOT_LIFECYCLE_ENABLED must be true or false")
 		}
 		cfg.BotLifecycleEnabled = value == "true"
+	}
+	if value, ok := os.LookupEnv("ROLE_REPORT_PERMISSION_ENABLED"); ok {
+		if value != "true" && value != "false" {
+			return Config{}, true, errors.New("ROLE_REPORT_PERMISSION_ENABLED must be true or false")
+		}
+		cfg.ReportPermissionEnabled = value == "true"
 	}
 	if err := json.Unmarshal([]byte(os.Getenv("S2S_JWKS_URLS_JSON")), &cfg.JWKSURLs); err != nil {
 		return Config{}, true, errors.New("invalid principal JWKS configuration")
@@ -111,6 +121,10 @@ func (c Config) validate() error {
 		return errors.New("invalid principal listener address")
 	}
 	allowedIssuers := map[string]struct{}{"space": {}, "gameintegration": {}, "voice": {}}
+	if c.ReportPermissionEnabled {
+		allowedIssuers["messaging"] = struct{}{}
+		allowedIssuers["moderation"] = struct{}{}
+	}
 	if c.BotLifecycleEnabled {
 		allowedIssuers["bot"] = struct{}{}
 	}
