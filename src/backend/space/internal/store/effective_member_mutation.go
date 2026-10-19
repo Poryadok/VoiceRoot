@@ -38,6 +38,7 @@ const (
 	effectiveMutationCandidateRetirement
 	effectiveMutationCommunityRecoveryReservation
 	effectiveMutationCommunityRecoveryCompletion
+	effectiveMutationLifecycleMaintenance
 )
 
 // Only the Creator's already verified, preallocated new identity enters here.
@@ -337,6 +338,8 @@ func (s *SpaceStore) finishEffectiveMemberMutations(ctx context.Context, capture
 		scopeErr = s.memberAdmissionRetirementScope(ctx, capture.space)
 	case effectiveMutationCommunityRecoveryReservation, effectiveMutationCommunityRecoveryCompletion:
 		scopeErr = s.communityRecoveryMutationScope(ctx, capture)
+	case effectiveMutationLifecycleMaintenance:
+		scopeErr = s.lifecycleMaintenanceMutationScope(ctx, capture.space)
 	default:
 		return ErrEffectiveEpisodeUnavailable
 	}

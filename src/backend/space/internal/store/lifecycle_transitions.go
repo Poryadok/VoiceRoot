@@ -199,7 +199,7 @@ func (s *SpaceStore) withLockedLifecycle(ctx context.Context, spaceID uuid.UUID,
 	if s == nil || s.Pool == nil || spaceID == uuid.Nil || s.tx != nil {
 		return nil, ErrLifecycleEvidenceInvalid
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +216,16 @@ func (s *SpaceStore) withLockedLifecycle(ctx context.Context, spaceID uuid.UUID,
 		return nil, err
 	}
 	if persist {
+		scoped := *s
+		scoped.tx = tx
+		capture, err := scoped.captureLifecycleMaintenanceMutation(ctx, spaceID)
+		if err != nil {
+			return nil, err
+		}
 		if err := persistLifecycleSnapshot(ctx, tx, aggregate.Snapshot()); err != nil {
+			return nil, err
+		}
+		if err := scoped.finishLifecycleMaintenanceMutation(ctx, capture); err != nil {
 			return nil, err
 		}
 	}

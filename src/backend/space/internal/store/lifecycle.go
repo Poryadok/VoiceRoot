@@ -53,7 +53,7 @@ func (s *SpaceStore) ReserveLifecycleSchedule(ctx context.Context, accountID, ac
 	requestHash, confirmationHash, proofDigest := toLifecycleHash(binding.requestHash), toLifecycleHash(binding.confirmationHash), toLifecycleHash(binding.proofDigest)
 	bindingHash := toLifecycleHash(binding.bindingHash)
 
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +108,12 @@ func (s *SpaceStore) ReserveLifecycleSchedule(ctx context.Context, accountID, ac
 		return nil, loadErr
 	}
 
+	scoped := *s
+	scoped.tx = tx
+	capture, err := scoped.captureLifecycleMaintenanceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
 	command, err := tx.Exec(ctx, `INSERT INTO space_lifecycle_operations(
 		operation_id,account_id,actor_profile_id,space_id,session_epoch,method,
 		request_sha256,confirmation_name_sha256,proof_digest_sha256,binding_sha256,state)
@@ -132,6 +138,9 @@ func (s *SpaceStore) ReserveLifecycleSchedule(ctx context.Context, accountID, ac
 	if err := persistLifecycleSnapshot(ctx, tx, aggregate.Snapshot()); err != nil {
 		return nil, err
 	}
+	if err := scoped.finishLifecycleMaintenanceMutation(ctx, capture); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
@@ -145,7 +154,7 @@ func (s *SpaceStore) RecordLifecycleDeletionProofReceipt(ctx context.Context, ac
 	if lifecycleHash("voice.auth.v1.ConsumeSpaceDeletionProofResponse", receiptBytes) != receiptHash {
 		return nil, ErrLifecycleEvidenceInvalid
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}
@@ -166,11 +175,18 @@ func (s *SpaceStore) RecordLifecycleDeletionProofReceipt(ctx context.Context, ac
 	if err := validateLifecycleAuthReceipt(receiptBytes, operation); err != nil {
 		return nil, err
 	}
+	scoped := *s
+	scoped.tx = tx
+	var capture *effectiveMemberMutations
 	if operation.authReceiptBytes != nil {
 		if !bytes.Equal(operation.authReceiptBytes, receiptBytes) || !bytes.Equal(operation.authReceiptHash, receiptHash[:]) {
 			return nil, ErrLifecycleConflict
 		}
 	} else {
+		capture, err = scoped.captureLifecycleMaintenanceMutation(ctx, operation.spaceID)
+		if err != nil {
+			return nil, err
+		}
 		command, updateErr := tx.Exec(ctx, `UPDATE space_lifecycle_operations
 			SET auth_receipt_bytes=$2,auth_receipt_sha256=$3
 			WHERE operation_id=$1 AND auth_receipt_bytes IS NULL`, operationID, receiptBytes, receiptHash[:])
@@ -183,6 +199,9 @@ func (s *SpaceStore) RecordLifecycleDeletionProofReceipt(ctx context.Context, ac
 	}
 	aggregate, err := loadLifecycle(ctx, tx, operation.spaceID, false)
 	if err != nil {
+		return nil, err
+	}
+	if err := scoped.finishLifecycleMaintenanceMutation(ctx, capture); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -201,12 +220,28 @@ func (s *SpaceStore) PersistLifecycle(ctx context.Context, aggregate *spacecore.
 	if s.tx != nil {
 		return persistLifecycleSnapshot(ctx, s.tx, aggregate.Snapshot())
 	}
-	tx, err := s.Pool.Begin(ctx)
+	spaceID, err := canonicalLifecycleUUID(aggregate.Snapshot().SpaceID)
+	if err != nil {
+		return err
+	}
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return err
 	}
 	defer rollbackLifecycleTx(ctx, tx)
+	if err := lockLifecycleSpace(ctx, tx, spaceID); err != nil {
+		return err
+	}
+	scoped := *s
+	scoped.tx = tx
+	capture, err := scoped.captureLifecycleMaintenanceMutation(ctx, spaceID)
+	if err != nil {
+		return err
+	}
 	if err := persistLifecycleSnapshot(ctx, tx, aggregate.Snapshot()); err != nil {
+		return err
+	}
+	if err := scoped.finishLifecycleMaintenanceMutation(ctx, capture); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -226,7 +261,7 @@ func (s *SpaceStore) CompleteLifecycleSchedule(ctx context.Context, spaceID uuid
 	if s == nil || s.Pool == nil || spaceID == uuid.Nil {
 		return nil, spacecore.LifecycleOutboxRecord{}, ErrLifecycleEvidenceInvalid
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, spacecore.LifecycleOutboxRecord{}, err
 	}
@@ -247,10 +282,19 @@ func (s *SpaceStore) CompleteLifecycleSchedule(ctx context.Context, spaceID uuid
 	if err != nil {
 		return nil, spacecore.LifecycleOutboxRecord{}, err
 	}
+	scoped := *s
+	scoped.tx = tx
+	capture, err := scoped.captureLifecycleMaintenanceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, spacecore.LifecycleOutboxRecord{}, err
+	}
 	if err := persistLifecycleSnapshot(ctx, tx, aggregate.Snapshot()); err != nil {
 		return nil, spacecore.LifecycleOutboxRecord{}, err
 	}
 	if err := persistLifecycleScheduleOutcome(ctx, tx, aggregate.Snapshot(), completing); err != nil {
+		return nil, spacecore.LifecycleOutboxRecord{}, err
+	}
+	if err := scoped.finishLifecycleMaintenanceMutation(ctx, capture); err != nil {
 		return nil, spacecore.LifecycleOutboxRecord{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -263,7 +307,7 @@ func (s *SpaceStore) DecideLifecycleRecovery(ctx context.Context, spaceID uuid.U
 	if s == nil || s.Pool == nil || spaceID == uuid.Nil || generation == 0 {
 		return nil, ErrLifecycleEvidenceInvalid
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +326,16 @@ func (s *SpaceStore) DecideLifecycleRecovery(ctx context.Context, spaceID uuid.U
 	if _, err := aggregate.DecideRecovery(databaseTime.UTC(), generation); err != nil {
 		return nil, err
 	}
+	scoped := *s
+	scoped.tx = tx
+	capture, err := scoped.captureLifecycleMaintenanceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
 	if err := persistLifecycleSnapshot(ctx, tx, aggregate.Snapshot()); err != nil {
+		return nil, err
+	}
+	if err := scoped.finishLifecycleMaintenanceMutation(ctx, capture); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
