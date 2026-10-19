@@ -168,6 +168,15 @@ message RoleStreamEvent {
     RoleAssignmentChanged role_assignment_changed = 10;
     RoleDefinitionChanged role_definition_changed = 11;
     VoiceRoomPolicyInvalidated voice_room_policy_invalidated = 12;
+    RoleMutation role_created = 13;
+    RoleMutation role_updated = 14;
+    RoleMutation role_deleted = 15;
+    RoleMutation role_assigned = 16;
+    RoleMutation role_revoked = 17;
+    RoleMutation role_chat_override_set = 18;
+    RoleMutation role_chat_override_removed = 19;
+    RoleMutation role_voice_override_set = 20;
+    RoleMutation role_voice_override_removed = 21;
   }
 }
 
@@ -1015,4 +1024,19 @@ message SpaceMemberBanned {
   string space_id = 1;
   string account_id = 2;
   string banned_by_profile_id = 3;
+}
+
+// Appended to preserve descriptor indices for existing event message types.
+// Ordinary Role notifications. The oneof arm selects the action and must match
+// its exact role.* subject. This is neither an authorization command nor a role
+// snapshot. Generic arms 10/11 retain unspecified legacy semantics; consumers
+// must not infer their action or role_ids meaning from a subject.
+message RoleMutation {
+  string space_id = 1;
+  string role_id = 2;
+  string profile_id = 3;
+  string name = 4;
+  string chat_id = 5;
+  string voice_room_id = 6;
+  repeated string changed_fields = 7;
 }

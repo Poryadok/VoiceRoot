@@ -20,6 +20,7 @@ import (
 	"voice/backend/analytics/internal/buffer"
 	"voice/backend/analytics/internal/metrics"
 	"voice/backend/pkg/natslog"
+	"voice/backend/pkg/roleeventwire"
 )
 
 const analyticsDurablePrefix = "analytics_v2_"
@@ -304,7 +305,12 @@ func (r *Runner) handleModerationProto(d []byte, m *nats.Msg) error {
 	return r.appendWithSourceAck(r.Mapper.FromModeration(&e), e.GetEventId(), m)
 }
 func (r *Runner) handleRoleMsg(m *nats.Msg) error {
-	return r.appendWithSourceAck(r.Mapper.FromRoleSubject(m.Subject, m.Data), "", m)
+	event, err := roleeventwire.Decode(m.Subject, m.Data)
+	if err != nil {
+		natslog.LogConsume(r.Logger, m, slog.LevelWarn, "ignored ordinary Role event", slog.String("disposition", err.Error()))
+		return r.appendWithSourceAck(nil, "", m)
+	}
+	return r.appendWithSourceAck(r.Mapper.FromRoleEvent(event), event.EventID, m)
 }
 func (r *Runner) handleAnalyticsMsg(m *nats.Msg) error {
 	sourceEventID := analyticsEnvelopeEventID(m.Data)
