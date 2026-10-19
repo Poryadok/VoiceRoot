@@ -31,14 +31,15 @@ func (s *ReportStore) ExportReportRecoverySnapshot(ctx context.Context, incarnat
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	view := reportrecovery.View{Protocol: 1, LogicalStore: "moderation", StoreIncarnation: incarnation, OperationID: operation, SnapshotID: uuid.New()}
+	view := reportrecovery.View{Protocol: reportrecovery.Protocol, LogicalStore: "moderation", StoreIncarnation: incarnation, OperationID: operation, SnapshotID: uuid.New()}
 	var snapshot string
 	if err := tx.QueryRow(ctx, `SELECT journal_generation,pg_current_snapshot()::text FROM report_privacy_journal_metadata WHERE singleton`).Scan(&view.JournalGeneration, &snapshot); err != nil {
 		return nil, err
 	}
 	sum := sha256.Sum256([]byte(snapshot))
 	view.ViewID = "pgsnapshot-sha256:" + hex.EncodeToString(sum[:])
-	if err := tx.QueryRow(ctx, `SELECT count(*),COALESCE(max(sequence),0) FROM report_privacy_journal`).Scan(&view.RecordCount, &view.DiagnosticHighWater); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM report_privacy_journal)+(SELECT count(*) FROM report_target_rejections),
+ GREATEST((SELECT COALESCE(max(sequence),0) FROM report_privacy_journal),(SELECT COALESCE(max(sequence),0) FROM report_target_rejections))`).Scan(&view.RecordCount, &view.DiagnosticHighWater); err != nil {
 		return nil, err
 	}
 	if view.RecordCount > reportrecovery.RecordsPerChunk*reportrecovery.MaxChunks {
@@ -56,6 +57,31 @@ func (s *ReportStore) ExportReportRecoverySnapshot(ctx context.Context, incarnat
 	for rows.Next() {
 		var record reportrecovery.Record
 		if err := rows.Scan(&record.ReportID, &record.Slot, &record.Disposition, &record.SubjectID, &record.EvidenceKind, &record.EvidenceID, &record.EvidenceVersion); err != nil {
+			return nil, err
+		}
+		encoded, err := json.Marshal(record)
+		if err != nil {
+			return nil, err
+		}
+		byteCount += len(encoded) + 1
+		if byteCount > reportrecovery.MaxTotalBytes || len(records) >= view.RecordCount {
+			return nil, reportrecovery.ErrInvalid
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	rows, err = tx.Query(ctx, `SELECT report_id,decision,provenance,schema_version FROM report_target_rejections ORDER BY report_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var record reportrecovery.Record
+		record.Rejection = &reportrecovery.TargetRejection{}
+		if err := rows.Scan(&record.ReportID, &record.Rejection.Decision, &record.Rejection.Provenance, &record.Rejection.SchemaVersion); err != nil {
 			return nil, err
 		}
 		encoded, err := json.Marshal(record)

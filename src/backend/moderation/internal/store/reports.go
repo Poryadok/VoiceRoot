@@ -26,7 +26,7 @@ type ReportRow struct {
 	ID                uuid.UUID
 	ReporterProfileID uuid.UUID
 	TargetType        string
-	TargetID          uuid.UUID
+	TargetID          *uuid.UUID
 	Category          string
 	Description       *string
 	EvidenceJSON      string

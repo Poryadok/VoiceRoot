@@ -55,7 +55,7 @@ func TestReportProvenanceSeparatesPrivacyRecovery(t *testing.T) {
 		_, err = pool.Exec(ctx, `UPDATE reports SET validation_claim=$2,validation_claim_until=now()+interval '30 seconds' WHERE id=$1`, row.ID, claimID)
 		require.NoError(t, err)
 		revision := int64(1)
-		claim := &store.ValidationClaim{ValidationFact: store.ValidationFact{ReportID: row.ID, ReporterProfileID: row.ReporterProfileID, ReporterAccountID: &subject.AccountID, ReporterSubjectID: &subject.ID, ReporterSubjectRevision: &revision, ReporterProvenance: "VERIFIED_AT_SUBMISSION", TargetType: row.TargetType, TargetID: row.TargetID, CreatedAt: row.CreatedAt}, ClaimID: claimID, ReporterSubject: &subject}
+		claim := &store.ValidationClaim{ValidationFact: store.ValidationFact{ReportID: row.ID, ReporterProfileID: row.ReporterProfileID, ReporterAccountID: &subject.AccountID, ReporterSubjectID: &subject.ID, ReporterSubjectRevision: &revision, ReporterProvenance: "VERIFIED_AT_SUBMISSION", TargetType: row.TargetType, TargetID: *row.TargetID, CreatedAt: row.CreatedAt}, ClaimID: claimID, ReporterSubject: &subject}
 		claim.PrivacyCheck, _ = reportOpenPrivacy(ctx)
 		applied, err := reports.CompleteValidation(ctx, claim, "LIVE", uuid.Nil, retentionEvents(), nil)
 		require.ErrorIs(t, err, store.ErrReportPrivacy)

@@ -217,11 +217,13 @@ func reportRowToProto(row *store.ReportRow) *moderationv1.Report {
 		Id:                row.ID.String(),
 		ReporterProfileId: row.ReporterProfileID.String(),
 		TargetType:        row.TargetType,
-		TargetId:          row.TargetID.String(),
 		Category:          row.Category,
 		EvidenceJson:      row.EvidenceJSON,
 		Status:            row.Status,
 		CreatedAt:         timestamppb.New(row.CreatedAt.UTC()),
+	}
+	if row.TargetID != nil {
+		out.TargetId = row.TargetID.String()
 	}
 	if row.Description != nil {
 		out.Description = row.Description

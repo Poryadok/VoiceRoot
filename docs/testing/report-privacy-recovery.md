@@ -120,14 +120,23 @@ User facts still need their dedicated authoritative recovery path.
 
 ### Bounded journal byte format
 
-`internal/reportrecovery` defines schema 1 canonical UTF-8 JSON with one LF per
+`internal/reportrecovery` defines protocol/schema 2 canonical UTF-8 JSON with one LF per
 line. A canonical JSON manifest names every artifact; chunks contain one header
-followed by canonical record lines, ordered by report UUID and slot. Each
+followed by canonical tagged record lines, ordered by report UUID, family and slot. Each
 `report_journal_chunk_000001` (and subsequent ordinal) is independently named in
 the trusted complete inventory. Header, manifest and expected cut must agree on
 the operation, store incarnation, journal generation, snapshot and bounded view.
 The expected cut includes the manifest SHA-256 and each chunk's exact byte count,
 record count and SHA-256. These identities prove bytes, not source currency.
+
+Protocol 2 has separately validated `SUBJECT_PRIVACY` and
+`USER_TARGET_REJECTION` families. A rejection encodes only report UUID, typed
+decision/provenance and its record schema version; no subject/evidence fields
+or zero UUID placeholders appear. Counts and hashes cover both families in
+one RR capture. Protocol 1 artifacts are historical evidence and are rejected
+as complete current recovery input; missing rejection history cannot be silently
+accepted. The importer locks all subject-journal records before any rejection
+record, unions both atomically and does not minimize raw reports itself.
 
 The finite limits are 8,192 records per chunk, 128 chunks, 8 MiB per chunk,
 64 MiB for the complete domain snapshot including its manifest, 64 KiB for the
@@ -211,6 +220,18 @@ unknown classes, missing/mismatched receipts and unresolved retained bindings
 reject. A recovered legacy class requires its User owner fact and confers no
 new submission, vote or validation authority.
 
+After migration 9, retained DELETED bindings also require a known nonzero Auth
+deletion cycle; LIVE bindings require a NULL cycle. This applies to reporters,
+validated targets and retained target-subject history after plain rejection.
+A legacy NULL cycle with a future deadline is unresolved, never fabricated or
+promoted by this read-only checker. Fresh owning-authority repair must preserve
+the exact cycle and its immutable deadline before completion.
+The report-created outbox applies the same known-cycle/retained-deadline rule
+under its account/subject/report locks before invoking publication. A legacy
+NULL cycle produces no send, ACK or invented terminal marker. A fresh retained
+cycle can still publish within its exact database deadline; this is not a new
+submission or target-admission authority.
+
 A fresh opaque pending target without a target receipt still has no inferred
 owner or eligibility; it does not require synchronous target lookup at intake or
 this checker. Known current receipts cannot be discarded to make an older row
@@ -254,6 +275,45 @@ crossing behind a held report lock, concurrent User owner facts, bounded
 deduplicated calls, legacy exclusion and positive-terminal-only cleanup.
 The shared lifecycle cycle projection and coordinator invocation remain owned
 by BE-045; this helper does not establish their assembled acceptance.
+
+### User target rejection (BE-137 c51/c52)
+
+MISSING/DELETED is the final decision for one intake, not identity-erasure
+authority. A User rejection retains the dismissed report/reporter lifecycle,
+sets the internal target UUID and target owner/subject tuple to SQL NULL, clears
+body/evidence and pending work, and keeps only its safe resolution code. Public
+input still requires a real UUID and synchronous acceptance remains opaque.
+Other target types retain their existing representation and cleanup contracts.
+
+The independent immutable `report_target_rejections` receipt contains only the
+existing report UUID, MISSING/DELETED decision, OWNER_VALIDATION or
+LEGACY_RECORDED_DECISION provenance and schema/diagnostic sequence metadata.
+It has no raw target, subject/account, content, hash or report-cascading FK.
+Same decision is idempotent; opposite decisions are divergence. A fresh report
+UUID may refer to the same now-LIVE target; the old intake never reopens.
+
+`RepairReportTargetRejections` implements finite private legacy/minimized replay
+without an owner lookup. It accepts limit 1–1000, returns local Minimized/More
+observations and compares complete raw/journal tuples under the shared gate.
+An existing receipt can minimize only its restored PENDING or matching rejected
+intake; VALID, another target type or an opposite decision is divergence.
+Ordinary completion rechecks its actual lease against the database clock after
+the report lock and before commit, including lock waits crossing expiry.
+Nullable store/DTO readers preserve NULL without a fabricated UUID. Repair uses
+the shared private gate and
+account→subject→report→subject-journal→rejection lock order. Existing subject
+receipts retain their separate lifecycle/terminal obligations. A plain rejection
+never becomes AUTH_TERMINAL, USER_ERASURE_FACT, a subject fence or account purge.
+The final rejection advisory lock also protects an absent receipt; ordinary
+activation checks it only after finishing every subject-journal write and before
+threshold hooks/events. A current receipt rolls back attempted late activation.
+Import takes no account/report locks after this family, and terminal cleanup
+retains the minimal rejection receipt without acquiring it as subject evidence.
+Keep receipts while a supported backup/replay can restore their raw intake;
+this is purpose-limited pseudonymous metadata, not an anonymity or physical
+deletion claim.
+The J1–J14 matrix in BE-137 c52 governs the new behavior; earlier slice proofs do
+not certify these new nullability or artifact changes.
 
 It does **not** complete legacy owner recovery or authoritative boot repair,
 the protected User recovery RPC or assembled

@@ -106,7 +106,7 @@ reports
 ├── reporter_profile_id
 ├── reporter_account_id (nullable; verified submission identity, NULL for legacy)
 ├── target_type (user | message | space | story)
-├── target_id (UUID)
+├── target_id (UUID; NULL only for minimized MISSING/DELETED User intake)
 ├── validated_target_account_id (nullable; User LIVE mapping only)
 ├── validation_state (PENDING | VALID | MISSING | DELETED)
 ├── validation_publication_legacy (boolean; historical events must not replay)
@@ -337,3 +337,14 @@ mutations are atomic; terminal receipts survive payload deletion. The separate
 protected User recovery RPC never widens the ordinary owner resolver. Follow the
 [accepted contract and finite matrix](../testing/report-privacy-recovery.md);
 actual shared P0-P5/main and declared-restore evidence remain activation gates.
+
+User MISSING/DELETED minimization uses a separate no-FK
+`report_target_rejections` receipt keyed by the existing report UUID, with typed
+decision/provenance and record version. It contains no target/account/subject or
+payload digest and cannot authorize identity-terminal cleanup. The dismissed row
+keeps reporter semantics while its target UUID, target ownership tuple and body
+are cleared. Protocol/schema 2 recovery artifacts cover this family together
+with the existing subject-privacy journal; a current rejection receipt can
+minimize the same restored intake, never reopen a VALID report or blacklist a
+target ID. The private repair/checker and retention rules are in the linked
+contract.

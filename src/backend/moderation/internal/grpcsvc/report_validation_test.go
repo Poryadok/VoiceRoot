@@ -312,7 +312,7 @@ func TestReportValidationWorkerOutbox(t *testing.T) {
 	worker := &reportintake.Worker{Reports: reports, Subjects: reportFixtureResolver(), Privacy: reportOpenPrivacy, Targets: reportTargetFunc(func(_ context.Context, id uuid.UUID, kind string, target uuid.UUID) (string, uuid.UUID, error) {
 		require.Equal(t, row.ID, id)
 		require.Equal(t, "story", kind)
-		require.Equal(t, row.TargetID, target)
+		require.Equal(t, *row.TargetID, target)
 		return "UNSPECIFIED", uuid.Nil, nil
 	})}
 	worked, err := worker.ValidateOne(ctx)
