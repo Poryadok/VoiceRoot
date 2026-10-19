@@ -591,3 +591,21 @@ private manifest to the persisted origin. LFP remains unavailable until its
 separate genuine typed source and lifecycle are implemented. Current stamp
 rotation expires old candidates while a continuous supported rollout preserves
 the immutable original source origin.
+
+Bound native `CreateSourceParty` copies its runtime binding once, reads canonical
+history under the admission gate, and inserts its origin in the same transaction
+as the party, every session and queue intent. Replay validates the existing
+origin against that exact party and continuous history; it never inserts a
+missing origin for a historical capture. A compatible rollout changes the
+current binding while returning the original unchanged origin bytes. Session
+conflicts or failed intent insertion roll the origin back with the entire write.
+
+The native private manifest uses SHA-256 over domain
+`voice.mm.native-source-private-manifest.v1` plus NUL, followed by big-endian
+protocol U32, operation UUID16, request hash32, initiator account/profile UUID16,
+initiator epoch U64, source-kind U32 byte length plus UTF-8, optional room U8
+presence plus UUID16, roster-version U64, member-manifest hash32, member-authority
+version U32, member-authority hash32 and source-authority hash32. Thus the wire
+family `NATIVE_VOICE` cannot reinterpret SOLO as VOICE_ROSTER or replace the
+captured c16 authority. Origin/canonical receipt validation is still separate
+from actual installed launch, fresh external admission, and source revalidation.

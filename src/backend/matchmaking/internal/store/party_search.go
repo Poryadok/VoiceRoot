@@ -92,12 +92,17 @@ func (s *PartyStore) CreateSourceParty(ctx context.Context, p CreateSourcePartyP
 	if s == nil || s.Pool == nil {
 		return SourcePartySearch{}, ErrSourcePartyUnavailable
 	}
+	nativeBinding := copyNativeBinding(s.NativeAdmission)
 	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return SourcePartySearch{}, errors.Join(ErrSourcePartyUnavailable, err)
 	}
 	defer rollbackPartySearch(tx)
-	if err := mmadmission.Acquire(ctx, tx, s.NativeAdmission); err != nil {
+	if err := mmadmission.Acquire(ctx, tx, nativeBinding); err != nil {
+		return SourcePartySearch{}, err
+	}
+	history, err := readNativeHistory(ctx, tx, nativeBinding)
+	if err != nil {
 		return SourcePartySearch{}, err
 	}
 	accounts := make([]uuid.UUID, 0, len(p.MemberAuthorities))
@@ -142,6 +147,11 @@ ON CONFLICT(search_operation_id) DO NOTHING RETURNING `+sourcePartyCols,
 		if party.DisbandedAt != nil || party.ProtocolVersion != p.ProtocolVersion || party.SourceKind != p.SourceKind || !samePartyUUID(party.SourceRoomID, p.SourceRoomID) || party.SourceRosterVersion != p.SourceRosterVersion || party.MemberManifestHash != manifest || party.MemberAuthorityVersion != p.MemberAuthorityVersion || party.MemberAuthorityHash != authorityHash || party.SourceAuthorityHash != p.SourceAuthorityHash {
 			return SourcePartySearch{}, ErrSourcePartyChanged
 		}
+		if history != nil {
+			if _, err := readNativeOrigin(ctx, tx, party, history); err != nil {
+				return SourcePartySearch{}, err
+			}
+		}
 		sessions, err := loadSourceSessions(ctx, tx, party.ID)
 		if err != nil {
 			return SourcePartySearch{}, errors.Join(ErrSourcePartyUnavailable, err)
@@ -171,6 +181,11 @@ ON CONFLICT(search_operation_id) DO NOTHING RETURNING `+sourcePartyCols,
 	}
 	if err != nil {
 		return SourcePartySearch{}, errors.Join(ErrSourcePartyUnavailable, err)
+	}
+	if history != nil {
+		if err := insertNativeOrigin(ctx, tx, party, history, nativeBinding); err != nil {
+			return SourcePartySearch{}, errors.Join(ErrSourcePartyUnavailable, err)
+		}
 	}
 	sessions := make([]SearchSession, 0, len(p.MemberProfileIDs))
 	// The global UUID order also orders conflicting unique-profile insert locks.

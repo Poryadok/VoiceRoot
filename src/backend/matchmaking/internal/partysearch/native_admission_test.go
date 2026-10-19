@@ -242,8 +242,7 @@ func TestNativeAdmissionBegunHeadRefusesUnboundPositiveWriters(t *testing.T) {
 func TestNativeAdmissionBoundWriterRechecksAfterActualCloseWait(t *testing.T) {
 	ctx := context.Background()
 	pool := partyDB(t)
-	binding := admissionFixture()
-	insertAdmissionFixture(t, pool, binding)
+	binding, _, _ := historyReceiptFixture(t, pool)
 	parties := &store.PartyStore{Pool: pool, NativeAdmission: &binding}
 	matches := &store.MatchStore{Pool: pool, NativeAdmission: &binding}
 	create := func() (store.ProposalCandidate, *partysource.ValidatedProposalAttempt, store.SourcePartySearch) {
