@@ -26,8 +26,11 @@ import (
 )
 
 func TestLegacyDecisionUsesTrueContext2AndIndependentManualGate(t *testing.T) {
-	for _, mode := range []string{"automatic", "manual", "questions_require_input", "captcha_require_input", "phone_unavailable", "becomes_guest", "final_sql_expiry"} {
+	for _, mode := range []string{"automatic", "manual", "manual_v1_winner", "manual_v1_questions", "questions_require_input", "captcha_require_input", "phone_unavailable", "becomes_guest", "final_sql_expiry"} {
 		t.Run(mode, func(t *testing.T) {
+			v1Winner := mode == "manual_v1_winner" || mode == "manual_v1_questions"
+			questionID := uuid.Nil
+			submitOperation := uuid.NewString()
 			ctx := context.Background()
 			st, space := admissionReadStore(t)
 			for _, name := range []string{"000040_join_decision_basis_v2.up.sql", "000043_join_public_operation_context.up.sql", "000045_join_legacy_selection_context.up.sql"} {
@@ -39,9 +42,10 @@ func TestLegacyDecisionUsesTrueContext2AndIndependentManualGate(t *testing.T) {
 			if mode != "automatic" && mode != "becomes_guest" {
 				var owner uuid.UUID
 				require.NoError(t, st.Pool.QueryRow(ctx, `SELECT profile_id FROM space_members WHERE space_id=$1 LIMIT 1`, space).Scan(&owner))
-				policy := entrypolicy.Policy{SchemaVersion: 1, Questions: []entrypolicy.Question{}, RequireManualApproval: mode == "manual" || mode == "final_sql_expiry", RequireCaptcha: mode == "captcha_require_input", RequirePhone: mode == "phone_unavailable"}
-				if mode == "questions_require_input" {
-					policy.Questions = []entrypolicy.Question{{ID: uuid.New(), Prompt: "2x2?", Kind: "exact_text", ExpectedAnswer: "4"}}
+				policy := entrypolicy.Policy{SchemaVersion: 1, Questions: []entrypolicy.Question{}, RequireManualApproval: mode == "manual" || mode == "final_sql_expiry" || v1Winner, RequireCaptcha: mode == "captcha_require_input", RequirePhone: mode == "phone_unavailable"}
+				if mode == "questions_require_input" || mode == "manual_v1_questions" {
+					questionID = uuid.New()
+					policy.Questions = []entrypolicy.Question{{ID: questionID, Prompt: "2x2?", Kind: "exact_text", ExpectedAnswer: "4"}}
 				}
 				_, err := st.SetEntryPolicy(ctx, store.SetEntryPolicyInput{SpaceID: space, ActorProfileID: owner, OperationID: uuid.New(), ExpectedVersion: 1, Policy: policy})
 				require.NoError(t, err)
@@ -99,9 +103,42 @@ func TestLegacyDecisionUsesTrueContext2AndIndependentManualGate(t *testing.T) {
 					if err != nil {
 						return nil, err
 					}
-					_, err = st.CommitLegacyJoinStart(callctx, sealed)
+					allocated, err := st.CommitLegacyJoinStart(callctx, sealed)
 					if err != nil {
 						return nil, err
+					}
+					if v1Winner {
+						// An independent additive client wins before the legacy call.
+						// Production legacy never fabricates these client requests.
+						modern := NewAdmissionServer(&SpaceGRPC{Store: st}, st, AdmissionDependencies{Subjects: subjects})
+						independent := func(req proto.Message, rpc string, handler grpc.UnaryHandler) (any, error) {
+							h, e := principal.RequestHash(req)
+							if e != nil {
+								return nil, e
+							}
+							rid := uuid.NewString()
+							jwt, e := gateway.IssueDelegatedUser(principal.DelegatedUserInput{Audience: "space", RPC: rpc, RequestID: rid, RequestHash: h, AccountID: account.String(), ProfileID: profile.String(), SessionEpoch: 7, AccountType: "regular", ClientExpiresAt: now.Add(time.Minute)})
+							if e != nil {
+								return nil, e
+							}
+							incoming := metadata.NewIncomingContext(callctx, metadata.Pairs("authorization", "Bearer "+jwt, "x-request-id", rid))
+							return verifier.Unary()(incoming, req, &grpc.UnaryServerInfo{FullMethod: rpc}, handler)
+						}
+						startRequest := &spacev1.StartJoinAttemptRequest{OperationId: uuid.NewString(), Target: &spacev1.StartJoinAttemptRequest_SpaceId{SpaceId: space.String()}}
+						started, e := independent(startRequest, spacev1.SpaceService_StartJoinAttempt_FullMethodName, func(c context.Context, _ any) (any, error) { return modern.StartJoinAttempt(c, startRequest) })
+						if e != nil {
+							return nil, e
+						}
+						require.Equal(t, allocated.ID.String(), started.(*spacev1.StartJoinAttemptResponse).Attempt.AttemptId)
+						submission := &spacev1.SubmitJoinAttemptRequest{SpaceId: space.String(), AttemptId: allocated.ID.String(), OperationId: submitOperation}
+						if questionID != uuid.Nil {
+							submission.Answers = []*spacev1.JoinAnswer{{QuestionId: questionID.String(), Value: "4"}}
+						}
+						_, e = independent(submission, spacev1.SpaceService_SubmitJoinAttempt_FullMethodName, func(c context.Context, _ any) (any, error) { return modern.SubmitJoinAttempt(c, submission) })
+						if e != nil {
+							return nil, e
+						}
+						return st.CompleteLegacyJoinPending(callctx, sealed)
 					}
 					decision, err := st.PrepareLegacyJoinDecision(callctx, start)
 					if err != nil {
@@ -154,6 +191,17 @@ func TestLegacyDecisionUsesTrueContext2AndIndependentManualGate(t *testing.T) {
 				return
 			}
 			result, err = invoke()
+			if mode == "manual_v1_questions" {
+				require.ErrorIs(t, err, store.ErrLegacyJoinInputRequired, "legacy empty body must not borrow the independent client's solved answers")
+				var legacyBasis, legacyAlias []byte
+				require.NoError(t, st.Pool.QueryRow(ctx, `SELECT decision_basis_sha256,observed_basis_sha256 FROM space_join_operations WHERE operation_id=$1`, op).Scan(&legacyBasis, &legacyAlias))
+				require.Nil(t, legacyBasis)
+				require.Nil(t, legacyAlias)
+				var originalCount int
+				require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM space_join_operations WHERE request_method=$1 AND decision_basis IS NOT NULL`, spacev1.SpaceService_SubmitJoinAttempt_FullMethodName).Scan(&originalCount))
+				require.Equal(t, 1, originalCount)
+				return
+			}
 			if mode == "questions_require_input" || mode == "captcha_require_input" || mode == "phone_unavailable" {
 				if mode == "phone_unavailable" {
 					require.ErrorIs(t, err, store.ErrJoinAttemptUnavailable)
@@ -179,27 +227,94 @@ func TestLegacyDecisionUsesTrueContext2AndIndependentManualGate(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			require.Equal(t, []authv1.SpaceAdmissionPhase{authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_START, authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_SUBMIT}, phases)
+			if v1Winner {
+				require.Equal(t, []authv1.SpaceAdmissionPhase{authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_START, authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_START, authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_SUBMIT}, phases)
+			} else {
+				require.Equal(t, []authv1.SpaceAdmissionPhase{authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_START, authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_SUBMIT}, phases)
+			}
 			record := result.(*store.JoinSubmissionRecord)
 			loaded, err := st.LoadVersionedJoinDecisionBasis(ctx, record.DecisionBasisSHA256)
 			require.NoError(t, err)
-			require.EqualValues(t, 2, loaded.Version())
-			basis, err := loaded.LegacyV2()
-			require.NoError(t, err)
-			require.Equal(t, spacev1.SpaceService_JoinSpace_FullMethodName, basis.Context.RequestMethod)
-			require.Equal(t, op, basis.Context.OperationID.String())
-			ctxSHA, err := basis.Context.SHA256()
-			require.NoError(t, err)
-			require.Equal(t, finalBinding, ctxSHA[:])
-			if mode == "manual" {
+			var kind uint8
+			if v1Winner {
+				require.EqualValues(t, 1, loaded.Version())
+				basis, e := loaded.V1()
+				require.NoError(t, e)
+				require.Equal(t, spacev1.SpaceService_SubmitJoinAttempt_FullMethodName, basis.Context.RequestMethod)
+				require.Equal(t, submitOperation, basis.Context.OperationID.String())
+				sha, e := basis.Context.SHA256()
+				require.NoError(t, e)
+				require.Equal(t, finalBinding, sha[:])
+				kind = basis.Context.Kind
+			} else {
+				require.EqualValues(t, 2, loaded.Version())
+				basis, e := loaded.LegacyV2()
+				require.NoError(t, e)
+				require.Equal(t, spacev1.SpaceService_JoinSpace_FullMethodName, basis.Context.RequestMethod)
+				require.Equal(t, op, basis.Context.OperationID.String())
+				sha, e := basis.Context.SHA256()
+				require.NoError(t, e)
+				require.Equal(t, finalBinding, sha[:])
+				kind = basis.Context.Kind
+			}
+			if mode == "manual" || v1Winner {
 				require.Equal(t, "PENDING", record.Attempt.State)
 				require.NotNil(t, record.RequestID)
-				require.Equal(t, store.JoinLegacyPending, basis.Context.Kind)
+				if v1Winner {
+					require.Equal(t, store.JoinDecisionSubmitPending, kind)
+				} else {
+					require.Equal(t, store.JoinLegacyPending, kind)
+				}
 				var savedState string
 				var savedCode int32
 				require.NoError(t, st.Pool.QueryRow(ctx, `SELECT state,outcome_code FROM space_join_operations WHERE actor_profile_id=$1 AND operation_id=$2`, profile, op).Scan(&savedState, &savedCode))
 				require.Equal(t, "COMPLETED", savedState, "original keyed pending is a final safe legacy outcome")
 				require.EqualValues(t, 9, savedCode)
+				noKey := &spacev1.JoinSpaceRequest{SpaceId: space.String()}
+				aliasID := uuid.NewString()
+				aliasHash, e := principal.RequestHash(noKey)
+				require.NoError(t, e)
+				aliasToken, e := gateway.IssueDelegatedUser(principal.DelegatedUserInput{Audience: "space", RPC: spacev1.SpaceService_JoinSpace_FullMethodName, RequestID: aliasID, RequestHash: aliasHash, AccountID: account.String(), ProfileID: profile.String(), SessionEpoch: 7, AccountType: "regular", ClientExpiresAt: now.Add(time.Minute)})
+				require.NoError(t, e)
+				aliasCtx := metadata.NewIncomingContext(ctx, metadata.Pairs("authorization", "Bearer "+aliasToken, "x-request-id", aliasID))
+				aliasResult, e := verifier.Unary()(aliasCtx, noKey, &grpc.UnaryServerInfo{FullMethod: spacev1.SpaceService_JoinSpace_FullMethodName}, func(callctx context.Context, _ any) (any, error) {
+					p, e := st.PrepareLegacyJoinStart(callctx, noKey)
+					if e != nil {
+						return nil, e
+					}
+					expected, e := p.OwnerRequest()
+					if e != nil {
+						return nil, e
+					}
+					proof, e := subjects.Observe(callctx, expected)
+					if e != nil {
+						return nil, e
+					}
+					sealed, e := p.Seal(proof)
+					if e != nil {
+						return nil, e
+					}
+					a, e := st.CommitLegacyJoinStart(callctx, sealed)
+					if e != nil {
+						return nil, e
+					}
+					require.Equal(t, record.Attempt.ID, a.ID)
+					return st.CompleteLegacyJoinPending(callctx, sealed)
+				})
+				require.NoError(t, e)
+				aliasRecord := aliasResult.(*store.JoinSubmissionRecord)
+				require.Equal(t, record.DecisionBasisSHA256, aliasRecord.DecisionBasisSHA256, "alias references the original winner without transplanting observations")
+				require.Equal(t, record.RequestID, aliasRecord.RequestID)
+				require.Nil(t, noKey.OperationId)
+				var aliases, originals int
+				require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FILTER(WHERE observed_basis_sha256=$1),count(*) FILTER(WHERE decision_basis_sha256=$1) FROM space_join_operations`, record.DecisionBasisSHA256).Scan(&aliases, &originals))
+				if v1Winner {
+					require.Equal(t, 2, aliases)
+				} else {
+					require.Equal(t, 1, aliases)
+				}
+				require.Equal(t, 1, originals)
+				ownerBeforeReplay := len(phases)
 				_, err = st.Pool.Exec(ctx, `UPDATE space_entry_policies SET version=version+1 WHERE space_id=$1`, space)
 				require.NoError(t, err)
 				retryID := uuid.NewString()
@@ -217,16 +332,16 @@ func TestLegacyDecisionUsesTrueContext2AndIndependentManualGate(t *testing.T) {
 					return nil, e
 				})
 				require.ErrorIs(t, e, store.ErrJoinAttemptPending)
-				require.Len(t, phases, 2, "completed exact pending replay has no new Subject or Role observation")
+				require.Len(t, phases, ownerBeforeReplay, "completed exact pending replay has no new Subject or Role observation")
 				_, e = st.Pool.Exec(ctx, `UPDATE spaces SET visibility='private' WHERE id=$1`, space)
 				require.NoError(t, e)
 				_, e = verifier.Unary()(retryCtx, request, &grpc.UnaryServerInfo{FullMethod: spacev1.SpaceService_JoinSpace_FullMethodName}, func(callctx context.Context, _ any) (any, error) { return st.PrepareLegacyJoinStart(callctx, request) })
 				require.ErrorIs(t, e, store.ErrJoinAttemptDenied, "a legacy key is not a current target discovery/access bypass")
-				require.Len(t, phases, 2)
+				require.Len(t, phases, ownerBeforeReplay)
 			} else {
 				require.Equal(t, "READY", record.Attempt.State)
 				require.Nil(t, record.RequestID)
-				require.Equal(t, store.JoinLegacyReady, basis.Context.Kind)
+				require.Equal(t, store.JoinLegacyReady, kind)
 			}
 			var members int
 			require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM space_members WHERE profile_id=$1`, profile).Scan(&members))
