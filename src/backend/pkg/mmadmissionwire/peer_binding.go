@@ -184,7 +184,10 @@ type LaunchExpectations struct {
 	ControllerObservationHash, ConsumerObservationHash, SocketMountObservationHash, CustodyContractHash Hash
 	ControllerNamespaceID, ConsumerNamespaceID                                                          ID
 }
-type ValidatedPeerBinding struct{ record ReadbackPeerBindingV1 }
+type ValidatedPeerBinding struct {
+	record     ReadbackPeerBindingV1
+	descriptor DescriptorV1
+}
 
 func LoadValidatedPeerBinding(d DescriptorV1, expected LaunchExpectations) (ValidatedPeerBinding, error) {
 	var p ReadbackPeerBindingV1
@@ -201,5 +204,5 @@ func validatePeerBinding(d DescriptorV1, p ReadbackPeerBindingV1, x LaunchExpect
 	}
 	p.ControllerCertificateDER = append([]byte(nil), p.ControllerCertificateDER...)
 	p.ConsumerCertificateDER = append([]byte(nil), p.ConsumerCertificateDER...)
-	return ValidatedPeerBinding{p}, nil
+	return ValidatedPeerBinding{record: p, descriptor: copyDescriptor(d)}, nil
 }

@@ -30,12 +30,12 @@ func Decode(data []byte, target any) error {
 	if _, err := scan.Token(); err != io.EOF {
 		return ErrInvalid
 	}
+	if target == nil || requiredFields(data, reflect.TypeOf(target)) != nil {
+		return ErrInvalid
+	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(target); err != nil {
-		return ErrInvalid
-	}
-	if err := requiredFields(data, reflect.TypeOf(target)); err != nil {
 		return ErrInvalid
 	}
 	if v, ok := target.(interface{ Validate() error }); ok {
@@ -54,6 +54,26 @@ func requiredFields(data []byte, t reflect.Type) error {
 		var fields map[string]json.RawMessage
 		if json.Unmarshal(data, &fields) != nil {
 			return ErrInvalid
+		}
+		allowed := make(map[string]bool, t.NumField())
+		for i := 0; i < t.NumField(); i++ {
+			f := t.Field(i)
+			if !f.IsExported() {
+				continue
+			}
+			tag := strings.Split(f.Tag.Get("json"), ",")[0]
+			if tag == "-" {
+				continue
+			}
+			if tag == "" {
+				tag = f.Name
+			}
+			allowed[tag] = true
+		}
+		for key := range fields {
+			if !allowed[key] {
+				return ErrInvalid
+			}
 		}
 		for i := 0; i < t.NumField(); i++ {
 			f := t.Field(i)

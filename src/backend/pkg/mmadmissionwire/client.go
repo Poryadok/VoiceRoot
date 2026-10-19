@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"io"
 	"net"
+	"reflect"
 	"time"
 )
 
@@ -19,17 +20,18 @@ type PeerIdentity struct {
 // Client requires an independently verified launch/mount identity. Descriptor bytes
 // and a socket name are not a substitute for the driver's custody observation.
 type Client struct {
-	Descriptor     DescriptorV1
-	ControllerPeer PeerIdentity
-	Timeout        time.Duration
-	peerBinding    *ReadbackPeerBindingV1
-	ownTLS         tls.Certificate
+	Descriptor         DescriptorV1
+	ControllerPeer     PeerIdentity
+	Timeout            time.Duration
+	peerBinding        *ReadbackPeerBindingV1
+	ownTLS             tls.Certificate
+	admittedDescriptor DescriptorV1
 }
 
 // NewReadbackClient is the only operational constructor. A descriptor and raw
 // numeric peer identity alone do not authenticate independent launch provenance.
 func NewReadbackClient(d DescriptorV1, p ValidatedPeerBinding, own tls.Certificate, timeout time.Duration) (Client, error) {
-	if d.Validate() != nil || p.record.Validate() != nil || timeout <= 0 || timeout > 10*time.Second {
+	if d.Validate() != nil || p.record.Validate() != nil || !reflect.DeepEqual(d, p.descriptor) || timeout <= 0 || timeout > 10*time.Second {
 		return Client{}, ErrInvalid
 	}
 	h, e := BindingHash(d.Binding)
@@ -40,7 +42,12 @@ func NewReadbackClient(d DescriptorV1, p ValidatedPeerBinding, own tls.Certifica
 		return Client{}, e
 	}
 	record := p.record
-	return Client{Descriptor: d, Timeout: timeout, peerBinding: &record, ownTLS: own}, nil
+	return Client{Descriptor: copyDescriptor(d), admittedDescriptor: copyDescriptor(p.descriptor), Timeout: timeout, peerBinding: &record, ownTLS: own}, nil
+}
+
+func copyDescriptor(d DescriptorV1) DescriptorV1 {
+	d.AdmittedArgv = append([]string(nil), d.AdmittedArgv...)
+	return d
 }
 
 type StartupObservation struct{ response ObserveResponseV1 }
@@ -62,12 +69,12 @@ func (c Client) ObserveFresh(ctx context.Context, action ID, request Hash) (Fres
 func (c Client) observe(ctx context.Context, p Purpose, action ID, request Hash) (ObserveResponseV1, error) {
 	var zero ObserveResponseV1
 	d := c.Descriptor
-	if d.Validate() != nil || c.Timeout <= 0 || c.Timeout > 10*time.Second || c.peerBinding == nil || c.peerBinding.Validate() != nil {
+	if d.Validate() != nil || !reflect.DeepEqual(d, c.admittedDescriptor) || c.Timeout <= 0 || c.Timeout > 10*time.Second || c.peerBinding == nil || c.peerBinding.Validate() != nil {
 		return zero, ErrInvalid
 	}
 	h, e := BindingHash(d.Binding)
 	if e != nil || h != c.peerBinding.BindingHash || d.ReplicaID != c.peerBinding.ConsumerReplicaID || d.ProcessLaunchID != c.peerBinding.ConsumerProcessLaunchID || d.ControllerID != c.peerBinding.ControllerID || d.AuthorityScope != c.peerBinding.AuthorityScope || d.ScopeID != c.peerBinding.ScopeID {
-		return zero, e
+		return zero, ErrInvalid
 	}
 	r := ObserveRequestV1{ProtocolVersion: 1, Purpose: p, EnvironmentID: d.Binding.EnvironmentID, InstallationID: d.Binding.InstallationID, ReplicaID: d.ReplicaID, ProcessLaunchID: d.ProcessLaunchID, ExpectedBindingHash: h, ActionID: action, ActionRequestHash: request}
 	if _, e = rand.Read(r.Nonce[:]); e != nil {
