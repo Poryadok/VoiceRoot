@@ -82,8 +82,11 @@ HumanVerifier captures exact delegated Gateway actor/type/operation/body and
 rechecks expiry after live dependencies. Protected ActionServer and the new
 ActorBound RegistryProducer preserve exact original replay, verify full
 qualified ACK and require durable local capture before public success. They do
-not install a listener or actual authority. Gateway routes and protected root
-composition remain implementation prerequisites. Codec/Store inputs are
+not install a listener or actual authority. Additive Gateway consent routes use
+a dedicated mTLS client and real JWKS/blacklist/strict-floor human delegation;
+legacy profile-only discovery never supplies qualified evidence. Actual
+protected root/controller/DB-session/peer and retention composition remain
+implementation prerequisites. Codec/Store inputs are
 data, not proof that a protected Gateway verification occurred.
 `BE011-STORY-LFP-RESTORE-CONTROLLER` owns the still-absent deployment controller,
 full replica/transaction drain, external state and credential/route custody;

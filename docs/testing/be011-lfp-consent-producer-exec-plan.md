@@ -148,7 +148,16 @@ CI and product acceptance remain distinct from source/component proof.
   conversion replay, privacy denial, local ACK rollback and cohort retirement
   tests pass: transport11top/57sub0skip17.475s, added Store replay1top2.759s,
   race and vet0. Admission/MM capture-policy fixtures are synthetic.
-- [ ] Complete Gateway routes and actual protected root/controller/retention
+- [x] Implement additive protected Gateway consent HTTP routes, dedicated mTLS
+  client, strict bootstrap/readiness/drain and exact original account-type
+  signer. Native delegation requires real issuer/audience-pinned Auth JWKS,
+  single bearer/JTI/blacklist/live floor; static/default regular/SDK cannot mint
+  a human actor. Public stable operation + profile-scoped offer selectors only,
+  no ordinary transport fallback. Real Linux JWKS/Redis fixture checks cover
+  guest/regular JOIN/INVITE; current scoped regression51top/117sub0skip/race and
+  vet0 includes existing creator/auth/Story/bootstrap behavior. Upstream action
+  client is a fixture here; Story actual PG/mTLS proofs remain separate scopes.
+- [ ] Complete actual protected root/controller/DB-session/peer/retention
   composition. Original bare-v1 components cannot qualify the actor-bound path.
 
 ## Decisions
