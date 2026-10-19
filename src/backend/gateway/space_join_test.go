@@ -165,6 +165,46 @@ func TestSpaceJoinOperationBindingFailsClosed(t *testing.T) {
 	// An older/incorrect wire schema must never silently discard a valid key.
 	require.Equal(t, codes.Unavailable, status.Code(bindJoinOperation(r, &spacev1.GetInviteRequest{Code: "code"})))
 }
+
+func TestSpaceJoinOperationKeyIsSigned(t *testing.T) {
+	f := newCreatorFixture(t)
+	for _, path := range []string{"/api/v1/spaces/" + uuid.NewString() + "/join", "/api/v1/invites/exact-code/join"} {
+		t.Run(path, func(t *testing.T) {
+			operation := uuid.NewString()
+			client := &joinClient{call: func(ctx context.Context, req proto.Message, method string) error {
+				field := req.ProtoReflect().Descriptor().Fields().ByName("operation_id")
+				require.NotNil(t, field)
+				require.True(t, req.ProtoReflect().Has(field))
+				require.Equal(t, operation, req.ProtoReflect().Get(field).String())
+				md, _ := metadata.FromOutgoingContext(ctx)
+				require.Len(t, md, 2)
+				hash, err := principal.RequestHash(req)
+				require.NoError(t, err)
+				cfg := principal.VerifyConfig{ExpectedIssuer: "gateway", ExpectedAudience: "space", ExpectedRPC: method, ExpectedRequestID: md.Get("x-request-id")[0], ExpectedRequestHash: hash,
+					KeyResolver:         func(context.Context, string, string) (*rsa.PublicKey, error) { return &f.key.PublicKey, nil },
+					ReplayGuard:         func(context.Context, string, string, time.Time) error { return nil },
+					SessionEpochChecker: func(context.Context, string, int64) error { return nil }}
+				token := strings.TrimPrefix(md.Get("authorization")[0], "Bearer ")
+				_, err = principal.VerifyDelegatedUser(ctx, token, cfg)
+				require.NoError(t, err)
+				changed := proto.Clone(req)
+				changed.ProtoReflect().Clear(field)
+				cfg.ExpectedRequestHash, err = principal.RequestHash(changed)
+				require.NoError(t, err)
+				_, err = principal.VerifyDelegatedUser(ctx, token, cfg)
+				require.Error(t, err, "removing operation presence must invalidate signed body")
+				return nil
+			}}
+			r := httptest.NewRequest(http.MethodPost, path, nil)
+			r.Header.Set("Authorization", "Bearer "+signConfigJWT(t, "creator-key", f.key, f.payload))
+			r.Header.Set("Idempotency-Key", strings.ToUpper(operation))
+			w := httptest.NewRecorder()
+			newGateway(f.config(client)).ServeHTTP(w, r)
+			require.Equal(t, 200, w.Code, w.Body.String())
+			require.Equal(t, 1, client.calls)
+		})
+	}
+}
 func TestSpaceJoinFailsClosed(t *testing.T) {
 	f := newCreatorFixture(t)
 	for _, path := range []string{"/api/v1/spaces/" + uuid.NewString() + "/join", "/api/v1/invites/code/join"} {

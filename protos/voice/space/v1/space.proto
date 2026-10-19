@@ -320,6 +320,7 @@ message InviteList {
 
 message JoinByInviteRequest {
   string code = 1;
+  optional string operation_id = 2;
 }
 
 message SpaceMembership {
@@ -332,6 +333,7 @@ message SpaceMembership {
 
 message JoinSpaceRequest {
   string space_id = 1;
+  optional string operation_id = 2;
 }
 
 message LeaveSpaceRequest {
