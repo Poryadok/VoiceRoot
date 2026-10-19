@@ -72,7 +72,8 @@ public class AuthPrincipalConfiguration {
     }
     return new AuthPrincipalServerInterceptor(
         new AuthPrincipalVerifier(resolver::resolve, epochs::requireFloor, replay, clock),
-        () -> { closeReplay.run(); client.shutdownNow(); });
+        () -> { closeReplay.run(); client.shutdownNow(); },
+        environment.getProperty("AUTH_BOT_SESSION_FLOOR_ALLOWED_CLIENT_URI_SAN"));
   }
 
   private static Map<String, URI> endpoints(String raw) {
