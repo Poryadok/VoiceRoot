@@ -1,6 +1,6 @@
 BEGIN;
 -- Serialize the retention probe with every owner writer. A first owner may
--- have inserted before DOWN starts but commit only after this lock is acquired.
+-- still be uncommitted when DOWN starts; wait for it before checking retention.
 LOCK TABLE voice_space_media_admission_owners IN ACCESS EXCLUSIVE MODE;
 DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM voice_space_media_admission_owners) THEN
