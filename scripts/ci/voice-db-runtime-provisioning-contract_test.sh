@@ -3253,6 +3253,7 @@ f13_f54_collect_exact_unit() {
   local f13_f54_capability_file="${TMP_DIR}/f54-exact-source-capabilities.json"
   local f13_f54_M_operation='' f13_f54_M_child_map="${TMP_DIR}/f54-actual-M-child-map"
   local f13_f54_M_span_trace="${TMP_DIR}/f54-actual-M-span.jsonl" f13_f54_M_span_map="${TMP_DIR}/f54-actual-M-span-map"
+  local f13_f54_M_ledger="${TMP_DIR}/f54-actual-M-ledger.json" f13_f54_M_ledger_sha=''
   [[ "${repo}" == "${ROOT}" && "${f13_f54_observer:-}" == "${ROOT}/scripts/ci/f13_f54_history.py" &&
     -n "${f13_f54_trace_file:-}" && ! -e "${f13_f54_trace_file}" && ! -e "${f13_f54_capability_file}" ]] || return 1
   # Explicit finite author entrypoint; the ordinary production entrypoint does
@@ -3278,13 +3279,31 @@ f13_f54_execute_M_history() {
 }
 
 f13_f54_consume_M_before_mutation() {
-  local repo="$1" path="$2" output="$3" incoming="$4" category="$5"
+  local repo="$1" path="$2" output="$3" incoming="$4" category="$5" receipt aggregate status=0
   [[ -n "${f13_f54_M_operation:-}" && "${f13_f54_operation}" == "${f13_f54_M_operation}" ]] || return 0
-  # Early actual-caller checkpoint. No M row may change until the complete
-  # conserved ledger/aggregate consumer is implemented and independently proved.
-  f13_f54_trace_event qualification_pending "${repo}" "${path}" "${output}" "${incoming}" || return 1
-  f13_collect_failure "${category}" f54_complete_ledger_consumer_pending
-  return 1
+  receipt="${TMP_DIR}/f54-actual-M-consumed.json"
+  python3 "${f13_f54_observer}" M-consume "${f13_f54_M_ledger}" "${f13_f54_M_ledger_sha}" \
+    "${f13_f54_trace_file}" "${path}" "${output}" "${incoming}" >"${receipt}" || return 1
+  aggregate="$(python3 -c 'import json,sys;print(str(json.load(open(sys.argv[1]))["aggregate"]).lower())' "${receipt}")" || return 1
+  # Consume the aggregate in the original predicate before any map mutation.
+  # This does not rewrite the raw producer flag or grant a new path exception.
+  f13_cross_scope_path_allowed "${path}" "${aggregate}" || status=$?
+  f13_f54_trace_event complete_ledger_consumed "${repo}" "${path}" "${receipt}" "${status}" || return 1
+  if [[ "${status}" != 0 ]]; then
+    f13_collect_failure "${category}" f54_complete_ledger_cross_scope
+    return 1
+  fi
+}
+
+f13_f54_prepare_M_ledger() {
+  local repo="$1"
+  [[ -n "${f13_f54_M_operation:-}" && "${f13_f54_operation}" == "${f13_f54_M_operation}" ]] || return 0
+  [[ ! -e "${f13_f54_M_ledger}" ]] || return 1
+  python3 "${f13_f54_observer}" M-ledger "${repo}" "${f13_f54_capability_file}" \
+    "${f13_f54_trace_file}" "${f13_f54_original_trace}" "${f13_f54_M_span_trace}" \
+    "${f13_f54_original_native}" "${f13_f54_current_native}" >"${f13_f54_M_ledger}" || return 1
+  f13_f54_M_ledger_sha="$(python3 -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "${f13_f54_M_ledger}")" || return 1
+  f13_f54_trace_event M_ledger_ready "${repo}" "${f13_f54_M_ledger}"
 }
 
 f13_resolve_source_base() {
@@ -3963,6 +3982,7 @@ f13_collect_develop_contributions() {
     fi
     if [[ -n "${f13_f54_trace_file:-}" ]]; then
       f13_f54_trace_event classification "${repo}" "${trigger}" "${TMP_DIR}/f13-unapproved-delta" || return 1
+      f13_f54_prepare_M_ledger "${repo}" || return 1
     fi
     while IFS= read -r path; do
       [[ -n "${path}" ]] || continue

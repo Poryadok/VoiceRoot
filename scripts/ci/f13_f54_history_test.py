@@ -26,6 +26,36 @@ def module():
 
 
 class ProducerTrace(unittest.TestCase):
+    def test_M_consumer_uses_prior_true_and_original_gate_without_flag_rewrite(self):
+        # Private transport unit test only. Actual constructor/trace validation
+        # is separate; these hand-built inputs never claim observed M rows.
+        m=module();op='F1/'+m.M+'/2';name=PROTO
+        prior='\t'.join([name,'true','prior-owner','first','base','source','content','best'])
+        incoming='\t'.join([name,'false',m.M,m.P1,m.O,m.P2,'content',','.join(m.BASES)])
+        prefix=b'private-constructor-prefix\n';trace=self.folder/'consumer-trace'
+        # The bound constructor prefix is opaque here; the observed caller
+        # supplies a real JSONL prefix in the actual producer proof.
+        prefix=b'{"kind":"private-fixture-prefix"}\n'
+        before=dict(kind='row_before',operation=op,sequence=2,payload=dict(path=name,
+            incoming=m.raw_binding(incoming),prior_rows=[m.raw_binding(prior)]))
+        trace.write_bytes(prefix+json.dumps(before).encode()+b'\n')
+        evidence=dict(aggregate=True,retained_evidence=[dict(frame='F1',evidence=[dict(prior_rows=[m.raw_binding(prior)])])],span_evidence=None,M_classification=None)
+        ready=dict(type='F54_ACTUAL_M_COMPLETE_RETAINED_LEDGER',operation=op,admission=False,
+            prefix=dict(bytes=len(prefix),sha256=m.sha(prefix)),operation_binding=dict(paths=[name]),
+            outer_rows=[prior],required_qualification={name:evidence})
+        ledger=self.folder/'consumer-ledger';ledger.write_bytes(m.canonical(ready));digest=m.sha(ledger.read_bytes())
+        receipt=m.consume_M_path(ledger,digest,trace,name,(prior+'\n').encode(),incoming)
+        self.assertTrue(receipt['aggregate']);self.assertEqual(receipt['after_gate_row']['raw'],incoming)
+        self.assertEqual(m.original_scope_exit(name,'true'),1)
+        self.assertEqual(m.original_scope_exit(name,'false'),0)
+        # Prior true must not disappear just because the current raw row is false.
+        for map_bytes,path,after,expected_hash in ((b'',name,incoming,digest),
+                ((prior+'\n').encode(),name+'-future',incoming,digest),
+                ((prior+'\n').encode(),name,incoming.replace(m.M,'forged-owner'),'0'*64),
+                ((prior+'\n').encode(),name,incoming.replace(m.P2,m.M),digest)):
+            with self.assertRaises(m.Rejected):m.consume_M_path(ledger,expected_hash,trace,path,map_bytes,after)
+        self.assertEqual(receipt['obligations'],evidence)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
         self.folder = Path(self.temp.name); self.repo = self.folder / 'repo'; self.repo.mkdir()

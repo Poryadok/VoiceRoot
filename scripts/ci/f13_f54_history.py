@@ -210,6 +210,11 @@ def append(path, kind, frame, operation, repo, values):
         name,output,incoming=values
         payload=dict(path=name,map_before=file_binding(output),after_gate_row=raw_binding(incoming),
             reason='complete_ledger_consumer_required_before_mutation',admission=False)
+    elif kind == 'M_ledger_ready':
+        payload=dict(ledger=raw_binding(Path(values[0]).read_bytes()),admission=False)
+    elif kind == 'complete_ledger_consumed':
+        name,receipt,status=values
+        payload=dict(path=name,receipt=json.loads(Path(receipt).read_bytes()),scope_exit=int(status),admission=False)
     else: raise Rejected('unknown_event_kind')
     e=dict(schema=SCHEMA,sequence=sequence,previous=previous['digest'] if previous else '0'*64,
         kind=kind,frame=identity if kind=='frame_enter' else frame or None,
@@ -532,11 +537,101 @@ def consume_unit_path(verified, name, actual_map, actual_trigger):
         main_trace_sha256=verified['main_trace_sha256'],supplemental_trace_sha256=verified['supplemental_trace_sha256'],admission=False)
 
 
-def validate_trace(repo, path, expected_sha, complete=False):
+def original_scope_exit(name, trigger):
+    """Execute the unchanged gate, with the consumed aggregate, not a new policy."""
+    source=(ROOT/'scripts/ci/voice-db-runtime-provisioning-contract_test.sh').read_text()
+    functions=[]
+    for symbol in ('identity_publisher_path_allowed','f13_cross_scope_path_allowed'):
+        start=source.index(symbol+'() {');end=source.index('\n}\n',start)+3
+        functions.append(source[start:end])
+    result=subprocess.run(['bash','-c','\n'.join(functions)+'\nf13_cross_scope_path_allowed "$1" "$2"',
+        'f54-original-scope',name,trigger],capture_output=True)
+    require(result.returncode in (0,1),'actual_original_scope_execution')
+    return result.returncode
+
+
+def build_M_ready(repo, state, events, prefix_binding, original_path, span_path, span_sha, original_native, current_native):
+    """Conserve real ledgers separately; never turn DAG nodes into owner rows."""
+    span=validate_aggregate_span(repo,original_path,span_path,span_sha,original_native,current_native)
+    original=[json.loads(v) for v in Path(original_path).read_bytes().splitlines()]
+    reference='F1/'+SPAN_AGGREGATE+'/2'
+    old=next(e for e in original if e['kind']=='operation_begin' and e['operation']==reference)
+    actual=next(e for e in events if e['kind']=='operation_begin' and e['operation']==reference)
+    require(actual['payload']==old['payload'],'M_prefix_original_aggregate_operation')
+    require([e['payload'] for e in events if e['kind']=='row_committed' and e['operation']==reference]==
+        [e['payload'] for e in original if e['kind']=='row_committed' and e['operation']==reference],
+        'M_prefix_original_aggregate_rows')
+    coverage=state['coverage'];replacements={v['node']:v for v in span['dispositions']}
+    for value in coverage:
+        if value['node'] in replacements:
+            require(len(value['operations'])==1 and value['operations'][0]['disposition']=='UNREACHED','M_only_observed_missing_span')
+            value['operations']=[replacements[value['node']]]
+    accepted={'visited_real_operation','shared_real_operation','exact_single_commit_source_of_real_operation','aggregate_span_qualified'}
+    require(all(v['disposition'] in accepted for node in coverage for v in node['operations']),'M_complete_actual_33_dispositions')
+    required={}
+    for frame,ledger in state['ledger'].items():
+        for name,value in ledger['paths'].items():
+            item=required.setdefault(name,dict(aggregate=False,retained_evidence=[],span_evidence=None,M_classification=None))
+            item['aggregate']=item['aggregate'] or value['aggregate']
+            item['retained_evidence'].append(dict(frame=frame,aggregate=value['aggregate'],evidence=value['evidence']))
+    for name,value in span['obligations'].items():
+        item=required.setdefault(name,dict(aggregate=False,retained_evidence=[],span_evidence=None,M_classification=None))
+        item['aggregate']=item['aggregate'] or value['aggregate'];item['span_evidence']=value
+    for name in state['paths']:
+        item=required.setdefault(name,dict(aggregate=False,retained_evidence=[],span_evidence=None,M_classification=None))
+        item['M_classification']=dict(operation=state['operation'],classification=state['classification'])
+        item['aggregate']=item['aggregate'] or state['classification']['trigger']=='true'
+    outer=state['ledger'][state['frame']]
+    return dict(type='F54_ACTUAL_M_COMPLETE_RETAINED_LEDGER',operation=state['operation'],
+        capability_sha256=state['capability_sha256'],prefix=prefix_binding,operation_binding=state['operation_binding'],
+        original_trace=str(original_path),original_native=str(original_native),current_native=str(current_native),
+        span_trace=str(span_path),span_trace_sha256=span_sha,ledger=state['ledger'],coverage=coverage,
+        outer_rows=outer['rows'],outer_map_binding=outer['map_binding'],required_qualification=required,
+        M_rows_pending=True,qualification='HOLD',admission=False,runtime_pass=False)
+
+
+def prepare_M_ledger(repo, capability_path, trace_path, original_path, span_path, original_native, current_native):
+    capability=verified_capabilities(repo,capability_path)
+    raw=Path(trace_path).read_bytes();digest=sha(raw);events=[json.loads(v) for v in raw.splitlines()]
+    operation=next(e['operation'] for e in events if e['kind']=='history_capability')
+    state=validate_trace(repo,trace_path,digest,checkpoint=operation)['M_checkpoint']
+    require(state['capability_sha256']==sha(canonical(capability)),'M_ready_actual_capability')
+    return build_M_ready(repo,state,events,dict(bytes=len(raw),sha256=digest),original_path,span_path,
+        sha(Path(span_path).read_bytes()),original_native,current_native)
+
+
+def consume_M_path(ready, expected_sha, trace_path, name, actual_map, after_gate_raw):
+    """Only the constructor-generated full ledger is consumed by the real gate.
+
+    The final validator independently reconstructs it at the append boundary.
+    This transport has no authority for an ordinary production collector.
+    """
+    raw=Path(ready).read_bytes();require(sha(raw)==expected_sha,'M_consumer_complete_ledger_hash')
+    value=json.loads(raw);require(value['type']=='F54_ACTUAL_M_COMPLETE_RETAINED_LEDGER' and value['admission'] is False,'M_consumer_type')
+    require(name in value['operation_binding']['paths'],'M_consumer_exact_operation_path')
+    prefix=Path(trace_path).read_bytes();bound=value['prefix']
+    require(len(prefix)>=bound['bytes'] and sha(prefix[:bound['bytes']])==bound['sha256'],'M_consumer_actual_prefix')
+    events=[json.loads(v) for v in prefix.splitlines()]
+    before=next(e for e in reversed(events) if e['kind']=='row_before' and e['operation']==value['operation'])
+    require(before['payload']['path']==name,'M_consumer_current_original_row')
+    rows=actual_map.decode().splitlines();prior=[raw_binding(x) for x in rows if x.split('\t')[0]==name]
+    require(prior==before['payload']['prior_rows'] and prior==[raw_binding(x) for x in value['outer_rows'] if x.split('\t')[0]==name],'M_consumer_retains_all_original_prior_rows')
+    incoming=row(before['payload']['incoming']);after=row(raw_binding(after_gate_raw))
+    require(all(after[i]==incoming[i] for i in (0,2,3,6,7)),'M_consumer_immutable_row_identity')
+    if after[4:6]!=incoming[4:6]:
+        gates=[e for e in events[before['sequence']:] if e['kind']=='native_rebind_gate' and e['operation']==value['operation'] and e['payload']['path']==name]
+        require(len(gates)==1 and gates[0]['payload']['status']==0 and after[4:6]==[P1,M],'M_consumer_actual_source_rebind_gate')
+    aggregate=value['required_qualification'][name]['aggregate'] or any(row(x)[1]=='true' for x in prior) or incoming[1]=='true' or after[1]=='true'
+    return dict(path=name,ledger_sha256=sha(canonical(value)),incoming=before['payload']['incoming'],after_gate_row=raw_binding(after_gate_raw),
+        prior_rows=prior,aggregate=aggregate,obligations=value['required_qualification'][name],admission=False)
+
+
+def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
     raw=Path(path).read_bytes();require(sha(raw)==expected_sha,'trace_raw_hash')
     events=[json.loads(v) for v in raw.splitlines()];require(events,'nonempty_producer_trace')
     previous='0'*64;frames={};stack=[];operations={};attempts={};classified={};pending={};cumulative={};child_flags={};child_rows={};frame_rows={};carry={};failures=[];observed=set()
     expected_operations={};seen_operations={};visited={};committed={};maps={};children={};obligations={};native_bindings={}
+    M_capabilities={};M_compositions={};M_ready={};M_consumed={}
     def map_binding(frame):
         raw=''.join('\t'.join(parts)+'\n' for parts in maps[frame]).encode()
         return dict(bytes=len(raw),sha256=sha(raw))
@@ -555,6 +650,26 @@ def validate_trace(repo, path, expected_sha, complete=False):
         require(committed.get(operation,[])==value['paths'],'complete_ordered_path_commits')
         if frames[operation.split('/')[0]]['partition_source_history']=='true' and value['classification']=='merge':
             require(children.get(operation)==[(value['boundary'],value['source_head'],'true','false')],'complete_real_child_frame')
+        if operation in M_capabilities:
+            require(children.get(operation)==[(O,P2,'true','true')],'complete_exact_M_history_child')
+            require(operation in M_ready and M_consumed.get(operation,[])==value['paths'],'complete_M_ledger_consumption_before_mutation')
+    def ledger_state():
+        return {f:dict(map_binding=map_binding(f),rows=['\t'.join(x) for x in maps[f]],paths={
+            name:dict(aggregate=cumulative[(f,name)],evidence=obligations[(f,name)])
+            for owner,name in obligations if owner==f}) for f in frames}
+    def M_checkpoint_state(operation,prefix_events):
+        require(operation in M_capabilities and operation in classified,'typed_classified_M_checkpoint')
+        frame=operation.split('/')[0];value=operations[operation]
+        require(stack==[frame] and seen_operations[frame][-1]==(M,2),'exact_live_outer_M_checkpoint')
+        require(visited.get(operation,[])==value['paths'] and not committed.get(operation) and not pending,'M_checkpoint_before_any_row')
+        require(children.get(operation)==[(O,P2,'true','true')],'complete_M_child_before_rows')
+        for commit,index in seen_operations[frame][:-1]:finished(frame+'/'+commit+'/'+str(index))
+        child=[name for name,data in frames.items() if data['parent_operation']==operation]
+        require(len(child)==1,'one_exact_real_M_history_child')
+        return dict(type='F54_CLASSIFIED_M_PREFIX_CHECKPOINT',operation=operation,frame=frame,
+            capability_sha256=sha(canonical(M_capabilities[operation])),operation_binding=value,
+            classification=classified[operation],paths=value['paths'],ledger=ledger_state(),child_frame=child[0],
+            coverage=dag_dispositions(repo,prefix_events),M_rows_pending=True,admission=False)
     sync_gates=set()
     for sequence,e in enumerate(events,1):
         require(set(e)=={'schema','sequence','previous','kind','frame','operation','payload','digest'} and e['schema']==SCHEMA,'producer_event_schema')
@@ -590,8 +705,9 @@ def validate_trace(repo, path, expected_sha, complete=False):
             if parent_operation and v['exit']==0:
                 for (owner,name),flag in cumulative.items():
                     if owner==frame:child_flags[(parent_operation,name)]=child_flags.get((parent_operation,name),False) or flag
-                for (owner,name),parts in frame_rows.items():
-                    if owner==frame:child_rows[(parent_operation,name)]=parts
+                if frames[parent_operation.split('/')[0]]['partition_source_history']=='true':
+                    for (owner,name),parts in frame_rows.items():
+                        if owner==frame:child_rows[(parent_operation,name)]=parts
             pending={key:value for key,value in pending.items() if key[0]!=frame}
             stack.pop();continue
         if kind=='operation_attempt':
@@ -608,6 +724,15 @@ def validate_trace(repo, path, expected_sha, complete=False):
             if seen:finished(frame+'/'+seen[-1][0]+'/'+str(seen[-1][1]))
             require(len(seen)<len(expected_operations[frame]) and (v['commit'],index)==expected_operations[frame][len(seen)],'ordered_actual_operation_prefix')
             seen.append((v['commit'],index));attempts[op]=v;continue
+        if kind=='history_capability':
+            require(op in attempts and op not in operations and op not in M_capabilities,'history_capability_after_actual_attempt')
+            binding=v['capability'];require(binding==raw_binding(binding['raw']) and v['admission'] is False,'history_capability_raw_binding')
+            capability=json.loads(binding['raw'])
+            require(capability==prepare_capabilities(repo,capability['unit_directory']),'actual_complete_history_capability')
+            scope=capability['collector_scope'];actual_frame=frames[frame]
+            require([actual_frame[k] for k in ('base','target','allow_direct_followup','partition_source_history')]==[scope[k] for k in ('base','target','allow_direct_followup','partition_source_history')],'exact_capability_outer_context')
+            require(op==frame+'/'+M+'/2' and v['receipt']==capability['history_boundary'],'exact_typed_M_boundary_receipt')
+            M_capabilities[op]=capability;continue
         if kind=='operation_begin':
             require(op==v['id'] and v['id'] not in operations and v['commit'] in frames[frame]['first_parent_operations'],'actual_unique_operation')
             require(op in attempts and all(v[k]==attempts[op][k] for k in ('commit','ordered_parents','parent_index','first_parent','source_head')),'actual_attempt_before_begin')
@@ -628,7 +753,9 @@ def validate_trace(repo, path, expected_sha, complete=False):
                 require(v['candidates']==attempts[op]['candidates'],'actual_attempt_candidates')
                 # Multibase admission is a distinct, unfinished capability.
                 # A caller-selected scalar must never erase operation paths.
-                require(v['candidates']==[v['boundary']],'actual_single_best_source_boundary')
+                if op in M_capabilities:
+                    require([v['commit'],v['first_parent'],v['source_head'],v['boundary'],v['candidates']]==[M,P1,P2,O,BASES],'exact_history_boundary_is_not_best_base')
+                else:require(v['candidates']==[v['boundary']],'actual_single_best_source_boundary')
             require(v['delta']==raw_binding(git(repo,'diff','--name-only',v['boundary'],v['source_head'])),'actual_operation_delta')
             for name,entry in v['entries'].items():
                 require(entry==dict(base=entry_binding(repo,v['boundary'],name),source=entry_binding(repo,v['source_head'],name),result=entry_binding(repo,v['commit'],name)),'actual_full_entries')
@@ -638,6 +765,12 @@ def validate_trace(repo, path, expected_sha, complete=False):
             require(v['admission'] is False,'no_production_capability')
             if kind=='scalar_seam_observation':require(v['status']==1,'scalar_only_still_rejects')
             continue
+        if kind=='composition_capability':
+            require(op in M_capabilities and v['path'] in operations[op]['paths'],'exact_M_composition_path')
+            expected=composition(repo,O,P1,P2,v['path'],tree_entry(repo,M,v['path']).rstrip('\0'))
+            expected=dict(expected,type=M_capabilities[op]['whole_parent_composition']['type'],capability_sha256=sha(canonical(M_capabilities[op])))
+            require(v==expected and v['path'] not in M_compositions.setdefault(op,{}),'actual_distinct_whole_parent_composition_receipt')
+            M_compositions[op][v['path']]=v;continue
         if kind=='failure': failures.append(dict(frame=frame,category=v['category']));continue
         if kind=='final_gate_before':map_before(frame,v);continue
         require(op in operations,'referenced_real_operation')
@@ -648,7 +781,22 @@ def validate_trace(repo, path, expected_sha, complete=False):
             require(op not in classified and v['classifier']==classifier_binding(),'original_classifier_identity')
             require(v['trigger']==classify(v['unapproved_delta']['raw'].splitlines()),'actual_raw_classifier_flag')
             require(v['unapproved_delta']==raw_binding(v['unapproved_delta']['raw']),'actual_delta_bytes')
-            classified[op]=v;continue
+            classified[op]=v
+            if op in M_capabilities:
+                inherited_native={name for b in native_bindings.values() for name in b['paths']}
+                required=[name for name in guarded_names(operations[op]['paths']) if name in inherited_native or operations[op]['entries'][name]['source']!=operations[op]['entries'][name]['result']]
+                require(set(required)<=set(M_compositions.get(op,{})),'all_actual_M_composition_seams_consumed')
+            continue
+        if kind=='M_ledger_ready':
+            require(op in M_capabilities and op not in M_ready,'one_exact_M_ledger_checkpoint')
+            binding=v['ledger'];require(binding==raw_binding(binding['raw']),'complete_M_ledger_raw_binding')
+            ready=json.loads(binding['raw']);prefix_events=events[:sequence-1]
+            prefix_raw=b''.join(raw.splitlines(keepends=True)[:sequence-1])
+            state=M_checkpoint_state(op,prefix_events)
+            expected=build_M_ready(repo,state,prefix_events,dict(bytes=len(prefix_raw),sha256=sha(prefix_raw)),
+                ready['original_trace'],ready['span_trace'],ready['span_trace_sha256'],ready['original_native'],ready['current_native'])
+            require(ready==expected,'independently_recomputed_complete_M_ledger')
+            M_ready[op]=ready;continue
         if kind in ('path_gate_before','sync_gate_before'):
             map_before(frame,v)
             if kind=='path_gate_before':visited.setdefault(op,[]).append(v['path'])
@@ -661,6 +809,22 @@ def validate_trace(repo, path, expected_sha, complete=False):
             continue
         require(op in classified,'classification_before_row')
         key=(frame,v['path'])
+        if kind=='qualification_pending':
+            require(op in M_capabilities and key in pending and v['admission'] is False,'explicit_M_consumer_pending_without_mutation')
+            require(v['map_before']==map_binding(frame),'pending_M_map_is_unchanged');continue
+        if kind=='complete_ledger_consumed':
+            require(op in M_ready and key in pending and pending[key]['op']==op,'complete_M_ledger_before_real_row_mutation')
+            receipt=v['receipt'];item=pending[key];parts=row(receipt['after_gate_row'])
+            require(receipt['path']==v['path'] and receipt['incoming']==raw_binding('\t'.join(item['incoming'])),'actual_M_consumer_incoming')
+            require(all(parts[i]==item['incoming'][i] for i in (0,2,3,6,7)) and parts[4:6]==item.get('rebind',item['incoming'][4:6]),'actual_M_consumer_after_gate_identity')
+            require(parts[1]==item['incoming'][1] or (parts[1]=='true' and cumulative[key]),'actual_M_consumer_raw_flag')
+            require(receipt['ledger_sha256']==sha(canonical(M_ready[op])) and receipt['prior_rows']==[raw_binding('\t'.join(x)) for x in maps[frame] if x[0]==v['path']],'complete_M_consumer_prior_ledger')
+            require(receipt['obligations']==M_ready[op]['required_qualification'][v['path']] and receipt['admission'] is False and v['admission'] is False,'complete_M_consumer_evidence_not_sidecar_bit')
+            aggregate=cumulative[key] or M_ready[op]['required_qualification'][v['path']]['aggregate']
+            require(type(receipt['aggregate']) is bool and receipt['aggregate']==aggregate,'M_consumer_must_keep_full_aggregate_or')
+            require(v['scope_exit']==original_scope_exit(v['path'],'true' if aggregate else 'false'),'actual_original_scope_gate_on_complete_ledger')
+            if v['scope_exit']==0:M_consumed.setdefault(op,[]).append(v['path'])
+            continue
         if kind=='native_rebind_gate':
             require(key in pending and pending[key]['op']==op and not pending[key]['removed'] and 'rebind' not in pending[key],'native_gate_before_exact_mutation')
             item=pending[key];prior=item['prior'];incoming=item['incoming'];operation=operations[op]
@@ -706,6 +870,7 @@ def validate_trace(repo, path, expected_sha, complete=False):
             parts=row(v['row']);require(parts[6]==pending[key]['incoming'][6],'original_content_base')
             incoming=pending[key]['incoming']
             require(all(parts[i]==incoming[i] for i in (0,2,3,6,7)) and parts[4:6]==pending[key].get('rebind',incoming[4:6]),'actual_reduction_row_identity')
+            if op in M_capabilities:require(v['path'] in M_consumed.get(op,[]),'M_mutation_requires_consumed_complete_ledger')
             if kind=='row_remove':
                 require(pending[key]['prior'] is not None and not pending[key]['removed'],'actual_single_reduction')
                 pending[key]['removed']=True;maps[frame]=[x for x in maps[frame] if x[0]!=v['path']]
@@ -725,15 +890,14 @@ def validate_trace(repo, path, expected_sha, complete=False):
             committed.setdefault(op,[]).append(v['path'])
             pending.pop(key)
         else:raise Rejected('unknown_trace_kind')
-    require(not stack,'closed_frames')
+    checkpoint_state=M_checkpoint_state(checkpoint,events) if checkpoint else None
+    require(not stack or checkpoint_state is not None,'closed_frames')
     coverage=dag_dispositions(repo,events) if complete else []
     accepted={'visited_real_operation','shared_real_operation','exact_single_commit_source_of_real_operation'}
     require(not complete or (all(v['disposition'] in accepted for node in coverage for v in node['operations']) and not failures),'complete_33_real_producer_coverage_and_gates')
-    ledger={f:dict(map_binding=map_binding(f),rows=['\t'.join(x) for x in maps[f]],paths={
-        name:dict(aggregate=cumulative[(f,name)],evidence=obligations[(f,name)])
-        for owner,name in obligations if owner==f}) for f in frames}
+    ledger=ledger_state()
     return dict(schema=SCHEMA,trace_sha256=expected_sha,frames=len(frames),operations=len(operations),failures=failures,
-        ledger=ledger,coverage=coverage,observed_qualification='COMPLETE' if complete else 'OBSERVED_PREFIX_ONLY',admission=False)
+        ledger=ledger,coverage=coverage,M_checkpoint=checkpoint_state,observed_qualification='COMPLETE' if complete else 'OBSERVED_PREFIX_ONLY',admission=False)
 
 
 def consume_aggregate(verified, frame, name, actual_map, actual_trigger):
@@ -766,6 +930,10 @@ def main():
         if command=='cap-boundary':print(json.dumps(boundary_capability(*args)));return 0
         if command=='cap-entry':print(json.dumps(entry_capability(*args)));return 0
         if command=='cap-composition':print(json.dumps(composition_capability(*args)));return 0
+        if command=='M-ledger':print(json.dumps(prepare_M_ledger(*args)));return 0
+        if command=='M-consume':
+            ready,digest,trace,name,map_path,incoming=args
+            print(json.dumps(consume_M_path(ready,digest,trace,name,Path(map_path).read_bytes(),incoming)));return 0
         if command=='span-origin':print(json.dumps(span_origin(*args)));return 0
         if command=='span-validate':print(json.dumps(validate_aggregate_span(*args)));return 0
         if command=='unit-observe':print(json.dumps(observe_qualified_unit(*args)));return 0
