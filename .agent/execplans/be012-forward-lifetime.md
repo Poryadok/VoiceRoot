@@ -54,4 +54,10 @@ waits for receipt/activation or retry classification. Nine acquire-negative
 combinations keep pending state and zero provider calls/cancellations; distinct
 retry workIDs and closed ABANDONED replay+real receipt/teardown commit pass.
 Synthetic callback proves orchestration only, not actual root registration.
-Scoped vet0; provider regressions/build and independent309 review follow.
+Scoped vet0/full MM fixture build0; prior provider regressions12top7sub
+PG/race PASS0skip27.173s. Independent309 SOURCE/PROOF CLEAR03312a, existing
+reviewc6/e8 and parentc39. Actual145 adapteraa1a4852 nativeapp/gate.go uses
+context only for acquisition/ObserveFresh; successful registration is removed
+only by explicit sync.Once release. Interface documentation now makes this
+requirement explicit; no runtime behavior changed or repeated runtime claimed.
+Current MASTER/root/installed qualification remains145/121-owned and OPEN.

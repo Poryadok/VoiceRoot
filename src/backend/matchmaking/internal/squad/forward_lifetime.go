@@ -9,6 +9,8 @@ import (
 // genuine fresh-admission owner. It does not replace source or SQL admission.
 // workID is a fresh runtime identity, not a provider/business operation ID.
 // Successful release must remain held until durable outcome handling returns.
+// The context governs acquisition only. After successful entry, cancellation or
+// deadline expiry must not unregister work; only the explicit release may do so.
 // Failed admission retains any uncertainty in the owning implementation.
 type ForwardLifetime interface {
 	EnterForward(context.Context, uuid.UUID, [32]byte) (release func(), err error)
