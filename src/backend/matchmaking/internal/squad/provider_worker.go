@@ -18,6 +18,7 @@ import (
 
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
+	"voice/backend/matchmaking/internal/partysource"
 	"voice/backend/matchmaking/internal/store"
 	"voice/backend/pkg/principal"
 )
@@ -37,10 +38,11 @@ var errProviderContract = errors.New("protected provider contract mismatch")
 // the dedicated protected provider clients. The clients must use the provider
 // mTLS listeners; this worker never falls back to the public service clients.
 type MatchSquadProviderWorker struct {
-	Store  *store.MatchStore
-	Chat   chatv1.MatchSquadChatServiceClient
-	Voice  callsv1.MatchSquadVoiceServiceClient
-	Issuer *principal.Issuer
+	Store          *store.MatchStore
+	Chat           chatv1.MatchSquadChatServiceClient
+	Voice          callsv1.MatchSquadVoiceServiceClient
+	Issuer         *principal.Issuer
+	PartyValidator partysource.ProvisionValidator
 }
 
 // Provision is the request-path entry to the durable provider saga. Every RPC
@@ -51,11 +53,18 @@ func (w *MatchSquadProviderWorker) Provision(ctx context.Context, matchID uuid.U
 	}
 	operation, err := w.Store.GetMatchSquadProvisioningOperation(ctx, matchID)
 	if errors.Is(err, store.ErrMatchSquadPending) {
+		candidate, proof, gateErr := w.partyGate().ValidateAttempt(ctx, matchID)
+		if gateErr != nil {
+			return "", "", gateErr
+		}
 		intent, buildErr := newProvisioningIntent(matchID, profileIDs)
 		if buildErr != nil {
 			return "", "", buildErr
 		}
-		operation, err = w.Store.SaveMatchSquadProvisioningIntent(ctx, intent)
+		operation, err = w.Store.SaveValidatedMatchSquadProvisioningIntent(ctx, candidate, proof, intent)
+		if errors.Is(err, store.ErrPlatformBanDenied) {
+			return "", "", w.partyGate().ResetDeniedParties(ctx, candidate, err)
+		}
 		if errors.Is(err, store.ErrMatchSquadConflict) {
 			// Another final accepter may have committed the same canonical match
 			// manifest first. Reuse only that exact durable intent; never replace it.
@@ -72,6 +81,9 @@ func (w *MatchSquadProviderWorker) Provision(ctx context.Context, matchID uuid.U
 	operation, err = w.provisionOperation(ctx, operation)
 	if err != nil {
 		return "", "", err
+	}
+	if operation.State != "active" {
+		return "", "", store.ErrMatchSquadPending
 	}
 	if operation.ChatID == nil || operation.VoiceRoomID == nil {
 		return "", "", fmt.Errorf("%w: active MatchSquad operation lacks resource IDs", errProviderContract)
@@ -162,11 +174,31 @@ func newProvisioningIntent(matchID uuid.UUID, profileIDs []uuid.UUID) (store.Mat
 }
 
 func (w *MatchSquadProviderWorker) provisionOperation(ctx context.Context, operation store.MatchSquadProvisioningOperation) (store.MatchSquadProvisioningOperation, error) {
+	// A scan item is discovery only; reload before deciding whether a forward
+	// attempt or receipt-only settlement is still permitted.
+	var err error
+	operation, err = w.Store.GetMatchSquadProvisioningOperation(ctx, operation.MatchID)
+	if err != nil {
+		return operation, err
+	}
 	if operation.State == "active" {
 		return operation, nil
 	}
-	if operation.State != "provisioning" {
+	if operation.State != "provisioning" && operation.State != "compensating" {
 		return operation, store.ErrMatchSquadPending
+	}
+	dispatch, err := w.Store.GetMatchSquadDispatchState(ctx, operation.MatchID)
+	if err != nil {
+		return operation, err
+	}
+	if dispatch.MatchStatus == store.MatchStatusAbandoned && dispatch.Disposition == "LIVE" {
+		if err := w.Store.AbandonMatch(ctx, operation.MatchID); err != nil {
+			return operation, err
+		}
+		operation, err = w.Store.GetMatchSquadProvisioningOperation(ctx, operation.MatchID)
+		if err != nil {
+			return operation, err
+		}
 	}
 	chatRequest := new(chatv1.CreateMatchSquadChatRequest)
 	if err := unmarshalFrozenRequest(operation.ChatRequestBytes, operation.ChatRequestHash, chatRequest); err != nil ||
@@ -175,11 +207,17 @@ func (w *MatchSquadProviderWorker) provisionOperation(ctx context.Context, opera
 		return operation, fmt.Errorf("%w: stored Chat creation request is invalid", errProviderContract)
 	}
 	if operation.ChatReceiptID == nil {
-		callCtx, err := w.callContext(ctx, "chat", chatCreateRPC, operation.ChatOperationID, chatRequest)
+		if err := w.authorizeForwardCreate(ctx, operation, "chat"); err != nil {
+			return operation, err
+		}
+		attemptCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		callCtx, err := w.callContext(attemptCtx, "chat", chatCreateRPC, operation.ChatOperationID, chatRequest)
 		if err != nil {
+			cancel()
 			return operation, err
 		}
 		response, err := w.Chat.CreateMatchSquadChat(callCtx, chatRequest)
+		cancel()
 		if err != nil {
 			return operation, err
 		}
@@ -222,21 +260,20 @@ func (w *MatchSquadProviderWorker) provisionOperation(ctx context.Context, opera
 		return operation, fmt.Errorf("%w: stored Voice creation request is invalid", errProviderContract)
 	}
 	if operation.VoiceReceiptID == nil {
-		callCtx, err := w.callContext(ctx, "voice", voiceCreateRPC, operation.VoiceOperationID, voiceRequest)
+		if err := w.authorizeForwardCreate(ctx, operation, "voice"); err != nil {
+			return operation, err
+		}
+		attemptCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		callCtx, err := w.callContext(attemptCtx, "voice", voiceCreateRPC, operation.VoiceOperationID, voiceRequest)
 		if err != nil {
+			cancel()
 			return operation, err
 		}
 		response, err := w.Voice.CreateMatchSquadRoom(callCtx, voiceRequest)
+		cancel()
 		if err != nil {
-			if isTerminalProviderCreateError(err) {
-				// The protected Voice provider rejects invalid creation requests
-				// before mutation, including terminal binding/ownership conflicts.
-				// Seal exact Chat-only compensation; never delete an unknown Voice
-				// resource or turn this into a completed match.
-				if _, compensationErr := w.Store.BeginMatchSquadProvisionCompensation(ctx, operation.MatchID); compensationErr != nil {
-					return operation, errors.Join(err, fmt.Errorf("persist MatchSquad provisioning compensation: %w", compensationErr))
-				}
-			}
+			// Once dispatch is possible, even a terminal status cannot prove
+			// absence. Preserve the immutable issued marker for exact replay.
 			return operation, err
 		}
 		if response == nil || response.GetReceipt() == nil {
@@ -263,10 +300,58 @@ func (w *MatchSquadProviderWorker) provisionOperation(ctx context.Context, opera
 	if operation.VoiceReceiptID == nil || operation.VoiceRoomID == nil {
 		return operation, fmt.Errorf("%w: Voice creation receipt was not durably recorded", errProviderContract)
 	}
-	if _, err := w.Store.ActivateProvisionedMatch(ctx, operation.MatchID); err != nil {
+	dispatch, err = w.Store.GetMatchSquadDispatchState(ctx, operation.MatchID)
+	if err != nil {
+		return operation, err
+	}
+	if dispatch.Disposition == "ABANDONED" {
+		// Persisted receipts materialize exact teardown independently. They do
+		// not restore eligibility or make this operation publicly usable.
+		return operation, store.ErrMatchSquadPending
+	}
+	candidate, proof, err := w.partyGate().ValidateAttempt(ctx, operation.MatchID)
+	if err != nil {
+		return operation, err
+	}
+	if _, err := w.Store.ActivateValidatedProvisionedMatch(ctx, candidate, proof, operation.OperationID); err != nil {
+		if errors.Is(err, store.ErrPlatformBanDenied) {
+			return operation, w.partyGate().ResetDeniedParties(ctx, candidate, err)
+		}
 		return operation, err
 	}
 	return w.Store.GetMatchSquadProvisioningOperation(ctx, operation.MatchID)
+}
+
+func (w *MatchSquadProviderWorker) partyGate() *PartySourceGate {
+	return &PartySourceGate{Store: w.Store, Validator: w.PartyValidator}
+}
+
+func (w *MatchSquadProviderWorker) authorizeForwardCreate(ctx context.Context, operation store.MatchSquadProvisioningOperation, provider string) error {
+	dispatch, err := w.Store.GetMatchSquadDispatchState(ctx, operation.MatchID)
+	if err != nil {
+		return err
+	}
+	if dispatch.Disposition == "ABANDONED" {
+		marker := dispatch.Chat
+		if provider == "voice" {
+			marker = dispatch.Voice
+		}
+		if dispatch.OperationState != "compensating" || dispatch.MatchStatus != store.MatchStatusAbandoned || marker != "MAY_HAVE_CREATED" {
+			return store.ErrMatchSquadPending
+		}
+		// Exact replay of a possible dispatch only obtains its original
+		// receipt for cleanup. Never issue a previously NOT_ISSUED provider.
+		return nil
+	}
+	candidate, proof, err := w.partyGate().ValidateAttempt(ctx, operation.MatchID)
+	if err != nil {
+		return err
+	}
+	_, err = w.Store.AuthorizeMatchSquadProviderDispatch(ctx, candidate, proof, operation.OperationID, provider)
+	if errors.Is(err, store.ErrPlatformBanDenied) {
+		return w.partyGate().ResetDeniedParties(ctx, candidate, err)
+	}
+	return err
 }
 
 func isTerminalProviderCreateError(err error) bool {
