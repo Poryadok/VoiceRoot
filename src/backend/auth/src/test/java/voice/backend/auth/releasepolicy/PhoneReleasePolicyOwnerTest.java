@@ -24,6 +24,9 @@ class PhoneReleasePolicyOwnerTest {
   final MailSender mail = mock(MailSender.class);
   final OtpThrottle throttle = spy(new InMemoryOtpThrottle(CLOCK));
   final JwtService jwt = JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK);
+  final InMemoryAccountRestoreTokenStore restoreTokens = spy(new InMemoryAccountRestoreTokenStore());
+  final voice.backend.auth.events.AuthEventPublisher events = mock(voice.backend.auth.events.AuthEventPublisher.class);
+  final InMemorySessionEpochFloorStore floors = spy(new InMemorySessionEpochFloorStore());
 
   AuthService auth() throws Exception {
     return auth(ReleasePolicyTest.alpha());
@@ -39,9 +42,9 @@ class PhoneReleasePolicyOwnerTest {
         CLOCK, Duration.ofDays(30), profiles,
         new voice.backend.auth.userdb.InMemoryPhoneHashResolver(accounts, profiles),
         new InMemorySubscriptionTierStore(), new voice.backend.auth.userdb.NoOpProfileSwitchValidator(),
-        new InMemoryE2EKeyBackupRepository(), new voice.backend.auth.events.NoopAuthEventPublisher(),
-        new io.micrometer.core.instrument.simple.SimpleMeterRegistry(), new InMemoryAccountRestoreTokenStore(),
-        mail, new InMemorySessionEpochFloorStore());
+        new InMemoryE2EKeyBackupRepository(), events,
+        new io.micrometer.core.instrument.simple.SimpleMeterRegistry(), restoreTokens,
+        mail, floors);
     service.configureReleasePolicy(policy);
     return service;
   }
@@ -115,6 +118,64 @@ class PhoneReleasePolicyOwnerTest {
     verify(refresh, never()).revokeIfActive(anyString(), any());
     verify(blacklist, never()).revoke(anyString(), any());
     assertThat(refresh.findByHash(codec.hash(old.refreshToken()))).contains(before);
+  }
+
+  @Test void deniedPhoneProfileSwitchPreservesCredentialsAndDoesNotPrepareFloor() throws Exception {
+    var development = auth(ReleasePolicy.development());
+    var old = development.register(new RegisterCommand(null, "+15550000003", PASSWORD, false, "{}"));
+    var alpha = auth();
+    var before = refresh.findByHash(codec.hash(old.refreshToken()));
+    clearInvocations(blacklist, refresh, floors);
+    assertThatThrownBy(() -> alpha.switchActiveProfile(old.accessToken(), java.util.UUID.randomUUID().toString(), "{}"))
+        .isInstanceOf(AuthException.class).hasMessage("capability_unavailable");
+    verify(blacklist, never()).revoke(anyString(), any());
+    verify(floors, never()).recordAtLeast(any(), anyLong());
+    verifyNoInteractions(refresh);
+    assertThat(alpha.validate(old.accessToken()).userId()).isEqualTo(old.accountId());
+    assertThat(refresh.findByHash(codec.hash(old.refreshToken()))).isEqualTo(before);
+  }
+
+  @Test void allowedEmailProfileSwitchRevokesOldAccessAndIssuesTargetSession() throws Exception {
+    var alpha = auth();
+    var old = alpha.register(new RegisterCommand("switch@example.com", null, PASSWORD, false, "{}"));
+    var target = java.util.UUID.randomUUID().toString();
+    var switched = alpha.switchActiveProfile(old.accessToken(), target, "{}");
+    assertThat(alpha.validate(switched.accessToken()).profileId()).isEqualTo(target);
+    assertThat(switched.refreshToken()).isNotBlank();
+    assertThatThrownBy(() -> alpha.validate(old.accessToken())).hasMessage("token_revoked");
+  }
+
+  @Test void deniedPhoneRestorePreservesDeletedAccountReusableTokenAndNoEventOrFloor() throws Exception {
+    var account = accounts.create(null, "+15550000004", passwords.hash(PASSWORD), "regular");
+    accounts.markDeleted(account.id(), CLOCK.instant());
+    restoreTokens.store("phone-restore", account.id(), AccountRestoreTokenStore.RESTORE_TTL);
+    var deleted = accounts.findById(account.id().toString()).orElseThrow();
+    var alpha = auth();
+    clearInvocations(accounts, restoreTokens, events, floors, refresh);
+    for (int attempt = 0; attempt < 2; attempt++) {
+      assertThatThrownBy(() -> alpha.restoreAccount("phone-restore"))
+          .isInstanceOf(AuthException.class).hasMessage("capability_unavailable");
+    }
+    verify(restoreTokens, never()).consume(anyString());
+    verify(accounts, never()).restoreDeleted(any());
+    verify(floors, never()).recordAtLeast(any(), anyLong());
+    verifyNoInteractions(events, refresh);
+    assertThat(restoreTokens.peek("phone-restore")).contains(account.id());
+    assertThat(accounts.findById(account.id().toString())).contains(deleted);
+  }
+
+  @Test void allowedEmailRestoreConsumesTokenRestoresPublishesAndIssuesSession() throws Exception {
+    var account = accounts.create("restore@example.com", null, passwords.hash(PASSWORD), "regular");
+    accounts.markDeleted(account.id(), CLOCK.instant());
+    restoreTokens.store("email-restore", account.id(), AccountRestoreTokenStore.RESTORE_TTL);
+    var alpha = auth();
+    var restored = alpha.restoreAccount("email-restore");
+    assertThat(alpha.validate(restored.accessToken()).userId()).isEqualTo(account.id().toString());
+    assertThat(restored.refreshToken()).isNotBlank();
+    assertThat(restoreTokens.peek("email-restore")).isEmpty();
+    assertThat(accounts.findById(account.id().toString()).orElseThrow().status()).isEqualTo("active");
+    verify(events).publishAccountRestored(account.id());
+    assertThatThrownBy(() -> alpha.restoreAccount("email-restore")).hasMessage("invalid_token");
   }
 
   @Test void grpcAndHttpExposeTheCapabilityFailureForPublicPhoneRequest() throws Exception {

@@ -840,6 +840,7 @@ public class AuthService {
       if (currentClaims.sessionEpoch() < account.sessionEpoch()) {
         throw new AuthException("token_revoked");
       }
+      requireIssuanceCapability(account);
       PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
       tokenBlacklist.revoke(currentClaims.jti(), jwtService.ttl(currentClaims));
       return issueSessionForProfile(account, prepared, profileId,
@@ -1015,6 +1016,7 @@ public class AuthService {
             .findById(peekedAccountId.toString())
             .orElseThrow(() -> new AuthException("invalid_token"));
     ensureRestorable(account);
+    requireIssuanceCapability(account);
     PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
     UUID consumedAccountId =
         restoreTokenStore

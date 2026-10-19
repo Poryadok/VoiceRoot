@@ -152,7 +152,12 @@ password, session, OTP throttle/code or provider effects at register/login and
 OTP send/verify. Conversion first preserves current authenticated anonymous-guest
 checks, then denies before password hashing or account/session effects. Old
 phone-only accounts cannot refresh into a replacement session or complete 2FA
-session issuance; refresh denial preserves the unconsumed credential. The final
+session issuance; refresh denial preserves the unconsumed credential. Profile
+switch denial occurs before floor preparation or access revocation and preserves
+existing access and refresh credentials. Restore denial occurs after validating
+the restore token/account but before floor preparation, token consumption,
+account restoration or restored-event publication; the token remains reusable.
+Email profile switches and restores retain their normal issuance behavior. The final
 session writer also guards phone-only issuance. These failures map to HTTP 412
 and gRPC `FAILED_PRECONDITION`, with `capability_unavailable`. Existing email,
 guest, email OTP/reset, reads, logout and safety cleanup retain their behavior;
