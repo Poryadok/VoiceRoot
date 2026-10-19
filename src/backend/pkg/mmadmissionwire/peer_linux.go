@@ -10,6 +10,24 @@ import (
 	"syscall"
 )
 
+// PeerCredentials captures the tuple from the same connected FD used for TLS.
+// Executable provenance is the independent launch driver's responsibility.
+func PeerCredentials(conn *net.UnixConn) (KernelPeer, error) {
+	var out KernelPeer
+	raw, e := conn.SyscallConn()
+	if e != nil {
+		return out, ErrInvalid
+	}
+	var cred *syscall.Ucred
+	var inner error
+	if e = raw.Control(func(fd uintptr) {
+		cred, inner = syscall.GetsockoptUcred(int(fd), syscall.SOL_SOCKET, syscall.SO_PEERCRED)
+	}); e != nil || inner != nil || cred == nil || cred.Pid <= 0 {
+		return out, ErrInvalid
+	}
+	return KernelPeer{cred.Pid, cred.Uid, cred.Gid}, nil
+}
+
 func Peer(conn *net.UnixConn) (PeerIdentity, error) {
 	var out PeerIdentity
 	raw, e := conn.SyscallConn()
@@ -25,6 +43,7 @@ func Peer(conn *net.UnixConn) (PeerIdentity, error) {
 	}
 	out.PID = cred.Pid
 	out.UID = cred.Uid
+	out.GID = cred.Gid
 	b, e := os.ReadFile(fmt.Sprintf("/proc/%d/exe", cred.Pid))
 	if e != nil {
 		return out, ErrInvalid

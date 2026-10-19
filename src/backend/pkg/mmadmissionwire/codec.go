@@ -87,6 +87,11 @@ func requiredFields(data []byte, t reflect.Type) error {
 		}
 	}
 	if t.Kind() == reflect.Slice {
+		// JSON byte slices use a base64 string; CertificateDER's decoder
+		// enforces its bounded canonical encoding before this shape walk.
+		if t.Elem().Kind() == reflect.Uint8 {
+			return nil
+		}
 		var items []json.RawMessage
 		if json.Unmarshal(data, &items) != nil {
 			return ErrInvalid

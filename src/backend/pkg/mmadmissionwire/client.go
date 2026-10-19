@@ -3,6 +3,7 @@ package mmadmissionwire
 import (
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"io"
 	"net"
 	"time"
@@ -11,6 +12,7 @@ import (
 type PeerIdentity struct {
 	PID            int32
 	UID            uint32
+	GID            uint32
 	ExecutableHash Hash
 }
 
@@ -20,7 +22,27 @@ type Client struct {
 	Descriptor     DescriptorV1
 	ControllerPeer PeerIdentity
 	Timeout        time.Duration
+	peerBinding    *ReadbackPeerBindingV1
+	ownTLS         tls.Certificate
 }
+
+// NewReadbackClient is the only operational constructor. A descriptor and raw
+// numeric peer identity alone do not authenticate independent launch provenance.
+func NewReadbackClient(d DescriptorV1, p ValidatedPeerBinding, own tls.Certificate, timeout time.Duration) (Client, error) {
+	if d.Validate() != nil || p.record.Validate() != nil || timeout <= 0 || timeout > 10*time.Second {
+		return Client{}, ErrInvalid
+	}
+	h, e := BindingHash(d.Binding)
+	if e != nil || p.record.BindingHash != h || p.record.ConsumerReplicaID != d.ReplicaID || p.record.ConsumerProcessLaunchID != d.ProcessLaunchID {
+		return Client{}, ErrInvalid
+	}
+	if _, e = launchTLSConfig(p.record, own, false); e != nil {
+		return Client{}, e
+	}
+	record := p.record
+	return Client{Descriptor: d, Timeout: timeout, peerBinding: &record, ownTLS: own}, nil
+}
+
 type StartupObservation struct{ response ObserveResponseV1 }
 type FreshAdmissionObservation struct{ response ObserveResponseV1 }
 
@@ -40,11 +62,11 @@ func (c Client) ObserveFresh(ctx context.Context, action ID, request Hash) (Fres
 func (c Client) observe(ctx context.Context, p Purpose, action ID, request Hash) (ObserveResponseV1, error) {
 	var zero ObserveResponseV1
 	d := c.Descriptor
-	if d.Validate() != nil || c.Timeout <= 0 || c.Timeout > 10*time.Second || c.ControllerPeer.PID <= 0 || c.ControllerPeer.ExecutableHash == (Hash{}) {
+	if d.Validate() != nil || c.Timeout <= 0 || c.Timeout > 10*time.Second || c.peerBinding == nil || c.peerBinding.Validate() != nil {
 		return zero, ErrInvalid
 	}
 	h, e := BindingHash(d.Binding)
-	if e != nil {
+	if e != nil || h != c.peerBinding.BindingHash || d.ReplicaID != c.peerBinding.ConsumerReplicaID || d.ProcessLaunchID != c.peerBinding.ConsumerProcessLaunchID || d.ControllerID != c.peerBinding.ControllerID || d.AuthorityScope != c.peerBinding.AuthorityScope || d.ScopeID != c.peerBinding.ScopeID {
 		return zero, e
 	}
 	r := ObserveRequestV1{ProtocolVersion: 1, Purpose: p, EnvironmentID: d.Binding.EnvironmentID, InstallationID: d.Binding.InstallationID, ReplicaID: d.ReplicaID, ProcessLaunchID: d.ProcessLaunchID, ExpectedBindingHash: h, ActionID: action, ActionRequestHash: request}
@@ -69,24 +91,25 @@ func (c Client) observe(ctx context.Context, p Purpose, action ID, request Hash)
 		deadline = dl
 	}
 	_ = conn.SetDeadline(deadline)
-	if CheckPeer(conn, c.ControllerPeer) != nil {
+	secure, e := authenticateReadbackClient(ctx, conn, *c.peerBinding, c.ownTLS)
+	if e != nil {
 		return zero, ErrInvalid
 	}
-	if e = WriteFrame(conn, r); e != nil {
+	if e = WriteFrame(secure, r); e != nil {
 		return zero, e
 	}
-	if e = conn.CloseWrite(); e != nil {
+	if e = secure.CloseWrite(); e != nil {
 		return zero, e
 	}
 	var out ObserveResponseV1
-	if ReadFrame(conn, &out) != nil {
+	if ReadFrame(secure, &out) != nil {
 		return zero, ErrInvalid
 	}
 	var extra [1]byte
-	if n, e := conn.Read(extra[:]); n != 0 || e != io.EOF {
+	if n, e := secure.Read(extra[:]); n != 0 || e != io.EOF {
 		return zero, ErrInvalid
 	}
-	if ValidateObservation(d, r, out) != nil {
+	if ValidateObservation(d, r, out) != nil || out.LaunchObservationHash != c.peerBinding.ConsumerLaunchObservationHash {
 		return zero, ErrInvalid
 	}
 	return out, nil
