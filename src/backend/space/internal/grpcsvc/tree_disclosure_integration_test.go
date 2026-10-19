@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/google/uuid"
@@ -26,6 +27,10 @@ func (l disclosureChatLookup) GetChatNames(_ context.Context, ids []uuid.UUID) (
 }
 
 func disclosurePool(t *testing.T) *pgxpool.Pool {
+	return disclosurePoolAt(t, "000025")
+}
+
+func disclosurePoolAt(t *testing.T, version string) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
 	var pool *pgxpool.Pool
@@ -52,7 +57,7 @@ func disclosurePool(t *testing.T) *pgxpool.Pool {
 	paths, err := filepath.Glob(filepath.Join(repoRoot(t), "src/backend/migrations/space_db", "*.up.sql"))
 	require.NoError(t, err)
 	for _, path := range paths {
-		if filepath.Base(path)[:6] > "000024" {
+		if filepath.Base(path)[:6] > version {
 			break
 		}
 		raw, err := os.ReadFile(path)
@@ -60,7 +65,76 @@ func disclosurePool(t *testing.T) *pgxpool.Pool {
 		_, err = pool.Exec(ctx, string(raw))
 		require.NoError(t, err)
 	}
+	_, err = pool.Exec(ctx, `CREATE TABLE schema_migrations(version bigint NOT NULL PRIMARY KEY, dirty boolean NOT NULL)`)
+	require.NoError(t, err)
+	number, err := strconv.ParseInt(version, 10, 64)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO schema_migrations VALUES($1,false)`, number)
+	require.NoError(t, err)
 	return pool
+}
+
+func TestListSpaceTree_RequiresQualifiedCatalog(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires real PostgreSQL")
+	}
+	for _, name := range []string{"pre24", "missing_trigger", "disabled_trigger", "changed_function", "missing_metadata", "dirty", "unknown_version", "trigger_removed_during_enrichment", "current34"} {
+		t.Run(name, func(t *testing.T) {
+			version := "000024"
+			if name == "pre24" {
+				version = "000021"
+			} else if name == "current34" {
+				version = "000034"
+			}
+			pool := disclosurePoolAt(t, version)
+			ctx := context.Background()
+			viewer := uuid.New()
+			st := &store.SpaceStore{Pool: pool}
+			space, err := st.CreateSpace(ctx, viewer, "Catalog", "", "private")
+			require.NoError(t, err)
+			_, err = pool.Exec(ctx, `INSERT INTO space_tree_nodes(id,space_id,kind,chat_id,sort_order) VALUES($1,$2,'text_chat',$3,0)`, uuid.New(), space.ID, uuid.New())
+			require.NoError(t, err)
+			var epoch uint64
+			require.NoError(t, pool.QueryRow(ctx, `SELECT access_epoch FROM space_voice_access_epochs WHERE space_id=$1`, space.ID).Scan(&epoch))
+			require.Positive(t, epoch, "a positive old media epoch is deliberately insufficient")
+			corrupt := func(query string) {
+				_, err := pool.Exec(ctx, query)
+				require.NoError(t, err)
+			}
+			switch name {
+			case "missing_trigger":
+				corrupt(`DROP TRIGGER space_authority_revision_categories ON categories`)
+			case "disabled_trigger":
+				corrupt(`ALTER TABLE space_tree_nodes DISABLE TRIGGER space_authority_revision_space_tree_nodes`)
+			case "changed_function":
+				corrupt(`CREATE OR REPLACE FUNCTION space_authority_revision_changed() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF TG_OP='DELETE' THEN RETURN OLD; END IF; RETURN NEW; END $$`)
+			case "missing_metadata":
+				corrupt(`DROP TABLE schema_migrations`)
+			case "dirty":
+				corrupt(`UPDATE schema_migrations SET dirty=true`)
+			case "unknown_version":
+				corrupt(`UPDATE schema_migrations SET version=999`)
+			}
+			lookedUp := false
+			svc := &SpaceGRPC{Store: st, Chats: disclosureChatLookup{read: func() {
+				lookedUp = true
+				if name == "trigger_removed_during_enrichment" {
+					corrupt(`DROP TRIGGER space_authority_revision_categories ON categories`)
+				}
+			}}}
+			actor := metadata.NewIncomingContext(ctx, metadata.Pairs(authctx.HeaderProfileID, viewer.String()))
+			response, err := svc.ListSpaceTree(actor, &spacev1.ListSpaceTreeRequest{SpaceId: space.ID.String()})
+			if name == "current34" {
+				require.NoError(t, err)
+				require.NotNil(t, response)
+				require.True(t, lookedUp)
+				return
+			}
+			require.Equal(t, codes.Unavailable, status.Code(err), "unqualified source catalogs must fail closed even with a positive epoch")
+			require.Nil(t, response)
+			require.Equal(t, name == "trigger_removed_during_enrichment", lookedUp, "initial qualification precedes enrichment, final qualification follows it")
+		})
+	}
 }
 
 func TestListSpaceTree_DisclosureCut(t *testing.T) {
