@@ -20,6 +20,35 @@
 - TLS termination
 - Request ID генерация и propagation (для трейсинга)
 
+## Verified Space creator dispatch
+
+`POST /api/v1/spaces` uses the protected Space public lifecycle client configured
+by `GATEWAY_SPACE_LIFECYCLE_*`. It has no ordinary gRPC or REST fallback.
+The existing protobuf request and successful HTTP200 response stay unchanged;
+unknown/duplicate protobuf JSON fields are rejected before dispatch. This POST
+performs one dispatch and does not retry an ambiguous result with a new token.
+
+Creator authority requires a real Auth JWKS-validated Bearer JWT with configured
+issuer and audience, blacklist and
+strict session-floor checks. Static development tokens, including the static
+branch of mixed authentication, cannot issue it. Account/profile IDs must be
+canonical nonnil UUIDs, epoch positive, session unexpired, and the signed
+`account_type` exactly `regular`; the legacy missing-type default is not proof.
+The JWT projection retains the raw authenticated account type separately from
+the compatibility value used by older routes.
+
+Gateway signs `delegated_user` for audience `space`, exact full `CreateSpace`
+method, complete deterministic protobuf hash, fresh transport request UUID and
+JTI, verified account/profile/epoch and explicit regular type. Its lifetime is
+at most 30 seconds and no longer than the authenticated session. Only this
+credential and transport request ID are forwarded as authority metadata.
+
+This producer does not activate native Space creation on its own. The receiving
+Space implementation must enforce the protected method, ordinary-listener deny,
+fresh Auth-owned `GetSpaceSessionEpochFloor`, replay continuity and atomic native
+publication required by `SPACE-NATIVE-MEMBERSHIP-v1` / creator cases C01–C12.
+Those receiver/Auth/assembled runtime proofs remain separate prerequisites.
+
 ## Outbound gRPC resilience
 
 Ordinary upstream ClientConns created by `grpcClientsFromEnv` use the shared

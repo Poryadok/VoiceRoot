@@ -328,59 +328,6 @@ VALUES($1,$2,$3,$4,$5,$6)`, spaceID, generation, operationID, requestBytes, requ
 	return nil, ErrUnavailable
 }
 
-func (s *PostgresStore) completePurge(ctx context.Context, req *commonv1.SpacePurgeRequest, requestHash []byte, receiptID uuid.UUID) (*commonv1.SpacePurgeReceipt, error) {
-	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if err := spacebarrier.Lock(ctx, tx, req.SpaceId); err != nil {
-		return nil, err
-	}
-	var proven bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM voice_space_lifecycle_fence_heads h JOIN voice_space_lifecycle_fence_receipts r ON r.space_id=h.space_id AND r.generation=h.generation-1 WHERE h.space_id=$1 AND h.generation=$2 AND h.state='PURGE_DECIDED' AND h.deletion_operation_id=$3 AND h.manifest_id=$4 AND h.manifest_sha256=$5 AND h.manifest_item_count=$6 AND r.applied_state='FROZEN' AND r.coverage_sealed AND r.retirement_proven AND r.receipt_bytes IS NOT NULL AND NOT EXISTS(SELECT 1 FROM voice_space_lifecycle_targets t WHERE t.space_id=r.space_id AND t.generation=r.generation AND t.cleanup_completed_at IS NULL))`, req.SpaceId, int64(req.Generation), req.DeletionOperationId, req.Manifest.ManifestId, req.Manifest.ManifestSha256, req.Manifest.ItemCount).Scan(&proven); err != nil || !proven {
-		return nil, ErrUnavailable
-	}
-	var completedAt time.Time
-	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&completedAt); err != nil {
-		return nil, err
-	}
-	completedAt = completedAt.UTC()
-	receipt := &commonv1.SpacePurgeReceipt{
-		ProtocolVersion: 1, ReceiptId: receiptID.String(), SpaceId: req.GetSpaceId(),
-		DeletionOperationId: req.GetDeletionOperationId(), Generation: req.GetGeneration(),
-		ParticipantId: commonv1.ParticipantId_PARTICIPANT_ID_VOICE,
-		State:         commonv1.PurgeReceiptState_PURGE_RECEIPT_STATE_COMPLETED,
-		RequestSha256: append([]byte(nil), requestHash...), CompletedAt: timestamppb.New(completedAt),
-	}
-	receiptBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(receipt)
-	if err != nil {
-		return nil, err
-	}
-	receiptHash := domainHash("voice.space-purge.receipt.v1\x00", receiptBytes)
-	tag, err := tx.Exec(ctx, `UPDATE voice_space_lifecycle_purge_receipts SET receipt_bytes=$4,receipt_sha256=$5,completed_at=$6
-WHERE space_id=$1 AND generation=$2 AND receipt_id=$3 AND receipt_bytes IS NULL`, uuid.MustParse(req.GetSpaceId()), int64(req.GetGeneration()), receiptID, receiptBytes, receiptHash, completedAt)
-	if err != nil {
-		return nil, err
-	}
-	if tag.RowsAffected() == 1 {
-		return receipt, tx.Commit(ctx)
-	}
-	var saved []byte
-	var savedHash []byte
-	if err := tx.QueryRow(ctx, `SELECT receipt_bytes,receipt_sha256 FROM voice_space_lifecycle_purge_receipts WHERE space_id=$1 AND generation=$2 AND receipt_id=$3`, uuid.MustParse(req.GetSpaceId()), int64(req.GetGeneration()), receiptID).Scan(&saved, &savedHash); err != nil {
-		return nil, err
-	}
-	if !validReceiptDigest(saved, savedHash, "voice.space-purge.receipt.v1\x00") {
-		return nil, ErrUnavailable
-	}
-	var stored commonv1.SpacePurgeReceipt
-	if err := proto.Unmarshal(saved, &stored); err != nil {
-		return nil, ErrUnavailable
-	}
-	return &stored, tx.Commit(ctx)
-}
-
 // ExpireReceipts removes full request/receipt evidence after its 30-day replay
 // period. The compact current fence remains permanently to prevent resurrection.
 func (s *PostgresStore) ExpireReceipts(ctx context.Context, before time.Time) error {

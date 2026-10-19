@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var ErrPartySourceChanged = errors.New("Space party source changed")
+var ErrPartySourceChanged = errors.New("space party source changed")
 
 type PartyEligibilityLoss struct {
 	RoomID, Incarnation, AccountID, ProfileID, OperationID uuid.UUID

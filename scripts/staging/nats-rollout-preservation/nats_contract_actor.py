@@ -30,11 +30,13 @@ class Actor:
         selected=plan or {'schema':V4_SCHEMA,'migration_id':V4_MIGRATION_ID}
         self.streams=stream_updates_for(selected)
         self.consumers={(stream,config['durable_name']):config for stream,config in declarations_for(selected)}
+        self.consumer_objects=frozenset(s+'/'+d for s,d in self.consumers)
         self.write={'$JS.API.STREAM.UPDATE.'+name:name for name in self.streams}
         self.write.update({'$JS.API.CONSUMER.CREATE.'+s+'.'+d:s+'/'+d for s,d in self.consumers})
         names=set(self.streams)|{s for s,_ in self.consumers}
         self.info={name:'$JS.API.STREAM.INFO.'+name for name in names}
         self.info.update({s+'/'+d:'$JS.API.CONSUMER.INFO.'+s+'.'+d for s,d in self.consumers})
+        self.consumer_info_apis=frozenset(self.info[obj] for obj in self.consumer_objects)
     def assert_closed_isolation(self):
         self.fence();row=self.runtime.inspect(self.broker)
         if row['Id']!=self.broker_id or not row['State']['Running'] or row['HostConfig']['NetworkMode']!='none' or row['HostConfig'].get('PortBindings'):fail()
@@ -68,7 +70,7 @@ class Actor:
                     and type(error['err_code']) is int and error['err_code'] in (10037,10059)
                     and isinstance(error['description'],str) and 0<len(error['description'])<=256):return None
                 fail()
-            if missing and api in _CONSUMER_INFO_APIS and row['error'].get('err_code')==10014:return None
+            if missing and api in self.consumer_info_apis and row['error'].get('err_code')==10014:return None
             if missing and api.startswith('$JS.API.STREAM.MSG.GET.') and row['error'].get('err_code')==10037:return None
             fail()
         return row
@@ -100,7 +102,7 @@ class Actor:
         return row['message']
     def info_config(self,obj):
         if obj not in self.info:fail()
-        row=self._request(self.info[obj],None,missing=obj in _CONSUMER_OBJECTS)
+        row=self._request(self.info[obj],None,missing=obj in self.consumer_objects)
         if row is None:return None
         if not isinstance(row.get('config'),dict):fail()
         if '/' not in obj:
@@ -114,7 +116,7 @@ class Actor:
         if '.STREAM.UPDATE.' in api:
             if payload.get('name')!=self.write[api]:fail()
         else:
-            stream_durable=WRITE[api]
+            stream_durable=self.write[api]
             stream,durable=stream_durable.split('/',1)
             if (set(payload)!={'stream_name','action','config'} or payload.get('stream_name')!=stream
                 or payload.get('action')!='create' or payload.get('config')!=self.consumers[(stream,durable)]):fail()

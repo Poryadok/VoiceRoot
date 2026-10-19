@@ -14,6 +14,7 @@ import (
 	filev1 "voice.app/voice/file/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	notificationv1 "voice.app/voice/notification/v1"
+	realtimev1 "voice.app/voice/realtime/v1"
 	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/space/internal/spacecore"
 )
@@ -33,6 +34,7 @@ type ManifestOwners interface {
 	GetChatManifestPage(context.Context, *chatv1.GetSpacePurgeManifestPageRequest) (*chatv1.GetSpacePurgeManifestPageResponse, error)
 	ImportMessagingManifestPage(context.Context, *messagingv1.ImportSpacePurgeManifestPageRequest) (*messagingv1.ImportSpacePurgeManifestPageResponse, error)
 	ImportNotificationManifestPage(context.Context, *notificationv1.ImportSpacePurgeManifestPageRequest) (*notificationv1.ImportSpacePurgeManifestPageResponse, error)
+	ImportRealtimeManifestPage(context.Context, *realtimev1.ImportSpacePurgeManifestPageRequest) (*realtimev1.ImportSpacePurgeManifestPageResponse, error)
 	PrepareFileManifest(context.Context, *filev1.PrepareSpaceDeletionReferenceManifestRequest) (*filev1.PrepareSpaceDeletionReferenceManifestResponse, error)
 	SealSpaceFileProducer(context.Context, spacecore.LifecycleSnapshot) error
 }
@@ -164,6 +166,18 @@ func (c *Coordinator) PrepareFreeze(ctx context.Context, spaceID uuid.UUID) (*sp
 		requestDigest := sha256.Sum256(append(append([]byte(notificationRequest.ProtoReflect().Descriptor().FullName()), 0), requestWire...))
 		if marshalErr != nil || notificationReceipt == nil || notificationReceipt.GetProtocolVersion() != 1 || notificationReceipt.GetReceiptId() == "" || notificationReceipt.GetSpaceId() != snapshot.SpaceID || notificationReceipt.GetDeletionOperationId() != snapshot.DeletionOperationID || notificationReceipt.GetGeneration() != snapshot.Generation || !proto.Equal(notificationReceipt.GetManifest(), manifest) || notificationReceipt.GetPageIndex() != pageIndex || notificationReceipt.GetAcceptedCount() != uint64(len(page.GetItemIds())) || !bytes.Equal(notificationReceipt.GetPageSha256(), page.GetPageSha256()) || notificationReceipt.GetManifestSealed() != seals || !bytes.Equal(notificationReceipt.GetRequestSha256(), requestDigest[:]) || notificationReceipt.GetCompletedAt() == nil || notificationReceipt.GetCompletedAt().CheckValid() != nil {
 			return nil, fmt.Errorf("notification returned an invalid receipt for manifest page %d", pageIndex)
+		}
+
+		realtimeRequest := &realtimev1.ImportSpacePurgeManifestPageRequest{ProtocolVersion: 1, SpaceId: snapshot.SpaceID, DeletionOperationId: snapshot.DeletionOperationID, ScheduleGeneration: snapshot.Generation, Page: page, SealsManifest: seals}
+		realtimeCtx, realtimeCancel := callCtx()
+		realtimeResponse, realtimeErr := c.dependencies.Manifests.ImportRealtimeManifestPage(realtimeCtx, realtimeRequest)
+		realtimeCancel()
+		if realtimeErr != nil {
+			return nil, fmt.Errorf("import Realtime manifest page %d: %w", pageIndex, realtimeErr)
+		}
+		realtimeReceipt := realtimeResponse.GetReceipt()
+		if realtimeReceipt == nil || realtimeReceipt.GetProtocolVersion() != 1 || realtimeReceipt.GetReceiptId() == "" || realtimeReceipt.GetSpaceId() != snapshot.SpaceID || realtimeReceipt.GetDeletionOperationId() != snapshot.DeletionOperationID || realtimeReceipt.GetGeneration() != snapshot.Generation || !proto.Equal(realtimeReceipt.GetManifest(), manifest) || realtimeReceipt.GetPageIndex() != pageIndex || realtimeReceipt.GetAcceptedCount() != uint64(len(page.GetItemIds())) || !bytes.Equal(realtimeReceipt.GetPageSha256(), page.GetPageSha256()) || realtimeReceipt.GetManifestSealed() != seals || !manifestReceiptMatches(realtimeRequest, realtimeReceipt.GetRequestSha256()) || realtimeReceipt.GetCompletedAt() == nil || realtimeReceipt.GetCompletedAt().CheckValid() != nil {
+			return nil, fmt.Errorf("realtime returned an invalid receipt for manifest page %d", pageIndex)
 		}
 		imported += uint64(len(page.GetItemIds()))
 		if seals {

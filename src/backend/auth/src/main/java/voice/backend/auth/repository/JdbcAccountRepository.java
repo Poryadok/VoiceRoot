@@ -304,14 +304,20 @@ public class JdbcAccountRepository implements AccountRepository {
 
   @Override
   public boolean restoreDeleted(UUID accountId) {
+    // Materialize the row lock before evaluating expiry: even a fresh clock in
+    // the UPDATE predicate alone can be evaluated before waiting for the lock.
     return jdbc.update(
         """
-        UPDATE accounts
+        WITH locked_account AS MATERIALIZED (
+          SELECT id, status, deleted_at FROM accounts WHERE id = :id FOR UPDATE
+        )
+        UPDATE accounts AS target
         SET status = 'active', deleted_at = NULL, updated_at = now()
-        WHERE id = :id
-          AND status = 'deleted'
-          AND deleted_at IS NOT NULL
-          AND deleted_at + INTERVAL '30 days' >= CURRENT_TIMESTAMP
+        FROM locked_account AS locked
+        WHERE target.id = locked.id
+          AND locked.status = 'deleted'
+          AND locked.deleted_at IS NOT NULL
+          AND locked.deleted_at + INTERVAL '30 days' > clock_timestamp()
         """,
         new MapSqlParameterSource("id", accountId)) == 1;
   }

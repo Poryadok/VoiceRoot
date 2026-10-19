@@ -28,6 +28,8 @@ class AuthPrincipalServicesTest {
   static final MethodDescriptor<Struct,Struct> LOOKUP = method(AuthPrincipalServerInterceptor.LOOKUP_RPC);
   static final MethodDescriptor<Struct,Struct> FLOOR = method(AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC);
   static final MethodDescriptor<Struct,Struct> ROLE_FLOOR = method("/" + SERVICE + "/GetRoleSessionEpochFloor");
+  static final MethodDescriptor<Struct,Struct> SPACE_FLOOR = method("/" + SERVICE + "/GetSpaceSessionEpochFloor");
+  static final MethodDescriptor<Struct,Struct> ADMISSION = method(AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC);
   static final MethodDescriptor<Struct,Struct> LOGIN = method("/" + SERVICE + "/Login");
   final AtomicInteger proofCalls = new AtomicInteger(), loginCalls = new AtomicInteger();
   final AtomicReference<VerifiedPrincipal> principal = new AtomicReference<>();
@@ -35,6 +37,10 @@ class AuthPrincipalServicesTest {
 
   ServerServiceDefinition all() {
     return ServerServiceDefinition.builder(SERVICE)
+        .addMethod(ADMISSION, ServerCalls.asyncUnaryCall((request, observer) -> {
+          proofCalls.incrementAndGet(); principal.set(VerifiedPrincipal.current());
+          observer.onNext(request); observer.onCompleted();
+        }))
         .addMethod(ISSUE, ServerCalls.asyncUnaryCall((request, observer) -> {
           proofCalls.incrementAndGet(); principal.set(VerifiedPrincipal.current());
           observer.onNext(request); observer.onCompleted();
@@ -55,6 +61,10 @@ class AuthPrincipalServicesTest {
           proofCalls.incrementAndGet(); principal.set(VerifiedPrincipal.current());
           observer.onNext(request); observer.onCompleted();
         }))
+        .addMethod(SPACE_FLOOR, ServerCalls.asyncUnaryCall((request, observer) -> {
+          proofCalls.incrementAndGet(); principal.set(VerifiedPrincipal.current());
+          observer.onNext(request); observer.onCompleted();
+        }))
         .addMethod(LOGIN, ServerCalls.asyncUnaryCall((request, observer) -> {
           loginCalls.incrementAndGet(); observer.onNext(request); observer.onCompleted();
         })).build();
@@ -65,7 +75,7 @@ class AuthPrincipalServicesTest {
     assertEquals(Set.of(ISSUE.getFullMethodName(), CONSUME.getFullMethodName(), LOOKUP.getFullMethodName()), service.getMethods().stream()
         .map(method -> method.getMethodDescriptor().getFullMethodName()).collect(Collectors.toSet()));
     var floor = AuthPrincipalServices.sessionFloorService(all(), new AuthPrincipalServerInterceptor(fixture.verifier));
-    assertEquals(Set.of(FLOOR.getFullMethodName(), ROLE_FLOOR.getFullMethodName()), floor.getMethods().stream()
+    assertEquals(Set.of(FLOOR.getFullMethodName(), ROLE_FLOOR.getFullMethodName(), SPACE_FLOOR.getFullMethodName(), ADMISSION.getFullMethodName()), floor.getMethods().stream()
         .map(method -> method.getMethodDescriptor().getFullMethodName()).collect(Collectors.toSet()));
     for (var missing : Set.of(ISSUE, CONSUME, LOOKUP)) {
       var builder = ServerServiceDefinition.builder(SERVICE);
@@ -156,6 +166,29 @@ class AuthPrincipalServicesTest {
     } finally { stop(channel, server); }
   }
 
+  @Test void trustedMutualTlsSpaceHasOnlyItsExactFloorAuthority() throws Exception {
+    Server server = floorTlsServer("server-cert.pem");
+    ManagedChannel channel = NettyChannelBuilder.forAddress("localhost", server.getPort())
+        .sslContext(tlsClientContext(true, "server-cert.pem")).build();
+    try {
+      assertEquals(REQUEST, call(channel, SPACE_FLOOR));
+      assertEquals("space", principal.get().issuer());
+      assertEquals(1, proofCalls.get());
+      for (String issuer : Set.of("voice", "role", "gateway")) {
+        var denied = assertThrows(StatusRuntimeException.class, () -> call(channel, SPACE_FLOOR, issuer));
+        assertEquals(Status.Code.PERMISSION_DENIED, denied.getStatus().getCode());
+      }
+      for (var method : Set.of(FLOOR, ROLE_FLOOR)) {
+        var denied = assertThrows(StatusRuntimeException.class, () -> call(channel, method, "space"));
+        assertEquals(Status.Code.PERMISSION_DENIED, denied.getStatus().getCode());
+      }
+      var binding = assertThrows(StatusRuntimeException.class,
+          () -> call(channel, SPACE_FLOOR, "space", AuthPrincipalServerInterceptor.LOOKUP_RPC));
+      assertEquals(Status.Code.UNAUTHENTICATED, binding.getStatus().getCode());
+      assertEquals(1, proofCalls.get());
+    } finally { stop(channel, server); }
+  }
+
   @Test void missingClientCertificateAndWrongServerTrustNeverReachTlsHandler() throws Exception {
     Server server = floorTlsServer("server-cert.pem");
     try {
@@ -230,7 +263,7 @@ class AuthPrincipalServicesTest {
     var claims = AuthPrincipalVerifierTest.claims();
     claims.put("rpc", rpcOverride == null ? "/" + method.getFullMethodName() : rpcOverride);
     claims.put("request_hash", AuthPrincipalServerInterceptor.requestHash(REQUEST));
-    if (method == CONSUME || method == LOOKUP || method == FLOOR || method == ROLE_FLOOR) {
+    if (method == CONSUME || method == LOOKUP || method == FLOOR || method == ROLE_FLOOR || method == SPACE_FLOOR) {
       String issuer = method == ROLE_FLOOR ? "role" : method == FLOOR ? "voice" : "space";
       claims.put("iss", issuer); claims.put("sub", "service:" + issuer); claims.put("principal_type", "service");
       claims.remove("account_id"); claims.remove("profile_id"); claims.remove("session_epoch");

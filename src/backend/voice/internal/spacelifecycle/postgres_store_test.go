@@ -2,7 +2,6 @@ package spacelifecycle
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"os"
 	"path/filepath"
@@ -50,14 +49,6 @@ func TestPostgresSpaceLifecyclePendingReplayRetainsBinding(t *testing.T) {
 		return nil
 	})
 	require.ErrorIs(t, err, ErrUnavailable)
-}
-
-func participantRequestDigest(t *testing.T, request proto.Message) []byte {
-	t.Helper()
-	wire, err := (proto.MarshalOptions{Deterministic: true}).Marshal(request)
-	require.NoError(t, err)
-	digest := sha256.Sum256(append(append([]byte(request.ProtoReflect().Descriptor().FullName()), 0), wire...))
-	return digest[:]
 }
 
 func TestPostgresSpaceLifecyclePurgeRequiresDecisionFence(t *testing.T) {

@@ -16,9 +16,12 @@ V4_SCHEMA='voice-nats-additive-contract-v4'
 V4_MIGRATION_ID='chat-space-social-role-media-music-consumers-v4'
 SCHEMA='voice-nats-additive-contract-v5'
 MIGRATION_ID='chat-space-social-role-media-music-participant-auth-observations-v5'
+V6_SCHEMA='voice-nats-additive-contract-v6'
+V6_MIGRATION_ID='chat-space-social-role-media-music-a3-roster-v6'
 VOICE_SUBJECTS_10=frozenset('voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined'.split())
 VOICE_ADDITIONS=('voice.participant_joined','voice.participant_left')
 VOICE_SUBJECTS_12=VOICE_SUBJECTS_10|frozenset(VOICE_ADDITIONS)
+VOICE_SUBJECTS_13=VOICE_SUBJECTS_12|{'voice.roster_membership_changed'}
 USER_SUBJECTS_10=frozenset('user.account_deleted user.account_restored user.guest_converted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed'.split())
 USER_ADDITIONS=('user.registered','user.logged_in','user.logged_out','user.2fa_enabled')
 USER_SUBJECTS_14=USER_SUBJECTS_10|frozenset(USER_ADDITIONS)
@@ -33,6 +36,17 @@ V5_SCRIPT_HASHES={'realtime':'b98c6a643dc6bd357049fe19f4de467b038cbf92e4019768b6
     'search':'217334b7503c008444d90eb8b49a2510ce67a7470998112bcf56eb1cbe8ca906',
     'notification':'3a705777cc116695c1ea74307968b8faccc87091572b639473f673c97103bbad'}
 V5_SCRIPT_BYTES={'realtime':10460,'analytics-chat':12470,'search':4224,'notification':4620}
+V6_SOURCE_HASHES={
+    'deploy/templates/nats-realtime-bootstrap.yaml':'69b92bbf6e1ec0c66d846a8a2dbf78cbbea6f4c479190f5ecf91d9adf67cdca7',
+    'deploy/templates/nats-analytics-chat-bootstrap.yaml':'24cfd23d207cc0ecc17419bd795d26f277cd7598bd7bcf2a0c9ee9739e9962ca',
+    'deploy/templates/nats-search-bootstrap.yaml':'c9ec664e2a1bcc512bd50257a7e66373e89d05651281408bc8ef2894e67edffb',
+    'deploy/templates/nats-notification-bootstrap.yaml':'ef837af0663b2d13284b2f45f144ed21328eccd1b63a55d377fafd09de159906',
+}
+V6_SCRIPT_HASHES={'realtime':'a02d19fb4d880bafdaca23f960860d8471b74ad154fa6479e14bd9e516f64fa0',
+    'analytics-chat':'1534502c2c8923bae9c183107b8fab47cd2ff227371a56756dc83889bbd9d8d1',
+    'search':'217334b7503c008444d90eb8b49a2510ce67a7470998112bcf56eb1cbe8ca906',
+    'notification':'e66892e93bf1916f85a16bc68bfd8a420087a53698f0a77de6d8303c0ef4d3c0'}
+V6_SCRIPT_BYTES={'realtime':10777,'analytics-chat':12593,'search':4224,'notification':4652}
 CHAT_SUBJECTS_13=frozenset({
     'chat.created','chat.member_changed','chat.dm_peer_deleted','space.tree_changed','space.created',
     'voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left',
@@ -70,6 +84,10 @@ V4_DECLARATIONS=V3_DECLARATIONS+(
     ('file_events', {'name':'messaging_music_metadata','durable_name':'messaging_music_metadata','filter_subject':'file.processed','deliver_subject':'_INBOX.voice.messaging.messaging_music_metadata','deliver_group':'messaging_music_metadata','deliver_policy':'new','ack_policy':'explicit'}),
 )
 DECLARATIONS=V4_DECLARATIONS
+V6_DECLARATIONS=V4_DECLARATIONS+(
+    ('voice_events',{'name':'matchmaking_voice_roster_v1','durable_name':'matchmaking_voice_roster_v1',
+        'filter_subject':'voice.roster_membership_changed','deliver_policy':'all','ack_policy':'explicit'}),
+)
 DECLARATION=DECLARATIONS[0][1]  # Compatibility for the existing friend-removal fixture.
 class ContractError(ValueError): pass
 def fail(): raise ContractError('nats_additive_contract_unsupported')
@@ -79,13 +97,14 @@ def declarations_for(plan):
     if key==(V3_SCHEMA,V3_MIGRATION_ID):return V3_DECLARATIONS
     if key==(V4_SCHEMA,V4_MIGRATION_ID):return V4_DECLARATIONS
     if key==(SCHEMA,MIGRATION_ID):return DECLARATIONS
+    if key==(V6_SCHEMA,V6_MIGRATION_ID):return V6_DECLARATIONS
     fail()
 def stream_updates_for(plan):
     declarations_for(plan)
-    return ('chat_events','social_events','role_events')+ (('voice_events','user_events') if plan['schema']==SCHEMA else ())
+    return ('chat_events','social_events','role_events')+ (('voice_events','user_events') if plan['schema'] in (SCHEMA,V6_SCHEMA) else ())
 def proof_schema_for(plan):
     declarations_for(plan)
-    return {V3_SCHEMA:'voice-nats-additive-census-proof-v2',V4_SCHEMA:'voice-nats-additive-census-proof-v3',SCHEMA:'voice-nats-additive-census-proof-v4'}[plan['schema']]
+    return {V3_SCHEMA:'voice-nats-additive-census-proof-v2',V4_SCHEMA:'voice-nats-additive-census-proof-v3',SCHEMA:'voice-nats-additive-census-proof-v4',V6_SCHEMA:'voice-nats-additive-census-proof-v5'}[plan['schema']]
 def validated_targets(plan):
     declarations=declarations_for(plan)
     rows=plan.get('consumer_targets')
@@ -119,27 +138,33 @@ def subject_overlap(left,right):
         if x=='>' or y=='>':return True
         if x!='*' and y!='*' and x!=y:return False
     return len(a)==len(b)
-def _consumer_hashes(normalized_consumers):
-    expected={(stream,config['durable_name']) for stream,config in DECLARATIONS}
+def _consumer_hashes(normalized_consumers,declarations=DECLARATIONS):
+    expected={(stream,config['durable_name']) for stream,config in declarations}
     if not isinstance(normalized_consumers,dict) or set(normalized_consumers)!=expected:fail()
     hashes={}
-    for stream,config in DECLARATIONS:
+    for stream,config in declarations:
         normalized=normalized_consumers[(stream,config['durable_name'])]
         if not isinstance(normalized,dict) or any(normalized.get(k)!=v for k,v in config.items()):fail()
+        if config.get('durable_name')=='matchmaking_voice_roster_v1' and (
+            normalized.get('deliver_subject','')!='' or normalized.get('deliver_group','')!=''
+            or normalized.get('filter_subjects',[])!=[]):fail()
         hashes[(stream,config['durable_name'])]=digest(normalized)
     return hashes
 
 def compile_plan(source,streams,consumers,normalized_consumers,*,version=V4_SCHEMA):
     # Historical direct callers retain their v4 semantics. Only fixed root
     # source authority can select the new v5 transition.
-    if version not in (V4_SCHEMA,SCHEMA):fail()
-    v5=version==SCHEMA
+    if version not in (V4_SCHEMA,SCHEMA,V6_SCHEMA):fail()
+    v6=version==V6_SCHEMA
+    v5=version in (SCHEMA,V6_SCHEMA)
+    declarations=V6_DECLARATIONS if v6 else DECLARATIONS
     sources={}; texts={}
     for role in (('realtime','analytics-chat','search','notification') if v5 else ('realtime','analytics-chat')):
         path='deploy/templates/nats-'+role+'-bootstrap.yaml'
         raw=(Path(source)/path).read_bytes()
         if len(raw)>65536:fail()
         texts[role]=raw.decode('utf8');sources[path]=hashlib.sha256(raw).hexdigest()
+    if v6 and sources!=V6_SOURCE_HASHES:fail()
     chat=[];social=[]
     for role in ('realtime','analytics-chat'):
         text=texts[role]
@@ -161,7 +186,7 @@ def compile_plan(source,streams,consumers,normalized_consumers,*,version=V4_SCHE
         or len(set(social))!=len(social) or len(set(role))!=len(role) or set(role)!=ROLE_SUBJECTS_10):fail()
     expanded={}
     if v5:
-        for name,target,roles in (('voice_events',VOICE_SUBJECTS_12,('realtime','analytics-chat','notification')),
+        for name,target,roles in (('voice_events',VOICE_SUBJECTS_13 if v6 else VOICE_SUBJECTS_12,('realtime','analytics-chat','notification')),
                                   ('user_events',USER_SUBJECTS_14,('realtime','analytics-chat','search'))):
             first=None
             for source_role in roles:
@@ -178,7 +203,7 @@ def compile_plan(source,streams,consumers,normalized_consumers,*,version=V4_SCHE
         config=info.get('config') if isinstance(info,dict) else None
         if not isinstance(config,dict) or config.get('name')!=name or not isinstance(config.get('subjects'),list):fail()
         additions={'chat_events':CHAT_ADDITIONS|{'space.voice_room_access_invalidated'},'role_events':ROLE_ADDITIONS}
-        if v5:additions.update(voice_events=frozenset(VOICE_ADDITIONS),user_events=frozenset(USER_ADDITIONS))
+        if v5:additions.update(voice_events=frozenset(VOICE_ADDITIONS)|({'voice.roster_membership_changed'} if v6 else set()),user_events=frozenset(USER_ADDITIONS))
         own=additions.get(name,set());all_additions=set().union(*additions.values())
         if any(subject_overlap(added,subject) for added in (all_additions-own) for subject in config['subjects']):fail()
     for stream,config in V3_DECLARATIONS:
@@ -186,10 +211,11 @@ def compile_plan(source,streams,consumers,normalized_consumers,*,version=V4_SCHE
         if texts['realtime'].splitlines().count(line)!=1:fail()
     music_line='    consumer file_events messaging_music_metadata file.processed _INBOX.voice.messaging.messaging_music_metadata new messaging_music_metadata'
     if texts['analytics-chat'].splitlines().count(music_line)!=1:fail()
+    if v6 and texts['analytics-chat'].splitlines().count('    pull_consumer voice_events matchmaking_voice_roster_v1 voice.roster_membership_changed all')!=1:fail()
     file_stream=streams.get('file_events',{}).get('config',{})
     if (file_stream.get('name')!='file_events' or file_stream.get('storage')!='file'
         or file_stream.get('retention')!='limits' or 'file.processed' not in file_stream.get('subjects',[])):fail()
-    normalized_hashes=_consumer_hashes(normalized_consumers)
+    normalized_hashes=_consumer_hashes(normalized_consumers,declarations)
     # Defaults must come from the isolated pinned server, not caller-selected
     # arbitrary desired state. Root binds their full hash in its authority.
     actions=[];observed={'file_events':{'config_sha256':digest(file_stream)}}
@@ -201,6 +227,7 @@ def compile_plan(source,streams,consumers,normalized_consumers,*,version=V4_SCHE
         if name=='chat_events':require_sets.extend((CHAT_SUBJECTS_13,CHAT_SUBJECTS_14,CHAT_SUBJECTS_15))
         if name=='role_events':require_sets.append(ROLE_SUBJECTS_9)
         if name=='voice_events':require_sets.append(VOICE_SUBJECTS_10)
+        if name=='voice_events' and v6:require_sets.append(VOICE_SUBJECTS_12)
         if name=='user_events':require_sets.append(USER_SUBJECTS_10)
         if not isinstance(actual,list) or len(actual)!=len(set(actual)) or set(actual) not in require_sets:fail()
         if name=='social_events' and config.get('duplicate_window') not in (120000000000,86400000000000):fail()
@@ -212,7 +239,7 @@ def compile_plan(source,streams,consumers,normalized_consumers,*,version=V4_SCHE
         observed[name]={'config_sha256':digest(before)}
         if before!=after:actions.append({'api':'$JS.API.STREAM.UPDATE.'+name,'object':name,'before':before,'after':after})
     if not isinstance(consumers,dict):fail()
-    for stream,config in DECLARATIONS:
+    for stream,config in declarations:
         durable=config['durable_name'];key=(stream,durable);consumer=consumers.get(key)
         if consumer is not None:
             if consumer.get('config')!=normalized_consumers[key]:fail()
@@ -221,8 +248,8 @@ def compile_plan(source,streams,consumers,normalized_consumers,*,version=V4_SCHE
                 'object':stream+'/'+durable,'before':None,
                 'after':{'stream_name':stream,'action':'create','config':copy.deepcopy(config)},
                 'normalized_config_sha256':normalized_hashes[key]})
-    targets=[{'stream':stream,'name':config['durable_name'],'config_sha256':normalized_hashes[(stream,config['durable_name'])]} for stream,config in DECLARATIONS]
-    return {'schema':version,'migration_id':MIGRATION_ID if v5 else V4_MIGRATION_ID,'sources':sources,'observed':observed,'consumer_targets':targets,'actions':actions}
+    targets=[{'stream':stream,'name':config['durable_name'],'config_sha256':normalized_hashes[(stream,config['durable_name'])]} for stream,config in declarations]
+    return {'schema':version,'migration_id':V6_MIGRATION_ID if v6 else MIGRATION_ID if v5 else V4_MIGRATION_ID,'sources':sources,'observed':observed,'consumer_targets':targets,'actions':actions}
 
 
 def execute(plan,actor,journal):
@@ -258,7 +285,7 @@ def execute(plan,actor,journal):
         receipt.append({'object':obj,'config_sha256':expected_hash})
     return receipt
 
-def verify_census(plan,before,after):
+def verify_census(plan,before,after,*,deliver_all=None):
     """Allow the fixed config delta; preserve every previously captured state.
 
     Both inputs must be validated complete rollout_census output. Native record
@@ -266,6 +293,11 @@ def verify_census(plan,before,after):
     """
     from rollout_census import semantic
     declarations=validated_actions(plan)
+    all_cut=all_created=None
+    if plan['schema']==V6_SCHEMA:
+        from nats_deliver_all import census_inputs
+        all_cut,all_created=census_inputs(plan,before,after,deliver_all)
+    elif deliver_all is not None:fail()
     before,after=semantic(before),semantic(after)
     if (before.get('schema')!='voice-nats-census-v1'
         or after.get('schema')!=before['schema'] or after.get('account')!=before.get('account')):fail()
@@ -292,6 +324,9 @@ def verify_census(plan,before,after):
     for key,row in old_consumers.items():
         if new_consumers[key]!=row:fail()
     for key in created_actions:
+        if plan['schema']==V6_SCHEMA and key==('voice_events','matchmaking_voice_roster_v1'):
+            # Validated before semantic() removed waiting/activity observations.
+            continue
         row=new_consumers[key];initial={'consumer_seq':0,'stream_seq':old_streams[key[0]]['state']['last_seq']}
         if (row.get('durable')!=key[1] or row.get('config_sha256')!=target_by_key[key]
             or any(row.get(field)!=0 for field in ('num_ack_pending','num_redelivered','num_pending'))
@@ -311,7 +346,10 @@ def verify_census(plan,before,after):
             expected['config_sha256']=digest(action['after'])
         expected['state']['consumer_count']+=sum(1 for key in created_actions if key[0]==name)
         if new_streams[name]!=expected:fail()
-    return {'schema':proof_schema_for(plan),'migration_id':plan['migration_id'],
+    result={'schema':proof_schema_for(plan),'migration_id':plan['migration_id'],
         'before_sha256':digest(before),'after_sha256':digest(after),
         'messages':sum(row['state']['messages'] for row in new_streams.values()),
         'old_consumers_preserved':len(old_consumers),'created_consumers':len(create_actions)}
+    if plan['schema']==V6_SCHEMA:result.update(deliver_all_cut=all_cut,
+        deliver_all_cut_sha256=digest(all_cut),created_consumer_evidence=all_created)
+    return result

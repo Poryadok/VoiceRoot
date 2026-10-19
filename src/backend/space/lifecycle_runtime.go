@@ -20,6 +20,7 @@ import (
 	filev1 "voice.app/voice/file/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	notificationv1 "voice.app/voice/notification/v1"
+	realtimev1 "voice.app/voice/realtime/v1"
 	rolev1 "voice.app/voice/role/v1"
 	_ "voice.app/voice/search/v1"
 	_ "voice.app/voice/subscription/v1"
@@ -95,8 +96,8 @@ func (w lifecycleRecoveryWorker) RunOnce(ctx context.Context) error {
 }
 
 func newLifecycleRuntime(parent context.Context, c lifecycleRuntimeConfig, spaceStore *store.SpaceStore, service *grpcsvc.SpaceGRPC, publisher *spaceevents.JetStreamPublisher, logger *slog.Logger) (*lifecycleRuntime, error) {
-	if parent == nil || spaceStore == nil || spaceStore.Pool == nil || service == nil || service.PrincipalIssuer == nil || service.OwnershipAuth == nil || publisher == nil || len(c.Owners) != 10 {
-		return nil, errors.New("space lifecycle requires database, Auth, issuer, JetStream and all ten owners")
+	if parent == nil || spaceStore == nil || spaceStore.Pool == nil || service == nil || service.PrincipalIssuer == nil || service.OwnershipAuth == nil || publisher == nil || len(c.Owners) != 11 {
+		return nil, errors.New("space lifecycle requires database, Auth, issuer, JetStream and all eleven owners")
 	}
 	// Validate the deployed migration before exposing a destructive public route.
 	var ready bool
@@ -144,7 +145,7 @@ func newLifecycleRuntime(parent context.Context, c lifecycleRuntimeConfig, space
 			purges[owner.ID] = participant
 		}
 	}
-	owners := &grpcsvc.LifecycleManifestOwners{Issuer: service.PrincipalIssuer, Chat: chatv1.NewChatServiceClient(clients[commonv1.ParticipantId_PARTICIPANT_ID_CHAT]), Messaging: messagingv1.NewMessagingServiceClient(clients[commonv1.ParticipantId_PARTICIPANT_ID_MESSAGING]), File: filev1.NewFileServiceClient(clients[commonv1.ParticipantId_PARTICIPANT_ID_FILE]), Notification: notificationv1.NewNotificationServiceClient(clients[commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION])}
+	owners := &grpcsvc.LifecycleManifestOwners{Issuer: service.PrincipalIssuer, Chat: chatv1.NewChatServiceClient(clients[commonv1.ParticipantId_PARTICIPANT_ID_CHAT]), Messaging: messagingv1.NewMessagingServiceClient(clients[commonv1.ParticipantId_PARTICIPANT_ID_MESSAGING]), File: filev1.NewFileServiceClient(clients[commonv1.ParticipantId_PARTICIPANT_ID_FILE]), Notification: notificationv1.NewNotificationServiceClient(clients[commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION]), Realtime: realtimev1.NewRealtimeLifecycleServiceClient(clients[commonv1.ParticipantId_PARTICIPANT_ID_REALTIME])}
 	coordinator := lifecyclecoord.New(lifecyclecoord.Dependencies{Store: spaceStore, Participants: fences, PurgeParticipants: purges, RoleRetirement: &lifecyclecoord.GRPCRoleRetirementParticipant{Issuer: service.PrincipalIssuer, Client: rolev1.NewRoleServiceClient(clients[commonv1.ParticipantId_PARTICIPANT_ID_ROLE])}, Manifests: owners, FileProducer: owners})
 	service.DeletionLifecycle = coordinator
 	worker := lifecycleRecoveryWorker{scanner: spaceStore, coordinator: coordinator, finalizer: localLifecycleFinalizer{store: spaceStore, hasher: hasher}, recoverProof: service.RecoverLifecycleProof, logger: logger}

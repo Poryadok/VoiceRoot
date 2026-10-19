@@ -36,9 +36,10 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 
-/** Dedicated RS256 workload credentials for request-bound Auth-to-User calls. */
+/** Auth's single workload keyset for explicitly bound service-purpose calls. */
 public final class AuthUserPrincipalIssuer implements SdkDeviceStatusIssuer {
   private static final String ELIGIBILITY_RPC = "/voice.user.v1.UserService/GetSdkProfileEligibility";
+  private static final String MODERATION_SNAPSHOT_RPC = "/voice.automod.v1.ModerationEvidenceService/GetEffectiveRestrictionSnapshot";
   private static final String ISSUER = "auth";
   private static final String SUBJECT = "service:auth";
   private static final String AUDIENCE = "user";
@@ -112,13 +113,28 @@ public final class AuthUserPrincipalIssuer implements SdkDeviceStatusIssuer {
   }
 
   public String issue(String rpc, String requestId, String requestHash) {
-    if (!ELIGIBILITY_RPC.equals(rpc) || requestId == null || !requestId.matches(
+    if (!ELIGIBILITY_RPC.equals(rpc)) throw new IllegalArgumentException("invalid request binding");
+    return issueService(AUDIENCE,rpc,requestId,requestHash);
+  }
+
+  /** Fixed audience/method only; callers cannot turn this into a general signer. */
+  public String issueModerationSnapshot(String requestId,String requestHash) {
+    return issueService("moderation",MODERATION_SNAPSHOT_RPC,requestId,requestHash);
+  }
+
+  /** Fixed admission read only; SDK credentials remain restricted to their original RPC. */
+  public String issueAdmissionProfile(String requestId, String requestHash) {
+    return issueService("user", "/voice.user.v1.UserService/GetSpaceAdmissionProfileEligibility", requestId, requestHash);
+  }
+
+  private String issueService(String audience,String rpc,String requestId,String requestHash) {
+    if (requestId == null || !requestId.matches(
         "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
         || requestHash == null || !requestHash.matches("sha256:[0-9a-f]{64}")) {
       throw new IllegalArgumentException("invalid request binding");
     }
     Instant now = clock.instant();
-    JWTClaimsSet claims = new JWTClaimsSet.Builder().issuer(ISSUER).subject(SUBJECT).audience(AUDIENCE)
+    JWTClaimsSet claims = new JWTClaimsSet.Builder().issuer(ISSUER).subject(SUBJECT).audience(audience)
         .claim("principal_type", "service").claim("rpc", rpc).claim("request_id", requestId)
         .claim("request_hash", requestHash).issueTime(Date.from(now)).notBeforeTime(Date.from(now))
         .expirationTime(Date.from(now.plusSeconds(MAX_LIFETIME_SECONDS))).jwtID(UUID.randomUUID().toString()).build();

@@ -83,17 +83,6 @@ func addLifecycleParticipantForTest(ctx context.Context, s *RedisCallStore, room
 	}
 	return s.AddParticipant(ctx, room, profile, max)
 }
-func reconcileLifecycleParticipantForTest(ctx context.Context, s *RedisCallStore, room, profile, identity, generation string, grant SpaceMediaGrant) (Call, bool, error) {
-	call, err := s.GetCall(ctx, room)
-	if err != nil {
-		return Call{}, false, err
-	}
-	t, err := fixtureTicket(ctx, s, call)
-	if err != nil {
-		return Call{}, false, err
-	}
-	return s.ReconcileSpaceMediaParticipant(WithSpaceProjectionTicket(ctx, t), room, profile, identity, generation, grant)
-}
 func moveLifecycleParticipantForTest(ctx context.Context, s *RedisCallStore, req VoiceRoomMoveRequest) (VoiceRoomMoveResult, error) {
 	room, err := s.client.Get(ctx, s.activeVoiceRoomKey(req.FromVoiceRoomID)).Result()
 	if err != nil {

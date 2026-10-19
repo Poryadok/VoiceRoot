@@ -25,11 +25,24 @@ type PushDispatcher struct {
 
 // Send delivers a push to the appropriate sender for the device token.
 func (d *PushDispatcher) Send(ctx context.Context, profileID uuid.UUID, token store.DeviceToken, payload push.Payload) error {
+	return d.PrepareAndSend(ctx, profileID, token, payload, func(context.Context) (push.Payload, bool, error) { return payload, true, nil })
+}
+
+// PrepareAndSend keeps ordinary admission and grouping inside the same lifecycle
+// gate as external dispatch. The callback runs only when delivery is eligible.
+func (d *PushDispatcher) PrepareAndSend(ctx context.Context, profileID uuid.UUID, token store.DeviceToken, payload push.Payload, prepare func(context.Context) (push.Payload, bool, error)) error {
 	if d == nil {
 		return fmt.Errorf("push dispatcher unavailable")
 	}
+	send := func(guarded context.Context) error {
+		prepared, allowed, err := prepare(guarded)
+		if err != nil || !allowed {
+			return err
+		}
+		return d.send(guarded, profileID, token, prepared)
+	}
 	if d.LifecycleDelivery != nil {
-		dispatch := func(guarded context.Context) error { return d.send(guarded, profileID, token, payload) }
+		dispatch := send
 		spaceDispatch := func(guarded context.Context) error {
 			if id := payload.Data["space_id"]; id != "" {
 				return d.LifecycleDelivery.WithSpaceDelivery(guarded, id, dispatch)
@@ -41,7 +54,7 @@ func (d *PushDispatcher) Send(ctx context.Context, profileID uuid.UUID, token st
 		}
 		return spaceDispatch(ctx)
 	}
-	return d.send(ctx, profileID, token, payload)
+	return send(ctx)
 }
 
 func (d *PushDispatcher) send(ctx context.Context, profileID uuid.UUID, token store.DeviceToken, payload push.Payload) error {

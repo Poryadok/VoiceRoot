@@ -39,12 +39,12 @@ func TestMatchmakingFanouts_MatchFoundEnvelope(t *testing.T) {
 		OccurredAt: timestamppb.Now(),
 		Payload: &eventsv1.MatchmakingStreamEvent_MatchFound{
 			MatchFound: &eventsv1.MatchFound{
-				MatchId:    matchID,
-				ProfileIds: []string{profileA, profileB},
-				GameId:     gameID,
-				Mode:       "Duo",
-				Region:     "eu",
-				SessionIds: []string{sessionA, sessionB},
+				MatchId:     matchID,
+				ProfileIds:  []string{profileA, profileB},
+				GameId:      gameID,
+				Mode:        "Duo",
+				Region:      "eu",
+				SessionIds:  []string{sessionA, sessionB},
 				ChatId:      protoString("chat-1"),
 				VoiceRoomId: protoString("voice-1"),
 			},

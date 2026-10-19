@@ -12,7 +12,7 @@ import (
 
 const ClassID int32 = 0x53504345
 
-var ErrRestricted = errors.New("Space lifecycle denies native media activation")
+var ErrRestricted = errors.New("space lifecycle denies native media activation")
 
 func Lock(ctx context.Context, tx pgx.Tx, space string) error {
 	id, err := uuid.Parse(space)

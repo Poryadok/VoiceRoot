@@ -74,6 +74,7 @@ dependencies:
   # Music uses only bounded pull decoding; never loadFile/loadMem native fallback.
   flutter_soloud: 4.1.7
   web: 1.1.1
+  hive: ^2.2.3
 
 dev_dependencies:
   flutter_test:
