@@ -289,3 +289,21 @@ global Space cleanup retained RETRY_WAIT rather than whole-root completion.
 Recovery reinstantiates BotGRPC/BotStore on the same live Pool; it is not an OS
 process restart. Native402e Empty ACK cannot settle SPACE_CLEANUP: c69/c70 require
 the separately implemented target terminal fence and typed completion result.
+
+For c69/c70, 247 owns the additive Space wire and 186 owns its receiver/store,
+global marker, every-Add guard and actual schema transition. The wire is seeded
+from full canonical69/1a01, preserving SetEntryPolicy, member_admission and402e
+Add/Remove. New native-only ApplyBotInstallationRemoval request uses tags1-9/13
+(10-12 reserved); its typed receipt mirrors existing bindings through15 and
+requires global_native_adds_fenced=true at16, with no unsupported count fields.
+Old native Empty cancellation is not that receipt.
+
+Buf compatibility against the full69 Space descriptor and scoped lint passed.
+The remote Go plugin returned403; local Linux pinned protoc-gen-go1.36.5 and
+grpc1.5.1, protoc3.21.12 and Dart plugin25.0.0 generated coherent mirrors.
+Go descriptor/golden and Bot/Space builds passed. The first golden expectation
+omitted the existing sha256: string prefix; only that test was corrected, with
+its failed log retained. Independent Dart bytes match the same manually derived
+vector; analyzer exits0 with27 generated deprecation infos, not zero diagnostics.
+This qualifies schema/codecs only. Receiver terminal-fence/receipt persistence
+and actual Bot producer/worker composition remain unfinished.

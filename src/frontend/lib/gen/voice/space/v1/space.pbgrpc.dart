@@ -283,6 +283,14 @@ class SpaceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$approveJoinRequest, request, options: options);
   }
 
+  /// Exact protected settings operation. The response is a saved safe acknowledgement.
+  $grpc.ResponseFuture<$1.SetEntryPolicyResponse> setEntryPolicy(
+    $1.SetEntryPolicyRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$setEntryPolicy, request, options: options);
+  }
+
   $grpc.ResponseFuture<$1.LeaveSpaceResponse> leaveSpace(
     $1.LeaveSpaceRequest request, {
     $grpc.CallOptions? options,
@@ -513,6 +521,18 @@ class SpaceServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// Global Bot deletion only: exact native cancellation plus target-owned
+  /// permanent Bot Add fence. Ordinary uninstall uses RemoveBotMember.
+  /// @voice.security=protected;callers=service:bot
+  $grpc.ResponseFuture<$1.ApplyBotInstallationRemovalResponse>
+      applyBotInstallationRemoval(
+    $1.ApplyBotInstallationRemovalRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applyBotInstallationRemoval, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$getMemberAdmissionAuthority = $grpc.ClientMethod<
@@ -682,6 +702,11 @@ class SpaceServiceClient extends $grpc.Client {
       '/voice.space.v1.SpaceService/ApproveJoinRequest',
       ($1.ApproveJoinRequestRequest value) => value.writeToBuffer(),
       $1.ApproveJoinRequestResponse.fromBuffer);
+  static final _$setEntryPolicy =
+      $grpc.ClientMethod<$1.SetEntryPolicyRequest, $1.SetEntryPolicyResponse>(
+          '/voice.space.v1.SpaceService/SetEntryPolicy',
+          ($1.SetEntryPolicyRequest value) => value.writeToBuffer(),
+          $1.SetEntryPolicyResponse.fromBuffer);
   static final _$leaveSpace =
       $grpc.ClientMethod<$1.LeaveSpaceRequest, $1.LeaveSpaceResponse>(
           '/voice.space.v1.SpaceService/LeaveSpace',
@@ -825,6 +850,12 @@ class SpaceServiceClient extends $grpc.Client {
       ($1.GetSpaceDeletionCoordinatorStatusRequest value) =>
           value.writeToBuffer(),
       $1.GetSpaceDeletionCoordinatorStatusResponse.fromBuffer);
+  static final _$applyBotInstallationRemoval = $grpc.ClientMethod<
+          $1.ApplyBotInstallationRemovalRequest,
+          $1.ApplyBotInstallationRemovalResponse>(
+      '/voice.space.v1.SpaceService/ApplyBotInstallationRemoval',
+      ($1.ApplyBotInstallationRemovalRequest value) => value.writeToBuffer(),
+      $1.ApplyBotInstallationRemovalResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.space.v1.SpaceService')
@@ -1125,6 +1156,15 @@ abstract class SpaceServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $1.ApproveJoinRequestRequest.fromBuffer(value),
         ($1.ApproveJoinRequestResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.SetEntryPolicyRequest,
+            $1.SetEntryPolicyResponse>(
+        'SetEntryPolicy',
+        setEntryPolicy_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $1.SetEntryPolicyRequest.fromBuffer(value),
+        ($1.SetEntryPolicyResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$1.LeaveSpaceRequest, $1.LeaveSpaceResponse>(
         'LeaveSpace',
         leaveSpace_Pre,
@@ -1362,6 +1402,16 @@ abstract class SpaceServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $1.GetSpaceDeletionCoordinatorStatusRequest.fromBuffer(value),
         ($1.GetSpaceDeletionCoordinatorStatusResponse value) =>
+            value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.ApplyBotInstallationRemovalRequest,
+            $1.ApplyBotInstallationRemovalResponse>(
+        'ApplyBotInstallationRemoval',
+        applyBotInstallationRemoval_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $1.ApplyBotInstallationRemovalRequest.fromBuffer(value),
+        ($1.ApplyBotInstallationRemovalResponse value) =>
             value.writeToBuffer()));
   }
 
@@ -1656,6 +1706,15 @@ abstract class SpaceServiceBase extends $grpc.Service {
   $async.Future<$1.ApproveJoinRequestResponse> approveJoinRequest(
       $grpc.ServiceCall call, $1.ApproveJoinRequestRequest request);
 
+  $async.Future<$1.SetEntryPolicyResponse> setEntryPolicy_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$1.SetEntryPolicyRequest> $request) async {
+    return setEntryPolicy($call, await $request);
+  }
+
+  $async.Future<$1.SetEntryPolicyResponse> setEntryPolicy(
+      $grpc.ServiceCall call, $1.SetEntryPolicyRequest request);
+
   $async.Future<$1.LeaveSpaceResponse> leaveSpace_Pre($grpc.ServiceCall $call,
       $async.Future<$1.LeaveSpaceRequest> $request) async {
     return leaveSpace($call, await $request);
@@ -1898,4 +1957,14 @@ abstract class SpaceServiceBase extends $grpc.Service {
   $async.Future<$1.GetSpaceDeletionCoordinatorStatusResponse>
       getSpaceDeletionCoordinatorStatus($grpc.ServiceCall call,
           $1.GetSpaceDeletionCoordinatorStatusRequest request);
+
+  $async.Future<$1.ApplyBotInstallationRemovalResponse>
+      applyBotInstallationRemoval_Pre($grpc.ServiceCall $call,
+          $async.Future<$1.ApplyBotInstallationRemovalRequest> $request) async {
+    return applyBotInstallationRemoval($call, await $request);
+  }
+
+  $async.Future<$1.ApplyBotInstallationRemovalResponse>
+      applyBotInstallationRemoval($grpc.ServiceCall call,
+          $1.ApplyBotInstallationRemovalRequest request);
 }

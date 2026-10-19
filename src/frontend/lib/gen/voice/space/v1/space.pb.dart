@@ -11483,6 +11483,660 @@ class ApproveJoinRequestResponse extends $pb.GeneratedMessage {
   JoinAdmissionResult ensureResult() => $_ensure(0);
 }
 
+/// Complete strict schema1 JSON. Configured answers are never returned by this RPC.
+/// @voice.unknown_fields=reject
+class SetEntryPolicyRequest extends $pb.GeneratedMessage {
+  factory SetEntryPolicyRequest({
+    $core.String? spaceId,
+    $core.String? operationId,
+    $fixnum.Int64? expectedPolicyVersion,
+    $core.List<$core.int>? privatePolicyJson,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (operationId != null) result.operationId = operationId;
+    if (expectedPolicyVersion != null)
+      result.expectedPolicyVersion = expectedPolicyVersion;
+    if (privatePolicyJson != null) result.privatePolicyJson = privatePolicyJson;
+    return result;
+  }
+
+  SetEntryPolicyRequest._();
+
+  factory SetEntryPolicyRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SetEntryPolicyRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SetEntryPolicyRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..a<$fixnum.Int64>(
+        3, _omitFieldNames ? '' : 'expectedPolicyVersion', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$core.List<$core.int>>(
+        4, _omitFieldNames ? '' : 'privatePolicyJson', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetEntryPolicyRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetEntryPolicyRequest copyWith(
+          void Function(SetEntryPolicyRequest) updates) =>
+      super.copyWith((message) => updates(message as SetEntryPolicyRequest))
+          as SetEntryPolicyRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SetEntryPolicyRequest create() => SetEntryPolicyRequest._();
+  @$core.override
+  SetEntryPolicyRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SetEntryPolicyRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SetEntryPolicyRequest>(create);
+  static SetEntryPolicyRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $fixnum.Int64 get expectedPolicyVersion => $_getI64(2);
+  @$pb.TagNumber(3)
+  set expectedPolicyVersion($fixnum.Int64 value) => $_setInt64(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasExpectedPolicyVersion() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearExpectedPolicyVersion() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.List<$core.int> get privatePolicyJson => $_getN(3);
+  @$pb.TagNumber(4)
+  set privatePolicyJson($core.List<$core.int> value) => $_setBytes(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasPrivatePolicyJson() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearPrivatePolicyJson() => $_clearField(4);
+}
+
+/// @voice.unknown_fields=accept_preserve
+class SetEntryPolicyResponse extends $pb.GeneratedMessage {
+  factory SetEntryPolicyResponse({
+    $core.String? operationId,
+    $fixnum.Int64? entryPolicyVersion,
+  }) {
+    final result = create();
+    if (operationId != null) result.operationId = operationId;
+    if (entryPolicyVersion != null)
+      result.entryPolicyVersion = entryPolicyVersion;
+    return result;
+  }
+
+  SetEntryPolicyResponse._();
+
+  factory SetEntryPolicyResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SetEntryPolicyResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SetEntryPolicyResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'operationId')
+    ..a<$fixnum.Int64>(
+        2, _omitFieldNames ? '' : 'entryPolicyVersion', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetEntryPolicyResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetEntryPolicyResponse copyWith(
+          void Function(SetEntryPolicyResponse) updates) =>
+      super.copyWith((message) => updates(message as SetEntryPolicyResponse))
+          as SetEntryPolicyResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SetEntryPolicyResponse create() => SetEntryPolicyResponse._();
+  @$core.override
+  SetEntryPolicyResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SetEntryPolicyResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SetEntryPolicyResponse>(create);
+  static SetEntryPolicyResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get operationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set operationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOperationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOperationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $fixnum.Int64 get entryPolicyVersion => $_getI64(1);
+  @$pb.TagNumber(2)
+  set entryPolicyVersion($fixnum.Int64 value) => $_setInt64(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasEntryPolicyVersion() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearEntryPolicyVersion() => $_clearField(2);
+}
+
+/// The authenticated Bot service asserts its exact committed verified-owner root.
+/// This carries no human credential or configurable default Role authority.
+class ApplyBotInstallationRemovalRequest extends $pb.GeneratedMessage {
+  factory ApplyBotInstallationRemovalRequest({
+    $core.int? protocolVersion,
+    $core.String? operationId,
+    $core.String? decisionId,
+    $core.List<$core.int>? decisionSha256,
+    $core.String? purpose,
+    $core.String? botId,
+    $core.String? actorProfileId,
+    $core.String? spaceId,
+    RemoveBotMemberRequest? nativeCancellation,
+    $core.List<$core.int>? frozenScopeSha256,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (operationId != null) result.operationId = operationId;
+    if (decisionId != null) result.decisionId = decisionId;
+    if (decisionSha256 != null) result.decisionSha256 = decisionSha256;
+    if (purpose != null) result.purpose = purpose;
+    if (botId != null) result.botId = botId;
+    if (actorProfileId != null) result.actorProfileId = actorProfileId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (nativeCancellation != null)
+      result.nativeCancellation = nativeCancellation;
+    if (frozenScopeSha256 != null) result.frozenScopeSha256 = frozenScopeSha256;
+    return result;
+  }
+
+  ApplyBotInstallationRemovalRequest._();
+
+  factory ApplyBotInstallationRemovalRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApplyBotInstallationRemovalRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApplyBotInstallationRemovalRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..aOS(3, _omitFieldNames ? '' : 'decisionId')
+    ..a<$core.List<$core.int>>(
+        4, _omitFieldNames ? '' : 'decisionSha256', $pb.PbFieldType.OY)
+    ..aOS(5, _omitFieldNames ? '' : 'purpose')
+    ..aOS(6, _omitFieldNames ? '' : 'botId')
+    ..aOS(7, _omitFieldNames ? '' : 'actorProfileId')
+    ..aOS(8, _omitFieldNames ? '' : 'spaceId')
+    ..aOM<RemoveBotMemberRequest>(
+        9, _omitFieldNames ? '' : 'nativeCancellation',
+        subBuilder: RemoveBotMemberRequest.create)
+    ..a<$core.List<$core.int>>(
+        13, _omitFieldNames ? '' : 'frozenScopeSha256', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyBotInstallationRemovalRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyBotInstallationRemovalRequest copyWith(
+          void Function(ApplyBotInstallationRemovalRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as ApplyBotInstallationRemovalRequest))
+          as ApplyBotInstallationRemovalRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApplyBotInstallationRemovalRequest create() =>
+      ApplyBotInstallationRemovalRequest._();
+  @$core.override
+  ApplyBotInstallationRemovalRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApplyBotInstallationRemovalRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApplyBotInstallationRemovalRequest>(
+          create);
+  static ApplyBotInstallationRemovalRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get decisionId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set decisionId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasDecisionId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearDecisionId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.List<$core.int> get decisionSha256 => $_getN(3);
+  @$pb.TagNumber(4)
+  set decisionSha256($core.List<$core.int> value) => $_setBytes(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasDecisionSha256() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearDecisionSha256() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get purpose => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set purpose($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasPurpose() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearPurpose() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get botId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set botId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasBotId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearBotId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get actorProfileId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set actorProfileId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasActorProfileId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearActorProfileId() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.String get spaceId => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set spaceId($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasSpaceId() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearSpaceId() => $_clearField(8);
+
+  /// Preserve the original generation-scoped cancellation operation verbatim.
+  /// Its operation may differ from the enclosing global child operation.
+  @$pb.TagNumber(9)
+  RemoveBotMemberRequest get nativeCancellation => $_getN(8);
+  @$pb.TagNumber(9)
+  set nativeCancellation(RemoveBotMemberRequest value) => $_setField(9, value);
+  @$pb.TagNumber(9)
+  $core.bool hasNativeCancellation() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearNativeCancellation() => $_clearField(9);
+  @$pb.TagNumber(9)
+  RemoveBotMemberRequest ensureNativeCancellation() => $_ensure(8);
+
+  @$pb.TagNumber(13)
+  $core.List<$core.int> get frozenScopeSha256 => $_getN(9);
+  @$pb.TagNumber(13)
+  set frozenScopeSha256($core.List<$core.int> value) => $_setBytes(9, value);
+  @$pb.TagNumber(13)
+  $core.bool hasFrozenScopeSha256() => $_has(9);
+  @$pb.TagNumber(13)
+  void clearFrozenScopeSha256() => $_clearField(13);
+}
+
+class BotInstallationRemovalReceipt extends $pb.GeneratedMessage {
+  factory BotInstallationRemovalReceipt({
+    $core.int? protocolVersion,
+    $core.String? receiptId,
+    $core.String? operationId,
+    $core.String? decisionId,
+    $core.String? purpose,
+    $core.String? botId,
+    $core.String? actorProfileId,
+    $core.String? spaceId,
+    $core.String? evidenceKind,
+    $core.List<$core.int>? evidenceSha256,
+    $core.List<$core.int>? frozenScopeSha256,
+    $core.List<$core.int>? requestSha256,
+    $core.String? participant,
+    $core.String? outcome,
+    $2.Timestamp? completedAt,
+    $core.bool? globalNativeAddsFenced,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (receiptId != null) result.receiptId = receiptId;
+    if (operationId != null) result.operationId = operationId;
+    if (decisionId != null) result.decisionId = decisionId;
+    if (purpose != null) result.purpose = purpose;
+    if (botId != null) result.botId = botId;
+    if (actorProfileId != null) result.actorProfileId = actorProfileId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (evidenceKind != null) result.evidenceKind = evidenceKind;
+    if (evidenceSha256 != null) result.evidenceSha256 = evidenceSha256;
+    if (frozenScopeSha256 != null) result.frozenScopeSha256 = frozenScopeSha256;
+    if (requestSha256 != null) result.requestSha256 = requestSha256;
+    if (participant != null) result.participant = participant;
+    if (outcome != null) result.outcome = outcome;
+    if (completedAt != null) result.completedAt = completedAt;
+    if (globalNativeAddsFenced != null)
+      result.globalNativeAddsFenced = globalNativeAddsFenced;
+    return result;
+  }
+
+  BotInstallationRemovalReceipt._();
+
+  factory BotInstallationRemovalReceipt.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory BotInstallationRemovalReceipt.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'BotInstallationRemovalReceipt',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
+    ..aOS(4, _omitFieldNames ? '' : 'decisionId')
+    ..aOS(5, _omitFieldNames ? '' : 'purpose')
+    ..aOS(6, _omitFieldNames ? '' : 'botId')
+    ..aOS(7, _omitFieldNames ? '' : 'actorProfileId')
+    ..aOS(8, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(9, _omitFieldNames ? '' : 'evidenceKind')
+    ..a<$core.List<$core.int>>(
+        10, _omitFieldNames ? '' : 'evidenceSha256', $pb.PbFieldType.OY)
+    ..a<$core.List<$core.int>>(
+        11, _omitFieldNames ? '' : 'frozenScopeSha256', $pb.PbFieldType.OY)
+    ..a<$core.List<$core.int>>(
+        12, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
+    ..aOS(13, _omitFieldNames ? '' : 'participant')
+    ..aOS(14, _omitFieldNames ? '' : 'outcome')
+    ..aOM<$2.Timestamp>(15, _omitFieldNames ? '' : 'completedAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOB(16, _omitFieldNames ? '' : 'globalNativeAddsFenced')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  BotInstallationRemovalReceipt clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  BotInstallationRemovalReceipt copyWith(
+          void Function(BotInstallationRemovalReceipt) updates) =>
+      super.copyWith(
+              (message) => updates(message as BotInstallationRemovalReceipt))
+          as BotInstallationRemovalReceipt;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static BotInstallationRemovalReceipt create() =>
+      BotInstallationRemovalReceipt._();
+  @$core.override
+  BotInstallationRemovalReceipt createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static BotInstallationRemovalReceipt getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<BotInstallationRemovalReceipt>(create);
+  static BotInstallationRemovalReceipt? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get receiptId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set receiptId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReceiptId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReceiptId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get decisionId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set decisionId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasDecisionId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearDecisionId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get purpose => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set purpose($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasPurpose() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearPurpose() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get botId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set botId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasBotId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearBotId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get actorProfileId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set actorProfileId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasActorProfileId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearActorProfileId() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.String get spaceId => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set spaceId($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasSpaceId() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearSpaceId() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.String get evidenceKind => $_getSZ(8);
+  @$pb.TagNumber(9)
+  set evidenceKind($core.String value) => $_setString(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasEvidenceKind() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearEvidenceKind() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $core.List<$core.int> get evidenceSha256 => $_getN(9);
+  @$pb.TagNumber(10)
+  set evidenceSha256($core.List<$core.int> value) => $_setBytes(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasEvidenceSha256() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearEvidenceSha256() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $core.List<$core.int> get frozenScopeSha256 => $_getN(10);
+  @$pb.TagNumber(11)
+  set frozenScopeSha256($core.List<$core.int> value) => $_setBytes(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasFrozenScopeSha256() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearFrozenScopeSha256() => $_clearField(11);
+
+  @$pb.TagNumber(12)
+  $core.List<$core.int> get requestSha256 => $_getN(11);
+  @$pb.TagNumber(12)
+  set requestSha256($core.List<$core.int> value) => $_setBytes(11, value);
+  @$pb.TagNumber(12)
+  $core.bool hasRequestSha256() => $_has(11);
+  @$pb.TagNumber(12)
+  void clearRequestSha256() => $_clearField(12);
+
+  @$pb.TagNumber(13)
+  $core.String get participant => $_getSZ(12);
+  @$pb.TagNumber(13)
+  set participant($core.String value) => $_setString(12, value);
+  @$pb.TagNumber(13)
+  $core.bool hasParticipant() => $_has(12);
+  @$pb.TagNumber(13)
+  void clearParticipant() => $_clearField(13);
+
+  @$pb.TagNumber(14)
+  $core.String get outcome => $_getSZ(13);
+  @$pb.TagNumber(14)
+  set outcome($core.String value) => $_setString(13, value);
+  @$pb.TagNumber(14)
+  $core.bool hasOutcome() => $_has(13);
+  @$pb.TagNumber(14)
+  void clearOutcome() => $_clearField(14);
+
+  @$pb.TagNumber(15)
+  $2.Timestamp get completedAt => $_getN(14);
+  @$pb.TagNumber(15)
+  set completedAt($2.Timestamp value) => $_setField(15, value);
+  @$pb.TagNumber(15)
+  $core.bool hasCompletedAt() => $_has(14);
+  @$pb.TagNumber(15)
+  void clearCompletedAt() => $_clearField(15);
+  @$pb.TagNumber(15)
+  $2.Timestamp ensureCompletedAt() => $_ensure(14);
+
+  @$pb.TagNumber(16)
+  $core.bool get globalNativeAddsFenced => $_getBF(15);
+  @$pb.TagNumber(16)
+  set globalNativeAddsFenced($core.bool value) => $_setBool(15, value);
+  @$pb.TagNumber(16)
+  $core.bool hasGlobalNativeAddsFenced() => $_has(15);
+  @$pb.TagNumber(16)
+  void clearGlobalNativeAddsFenced() => $_clearField(16);
+}
+
+class ApplyBotInstallationRemovalResponse extends $pb.GeneratedMessage {
+  factory ApplyBotInstallationRemovalResponse({
+    BotInstallationRemovalReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  ApplyBotInstallationRemovalResponse._();
+
+  factory ApplyBotInstallationRemovalResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApplyBotInstallationRemovalResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApplyBotInstallationRemovalResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<BotInstallationRemovalReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: BotInstallationRemovalReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyBotInstallationRemovalResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyBotInstallationRemovalResponse copyWith(
+          void Function(ApplyBotInstallationRemovalResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ApplyBotInstallationRemovalResponse))
+          as ApplyBotInstallationRemovalResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApplyBotInstallationRemovalResponse create() =>
+      ApplyBotInstallationRemovalResponse._();
+  @$core.override
+  ApplyBotInstallationRemovalResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApplyBotInstallationRemovalResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ApplyBotInstallationRemovalResponse>(create);
+  static ApplyBotInstallationRemovalResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  BotInstallationRemovalReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt(BotInstallationRemovalReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  BotInstallationRemovalReceipt ensureReceipt() => $_ensure(0);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =
