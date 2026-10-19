@@ -15,11 +15,11 @@ type ProjectionResetter interface {
 	ResetVoiceParty(context.Context, uuid.UUID) (store.VoiceRosterResetResult, error)
 }
 
-func (p *Projector) authorizeNativeProjection(ctx context.Context, cut store.PartyQueueProjection) (func(), error) {
+func (p *Projector) authorizeNativeProjection(ctx context.Context, cut *store.PartyQueueProjection) (func(), error) {
 	if p.Validator == nil || p.ForwardLifetime == nil || p.Resetter == nil {
 		return nil, partysource.ErrUnknown
 	}
-	candidate, err := p.Store.CaptureQueueProjection(ctx, cut)
+	candidate, err := p.Store.CaptureQueueProjection(ctx, *cut)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func (p *Projector) authorizeNativeProjection(ctx context.Context, cut store.Par
 		}
 		return nil, partysource.ErrUnknown
 	}
-	err = p.Store.AuthorizeQueueProjection(ctx, candidate, validation.Attempt)
+	lease, err := p.Store.AuthorizeQueueProjectionForDispatch(ctx, candidate, validation.Attempt)
 	if err != nil {
 		release()
 		var denial *store.PlatformBanDenial
@@ -73,5 +73,6 @@ func (p *Projector) authorizeNativeProjection(ctx context.Context, cut store.Par
 		}
 		return nil, err
 	}
+	cut.Lease = lease
 	return release, nil
 }

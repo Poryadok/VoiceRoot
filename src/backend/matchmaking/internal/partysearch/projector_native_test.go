@@ -106,6 +106,10 @@ func TestNativeProjectorActualRedisPositiveAndNegativeBoundaries(t *testing.T) {
 				require.NoError(t, err)
 				require.Len(t, ids, 2)
 				require.True(t, lifetime.released)
+				var stateBytes, stampBytes int
+				require.NoError(t, pool.QueryRow(ctx, `SELECT octet_length(projected_state_sha256),octet_length(projected_admission_stamp_sha256) FROM matchmaking_party_search_queue_intents WHERE party_id=$1`, created.Party.ID).Scan(&stateBytes, &stampBytes))
+				require.Equal(t, 32, stateBytes)
+				require.Equal(t, 32, stampBytes, "native recovery ACK must bind the actual authorized admission stamp")
 				_, err = pool.Exec(ctx, `UPDATE mm_native_admission_head SET state='CLOSED'`)
 				require.NoError(t, err)
 				_, err = projector.Resetter.ResetVoiceParty(ctx, created.Party.ID)
@@ -121,6 +125,9 @@ func TestNativeProjectorActualRedisPositiveAndNegativeBoundaries(t *testing.T) {
 				ids, err = q.ListSessionIDs(ctx, p.GameID, p.Mode, "eu", 10)
 				require.NoError(t, err)
 				require.Empty(t, ids)
+				var terminalStamp bool
+				require.NoError(t, pool.QueryRow(ctx, `SELECT projected_admission_stamp_sha256 IS NULL AND octet_length(projected_state_sha256)=32 FROM matchmaking_party_search_queue_intents WHERE party_id=$1`, created.Party.ID).Scan(&terminalStamp))
+				require.True(t, terminalStamp, "closed RELEASE records exact terminal projection without minting fresh admission")
 			} else {
 				require.Error(t, err)
 				require.Empty(t, ids)

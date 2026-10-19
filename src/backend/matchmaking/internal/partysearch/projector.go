@@ -44,7 +44,8 @@ func (p *Projector) RunOnce(ctx context.Context) (bool, error) {
 	if workErr == nil {
 		if cut.Enqueue && p.Store.NativeAdmission != nil {
 			var release func()
-			release, workErr = p.authorizeNativeProjection(ctx, cut)
+			release, workErr = p.authorizeNativeProjection(ctx, &cut)
+			finishLease = cut.Lease
 			if release != nil {
 				defer release()
 			}

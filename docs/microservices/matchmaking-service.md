@@ -630,3 +630,20 @@ The candidate defense takes a nonblocking shared history gate on READ COMMITTED
 and does not replace each forward owner's mandatory admission gate FIRST,
 before all account and row locks. Native serving remains unavailable until the
 complete root, fresh external admission and all forward owners are qualified.
+## Native queue projection evidence (BE-011)
+
+Native whole-party enqueue validates its immutable source/origin and current
+admission history outside SQL, then uses FIRST local admission, all-account
+locks, party/session/intent locks, a fresh ban read and cut verification in a
+short READ COMMITTED transaction. Its process registration remains held through
+Redis dispatch and durable acknowledgement. Unknown does not cancel a party;
+definitive source loss or an exact private account ban resets the affected party.
+Terminal RELEASE remains available with closed admission.
+
+MM026 records the projected party/session/intent state hash and the exact
+authorized admission stamp. Old `projected_at` is not qualified evidence and is
+never backfilled. Intent revision/action invalidates the witness; terminal
+projection has no fresh stamp. These private hashes remain linked operational
+evidence, not anonymous data or installation authority. Native timeout recovery
+acknowledges this committed whole-party evidence instead of invoking scalar
+Redis recovery under SQL row locks. The pre-cut recovery composition is separate.

@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	admission "voice/backend/matchmaking/internal/mmadmission"
+	wire "voice/backend/pkg/mmadmissionwire"
 )
 
 // QueueProjectionCandidate is a private immutable native cut. Its source and
@@ -30,6 +31,22 @@ func (c QueueProjectionCandidate) Accounts() []uuid.UUID {
 
 type QueueProjectionProof interface {
 	Matches(QueueProjectionCandidate) bool
+}
+
+// AuthorizeQueueProjectionForDispatch returns the private witness carried into
+// the eventual durable acknowledgement. The caller cannot set its stamp.
+func (s *PartyStore) AuthorizeQueueProjectionForDispatch(ctx context.Context, c QueueProjectionCandidate, proof QueueProjectionProof) (PartyQueueLease, error) {
+	if err := s.AuthorizeQueueProjection(ctx, c, proof); err != nil {
+		return PartyQueueLease{}, err
+	}
+	stamp, err := wire.StampHash(c.origins.Stamp)
+	if err != nil {
+		return PartyQueueLease{}, ErrSourcePartyUnavailable
+	}
+	lease := c.lease
+	lease.nativeStampHash = [32]byte(stamp)
+	lease.terminalProjection = false
+	return lease, nil
 }
 
 func (s *PartyStore) CaptureQueueProjection(ctx context.Context, projection PartyQueueProjection) (QueueProjectionCandidate, error) {

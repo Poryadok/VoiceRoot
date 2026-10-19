@@ -18,6 +18,8 @@ type PartyQueueLease struct {
 	Revision            int64
 	Action              string
 	projectionHash      [32]byte
+	nativeStampHash     [32]byte
+	terminalProjection  bool
 }
 
 type PartyQueueProjection struct {
@@ -126,6 +128,7 @@ WHERE party_id=$1 AND revision=$2 AND lease_token=$3 AND action=$4 AND lease_unt
 	if err := tx.Commit(ctx); err != nil {
 		return PartyQueueProjection{}, errors.Join(ErrSourcePartyUnavailable, err)
 	}
+	out.Lease.terminalProjection = !out.Enqueue
 	return out, nil
 }
 func (s *PartyStore) FinishQueueIntent(ctx context.Context, lease PartyQueueLease, delay time.Duration, success bool) error {
@@ -134,6 +137,9 @@ func (s *PartyStore) FinishQueueIntent(ctx context.Context, lease PartyQueueLeas
 	}
 	if !validPartyQueueLease(lease) {
 		return ErrPartyQueueLeaseLost
+	}
+	if success && s.NativeAdmission != nil && !lease.terminalProjection && lease.nativeStampHash == [32]byte{} {
+		return ErrSourcePartyUnavailable
 	}
 	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
@@ -175,10 +181,21 @@ func (s *PartyStore) FinishQueueIntent(ctx context.Context, lease PartyQueueLeas
 			delay = time.Second
 		}
 	}
-	tag, err := tx.Exec(ctx, `UPDATE matchmaking_party_search_queue_intents
+	statement := `UPDATE matchmaking_party_search_queue_intents
 SET lease_token=NULL,lease_until=NULL,next_attempt_at=clock_timestamp()+make_interval(secs=>$5),
- projected_at=CASE WHEN $6 THEN clock_timestamp() ELSE projected_at END
-WHERE party_id=$1 AND revision=$2 AND lease_token=$3 AND action=$4 AND lease_until>clock_timestamp()`, lease.PartyID, lease.Revision, lease.LeaseToken, lease.Action, delay.Seconds(), success)
+ projected_at=CASE WHEN $6 THEN clock_timestamp() ELSE projected_at END`
+	args := []any{lease.PartyID, lease.Revision, lease.LeaseToken, lease.Action, delay.Seconds(), success}
+	if s.NativeAdmission != nil {
+		statement += `,projected_state_sha256=CASE WHEN $6 THEN $7 ELSE projected_state_sha256 END,
+ projected_admission_stamp_sha256=CASE WHEN $6 THEN $8 ELSE projected_admission_stamp_sha256 END`
+		var stamp []byte
+		if !lease.terminalProjection {
+			stamp = lease.nativeStampHash[:]
+		}
+		args = append(args, lease.projectionHash[:], stamp)
+	}
+	statement += ` WHERE party_id=$1 AND revision=$2 AND lease_token=$3 AND action=$4 AND lease_until>clock_timestamp()`
+	tag, err := tx.Exec(ctx, statement, args...)
 	if err != nil {
 		return errors.Join(ErrSourcePartyUnavailable, err)
 	}
@@ -198,11 +215,12 @@ func partyQueueProjectionHash(ctx context.Context, tx pgx.Tx, partyID uuid.UUID)
 	var raw string
 	err := tx.QueryRow(ctx, `SELECT jsonb_build_object(
 'party',(SELECT to_jsonb(p) FROM parties p WHERE id=$1),
+'intent',(SELECT jsonb_build_object('revision',i.revision,'action',i.action) FROM matchmaking_party_search_queue_intents i WHERE i.party_id=$1),
 'sessions',COALESCE((SELECT jsonb_agg(to_jsonb(s) ORDER BY s.id) FROM search_sessions s WHERE party_id=$1),'[]'::jsonb))::text`, partyID).Scan(&raw)
 	if err != nil {
 		return [32]byte{}, err
 	}
-	return sha256.Sum256(append([]byte("voice.mm-party.queue-cut.v1\x00"), []byte(raw)...)), nil
+	return sha256.Sum256(append([]byte("voice.mm-party.queue-cut.v2\x00"), []byte(raw)...)), nil
 }
 
 func validPartyQueueLease(l PartyQueueLease) bool {

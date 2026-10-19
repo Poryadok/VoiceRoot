@@ -25,6 +25,10 @@ type Sweeper struct {
 
 // RunOnce processes due nudges and expired searching sessions.
 func (s *Sweeper) RunOnce(ctx context.Context) error {
+	return s.runOnce(ctx, false)
+}
+
+func (s *Sweeper) runOnce(ctx context.Context, native bool) error {
 	if s == nil || s.Sessions == nil {
 		return nil
 	}
@@ -89,13 +93,17 @@ func (s *Sweeper) RunOnce(ctx context.Context) error {
 			}
 		}
 	}
-	if err := s.expirePendingAccept(ctx); err != nil {
+	if err := s.expirePendingAcceptMode(ctx, native); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (s *Sweeper) expirePendingAccept(ctx context.Context) error {
+	return s.expirePendingAcceptMode(ctx, false)
+}
+
+func (s *Sweeper) expirePendingAcceptMode(ctx context.Context, native bool) error {
 	if s.Matches == nil {
 		return nil
 	}
@@ -108,6 +116,10 @@ func (s *Sweeper) expirePendingAccept(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+	}
+	if native {
+		_, err := s.Matches.AcknowledgeNativeRecoveryEffects(ctx, 100)
+		return err
 	}
 	if s.Queue == nil {
 		return nil

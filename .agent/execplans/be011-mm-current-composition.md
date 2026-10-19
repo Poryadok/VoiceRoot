@@ -155,8 +155,28 @@ closed RELEASE. Four existing projector regressions also pass. Composed147033/
 registration until explicit release, never an attempt deadline alone.
 
 MM026 is reserved in BE011c122 for a durable projection witness and c117 response
-receipt; it is not implemented/published yet. Native root must not use the old
+receipt. Its queue witness portion is now implemented; response receipt remains
+implementation. Native root must not use the old
 ApplyPendingRecoveryEffects network-under-row-lock callback for positive
 requeue. Implement native acknowledgement of exact whole-party projection
 evidence before starting native workers. Full fixed root, protected response
 and client-to-Gateway positive remain implementation, not completed features.
+
+### Native recovery acknowledgement
+
+MM026 persists exact projected state and authorized admission stamp, never
+backfills old projected_at. Private dispatch lease carries the stamp only after
+source proof plus RC authorization; terminal RELEASE carries no fresh stamp.
+State hash v2 includes intent revision/action as well as party/all sessions.
+Intent revision/action invalidates old projection evidence in SQL. Native ACK
+consumes a matching committed whole-party witness or obsolete generation;
+it never calls Redis or produces forward authority. RC history uses the existing
+nonblocking try-gate; a pinned writable RR view is deliberately unsupported.
+RunNativeOnce routes timeout recovery through that ACK, preserving pre-cut
+RunOnce separately. Its actual Redis hook oracle sees zero recovery RPC calls.
+
+Real native PG/Redis tests include actual positive projection/ACK replay,
+unqualified projected_at rejection, stale generation rejection, closed RELEASE,
+RR DOWN refusal before held gate, noncooperating first-writer retention, empty
+RC roundtrip, unknown witness retention, and upgrade refusal while ADMITTED.
+No shared migration, installation admission or full native root was executed.
