@@ -72,6 +72,8 @@ VOICE_STARTUP_PREFIXES = (
     ("voice MatchSquad member listener:", "voice_match_squad_member_listener"),
     ("voice GIS principal configuration:", "voice_gis_principal_configuration"),
     ("voice principal JWKS configuration:", "voice_principal_jwks_configuration"),
+    ("voice principal JWKS startup:", "voice_principal_jwks_startup"),
+    ("voice principal JWKS serve:", "voice_principal_jwks_serve"),
     ("voice Role grant checker configuration:", "voice_role_grant_configuration"),
     ("voice Space lifecycle principal configuration:", "voice_space_principal_configuration"),
     ("voice user-principal configuration:", "voice_user_principal_configuration"),

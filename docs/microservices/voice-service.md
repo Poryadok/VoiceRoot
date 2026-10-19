@@ -1,5 +1,16 @@
 # Voice Service
 
+## Legacy public principal startup
+
+The pre-cut executable validates and binds its own public HTTPS JWKS publisher
+before initial Space admission reconciliation. It publishes the same configured
+current and next public signing keys; it exposes no readiness or mutation route.
+TLS/bind errors fail startup synchronously, and unexpected serving failure is
+fatal even during recovery. Cold Space verifiers can therefore authenticate
+recovery requests for persisted ACTIVE/COMMITTED admissions. This ordering does
+not move any listener ahead of the additive native executable's protected
+installation/cohort gates and does not activate the native roster relay.
+
 ## Space communication timeout (BE-044-TIMEOUT-v1)
 
 Accepted target: the [Space timeout matrix](../features/spaces.md#communication-timeout-be-044-timeout-v1-accepted-target)
