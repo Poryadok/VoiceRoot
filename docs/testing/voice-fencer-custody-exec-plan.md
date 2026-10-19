@@ -93,14 +93,23 @@ explicit fencing then terminates the restored session and retains the stable
 receipt with a new observation. Historical readback alone cannot prove this
 current resource condition.
 
+A separate owned backend is suspended inside its PostgreSQL container using its
+actual authenticated PID. Positive-timeout termination fails, NOLOGIN remains
+committed and fresh observation refuses the still-established predecessor. The
+installer resumes that exact process; recovery fences and reobserves the same
+command, retaining the original receipt identity. This exercises a real partial
+failure after NOLOGIN, without changing the production termination algorithm or
+signalling host/foreign processes. An initial fixture attempt lacked `/bin/kill`
+and failed before suspension; the final fixture uses the installed shell builtin.
+That setup failure is not a product RED result.
+
 These are component proofs. Fixture source/schema/writer/provider manifest
 hashes do not constitute the assembled native package or closed catalogue.
 
 ## Remaining work and honest assumptions
 
-- [ ] Complete c12 post-precheck race, partial crash and termination-failure
-      negative matrix through the
-      separated executable boundary.
+- [ ] Complete c12 post-precheck prepared/delegation race and process-crash
+      negative matrix through the separated executable boundary.
 - [ ] Installer-enforced complete deployment/controller/credential history,
       non-restored external incarnation and all writable/promotable endpoints.
 - [ ] Bounded installer launch/response composition for fresh observations,
