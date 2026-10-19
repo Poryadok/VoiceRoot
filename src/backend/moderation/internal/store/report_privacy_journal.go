@@ -35,7 +35,7 @@ func validReportRecoveryRecord(r ReportRecoveryRecord) bool {
 		return false
 	}
 	if r.Disposition == "BOUND" {
-		return r.SubjectID != nil && (r.EvidenceKind == "AUTH_SUBJECT" || r.EvidenceKind == "USER_OWNER_FACT")
+		return r.SubjectID != nil && (r.EvidenceKind == "USER_OWNER_FACT" || (r.EvidenceKind == "AUTH_SUBJECT" && *r.SubjectID == r.EvidenceID))
 	}
 	return r.Disposition == "REDACTED" && (r.EvidenceKind == "AUTH_TERMINAL" || r.EvidenceKind == "USER_ERASURE_FACT")
 }

@@ -86,6 +86,38 @@ claim that an operational restore or production deployment occurred.
 
 ## Implementation checkpoint
 
+### Exact terminal receipt repair
+
+`RepairReportTerminalReceipts` accepts a separately injected shared private-repair
+acquire function and a batch limit from 1 to 1,000. It does not use effects/P5
+admission. A candidate is an existing exact report UUID/slot with either a
+positive `USER_ERASURE_FACT` redaction or a journal subject present in the actual
+local permanent Auth terminal union. Missing owner history, generic errors,
+expired/stale DELETED observations and an Auth-terminal receipt without that
+owning terminal union cannot authorize deletion.
+
+The batch observes raw tuples and journal receipts, then locks all stored raw
+accounts in sorted order, all known subjects, all report rows, and finally their
+journal slots. It rechecks the full observed raw tuple and receipt set before
+mutation. Changed observations retry with a new complete lock set; known subject
+divergence rejects. No newly discovered account is acquired after a subject or
+report lock. An old NULL raw binding can be cleaned by its exact current receipt
+and positive terminal authority without reconstructing an account mapping.
+
+Auth terminalization is recorded atomically before the existing raw-report purge
+participant. Positive User erasure evidence retains its original fact identity
+and version. The transaction checks durable journal generation and its captured
+private-repair check before commit. Failure rolls back the complete batch. It
+does not create Auth terminal fences, guess other reports for the same profile,
+revoke sanctions or assert other participants have been scrubbed. Existing
+minimal sanction/appeal snapshot handling is preserved.
+
+`Removed` and `More` describe one bounded local observation, never a complete
+source-tail or ready certificate. The coordinator must complete actual terminal
+imports, all owning participant repairs and the final checker under its supported
+writer fence/restore mode. Nonterminal legacy provenance and missing canonical
+User facts still need their dedicated authoritative recovery path.
+
 ### Bounded journal byte format
 
 `internal/reportrecovery` defines schema 1 canonical UTF-8 JSON with one LF per
@@ -162,12 +194,37 @@ private PostgreSQL capture through file publication. A temporary filesystem
 fixture and a successful command do not demonstrate durable off-node backup,
 FINAL writer drain, other domain cuts or a real restore operation.
 
+### Journal-aware final checker
+
+`RequirePrivacyRecovery` remains read-only. It requires durable nonzero journal
+generation, valid opaque receipt identities and the local permanent terminal
+union for every `AUTH_TERMINAL` receipt. Every retained reporter must have its
+exact subject in a `BOUND` receipt and the evidence kind corresponding to its
+explicit provenance class.
+For `AUTH_SUBJECT`, the evidence UUID is the opaque subject UUID itself: Auth
+returns a binding/revision, not a separate binding-fact UUID. The store writer,
+snapshot codec and final checker reject a different UUID, including orphan
+journal records. `USER_OWNER_FACT` retains its distinct canonical owner-fact UUID.
+The same correspondence holds for a VALID User target or an existing
+User-target receipt restored alongside an older raw row. Redacted raw residue,
+unknown classes, missing/mismatched receipts and unresolved retained bindings
+reject. A recovered legacy class requires its User owner fact and confers no
+new submission, vote or validation authority.
+
+A fresh opaque pending target without a target receipt still has no inferred
+owner or eligibility; it does not require synchronous target lookup at intake or
+this checker. Known current receipts cannot be discarded to make an older row
+look like that case. The checker creates no events or ownership, performs no
+purge and cannot establish fresh remote owner state or physical deadline
+completion. The shared coordinator still needs actual current lifecycle/terminal
+authority, participant cleanup and restore continuity before admitting effects.
+
 The initial source slice implements explicit provenance, transactional opaque
 journal writes at submission/validation and terminal account/subject/late-result
 cleanup. It also implements bounded journal byte verification, finite SQL capture
 and authorized journal-only import as enabling inputs for the shared coordinator.
 
-It does **not** complete legacy owner recovery, journal-aware boot repair/checking,
+It does **not** complete legacy owner recovery or authoritative boot repair,
 the protected User recovery RPC or assembled
 P0-P5 activation. Those remain required before complete BE-137 integration and
 acceptance. Publication or a scoped source review of this slice grants none of
