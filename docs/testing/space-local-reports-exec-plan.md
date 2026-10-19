@@ -2,6 +2,27 @@
 
 ## Resumed current-cohort implementation
 
+### Functional protected chain continuation
+
+Existing owner320 resumes from independently reviewed ea76542/d410 in a fresh
+lease, not a new product ticket. Add the accepted SpaceService RPC with a
+Messaging-only private verifier, full request-body binding, replay protection
+and mTLS runtime. The wire response echoes operation/Space/Chat/viewer and
+returns only current episode/tree/native membership positioning facts. Explicit
+UNKNOWN is not a zero-time history grant. Ordinary listeners reject the method.
+The actual scoped44 producer runs before any disclosure; there is no callback
+substitute, borrowed admission/communication capability or remote RPC under SQL.
+
+The same continuation then implements Messaging's content-free batch facade and
+separate positive lifecycle observer, using actual protected owner clients and
+native visibility state. Local Moderation owns isolated persistence, current
+per-row ACL before public pagination, CAS workflow and terminal minimization.
+Keep one author for test/implementation and independent changed-head review at
+the coherent checkpoint. Start with spoofed/foreign/body/unknown-provenance RED,
+then prove the actual assembled positive path and each dependency deny/error.
+Re-use earlier native44, Chat attachment and Social proofs where unchanged;
+no claim of45 continuous qualification, full Auth/Role or other native writers.
+
 ### Qualified native41 consumer continuation
 
 Development union31cfbd9 normally composes prior587d, current MASTER candidate

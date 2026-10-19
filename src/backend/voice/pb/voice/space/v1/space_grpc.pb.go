@@ -19,6 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	SpaceService_ResolveSpaceReportReadContext_FullMethodName     = "/voice.space.v1.SpaceService/ResolveSpaceReportReadContext"
 	SpaceService_GetMemberAdmissionAuthority_FullMethodName       = "/voice.space.v1.SpaceService/GetMemberAdmissionAuthority"
 	SpaceService_CreateSpace_FullMethodName                       = "/voice.space.v1.SpaceService/CreateSpace"
 	SpaceService_UpdateSpace_FullMethodName                       = "/voice.space.v1.SpaceService/UpdateSpace"
@@ -87,6 +88,9 @@ const (
 //
 // Spaces, tree, invites. HTTP: /api/v1/spaces/**.
 type SpaceServiceClient interface {
+	// Current exact Space/tree/effective-history facts; no Role/content grant.
+	// @voice.security=protected;callers=service:messaging
+	ResolveSpaceReportReadContext(ctx context.Context, in *ResolveSpaceReportReadContextRequest, opts ...grpc.CallOption) (*ResolveSpaceReportReadContextResponse, error)
 	// Narrow native membership authority; own DB only, no Role callback.
 	// @voice.security=protected;callers=service:role
 	GetMemberAdmissionAuthority(ctx context.Context, in *GetMemberAdmissionAuthorityRequest, opts ...grpc.CallOption) (*GetMemberAdmissionAuthorityResponse, error)
@@ -196,6 +200,16 @@ type spaceServiceClient struct {
 
 func NewSpaceServiceClient(cc grpc.ClientConnInterface) SpaceServiceClient {
 	return &spaceServiceClient{cc}
+}
+
+func (c *spaceServiceClient) ResolveSpaceReportReadContext(ctx context.Context, in *ResolveSpaceReportReadContextRequest, opts ...grpc.CallOption) (*ResolveSpaceReportReadContextResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveSpaceReportReadContextResponse)
+	err := c.cc.Invoke(ctx, SpaceService_ResolveSpaceReportReadContext_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *spaceServiceClient) GetMemberAdmissionAuthority(ctx context.Context, in *GetMemberAdmissionAuthorityRequest, opts ...grpc.CallOption) (*GetMemberAdmissionAuthorityResponse, error) {
@@ -804,6 +818,9 @@ func (c *spaceServiceClient) GetSpaceDeletionCoordinatorStatus(ctx context.Conte
 //
 // Spaces, tree, invites. HTTP: /api/v1/spaces/**.
 type SpaceServiceServer interface {
+	// Current exact Space/tree/effective-history facts; no Role/content grant.
+	// @voice.security=protected;callers=service:messaging
+	ResolveSpaceReportReadContext(context.Context, *ResolveSpaceReportReadContextRequest) (*ResolveSpaceReportReadContextResponse, error)
 	// Narrow native membership authority; own DB only, no Role callback.
 	// @voice.security=protected;callers=service:role
 	GetMemberAdmissionAuthority(context.Context, *GetMemberAdmissionAuthorityRequest) (*GetMemberAdmissionAuthorityResponse, error)
@@ -915,6 +932,9 @@ type SpaceServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedSpaceServiceServer struct{}
 
+func (UnimplementedSpaceServiceServer) ResolveSpaceReportReadContext(context.Context, *ResolveSpaceReportReadContextRequest) (*ResolveSpaceReportReadContextResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveSpaceReportReadContext not implemented")
+}
 func (UnimplementedSpaceServiceServer) GetMemberAdmissionAuthority(context.Context, *GetMemberAdmissionAuthorityRequest) (*GetMemberAdmissionAuthorityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMemberAdmissionAuthority not implemented")
 }
@@ -1114,6 +1134,24 @@ func RegisterSpaceServiceServer(s grpc.ServiceRegistrar, srv SpaceServiceServer)
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&SpaceService_ServiceDesc, srv)
+}
+
+func _SpaceService_ResolveSpaceReportReadContext_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveSpaceReportReadContextRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).ResolveSpaceReportReadContext(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_ResolveSpaceReportReadContext_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).ResolveSpaceReportReadContext(ctx, req.(*ResolveSpaceReportReadContextRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _SpaceService_GetMemberAdmissionAuthority_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -2203,6 +2241,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "voice.space.v1.SpaceService",
 	HandlerType: (*SpaceServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ResolveSpaceReportReadContext",
+			Handler:    _SpaceService_ResolveSpaceReportReadContext_Handler,
+		},
 		{
 			MethodName: "GetMemberAdmissionAuthority",
 			Handler:    _SpaceService_GetMemberAdmissionAuthority_Handler,

@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package voice.space.v1;
+
+import "google/protobuf/timestamp.proto";
+import "voice/chat/v1/chat.proto";
+import "voice/role/v1/member_admission.proto";
+
+option go_package = "voice.app/voice/space/v1;spacev1";
+
+// Subject data is accepted only from the exact verified Messaging workload.
+// @voice.unknown_fields=reject
+message ResolveSpaceReportReadContextRequest {
+  uint32 protocol_version = 1;
+  string operation_id = 2;
+  string space_id = 3;
+  voice.chat.v1.ChatRef chat = 4;
+  string viewer_profile_id = 5;
+}
+
+// Positioning facts, never a Role/content grant or positive retirement proof.
+// @voice.unknown_fields=reject
+message ResolveSpaceReportReadContextResponse {
+  uint32 protocol_version = 1;
+  string operation_id = 2;
+  string space_id = 3;
+  voice.chat.v1.ChatRef chat = 4;
+  string viewer_profile_id = 5;
+  bool eligible = 6;
+  uint64 space_authority_revision = 7;
+  uint64 lifecycle_generation = 8;
+  string tree_attachment_incarnation = 9;
+  voice.role.v1.MembershipBinding membership_binding = 10;
+  bool history_known = 11;
+  google.protobuf.Timestamp history_visible_since = 12;
+  string effective_episode_id = 13;
+  uint64 effective_episode_generation = 14;
+  uint64 ledger_revision = 15;
+  google.protobuf.Timestamp evaluated_at = 16;
+  uint32 validity_remaining_ms = 17;
+}

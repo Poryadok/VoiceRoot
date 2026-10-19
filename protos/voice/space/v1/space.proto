@@ -8,11 +8,15 @@ import "voice/common/v1/common.proto";
 import "voice/common/v1/space_lifecycle.proto";
 import "voice/file/v1/file.proto";
 import "voice/space/v1/member_admission.proto";
+import "voice/space/v1/report_read.proto";
 
 option go_package = "voice.app/voice/space/v1;spacev1";
 
 // Spaces, tree, invites. HTTP: /api/v1/spaces/**.
 service SpaceService {
+  // Current exact Space/tree/effective-history facts; no Role/content grant.
+  // @voice.security=protected;callers=service:messaging
+  rpc ResolveSpaceReportReadContext(ResolveSpaceReportReadContextRequest) returns (ResolveSpaceReportReadContextResponse);
   // Narrow native membership authority; own DB only, no Role callback.
   // @voice.security=protected;callers=service:role
   rpc GetMemberAdmissionAuthority(GetMemberAdmissionAuthorityRequest) returns (GetMemberAdmissionAuthorityResponse);

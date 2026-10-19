@@ -48,6 +48,23 @@ not request authentication, Role/content authorization or an exposed RPC. The
 earlier facts-only tests retain explicit schema41 fixtures; new protected
 consumer tests run the actual44 cohort and current eleven-participant P3.
 
+`ResolveSpaceReportReadContext` now has an additive protobuf and narrow handler
+backed by that actual producer. Its dedicated `reportprincipal` runtime accepts
+only signed Messaging, full operation/body binding, JTI replay and client mTLS;
+it registers exactly this method. A denied subject receives only request echoes
+and `eligible=false`; uncertain source/readiness remains UNAVAILABLE. UNKNOWN
+history omits the timestamp. The wire observations grant no Role/content access.
+
+The runtime loads only owned `SPACE_REPORT_READ_GRPC_LISTEN` (default `:9098`),
+`SPACE_REPORT_READ_TLS_CERT_FILE`, `SPACE_REPORT_READ_TLS_KEY_FILE`,
+`SPACE_REPORT_READ_CLIENT_CA_FILE`, `SPACE_REPORT_READ_REPLAY_REDIS_ADDR` and
+optional `SPACE_REPORT_READ_REPLAY_REDIS_PASSWORD`. Any owned setting requires
+the complete configuration. Shared `S2S_JWKS_*` settings select an exact HTTPS
+Messaging JWKS endpoint and optional paired JWKS client certificate/key; a
+CA-only client cannot use a JWKS endpoint requiring mTLS. Production main
+registration is coordinated with its existing owner342; an isolated handler or
+runtime does not by itself activate the whole local-report chain.
+
 Accepted410 (BE010 c76-c79, decision SHA256
 `83baa14994d9b5f63f0ae7c24956d0a1a373360111c6735be9d590322e64c0b4`)
 requires both an enforced exact DB guard epoch and a completed full-cohort
