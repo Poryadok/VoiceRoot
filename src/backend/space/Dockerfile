@@ -6,6 +6,7 @@ ENV GOPROXY=https://proxy.golang.org,direct
 COPY scripts/docker-go-mod-download.sh /usr/local/bin/docker-go-mod-download.sh
 COPY pkg/go.mod ./pkg/
 COPY space/go.mod ./space/
+COPY realtime/pb/voice/realtime/go.mod ./realtime/pb/voice/realtime/
 COPY role/go.mod ./role/
 COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
@@ -45,6 +46,7 @@ COPY voice/pb/voice/subscription ./voice/pb/voice/subscription
 COPY file/pb/voice/file ./file/pb/voice/file
 COPY voice/pb/voice/story ./voice/pb/voice/story
 COPY space ./space
+COPY realtime/pb/voice/realtime ./realtime/pb/voice/realtime
 WORKDIR /src/space
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked --mount=type=cache,target=/root/.cache/go-build,id=voice-gobuild,sharing=locked CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .
 

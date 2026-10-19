@@ -1387,15 +1387,15 @@ coverage; a boolean setting or empty roster does not satisfy this prerequisite.
 Space owns the aggregate and durable participant ledger. States are `LIVE`,
 `SCHEDULE_PENDING`, `FREEZE_PENDING`, `SCHEDULED`, `RESTORE_DECIDED`,
 `PURGE_DECIDED`, `PURGING`, `PURGED`; generations are positive and monotonic.
-The release manifest fixes ten participants: Role, Chat, Messaging, File, Voice,
-Matchmaking, Search, Subscription, Bot and Notification. Service absence never
+The release manifest fixes eleven participants: Role, Chat, Messaging, File, Voice,
+Matchmaking, Search, Subscription, Bot, Notification and Realtime. Service absence never
 removes a participant: an empty result still has an immutable receipt.
 
 Before Auth consume Space commits the immutable operation binding and
 `SCHEDULE_PENDING`. After an exact receipt it enters `FREEZE_PENDING`, where
 Chat first fences and captures the immutable sorted chat manifest; Messaging
-imports it; File preliminarily fences and seals exact `SPACE`, `CHAT` and
-`MESSAGING` reference declarations/pages; then all ten participants acknowledge
+imports it; Notification and Realtime import every exact Chat page; File preliminarily fences and seals exact `SPACE`, `CHAT` and
+`MESSAGING` reference declarations/pages; then all eleven participants acknowledge
 the same root manifest. Only after the complete barrier does fresh PostgreSQL
 time under the Space lock set `SCHEDULED`, `scheduled_at` and
 `purge_after = scheduled_at + interval '7 days'`. Subphases and exact manifest
@@ -1408,7 +1408,7 @@ commits irreversible `PURGE_DECIDED`, sends that fence to all participants,
 then retries destructive work. Role retirement is first. Messaging deletes the
 saved Chat domain and obtains File release acceptance; Chat deletes its rows
 only afterward. Other participants may converge in parallel. Local `PURGED`,
-the tombstone and ready `space.deleted` outbox row commit only after all ten
+the tombstone and ready `space.deleted` outbox row commit only after all eleven
 validated completion receipts. File receipt proves durable reference/GC
 handoff, not physical R2 absence.
 
@@ -1424,7 +1424,7 @@ transaction. Concurrent participant responses cannot replace each other's
 progress. Exact receipt replay remains valid after the aggregate advances; a
 changed receipt for an already completed participant conflicts. Restore completion
 uses fresh database time under that same lock and commits `LIVE` with its stable
-`space.restored` outbox row only after the ten-participant barrier. These durable
+`space.restored` outbox row only after the eleven-participant barrier. These durable
 transitions do not themselves authenticate network callers or activate the public
 coordinator. Schedule reservation replay validates the original immutable binding
 and loads saved progress without resetting generation or repeating current-owner
@@ -1494,7 +1494,7 @@ manifest_sha256,item_count)`. Its receipt adds stable `receipt_id`, fixed
 `applied_at`. A purge request replaces desired state with `purge_decided_at`;
 its receipt accepts only `COMPLETED` and records `completed_at`. Participant IDs
 are Role=1, Chat=2, Messaging=3, File=4, Voice=5, Matchmaking=6, Search=7,
-Subscription=8, Bot=9, Notification=10; zero/unknown IDs or states are invalid.
+Subscription=8, Bot=9, Notification=10, Realtime=11; zero/unknown IDs or states are invalid.
 Role returns the stricter retirement receipt. Exact replay returns stored bytes;
 changed bytes for the same operation/generation conflict, timeouts never
 manufacture a receipt, and `CONTRACT_MISMATCH` is never auto-skipped.
@@ -1514,3 +1514,15 @@ is audited, and uses the shared `P30D` maximum restorable-backup window. Old
 versions are destroyed only after no retained row or restorable backup needs
 them. The owner-approved U5-A decision explicitly accepts this purpose-specific
 pseudonymous Space tombstone HMAC as compatible with account erasure.
+
+### Realtime participant11 admission boundary
+
+BE-REALTIME-P3-DURABLE-ADMISSION-v1 adds Realtime without renumbering IDs1–10.
+Migration `000034_realtime_lifecycle_participant` widens the durable participant
+and compact completion constraints and terminal hard-delete predicate to11.
+Ten historical completions cannot schedule, start destructive work or authorize
+local hard deletion. Realtime manifest-import receipts are not strong FROZEN
+receipts: the latter require exact sealed coverage and no unresolved durable
+admissions across process incarnations. Dead-incarnation recovery remains
+unsupported without qualified termination evidence; timeout never skips11.
+This extension neither activates public P3 nor establishes old-writer coverage.

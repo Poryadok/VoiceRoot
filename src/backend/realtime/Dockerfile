@@ -6,6 +6,7 @@ ENV GOPROXY=https://proxy.golang.org,direct
 COPY scripts/docker-go-mod-download.sh /usr/local/bin/docker-go-mod-download.sh
 COPY pkg/go.mod ./pkg/
 COPY realtime/go.mod ./realtime/
+COPY realtime/pb/voice/realtime/go.mod ./realtime/pb/voice/realtime/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY user/pb/voice/gameintegration/go.mod ./user/pb/voice/gameintegration/

@@ -88,6 +88,7 @@ var lifecycleParticipantServices = map[commonv1.ParticipantId]struct {
 	commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION: {audience: "subscription", serviceName: "voice.subscription.v1.SubscriptionService"},
 	commonv1.ParticipantId_PARTICIPANT_ID_BOT:          {audience: "bot", serviceName: "voice.bot.v1.BotService"},
 	commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION: {audience: "notification", serviceName: "voice.notification.v1.NotificationService"},
+	commonv1.ParticipantId_PARTICIPANT_ID_REALTIME:     {audience: "realtime", serviceName: "voice.realtime.v1.RealtimeLifecycleService"},
 }
 
 func NewGRPCParticipant(id commonv1.ParticipantId, issuer *principal.Issuer, client LifecycleRPCInvoker) (*GRPCParticipant, error) {

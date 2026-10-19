@@ -265,6 +265,12 @@ apply_migrate chat_db \
   voice-migrate-chat-db \
   voice-chat-db-migrations
 
+apply_migrate realtime_db \
+  "${ROOT}/src/backend/migrations/realtime_db" \
+  "${ROOT}/deploy/templates/migrate-realtime-db-job.yaml" \
+  voice-migrate-realtime-db \
+  voice-realtime-db-migrations
+
 apply_migrate messaging_db \
   "${ROOT}/src/backend/migrations/messaging_db" \
   "${ROOT}/deploy/templates/migrate-messaging-db-job.yaml" \
