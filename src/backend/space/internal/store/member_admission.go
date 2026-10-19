@@ -164,6 +164,10 @@ func (s *SpaceStore) PrepareMemberAdmission(ctx context.Context, in MemberAdmiss
 }
 
 func (s *SpaceStore) validateMemberAdmission(ctx context.Context, i *MemberAdmissionIntent) error {
+	return s.validateMemberAdmissionWithGuest(ctx, i, i.Input.Guest)
+}
+
+func (s *SpaceStore) validateMemberAdmissionWithGuest(ctx context.Context, i *MemberAdmissionIntent, guest bool) error {
 	in := i.Input
 	var current time.Time
 	if err := s.db().QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&current); err != nil {
@@ -193,7 +197,10 @@ func (s *SpaceStore) validateMemberAdmission(ctx context.Context, i *MemberAdmis
 		return err
 	}
 	if in.InviteID == nil {
-		if in.Guest || visibility != "public" {
+		if guest || visibility != "public" {
+			if guest && !in.Guest {
+				return ErrGuestsNotAllowed
+			}
 			return ErrMemberAdmissionConflict
 		}
 	} else {
@@ -207,7 +214,7 @@ func (s *SpaceStore) validateMemberAdmission(ctx context.Context, i *MemberAdmis
 		if err = s.validateInviteForJoin(inv, current); err != nil {
 			return err
 		}
-		if in.Guest && !guests {
+		if guest && !guests {
 			return ErrGuestsNotAllowed
 		}
 	}
@@ -217,6 +224,9 @@ func (s *SpaceStore) validateMemberAdmission(ctx context.Context, i *MemberAdmis
 	}
 	if count >= cap {
 		return ErrMemberCapReached
+	}
+	if guest && policy.Policy.RequirePhone {
+		return ErrGuestsNotAllowed
 	}
 	return s.verifyMemberAdmissionReference(ctx, i)
 }
@@ -243,6 +253,10 @@ func (s *SpaceStore) invalidateMemberAdmission(ctx context.Context, i *MemberAdm
 // retry returns its historical outcome before current membership/lifecycle checks;
 // it never executes a new final guard or recreates a later removed membership.
 func (s *SpaceStore) PublishMemberAdmission(ctx context.Context, operation, role uuid.UUID, receipt []byte, guard MemberAdmissionFinalGuard) (*MembershipRow, error) {
+	return s.publishMemberAdmission(ctx, operation, role, receipt, guard, nil)
+}
+
+func (s *SpaceStore) publishMemberAdmission(ctx context.Context, operation, role uuid.UUID, receipt []byte, guard MemberAdmissionFinalGuard, continuation *VerifiedAdmissionContinuation) (*MembershipRow, error) {
 	if s == nil || s.Pool == nil || s.tx != nil || operation == uuid.Nil || role == uuid.Nil {
 		return nil, ErrMemberAdmissionConflict
 	}
@@ -280,7 +294,10 @@ func (s *SpaceStore) PublishMemberAdmission(ctx context.Context, operation, role
 	// The historical journal and a generic callback cannot manufacture fresh
 	// applicant/original-reviewer authority. A sealed continuation API must
 	// explicitly enable this path; completed replay above stays inert.
-	if i.Input.JoinAttempt != nil {
+	if i.Input.JoinAttempt != nil && continuation == nil {
+		return nil, ErrJoinAttemptUnavailable
+	}
+	if i.Input.JoinAttempt == nil && continuation != nil {
 		return nil, ErrJoinAttemptUnavailable
 	}
 	if err = lockAndCheckOwnershipScope(ctx, tx, []uuid.UUID{i.Input.SpaceID}); err != nil {
@@ -296,7 +313,21 @@ func (s *SpaceStore) PublishMemberAdmission(ctx context.Context, operation, role
 	}
 	scoped := *s
 	scoped.tx = tx
-	if err = scoped.validateMemberAdmission(ctx, i); err != nil {
+	guest := i.Input.Guest
+	if continuation != nil {
+		if guest, err = continuation.check(i); err != nil {
+			return nil, err
+		}
+		if err = scoped.checkContinuationReviewer(ctx, continuation); err != nil {
+			return nil, err
+		}
+	}
+	if err = scoped.validateMemberAdmissionWithGuest(ctx, i, guest); err != nil {
+		if continuation != nil {
+			if _, proofErr := continuation.check(i); proofErr != nil {
+				return nil, proofErr
+			}
+		}
 		if !knownMemberAdmissionDenial(err) {
 			return nil, err
 		}
@@ -315,7 +346,10 @@ func (s *SpaceStore) PublishMemberAdmission(ctx context.Context, operation, role
 		}
 		guardStore := scoped
 		guardStore.tx = guardTx
-		if guardErr := guard(ctx, &guardStore, i); guardErr != nil {
+		guardIntent := *i
+		guardIntent.Input = cloneMemberAdmissionInput(i.Input)
+		guardIntent.BindingSHA256 = append([]byte(nil), i.BindingSHA256...)
+		if guardErr := guard(ctx, &guardStore, &guardIntent); guardErr != nil {
 			if rollbackErr := guardTx.Rollback(ctx); rollbackErr != nil {
 				return nil, rollbackErr
 			}
@@ -324,6 +358,11 @@ func (s *SpaceStore) PublishMemberAdmission(ctx context.Context, operation, role
 			// a fresh attempt; all callback SQL is already rolled back.
 			if !knownMemberAdmissionGuardDenial(guardErr) {
 				return nil, guardErr
+			}
+			if continuation != nil {
+				if _, proofErr := continuation.check(i); proofErr != nil {
+					return nil, proofErr
+				}
 			}
 			if err = scoped.invalidateMemberAdmission(ctx, i); err != nil {
 				return nil, err
@@ -363,6 +402,20 @@ func (s *SpaceStore) PublishMemberAdmission(ctx context.Context, operation, role
 	 VALUES($1,$2,$3,$4,$5,$6)`, uuid.New(), operation, i.Input.SpaceID, i.Input.ProfileID, i.Generation, member.JoinedAt)
 	if err != nil {
 		return nil, err
+	}
+	if continuation != nil {
+		if err = scoped.MarkJoinAttemptPublished(ctx, *i.Input.JoinAttempt, operation); err != nil {
+			return nil, err
+		}
+		if err = scoped.MarkJoinDecisionBasisPublished(ctx, *i.Input.JoinAttempt, i.Input.DecisionBasisSHA256, operation); err != nil {
+			return nil, err
+		}
+		if err = scoped.checkContinuationReviewer(ctx, continuation); err != nil {
+			return nil, err
+		}
+		if _, err = continuation.check(i); err != nil {
+			return nil, err // Includes every SQL/hook wait; whole publication rolls back.
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, err
