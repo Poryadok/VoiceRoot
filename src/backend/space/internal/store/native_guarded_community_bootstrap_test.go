@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/pkg/integrationtest"
@@ -82,6 +83,10 @@ func TestNative45CommunityBootstrapBornPublicationAndReplay(t *testing.T) {
 		failed.OperationID, failed.CorporationKey = occupied, "publication-conflict"
 		_, _, err = st.CreateCommunityBootstrapSpace(ctx, failed)
 		require.Error(t, err, "real native publication uniqueness rejects after born Space and journal INSERTs")
+		var constraint *pgconn.PgError
+		require.ErrorAs(t, err, &constraint, "a guard/deadline/setup failure cannot satisfy the publication rollback oracle")
+		require.Equal(t, "23505", constraint.Code)
+		require.Equal(t, "space_native_member_publications_pkey", constraint.ConstraintName)
 		var clean bool
 		require.NoError(t, db.Pool.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM public.community_bootstrap_operations WHERE operation_id=$1)
  AND (SELECT count(*) FROM public.spaces)=3 AND (SELECT count(*) FROM native_membership_guard.spaces)=3

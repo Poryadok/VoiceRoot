@@ -10,10 +10,14 @@ import (
 // before creator session checks or domain work. Ambiguous DB outcomes never
 // authorize the writer. Every Space instance shares the same permanent key.
 func (s *SpaceStore) ClaimCreatorPrincipalReplay(ctx context.Context, issuer, jti string, expiry time.Time) error {
+	return s.claimGatewayPrincipalReplay(ctx, issuer, jti, expiry)
+}
+
+func (s *SpaceStore) claimGatewayPrincipalReplay(ctx context.Context, issuer, jti string, expiry time.Time) error {
 	if issuer != "gateway" || !validCreatorJWTID(jti) || expiry.IsZero() {
 		return ErrMemberAdmissionConflict
 	}
-	if s == nil || s.Pool == nil || s.tx != nil {
+	if s == nil || s.Pool == nil || s.tx != nil || ctx == nil {
 		return ErrMemberAuthorityUnavailable
 	}
 	tag, err := s.Pool.Exec(ctx, `INSERT INTO space_creator_principal_replays(issuer,jti,expires_at)
@@ -34,6 +38,10 @@ func validCreatorJWTID(jti string) bool {
 }
 
 func (s *SpaceStore) CleanupCreatorPrincipalReplays(ctx context.Context, limit int) (int64, error) {
+	return s.cleanupGatewayPrincipalReplays(ctx, limit)
+}
+
+func (s *SpaceStore) cleanupGatewayPrincipalReplays(ctx context.Context, limit int) (int64, error) {
 	if s == nil || s.Pool == nil || s.tx != nil || limit < 1 || limit > 100 {
 		return 0, ErrMemberAdmissionConflict
 	}
