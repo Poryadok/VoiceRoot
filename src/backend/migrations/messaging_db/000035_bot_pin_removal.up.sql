@@ -10,7 +10,7 @@ CREATE TABLE bot_pin_removal_decisions (
 
 CREATE TABLE bot_pin_actor_bindings (
     actor_profile_id UUID PRIMARY KEY,
-    bot_id UUID NOT NULL
+    bot_id UUID NOT NULL UNIQUE
 );
 
 CREATE TABLE bot_pin_removal_revisions (

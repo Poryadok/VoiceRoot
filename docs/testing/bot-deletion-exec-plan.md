@@ -132,6 +132,13 @@ retained DOWN rejection with an actual first cleanup writer, old RR rejection
 and empty default-RC DOWN are separate controls. This store component is not the
 protected receiver or authoritative Chat-scope check; both remain required.
 
+Independent review82 found the first participant journal constrained only the
+actor-to-Bot direction. A known Bot could change actor through a new decision.
+Sequential real-PG RED and a separate concurrent first-bind RED through different
+CHAT guards exposed this. The corrected immutable mapping is unique in both
+directions; the losing transaction conflicts and rolls back decisions, cleanup
+revisions, pins and receipts. Distinct legitimate Bot/actor pairs remain valid.
+
 BE170c29/c30 adds a bounded Bot-only Chat scope observation using the existing
 Chat-owned permanent head. Exact file custody is recorded in c31/c32 before
 writes. No Chat DDL or stopped migration operation is involved. Bot whitelist

@@ -202,3 +202,73 @@ func TestBotPinRemovalOfficialMigration35(t *testing.T) {
 	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT count(*) FROM bot_pin_removal_receipts`).Scan(&count))
 	require.Equal(t, 1, count)
 }
+
+func TestBotPinRemovalKnownBotCannotChangeActor(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real PostgreSQL immutable Bot actor binding")
+	}
+	s, first, _ := newBotPinRemovalFixture(t)
+	ctx := t.Context()
+	_, err := s.ApplyBotChatPinRemoval(ctx, first)
+	require.NoError(t, err)
+	chat, actor, message := uuid.New(), uuid.New(), uuid.New()
+	seedMessage(t, ctx, s.Pool, chat, message, actor)
+	require.NoError(t, s.UpsertPin(ctx, chat, message, uuid.New()))
+	changed := proto.Clone(first).(*messagingv1.ApplyBotChatPinRemovalRequest)
+	changed.OperationId, changed.DecisionId = uuid.NewString(), uuid.NewString()
+	changed.ActorProfileId, changed.ChatId = actor.String(), chat.String()
+	_, err = s.ApplyBotChatPinRemoval(ctx, changed)
+	require.ErrorIs(t, err, ErrBotPinRemovalConflict, "known Bot cannot acquire a different actor through a new decision")
+	pins, err := s.ListPins(ctx, chat)
+	require.NoError(t, err)
+	require.Len(t, pins, 1, "foreign actor pin must survive rejected rebinding")
+	for _, table := range []string{"bot_pin_removal_revisions", "bot_pin_removal_receipts"} {
+		var count int
+		require.NoError(t, s.Pool.QueryRow(ctx, "SELECT count(*) FROM "+table+" WHERE chat_id=$1", chat).Scan(&count))
+		require.Zero(t, count, table)
+	}
+	var count int
+	require.NoError(t, s.Pool.QueryRow(ctx, `SELECT count(*) FROM bot_pin_removal_decisions WHERE decision_id=$1`, changed.DecisionId).Scan(&count))
+	require.Zero(t, count, "rejected decision rolls back")
+	changed.BotId = uuid.NewString()
+	response, err := s.ApplyBotChatPinRemoval(ctx, changed)
+	require.NoError(t, err, "a distinct legitimate Bot actor remains eligible")
+	require.EqualValues(t, 1, response.GetReceipt().GetRemovedPinCount())
+}
+
+func TestBotPinRemovalConcurrentFirstBindHasOneImmutableActor(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real PostgreSQL cross-chat first binding race")
+	}
+	s, first, _ := newBotPinRemovalFixture(t)
+	ctx := t.Context()
+	second := proto.Clone(first).(*messagingv1.ApplyBotChatPinRemovalRequest)
+	second.OperationId, second.DecisionId = uuid.NewString(), uuid.NewString()
+	chat, actor, message := uuid.New(), uuid.New(), uuid.New()
+	second.ChatId, second.ActorProfileId = chat.String(), actor.String()
+	seedMessage(t, ctx, s.Pool, chat, message, actor)
+	require.NoError(t, s.UpsertPin(ctx, chat, message, uuid.New()))
+	start, results := make(chan struct{}), make(chan error, 2)
+	for _, request := range []*messagingv1.ApplyBotChatPinRemovalRequest{first, second} {
+		go func() { <-start; _, err := s.ApplyBotChatPinRemoval(ctx, request); results <- err }()
+	}
+	close(start)
+	completed := 0
+	for range 2 {
+		err := <-results
+		if err == nil {
+			completed++
+		} else {
+			require.ErrorIs(t, err, ErrBotPinRemovalConflict)
+		}
+	}
+	require.Equal(t, 1, completed, "different CHAT guards cannot hide a same-Bot binding race")
+	for _, table := range []string{"bot_pin_actor_bindings", "bot_pin_removal_decisions", "bot_pin_removal_revisions", "bot_pin_removal_receipts"} {
+		var count int
+		require.NoError(t, s.Pool.QueryRow(ctx, "SELECT count(*) FROM "+table).Scan(&count))
+		require.Equal(t, 1, count, table)
+	}
+	var pins int
+	require.NoError(t, s.Pool.QueryRow(ctx, `SELECT count(*) FROM pins`).Scan(&pins))
+	require.Equal(t, 1, pins, "losing actor's pin is untouched")
+}

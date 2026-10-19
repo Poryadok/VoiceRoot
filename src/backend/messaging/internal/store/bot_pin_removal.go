@@ -243,11 +243,16 @@ func (s *PinsStore) ApplyBotChatPinRemoval(ctx context.Context, request *messagi
 	if !bytes.Equal(savedSHA, request.DecisionSha256) || purpose != request.Purpose || bot != b.bot || actor != b.actor || (scopeSpace == nil) != (savedSpace == nil) || (scopeSpace != nil && *scopeSpace != *savedSpace) {
 		return nil, ErrBotPinRemovalConflict
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO bot_pin_actor_bindings(actor_profile_id,bot_id) VALUES($1,$2) ON CONFLICT(actor_profile_id) DO NOTHING`, b.actor, b.bot)
+	// Both directions are immutable. The unique Bot key also serializes first
+	// bindings arriving concurrently through different CHAT guards.
+	_, err = tx.Exec(ctx, `INSERT INTO bot_pin_actor_bindings(actor_profile_id,bot_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, b.actor, b.bot)
 	if err != nil {
 		return nil, err
 	}
 	err = tx.QueryRow(ctx, `SELECT bot_id FROM bot_pin_actor_bindings WHERE actor_profile_id=$1 FOR UPDATE`, b.actor).Scan(&bot)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrBotPinRemovalConflict
+	}
 	if err != nil {
 		return nil, err
 	}
