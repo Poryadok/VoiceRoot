@@ -14,6 +14,7 @@ public final class AuthPrincipalServices {
         AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC.substring(1),
         AuthPrincipalServerInterceptor.ROLE_SESSION_FLOOR_RPC.substring(1),
         AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC.substring(1),
+        AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC.substring(1),
         AuthPrincipalServerInterceptor.SPACE_DELETE_CONSUME_RPC.substring(1),
         AuthPrincipalServerInterceptor.SPACE_DELETE_LOOKUP_RPC.substring(1),
         AuthPrincipalServerInterceptor.SPACE_DELETE_ACK_RPC.substring(1));
@@ -67,7 +68,8 @@ public final class AuthPrincipalServices {
         AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC.substring(1),
         AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC.substring(1),
         AuthPrincipalServerInterceptor.ROLE_SESSION_FLOOR_RPC.substring(1),
-        AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC.substring(1));
+        AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC.substring(1),
+        AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC.substring(1));
     var floor = ServerServiceDefinition.builder(all.getServiceDescriptor().getName());
     int count = 0;
     for (var method : all.getMethods()) {

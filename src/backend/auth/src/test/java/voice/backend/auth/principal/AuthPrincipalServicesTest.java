@@ -29,6 +29,7 @@ class AuthPrincipalServicesTest {
   static final MethodDescriptor<Struct,Struct> FLOOR = method(AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC);
   static final MethodDescriptor<Struct,Struct> ROLE_FLOOR = method("/" + SERVICE + "/GetRoleSessionEpochFloor");
   static final MethodDescriptor<Struct,Struct> SPACE_FLOOR = method("/" + SERVICE + "/GetSpaceSessionEpochFloor");
+  static final MethodDescriptor<Struct,Struct> BOT_FLOOR = method("/" + SERVICE + "/GetBotSessionEpochFloor");
   static final MethodDescriptor<Struct,Struct> ADMISSION = method(AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC);
   static final MethodDescriptor<Struct,Struct> LOGIN = method("/" + SERVICE + "/Login");
   final AtomicInteger proofCalls = new AtomicInteger(), loginCalls = new AtomicInteger();
@@ -37,6 +38,9 @@ class AuthPrincipalServicesTest {
 
   ServerServiceDefinition all() {
     return ServerServiceDefinition.builder(SERVICE)
+        .addMethod(BOT_FLOOR, ServerCalls.asyncUnaryCall((request, observer) -> {
+          proofCalls.incrementAndGet(); observer.onNext(request); observer.onCompleted();
+        }))
         .addMethod(ADMISSION, ServerCalls.asyncUnaryCall((request, observer) -> {
           proofCalls.incrementAndGet(); principal.set(VerifiedPrincipal.current());
           observer.onNext(request); observer.onCompleted();
@@ -75,7 +79,7 @@ class AuthPrincipalServicesTest {
     assertEquals(Set.of(ISSUE.getFullMethodName(), CONSUME.getFullMethodName(), LOOKUP.getFullMethodName()), service.getMethods().stream()
         .map(method -> method.getMethodDescriptor().getFullMethodName()).collect(Collectors.toSet()));
     var floor = AuthPrincipalServices.sessionFloorService(all(), new AuthPrincipalServerInterceptor(fixture.verifier));
-    assertEquals(Set.of(FLOOR.getFullMethodName(), ROLE_FLOOR.getFullMethodName(), SPACE_FLOOR.getFullMethodName(), ADMISSION.getFullMethodName()), floor.getMethods().stream()
+    assertEquals(Set.of(FLOOR.getFullMethodName(), ROLE_FLOOR.getFullMethodName(), SPACE_FLOOR.getFullMethodName(), BOT_FLOOR.getFullMethodName(), ADMISSION.getFullMethodName()), floor.getMethods().stream()
         .map(method -> method.getMethodDescriptor().getFullMethodName()).collect(Collectors.toSet()));
     for (var missing : Set.of(ISSUE, CONSUME, LOOKUP)) {
       var builder = ServerServiceDefinition.builder(SERVICE);

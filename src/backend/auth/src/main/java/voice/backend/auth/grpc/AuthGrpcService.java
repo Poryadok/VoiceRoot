@@ -152,6 +152,18 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     });
   }
 
+  @Override
+  public void getBotSessionEpochFloor(
+      app.voice.auth.v1.GetBotSessionEpochFloorRequest request,
+      StreamObserver<app.voice.auth.v1.GetBotSessionEpochFloorResponse> responseObserver) {
+    runProof(responseObserver, () -> {
+      requireProofPrincipal("service", "bot");
+      rejectUnknownFields(request);
+      return app.voice.auth.v1.GetBotSessionEpochFloorResponse.newBuilder()
+          .setSessionEpochFloor(readSessionEpochFloor(request.getAccountId(), true)).build();
+    });
+  }
+
   private long readSessionEpochFloor(String rawAccountId) {
     return readSessionEpochFloor(rawAccountId, false);
   }
