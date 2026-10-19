@@ -43,6 +43,7 @@ func TestProtectedStartSearchUsesDedicatedVerifiedSubjectAndRejectsMutation(t *t
 	for _, mutate := range []bool{false, true} {
 		req := &matchmakingv1.StartSearchRequest{GameId: uuid.NewString(), Mode: "duo"}
 		op := uuid.NewString()
+		req.OperationId = op
 		account, profile := uuid.NewString(), uuid.NewString()
 		hash, err := principal.RequestHash(req)
 		require.NoError(t, err)

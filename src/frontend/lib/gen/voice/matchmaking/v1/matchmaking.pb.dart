@@ -1066,12 +1066,14 @@ class StartSearchRequest extends $pb.GeneratedMessage {
     $core.String? mode,
     $core.String? criteriaJson,
     $core.String? partyId,
+    $core.String? operationId,
   }) {
     final result = create();
     if (gameId != null) result.gameId = gameId;
     if (mode != null) result.mode = mode;
     if (criteriaJson != null) result.criteriaJson = criteriaJson;
     if (partyId != null) result.partyId = partyId;
+    if (operationId != null) result.operationId = operationId;
     return result;
   }
 
@@ -1093,6 +1095,7 @@ class StartSearchRequest extends $pb.GeneratedMessage {
     ..aOS(2, _omitFieldNames ? '' : 'mode')
     ..aOS(3, _omitFieldNames ? '' : 'criteriaJson')
     ..aOS(4, _omitFieldNames ? '' : 'partyId')
+    ..aOS(5, _omitFieldNames ? '' : 'operationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1149,6 +1152,16 @@ class StartSearchRequest extends $pb.GeneratedMessage {
   $core.bool hasPartyId() => $_has(3);
   @$pb.TagNumber(4)
   void clearPartyId() => $_clearField(4);
+
+  /// Stable client search operation, retained across retries of this intent.
+  @$pb.TagNumber(5)
+  $core.String get operationId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set operationId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasOperationId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearOperationId() => $_clearField(5);
 }
 
 class StartSpaceQueueRequest extends $pb.GeneratedMessage {
@@ -1753,10 +1766,12 @@ class RespondToMatchRequest extends $pb.GeneratedMessage {
   factory RespondToMatchRequest({
     $core.String? matchId,
     $core.bool? accept,
+    $core.String? operationId,
   }) {
     final result = create();
     if (matchId != null) result.matchId = matchId;
     if (accept != null) result.accept = accept;
+    if (operationId != null) result.operationId = operationId;
     return result;
   }
 
@@ -1776,6 +1791,7 @@ class RespondToMatchRequest extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'matchId')
     ..aOB(2, _omitFieldNames ? '' : 'accept')
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1815,6 +1831,16 @@ class RespondToMatchRequest extends $pb.GeneratedMessage {
   $core.bool hasAccept() => $_has(1);
   @$pb.TagNumber(2)
   void clearAccept() => $_clearField(2);
+
+  /// Stable client decision operation, retained across ambiguous retries.
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
 }
 
 class RespondToMatchResponse extends $pb.GeneratedMessage {

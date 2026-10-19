@@ -16,6 +16,9 @@ type delegatedSearchVerifier interface {
 func ProtectedUnaryInterceptor(v verifier) grpc.UnaryServerInterceptor {
 	other := StrictUnaryInterceptor(v)
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if info.FullMethod == matchmakingv1.MatchmakingService_RespondToMatch_FullMethodName {
+			return protectedResponse(v, ctx, request, handler)
+		}
 		if info.FullMethod != matchmakingv1.MatchmakingService_StartSearch_FullMethodName {
 			return other(ctx, request, info, handler)
 		}

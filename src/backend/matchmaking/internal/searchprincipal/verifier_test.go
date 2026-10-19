@@ -229,6 +229,9 @@ func fixture(t *testing.T) (Verifier, *principal.Issuer, time.Time) {
 
 func credentialInput(t *testing.T, req *matchmakingv1.StartSearchRequest, now time.Time) principal.DelegatedUserInput {
 	t.Helper()
+	if req.OperationId == "" {
+		req.OperationId = "10000000-0000-4000-8000-000000000001"
+	}
 	hash, err := principal.RequestHash(req)
 	require.NoError(t, err)
 	return principal.DelegatedUserInput{Audience: "matchmaking", RPC: matchmakingv1.MatchmakingService_StartSearch_FullMethodName, RequestID: "10000000-0000-4000-8000-000000000001", RequestHash: hash, AccountID: uuid.NewString(), ProfileID: uuid.NewString(), SessionEpoch: 7, ClientExpiresAt: now.Add(time.Minute)}
@@ -236,4 +239,21 @@ func credentialInput(t *testing.T, req *matchmakingv1.StartSearchRequest, now ti
 
 func incoming(token, requestID string) context.Context {
 	return metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token, "x-request-id", requestID))
+}
+
+func TestSearchPrincipalRequiresBodyOperationToMatchDelegation(t *testing.T) {
+	for _, operation := range []string{"", uuid.NewString(), uuid.Nil.String()} {
+		t.Run(operation, func(t *testing.T) {
+			v, issuer, now := fixture(t)
+			req := &matchmakingv1.StartSearchRequest{OperationId: operation}
+			input := credentialInput(t, req, now)
+			req.OperationId = operation
+			input.RequestHash, _ = principal.RequestHash(req)
+			token, err := issuer.IssueDelegatedUser(input)
+			require.NoError(t, err)
+			ctx, err := v.Verify(incoming(token, input.RequestID), req)
+			require.Nil(t, ctx)
+			require.Equal(t, codes.Unauthenticated, status.Code(err))
+		})
+	}
 }

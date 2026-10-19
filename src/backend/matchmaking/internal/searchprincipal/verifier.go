@@ -47,7 +47,7 @@ func (v Verifier) Verify(ctx context.Context, request *matchmakingv1.StartSearch
 	deny := func() (context.Context, error) {
 		return nil, status.Error(codes.Unauthenticated, "invalid search principal")
 	}
-	if request == nil || len(request.ProtoReflect().GetUnknown()) != 0 || v.KeyResolver == nil || v.ReplayGuard == nil || v.SessionEpochChecker == nil {
+	if ctx == nil || request == nil || len(request.ProtoReflect().GetUnknown()) != 0 || v.KeyResolver == nil || v.ReplayGuard == nil || v.SessionEpochChecker == nil {
 		return deny()
 	}
 	transport, err := principal.IncomingMetadata(ctx)
@@ -55,7 +55,7 @@ func (v Verifier) Verify(ctx context.Context, request *matchmakingv1.StartSearch
 		return deny()
 	}
 	operationID, err := uuid.Parse(transport.RequestID)
-	if err != nil || operationID == uuid.Nil || operationID.String() != transport.RequestID {
+	if err != nil || operationID == uuid.Nil || operationID.String() != transport.RequestID || request.GetOperationId() != transport.RequestID {
 		return deny()
 	}
 	hash, err := principal.RequestHash(request)
@@ -95,7 +95,7 @@ func (v Verifier) Verify(ctx context.Context, request *matchmakingv1.StartSearch
 // SubjectFromContext returns only a subject produced by Verify for these exact
 // request bytes. It intentionally never consults legacy authctx or metadata.
 func SubjectFromContext(ctx context.Context, request *matchmakingv1.StartSearchRequest) (Subject, bool) {
-	if request == nil {
+	if ctx == nil || request == nil {
 		return Subject{}, false
 	}
 	verified, ok := ctx.Value(searchContextKey{}).(verifiedSearch)

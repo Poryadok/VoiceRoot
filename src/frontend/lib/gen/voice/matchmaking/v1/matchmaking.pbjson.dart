@@ -373,6 +373,7 @@ const StartSearchRequest$json = {
       '10': 'partyId',
       '17': true
     },
+    {'1': 'operation_id', '3': 5, '4': 1, '5': 9, '10': 'operationId'},
   ],
   '8': [
     {'1': '_party_id'},
@@ -383,7 +384,8 @@ const StartSearchRequest$json = {
 final $typed_data.Uint8List startSearchRequestDescriptor = $convert.base64Decode(
     'ChJTdGFydFNlYXJjaFJlcXVlc3QSFwoHZ2FtZV9pZBgBIAEoCVIGZ2FtZUlkEhIKBG1vZGUYAi'
     'ABKAlSBG1vZGUSIwoNY3JpdGVyaWFfanNvbhgDIAEoCVIMY3JpdGVyaWFKc29uEh4KCHBhcnR5'
-    'X2lkGAQgASgJSABSB3BhcnR5SWSIAQFCCwoJX3BhcnR5X2lk');
+    'X2lkGAQgASgJSABSB3BhcnR5SWSIAQESIQoMb3BlcmF0aW9uX2lkGAUgASgJUgtvcGVyYXRpb2'
+    '5JZEILCglfcGFydHlfaWQ=');
 
 @$core.Deprecated('Use startSpaceQueueRequestDescriptor instead')
 const StartSpaceQueueRequest$json = {
@@ -590,13 +592,14 @@ const RespondToMatchRequest$json = {
   '2': [
     {'1': 'match_id', '3': 1, '4': 1, '5': 9, '10': 'matchId'},
     {'1': 'accept', '3': 2, '4': 1, '5': 8, '10': 'accept'},
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
   ],
 };
 
 /// Descriptor for `RespondToMatchRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List respondToMatchRequestDescriptor = $convert.base64Decode(
     'ChVSZXNwb25kVG9NYXRjaFJlcXVlc3QSGQoIbWF0Y2hfaWQYASABKAlSB21hdGNoSWQSFgoGYW'
-    'NjZXB0GAIgASgIUgZhY2NlcHQ=');
+    'NjZXB0GAIgASgIUgZhY2NlcHQSIQoMb3BlcmF0aW9uX2lkGAMgASgJUgtvcGVyYXRpb25JZA==');
 
 @$core.Deprecated('Use respondToMatchResponseDescriptor instead')
 const RespondToMatchResponse$json = {

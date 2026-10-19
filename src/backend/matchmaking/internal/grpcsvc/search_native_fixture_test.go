@@ -74,9 +74,12 @@ func startProtectedSearchForTest(t *testing.T, svc *MatchmakingGRPC, ctx context
 	now := time.Now().UTC()
 	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "fixture", PrivateKey: key, Clock: func() time.Time { return now }})
 	require.NoError(t, err)
+	if req.OperationId == "" {
+		req.OperationId = uuid.NewString()
+	}
 	hash, err := principal.RequestHash(req)
 	require.NoError(t, err)
-	op := uuid.NewString()
+	op := req.OperationId
 	token, err := issuer.IssueDelegatedUser(principal.DelegatedUserInput{Audience: "matchmaking", RPC: matchmakingv1.MatchmakingService_StartSearch_FullMethodName, RequestID: op, RequestHash: hash, AccountID: account.String(), ProfileID: profile.String(), SessionEpoch: 7, ClientExpiresAt: now.Add(time.Minute)})
 	require.NoError(t, err)
 	v := searchprincipal.Verifier{Clock: func() time.Time { return now }, KeyResolver: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil }, ReplayGuard: func(context.Context, string, string, time.Time) error { return nil }, SessionEpochChecker: func(context.Context, string, int64) error { return nil }}

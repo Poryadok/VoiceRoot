@@ -144,6 +144,8 @@ message StartSearchRequest {
   string mode = 2;
   string criteria_json = 3;
   optional string party_id = 4;
+  // Stable client search operation, retained across retries of this intent.
+  string operation_id = 5;
 }
 
 message StartSpaceQueueRequest {
@@ -195,6 +197,8 @@ message GetMatchRequest {
 message RespondToMatchRequest {
   string match_id = 1;
   bool accept = 2;
+  // Stable client decision operation, retained across ambiguous retries.
+  string operation_id = 3;
 }
 
 message RespondToMatchResponse {

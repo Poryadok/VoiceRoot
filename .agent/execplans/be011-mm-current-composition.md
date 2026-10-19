@@ -200,3 +200,28 @@ dispatch/classification/ACK; no party/session row locks cross Redis. Native
 projection keeps its external explicit-release registration and zero acquired
 SQL connections over RPC. The oracle waits on actual PostgreSQL lock state and
 requires the first closer to observe the committed projection ACK after release.
+
+### Protected public operations (c117 consumer)
+
+Implement RespondToMatch.operation_id3 and the existing StartSearch signed
+operation as additive operation_id5. Current Gateway search was still ordinary
+metadata, and the Flutter call had no stable intent key; native handler tests
+alone do not constitute a working user journey. Stable IDs are allocated before
+first send and retained across ambiguous retries, with fresh delegated tokens.
+Implement exact response principal, private candidate/receipt transaction and
+both decision branches, then actual client/Gateway/MM positive qualification.
+Do not route native calls through ordinary metadata or enable legacy fallback.
+
+The additive Go/Dart wire is now generated from current proto inputs. Exact
+responseprincipal accepts authenticated ACCEPT and DECLINE with live epoch,
+method/body/operation binding and fresh-JWT semantic retries; reused JWT and
+wrong identity/body/method/dependencies deny. Protected transport validates the
+opaque subject again after verification, rejecting mutation before the handler.
+Native ordinary response listener denies both decisions; explicit pre-cut
+ordinary composition remains separate. Search body operation must equal the
+authenticated delegation, with actual handler fixtures using genuine signatures.
+Actual Linux race checks: search8top25sub, response2top18sub, protected transport
+14top14sub, all0skip; full module vet0. Three affected search handler PG tests
+also pass. Initial full transport run lacked docker-compose.yml test fixture;
+restored exact current tracked file then all package tests passed. This is not
+the response SQL receipt/handler, Gateway/client, native root or installed proof.
