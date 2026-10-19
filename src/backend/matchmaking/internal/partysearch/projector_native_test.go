@@ -43,7 +43,7 @@ func (f *projectionLifetimeFixture) EnterForward(context.Context, uuid.UUID, [32
 }
 
 func TestNativeProjectorActualRedisPositiveAndNegativeBoundaries(t *testing.T) {
-	for _, kind := range []string{"current", "snapshot-unknown", "changed", "closed-head", "noninitiator-ban", "readback-unknown", "local-cut-change"} {
+	for _, kind := range []string{"current", "snapshot-unknown", "changed", "closed-head", "noninitiator-ban", "readback-unknown", "local-cut-change", "missing-binding", "missing-binding-closed"} {
 		t.Run(kind, func(t *testing.T) {
 			ctx := context.Background()
 			pool := partyDB(t)
@@ -98,6 +98,13 @@ func TestNativeProjectorActualRedisPositiveAndNegativeBoundaries(t *testing.T) {
 				}
 			}
 			projector := &Projector{Store: parties, Queue: projectionSpy{delegate: q, before: func() { require.Zero(t, pool.Stat().AcquiredConns()); require.False(t, lifetime.released) }}, Validator: validator, ForwardLifetime: lifetime, Resetter: &store.MatchStore{Pool: pool, NativeAdmission: &binding}}
+			if kind == "missing-binding" || kind == "missing-binding-closed" {
+				parties.NativeAdmission = nil
+				if kind == "missing-binding-closed" {
+					_, err = pool.Exec(ctx, `UPDATE mm_native_admission_head SET state='CLOSED'`)
+					require.NoError(t, err)
+				}
+			}
 			claimed, err := projector.RunOnce(ctx)
 			require.True(t, claimed)
 			ids, listErr := q.ListSessionIDs(ctx, p.GameID, p.Mode, "eu", 10)
@@ -137,6 +144,13 @@ func TestNativeProjectorActualRedisPositiveAndNegativeBoundaries(t *testing.T) {
 					require.Zero(t, searching)
 				} else {
 					require.Equal(t, 2, searching, "Unknown must not cancel the party")
+				}
+				if kind == "missing-binding-closed" {
+					_, err = projector.Resetter.ResetVoiceParty(ctx, created.Party.ID)
+					require.NoError(t, err)
+					claimed, err = projector.RunOnce(ctx)
+					require.True(t, claimed)
+					require.NoError(t, err, "exact terminal RELEASE survives lost binding and CLOSED admission")
 				}
 			}
 		})

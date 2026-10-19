@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	admission "voice/backend/matchmaking/internal/mmadmission"
 )
 
 var ErrPartyQueueLeaseLost = errors.New("party queue projection lease changed")
@@ -106,6 +107,14 @@ WHERE party_id=$1 AND revision=$2 AND lease_token=$3 AND action=$4 AND lease_unt
 		}
 	}
 	if out.Enqueue {
+		// Configuration loss cannot turn an already-begun native installation
+		// into the historical projection composition. Terminal RELEASE remains
+		// independent of current admission and private source evidence.
+		if s.NativeAdmission == nil {
+			if err := admission.CheckPrecutCut(ctx, tx); err != nil {
+				return PartyQueueProjection{}, err
+			}
+		}
 		// Only the installed native capture source is qualified here. A future
 		// MM_LFP_CONSENT_V1 adapter must validate its distinct owner receipt; NULL
 		// and arbitrary legacy parties cannot become a native authority fallback.
@@ -131,6 +140,7 @@ WHERE party_id=$1 AND revision=$2 AND lease_token=$3 AND action=$4 AND lease_unt
 	out.Lease.terminalProjection = !out.Enqueue
 	return out, nil
 }
+
 func (s *PartyStore) FinishQueueIntent(ctx context.Context, lease PartyQueueLease, delay time.Duration, success bool) error {
 	if s == nil || s.Pool == nil || delay < 0 || delay > time.Minute {
 		return ErrSourcePartyUnavailable

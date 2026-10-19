@@ -15,6 +15,28 @@ import (
 
 type nativeAckRedisHook struct{ calls atomic.Int32 }
 
+func TestPrecutRecoveryCallbackStillAcknowledgesExactEffects(t *testing.T) {
+	ctx := context.Background()
+	pool := partyDB(t)
+	p := partyParams(t, pool)
+	created, err := (&store.PartyStore{Pool: pool}).CreateSourceParty(ctx, p)
+	require.NoError(t, err)
+	matchID := uuid.New()
+	_, err = pool.Exec(ctx, `INSERT INTO matches(id,game_id,mode,region)VALUES($1,$2,$3,'eu')`, matchID, p.GameID, p.Mode)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE search_sessions SET recovery_generation=recovery_generation+1 WHERE party_id=$1`, created.Party.ID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO matchmaking_match_recovery_effects(match_id,search_session_id,generation,action)SELECT $1,id,recovery_generation,'enqueue' FROM search_sessions WHERE id=$2`, matchID, created.Sessions[0].ID)
+	require.NoError(t, err)
+	calls := 0
+	matches := &store.MatchStore{Pool: pool}
+	apply := func(context.Context, store.SearchSession, string) error { calls++; return nil }
+	require.NoError(t, matches.ApplyPendingRecoveryEffects(ctx, 10, apply))
+	require.Equal(t, 1, calls)
+	require.NoError(t, matches.ApplyPendingRecoveryEffects(ctx, 10, apply))
+	require.Equal(t, 1, calls, "committed pre-cut recovery is not dispatched twice")
+}
+
 func (h *nativeAckRedisHook) DialHook(next redis.DialHook) redis.DialHook {
 	return func(ctx context.Context, network, addr string) (net.Conn, error) { return next(ctx, network, addr) }
 }
@@ -48,6 +70,13 @@ func TestNativeRecoveryAckRequiresActualWholePartyStateAndStamp(t *testing.T) {
 	require.NoError(t, err)
 	_, err = matches.AcknowledgeNativeRecoveryEffects(ctx, 10)
 	require.Error(t, err, "old projected_at without state/stamp must remain unqualified")
+	legacyCalls := 0
+	err = (&store.MatchStore{Pool: pool}).ApplyPendingRecoveryEffects(ctx, 10, func(context.Context, store.SearchSession, string) error {
+		legacyCalls++
+		return nil
+	})
+	require.Error(t, err, "lost native binding cannot select scalar legacy recovery after admission began")
+	require.Zero(t, legacyCalls)
 	validator := &partysource.Revalidator{Snapshots: provisionReaderFunc(func(context.Context, partysource.Subject) (partysource.Snapshot, error) {
 		return partysource.Snapshot{ProtocolVersion: p.ProtocolVersion, Kind: p.SourceKind, RoomID: p.SourceRoomID, RosterVersion: p.SourceRosterVersion, MemberProfileIDs: p.MemberProfileIDs, MemberAuthorityVersion: p.MemberAuthorityVersion, MemberAuthorities: p.MemberAuthorities, SourceAuthorityHash: p.SourceAuthorityHash}, nil
 	})}

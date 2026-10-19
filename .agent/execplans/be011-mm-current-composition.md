@@ -180,3 +180,14 @@ unqualified projected_at rejection, stale generation rejection, closed RELEASE,
 RR DOWN refusal before held gate, noncooperating first-writer retention, empty
 RC roundtrip, unknown witness retention, and upgrade refusal while ADMITTED.
 No shared migration, installation admission or full native root was executed.
+
+### Review309 configuration-loss correction
+
+Exact103 review found nil-binding projector/recovery selection could enter the
+legacy forward path despite retained native admission. Actual native PG/Redis
+RED reproduced a successful enqueue and a scalar recovery callback. Positive
+nil-binding projection now requires CheckPrecutCut; legacy recovery takes FIRST
+nil admission in RC through callback/ACK and rejects configured native callers.
+Keep genuine pre-cut behavior and closed terminal RELEASE; qualify both native
+ADMITTED/CLOSED missing-binding cases and the historical projection regressions.
+This is a same-task correction, not completion of the native root or response.

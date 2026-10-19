@@ -640,6 +640,13 @@ Redis dispatch and durable acknowledgement. Unknown does not cancel a party;
 definitive source loss or an exact private account ban resets the affected party.
 Terminal RELEASE remains available with closed admission.
 
+Losing the native binding cannot select pre-cut queue projection after the
+admission head has begun. A nil-binding positive projection checks the canonical
+never-begun cut; terminal RELEASE does not require this positive admission.
+The scalar legacy recovery callback acquires the pre-cut admission gate FIRST
+and retains it through callback acknowledgement. Configured native callers
+cannot invoke it, and a retained admission head refuses lost-binding callers.
+
 MM026 records the projected party/session/intent state hash and the exact
 authorized admission stamp. Old `projected_at` is not qualified evidence and is
 never backfilled. Intent revision/action invalidates the witness; terminal

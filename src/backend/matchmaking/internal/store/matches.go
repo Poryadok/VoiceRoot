@@ -306,6 +306,9 @@ func (s *MatchStore) ApplyPendingRecoveryEffects(ctx context.Context, limit int,
 	if s == nil || s.Pool == nil {
 		return errors.New("match store unavailable")
 	}
+	if s.NativeAdmission != nil {
+		return mmadmission.ErrUnavailable
+	}
 	if apply == nil {
 		return errors.New("recovery effect projector unavailable")
 	}
@@ -342,8 +345,15 @@ func (s *MatchStore) ApplyPendingRecoveryEffects(ctx context.Context, limit int,
 	rows.Close()
 
 	for _, item := range candidates {
-		tx, err := s.Pool.Begin(ctx)
+		tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 		if err != nil {
+			return err
+		}
+		// This scalar callback belongs exclusively to the genuine pre-cut
+		// composition. Hold the FIRST admission gate through its durable ACK;
+		// losing the runtime binding must never restore this legacy forward path.
+		if err := mmadmission.Acquire(ctx, tx, nil); err != nil {
+			_ = tx.Rollback(ctx)
 			return err
 		}
 		var lockedMatch uuid.UUID
