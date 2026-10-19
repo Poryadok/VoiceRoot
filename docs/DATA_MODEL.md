@@ -326,6 +326,12 @@ alias available to clients nor permission to query message content. At terminal
 purge every raw account/profile mapping and pending personal payload is erased;
 the opaque subject-only fence remains permanent, including after backup restore.
 
+Auth's `moderation_startup_identity` contains only a singleton and immutable UUID
+store incarnation. It is separate from subject/account identifiers and the
+terminal authority generation. Boot capabilities remain process-local and bind
+the independently protected operational context plus finite native integrity;
+the local identity is neither a readiness flag nor restore-currentness proof.
+
 Messaging owns one immutable source epoch and a contiguous committed sequence
 per subject/account. Source time is monotonic database time under that account's
 counter lock, after Chat/Space locks. A logical message plus authored forward

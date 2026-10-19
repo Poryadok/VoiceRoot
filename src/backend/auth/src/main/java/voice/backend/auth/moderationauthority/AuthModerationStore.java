@@ -23,7 +23,13 @@ public final class AuthModerationStore {
   private final TransactionTemplate transactions;
   private final TransactionTemplate snapshots;
   private final TransactionTemplate terminalization;
+  private final java.util.function.Supplier<Runnable> authority;
+  /** Direct store component constructor; production configuration uses the guarded constructor. */
   public AuthModerationStore(NamedParameterJdbcTemplate jdbc, PlatformTransactionManager manager) {
+    this(jdbc,manager,()->()->{});
+  }
+  public AuthModerationStore(NamedParameterJdbcTemplate jdbc,PlatformTransactionManager manager,java.util.function.Supplier<Runnable> authority) {
+    this.authority=Objects.requireNonNull(authority);
     this.jdbc=Objects.requireNonNull(jdbc);this.transactions=new TransactionTemplate(manager);
     this.transactions.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     this.snapshots=new TransactionTemplate(manager);
@@ -34,6 +40,7 @@ public final class AuthModerationStore {
     this.terminalization.setTimeout(5);
   }
   public ResolveModerationSubjectResponse resolve(UUID account,UUID expectedSubject) {
+    Runnable check=authority.get();check.run();
     var rows=jdbc.query("""
         SELECT moderation_subject_id,moderation_lifecycle_revision,moderation_deletion_cycle_id,
                moderation_purge_at,deleted_at,status,session_epoch,
@@ -46,11 +53,14 @@ public final class AuthModerationStore {
       return accountBinding(rs,account);
     });
     if(rows.size()!=1)throw Status.NOT_FOUND.withDescription("moderation subject unavailable").asRuntimeException();
+    check.run();
     return rows.getFirst();
   }
   public ListTerminalModerationSubjectsResponse terminalSnapshot() {
+    Runnable check=authority.get();check.run();
     if(TransactionSynchronizationManager.isActualTransactionActive())throw Status.FAILED_PRECONDITION.withDescription("terminal view requires a standalone owner transaction").asRuntimeException();
     Instant cut=terminalization.execute(transaction->{
+      check.run();
       Instant through=Objects.requireNonNull(jdbc.queryForObject("SELECT clock_timestamp()",Map.of(),java.sql.Timestamp.class)).toInstant();
       // Never SKIP LOCKED here: a hidden winning restore must settle before
       // the owner can certify that due work through this cut is complete.
@@ -61,9 +71,11 @@ public final class AuthModerationStore {
           """,Map.of("cut",java.sql.Timestamp.from(through)),(rs,row)->Map.entry(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class)));
       if(due.size()>50000)throw Status.RESOURCE_EXHAUSTED.withDescription("complete due terminal work unavailable").asRuntimeException();
       purgeLocked(due);
+      check.run();
       return through;
     });
     return snapshots.execute(transaction->{
+      check.run();
       var authority=Objects.requireNonNull(jdbc.queryForObject("SELECT generation,terminal_high_water FROM moderation_authority_generation WHERE singleton",Map.of(),
           (rs,row)->new Authority(rs.getObject(1,UUID.class),rs.getLong(2))));
       var subjects=jdbc.query("""
@@ -75,12 +87,15 @@ public final class AuthModerationStore {
           .setAuthorityGeneration(authority.generation().toString()).setSnapshotId(UUID.randomUUID().toString())
           .setCut(timestamp(cut)).setTerminalHighWater(authority.highWater()).setItemCount(subjects.size())
           .setCanonicalSha256(com.google.protobuf.ByteString.copyFrom(terminalDigest(subjects))).setComplete(true);
-      return ListTerminalModerationSubjectsResponse.newBuilder().addAllSubjectIds(subjects).setComplete(true).setSeal(seal).build();
+      var result=ListTerminalModerationSubjectsResponse.newBuilder().addAllSubjectIds(subjects).setComplete(true).setSeal(seal).build();
+      check.run();return result;
     });
   }
   private record Authority(UUID generation,long highWater) {}
   public ListModerationAccountCensusResponse accountCensus() {
+    Runnable check=authority.get();check.run();
     return snapshots.execute(transaction->{
+      check.run();
       Instant cut=Objects.requireNonNull(jdbc.queryForObject("SELECT clock_timestamp()",Map.of(),java.sql.Timestamp.class)).toInstant();
       var authority=Objects.requireNonNull(jdbc.queryForObject("SELECT generation,terminal_high_water FROM moderation_authority_generation WHERE singleton",Map.of(),
           (rs,row)->new Authority(rs.getObject(1,UUID.class),rs.getLong(2))));
@@ -97,7 +112,8 @@ public final class AuthModerationStore {
           .setAuthorityGeneration(authority.generation().toString()).setSnapshotId(UUID.randomUUID().toString())
           .setCut(timestamp(cut)).setTerminalHighWater(authority.highWater()).setItemCount(accounts.size())
           .setCanonicalSha256(com.google.protobuf.ByteString.copyFrom(accountCensusDigest(accounts))).setComplete(true);
-      return ListModerationAccountCensusResponse.newBuilder().addAllAccounts(accounts).setComplete(true).setSeal(seal).build();
+      var result=ListModerationAccountCensusResponse.newBuilder().addAllAccounts(accounts).setComplete(true).setSeal(seal).build();
+      check.run();return result;
     });
   }
   private static ResolveModerationSubjectResponse accountBinding(ResultSet rs,UUID account) throws SQLException {
@@ -131,27 +147,33 @@ public final class AuthModerationStore {
     }catch(NoSuchAlgorithmException ex){throw new IllegalStateException("SHA-256 unavailable",ex);}
   }
   public ReconcileModerationRestrictionResponse reconcile(UUID account,UUID subject,long revision,boolean banned) {
+    Runnable check=authority.get();check.run();
     if(revision<=0)throw Status.INVALID_ARGUMENT.withDescription("positive moderation revision required").asRuntimeException();
     return transactions.execute(transaction->{
+      check.run();
       var parameters=Map.of("account",account,"subject",subject,"revision",revision,"banned",banned);
       Long accepted=jdbc.queryForObject("SELECT auth_reconcile_moderation(:account,:subject,:revision,:banned)",parameters,Long.class);
       // The SQL function's account lock remains held until this exact accepted
       // payload and lifecycle have been captured. Never echo the stale request.
       Boolean acceptedBanned=jdbc.queryForObject("SELECT desired_banned FROM moderation_account_restrictions WHERE account_id=:account AND subject_id=:subject",parameters,Boolean.class);
-      return ReconcileModerationRestrictionResponse.newBuilder().setProtocolVersion(1)
+      var result=ReconcileModerationRestrictionResponse.newBuilder().setProtocolVersion(1)
           .setAccountId(account.toString()).setSubjectId(subject.toString())
           .setRevision(Objects.requireNonNull(accepted)).setModerationBanned(Objects.requireNonNull(acceptedBanned))
           .setState(resolve(account,subject).getSubject().getState()).build();
+      check.run();return result;
     });
   }
   /** No ACK or consumer availability can extend the canonical Auth deletion deadline. */
   public void purgeDue() {
+    Runnable check=authority.get();check.run();
     transactions.executeWithoutResult(status->{
+      check.run();
       var due=jdbc.query("""
           SELECT id,moderation_subject_id FROM accounts WHERE moderation_subject_id IS NOT NULL
             AND (moderation_purge_at <= clock_timestamp() OR EXISTS(SELECT 1 FROM moderation_terminal_subjects t WHERE t.subject_id=accounts.moderation_subject_id)) ORDER BY id LIMIT 100 FOR UPDATE SKIP LOCKED
           """,Map.of(),(rs,row)->Map.entry(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class)));
       purgeLocked(due);
+      check.run();
     });
   }
   private void purgeLocked(List<Map.Entry<UUID,UUID>> due) {

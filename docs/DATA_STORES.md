@@ -9,6 +9,14 @@ restriction projection. `moderation_authority_generation` identifies the sealed
 finite terminal view and its append-only high-water. It is opaque authority
 metadata, not an independent proof that a restored database is current. Terminal
 snapshot count/hash/cut framing is in the [startup contract](testing/async-automod-startup-restore.md).
+
+`moderation_startup_identity` (Auth Flyway V32 / canonical auth_db33) holds one
+immutable Mod-purpose store incarnation, independently from the terminal authority
+generation. It has no ready flag, account mapping or currentness timestamp. Its
+identity cannot be rewritten/deleted or silently DOWN/UP replaced. The protected
+operator start context binds that local identity and authority generation; an
+old internally coherent copy still requires declared restore evidence. Neither
+UUID can establish an independently current tail.
 Bot owns owner-account/actor/installation correspondence
 and positive ownership revision. Messaging owns versioned account-scoped HMAC
 keys, subject/source counter, immutable account-only v2 core outbox and content-free

@@ -116,6 +116,46 @@ transaction. This component still needs the verified own-authority bootstrap
 barrier, scheduled delivery/catch-up wiring and the complete recipient/coordinator
 activation proof; its local tests do not establish P1-P5 or physical P30D.
 
+The Auth P1 startup boundary uses an operator-installed absolute
+`AUTH_AUTOMOD_START_CONTEXT_FILE`, with independently configured
+`AUTH_AUTOMOD_ENVIRONMENT` and `AUTH_AUTOMOD_DEPLOYMENT_GENERATION` (UUID).
+All three settings are required together. The file is a private, read-only regular
+file (owner read only), with no symlink component and no group/other-writable
+parent; it is bounded to 16 KiB. On Linux the file and ancestors must belong to
+root or the Auth process UID, and ancestors must exclude untrusted writes
+(root-owned sticky ancestors such as `/tmp` are allowed above the private parent).
+It is not accepted from an RPC, SDK or restored
+SQL row. Strict JSON protocol1 contains `mode`, `environment`,
+`deployment_generation`, `store_incarnation`, `authority_generation`; only
+`DECLARED_RESTORE` additionally requires `operation_id`. Unknown/duplicate fields,
+trailing input and noncanonical UUIDs fail closed. Missing settings/context do
+not select live mode. The trusted operator procedure must mark replacement or
+uncertain storage DECLARED_RESTORE before cutover; an undeclared old DB cannot
+detect its own rollback from these identities.
+
+After local private listeners start, explicitly intact LIVE_CURRENT requires a
+finite native inventory, actual owned function bodies/trigger configuration,
+current account/projection/intent coherence and terminal ledger/high-water
+agreement. The resulting capability binds this process boot and is checked by
+production authority reads, restriction transactions and terminal cleanup before
+commit. Context validation detects replacement/removal and closes captured checks;
+cutover must first fence/drain the old process, as c13 requires, rather than
+relying on the retry interval to recall an in-flight operation. A new boot is
+required; a persisted ready bit cannot reopen it. DECLARED_RESTORE remains closed
+until the separate operation-bound recovered-domain verifier is implemented and
+has actual c23/c24 evidence; valid file hashes alone cannot authorize it.
+
+Lifecycle publication uses its own single worker with no retry queue, separate
+from the scheduled terminal deadline worker. Peer RPC waits cannot occupy the
+terminal worker's scheduler. `AUTH_AUTOMOD_LIFECYCLE_BATCH_SIZE` bounds each
+recipient's pass to 1..1,000 (default100). A peer ahead of CURRENT local owner
+closes this boot as RESTORE_DIVERGENCE. Component tests cover seven PostgreSQL/
+gate/file cases and two actual mTLS/private-start/scheduler-isolation cases.
+Independent review, the operation-bound restore verifier, finite catch-up,
+P4/public-issuance gating and the full activation matrix remain open. The public
+P4 gate is not implemented by this component; no public-readiness or physical
+P30D acceptance follows from a local P1 gate.
+
 ## Space admission owner observation (SPACE-ADMISSION-IDENTITY-v1)
 
 `ObserveSpaceAdmissionSubject` is an additive read-only RPC on the existing

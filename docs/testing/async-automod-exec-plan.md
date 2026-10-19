@@ -688,3 +688,39 @@ rollback. Four actual private mTLS/configuration tests passed, including anonymo
 and wrong-CA refusal before the handler. These component checks do not yet wire
 the scheduled publisher, finite catch-up, Auth own-authority bootstrap barrier or
 public issuance gate. Exact frozen-source verification follows before review.
+
+P1 source-stage checkpoint uses the existing c13/c23-c24 operational boundary:
+an operator-installed private read-only startup context explicitly selects
+LIVE_CURRENT or DECLARED_RESTORE and binds environment, deployment generation
+and expected store incarnation/authority generation. Absence or malformed input
+never selects live mode. Auth V32 / canonical auth_db33 adds an immutable local
+Mod-purpose store incarnation, distinct from the authority generation and from
+Role-purpose metadata. This UUID identifies the connected store only; it cannot
+prove currentness or detect an undeclared rollback. Intact LIVE_CURRENT still
+requires finite native integrity checks. DECLARED_RESTORE must remain closed
+without the independently operation-bound actual recovered domain cuts from
+c23/c24. Private authority, scheduled terminal work and lifecycle publication
+must capture this boot's verified authority check and recheck before commit;
+opening P1 does not open public P4 or supply physical-deadline acceptance.
+
+The production configuration now injects the closed current-boot authority into
+the store and terminal worker; the old JDBC-only worker first failed its native
+mock oracle (one failure, 4.320 s). Seven native PostgreSQL/gate/context tests
+then passed (21.703 s), including altered native catalog denial and generation
+closure rolling back terminal ledger/mapping changes. Two actual mTLS tests
+passed (11.318 s): the private listener is reachable but denies authority before
+P1, and terminal cleanup completes while a separate publisher peer RPC waits.
+Final source binding/review follow. No new product scope is added after the user
+master-priority override. Preserve this checkpoint separately from the reviewed
+downgrade components; restore verification, finite catch-up and public P4 are
+still unfinished, and the total-partition/all-copy physical criterion remains
+open under c19/c20/c28. Sole master integration/CI belongs to 121.
+
+Preservation boundary after the master override: keep the already-authored P1
+prototype on a separate source-stage branch; the original branch's reviewed
+components and downgrade correction remain independently consumable. P1's
+quiescent local catalog check is not a function-DDL barrier: table AccessShare
+locks alone do not qualify concurrent CREATE OR REPLACE FUNCTION or rolling
+schema cutover. That named race still needs a production fence and finite oracle
+before P1 activation, alongside the already-open restore/P4 requirements. No
+claim that the present prototype is a complete serving-readiness solution.
