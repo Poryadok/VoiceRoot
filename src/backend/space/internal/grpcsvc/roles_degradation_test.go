@@ -52,7 +52,7 @@ func TestCreateInvite_RoleUnavailable(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool, withRoleClient(unavailableRoleClient{}))
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Degraded"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Degraded"})
 	require.NoError(t, err)
 
 	_, err = client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{

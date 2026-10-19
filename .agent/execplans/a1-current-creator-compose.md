@@ -86,3 +86,37 @@ writer cohort. Shared admission dispatch actualRED0.088 (regular/guest denied,
 ordinary bypass) became full LP race2.431/checker1.148/vetPASS. Creator-only and
 Admission-only dependency guards remain independent.186/69 exact helper API
 and dispatch ownership agreement used; no native Store implementation copied.
+
+Consumed producer-only compile closure510/AuthRoleclients,352e/Q35-37,7f9/count,
+081/nativeStore as17b021/d66d56/0a85cb/8a189. No39 SQL in product tree;
+allwriter activation is still closed. Fixture-only exactd43239SQL was executed
+using pinnedmigrate4.18.1 binary and own network PostgreSQL, no hostports.
+Runner-only PG adapter preserves canonical SQL and assertions while replacing
+published testcontainer ports with per-test owned databases; adapter hashes and
+recipe live externally at tmp/swarm/master-intake/342-private-pg-adapter.py.
+
+Current signed Creator handler actualPG RED1.892 missingprofile became native
+publication/replay/rawdeny GREEN2.330race. Missing protectedRole dependency,
+revoked floor and disabled publicationguard negatives passed11.412race with
+spaces/events/bootstrap calls unchanged. Role response is controlled signed
+component evidence, not actual Role/JavaAuth/HTTP/OwnerACL qualification.
+
+main now builds separate Authfloor mTLS connection and passes only its client
+into restored creatorMembershipDependencies, preserves ownershipAuth and public
+Composite/Audit registration. Replay cleanup starts once with its own cancel.
+Root short/race3.094 grpcsvc2.733 vet/build PASS. Explicitly ported unrelated
+legacy fixture seeds without overriding CreateSpace or auto-signing negatives;
+creation tests use actual signed receiver and current real migration driver.
+Creation/neighbor focused PG regressions PASS158.482race;90 affected legacy seed
+cases running. Final integration targetfd43 (5113+BE080259) is confirmed121;
+new Role/Join/native writer cohorts are not yet qualified or activated.
+
+Consumed GIS dd02 as327e945 only5storefiles. GIS dependency-zero-write
+RED21.610 became5.123raceGREEN with protected bootstrap at firstcreate/replay
+and current publication check.90 legacyseed cases first run302.160:88 passed,
+2 Voice customclient fixture type failures fixed explicitly in that factory;
+only those2 rerun3.262racePASS. This preserves assertion and protected Voice
+interceptor, no automatic signing or client CreateSpace override.186 explicitly
+owns remaining current39 ports in communityownerrecovery/roster fixtures.
+Its later40 cohort will require fresh catalog/writer qualification; this39
+component proof is not future40 activation or fullpublicCreator e2e.

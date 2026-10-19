@@ -25,7 +25,7 @@ func TestJoinSpace_PublicNoneRequirement(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{
 		Name:        "Public Plaza",
 		Visibility:  "public",
 		Description: "open",
@@ -58,7 +58,7 @@ func TestJoinSpace_EntryRequirementBlocksPublicJoin(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{
 		Name:       "Gated",
 		Visibility: "public",
 	})
@@ -88,7 +88,7 @@ func TestLeaveSpace_RemovesMembership(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Leave test"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Leave test"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -115,7 +115,7 @@ func TestLeaveSpace_OwnerBlockedWithoutTransfer(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Owner stuck"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Owner stuck"})
 	require.NoError(t, err)
 
 	_, err = client.LeaveSpace(ownerCtx, &spacev1.LeaveSpaceRequest{SpaceId: created.GetSpace().GetId()})

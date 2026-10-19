@@ -574,7 +574,7 @@ func setupTransferWithRoles(t *testing.T, stub *transferRoleStub, extraOpts ...s
 	client, cleanup := startSpaceGRPCTestServer(t, pool, opts...)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Role transfer"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Role transfer"})
 	require.NoError(t, err)
 	spaceID = created.GetSpace().GetId()
 
@@ -1270,7 +1270,7 @@ func TestTransferOwnership_ConcurrentSameSpace_DoesNotInterleaveRoleTransitions(
 	client, cleanup := startSpaceGRPCTestServer(t, pool, withOwnershipRoleClient(t, roles))
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Concurrent transfer"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Concurrent transfer"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 	memberA := uuid.New()

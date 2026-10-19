@@ -53,7 +53,7 @@ func TestJoinByInvite_FriendsOnlyInvitePrivacy_StrangerDenied(t *testing.T) {
 	)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Invite privacy"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Invite privacy"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 

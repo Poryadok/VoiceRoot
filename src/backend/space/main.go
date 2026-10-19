@@ -261,6 +261,24 @@ func main() {
 			log.Fatal("AUTH_PRINCIPAL_GRPC_ADDR is required with Auth ownership TLS settings")
 		}
 
+		var creatorAuthClient authv1.AuthServiceClient
+		creatorAuthConfig, creatorAuthEnabled, err := creatorAuthConfigFromEnv()
+		if err != nil {
+			log.Fatalf("Space Auth session-floor TLS: %v", err)
+		}
+		if creatorAuthEnabled {
+			if principalIssuer == nil {
+				log.Fatal("Space principal issuer is required for Auth session-floor transport")
+			}
+			conn, err := creatorAuthConfig.dial()
+			if err != nil {
+				log.Fatalf("Space Auth session-floor grpc: %v", err)
+			}
+			defer func() { _ = conn.Close() }()
+			creatorAuthClient = authv1.NewAuthServiceClient(conn)
+			defer startCreatorReplayCleanup(runCtx, spaceStore, logger)()
+		}
+
 		sharedOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
 		if sourceEnabled {
 			var sourceRuntime *authoritysource.Runtime
@@ -466,7 +484,7 @@ func main() {
 				log.Fatalf("Space Gateway lifecycle listen: %v", err)
 			}
 			options := append([]grpc.ServerOption{}, sharedOptions...)
-			options = append(options, publicRuntime.ServerOptions()...)
+			options = append(options, publicRuntime.ServerOptionsWithMembership(creatorMembershipDependencies(spaceStore, creatorAuthClient, principalIssuer))...)
 			publicServer = grpc.NewServer(options...)
 			spacev1.RegisterSpaceServiceServer(publicServer, &grpcsvc.PublicLifecycleSpace{SpaceGRPC: spaceSvc, Composite: compositeService})
 			go func() {

@@ -9,6 +9,12 @@ import (
 )
 
 func mapSpaceStoreError(err error) error {
+	if errors.Is(err, store.ErrMemberAuthorityUnavailable) {
+		return status.Error(codes.Unavailable, "membership authority unavailable")
+	}
+	if errors.Is(err, store.ErrMemberAdmissionConflict) {
+		return status.Error(codes.FailedPrecondition, "membership admission conflict")
+	}
 	if errors.Is(err, store.ErrAdmissionRequired) || errors.Is(err, store.ErrLegacyEntryPolicyWrite) || errors.Is(err, store.ErrEntryPolicyVersion) {
 		return status.Error(codes.FailedPrecondition, "entry verification required")
 	}
