@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"voice/backend/pkg/releasepolicy"
 	"voice/backend/user/internal/authctx"
 	"voice/backend/user/internal/profileaccent"
 	"voice/backend/user/internal/profilemutation"
@@ -25,7 +26,8 @@ import (
 // UserGRPC implements profile RPCs backed by user_db v1 profiles DDL.
 type UserGRPC struct {
 	userv1.UnimplementedUserServiceServer
-	Profiles *store.ProfileStore
+	ReleasePolicy *releasepolicy.Policy
+	Profiles      *store.ProfileStore
 	// ProfileMutations is required; missing/shared-state failures deny mutations.
 	ProfileMutations ProfileMutationLimiter
 	Privacy          *store.PrivacyStore
@@ -218,6 +220,9 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 	}
 	if owned == nil {
 		return nil, status.Error(codes.NotFound, "profile not found or not owned")
+	}
+	if req.CustomStatus != nil && *req.CustomStatus != "" && s.ReleasePolicy != nil && !s.ReleasePolicy.Allows("paid") {
+		return nil, status.Error(codes.FailedPrecondition, "capability_unavailable")
 	}
 	if req.CustomStatus != nil && *req.CustomStatus != "" && authctx.SubscriptionTier(ctx) != "premium" {
 		return nil, status.Error(codes.FailedPrecondition, "custom status requires premium subscription")

@@ -124,6 +124,7 @@ echo "Starting auth container ($AUTH_IMAGE)..."
 # Account deletion likewise uses a deterministic smoke-only HMAC key; production uses Kubernetes Secret.
 docker run -d --name "$CONTAINER_NAME" --network "$NETWORK" \
   -e SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/auth_db \
+  -e VOICE_RELEASE_PROFILE=development \
   -e SPRING_DATASOURCE_USERNAME=voice \
   -e SPRING_DATASOURCE_PASSWORD=voice \
   -e USER_GRPC_ADDR=user:9090 \
