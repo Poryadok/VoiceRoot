@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"log"
 	"log/slog"
 	"net"
@@ -34,7 +33,6 @@ import (
 	"voice/backend/space/internal/auditprincipal"
 	"voice/backend/space/internal/authctx"
 	"voice/backend/space/internal/chatcreation"
-	"voice/backend/space/internal/creatorauthority"
 	grpcsvc "voice/backend/space/internal/grpcsvc"
 	"voice/backend/space/internal/lifecycleprincipal"
 	"voice/backend/space/internal/memberauthorityprincipal"
@@ -495,22 +493,12 @@ func main() {
 				log.Fatalf("Space Gateway lifecycle listen: %v", err)
 			}
 			options := append([]grpc.ServerOption{}, sharedOptions...)
-			if memberAuthorityEnabled {
-				if ownershipAuthClient == nil || principalIssuer == nil {
-					log.Fatal("native Space creator requires protected Auth principal transport")
-				}
-				checker := &creatorauthority.Checker{Client: ownershipAuthClient, Issuer: principalIssuer}
-				replay := func(ctx context.Context, issuer, jti string, expiry time.Time) error {
-					err := spaceStore.ClaimCreatorPrincipalReplay(ctx, issuer, jti, expiry)
-					if errors.Is(err, store.ErrMemberAuthorityUnavailable) {
-						return lifecycleprincipal.ErrDependencyUnavailable
-					}
-					return err
-				}
-				options = append(options, publicRuntime.ServerOptionsWithCreator(checker.CheckEpoch, replay)...)
-			} else {
-				options = append(options, publicRuntime.ServerOptions()...)
+			creatorDependencies := creatorMembershipDependencies(spaceStore, ownershipAuthClient, principalIssuer)
+			if !memberAuthorityEnabled && creatorDependencies.CreatorReplay != nil {
+				stopCreatorReplayCleanup := startCreatorReplayCleanup(runCtx, spaceStore, logger)
+				defer stopCreatorReplayCleanup()
 			}
+			options = append(options, publicRuntime.ServerOptionsWithMembership(creatorDependencies)...)
 			publicServer = grpc.NewServer(options...)
 			spacev1.RegisterSpaceServiceServer(publicServer, &grpcsvc.PublicLifecycleSpace{SpaceGRPC: spaceSvc, Composite: compositeService})
 			go func() {
