@@ -2,7 +2,7 @@
   "version": "MASTER-ROLE-CHECKPERMISSION-HISTORICAL-CONSUMPTION-v1",
   "status": "SOURCE_CONSUMPTION_CONTRACT_CLEAR",
   "classification": "ONE_HISTORICAL_SOURCE_DUPLICATE_WITH_REQUIRED_CURRENT_CORRECTION",
-  "source": "2ce88a9892989686cd4fd5734e8b414a3c914564",
+  "source": "e5ece697cefc00c708635539efb3d9e6c629517e",
   "base": "698d4f064f032ea74abf3ede2017100b26c8ee69",
   "path": "src/backend/role/internal/principalruntime/runtime.go",
   "historical_tuple": {
@@ -77,7 +77,7 @@
   "producer_contract": [
     "Only the exact historical duplicate caller may consume this record after actual immutable record commit/rawhash pin; never infer generic identical-blob or independent-source lineage.",
     "Preserve exact original prior row and append real new source/owner/content row plus both runtime-required flags in an auditable sidecar before normal map replacement. Never fabricate source/owner, erase history, lower a trigger or remove taint.",
-    "Current target must descend from source2ce and equal every required current source entry below. The historical nickname-wrapper defect is not silently forgiven; the actual current protected listener correction and its tests are a mandatory bound precondition.",
+    "Current target must descend from the pinned qualified descendant of original source2ce and equal every required current source entry below. The historical nickname-wrapper defect is not silently forgiven; the actual current protected listener correction and its tests are a mandatory bound precondition.",
     "Keep all fixed native/Game/test-only Role/historical-composition authorities separate. This grants no current/future path, endpoint, stand or activation authority and no blanket runtime PASS.",
     "The actual combined full producer must emit/verify both retained rows and pass existing independent-duplicate negatives, actual PR/push and required CI; this metadata alone is not a producer PASS."
   ],
@@ -87,9 +87,9 @@
       "entry": {
         "mode": "100644",
         "type": "blob",
-        "oid": "9696d267896c1086c035ff5f9b28374f548f2b40"
+        "oid": "2a76645fd5e55f220bfa6cf683237f14fee0d758"
       },
-      "sha256": "b9b922ad6170e404335e20539a0e9667f7ca6ec127ca9dfbae7c86d068b44e64"
+      "sha256": "9a96f83544726068591bb5e122521ce8030d27b566fc1ceebf354ebc59ef0e67"
     },
     {
       "path": "src/backend/role/go.mod",
@@ -184,14 +184,16 @@
   ],
   "historical_runtime_gap": "Old9dc composition unconditionally rechecked nickname after accepted creation;144c69 HOLD. Original author/runtime evidence and taint stay historical. No executed historical cross-merge success is invented.",
   "current_correction": {
-    "commit": "2ce88a9892989686cd4fd5734e8b414a3c914564",
+    "commit": "e5ece697cefc00c708635539efb3d9e6c629517e",
     "source_review": "http://192.168.0.109:30990/?project=voice&task=SWARM-DEVELOP-20261018#comment-c70",
-    "criterion": "Remove only redundant post-Strict nickname-only wrapper; existing Strict exact creation/nickname branches and all signed/TLS/body/JTI/ordinary route guards retained.",
+    "criterion": "Remove only redundant post-Strict nickname-only wrapper; existing Strict exact creation/nickname branches and all signed/TLS/body/JTI/ordinary route guards retained. Current source is the reviewed descendant with only additive Role catalog20 qualification documentation among these11bound paths; original correction2ce is mandatory ancestor and all10code/module bindings remain byte-identical.",
     "proof": "role-creation-correction-proof.json",
     "proof_sha256": "71123a7b85faa460ce87848f0df582da3d4a4dafe90d032d9e217cc22662b706",
-    "scope": "Actual fresh private TLS/JWKS/RSA/Redis creation11events and210affectedevents PASS0skip, vet/lint/gofmt0. Component proof only."
+    "scope": "Actual fresh private TLS/JWKS/RSA/Redis creation11events and210affectedevents PASS0skip, vet/lint/gofmt0. Component proof only.",
+    "original_correction_commit": "2ce88a9892989686cd4fd5734e8b414a3c914564",
+    "qualified_descendant_review": "http://192.168.0.109:30990/?project=voice&task=SWARM-DEVELOP-20261018#comment-c74"
   },
-  "review": "http://192.168.0.109:30990/?project=voice&task=SWARM-DEVELOP-20261018#comment-c71",
+  "review": "http://192.168.0.109:30990/?project=voice&task=SWARM-DEVELOP-20261018#comment-c75",
   "runtime_pass": false,
   "generic_identical_blob_authority": false,
   "current_or_future_path_authority": false,
@@ -238,7 +240,7 @@
       "bytes": 932981
     }
   ],
-  "proposal_sha256": "b0d5f6ec4d9eed375c2e228bc6c11ab7795f2beb94fdbca3a35440c2c798558f",
+  "proposal_sha256": "893ecc95b8db74922279af140ae92ee67acc2696860353f89f3386a393e47c1b",
   "prior_row_evidence_kind": "Exact eight arguments observed at the original real producer printf in contiguous hash-bound actual bash trace; the standalone temporary TSV was cleaned and is not claimed retained. Consumer must compare its actual prior row against these values and preserve it, never synthesize a replacement row.",
   "carrier_status": "Metadata only. Requires separate later immutable-commit/rawhash consumer, independent code review, actual original/conditional-negative/PR-push/full CI proof. No runtime or master merge PASS."
 }
