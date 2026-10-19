@@ -491,9 +491,54 @@ TTL. Stronger cross-service permits would need their own justified contract.
 
 The current source has no complete protected local-target resolver chain.
 Existing viewer reads and Chat entitlement methods must not be broadened by
-unsigned metadata or synthetic Space IDs. Exact owner protocol is a bounded
-cross-service/security question before code. Reporter/account lifecycle and
-list visibility require implementation as part of the same enabled vertical;
-an isolated permission check or disabled foundation does not complete BE-066.
-No source runtime, migration execution, deployment or acceptance is claimed by
-this contract stage.
+unsigned metadata or synthetic Space IDs. Reporter/account lifecycle and list
+visibility require implementation as part of the same enabled vertical; an
+isolated permission check or disabled foundation does not complete BE-066.
+
+2026-10-19 continuation: signed Messaging-only Space report RPC, actual native44
+readiness-before-facts and exact protected Role VIEW/HISTORY producer are now
+composed as development source. Role8aa is independently scoped SOURCE CLEAR;
+its actual Role25/Space44/Redis/mTLS proof is reused within that scope. Dedicated
+Chat report-policy runtime/main now calls the actual managed interval ledger;
+its private proof rejects raw/generic verified contexts. Real signed service
+credentials carrying account/profile/session claims produced causal RED in
+both new Space/Chat report interceptors; narrow checks then passed. Common
+principal behavior and unrelated caller migrations are unchanged.
+
+Messaging's new signed owner clients validate exact Space, Chat, Role and Social
+responses, conservative Space deadline, complete finite block batches and
+separate attachment retirement. An actual Linux-built Chat main with migrated
+Chat26 and independent SELECT-only LOGIN proves caller-to-native interval
+allow/deny, TLS and body binding, and actual A-to-B-to-A attachment retirement.
+Type/creator changes alter scope incarnation while preserving attachment
+generation and UNCHANGED disposition. No synthetic provider supplies these
+facts. Miniredis remains an explicit replay fixture; this is not full Auth or
+the complete BE-066 workflow proof.
+
+Accepted410 retirement refinement is IMPL c34-c38, SHA256
+`d3fce80b91ba602dafbbdacd6c2434ed8775b84d871254c5782020abc6363649`.
+Implement distinct MESSAGE/ATTACHMENT complete-scope ACK, global local-report
+fences, Chat-first writer order and actual current11 P3 durable handoff plus
+terminal-domain reconciliation. Do not wait for Moderation ACK at native P3,
+forge acknowledged_at or delete the sole positive proof without covering
+authority. Do not delete moved-out live Chat heads from Space-only report cleanup.
+
+The ordinary message-head/visibility revision schema and account-dependent
+cleanup remain specifically HOLD: no actual full erasure fence/cycle/deadline,
+pre-erasure profile mapping, preserved-message classification and allowed
+anti-ABA retention ABI is available. `auth-service.md` defines recovery then
+PII/credential erasure and author tombstones; its `user.account_deleted` account
+event is insufficient for those missing fields. The existing
+`account-delete-broker-rollout-exec-plan.md` consumer is default-off and its
+external per-service identity foundation is not activated. No substitute route,
+A7/P30D/HMAC grant or stopped operation is authorized. New message-head DDL has
+not been authored. Record a concrete owner contract/source trigger before this
+schema, rather than issue readable bindings from a fixture or resettable UUID.
+
+Remaining implementation: native head/visibility/all-writer producer after the
+named contract, Moderation-only full327 viewer/lifecycle facade, actor and
+assignee checks, finite complete-ACL pagination, actual local workflow/typed ACK
+and cleanup, restore reconciliation and coherent protected end-to-end proof.
+Namespace45/all-writer grants, deployment, CI/121 accepted handoff and full
+feature acceptance remain open. Earlier checklists and scoped proofs retain
+their exact historical boundaries; no deployment or acceptance is inferred.

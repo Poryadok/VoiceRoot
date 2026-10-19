@@ -1293,14 +1293,16 @@
           ]
         }
       ],
-      "contract_projection_sha256": "c9ace599b4e409e8120a6c1009accfb6067e1ab34fff4b44da79d4c956d0a45c",
+      "contract_projection_sha256": "7b339a260ccbe33609b33008388f397ebf94cf80c3d865330fc9db31b06946fb",
       "syntax": "proto3",
       "dependencies": [
         "google/protobuf/timestamp.proto",
         "voice/chat/v1/chat.proto",
         "voice/common/v1/common.proto",
         "voice/common/v1/space_lifecycle.proto",
-        "voice/file/v1/file.proto"
+        "voice/file/v1/file.proto",
+        "voice/space/v1/member_admission.proto",
+        "voice/space/v1/report_read.proto"
       ],
       "options": {
         "go_package": "voice.app/voice/space/v1;spacev1"

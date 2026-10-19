@@ -48,8 +48,8 @@ func (v Verifier) Unary() grpc.UnaryServerInterceptor {
 		if err != nil {
 			return nil, deny
 		}
-		_, err = principal.VerifyService(ctx, transport.BearerToken, principal.VerifyConfig{ExpectedIssuer: "messaging", ExpectedAudience: "space", ExpectedRPC: info.FullMethod, ExpectedRequestID: req.OperationId, ExpectedRequestHash: hash, KeyResolver: v.Keys, ReplayGuard: v.Replay, Clock: v.Clock})
-		if err != nil {
+		verified, err := principal.VerifyService(ctx, transport.BearerToken, principal.VerifyConfig{ExpectedIssuer: "messaging", ExpectedAudience: "space", ExpectedRPC: info.FullMethod, ExpectedRequestID: req.OperationId, ExpectedRequestHash: hash, KeyResolver: v.Keys, ReplayGuard: v.Replay, Clock: v.Clock})
+		if err != nil || verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 {
 			return nil, deny
 		}
 		return next(context.WithValue(ctx, proofKey{}, verifiedProof{hash: hash}), req)

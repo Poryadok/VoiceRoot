@@ -4,10 +4,23 @@
 
 Messaging's [local-report owner facade](messaging-service.md#space-local-report-owner-decisions-be-066-accepted-target)
 uses an exact signed `service:messaging` scope-authority registration and still
-requires a NEW protected `CheckMessageReadEntitlement` route. Its body binds the expected
+requires the dedicated protected `CheckMessageReadEntitlement` route. Its body binds the expected
 Space/Chat/viewer/timestamp as appropriate; unrelated caller routing stays
 unchanged. An unmanaged entitlement=true is only absence of an additional
 managed restriction, never proof of Space membership, tree visibility or history.
+
+The report-policy producer uses only `CheckMessageReadEntitlement` on its own
+`CHAT_REPORT_POLICY_*` mTLS listener (default9099), with the exact Messaging
+HTTPS current/next JWKS and Redis replay checks. It binds canonical Chat/profile,
+the immutable native message timestamp, a canonical transport request UUID and
+the deterministic complete request hash. Recursive unknown fields, raw identity
+metadata and service credentials containing user identity claims are rejected
+before native storage. The handler requires the private verifier-produced proof;
+a generic in-process verified context is insufficient. This route calls the
+existing native managed interval evaluator directly. It neither broadens the
+ordinary legacy method nor shares the GIS/Bot/Role/Space method closures.
+Messaging must configure this protected connection explicitly; no legacy
+metadata adapter is an accepted fallback for reports.
 
 `scope_incarnation` also changes on type/creator/managed changes. It is an
 observation fence, never positive TARGET_MOVED authority. Native migration

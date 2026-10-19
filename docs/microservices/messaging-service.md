@@ -48,6 +48,52 @@ These are required producer/consumer additions, not shipped RPCs. The complete
 finite list and cleanup contract is in the
 [implementation plan](../testing/space-local-reports-exec-plan.md).
 
+The report owner clients sign a fresh exact request for each audience and never
+forward incoming bearer or identity metadata. They preserve Chat's explicit
+group/channel type in Role decisions, validate complete echoed owner responses
+and accept only VIEW/HISTORY on the Messaging Role client. A Space lease ends
+at call-start plus the returned remaining duration; network transit cannot
+extend it. UNKNOWN history remains UNKNOWN. Neither changed Chat incarnation,
+NotFound nor a viewer NOT_VISIBLE result is a cleanup proof.
+
+### Exact retirement and native erasure contract
+
+Accepted BE-066 continuation c34-c38 distinguishes MESSAGE retirement
+`(chat_id,message_id,message_incarnation)` from ATTACHMENT retirement
+`(chat_id,original_space_id,report_attachment_generation)`. A message ACK covers
+all LOCAL reports for that incarnation across historical attachments/Spaces;
+an attachment ACK covers all its messages. Each binds its actual owner event,
+revision and exact retired key plus committed Moderation minimization receipt.
+One report, page, saved Space or opposite ACK kind cannot acknowledge the whole
+scope. UNKNOWN, absence, freeze, viewer denial and timeout cannot create ACK.
+
+Moderation installs separate global local-jurisdiction terminal fences and
+scrubs all matching open/closed report payload, notes, evidence and derived work
+before its durable completion receipt. Every local writer uses the same local
+Chat lock, then typed scope fences, typed target fences and ordered report rows;
+no RPC occurs under SQL locks. A bulk Space/account fence commits before Chat
+chunking, so it never reverses that order. These are required workflow changes,
+not claims that the local workflow currently exists.
+
+Native current11 P3 never waits for Moderation ACK and never fabricates one.
+At actual native owner completion, exact already-canonical permanent Chat-domain
+coverage and a durable content-free minimization handoff must replace new
+detailed head/retirement state atomically. Protected typed terminal-domain
+reconciliation must survive event loss and full receipt expiry, without
+resurrecting expired bytes or retaining new permanent personal metadata. Chat26
+pending-evidence guards remain intact until a separately qualified native
+terminal-supersession path exists. Space-only report erasure cannot delete a
+moved-out live Chat's Messaging heads. This does not add a twelfth participant.
+
+The new ordinary message-head schema/anti-ABA retention and account cleanup are
+HOLD until an actual owner contract binds erasure event/fence/cycle/deadline,
+pre-erasure profile mapping, retained-versus-deleted message classification and
+permitted anti-replay state. Auth's recovery window and author tombstone policy
+do not supply that ABI. The existing default-off account-delete rollout is not
+an activated protected producer. No new HMAC family, P30D metadata exception,
+late foreign identity lookup or fake deletion is implied. Full BE-066 remains
+open while this producer and the complete viewer/workflow/cleanup chain are absent.
+
 ## Durable Bot pin-removal target
 
 Private `ApplyBotChatPinRemoval` accepts one frozen whitelisted chat, including

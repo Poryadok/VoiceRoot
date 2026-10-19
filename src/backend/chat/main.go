@@ -24,6 +24,7 @@ import (
 	"voice/backend/chat/internal/gisprincipal"
 	grpcsvc "voice/backend/chat/internal/grpcsvc"
 	"voice/backend/chat/internal/matchsquadprincipal"
+	"voice/backend/chat/internal/reportprincipal"
 	"voice/backend/chat/internal/store"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
@@ -56,6 +57,13 @@ func waitForRequiredGRPCReady(ctx context.Context, conn *grpc.ClientConn) error 
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	reportPolicyConfig, reportPolicyEnabled, reportPolicyErr := reportprincipal.LoadFromEnv()
+	if reportPolicyErr != nil {
+		log.Fatalf("Chat report policy config: %v", reportPolicyErr)
+	}
+	if reportPolicyEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+		log.Fatal("Chat report policy listener requires DATABASE_URL")
+	}
 	targetConfig, targetEnabled, targetErr := roleoverrideprincipal.LoadFromEnv("chat")
 	if targetErr != nil {
 		log.Fatalf("Role target principal config: %v", targetErr)
@@ -143,6 +151,11 @@ func main() {
 			log.Fatalf("postgres: %v", err)
 		}
 		defer pool.Close()
+		reportPolicyCleanup, reportPolicyStartErr := startReportPolicyServer(runCtx, reportPolicyConfig, reportPolicyEnabled, &store.DMStore{Pool: pool}, nil)
+		if reportPolicyStartErr != nil {
+			log.Fatalf("Chat report policy listener: %v", reportPolicyStartErr)
+		}
+		defer reportPolicyCleanup()
 		scopeAuthorityCleanup, scopeErr := startChatScopeAuthorityListeners(runCtx, pool, scopeAuthorityConfigs)
 		if scopeErr != nil {
 			log.Fatalf("Chat scope authority listener: %v", scopeErr)
