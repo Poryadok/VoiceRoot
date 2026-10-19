@@ -20,6 +20,11 @@ import (
 
 func partyDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+	return partyDBThrough(t, "")
+}
+
+func partyDBThrough(t *testing.T, lastMigration string) *pgxpool.Pool {
+	t.Helper()
 	dsn := os.Getenv("BE011_TEST_PG_DSN")
 	if dsn == "" {
 		t.Skip("real PostgreSQL unavailable: set BE011_TEST_PG_DSN")
@@ -45,11 +50,19 @@ func partyDB(t *testing.T) *pgxpool.Pool {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(files), 19)
 	sort.Strings(files)
+	applied := 0
 	for _, file := range files {
+		if lastMigration != "" && filepath.Base(file)[:6] > lastMigration {
+			continue
+		}
 		body, err := os.ReadFile(file)
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(body))
 		require.NoError(t, err, file)
+		applied++
+	}
+	if lastMigration == "000018" {
+		require.Equal(t, 18, applied, "actual pre-native migration fixture")
 	}
 	return pool
 }

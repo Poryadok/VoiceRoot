@@ -896,6 +896,14 @@ Voice process instances stateless — масштабируются горизо�
 
 ## P3 Space lifecycle participant (target)
 
+The native A3 roster outbox relay is dormant in production composition. Native
+transactions still save their frozen facts and counters, but ordinary Voice,
+Space media and `NATS_URL` configuration do not lease, publish or mark these facts
+delivered. Existing participant/admission compatibility delivery is unchanged.
+A3 relay activation requires a separately qualified canonical broker authority,
+scoped publisher rights and durable consumer/inbox/source-coverage package; a v5
+readiness result or PubAck alone does not authorize that composition change.
+
 Voice adds a durable PostgreSQL lifecycle fence/operation receipt even though
 its media projection is primarily Redis. `FROZEN` atomically fences admission,
 actively ejects every Space session and revokes outstanding grants; ordinary
@@ -978,3 +986,31 @@ operation, resource, and digest fences remain; matching compact-command replay
 returns the exact stored receipt, while old create/teardown replay gets a
 terminal precondition instead of recreating or fabricating historic receipts.
 The migration refuses DOWN while any operation or permanent fence remains.
+
+The native matchmaking source reads coverage, ordinary and Space owner cuts,
+current shared memberships, account fences and related retained work in the
+same read-only repeatable-read transaction. Its fingerprint includes the full
+native witnesses and all coverage identity fields. Creation manifests do not
+establish current membership. Unknown legacy identity, conflicting locators,
+unbound fences and unresolved foreign effects make the cut unavailable;
+PREPARED and departing members do not require an active eligibility fence.
+Retained owner work needs an exact qualified retirement classification before
+it can stop excluding eligibility; expiry, an empty projection or the original
+business state alone does not establish that classification. This read adapter
+does not issue coverage, qualify factories or activate the native runtime.
+
+Legacy startup checks the persisted coverage head before any optional native
+fallback, including an empty ordinary roster. A begun cut requires its separate
+native serving artifact; the legacy root also refuses the fixed native
+installation descriptor even if its database input was removed. An admitted
+pre-cut legacy installation without either input keeps its existing behavior.
+The native descriptor contract is
+`/run/voice/installation/native-serving-v1.json`, purpose `NATIVE_SERVING`,
+entrypoint `/service-native`; digests use lowercase hexadecimal SHA256 and
+factory artifacts retain their explicit hash domains and canonical bytes.
+Parsing the descriptor establishes neither installer custody nor source
+readiness. The mandatory native database opener has no disabled-success result:
+it checks the authenticated session/current/backend role identity and required
+bound ACTIVE coverage before returning a pool. The native executable/image,
+closed factory composition and installer launch admission remain separate
+required parts of the native startup implementation.

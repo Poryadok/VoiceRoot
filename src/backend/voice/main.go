@@ -626,7 +626,8 @@ func main() {
 				logger.Warn("Space media admission outbox delivery failed", slog.String("error", err.Error()))
 			},
 		}
-		go runRosterOutbox(runCtx, lifecyclePool, admissionPublisher, logger)
+		// Native A3 facts remain pending. Starting their roster relay requires a
+		// separately qualified broker/consumer package, not ordinary NATS_URL.
 		go func() {
 			if err := admissionRelay.Run(runCtx); err != nil && runCtx.Err() == nil {
 				logger.Error("Space media admission outbox relay stopped", slog.String("error", err.Error()))

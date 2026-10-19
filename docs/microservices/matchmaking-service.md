@@ -413,3 +413,35 @@ A partial queue projection, committed disband, expired session or scope mismatch
 must create no match and advance no session generation. Database time is sampled
 after waiting for these locks. These local checks complement the protected fresh
 source revalidation and account-wide ban guard required by the full A3 path.
+### Complete-party queue selection
+
+The matcher groups queued sessions by their persisted MM party before choosing
+participants. A party is selectable only when every recorded member has one
+queued searching session; a missing member never becomes a smaller party.
+Bundles retain the queue position of their first member. A bundle that does
+not fit the remaining slots is skipped as a whole, and compatibility and peer
+bans apply to every pair in the proposed group. PostgreSQL repeats the complete
+membership and live session checks under the reservation locks.
+
+This local grouping does not establish source authority for historical rows.
+Native proposal authorization additionally requires fresh protected source
+revalidation and the account ban guard; LFP qualification uses its separate
+consent source contract.
+
+Preproposal capture uses a distinct `ProposalCandidate`, without synthesizing
+a match ID before reservation. It fingerprints the complete private parties,
+all related session rows and canonical proposal parameters in one read-only
+repeatable-read cut, then releases the transaction before protected source RPCs.
+Its accounts come only from validated persisted private member authority.
+`ProposalValidator` yields an immediate proof for that exact local cut or the
+exact definitively changed party IDs. Any Unknown result discards a partial
+change set. `CreateValidatedProposal` obtains sorted shared account ban locks
+before complete party/session row locks in a short READ COMMITTED transaction,
+then starts separate fresh ban and local cut reads before writing the match,
+proposals and next session generations. The public legacy `CreateProposal`
+refuses typed source parties; missing or mismatched immediate proof cannot
+select that path. Its schema-independent authority-field check preserves the
+actual pre-native migrations 001–018 path without treating historical rows as
+Voice/LFP source authority. Worker/native startup integration must still call
+fresh capture and protected validation at each reservation boundary; capture
+or external validation alone does not create a match.

@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 
 	"voice/backend/matchmaking/internal/config"
-	"voice/backend/matchmaking/internal/criteria"
 	"voice/backend/matchmaking/internal/queue"
 	"voice/backend/matchmaking/internal/store"
 )
@@ -140,110 +139,54 @@ func (w *Worker) tryMatchQueue(ctx context.Context, spaceID *uuid.UUID, gameID u
 		}
 	}
 
-	for i := 0; i < len(ordered); i++ {
-		anchor := ordered[i]
-		anchorCrit, err := criteria.Parse(anchor.Criteria)
-		if err != nil {
-			continue
-		}
-		group := []store.SearchSession{anchor}
-		used := map[uuid.UUID]bool{anchor.ID: true}
-
-		for j := i + 1; j < len(ordered) && len(group) < mode.Slots; j++ {
-			candidate := ordered[j]
-			if used[candidate.ID] {
-				continue
-			}
-			candCrit, err := criteria.Parse(candidate.Criteria)
-			if err != nil {
-				continue
-			}
-			if !criteria.Compatible(anchorCrit, candCrit, mode) {
-				continue
-			}
-			if w.Bans != nil {
-				banned, err := w.Bans.IsPairBanned(ctx, anchor.ProfileID, candidate.ProfileID)
-				if err != nil {
-					if w.Logger != nil {
-						w.Logger.Warn("peer ban check failed; fail-closed skip", slog.Any("error", err))
-					}
-					continue
-				}
-				if banned {
-					continue
-				}
-			}
-			compatible := true
-			for _, existing := range group {
-				existCrit, err := criteria.Parse(existing.Criteria)
-				if err != nil || !criteria.Compatible(existCrit, candCrit, mode) {
-					compatible = false
-					break
-				}
-				if w.Bans != nil {
-					banned, err := w.Bans.IsPairBanned(ctx, existing.ProfileID, candidate.ProfileID)
-					if err != nil {
-						if w.Logger != nil {
-							w.Logger.Warn("peer ban check failed; fail-closed skip", slog.Any("error", err))
-						}
-						compatible = false
-						break
-					}
-					if banned {
-						compatible = false
-						break
-					}
-				}
-			}
-			if !compatible {
-				continue
-			}
-			group = append(group, candidate)
-			used[candidate.ID] = true
-		}
-
-		if len(group) < mode.Slots {
-			continue
-		}
-
-		proposalSessions := make([]store.ProposalSession, len(group))
-		sessionIDs := make([]uuid.UUID, len(group))
-		profileIDs := make([]uuid.UUID, len(group))
-		for k, sess := range group {
-			proposalSessions[k] = store.ProposalSession{
-				SessionID: sess.ID,
-				ProfileID: sess.ProfileID,
-				PartyID:   sess.PartyID,
-			}
-			sessionIDs[k] = sess.ID
-			profileIDs[k] = sess.ProfileID
-		}
-
-		result, err := w.Matches.CreateProposal(ctx, store.CreateProposalParams{
-			GameID:   gameID,
-			Mode:     mode.Name,
-			Region:   region,
-			Sessions: proposalSessions,
-		})
-		if err != nil {
-			return err
-		}
-
-		for _, sess := range group {
-			_ = w.Queue.DequeueScopedGeneration(ctx, spaceID, gameID, mode.Name, region, sess.ID, sess.RecoveryGeneration)
-		}
-
-		if w.Events != nil {
-			_ = w.Events.PublishMatchFound(ctx, MatchFoundEvent{
-				MatchID:    result.Match.ID,
-				GameID:     gameID,
-				Mode:       mode.Name,
-				Region:     region,
-				ProfileIDs: profileIDs,
-				SessionIDs: sessionIDs,
-			})
-		}
+	bundles, err := queuedPartyBundles(ctx, ordered, &store.PartyStore{Pool: w.Matches.Pool})
+	if err != nil {
+		return err
+	}
+	group, err := selectWholePartyGroup(ctx, bundles, mode, w.Bans)
+	if err != nil {
+		return err
+	}
+	if len(group) != mode.Slots {
 		return nil
+	}
+
+	proposalSessions := make([]store.ProposalSession, len(group))
+	sessionIDs := make([]uuid.UUID, len(group))
+	profileIDs := make([]uuid.UUID, len(group))
+	for k, sess := range group {
+		proposalSessions[k] = store.ProposalSession{
+			SessionID: sess.ID,
+			ProfileID: sess.ProfileID,
+			PartyID:   sess.PartyID,
+		}
+		sessionIDs[k] = sess.ID
+		profileIDs[k] = sess.ProfileID
+	}
+
+	result, err := w.Matches.CreateProposal(ctx, store.CreateProposalParams{
+		GameID:   gameID,
+		Mode:     mode.Name,
+		Region:   region,
+		Sessions: proposalSessions,
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, sess := range group {
+		_ = w.Queue.DequeueScopedGeneration(ctx, spaceID, gameID, mode.Name, region, sess.ID, sess.RecoveryGeneration)
+	}
+
+	if w.Events != nil {
+		_ = w.Events.PublishMatchFound(ctx, MatchFoundEvent{
+			MatchID:    result.Match.ID,
+			GameID:     gameID,
+			Mode:       mode.Name,
+			Region:     region,
+			ProfileIDs: profileIDs,
+			SessionIDs: sessionIDs,
+		})
 	}
 	return nil
 }
