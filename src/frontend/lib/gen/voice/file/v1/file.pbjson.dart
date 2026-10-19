@@ -184,6 +184,62 @@ final $typed_data.Uint8List fileReferenceGCStateDescriptor = $convert.base64Deco
     'RkVSRU5DRV9HQ19TVEFURV9HQ19DT01QTEVURRACEisKJ0ZJTEVfUkVGRVJFTkNFX0dDX1NUQV'
     'RFX1JFVEFJTkVEX1NIQVJFRBAD');
 
+@$core
+    .Deprecated('Use resolveMessageAttachmentPreviewRequestDescriptor instead')
+const ResolveMessageAttachmentPreviewRequest$json = {
+  '1': 'ResolveMessageAttachmentPreviewRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {
+      '1': 'reference',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.FileReferenceKey',
+      '10': 'reference'
+    },
+  ],
+};
+
+/// Descriptor for `ResolveMessageAttachmentPreviewRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List resolveMessageAttachmentPreviewRequestDescriptor =
+    $convert.base64Decode(
+        'CiZSZXNvbHZlTWVzc2FnZUF0dGFjaG1lbnRQcmV2aWV3UmVxdWVzdBIpChBwcm90b2NvbF92ZX'
+        'JzaW9uGAEgASgNUg9wcm90b2NvbFZlcnNpb24SPQoJcmVmZXJlbmNlGAIgASgLMh8udm9pY2Uu'
+        'ZmlsZS52MS5GaWxlUmVmZXJlbmNlS2V5UglyZWZlcmVuY2U=');
+
+@$core
+    .Deprecated('Use resolveMessageAttachmentPreviewResponseDescriptor instead')
+const ResolveMessageAttachmentPreviewResponse$json = {
+  '1': 'ResolveMessageAttachmentPreviewResponse',
+  '2': [
+    {
+      '1': 'reference',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.FileReferenceKey',
+      '10': 'reference'
+    },
+    {
+      '1': 'snapshot',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.FilePreviewSnapshot',
+      '10': 'snapshot'
+    },
+  ],
+};
+
+/// Descriptor for `ResolveMessageAttachmentPreviewResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List resolveMessageAttachmentPreviewResponseDescriptor =
+    $convert.base64Decode(
+        'CidSZXNvbHZlTWVzc2FnZUF0dGFjaG1lbnRQcmV2aWV3UmVzcG9uc2USPQoJcmVmZXJlbmNlGA'
+        'EgASgLMh8udm9pY2UuZmlsZS52MS5GaWxlUmVmZXJlbmNlS2V5UglyZWZlcmVuY2USQAoIc25h'
+        'cHNob3QYAiABKAsyJC52b2ljZS5ldmVudHMudjEuRmlsZVByZXZpZXdTbmFwc2hvdFIIc25hcH'
+        'Nob3Q=');
+
 @$core.Deprecated('Use validateStoryMediaRequestDescriptor instead')
 const ValidateStoryMediaRequest$json = {
   '1': 'ValidateStoryMediaRequest',

@@ -106,6 +106,9 @@ func (s stubFiles) GetBulkMetadata(_ context.Context, req *filev1.GetBulkMetadat
 	}
 	out := map[string]*filev1.FileMetadata{}
 	legacyFileIDs := req.GetFileIds() //nolint:staticcheck // R23 compatibility: keep legacy metadata fixtures until callers migrate to access-scoped items.
+	for _, item := range req.GetItems() {
+		legacyFileIDs = append(legacyFileIDs, item.GetFileId())
+	}
 	for _, id := range legacyFileIDs {
 		if m := s.byID[id]; m != nil {
 			out[id] = m

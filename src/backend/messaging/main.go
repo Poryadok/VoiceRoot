@@ -566,6 +566,7 @@ func main() {
 					logger.Error("music metadata consumer exited")
 				}
 			}()
+			go runFilePreviewPending(runCtx, &store.MessagesStore{Pool: pool}, &store.SQLChatThreadPolicy{Pool: chatMetaPool}, logger)
 			if !ok {
 				log.Fatalf("chat receipt visibility targets not configured")
 			}
@@ -688,6 +689,7 @@ func main() {
 				ticker := time.NewTicker(time.Minute)
 				defer ticker.Stop()
 				for {
+					if err := messagingService.ReconcileLegacyFilePreviews(retentionCtx); err != nil && retentionCtx.Err() == nil { logger.Error("Messaging file preview reconciliation pass failed") }
 					if err := (&store.MessagesStore{Pool: pool}).ReconcileAttachmentIntents(retentionCtx, messagingService.AttachmentReferences.Release); err != nil && retentionCtx.Err() == nil {
 						logger.Error("Messaging abandoned attachment recovery pass failed")
 					}

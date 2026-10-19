@@ -7,6 +7,7 @@ import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
 import "voice/common/v1/space_lifecycle.proto";
 import "voice/story/v1/story.proto";
+import "voice/events/v1/jetstream_events.proto";
 
 option go_package = "voice.app/voice/file/v1;filev1";
 
@@ -43,6 +44,8 @@ enum FileScanOutcome {
 
 // Uploads, R2, scanning. HTTP: /api/v1/files/**.
 service FileService {
+  // @voice.security=protected;callers=service:messaging
+  rpc ResolveMessageAttachmentPreview(ResolveMessageAttachmentPreviewRequest) returns (ResolveMessageAttachmentPreviewResponse);
   // @voice.security=protected;callers=service:story
   rpc ValidateStoryMedia(ValidateStoryMediaRequest) returns (ValidateStoryMediaResponse);
   rpc RequestUpload(RequestUploadRequest) returns (RequestUploadResponse);
@@ -88,6 +91,20 @@ service FileService {
 
   // @voice.security=protected;callers=service:space
   rpc GetSpacePurgeReceipt(voice.file.v1.GetSpacePurgeReceiptRequest) returns (voice.file.v1.GetSpacePurgeReceiptResponse);
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message ResolveMessageAttachmentPreviewRequest {
+  uint32 protocol_version = 1;
+  FileReferenceKey reference = 2;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message ResolveMessageAttachmentPreviewResponse {
+  FileReferenceKey reference = 1;
+  voice.events.v1.FilePreviewSnapshot snapshot = 2;
 }
 
 // @voice.unknown_fields=reject

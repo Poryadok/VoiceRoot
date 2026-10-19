@@ -19,6 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	FileService_ResolveMessageAttachmentPreview_FullMethodName        = "/voice.file.v1.FileService/ResolveMessageAttachmentPreview"
 	FileService_ValidateStoryMedia_FullMethodName                     = "/voice.file.v1.FileService/ValidateStoryMedia"
 	FileService_RequestUpload_FullMethodName                          = "/voice.file.v1.FileService/RequestUpload"
 	FileService_ConfirmUpload_FullMethodName                          = "/voice.file.v1.FileService/ConfirmUpload"
@@ -46,6 +47,8 @@ const (
 //
 // Uploads, R2, scanning. HTTP: /api/v1/files/**.
 type FileServiceClient interface {
+	// @voice.security=protected;callers=service:messaging
+	ResolveMessageAttachmentPreview(ctx context.Context, in *ResolveMessageAttachmentPreviewRequest, opts ...grpc.CallOption) (*ResolveMessageAttachmentPreviewResponse, error)
 	// @voice.security=protected;callers=service:story
 	ValidateStoryMedia(ctx context.Context, in *ValidateStoryMediaRequest, opts ...grpc.CallOption) (*ValidateStoryMediaResponse, error)
 	RequestUpload(ctx context.Context, in *RequestUploadRequest, opts ...grpc.CallOption) (*RequestUploadResponse, error)
@@ -87,6 +90,16 @@ type fileServiceClient struct {
 
 func NewFileServiceClient(cc grpc.ClientConnInterface) FileServiceClient {
 	return &fileServiceClient{cc}
+}
+
+func (c *fileServiceClient) ResolveMessageAttachmentPreview(ctx context.Context, in *ResolveMessageAttachmentPreviewRequest, opts ...grpc.CallOption) (*ResolveMessageAttachmentPreviewResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveMessageAttachmentPreviewResponse)
+	err := c.cc.Invoke(ctx, FileService_ResolveMessageAttachmentPreview_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *fileServiceClient) ValidateStoryMedia(ctx context.Context, in *ValidateStoryMediaRequest, opts ...grpc.CallOption) (*ValidateStoryMediaResponse, error) {
@@ -285,6 +298,8 @@ func (c *fileServiceClient) GetSpacePurgeReceipt(ctx context.Context, in *GetSpa
 //
 // Uploads, R2, scanning. HTTP: /api/v1/files/**.
 type FileServiceServer interface {
+	// @voice.security=protected;callers=service:messaging
+	ResolveMessageAttachmentPreview(context.Context, *ResolveMessageAttachmentPreviewRequest) (*ResolveMessageAttachmentPreviewResponse, error)
 	// @voice.security=protected;callers=service:story
 	ValidateStoryMedia(context.Context, *ValidateStoryMediaRequest) (*ValidateStoryMediaResponse, error)
 	RequestUpload(context.Context, *RequestUploadRequest) (*RequestUploadResponse, error)
@@ -328,6 +343,9 @@ type FileServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedFileServiceServer struct{}
 
+func (UnimplementedFileServiceServer) ResolveMessageAttachmentPreview(context.Context, *ResolveMessageAttachmentPreviewRequest) (*ResolveMessageAttachmentPreviewResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveMessageAttachmentPreview not implemented")
+}
 func (UnimplementedFileServiceServer) ValidateStoryMedia(context.Context, *ValidateStoryMediaRequest) (*ValidateStoryMediaResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ValidateStoryMedia not implemented")
 }
@@ -404,6 +422,24 @@ func RegisterFileServiceServer(s grpc.ServiceRegistrar, srv FileServiceServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&FileService_ServiceDesc, srv)
+}
+
+func _FileService_ResolveMessageAttachmentPreview_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveMessageAttachmentPreviewRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).ResolveMessageAttachmentPreview(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_ResolveMessageAttachmentPreview_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).ResolveMessageAttachmentPreview(ctx, req.(*ResolveMessageAttachmentPreviewRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _FileService_ValidateStoryMedia_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -755,6 +791,10 @@ var FileService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "voice.file.v1.FileService",
 	HandlerType: (*FileServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ResolveMessageAttachmentPreview",
+			Handler:    _FileService_ResolveMessageAttachmentPreview_Handler,
+		},
 		{
 			MethodName: "ValidateStoryMedia",
 			Handler:    _FileService_ValidateStoryMedia_Handler,
