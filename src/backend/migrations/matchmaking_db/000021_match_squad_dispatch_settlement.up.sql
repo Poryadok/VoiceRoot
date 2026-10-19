@@ -249,4 +249,16 @@ $$;
 CREATE TRIGGER matchmaking_match_squad_teardown_participant_fence BEFORE UPDATE OR DELETE ON matchmaking_match_squad_teardown_participants
     FOR EACH ROW EXECUTE FUNCTION guard_matchmaking_match_squad_teardown_participant();
 
+CREATE FUNCTION require_matchmaking_match_squad_new_dispatch_protocol() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.dispatch_protocol_version<>1 OR NEW.state<>'provisioning' OR NEW.provision_disposition<>'LIVE' OR
+       NEW.provision_revision<>1 OR NEW.chat_dispatch_state<>'NOT_ISSUED' OR NEW.voice_dispatch_state<>'NOT_ISSUED' THEN
+        RAISE EXCEPTION 'new MatchSquad intent requires unissued dispatch protocol1';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER matchmaking_match_squad_new_dispatch_protocol_guard BEFORE INSERT ON matchmaking_match_squad_operations
+    FOR EACH ROW EXECUTE FUNCTION require_matchmaking_match_squad_new_dispatch_protocol();
+
 COMMIT;

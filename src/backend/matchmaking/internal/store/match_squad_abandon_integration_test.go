@@ -162,6 +162,10 @@ func TestMatchSquadUnissuedAbandonmentClosesWithoutSyntheticTeardown(t *testing.
 		Participants: []*chatv1.MatchSquadParticipant{{ProfileId: s.ProfileID.String()}}, ParticipantManifestSha256: sumSHA256(manifest),
 	})
 	require.NoError(t, err)
+	_, err = st.SaveMatchSquadProvisioningIntent(ctx, MatchSquadProvisioningIntent{MatchID: proposal.Match.ID, OperationID: uuid.New(),
+		ParticipantManifestHash: sumSHA256(manifest), ParticipantManifestBytes: manifest, ChatOperationID: chatOp,
+		ChatRequestHash: sumSHA256(request), ChatRequestBytes: request, VoiceOperationID: uuid.New()})
+	require.Error(t, err, "upgraded schema rejects new unmarked legacy intent")
 	_, err = pool.Exec(ctx, `INSERT INTO matchmaking_match_squad_operations
 		(match_id,operation_id,participant_manifest_sha256,participant_manifest_bytes,state,chat_operation_id,chat_request_sha256,chat_request_bytes,voice_operation_id,dispatch_protocol_version)
 		VALUES ($1,$2,$3,$4,'provisioning',$5,$6,$7,$8,1)`, proposal.Match.ID, uuid.New(), sumSHA256(manifest), manifest, chatOp, sumSHA256(request), request, uuid.New())

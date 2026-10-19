@@ -37,7 +37,8 @@ func TestProvisionPartyGateFreshCutUnknownAndAtomicChangedReset(t *testing.T) {
 	validator := &partysource.Revalidator{Snapshots: provisionReaderFunc(func(_ context.Context, subject partysource.Subject) (partysource.Snapshot, error) {
 		reads++
 		p := params[subject.SearchOperationID]
-		return partysource.Snapshot{ProtocolVersion: p.ProtocolVersion, Kind: p.SourceKind, RoomID: p.SourceRoomID, RosterVersion: p.SourceRosterVersion, MemberProfileIDs: p.MemberProfileIDs}, nil
+		return partysource.Snapshot{ProtocolVersion: p.ProtocolVersion, Kind: p.SourceKind, RoomID: p.SourceRoomID, RosterVersion: p.SourceRosterVersion,
+			MemberProfileIDs: p.MemberProfileIDs, MemberAuthorityVersion: p.MemberAuthorityVersion, MemberAuthorities: p.MemberAuthorities, SourceAuthorityHash: p.SourceAuthorityHash}, nil
 	})}
 	gate := &squad.PartySourceGate{Store: st, Validator: validator}
 	candidate, err := gate.ValidateProvision(ctx, proposal.Match.ID)

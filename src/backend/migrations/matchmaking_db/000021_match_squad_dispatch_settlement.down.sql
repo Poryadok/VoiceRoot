@@ -5,6 +5,8 @@ DO $$ BEGIN
         RAISE EXCEPTION 'cannot remove MatchSquad dispatch or settlement evidence';
     END IF;
 END $$;
+DROP TRIGGER matchmaking_match_squad_new_dispatch_protocol_guard ON matchmaking_match_squad_operations;
+DROP FUNCTION require_matchmaking_match_squad_new_dispatch_protocol();
 DROP TRIGGER matchmaking_match_squad_teardown_fence ON matchmaking_match_squad_teardowns;
 DROP FUNCTION guard_matchmaking_match_squad_lifecycle();
 ALTER FUNCTION guard_matchmaking_match_squad_lifecycle_pre021() RENAME TO guard_matchmaking_match_squad_lifecycle;

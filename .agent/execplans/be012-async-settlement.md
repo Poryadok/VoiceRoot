@@ -159,3 +159,54 @@ existing full provisioning/lifecycle and storage roundtrip. Input is immutable
 no actual provider replay or enabled worker recovery is claimed. Remaining named
 work: durable conflict evidence/alerts, common validated intent/dispatch/activation,
 every reset/deadline/decline latch, abandoned recovery scan and real provider tests.
+
+2026-10-19T00:22Z forward store checkpoint (worker still unwired):
+
+- `ProvisionValidationProof` consumes the actual private partysource attempt via
+  Hash/Matches without a store->partysource import cycle. All three local APIs
+  acquire READ COMMITTED account guard before match -> complete parties ->
+  complete sessions -> proposals -> operation, then fresh ban Check, Verify and
+  transition/commit; no external IO occurs in the transaction.
+- Validated intent uses protocol1 with both providers NOT_ISSUED. Dispatch
+  authorization commits MAY_HAVE_CREATED before returning a ticket; retries keep
+  permanent first-dispatch identity/time and advance revision, invalidating the
+  consumed cut even when dispatch state was already MAY_HAVE_CREATED.
+- Final activation requires exact operation/protocol/LIVE/both-known bindings
+  and the same fresh proof/guard. Legacy public activation cannot bypass protocol1.
+  Caller-Tx extraction retains original immutable request/receipt validation and
+  predecessor legacy-schema behavior in its explicitly legacy entry points.
+- 021 post-UP INSERT fence rejects new unmarked legacy intents. Historical
+  conservative backfill stays separate; this is not proof old in-flight writers
+  stopped or that any missing receipt means no effect.
+
+Actual proof partition (external JSONL/stderr/exit and source SHA inventories):
+- settlement-dispatch-red: initial stub Pending RED; dispatch-v2-green:
+  3PGPASS/0skip24.170s (non-initiating member ban, nil/stale proof, marker/abandon).
+- settlement-intent-refactor-regression: original full lifecycle PASS1/0skip17.846s.
+- settlement-activation-red: missing final gate RED; unmarked-writer-red:
+  upgraded schema previously accepted protocol0 intent (RED retained).
+- settlement-forward-green: 10PGPASS/0skip (partysearch15.048s, store58.105s),
+  including activation/ban/stale cut, both abandonment/activation winner outcomes,
+  provider receipt/cleanup and guarded migration cases.
+- settlement-proof-reuse-red: a retry reused its proof, RED retained; revision
+  fix covered by full settlement-party-package run:21top+10subPASS,1topFAIL,
+  0skip156.376s. The sole failure was own older gate Snapshot fixture missing
+  newly required private authority fields; production validator unchanged.
+  Only that fixture changed, then settlement-party-fixture-green PASS1/0skip14.985s.
+  Original full-package FAIL remains preserved, not relabelled a full-run PASS.
+- settlement-forward-short:230PASS/176explicitPGskip/0FAIL; forward-vet store,
+  squad and partysearch terminal0. Host lint diagnostic terminal1 reports only
+  the three existing unwired roster-runtime helpers; not a lint PASS and its
+  working input overlapped new skeleton edits, so no immutable certification.
+- Second Graphify update again produced no output; only owned40100/49756 stopped,
+  wrapper terminal0; NOT a graph update PASS. Actual WT31 lease/holder unchanged
+  on readback, no foreign process/lease/resource changed.
+
+Remaining: real typed local-ban denial -> exact affected-party reset (145 narrow
+private error accessor is publishing), every source/decline/deadline abandonment
+latch and historical repair, durable provider mismatch evidence/alerts, request
+and both background coordinator paths, exact abandoned Create settlement and
+actual provider replay/no-resurrection proofs. LFP169c23 is a separate typed
+MM-owned consent source; no NULL/native/SOLO compatibility bypass was added.
+222/121 dormant A3 relay repair remains independent; later delivery still needs
+220v6 plus145coverage and147 actual productPG commit-beforeACK/lostACK evidence.
