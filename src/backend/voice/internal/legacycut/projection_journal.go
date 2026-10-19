@@ -59,6 +59,26 @@ type ProjectionJournal struct {
 	Clients map[string]*redis.Client
 }
 
+// ReadPartition is the protected native-owner intake reader. It rederives the
+// complete partition from retained raw capture and authoritative owner journals,
+// and re-verifies every work/proof binding before returning it. Native owners
+// call it before writing their own W/C/P acknowledgement; acknowledgements are
+// intentionally not a prerequisite of this read. It grants no mutation right.
+func (j *ProjectionJournal) ReadPartition(ctx context.Context, ref PartitionRef) (Partition, error) {
+	p, err := j.readPartition(ctx, ref)
+	if err != nil {
+		return Partition{}, err
+	}
+	w, err := j.Owner.ReadOwnerWork(ctx, p.LegacyWork)
+	if err != nil {
+		return Partition{}, err
+	}
+	if _, err = j.verifyOwners(ctx, p, w, false); err != nil {
+		return Partition{}, err
+	}
+	return p, nil
+}
+
 func (j *ProjectionJournal) RegisterPartition(ctx context.Context, legacy retirementproof.OwnerWorkRef, proof retirementproof.ProofRef, id uuid.UUID) (PartitionRef, error) {
 	if j == nil || j.Owner == nil || j.Authority == nil || id == uuid.Nil {
 		return PartitionRef{}, retirementproof.ErrUnavailable
