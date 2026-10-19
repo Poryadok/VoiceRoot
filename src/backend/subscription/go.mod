@@ -94,6 +94,7 @@ require (
 	voice.app/voice/analytics v0.0.0 // indirect
 	voice.app/voice/chat v0.0.0 // indirect
 	voice.app/voice/file v0.0.0 // indirect
+	voice.app/voice/role v0.0.0
 	voice.app/voice/story v0.0.0 // indirect
 )
 
@@ -116,3 +117,5 @@ replace voice.app/voice/events => ../messaging/pb/voice/events
 replace voice.app/voice/file => ../file/pb/voice/file
 
 replace voice.app/voice/story => ../voice/pb/voice/story
+
+replace voice.app/voice/role => ../role/pb/voice/role

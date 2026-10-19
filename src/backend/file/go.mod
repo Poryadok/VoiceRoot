@@ -128,7 +128,10 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	voice.app/voice/gameintegration v0.0.0 // indirect
+	voice.app/voice/role v0.0.0
 	voice.app/voice/space v0.0.0 // indirect
 )
 
 replace voice.app/voice/gameintegration => ../user/pb/voice/gameintegration
+
+replace voice.app/voice/role => ../role/pb/voice/role

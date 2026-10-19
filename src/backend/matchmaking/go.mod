@@ -90,6 +90,7 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	voice.app/voice/file v0.0.0 // indirect
+	voice.app/voice/role v0.0.0
 	voice.app/voice/story v0.0.0 // indirect
 )
 
@@ -114,3 +115,5 @@ replace voice.app/voice/events => ../messaging/pb/voice/events
 replace voice.app/voice/file => ../file/pb/voice/file
 
 replace voice.app/voice/story => ../voice/pb/voice/story
+
+replace voice.app/voice/role => ../role/pb/voice/role

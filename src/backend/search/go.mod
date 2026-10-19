@@ -95,6 +95,7 @@ require (
 	voice.app/voice/analytics v0.0.0 // indirect
 	voice.app/voice/file v0.0.0 // indirect
 	voice.app/voice/gameintegration v0.0.0 // indirect
+	voice.app/voice/role v0.0.0
 	voice.app/voice/story v0.0.0 // indirect
 )
 

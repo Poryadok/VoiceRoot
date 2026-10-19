@@ -16,6 +16,7 @@ COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY user/pb/voice/gameintegration/go.mod ./user/pb/voice/gameintegration/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
+COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh file
 COPY user/pb/voice/gameintegration ./user/pb/voice/gameintegration
 COPY pkg ./pkg
@@ -27,6 +28,7 @@ COPY voice/pb/voice/story ./voice/pb/voice/story
 COPY voice/pb/voice/space ./voice/pb/voice/space
 COPY voice/pb/voice/subscription ./voice/pb/voice/subscription
 COPY user/pb ./user/pb
+COPY role/pb/voice/role ./role/pb/voice/role
 WORKDIR /src/file
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked --mount=type=cache,target=/root/.cache/go-build,id=voice-gobuild,sharing=locked CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .
 

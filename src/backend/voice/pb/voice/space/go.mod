@@ -16,6 +16,7 @@ require (
 	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
+	voice.app/voice/role v0.0.0
 	voice.app/voice/story v0.0.0 // indirect
 )
 
@@ -28,3 +29,5 @@ replace voice.app/voice/chat => ../../../../chat/pb/voice/chat
 replace voice.app/voice/story => ../story
 
 replace voice.app/voice/events => ../../../../messaging/pb/voice/events
+
+replace voice.app/voice/role => ../../../../role/pb/voice/role
