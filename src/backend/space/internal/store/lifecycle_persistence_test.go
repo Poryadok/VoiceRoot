@@ -90,6 +90,21 @@ func lifecycleMigrationPath(t *testing.T, direction string) string {
 
 func lifecycleStoreFixture(t *testing.T) *SpaceStore {
 	t.Helper()
+	st := lifecycleBaseStoreFixture(t)
+	ctx := context.Background()
+	// Keep this focused fixture's historical layout, extending only the durable
+	// completion ledger and canonical Realtime11 constraints it now exercises.
+	// Complete runtime fixtures separately install audit/hard-delete guards.
+	for _, name := range []string{"000023_lifecycle_evidence_retention.up.sql", "000034_realtime_lifecycle_participant.up.sql"} {
+		_, err := st.Pool.Exec(ctx, r22SpaceMigrationSQL(t, name))
+		require.NoError(t, err)
+	}
+	return st
+}
+
+// Runtime fixtures must install22 before34 creates the terminal predicate.
+func lifecycleBaseStoreFixture(t *testing.T) *SpaceStore {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("requires PostgreSQL lifecycle migration")
 	}

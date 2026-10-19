@@ -26,7 +26,7 @@ func (testLifecycleHasher) HashAccount(_ context.Context, id uuid.UUID) ([]byte,
 
 func completeLifecycleRuntimeStoreFixture(t *testing.T) *SpaceStore {
 	t.Helper()
-	st := lifecycleStoreFixture(t)
+	st := lifecycleBaseStoreFixture(t)
 	ctx := context.Background()
 	for _, name := range []string{"000014_ownership_outbox_delivery.up.sql", "000015_audit_ledger.up.sql", "000022_lifecycle_runtime.up.sql", "000023_lifecycle_evidence_retention.up.sql", "000025_tree_audit_actions.up.sql", "000027_audit_ingestion.up.sql", "000029_audit_receipt_minimization.up.sql"} {
 		raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/space_db", name))
