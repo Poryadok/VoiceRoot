@@ -40,9 +40,27 @@ class AdmissionProfileClientTest {
       }
     }
   }
+  @Test void settingsPurposeIsIncludedInTheOpaqueUserObservationBinding() throws Exception {
+    try (var f = new Fixture()) {
+      var wire = app.voice.auth.v1.ObserveSpaceAdmissionSubjectRequest.newBuilder().setProtocolVersion(1)
+          .setPhase(app.voice.auth.v1.SpaceAdmissionPhase.SPACE_ADMISSION_PHASE_SET_ENTRY_POLICY)
+          .setSubjectRole(app.voice.auth.v1.SpaceAdmissionSubjectRole.SPACE_ADMISSION_SUBJECT_ROLE_SETTINGS_ACTOR)
+          .setAccountId(f.request.account().toString()).setProfileId(f.request.profile().toString())
+          .setSpaceId(f.request.space().toString()).setAdmissionBindingSha256(com.google.protobuf.ByteString.copyFrom(new byte[32]))
+          .setInteractiveSessionEpoch(1).build();
+      String settingsHash = AuthPrincipalServerInterceptor.requestHash(wire);
+      f.request = new AdmissionObservation.Request(AdmissionObservation.Phase.valueOf("SET_ENTRY_POLICY"),
+          AdmissionObservation.Role.valueOf("SETTINGS_ACTOR"), f.request.account(), f.request.profile(), f.request.space(),
+          "00".repeat(32), settingsHash, 1L);
+      assertEquals(settingsHash, f.client.inspect(f.request).binding());
+      assertNotEquals(settingsHash, AuthPrincipalServerInterceptor.requestHash(wire.toBuilder()
+          .setPhase(app.voice.auth.v1.SpaceAdmissionPhase.SPACE_ADMISSION_PHASE_READ)
+          .setSubjectRole(app.voice.auth.v1.SpaceAdmissionSubjectRole.SPACE_ADMISSION_SUBJECT_ROLE_APPLICANT).build()));
+    }
+  }
   class Fixture implements AutoCloseable {
     final AuthUserPrincipalIssuer issuer;final AdmissionProfileClient client;final Server server;final ManagedChannel channel;
-    final AdmissionObservation.Request request=new AdmissionObservation.Request(AdmissionObservation.Phase.READ,AdmissionObservation.Role.APPLICANT,
+    AdmissionObservation.Request request=new AdmissionObservation.Request(AdmissionObservation.Phase.READ,AdmissionObservation.Role.APPLICANT,
         UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),"ab".repeat(32),"sha256:"+"cd".repeat(32),1L);
     final KeyPair current;
     Fixture() throws Exception {

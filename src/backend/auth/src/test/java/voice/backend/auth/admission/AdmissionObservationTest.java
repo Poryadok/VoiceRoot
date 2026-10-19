@@ -34,7 +34,8 @@ class AdmissionObservationTest {
   @Test void delayedApplicantAndContinuationDoNotPinOldSession() {
     var service = new AdmissionObservation(id -> good("regular", 88, 89), this::eligible);
     assertThat(service.observe(request(Phase.APPROVE, Role.APPLICANT, null)).floor()).isEqualTo(89);
-    for (Role role : Role.values()) assertThat(service.observe(request(Phase.FIRST_PUBLISH, role, null)).floor()).isEqualTo(89);
+    for (Role role : new Role[]{Role.APPLICANT, Role.REVIEWER})
+      assertThat(service.observe(request(Phase.FIRST_PUBLISH, role, null)).floor()).isEqualTo(89);
   }
   @Test void phaseAndEpochMatrixRejectsMalformedCombinations() {
     var service = new AdmissionObservation(id -> good("regular", 1, 1), this::eligible);

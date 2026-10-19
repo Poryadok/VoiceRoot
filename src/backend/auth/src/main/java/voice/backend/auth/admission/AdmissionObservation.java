@@ -5,8 +5,8 @@ import java.util.function.Function;
 
 /** Read-only owner aggregation; never holds an Auth mutation lock across User I/O. */
 public final class AdmissionObservation {
-  public enum Phase { START, READ, SUBMIT, APPROVE, FIRST_PUBLISH }
-  public enum Role { APPLICANT, REVIEWER }
+  public enum Phase { START, READ, SUBMIT, APPROVE, FIRST_PUBLISH, SET_ENTRY_POLICY }
+  public enum Role { APPLICANT, REVIEWER, SETTINGS_ACTOR }
   public record Request(Phase phase, Role role, UUID account, UUID profile, UUID space,
       String binding, String requestHash, Long interactiveEpoch) {}
   public record Account(UUID id, String type, boolean active, long revision, long durableEpoch, long retainedEpoch) {}
@@ -44,7 +44,9 @@ public final class AdmissionObservation {
     if (r == null || r.phase() == null || r.role() == null || nil(r.account()) || nil(r.profile()) || nil(r.space())
         || r.binding() == null || !r.binding().matches("[0-9a-f]{64}")
         || r.requestHash() == null || !r.requestHash().matches("sha256:[0-9a-f]{64}")) throw invalid();
-    boolean interactive = r.phase() == Phase.READ || r.phase() == Phase.START || r.phase() == Phase.SUBMIT
+    boolean settings = r.phase() == Phase.SET_ENTRY_POLICY;
+    if (settings != (r.role() == Role.SETTINGS_ACTOR)) throw invalid();
+    boolean interactive = settings || r.phase() == Phase.READ || r.phase() == Phase.START || r.phase() == Phase.SUBMIT
         || (r.phase() == Phase.APPROVE && r.role() == Role.REVIEWER);
     if (((r.phase() == Phase.START || r.phase() == Phase.SUBMIT) && r.role() != Role.APPLICANT)
         || interactive != (r.interactiveEpoch() != null)
