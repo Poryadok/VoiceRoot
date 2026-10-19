@@ -42,6 +42,17 @@ tickets and permanent denies and cannot reintroduce an unguarded older writer.
 Shared DEV/STAGING operations still require the current TT resource protocol;
 these source templates do not claim a stand or appoint a tester.
 
+## Owner capability policy
+
+The [runtime capability contract](testing/release-capability-runtime-contract.md)
+defines the immutable v2 policy, owner guards, effective snapshot and qualification
+boundary. Notification now consumes that policy at bootstrap and its final push
+boundary. Its alpha image needs independently bound compiled source, mounted
+policy/digest and a private fresh snapshot target before rollout. Legacy configs
+do not qualify; all other owners, full negative runners and deployment acceptance
+remain required. The local Compose Notification fixture explicitly uses the
+nonqualifying development profile.
+
 ## Explicit provisional staging (implementation contract)
 
 An explicit master `workflow_dispatch` may opt into `provisional_staging=true`

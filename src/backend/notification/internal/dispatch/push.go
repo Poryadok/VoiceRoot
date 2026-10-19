@@ -10,14 +10,17 @@ import (
 	"voice/backend/notification/internal/fcm"
 	"voice/backend/notification/internal/push"
 	"voice/backend/notification/internal/store"
+	"voice/backend/pkg/releasepolicy"
 )
 
 // PushDispatcher routes push delivery to FCM, APNs, or VoIP APNs based on device token metadata.
 type PushDispatcher struct {
-	FCM               fcm.Sender
-	APNs              apns.Sender
-	VoIP              apns.VoIPSender
-	LifecycleDelivery interface {
+	ReleasePolicy          *releasepolicy.Policy
+	OnCapabilitySuppressed func(context.Context)
+	FCM                    fcm.Sender
+	APNs                   apns.Sender
+	VoIP                   apns.VoIPSender
+	LifecycleDelivery      interface {
 		WithChatDelivery(context.Context, string, func(context.Context) error) error
 		WithSpaceDelivery(context.Context, string, func(context.Context) error) error
 	}
@@ -35,6 +38,10 @@ func (d *PushDispatcher) PrepareAndSend(ctx context.Context, profileID uuid.UUID
 		return fmt.Errorf("push dispatcher unavailable")
 	}
 	send := func(guarded context.Context) error {
+		allowed, err := d.releaseTargetAllowed(guarded, token)
+		if err != nil || !allowed {
+			return err
+		}
 		prepared, allowed, err := prepare(guarded)
 		if err != nil || !allowed {
 			return err
@@ -58,6 +65,10 @@ func (d *PushDispatcher) PrepareAndSend(ctx context.Context, profileID uuid.UUID
 }
 
 func (d *PushDispatcher) send(ctx context.Context, profileID uuid.UUID, token store.DeviceToken, payload push.Payload) error {
+	allowed, err := d.releaseTargetAllowed(ctx, token)
+	if err != nil || !allowed {
+		return err
+	}
 	fcmPayload := fcm.PushPayload(payload)
 	switch token.PushService {
 	case "apns":
@@ -76,4 +87,22 @@ func (d *PushDispatcher) send(ctx context.Context, profileID uuid.UUID, token st
 		}
 		return d.FCM.Send(ctx, profileID, token, fcmPayload)
 	}
+}
+
+// releaseTargetAllowed is checked inside lifecycle protection before lazy quota
+// and grouping preparation, then again at the final provider boundary.
+func (d *PushDispatcher) releaseTargetAllowed(ctx context.Context, token store.DeviceToken) (bool, error) {
+	if d.ReleasePolicy != nil && d.ReleasePolicy.Profile() == releasepolicy.Alpha {
+		mobile, err := push.MobileTarget(token.Platform, token.PushService)
+		if err != nil {
+			return false, err
+		}
+		if mobile && !d.ReleasePolicy.Allows(releasepolicy.MobilePush) {
+			if d.OnCapabilitySuppressed != nil {
+				d.OnCapabilitySuppressed(ctx)
+			}
+			return false, nil
+		}
+	}
+	return true, nil
 }

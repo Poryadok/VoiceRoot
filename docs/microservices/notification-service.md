@@ -1,5 +1,19 @@
 # Notification Service
 
+## Release capability enforcement
+
+Notification consumes the immutable, source/digest-bound
+[owner capability policy](../testing/release-capability-runtime-contract.md).
+The same bootstrap object feeds mobile RegisterDevice admission, every final
+PushDispatcher provider call and the private effective snapshot. Alpha rejects
+Android/iOS registration before token writes and suppresses mobile dispatch for
+old tokens/events/retries; web push, unregister/settings and in-app behavior
+retain their ordinary rules. Unknown/conflicting platform/provider metadata
+cannot fall through to FCM. No token purge or provider activation is implied.
+Release bootstrap rejects absent/unbound policy, recording/debug test mode and
+missing private snapshot configuration before serving. Explicit development
+cannot qualify as alpha. Other owners and actual UI/REST/WS proof remain open.
+
 ## Обзор
 
 Маршрутизация уведомлений по каналам доставки: push (FCM/APNs), in-app (WebSocket), email.
