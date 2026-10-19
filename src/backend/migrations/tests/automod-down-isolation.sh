@@ -53,8 +53,10 @@ for testmode in rr race empty live; do
       auth30) family=auth_db;target=30;number=000030;table=moderation_terminal_subjects;insert="INSERT INTO $table(subject_id) VALUES(gen_random_uuid())";guard='cannot discard terminal authority generation or progress';;
       auth31) family=auth_db;target=31;number=000031;table=moderation_lifecycle_current;insert="INSERT INTO accounts(id,password_hash,type,status) VALUES(gen_random_uuid(),'native-fixture','regular','active')";guard='moderation lifecycle authority cannot be discarded';;
     esac
-    db="down_guard_$$_${selected}_${testmode}"
-    createdb --maintenance-db=postgres "$db"
+    candidate="down_guard_$$_${selected}_${testmode}"
+    createdb --maintenance-db=postgres "$candidate"
+    # A failed/unknown create never grants cleanup custody over this name.
+    db=$candidate
     prefix
     down=${up%.up.sql}.down.sql
     ready="$tmp/${selected}_${testmode}.ready";go="$tmp/${selected}_${testmode}.go"

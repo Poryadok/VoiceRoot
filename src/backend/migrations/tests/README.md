@@ -5,6 +5,11 @@ Linux PostgreSQL fixture with PostgreSQL client tools and administrative
 `PGUSER`/`PGPASSWORD`. It creates uniquely named databases and drops only databases
 it successfully created. No host port or application database is required.
 
+Run `sh automod-down-ownership-test.sh` inside Linux for the command-stub
+regression: failed/colliding or unknown-outcome creates must never call `dropdb`;
+a confirmed successful create owns cleanup of that exact name after a later
+fixture failure. This check uses no PostgreSQL server or listener.
+
 The 22 cases cover seven author-owned downgrade files: pinned REPEATABLE READ
 with a subsequently committed first history row; READ COMMITTED with a real
 writer-lock wait; unused READ COMMITTED DOWN/UP; and Auth28's existing LIVE
