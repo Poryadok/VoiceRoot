@@ -121,7 +121,7 @@ func main() {
 		if !lifecycleEnabled || lifecyclePool == nil {
 			log.Fatal("Voice Space lifecycle principal requires VOICE_DATABASE_URL")
 		}
-		spaceLifecycleStore = spacelifecycle.NewPostgresStore(lifecyclePool)
+		spaceLifecycleStore = spacelifecycle.NewPostgresStore(lifecyclePool, spacemedia.BeginPartyRoomClose)
 		if err := spaceLifecycleStore.CheckSchema(runCtx); err != nil {
 			log.Fatalf("voice Space lifecycle database schema: %v", err)
 		}
@@ -506,6 +506,16 @@ func main() {
 		}()
 	}
 
+	if service, ok := spaceLifecycleController.(*spacelifecycle.Service); ok {
+		fence, ok := callStore.(interface {
+			SetSpaceLifecycle(context.Context, string, int64, bool) error
+		})
+		if !ok || !callStoreDurable {
+			log.Fatal("P3 requires durable lifecycle-fenced Redis")
+		}
+		service.Effects.ProjectionFence = fence
+		service.Effects.NativeDrain = &spacemedia.Coordinator{Calls: callStore, Store: callStore, Admissions: spacemedia.NewPostgresAdmissionStore(lifecyclePool)}
+	}
 	tokenTTL := time.Hour
 	spaceMediaAdmissions := spacemedia.NewPostgresAdmissionStore(lifecyclePool)
 	federatedMedia, err := federationmedia.LoadFromEnv(os.Getenv)
@@ -594,10 +604,15 @@ func main() {
 			strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")),
 			strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET")),
 		)
+		projectionGates, ok := callStore.(voicestore.SpaceProjectionGates)
+		if !ok {
+			log.Fatal("Space requires an incarnation-fenced projection store")
+		}
+		voiceSvc.SpaceProjectionGates = projectionGates
 		spaceMediaServing := &atomic.Bool{}
 		voiceSvc.SpaceMediaServing = spaceMediaServing
 		spaceMediaCoordinator := &spacemedia.Coordinator{
-			Store: callStore, Calls: callStore, Admissions: spaceMediaAdmissions,
+			ProjectionGates: projectionGates, Store: callStore, Calls: callStore, Admissions: spaceMediaAdmissions,
 			SessionEpochChecker: sessionEpochChecker,
 			Access:              voiceRoomAccessResolver, Grants: voiceRoomGrantResolver, Media: mediaLifecycle,
 			Every: spacemedia.ReconcileInterval,
@@ -605,6 +620,17 @@ func main() {
 				logger.Warn("Space media authority reconciliation failed", slog.String("error", err.Error()))
 			},
 			OnReadiness: spaceMediaServing.Store,
+		}
+		if service, ok := spaceLifecycleController.(*spacelifecycle.Service); ok {
+			service.Effects.NativeDrain = spaceMediaCoordinator
+			fence, ok := callStore.(interface {
+				SetSpaceLifecycle(context.Context, string, int64, bool) error
+			})
+			if !ok {
+				log.Fatal("P3 requires lifecycle-fenced Redis projection")
+			}
+			service.Effects.ProjectionFence = fence
+			// Protected P3 has one independently wired exact-drain recovery loop.
 		}
 		voiceSvc.SpaceMediaRevoker = spaceMediaCoordinator
 		invalidationConsumer, err := spacemedia.StartInvalidationConsumer(runCtx, natsURL, spaceMediaCoordinator, logger)
@@ -620,11 +646,14 @@ func main() {
 			log.Fatal("Space media durable event publisher is not configured")
 		}
 		admissionRelay := &spacemedia.AdmissionOutboxRelay{
+
 			Store: spaceMediaAdmissions, Publisher: admissionPublisher,
 			OnError: func(err error) {
 				logger.Warn("Space media admission outbox delivery failed", slog.String("error", err.Error()))
 			},
 		}
+		// Native A3 facts remain pending. Starting their roster relay requires a
+		// separately qualified broker/consumer package, not ordinary NATS_URL.
 		go func() {
 			if err := admissionRelay.Run(runCtx); err != nil && runCtx.Err() == nil {
 				logger.Error("Space media admission outbox relay stopped", slog.String("error", err.Error()))
@@ -633,6 +662,26 @@ func main() {
 		go func() {
 			if err := spaceMediaCoordinator.Run(runCtx); err != nil && runCtx.Err() == nil {
 				logger.Error("Space media authority reconciler stopped", slog.String("error", err.Error()))
+			}
+		}()
+	}
+	// Publish P3 recovery only after every optional consumer has final bindings.
+	if configured, ok := spaceLifecycleController.(*spacelifecycle.Service); ok {
+		service := configured.RecoverySnapshot()
+		go func() {
+			ticker := time.NewTicker(spacemedia.ReconcileInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-runCtx.Done():
+					return
+				case <-ticker.C:
+					ctx, cancel := context.WithTimeout(runCtx, 4*time.Second)
+					if err := service.ResumePending(ctx); err != nil {
+						logger.Warn("P3 exact drain pending", slog.String("error", err.Error()))
+					}
+					cancel()
+				}
 			}
 		}()
 	}

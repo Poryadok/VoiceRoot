@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"voice/backend/moderation/internal/automod"
+	"voice/backend/pkg/promhttp"
 )
 
 type healthResponse struct {
@@ -43,5 +44,5 @@ func healthHandlerWithGate(service string, gate *automod.BootGate) http.Handler 
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
 	})
-	return mux
+	return promhttp.MountMetricsOnHealth(mux, nil)
 }

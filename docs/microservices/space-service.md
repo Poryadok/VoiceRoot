@@ -576,6 +576,20 @@ permission subset и Owner lifecycle paths определены в
 
 `GetAuditLog` читает только строки запрошенного `space_id` и возвращает все поля `AuditLogEntry`. Ошибка Role Service закрывает доступ (`UNAVAILABLE`), явный deny даёт `PERMISSION_DENIED`, malformed cursor — `INVALID_ARGUMENT`. Handler передаёт actor/action/time filters в filter-bound store query; каждый cursor связывает authenticated viewer, scope, filters и page size. Остальные writers и клиентские REST/Flutter поверхности остаются в [backend backlog](../todo/backend.md).
 
+The audit read chain consumes `pkg/principal.RequireDelegatedUser` from the
+already verified Gateway delegated context. The shared reader binds canonical
+non-nil account/profile UUIDs, positive session epoch and exact audience, RPC and
+protobuf request hash; it never derives an actor from raw identity metadata.
+For this method the protected lifecycle interceptor preserves the signed
+transport metadata without manufacturing `x-voice-*` headers. The public
+disclosure wrapper, membership checks, explicit profile permission/owner cores
+and cursor viewer all use that typed profile. The ordinary listener still
+rejects audit reads, and missing protected transport has no ordinary fallback.
+Other lifecycle methods retain their explicitly unmigrated verified-first
+projection. The current ordinary Space-to-Role decision transport is a separate
+BE-181 residual; this cutover does not claim its S2S authorization or production
+PKI rollout. See the [BE-041 execution plan](../testing/be041-verified-audit-identity-exec-plan.md).
+
 **Invite permissions:** shipped `CreateInvite`, `RevokeInvite` and `ListInvites`
 handlers use the exact `SPACE_MANAGE_INVITES` decision. An unavailable configured
 Role Service fails closed. While Role is intentionally unwired, the shared
@@ -1357,6 +1371,18 @@ support are a separate later A2 implementation dependency. This decision does
 not expand the ownership-proof implementation or reuse its tokens/receipts.
 
 ## P3 Space lifecycle coordinator (accepted target; not implemented)
+
+Full deletion activation must preflight the complete participant capability
+manifest before `SCHEDULE_PENDING` or Auth consume. Voice currently declares
+`EJECT_ONLY`; see [Voice P3](voice-service.md#p3-space-lifecycle-participant-target).
+Its restrictive native barrier/exact drain is local progress, not a completed
+freeze receipt: self-hosted original/refreshed credentials lack durable provider
+retirement proof. Keep Voice outstanding and do not start the seven-day schedule,
+restore LIVE or bypass revocation through purge. A capability downgrade preserves
+already committed restrictive intent and exact retry targets; no compensating
+LIVE or weaker success grade is authorized. A future provider path requires
+operation-bound coverage/retirement proof and qualified current/historical issuer
+coverage; a boolean setting or empty roster does not satisfy this prerequisite.
 
 Space owns the aggregate and durable participant ledger. States are `LIVE`,
 `SCHEDULE_PENDING`, `FREEZE_PENDING`, `SCHEDULED`, `RESTORE_DECIDED`,

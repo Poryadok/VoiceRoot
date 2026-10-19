@@ -128,5 +128,31 @@ class EntitlementReason extends $pb.ProtobufEnum {
   const EntitlementReason._(super.value, super.name);
 }
 
+class VoiceRosterMembershipChanged_Change extends $pb.ProtobufEnum {
+  static const VoiceRosterMembershipChanged_Change CHANGE_UNSPECIFIED =
+      VoiceRosterMembershipChanged_Change._(
+          0, _omitEnumNames ? '' : 'CHANGE_UNSPECIFIED');
+  static const VoiceRosterMembershipChanged_Change CHANGE_JOINED =
+      VoiceRosterMembershipChanged_Change._(
+          1, _omitEnumNames ? '' : 'CHANGE_JOINED');
+  static const VoiceRosterMembershipChanged_Change CHANGE_LEFT =
+      VoiceRosterMembershipChanged_Change._(
+          2, _omitEnumNames ? '' : 'CHANGE_LEFT');
+
+  static const $core.List<VoiceRosterMembershipChanged_Change> values =
+      <VoiceRosterMembershipChanged_Change>[
+    CHANGE_UNSPECIFIED,
+    CHANGE_JOINED,
+    CHANGE_LEFT,
+  ];
+
+  static final $core.List<VoiceRosterMembershipChanged_Change?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 2);
+  static VoiceRosterMembershipChanged_Change? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const VoiceRosterMembershipChanged_Change._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');

@@ -1,5 +1,26 @@
 # ExecPlan: account-scoped asynchronous spam moderation (BE-045)
 
+## Current develop integration checkpoint
+
+Normal merge input `0a0024900b5bb3ba2f6fee391615f0f4fa0864e3` preserves
+the separate Role/Space Auth floor methods and reviewed strict restore deadline.
+The combined issuer inventory retains all six service issuers while each RPC
+keeps its own exact caller allowlist. Moderation retains both scan metrics and
+the private report authority/privacy fields; liveness still mounts metrics and
+configured readiness still requires P5. Auth Go/Dart bindings were regenerated
+from the merged canonical proto, rather than selecting either stale descriptor.
+
+The frozen source tree `f1c6752127db76472a3821172019c127614667e4` passed
+Linux Moderation `go test -short ./...` and `go vet ./...`. The native Maven
+compile and 40 tests passed first, with two fixture errors from unavailable
+Docker. The identical compiled candidate then passed all 42 selected principal,
+Role-floor and Space-floor tests with zero failures/errors/skips using real
+PostgreSQL16/Redis inside an owned private DinD engine. Nested published ports
+existed only in its Linux namespace; there were no Windows host ports/listeners.
+The XML reports are retained in ignored checkpoint evidence. Both runners,
+engine, private inner network and engine volume were removed after terminal
+results. This proves the bounded merge, not P1-P5 or full feature acceptance.
+
 ## Account-core v2 implementation checkpoint
 
 P0 composition checkpoint: main now loads one local issuer and starts its

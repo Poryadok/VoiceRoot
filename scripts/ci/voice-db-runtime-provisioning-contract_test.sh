@@ -3315,6 +3315,17 @@ f13_sync_boundary_reconciles_guarded_path() {
     "${result_entry}" == "${base_entry}" ]]
 }
 
+f13_guarded_correction_qualified() {
+  local repo="$1" base="$2" target="$3" path="$4" correction="$5" owner_map="$6" receipt
+  f13_develop_aggregate_enabled "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_REF:-}" || return 1
+  receipt="$(python3 "${ROOT}/scripts/ci/f13_guarded_correction.py" \
+    --repo "${repo}" --base "${base}" --target "${target}" --path "${path}" \
+    --correction "${correction}" --owner-map "${owner_map}" \
+    --event "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" --ref "${GITHUB_REF:-}" 2>/dev/null)" || return 1
+  printf '%s\n' "${receipt}" >>"${TMP_DIR}/f13-guarded-corrections.jsonl"
+  printf 'CI_DIAG stage=f13-guarded-correction qualification=%s\n' "${receipt}" >&2
+}
+
 f13_collect_develop_contributions() {
   local repo="$1" base="$2" target="$3" output="$4" diagnostic_file="${5:-}"
   local allow_direct_followup="${6:-false}"
@@ -3325,7 +3336,7 @@ f13_collect_develop_contributions() {
   local path source_entry result_entry target_entry blob trigger incremental_merge checkpoint_owner_commit checkpoint_owner_row
   local previous_trigger content_base nested_map nested_row nested_trigger nested_base nested_head
   local previous_source_head previous_source_entry base_entry source_lineage source_base_candidates nested_owner_commit
-  local game_snapshot_contribution_allowed merge_tree_status checkpoint_supersession_status sync_row_count
+  local game_snapshot_contribution_allowed merge_tree_status checkpoint_supersession_status sync_row_count guarded_correction_allowed
   local -a commit_line
   local -A owners=() owner_triggers=() owner_content_bases=() owner_source_heads=() owner_source_entries=() guarded_entries=() guarded_entry_commits=() checkpoint_merge_outcomes=()
   : >"${output}"
@@ -3546,6 +3557,7 @@ f13_collect_develop_contributions() {
       nested_base="${source_base}"
       nested_head="${source_head}"
       source_lineage=false
+      guarded_correction_allowed=false
       if [[ -n "${nested_map}" ]]; then
         nested_row="$(awk -F '\t' -v candidate="${path}" '$1 == candidate { row = $0 } END { print row }' "${nested_map}")"
         [[ -n "${nested_row}" ]] || {
@@ -3594,8 +3606,13 @@ f13_collect_develop_contributions() {
             [[ "${checkpoint_supersession_status}" == 2 ]] && incremental_merge=true
           fi
         fi
-        if [[ "${allow_direct_followup}" != true || \
-          ( "${is_direct}" != true && "${incremental_merge}" != true ) ]]; then
+        if [[ "${allow_direct_followup}" != true && "${is_direct}" == true ]] && \
+          f13_guarded_correction_qualified "${repo}" "${base}" "${target}" "${path}" "${commit}" "${output}"; then
+          guarded_correction_allowed=true
+        fi
+        if [[ "${guarded_correction_allowed}" != true && \
+          ( "${allow_direct_followup}" != true || \
+          ( "${is_direct}" != true && "${incremental_merge}" != true ) ) ]]; then
           f13_emit_guarded_failure_diagnostic duplicate_guarded_owner "${path}" \
             "${commit}" "${game_checkpoint_aggregate_head:-}" "${owners[${path}]:-}" \
             "${nested_head:-}" "${guarded_entries[${path}]:-}" "${source_entry}" \
@@ -3604,7 +3621,7 @@ f13_collect_develop_contributions() {
           return 1
         fi
         previous_trigger="${owner_triggers[${path}]:-false}"
-        [[ "${previous_trigger}" == true && "${source_lineage}" == true ]] && trigger=true
+        [[ "${previous_trigger}" == true && ( "${source_lineage}" == true || "${guarded_correction_allowed}" == true ) ]] && trigger=true
         if [[ "${checkpoint_supersession_status}" == 0 ]]; then
           unset 'guarded_entries[$path]'
           unset 'guarded_entry_commits[$path]'
@@ -3638,6 +3655,10 @@ f13_collect_develop_contributions() {
       owner_source_entries["${path}"]="${source_entry}"
       printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}" >>"${output}"
+      if [[ "${guarded_correction_allowed}" == true ]]; then
+        printf 'CI_DIAG stage=f13-guarded-correction owner_row=%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+          "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}" >&2
+      fi
     done <"${delta}"
     done
     if ((parent_count > 2)); then

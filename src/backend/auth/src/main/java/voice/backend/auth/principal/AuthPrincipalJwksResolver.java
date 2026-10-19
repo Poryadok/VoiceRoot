@@ -93,6 +93,6 @@ public final class AuthPrincipalJwksResolver {
   }
 
   private static IllegalArgumentException unavailable() {
-    return new IllegalArgumentException("principal JWKS unavailable");
+    return new PrincipalDependencyUnavailableException();
   }
 }

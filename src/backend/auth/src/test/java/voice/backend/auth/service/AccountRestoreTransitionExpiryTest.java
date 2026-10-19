@@ -72,9 +72,9 @@ class AccountRestoreTransitionExpiryTest {
   }
 
   @Test
-  void restoreAtExactTransitionCutoffRemainsAllowed() throws Exception {
+  void restoreStrictlyBeforeTransitionCutoffRemainsAllowed() throws Exception {
     AccountRepository accounts =
-        TransitionAwareAccountRepository.create(Clock.fixed(CUTOFF, ZoneOffset.UTC));
+        TransitionAwareAccountRepository.create(Clock.fixed(PRECHECK, ZoneOffset.UTC));
     Account account = accounts.create("transition-boundary@example.com", null, "hash", "regular");
     accounts.markDeleted(account.id(), DELETED_AT);
     AuthEventPublisher events = mock();
@@ -85,7 +85,7 @@ class AccountRestoreTransitionExpiryTest {
                 refreshTokens,
                 new FixedRestoreTokenStore(account.id()),
                 events,
-                Clock.fixed(CUTOFF, ZoneOffset.UTC))
+                Clock.fixed(PRECHECK, ZoneOffset.UTC))
             .restoreAccount("restore-token");
 
     assertThat(session.accountId()).isEqualTo(account.id().toString());
@@ -99,8 +99,28 @@ class AccountRestoreTransitionExpiryTest {
         org.mockito.ArgumentMatchers.eq("{}"),
         org.mockito.ArgumentMatchers.anyString(),
         org.mockito.ArgumentMatchers.any(),
-        org.mockito.ArgumentMatchers.eq(CUTOFF));
+        org.mockito.ArgumentMatchers.eq(PRECHECK));
     verify(events).publishAccountRestored(account.id());
+  }
+
+  @Test
+  void restoreAtExactCutoffRejectsWithoutIssuingSessionOrPublishingRestore() throws Exception {
+    AccountRepository accounts =
+        TransitionAwareAccountRepository.create(Clock.fixed(CUTOFF, ZoneOffset.UTC));
+    Account account = accounts.create("exact-expiry@example.com", null, "hash", "regular");
+    accounts.markDeleted(account.id(), DELETED_AT);
+    AuthEventPublisher events = mock();
+    RefreshTokenRepository refreshTokens = mock();
+    AuthService service = service(accounts, refreshTokens,
+        new FixedRestoreTokenStore(account.id()), events, Clock.fixed(CUTOFF, ZoneOffset.UTC));
+
+    assertThatThrownBy(() -> service.restoreAccount("restore-token"))
+        .isInstanceOf(AuthException.class)
+        .hasMessage("account_inactive");
+    assertThat(accounts.findById(account.id().toString()).orElseThrow())
+        .extracting(Account::status, Account::deletedAt)
+        .containsExactly("deleted", DELETED_AT);
+    verifyNoInteractions(refreshTokens, events);
   }
 
   private AuthService service(

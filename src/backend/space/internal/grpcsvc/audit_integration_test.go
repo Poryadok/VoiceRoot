@@ -465,16 +465,17 @@ func TestGetAuditLog_CrossInstance_WaitsForSpaceMutationSaga(t *testing.T) {
 		}
 	}()
 
-	memberCtx := directServerContext(withAccountProfileCtx(ctx, uuid.New(), member))
+	request := &spacev1.GetAuditLogRequest{SpaceId: spaceID.String()}
+	memberCtx := boundAuditFixture(ctx, uuid.New(), member, request)
 	readCtx, cancelRead := context.WithTimeout(memberCtx, 200*time.Millisecond)
 	defer cancelRead()
-	_, readErr := svcB.GetAuditLog(readCtx, &spacev1.GetAuditLogRequest{SpaceId: spaceID.String()})
+	_, readErr := svcB.GetAuditLog(readCtx, request)
 	permissionBeforeRelease := roles.lastPermission
 
 	close(tracer.blockAuditInsert)
 	transferErr := requireTransferResult(t, transferDone)
 	require.Equal(t, codes.Internal, status.Code(transferErr))
-	resp, err := svcB.GetAuditLog(memberCtx, &spacev1.GetAuditLogRequest{SpaceId: spaceID.String()})
+	resp, err := svcB.GetAuditLog(memberCtx, request)
 	require.NoError(t, err, "authorized member must read audit after the ownership saga releases the lease")
 	require.NotNil(t, resp.GetAuditLogList())
 	require.Equal(t, codes.Unavailable, status.Code(readErr), "audit reads must not observe the transfer's temporary owner window")

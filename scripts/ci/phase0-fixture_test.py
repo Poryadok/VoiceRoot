@@ -903,6 +903,23 @@ class ComposeTests(unittest.TestCase):
             self.assertEqual(first["startup_category"], prefixes[prefix])
             self.assertNotIn("private-sentinel", json.dumps({"summary": summary, "first": first}))
 
+    def test_voice_p3_startup_categories_are_finite_and_redacted(self):
+        cases = {
+            "P3 requires durable lifecycle-fenced Redis": "voice_p3_durable_redis_required",
+            "Space requires an incarnation-fenced projection store": "voice_space_incarnation_projection_required",
+            "P3 requires lifecycle-fenced Redis projection": "voice_p3_projection_fence_required",
+        }
+        for message, expected in cases.items():
+            with self.subTest(category=expected):
+                raw = ("voice | " + message + " private-sentinel\n").encode()
+                summary, first = startup_diagnostics.sanitize_logs(raw, "complete", ("voice",))
+                self.assertEqual(first["startup_category"], expected)
+                self.assertNotIn("private-sentinel", json.dumps({"summary": summary, "first": first}))
+        summary, first = startup_diagnostics.sanitize_logs(
+            b"voice | P3 requires unknown-private-sentinel\n", "complete", ("voice",))
+        self.assertEqual(first["startup_category"], "unknown")
+        self.assertNotIn("private-sentinel", json.dumps({"summary": summary, "first": first}))
+
     def test_t31_match_squad_runtime_detail_is_allowlisted_and_redacted(self):
         secret = "private-certificate-or-endpoint-detail"
         cases = {

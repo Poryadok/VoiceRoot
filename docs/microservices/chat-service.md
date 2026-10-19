@@ -52,6 +52,48 @@ BE-131 work; this codec contract does not activate its transport.
 
 ## API (gRPC)
 
+### Native Space-chat scope authority
+
+`ChatScopeAuthorityService.GetSpaceChatScopeAuthority` is a narrow own-`chat_db`
+read for signed `service:role` and `service:space`. Its request binds protocol
+version 1, canonical `chat_id`, `expected_space_id` and `operation_id`. A known
+matching group/channel returns only echoed scope, existence/liveness, stored
+type/Space, UUID attachment incarnation, positive monotonic Chat authority
+revision, independent lifecycle generation/state and managed kind. It returns
+no content, title, membership or Role decision and calls no other service.
+Missing and cross-Space requests use the same NotFound outcome; unavailable or
+inconsistent source state never becomes a permissive default. Consumers accept
+only an ordinary LIVE scope and retain their own fresh authorization checks.
+
+Migration `chat_db/000025` maintains `chats.scope_incarnation` and permanent
+`chat_scope_authority_heads` in the source transaction. Reparenting, type or
+ownership/managed binding reassignment replaces the incarnation. Cosmetic
+title/topic/category ordering does not. Delete preserves the head and advances
+its revision; same-ID recreation receives a new incarnation and higher revision.
+Lifecycle state/generation transitions advance the same observation revision
+without replacing the independent lifecycle generation. Revision overflow aborts
+the mutation; the head and fences cannot be truncated or reset. This migration
+has no provenance-safe DOWN. Existing native creation and P3 mutation barriers
+remain in force; no new attachment/reparent API is introduced.
+
+All returned facts come from one PostgreSQL statement snapshot of the native
+row, its head and lifecycle fence. Source triggers cover consumed fields;
+the MatchSquad operation insert covers managed-kind ownership. No read lock is
+held across network I/O. Space owns its tree relation separately: this Chat
+snapshot does not replace the exact Space-tree authority observation.
+
+Role and Space each use a dedicated listener configured by
+`CHAT_SCOPE_ROLE_*` or `CHAT_SCOPE_SPACE_*`: `GRPC_LISTEN`, `TLS_CERT_FILE`,
+`TLS_KEY_FILE`, `CLIENT_CA_FILE`, `JWKS_URL`, `JWKS_CA_FILE`,
+`REPLAY_REDIS_ADDR` and optional `REPLAY_REDIS_PASSWORD` plus paired
+`JWKS_CLIENT_CERT_FILE`/`JWKS_CLIENT_KEY_FILE`. Partial configuration fails
+startup. The listener verifies mTLS and exact issuer, subject, Chat audience,
+full RPC, request ID, complete protobuf hash and fresh JTI through the existing
+principal verifier/replay store. Ordinary and other protected Chat listeners
+do not register this service. Federation-only authority remains unchanged.
+Serving this producer is not activation of the downstream permission/admission
+vertical or permission to deploy.
+
 **Effective-membership revision/export target.**
 
 The [ListThreads effective-membership contract v1](../testing/listthreads-versioned-readmodel-exec-plan.md#effective-membership-contract-v1)
@@ -877,6 +919,12 @@ waits for Messaging completion and File acceptance of Chat-owned reference
 releases, then removes chats/navigation and returns an immutable completion
 receipt. Full request/receipt bytes retain 30 days from this participant's
 completion; compact terminal fence is permanent.
+
+An exact authenticated `PurgeSpace` retry first reads Chat's committed response
+within that original retention window, before requiring Messaging/File clients.
+It returns the saved wrapper including unknown protobuf fields, without repeating
+owner calls. Changed request bytes/hash, corrupt response bindings and expired
+evidence fail closed; they cannot restart cleanup or extend receipt retention.
 
 The same successful local PURGE transaction writes one immutable
 `chat.deleted` envelope to `chat_deleted_event_outbox` for each manifest chat.

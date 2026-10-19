@@ -71,9 +71,13 @@ func TestAuditReadDelegatedPrincipalRejectsTamperingAndRevocation(t *testing.T) 
 			called := false
 			_, err = verifier.Unary()(metadata.NewIncomingContext(context.Background(), md), req, &grpc.UnaryServerInfo{FullMethod: spacev1.SpaceService_GetAuditLog_FullMethodName}, func(ctx context.Context, _ any) (any, error) {
 				called = true
-				id, ok := authctx.ProfileID(ctx)
+				incoming, _ := metadata.FromIncomingContext(ctx)
+				for name := range incoming {
+					require.NotContains(t, name, "x-voice-", "audit must never synthesize raw identity")
+				}
+				id, ok := principal.FromContext(ctx)
 				require.True(t, ok)
-				require.Equal(t, profile, id.String())
+				require.Equal(t, profile, id.ProfileID)
 				return nil, nil
 			})
 			if mode == "valid" {

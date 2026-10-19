@@ -154,7 +154,8 @@ func TestOwnershipFreeze_GRPCOwnerAdminBotInviteVoiceAndBatchFailClosedWithoutEv
 			return svc.ListBans(ctx, &spacev1.ListBansRequest{SpaceId: f.space.String()})
 		}},
 		{"audit read", func(ctx context.Context, svc *SpaceGRPC, f r20GRPCFreezeFixture) (any, error) {
-			return svc.GetAuditLog(ctx, &spacev1.GetAuditLogRequest{SpaceId: f.space.String()})
+			request := &spacev1.GetAuditLogRequest{SpaceId: f.space.String()}
+			return svc.GetAuditLog(boundAuditFixture(ctx, f.account, f.owner, request), request)
 		}},
 		{"tree read", func(ctx context.Context, svc *SpaceGRPC, f r20GRPCFreezeFixture) (any, error) {
 			return svc.ListSpaceTree(ctx, &spacev1.ListSpaceTreeRequest{SpaceId: f.space.String()})
