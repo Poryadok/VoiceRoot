@@ -475,7 +475,7 @@ interceptor ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md));
 | `space` service | `BootstrapSpaceRoles`, `GetDefaultJoinRole`, `ListRoles`, `GetMemberRoles`, `EnsureDefaultMemberRole` (**target dedicated lifecycle RPC**), `RemoveMemberRoles` (**target dedicated lifecycle RPC**), `CheckPermission` | `owner_profile_id` only for bootstrap; dedicated lifecycle RPCs bind the joining/leaving `profile_id`, `space_id` and Role-resolved default/member roles. Generic `AssignRole`/`RevokeRole` are not accepted from Space. `CheckPermission` is limited to the global permission names enumerated below. |
 | `space` trusted transfer | `GetOwnershipTransferCapabilities`, `PrepareOwnershipTransfer`, `FinalizeOwnershipTransfer`, `AbortOwnershipTransfer` | protocol 2 and exact `space_id`, `old_owner_profile_id`, `new_owner_profile_id`, `operation_id` and request binding; same action is idempotent; no generic Role RPC may mutate `Owner` |
 | `voice`, `chat`, `messaging` service | `CheckPermission` | explicit `profile_id` only as the decision subject, plus requested `space_id`/node scope; no actor mutation authority |
-| `bot` service | `CheckPermission`, `GetMemberRoles`, `RevokeRole`, `DeleteRolesCreatedByProfile` | only signed `service:bot` lifecycle/decision calls below; no actor-mutation authority; cleanup cannot touch `Owner` or system roles |
+| `bot` service | `CheckPermission`, `ApplyBotInstallationRemoval` (durable lifecycle target); historical uninstall helpers below | only signed `service:bot` lifecycle/decision calls below; no actor-mutation authority; cleanup cannot touch `Owner` or system roles |
 | `bot` signed `bot_actor` capability | `CreateRole`, `AssignRole`, `RevokeRole` | only the exact scope and claim-bound space below; no generic Gateway principal or metadata fallback; `Owner` and every system-role mutation are rejected |
 
 ### Space `CheckPermission` decision contract
@@ -532,6 +532,39 @@ lifecycle/decision calls. It carries the exact RPC, `request_id`, `request_hash`
 
 This service principal has no authority for interactive bot actor mutations;
 those require the capability below.
+
+### Durable Bot removal target
+
+`ApplyBotInstallationRemoval` is a private `service:bot` operation for one frozen
+Bot/Space target. Protocol1 binds child operation, durable decision ID/SHA256,
+purpose `global_delete` or `space_uninstall`, Bot/actor/Space and frozen-scope
+SHA256. Its evidence is exactly one of native installation/add-operation/positive
+int64-range generation, actual legacy installation plus snapshot ID/digest, or
+orphan-whitelist snapshot ID/digest. The orphan arm is global-delete only.
+The trusted Bot service asserts its own saved source and authorization; digest
+fields alone are not independent ownership evidence. Known conflicting actor
+bindings reject. Global deletion derives from a persisted verified Bot-owner
+decision, not invented Space-admin permission. Ordinary uninstall still requires
+current verified initiating `SPACE_MANAGE_BOTS` admission.
+
+The protected mTLS receiver accepts only signed `service:bot`, audience `role`,
+exact method/request ID and full deterministic request hash, fresh bounded JWT
+and JTI. Ordinary/Gateway listeners deny this method. It does not loop through
+generic `GetMemberRoles`/`RevokeRole` handlers. Under the existing Space mutation
+guard it installs the terminal global Bot marker and/or exact installation
+tombstone, removes only non-system/non-Owner roles created by this actor and
+non-system/non-Owner assignments to this actor, and stores exact request and
+receipt bytes atomically. Owner anomalies fail closed with retained evidence;
+cleanup never grants Member or mutates Owner/system roles.
+
+The receipt binds every request identity/digest, participant `role`, outcome
+`COMPLETED`, immutable receipt ID/time and bounded role/assignment counts. Exact
+operation replay returns byte-identical saved response; changed body conflicts.
+All admitted Bot-actor writers must check the global marker and exact
+installation tombstone under the same guard; unsupported actor routes remain
+denied. A new legitimate installation UUID survives an old cleanup replay.
+This accepted BE170c8-c10 target requires its actual receiver/journal/runtime
+implementation and tests before readiness; adding wire is not activation.
 
 ### Bot actor mutation contract
 
