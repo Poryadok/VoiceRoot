@@ -405,3 +405,11 @@ generation; cleanup does not require retaining private member authority.
 The component currently accepts qualified native source captures. LFP consent
 requires its separate typed receipt adapter, and runtime startup remains part
 of the complete source activation package.
+
+Proposal reservation preserves each captured party as one unit. The store locks
+all referenced parties in UUID order before locking search sessions, then checks
+the complete immutable profile roster, current party status and session scope.
+A partial queue projection, committed disband, expired session or scope mismatch
+must create no match and advance no session generation. Database time is sampled
+after waiting for these locks. These local checks complement the protected fresh
+source revalidation and account-wide ban guard required by the full A3 path.
