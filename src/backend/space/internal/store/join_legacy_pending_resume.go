@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	authv1 "voice.app/voice/auth/v1"
 	"voice/backend/space/internal/admissionauthority"
 )
@@ -49,7 +50,7 @@ func (s *SpaceStore) PrepareLegacyJoinPendingResume(ctx context.Context, p *Join
 	}
 	c := p.selection.Context
 	in := c.Operation
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}

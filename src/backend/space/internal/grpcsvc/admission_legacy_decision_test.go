@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -370,6 +371,33 @@ func TestLegacyDecisionUsesTrueContext2AndIndependentManualGate(t *testing.T) {
 						if mode == "manual_restart_concurrent" {
 							// Two real transactions compete for the same exact sealed
 							// operation. This does not qualify a replay nonce provider.
+							// Force an ambient RR pool, then prove both transactions
+							// began before the winning ACK commits. A pre-wait RR snapshot
+							// must not turn exact replay into a serialization failure.
+							cfg := st.Pool.Config().Copy()
+							cfg.ConnConfig.RuntimeParams["default_transaction_isolation"] = "repeatable read"
+							rr, e := pgxpool.NewWithConfig(ctx, cfg)
+							require.NoError(t, e)
+							t.Cleanup(rr.Close)
+							st = &store.SpaceStore{Pool: rr}
+							var ambient string
+							require.NoError(t, rr.QueryRow(ctx, `SHOW default_transaction_isolation`).Scan(&ambient))
+							require.Equal(t, "repeatable read", ambient)
+							rrResume, e := st.PrepareLegacyJoinPendingResume(callctx, p)
+							if e != nil {
+								return nil, e
+							}
+							resumed, e = rrResume.Seal(proof)
+							if e != nil {
+								return nil, e
+							}
+							holder, e := rr.Begin(ctx)
+							require.NoError(t, e)
+							defer holder.Rollback(ctx)
+							var pid int
+							require.NoError(t, holder.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&pid))
+							_, e = holder.Exec(ctx, `SELECT 1 FROM space_join_operations WHERE actor_profile_id=$1 AND operation_id=$2 FOR UPDATE`, profile, view.Input.OperationID)
+							require.NoError(t, e)
 							type completion struct {
 								record *store.JoinSubmissionRecord
 								err    error
@@ -378,6 +406,12 @@ func TestLegacyDecisionUsesTrueContext2AndIndependentManualGate(t *testing.T) {
 							for i := 0; i < 2; i++ {
 								go func() { r, e := st.CompleteLegacyJoinPendingResume(callctx, resumed); results <- completion{r, e} }()
 							}
+							require.Eventually(t, func() bool {
+								var queued bool
+								e := rr.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity w WHERE $1=ANY(pg_blocking_pids(w.pid)) AND EXISTS(SELECT 1 FROM pg_stat_activity l WHERE w.pid=ANY(pg_blocking_pids(l.pid))))`, pid).Scan(&queued)
+								return e == nil && queued
+							}, 3*time.Second, 10*time.Millisecond)
+							require.NoError(t, holder.Rollback(ctx))
 							var winner *store.JoinSubmissionRecord
 							for i := 0; i < 2; i++ {
 								r := <-results

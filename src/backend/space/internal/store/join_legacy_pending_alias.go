@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"slices"
 	"voice/backend/space/internal/admissionauthority"
 )
@@ -27,7 +28,7 @@ func (s *SpaceStore) completeLegacyJoinPending(ctx context.Context, p *JoinLegac
 	}
 	c := p.selection.Context
 	in := c.Operation
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}
