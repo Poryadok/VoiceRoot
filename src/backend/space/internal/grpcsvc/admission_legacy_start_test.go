@@ -70,6 +70,17 @@ func TestLegacyJoinStartRealIngressAndCanonicalGuest(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
+			reservation, e := p.Reservation()
+			require.NoError(t, e)
+			require.Equal(t, "RESERVED", reservation.State)
+			require.Nil(t, reservation.AttemptID)
+			require.Equal(t, account, reservation.Input.ActorAccountID)
+			require.Equal(t, profile, reservation.Input.ActorProfileID)
+			require.Equal(t, rpc, reservation.Input.Method)
+			reservation.Input.RequestSHA256[0] ^= 1
+			unchanged, e := p.Reservation()
+			require.NoError(t, e)
+			require.NotEqual(t, reservation.Input.RequestSHA256, unchanged.Input.RequestSHA256)
 			expected, err := p.OwnerRequest()
 			if err != nil {
 				return nil, err
