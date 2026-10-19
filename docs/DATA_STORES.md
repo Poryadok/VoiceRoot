@@ -168,6 +168,7 @@ Sticker/GIF bytes live in **`file_db`** (`files`); send payloads in **`messaging
 |---------|------------|
 | `bot_daily_chat_creates` | Per-bot daily count; admission is an atomic conditional reservation capped at ten |
 | `bot_chat_create_requests` | Migration `000006`; stable `(bot_id, request_id)` hash tombstone, original/current quota day, active-attempt count, reserved flag and sticky retention fence; same-hash re-admission after definite rejection preserves key binding |
+| `bot_installation_intents` | Migration `000008`; durable Bot/Space installation identity, increasing Bot generation, immutable add operation and actor, whitelist snapshot, PREPARING/INSTALLED/CANCELING/CANCELED state and distinct cancel operation. Retained for exact retries and stale-generation rejection; permanent Space purge erases the snapshot under its lifecycle head. DOWN locks before checking and refuses any retained rows. |
 
 ---
 

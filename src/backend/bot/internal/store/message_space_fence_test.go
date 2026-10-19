@@ -106,9 +106,9 @@ func TestSpaceMessageWebhookAttemptDelaysFenceReceipt(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires PostgreSQL")
 	}
+	st, bot, chat, fence := messageSpaceFixture(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	st, bot, chat, fence := messageSpaceFixture(t)
 	_, err := st.Pool.Exec(ctx, `UPDATE bots SET is_polling_mode=false,webhook_url='https://bot.invalid/hook' WHERE id=$1`, bot.ID)
 	require.NoError(t, err)
 	require.NoError(t, st.QueueMessageRecipients(ctx, chat, uuid.New(), uuid.NewString(), map[string]any{"chat_id": chat.String()}))
@@ -154,9 +154,9 @@ func TestSpaceMessageInstallWaitsWithoutHoldingBotLock(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires PostgreSQL")
 	}
+	st, bot, chat, fence := messageSpaceFixture(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	st, bot, chat, fence := messageSpaceFixture(t)
 	space := uuid.MustParse(fence.SpaceId)
 	blocker, err := st.Pool.Begin(ctx)
 	require.NoError(t, err)
@@ -212,9 +212,9 @@ func TestSpaceMessagePollingSendDelaysFenceAndRestoredFreshMessageWorks(t *testi
 	if testing.Short() {
 		t.Skip("requires PostgreSQL")
 	}
+	st, bot, chat, fence := messageSpaceFixture(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	st, bot, chat, fence := messageSpaceFixture(t)
 	queue := func() {
 		require.NoError(t, st.QueueMessageRecipients(ctx, chat, uuid.New(), uuid.NewString(), map[string]any{"chat_id": chat.String()}))
 		d, err := st.ClaimDueMessageDelivery(ctx)

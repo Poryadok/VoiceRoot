@@ -144,6 +144,13 @@ func main() {
 			}
 		}
 		wireDownstream(svc, logger)
+		installationConn, err := wireInstallationSpace(svc, os.Getenv)
+		if err != nil {
+			log.Fatalf("Bot Space installation client: %v", err)
+		}
+		if installationConn != nil {
+			defer func() { _ = installationConn.Close() }()
+		}
 		svc.RehydrateDeferred(context.Background())
 		startDeferredTTLSweeper(svc, logger)
 		slashWorkerCtx, stopSlashWorker := context.WithCancel(context.Background())

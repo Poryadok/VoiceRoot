@@ -27,6 +27,7 @@ func startBotLifecycleStore(t *testing.T) *store.BotStore {
 		"000001_init.up.sql", "000002_bot_presence.up.sql", "000003_message_delivery_outbox.up.sql",
 		"000004_slash_interaction_outbox.up.sql", "000005_space_lifecycle.up.sql",
 		"000007_message_token_uniqueness.up.sql",
+		"000008_installation_intents.up.sql",
 	} {
 		sql, err := os.ReadFile(filepath.Join(root, name))
 		require.NoError(t, err)
@@ -46,7 +47,9 @@ func TestSpaceLifecycleFenceReplayAndPurgeOnlySpaceOwnedBotData(t *testing.T) {
 	bot, _, err := st.CreateBot(ctx, uuid.New(), "Lifecycle Bot", "", `["TEXT_CHAT_READ_HISTORY"]`, profileID)
 	require.NoError(t, err)
 	chatID := uuid.New()
-	_, err = st.InstallInSpace(ctx, bot.ID, spaceID, profileID, []uuid.UUID{chatID})
+	intent, err := st.PrepareInstallation(ctx, bot.ID, spaceID, profileID, []uuid.UUID{chatID})
+	require.NoError(t, err)
+	err = st.CompleteInstallation(ctx, intent, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	deliveryID := uuid.New()
 	_, err = st.Pool.Exec(ctx, `INSERT INTO bot_message_deliveries
@@ -84,11 +87,13 @@ func TestSpaceLifecycleFenceReplayAndPurgeOnlySpaceOwnedBotData(t *testing.T) {
 	purgeReplay, err := st.PurgeSpace(ctx, proto.Clone(purge).(*botcommonv1.SpacePurgeRequest))
 	require.NoError(t, err)
 	require.True(t, proto.Equal(purgeReceipt, purgeReplay))
-	for _, table := range []string{"bot_space_installations", "bot_chat_whitelist"} {
+	for _, table := range []string{"bot_space_installations", "bot_chat_whitelist", "bot_installation_intents"} {
 		var count int
 		require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM `+table+` WHERE space_id=$1`, spaceID).Scan(&count))
 		require.Zero(t, count, table)
 	}
+	_, err = st.PrepareInstallation(ctx, bot.ID, spaceID, profileID, nil)
+	require.ErrorIs(t, err, store.ErrSpaceLifecycleConflict, "permanent purge head remains the admission fence after journal erasure")
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT status,payload::text FROM bot_message_deliveries WHERE id=$1`, deliveryID).Scan(&deliveryStatus, &payload))
 	require.Equal(t, "canceled", deliveryStatus)
 	require.NotContains(t, payload, "space-private")

@@ -54,7 +54,7 @@ func TestPollingTransportActualHandlerStallReleasesPostgresFence(t *testing.T) {
 	defer setupCancel()
 	pool := integrationtest.StartPostgres(t, setupCtx, "botdb", "")
 	_, file, _, _ := runtime.Caller(0)
-	for _, name := range []string{"000001_init.up.sql", "000002_bot_presence.up.sql", "000003_message_delivery_outbox.up.sql", "000004_slash_interaction_outbox.up.sql", "000005_space_lifecycle.up.sql", "000007_message_token_uniqueness.up.sql"} {
+	for _, name := range []string{"000001_init.up.sql", "000002_bot_presence.up.sql", "000003_message_delivery_outbox.up.sql", "000004_slash_interaction_outbox.up.sql", "000005_space_lifecycle.up.sql", "000007_message_token_uniqueness.up.sql", "000008_installation_intents.up.sql"} {
 		raw, err := os.ReadFile(filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db", name))
 		require.NoError(t, err)
 		_, err = pool.Exec(setupCtx, string(raw))

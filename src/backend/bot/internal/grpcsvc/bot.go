@@ -31,15 +31,18 @@ import (
 // BotGRPC implements voice.bot.v1.BotService.
 type BotGRPC struct {
 	botv1.UnimplementedBotServiceServer
-	Store                   *store.BotStore
-	LifecycleStore          BotLifecycleStore
-	Hub                     *dispatch.Hub
-	HTTPClient              *http.Client
-	Chat                    chatv1.ChatServiceClient
-	Messaging               messagingv1.MessagingServiceClient
-	Role                    rolev1.RoleServiceClient
-	User                    userv1.UserServiceClient
-	Space                   spacev1.SpaceServiceClient
+	Store          *store.BotStore
+	LifecycleStore BotLifecycleStore
+	Hub            *dispatch.Hub
+	HTTPClient     *http.Client
+	Chat           chatv1.ChatServiceClient
+	Messaging      messagingv1.MessagingServiceClient
+	Role           rolev1.RoleServiceClient
+	User           userv1.UserServiceClient
+	Space          spacev1.SpaceServiceClient
+	// InstallationSpace is the dedicated protected mTLS membership client.
+	// It never falls back to the legacy Space client used by ordinary reads.
+	InstallationSpace       spacev1.SpaceServiceClient
 	Events                  BotEventPublisher
 	PrincipalIssuer         *principal.Issuer
 	InstallationScopeReader BotInstallationScopeReader
@@ -591,6 +594,9 @@ func (s *BotGRPC) userCallCtx(ctx context.Context) context.Context {
 func mapStoreErr(err error) error {
 	if err == store.ErrNotFound {
 		return status.Error(codes.NotFound, "not found")
+	}
+	if errors.Is(err, store.ErrInstallationConflict) || errors.Is(err, store.ErrSpaceLifecycleConflict) {
+		return status.Error(codes.FailedPrecondition, "bot installation is not admitting this operation")
 	}
 	return status.Error(codes.Internal, err.Error())
 }

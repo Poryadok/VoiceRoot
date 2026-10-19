@@ -14,6 +14,38 @@ deployment outage or introduce another JWKS server.
 
 ## Обзор
 
+### Durable native Space installation
+
+`InstallBotInSpace` persists a `bot_installation_intents` PREPARING row before
+calling the dedicated Space Bot-membership listener. The immutable request binds
+operation UUID, Bot UUID, installation UUID, Space UUID, actor profile UUID and
+positive int64-range Bot generation. The initiating caller must pass the current
+`SPACE_MANAGE_BOTS` check; missing Role authority fails closed. Only Space's
+acknowledgement permits local INSTALLED state and whitelist activation. A lost
+response leaves the same operation recoverable on request retry after restart.
+
+Cancellation persists a distinct operation UUID and the original install
+operation UUID before the protected remove call. CANCELING disables local use
+and blocks reinstall; acknowledged cancellation becomes CANCELED. A reinstall
+uses a new installation UUID and increasing Bot generation. An old internal
+cancellation replay cannot erase that new installation. The public uninstall
+request still addresses Bot/Space, so a new public call after reinstall targets
+the current installation; it has no cross-generation client retry precondition.
+Space-attached group/channel membership inherits the Space native source; this
+path sends no redundant unfenced `Chat.AddMembers` request.
+
+The dedicated client requires all five `BOT_SPACE_INSTALLATION_*` values:
+`GRPC_ADDR` (Space's dedicated listener, normally `space:9098`), `TLS_CA_FILE`,
+`TLS_SERVER_NAME`, `TLS_CERT_FILE` and `TLS_KEY_FILE`. It uses verified server TLS
+and a Bot client certificate, plus the existing Bot service-principal issuer.
+Each call signs audience `space`, exact RPC, operation ID and deterministic full
+request hash, with a fresh JWT ID per retry and a three-second call deadline.
+There is no ordinary Space-client or raw-metadata fallback and no configurable
+human default Role. Deployment must provide the matched protected receiver and
+existing Bot issuer/JWKS configuration; these settings do not activate a stand.
+Global `DeleteBot` cleanup and legacy unqualified in-flight request reconciliation
+remain separate unfinished work.
+
 ### BE-131 current installation authority
 
 `CheckBotInstallationScope` is a protected Space-only decision read on Bot's

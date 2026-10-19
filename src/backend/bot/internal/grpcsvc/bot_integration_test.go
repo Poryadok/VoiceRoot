@@ -35,7 +35,7 @@ func migrationSQL(t *testing.T) string {
 	_, file, _, _ := runtime.Caller(0)
 	dir := filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db")
 	var b strings.Builder
-	for _, name := range []string{"000001_init.up.sql", "000002_bot_presence.up.sql", "000003_message_delivery_outbox.up.sql", "000004_slash_interaction_outbox.up.sql", "000005_space_lifecycle.up.sql", "000006_bot_chat_create_requests.up.sql", "000007_message_token_uniqueness.up.sql"} {
+	for _, name := range []string{"000001_init.up.sql", "000002_bot_presence.up.sql", "000003_message_delivery_outbox.up.sql", "000004_slash_interaction_outbox.up.sql", "000005_space_lifecycle.up.sql", "000006_bot_chat_create_requests.up.sql", "000007_message_token_uniqueness.up.sql", "000008_installation_intents.up.sql"} {
 		raw, err := os.ReadFile(filepath.Join(dir, name))
 		require.NoError(t, err)
 		b.Write(raw)
@@ -44,7 +44,7 @@ func migrationSQL(t *testing.T) string {
 	return b.String()
 }
 
-func startBotGRPC(t *testing.T) (botv1.BotServiceClient, *store.BotStore, func()) {
+func startBotGRPC(t *testing.T, installationAdmission ...bool) (botv1.BotServiceClient, *store.BotStore, func()) {
 	t.Helper()
 	t.Setenv("BOT_ENABLE_DEV_POLLING", "true")
 	ctx := context.Background()
@@ -55,6 +55,11 @@ func startBotGRPC(t *testing.T) (botv1.BotServiceClient, *store.BotStore, func()
 	st := &store.BotStore{Pool: pool}
 	hub := dispatch.NewHub()
 	svc := grpcsvc.NewBotGRPC(st, hub)
+	if len(installationAdmission) > 0 && installationAdmission[0] {
+		svc.Role = installationPermissionClient{allowed: true}
+	}
+	svc.PrincipalIssuer = installationTestIssuer(t)
+	svc.InstallationSpace = intentObservingSpace{}
 	svc.Chat = allowMembershipClient{}
 
 	lis := bufconn.Listen(1024 * 1024)

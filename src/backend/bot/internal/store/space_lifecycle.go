@@ -215,6 +215,11 @@ WHERE e.space_id=$1 OR (e.event_type='message' AND e.space_id IS NULL AND EXISTS
 	if _, err = tx.Exec(ctx, `DELETE FROM bot_space_installations WHERE space_id=$1`, spaceID); err != nil {
 		return nil, err
 	}
+	// The permanent PURGED lifecycle head replaces per-installation replay
+	// authority for this Space. Retain no actor/chat snapshot after its purge.
+	if _, err = tx.Exec(ctx, `DELETE FROM bot_installation_intents WHERE space_id=$1`, spaceID); err != nil {
+		return nil, err
+	}
 	now := timestamppb.Now()
 	receipt := &commonv1.SpacePurgeReceipt{ProtocolVersion: 1, ReceiptId: uuid.NewString(), SpaceId: spaceID.String(), DeletionOperationId: opID.String(), Generation: req.GetGeneration(), ParticipantId: commonv1.ParticipantId_PARTICIPANT_ID_BOT, State: commonv1.PurgeReceiptState_PURGE_RECEIPT_STATE_COMPLETED, RequestSha256: hash[:], CompletedAt: now}
 	receiptBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(receipt)

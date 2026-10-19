@@ -37,7 +37,7 @@ func startBotStore(t *testing.T) *store.BotStore {
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(migration))
 	require.NoError(t, err)
-	for _, name := range []string{"000004_slash_interaction_outbox.up.sql", "000005_space_lifecycle.up.sql", "000007_message_token_uniqueness.up.sql"} {
+	for _, name := range []string{"000004_slash_interaction_outbox.up.sql", "000005_space_lifecycle.up.sql", "000007_message_token_uniqueness.up.sql", "000008_installation_intents.up.sql"} {
 		migration, err = os.ReadFile(filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db", name))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(migration))
@@ -260,9 +260,10 @@ func TestQueueMessageRecipientsAndInstallInSpaceDoNotDeadlock(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
+	st := startBotStore(t)
+	// The lock-order oracle gets its full budget after container/bootstrap I/O.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	st := startBotStore(t)
 	owner, chatID, spaceID := uuid.New(), uuid.New(), uuid.New()
 	bot, _, err := st.CreateBot(ctx, owner, "LockOrderBot", "", `["TEXT_CHAT_READ_HISTORY"]`, uuid.New())
 	require.NoError(t, err)

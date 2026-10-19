@@ -336,9 +336,19 @@ func (s *BotStore) InstallInSpace(ctx context.Context, botID, spaceID, installer
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,71431))`, spaceID.String()); err != nil {
 		return uuid.Nil, err
 	}
-	var lockedBotID uuid.UUID
-	if err := tx.QueryRow(ctx, `SELECT id FROM bots WHERE id = $1 FOR UPDATE`, botID).Scan(&lockedBotID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	bot, err := s.GetBotByIDForUpdate(ctx, tx, botID)
+	if err != nil {
 		return uuid.Nil, err
+	}
+	if bot.Status != "live" {
+		return uuid.Nil, ErrInstallationConflict
+	}
+	var canceling bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot_installation_intents WHERE bot_id=$1 AND space_id=$2 AND state='CANCELING')`, botID, spaceID).Scan(&canceling); err != nil {
+		return uuid.Nil, err
+	}
+	if canceling {
+		return uuid.Nil, ErrInstallationConflict
 	}
 	var lifecycleState string
 	err = tx.QueryRow(ctx, `SELECT desired_state FROM bot_space_lifecycle_heads WHERE space_id=$1`, spaceID).Scan(&lifecycleState)
@@ -349,11 +359,12 @@ func (s *BotStore) InstallInSpace(ctx context.Context, botID, spaceID, installer
 		return uuid.Nil, err
 	}
 	installID := uuid.New()
-	_, err = tx.Exec(ctx, `
+	err = tx.QueryRow(ctx, `
 INSERT INTO bot_space_installations (id, bot_id, space_id, installed_by_profile_id)
 VALUES ($1, $2, $3, $4)
-ON CONFLICT (bot_id, space_id) DO UPDATE SET installed_by_profile_id = EXCLUDED.installed_by_profile_id`,
-		installID, botID, spaceID, installer)
+ON CONFLICT (bot_id, space_id) DO UPDATE SET installed_by_profile_id = EXCLUDED.installed_by_profile_id
+RETURNING id`,
+		installID, botID, spaceID, installer).Scan(&installID)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -477,6 +488,22 @@ func (s *BotStore) SetChatEnabled(ctx context.Context, botID, chatID, spaceID, i
 	// recipients behind this bot's in-flight HTTP attempt.
 	if err = lockMessageSpaces(ctx, tx, []uuid.UUID{spaceID}); err != nil {
 		return err
+	}
+	var botStatus string
+	if err = tx.QueryRow(ctx, `SELECT status FROM bots WHERE id=$1 FOR SHARE`, botID).Scan(&botStatus); errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	} else if err != nil {
+		return err
+	}
+	if botStatus != "live" {
+		return ErrInstallationConflict
+	}
+	var canceling bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot_installation_intents WHERE bot_id=$1 AND space_id=$2 AND state='CANCELING')`, botID, spaceID).Scan(&canceling); err != nil {
+		return err
+	}
+	if canceling {
+		return ErrInstallationConflict
 	}
 	var lifecycleState string
 	err = tx.QueryRow(ctx, `SELECT desired_state FROM bot_space_lifecycle_heads WHERE space_id=$1`, spaceID).Scan(&lifecycleState)

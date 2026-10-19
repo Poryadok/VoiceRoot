@@ -848,7 +848,7 @@ func TestExecuteSlashInteraction_unknownCommand(t *testing.T) {
 	require.Equal(t, codes.NotFound, status.Code(err))
 }
 
-func TestInstallBotInSpace_groupAddsChatMembers(t *testing.T) {
+func TestInstallBotInSpace_groupInheritsSpaceMembership(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -875,7 +875,7 @@ func TestInstallBotInSpace_groupAddsChatMembers(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1, chatFake.addMembersCalls)
+	require.Equal(t, 0, chatFake.addMembersCalls, "Space group membership must not be regranted by a late raw Chat call")
 }
 
 func TestCompleteInteraction_defersViaHub(t *testing.T) {

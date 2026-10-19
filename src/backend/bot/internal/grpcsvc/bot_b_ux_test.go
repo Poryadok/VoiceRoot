@@ -76,7 +76,7 @@ func TestUninstallFromSpace_clearsWhitelist(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	client, st, cleanup := startBotGRPC(t)
+	client, st, cleanup := startBotGRPC(t, true)
 	defer cleanup()
 	ctx := withAccount(context.Background(), uuid.New(), uuid.New())
 	profile, _ := authProfile(ctx)

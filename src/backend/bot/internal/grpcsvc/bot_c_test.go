@@ -270,6 +270,12 @@ func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceCli
 		}
 	}
 
+	svc.PrincipalIssuer = installationTestIssuer(t)
+	svc.InstallationSpace = svc.Space
+	if svc.InstallationSpace == nil {
+		svc.InstallationSpace = intentObservingSpace{}
+	}
+
 	lis := bufconn.Listen(1024 * 1024)
 	s := grpc.NewServer()
 	botv1.RegisterBotServiceServer(s, svc)
