@@ -95,3 +95,29 @@ Graphify AST update session16984 produced no output in the bounded attempt;
 verified own Python12304/launcher32480 started1792366884002 was stopped, terminal
 exit1. No Graphify PASS. Exact source review and final source freeze
 remain open, as do legacy cleanup composition and broader catalogue aggregation.
+
+## Independent238 correction: retained terminal history before rejoin
+
+Review existing REVIEW-BE265-OWNER-RETIREMENT-INGEST-e9af1261982b c1 and parentc5
+holds e9af126 for an old ENDED admission sorting before the newer projection of
+the same room/profile. Author realPG leave/rejoin + actual private Redis regression
+reproduces Pending/conflict RED24.66s (overlaysb0731c81, no setup failure).
+
+Qualified cleanup alone now preserves a mismatching newer SpaceMedia tuple when
+the sealed captured old participant was ENDED. The native owner transaction still
+checks actual exact-row terminal state under native/identity locks and accepted
+proof; a nonterminal row cannot take that history path. Ordinary unqualified
+ResumeCapturedDrain remains strict. The regression observes the newer Redis tuple
+and exact newer account fence immediately after old history cleanup, then drains
+the newer/survivor targets and retains all three ENDED admissions.
+
+Overlay3ab3da3859cd2ec25567a58fc82ab1b62efdbf243c29dc9d6b844c59c327509b:
+realPG+Redis -race GREEN37.171s; affected short PASS0.050/0.113s; root Voice build
+and affected vet terminal0. No extra full-provider or catalogue qualification.
+Same238 delta recheck remains required before delivery acceptance.
+
+Post-correction Graphify unbuffered AST attempt session35006 reached code
+re-extraction then no bounded completion; verified own Python45340/parent54048,
+creation1792369131307, stopped. Terminal1, no Graphify PASS; no live handle.
+Own private correction Redis0cd1dc07/networkd2884856 retained only until current
+source proof/independent recheck packet is frozen, no host ports/stand/GH.

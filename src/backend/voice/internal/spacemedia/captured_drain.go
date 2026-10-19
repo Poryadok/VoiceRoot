@@ -15,6 +15,10 @@ import (
 // ResumeCapturedDrain never discovers a newer incarnation by Space/profile.
 // Ejection has already used the exact saved SFU target, even if Redis is absent.
 func (c *Coordinator) ResumeCapturedDrain(ctx context.Context, t spacelifecycle.CapturedTarget) error {
+	return c.resumeCapturedDrain(ctx, t, false)
+}
+
+func (c *Coordinator) resumeCapturedDrain(ctx context.Context, t spacelifecycle.CapturedTarget, preserveTerminalNewerProjection bool) error {
 	if c == nil || c.Calls == nil || c.Admissions == nil {
 		return ErrAdmissionUnavailable
 	}
@@ -26,21 +30,27 @@ func (c *Coordinator) ResumeCapturedDrain(ctx context.Context, t spacelifecycle.
 		}
 		if p, ok := call.SpaceMedia[t.ProfileID]; ok {
 			if p.AdmissionOperationID != t.OperationID || p.Generation != t.Generation || p.Identity != t.Identity || p.RoomGeneration != t.RoomGeneration {
-				return ErrAdmissionConflict
-			}
-			_, matched, err := c.Store.BeginSpaceMediaRevocation(ctx, t.RoomID, t.ProfileID, t.Identity, t.Generation)
-			if err != nil || !matched {
-				if err != nil {
-					return err
+				if !preserveTerminalNewerProjection || t.ParticipantState != "ENDED" {
+					return ErrAdmissionConflict
 				}
-				return ErrAdmissionConflict
-			}
-			_, matched, err = c.Store.CompleteSpaceMediaRevocation(ctx, t.RoomID, t.ProfileID, t.Identity, t.Generation)
-			if err != nil || !matched {
-				if err != nil {
-					return err
+				// The qualified owner store below must recheck that this exact
+				// sealed old admission is terminal. Its newer projection belongs
+				// to another target and must survive this history-only step.
+			} else {
+				_, matched, err := c.Store.BeginSpaceMediaRevocation(ctx, t.RoomID, t.ProfileID, t.Identity, t.Generation)
+				if err != nil || !matched {
+					if err != nil {
+						return err
+					}
+					return ErrAdmissionConflict
 				}
-				return ErrAdmissionConflict
+				_, matched, err = c.Store.CompleteSpaceMediaRevocation(ctx, t.RoomID, t.ProfileID, t.Identity, t.Generation)
+				if err != nil || !matched {
+					if err != nil {
+						return err
+					}
+					return ErrAdmissionConflict
+				}
 			}
 		} else if call.IsParticipant(t.ProfileID) {
 			// Room IDs are unique across native head incarnations. Remove only this
@@ -110,6 +120,11 @@ WHERE operation_id=$1 AND generation=$2 AND account_id=$3 AND profile_id=$4 AND 
 			}
 		}
 		return tx.Commit(ctx)
+	}
+	if retired != nil && t.ParticipantState == "ENDED" {
+		// A stale/corrupt terminal witness cannot bypass projection cleanup
+		// for a row that is not actually terminal under the native locks.
+		return ErrAdmissionConflict
 	}
 	if retired != nil {
 		var closable bool

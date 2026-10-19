@@ -84,5 +84,5 @@ func (c *Coordinator) ResumeRetiredCapturedDrain(ctx context.Context, t spacelif
 	// Construct only the exact cleanup view; never copy reconcileMu/readiness
 	// from the serving coordinator or publish any ordinary forward capability.
 	cleanup := &Coordinator{Calls: c.Calls, Store: c.Store, Admissions: &retiredAdmissionCompletion{c.Admissions, verified, work}}
-	return cleanup.ResumeCapturedDrain(ctx, t)
+	return cleanup.resumeCapturedDrain(ctx, t, true)
 }
