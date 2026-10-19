@@ -452,3 +452,29 @@ func TestJoinAttempt_AccountBanCannotGuessClaimedPublicationRetirement(t *testin
 	require.NoError(t, pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_bans WHERE space_id=$1 AND account_id=$2)`, space.ID, in.AccountID).Scan(&banned))
 	require.False(t, banned, "same outer transaction must roll back the ban too")
 }
+
+func TestJoinAttempt_CollectionDeadlineRecheckedAfterSubmissionSQLWait(t *testing.T) {
+	ctx := context.Background()
+	pool := startJoinAttemptPostgres(t, ctx)
+	applySpaceMigrationForStoreTest(t, ctx, pool)
+	st := &SpaceStore{Pool: pool}
+	space, err := st.CreateSpace(ctx, uuid.New(), "Collection wait", "", "public")
+	require.NoError(t, err)
+	applyEntryPolicyMigration(t, st)
+	applyJoinAttemptMigration(t, st)
+	in := JoinAttemptInput{SpaceID: space.ID, AccountID: uuid.New(), ProfileID: uuid.New()}
+	a, err := st.StartJoinAttempt(ctx, in)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE space_join_attempts SET collection_deadline=clock_timestamp()+interval '400 milliseconds' WHERE id=$1`, a.ID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `CREATE FUNCTION delay_join_submission() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.state IN ('READY','PENDING') THEN PERFORM pg_sleep(0.6); END IF; RETURN NEW; END $$;
+CREATE TRIGGER delay_join_submission BEFORE UPDATE ON space_join_attempts FOR EACH ROW EXECUTE FUNCTION delay_join_submission()`)
+	require.NoError(t, err)
+	_, err = st.SubmitJoinAttempt(ctx, in, a.ID, nil)
+	require.ErrorIs(t, err, ErrJoinAttemptDenied, "collection cannot finish successfully after its deadline during an SQL wait")
+	var state string
+	var evidence []byte
+	require.NoError(t, pool.QueryRow(ctx, `SELECT state,evidence_sha256 FROM space_join_attempts WHERE id=$1`, a.ID).Scan(&state, &evidence))
+	require.Equal(t, "EXPIRED", state)
+	require.Nil(t, evidence)
+}

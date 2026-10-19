@@ -522,6 +522,21 @@ func (s *SpaceStore) SubmitJoinAttempt(ctx context.Context, in JoinAttemptInput,
 			a.EvidenceSHA256 = a.evidence()
 		}
 		_, err = scoped.db().Exec(ctx, `UPDATE space_join_attempts SET state=$2,submission_sha256=$3,submitted_answers=$4,evidence_sha256=$5 WHERE id=$1`, id, a.State, submission, raw, a.EvidenceSHA256)
+		if err != nil {
+			return nil, err
+		}
+		// The writer may have waited after the first clock sample (including in
+		// database triggers). A newly collected proof must still be within its
+		// window after those waits; this does not expire historical pending proof.
+		var withinCollection bool
+		if err = scoped.db().QueryRow(ctx, `SELECT clock_timestamp()<collection_deadline FROM space_join_attempts WHERE id=$1`, id).Scan(&withinCollection); err != nil {
+			return nil, err
+		}
+		if !withinCollection {
+			_, err = scoped.db().Exec(ctx, `UPDATE space_join_attempts SET state='EXPIRED',evidence_sha256=NULL WHERE id=$1`, id)
+			a.State = "EXPIRED"
+			a.EvidenceSHA256 = nil
+		}
 		return &a.JoinAttempt, err
 	})
 	if err == nil && result != nil {
