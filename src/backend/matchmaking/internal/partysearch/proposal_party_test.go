@@ -40,7 +40,9 @@ func TestProposalPreservesCompleteCapturedParty(t *testing.T) {
 	wrong.GameID = uuid.New()
 	_, err = matches.CreateProposal(ctx, wrong)
 	require.ErrorIs(t, err, store.ErrSessionNotSearchable)
-	result, err := matches.CreateProposal(ctx, partyProposal(p, created.Sessions))
+	candidate, err := matches.CaptureProposalCandidate(ctx, partyProposal(p, created.Sessions))
+	require.NoError(t, err)
+	result, err := matches.CreateValidatedProposal(ctx, candidate, validateNativeProposal(t, pool, candidate))
 	require.NoError(t, err)
 	require.Len(t, result.Proposals, len(created.Sessions))
 	for _, session := range created.Sessions {

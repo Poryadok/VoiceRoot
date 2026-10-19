@@ -435,6 +435,13 @@ repeatable-read cut, then releases the transaction before protected source RPCs.
 Its accounts come only from validated persisted private member authority.
 `ProposalValidator` yields an immediate proof for that exact local cut or the
 exact definitively changed party IDs. Any Unknown result discards a partial
-change set. Reservation must still obtain the account/party/session locks and
-repeat the fresh ban and local cut checks before writing; capture or external
-validation alone does not authorize the existing proposal creation API.
+change set. `CreateValidatedProposal` obtains sorted shared account ban locks
+before complete party/session row locks in a short READ COMMITTED transaction,
+then starts separate fresh ban and local cut reads before writing the match,
+proposals and next session generations. The public legacy `CreateProposal`
+refuses typed source parties; missing or mismatched immediate proof cannot
+select that path. Its schema-independent authority-field check preserves the
+actual pre-native migrations 001–018 path without treating historical rows as
+Voice/LFP source authority. Worker/native startup integration must still call
+fresh capture and protected validation at each reservation boundary; capture
+or external validation alone does not create a match.

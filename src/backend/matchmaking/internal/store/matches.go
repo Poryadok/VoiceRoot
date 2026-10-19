@@ -755,8 +755,8 @@ type CreateProposalResult struct {
 	Proposals []MatchProposal
 }
 
-// CreateProposal inserts match, proposals, and moves sessions to pending_accept.
-func (s *MatchStore) CreateProposal(ctx context.Context, p CreateProposalParams) (CreateProposalResult, error) {
+// createProposal shares the atomic legacy/validated reservation writes.
+func (s *MatchStore) createProposal(ctx context.Context, p CreateProposalParams, candidate *ProposalCandidate, proof ProposalValidationProof) (CreateProposalResult, error) {
 	if s == nil || s.Pool == nil {
 		return CreateProposalResult{}, errors.New("match store unavailable")
 	}
@@ -764,11 +764,18 @@ func (s *MatchStore) CreateProposal(ctx context.Context, p CreateProposalParams)
 		return CreateProposalResult{}, errors.New("no sessions")
 	}
 
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return CreateProposalResult{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	var banGuard *PlatformBanGuard
+	if candidate != nil {
+		banGuard, err = AcquirePlatformBanGuard(ctx, tx, candidate.Accounts())
+		if err != nil {
+			return CreateProposalResult{}, err
+		}
+	}
 
 	proposalSessions := append([]ProposalSession(nil), p.Sessions...)
 	sort.Slice(proposalSessions, func(i, j int) bool {
@@ -830,6 +837,24 @@ func (s *MatchStore) CreateProposal(ctx context.Context, p CreateProposalParams)
 		sess, ok := lockedSessions[candidate.SessionID]
 		if !ok || sess.Status != SessionStatusSearching || sess.ProfileID != candidate.ProfileID || !samePartyID(sess.PartyID, candidate.PartyID) || !samePartyID(sess.SpaceID, spaceID) || !proposalSessionScopeMatches(sess, p, now) {
 			return CreateProposalResult{}, ErrSessionNotSearchable
+		}
+	}
+
+	if candidate == nil {
+		if err := requireUntypedProposalTx(ctx, tx, partyIDs); err != nil {
+			return CreateProposalResult{}, err
+		}
+	} else {
+		if proof == nil || !proof.Matches(*candidate) {
+			return CreateProposalResult{}, ErrSourcePartyUnavailable
+		}
+		// Both reads start after every inner lock has been acquired. Never fold
+		// the fresh ban observation into the statement that waited for a lock.
+		if err := banGuard.Check(ctx); err != nil {
+			return CreateProposalResult{}, err
+		}
+		if err := VerifyProposalCandidateTx(ctx, tx, *candidate); err != nil {
+			return CreateProposalResult{}, err
 		}
 	}
 
