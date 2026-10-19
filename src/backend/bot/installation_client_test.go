@@ -84,6 +84,7 @@ func TestInstallationSpaceDedicatedMutualTLSClient(t *testing.T) {
 	conn, err := wireInstallationSpace(svc, func(k string) string { return values[k] })
 	require.NoError(t, err)
 	require.NotNil(t, conn)
+	require.Same(t, svc.InstallationSpace, svc.CleanupSpace, "both clients use the explicitly protected mTLS destination")
 	defer conn.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -104,6 +105,7 @@ func TestInstallationSpaceConfigurationFailsClosed(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, conn)
 	require.Nil(t, svc.InstallationSpace)
+	require.Nil(t, svc.CleanupSpace)
 	_, err = wireInstallationSpace(svc, func(k string) string {
 		if k == "BOT_SPACE_INSTALLATION_GRPC_ADDR" {
 			return "space:9098"

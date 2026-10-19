@@ -54,5 +54,6 @@ func wireInstallationSpace(svc *grpcsvc.BotGRPC, getenv func(string) string) (*g
 		return nil, err
 	}
 	svc.InstallationSpace = spacev1.NewSpaceServiceClient(conn)
+	svc.CleanupSpace = svc.InstallationSpace
 	return conn, nil
 }

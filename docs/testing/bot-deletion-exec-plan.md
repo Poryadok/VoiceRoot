@@ -307,3 +307,14 @@ its failed log retained. Independent Dart bytes match the same manually derived
 vector; analyzer exits0 with27 generated deprecation infos, not zero diagnostics.
 This qualifies schema/codecs only. Receiver terminal-fence/receipt persistence
 and actual Bot producer/worker composition remain unfinished.
+
+The Bot typed Space producer and worker dispatch now use that exact wire. They
+rebuild the original native cancellation from the frozen owner root, seal the
+outer child before issuing a fresh credential, and require the exact typed Space
+receipt with matching root/request/full nested cancellation hashes and terminal
+fence=true before saving completion. Historical completed Space children are
+revalidated as well. Legacy/unqualified source and Empty/no-fence responses stay
+unavailable; the protected mTLS constructor sets an explicit CleanupSpace alias
+and never uses the ordinary Space client. Component/negative/constructor checks
+and vet/build pass. Actual protected native46 receiver composition is not yet
+executed, so this producer remains an unfinished runtime integration slice.

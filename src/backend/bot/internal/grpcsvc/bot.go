@@ -48,6 +48,7 @@ type BotGRPC struct {
 	InstallationRole        rolev1.RoleServiceClient
 	CleanupRole             rolev1.RoleServiceClient
 	CleanupMessaging        messagingv1.MessagingServiceClient
+	CleanupSpace            spacev1.SpaceServiceClient
 	Events                  BotEventPublisher
 	PrincipalIssuer         *principal.Issuer
 	InstallationScopeReader BotInstallationScopeReader

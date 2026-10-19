@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	messagingv1 "voice.app/voice/messaging/v1"
 	rolev1 "voice.app/voice/role/v1"
+	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/bot/internal/store"
 )
 
@@ -20,6 +21,19 @@ import (
 func validateCompletedDeletionEffect(claim *store.BotDeletion, effect store.BotDeletionEffect) error {
 	var request proto.Message
 	switch effect.Kind {
+	case "SPACE_CLEANUP":
+		if len(effect.ReceiptBytes) == 0 {
+			return store.ErrDeletionPending
+		}
+		q, err := buildSpaceDeletionRequest(claim, effect)
+		if err != nil {
+			return err
+		}
+		request = q
+		r := new(spacev1.ApplyBotInstallationRemovalResponse)
+		if proto.Unmarshal(effect.ReceiptBytes, r) != nil || validateSpaceDeletionReceipt(q, r) != nil {
+			return errDeletionEvidence
+		}
 	case "ROLE_REMOVE":
 		q, err := buildRoleDeletionRequest(claim, effect)
 		if err != nil {
@@ -68,6 +82,8 @@ func (s *BotGRPC) processDeletionClaim(ctx context.Context, claim *store.BotDele
 			continue
 		}
 		switch effect.Kind {
+		case "SPACE_CLEANUP":
+			err = s.applySpaceDeletion(ctx, claim, effect)
 		case "ROLE_REMOVE":
 			err = s.applyRoleDeletion(ctx, claim, effect)
 		case "MESSAGING_UNPIN":
