@@ -131,7 +131,7 @@ func TestAdmissionCallExactActorMethodBudgetAndNoEligibilityForgery(t *testing.T
 			}
 		})
 	}
-	for _, method := range []string{"StartJoinAttempt", "GetJoinAttempt", "SubmitJoinAttempt", "ListJoinRequests", "GetJoinRequest", "ApproveJoinRequest", "JoinSpace", "JoinByInvite"} {
+	for _, method := range []string{"StartJoinAttempt", "GetJoinAttempt", "SubmitJoinAttempt", "ListJoinRequests", "GetJoinRequest", "ApproveJoinRequest", "JoinSpace", "JoinByInvite", "SetEntryPolicy"} {
 		_, err := OrdinaryUnary()(context.Background(), &spacev1.JoinSpaceRequest{}, &grpc.UnaryServerInfo{FullMethod: admissionRPCPrefix + method}, func(context.Context, any) (any, error) {
 			t.Fatal("ordinary listener reached protected admission handler")
 			return nil, nil
