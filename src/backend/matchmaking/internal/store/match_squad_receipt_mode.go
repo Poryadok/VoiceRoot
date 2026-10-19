@@ -19,6 +19,22 @@ func lockMatchSquadReceiptMatchTx(ctx context.Context, tx pgx.Tx, matchID uuid.U
 	return tx.QueryRow(ctx, `SELECT id FROM matches WHERE id=$1 FOR UPDATE`, matchID).Scan(&id)
 }
 
+func lockMatchSquadAggregatePrefixTx(ctx context.Context, tx pgx.Tx, aggregateID uuid.UUID) error {
+	// Discovery takes no row lock. Aggregate identity is permanent; after
+	// discovery all participating writers acquire match -> operation first.
+	var matchID uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT match_id FROM matchmaking_match_squad_teardowns WHERE aggregate_id=$1`, aggregateID).Scan(&matchID); err != nil {
+		if err == pgx.ErrNoRows {
+			return ErrMatchSquadPending
+		}
+		return err
+	}
+	if err := lockMatchSquadReceiptMatchTx(ctx, tx, matchID); err != nil {
+		return err
+	}
+	return tx.QueryRow(ctx, `SELECT match_id FROM matchmaking_match_squad_operations WHERE match_id=$1 FOR UPDATE`, matchID).Scan(&matchID)
+}
+
 func readMatchSquadReceiptModeTx(ctx context.Context, tx pgx.Tx, operation MatchSquadProvisioningOperation, provider string) (matchSquadReceiptMode, error) {
 	var disposition, dispatch string
 	// JSON field access preserves the predecessor store tests/schema behavior;

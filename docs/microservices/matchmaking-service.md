@@ -87,6 +87,30 @@ pre-RPC dispatch markers, monotone abandonment and receipt-based cleanup of
 possibly created resources. That coordinator/cold-cut activation remains a
 separate implementation and deployment gate; an inbox PASS does not satisfy it.
 
+### Preactivation MatchSquad settlement (A3)
+
+Migration `000021_match_squad_dispatch_settlement` records a monotone
+`LIVE`/`ABANDONED` disposition, revision and immutable abandonment evidence on
+the existing provider operation. Each provider has a permanent first-dispatch
+identity/time and `NOT_ISSUED`, `MAY_HAVE_CREATED` or `RECEIPT_KNOWN` state.
+Historical frozen requests migrate conservatively as possibly issued; an RPC
+error, missing receipt or expired lease never establishes resource absence.
+
+The abandonment transaction freezes cleanup obligations from dispatch evidence.
+No dispatch closes locally without synthetic teardown evidence. Otherwise the
+required set is `[chat]` or `[chat, voice]`; an unknown creation retains a
+`WAITING_FOR_CREATION` slot without executable teardown bytes. Valid creation
+receipts materialize the exact preallocated cleanup identity once, including late
+receipts after abandonment. Known Chat cleanup proceeds while Voice is unknown.
+Issued obligations stay discoverable until creation and cleanup are proven;
+abandoned cleanup cannot activate the match or emit `mm.match_completed`.
+
+Receipt-only transactions take match, operation, aggregate and participant locks
+in that order. Forward transitions additionally require the complete captured
+party/session cut and the outer account guard described below. Schema/storage
+proof alone does not enable this coordinator: common request/recovery gates,
+real provider replay and actual old-writer retirement remain activation gates.
+
 ### Private captured party authority (A3)
 
 The protected Voice snapshot binds each roster profile to its native admission

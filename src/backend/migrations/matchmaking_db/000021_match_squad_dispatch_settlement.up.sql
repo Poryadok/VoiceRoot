@@ -113,6 +113,16 @@ BEGIN
     IF NEW.state='active' AND NEW.provision_disposition<>'LIVE' THEN
         RAISE EXCEPTION 'cannot activate abandoned MatchSquad provisioning';
     END IF;
+    IF NEW.state='closed' AND NEW.provision_disposition='ABANDONED' AND
+       (NEW.chat_dispatch_state<>'NOT_ISSUED' OR NEW.voice_dispatch_state<>'NOT_ISSUED') AND NOT (
+       NEW.chat_dispatch_state='RECEIPT_KNOWN' AND
+       (NEW.voice_dispatch_state='NOT_ISSUED' OR NEW.voice_dispatch_state='RECEIPT_KNOWN') AND
+       EXISTS (SELECT 1 FROM matchmaking_match_squad_teardowns a WHERE a.match_id=NEW.match_id
+         AND a.purpose='PROVISION_COMPENSATION' AND a.state='complete'
+         AND a.required_providers=CASE WHEN NEW.voice_dispatch_state='NOT_ISSUED'
+           THEN ARRAY['chat']::TEXT[] ELSE ARRAY['chat','voice']::TEXT[] END)) THEN
+        RAISE EXCEPTION 'cannot close unresolved MatchSquad creation or cleanup obligation';
+    END IF;
     IF NEW.provision_revision<OLD.provision_revision OR
        (ROW(NEW.provision_disposition,NEW.chat_dispatch_state,NEW.voice_dispatch_state)
         IS DISTINCT FROM ROW(OLD.provision_disposition,OLD.chat_dispatch_state,OLD.voice_dispatch_state)
@@ -238,5 +248,17 @@ END;
 $$;
 CREATE TRIGGER matchmaking_match_squad_teardown_participant_fence BEFORE UPDATE OR DELETE ON matchmaking_match_squad_teardown_participants
     FOR EACH ROW EXECUTE FUNCTION guard_matchmaking_match_squad_teardown_participant();
+
+CREATE FUNCTION require_matchmaking_match_squad_new_dispatch_protocol() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.dispatch_protocol_version<>1 OR NEW.state<>'provisioning' OR NEW.provision_disposition<>'LIVE' OR
+       NEW.provision_revision<>1 OR NEW.chat_dispatch_state<>'NOT_ISSUED' OR NEW.voice_dispatch_state<>'NOT_ISSUED' THEN
+        RAISE EXCEPTION 'new MatchSquad intent requires unissued dispatch protocol1';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER matchmaking_match_squad_new_dispatch_protocol_guard BEFORE INSERT ON matchmaking_match_squad_operations
+    FOR EACH ROW EXECUTE FUNCTION require_matchmaking_match_squad_new_dispatch_protocol();
 
 COMMIT;

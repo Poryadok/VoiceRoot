@@ -102,5 +102,22 @@ func LatchMatchSquadAbandonmentTx(ctx context.Context, tx pgx.Tx, matchID uuid.U
 			return err
 		}
 	}
+	if chat == "RECEIPT_KNOWN" || voice == "RECEIPT_KNOWN" {
+		operation, err := scanMatchSquadProvisioningOperation(tx.QueryRow(ctx, `
+		 SELECT match_id,operation_id,participant_manifest_sha256,participant_manifest_bytes,state,
+		 chat_operation_id,chat_request_sha256,chat_request_bytes,chat_receipt_id,chat_receipt_bytes,chat_id,
+		 voice_operation_id,voice_request_sha256,voice_request_bytes,voice_receipt_id,voice_receipt_bytes,voice_room_id
+		 FROM matchmaking_match_squad_operations WHERE match_id=$1`, matchID))
+		if err != nil {
+			return err
+		}
+		for _, provider := range required {
+			if (provider == "chat" && chat == "RECEIPT_KNOWN") || (provider == "voice" && voice == "RECEIPT_KNOWN") {
+				if err := materializeMatchSquadCompensationTx(ctx, tx, operation, provider); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	return nil
 }
