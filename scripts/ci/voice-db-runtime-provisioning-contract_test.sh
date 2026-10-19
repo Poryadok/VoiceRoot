@@ -426,6 +426,7 @@ python3 "${ROOT}/scripts/ci/f13_native_p3_source_test.py"
 python3 "${ROOT}/scripts/ci/f13_native_p3_source_history_test.py"
 python3 "${ROOT}/scripts/ci/f13_guarded_merge_test.py"
 python3 "${ROOT}/scripts/ci/f13_reviewed_test_merge_test.py"
+python3 "${ROOT}/scripts/ci/f13_historical_composition_test.py"
 base_sha="${VOICE_R22_BASE_SHA:-$(git -C "${ROOT}" merge-base HEAD origin/master)}"
 # The later Game sprint authorizes the verified opt-in runtime checkpoint, not
 # arbitrary future runtime or deployment changes. Exempt only its exact paths
@@ -3447,9 +3448,21 @@ f13_reviewed_test_merge_qualified() {
   printf 'CI_DIAG stage=f13-reviewed-test-merge qualification=%s\n' "${receipt}" >&2
 }
 
+f13_historical_composition_qualified() {
+  local repo="$1" merge="$2" first="$3" source_base="$4" source="$5" path="$6" receipt target
+  [[ "${repo}" == "${ROOT}" ]] || return 1
+  target="$(git -C "${ROOT}" rev-parse HEAD)" || return 1
+  receipt="$(python3 "${ROOT}/scripts/ci/f13_historical_composition.py" \
+    --repo "${repo}" --target "${target}" --merge "${merge}" --first "${first}" \
+    --source-base "${source_base}" --source "${source}" --path "${path}" 2>/dev/null)" || return 1
+  printf '%s\n' "${receipt}" >>"${TMP_DIR}/f13-historical-composition.jsonl" || return 1
+  printf 'CI_DIAG stage=f13-historical-composition qualification=%s\n' "${receipt}" >&2
+}
+
 f13_guarded_merge_state_fingerprint() {
   local state_file
   for state_file in "${ROOT}/scripts/ci/f13_reviewed_test_merge.py" \
+    "${ROOT}/scripts/ci/f13_historical_composition.py" "${TMP_DIR}/f13-historical-composition.jsonl" \
     "${TMP_DIR}/f13-guarded-merge-history.tsv" "${TMP_DIR}/f13-reviewed-test-merges.jsonl"; do
     if [[ -f "${state_file}" ]]; then
       git -C "${ROOT}" hash-object -- "${state_file}" || return 1
@@ -3663,7 +3676,11 @@ f13_collect_develop_contributions() {
               ordinary_merge_entries["${path}"]="${result_entry}"
             else
               merge_tree_status=$?
-              if [[ "${merge_tree_status}" == 2 ]] &&
+              if declare -F f13_historical_composition_qualified >/dev/null &&
+                f13_historical_composition_qualified "${repo}" "${commit}" "${first_parent}" \
+                  "${source_base}" "${source_head}" "${path}"; then
+                ordinary_merge_entries["${path}"]="${result_entry}"
+              elif [[ "${merge_tree_status}" == 2 ]] &&
                 declare -F f13_reviewed_test_merge_qualified >/dev/null &&
                 f13_reviewed_test_merge_qualified "${repo}" "${commit}" "${first_parent}" \
                   "${source_base}" "${source_head}" "${path}"; then
