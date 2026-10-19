@@ -40,6 +40,26 @@ Wire/codec presence alone does not install this protected runtime or journal;
 the [producer execution plan](../testing/be011-lfp-consent-producer-exec-plan.md)
 tracks their implementation and verification. Existing activation gates remain.
 
+The component journal in `internal/lfpconsentstore` uses Story migration000005.
+Each explicit authenticated author publication creates an immutable revision;
+observing an existing Story never adopts it automatically. Response-operation
+replay returns the original consent and epoch, and registration readback retains
+MM's original captured intent. Canonical bytes must match every relational
+selector and immutable offer before any readback can qualify.
+
+Accepted restore-cohort contract (producer c7) requires immutable environment,
+installation, external incarnation and admitted Story database binding alongside
+the unchanged v1 material. `pkg/storylfpadmission.Barrier` is the shared local
+ABI: the bound journal obtains admission before SQL and releases after commit or
+rollback. Its local shared admission-head lock supplements that external permit.
+Neither database marker nor constructing an Origin establishes admission.
+`BE011-STORY-LFP-RESTORE-CONTROLLER` owns the still-absent deployment controller,
+full replica/transaction drain, external state and credential/route custody;
+consumers are Story291 and MM145. Unknown authority leaves qualification closed.
+The journal is a component, with no production authority or protected transport
+installed. Personal journal data remains subject to account erasure/retention;
+that composition and runtime activation remain open.
+
 ## Обзор
 
 Сторис: 24-часовой контент, архив, хайлайты, интеграция с матчмейкингом ("ищу пати").

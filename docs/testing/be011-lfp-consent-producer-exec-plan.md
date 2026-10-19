@@ -28,8 +28,8 @@ acceptance/migrations, native roster, runtime rollout or provider authority.
 
 - [x] Pin additive private protobuf, strict canonical receipt codec and golden
   vectors for immediate consumer145.
-- [ ] Persist immutable Story offer/consent with exact replay and guarded
-  current-offer checks; prove real PostgreSQL races and rollback behavior.
+- [x] Implement component journal with immutable offer/consent, exact replay,
+  guarded current-offer checks and real PostgreSQL race/rollback checks.
 - [ ] Wire verified delegated responder plus narrow service authentication,
   durable registration/readback and exact fresh offer validation.
 - [ ] Independent security/concurrency review and accepted121 delivery.
@@ -69,7 +69,19 @@ CI and product acceptance remain distinct from source/component proof.
 - [x] Buf lint/breaking master and canonical Go/Dart generation succeeded.
   Initial Buf response-name error and host WSL bash absence were setup failures,
   corrected using canonical response wrappers and installed Git Bash.
-- [ ] Immutable first-wire consumer pin, exact-head independent review.
+- [x] Immutable first-wire pin `5b33b6e3e8a95428e053fe7a6e53f772ca7a8884`,
+  independently SOURCE CLEAR by305; source-only publication by121. No full-task
+  delivery or runtime acceptance transferred.
+- [x] Journal RED4 -> GREEN4; registration RED1; cohort journal GREEN7;
+  malformed metadata-import RED1top/2sub reproduced a real WIP defect before
+  strict relational/canonical validation fixed it.
+- [x] Shared admission ABI314 `468e807efd807705c191a713c493046de126e6a6`
+  consumed as additive commit `ab9cb4ba6`. Own bound factory holds its permit
+  before SQL locks until commit/rollback. Component authority is synthetic.
+- [x] Journal Linux race9top/2sub0skip (9.999s), vet0, including a deferred
+  PostgreSQL constraint trigger that blocks actual COMMIT while close/drain
+  remains incomplete. No installed controller or real restore proof inferred.
+- [ ] Freeze journal pin, independent exact-head review and producer transport.
 
 ## Decisions
 
@@ -79,6 +91,16 @@ validation service by Story. Receipt bytes alone convey no authentication;
 only the exact protected Story call can establish provenance at registration.
 Protocol codecs never mint identity or current offer/intent authority.
 
+Accepted restore-cohort decision is BE011-LFP-CONSENT-PRODUCER c7,
+`BE011-STORY-LFP-RESTORE-COHORT-v1`, artifact SHA256
+`592a5bb6bb9e6dda50520f42f358d3f5727a3bf38d80c44f3a3f5274b59d775b`.
+Database revision/UUIDs cannot detect restore. Immutable origin accompanies
+offer/consent and MM registration separately from unchanged v1 wire bytes.
+`BE011-STORY-LFP-RESTORE-CONTROLLER` owns the external authority/composition
+continuation; consumers are291/145. Its actual deployment-owned controller,
+credential/route retirement and replica drain remain absent prerequisites.
+Missing authority never means clean installation or an open qualified path.
+
 ## Risks And Follow-Ups
 
 High risk: signed identity, privacy, immutable replay and two-database ambiguous
@@ -86,3 +108,8 @@ acknowledgement. Mandatory independent review. Pair support does not implement
 N-member consent; unsupported groups deny without dropping peers. Story restore
 must not reuse an offer incarnation/revision. Exact deployment/credential and
 account erasure composition remain separate acceptance concerns.
+Migration000005 has no initial admission row and preserves immutable evidence
+without cascading Story deletion. These are personal data, with no retention
+exemption: actual account-erasure/retention composition is still required before
+activation. Down migration refuses retained journal/head data. Synthetic local
+cohort rebind and malformed-import fixtures do not prove authorized restoration.
