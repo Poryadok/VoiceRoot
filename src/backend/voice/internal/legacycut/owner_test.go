@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"voice/backend/voice/internal/retirementproof"
@@ -234,4 +235,34 @@ func mustJSON(t *testing.T, v any) []byte {
 	b, e := json.Marshal(v)
 	require.NoError(t, e)
 	return b
+}
+
+func TestLegacyOwnerRejectsAdminSessionAndSetRoleBridge(t *testing.T) {
+	dsn := os.Getenv("VOICE_LEGACY_ADMIN_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("owned isolated administrative negative fixture required")
+	}
+	ctx := context.Background()
+	for _, bridge := range []bool{false, true} {
+		name := "admin"
+		if bridge {
+			name = "set-role-bridge"
+		}
+		t.Run(name, func(t *testing.T) {
+			cfg, err := pgxpool.ParseConfig(dsn)
+			require.NoError(t, err)
+			if bridge {
+				cfg.AfterConnect = func(ctx context.Context, c *pgx.Conn) error {
+					_, e := c.Exec(ctx, `SET ROLE legacy_maintenance`)
+					return e
+				}
+			}
+			pool, err := pgxpool.NewWithConfig(ctx, cfg)
+			require.NoError(t, err)
+			t.Cleanup(pool.Close)
+			o := &Owner{Pool: pool}
+			_, err = o.ReadOwnerWork(ctx, retirementproof.OwnerWorkRef{Protocol: 1, OwnerProtocol: Protocol, WorkID: uuid.New()})
+			require.ErrorIs(t, err, retirementproof.ErrUnavailable)
+		})
+	}
 }
