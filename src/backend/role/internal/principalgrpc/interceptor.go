@@ -3,6 +3,7 @@ package principalgrpc
 import (
 	"context"
 	"errors"
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -42,6 +43,12 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 		message, ok := request.(proto.Message)
 		if !ok || message == nil {
 			return nil, status.Error(codes.InvalidArgument, "invalid request")
+		}
+		if info.FullMethod == rolev1.RoleService_BootstrapSpaceRoles_FullMethodName {
+			bootstrap, ok := message.(*rolev1.BootstrapSpaceRolesRequest)
+			if !ok || len(bootstrap.ProtoReflect().GetUnknown()) != 0 || !bootstrapUUID(bootstrap.GetSpaceId()) || !bootstrapUUID(bootstrap.GetOwnerProfileId()) {
+				return nil, status.Error(codes.InvalidArgument, "invalid bootstrap binding")
+			}
 		}
 		requestHash, err := principal.RequestHash(message)
 		if err != nil {
@@ -95,6 +102,8 @@ func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 			}
 		}
 		switch info.FullMethod {
+		case rolev1.RoleService_BootstrapSpaceRoles_FullMethodName:
+			return nil, status.Error(codes.Unavailable, "protected bootstrap listener required")
 		case rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName,
 			rolev1.RoleService_RemoveMemberRoles_FullMethodName:
 			return nil, status.Error(codes.Unavailable, "protected method unavailable on ordinary listener")
@@ -116,4 +125,9 @@ func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 			return handler(ctx, request)
 		}
 	}
+}
+
+func bootstrapUUID(raw string) bool {
+	id, err := uuid.Parse(raw)
+	return err == nil && id != uuid.Nil && id.String() == raw
 }

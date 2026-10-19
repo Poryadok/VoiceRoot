@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/test/bufconn"
+	rolev1 "voice.app/voice/role/v1"
 	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/pkg/principal"
 	"voice/backend/space/internal/authctx"
@@ -67,6 +68,17 @@ func startSignedCreatorGRPCTestServer(t *testing.T, pool *pgxpool.Pool, options 
 		},
 	}
 	svc := &SpaceGRPC{Store: st}
+	roleIssuer, roleKey := newOwnershipTestIssuer(t)
+	svc.PrincipalIssuer = roleIssuer
+	svc.OwnershipRoles = &creatorBootstrapRoleClient{bootstrap: func(ctx context.Context, request *rolev1.BootstrapSpaceRolesRequest) (*rolev1.BootstrapSpaceRolesResponse, error) {
+		verifyOwnershipCredential(t, ctx, request, rolev1.RoleService_BootstrapSpaceRoles_FullMethodName, roleKey)
+		// Component-only controlled dependency. Real protected Role composition
+		// and Owner ACL qualification remain separate from this Creator fixture.
+		if svc.Roles != nil {
+			return svc.Roles.BootstrapSpaceRoles(ctx, request)
+		}
+		return &rolev1.BootstrapSpaceRolesResponse{}, nil
+	}}
 	for _, option := range options {
 		option(svc)
 	}

@@ -42,6 +42,9 @@ func (s *SpaceGRPC) CreateSpace(ctx context.Context, req *spacev1.CreateSpaceReq
 	if err != nil {
 		return nil, err
 	}
+	if err := s.creatorRoleRuntimeReady(); err != nil {
+		return nil, err
+	}
 	row, err := s.Store.CreateSpaceWithCreator(ctx, creator, req)
 	if err != nil {
 		return nil, mapSpaceStoreError(err)
@@ -49,7 +52,7 @@ func (s *SpaceGRPC) CreateSpace(ctx context.Context, req *spacev1.CreateSpaceReq
 	if accountID, parseErr := uuid.Parse(actor.AccountID); parseErr == nil && s.SeedSpaceProActive {
 		_ = s.Store.UpsertSpaceSubscription(ctx, row.ID, accountID, "active")
 	}
-	if err := s.bootstrapSpaceRoles(ctx, row.ID, row.OwnerProfileID); err != nil {
+	if err := s.bootstrapCreatorRoles(ctx, row.ID, row.OwnerProfileID); err != nil {
 		return nil, mapSpaceStoreError(err)
 	}
 	if s.SpaceEvents != nil {

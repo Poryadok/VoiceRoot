@@ -466,6 +466,17 @@ interceptor ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md));
 
 ### Space `CheckPermission` decision contract
 
+The protected runtime also accepts exact Space-service `BootstrapSpaceRoles`:
+audience `role`, full Bootstrap RPC, fresh request ID/JTI and deterministic
+request hash bind canonical nonnil `space_id` and `owner_profile_id`. Unknown
+request fields, user authority claims, other service issuers and raw actor
+metadata are rejected. The ordinary listener denies this RPC. Bootstrap reuses
+the existing serialized Role transaction: the same Owner is idempotent, while a
+different existing Owner cannot be replaced. Native public Space creation uses
+its configured protected Role client and signed Space issuer; absent dependencies
+fail before native Space creation. This does not activate the rest of the target
+caller matrix or prove assembled Auth/Role/Space qualification.
+
 Space may call only `/voice.role.v1.RoleService/CheckPermission` with a signed
 service JWT whose `principal_type=service`, `iss=space`, `sub=service:space`,
 `aud=role`, and `rpc` is that exact full RPC name. The credential also requires
