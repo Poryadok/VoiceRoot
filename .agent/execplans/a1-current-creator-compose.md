@@ -50,3 +50,12 @@ actual public journeys. Component checks do not replace assembled proof.
 Start with current Role critical RED; no source production edit before RED.
 Current fresh base78bc80b, branch codex/a1-creator-current-342, clean lease22.
 Direct186/69 ownership ACKs recorded in TT checkpoint. No scarce shared stand.
+
+Role current realTLS RED0.293 became full principalruntime race17.069 and
+principalgrpc1.018/vetPASS; frozen9eface22, sharedRolefiles released to183.
+Creator ordinaryCreate/open and missingruntime wrongstatus RED0.018 became
+LP race2.020 and checker1.044/vetPASS. Existing unlisted-method tests now use
+ListMySpaces because protectedCreator is intentionally newly supported; their
+deny assertion remains intact. No audit/nickname/composite projection changed.
+Dedicated Authfloor mTLS configuration regression passed1.034. These are
+component results; main/native/allwriter assembly and public e2e remain open.
