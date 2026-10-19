@@ -40,6 +40,51 @@ boundary/composition transport, real child hook, and a fail-closed pending
 ledger barrier if that child later succeeds. This is incomplete author work,
 not collection, original full-router, production R/K or CI PASS.
 
+The d4a3a4f6 full original wrapper is terminal: EXIT1,7933 events,
+trace00b89f3d4cc149806fcdd7601a7f177a06a5a10f33bd50a6c08df830977dbc94.
+Its actual fixed3071 boundary in F5 calls the real required child and reaches
+the same nested first_parent_range failure. No J rows/classification or later
+router occurred. The original top-level unknown category is retained; the
+successor routes the genuine child's diagnostic file through unchanged.
+
+410 decision b1bfbcacdeaf993e975afd993c8176e1379a6206c51503ddd0f0279d23df8f1a
+permits a separate fixed-nine author observation, not an ordinary range pass.
+Actual immutable d4a B-to-A six-node supplemental is EXIT0/174 events,
+traceb52eb0f595ee1037aa8c7a34ae991b1f896342a8d0e80825e5ef25fef5876b7f,
+with two rawtrue/four rawfalse classifications. Its map is never concatenated
+into the three-spine map. New source binds exact J/I/B/H/C/A/F topology and
+current source/native/caller context; records the refused original predicate;
+observes a fresh separately linked six-node frame, then uses the same original
+persistent-state operation loop for the three-node spine. The real F boundary
+remains C. All native/source/composition/duplicate gates remain intact.
+
+The I constructor validates the complete real nine-operation evidence, every
+retained main ledger, existing M span obligations and the linked supplemental
+ledger before any I rows. Each I transition consumes the full bound ledger,
+all actual prior/incoming owner/content identities and cumulative OR, checks
+the exact post-map, and preserves a rawfalse append. Only a genuine existing
+native status-zero receipt can rebind its original source fields. This supplies
+no M supersession grant to I/J. Global new handles initialize empty; ordinary
+callers keep the original range refusal. J's complete-ledger stage remains
+fail-closed pending actual required child evidence; no final authority exists.
+
+Private tests cover exact9 topology/default rejection/six-side success and a
+real temporary side-true/main-false transport. Dropped true/evidence, source/map
+substitution and forced raw normalization reject. An additional meaningful
+integer1-versus-booleantrue oracle failed (6.393s) and passed after canonical
+typed comparison (8.879s). Current helper/shell syntax and26 private tests pass
+98.315s; three existing guarded-merge regressions pass0.737s. The old actual
+d4a prefix also supplies a source-specific origin component, not a new producer
+continuation. A fresh immutable source and real whole-wrapper execution are
+still required for the new range/I implementation; all qualification stays HOLD.
+
+The first external origin-negative harness preserved a test-driver assertion
+failure: wrong-main-mode was correctly rejected earlier by
+actual_incoming_source_boundary, rather than its overly narrow expected final
+main-child predicate. This is not a consumer acceptance or source-code RED.
+Its component baseline and both forged inputs remain immutable; the corrected
+oracle names that actual source-identity rejection and reruns no producer.
+
 Plan and validation:
 
 1. Freeze the complete actual3071 bounded DAG/ordered-parent/raw-delta/version

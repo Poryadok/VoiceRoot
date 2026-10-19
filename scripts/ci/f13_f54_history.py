@@ -53,6 +53,15 @@ J3071_DOC_OIDS = dict(O='d66b3db53db02d2df5d548ff1cca47cfb3dd80f1',bestA='d66b3d
 J3071_DOC_HASHES = dict(O='e035fe905332326f2482735af309c6d21df9a6e3606d490baf3c68283eac41ac',bestA='e035fe905332326f2482735af309c6d21df9a6e3606d490baf3c68283eac41ac',bestB='e035fe905332326f2482735af309c6d21df9a6e3606d490baf3c68283eac41ac',
     P1='34e842635d5d743d14576cdde8fd6e9ef791527d77a1b9b8af59de255e0fc564',P2='a4c2cc6316c3b046fe03bfebcb2c9478c7d3b3dc14dca1d191756dfcedf903a7',AUTO='7d7b20429c07361d058551f4d0e1a77ff090d62fce778e3660c5116e418cd890',J='342b0f63411e327250676c20e2853455701ce3787656cdfa6e40b2394b986b53')
 J3071_INSERTIONS = [(39,2844,'4dd4d04a9699ea1ffd28b7b8e3ca471784941bcbe68c444c31ee7152f67c9793'),(39,626,'285dad0f5994b4acb2b044beff212cbc1f445f91d7c96ba41526346aa540b212')]
+J3071_RANGE_RULING_SHA = 'b1bfbcacdeaf993e975afd993c8176e1379a6206c51503ddd0f0279d23df8f1a'
+J3071_RANGE_FAILED_TRACE_SHA = '8c16448aa157f0666c9dd8cec95e90500bc1425b3b2beb26aa148923b2dea2bc'
+J3071_RANGE = dict(integration='2cc9482255ba18cd948aacb567f4c4bdf8976b14',first='8191a36ca3bea7d053df0dd25963ca5133284b41',
+    base='d4abb829622e9bd91b26842b61522e6840840867',target='909090a34743902799306974d6f3ebabe3c02f10',
+    baseline='c08cf1ed3a18e54e86541c54fa731fc9b24e1a8c',side='a80f649cbe0a03671c25531ace4ac1bd6bf54756',
+    direct='40afa80e6d1ca7faebf528b7cb78f32cdf707e5d',merge='fa1528a7c232a644218edf49811e2bb2e373105f',
+    side_nodes=['447d77729c904943800f78b78937f46ab67739cd','ff35cc20928280ac88e1dbf6f013a8d99839afdf',
+        '9dde1dedbfbc32d283056583de6c138ca241a56f','ae815afbea96f4da9006bb1d3b5c46f1408c637d',
+        'a3502b516fa4cf109fec2d53c16db420700122a3','a80f649cbe0a03671c25531ace4ac1bd6bf54756'])
 UNIT_HASHES = {
     'corrected-contract-v3-PROPOSAL.json':'62a00947187fa58b2815b13877a2c15a94ecb588c8d5fc06ca46aceb1cc24dde',
     'corrected-history-composition-contract-v3-PROPOSED.md':'04ab09c4094a35e256c4cb6642f54cd24c22f58b166ad013e29f7470953ed943',
@@ -218,13 +227,13 @@ def append(path, kind, frame, operation, repo, values):
         payload=json.loads(values[0]);require(payload['admission'] is False,'observation_not_authority')
     elif kind == 'scalar_seam_observation':
         payload=dict(status=int(values[0]),original_gate='single_best_base_required',admission=False)
-    elif kind == 'span_link':
+    elif kind in ('span_link','range_side_link'):
         require(previous is None and not frame and not operation,'separate_supplemental_trace')
         payload=json.loads(values[0]);require(payload['admission'] is False,'span_not_admission')
     elif kind in ('history_capability','history_3071_capability'):
         capability,receipt=values
         payload=dict(capability=raw_binding(Path(capability).read_bytes()),receipt=json.loads(receipt),admission=False)
-    elif kind in ('composition_capability','composition_3071_capability'):
+    elif kind in ('composition_capability','composition_3071_capability','range_3071_branch'):
         payload=json.loads(values[0]);require(payload['admission'] is False,'composition_not_production_authority')
     elif kind == 'boundary_3071_observation':
         output,boundary=values
@@ -233,12 +242,12 @@ def append(path, kind, frame, operation, repo, values):
         name,output,incoming=values
         payload=dict(path=name,map_before=file_binding(output),after_gate_row=raw_binding(incoming),
             reason='complete_ledger_consumer_required_before_mutation',admission=False)
-    elif kind == 'M_ledger_ready':
+    elif kind in ('M_ledger_ready','range_I_ledger_ready'):
         payload=dict(ledger=raw_binding(Path(values[0]).read_bytes()),admission=False)
     elif kind == 'complete_ledger_consumed':
         name,receipt,status=values
         payload=dict(path=name,receipt=json.loads(Path(receipt).read_bytes()),scope_exit=int(status),admission=False)
-    elif kind == 'complete_ledger_conserved':
+    elif kind in ('complete_ledger_conserved','range_I_ledger_conserved'):
         name,receipt=values
         payload=dict(path=name,receipt=json.loads(Path(receipt).read_bytes()),policy_result=None,admission=False)
     elif kind == 'exact_unit_supersession':
@@ -351,6 +360,161 @@ def verified_3071_capabilities(repo, path):
     cap=json.loads(Path(path).read_bytes())
     require(cap==prepare_3071_capabilities(repo,cap['directory'],cap['native_path']),'fixed3071_complete_current_capability_binding')
     return cap
+
+
+def fixed3071_range_structure(repo, base, target, allow, partition):
+    """Exact Git witness only. It neither qualifies rows nor opens the engine."""
+    r=J3071_RANGE
+    require([base,target,allow,partition]==[r['base'],r['target'],'true','false'],'fixed3071_range_exact_invocation')
+    parents=lambda node:git(repo,'rev-list','--parents','-n','1',node).decode().split()[1:]
+    require(parents(r['integration'])==[r['first'],target],'fixed3071_range_actual_I_ordered_parents')
+    expected={r['direct']:[r['baseline']],r['merge']:[r['direct'],r['side']],target:[r['merge']]}
+    previous=base
+    for node in r['side_nodes']:
+        expected[node]=[previous];previous=node
+    require(previous==r['side'] and len(expected)==9,'fixed3071_range_six_distinct_side_nodes')
+    nodes=git(repo,'rev-list','--topo-order','--reverse',base+'..'+target).decode().splitlines()
+    require(len(nodes)==9 and set(nodes)==set(expected),'fixed3071_range_complete_nine_node_closure')
+    require(all(parents(node)==value for node,value in expected.items()),'fixed3071_range_every_ordered_parent_edge')
+    spine=git(repo,'rev-list','--first-parent','--reverse',base+'..'+target).decode().splitlines()
+    side=git(repo,'rev-list','--first-parent','--reverse',base+'..'+r['side']).decode().splitlines()
+    require(spine==[r['direct'],r['merge'],target] and side==r['side_nodes'],'fixed3071_range_exact_three_and_six_partition')
+    require(set(spine).isdisjoint(side) and set(spine+side)==set(nodes),'fixed3071_range_disjoint_novel_operation_accounting')
+    require(git(repo,'merge-base','--all',r['first'],target).decode().splitlines()==[base],'fixed3071_range_actual_I_source_boundary')
+    require(git(repo,'merge-base','--all',r['direct'],r['side']).decode().splitlines()==[r['baseline']],'fixed3071_range_F_keeps_real_C_source_boundary')
+    require(subprocess.run(['git','--no-replace-objects','-C',str(repo),'merge-base','--is-ancestor',r['baseline'],base],capture_output=True).returncode==0,'fixed3071_range_C_baseline_ancestry')
+    chain=git(repo,'rev-list','--first-parent',target).decode().splitlines()
+    sync=[node for node in chain if len(parents(node))==2 and parents(node)[1]==base]
+    require(base not in chain and not sync,'fixed3071_range_original_guard_still_refuses')
+    edges={node:[dict(parent=parent,delta=raw_binding(git(repo,'diff','--raw','--no-abbrev','--no-renames','-z',parent,node))) for parent in expected[node]] for node in nodes}
+    return dict(type='F54_FIXED3071_NINE_NODE_STRUCTURAL_WITNESS',tuple=r,invocation=dict(base=base,target=target,allow=allow,partition=partition),
+        nodes=nodes,ordered_parent_edges=expected,raw_edges=edges,spine=spine,side_nodes=side,
+        original_guard=dict(status=1,base_in_first_parent=False,exact_sync_boundaries=[]),
+        F_source_delta=raw_binding(git(repo,'diff','--name-only',r['baseline'],r['side'])),
+        baseline_closure=raw_binding(git(repo,'rev-list','--topo-order',base)),
+        history='UNOBSERVED',qualification='HOLD',admission=False)
+
+
+def range_3071_origin_value(repo, capability, state, trace_path, prefix):
+    folder=Path(capability['directory'])
+    require(sha((folder/'rudeus410-3071-child-range-decision.md').read_bytes())==J3071_RANGE_RULING_SHA,'fixed3071_exact_range_decision')
+    failed=(folder/'range/failed-trace.jsonl').read_bytes()
+    require(sha(failed)==J3071_RANGE_FAILED_TRACE_SHA,'fixed3071_original_failed_range_immutable')
+    r=J3071_RANGE
+    witness=fixed3071_range_structure(repo,r['base'],r['target'],'true','false')
+    return dict(type='F54_FIXED3071_RANGE_AUTHOR_ORIGIN',capability=capability,state=state,witness=witness,
+        main_trace=str(trace_path),main_prefix=prefix,source_context=router_source_context(repo),
+        ruling_sha256=J3071_RANGE_RULING_SHA,original_failed_trace_sha256=J3071_RANGE_FAILED_TRACE_SHA,
+        side_invocation=dict(base=r['base'],target=r['side'],allow='true',partition='false'),admission=False)
+
+
+def prepare_3071_range_origin(repo, capability_path, trace_path):
+    capability=verified_3071_capabilities(repo,capability_path)
+    raw=Path(trace_path).read_bytes();events=[json.loads(x) for x in raw.splitlines()]
+    require(events and events[-1]['kind']=='frame_enter','fixed3071_range_before_any_engine_operation')
+    frame=events[-1]['frame']
+    state=validate_trace(repo,trace_path,sha(raw),range_checkpoint=frame)['range_checkpoint']
+    require(state['capability_sha256']==sha(canonical(capability)),'fixed3071_range_exact_parent_capability')
+    value=range_3071_origin_value(repo,capability,state,trace_path,dict(bytes=len(raw),sha256=sha(raw)))
+    return dict(value,capability_path=str(capability_path))
+
+
+def verify_3071_range_side(repo, origin, trace_path, map_path):
+    r=J3071_RANGE;raw=Path(trace_path).read_bytes();events=[json.loads(x) for x in raw.splitlines()]
+    require(events and events[0]['kind']=='range_side_link' and events[0]['payload']==origin,'fixed3071_supplemental_same_actual_origin')
+    verified=validate_trace(repo,trace_path,sha(raw))
+    require(not verified['failures'] and verified['frames']==1 and verified['operations']==6,'fixed3071_six_real_successful_side_operations')
+    frame=next(e['payload'] for e in events if e['kind']=='frame_enter')
+    require([frame[k] for k in ('base','target','allow_direct_followup','partition_source_history')]==[r['base'],r['side'],'true','false'],'fixed3071_exact_six_node_side_frame')
+    beginnings=[e for e in events if e['kind']=='operation_begin']
+    require([e['payload']['commit'] for e in beginnings]==r['side_nodes'] and all(e['payload']['classification']=='direct' for e in beginnings),'fixed3071_no_synthetic_or_net_only_side_operations')
+    ledger=verified['ledger'][frame['id']];actual=Path(map_path).read_bytes()
+    require(ledger['map_binding']==dict(bytes=len(actual),sha256=sha(actual)) and ledger['rows']==actual.decode().splitlines(),'fixed3071_actual_supplemental_final_map')
+    return dict(type='F54_FIXED3071_RANGE_ENGINE_OBSERVATION',origin=origin,
+        side_trace=str(trace_path),side_trace_sha256=sha(raw),side_map=str(map_path),side_map_binding=ledger['map_binding'],
+        side_ledger=ledger,side_operations=[dict(operation=e['operation'],begin_digest=e['digest']) for e in beginnings],
+        original_guard_status=1,route='EXACT_NINE_NODE_AUTHOR_OBSERVATION',qualified_nested_result=False,admission=False)
+
+
+def prepare_3071_range_branch(repo, origin_path, trace_path, map_path):
+    origin=json.loads(Path(origin_path).read_bytes());prefix=origin['main_prefix'];raw=Path(origin['main_trace']).read_bytes()
+    require(len(raw)==prefix['bytes'] and sha(raw)==prefix['sha256'],'fixed3071_still_unchanged_main_prefix_before_engine')
+    require(origin==prepare_3071_range_origin(repo,origin['capability_path'],origin['main_trace']),'fixed3071_current_range_origin_rechecked')
+    return verify_3071_range_side(repo,origin,trace_path,map_path)
+
+
+def build_3071_I_ready(state, prefix):
+    """A complete actual ledger, not six Git-node rows or a sidecar true bit."""
+    required={}
+    require(state['classification']['trigger'] in ('true','false'),'fixed3071_I_original_raw_classifier_type')
+    def item(name):
+        return required.setdefault(name,dict(aggregate=False,retained_evidence=[],range_evidence=[],inherited_qualification=[],I_classification=None))
+    for frame,ledger in state['ledger'].items():
+        for name,value in ledger['paths'].items():
+            require(type(value['aggregate']) is bool,'fixed3071_I_retained_aggregate_boolean')
+            target=item(name);target['aggregate']|=value['aggregate']
+            target['retained_evidence'].append(dict(frame=frame,map_binding=ledger['map_binding'],evidence=value['evidence']))
+    for operation,ready in state['M_ready'].items():
+        inherited_sha=sha(canonical(ready))
+        for name,value in ready['required_qualification'].items():
+            require(type(value['aggregate']) is bool,'fixed3071_I_inherited_aggregate_boolean')
+            target=item(name);target['aggregate']|=value['aggregate']
+            target['inherited_qualification'].append(dict(operation=operation,ledger_sha256=inherited_sha,obligation=value))
+    branch=state['range_branch'];side=branch['side_ledger']
+    for name,value in side['paths'].items():
+        require(type(value['aggregate']) is bool,'fixed3071_I_supplemental_aggregate_boolean')
+        target=item(name);target['aggregate']|=value['aggregate']
+        target['range_evidence'].append(dict(trace_sha256=branch['side_trace_sha256'],map_binding=side['map_binding'],
+            rows=[raw_binding(x) for x in side['rows'] if x.split('\t')[0]==name],evidence=value['evidence'],
+            actual_operations=branch['side_operations']))
+    for name in state['operation_binding']['paths']:
+        target=item(name);target['I_classification']=state['classification']
+        target['aggregate']|=state['classification']['trigger']=='true'
+    outer=state['ledger'][state['frame']]
+    return dict(type='F54_FIXED3071_ACTUAL_I_RANGE_LEDGER',operation=state['operation'],frame=state['frame'],classification=state['classification'],operation_binding=state['operation_binding'],
+        capability_sha256=state['capability_sha256'],prefix=prefix,frame_ancestry=state['frame_ancestry'],
+        ledger=state['ledger'],range_branch=branch,coverage=state['coverage'],inherited_M_ledgers=state['M_ready'],
+        outer_rows=outer['rows'],outer_map_binding=outer['map_binding'],required_qualification=required,
+        qualification='HOLD',admission=False,runtime_pass=False)
+
+
+def prepare_3071_I_ledger(repo, capability_path, trace_path, branch_path):
+    cap=verified_3071_capabilities(repo,capability_path);branch=json.loads(Path(branch_path).read_bytes())
+    raw=Path(trace_path).read_bytes();operation=branch['origin']['state']['integration_operation']
+    state=validate_trace(repo,trace_path,sha(raw),I_checkpoint=operation)['I_checkpoint']
+    require(state['capability_sha256']==sha(canonical(cap)) and state['range_branch']==branch,'fixed3071_I_same_actual_capability_and_range')
+    return build_3071_I_ready(state,dict(bytes=len(raw),sha256=sha(raw)))
+
+
+def consume_3071_I_path(ready_path, expected_sha, trace_path, name, actual_map, after_raw, transition):
+    raw=Path(ready_path).read_bytes();require(sha(raw)==expected_sha,'fixed3071_I_complete_ledger_raw_hash')
+    value=json.loads(raw);require(value['type']=='F54_FIXED3071_ACTUAL_I_RANGE_LEDGER' and value['admission'] is False,'fixed3071_I_complete_ledger_type')
+    reconstructed=build_3071_I_ready(dict(frame=value['frame'],operation=value['operation'],operation_binding=value['operation_binding'],
+        classification=value['classification'],capability_sha256=value['capability_sha256'],frame_ancestry=value['frame_ancestry'],
+        ledger=value['ledger'],range_branch=value['range_branch'],coverage=value['coverage'],M_ready=value['inherited_M_ledgers']),value['prefix'])
+    require(canonical(value)==canonical(reconstructed),'fixed3071_I_consumer_reads_full_retained_and_supplemental_evidence_not_only_a_bit')
+    require(value['operation_binding']['commit']==J3071_RANGE['integration'] and name in value['operation_binding']['paths'],'fixed3071_I_actual_operation_path')
+    trace=Path(trace_path).read_bytes();prefix=value['prefix']
+    require(len(trace)>=prefix['bytes'] and sha(trace[:prefix['bytes']])==prefix['sha256'],'fixed3071_I_consumes_sealed_real_prefix')
+    events=[json.loads(x) for x in trace.splitlines()]
+    before=next(e for e in reversed(events) if e['kind']=='row_before' and e['operation']==value['operation'])
+    require(before['payload']['path']==name and before['payload']['map_before']==dict(bytes=len(actual_map),sha256=sha(actual_map)),'fixed3071_I_actual_current_map_and_path')
+    rows=actual_map.decode().splitlines();prior=[raw_binding(x) for x in rows if x.split('\t')[0]==name]
+    require(prior==before['payload']['prior_rows'] and prior==[raw_binding(x) for x in value['outer_rows'] if x.split('\t')[0]==name],'fixed3071_I_all_original_prior_rows')
+    incoming=row(before['payload']['incoming']);after=row(raw_binding(after_raw))
+    require(all(after[i]==incoming[i] for i in (0,2,3,6,7)),'fixed3071_I_immutable_after_gate_identity')
+    if after[4:6]!=incoming[4:6]:
+        gates=[e for e in events[before['sequence']:] if e['kind']=='native_rebind_gate' and e['operation']==value['operation'] and e['payload']['path']==name]
+        require(len(gates)==1 and gates[0]['payload']['status']==0 and after[4:6]==[J3071_RANGE['first'],J3071_RANGE['integration']],'fixed3071_I_only_original_native_gate_rebind')
+    aggregate=value['required_qualification'][name]['aggregate'] or any(row(x)[1]=='true' for x in prior) or incoming[1]=='true' or after[1]=='true'
+    require(transition in ('append','replace') and (transition!='replace' or prior),'fixed3071_I_actual_transition')
+    require((transition=='append' and after==incoming) or (transition=='replace' and (after[1]==incoming[1] or (after[1]=='true' and aggregate))),'fixed3071_I_raw_append_and_conserved_reduction_flag')
+    output=([x for x in rows if x.split('\t')[0]!=name] if transition=='replace' else rows)+[after_raw]
+    post=('\n'.join(output)+'\n').encode()
+    return dict(path=name,ledger_sha256=sha(canonical(value)),incoming=before['payload']['incoming'],after_gate_row=raw_binding(after_raw),
+        prior_rows=prior,map_before=dict(bytes=len(actual_map),sha256=sha(actual_map)),transition=transition,
+        expected_post_map=dict(bytes=len(post),sha256=sha(post)),aggregate=aggregate,
+        obligations=value['required_qualification'][name],policy_result=None,admission=False)
 
 
 def boundary_3071_capability(repo, path, merge, first, source):
@@ -1125,13 +1289,13 @@ def validate_router(repo, seal_path, seal_sha, map_path, context_path, sidecar_p
         failures=[v for v in receipts if v['status']!=0],qualification='HOLD',admission=False,runtime_pass=False)
 
 
-def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
+def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, range_checkpoint=None, I_checkpoint=None):
     raw=Path(path).read_bytes();require(sha(raw)==expected_sha,'trace_raw_hash')
     events=[json.loads(v) for v in raw.splitlines()];require(events,'nonempty_producer_trace')
     previous='0'*64;frames={};stack=[];operations={};attempts={};classified={};pending={};cumulative={};child_flags={};child_rows={};frame_rows={};carry={};failures=[];observed=set()
     expected_operations={};seen_operations={};visited={};committed={};maps={};children={};obligations={};native_bindings={}
     M_capabilities={};M_compositions={};M_ready={};M_consumed={};M_supersessions={};master_entry=None;master_wrapper=None
-    J_capabilities={};J_compositions={}
+    J_capabilities={};J_compositions={};range_branches={};frame_results={};I_ready={};I_consumed={}
     def map_binding(frame):
         raw=''.join('\t'.join(parts)+'\n' for parts in maps[frame]).encode()
         return dict(bytes=len(raw),sha256=sha(raw))
@@ -1156,6 +1320,9 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
         if operation in J_capabilities:
             require(children.get(operation)==[(J3071_O,J3071_P2,'true','true')],'complete_fixed3071_real_history_child')
             require(False,'fixed3071_complete_ledger_consumer_not_yet_observed')
+        range_children=[name for name,data in frames.items() if data['parent_operation']==operation and name in range_branches]
+        if range_children:
+            require(operation in I_ready and I_consumed.get(operation,[])==value['paths'],'fixed3071_I_complete_ledger_consumed_before_collapse')
     def ledger_state():
         return {f:dict(map_binding=map_binding(f),rows=['\t'.join(x) for x in maps[f]],paths={
             name:dict(aggregate=cumulative[(f,name)],evidence=obligations[(f,name)])
@@ -1179,6 +1346,45 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
             capability_sha256=sha(canonical(M_capabilities[operation])),operation_binding=value,
             classification=classified[operation],paths=value['paths'],ledger=ledger_state(),child_frame=child[0],
             coverage=dag_dispositions(repo,prefix_events),frame_ancestry=[dict(frame=name,context=frames[name]) for name in stack],M_rows_pending=True,admission=False)
+    def range_checkpoint_state(identity):
+        r=J3071_RANGE
+        require(stack and stack[-1]==identity and not seen_operations[identity] and not maps[identity] and not pending and not failures,'fixed3071_exact_empty_range_engine_boundary')
+        value=frames[identity]
+        require([value[k] for k in ('base','target','allow_direct_followup','partition_source_history')]==[r['base'],r['target'],'true','false'],'fixed3071_exact_nested_range_frame')
+        parent=value['parent_operation'];require(parent in operations,'fixed3071_real_I_before_range')
+        integration=operations[parent]
+        require([integration[k] for k in ('commit','parent_index','first_parent','boundary','source_head','candidates')]==[r['integration'],2,r['first'],r['base'],r['target'],[r['base']]],'fixed3071_actual_I_source_slot')
+        main=frames[value['parent']]
+        require([main[k] for k in ('base','target','allow_direct_followup','partition_source_history')]==[J3071_O,J3071_P2,'true','true'],'fixed3071_real_required_main_child')
+        owner=main['parent_operation'];require(owner in J_capabilities and owner in operations,'fixed3071_range_belongs_to_actual_J')
+        require(master_entry is not None and len(stack)>=3,'fixed3071_range_original_master_ancestor_context')
+        return dict(type='F54_FIXED3071_PENDING_RANGE_CHECKPOINT',frame=identity,integration_operation=parent,
+            integration_binding=integration,J_operation=owner,capability_sha256=sha(canonical(J_capabilities[owner])),
+            frame_ancestry=[dict(frame=name,context=frames[name]) for name in stack],
+            retained_maps={name:map_binding(name) for name in maps},admission=False)
+    def I_checkpoint_state(operation):
+        r=J3071_RANGE;require(operation in operations and operation in classified,'fixed3071_I_actual_classified_checkpoint')
+        frame=operation.split('/')[0];value=operations[operation]
+        require(stack and stack[-1]==frame and seen_operations[frame][-1]==(r['integration'],2),'fixed3071_I_live_original_operation')
+        require([value[k] for k in ('commit','first_parent','boundary','source_head','candidates')]==[r['integration'],r['first'],r['base'],r['target'],[r['base']]],'fixed3071_I_keeps_original_parents_and_source')
+        owner=frames[frame]['parent_operation'];require(owner in J_capabilities,'fixed3071_I_actual_J_child_only')
+        require(visited.get(operation,[])==value['paths'] and not committed.get(operation) and not pending and not failures,'fixed3071_I_all_original_pregates_before_rows')
+        require(children.get(operation)==[(r['base'],r['target'],'true','false')],'fixed3071_I_exact_required_range_child')
+        candidates=[name for name,data in frames.items() if data['parent_operation']==operation]
+        require(len(candidates)==1 and candidates[0] in range_branches,'fixed3071_I_one_typed_same_state_range')
+        child=candidates[0];require(child in frame_results and frame_results[child]['exit']==0,'fixed3071_I_actual_range_engine_completed')
+        branch=range_branches[child]
+        spine=[dict(node=node,operation=child+'/'+node+'/'+str(index),disposition='actual_same_state_spine',
+            begin=next(e['digest'] for e in events if e['kind']=='operation_begin' and e['operation']==child+'/'+node+'/'+str(index))) for node,index in seen_operations[child]]
+        side=[dict(node=node,operation=ref['operation'],disposition='actual_supplemental_side_operation',
+            trace_sha256=branch['side_trace_sha256'],begin=ref['begin_digest']) for node,ref in zip(r['side_nodes'],branch['side_operations'])]
+        coverage=spine+side
+        require(len(coverage)==9 and len({x['node'] for x in coverage})==9 and {x['node'] for x in coverage}==set(branch['origin']['witness']['nodes']),'fixed3071_I_complete_nine_actual_operation_dispositions')
+        require(M_ready,'fixed3071_I_retains_actual_existing_M_span_evidence')
+        return dict(type='F54_FIXED3071_CLASSIFIED_I_CHECKPOINT',operation=operation,frame=frame,operation_binding=value,
+            classification=classified[operation],capability_sha256=sha(canonical(J_capabilities[owner])),
+            frame_ancestry=[dict(frame=name,context=frames[name]) for name in stack],ledger=ledger_state(),
+            range_branch=branch,coverage=coverage,M_ready=M_ready,admission=False)
     sync_gates=set()
     for sequence,e in enumerate(events,1):
         require(set(e)=={'schema','sequence','previous','kind','frame','operation','payload','digest'} and e['schema']==SCHEMA,'producer_event_schema')
@@ -1197,6 +1403,12 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
             root=next(iter(frames));require(v['source_map']==v['output']==map_binding(root),'original_wrapper_full_root_map_parity')
             require(Path(v['source_map_path']).read_bytes()==Path(v['output_path']).read_bytes(),'actual_wrapper_output_copy_not_selected_map')
             master_wrapper=v;continue
+        if kind=='range_side_link':
+            require(sequence==1 and not frames and frame is None and op is None and v['admission'] is False,'separate_fixed3071_side_link_before_real_execution')
+            require(v['type']=='F54_FIXED3071_RANGE_AUTHOR_ORIGIN' and v['source_context']==router_source_context(repo),'fixed3071_side_actual_source_context')
+            r=J3071_RANGE
+            require(v['witness']==fixed3071_range_structure(repo,r['base'],r['target'],'true','false') and v['ruling_sha256']==J3071_RANGE_RULING_SHA,'fixed3071_side_exact_nine_node_witness')
+            continue
         if kind=='span_link':
             require(sequence==1 and not frames and frame is None and op is None and v['admission'] is False,'separate_span_link_before_execution')
             require(v['supplemental_classifier']==classifier_binding(),'supplemental_collector_context')
@@ -1216,14 +1428,29 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
                 children.setdefault(v['parent_operation'],[]).append((v['base'],v['target'],v['allow_direct_followup'],v['partition_source_history']))
             continue
         require(stack and frame==stack[-1],'current_live_frame')
+        if kind=='range_3071_branch':
+            require(frame not in range_branches and op is None,'fixed3071_range_branch_before_same_state_operations')
+            state=range_checkpoint_state(frame);capability=J_capabilities[state['J_operation']]
+            prefix=b''.join(raw.splitlines(keepends=True)[:sequence-1])
+            origin=range_3071_origin_value(repo,capability,state,path,dict(bytes=len(prefix),sha256=sha(prefix)))
+            origin['capability_path']=v['origin']['capability_path']
+            require(verified_3071_capabilities(repo,origin['capability_path'])==capability,'fixed3071_range_same_actual_capability_file')
+            require(v['origin']==origin,'fixed3071_actual_range_origin_not_foreign_frame_or_old_ledger')
+            require(v==verify_3071_range_side(repo,origin,v['side_trace'],v['side_map']),'fixed3071_actual_side_receipt_before_persistent_engine')
+            range_branches[frame]=v;continue
         if kind=='frame_exit':
             require(v['final_map']==map_binding(frame),'conserved_final_map')
+            r=J3071_RANGE;current=frames[frame]
+            if v['exit']==0 and [current[k] for k in ('base','target')]==[r['base'],r['target']]:
+                require(frame in range_branches,'fixed3071_nonfirstparent_success_requires_actual_typed_branch')
+                require([commit for commit,index in seen_operations[frame]]==[r['direct'],r['merge'],r['target']],'fixed3071_persistent_three_operation_spine')
             seen=seen_operations[frame]
             require(seen==expected_operations[frame][:len(seen)],'ordered_actual_operation_prefix')
             if v['exit']==0:require(seen==expected_operations[frame],'complete_actual_operations')
             for commit,index in (seen if v['exit']==0 else seen[:-1]):finished(frame+'/'+commit+'/'+str(index))
             require(v['exit']!=0 or not any(key[0]==frame for key in pending),'row_without_commit')
             if v['exit']!=0: failures.append(dict(frame=frame,category=v['category']))
+            frame_results[frame]=v
             parent_operation=frames[frame]['parent_operation']
             if parent_operation and v['exit']==0:
                 for (owner,name),flag in cumulative.items():
@@ -1336,6 +1563,13 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
                 required=[name for name in guarded_names(operations[op]['paths']) if name in inherited_native or operations[op]['entries'][name]['source']!=operations[op]['entries'][name]['result']]
                 require(set(required)<=set(M_compositions.get(op,{})),'all_actual_M_composition_seams_consumed')
             continue
+        if kind=='range_I_ledger_ready':
+            require(op not in I_ready,'fixed3071_I_one_actual_ledger_checkpoint')
+            binding=v['ledger'];require(binding==raw_binding(binding['raw']) and v['admission'] is False,'fixed3071_I_complete_ledger_raw_binding')
+            ready=json.loads(binding['raw']);state=I_checkpoint_state(op)
+            prefix=b''.join(raw.splitlines(keepends=True)[:sequence-1])
+            require(canonical(ready)==canonical(build_3071_I_ready(state,dict(bytes=len(prefix),sha256=sha(prefix)))),'fixed3071_I_reconstructed_complete_owner_content_OR_ledger')
+            I_ready[op]=ready;continue
         if kind=='M_ledger_ready':
             require(op in M_capabilities and op not in M_ready,'one_exact_M_ledger_checkpoint')
             binding=v['ledger'];require(binding==raw_binding(binding['raw']),'complete_M_ledger_raw_binding')
@@ -1369,21 +1603,23 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
             expected=dict(expected,trace_prefix=dict(bytes=len(prefix_raw),sha256=sha(prefix_raw)))
             require(receipt==expected and v['admission'] is False,'independent_exact_supersession_actual_history_binding')
             M_supersessions[key]=receipt;continue
-        if kind=='complete_ledger_conserved':
-            require(op in M_ready and key in pending and pending[key]['op']==op,'complete_M_ledger_before_real_row_mutation')
+        if kind in ('complete_ledger_conserved','range_I_ledger_conserved'):
+            ready_table=M_ready if kind=='complete_ledger_conserved' else I_ready
+            consumed_table=M_consumed if kind=='complete_ledger_conserved' else I_consumed
+            require(op in ready_table and key in pending and pending[key]['op']==op,'complete_typed_ledger_before_real_row_mutation')
             receipt=v['receipt'];item=pending[key];parts=row(receipt['after_gate_row'])
             require(receipt['path']==v['path'] and receipt['incoming']==raw_binding('\t'.join(item['incoming'])),'actual_M_consumer_incoming')
             require(all(parts[i]==item['incoming'][i] for i in (0,2,3,6,7)) and parts[4:6]==item.get('rebind',item['incoming'][4:6]),'actual_M_consumer_after_gate_identity')
             require(parts[1]==item['incoming'][1] or (parts[1]=='true' and cumulative[key]),'actual_M_consumer_raw_flag')
-            require(receipt['ledger_sha256']==sha(canonical(M_ready[op])) and receipt['prior_rows']==[raw_binding('\t'.join(x)) for x in maps[frame] if x[0]==v['path']],'complete_M_consumer_prior_ledger')
-            require(receipt['obligations']==M_ready[op]['required_qualification'][v['path']] and receipt['admission'] is False and v['admission'] is False,'complete_M_consumer_evidence_not_sidecar_bit')
+            require(receipt['ledger_sha256']==sha(canonical(ready_table[op])) and receipt['prior_rows']==[raw_binding('\t'.join(x)) for x in maps[frame] if x[0]==v['path']],'complete_typed_consumer_prior_ledger')
+            require(receipt['obligations']==ready_table[op]['required_qualification'][v['path']] and receipt['admission'] is False and v['admission'] is False,'complete_typed_consumer_evidence_not_sidecar_bit')
             require(receipt['map_before']==map_binding(frame) and receipt['transition'] in ('append','replace'),'M_transition_actual_premap')
-            aggregate=cumulative[key] or M_ready[op]['required_qualification'][v['path']]['aggregate']
+            aggregate=cumulative[key] or ready_table[op]['required_qualification'][v['path']]['aggregate']
             require(type(receipt['aggregate']) is bool and receipt['aggregate']==aggregate,'M_consumer_must_keep_full_aggregate_or')
             require(v['policy_result'] is None and receipt['policy_result'] is None,'conservation_is_not_policy_admission')
             if key in M_supersessions:
                 require(receipt.get('exact_unit_supersession')==M_supersessions[key], 'conservation_consumes_exact_supersession_not_unused_sidecar')
-            M_consumed.setdefault(op,[]).append(v['path']);item['conservation']=receipt
+            consumed_table.setdefault(op,[]).append(v['path']);item['conservation']=receipt
             continue
         if kind=='native_rebind_gate':
             require(key in pending and pending[key]['op']==op and not pending[key]['removed'] and 'rebind' not in pending[key],'native_gate_before_exact_mutation')
@@ -1425,6 +1661,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
             previous_rows=[row(value) for value in v['prior_rows']]
             require((previous_rows[-1] if previous_rows else None)==prior,'actual_prior_row_order')
             cumulative[key]=cumulative.get(key,False) or any(p[1]=='true' for p in previous_rows) or incoming[1]=='true' or classified[op]['trigger']=='true' or child_flags.get((op,v['path']),False)
+            if op in I_ready:cumulative[key]|=I_ready[op]['required_qualification'][v['path']]['aggregate']
             obligations.setdefault(key,[]).append(dict(operation=op,classification=classified[op],prior_rows=v['prior_rows'],incoming=v['incoming'],child_aggregate=child_flags.get((op,v['path']),False)))
         elif kind in ('row_after','row_remove'):
             require(key in pending and pending[key]['op']==op,'pre_mutation_prior_reference')
@@ -1432,6 +1669,8 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
             incoming=pending[key]['incoming']
             require(all(parts[i]==incoming[i] for i in (0,2,3,6,7)) and parts[4:6]==pending[key].get('rebind',incoming[4:6]),'actual_reduction_row_identity')
             if op in M_capabilities:require(v['path'] in M_consumed.get(op,[]),'M_mutation_requires_consumed_complete_ledger')
+            if any(data['parent_operation']==op and name in range_branches for name,data in frames.items()):
+                require(op in I_ready and v['path'] in I_consumed.get(op,[]),'fixed3071_I_mutation_requires_consumed_full_range_ledger')
             if kind=='row_remove':
                 require(pending[key]['prior'] is not None and not pending[key]['removed'],'actual_single_reduction')
                 pending[key]['removed']=True;maps[frame]=[x for x in maps[frame] if x[0]!=v['path']]
@@ -1448,13 +1687,15 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
             frame_rows[key]=row(v['row'])
             maps[frame].append(row(v['row']))
             require(v['map_after']==map_binding(frame) and [row(x) for x in v['retained_rows']]==[x for x in maps[frame] if x[0]==v['path']],'conserved_committed_map')
-            if op in M_capabilities:
+            if op in M_capabilities or op in I_ready:
                 receipt=pending[key]['conservation']
                 require(receipt['expected_post_map']==map_binding(frame) and (receipt['transition']=='replace')==pending[key]['removed'],'M_conserved_exact_actual_post_transition')
             committed.setdefault(op,[]).append(v['path'])
             pending.pop(key)
         else:raise Rejected('unknown_trace_kind')
-    checkpoint_state=M_checkpoint_state(checkpoint,events) if checkpoint else None
+    range_state=range_checkpoint_state(range_checkpoint) if range_checkpoint else None
+    I_state=I_checkpoint_state(I_checkpoint) if I_checkpoint else None
+    checkpoint_state=M_checkpoint_state(checkpoint,events) if checkpoint else range_state or I_state
     require(not stack or checkpoint_state is not None,'closed_frames')
     require(checkpoint_state is not None or master_entry is None or failures or master_wrapper is not None,'successful_master_collection_requires_actual_wrapper_result')
     coverage=dag_dispositions(repo,events) if complete else []
@@ -1462,8 +1703,9 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
     require(not complete or (all(v['disposition'] in accepted for node in coverage for v in node['operations']) and not failures),'complete_33_real_producer_coverage_and_gates')
     ledger=ledger_state()
     return dict(schema=SCHEMA,trace_sha256=expected_sha,frames=len(frames),operations=len(operations),failures=failures,
-        ledger=ledger,coverage=coverage,M_checkpoint=checkpoint_state,M_ready=M_ready,M_consumed=M_consumed,
-        root_frame=next(iter(frames)),master_entry=master_entry,master_wrapper=master_wrapper,
+        ledger=ledger,coverage=coverage,M_checkpoint=checkpoint_state if checkpoint else None,M_ready=M_ready,M_consumed=M_consumed,
+        root_frame=next(iter(frames)),master_entry=master_entry,master_wrapper=master_wrapper,range_checkpoint=range_state,range_branches=range_branches,
+        I_checkpoint=I_state,I_ready=I_ready,I_consumed=I_consumed,
         observed_qualification='COMPLETE' if complete else 'OBSERVED_PREFIX_ONLY',admission=False)
 
 
@@ -1500,6 +1742,14 @@ def main():
         if command=='3071-capabilities':print(json.dumps(prepare_3071_capabilities(*args)));return 0
         if command=='3071-boundary':print(json.dumps(boundary_3071_capability(*args)));return 0
         if command=='3071-composition':print(json.dumps(composition_3071_capability(*args)));return 0
+        if command=='3071-range-origin':
+            repo,capability,trace=args;value=prepare_3071_range_origin(repo,capability,trace);value['capability_path']=capability
+            print(json.dumps(value));return 0
+        if command=='3071-range-branch':print(json.dumps(prepare_3071_range_branch(*args)));return 0
+        if command=='3071-I-ledger':print(json.dumps(prepare_3071_I_ledger(*args)));return 0
+        if command=='3071-I-consume':
+            ready,digest,trace,name,map_path,incoming,transition=args
+            print(json.dumps(consume_3071_I_path(ready,digest,trace,name,Path(map_path).read_bytes(),incoming,transition)));return 0
         if command=='master-entry':print(json.dumps(prepare_master_entry(*args)));return 0
         if command=='master-result':print(json.dumps(master_wrapper_result(*args)));return 0
         if command=='M-ledger':print(json.dumps(prepare_M_ledger(*args)));return 0

@@ -3210,6 +3210,10 @@ f13_path_is_guarded() {
 # governed by this collector has the same complete tree entry at each best
 # base. Differences in those paths remain ambiguous and fail closed.
 f13_f54_capability_file=''
+f13_f54_3071_capability_file=''
+f13_f54_I_operation=''
+f13_f54_I_ledger=''
+f13_f54_I_ledger_sha=''
 f13_f54_collection_file=''
 f13_f54_collection_sha=''
 f13_f54_router_seal=''
@@ -3285,6 +3289,7 @@ f13_f54_collect_exact_master_unit() {
   local repo="$1" base="$2" target="$3" output="$4" category="$5" unit="$6"
   local f13_f54_original_trace="$7" f13_f54_original_native="$8" f13_f54_current_native="$9"
   local fixed3071_unit="${10:-}" f13_f54_3071_capability_file=''
+  local f13_f54_I_operation='' f13_f54_I_ledger="${TMP_DIR}/fixed3071-I-ledger.json" f13_f54_I_ledger_sha=''
   local f13_f54_capability_file="${TMP_DIR}/f54-exact-source-capabilities.json"
   local f13_f54_M_operation='' f13_f54_M_child_map="${TMP_DIR}/f54-actual-M-child-map"
   local f13_f54_M_span_trace="${TMP_DIR}/f54-actual-M-span.jsonl" f13_f54_M_span_map="${TMP_DIR}/f54-actual-M-span-map"
@@ -3377,7 +3382,7 @@ f13_f54_execute_M_history() {
 }
 
 f13_f54_execute_3071_history() {
-  local repo="$1" merge="$2" first="$3" source="$4" output="$5" receipt="$6" boundary
+  local repo="$1" merge="$2" first="$3" source="$4" output="$5" receipt="$6" diagnostic_file="$7" boundary
   [[ -n "${f13_f54_3071_capability_file:-}" && -s "${receipt}" ]] || return 1
   boundary="$(python3 "${f13_f54_observer}" 3071-boundary "${repo}" "${f13_f54_3071_capability_file}" "${merge}" "${first}" "${source}")" || return 1
   boundary="$(python3 -c 'import json,sys;print(json.loads(sys.argv[1])["history_boundary"])' "${boundary}")" || return 1
@@ -3385,7 +3390,57 @@ f13_f54_execute_3071_history() {
   # This genuine child adds evidence; it never supplies replacement outer owners.
   # Original failure propagates unchanged. No M supersession is extended here.
   f13_collect_develop_contributions "${repo}" "${boundary}" "${source}" \
-    "${TMP_DIR}/fixed3071-child-map" "${TMP_DIR}/fixed3071-child-category" true true
+    "${TMP_DIR}/fixed3071-child-map" "${diagnostic_file}" true true
+}
+
+f13_f54_fixed3071_range_observe() {
+  local repo="$1" base="$2" target="$3" allow="$4" partition="$5"
+  local origin="${TMP_DIR}/fixed3071-range-origin.json" receipt="${TMP_DIR}/fixed3071-range-branch.json"
+  local side_trace="${TMP_DIR}/fixed3071-range-side.jsonl" side_map="${TMP_DIR}/fixed3071-range-side-map"
+  [[ -n "${f13_f54_3071_capability_file:-}" && -n "${f13_f54_trace_file:-}" &&
+    "${f13_f54_observer:-}" == "${repo}/scripts/ci/f13_f54_history.py" &&
+    "${base}" == d4abb829622e9bd91b26842b61522e6840840867 &&
+    "${target}" == 909090a34743902799306974d6f3ebabe3c02f10 &&
+    "${allow}:${partition}" == true:false && ! -e "${side_trace}" ]] || return 1
+  python3 "${f13_f54_observer}" 3071-range-origin "${repo}" "${f13_f54_3071_capability_file}" \
+    "${f13_f54_trace_file}" >"${origin}" || return 1
+  f13_f54_fixed3071_range_side "${repo}" "${origin}" "${side_trace}" "${side_map}" || return 1
+  python3 "${f13_f54_observer}" 3071-range-branch "${repo}" "${origin}" "${side_trace}" "${side_map}" >"${receipt}" || return 1
+  # The ordinary range predicate is still false. A distinct fixed witness and
+  # successful actual side frame permit only observation of the same engine.
+  f13_f54_trace_event range_3071_branch "${repo}" "$(<"${receipt}")"
+}
+
+f13_f54_fixed3071_range_side() {
+  local repo="$1" origin="$2" trace="$3" output="$4"
+  local f13_f54_trace_file="${trace}" f13_f54_frame='' f13_f54_operation='' f13_f54_running=false
+  f13_f54_trace_event range_side_link "${repo}" "$(<"${origin}")" || return 1
+  # Separate evidence. Original operation body/gates, flags and owners stay raw.
+  # Never concatenate this map into the three-spine persistent output map.
+  f13_collect_develop_contributions "${repo}" d4abb829622e9bd91b26842b61522e6840840867 \
+    a80f649cbe0a03671c25531ace4ac1bd6bf54756 "${output}" "${TMP_DIR}/fixed3071-range-side-category" true false
+}
+
+f13_f54_prepare_range_I_ledger() {
+  local repo="$1" branch="${TMP_DIR}/fixed3071-range-branch.json" wanted
+  [[ -n "${f13_f54_3071_capability_file:-}" && -s "${branch}" ]] || return 0
+  wanted="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["origin"]["state"]["integration_operation"])' "${branch}")" || return 1
+  [[ "${wanted}" == "${f13_f54_operation:-}" ]] || return 0
+  [[ -n "${f13_f54_I_ledger:-}" && ! -e "${f13_f54_I_ledger}" ]] || return 1
+  f13_f54_I_operation="${wanted}"
+  python3 "${f13_f54_observer}" 3071-I-ledger "${repo}" "${f13_f54_3071_capability_file}" \
+    "${f13_f54_trace_file}" "${branch}" >"${f13_f54_I_ledger}" || return 1
+  f13_f54_I_ledger_sha="$(python3 -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "${f13_f54_I_ledger}")" || return 1
+  f13_f54_trace_event range_I_ledger_ready "${repo}" "${f13_f54_I_ledger}"
+}
+
+f13_f54_consume_I_before_mutation() {
+  local repo="$1" path="$2" output="$3" incoming="$4" transition="$5" receipt="${TMP_DIR}/fixed3071-I-consumed.json"
+  [[ -n "${f13_f54_I_operation:-}" && "${f13_f54_operation:-}" == "${f13_f54_I_operation}" ]] || return 0
+  [[ -n "${f13_f54_I_ledger_sha:-}" ]] || return 1
+  python3 "${f13_f54_observer}" 3071-I-consume "${f13_f54_I_ledger}" "${f13_f54_I_ledger_sha}" \
+    "${f13_f54_trace_file}" "${path}" "${output}" "${incoming}" "${transition}" >"${receipt}" || return 1
+  f13_f54_trace_event range_I_ledger_conserved "${repo}" "${path}" "${receipt}"
 }
 
 f13_f54_consume_M_before_mutation() {
@@ -3849,10 +3904,17 @@ f13_collect_develop_contributions() {
       fi
     done <<<"${first_parent_commits}"
   fi
-  [[ -n "${sync_boundary}" || "$(grep -Fx -- "${base}" <<<"${first_parent_commits}")" == "${base}" ]] || {
-    f13_collect_failure "${diagnostic_file}" first_parent_range
-    return 1
-  }
+  if [[ -z "${sync_boundary}" && "$(grep -Fx -- "${base}" <<<"${first_parent_commits}")" != "${base}" ]]; then
+    # Default refusal and sync semantics stay unchanged. This typed author-only
+    # branch leaves base/sync/state untouched and preserves the failed predicate.
+    if [[ -z "${f13_f54_3071_capability_file:-}" ]] ||
+      ! declare -F f13_f54_fixed3071_range_observe >/dev/null ||
+      ! f13_f54_fixed3071_range_observe "${repo}" "${base}" "${target}" \
+      "${allow_direct_followup}" "${partition_source_history}"; then
+      f13_collect_failure "${diagnostic_file}" first_parent_range
+      return 1
+    fi
+  fi
 
   while IFS= read -r commit; do
     [[ -n "${commit}" ]] || continue
@@ -3967,7 +4029,7 @@ f13_collect_develop_contributions() {
       f13_f54_execute_M_history "${repo}" "${commit}" "${first_parent}" "${source_head}" "${output}" "${source_base_file}.capability" || return 1
     fi
     if [[ "${is_direct}" != true && -n "${f13_f54_3071_capability_file:-}" && -s "${source_base_file:-}.3071-capability" ]]; then
-      f13_f54_execute_3071_history "${repo}" "${commit}" "${first_parent}" "${source_head}" "${output}" "${source_base_file}.3071-capability" || return 1
+      f13_f54_execute_3071_history "${repo}" "${commit}" "${first_parent}" "${source_head}" "${output}" "${source_base_file}.3071-capability" "${diagnostic_file}" || return 1
       # A successful child alone is not a complete before-mutation ledger.
       # Until that constructor is actually observed, this author stage fails closed.
       f13_collect_failure "${diagnostic_file}" fixed3071_complete_ledger_pending
@@ -4119,6 +4181,7 @@ f13_collect_develop_contributions() {
     fi
     if [[ -n "${f13_f54_trace_file:-}" ]]; then
       f13_f54_trace_event classification "${repo}" "${trigger}" "${TMP_DIR}/f13-unapproved-delta" || return 1
+      f13_f54_prepare_range_I_ledger "${repo}" || return 1
       f13_f54_prepare_M_ledger "${repo}" || return 1
     fi
     while IFS= read -r path; do
@@ -4302,6 +4365,8 @@ f13_collect_develop_contributions() {
           fi
         fi
         if [[ -n "${f13_f54_trace_file:-}" ]]; then
+          f13_f54_consume_I_before_mutation "${repo}" "${path}" "${output}" \
+            "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" replace || return 1
           f13_f54_consume_M_before_mutation "${repo}" "${path}" "${output}" \
             "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" "${diagnostic_file}" replace || return 1
           f13_f54_path_consumed=true
@@ -4319,6 +4384,8 @@ f13_collect_develop_contributions() {
       fi
       if [[ -n "${f13_f54_trace_file:-}" ]]; then
         if [[ "${f13_f54_path_consumed}" != true ]]; then
+          f13_f54_consume_I_before_mutation "${repo}" "${path}" "${output}" \
+            "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" append || return 1
           f13_f54_consume_M_before_mutation "${repo}" "${path}" "${output}" \
             "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" "${diagnostic_file}" append || return 1
         fi

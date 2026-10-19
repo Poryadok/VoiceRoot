@@ -27,6 +27,85 @@ def module():
 
 
 class ProducerTrace(unittest.TestCase):
+    def test_private_I_consumer_keeps_actual_side_true_and_raw_false_main_row(self):
+        # Private transport/oracles only. These are real temporary collector
+        # traces, not production I/J observations or an exact-nine qualification.
+        self.hidden_runtime();middle=self.head
+        self.write(PROTO,'later proto only\n');tail=self.commit('private false final source')
+        m=module();side_run,side=self.collect(target=tail,partition=False)
+        self.assertEqual(side_run.returncode,0,side_run.stderr)
+        side_raw=(side/'trace.jsonl').read_bytes();side_state=m.validate_trace(self.repo,side/'trace.jsonl',m.sha(side_raw))
+        side_ledger=side_state['ledger'][side_state['root_frame']]
+        original_base=self.base;self.base=middle
+        main_run,main=self.collect(target=tail,partition=False);self.base=original_base
+        self.assertEqual(main_run.returncode,0,main_run.stderr)
+        events=[json.loads(x) for x in (main/'trace.jsonl').read_bytes().splitlines()]
+        before=next(e for e in events if e['kind']=='row_before' and e['payload']['path']==PROTO)
+        classification=next(e['payload'] for e in events if e['kind']=='classification')
+        binding=next(e['payload'] for e in events if e['kind']=='operation_begin')
+        incoming=before['payload']['incoming']['raw']
+        self.assertEqual(incoming.split('\t')[1],'false');self.assertTrue(side_ledger['paths'][PROTO]['aggregate'])
+        prefix=b''.join((main/'trace.jsonl').read_bytes().splitlines(keepends=True)[:before['sequence']-1])
+        trace=self.folder/'I-private-pending-trace';trace.write_bytes(prefix+json.dumps(before,sort_keys=True).encode()+b'\n')
+        branch=dict(type='F54_FIXED3071_RANGE_ENGINE_OBSERVATION',side_ledger=side_ledger,side_trace_sha256=m.sha(side_raw),
+            side_operations=[dict(operation=e['operation'],begin_digest=e['digest']) for e in [json.loads(x) for x in side_raw.splitlines()] if e['kind']=='operation_begin'])
+        empty=dict(bytes=0,sha256=m.sha(b''));frame=before['frame']
+        state=dict(frame=frame,operation=before['operation'],operation_binding=binding,classification=classification,
+            capability_sha256='private-fixture-only',frame_ancestry=[],ledger={frame:dict(map_binding=empty,rows=[],paths={})},
+            range_branch=branch,coverage=[],M_ready={})
+        ready=m.build_3071_I_ready(state,dict(bytes=len(prefix),sha256=m.sha(prefix)))
+        self.assertTrue(ready['required_qualification'][PROTO]['aggregate'])
+        self.assertEqual(ready['required_qualification'][PROTO]['range_evidence'][0]['evidence'],side_ledger['paths'][PROTO]['evidence'])
+        m.J3071_RANGE=dict(m.J3071_RANGE,integration=tail,first=middle)
+        ledger=self.folder/'I-private-ledger';ledger.write_bytes(m.canonical(ready));digest=m.sha(ledger.read_bytes())
+        receipt=m.consume_3071_I_path(ledger,digest,trace,PROTO,b'',incoming,'append')
+        self.assertTrue(receipt['aggregate']);self.assertEqual(receipt['after_gate_row']['raw'],incoming)
+        self.assertEqual(receipt['expected_post_map'],dict(bytes=len((incoming+'\n').encode()),sha256=m.sha((incoming+'\n').encode())))
+        for error in ('drop-side-true','integer-aggregate','drop-owner-evidence','normalize-raw-false','wrong-map','wrong-source'):
+            changed=json.loads(json.dumps(ready));after=incoming;actual=b''
+            if error=='drop-side-true':changed['required_qualification'][PROTO]['aggregate']=False
+            elif error=='integer-aggregate':changed['required_qualification'][PROTO]['aggregate']=1
+            elif error=='drop-owner-evidence':changed['required_qualification'][PROTO]['range_evidence']=[]
+            elif error=='normalize-raw-false':
+                parts=incoming.split('\t');parts[1]='true';after='\t'.join(parts)
+            elif error=='wrong-map':actual=b'foreign map\n'
+            else:
+                parts=incoming.split('\t');parts[5]=middle;after='\t'.join(parts)
+            ledger.write_bytes(m.canonical(changed))
+            with self.assertRaises(m.Rejected):m.consume_3071_I_path(ledger,m.sha(ledger.read_bytes()),trace,PROTO,actual,after,'append')
+
+    def test_fixed_nine_node_range_witness_keeps_default_guard_and_real_F_boundary(self):
+        m=module();common=self.base
+        self.write('range/direct.txt','direct\n');direct=self.commit('private direct spine')
+        git(self.repo,'checkout','-qb','range-side',common)
+        self.write('range/base.txt','boundary\n');base=self.commit('private B')
+        side=[]
+        for index in range(6):
+            self.write('range/side'+str(index)+'.txt',str(index)+'\n');side.append(self.commit('private side '+str(index)))
+        git(self.repo,'checkout','-q',direct);git(self.repo,'merge','--no-ff','-qm','private F',side[-1]);merge=git(self.repo,'rev-parse','HEAD')
+        self.write('range/head.txt','head\n');target=self.commit('private H')
+        integration=git(self.repo,'commit-tree',target+'^{tree}','-p',base,'-p',target,'-m','private I')
+        m.J3071_RANGE=dict(integration=integration,first=base,base=base,target=target,baseline=common,side=side[-1],direct=direct,merge=merge,side_nodes=side)
+        witness=m.fixed3071_range_structure(self.repo,base,target,'true','false')
+        self.assertEqual(witness['spine'],[direct,merge,target]);self.assertEqual(witness['side_nodes'],side)
+        self.assertEqual(witness['original_guard']['status'],1);self.assertFalse(witness['admission'])
+        self.assertEqual(witness['history'],'UNOBSERVED')
+        original=self.base;self.base=base
+        rejected,out=self.collect(target=target,partition=False)
+        self.assertEqual(rejected.returncode,1,rejected.stderr)
+        self.assertEqual((out/'category').read_text().strip(),'first_parent_range')
+        passed,observed=self.collect(target=side[-1],partition=False)
+        self.assertEqual(passed.returncode,0,passed.stderr)
+        self.assertEqual(sum(json.loads(x)['kind']=='operation_begin' for x in (observed/'trace.jsonl').read_text().splitlines()),6)
+        with self.assertRaisesRegex(m.Rejected,'supplemental_same_actual_origin'):
+            m.verify_3071_range_side(self.repo,{},observed/'trace.jsonl',observed/'map')
+        self.base=original
+        for allow,partition in (('false','false'),('true','true')):
+            with self.assertRaises(m.Rejected):m.fixed3071_range_structure(self.repo,base,target,allow,partition)
+        with self.assertRaises(m.Rejected):m.fixed3071_range_structure(self.repo,common,target,'true','false')
+        m.J3071_RANGE=dict(m.J3071_RANGE,side_nodes=side[:-1])
+        with self.assertRaises(m.Rejected):m.fixed3071_range_structure(self.repo,base,target,'true','false')
+
     def test_private_reviewed3071_equation_keeps_both_parent_obligations(self):
         m=module();old=b'# Base\n\nrest\n';offset=8
         first=b'## P1\nDo not reset identity.\n\n';second=b'## P2\nRequire independent acceptance.\n\n'
