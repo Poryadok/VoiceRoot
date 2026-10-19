@@ -334,6 +334,11 @@ func (s *SpaceStore) publishMemberAdmission(ctx context.Context, operation, role
 		if invalidateErr := scoped.invalidateMemberAdmission(ctx, i); invalidateErr != nil {
 			return nil, invalidateErr
 		}
+		if continuation != nil {
+			if _, proofErr := continuation.check(i); proofErr != nil {
+				return nil, proofErr
+			}
+		}
 		if commitErr := tx.Commit(ctx); commitErr != nil {
 			return nil, commitErr
 		}
@@ -366,6 +371,11 @@ func (s *SpaceStore) publishMemberAdmission(ctx context.Context, operation, role
 			}
 			if err = scoped.invalidateMemberAdmission(ctx, i); err != nil {
 				return nil, err
+			}
+			if continuation != nil {
+				if _, proofErr := continuation.check(i); proofErr != nil {
+					return nil, proofErr
+				}
 			}
 			if err = tx.Commit(ctx); err != nil {
 				return nil, err
