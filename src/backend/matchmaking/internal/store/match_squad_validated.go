@@ -72,11 +72,11 @@ func (s *MatchStore) AuthorizeMatchSquadProviderDispatch(ctx context.Context, ca
 			firstID = &id
 			query := `UPDATE matchmaking_match_squad_operations SET chat_dispatch_state='MAY_HAVE_CREATED',
 			 chat_first_dispatch_id=$2,chat_first_dispatch_at=clock_timestamp(),provision_revision=provision_revision+1,
-			 updated_at=clock_timestamp() WHERE match_id=$1`
+			 provision_last_progress_at=clock_timestamp(),updated_at=clock_timestamp() WHERE match_id=$1`
 			if provider == "voice" {
 				query = `UPDATE matchmaking_match_squad_operations SET voice_dispatch_state='MAY_HAVE_CREATED',
 				 voice_first_dispatch_id=$2,voice_first_dispatch_at=clock_timestamp(),provision_revision=provision_revision+1,
-				 updated_at=clock_timestamp() WHERE match_id=$1`
+				 provision_last_progress_at=clock_timestamp(),updated_at=clock_timestamp() WHERE match_id=$1`
 			}
 			if _, err := tx.Exec(ctx, query, candidate.MatchID, id); err != nil {
 				return err

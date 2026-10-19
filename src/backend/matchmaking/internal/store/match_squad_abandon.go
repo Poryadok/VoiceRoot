@@ -79,7 +79,7 @@ func LatchMatchSquadAbandonmentTx(ctx context.Context, tx pgx.Tx, matchID uuid.U
 		provision_abandoned_at=clock_timestamp(),provision_abandon_reason=$2,
 		provision_abandon_evidence_sha256=$3,
 		state=CASE WHEN cardinality($4::TEXT[])=0 THEN 'closed' ELSE 'compensating' END,
-		updated_at=clock_timestamp() WHERE match_id=$1`, matchID, reason, evidence[:], required)
+		provision_last_progress_at=clock_timestamp(),updated_at=clock_timestamp() WHERE match_id=$1`, matchID, reason, evidence[:], required)
 	if err != nil {
 		return err
 	}

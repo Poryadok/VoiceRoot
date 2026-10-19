@@ -54,6 +54,8 @@ func (s *MatchStore) ListPendingMatchSquadProvisioningOperations(ctx context.Con
 		       voice_operation_id, voice_request_sha256, voice_request_bytes, voice_receipt_id, voice_receipt_bytes, voice_room_id
 		FROM matchmaking_match_squad_operations
 		WHERE state IN ('provisioning','compensating')
+		AND provision_next_attempt_at<=clock_timestamp()
+		AND (provision_claim_until IS NULL OR provision_claim_until<=clock_timestamp())
 		ORDER BY created_at,match_id LIMIT $1
 	`, limit)
 	if err != nil {

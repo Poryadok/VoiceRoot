@@ -33,6 +33,7 @@ const (
 )
 
 var errProviderContract = errors.New("protected provider contract mismatch")
+var ErrProvisionOperatorAttention = errors.New("match squad provisioning requires operator reconciliation")
 
 // MatchSquadProviderWorker dispatches only persisted, request-bound commands to
 // the dedicated protected provider clients. The clients must use the provider
@@ -139,6 +140,12 @@ func (w *MatchSquadProviderWorker) RunProvisioningOnce(ctx context.Context, limi
 			completed++
 		}
 	}
+	attention, attentionErr := w.Store.MatchSquadProvisioningAttention(ctx)
+	if attentionErr != nil {
+		failures = append(failures, attentionErr)
+	} else if attention.Stalled > 0 || attention.ContractMismatch > 0 {
+		failures = append(failures, fmt.Errorf("%w: stalled=%d contract_mismatch=%d", ErrProvisionOperatorAttention, attention.Stalled, attention.ContractMismatch))
+	}
 	return completed, errors.Join(failures...)
 }
 
@@ -174,6 +181,61 @@ func newProvisioningIntent(matchID uuid.UUID, profileIDs []uuid.UUID) (store.Mat
 }
 
 func (w *MatchSquadProviderWorker) provisionOperation(ctx context.Context, operation store.MatchSquadProvisioningOperation) (store.MatchSquadProvisioningOperation, error) {
+	if operation.State == "active" {
+		return w.Store.GetMatchSquadProvisioningOperation(ctx, operation.MatchID)
+	}
+	claim, claimed, err := w.Store.ClaimMatchSquadProvisioningOperation(ctx, operation.MatchID, operation.OperationID, time.Minute)
+	if err != nil {
+		return operation, err
+	}
+	if !claimed {
+		return operation, store.ErrMatchSquadPending
+	}
+	// Keep the whole attempt shorter than its claim. Permanent dispatch markers
+	// remain the effect authority; an expired lease never proves no creation.
+	attemptCtx, cancel := context.WithTimeout(ctx, 55*time.Second)
+	result, attemptErr := w.provisionClaimedOperation(attemptCtx, operation)
+	cancel()
+	if attemptErr == nil && result.State == "active" {
+		if err := w.Store.ReleaseMatchSquadProvisioningClaim(ctx, claim); err != nil {
+			return result, err
+		}
+		return result, nil
+	}
+	class := matchSquadProvisionErrorClass(attemptErr)
+	if err := w.Store.ScheduleMatchSquadProvisioningRetry(ctx, claim, matchSquadTeardownRetryDelay(claim.AttemptCount, rand.Float64()), class); err != nil {
+		return result, errors.Join(attemptErr, err)
+	}
+	return result, attemptErr
+}
+
+func matchSquadProvisionErrorClass(err error) string {
+	if errors.Is(err, ErrPartyProvisionUnknown) || errors.Is(err, ErrPartyProvisionChanged) {
+		return "waiting_authority"
+	}
+	if errors.Is(err, store.ErrMatchSquadPending) {
+		return "settling"
+	}
+	if errors.Is(err, errProviderContract) {
+		return "provider_contract"
+	}
+	switch status.Code(err) {
+	case codes.InvalidArgument:
+		return "invalid_argument"
+	case codes.FailedPrecondition:
+		return "failed_precondition"
+	case codes.Aborted:
+		return "aborted"
+	default:
+		class := matchSquadTeardownErrorClass(err)
+		if class == "transport_or_unknown" {
+			return "unknown"
+		}
+		return class
+	}
+}
+
+func (w *MatchSquadProviderWorker) provisionClaimedOperation(ctx context.Context, operation store.MatchSquadProvisioningOperation) (store.MatchSquadProvisioningOperation, error) {
 	// A scan item is discovery only; reload before deciding whether a forward
 	// attempt or receipt-only settlement is still permitted.
 	var err error

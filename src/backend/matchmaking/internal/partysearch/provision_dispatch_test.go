@@ -98,12 +98,17 @@ func TestAbandonedProviderResumeSettlesOnlyPreviouslyIssuedCreates(t *testing.T)
 	worker := &squad.MatchSquadProviderWorker{Store: st, Issuer: issuer, Chat: chat, Voice: voice, PartyValidator: validator}
 	_, _, err = worker.Provision(ctx, intent.MatchID, p.MemberProfileIDs)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	_, attentionErr := worker.RunProvisioningOnce(ctx, 10)
+	require.ErrorIs(t, attentionErr, squad.ErrProvisionOperatorAttention)
+	require.Equal(t, 1, voice.calls, "another request or process must respect durable creation backoff")
 	var aggregates int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_squad_teardowns WHERE match_id=$1`, intent.MatchID).Scan(&aggregates))
 	require.Zero(t, aggregates, "terminal response cannot prove no Voice effect or seal Chat-only cleanup")
 	var partyID uuid.UUID
 	require.NoError(t, pool.QueryRow(ctx, `SELECT id FROM parties WHERE search_operation_id=$1`, p.SearchOperationID).Scan(&partyID))
 	_, err = st.ResetVoiceParties(ctx, []uuid.UUID{partyID})
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE matchmaking_match_squad_operations SET provision_next_attempt_at=clock_timestamp()-interval '1 second' WHERE match_id=$1`, intent.MatchID)
 	require.NoError(t, err)
 	worker.PartyValidator = nil // cleanup must not require revoked eligibility
 	_, _ = worker.RunProvisioningOnce(ctx, 10)
@@ -136,8 +141,13 @@ func TestProviderResumeWithUnknownPartyAuthorityCannotDispatch(t *testing.T) {
 	worker := &squad.MatchSquadProviderWorker{Store: st, Issuer: issuer, Chat: chat, Voice: &gateVoiceClient{}}
 	_, _, err = worker.Provision(ctx, intent.MatchID, p.MemberProfileIDs)
 	require.ErrorIs(t, err, squad.ErrPartyProvisionUnknown)
+	completed, err := worker.RunProvisioningOnce(ctx, 10)
+	require.NoError(t, err, "idle durable backoff is not successful activation")
+	require.Zero(t, completed)
+	_, err = pool.Exec(ctx, `UPDATE matchmaking_match_squad_operations SET provision_next_attempt_at=clock_timestamp()-interval '1 second' WHERE match_id=$1`, intent.MatchID)
+	require.NoError(t, err)
 	_, err = worker.RunProvisioningOnce(ctx, 10)
-	require.ErrorIs(t, err, squad.ErrPartyProvisionUnknown)
+	require.ErrorIs(t, err, squad.ErrPartyProvisionUnknown, "eligible retry still consumes the common authority gate")
 	require.Zero(t, chat.calls, "both request and existing-operation resume require fresh authority")
 	var marker string
 	require.NoError(t, pool.QueryRow(ctx, `SELECT chat_dispatch_state FROM matchmaking_match_squad_operations WHERE match_id=$1`, intent.MatchID).Scan(&marker))
