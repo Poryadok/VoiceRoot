@@ -16,6 +16,22 @@ import voice.backend.auth.security.BCryptPasswordHasher;
 import voice.backend.auth.security.RefreshTokenCodec;
 
 public class OtpService {
+  private voice.backend.auth.releasepolicy.ReleasePolicy releasePolicy =
+      voice.backend.auth.releasepolicy.ReleasePolicy.development();
+  private boolean releasePolicyConfigured;
+
+  public synchronized void configureReleasePolicy(voice.backend.auth.releasepolicy.ReleasePolicy policy) {
+    if (releasePolicyConfigured) throw new IllegalStateException("release policy already configured");
+    this.releasePolicy = java.util.Objects.requireNonNull(policy);
+    releasePolicyConfigured = true;
+  }
+
+  public voice.backend.auth.releasepolicy.ReleasePolicy releasePolicy() { return releasePolicy; }
+
+  private void requirePhoneCapability(String phone) {
+    if (phone != null && !phone.isBlank() && !releasePolicy.allowsPhoneAuth())
+      throw new AuthException("capability_unavailable");
+  }
   static final Duration OTP_TTL = Duration.ofMinutes(10);
 
   private final AccountRepository accounts;
@@ -77,6 +93,7 @@ public class OtpService {
   }
 
   public void sendOtp(SendOtpCommand command, AuthService authService) {
+    requirePhoneCapability(command.phone());
     String type = normalizeType(command.otpType());
     Account account = resolveAccount(command, authService, type);
     ensureActive(account);
@@ -99,6 +116,7 @@ public class OtpService {
   }
 
   public AuthSession verifyOtp(VerifyOtpCommand command, AuthService authService) {
+    requirePhoneCapability(command.phone());
     String type = normalizeType(command.otpType());
     if (command.code() == null || command.code().isBlank()) {
       throw new AuthException("validation_failed");

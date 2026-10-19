@@ -78,6 +78,7 @@ func applyBaseMessagingMigrations(t *testing.T, ctx context.Context, pool *pgxpo
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000028_music_metadata.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000029_music_file_snapshot.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000030_send_request_receipts.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000034_file_preview.up.sql")
 }
 
 // applyChatDBForBufconnChat applies chat_db schema needed when wiring real Chat gRPC
@@ -347,6 +348,9 @@ type fileMetadataMap map[string]*filev1.FileMetadata
 func (m fileMetadataMap) GetBulkMetadata(_ context.Context, req *filev1.GetBulkMetadataRequest, _ ...grpc.CallOption) (*filev1.GetBulkMetadataResponse, error) {
 	out := map[string]*filev1.FileMetadata{}
 	legacyFileIDs := req.GetFileIds() //nolint:staticcheck // R23 compatibility: keep legacy metadata fixtures until callers migrate to access-scoped items.
+	for _, item := range req.GetItems() {
+		legacyFileIDs = append(legacyFileIDs, item.GetFileId())
+	}
 	for _, id := range legacyFileIDs {
 		if meta := m[id]; meta != nil {
 			out[id] = meta

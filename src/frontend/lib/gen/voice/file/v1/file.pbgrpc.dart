@@ -33,6 +33,16 @@ class FileServiceClient extends $grpc.Client {
 
   FileServiceClient(super.channel, {super.options, super.interceptors});
 
+  /// @voice.security=protected;callers=service:messaging
+  $grpc.ResponseFuture<$0.ResolveMessageAttachmentPreviewResponse>
+      resolveMessageAttachmentPreview(
+    $0.ResolveMessageAttachmentPreviewRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$resolveMessageAttachmentPreview, request,
+        options: options);
+  }
+
   /// @voice.security=protected;callers=service:story
   $grpc.ResponseFuture<$0.ValidateStoryMediaResponse> validateStoryMedia(
     $0.ValidateStoryMediaRequest request, {
@@ -194,6 +204,13 @@ class FileServiceClient extends $grpc.Client {
 
   // method descriptors
 
+  static final _$resolveMessageAttachmentPreview = $grpc.ClientMethod<
+          $0.ResolveMessageAttachmentPreviewRequest,
+          $0.ResolveMessageAttachmentPreviewResponse>(
+      '/voice.file.v1.FileService/ResolveMessageAttachmentPreview',
+      ($0.ResolveMessageAttachmentPreviewRequest value) =>
+          value.writeToBuffer(),
+      $0.ResolveMessageAttachmentPreviewResponse.fromBuffer);
   static final _$validateStoryMedia = $grpc.ClientMethod<
           $0.ValidateStoryMediaRequest, $0.ValidateStoryMediaResponse>(
       '/voice.file.v1.FileService/ValidateStoryMedia',
@@ -305,6 +322,16 @@ abstract class FileServiceBase extends $grpc.Service {
   $core.String get $name => 'voice.file.v1.FileService';
 
   FileServiceBase() {
+    $addMethod($grpc.ServiceMethod<$0.ResolveMessageAttachmentPreviewRequest,
+            $0.ResolveMessageAttachmentPreviewResponse>(
+        'ResolveMessageAttachmentPreview',
+        resolveMessageAttachmentPreview_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ResolveMessageAttachmentPreviewRequest.fromBuffer(value),
+        ($0.ResolveMessageAttachmentPreviewResponse value) =>
+            value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ValidateStoryMediaRequest,
             $0.ValidateStoryMediaResponse>(
         'ValidateStoryMedia',
@@ -473,6 +500,18 @@ abstract class FileServiceBase extends $grpc.Service {
             $0.GetSpacePurgeReceiptRequest.fromBuffer(value),
         ($0.GetSpacePurgeReceiptResponse value) => value.writeToBuffer()));
   }
+
+  $async.Future<$0.ResolveMessageAttachmentPreviewResponse>
+      resolveMessageAttachmentPreview_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.ResolveMessageAttachmentPreviewRequest>
+              $request) async {
+    return resolveMessageAttachmentPreview($call, await $request);
+  }
+
+  $async.Future<$0.ResolveMessageAttachmentPreviewResponse>
+      resolveMessageAttachmentPreview($grpc.ServiceCall call,
+          $0.ResolveMessageAttachmentPreviewRequest request);
 
   $async.Future<$0.ValidateStoryMediaResponse> validateStoryMedia_Pre(
       $grpc.ServiceCall $call,

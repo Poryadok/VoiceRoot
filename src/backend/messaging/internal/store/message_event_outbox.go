@@ -132,6 +132,9 @@ func (s *MessagesStore) InsertMessageWithOutbox(ctx context.Context, row Message
 	if err := insertForwardCommentaryDB(ctx, tx, row); err != nil {
 		return nil, false, err
 	}
+	if err := s.reconcileFilePreviewInsert(ctx, tx, &row, spaceID); err != nil {
+		return nil, false, err
+	}
 	saved, err := insertMessageDB(ctx, tx, row)
 	if err != nil {
 		return nil, false, err

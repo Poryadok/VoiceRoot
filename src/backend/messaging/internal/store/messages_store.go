@@ -29,6 +29,7 @@ type MessageRow struct {
 	AdmissionRequestHash   string                  `json:"-"`
 	AdmissionRequestRPC    string                  `json:"-"`
 	MusicBinding           *MusicAttachmentBinding `json:"-"`
+	FilePreviewBindings    []FilePreviewBinding    `json:"-"`
 	ID                     uuid.UUID
 	ChatID                 uuid.UUID
 	ChatType               string
@@ -446,6 +447,9 @@ func (s *MessagesStore) InsertMessage(ctx context.Context, row MessageRow) (*Mes
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("messages store: pool not configured")
 	}
+	if len(row.FilePreviewBindings) > 0 {
+		return nil, errors.New("file preview binding requires fenced atomic insertion")
+	}
 	saved, err := insertMessageDB(ctx, s.Pool, row)
 	if err != nil {
 		return nil, err
@@ -510,15 +514,28 @@ func insertMessageDB(ctx context.Context, db messageInsertDB, row MessageRow) (*
 		musicFile, musicChat, musicRevision = b.FileID, b.SourceChatID, int64(b.Revision)
 	}
 
+	previewBindings := "[]"
+	if len(row.FilePreviewBindings) > 0 {
+		for _, binding := range row.FilePreviewBindings {
+			if err := validatePreviewBinding(row, binding); err != nil {
+				return nil, err
+			}
+		}
+		encoded, err := json.Marshal(row.FilePreviewBindings)
+		if err != nil {
+			return nil, err
+		}
+		previewBindings = string(encoded)
+	}
 	q := `
 INSERT INTO messages (
   id, chat_id, chat_type, sender_profile_id, posted_as_chat, display_chat_id,
   content, type, thread_parent_id, forward_from_id, forward_from_sender,
   attachments, mentions, client_message_id, ghost_only, is_e2e, content_type, send_silent,
-  music_file_id, music_source_chat_id, music_metadata_revision
+  music_file_id, music_source_chat_id, music_metadata_revision, file_preview_bindings
 ) VALUES (
   $1, $2, $3, $4, $5, $6,
-  $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16, $17, $18, $19, $20, $21
+  $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16, $17, $18, $19, $20, $21, $22::jsonb
 )
 ON CONFLICT (chat_id, sender_profile_id, client_message_id)
   WHERE client_message_id IS NOT NULL
@@ -528,7 +545,7 @@ ON CONFLICT (chat_id, sender_profile_id, client_message_id)
 		row.ID, row.ChatID, chatType, row.SenderProfileID, row.PostedAsChat, displayAny,
 		row.Content, row.Type, threadAny, forwardFromAny, forwardSenderAny,
 		row.AttachmentsJSON, row.MentionsJSON, clientAny, row.GhostOnly, row.IsE2E, contentTypeAny, row.SendSilent,
-		musicFile, musicChat, musicRevision,
+		musicFile, musicChat, musicRevision, previewBindings,
 	)
 	if err != nil {
 		return nil, err

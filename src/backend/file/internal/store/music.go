@@ -16,7 +16,7 @@ func (s *FilesStore) markUnavailableWithMusicEvent(ctx context.Context, id uuid.
 		return err
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
-	row, err := getFileByID(ctx, tx, id, "FOR UPDATE")
+	row, err := getFileByID(ctx, tx, id, "FOR NO KEY UPDATE")
 	if err != nil {
 		return err
 	}
@@ -58,7 +58,9 @@ func markUnavailableWithMusicEventTx(ctx context.Context, tx pgx.Tx, row FileRow
 			return err
 		}
 	}
-	return nil
+	after := row
+	after.Status = status
+	return recordPreviewChange(ctx, tx, row, after)
 }
 
 // ApplyAudioProcessing commits metadata and its processing event together. No clock value serves as

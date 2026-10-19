@@ -703,6 +703,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
 
   private static Status toGrpcStatus(AuthException ex) {
     return switch (ex.getMessage()) {
+      case "capability_unavailable" -> Status.FAILED_PRECONDITION.withDescription(ex.getMessage());
       case "validation_failed" -> Status.INVALID_ARGUMENT.withDescription(ex.getMessage());
       case "registration_conflict" -> Status.FAILED_PRECONDITION.withDescription(ex.getMessage());
       case "guest_reminder_already_shown", "totp_already_enabled" -> Status.ALREADY_EXISTS.withDescription(ex.getMessage());
