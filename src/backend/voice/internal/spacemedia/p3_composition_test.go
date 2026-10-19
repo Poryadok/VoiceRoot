@@ -31,6 +31,7 @@ func TestP3CurrentNativeCompositionWithoutLegacyOrRedis(t *testing.T) {
 	pool := startSpaceMediaAdmissionPostgres(t, ctx)
 	admissions := NewPostgresAdmissionStore(pool)
 	a := admissionFixture()
+	ctx = ownAdmission(ctx, &a)
 	a.Identity, _ = livekit.SpaceParticipantIdentity(a.ProfileID.String(), a.Generation)
 	require.NoError(t, prepareAdmission(ctx, admissions, &a))
 	require.NoError(t, admissions.Fence(ctx, a))
@@ -86,6 +87,7 @@ func TestP3CurrentNativeCompositionWithoutLegacyOrRedis(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, "EJECT_ONLY", svc.RetirementCapability())
 	other := admissionFixture()
+	ctx = ownAdmission(ctx, &other)
 	require.NoError(t, prepareAdmission(ctx, admissions, &other), "unaffected LIVE Space remains usable")
 }
 
@@ -94,6 +96,7 @@ func TestSpaceGrantReservationFixedExpiryAndFreezeBarrier(t *testing.T) {
 	pool := startSpaceMediaAdmissionPostgres(t, ctx)
 	s := NewPostgresAdmissionStore(pool)
 	a := admissionFixture()
+	ctx = ownAdmission(ctx, &a)
 	a.Identity, _ = livekit.SpaceParticipantIdentity(a.ProfileID.String(), a.Generation)
 	require.NoError(t, prepareAdmission(ctx, s, &a))
 	require.NoError(t, s.Fence(ctx, a))

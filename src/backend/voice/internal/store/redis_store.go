@@ -54,7 +54,7 @@ func (s *RedisCallStore) CreateCall(ctx context.Context, call Call) (Call, error
 	}
 	keys := []string{s.callKey(call.RoomID)}
 	if call.SpaceID != "" {
-		keys = append(keys, s.spaceLifecycleKey(call.SpaceID), s.activeVoiceRoomKey(call.VoiceRoomID))
+		keys = append(keys, s.spaceLifecycleKey(call.SpaceID), s.spaceAdmissionKey(call.SpaceProjectionTicket.OperationID), s.activeVoiceRoomKey(call.VoiceRoomID))
 	}
 	if call.IsVoiceRoom() && call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
 		keys = append(keys, s.activeVoiceRoomKey(call.VoiceRoomID), s.activeSpaceVoiceRoomsKey(call.SpaceID))
@@ -458,7 +458,7 @@ func (s *RedisCallStore) AdmitSpaceMediaParticipant(ctx context.Context, roomID 
 				result = call
 			}
 			return err
-		}, s.spaceLifecycleKey(initial.SpaceID), s.callKey(roomID), profileKey, accessFloorKey, policyFloorKey, s.activeVoiceRoomKey(initial.VoiceRoomID), s.activeSpaceVoiceRoomsKey(initial.SpaceID))
+		}, s.spaceLifecycleKey(initial.SpaceID), s.spaceAdmissionKey(participant.ProjectionTicket.OperationID), s.callKey(roomID), profileKey, accessFloorKey, policyFloorKey, s.activeVoiceRoomKey(initial.VoiceRoomID), s.activeSpaceVoiceRoomsKey(initial.SpaceID))
 		if errors.Is(err, redis.TxFailedErr) {
 			continue
 		}
@@ -471,6 +471,9 @@ func (s *RedisCallStore) AdmitSpaceMediaParticipant(ctx context.Context, roomID 
 }
 
 func (s *RedisCallStore) BeginSpaceMediaRevocation(ctx context.Context, roomID, profileID, identity, generation string) (Call, bool, error) {
+	if _, ok := ctx.Value(spaceCleanupContext{}).(SpaceProjectionTicket); !ok {
+		return Call{}, false, ErrSpaceMediaStaleGrant
+	}
 	return s.mutateSpaceMediaParticipant(ctx, roomID, profileID, identity, generation, func(_ context.Context, _ *redis.Tx, call *Call, participant *SpaceMediaParticipant) (bool, error) {
 		if participant.Revoking {
 			return true, nil
@@ -481,6 +484,9 @@ func (s *RedisCallStore) BeginSpaceMediaRevocation(ctx context.Context, roomID, 
 }
 
 func (s *RedisCallStore) CompleteSpaceMediaRevocation(ctx context.Context, roomID, profileID, identity, generation string) (Call, bool, error) {
+	if _, ok := ctx.Value(spaceCleanupContext{}).(SpaceProjectionTicket); !ok {
+		return Call{}, false, ErrSpaceMediaStaleGrant
+	}
 	return s.mutateSpaceMediaParticipant(ctx, roomID, profileID, identity, generation, func(_ context.Context, _ *redis.Tx, call *Call, participant *SpaceMediaParticipant) (bool, error) {
 		if !participant.Revoking {
 			return false, ErrSpaceMediaTransition
@@ -526,6 +532,12 @@ func (s *RedisCallStore) mutateSpaceMediaParticipant(ctx context.Context, roomID
 		return Call{}, false, err
 	}
 	keys := []string{s.callKey(roomID), s.activeKey(profileID)}
+	if ticket, ok := ctx.Value(spaceTicketContext{}).(SpaceProjectionTicket); ok {
+		keys = append(keys, s.spaceAdmissionKey(ticket.OperationID))
+	}
+	if ticket, ok := ctx.Value(spaceCleanupContext{}).(SpaceProjectionTicket); ok {
+		keys = append(keys, s.spaceAdmissionKey(ticket.OperationID))
+	}
 	if initial.SpaceID != "" {
 		keys = append(keys, s.spaceLifecycleKey(initial.SpaceID), s.activeVoiceRoomKey(initial.VoiceRoomID), s.spaceMediaFloorKey(initial.SpaceID, SpaceAccessEpoch), s.spaceMediaFloorKey(initial.SpaceID, RolePolicyEpoch))
 	}
@@ -538,9 +550,14 @@ func (s *RedisCallStore) mutateSpaceMediaParticipant(ctx context.Context, roomID
 				return err
 			}
 			participant, ok := call.SpaceMedia[profileID]
-			if target, has := ctx.Value(spaceCleanupContext{}).(SpaceProjectionTicket); has && ok {
-				if target.RoomID != roomID || target.SpaceID != call.SpaceID || target.VoiceRoomID != call.VoiceRoomID || target.OperationID != participant.AdmissionOperationID || target.AdmissionGeneration != participant.Generation || target.RoomGeneration != participant.RoomGeneration || target.AccountID != participant.AccountID || target.ProfileID != participant.ProfileID || target.Identity != participant.Identity {
-					return ErrSpaceMediaTransition
+			if target, has := ctx.Value(spaceCleanupContext{}).(SpaceProjectionTicket); has {
+				if err := s.requireAdmissionDenied(ctx, tx, target); err != nil {
+					return err
+				}
+				if ok {
+					if target.RoomID != roomID || target.SpaceID != call.SpaceID || target.VoiceRoomID != call.VoiceRoomID || target.OperationID != participant.AdmissionOperationID || target.AdmissionGeneration != participant.Generation || target.RoomGeneration != participant.RoomGeneration || target.AccountID != participant.AccountID || target.ProfileID != participant.ProfileID || target.Identity != participant.Identity {
+						return ErrSpaceMediaTransition
+					}
 				}
 			}
 			if !ok || participant.Identity != identity || participant.Generation != generation {

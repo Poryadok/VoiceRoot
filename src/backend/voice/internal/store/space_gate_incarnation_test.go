@@ -28,6 +28,14 @@ func fixtureTicket(ctx context.Context, s *RedisCallStore, call Call) (SpaceProj
 	t, err := s.ReadReadySpaceGate(ctx, call.SpaceID)
 	t.RoomID = call.RoomID
 	t.VoiceRoomID = call.VoiceRoomID
+	if err != nil {
+		return t, err
+	}
+	dispatch, err := s.EnsureAdmissionDispatch(ctx, "fixture:"+call.RoomID, liveFixture(1))
+	t.OperationID = dispatch.OperationID
+	t.AdmissionIncarnation = dispatch.AdmissionIncarnation
+	t.AdmissionOwnerEpoch = dispatch.AdmissionOwnerEpoch
+	t.AdmissionLive = dispatch.AdmissionLive
 	return t, err
 }
 
@@ -58,9 +66,19 @@ func participantTicket(ctx context.Context, s *RedisCallStore, room string, p Sp
 	t.AccountID = p.AccountID
 	t.ProfileID = p.ProfileID
 	t.Identity = p.Identity
+	if err != nil {
+		return t, err
+	}
+	dispatch, err := s.EnsureAdmissionDispatch(ctx, p.AdmissionOperationID, liveFixture(1))
+	t.AdmissionIncarnation = dispatch.AdmissionIncarnation
+	t.AdmissionOwnerEpoch = dispatch.AdmissionOwnerEpoch
+	t.AdmissionLive = dispatch.AdmissionLive
 	return t, err
 }
 func admitLifecycleParticipantForTest(ctx context.Context, s *RedisCallStore, room string, p SpaceMediaParticipant, max int) (Call, error) {
+	if p.AdmissionOperationID == "" {
+		p.AdmissionOperationID = "fixture:" + p.Generation
+	}
 	t, err := participantTicket(ctx, s, room, p)
 	if err != nil {
 		return Call{}, err
@@ -291,6 +309,7 @@ func TestRedisSpaceGateGenericMetadataAndExactCleanupNeverRebuildNewOwnerIndexes
 	require.Zero(t, client.Exists(ctx, s.activeKey("member"), s.activeVoiceRoomKey(call.VoiceRoomID)).Val(), "state writer is metadata-only and may not restore indexes")
 	require.NoError(t, client.Set(ctx, s.activeKey("member"), "new-call", 0).Err())
 	require.NoError(t, client.Set(ctx, s.activeVoiceRoomKey(call.VoiceRoomID), "new-call", 0).Err())
+	ctx = fixtureCleanupContext(t, ctx, s, call.RoomID, p)
 	_, matched, err := s.BeginSpaceMediaRevocation(ctx, call.RoomID, "member", p.Identity, p.Generation)
 	require.NoError(t, err)
 	require.True(t, matched)
@@ -299,4 +318,24 @@ func TestRedisSpaceGateGenericMetadataAndExactCleanupNeverRebuildNewOwnerIndexes
 	require.True(t, matched)
 	require.Equal(t, "new-call", client.Get(ctx, s.activeKey("member")).Val())
 	require.Equal(t, "new-call", client.Get(ctx, s.activeVoiceRoomKey(call.VoiceRoomID)).Val())
+}
+
+// This fixture explicitly obtains a fresh restrictive admission gate. It is
+// separate from production PG authority and makes no database ownership claim.
+func fixtureCleanupContext(t *testing.T, ctx context.Context, s *RedisCallStore, room string, p SpaceMediaParticipant) context.Context {
+	t.Helper()
+	call, err := s.GetCall(ctx, room)
+	require.NoError(t, err)
+	ticket, err := s.EnsureAdmissionDispatch(ctx, p.AdmissionOperationID, func(context.Context, string) (int64, bool, error) { return 1, false, nil })
+	require.NoError(t, err)
+	ticket.OperationID = p.AdmissionOperationID
+	ticket.RoomID = room
+	ticket.SpaceID = call.SpaceID
+	ticket.VoiceRoomID = call.VoiceRoomID
+	ticket.RoomGeneration = p.RoomGeneration
+	ticket.AdmissionGeneration = p.Generation
+	ticket.AccountID = p.AccountID
+	ticket.ProfileID = p.ProfileID
+	ticket.Identity = p.Identity
+	return WithSpaceCleanupTarget(ctx, ticket)
 }

@@ -32,11 +32,12 @@ func startSpaceMediaRuntime(runCtx context.Context, voiceSvc *grpcsvc.VoiceGRPC,
 		fence, ok := callStore.(interface {
 			SetSpaceLifecycle(context.Context, string, int64, bool) error
 		})
-		if !ok || !callStoreDurable {
+		gates, gatesOK := callStore.(voicestore.SpaceProjectionGates)
+		if !ok || !gatesOK || !callStoreDurable {
 			log.Fatal("P3 requires durable lifecycle-fenced Redis")
 		}
 		service.Effects.ProjectionFence = fence
-		service.Effects.NativeDrain = &spacemedia.Coordinator{Calls: callStore, Store: callStore, Admissions: spaceMediaAdmissions}
+		service.Effects.NativeDrain = &spacemedia.Coordinator{ProjectionGates: gates, Calls: callStore, Store: callStore, Admissions: spaceMediaAdmissions}
 	}
 	if natsURL != "" {
 		if sessionEpochChecker == nil {

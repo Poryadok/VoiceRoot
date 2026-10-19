@@ -18,7 +18,38 @@ func (c *Coordinator) ResumeCapturedDrain(ctx context.Context, t spacelifecycle.
 	if c == nil || c.Calls == nil || c.Admissions == nil {
 		return ErrAdmissionUnavailable
 	}
-	ctx = store.WithSpaceCleanupTarget(ctx, store.SpaceProjectionTicket{SpaceID: t.SpaceID, RoomID: t.RoomID, VoiceRoomID: t.VoiceRoomID, RoomGeneration: t.RoomGeneration, OperationID: t.OperationID, AdmissionGeneration: t.Generation, AccountID: t.AccountID, ProfileID: t.ProfileID, Identity: t.Identity})
+	// P3 capture is a separate trusted restrictive boundary. It never borrows
+	// workflow authority or rebuilds a target from a later profile incarnation.
+	op, err := uuid.Parse(t.OperationID)
+	if err != nil {
+		return ErrAdmissionConflict
+	}
+	target, err := c.Admissions.BeginRestrictiveRoomLeave(ctx, op, t.Generation)
+	if err != nil {
+		return err
+	}
+	a := target.Admission
+	if a.SpaceID.String() != t.SpaceID || a.RoomID != t.RoomID || a.VoiceRoomID != t.VoiceRoomID || a.RoomGeneration != t.RoomGeneration || a.AccountID.String() != t.AccountID || a.ProfileID.String() != t.ProfileID || a.Identity != t.Identity {
+		return ErrAdmissionConflict
+	}
+	gates, ok := c.ProjectionGates.(store.SpaceAdmissionProjectionGates)
+	if !ok {
+		return ErrAdmissionUnavailable
+	}
+	ticket, err := c.Admissions.FenceRestrictiveRoomLeave(ctx, target, gates)
+	if err != nil {
+		return err
+	}
+	ticket.SpaceID = t.SpaceID
+	ticket.RoomID = t.RoomID
+	ticket.VoiceRoomID = t.VoiceRoomID
+	ticket.RoomGeneration = t.RoomGeneration
+	ticket.OperationID = t.OperationID
+	ticket.AdmissionGeneration = t.Generation
+	ticket.AccountID = t.AccountID
+	ticket.ProfileID = t.ProfileID
+	ticket.Identity = t.Identity
+	ctx = store.WithSpaceCleanupTarget(ctx, ticket)
 	call, err := c.Calls.GetCall(ctx, t.RoomID)
 	if err == nil {
 		if call.RoomID != t.RoomID || call.SpaceID != t.SpaceID || call.VoiceRoomID != t.VoiceRoomID {
