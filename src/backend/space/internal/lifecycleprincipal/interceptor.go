@@ -38,7 +38,7 @@ func protectedMutation(method string) bool {
 
 func OrdinaryUnary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if protectedMutation(info.FullMethod) || info.FullMethod == spacev1.SpaceService_GetAuditLog_FullMethodName {
+		if protectedMutation(info.FullMethod) || admissionMethod(info.FullMethod) || info.FullMethod == spacev1.SpaceService_GetAuditLog_FullMethodName {
 			return nil, status.Error(codes.PermissionDenied, "protected lifecycle listener required")
 		}
 		return handler(ctx, req)
@@ -52,6 +52,9 @@ func canonicalID(value string) bool {
 
 func (v Verifier) Unary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if admissionMethod(info.FullMethod) {
+			return v.verifyAdmissionCall(ctx, req, info, handler)
+		}
 		if info.FullMethod == spacev1.SpaceService_CreateSpace_FullMethodName {
 			return v.verifyCreatorCall(ctx, req, info, handler)
 		}
