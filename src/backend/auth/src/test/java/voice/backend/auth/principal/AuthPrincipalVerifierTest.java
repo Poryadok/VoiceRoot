@@ -235,6 +235,33 @@ class AuthPrincipalVerifierTest {
     }
   }
 
+  @Test void spaceFloorBindsExactServiceAndRejectsReplayOrChangedFields() {
+    String rpc = AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC;
+    var base = claims();
+    base.put("iss", "space"); base.put("sub", "service:space");
+    base.put("principal_type", "service"); base.put("rpc", rpc);
+    base.remove("account_id"); base.remove("profile_id"); base.remove("session_epoch");
+    assertEquals("space", verifier.verify(token(base), rpc, "request-1", "sha256:" + "0".repeat(64)).issuer());
+    assertEquals(Status.Code.UNAUTHENTICATED, assertThrows(StatusRuntimeException.class,
+        () -> verifier.verify(token(base), rpc, "request-1", "sha256:" + "0".repeat(64))).getStatus().getCode());
+    for (String field : List.of("aud", "rpc", "request_id", "request_hash", "iss", "sub", "jti")) {
+      var changed = new HashMap<>(base);
+      changed.put("jti", UUID.randomUUID().toString());
+      if (field.equals("jti")) changed.remove(field); else changed.put(field, "wrong");
+      assertEquals(Status.Code.UNAUTHENTICATED, assertThrows(StatusRuntimeException.class,
+          () -> verifier.verify(token(changed), rpc, "request-1", "sha256:" + "0".repeat(64)), field).getStatus().getCode());
+    }
+    for (boolean keyFailure : List.of(true, false)) {
+      var unavailable = new AuthPrincipalVerifier(
+          (issuer, kid) -> { if (keyFailure) throw new PrincipalDependencyUnavailableException(); return (RSAPublicKey) KEY.getPublic(); },
+          account -> { throw new AssertionError("service floor must not read delegated epoch"); },
+          (issuer, jti, expires) -> { throw new PrincipalDependencyUnavailableException(); },
+          Clock.fixed(NOW, ZoneOffset.UTC));
+      assertEquals(Status.Code.UNAVAILABLE, assertThrows(StatusRuntimeException.class,
+          () -> unavailable.verify(token(base), rpc, "request-1", "sha256:" + "0".repeat(64))).getStatus().getCode());
+    }
+  }
+
   @Test void canonicalHashIgnoresProtobufMapInsertionOrder() {
     var a=Struct.newBuilder().putFields("z",Value.newBuilder().setStringValue("last").build()).putFields("a",Value.newBuilder().setNumberValue(1).build()).build();
     var b=Struct.newBuilder().putFields("a",Value.newBuilder().setNumberValue(1).build()).putFields("z",Value.newBuilder().setStringValue("last").build()).build();

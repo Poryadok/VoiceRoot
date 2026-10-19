@@ -30,6 +30,7 @@ class AuthPrincipalServerLifecycleTest {
   static final MethodDescriptor<Struct,Struct> CONSUME = method(AuthPrincipalServerInterceptor.CONSUME_RPC);
   static final MethodDescriptor<Struct,Struct> LOOKUP = method(AuthPrincipalServerInterceptor.LOOKUP_RPC);
   static final MethodDescriptor<Struct,Struct> FLOOR = method(AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC);
+  static final MethodDescriptor<Struct,Struct> SPACE_FLOOR = method(AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC);
   static final MethodDescriptor<Struct,Struct> ROLE_FLOOR = method(AuthPrincipalServerInterceptor.ROLE_SESSION_FLOOR_RPC);
   static final MethodDescriptor<Struct,Struct> LOGIN = method("/" + SERVICE + "/Login");
   final AuthGrpcService service = mock(AuthGrpcService.class);
@@ -67,6 +68,7 @@ class AuthPrincipalServerLifecycleTest {
       assertStatus(legacy, LOOKUP, Status.Code.UNAUTHENTICATED);
       assertStatus(legacy, FLOOR, Status.Code.UNIMPLEMENTED);
       assertStatus(legacy, ROLE_FLOOR, Status.Code.UNIMPLEMENTED);
+      assertStatus(legacy, SPACE_FLOOR, Status.Code.UNIMPLEMENTED);
       assertEquals(0, proofCalls.get());
       assertEquals(REQUEST, call(legacy, LOGIN));
       assertEquals(1, loginCalls.get());
@@ -80,6 +82,7 @@ class AuthPrincipalServerLifecycleTest {
           "lifecycle-request", AuthPrincipalServerInterceptor.requestHash(REQUEST));
       assertStatus(privateChannel, FLOOR, Status.Code.UNIMPLEMENTED);
       assertStatus(privateChannel, ROLE_FLOOR, Status.Code.UNIMPLEMENTED);
+      assertStatus(privateChannel, SPACE_FLOOR, Status.Code.UNIMPLEMENTED);
       assertEquals(REQUEST, call(floorChannel, FLOOR));
       assertEquals(voicePrincipal, observed.get());
       assertEquals(3, proofCalls.get());
@@ -185,6 +188,10 @@ class AuthPrincipalServerLifecycleTest {
           observer.onNext(request); observer.onCompleted();
         }))
         .addMethod(FLOOR, ServerCalls.asyncUnaryCall((request, observer) -> {
+          proofCalls.incrementAndGet(); observed.set(VerifiedPrincipal.current());
+          observer.onNext(request); observer.onCompleted();
+        }))
+        .addMethod(SPACE_FLOOR, ServerCalls.asyncUnaryCall((request, observer) -> {
           proofCalls.incrementAndGet(); observed.set(VerifiedPrincipal.current());
           observer.onNext(request); observer.onCompleted();
         }))
