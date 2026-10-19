@@ -496,3 +496,24 @@ remains possible. Source d793241 uses the same qualified Space44/a36 input;
 native cancellation/initiating facts remain controlled, recovery SAME Pool and
 manual equivalent mTLS. This closes the nonzero producer/receiver effect risk;
 it does not qualify public/current46/Purge/post30day/full-BE170 composition.
+
+The optional `BOT_GATEWAY_NATIVE_UNINSTALL=1` public fixture now characterizes
+the existing HTTP DELETE route with a second actual native installation. The
+primary install/enable/owner-only RPC/deleted-Chat retry controls remain intact.
+The second installation has an empty whitelist (no Messaging-effect claim).
+After its exact persisted installation configures the reviewed d793241 fixture,
+the real client JWT passes Gateway, Bot mTLS/delegated verification, live Java
+Auth floor and actual Role manage-bots decision. Stale epoch DELETE is denied;
+current DELETE and its retry return204. Bot independently checks its immutable
+ordinary journal COMPLETE, native cancellation/local CANCELED, live Bot and no
+global root. The saved production Role receipt reports1 role/2 assignments;
+the source-owned provider independently verifies target removal and preserved
+human/system/Owner controls. Fixture JSON only configures and synchronizes.
+
+This is test-only characterization of existing production behavior, so the
+first real execution may pass without an invented product RED. Role25/Space44
+and the independently built a36/8cd/d793/abd dependencies are historical scoped
+fixtures; this does not qualify current46/all-writer activation. Gateway/Bot
+replay controls use miniredis, while the provider fixtures use real Redis.
+Connections are manually configured equivalent mTLS, not production main
+startup. Full public DeleteBot, Purge/P3/retention and full BE170 remain open.

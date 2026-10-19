@@ -31,16 +31,17 @@ func TestBotNativeInstallActualHTTPToAllProtectedSources(t *testing.T) {
 		t.Skip("explicit private native public fixture only")
 	}
 	var ready struct {
-		Address  string `json:"address"`
-		Bot      string `json:"bot_id"`
-		OtherBot string `json:"other_bot_id"`
-		Account  string `json:"account_id"`
-		Profile  string `json:"profile_id"`
-		Space    string `json:"space_id"`
-		Chat     string `json:"chat_id"`
-		ChatDir  string `json:"chat_fixture_dir"`
-		Key      string `json:"key_file"`
-		Cert     string `json:"cert_file"`
+		Address      string `json:"address"`
+		Bot          string `json:"bot_id"`
+		OtherBot     string `json:"other_bot_id"`
+		UninstallBot string `json:"uninstall_bot_id"`
+		Account      string `json:"account_id"`
+		Profile      string `json:"profile_id"`
+		Space        string `json:"space_id"`
+		Chat         string `json:"chat_id"`
+		ChatDir      string `json:"chat_fixture_dir"`
+		Key          string `json:"key_file"`
+		Cert         string `json:"cert_file"`
 	}
 	require.Eventually(t, func() bool {
 		raw, err := os.ReadFile(filepath.Join(dir, "ready.json"))
@@ -146,4 +147,35 @@ func TestBotNativeInstallActualHTTPToAllProtectedSources(t *testing.T) {
 	require.Equal(t, initial, again)
 	code, _ = request(token, uuid.NewString(), false)
 	require.Equal(t, http.StatusNotFound, code, "a new unknown target is never admitted through old source evidence")
+	mode := os.Getenv("BOT_GATEWAY_NATIVE_UNINSTALL")
+	require.True(t, mode == "" || mode == "1")
+	if mode == "1" {
+		install, err := http.NewRequestWithContext(t.Context(), http.MethodPost, server.URL+"/api/v1/bots/"+ready.UninstallBot+"/spaces/"+ready.Space+"/install", bytes.NewBufferString(`{"allowed_chats":[]}`))
+		require.NoError(t, err)
+		install.Header.Set("Content-Type", "application/json")
+		install.Header.Set("Authorization", "Bearer "+token)
+		response, err := http.DefaultClient.Do(install)
+		require.NoError(t, err)
+		raw, err := io.ReadAll(response.Body)
+		require.NoError(t, err)
+		require.NoError(t, response.Body.Close())
+		require.Equal(t, http.StatusOK, response.StatusCode, string(raw))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "uninstall.install.done"), []byte("actual HTTP install accepted"), 0600))
+		require.Eventually(t, func() bool { _, err := os.Stat(filepath.Join(dir, "uninstall.seed.ready")); return err == nil }, 12*time.Second, 25*time.Millisecond)
+		for _, bearer := range []string{signConfigJWT(t, "fixture", key, stale), token, token} {
+			r, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, server.URL+"/api/v1/bots/"+ready.UninstallBot+"/spaces/"+ready.Space, nil)
+			require.NoError(t, err)
+			r.Header.Set("Authorization", "Bearer "+bearer)
+			response, err := http.DefaultClient.Do(r)
+			require.NoError(t, err)
+			raw, err := io.ReadAll(response.Body)
+			require.NoError(t, err)
+			require.NoError(t, response.Body.Close())
+			expected := http.StatusNoContent
+			if bearer != token {
+				expected = http.StatusUnauthorized
+			}
+			require.Equal(t, expected, response.StatusCode, string(raw))
+		}
+	}
 }

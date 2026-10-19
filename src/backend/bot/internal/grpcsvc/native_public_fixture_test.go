@@ -65,6 +65,8 @@ func TestBotNativePublicInstallFixture(t *testing.T) {
 		t.Skip("explicit private full public install fixture only")
 	}
 	ctx := t.Context()
+	uninstallMode := os.Getenv("BOT_GATEWAY_NATIVE_UNINSTALL")
+	require.True(t, uninstallMode == "" || uninstallMode == "1")
 	require.NoError(t, os.MkdirAll(dir, 0700))
 	var role struct {
 		Schema      int    `json:"role_schema"`
@@ -133,6 +135,12 @@ func TestBotNativePublicInstallFixture(t *testing.T) {
 	require.NoError(t, err)
 	other, _, err := st.CreateBot(ctx, uuid.New(), "Other owner policy", "", `[]`, uuid.New())
 	require.NoError(t, err)
+	var uninstallBot store.BotRow
+	if uninstallMode == "1" {
+		require.Equal(t, "1", os.Getenv("ROLE_NATIVE_FIXTURE_BOT_CLEANUP"))
+		uninstallBot, _, err = st.CreateBot(ctx, uuid.MustParse(role.Owner), "Actual HTTP uninstall", "", `[]`, uuid.New())
+		require.NoError(t, err)
+	}
 	// The Gateway has its own test key and mTLS identity. All pure Bot calls,
 	// including Auth floor, use ONE actual Runtime issuer below.
 	gatewayKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -160,6 +168,9 @@ func TestBotNativePublicInstallFixture(t *testing.T) {
 	service := NewBotGRPC(st, nil)
 	service.PrincipalIssuer = runtime.Issuer()
 	service.InstallationRole = rolev1.NewRoleServiceClient(nativePublicConnection(t, role.Address, role.Name, role.CA, role.Cert, role.Key))
+	if uninstallMode == "1" {
+		service.CleanupRole = service.InstallationRole
+	}
 	service.InstallationSpace = spacev1.NewSpaceServiceClient(nativePublicConnection(t, space.Address, space.Name, space.CA, space.Cert, space.Key))
 	service.ChatScope = chatv1.NewChatScopeAuthorityServiceClient(nativePublicConnection(t, chat.Address, chat.Name, chat.CA, chat.Cert, chat.Key))
 	// Real native prehistory allocates and fences generation one in both stores.
@@ -178,11 +189,25 @@ func TestBotNativePublicInstallFixture(t *testing.T) {
 	botv1.RegisterBotServiceServer(server, service)
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(func() { server.Stop(); _ = listener.Close() })
-	body, err := json.Marshal(map[string]any{"address": listener.Addr().String(), "bot_id": bot.ID, "other_bot_id": other.ID, "account_id": role.Owner, "profile_id": role.Profile, "space_id": role.Space, "chat_id": chat.Chat, "chat_fixture_dir": chatDir, "key_file": gatewayKeyFile, "cert_file": certFile})
+	body, err := json.Marshal(map[string]any{"address": listener.Addr().String(), "bot_id": bot.ID, "other_bot_id": other.ID, "uninstall_bot_id": uninstallBot.ID, "account_id": role.Owner, "profile_id": role.Profile, "space_id": role.Space, "chat_id": chat.Chat, "chat_fixture_dir": chatDir, "key_file": gatewayKeyFile, "cert_file": certFile})
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "ready.json"), body, 0600))
 	t.Cleanup(func() { _ = os.Remove(filepath.Join(dir, "ready.json")); _ = os.Remove(gatewayKeyFile) })
+	var uninstallIntent *store.InstallationIntent
+	var uninstallSeed *roleNonzeroSeed
+	if uninstallMode == "1" {
+		require.Eventually(t, func() bool { _, err := os.Stat(filepath.Join(dir, "uninstall.install.done")); return err == nil }, 45*time.Second, 30*time.Millisecond)
+		uninstallIntent, err = st.ReusableInstallationIntent(ctx, uninstallBot.ID, uuid.MustParse(role.Space), nil)
+		require.NoError(t, err)
+		require.NotNil(t, uninstallIntent)
+		require.Equal(t, "INSTALLED", uninstallIntent.State)
+		uninstallSeed = seedActualRoleCleanupTarget(t, os.Getenv("ROLE_NATIVE_FIXTURE_EXPORT_DIR"), uninstallBot, uninstallIntent)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "uninstall.seed.ready"), []byte("committed provider setup"), 0600))
+	}
 	require.Eventually(t, func() bool { _, err := os.Stat(filepath.Join(dir, "done")); return err == nil }, 65*time.Second, 50*time.Millisecond)
+	if uninstallMode == "1" {
+		checkPublicUninstall(t, st, uninstallBot, uninstallIntent, *uninstallSeed, os.Getenv("ROLE_NATIVE_FIXTURE_EXPORT_DIR"))
+	}
 	intent, err := st.ReusableInstallationIntent(context.Background(), bot.ID, initial.SpaceID, []uuid.UUID{uuid.MustParse(chat.Chat)})
 	require.NoError(t, err)
 	require.NotNil(t, intent)
