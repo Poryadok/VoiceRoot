@@ -307,12 +307,6 @@ func newRealtimeLifecycleRuntime(ctx context.Context, hub *wsHub) (*realtimeLife
 	return r, nil
 }
 
-type deniedLifecycleRunner struct{}
-
-func (deniedLifecycleRunner) Run(context.Context, uuid.UUID, func(*lifecycle.Scope)) error {
-	return lifecycle.ErrDenied
-}
-
 // matchRealtimePublishedJWKS ensures independent startup publication names the
 // exact current+next keys owned by this issuer, including their public exponent.
 func matchRealtimePublishedJWKS(public principalJWKS, path string) error {
