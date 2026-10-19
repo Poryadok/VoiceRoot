@@ -80,6 +80,21 @@ private provider fixture, and cannot qualify a provider by themselves.
 
 ## Continuation
 
+Task c6/c7 selects the next architecture: a separate one-room MatchSquad worker
+and an independent trusted supervisor with an exclusive mandatory forwarding
+attachment. Replacement is permitted only after the previous sandbox has been
+physically fenced. The conditional fault profile assumes a responsive trusted
+host/kernel/runtime/controller; a whole-host fault requires independent VM/power
+enforcement. No timer or worker-owned lease provides that boundary.
+
+`control` now defines the reference-only protected authority/supervisor close
+boundary, complete owner/birth census and exact runtime/host-boot bindings. It
+archives each actual supervisor receipt before aggregate confirmation, rejects
+missing scope/evidence and retains lost-reply ambiguity. Its tests use explicit
+model-only readers. There is no installed native authority journal or qualified
+runtime supervisor implementation yet. Shared Voice/proto allocation and the
+first actual private forwarding/process fence proof remain explicit next steps.
+
 1. Preserve exact source/probe outcomes in the owning task.
 2. Keep the existing MatchFound consumer fail-closed at the provider boundary.
 3. Obtain a separate source-contract allocation naming a real stale-owner sink
