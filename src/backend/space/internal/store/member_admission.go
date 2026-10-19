@@ -275,6 +275,10 @@ func (s *SpaceStore) PublishMemberAdmission(ctx context.Context, operation, role
 }
 
 func (s *SpaceStore) publishMemberAdmission(ctx context.Context, operation, role uuid.UUID, receipt []byte, guard MemberAdmissionFinalGuard, continuation *VerifiedAdmissionContinuation, publicationHook MemberAdmissionPublicationHook) (*MembershipRow, error) {
+	return s.publishMemberAdmissionWithInitiatingCall(ctx, operation, role, receipt, guard, continuation, publicationHook, nil)
+}
+
+func (s *SpaceStore) publishMemberAdmissionWithInitiatingCall(ctx context.Context, operation, role uuid.UUID, receipt []byte, guard MemberAdmissionFinalGuard, continuation *VerifiedAdmissionContinuation, publicationHook MemberAdmissionPublicationHook, initiating *memberAdmissionInitiatingCall) (*MembershipRow, error) {
 	if s == nil || s.Pool == nil || s.tx != nil || operation == uuid.Nil || role == uuid.Nil {
 		return nil, ErrMemberAdmissionConflict
 	}
@@ -308,6 +312,11 @@ func (s *SpaceStore) publishMemberAdmission(ctx context.Context, operation, role
 	}
 	if i.State != "PREPARING" {
 		return nil, ErrMemberAdmissionStale
+	}
+	if initiating != nil {
+		if err = initiating.check(ctx); err != nil {
+			return nil, err
+		}
 	}
 	// The historical journal and a generic callback cannot manufacture fresh
 	// applicant/original-reviewer authority. A sealed continuation API must
@@ -369,6 +378,11 @@ func (s *SpaceStore) publishMemberAdmission(ctx context.Context, operation, role
 				return nil, proofErr
 			}
 		}
+		if initiating != nil {
+			if callErr := initiating.check(ctx); callErr != nil {
+				return nil, callErr
+			}
+		}
 		if commitErr := tx.Commit(ctx); commitErr != nil {
 			return nil, commitErr
 		}
@@ -410,6 +424,11 @@ func (s *SpaceStore) publishMemberAdmission(ctx context.Context, operation, role
 			if continuation != nil {
 				if _, proofErr := continuation.check(i); proofErr != nil {
 					return nil, proofErr
+				}
+			}
+			if initiating != nil {
+				if err = initiating.check(ctx); err != nil {
+					return nil, err
 				}
 			}
 			if err = tx.Commit(ctx); err != nil {
@@ -491,6 +510,14 @@ func (s *SpaceStore) publishMemberAdmission(ctx context.Context, operation, role
 	if continuation != nil {
 		if _, err = continuation.check(i); err != nil {
 			return nil, err // Includes every SQL/hook wait; whole publication rolls back.
+		}
+	}
+	// The initiating ingress budget may be older than every continuation/history
+	// budget. This pure restriction follows ALL SQL and cannot move into either
+	// PRE authorization or POST journal bookkeeping. No SQL follows before commit.
+	if initiating != nil {
+		if err = initiating.check(ctx); err != nil {
+			return nil, err
 		}
 	}
 	if err = tx.Commit(ctx); err != nil {
