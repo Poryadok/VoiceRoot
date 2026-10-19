@@ -254,6 +254,10 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash str
 	}
 	issuer := ""
 	switch method {
+	case rolev1.RoleService_ApplyBotInstallationRemoval_FullMethodName:
+		if r.botLifecycleEnabled {
+			issuer = "bot"
+		}
 	case rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName, rolev1.RoleService_RemoveMemberRoles_FullMethodName:
 		issuer = "space"
 	case rolev1.RoleService_CheckPermission_FullMethodName, rolev1.RoleService_BootstrapSpaceRoles_FullMethodName:
