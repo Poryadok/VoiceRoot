@@ -18,6 +18,15 @@ Apply against the matching database only; do not run one folder against another 
 
 ## `auth_db` (Auth): Flyway vs golang-migrate
 
+Guest-conversion rollback `000009` takes the owning table's exclusive lock
+before checking for pending work, and retains it through the drop in one DO
+statement. Concurrent admitted `PENDING_USER`/`PENDING_EVENT` writers must commit
+before that check; their work refuses rollback. Empty/completed-only tables may
+still roll back. Run `python scripts/dev/auth9_rollback_test.py` from the repo
+root for the real PostgreSQL 16 two-connection regression and DOWN/UP controls.
+It requires Docker and creates only its own disposable container, with no host
+ports or shared database access.
+
 `auth_db` is owned by the Auth service. The same schema can be applied in **two** ways; use **exactly one** per database (mutual exclusion — do not run golang-migrate on `auth_db` and then start Auth with default Flyway on the same DB, or Flyway will try `V1` against existing tables and fail).
 
 | Path | Who applies | Current ordered layout | Auth startup |
