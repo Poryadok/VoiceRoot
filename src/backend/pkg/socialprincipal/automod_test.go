@@ -21,7 +21,7 @@ func TestAutoModCapability_ExactMethodCallerAndMTLS(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	verifier := &Verifier{Target: "moderation", Capability: "automod-evidence", Issuers: map[string]bool{"messaging": true, "auth": true}, Resolve: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil }, Replay: func(context.Context, string, string, time.Time) error { return nil }}
-	methods := []string{automodv1.ModerationEvidenceService_ProvisionSubject_FullMethodName, automodv1.ModerationEvidenceService_IngestCommittedMessageEvidence_FullMethodName, automodv1.ModerationEvidenceService_GetAccountSendRestriction_FullMethodName, automodv1.ModerationEvidenceService_GetEffectiveRestrictionSnapshot_FullMethodName, "/voice.moderation.v1.ModerationService/CheckMessage"}
+	methods := []string{automodv1.ModerationEvidenceService_ProvisionSubject_FullMethodName, automodv1.ModerationEvidenceService_IngestCommittedMessageEvidence_FullMethodName, automodv1.ModerationEvidenceService_GetAccountSendRestriction_FullMethodName, automodv1.ModerationEvidenceService_GetEffectiveRestrictionSnapshot_FullMethodName, automodv1.AccountLifecycleReceiverService_ApplyLifecycleFact_FullMethodName, "/voice.moderation.v1.ModerationService/CheckMessage"}
 	for _, caller := range []string{"messaging", "auth"} {
 		issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: caller, KeyID: "current", PrivateKey: key})
 		require.NoError(t, err)
@@ -38,7 +38,8 @@ func TestAutoModCapability_ExactMethodCallerAndMTLS(t *testing.T) {
 				called = true
 				return nil, RequireAutoModEvidence(verified, method, request.(*emptypb.Empty))
 			})
-			allowed := caller == "auth" && method == automodv1.ModerationEvidenceService_GetEffectiveRestrictionSnapshot_FullMethodName || caller == "messaging" && method != methods[3] && method != methods[4]
+			authMethod := method == automodv1.ModerationEvidenceService_GetEffectiveRestrictionSnapshot_FullMethodName || method == automodv1.AccountLifecycleReceiverService_ApplyLifecycleFact_FullMethodName
+			allowed := caller == "auth" && authMethod || caller == "messaging" && !authMethod && method != "/voice.moderation.v1.ModerationService/CheckMessage"
 			require.Equal(t, allowed, called, "caller=%s method=%s error=%v", caller, method, err)
 			require.Equal(t, allowed, err == nil)
 		}

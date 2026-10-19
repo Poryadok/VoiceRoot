@@ -97,6 +97,7 @@ func newAutoModAuthorityRuntime(ctx context.Context, cfg autoModAuthorityConfig,
 	runtime := &autoModAuthorityRuntime{Store: subjects, Auth: automodclient.NewAuthClient(issuer, connection), Gate: gate, Issuer: issuer, verifier: verifier, authConnection: connection, listener: listener, done: make(chan struct{}), errors: make(chan error, 1)}
 	runtime.server = grpc.NewServer(verifier.ServerOptions()...)
 	automodv1.RegisterModerationEvidenceServiceServer(runtime.server, &evidence.Service{Store: subjects, Auth: runtime.Auth, Gate: gate})
+	automodv1.RegisterAccountLifecycleReceiverServiceServer(runtime.server, &evidence.LifecycleService{Store: subjects, Gate: gate})
 	go func() {
 		defer close(runtime.done)
 		defer runtime.Gate.Close()

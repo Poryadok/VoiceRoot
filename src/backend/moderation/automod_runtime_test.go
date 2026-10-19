@@ -65,6 +65,17 @@ func TestAutoModP0_PrivateListenerNeedsNoPeerOrDomainReadiness(t *testing.T) {
 	_, err = client.GetEffectiveRestrictionSnapshot(metadata.NewOutgoingContext(call, metadata.Pairs("authorization", "Bearer "+token, "x-request-id", requestID)), request)
 	require.Equal(t, codes.Unavailable, status.Code(err), "private route is discoverable but fresh gate forbids DB/peer effects")
 	require.Contains(t, status.Convert(err).Message(), "current-boot")
+	lifecycle := automodv1.NewAccountLifecycleReceiverServiceClient(connection)
+	fact := &automodv1.ApplyLifecycleFactRequest{Fact: &automodv1.AccountLifecycleFact{ProtocolVersion: 1, AuthorityGeneration: uuid.NewString(), EventId: uuid.NewString(), SubjectId: uuid.NewString(), State: automodv1.SubjectState_SUBJECT_STATE_LIVE, LifecycleRevision: 1}}
+	_, err = lifecycle.ApplyLifecycleFact(call, fact)
+	require.Equal(t, codes.Unauthenticated, status.Code(err), "lifecycle P0 discovery must still authenticate the exact caller")
+	hash, err = principal.RequestHash(fact)
+	require.NoError(t, err)
+	requestID = uuid.NewString()
+	token, err = authIssuer.IssueService(principal.ServiceInput{Audience: "moderation", RPC: automodv1.AccountLifecycleReceiverService_ApplyLifecycleFact_FullMethodName, RequestID: requestID, RequestHash: hash})
+	require.NoError(t, err)
+	_, err = lifecycle.ApplyLifecycleFact(metadata.NewOutgoingContext(call, metadata.Pairs("authorization", "Bearer "+token, "x-request-id", requestID)), fact)
+	require.Equal(t, codes.Unavailable, status.Code(err), "Auth lifecycle private route must be discoverable before P2 while effects remain closed")
 	bootID, generation := g.Identity()
 	for phase := automod.BootLocalIssuer; phase <= automod.BootTerminalImported; phase++ {
 		require.NoError(t, g.Advance(automod.BootReceipt{BootID: bootID, Generation: generation, Phase: phase, ProofID: uuid.New()}))

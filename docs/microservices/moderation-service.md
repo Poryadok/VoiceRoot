@@ -328,6 +328,20 @@ creates a new gate and repeats every phase. Report intake/validation/publication
 receive that same gate through `ReportPrivacyAcquire`, with nil closed. Gate
 unit/RPC tests do not prove sealed snapshots, readiness routing or recovery cuts.
 
+The same P0 private listener registers
+`AccountLifecycleReceiverService.ApplyLifecycleFact` for `service:auth` only,
+with exact recipient audience/method/body binding and mandatory mTLS. It is
+discoverable before public readiness but applies nothing before P2 and locally
+verified generation installation. A complete opaque fact can arrive before its
+raw binding; it then prevents a delayed lower-revision binding. A fresh higher
+binding may precede its push, but the receiver cannot acknowledge a fabricated
+newer canonical hash. LIVE restore preserves source epoch/cursor/detector state;
+due DELETED never means PURGED. Positive terminal application and every purge
+participant commit together before a receipt is returned. Duplicate terminal
+delivery repeats idempotent cleanup, including restored residual projections.
+The actual bootstrap coordinator and Auth current-owner ACK remain required;
+route/store tests do not establish full activation or physical P30D completion.
+
 
 ### Legacy report privacy recovery
 

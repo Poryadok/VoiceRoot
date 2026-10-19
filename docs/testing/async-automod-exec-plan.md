@@ -611,3 +611,44 @@ empty-authority rollback remains valid. Scoped Linux PostgreSQL race results:
 Moderation three cases PASS 2.366s, Messaging two cases PASS 4.571s, no skips.
 Independent exact-delta rechecks are still required; this does not clear the
 whole vertical or the physical-deadline criterion.
+
+Next activated-vertical slice: register the Auth-only lifecycle receiver on the
+existing private P0 listener. Raw callers must be unauthenticated; a correctly
+signed Auth call before P2 must be unavailable without touching a database or
+waiting for public readiness. After P2, the receiver must consume the locally
+verified current Auth authority generation, persist monotonic opaque facts and
+exact hashes, and update any existing binding under account-before-subject locks.
+A due DELETED fact cannot create a terminal fence. A positive PURGED fact must
+commit all mapped and subject-only participants with its permanent fence before
+acknowledging. Unknown-subject facts must fence later stale binds without
+inventing raw identity. Local state ahead of an incoming fact must not be
+overwritten or acknowledged with a fabricated newer hash. Test the real missing
+private route first, then transactional replay/conflict/restore and participant
+rollback. Migration 13 is reserved for this receiver; Messaging 32 belongs to
+the accepted BE184 consumer. Actual coordinator/current-owner ACK and P1-P5
+activation remain required consumers of this slice.
+
+Receiver checkpoint: the real missing P0 route produced Unimplemented (RED
+1.016s); the Auth caller matrix rejected that exact method (RED 0.213s). Both
+are now wired narrowly. A further unknown-binding negative accepted a changed
+same-cycle deadline (RED 0.343s), now refused in the opaque projection as well
+as the raw binding. The final frozen tree is
+`050bf64ab32585dd9812c51232174c2203f226d5`; all 4241 Git/archive/native
+before/after bodies match. Linux PostgreSQL/RPC/P0 race results: 18 top-level
+plus 6 subcases PASS, zero skip, 21.539s for the integration package and 2.113s
+for the private-runtime package. Principal/wire/client short-race checks pass
+40 top-level plus 135 subcases, with one explicit integration skip. Moderation
+all-short and vet, and scoped shared-package vet, pass. Real migrations 1-13
+apply cleanly, metadata version 13/dirty=false; the fixture database was removed.
+
+Keep the qualifications: the first final driver stopped before tests because
+its path list used CRLF, then the pathname fixture was corrected. An overly broad
+non-short shared-package run reached an unavailable nested Docker fixture and
+failed; it is retained as infrastructure failure, not a TLS/Redis runtime pass.
+The scoped short run reports its skip explicitly, while the separate P0 TLS and
+PostgreSQL/RPC cases execute. Initial receiver iteration corrected typed conflict
+normalization and a stale test callback capture. Graphify was canceled at exit 1.
+Portable receipts include these failures. This checkpoint still has no actual
+Auth lifecycle publisher/current-owner ACK, bootstrap coordinator, public P1-P5
+activation or physical P30D acceptance. The broader legacy CheckMessage failure
+above also remains open.

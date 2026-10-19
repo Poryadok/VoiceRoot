@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math"
 	"time"
 
@@ -86,7 +85,7 @@ func (s *Store) BindSubjectTx(ctx context.Context, tx pgx.Tx, binding Subject) e
  AND (automod_subjects.lifecycle_revision < EXCLUDED.lifecycle_revision OR
 	(automod_subjects.lifecycle_revision=EXCLUDED.lifecycle_revision AND automod_subjects.lifecycle_state=EXCLUDED.lifecycle_state AND automod_subjects.purge_at IS NOT DISTINCT FROM EXCLUDED.purge_at AND automod_subjects.deletion_cycle_id IS NOT DISTINCT FROM EXCLUDED.deletion_cycle_id))`, binding.ID, binding.AccountID, binding.Revision, binding.State, binding.PurgeAt, nullableCycle(binding.CycleID))
 	if err != nil {
-		return err
+		return lifecycleError(err)
 	}
 	if tag.RowsAffected() != 1 {
 		return ErrConflict
@@ -142,7 +141,7 @@ func (s *Store) accountTxChecked(ctx context.Context, account uuid.UUID, check B
 		}
 	}
 	if err = fn(tx); err != nil {
-		return err
+		return lifecycleError(err)
 	}
 	if check != nil {
 		if err = check(ctx); err != nil {
@@ -444,67 +443,10 @@ func writeAction(ctx context.Context, tx pgx.Tx, subject Subject, a Action) erro
 	return err
 }
 
-// Purge retains only the opaque subject fence. Authority callers must provide a
-// verified terminal lifecycle, or run this at the already verified deadline.
+// Purge consumes positive permanent Auth terminal authority. A captured deletion
+// deadline alone is never sufficient; an unseen restore may have superseded it.
 func (s *Store) Purge(ctx context.Context, subject uuid.UUID) error {
-	if s == nil || s.Pool == nil || subject == uuid.Nil {
-		return ErrSubject
-	}
-	var account uuid.UUID
-	err := s.Pool.QueryRow(ctx, `SELECT account_id FROM automod_subjects WHERE subject_id=$1`, subject).Scan(&account)
-	if errors.Is(err, pgx.ErrNoRows) {
-		// No account mapping exists to lock. Serialize against first binding,
-		// then recheck; never invert subject->account lock order in this branch.
-		tx, err := s.Pool.Begin(ctx)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = tx.Rollback(context.Background()) }()
-		if err = lockSubject(ctx, tx, subject); err != nil {
-			return err
-		}
-		var exists bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM automod_subjects WHERE subject_id=$1)`, subject).Scan(&exists); err != nil {
-			return err
-		}
-		if exists {
-			return ErrConflict
-		} // Caller retries with the actual account mapping.
-		if _, err = tx.Exec(ctx, `INSERT INTO automod_terminal_subjects(subject_id) VALUES($1) ON CONFLICT DO NOTHING`, subject); err != nil {
-			return err
-		}
-		if s.BeforeTerminalSubjectPurge != nil {
-			if err = s.BeforeTerminalSubjectPurge(ctx, tx, subject); err != nil {
-				return err
-			}
-		}
-		return tx.Commit(ctx)
-	}
-	if err != nil {
-		return err
-	}
-	return s.accountTx(ctx, account, func(tx pgx.Tx) error {
-		if err := lockSubject(ctx, tx, subject); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, `INSERT INTO automod_terminal_subjects(subject_id) VALUES($1) ON CONFLICT DO NOTHING`, subject); err != nil {
-			return err
-		}
-		if s.BeforeTerminalPurge != nil {
-			if err := s.BeforeTerminalPurge(ctx, tx, account); err != nil {
-				return err
-			}
-		}
-		if s.BeforeTerminalSubjectPurge != nil {
-			if err := s.BeforeTerminalSubjectPurge(ctx, tx, subject); err != nil {
-				return err
-			}
-		}
-		// Keep a minimal case snapshot, but erase the direct account mapping. The
-		// exact terminal case retention policy is enforced by the case lifecycle.
-		if _, err := tx.Exec(ctx, `DELETE FROM automod_subjects WHERE subject_id=$1`, subject); err != nil {
-			return fmt.Errorf("purge subject: %w", err)
-		}
-		return nil
+	return s.withLockedSubjectChecked(ctx, subject, nil, func(tx pgx.Tx, account uuid.UUID) error {
+		return s.purgeSubjectTx(ctx, tx, subject, account)
 	})
 }

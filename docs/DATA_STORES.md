@@ -30,6 +30,20 @@ physical-purge receipts. No producer table carries account/profile/content IDs.
 Flyway V30 and canonical Auth version31 are reserved for this producer; recipient
 transport/application and actual activation remain separate required work.
 
+Moderation migration 13 adds `automod_lifecycle_authority`, installed only after
+the owning coordinator verifies Auth generation and continuity, and
+`automod_lifecycle_current`, a complete opaque per-subject fact plus canonical
+hash. No raw account/profile/origin identifier is stored there. Unknown-subject
+facts fence delayed stale bindings; both binding and current-fact projections
+preserve exact deletion cycles and immutable same-cycle deadlines. Positive
+terminal application removes the current fact in the same transaction as all
+purge participants and the permanent opaque fence, including absent mappings.
+The private receiver uses captured P2 checks and returns only committed receipts;
+a due DELETED fact remains nonterminal. The receipt hash is not proof that Auth
+has accepted it or that a restored store is current. Authority installation
+cannot change an existing generation through ordinary RPC replay. Actual
+coordinator, delivery/current-owner ACK and P1-P5 activation remain open.
+
 Raw cross-service UUIDs are references, never cross-database foreign keys. Pattern
 digests, not bodies/URLs, have bounded retention; source evidence expires at 30
 days, samples at most 30 days + 10 minutes, strike aliases at most 60 days from

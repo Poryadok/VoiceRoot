@@ -58,7 +58,8 @@ func AllowsMethod(target, method string) bool {
 		return method == automodv1.ModerationEvidenceService_ProvisionSubject_FullMethodName ||
 			method == automodv1.ModerationEvidenceService_IngestCommittedMessageEvidence_FullMethodName ||
 			method == automodv1.ModerationEvidenceService_GetAccountSendRestriction_FullMethodName ||
-			method == automodv1.ModerationEvidenceService_GetEffectiveRestrictionSnapshot_FullMethodName
+			method == automodv1.ModerationEvidenceService_GetEffectiveRestrictionSnapshot_FullMethodName ||
+			method == automodv1.AccountLifecycleReceiverService_ApplyLifecycleFact_FullMethodName
 	case "moderation-report-threshold", "auth-admission":
 		return method == Method(target)
 	case "space-voice-communication", "space-messaging-communication":
@@ -355,7 +356,7 @@ func expectedIssuer(target string) string {
 }
 
 func expectedCaller(capability, method string) string {
-	if capability == "automod-evidence" && method == automodv1.ModerationEvidenceService_GetEffectiveRestrictionSnapshot_FullMethodName {
+	if capability == "automod-evidence" && (method == automodv1.ModerationEvidenceService_GetEffectiveRestrictionSnapshot_FullMethodName || method == automodv1.AccountLifecycleReceiverService_ApplyLifecycleFact_FullMethodName) {
 		return "auth"
 	}
 	return expectedIssuer(capability)
