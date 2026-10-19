@@ -1,7 +1,7 @@
 {
   "version": "NATIVE-P3-SOURCE-v1",
   "base": "8191a36ca3bea7d053df0dd25963ca5133284b41",
-  "source": "53f75f74523735ac594e21582bea659f567a7288",
+  "source": "6c117e9203c64fa3a93d4a182e36ac142b515557",
   "classification": "DORMANT-A3-RESTRICTIVE-P3-SOURCE",
   "consumers": [
     "DEVELOP-SOURCE-v1",
@@ -67,7 +67,7 @@
       "after": {
         "mode": "100644",
         "type": "blob",
-        "oid": "d3330b04c059434e8be4746d1796233973d37f17"
+        "oid": "ec3e09d628b7ca7b881b8a82f1a34004273f5171"
       }
     },
     {
@@ -963,7 +963,7 @@
       "entry": {
         "mode": "100644",
         "type": "blob",
-        "oid": "ff9642b0c6d1fa75a280953c8868b26eefea0b0b"
+        "oid": "8d1a113398832d1cdbc684ecff38277c7c135a5c"
       }
     },
     {
@@ -4600,25 +4600,101 @@
     "src/backend/voice/pb/voice/user/v1/user.pb.go",
     "src/backend/voice/pb/voice/user/v1/user_grpc.pb.go"
   ],
-  "closure_review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c1",
+  "closure_review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c4",
   "down_review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-VOICE-NATIVE-DOWN-53f75f745237#comment-c1",
-  "source_proposal_sha256": "633ba3e803d969a564f0b1b2292ff17a633f752765f4f1c1cbc3f2a042eb7a59",
+  "source_proposal_sha256": "0c339b49eaa953e411f1f960b6054a28ecd9680f35f2a234e6f2e7468481d835",
   "evidence": [
     {
-      "name": "native-source-53f75-closure-proof.json",
+      "name": "rudeus121-develop/batch3/native-source-53f75-closure-proof.json",
       "sha256": "d2d1d03d7bde9583531642549168b04b7fc801d36ecd7af0adf7bb9aaa5fa028"
     },
     {
-      "name": "native-down-snapshot-proof.json",
+      "name": "rudeus121-develop/batch3/native-down-snapshot-proof.json",
       "sha256": "a595d15486b4ea688865e5e3a3fe8e5165ad67934916e214f3915bec12fe050c"
     },
     {
-      "name": "native-composition-summary.json",
-      "sha256": "25b03d6c35e089da6205acd55ade16767f0248793bca6b551451756763aa21be"
+      "name": "rudeus121-develop/batch3/native-closure-matrix-receipt.json",
+      "sha256": "1b2498c90161428d2f1a6da438b790b5023dea583b9531867d6200347270d5f1"
     },
     {
-      "name": "native-closure-matrix-receipt.json",
-      "sha256": "1b2498c90161428d2f1a6da438b790b5023dea583b9531867d6200347270d5f1"
+      "name": "rudeus121-develop/batch3/native-closure-factory.jsonl",
+      "sha256": "1a7f18fbd2a54384f88efa2d0dc7c1196bd6773787a549dbc372b8708871d200"
+    },
+    {
+      "name": "rudeus121-develop/batch3/native-closure-ordinary.jsonl",
+      "sha256": "525612c305961fb1867a19e4c0f91c5114a6a3d16564ff4a3e6d35ef666df7c6"
+    },
+    {
+      "name": "rudeus121-develop/batch3/native-closure-p3.jsonl",
+      "sha256": "fe5231bee8ca5658bc8c293d19f32accb14250f1aa2d95ca860ccab33fbb069c"
+    },
+    {
+      "name": "rudeus121-develop/batch3/native-closure-retirement.jsonl",
+      "sha256": "e7d426319f0ee99ba96c65fde6b052ce62998a15f7928217c62069911a2eedc0"
+    },
+    {
+      "name": "rudeus121-develop/batch3/native-down-snapshot-matrix-receipt.json",
+      "sha256": "51a606a3693e128c2cc3021d8cc54b309fd45ef4c9d8ed107ec27ecf90e04654"
+    },
+    {
+      "name": "rudeus121-develop/batch3/native-down-snapshot-matrix.jsonl",
+      "sha256": "cd885785fb4a76444a0b86583addeffdfacdecfccb68bc3f37894f6d25d141ef"
+    },
+    {
+      "name": "rudeus121-develop/batch3/roster-root-red2.log",
+      "sha256": "3e59b8a8638e58c4ac95e3274f905ef97cdfafa57ee31b057c4a7ed5f455d960"
+    },
+    {
+      "name": "rudeus121-develop/batch3/roster-root-red2-receipt.json",
+      "sha256": "6dd1866bcf28cd4a6eab4d741328d9b44ee6100810f8333de2ca75b1b05312bc"
+    },
+    {
+      "name": "rudeus121-develop/batch3/roster-root-green.log",
+      "sha256": "25cdfe4788a6fb47ad0b2452afbb7d2e6cf969e96ef0657e7c322aeed57a6aeb"
+    },
+    {
+      "name": "rudeus121-develop/batch3/roster-root-green-receipt.json",
+      "sha256": "81fa8d74663af2012d299c2410e50f71c8e8b18d6959ce806214a6eb3a61ba29"
+    },
+    {
+      "name": "master-intake/native-b3-receipt.json",
+      "sha256": "4a3313e231914cb488e02e8bf329f9080906dd4e283f48349f451324648119d6"
+    },
+    {
+      "name": "master-intake/native-b3-probe.jsonl",
+      "sha256": "876e945ba10c771884fbdaeefd549202b1e9c55d74800d38aa338ce1df5a361f"
+    },
+    {
+      "name": "master-intake/native_b3_qualification_probe_test.go",
+      "sha256": "9e70f9220e1b0caf57ab1f9184d3627a95a005024df386798f479325aaad88e2"
+    },
+    {
+      "name": "master-intake/native-h2-context.diff",
+      "sha256": "c2bb735690ac638268857fe0fb8b7c1c3ce6edb89411404f493f823961a6d426"
+    },
+    {
+      "name": "master-intake/native-h2-matrix-packet.json",
+      "sha256": "9d235a5389ed0f53f43a11a079459db5f9c836fd4a87b1fd757ffdd6ed33b5df"
+    },
+    {
+      "name": "master-intake/native-b1-supplement.json",
+      "sha256": "752f8a6456fecec12291f983b231652262ade78c05fece94cac12fff6e45a90d"
+    },
+    {
+      "name": "master-intake/native_b1_qualification_probe_test.go",
+      "sha256": "c0e9420989758bbc8ec453a5df4be5303d19e167247d5129fda965d7a35898d1"
+    },
+    {
+      "name": "master-intake/native-b1-probe.tar",
+      "sha256": "8b70984de6290d2a5c9a4d42f12a21998f1d0f70ced31d43cbc79c9178940d7b"
+    },
+    {
+      "name": "master-intake/native-b1-probe.jsonl",
+      "sha256": "5474245e56f1c5b3d64f1e51f2e0f3d0962bc0dbb13c2d79003f7d24605daff3"
+    },
+    {
+      "name": "master-intake/native-b1-receipt.json",
+      "sha256": "80d9dfa81c04bb56624b14de25ecc8301980f6197dd730bd353fa082a51c6ca3"
     }
   ],
   "excluded_authority": [
@@ -4630,44 +4706,44 @@
   ],
   "evidence_matrix": {
     "A1": {
-      "result": "OPEN",
-      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+      "result": "PASS",
+      "evidence": "Discriminating actual root RED and repaired current factory GREEN, not unused helper. See native-h2-matrix-packet.json literal cases/hashes.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c3"
     },
     "A2": {
-      "result": "OPEN",
-      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+      "result": "PASS",
+      "evidence": "Actual factory ordinary-only and Space/NATS-enabled branches leave every A3 fact unleased/undelivered, preserve compatibility and restrictive native drain. See native-h2-matrix-packet.json literal cases/hashes.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c3"
     },
     "A3": {
-      "result": "OPEN",
-      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+      "result": "PASS",
+      "evidence": "Real native ordinary/Space caller-transaction counters/frozen facts, denied/replay/rollback and actual process restart pending state. See native-h2-matrix-packet.json literal cases/hashes.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c3"
     },
     "A4": {
-      "result": "OPEN",
-      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+      "result": "PASS",
+      "evidence": "EJECT_ONLY never proves retirement/fullFROZEN/LIVE; exact retained targets restart without projection Redis; credential refresh and unknown capability cannot upgrade. See native-h2-matrix-packet.json literal cases/hashes.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c3"
     },
     "B1": {
-      "result": "OPEN",
-      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+      "result": "PASS",
+      "evidence": "Successful literal H53/H2 DOWN preserves separately owned schema tables/FK/index/view/JSON data and public sentinel complete snapshot; owned targets/grants absent; literal UP roundtrip preserves snapshot. Independent external driver -race PASS1/0skip1.220s, all six commands0. See native-b1-supplement.json and reviewed original empty-roundtrip matrix.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c4"
     },
     "B2": {
-      "result": "OPEN",
-      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+      "result": "PASS",
+      "evidence": "Every independently retained lifecycle class refuses destructive rollback with exact rows/columns retained, including grants without cleanup targets. See native-h2-matrix-packet.json literal cases/hashes.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c3"
     },
     "B3": {
-      "result": "OPEN",
-      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+      "result": "PASS",
+      "evidence": "Genuine writer-win, DOWN-first exclusion, partial-DDL rollback and timeout rollback are synchronized/observed, not timing-only assumptions. See native-h2-matrix-packet.json literal cases/hashes.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c3"
     },
     "B4": {
-      "result": "OPEN",
-      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+      "result": "PASS",
+      "evidence": "Voice013 retained outbox/counter refusal and no MM020 import are preserved; only early inherited-snapshot refusal was added/reviewed408. See native-h2-matrix-packet.json literal cases/hashes.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c3"
     }
   }
 }
