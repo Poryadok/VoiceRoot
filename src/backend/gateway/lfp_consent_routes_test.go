@@ -187,3 +187,29 @@ func TestStoryConsentTLSConfigurationIsAllOrNone(t *testing.T) {
 	require.Error(t, e)
 	require.True(t, enabled)
 }
+
+func TestStoryConsentWithoutTranscoderNeverFallsBackToREST(t *testing.T) {
+	for _, kind := range []string{"guest", "regular"} {
+		for _, route := range []struct{ method, suffix string }{
+			{http.MethodPost, "/lfp-consent-offer"},
+			{http.MethodGet, "/lfp-consent-offer"},
+			{http.MethodPost, "/lfp-consent-response"},
+		} {
+			t.Run(kind+route.method+route.suffix, func(t *testing.T) {
+				f := newCreatorFixture(t)
+				f.payload["account_type"] = kind
+				cfg := f.config(nil)
+				cfg.transcoder = nil
+				proxyCalls := 0
+				cfg.restUpstreams = map[string]http.Handler{"stories": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					proxyCalls++
+					w.WriteHeader(http.StatusNoContent)
+				})}
+				path := "/api/v1/stories/" + uuid.NewString() + route.suffix
+				w := gatewayConsentRequest(t, newGateway(cfg), f, route.method, path, `{}`)
+				require.Equal(t, http.StatusServiceUnavailable, w.Code, w.Body.String())
+				require.Zero(t, proxyCalls)
+			})
+		}
+	}
+}
