@@ -117,27 +117,33 @@ func (s *BotStore) deletionClaimTx(ctx context.Context, claim *BotDeletion) (pgx
 	if err != nil {
 		return nil, err
 	}
+	if err = s.lockLifecycleClaim(ctx, tx, claim); err != nil {
+		_ = tx.Rollback(context.Background())
+		return nil, err
+	}
+	return tx, nil
+}
+
+func (s *BotStore) lockLifecycleClaim(ctx context.Context, tx pgx.Tx, claim *BotDeletion) error {
 	var generation int64
 	var state string
-	err = tx.QueryRow(ctx, lifecycleQuery(claim, `SELECT claim_generation,state FROM bot_deletion_operations WHERE operation_id=$1 FOR UPDATE`), claim.OperationID).Scan(&generation, &state)
+	err := tx.QueryRow(ctx, lifecycleQuery(claim, `SELECT claim_generation,state FROM bot_deletion_operations WHERE operation_id=$1 FOR UPDATE`), claim.OperationID).Scan(&generation, &state)
 	if err != nil || generation != claim.ClaimGeneration || state != "RUNNING" {
-		_ = tx.Rollback(context.Background())
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, err
+			return err
 		}
-		return nil, ErrDeletionClaimLost
+		return ErrDeletionClaimLost
 	}
 	// Evaluate expiry after acquiring the row lock, including any lock wait.
 	var current bool
 	err = tx.QueryRow(ctx, lifecycleQuery(claim, `SELECT claimed_until>clock_timestamp() FROM bot_deletion_operations WHERE operation_id=$1`), claim.OperationID).Scan(&current)
 	if err != nil || !current {
-		_ = tx.Rollback(context.Background())
 		if err != nil {
-			return nil, err
+			return err
 		}
-		return nil, ErrDeletionClaimLost
+		return ErrDeletionClaimLost
 	}
-	return tx, nil
+	return nil
 }
 
 func (s *BotStore) SealBotDeletionRequest(ctx context.Context, claim *BotDeletion, effect uuid.UUID, request []byte) error {

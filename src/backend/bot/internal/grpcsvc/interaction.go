@@ -150,6 +150,9 @@ func (s *BotGRPC) UninstallBotFromSpace(ctx context.Context, req *botv1.Uninstal
 		if retryErr := s.Store.RetryBotDeletion(retryCtx, claim); retryErr != nil {
 			return nil, mapStoreErr(retryErr)
 		}
+		if s.nativeCancellationAccepted(ctx, claim) {
+			return &botv1.UninstallBotFromSpaceResponse{}, nil
+		}
 		return nil, status.Error(codes.Unavailable, "native cancellation and installation cleanup remain recoverable")
 	}
 	return &botv1.UninstallBotFromSpaceResponse{}, nil

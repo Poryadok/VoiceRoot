@@ -60,6 +60,13 @@ func (s *BotStore) lockInstallation(ctx context.Context, tx pgx.Tx, botID, space
 		return nil, err
 	}
 	if admitting {
+		pending, err := s.pendingUninstallCleanup(ctx, tx, botID, spaceID)
+		if err != nil {
+			return nil, err
+		}
+		if pending {
+			return nil, ErrInstallationConflict
+		}
 		if bot.Status != "live" || bot.ActorProfileID == uuid.Nil {
 			return nil, ErrInstallationConflict
 		}

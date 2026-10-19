@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -11,6 +12,115 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
+
+func (s *BotStore) pendingUninstallCleanup(ctx context.Context, tx pgx.Tx, bot, space uuid.UUID) (bool, error) {
+	var pending bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot_uninstall_operations o JOIN bot_uninstall_installations t ON t.operation_id=o.operation_id WHERE t.bot_id=$1 AND t.space_id=$2 AND o.state<>'COMPLETE')`, bot, space).Scan(&pending)
+	return pending, err
+}
+
+// Only explicitly unfinished uninstall targets participate in discovery. This
+// is not a scan/promote of arbitrary canceled installation history.
+func (s *BotStore) retainedUninstallTarget(ctx context.Context, tx pgx.Tx, bot, space uuid.UUID) (*BotDeletionTarget, error) {
+	rows, err := tx.Query(ctx, `SELECT t.scope_bytes,t.scope_sha256,o.operation_id,o.actor_profile_id,t.target_id FROM bot_uninstall_operations o JOIN bot_uninstall_installations t ON t.operation_id=o.operation_id WHERE t.bot_id=$1 AND t.space_id=$2 AND o.state<>'COMPLETE' FOR UPDATE OF o,t`, bot, space)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result *BotDeletionTarget
+	for rows.Next() {
+		if result != nil {
+			return nil, ErrInstallationConflict
+		}
+		var raw, digest []byte
+		var operation, actor, target uuid.UUID
+		if err = rows.Scan(&raw, &digest, &operation, &actor, &target); err != nil {
+			return nil, err
+		}
+		sum := sha256.Sum256(raw)
+		if !bytes.Equal(sum[:], digest) {
+			return nil, ErrInstallationConflict
+		}
+		var source BotDeletionTarget
+		if json.Unmarshal(raw, &source) != nil {
+			return nil, ErrInstallationConflict
+		}
+		canonical, e := json.Marshal(source)
+		if e != nil || !bytes.Equal(canonical, raw) || source.OperationID != operation || source.TargetID != target || source.BotID != bot || source.SpaceID != space || source.ActorProfileID != actor {
+			return nil, ErrInstallationConflict
+		}
+		source.ScopeBytes, source.ScopeSHA256 = raw, digest
+		result = &source
+	}
+	return result, rows.Err()
+}
+
+// Atomically retain the local native ACK and retire live installation state.
+// The separate Role/Messaging obligations survive accepted Empty cancellation.
+func (s *BotStore) SaveUninstallNativeAcknowledgement(ctx context.Context, claim *BotDeletion, effect uuid.UUID, request, observation []byte) error {
+	if claim == nil || claim.Purpose != "space_uninstall" || claim.OperationID == uuid.Nil || claim.ClaimGeneration <= 0 || len(request) == 0 || len(request) > 1024*1024 || len(observation) == 0 || len(observation) > 1024*1024 {
+		return ErrInstallationConflict
+	}
+	effects, err := s.LifecycleEffects(ctx, claim)
+	if err != nil {
+		return err
+	}
+	var target *BotDeletionTarget
+	for _, e := range effects {
+		if e.EffectID == effect && e.Kind == "SPACE_CLEANUP" && e.ChatID == nil {
+			copy := e.Target
+			target = &copy
+		}
+	}
+	if target == nil {
+		return ErrInstallationConflict
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if _, err = s.lockInstallation(ctx, tx, target.BotID, target.SpaceID, false); err != nil {
+		return err
+	}
+	if err = s.lockLifecycleClaim(ctx, tx, claim); err != nil {
+		return err
+	}
+	var savedRequest, savedReceipt []byte
+	err = tx.QueryRow(ctx, `SELECT e.request_bytes,e.receipt_bytes FROM bot_uninstall_effects e JOIN bot_uninstall_installations t ON t.target_id=e.target_id WHERE e.effect_id=$1 AND t.operation_id=$2 AND e.kind='SPACE_CLEANUP' FOR UPDATE OF e`, effect, claim.OperationID).Scan(&savedRequest, &savedReceipt)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(savedRequest, request) {
+		return ErrInstallationConflict
+	}
+	if savedReceipt != nil {
+		if !bytes.Equal(savedReceipt, observation) {
+			return ErrInstallationConflict
+		}
+		return tx.Commit(ctx)
+	}
+	intent, err := scanInstallationIntent(tx.QueryRow(ctx, `SELECT `+intentColumns+` FROM bot_installation_intents WHERE installation_id=$1 FOR UPDATE`, target.InstallationID))
+	if err != nil {
+		return err
+	}
+	if intent.BotID != target.BotID || intent.SpaceID != target.SpaceID || intent.ActorProfileID != target.ActorProfileID || intent.OperationID != target.InstallOperationID || intent.CancelOperationID != target.CancelOperationID || intent.Generation != target.BotGeneration {
+		return ErrInstallationConflict
+	}
+	if err = s.completeInstallationCancellationTx(ctx, tx, intent); err != nil {
+		return err
+	}
+	sum := sha256.Sum256(observation)
+	_, err = tx.Exec(ctx, `UPDATE bot_uninstall_effects SET receipt_bytes=$2,receipt_sha256=$3,state='COMPLETE' WHERE effect_id=$1`, effect, observation, sum[:])
+	if err != nil {
+		return err
+	}
+	// Local row waits may outlive the worker lease. Recheck after every effect.
+	if err = s.lockLifecycleClaim(ctx, tx, claim); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
 
 // Purpose selects separate physical journals. Global deletion's uniqueness and
 // terminal authority are never reused for an ordinary Space uninstall.

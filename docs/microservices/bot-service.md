@@ -30,8 +30,13 @@ and blocks reinstall. Public uninstall also freezes its own per-installation
 `space_uninstall` initiating decision, target and Role/Messaging obligations in
 the same transaction. The native Empty acknowledgement is stored explicitly as
 a Bot-local transport observation; it is not a Space receipt or global terminal
-fence. Required typed participant receipts settle the remaining cleanup before
-local cancellation becomes CANCELED. Pending work is recovered by the bounded
+fence. Saving that observation atomically retires the local whitelist/installation
+and marks native cancellation CANCELED. Public Empty acknowledges accepted native
+cancellation while required typed Role/Messaging cleanup may remain pending.
+The separate pending-cleanup journal preserves admission exclusion until those
+obligations settle; clients provide no additional generation precondition.
+Global deletion discovers these explicitly pending frozen sources after local
+retirement. Pending work is recovered by the bounded
 claim worker without the initiating bearer token; exact accepted bytes remain
 stable and delivery credentials are refreshed. A reinstall
 uses a new installation UUID and increasing Bot generation. An old internal
@@ -217,7 +222,7 @@ service BotService {
 - **Uninstall** (`UninstallBotFromSpace`): снимает whitelist/installation, protected native `Space.RemoveBotMember`; **S2S cleanup** — см. [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md):
   - Role: private `ApplyBotInstallationRemoval` с `purpose=space_uninstall` удаляет допустимые созданные роли и назначения этого Bot actor; системные/Owner роли не обходятся.
   - Messaging: private `ApplyBotChatPinRemoval` с тем же purpose снимает pins отправителя по сохранённому batch whitelisted attachments; сообщения сохраняются.
-  - Обычные Role/Messaging helpers не являются fallback. Ошибка/configuration gap сохраняет отдельный pending journal; текущая реализация отвечает `Unavailable` и допускает recovery. Это не переносит DeleteBot-only правило полного Empty completion на контракт native cancellation ACK.
+  - Обычные Role/Messaging helpers не являются fallback. Ошибка/configuration gap сохраняет отдельный pending journal. После durable native ACK возвращается Empty acceptance; незавершённый native ACK остаётся retryable `Unavailable`. Empty не означает завершение всей typed cleanup работы.
 - **ListInstalledBots**: `InstalledBot.online` из `bot_presence` (тот же порог, что для slash `online`).
 - `ListInstalledBots.allowed_chats` получает текущий group/channel type через
   Chat `GetChat` с исходным caller context. Тип принимается только для точного

@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	botv1 "voice.app/voice/bot/v1"
+	chatv1 "voice.app/voice/chat/v1"
 	rolev1 "voice.app/voice/role/v1"
 	spacev1 "voice.app/voice/space/v1"
 	grpcsvc "voice/backend/bot/internal/grpcsvc"
@@ -50,9 +51,15 @@ func TestUninstallRetainsCanceledAccessAndPendingCleanupWithoutLegacyFallback(t 
 	owner, installer, space := uuid.New(), uuid.New(), uuid.New()
 	bot, _, err := st.CreateBot(ctx, owner, "Pending uninstall", "", `[]`, uuid.New())
 	require.NoError(t, err)
-	intent, err := st.PrepareInstallation(ctx, bot.ID, space, installer, nil)
+	chat := uuid.New()
+	read := &chatv1.GetBotChatScopeAuthorityRequest{ProtocolVersion: 1, OperationId: uuid.NewString(), ChatId: chat.String(), ExpectedSpaceId: space.String()}
+	scope, err := (&firstReadOnlyChatScope{}).GetBotChatScopeAuthority(ctx, read)
 	require.NoError(t, err)
-	require.NoError(t, st.CompleteInstallation(ctx, intent, nil))
+	observation, err := store.NewChatScopeObservation(read, scope, true)
+	require.NoError(t, err)
+	intent, err := st.PrepareInstallation(store.WithChatScopeObservations(ctx, []store.ChatScopeObservation{observation}), bot.ID, space, installer, []uuid.UUID{chat})
+	require.NoError(t, err)
+	require.NoError(t, st.CompleteInstallation(ctx, intent, []uuid.UUID{chat}))
 	svc := grpcsvc.NewBotGRPC(st, nil)
 	svc.PrincipalIssuer = installationTestIssuer(t)
 	svc.InstallationRole = installationPermissionClient{allowed: true}
@@ -64,19 +71,16 @@ func TestUninstallRetainsCanceledAccessAndPendingCleanupWithoutLegacyFallback(t 
 	// A request-bound signed component actor passes the real initiation guard;
 	// current manageBots and native cancellation are controlled protocol fixtures.
 	_, err = svc.UninstallBotFromSpace(verifiedMutationActor(t, ctx, request, botv1.BotService_UninstallBotFromSpace_FullMethodName), request)
-	// The public Empty response is not specified as an all-participant receipt.
-	// This oracle checks authority and retained work, not a newly invented code.
-	if err != nil {
-		require.Equal(t, codes.Unavailable, status.Code(err))
-	}
+	// Accepted native cancellation is Empty; it does not claim typed cleanup.
+	require.NoError(t, err)
 	require.Equal(t, 1, removed, "live Space access must already be canceled")
 	require.Zero(t, rawCalls, "ordinary Role helpers are not private cleanup authority")
 	var state string
 	var installations int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM bot_installation_intents WHERE installation_id=$1`, intent.InstallationID).Scan(&state))
-	require.Equal(t, "CANCELING", state)
+	require.Equal(t, "CANCELED", state)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM bot_space_installations WHERE id=$1`, intent.InstallationID).Scan(&installations))
-	require.Equal(t, 1, installations, "retain the obligation until typed participant receipts")
+	require.Zero(t, installations, "accepted native cancellation retires the local installation; its separate journal retains cleanup")
 	current, err := st.GetBotByID(ctx, bot.ID)
 	require.NoError(t, err)
 	require.Equal(t, "live", current.Status, "Space uninstall must not globally disable the application")
@@ -89,6 +93,27 @@ func TestUninstallRetainsCanceledAccessAndPendingCleanupWithoutLegacyFallback(t 
 	require.Equal(t, 1, pending)
 	_, err = st.PrepareInstallation(ctx, bot.ID, space, installer, nil)
 	require.ErrorIs(t, err, store.ErrInstallationConflict, "reinstall cannot bypass pending cleanup")
+	_, err = st.InstallInSpace(ctx, bot.ID, space, installer, nil)
+	require.ErrorIs(t, err, store.ErrInstallationConflict, "legacy whitelist admission cannot bypass retained cleanup")
+	require.ErrorIs(t, st.SetChatEnabled(ctx, bot.ID, chat, space, installer, true), store.ErrInstallationConflict)
+	op, err := st.UninstallCleanup(ctx, intent.InstallationID)
+	require.NoError(t, err)
+	retained, err := st.LifecycleEffects(ctx, op)
+	require.NoError(t, err)
+	require.Len(t, retained, 3)
+	require.Len(t, retained[0].Target.ChatSources, 1)
+	// After local retirement, global deletion discovers only this explicitly
+	// pending frozen obligation. It must not join mutable source history again.
+	_, err = pool.Exec(ctx, `UPDATE bot_chat_scope_observations SET request_bytes=$1 WHERE bot_id=$2`, []byte("changed after immutable uninstall snapshot"), bot.ID)
+	require.NoError(t, err)
+	global, err := st.BeginBotDeletion(ctx, bot.ID, owner)
+	require.NoError(t, err)
+	require.Equal(t, "PENDING", global.State)
+	globalEffects, err := st.BotDeletionEffects(ctx, global.OperationID)
+	require.NoError(t, err)
+	require.Len(t, globalEffects, 3)
+	require.Equal(t, intent.InstallationID, globalEffects[0].Target.InstallationID)
+	require.Equal(t, retained[0].Target.ChatSources, globalEffects[0].Target.ChatSources)
 }
 
 type controlledUninstallRole struct {
@@ -157,7 +182,7 @@ func TestUninstallTypedCleanupLostACKRecoveryAndReinstall(t *testing.T) {
 	request := &botv1.UninstallBotFromSpaceRequest{BotId: bot.ID.String(), SpaceId: space.String()}
 	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("x-voice-user-id", managerAccount.String(), "x-voice-profile-id", manager.String()))
 	_, err = svc.UninstallBotFromSpace(verifiedMutationActor(t, ctx, request, botv1.BotService_UninstallBotFromSpace_FullMethodName), request)
-	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.NoError(t, err, "native cancellation was accepted; the lost Role ACK remains recoverable")
 	require.Equal(t, 1, removed)
 	require.Equal(t, 1, role.calls)
 	op, err := st.UninstallCleanup(ctx, intent.InstallationID)
@@ -294,4 +319,78 @@ func TestUninstallDecisionRollbackConcurrentAdmissionAndGlobalCapture(t *testing
 	source, err = st.LifecycleEffects(ctx, root)
 	require.NoError(t, err)
 	require.Equal(t, originalScope, source[0].Target.ScopeBytes, "global source removal cannot erase frozen uninstall input")
+}
+
+func TestUninstallNativeACKAndLocalRetirementCommitAtomically(t *testing.T) {
+	if testing.Short() {
+		t.Skip("actual PostgreSQL native ACK/local retirement rollback")
+	}
+	ctx := t.Context()
+	pool := integrationtest.StartPostgres(t, ctx, "bot_uninstall_ack_atomic", "")
+	_, err := pool.Exec(ctx, migrationSQL(t))
+	require.NoError(t, err)
+	st := &store.BotStore{Pool: pool}
+	owner, manager, space := uuid.New(), uuid.New(), uuid.New()
+	bot, _, err := st.CreateBot(ctx, owner, "Atomic native ACK", "", `[]`, uuid.New())
+	require.NoError(t, err)
+	intent, err := st.PrepareInstallation(ctx, bot.ID, space, manager, nil)
+	require.NoError(t, err)
+	require.NoError(t, st.CompleteInstallation(ctx, intent, nil))
+	svc := grpcsvc.NewBotGRPC(st, nil)
+	svc.PrincipalIssuer = installationTestIssuer(t)
+	svc.InstallationRole = installationPermissionClient{allowed: true}
+	calls, effects := 0, 0
+	var original []byte
+	svc.InstallationSpace = intentObservingSpace{remove: func(_ context.Context, q *spacev1.RemoveBotMemberRequest) error {
+		calls++
+		body, e := (proto.MarshalOptions{Deterministic: true}).Marshal(q)
+		require.NoError(t, e)
+		if original == nil {
+			original = body
+			effects++
+		} else {
+			require.Equal(t, original, body)
+		}
+		return nil
+	}}
+	q := &botv1.UninstallBotFromSpaceRequest{BotId: bot.ID.String(), SpaceId: space.String()}
+	userCtx := metadata.NewIncomingContext(ctx, metadata.Pairs("x-voice-user-id", owner.String(), "x-voice-profile-id", manager.String()))
+	_, err = pool.Exec(ctx, `ALTER TABLE bot_installation_intents ADD CONSTRAINT injected_local_retirement_failure CHECK(state<>'CANCELED')`)
+	require.NoError(t, err)
+	_, err = svc.UninstallBotFromSpace(verifiedMutationActor(t, userCtx, q, botv1.BotService_UninstallBotFromSpace_FullMethodName), q)
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.Equal(t, 1, calls)
+	root, err := st.UninstallCleanup(ctx, intent.InstallationID)
+	require.NoError(t, err)
+	children, err := st.LifecycleEffects(ctx, root)
+	require.NoError(t, err)
+	for _, child := range children {
+		if child.Kind == "SPACE_CLEANUP" {
+			require.Equal(t, "PENDING", child.State)
+			require.Empty(t, child.ReceiptBytes)
+			require.Equal(t, original, child.RequestBytes)
+		}
+	}
+	var state string
+	var n int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM bot_installation_intents WHERE installation_id=$1`, intent.InstallationID).Scan(&state))
+	require.Equal(t, "CANCELING", state)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM bot_space_installations WHERE id=$1`, intent.InstallationID).Scan(&n))
+	require.Equal(t, 1, n)
+	_, err = pool.Exec(ctx, `ALTER TABLE bot_installation_intents DROP CONSTRAINT injected_local_retirement_failure`)
+	require.NoError(t, err)
+	_, err = svc.UninstallBotFromSpace(verifiedMutationActor(t, userCtx, q, botv1.BotService_UninstallBotFromSpace_FullMethodName), q)
+	require.NoError(t, err, "accepted native Empty survives missing private Role while journal remains pending")
+	require.Equal(t, 2, calls)
+	require.Equal(t, 1, effects, "controlled receiver represents exact idempotent native effect, not real Space transport")
+	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM bot_installation_intents WHERE installation_id=$1`, intent.InstallationID).Scan(&state))
+	require.Equal(t, "CANCELED", state)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM bot_space_installations WHERE id=$1`, intent.InstallationID).Scan(&n))
+	require.Zero(t, n)
+	root, err = st.UninstallCleanup(ctx, intent.InstallationID)
+	require.NoError(t, err)
+	require.Equal(t, "RETRY_WAIT", root.State)
+	_, err = svc.UninstallBotFromSpace(verifiedMutationActor(t, userCtx, q, botv1.BotService_UninstallBotFromSpace_FullMethodName), q)
+	require.NoError(t, err)
+	require.Equal(t, 2, calls)
 }

@@ -106,5 +106,18 @@ func (s *BotGRPC) applyNativeCancellation(ctx context.Context, claim *store.BotD
 	if err != nil {
 		return err
 	}
-	return s.Store.SaveBotDeletionReceipt(ctx, claim, effect.EffectID, body, receipt)
+	return s.Store.SaveUninstallNativeAcknowledgement(ctx, claim, effect.EffectID, body, receipt)
+}
+
+func (s *BotGRPC) nativeCancellationAccepted(ctx context.Context, claim *store.BotDeletion) bool {
+	effects, err := s.Store.LifecycleEffects(ctx, claim)
+	if err != nil {
+		return false
+	}
+	for _, effect := range effects {
+		if effect.Kind == "SPACE_CLEANUP" && effect.State == "COMPLETE" {
+			return validateCompletedNativeCancellation(claim, effect) == nil
+		}
+	}
+	return false
 }

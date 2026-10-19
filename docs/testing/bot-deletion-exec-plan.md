@@ -45,7 +45,8 @@ Uninstall response semantics are not strengthened by that test.
 Implementation steps: atomically bind verified initiating request, current
 manage-bots decision and frozen source to cancellation; independently seal and
 validate participant receipts; reclaim pending work after service recreation;
-complete local cancellation only after those required obligations are settled.
+atomically commit the native ACK with local CANCELED retirement, preserving
+accepted Empty semantics and the independently pending typed obligations.
 Run actual PG failure/retry/duplicate/isolation checks with explicitly controlled
 Role/Space fixtures before real protected participant composition. Retained
 uninstall inputs remain discoverable to global deletion. No compactor or late-P3
@@ -348,7 +349,7 @@ namespace. Its native Empty result has an explicitly local observation envelope
 with genuinely empty response bytes and cannot build or satisfy global Space
 terminal authority. Ordinary helper calls have been removed from this path.
 Controlled Role lost-ACK recovery rejects a changed-purpose response, retains
-the original decision/request, settles local cancellation, preserves another
+the original decision/request, completes the remaining cleanup, preserves another
 Space and permits a new installation. This reinstantiates services on the same
 Pool; it does not prove an OS restart or real Role/Space transport. Existing
 uninstall semantic tests now use explicit native admission and typed controlled
@@ -357,7 +358,7 @@ expanded run failed four old raw/legacy fixtures; those failures remain saved.
 Actual multi-service uninstall composition, native46 global completion, Purge and
 post-retention proof remain separate unfinished acceptance work.
 
-Final coherent affected PG/race run: store62.513s, grpc39.697s,
+Intermediate b3 coherent affected PG/race run: store62.513s, grpc39.697s,
 24 top-level/72 total test passes, one explicit pre-existing optional Messaging
 handoff skip (no provider configured). It includes DOWN012 old-RR rejection,
 empty default-RC rollback, observed first-writer lock wait/preserved row, and
@@ -365,3 +366,24 @@ the historical DOWN008 empty control after official reverse-order DOWN012.
 Bot short checks:220 total test passes/231 explicit integration skips; scoped
 vet and full Bot build pass. These are component boundaries, not multi-service
 Uninstall acceptance or full BE-170 readiness.
+
+The accepted native ACK boundary was then corrected before review readiness:
+b3 still returned Unavailable for missing Role despite a durable native ACK.
+The canonical ordinary-uninstall test reproduced that error in3.702s. The
+successor atomically stores the explicitly local ACK, retires local rows and
+marks the native intent CANCELED, returning Empty acceptance with a separate
+RETRY_WAIT journal. Typed cleanup is never falsely marked complete. Pending
+cleanup retains admission exclusion under the existing Space/Bot guards; its
+exact frozen target participates in global discovery even after local source
+retirement. The global snapshot copies the retained original/current Chat bytes,
+not subsequently changed source rows or arbitrary historical installations.
+
+Successor coherent PG/race proof: store79.239s/grpc52.435s,25 top-level /
+73 total test passes and the same one explicit optional Messaging handoff skip.
+The new local-retirement fault oracle rolls the ACK/retirement transaction back,
+retains CANCELING and the sealed native request, then retries that exact request
+and commits CANCELED plus accepted Empty with typed work still RETRY_WAIT.
+Bot short:220 passes/232 explicit integration skips; scoped vet/full build pass.
+The skips do not prove actual Role/Messaging/native transport composition,
+public Gateway uninstall, OS restart, Purge or post-retention completion. Those
+acceptance requirements remain open despite this bounded component proof.

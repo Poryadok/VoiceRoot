@@ -73,7 +73,7 @@ type deletionQuerier interface {
 }
 
 func deletionSpaces(ctx context.Context, q deletionQuerier, bot uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := q.Query(ctx, `SELECT space_id FROM bot_space_installations WHERE bot_id=$1 UNION SELECT space_id FROM bot_chat_whitelist WHERE bot_id=$1 UNION SELECT space_id FROM bot_installation_intents WHERE bot_id=$1 AND state<>'CANCELED' ORDER BY space_id`, bot)
+	rows, err := q.Query(ctx, `SELECT space_id FROM bot_space_installations WHERE bot_id=$1 UNION SELECT space_id FROM bot_chat_whitelist WHERE bot_id=$1 UNION SELECT space_id FROM bot_installation_intents WHERE bot_id=$1 AND state<>'CANCELED' UNION SELECT t.space_id FROM bot_uninstall_installations t JOIN bot_uninstall_operations o ON o.operation_id=t.operation_id WHERE t.bot_id=$1 AND o.state<>'COMPLETE' ORDER BY space_id`, bot)
 	if err != nil {
 		return nil, err
 	}
@@ -206,8 +206,21 @@ func (s *BotStore) beginBotDeletionAttempt(ctx context.Context, botID, owner uui
 
 func (s *BotStore) snapshotDeletionTarget(ctx context.Context, tx pgx.Tx, op *BotDeletion, space uuid.UUID) (*BotDeletionTarget, error) {
 	t := &BotDeletionTarget{TargetID: uuid.New(), OperationID: op.OperationID, BotID: op.BotID, SpaceID: space, ActorProfileID: op.ActorProfileID, CancelOperationID: uuid.New(), Chats: []uuid.UUID{}, LegacyEvidence: true}
+	retained, err := s.retainedUninstallTarget(ctx, tx, op.BotID, space)
+	if err != nil {
+		return nil, err
+	}
+	if retained != nil {
+		t.InstallationID, t.InstallOperationID, t.BotGeneration = retained.InstallationID, retained.InstallOperationID, retained.BotGeneration
+		t.CancelOperationID, t.LegacyEvidence = retained.CancelOperationID, retained.LegacyEvidence
+		t.Chats = append(t.Chats, retained.Chats...)
+		t.ChatSources = retained.ChatSources
+	}
 	i, err := scanInstallationIntent(tx.QueryRow(ctx, `SELECT `+intentColumns+` FROM bot_installation_intents WHERE bot_id=$1 AND space_id=$2 AND state<>'CANCELED' FOR UPDATE`, op.BotID, space))
 	if err == nil {
+		if retained != nil && retained.InstallationID != i.InstallationID {
+			return nil, ErrInstallationConflict
+		}
 		t.InstallationID = i.InstallationID
 		t.InstallOperationID = i.OperationID
 		t.BotGeneration = i.Generation
@@ -251,9 +264,11 @@ func (s *BotStore) snapshotDeletionTarget(ctx context.Context, tx pgx.Tx, op *Bo
 		return nil, err
 	}
 	t.Chats = normalizedInstallationChats(t.Chats)
-	t.ChatSources, err = snapshotChatScopeSources(ctx, tx, op.BotID, space)
-	if err != nil {
-		return nil, err
+	if retained == nil {
+		t.ChatSources, err = snapshotChatScopeSources(ctx, tx, op.BotID, space)
+		if err != nil {
+			return nil, err
+		}
 	}
 	t.ScopeBytes, err = json.Marshal(t)
 	if err != nil {

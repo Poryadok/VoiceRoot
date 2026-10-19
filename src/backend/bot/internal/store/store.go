@@ -350,6 +350,13 @@ func (s *BotStore) InstallInSpace(ctx context.Context, botID, spaceID, installer
 	if canceling {
 		return uuid.Nil, ErrInstallationConflict
 	}
+	pendingCleanup, cleanupErr := s.pendingUninstallCleanup(ctx, tx, botID, spaceID)
+	if cleanupErr != nil {
+		return uuid.Nil, cleanupErr
+	}
+	if pendingCleanup {
+		return uuid.Nil, ErrInstallationConflict
+	}
 	scopeIDs, err := persistChatScopeObservations(ctx, tx, botID, spaceID, chats, nil, "whitelist_admission")
 	if err != nil {
 		return uuid.Nil, err
@@ -473,6 +480,13 @@ func (s *BotStore) SetChatEnabled(ctx context.Context, botID, chatID, spaceID, i
 		return err
 	}
 	if canceling {
+		return ErrInstallationConflict
+	}
+	pendingCleanup, cleanupErr := s.pendingUninstallCleanup(ctx, tx, botID, spaceID)
+	if cleanupErr != nil {
+		return cleanupErr
+	}
+	if pendingCleanup {
 		return ErrInstallationConflict
 	}
 	var lifecycleState string
