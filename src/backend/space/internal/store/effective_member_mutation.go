@@ -54,7 +54,7 @@ func (s *SpaceStore) effectiveMutationScope(ctx context.Context, space uuid.UUID
 		return ErrEffectiveEpisodeUnavailable
 	}
 	var version int64
-	if err := s.tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || version != 41 {
+	if err := s.tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || (version != 41 && version != 42) {
 		return ErrEffectiveEpisodeUnavailable
 	}
 	lifecycle, err := readMemberLifecycle(ctx, s.tx, space)

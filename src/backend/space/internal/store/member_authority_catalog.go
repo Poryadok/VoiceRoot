@@ -24,7 +24,7 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 	}
 	var version int64
 	var dirty bool
-	if err := tx.QueryRow(ctx, `SELECT version,dirty FROM public.schema_migrations`).Scan(&version, &dirty); err != nil || dirty || (version != 39 && version != 40 && version != 41) {
+	if err := tx.QueryRow(ctx, `SELECT version,dirty FROM public.schema_migrations`).Scan(&version, &dirty); err != nil || dirty || (version != 39 && version != 40 && version != 41 && version != 42) {
 		return ErrMemberAuthorityUnavailable
 	}
 	tables := append([]string{}, spaceAuthorityCatalog.Tables...)
@@ -34,8 +34,11 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 	tables = append(tables, "space_native_creator_operations")
 	tables = append(tables, "space_join_attempts", "space_join_approval_operations", "space_join_operations",
 		"space_join_request_groups", "space_join_request_attempts", "space_join_request_selections")
-	if version == 41 {
+	if version == 41 || version == 42 {
 		tables = append(tables, "space_effective_member_heads")
+	}
+	if version == 42 {
+		tables = append(tables, "space_bot_installation_heads", "space_bot_installation_attempts", "space_bot_installation_cancellations")
 	}
 	names := make([]string, 0, len(tables))
 	for _, table := range tables {
@@ -87,12 +90,26 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 		authoritysource.CatalogTrigger{Table: "space_native_member_publications", Name: "native_member_publication_guard", Function: "space_native_member_publication_guard", Type: 27},
 		authoritysource.CatalogTrigger{Table: "space_native_member_publications", Name: "native_member_publication_truncate", Function: "space_native_member_publication_guard", Type: 34},
 	)
-	if version == 41 {
+	if version == 41 || version == 42 {
 		triggers = append(triggers,
 			authoritysource.CatalogTrigger{Table: "space_effective_member_heads", Name: "effective_member_head_guard", Function: "space_effective_member_head_guard", Type: 27},
 			authoritysource.CatalogTrigger{Table: "space_effective_member_heads", Name: "effective_member_head_truncate", Function: "space_effective_member_head_guard", Type: 34},
 			authoritysource.CatalogTrigger{Table: "space_effective_member_heads", Name: "effective_member_liveness_guard", Function: "space_effective_member_liveness_guard", Type: 23},
 			authoritysource.CatalogTrigger{Table: "spaces", Name: "zz_space_effective_membership_terminal_cleanup", Function: "space_effective_membership_terminal_cleanup", Type: 9})
+	}
+
+	if version == 42 {
+		for _, table := range []string{"space_bot_installation_heads", "space_bot_installation_attempts", "space_bot_installation_cancellations"} {
+			triggers = append(triggers, authoritysource.CatalogTrigger{Table: table, Name: table + "_liveness", Function: "space_bot_installation_liveness_guard", Type: 23}, authoritysource.CatalogTrigger{Table: table, Name: "space_authority_revision_" + table, Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"}, authoritysource.CatalogTrigger{Table: table, Name: "space_authority_revision_" + table + "_truncate", Function: "space_authority_revision_floor_guard", Type: 34})
+		}
+		triggers = append(triggers,
+			authoritysource.CatalogTrigger{Table: "space_bot_installation_heads", Name: "bot_installation_head_guard", Function: "space_bot_installation_head_guard", Type: 31},
+			authoritysource.CatalogTrigger{Table: "space_bot_installation_heads", Name: "bot_installation_head_truncate", Function: "space_bot_installation_head_guard", Type: 34},
+			authoritysource.CatalogTrigger{Table: "space_bot_installation_attempts", Name: "bot_installation_attempt_guard", Function: "space_bot_installation_attempt_guard", Type: 27},
+			authoritysource.CatalogTrigger{Table: "space_bot_installation_attempts", Name: "bot_installation_attempt_truncate", Function: "space_bot_installation_attempt_guard", Type: 34},
+			authoritysource.CatalogTrigger{Table: "space_bot_installation_cancellations", Name: "bot_installation_cancellation_guard", Function: "space_bot_installation_cancellation_guard", Type: 27},
+			authoritysource.CatalogTrigger{Table: "space_bot_installation_cancellations", Name: "bot_installation_cancellation_truncate", Function: "space_bot_installation_cancellation_guard", Type: 34},
+			authoritysource.CatalogTrigger{Table: "spaces", Name: "zzzz_space_bot_installation_terminal_cleanup", Function: "space_bot_installation_terminal_cleanup", Type: 9})
 	}
 	for _, trigger := range triggers {
 		arguments := []byte{}
@@ -100,15 +117,18 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 			arguments = []byte(trigger.Argument + "\x00")
 		}
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace n ON n.oid=p.pronamespace
-	 WHERE t.tgrelid=to_regclass($1) AND t.tgname=$2 AND NOT t.tgisinternal AND t.tgenabled='O' AND t.tgtype=$3
+	 WHERE t.tgrelid=to_regclass($1) AND t.tgname=$2 AND NOT t.tgisinternal AND t.tgenabled='O' AND NOT t.tgdeferrable AND NOT t.tginitdeferred AND t.tgtype=$3
 	 AND n.nspname='public' AND p.proname=$4 AND p.pronargs=0 AND p.prorettype='trigger'::regtype AND t.tgargs=$5)`, "public."+trigger.Table, trigger.Name, trigger.Type, trigger.Function, arguments).Scan(&valid); err != nil || !valid {
 			return ErrMemberAuthorityUnavailable
 		}
 	}
 	functions := append([]authoritysource.CatalogFunction{}, spaceAuthorityCatalog.Functions...)
 	functions = append(functions, memberAuthorityFunctions...)
-	if version == 41 {
+	if version == 41 || version == 42 {
 		functions = append(functions, effectiveMemberAuthorityFunctions...)
+	}
+	if version == 42 {
+		functions = append(functions, botInstallationAuthorityFunctions...)
 	}
 	for _, function := range functions {
 		var body, volatility string

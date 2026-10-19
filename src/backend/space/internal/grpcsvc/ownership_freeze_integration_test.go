@@ -199,7 +199,12 @@ func TestOwnershipFreeze_GRPCOwnerAdminBotInviteVoiceAndBatchFailClosedWithoutEv
 			ctx, cancel := context.WithTimeout(r20IncomingProfile(f.account, caller), 2*time.Second)
 			defer cancel()
 			response, err := tc.call(ctx, svc, f)
-			requireR20UnavailableWithoutDetail(t, response, err)
+			if tc.name == "bot lifecycle" {
+				require.Nil(t, response)
+				require.Equal(t, codes.PermissionDenied, status.Code(err), "ordinary Bot route is always closed")
+			} else {
+				requireR20UnavailableWithoutDetail(t, response, err)
+			}
 			require.Equal(t, before, r20GRPCFreezeSnapshot(t, f))
 			require.Empty(t, events.snapshot())
 			require.Empty(t, events.snapshotUpdated())
