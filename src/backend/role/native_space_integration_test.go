@@ -606,6 +606,8 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 		require.NoError(t, roles.Pool.QueryRow(ctx, "SELECT current_database(),system_identifier::text FROM pg_control_system()").Scan(&roleDatabase, &roleSystemID))
 		require.NotEqual(t, roleSystemID, preparing.DatabaseSystemID, "actual independent Role and Space databases")
 		manifest := nativefixture.Manifest{RoleSchema: 25, SpaceSchema: preparing.SchemaVersion, SpaceSource: "a36cc5e504fab412f6d48dd5233ed199b9b5d243", RoleAddress: address, TLSServerName: "127.0.0.1", BotSignerKeyID: "current", BotJWKSURL: jwks.URL + "/bot", OwnerProfileID: owner.String(), OwnerAccountID: ownerAccount, SpaceID: space.String(), SpaceServingDSN: preparing.ServingDSN, RoleDatabase: roleDatabase, SpaceDatabase: preparing.DatabaseName, RoleDatabaseSystemID: roleSystemID, SpaceDatabaseSystemID: preparing.DatabaseSystemID}
+		control := startFixtureBotControl(t, ctx, client, botSigningKey, space.String())
 		holdPortableNativeFixture(t, ctx, manifest, certPEM, clientPEM, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: clientDER}), botSigningKey)
+		fixtureCheckControl(t, control)
 	}
 }
