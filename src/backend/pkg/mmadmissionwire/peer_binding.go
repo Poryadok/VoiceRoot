@@ -94,7 +94,8 @@ func PeerBindingHash(p ReadbackPeerBindingV1) (Hash, error) {
 			return Hash{}, ErrInvalid
 		}
 		for _, c := range label {
-			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
+			allowed := c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-'
+			if !allowed {
 				return Hash{}, ErrInvalid
 			}
 		}
