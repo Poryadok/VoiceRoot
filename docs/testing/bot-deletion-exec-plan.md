@@ -387,3 +387,34 @@ Bot short:220 passes/232 explicit integration skips; scoped vet/full build pass.
 The skips do not prove actual Role/Messaging/native transport composition,
 public Gateway uninstall, OS restart, Purge or post-retention completion. Those
 acceptance requirements remain open despite this bounded component proof.
+
+Next actual lower native46 consumption uses separate immutable Space source
+55b549b531cb9d8ea30423cf513a594ff830c3fa (serving harness atop9c11), built in247's
+own private Linux runner.186 owns only that serving fixture and real database
+postconditions.247 owns the Bot caller test: actual BotPG PREPARING before the
+production protected Add, committed owner-root revoke, real worker typed global
+removal, lost ACK, bad receipt and exact fresh-JWT recovery. The provider checks
+its own terminal marker/receipt/canceled head and denies historical, higher
+generation and new-Space Add. No borrowed Role44 DSN, live peer process, default
+Role or fake completion JSON authority. Initiating owner facts remain a
+controlled lower fixture; public Gateway/Auth/Role/Messaging/full task proof is
+not inferred from this native-only composition.
+
+This actual handoff completed: caller50.842s and provider39.445s, both terminal0
+with no skips. The caller uses official Bot001-012 migrations and the production
+Add/global-removal worker. A lost committed response and a corrupted fence flag
+leave the Space child pending; exact-body/fresh-JWT replay persists the genuine
+typed receipt. The Role child remains pending and the root RETRY_WAIT. The
+provider independently verifies its terminal row, saved receipt, canceled head,
+no membership and all three Add denials. Recovery reinstantiates service/store
+over the SAME live Pool, not an OS-process restart. The integration client uses
+manually configured equivalent mTLS; the production constructor was tested
+separately. Scoped caller vet passes. Own temporary credentials and all test
+PG/Redis/listener processes were removed after both processes completed.
+
+The next bounded review includes the previously unreviewed seven-path producer
+delta dcb51f4..ceb4925 at current blobs, its current overlap with independently
+reviewed86bc Uninstall changes, this new caller and the source-owned55b provider
+test branch. The complete executed archive proves inputs; it does not request a
+whole-parent semantic audit. Actual protected ordinary Uninstall, full Role and
+public composition, Purge and the post30day evidence gap remain open.
