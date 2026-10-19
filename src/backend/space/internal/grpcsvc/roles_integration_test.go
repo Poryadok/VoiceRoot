@@ -37,10 +37,10 @@ func TestCreateSpace_BootstrapSystemRoles(t *testing.T) {
 	applySpaceMigration(t, context.Background(), pool)
 	roleClient, roleCleanup := startSharedRoleClient(t)
 	t.Cleanup(roleCleanup)
-	spaceClient, cleanup := startSpaceGRPCTestServer(t, pool, withRoleClient(roleClient))
+	spaceClient, cleanup := startSignedCreatorGRPCTestServer(t, pool, withRoleClient(roleClient))
 	t.Cleanup(cleanup)
 
-	created, err := spaceClient.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "Roles QA"})
+	created, err := signedCreateSpaceForTest(t, spaceClient, ctx, &spacev1.CreateSpaceRequest{Name: "Roles QA"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 

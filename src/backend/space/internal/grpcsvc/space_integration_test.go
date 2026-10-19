@@ -307,10 +307,10 @@ func TestCreateSpace_OwnerGetsSpaceWithDefaults(t *testing.T) {
 	owner, _, ctx := profileFixture(t)
 	pool := startSpacePostgresForTest(t, context.Background())
 	applySpaceMigration(t, context.Background(), pool)
-	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	client, cleanup := startSignedCreatorGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	resp, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{
+	resp, err := signedCreateSpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{
 		Name:        "Friday squad",
 		Description: "We raid on Fridays",
 	})
@@ -335,10 +335,10 @@ func TestCreateSpace_EmptyName_InvalidArgument(t *testing.T) {
 	_, _, ctx := profileFixture(t)
 	pool := startSpacePostgresForTest(t, context.Background())
 	applySpaceMigration(t, context.Background(), pool)
-	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	client, cleanup := startSignedCreatorGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	_, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{
+	_, err := signedCreateSpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{
 		Name:        "   ",
 		Description: "ignored",
 	})
@@ -353,7 +353,7 @@ func TestCreateSpace_Unauthenticated(t *testing.T) {
 	}
 	pool := startSpacePostgresForTest(t, context.Background())
 	applySpaceMigration(t, context.Background(), pool)
-	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	client, cleanup := startSignedCreatorGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
 	_, err := client.CreateSpace(context.Background(), &spacev1.CreateSpaceRequest{
@@ -471,10 +471,10 @@ func TestCreateSpace_SpaceCreatedEvent(t *testing.T) {
 	pool := startSpacePostgresForTest(t, context.Background())
 	applySpaceMigration(t, context.Background(), pool)
 	spy := &spySpaceEvents{}
-	client, cleanup := startSpaceGRPCTestServer(t, pool, withSpaceEventsPublisher(spy))
+	client, cleanup := startSignedCreatorGRPCTestServer(t, pool, withSpaceEventsPublisher(spy))
 	t.Cleanup(cleanup)
 
-	resp, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{
+	resp, err := signedCreateSpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{
 		Name:        "Events",
 		Description: "NATS",
 	})
@@ -496,10 +496,10 @@ func TestCreateSpace_InsertsCreatorAsMember(t *testing.T) {
 	owner, _, ctx := profileFixture(t)
 	pool := startSpacePostgresForTest(t, context.Background())
 	applySpaceMigration(t, context.Background(), pool)
-	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	client, cleanup := startSignedCreatorGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	resp, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{
+	resp, err := signedCreateSpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{
 		Name:        "Membership",
 		Description: "Creator is member",
 	})
@@ -517,10 +517,10 @@ func TestCreateSpace_PublicVisibility(t *testing.T) {
 	_, _, ctx := profileFixture(t)
 	pool := startSpacePostgresForTest(t, context.Background())
 	applySpaceMigration(t, context.Background(), pool)
-	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	client, cleanup := startSignedCreatorGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	resp, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{
+	resp, err := signedCreateSpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{
 		Name:        "Public hub",
 		Description: "Open to all",
 		Visibility:  "public",
@@ -537,10 +537,10 @@ func TestCreateSpace_InviteOnlyVisibility(t *testing.T) {
 	_, _, ctx := profileFixture(t)
 	pool := startSpacePostgresForTest(t, context.Background())
 	applySpaceMigration(t, context.Background(), pool)
-	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	client, cleanup := startSignedCreatorGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	resp, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{
+	resp, err := signedCreateSpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{
 		Name:        "Invite squad",
 		Description: "Link only",
 		Visibility:  "invite_only",
@@ -557,10 +557,10 @@ func TestCreateSpace_InvalidVisibility(t *testing.T) {
 	_, _, ctx := profileFixture(t)
 	pool := startSpacePostgresForTest(t, context.Background())
 	applySpaceMigration(t, context.Background(), pool)
-	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	client, cleanup := startSignedCreatorGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	_, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{
+	_, err := signedCreateSpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{
 		Name:        "Bad vis",
 		Description: "should fail",
 		Visibility:  "secret",
@@ -701,10 +701,10 @@ func TestCreateSpace_PublishFailureStillCreates(t *testing.T) {
 	_, _, ctx := profileFixture(t)
 	pool := startSpacePostgresForTest(t, context.Background())
 	applySpaceMigration(t, context.Background(), pool)
-	client, cleanup := startSpaceGRPCTestServer(t, pool, withSpaceEventsPublisher(errSpaceEvents{}))
+	client, cleanup := startSignedCreatorGRPCTestServer(t, pool, withSpaceEventsPublisher(errSpaceEvents{}))
 	t.Cleanup(cleanup)
 
-	resp, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{
+	resp, err := signedCreateSpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{
 		Name:        "Resilient",
 		Description: "NATS down",
 	})
