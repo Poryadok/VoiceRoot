@@ -25,11 +25,23 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
   private static final Set<String> RAW = Set.of("x-profile-id", "x-account-id", "x-user-id", "x-actor-id", "x-internal-caller");
   private final AuthPrincipalVerifier verifier;
   private final Runnable cleanup;
+  private final Set<String> closedMethods;
 
   public AuthPrincipalServerInterceptor(AuthPrincipalVerifier verifier) { this(verifier, () -> {}); }
   AuthPrincipalServerInterceptor(AuthPrincipalVerifier verifier, Runnable cleanup) {
+    this(verifier, cleanup, null);
+  }
+  private AuthPrincipalServerInterceptor(AuthPrincipalVerifier verifier, Runnable cleanup, Set<String> closedMethods) {
     this.verifier = verifier;
     this.cleanup = cleanup;
+    this.closedMethods = closedMethods;
+  }
+  /** Must be installed on the dedicated identity-authority listener only. */
+  public static AuthPrincipalServerInterceptor identityAuthority(AuthPrincipalVerifier verifier) {
+    return new AuthPrincipalServerInterceptor(java.util.Objects.requireNonNull(verifier), () -> {}, Set.of(
+        "/voice.identityerasure.v1.AuthRoleIdentityAuthorityService/ObserveAccounts",
+        "/voice.identityerasure.v1.AuthUserIdentityAuthorityService/ResolveAccountHandle",
+        "/voice.identityerasure.v1.AuthUserIdentityAuthorityService/ObserveAccountHandles"));
   }
   @Override public void close() { cleanup.run(); }
   public boolean enabled() { return verifier != null; }
@@ -37,7 +49,12 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
   @Override public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
       ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
     String rpc = "/" + call.getMethodDescriptor().getFullMethodName();
-    if (!ISSUE_RPC.equals(rpc) && !CONSUME_RPC.equals(rpc) && !LOOKUP_RPC.equals(rpc) && !SPACE_ADMISSION_RPC.equals(rpc)
+    if (closedMethods != null) {
+      if (!closedMethods.contains(rpc) || call.getMethodDescriptor().getType() != MethodDescriptor.MethodType.UNARY) {
+        call.close(Status.PERMISSION_DENIED.withDescription("principal caller not permitted"), new Metadata());
+        return new ServerCall.Listener<>() {};
+      }
+    } else if (!ISSUE_RPC.equals(rpc) && !CONSUME_RPC.equals(rpc) && !LOOKUP_RPC.equals(rpc) && !SPACE_ADMISSION_RPC.equals(rpc)
         && !VOICE_SESSION_FLOOR_RPC.equals(rpc)
         && !ROLE_SESSION_FLOOR_RPC.equals(rpc) && !SPACE_SESSION_FLOOR_RPC.equals(rpc)
         && !SPACE_DELETE_CONSUME_RPC.equals(rpc) && !SPACE_DELETE_LOOKUP_RPC.equals(rpc)

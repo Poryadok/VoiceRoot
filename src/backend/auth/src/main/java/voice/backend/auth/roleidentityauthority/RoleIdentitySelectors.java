@@ -55,6 +55,17 @@ public final class RoleIdentitySelectors {
   public int activeVersion() { return activeVersion; }
   public List<Integer> retainedVersions() { return versions; }
 
+  Map<Integer, byte[]> keyFingerprints() {
+    var result = new LinkedHashMap<Integer, byte[]>();
+    try {
+      var digest = java.security.MessageDigest.getInstance("SHA-256");
+      for (int version : versions) result.put(version, digest.digest(keys.get(version)));
+      return Map.copyOf(result);
+    } catch (java.security.NoSuchAlgorithmException impossible) {
+      throw unavailable();
+    }
+  }
+
   public void requireRetainedVersions(List<Integer> required) {
     var seen = new HashSet<Integer>();
     if (required == null) throw unavailable();

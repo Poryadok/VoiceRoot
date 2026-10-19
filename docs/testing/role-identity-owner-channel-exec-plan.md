@@ -255,3 +255,35 @@ remains. All Maven/SQL/codegen jobs are terminal. Graph35862 remains active,
 no duplicate AST updater. Sole own PG/network/source+cache volumes remain useful
 for next protected Auth parent store/native transport work; no shared stand.
 No current full producer contract/readiness/source CLEAR/integration claim.
+
+## Parent observation and isolated principal checkpoint
+
+AuthIdentityOwnerStore now resolves one exact requested account using preloaded
+owner keys, its own READ COMMITTED transaction, current account/lifetime locks,
+and DB time after serialization. It rejects ambient caller transactions and
+mismatched loaded key fingerprints. Unknown history stays INCOMPLETE; a known
+terminal result binds the canonical deletion cycle/deadline and owner cut.
+This single-parent observation is not a global CURRENT recovery certificate.
+Actual native runtime RED was five cases (two failures, three errors), followed
+by parent5 + selector5 PASS and a separate V27-compatible parent5 PASS. Portable
+logs/XML and hashes are in tmp/swarm/rudeus172/owner-auth-parent/proof.json.
+
+Normal merge 8b68aeee incorporates local develop candidate304b49dc, without
+claiming hosted develop or CI acceptance. The native source snapshot was then
+refreshed before principal checks. Isolated identityAuthority verifier policy
+accepts only Role ObserveAccounts and User ResolveAccountHandle/ObserveAccountHandles.
+It does not grant floor, admission, ownership-proof or delegated-user methods.
+The dedicated interceptor factory rejects unknown and legacy methods before
+creating a handler; existing constructors preserve their existing surfaces.
+Actual exact-baseline missing-factory REDs precede native GREEN30 (five new,
+fourteen existing verifier, eleven existing interceptor cases), zero skips at
+2026-10-19T02:47:44Z. An earlier mixed stale snapshot compile failure is retained
+as diagnostic output and is not the accepted baseline RED.
+
+The prior Graph35862 and portable bundle restore are terminal/successful. New
+CodeGraph628/636/646/650 queries were cancelled after31 seconds without an answer;
+actual owned source supplied the implementation evidence. A new AST update is
+required for this checkpoint. Next are protected handler/listener configuration,
+typed User parent consumer, and all-birth lock choreography using290's canonical
+IdentityTx API. No listener, full producer contract, source CLEAR, birth/runtime
+activation or environment acceptance follows from these preparation checks.
