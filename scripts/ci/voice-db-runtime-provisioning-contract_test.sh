@@ -3355,6 +3355,17 @@ f13_f54_policy_context() {
   python3 "${f13_f54_observer}" policy-context "${ROOT}" "${TMP_DIR}/f13-contributions" "${values[@]}" >"${output}"
 }
 
+f13_f54_manual_gate_context() {
+  local output="$1" name
+  local -a values=()
+  while IFS= read -r name; do
+    case "${name}" in
+      ROOT|TMP_DIR|base_sha|accepted_*|game_checkpoint_*|native_p3_*|r23_*) values+=("${name}" "${!name-}") ;;
+    esac
+  done < <(compgen -v | LC_ALL=C sort -u)
+  python3 "${f13_f54_observer}" manual-F-context "${ROOT}" "${TMP_DIR}/f13-contributions" "${values[@]}" >"${output}"
+}
+
 f13_f54_router_prepare() {
   [[ -n "${f13_f54_collection_file:-}" ]] || return 0
   local context="${TMP_DIR}/f54-original-policy-context.json"
@@ -4433,6 +4444,93 @@ f13_collect_develop_contributions() {
       fi
     done <"${delta}"
     done
+    # Exact F authored merge-result residual in this SAME engine state.
+    # Original parent operations above remain unchanged; no nested-map fallback.
+    if [[ "${commit}" == fa1528a7c232a644218edf49811e2bb2e373105f &&
+      -n "${f13_f54_trace_file:-}" && -n "${f13_f54_F_capability_file:-}" &&
+      "${base}" == d4abb829622e9bd91b26842b61522e6840840867 &&
+      "${target}" == 909090a34743902799306974d6f3ebabe3c02f10 ]]; then
+      local f_manual_spec="${TMP_DIR}/manual-F-${f13_f54_frame}.json"
+      local f_manual_receipt="${TMP_DIR}/manual-F-${f13_f54_frame}-completed.json"
+      local f_manual_delta="${TMP_DIR}/manual-F-${f13_f54_frame}-delta"
+      local f_manual_unapproved="${TMP_DIR}/manual-F-${f13_f54_frame}-unapproved"
+      local f_manual_original_status f_manual_native_status f_manual_game_status f_manual_eligibility f_manual_kind f_manual_raw
+      local f_manual_context="${TMP_DIR}/manual-F-${f13_f54_frame}-gate-context.json"
+      f13_f54_manual_gate_context "${f_manual_context}" || return 1
+      python3 "${f13_f54_observer}" manual-F-spec "${repo}" "${f13_f54_F_capability_file}" \
+        "${f13_f54_trace_file}" "${output}" "${f_manual_context}" >"${f_manual_spec}" || return 1
+      git -C "${repo}" diff --name-only ab7a4a4d4ed4cbf9663b4a752b95c9aeb21eac3f "${commit}" >"${f_manual_delta}" || return 1
+      f13_f54_operation="$(f13_f54_trace_event manual_F_begin "${repo}" "${f_manual_spec}" "${output}")" || return 1
+      : >"${f_manual_unapproved}"
+      while IFS= read -r path; do
+        source_entry="$(git -C "${repo}" ls-tree "${commit}" -- "${path}")" || return 1
+        # Preserve the actual ordinary composition result; the independent
+        # complete corrected-F capability above qualifies the reviewed residual.
+        f_manual_original_status=0
+        f13_checkpoint_merge_tree_entry_matches "${repo}" c08cf1ed3a18e54e86541c54fa731fc9b24e1a8c \
+          40afa80e6d1ca7faebf528b7cb78f32cdf707e5d a80f649cbe0a03671c25531ace4ac1bd6bf54756 \
+          "${path}" "${source_entry}" "${commit}" '' "${f13_f54_observer}" '' '' || f_manual_original_status=$?
+        f_manual_native_status=0; f_manual_game_status=0
+        if [[ "${native_p3_active:-false}" == true ]] && native_p3_path_bound "${repo}" "${path}"; then
+          native_p3_pre_h_owner "${repo}" "${path}" "${commit}" || f_manual_native_status=$?
+        fi
+        if [[ "${game_checkpoint_aggregate_active}" == true ]] && grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}"; then
+          git -C "${repo}" merge-base --is-ancestor "${commit}" "${game_checkpoint_snapshot_head}" || f_manual_game_status=$?
+        fi
+        [[ "${f_manual_native_status}" == 0 && "${f_manual_game_status}" == 0 ]] || {
+          f13_collect_failure "${diagnostic_file}" checkpoint_post_h_owner; return 1;
+        }
+        f_manual_eligibility=unapproved
+        if game_checkpoint_aggregate_path_allowed "${repo}" "${commit}" "${path}" "${source_entry}"; then
+          f_manual_eligibility=game_aggregate
+        elif game_checkpoint_contribution_allowed "${repo}" "${commit}" \
+          c08cf1ed3a18e54e86541c54fa731fc9b24e1a8c a80f649cbe0a03671c25531ace4ac1bd6bf54756 "${f_manual_delta}" &&
+          game_checkpoint_domain_path "${path}"; then
+          f_manual_eligibility=game_snapshot
+        elif game_checkpoint_path_authorized_in_delta "${path}" "${f_manual_delta}" "$(awk '{print $3}' <<<"${source_entry}")" ||
+          be255_checkpoint_path_authorized_in_delta "${path}" "${f_manual_delta}" "$(awk '{print $3}' <<<"${source_entry}")"; then
+          f_manual_eligibility=checkpoint_blob
+        fi
+        f13_f54_trace_event manual_F_gate "${repo}" "${path}" "${output}" "${f_manual_original_status}" \
+          "${f_manual_native_status}" "${f_manual_game_status}" "${f_manual_eligibility}" || return 1
+        [[ "${f_manual_eligibility}" != unapproved ]] || printf '%s\n' "${path}" >>"${f_manual_unapproved}"
+      done <"${f_manual_delta}"
+      local f_manual_trigger=false f_manual_classifier_status=0
+      voice_r22_runtime_changed <"${f_manual_unapproved}" || f_manual_classifier_status=$?
+      [[ "${f_manual_classifier_status}" == 0 || "${f_manual_classifier_status}" == 1 ]] || {
+        f13_collect_failure "${diagnostic_file}" manual_result_classifier_error; return 1;
+      }
+      [[ "${f_manual_classifier_status}" != 0 ]] || f_manual_trigger=true
+      f13_f54_trace_event classification "${repo}" "${f_manual_trigger}" "${f_manual_unapproved}" "${f_manual_classifier_status}" || return 1
+      while IFS= read -r path; do
+        f_manual_kind="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["dispositions"][sys.argv[2]]["type"])' "${f_manual_spec}" "${path}")" || return 1
+        if [[ "${f_manual_kind}" != NEW_RESULT_PARENT_ROW ]]; then
+          f13_f54_trace_event manual_F_association "${repo}" "${path}" "${output}" "${f_manual_kind}" || return 1
+          continue
+        fi
+        [[ -z "${owners[${path}]+present}" ]] || { f13_collect_failure "${diagnostic_file}" duplicate_guarded_owner; return 1; }
+        f_manual_raw="$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${f_manual_trigger}" "${commit}" \
+          40afa80e6d1ca7faebf528b7cb78f32cdf707e5d 40afa80e6d1ca7faebf528b7cb78f32cdf707e5d "${commit}" \
+          40afa80e6d1ca7faebf528b7cb78f32cdf707e5d 40afa80e6d1ca7faebf528b7cb78f32cdf707e5d)"
+        f13_f54_trace_event row_before "${repo}" "${path}" "${output}" "${f_manual_raw}" || return 1
+        python3 "${f13_f54_observer}" manual-F-append-check "${repo}" "${f13_f54_trace_file}" \
+          "${f13_f54_operation}" "${path}" "${output}" || return 1
+        f13_f54_trace_event row_after "${repo}" "${path}" "${f_manual_raw}" actual_typed_result_parent_assignment || return 1
+        owners["${path}"]="${commit}"; owner_triggers["${path}"]="${f_manual_trigger}"
+        owner_content_bases["${path}"]=40afa80e6d1ca7faebf528b7cb78f32cdf707e5d
+        owner_source_heads["${path}"]="${commit}"
+        source_entry="$(git -C "${repo}" ls-tree "${commit}" -- "${path}")" || return 1
+        owner_source_entries["${path}"]="${source_entry}"
+        if f13_path_is_guarded "${path}"; then guarded_entries["${path}"]="${source_entry}"; guarded_entry_commits["${path}"]="${commit}"; fi
+        printf '%s\n' "${f_manual_raw}" >>"${output}"
+        f13_f54_trace_event row_committed "${repo}" "${path}" "${output}" || return 1
+        if [[ "${native_p3_active:-false}" == true ]] && native_p3_path_bound "${repo}" "${path}"; then
+          printf '%s\n' "${f_manual_raw}" >>"${TMP_DIR}/f13-native-p3-history.tsv" || return 1
+        fi
+      done <"${f_manual_delta}"
+      python3 "${f13_f54_observer}" manual-F-end "${repo}" "${f13_f54_trace_file}" "${f13_f54_operation}" >"${f_manual_receipt}" || return 1
+      f13_f54_trace_event manual_F_end "${repo}" "${f_manual_receipt}" "${output}" || return 1
+    fi
     if ((parent_count > 2)); then
       # A multi-source merge may not invent a guarded result path that no
       # source parent contributed. Full-entry checks above cover owned paths.
@@ -6008,6 +6106,14 @@ f13_retained_history_row() {
     "${f13_f54_router_seal_sha}" "${map}" "${TMP_DIR}/f54-current-policy-context.json" "${path}"
 }
 
+f13_f54_manual_delta_for_path() {
+  local repo="$1" map="$2" path="$3"
+  [[ -n "${f13_f54_collection_file:-}" && "${map}" == "${TMP_DIR}/f13-contributions" ]] || return 2
+  python3 "${f13_f54_observer}" router-manual-delta "${repo}" "${f13_f54_router_seal}" \
+    "${f13_f54_router_seal_sha}" "${map}" "${TMP_DIR}/f54-current-policy-context.json" "${path}" >"${TMP_DIR}/f13-current-delta" || return 2
+  printf '%s\n' "${TMP_DIR}/f13-current-delta"
+}
+
 f13_delta_for_path() {
   local repo="$1" map="$2" path="$3" row commit source_base source_head
   if [[ -s "${map}" ]]; then
@@ -6017,6 +6123,10 @@ f13_delta_for_path() {
     fi
     IFS=$'\t' read -r _ _ commit _ source_base source_head _ _ <<<"${row}"
     [[ -n "${commit}" && -n "${source_base}" && -n "${source_head}" ]] || return 1
+    if [[ "${source_head}" == fa1528a7c232a644218edf49811e2bb2e373105f ]]; then
+      f13_f54_manual_delta_for_path "${repo}" "${map}" "${path}"
+      return $?
+    fi
     git -C "${repo}" diff --name-only "${source_base}" "${source_head}" >"${TMP_DIR}/f13-current-delta" || return 1
     grep -Fxq -- "${path}" "${TMP_DIR}/f13-current-delta" || return 1
     printf '%s\n' "${TMP_DIR}/f13-current-delta"

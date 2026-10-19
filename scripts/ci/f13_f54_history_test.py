@@ -27,6 +27,101 @@ def module():
 
 
 class ProducerTrace(unittest.TestCase):
+    def test_manual_result_full33_spec_preserves_real_parent_rows_and_disjoint_edges(self):
+        # Explicit value-constructor fixture, not an executed producer ledger.
+        # Immutable Git establishes the full residual and content identities.
+        import copy
+        m=module();new=m.F_MANUAL_NEW_PATHS;retired=m.F_DELETION_PATH
+        covered=['docs/private-manual-covered-'+str(i).zfill(2)+'.md' for i in range(22)]
+        names=sorted(new+covered+[retired])
+        for name in names:self.write(name,'base\n'+'stable\n'*20+'base end\n')
+        base=self.commit('private residual C')
+        for name in covered:self.write(name,'first\n'+'stable\n'*20+'base end\n')
+        first=self.commit('private residual D')
+        git(self.repo,'checkout','-qb','private-residual-A',base)
+        for name in covered:self.write(name,'base\n'+'stable\n'*20+'source end\n')
+        source=self.commit('private residual A')
+        auto=git(self.repo,'merge-tree','--write-tree',first,source).splitlines()[0]
+        git(self.repo,'checkout','-q',first)
+        merge=subprocess.run(['git','-C',str(self.repo),'merge','--no-ff','--no-commit',source],capture_output=True)
+        self.assertEqual(merge.returncode,0)
+        for name in names:
+            if name==retired:(self.repo/name).unlink()
+            else:self.write(name,(self.repo/name).read_text()+'authored manual result\n')
+        result=self.commit('private entire authored residual')
+        self.assertEqual(git(self.repo,'diff','--name-only',auto,result).splitlines(),names)
+        m.F_CORRECTED_TUPLE=dict(merge=result,first=first,source=source,base=base,automatic_tree=auto,correction=result,result_tree=git(self.repo,'rev-parse',result+'^{tree}'))
+        m.J3071_RANGE=dict(m.J3071_RANGE,base=base)
+        rows=['\t'.join([n,'true' if n==retired else 'false',first,base,base,first,base,base]) for n in covered+[retired]]
+        m.F_DELETION_ROW_SHA=m.sha(rows[-1].encode());actual=('\n'.join(rows)+'\n').encode()
+        cap=dict(unit_path='private-value-fixture',whole=dict(complete_manual_paths=names),source_context=dict(private_fixture=True),context={})
+        values=dict(re.findall(r"(?m)^(accepted_[a-z_]+|game_checkpoint_snapshot_[a-z_]+)='([0-9a-f]{40})'$",SHELL.read_text()),
+            ROOT=str(self.repo.resolve()),TMP_DIR=str(self.folder),game_checkpoint_enabled='false',game_checkpoint_aggregate_active='false',
+            game_checkpoint_aggregate_paths='',game_checkpoint_aggregate_base='',game_checkpoint_aggregate_head='',native_p3_active='false')
+        context=dict(source_context=cap['source_context'],values=values,event={},files={},snapshots={})
+        frame=dict(id='private-same-state',base=base,target=result,allow_direct_followup='true',partition_source_history='false')
+        with patch.object(m,'prepare_corrected_F_capability',return_value=cap):
+            spec=m.manual_F_spec(self.repo,cap,frame,actual,context)
+            self.assertEqual(spec['paths'],names);self.assertEqual(spec['result_parent_edge']['base'],first)
+            self.assertEqual(spec['original_merge_bases'],[base]);self.assertNotEqual(first,base)
+            for name in new:self.assertEqual(spec['dispositions'][name]['type'],'NEW_RESULT_PARENT_ROW')
+            self.assertEqual(spec['dispositions'][retired]['prior_rows'],[m.raw_binding(rows[-1])])
+            # Re-execute the real original predicates with private Git inputs;
+            # no predicate is replaced by a fake accepting implementation.
+            for name in (new[0],covered[0]):
+                gate=m.replay_manual_F_gate(str(self.repo),m.canonical(spec).decode(),name)
+                self.assertEqual(gate,dict(original_composition_status=1,native_owner_status=0,game_owner_status=0,eligibility='unapproved'))
+            for bad in ('prior-owner','drop-covered','raw-deletion-false','context','flags','full33'):
+                changed=actual;fr=copy.deepcopy(frame);cx=copy.deepcopy(context)
+                if bad=='prior-owner':changed+=(new[0]+'\tfalse\t'+ '\t'.join([first]*6)+'\n').encode()
+                elif bad=='drop-covered':changed=('\n'.join(rows[1:])+'\n').encode()
+                elif bad=='raw-deletion-false':changed=actual.replace(rows[-1].encode(),rows[-1].replace('\ttrue\t','\tfalse\t').encode())
+                elif bad=='context':cx['values']['ROOT']='/foreign'
+                elif bad=='flags':fr['partition_source_history']='true'
+                else:cap['whole']['complete_manual_paths']=names[:-1]
+                with self.subTest(bad=bad),self.assertRaises(m.Rejected):m.manual_F_spec(self.repo,cap,fr,changed,cx)
+                cap['whole']['complete_manual_paths']=names
+
+    def test_manual_result_sealed_full_delta_and_complete_prefix_are_required(self):
+        import copy
+        m=module();names=sorted(m.F_MANUAL_NEW_PATHS+['docs/covered-'+str(i) for i in range(23)])
+        spec=dict(type='EXACT_F_MANUAL_RESULT_v1',admission=False,paths=names,delta=m.raw_binding('\n'.join(names)+'\n'))
+        receipt=dict(spec=spec,classification=dict(trigger='false'),dispositions={n:{} for n in names})
+        binding=dict(path=names[-1],manual_result_operations=[dict(frame='F1',operation='F1/F/manual-result',receipt=receipt)])
+        self.assertEqual(m.manual_delta_for_binding(binding),spec['delta']['raw'])
+        for bad in ('ten-only','omit-disposition','wrong-delta','duplicate-occurrence','missing-operation'):
+            value=copy.deepcopy(binding)
+            if bad=='ten-only':value['manual_result_operations'][0]['receipt']['spec']['paths']=m.F_MANUAL_NEW_PATHS
+            elif bad=='omit-disposition':value['manual_result_operations'][0]['receipt']['dispositions'].pop(names[0])
+            elif bad=='wrong-delta':value['manual_result_operations'][0]['receipt']['spec']['delta']=m.raw_binding('parent/import.go\n')
+            elif bad=='duplicate-occurrence':value['manual_result_operations']*=2
+            else:value['manual_result_operations']=[]
+            with self.subTest(bad=bad),self.assertRaises(m.Rejected):m.manual_delta_for_binding(value)
+        ledger={'F1':dict(manual_result_operations={'F1/F/manual-result':receipt})}
+        trace=(json.dumps(dict(frame='F1',operation='F1/F/manual-result',kind='manual_F_end',payload=dict(receipt=receipt)))+'\n').encode()
+        prefix=m.file_digest(trace)
+        self.assertEqual(m.manual_operations_in_prefix(ledger,trace,prefix),binding['manual_result_operations'])
+        with self.assertRaises(m.Rejected):m.manual_operations_in_prefix({},trace,prefix)
+        with self.assertRaises(m.Rejected):m.manual_operations_in_prefix(ledger,b'',m.file_digest(b''))
+
+    def test_manual_result_delta_cannot_use_unsealed_parent_import_context(self):
+        # Real private Git: D->F contains an imported path which AUTO->F does
+        # not. A typed result row alone must not authorize that broader delta.
+        imported='docs/private-parent-import.md'
+        self.write(RUNTIME,'base\n');self.write(imported,'base\n');base=self.commit('manual context base')
+        self.write(RUNTIME,'manual result\n');self.write(imported,'parent import\n');result=self.commit('private result edge')
+        raw='\t'.join([RUNTIME,'false',result,base,base,result,base,base])
+        output=self.folder/'typed-map';output.write_text(raw+'\n')
+        function=re.search(r'(?ms)^f13_delta_for_path\(\) \{\n.*?^\}\n',SHELL.read_text()).group(0)
+        function=function.replace('fa1528a7c232a644218edf49811e2bb2e373105f',result)
+        program='set -eu\nTMP_DIR='+shlex.quote(str(self.folder))+'\n'+function+'''
+f13_f54_manual_delta_for_path() { return 2; }
+f13_retained_history_row() { return 1; }
+'''
+        p=subprocess.run(['bash','-c',program+'f13_delta_for_path '+shlex.quote(str(self.repo))+' '+
+            shlex.quote(str(output))+' '+shlex.quote(RUNTIME)],capture_output=True,text=True)
+        self.assertNotEqual(p.returncode,0,'Unsealed typed row incorrectly accepted whole D->F parent-import delta')
+
     def test_corrected_historical_manual_unit_requires_complete_source_and_current_repair(self):
         # Private real-Git specification at the failing per-entry seam. A
         # corrected target is not a claim that its historical source was safe.

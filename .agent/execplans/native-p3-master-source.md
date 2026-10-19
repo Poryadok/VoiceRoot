@@ -399,3 +399,34 @@ The next source constructs the complete retained ledger at the classified, still
 That59 prototype's new bare-predicate timing is not the original ordered policy. Its actual11155 run constructs a complete11,122,977-byte ledger, then stops before mutation with status127 because the collector-only extracted harness lacks that newly referenced function. Preserve this setup defect and the premature policy design; neither is an original-policy rejection. Main trace ed4cb902c2ad128ff282ec1312967ebac7bf957fea248346dd1d083ec5ea0d73 and target0e7c26944cdf3b660c85af3a41764036a9db48d1 remain immutable.
 
 Existing410 timing decision d294b76d14b069ae8127d6acf69e74e96e02dd7c62e0ad5aee1f20601d798bdd selects A. Before mutation, conservation consumes full provenance/OR and exact pre-map, pending append/replacement and post-map; it supplies no policy allow. After successful collection, seal the immutable collection prefix and complete original map/ledger. At the original router phase, seal/recheck exact policy/native/Game/checkpoint context around the unchanged fixture invariance checks. Bind full obligations before early continues, record the actual original branch/arguments, and supply the same aggregate to runtime selection/global derivation. Qualify remaining real history obligations explicitly through that same original ordered policy without inventing endpoint changes or owners. Ordinary entrypoint defaults remain inactive; no production R/K, current native authority or runtime/CI PASS is created.
+# Exact F manual-result operation continuation (e139)
+
+Implement only 410 decision `0a24b9c23f26f633fc856534b4d361966468b59bc5e71c564022b0ba9ebf7932`.
+The b2 original wrapper remains EXIT1/8399 events; its typed deletion positive
+and failed-prefix validator74035 are immutable evidence, not full qualification.
+Add the distinct same-state F residual operation after F/2 and before H. All33
+AUTO-to-F paths form one classifier/gate input. Ten genuinely unowned PRESENT
+paths get actual F/D result-parent rows; all other associations and deleted D
+rawtrue/history remain byte-exact, with complete aggregate OR and refreshed I
+ledger consumed before overwrite. Native/Game/source pins and original router
+order remain unchanged. Actual classification is UNKNOWN until execution.
+
+Risk checks: full33 omission/narrow classifier, wrong context/parents/AUTO edge,
+unexpected owner, dropped oldtrue/association/deletion, old I ledger and unsealed
+typed-delta substitution must reject. First real private-Git consumer RED
+`87648325...` showed unsealed typed row accepting broad D-to-F imported delta;
+scoped caller correction is GREEN `d8a654ef...`, not actual F execution.
+Next: complete producer/gate receipt and typed consumers, finite meaningful
+fixtures, immutable source, changed-input original wrapper, independent418.
+Production/fullF13/RK/current candidate qualification remains HOLD.
+
+Manual-result checkpoint: initial affected history suite31 tests/syntax passed
+on its stable pre-context revision (receipt `416-F-manual-affected1`). Final
+focused constructor, unsealed-consumer and full-prefix tests3/syntax pass on
+the later executable revision (`416-F-manual-focused4`, log `a7981f87...`).
+The real predicate replay exposed Linux single-argv E2BIG before predicates
+(`focused3`, log `421da404...`); identical predicate code now uses a private
+script file. Original native/Game filters are replayed with captured source
+context and authority-file snapshots, not fake accepting functions. This is
+still fixture evidence: full actual F classifier/rows remain UNKNOWN until
+the changed-source original wrapper executes. Preserve all earlier receipts.

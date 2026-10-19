@@ -195,9 +195,25 @@ def append(path, kind, frame, operation, repo, values):
             delta=raw_binding(Path(delta).read_bytes()), paths=paths,
             entries={name:dict(base=entry_binding(repo,boundary,name),source=entry_binding(repo,source,name),result=entry_binding(repo,commit,name)) for name in paths},
             ordered_parent_deltas=[dict(parent=x,delta=raw_binding(git(repo,'diff','--name-only',x,commit))) for x in parents])
+    elif kind=='manual_F_begin':
+        spec,output=values;value=json.loads(Path(spec).read_bytes())
+        identity=frame+'/'+value['merge']+'/manual-result'
+        payload=dict(spec=value,map_before=file_binding(output),id=identity)
+    elif kind=='manual_F_gate':
+        name,output,composition_status,native_status,game_status,eligibility=values
+        payload=dict(path=name,map_before=file_binding(output),original_composition_status=int(composition_status),
+            qualified_composition='REVIEWED_CORRECTED_F_WHOLE',native_owner_status=int(native_status),
+            game_owner_status=int(game_status),eligibility=eligibility,classifier=classifier_binding())
+    elif kind=='manual_F_association':
+        name,output,disposition=values
+        payload=dict(path=name,map_before=file_binding(output),disposition=disposition)
+    elif kind=='manual_F_end':
+        receipt,output=values
+        payload=dict(receipt=json.loads(Path(receipt).read_bytes()),map_after=file_binding(output))
     elif kind == 'classification':
-        trigger, delta = values
+        trigger, delta, *status = values
         payload = dict(trigger=trigger, unapproved_delta=raw_binding(Path(delta).read_bytes()), classifier=classifier_binding())
+        if status:payload['exit']=int(status[0])
     elif kind == 'sync_gate_passed':
         payload=dict(gate='f13_validate_sync_merge_resolution',classifier=classifier_binding())
     elif kind == 'native_rebind_gate':
@@ -279,7 +295,7 @@ def append(path, kind, frame, operation, repo, values):
     else: raise Rejected('unknown_event_kind')
     e=dict(schema=SCHEMA,sequence=sequence,previous=previous['digest'] if previous else '0'*64,
         kind=kind,frame=identity if kind=='frame_enter' else frame or None,
-        operation=identity if kind in ('operation_attempt','operation_begin') else operation or None,payload=payload)
+        operation=identity if kind in ('operation_attempt','operation_begin','manual_F_begin') else operation or None,payload=payload)
     e['digest']=sha(canonical(e))
     with p.open('a',encoding='utf-8',newline='\n') as stream: stream.write(json.dumps(e,sort_keys=True)+'\n')
     return identity
@@ -495,6 +511,7 @@ def build_3071_I_ready(state, prefix):
     return dict(type='F54_FIXED3071_ACTUAL_I_RANGE_LEDGER',operation=state['operation'],frame=state['frame'],classification=state['classification'],operation_binding=state['operation_binding'],
         capability_sha256=state['capability_sha256'],prefix=prefix,frame_ancestry=state['frame_ancestry'],
         ledger=state['ledger'],terminal_dispositions=terminal_dispositions(state['ledger']),
+        manual_result_operations=manual_operations(state['ledger']),
         range_branch=branch,coverage=state['coverage'],inherited_M_ledgers=state['M_ready'],
         outer_rows=outer['rows'],outer_map_binding=outer['map_binding'],required_qualification=required,
         qualification='HOLD',admission=False,runtime_pass=False)
@@ -520,6 +537,7 @@ def consume_3071_I_path(ready_path, expected_sha, trace_path, name, actual_map, 
     require(len(trace)>=prefix['bytes'] and sha(trace[:prefix['bytes']])==prefix['sha256'],'fixed3071_I_consumes_sealed_real_prefix')
     require(value['terminal_dispositions']==terminal_dispositions_in_prefix(value['ledger'],trace,prefix),
         'fixed3071_I_consumes_terminal_obligations_before_overwrite')
+    require(value['manual_result_operations']==manual_operations_in_prefix(value['ledger'],trace,prefix), 'manual_F_refreshed_I_ledger_consumed')
     events=[json.loads(x) for x in trace.splitlines()]
     before=next(e for e in reversed(events) if e['kind']=='row_before' and e['operation']==value['operation'])
     require(before['payload']['path']==name and before['payload']['map_before']==dict(bytes=len(actual_map),sha256=sha(actual_map)),'fixed3071_I_actual_current_map_and_path')
@@ -689,6 +707,166 @@ F_DELETION_PATH = 'src/backend/voice/internal/store/space_lifecycle_test.go'
 F_DELETION_ROW_SHA = 'fd8bbc01415e1cc4ea13f4ad3de8ea10bef6be64e7cd79adeae5693392ea7f87'
 F_DELETION_ENTRY = '100644 blob c0569cce36543e032bd4e42e077d63c1df1ed72d\tsrc/backend/voice/internal/store/space_lifecycle_test.go\0'
 F_DELETION_RULING_SHA = '06c8b2bc49910714a29b2976a28a41a24d88b4a2caab82ef558c613ba52f9077'
+
+
+
+F_MANUAL_RULING_SHA = '0a24b9c23f26f633fc856534b4d361966468b59bc5e71c564022b0ba9ebf7932'
+F_MANUAL_NEW_PATHS = [
+    'src/backend/voice/internal/grpcsvc/voice_grpc.go',
+    'src/backend/voice/internal/grpcsvc/voice_grpc_test.go',
+    'src/backend/voice/internal/spacegatetest/gates.go',
+    'src/backend/voice/internal/spacelifecycle/store.go',
+    'src/backend/voice/internal/spacemedia/communication_timeout_test.go',
+    'src/backend/voice/internal/spacemedia/consumer_test.go',
+    'src/backend/voice/internal/spacemedia/coordinator_floor_test.go',
+    'src/backend/voice/internal/spacemedia/coordinator_test.go',
+    'src/backend/voice/internal/spacemedia/p3_gate_integration_test.go',
+    'src/backend/voice/internal/store/space_gate_incarnation_test.go']
+
+
+def manual_F_spec(repo, capability, frame_context, actual_map, gate_context):
+    """Real result-parent edge; diagnostic AUTO is never a commit ancestor."""
+    f=F_CORRECTED_TUPLE
+    require(capability==prepare_corrected_F_capability(repo,capability['unit_path']), 'manual_F_complete_unit_current_repair')
+    require([frame_context[k] for k in ('base','target','allow_direct_followup','partition_source_history')]
+        ==[J3071_RANGE['base'],f['correction'],'true','false'], 'manual_F_exact_same_state_frame')
+    require(gate_context['source_context']==capability['source_context'] and gate_context['values']['ROOT']==str(Path(repo).resolve()), 'manual_F_original_gate_source_context')
+    require(all(gate_context['event'].get(k,'')==v for k,v in capability['context'].items()), 'manual_F_original_gate_event_context')
+    for name,value in gate_context['snapshots'].items():
+        require(value==raw_binding(value['raw']) and gate_context['files'][name].get('sha256')==value['sha256'], 'manual_F_original_gate_file_snapshots')
+    source=(ROOT/'scripts/ci/voice-db-runtime-provisioning-contract_test.sh').read_text()
+    fixed=dict(re.findall(r"(?m)^(accepted_[a-z_]+|game_checkpoint_snapshot_[a-z_]+)='([0-9a-f]{40})'$",source))
+    require(all(gate_context['values'].get(k)==v for k,v in fixed.items()), 'manual_F_gate_fixed_source_constants')
+    rows=actual_map.decode().splitlines();names=capability['whole']['complete_manual_paths'];dispositions={}
+    require(names==git(repo,'diff','--name-only',f['automatic_tree'],f['merge']).decode().splitlines()
+        and len(names)==33, 'manual_F_indivisible_full_residual')
+    for name in names:
+        prior=[raw_binding(x) for x in rows if x.split('\t')[0]==name]
+        if name in F_MANUAL_NEW_PATHS:
+            entries=[tree_entry(repo,ref,name) for ref in (f['base'],f['first'],f['source'],f['automatic_tree'])]
+            result=tree_entry(repo,f['merge'],name)
+            require(not prior and len(set(entries))==1 and result and result!=entries[0], 'manual_F_genuinely_missing_result_only_path')
+            kind='NEW_RESULT_PARENT_ROW'
+        elif name==F_DELETION_PATH:
+            require(len(prior)==1 and sha(prior[0]['raw'].encode())==F_DELETION_ROW_SHA
+                and not tree_entry(repo,f['merge'],name), 'manual_F_retains_original_deleted_D_true')
+            kind='RETAINED_DELETION_PENDING_TERMINAL_GUARD'
+        else:
+            require(prior, 'manual_F_covered_residual_requires_actual_prior_producer')
+            kind='RETAINED_PARENT_ASSOCIATION'
+        dispositions[name]=dict(type=kind,prior_rows=prior,
+            result=entry_binding(repo,f['merge'],name),parent=entry_binding(repo,f['first'],name))
+    require(set(F_MANUAL_NEW_PATHS)<=set(names), 'manual_F_exact_ten_inside_whole33')
+    return dict(type='EXACT_F_MANUAL_RESULT_v1',ruling_sha256=F_MANUAL_RULING_SHA,capability=capability,
+        frame_context=frame_context,gate_context=gate_context,map_before=file_digest(actual_map),paths=names,dispositions=dispositions,
+        merge=f['merge'],ordered_parents=[f['first'],f['source']],original_merge_bases=[f['base']],
+        diagnostic_automatic_tree=f['automatic_tree'],result_tree=f['result_tree'],
+        result_parent_edge=dict(base=f['first'],head=f['merge'],type='RESULT_PARENT_NOT_MERGE_BASE'),
+        delta=raw_binding(git(repo,'diff','--name-only',f['automatic_tree'],f['merge'])),
+        patch=file_digest(git(repo,'diff','--binary',f['automatic_tree'],f['merge'])),admission=False)
+
+
+def prepare_manual_F(repo, capability_path, trace_path, map_path, context_path):
+    raw=Path(trace_path).read_bytes()
+    state=validate_trace(repo,trace_path,sha(raw),manual_checkpoint=True)['manual_checkpoint']
+    actual=Path(map_path).read_bytes()
+    require(state['map_before']==file_digest(actual), 'manual_F_actual_live_map')
+    return manual_F_spec(repo,json.loads(Path(capability_path).read_bytes()),state['frame_context'],actual,json.loads(Path(context_path).read_bytes()))
+
+
+def manual_operations(ledger):
+    return [dict(frame=frame,operation=op,receipt=value) for frame,item in ledger.items()
+        for op,value in item.get('manual_result_operations',{}).items()]
+
+
+def manual_operations_in_prefix(ledger, trace, prefix):
+    require(len(trace)>=prefix['bytes'] and sha(trace[:prefix['bytes']])==prefix['sha256'], 'manual_F_sealed_prefix')
+    events=[json.loads(v) for v in trace[:prefix['bytes']].splitlines()]
+    actual=[dict(frame=e['frame'],operation=e['operation'],receipt=e['payload']['receipt'])
+        for e in events if e['kind']=='manual_F_end']
+    expected=manual_operations(ledger)
+    require(actual==expected, 'manual_F_all_actual_operations_consumed_not_sidecar')
+    return expected
+
+
+def manual_delta_for_binding(binding):
+    name=binding['path'];values=binding.get('manual_result_operations',[])
+    matches=[v for v in values if name in v['receipt']['spec']['paths']]
+    require(len(matches)==1, 'manual_F_exact_sealed_operation_delta')
+    value=matches[0]['receipt'];spec=value['spec']
+    require(spec['type']=='EXACT_F_MANUAL_RESULT_v1' and spec['admission'] is False
+        and value['classification']['trigger'] in ('true','false')
+        and set(value['dispositions'])==set(spec['paths']), 'manual_F_complete_typed_delta_context')
+    require(spec['delta']==raw_binding(spec['delta']['raw']) and spec['delta']['raw'].splitlines()==spec['paths']
+        and len(spec['paths'])==33 and set(F_MANUAL_NEW_PATHS)<=set(spec['paths']), 'manual_F_indivisible_qualification_delta')
+    return spec['delta']['raw']
+
+
+
+def snapshot_manual_F_context(repo, map_path, pairs):
+    # This is before the later global classifier/router. Do not invent that
+    # result merely to reuse its context transport.
+    value=policy_context(repo,map_path,pairs,require_runtime=False)
+    require(value['source_context']==router_source_context(value['values']['ROOT']), 'manual_F_snapshot_actual_source')
+    value['snapshots']={name:raw_binding(Path(name).read_bytes()) for name,b in value['files'].items() if b is not None}
+    return value
+
+
+@lru_cache(maxsize=512)
+def replay_manual_F_gate(repo, spec_raw, name):
+    """Read-only replay of the same original predicates with captured inputs.
+
+    Only their scratch files are relocated. No accepting predicate replacement,
+    bare-policy admission or substituted source map is installed.
+    """
+    spec=json.loads(spec_raw);context=spec['gate_context'];f=F_CORRECTED_TUPLE
+    source=(ROOT/'scripts/ci/voice-db-runtime-provisioning-contract_test.sh').read_text()
+    functions=original_policy_functions(source)
+    with tempfile.TemporaryDirectory(prefix='f54-manual-gates-') as folder:
+        temporary=Path(folder);old_tmp=context['values']['TMP_DIR'];new_tmp=str(temporary/'scratch');Path(new_tmp).mkdir()
+        relocated={}
+        for index,(path,binding) in enumerate(context['snapshots'].items()):
+            target=Path(new_tmp+path[len(old_tmp):]) if path.startswith(old_tmp+'/') else temporary/('input-'+str(index))
+            target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(binding['raw'].encode());relocated[path]=str(target)
+        values={k:(new_tmp if k=='TMP_DIR' else relocated.get(v,v)) for k,v in context['values'].items()}
+        delta=temporary/'full33';delta.write_text(spec['delta']['raw']);entry=tree_entry(repo,f['merge'],name).rstrip('\0')
+        arguments=dict(values,F54_REPO=str(repo),F54_NAME=name,F54_ENTRY=entry,F54_DELTA=str(delta),F54_F=f['merge'],F54_C=f['base'],F54_D=f['first'],F54_A=f['source'])
+        script='set -euo pipefail\n'+functions+'\nwhile (( $# )); do printf -v "$1" "%s" "$2"; shift 2; done\n'
+        script+='''status=0
+f13_checkpoint_merge_tree_entry_matches "$F54_REPO" "$F54_C" "$F54_D" "$F54_A" "$F54_NAME" "$F54_ENTRY" "$F54_F" '' '' '' '' || status=$?
+native_status=0;game_status=0
+if [[ "${native_p3_active:-false}" == true ]] && native_p3_path_bound "$F54_REPO" "$F54_NAME"; then
+  native_p3_pre_h_owner "$F54_REPO" "$F54_NAME" "$F54_F" || native_status=$?
+fi
+if [[ "${game_checkpoint_aggregate_active:-false}" == true ]] && grep -Fxq -- "$F54_NAME" "$game_checkpoint_aggregate_paths"; then
+  git -C "$F54_REPO" merge-base --is-ancestor "$F54_F" "$game_checkpoint_snapshot_head" || game_status=$?
+fi
+eligibility=unapproved
+if game_checkpoint_aggregate_path_allowed "$F54_REPO" "$F54_F" "$F54_NAME" "$F54_ENTRY"; then eligibility=game_aggregate
+elif game_checkpoint_contribution_allowed "$F54_REPO" "$F54_F" "$F54_C" "$F54_A" "$F54_DELTA" && game_checkpoint_domain_path "$F54_NAME"; then eligibility=game_snapshot
+elif game_checkpoint_path_authorized_in_delta "$F54_NAME" "$F54_DELTA" "$(awk '{print $3}' <<<"$F54_ENTRY")" || be255_checkpoint_path_authorized_in_delta "$F54_NAME" "$F54_DELTA" "$(awk '{print $3}' <<<"$F54_ENTRY")"; then eligibility=checkpoint_blob
+fi
+printf '%s\t%s\t%s\t%s\n' "$status" "$native_status" "$game_status" "$eligibility"
+'''
+        executable=temporary/'original-gates.sh';executable.write_text(script)
+        p=subprocess.run(['bash',str(executable)]+sum(([k,v] for k,v in arguments.items()),[]),capture_output=True)
+        require(p.returncode==0, 'manual_F_original_gate_replay_execution:'+p.stderr.decode(errors='replace')[-200:])
+        fields=p.stdout.decode().strip().split('\t');require(len(fields)==4,'manual_F_original_gate_replay_shape')
+        return dict(original_composition_status=int(fields[0]),native_owner_status=int(fields[1]),game_owner_status=int(fields[2]),eligibility=fields[3])
+
+
+def prepare_manual_F_end(repo, trace_path, operation):
+    raw=Path(trace_path).read_bytes()
+    # The end event is itself checked by validate_trace; this constructor reads
+    # actual recorded values and never assigns a flag or fabricates a row.
+    events=[json.loads(x) for x in raw.splitlines()]
+    begin=next(e for e in events if e['kind']=='manual_F_begin' and e['operation']==operation)
+    spec=begin['payload']['spec'];gates={e['payload']['path']:e['payload'] for e in events if e['kind']=='manual_F_gate' and e['operation']==operation}
+    classification=next(e['payload'] for e in events if e['kind']=='classification' and e['operation']==operation)
+    # Validate the live prefix with an explicit manual-end checkpoint, including
+    # all prior F operations, maps and every mutation, before sealing anything.
+    state=validate_trace(repo,trace_path,sha(raw),manual_end_checkpoint=operation)['manual_end_checkpoint']
+    return state
 
 
 def reviewed_F_deletion_value(repo, cap, state, ruling_path):
@@ -1320,6 +1498,7 @@ def finalize_collection(repo, trace_path, map_path):
     return dict(type='F54_SEALED_SUCCESSFUL_COLLECTION',collection_prefix=dict(bytes=len(raw),sha256=sha(raw)),
         collection_trace=str(trace_path),map_path=str(map_path),map_binding=outer['map_binding'],outer_rows=outer['rows'],
         ledger=verified['ledger'],terminal_dispositions=terminal_dispositions(verified['ledger']),
+        manual_result_operations=manual_operations(verified['ledger']),
         required_qualification=required,coverage=ready['coverage'],
         child_span=dict(path=ready['span_trace'],sha256=ready['span_trace_sha256']),M_transitions=transitions,
         capability_sha256=ready['capability_sha256'],M=M,source_context=router_source_context(repo),
@@ -1344,6 +1523,7 @@ def load_collection(repo, path, expected_sha, map_path):
     require('terminal_dispositions' in value and 'ledger' in value,'complete_collection_terminal_state_fields')
     require(value['terminal_dispositions']==terminal_dispositions_in_prefix(value['ledger'],trace,seal),
         'collection_requires_all_typed_terminal_dispositions')
+    require(value.get('manual_result_operations',[])==manual_operations_in_prefix(value['ledger'],trace,seal), 'manual_F_collection_complete_operations')
     for disposition in value['terminal_dispositions']:
         name=disposition['path'];item=value['required_qualification'].get(name)
         require(item is not None and item['aggregate'] is True and item['retained_evidence'],
@@ -1354,9 +1534,10 @@ def load_collection(repo, path, expected_sha, map_path):
     return value
 
 
-def policy_context(repo, map_path, pairs):
+def policy_context(repo, map_path, pairs, require_runtime=True):
     require(len(pairs)%2==0,'policy_context_name_value_pairs');values=dict(zip(pairs[::2],pairs[1::2]))
     mandatory={'ROOT','TMP_DIR','base_sha','accepted_game_checkpoint','game_checkpoint_enabled','native_p3_active','r23_allowlist_enabled','r22_runtime_delta'}
+    if not require_runtime:mandatory.remove('r22_runtime_delta')
     require(mandatory<=set(values) and values['ROOT']==str(Path(repo).resolve()),'finite_actual_policy_context')
     allowed=lambda n:n in ('ROOT','TMP_DIR','base_sha','r22_runtime_delta') or n.startswith(('accepted_','game_checkpoint_','native_p3_','r23_'))
     require(all(allowed(n) for n in values),'no_whole_environment_authority_snapshot')
@@ -1419,7 +1600,7 @@ def router_binding(repo, seal_path, seal_sha, map_path, context_path, name):
     item=collection['required_qualification'].get(name)
     changed=(Path(context['values']['TMP_DIR'])/'changed-files').read_text().splitlines()
     require(name in changed or item is not None,'no_future_or_foreign_router_path_authority')
-    return dict(path=name,seal_sha256=seal_sha,collection_prefix=collection['collection_prefix'],complete_ledger_sha256=seal['complete_ledger_sha256'],
+    return dict(path=name,manual_result_operations=collection.get('manual_result_operations',[]),seal_sha256=seal_sha,collection_prefix=collection['collection_prefix'],complete_ledger_sha256=seal['complete_ledger_sha256'],
         map_binding=collection['map_binding'],context_sha256=sha(canonical(context)),obligations=item,
         aggregate=item['aggregate'] if item else None,covered=item is not None,
         scope='changed' if name in changed else 'retained_history',
@@ -1482,6 +1663,9 @@ def execute_original_router(context, binding):
         script+='f13_f54_router_gate() { python3 -c \'import json,sys;open(sys.argv[1],"a").write(json.dumps(sys.argv[2:])+"\\n")\' "$F54_CAPTURE" "$@"; }\n'
         if binding['covered']:
             script+='f13_runtime_for_path() { printf "%s\\n" "$F54_AGGREGATE"; }\n'
+        if any(binding['path'] in value['receipt']['spec']['paths'] for value in binding.get('manual_result_operations',[])):
+            delta=Path(folder)/'verified-manual-result-delta';delta.write_text(manual_delta_for_binding(binding))
+            script+='f13_delta_for_path() { printf "%s\\n" '+shlex.quote(str(delta))+'; }\n'
         historical=retained_row_for_binding(binding)
         if historical is not None:
             # Recheck the same already verified data projection; predicates
@@ -1540,14 +1724,14 @@ def validate_router(repo, seal_path, seal_sha, map_path, context_path, sidecar_p
         failures=[v for v in receipts if v['status']!=0],qualification='HOLD',admission=False,runtime_pass=False)
 
 
-def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, range_checkpoint=None, I_checkpoint=None, deletion_checkpoint=None):
+def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, range_checkpoint=None, I_checkpoint=None, deletion_checkpoint=None, manual_checkpoint=False, manual_end_checkpoint=None, manual_append_checkpoint=None):
     raw=Path(path).read_bytes();require(sha(raw)==expected_sha,'trace_raw_hash')
     events=[json.loads(v) for v in raw.splitlines()];require(events,'nonempty_producer_trace')
     previous='0'*64;frames={};stack=[];operations={};attempts={};classified={};pending={};cumulative={};child_flags={};child_rows={};frame_rows={};carry={};failures=[];observed=set()
     expected_operations={};seen_operations={};visited={};committed={};maps={};children={};obligations={};native_bindings={}
     M_capabilities={};M_compositions={};M_ready={};M_consumed={};M_supersessions={};master_entry=None;master_wrapper=None
     J_capabilities={};J_compositions={};F_compositions={};range_branches={};frame_results={};I_ready={};I_consumed={}
-    terminal={};final_gates={}
+    terminal={};final_gates={};manual_specs={};manual_gates={};manual_associations={};manual_closed={}
     def map_binding(frame):
         raw=''.join('\t'.join(parts)+'\n' for parts in maps[frame]).encode()
         return dict(bytes=len(raw),sha256=sha(raw))
@@ -1555,9 +1739,14 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         require(value['map_before']==map_binding(frame),'conserved_map_before')
         if 'prior_rows' in value:
             require([row(x) for x in value['prior_rows']]==[x for x in maps[frame] if x[0]==value['path']],'conserved_prior_rows')
-    def finished(operation):
+    def finished(operation, allow_manual_pending=False):
         require(operation in operations,'complete_operation_begin')
         value=operations[operation]
+        if value['classification']=='manual_result':
+            require(operation in classified and visited.get(operation,[])==value['paths'], 'manual_F_full33_actual_gates_and_classification')
+            require(committed.get(operation,[])==F_MANUAL_NEW_PATHS, 'manual_F_exact_ten_real_commits')
+            require(set(manual_associations.get(operation,{}))==set(value['paths'])-set(F_MANUAL_NEW_PATHS), 'manual_F_every_other_residual_disposition')
+            return
         if value['classification']=='sync':
             require(operation in sync_gates,'actual_sync_gate_receipt')
             return
@@ -1566,6 +1755,12 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         require(committed.get(operation,[])==value['paths'],'complete_ordered_path_commits')
         if frames[operation.split('/')[0]]['partition_source_history']=='true' and value['classification']=='merge':
             require(children.get(operation)==[(value['boundary'],value['source_head'],'true','false')],'complete_real_child_frame')
+        if value['commit']==F_CORRECTED_TUPLE['merge']:
+            manual=operation.rsplit('/',1)[0]+'/manual-result'
+            if operation.split('/')[0] in range_branches:
+                require(manual in operations or allow_manual_pending, 'manual_F_cannot_omit_whole_operation_before_H')
+            if manual in operations:
+                finished(manual);require(manual in manual_closed, 'manual_F_complete_before_next_spine_operation')
         if operation in M_capabilities:
             require(children.get(operation)==[(O,P2,'true','true')],'complete_exact_M_history_child')
             require(operation in M_ready and M_consumed.get(operation,[])==value['paths'],'complete_M_ledger_consumption_before_mutation')
@@ -1578,7 +1773,8 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
     def ledger_state():
         return {f:dict(map_binding=map_binding(f),rows=['\t'.join(x) for x in maps[f]],paths={
             name:dict(aggregate=cumulative[(f,name)],evidence=obligations[(f,name)])
-            for owner,name in obligations if owner==f},terminal_dispositions=terminal.get(f,{})) for f in frames}
+            for owner,name in obligations if owner==f},terminal_dispositions=terminal.get(f,{}),
+            manual_result_operations={op:v for op,v in manual_closed.items() if op.split('/')[0]==f}) for f in frames}
     def deletion_state(identity,prefix):
         require(stack and stack[-1]==identity and not pending and identity in final_gates,
             'reviewed_F_deletion_live_final_guard_not_old_frame')
@@ -1586,7 +1782,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         gate=final_gates[identity];name=F_DELETION_PATH
         require(gate['kind']=='reviewed_F_deletion_guard' and gate['payload']['path']==name
             and gate['operation'] is None,'reviewed_F_deletion_exact_final_path_phase')
-        candidates=[op for op,v in operations.items() if op.startswith(identity+'/') and v['commit']==F_CORRECTED_TUPLE['merge']]
+        candidates=[op for op,v in operations.items() if op.startswith(identity+'/') and v['commit']==F_CORRECTED_TUPLE['merge'] and v['classification']!='manual_result']
         require(len(candidates)==1,'reviewed_F_deletion_one_real_F_operation');operation=candidates[0]
         finished(operation)
         require(seen_operations[identity]==expected_operations[identity] and not failures,
@@ -1658,6 +1854,19 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             classification=classified[operation],capability_sha256=sha(canonical(J_capabilities[owner])),
             frame_ancestry=[dict(frame=name,context=frames[name]) for name in stack],ledger=ledger_state(),
             range_branch=branch,coverage=coverage,M_ready=M_ready,admission=False)
+    def manual_end_state(operation):
+        require(stack and stack[-1]==operation.split('/')[0] and not pending and not failures, 'manual_F_before_end_live_state')
+        finished(operation);frame=operation.split('/')[0]
+        return dict(spec=manual_specs[operation],classification=classified[operation],gates=manual_gates[operation],
+            dispositions={name:dict(type=manual_specs[operation]['dispositions'][name]['type'],
+                evidence=obligations[(frame,name)][-1]) for name in manual_specs[operation]['paths']},map_after=map_binding(frame),admission=False)
+    def manual_checkpoint_state():
+        require(stack and not pending and not failures, 'manual_F_live_completed_parent_boundary')
+        frame=stack[-1];parent=frame+'/'+F_CORRECTED_TUPLE['merge']+'/2'
+        require(frame in range_branches and seen_operations[frame][-1]==(F_CORRECTED_TUPLE['merge'],2), 'manual_F_exact_range_after_real_F_parent_loop')
+        require(parent in operations and parent in classified and parent.rsplit('/',1)[0]+'/manual-result' not in operations, 'manual_F_one_actual_occurrence')
+        finished(parent,allow_manual_pending=True)
+        return dict(frame_context=frames[frame],map_before=map_binding(frame))
     sync_gates=set()
     for sequence,e in enumerate(events,1):
         require(set(e)=={'schema','sequence','previous','kind','frame','operation','payload','digest'} and e['schema']==SCHEMA,'producer_event_schema')
@@ -1769,6 +1978,51 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             require([actual_frame[k] for k in ('base','target','allow_direct_followup','partition_source_history')]==[scope[k] for k in ('base','target','allow_direct_followup','partition_source_history')],'exact_capability_outer_context')
             require(op==frame+'/'+M+'/2' and v['receipt']==capability['history_boundary'],'exact_typed_M_boundary_receipt')
             M_capabilities[op]=capability;continue
+        if kind=='manual_F_begin':
+            state=manual_checkpoint_state();spec=v['spec']
+            actual=(''.join('\t'.join(x)+'\n' for x in maps[frame])).encode()
+            require(spec==manual_F_spec(repo,spec['capability'],state['frame_context'],actual,spec['gate_context'])
+                and op==frame+'/'+F_CORRECTED_TUPLE['merge']+'/manual-result' and op==v['id']
+                and v['map_before']==map_binding(frame), 'manual_F_actual_independent_result_operation')
+            require(master_entry is not None and spec['gate_context']['values'].get('native_p3_active')=='true', 'manual_F_same_actual_native_context_not_disabled')
+            binding_path=spec['gate_context']['values']['native_p3_binding']
+            require(spec['gate_context']['snapshots'][binding_path]==master_entry['native_binding'], 'manual_F_original_native_binding_not_swapped')
+            manual_specs[op]=spec
+            operations[op]=dict(id=op,commit=spec['merge'],first_parent=F_CORRECTED_TUPLE['first'],
+                source_head=spec['merge'],boundary=F_CORRECTED_TUPLE['first'],candidates=[F_CORRECTED_TUPLE['first']],
+                classification='manual_result',paths=spec['paths'],delta=spec['delta'],entries=spec['dispositions'])
+            continue
+        if kind=='manual_F_gate':
+            require(op in manual_specs and op not in classified and v['path'] in operations[op]['paths'], 'manual_F_gate_before_raw_classifier')
+            map_before(frame,v);name=v['path']
+            require(name not in manual_gates.setdefault(op,{}) and v['original_composition_status'] in (0,1,2)
+                and v['qualified_composition']=='REVIEWED_CORRECTED_F_WHOLE'
+                and v['native_owner_status']==v['game_owner_status']==0 and v['classifier']==classifier_binding()
+                and v['eligibility'] in ('unapproved','game_aggregate','game_snapshot','checkpoint_blob'), 'manual_F_real_original_gate_outcomes')
+            expected=replay_manual_F_gate(str(repo),canonical(manual_specs[op]).decode(),name)
+            require(all(v[k]==value for k,value in expected.items()), 'manual_F_independent_actual_gates_and_eligibility')
+            manual_gates[op][name]=v;visited.setdefault(op,[]).append(name);continue
+        if kind=='manual_F_association':
+            require(op in manual_specs and op in classified and v['path'] not in F_MANUAL_NEW_PATHS, 'manual_F_classified_association_not_new_row')
+            map_before(frame,v);name=v['path'];spec=manual_specs[op]
+            require(name in spec['paths'] and v['disposition']==spec['dispositions'][name]['type']
+                and name not in manual_associations.setdefault(op,{}), 'manual_F_exact_disjoint_retained_association')
+            prior=[raw_binding('\t'.join(x)) for x in maps[frame] if x[0]==name]
+            require(prior==spec['dispositions'][name]['prior_rows'], 'manual_F_prior_rows_byte_exact_no_rowdrop')
+            evidence=dict(operation=op,manual_result_spec=spec,classification=classified[op],prior_rows=prior,
+                disposition=v['disposition'],gate=manual_gates[op][name])
+            obligations.setdefault((frame,name),[]).append(evidence)
+            cumulative[(frame,name)]=cumulative.get((frame,name),False) or classified[op]['trigger']=='true'
+            manual_associations[op][name]=dict(evidence=evidence,event_digest=e['digest']);continue
+        if kind=='manual_F_end':
+            require(op in manual_specs and op not in manual_closed, 'manual_F_one_complete_occurrence')
+            finished(op)
+            expected=dict(spec=manual_specs[op],classification=classified[op],gates=manual_gates[op],
+                dispositions={name:dict(type=manual_specs[op]['dispositions'][name]['type'],
+                    evidence=obligations[(frame,name)][-1]) for name in manual_specs[op]['paths']},
+                map_after=map_binding(frame),admission=False)
+            require(v['receipt']==expected and v['map_after']==map_binding(frame), 'manual_F_full_disposition_partition_and_actual_map')
+            manual_closed[op]=expected;continue
         if kind=='operation_begin':
             require(op==v['id'] and v['id'] not in operations and v['commit'] in frames[frame]['first_parent_operations'],'actual_unique_operation')
             require(op in attempts and all(v[k]==attempts[op][k] for k in ('commit','ordered_parents','parent_index','first_parent','source_head')),'actual_attempt_before_begin')
@@ -1858,6 +2112,13 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         if kind=='sync_gate_passed':
             require(operations[op]['classification']=='sync' and v['gate']=='f13_validate_sync_merge_resolution' and v['classifier']==classifier_binding(),'actual_sync_gate_identity')
             sync_gates.add(op);continue
+        if kind=='classification' and op in manual_specs:
+            require(op not in classified and visited.get(op,[])==manual_specs[op]['paths'], 'manual_F_all33_gates_before_classifier')
+            names=[n for n in manual_specs[op]['paths'] if manual_gates[op][n]['eligibility']=='unapproved']
+            require(v['unapproved_delta']==raw_binding(('\n'.join(names)+'\n').encode() if names else b'')
+                and v['classifier']==classifier_binding() and v['trigger']==classify(names)
+                and v.get('exit')==(0 if v['trigger']=='true' else 1), 'manual_F_actual_full_operation_raw_classifier')
+            classified[op]=v;continue
         if kind=='classification':
             if operations[op]['commit']==F_CORRECTED_TUPLE['merge']:
                 require(F_compositions.get(op),'corrected_F_whole_consumed_before_classification')
@@ -1956,6 +2217,8 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             prior=row(v['prior']);incoming=row(v['incoming'])
             require(key not in pending and incoming[0]==v['path'] and incoming[2]==operations[op]['commit'],'actual_incoming_operation')
             operation=operations[op]
+            if op in manual_specs:
+                require(v['path'] in F_MANUAL_NEW_PATHS and not prior and not v['prior_rows'], 'manual_F_append_only_genuinely_unowned_ten')
             require(incoming[3]==operation['first_parent'] and incoming[7]==','.join(operation['candidates']),'actual_incoming_parent_and_bases')
             require(incoming[6]==(prior[6] if prior else operation['first_parent']),'actual_pre_qualification_content_base')
             if (op,v['path']) in child_rows:
@@ -1969,7 +2232,8 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             require((previous_rows[-1] if previous_rows else None)==prior,'actual_prior_row_order')
             cumulative[key]=cumulative.get(key,False) or any(p[1]=='true' for p in previous_rows) or incoming[1]=='true' or classified[op]['trigger']=='true' or child_flags.get((op,v['path']),False)
             if op in I_ready:cumulative[key]|=I_ready[op]['required_qualification'][v['path']]['aggregate']
-            obligations.setdefault(key,[]).append(dict(operation=op,classification=classified[op],prior_rows=v['prior_rows'],incoming=v['incoming'],child_aggregate=child_flags.get((op,v['path']),False)))
+            obligations.setdefault(key,[]).append(dict(operation=op,classification=classified[op],prior_rows=v['prior_rows'],incoming=v['incoming'],child_aggregate=child_flags.get((op,v['path']),False),
+                **(dict(manual_result_spec=manual_specs[op],gate=manual_gates[op][v['path']]) if op in manual_specs else {})))
         elif kind in ('row_after','row_remove'):
             require(key in pending and pending[key]['op']==op,'pre_mutation_prior_reference')
             parts=row(v['row']);require(parts[6]==pending[key]['incoming'][6],'original_content_base')
@@ -2000,10 +2264,22 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             committed.setdefault(op,[]).append(v['path'])
             pending.pop(key)
         else:raise Rejected('unknown_trace_kind')
+    manual_append_value=None
+    if manual_append_checkpoint:
+        op,name=manual_append_checkpoint;frame=op.split('/')[0];key=(frame,name)
+        require(stack[-1]==frame and op in manual_specs and key in pending and not failures
+            and pending[key]['after'] is None and pending[key]['prior'] is None, 'manual_F_actual_preappend_state')
+        actual=(''.join('\t'.join(x)+'\n' for x in maps[frame])).encode()
+        # Whole unit/context is rechecked before each actual append. Prior rows
+        # are independently conserved by the fold; no append may erase them.
+        require(manual_specs[op]['capability']==prepare_corrected_F_capability(repo,manual_specs[op]['capability']['unit_path']), 'manual_F_preappend_current_unit')
+        manual_append_value=dict(map_before=file_digest(actual),operation=op,path=name,admission=False)
+    manual_end_value=manual_end_state(manual_end_checkpoint) if manual_end_checkpoint else None
+    manual_state=manual_checkpoint_state() if manual_checkpoint else None
     range_state=range_checkpoint_state(range_checkpoint) if range_checkpoint else None
     I_state=I_checkpoint_state(I_checkpoint) if I_checkpoint else None
     deletion_state_value=deletion_state(deletion_checkpoint,file_digest(raw)) if deletion_checkpoint else None
-    checkpoint_state=M_checkpoint_state(checkpoint,events) if checkpoint else range_state or I_state or deletion_state_value
+    checkpoint_state=M_checkpoint_state(checkpoint,events) if checkpoint else range_state or I_state or deletion_state_value or manual_state or manual_end_value or manual_append_value
     require(not stack or checkpoint_state is not None,'closed_frames')
     require(checkpoint_state is not None or master_entry is None or failures or master_wrapper is not None,'successful_master_collection_requires_actual_wrapper_result')
     coverage=dag_dispositions(repo,events) if complete else []
@@ -2014,7 +2290,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         ledger=ledger,coverage=coverage,M_checkpoint=checkpoint_state if checkpoint else None,M_ready=M_ready,M_consumed=M_consumed,
         root_frame=next(iter(frames)),master_entry=master_entry,master_wrapper=master_wrapper,range_checkpoint=range_state,range_branches=range_branches,
         I_checkpoint=I_state,I_ready=I_ready,I_consumed=I_consumed,deletion_checkpoint=deletion_state_value,
-        terminal_dispositions=terminal_dispositions(ledger),
+        terminal_dispositions=terminal_dispositions(ledger),manual_checkpoint=manual_state,manual_end_checkpoint=manual_end_value,manual_append_checkpoint=manual_append_value,manual_result_operations=manual_operations(ledger),
         observed_qualification='COMPLETE' if complete else 'OBSERVED_PREFIX_ONLY',admission=False)
 
 
@@ -2050,6 +2326,17 @@ def main():
         if command=='cap-composition':print(json.dumps(composition_capability(*args)));return 0
         if command=='corrected-F-capability':print(json.dumps(prepare_corrected_F_capability(*args)));return 0
         if command=='corrected-F-composition':print(json.dumps(corrected_F_composition(*args)));return 0
+        if command=='manual-F-context':
+            repo,map_path,*pairs=args;print(json.dumps(snapshot_manual_F_context(repo,map_path,pairs)));return 0
+        if command=='manual-F-append-check':
+            repo,trace,operation,name,map_path=args;raw=Path(trace).read_bytes()
+            value=validate_trace(repo,trace,sha(raw),manual_append_checkpoint=(operation,name))['manual_append_checkpoint']
+            require(value['map_before']==file_digest(Path(map_path).read_bytes()), 'manual_F_preappend_same_map');return 0
+        if command=='manual-F-spec':print(json.dumps(prepare_manual_F(*args)));return 0
+        if command=='manual-F-end':print(json.dumps(prepare_manual_F_end(*args)));return 0
+        if command=='router-manual-delta':
+            repo,path,digest,map_path,context_path,name=args
+            print(manual_delta_for_binding(router_binding(repo,path,digest,map_path,context_path,name)),end='');return 0
         if command=='reviewed-F-deletion':print(json.dumps(prepare_reviewed_F_deletion(*args)));return 0
         if command=='3071-capabilities':print(json.dumps(prepare_3071_capabilities(*args)));return 0
         if command=='3071-boundary':print(json.dumps(boundary_3071_capability(*args)));return 0
