@@ -60,7 +60,7 @@ func TestDeliveryVetoesOriginalAuthorAccountCut(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			require.Error(t, call(), "saved original author account veto is independent of LiveOrUnseen offer/profile domains")
+			require.ErrorIs(t, call(), ErrErased, "known original author retirement must remain terminal rather than retryable unknown")
 		})
 	}
 }

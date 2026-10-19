@@ -274,7 +274,7 @@ func readPublicationProof(ctx context.Context, tx pgx.Tx, offer Offer) (lfpconse
 		return empty()
 	}
 	if e = checkNegative(tx, lfperasure.References{Accounts: []uuid.UUID{a.AccountID}, Profiles: []uuid.UUID{a.ProfileID}, Operations: []uuid.UUID{a.OperationID}}); e != nil {
-		return empty()
+		return lfpconsent.Actor{}, OfferContext{}, e
 	}
 	return a, bound, nil
 }
