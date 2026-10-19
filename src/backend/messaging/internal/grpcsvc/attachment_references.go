@@ -68,7 +68,7 @@ func (c *AttachmentReferenceCoordinator) Release(ctx context.Context, request *f
 func attachmentAcquisitionRequest(raw string) (*filev1.AcquireFileReferencesRequest, error) {
 	var attachments []messageAttachment
 	if err := json.Unmarshal([]byte(raw), &attachments); err != nil {
-		return nil, err
+		return nil, status.Error(codes.InvalidArgument, "attachments_json must be a JSON array")
 	}
 	unique := map[uuid.UUID]bool{}
 	for _, attachment := range attachments {
