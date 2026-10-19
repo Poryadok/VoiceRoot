@@ -69,13 +69,17 @@ func TestCanonicalIdentifiersAndNumbers(t *testing.T) {
 func TestReceiptHashIsAcyclic(t *testing.T) {
 	b := testBinding()
 	r := ArmedReceiptV1{Version: 1, AuthorityScope: LocalOwned, ScopeID: ID{1}, ControllerID: ID{2}, TransitionID: b.TransitionID, DatabaseLineageID: ID{3}, Binding: b, LaunchSpecHash: b.LaunchManifestHash, ClosureEvidenceHash: Hash{1}, PreparationEvidenceHash: Hash{2}}
+	r.Binding.AdmissionReceiptHash = Hash{}
 	h, e := ArmedHash(r)
 	if e != nil {
 		t.Fatal(e)
 	}
+	bound, e := ReceiptBinding(r)
+	if e != nil || bound.AdmissionReceiptHash != h {
+		t.Fatal("final binding not tied to immutable receipt", e)
+	}
 	r.Binding.AdmissionReceiptHash = h
-	h2, e := ArmedHash(r)
-	if e != nil || h2 != h {
-		t.Fatal("receipt hashes itself", e)
+	if _, e = ArmedHash(r); e == nil {
+		t.Fatal("self-referential receipt accepted")
 	}
 }

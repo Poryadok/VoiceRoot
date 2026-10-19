@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -69,6 +70,16 @@ func requiredFields(data []byte, t reflect.Type) error {
 			raw, ok := fields[tag]
 			if !ok {
 				return ErrInvalid
+			}
+			if strings.Contains(f.Tag.Get("json"), ",string") {
+				var s string
+				if json.Unmarshal(raw, &s) != nil {
+					return ErrInvalid
+				}
+				n, err := strconv.ParseUint(s, 10, 64)
+				if err != nil || strconv.FormatUint(n, 10) != s {
+					return ErrInvalid
+				}
 			}
 			if requiredFields(raw, f.Type) != nil {
 				return ErrInvalid

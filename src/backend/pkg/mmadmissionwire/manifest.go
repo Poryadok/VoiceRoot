@@ -141,6 +141,9 @@ type ArmedReceiptV1 struct {
 }
 
 func ArmedHash(r ArmedReceiptV1) (Hash, error) {
+	if r.Binding.AdmissionReceiptHash != (Hash{}) {
+		return Hash{}, ErrInvalid
+	}
 	b := r.Binding
 	b.AdmissionReceiptHash = Hash{1}
 	if r.Version != 1 || !scope(r.AuthorityScope) || r.ScopeID == (ID{}) || r.ControllerID == (ID{}) || r.TransitionID != b.TransitionID || r.DatabaseLineageID == (ID{}) || b.Validate() != nil || r.LaunchSpecHash != b.LaunchManifestHash || r.ClosureEvidenceHash == (Hash{}) || r.PreparationEvidenceHash == (Hash{}) {
@@ -160,6 +163,17 @@ func ArmedHash(r ArmedReceiptV1) (Hash, error) {
 	e.hash(r.PreparationEvidenceHash)
 	optionalHash(e, r.PreviousReceiptHash)
 	return e.sum()
+}
+func (r ArmedReceiptV1) Validate() error { _, e := ArmedHash(r); return e }
+func (r OpenReceiptV1) Validate() error  { _, e := OpenHash(r); return e }
+
+// ReceiptBinding constructs the final binding; receipts themselves always carry
+// an explicit zero placeholder, so no unbound JSON field can vary its meaning.
+func ReceiptBinding(r ArmedReceiptV1) (Binding, error) {
+	h, e := ArmedHash(r)
+	b := r.Binding
+	b.AdmissionReceiptHash = h
+	return b, e
 }
 
 type OpenReceiptV1 struct {

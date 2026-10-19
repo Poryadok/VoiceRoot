@@ -127,6 +127,19 @@ func ContinuityHash(c ContinuityRecordV1) (Hash, error) {
 	e.hash(c.PreviousHistoryRootHash)
 	return e.sum()
 }
+
+// HistoryGenesisHash starts a continuous lineage with its first immutable receipt.
+func HistoryGenesisHash(receipt Hash, lineage ID) (Hash, error) {
+	if receipt == (Hash{}) || lineage == (ID{}) {
+		return Hash{}, ErrInvalid
+	}
+	e := newEncoder("voice.mm.admission.history-genesis.v1")
+	e.u32(1)
+	e.hash(receipt)
+	e.id(lineage)
+	return e.sum()
+}
+func (c ContinuityRecordV1) Validate() error { _, e := ContinuityHash(c); return e }
 func registry(s []string) bool {
 	if len(s) == 0 || len(s) > 128 || !sort.StringsAreSorted(s) {
 		return false
