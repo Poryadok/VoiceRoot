@@ -3716,3 +3716,176 @@ final $typed_data.Uint8List approveJoinRequestResponseDescriptor =
     $convert.base64Decode(
         'ChpBcHByb3ZlSm9pblJlcXVlc3RSZXNwb25zZRI7CgZyZXN1bHQYASABKAsyIy52b2ljZS5zcG'
         'FjZS52MS5Kb2luQWRtaXNzaW9uUmVzdWx0UgZyZXN1bHQ=');
+
+@$core.Deprecated('Use setEntryPolicyRequestDescriptor instead')
+const SetEntryPolicyRequest$json = {
+  '1': 'SetEntryPolicyRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'expected_policy_version',
+      '3': 3,
+      '4': 1,
+      '5': 4,
+      '10': 'expectedPolicyVersion'
+    },
+    {
+      '1': 'private_policy_json',
+      '3': 4,
+      '4': 1,
+      '5': 12,
+      '10': 'privatePolicyJson'
+    },
+  ],
+};
+
+/// Descriptor for `SetEntryPolicyRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setEntryPolicyRequestDescriptor = $convert.base64Decode(
+    'ChVTZXRFbnRyeVBvbGljeVJlcXVlc3QSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQSIQoMb3'
+    'BlcmF0aW9uX2lkGAIgASgJUgtvcGVyYXRpb25JZBI2ChdleHBlY3RlZF9wb2xpY3lfdmVyc2lv'
+    'bhgDIAEoBFIVZXhwZWN0ZWRQb2xpY3lWZXJzaW9uEi4KE3ByaXZhdGVfcG9saWN5X2pzb24YBC'
+    'ABKAxSEXByaXZhdGVQb2xpY3lKc29u');
+
+@$core.Deprecated('Use setEntryPolicyResponseDescriptor instead')
+const SetEntryPolicyResponse$json = {
+  '1': 'SetEntryPolicyResponse',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'entry_policy_version',
+      '3': 2,
+      '4': 1,
+      '5': 4,
+      '10': 'entryPolicyVersion'
+    },
+  ],
+};
+
+/// Descriptor for `SetEntryPolicyResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setEntryPolicyResponseDescriptor = $convert.base64Decode(
+    'ChZTZXRFbnRyeVBvbGljeVJlc3BvbnNlEiEKDG9wZXJhdGlvbl9pZBgBIAEoCVILb3BlcmF0aW'
+    '9uSWQSMAoUZW50cnlfcG9saWN5X3ZlcnNpb24YAiABKARSEmVudHJ5UG9saWN5VmVyc2lvbg==');
+
+@$core.Deprecated('Use applyBotInstallationRemovalRequestDescriptor instead')
+const ApplyBotInstallationRemovalRequest$json = {
+  '1': 'ApplyBotInstallationRemovalRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'decision_id', '3': 3, '4': 1, '5': 9, '10': 'decisionId'},
+    {'1': 'decision_sha256', '3': 4, '4': 1, '5': 12, '10': 'decisionSha256'},
+    {'1': 'purpose', '3': 5, '4': 1, '5': 9, '10': 'purpose'},
+    {'1': 'bot_id', '3': 6, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'actor_profile_id', '3': 7, '4': 1, '5': 9, '10': 'actorProfileId'},
+    {'1': 'space_id', '3': 8, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'native_cancellation',
+      '3': 9,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.RemoveBotMemberRequest',
+      '10': 'nativeCancellation'
+    },
+    {
+      '1': 'frozen_scope_sha256',
+      '3': 13,
+      '4': 1,
+      '5': 12,
+      '10': 'frozenScopeSha256'
+    },
+  ],
+  '9': [
+    {'1': 10, '2': 13},
+  ],
+};
+
+/// Descriptor for `ApplyBotInstallationRemovalRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyBotInstallationRemovalRequestDescriptor = $convert.base64Decode(
+    'CiJBcHBseUJvdEluc3RhbGxhdGlvblJlbW92YWxSZXF1ZXN0EikKEHByb3RvY29sX3ZlcnNpb2'
+    '4YASABKA1SD3Byb3RvY29sVmVyc2lvbhIhCgxvcGVyYXRpb25faWQYAiABKAlSC29wZXJhdGlv'
+    'bklkEh8KC2RlY2lzaW9uX2lkGAMgASgJUgpkZWNpc2lvbklkEicKD2RlY2lzaW9uX3NoYTI1Nh'
+    'gEIAEoDFIOZGVjaXNpb25TaGEyNTYSGAoHcHVycG9zZRgFIAEoCVIHcHVycG9zZRIVCgZib3Rf'
+    'aWQYBiABKAlSBWJvdElkEigKEGFjdG9yX3Byb2ZpbGVfaWQYByABKAlSDmFjdG9yUHJvZmlsZU'
+    'lkEhkKCHNwYWNlX2lkGAggASgJUgdzcGFjZUlkElcKE25hdGl2ZV9jYW5jZWxsYXRpb24YCSAB'
+    'KAsyJi52b2ljZS5zcGFjZS52MS5SZW1vdmVCb3RNZW1iZXJSZXF1ZXN0UhJuYXRpdmVDYW5jZW'
+    'xsYXRpb24SLgoTZnJvemVuX3Njb3BlX3NoYTI1NhgNIAEoDFIRZnJvemVuU2NvcGVTaGEyNTZK'
+    'BAgKEA0=');
+
+@$core.Deprecated('Use botInstallationRemovalReceiptDescriptor instead')
+const BotInstallationRemovalReceipt$json = {
+  '1': 'BotInstallationRemovalReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'decision_id', '3': 4, '4': 1, '5': 9, '10': 'decisionId'},
+    {'1': 'purpose', '3': 5, '4': 1, '5': 9, '10': 'purpose'},
+    {'1': 'bot_id', '3': 6, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'actor_profile_id', '3': 7, '4': 1, '5': 9, '10': 'actorProfileId'},
+    {'1': 'space_id', '3': 8, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'evidence_kind', '3': 9, '4': 1, '5': 9, '10': 'evidenceKind'},
+    {'1': 'evidence_sha256', '3': 10, '4': 1, '5': 12, '10': 'evidenceSha256'},
+    {
+      '1': 'frozen_scope_sha256',
+      '3': 11,
+      '4': 1,
+      '5': 12,
+      '10': 'frozenScopeSha256'
+    },
+    {'1': 'request_sha256', '3': 12, '4': 1, '5': 12, '10': 'requestSha256'},
+    {'1': 'participant', '3': 13, '4': 1, '5': 9, '10': 'participant'},
+    {'1': 'outcome', '3': 14, '4': 1, '5': 9, '10': 'outcome'},
+    {
+      '1': 'completed_at',
+      '3': 15,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'completedAt'
+    },
+    {
+      '1': 'global_native_adds_fenced',
+      '3': 16,
+      '4': 1,
+      '5': 8,
+      '10': 'globalNativeAddsFenced'
+    },
+  ],
+};
+
+/// Descriptor for `BotInstallationRemovalReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botInstallationRemovalReceiptDescriptor = $convert.base64Decode(
+    'Ch1Cb3RJbnN0YWxsYXRpb25SZW1vdmFsUmVjZWlwdBIpChBwcm90b2NvbF92ZXJzaW9uGAEgAS'
+    'gNUg9wcm90b2NvbFZlcnNpb24SHQoKcmVjZWlwdF9pZBgCIAEoCVIJcmVjZWlwdElkEiEKDG9w'
+    'ZXJhdGlvbl9pZBgDIAEoCVILb3BlcmF0aW9uSWQSHwoLZGVjaXNpb25faWQYBCABKAlSCmRlY2'
+    'lzaW9uSWQSGAoHcHVycG9zZRgFIAEoCVIHcHVycG9zZRIVCgZib3RfaWQYBiABKAlSBWJvdElk'
+    'EigKEGFjdG9yX3Byb2ZpbGVfaWQYByABKAlSDmFjdG9yUHJvZmlsZUlkEhkKCHNwYWNlX2lkGA'
+    'ggASgJUgdzcGFjZUlkEiMKDWV2aWRlbmNlX2tpbmQYCSABKAlSDGV2aWRlbmNlS2luZBInCg9l'
+    'dmlkZW5jZV9zaGEyNTYYCiABKAxSDmV2aWRlbmNlU2hhMjU2Ei4KE2Zyb3plbl9zY29wZV9zaG'
+    'EyNTYYCyABKAxSEWZyb3plblNjb3BlU2hhMjU2EiUKDnJlcXVlc3Rfc2hhMjU2GAwgASgMUg1y'
+    'ZXF1ZXN0U2hhMjU2EiAKC3BhcnRpY2lwYW50GA0gASgJUgtwYXJ0aWNpcGFudBIYCgdvdXRjb2'
+    '1lGA4gASgJUgdvdXRjb21lEj0KDGNvbXBsZXRlZF9hdBgPIAEoCzIaLmdvb2dsZS5wcm90b2J1'
+    'Zi5UaW1lc3RhbXBSC2NvbXBsZXRlZEF0EjkKGWdsb2JhbF9uYXRpdmVfYWRkc19mZW5jZWQYEC'
+    'ABKAhSFmdsb2JhbE5hdGl2ZUFkZHNGZW5jZWQ=');
+
+@$core.Deprecated('Use applyBotInstallationRemovalResponseDescriptor instead')
+const ApplyBotInstallationRemovalResponse$json = {
+  '1': 'ApplyBotInstallationRemovalResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.BotInstallationRemovalReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `ApplyBotInstallationRemovalResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyBotInstallationRemovalResponseDescriptor =
+    $convert.base64Decode(
+        'CiNBcHBseUJvdEluc3RhbGxhdGlvblJlbW92YWxSZXNwb25zZRJHCgdyZWNlaXB0GAEgASgLMi'
+        '0udm9pY2Uuc3BhY2UudjEuQm90SW5zdGFsbGF0aW9uUmVtb3ZhbFJlY2VpcHRSB3JlY2VpcHQ=');

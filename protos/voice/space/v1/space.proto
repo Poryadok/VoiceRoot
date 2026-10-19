@@ -63,6 +63,8 @@ service SpaceService {
   rpc GetJoinRequest(GetJoinRequestRequest) returns (GetJoinRequestResponse);
   // @voice.security=public_gateway;callers=service:gateway
   rpc ApproveJoinRequest(ApproveJoinRequestRequest) returns (ApproveJoinRequestResponse);
+  // Exact protected settings operation. The response is a saved safe acknowledgement.
+  rpc SetEntryPolicy(SetEntryPolicyRequest) returns (SetEntryPolicyResponse);
   rpc LeaveSpace(LeaveSpaceRequest) returns (LeaveSpaceResponse);
   rpc KickMember(KickMemberRequest) returns (KickMemberResponse);
   rpc BanMember(BanMemberRequest) returns (BanMemberResponse);
@@ -131,7 +133,13 @@ service SpaceService {
   // @voice.activation=held
   // @voice.authorization=current_owner
   rpc GetSpaceDeletionCoordinatorStatus(voice.space.v1.GetSpaceDeletionCoordinatorStatusRequest) returns (voice.space.v1.GetSpaceDeletionCoordinatorStatusResponse);
+  // Global Bot deletion only: exact native cancellation plus target-owned
+  // permanent Bot Add fence. Ordinary uninstall uses RemoveBotMember.
+  // @voice.security=protected;callers=service:bot
+  rpc ApplyBotInstallationRemoval(ApplyBotInstallationRemovalRequest) returns (ApplyBotInstallationRemovalResponse);
 }
+
+
 
 message Space {
   string id = 1;
@@ -1043,4 +1051,60 @@ message ApproveJoinRequestRequest {
 // @voice.unknown_fields=accept_preserve
 message ApproveJoinRequestResponse {
   JoinAdmissionResult result = 1;
+}
+
+// Complete strict schema1 JSON. Configured answers are never returned by this RPC.
+// @voice.unknown_fields=reject
+message SetEntryPolicyRequest {
+  string space_id = 1;
+  string operation_id = 2;
+  uint64 expected_policy_version = 3;
+  bytes private_policy_json = 4;
+}
+
+// @voice.unknown_fields=accept_preserve
+message SetEntryPolicyResponse {
+  string operation_id = 1;
+  uint64 entry_policy_version = 2;
+}
+
+// The authenticated Bot service asserts its exact committed verified-owner root.
+// This carries no human credential or configurable default Role authority.
+message ApplyBotInstallationRemovalRequest {
+  uint32 protocol_version = 1;
+  string operation_id = 2; // stable child operation; exact signed request_id
+  string decision_id = 3;
+  bytes decision_sha256 = 4;
+  string purpose = 5; // global_delete only
+  string bot_id = 6;
+  string actor_profile_id = 7;
+  string space_id = 8;
+  // Preserve the original generation-scoped cancellation operation verbatim.
+  // Its operation may differ from the enclosing global child operation.
+  RemoveBotMemberRequest native_cancellation = 9;
+  reserved 10 to 12; // no invented legacy/orphan provenance
+  bytes frozen_scope_sha256 = 13;
+}
+
+message BotInstallationRemovalReceipt {
+  uint32 protocol_version = 1;
+  string receipt_id = 2;
+  string operation_id = 3;
+  string decision_id = 4;
+  string purpose = 5;
+  string bot_id = 6;
+  string actor_profile_id = 7;
+  string space_id = 8;
+  string evidence_kind = 9; // native
+  bytes evidence_sha256 = 10; // SHA256(deterministic full native_cancellation)
+  bytes frozen_scope_sha256 = 11;
+  bytes request_sha256 = 12; // SHA256(deterministic full enclosing request)
+  string participant = 13; // space
+  string outcome = 14; // COMPLETED only after exact cancel and global Add fence
+  google.protobuf.Timestamp completed_at = 15;
+  bool global_native_adds_fenced = 16; // true; includes new generation/new Space
+}
+
+message ApplyBotInstallationRemovalResponse {
+  BotInstallationRemovalReceipt receipt = 1;
 }
