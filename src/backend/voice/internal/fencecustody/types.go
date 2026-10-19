@@ -56,6 +56,7 @@ type LoginIdentity struct {
 // credential custody must already enforce the admitted closed window.
 type InstallationWindow struct {
 	Protocol                   uint32
+	ExecutionID                uuid.UUID
 	Installation               retirementproof.Installation
 	CutoverOperationID         uuid.UUID
 	CoverageEpoch              uint64
@@ -90,6 +91,7 @@ type ObservationRef struct {
 // receipt. Historical receipt readback never substitutes for reobservation.
 type PostgresFenceObservation struct {
 	Protocol      uint32
+	ExecutionID   uuid.UUID
 	ObservationID uuid.UUID
 	Command       CommandRef
 	Receipt       ReceiptRef
