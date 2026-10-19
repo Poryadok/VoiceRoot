@@ -112,8 +112,7 @@ func acquireGate(ctx context.Context, tx pgx.Tx, shared bool) error {
 	}
 	// One stable key across incarnations: a new binding cannot miss an old
 	// in-flight transaction. PostgreSQL advisory locks are database-local.
-	digest := sha256.Sum256([]byte("voice.mm.native-admission.gate.v1\x00"))
-	key := int64(binary.BigEndian.Uint64(digest[:8]))
+	key := nativeGateKey()
 	query := `SELECT pg_catalog.pg_advisory_xact_lock($1)`
 	if shared {
 		query = `SELECT pg_catalog.pg_advisory_xact_lock_shared($1)`
@@ -122,4 +121,9 @@ func acquireGate(ctx context.Context, tx pgx.Tx, shared bool) error {
 		return ErrUnavailable
 	}
 	return nil
+}
+
+func nativeGateKey() int64 {
+	digest := sha256.Sum256([]byte("voice.mm.native-admission.gate.v1\x00"))
+	return int64(binary.BigEndian.Uint64(digest[:8]))
 }

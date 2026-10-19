@@ -609,3 +609,22 @@ version U32, member-authority hash32 and source-authority hash32. Thus the wire
 family `NATIVE_VOICE` cannot reinterpret SOLO as VOICE_ROSTER or replace the
 captured c16 authority. Origin/canonical receipt validation is still separate
 from actual installed launch, fresh external admission, and source revalidation.
+
+Proposal and provisioning candidate v2 explicitly hash the current admission
+stamp, canonical origin for every complete party, and validated history-cut
+hash. The latter commits all canonical receipts and continuity records using
+domain `voice.mm.validated-history-cut.v1` plus NUL and deterministic JSON.
+Proposal/provision candidate domains are `voice.mm.proposal-local-cut.v2` and
+`voice.mm.provision-local-cut.v2`; they retain the full local row cut including
+provider-operation bookkeeping. Public candidate/proof APIs are unchanged.
+
+Each candidate freezes its expected binding. Immediate locked verification
+re-reads the same explicit material, so an admission transition expires old
+proofs even when the roster is unchanged. Fresh capture under a supported
+continuous rollout preserves existing original origins. V1 capture/verification
+is permitted only in a genuinely never-begun native-head view; a pre-cut proof
+cannot cross a begun cut or enroll a typed historical party without origin.
+The candidate defense takes a nonblocking shared history gate on READ COMMITTED
+and does not replace each forward owner's mandatory admission gate FIRST,
+before all account and row locks. Native serving remains unavailable until the
+complete root, fresh external admission and all forward owners are qualified.

@@ -2,6 +2,8 @@ package mmadmission
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"slices"
 
@@ -20,6 +22,23 @@ type HistoryCut struct {
 
 func (h HistoryCut) Stamp() wire.AdmissionStampV1 { return h.stamp }
 
+// Hash commits explicit canonical receipt and continuity evidence, rather than
+// depending on incidental party-row JSON or treating the head as sufficient.
+func (h HistoryCut) Hash() wire.Hash {
+	if h.stamp.Validate() != nil || len(h.receipts) == 0 {
+		return wire.Hash{}
+	}
+	body, err := json.Marshal(struct {
+		Stamp      wire.AdmissionStampV1
+		Receipts   []wire.ArmedReceiptV1
+		Continuity []wire.ContinuityRecordV1
+	}{h.stamp, h.receipts, h.records})
+	if err != nil {
+		return wire.Hash{}
+	}
+	return wire.Hash(sha256.Sum256(append([]byte("voice.mm.validated-history-cut.v1\x00"), body...)))
+}
+
 // Authority identifies the current receipt issuer for the root's independent
 // descriptor/readback comparison. These data are not installed custody proof.
 func (h HistoryCut) Authority() (wire.Scope, wire.ID, wire.ID) {
@@ -34,24 +53,7 @@ func ReadHistory(ctx context.Context, tx pgx.Tx, expected wire.Binding) (History
 	if tx == nil || expected.Validate() != nil {
 		return HistoryCut{}, ErrUnavailable
 	}
-	var isolation, readOnly string
-	if tx.QueryRow(ctx, `SHOW transaction_isolation`).Scan(&isolation) != nil || tx.QueryRow(ctx, `SHOW transaction_read_only`).Scan(&readOnly) != nil {
-		return HistoryCut{}, ErrUnavailable
-	}
-	switch isolation {
-	case "repeatable read":
-		if readOnly != "on" {
-			return HistoryCut{}, ErrUnavailable
-		}
-	case "read committed":
-		// A forward transaction must hold the stable gate through COMMIT. The
-		// nonblocking acquisition cannot wait behind a closer while row locks
-		// are held. Normal writers already acquired this FIRST via Acquire.
-		var acquired bool
-		if tx.QueryRow(ctx, `SELECT pg_catalog.pg_try_advisory_xact_lock_shared(2060719636617962328)`).Scan(&acquired) != nil || !acquired {
-			return HistoryCut{}, ErrUnavailable
-		}
-	default:
+	if checkHistoryView(ctx, tx) != nil {
 		return HistoryCut{}, ErrUnavailable
 	}
 	actual, lineage, root, err := readHistoryHead(ctx, tx)
@@ -117,6 +119,52 @@ func ReadHistory(ctx context.Context, tx pgx.Tx, expected wire.Binding) (History
 
 func sameHistoryHash(raw []byte, expected wire.Hash) bool {
 	return len(raw) == 32 && slices.Equal(raw, expected[:])
+}
+
+func checkHistoryView(ctx context.Context, tx pgx.Tx) error {
+	if tx == nil {
+		return ErrUnavailable
+	}
+	var isolation, readOnly string
+	if tx.QueryRow(ctx, `SHOW transaction_isolation`).Scan(&isolation) != nil || tx.QueryRow(ctx, `SHOW transaction_read_only`).Scan(&readOnly) != nil {
+		return ErrUnavailable
+	}
+	switch isolation {
+	case "repeatable read":
+		if readOnly != "on" {
+			return ErrUnavailable
+		}
+	case "read committed":
+		// Nonblocking: verification cannot wait behind a closer after taking
+		// row locks. Positive writers must still acquire Acquire FIRST.
+		var acquired bool
+		if tx.QueryRow(ctx, `SELECT pg_catalog.pg_try_advisory_xact_lock_shared($1)`, nativeGateKey()).Scan(&acquired) != nil || !acquired {
+			return ErrUnavailable
+		}
+	default:
+		return ErrUnavailable
+	}
+	return nil
+}
+
+// CheckPrecutCut admits only a genuinely never-begun transaction view. It is
+// solely for historical v1 capture/verification, never native enrollment.
+func CheckPrecutCut(ctx context.Context, tx pgx.Tx) error {
+	if checkHistoryView(ctx, tx) != nil {
+		return ErrUnavailable
+	}
+	var exists bool
+	if tx.QueryRow(ctx, `SELECT pg_catalog.to_regclass('public.mm_native_admission_head') IS NOT NULL`).Scan(&exists) != nil {
+		return ErrUnavailable
+	}
+	if !exists {
+		return nil
+	}
+	var begun bool
+	if tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM public.mm_native_admission_head)`).Scan(&begun) != nil || begun {
+		return ErrUnavailable
+	}
+	return nil
 }
 
 func readHistoryReceipt(ctx context.Context, tx pgx.Tx, hash wire.Hash) (wire.ArmedReceiptV1, error) {

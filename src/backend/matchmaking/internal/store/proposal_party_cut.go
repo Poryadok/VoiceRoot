@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"sort"
 	"time"
+	admission "voice/backend/matchmaking/internal/mmadmission"
 )
 
 var ErrProposalCandidateChanged = errors.New("persisted proposal candidate changed")
@@ -20,6 +21,7 @@ type ProposalCandidate struct {
 	fingerprint [32]byte
 	params      CreateProposalParams
 	parties     []SourceParty
+	binding     *admission.Binding
 }
 
 func (c ProposalCandidate) Hash() [32]byte { return c.fingerprint }
@@ -57,7 +59,7 @@ func (s *MatchStore) CaptureProposalCandidate(ctx context.Context, p CreatePropo
 		return ProposalCandidate{}, errors.Join(ErrSourcePartyUnavailable, err)
 	}
 	defer rollbackPartySearch(tx)
-	c, err := readProposalCandidate(ctx, tx, p)
+	c, err := readProposalCandidate(ctx, tx, p, copyNativeBinding(s.NativeAdmission))
 	if err != nil {
 		return ProposalCandidate{}, err
 	}
@@ -74,7 +76,7 @@ func VerifyProposalCandidateTx(ctx context.Context, tx pgx.Tx, c ProposalCandida
 	if tx == nil || c.fingerprint == [32]byte{} {
 		return ErrProposalCandidateChanged
 	}
-	current, err := readProposalCandidate(ctx, tx, c.params)
+	current, err := readProposalCandidate(ctx, tx, c.params, c.binding)
 	if err != nil || current.fingerprint != c.fingerprint {
 		return errors.Join(ErrProposalCandidateChanged, err)
 	}
@@ -87,7 +89,7 @@ SELECT jsonb_build_object(
 'sessions',COALESCE((SELECT jsonb_agg(to_jsonb(s) ORDER BY s.id) FROM search_sessions s WHERE id=ANY($1::uuid[]) OR party_id IN(SELECT id FROM party_ids)),'[]'::jsonb),
 'parties',COALESCE((SELECT jsonb_agg(to_jsonb(p) ORDER BY p.id) FROM parties p WHERE id IN(SELECT id FROM party_ids)),'[]'::jsonb))::text,clock_timestamp()`
 
-func readProposalCandidate(ctx context.Context, tx pgx.Tx, p CreateProposalParams) (ProposalCandidate, error) {
+func readProposalCandidate(ctx context.Context, tx pgx.Tx, p CreateProposalParams, binding *admission.Binding) (ProposalCandidate, error) {
 	if p.GameID == uuid.Nil || p.Mode == "" || p.Region == "" || len(p.Sessions) == 0 {
 		return ProposalCandidate{}, ErrSourcePartyUnavailable
 	}
@@ -154,7 +156,7 @@ func readProposalCandidate(ctx context.Context, tx pgx.Tx, p CreateProposalParam
 	if len(seen) != len(requested) {
 		return ProposalCandidate{}, ErrSourcePartyUnavailable
 	}
-	c := ProposalCandidate{params: p}
+	c := ProposalCandidate{params: p, binding: copyNativeBinding(binding)}
 	for _, row := range view.Parties {
 		party, err := scanSourceParty(tx.QueryRow(ctx, `SELECT `+sourcePartyCols+` FROM parties WHERE id=$1 AND search_operation_id IS NOT NULL`, row.ID))
 		if err != nil || party.DisbandedAt != nil || party.GameID != p.GameID || party.Mode != p.Mode || len(party.MemberProfileIDs) != len(partyMembers[row.ID]) {
@@ -171,6 +173,10 @@ func readProposalCandidate(ctx context.Context, tx pgx.Tx, p CreateProposalParam
 		}
 		c.parties = append(c.parties, party)
 	}
+	origins, err := readCandidateOrigins(ctx, tx, c.binding, c.parties)
+	if err != nil {
+		return ProposalCandidate{}, errors.Join(ErrSourcePartyUnavailable, err)
+	}
 	body, err := json.Marshal(struct {
 		Params CreateProposalParams
 		Cut    string
@@ -179,6 +185,18 @@ func readProposalCandidate(ctx context.Context, tx pgx.Tx, p CreateProposalParam
 		return ProposalCandidate{}, ErrSourcePartyUnavailable
 	}
 	c.fingerprint = sha256.Sum256(append([]byte("voice.mm.proposal-local-cut.v1\x00"), body...))
+	if origins.Version == 2 {
+		body, err = json.Marshal(struct {
+			Version   uint32
+			Params    CreateProposalParams
+			Cut       string
+			Admission candidateOriginCut
+		}{2, p, raw, origins})
+		if err != nil {
+			return ProposalCandidate{}, ErrSourcePartyUnavailable
+		}
+		c.fingerprint = sha256.Sum256(append([]byte("voice.mm.proposal-local-cut.v2\x00"), body...))
+	}
 	if len(c.Accounts()) == 0 {
 		return ProposalCandidate{}, ErrSourcePartyUnavailable
 	}

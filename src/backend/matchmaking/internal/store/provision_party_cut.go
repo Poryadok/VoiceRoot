@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"sort"
 	"time"
+	admission "voice/backend/matchmaking/internal/mmadmission"
 	"voice/backend/pkg/partyauthority"
 )
 
@@ -19,6 +20,7 @@ type ProvisionCandidate struct {
 	MatchID     uuid.UUID
 	fingerprint [32]byte
 	parties     []SourceParty
+	binding     *admission.Binding
 }
 
 func (c ProvisionCandidate) Hash() [32]byte { return c.fingerprint }
@@ -70,7 +72,7 @@ func (s *MatchStore) CaptureProvisionCandidate(ctx context.Context, id uuid.UUID
 		return ProvisionCandidate{}, errors.Join(ErrSourcePartyUnavailable, err)
 	}
 	defer rollbackPartySearch(tx)
-	candidate, err := readProvisionCandidate(ctx, tx, id)
+	candidate, err := readProvisionCandidate(ctx, tx, id, copyNativeBinding(s.NativeAdmission))
 	if err != nil {
 		return ProvisionCandidate{}, err
 	}
@@ -90,7 +92,7 @@ func VerifyProvisionCandidateTx(ctx context.Context, tx pgx.Tx, c ProvisionCandi
 	if tx == nil || c.MatchID == uuid.Nil || c.fingerprint == [32]byte{} {
 		return ErrProvisionCandidateChanged
 	}
-	current, err := readProvisionCandidate(ctx, tx, c.MatchID)
+	current, err := readProvisionCandidate(ctx, tx, c.MatchID, c.binding)
 	if err != nil {
 		return errors.Join(ErrProvisionCandidateChanged, err)
 	}
@@ -126,7 +128,7 @@ type provisionProposal struct {
 	Response  string     `json:"response"`
 }
 
-func readProvisionCandidate(ctx context.Context, tx pgx.Tx, id uuid.UUID) (ProvisionCandidate, error) {
+func readProvisionCandidate(ctx context.Context, tx pgx.Tx, id uuid.UUID, binding *admission.Binding) (ProvisionCandidate, error) {
 	var raw string
 	var now time.Time
 	if err := tx.QueryRow(ctx, provisionCutSQL, id).Scan(&raw, &now); err != nil {
@@ -183,7 +185,7 @@ func readProvisionCandidate(ctx context.Context, tx pgx.Tx, id uuid.UUID) (Provi
 	if len(view.Parties) != len(partyMembers) {
 		return ProvisionCandidate{}, ErrSourcePartyUnavailable
 	}
-	cut := ProvisionCandidate{MatchID: id, fingerprint: sha256.Sum256([]byte(raw))}
+	cut := ProvisionCandidate{MatchID: id, fingerprint: sha256.Sum256([]byte(raw)), binding: copyNativeBinding(binding)}
 	for _, row := range view.Parties {
 		p, err := scanSourceParty(tx.QueryRow(ctx, `SELECT `+sourcePartyCols+` FROM parties WHERE id=$1 AND search_operation_id IS NOT NULL`, row.ID))
 		if err != nil || p.DisbandedAt != nil || p.GameID != view.Match.GameID || p.Mode != view.Match.Mode {
@@ -206,6 +208,21 @@ func readProvisionCandidate(ctx context.Context, tx pgx.Tx, id uuid.UUID) (Provi
 	}
 	if len(cut.parties) == 0 {
 		return ProvisionCandidate{}, ErrSourcePartyUnavailable
+	}
+	origins, err := readCandidateOrigins(ctx, tx, cut.binding, cut.parties)
+	if err != nil {
+		return ProvisionCandidate{}, errors.Join(ErrSourcePartyUnavailable, err)
+	}
+	if origins.Version == 2 {
+		body, err := json.Marshal(struct {
+			Version   uint32
+			Cut       string
+			Admission candidateOriginCut
+		}{2, raw, origins})
+		if err != nil {
+			return ProvisionCandidate{}, ErrSourcePartyUnavailable
+		}
+		cut.fingerprint = sha256.Sum256(append([]byte("voice.mm.provision-local-cut.v2\x00"), body...))
 	}
 	return cut, nil
 }
