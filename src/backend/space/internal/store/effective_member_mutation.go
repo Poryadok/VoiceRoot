@@ -25,8 +25,16 @@ type effectiveMemberMutations struct {
 	started    time.Time
 	profiles   []effectiveMemberMutation
 	dbMutation *nativeMembershipDBMutation
+	purpose    effectiveMutationPurpose
 	used       bool
 }
+
+type effectiveMutationPurpose uint8
+
+const (
+	effectiveMutationPositive effectiveMutationPurpose = iota
+	effectiveMutationCandidateRetirement
+)
 
 // Only the Creator's already verified, preallocated new identity enters here.
 // Unlike an existing Space mutation, no LIVE Space row can exist before this
@@ -236,6 +244,12 @@ func (s *SpaceStore) captureEffectiveMemberMutations(ctx context.Context, space 
 	if err := s.effectiveMutationScope(ctx, space); err != nil {
 		return nil, err
 	}
+	return s.captureEffectiveMemberMutationFacts(ctx, space, profiles)
+}
+
+// Both callers establish their own domain scope before this private fact
+// capture. Maintenance cannot select the positive admission scope by a flag.
+func (s *SpaceStore) captureEffectiveMemberMutationFacts(ctx context.Context, space uuid.UUID, profiles []uuid.UUID) (*effectiveMemberMutations, error) {
 	version, err := s.memberDecisionSchema(ctx)
 	if err != nil {
 		return nil, ErrEffectiveEpisodeUnavailable
@@ -311,8 +325,17 @@ func (s *SpaceStore) finishEffectiveMemberMutations(ctx context.Context, capture
 		return ErrEffectiveEpisodeUnavailable
 	}
 	capture.used = true
-	if err := s.effectiveMutationScope(ctx, capture.space); err != nil {
-		return err
+	var scopeErr error
+	switch capture.purpose {
+	case effectiveMutationPositive:
+		scopeErr = s.effectiveMutationScope(ctx, capture.space)
+	case effectiveMutationCandidateRetirement:
+		scopeErr = s.memberAdmissionRetirementScope(ctx, capture.space)
+	default:
+		return ErrEffectiveEpisodeUnavailable
+	}
+	if scopeErr != nil {
+		return scopeErr
 	}
 	var sampled time.Time
 	if err := s.tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&sampled); err != nil || sampled.Before(capture.started) {

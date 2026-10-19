@@ -51,7 +51,7 @@ func (s *SpaceStore) RetireCandidate(ctx context.Context, operation uuid.UUID, e
 	if s == nil || s.Pool == nil || s.tx != nil || operation == uuid.Nil || expectedGeneration == 0 || expectedGeneration >= math.MaxInt64 || reason < MemberAdmissionRetireInviteInvalid || reason > MemberAdmissionRetireAccountBanned {
 		return nil, ErrMemberAdmissionConflict
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}
@@ -77,6 +77,9 @@ func (s *SpaceStore) RetireCandidate(ctx context.Context, operation uuid.UUID, e
 	}
 	scoped := *s
 	scoped.tx = tx
+	if err = scoped.memberAdmissionRetirementScope(ctx, i.Input.SpaceID); err != nil {
+		return nil, err
+	}
 	proven, err := scoped.proveMemberAdmissionRetirement(ctx, i, reason)
 	if err != nil {
 		return nil, err
@@ -84,8 +87,17 @@ func (s *SpaceStore) RetireCandidate(ctx context.Context, operation uuid.UUID, e
 	if !proven {
 		return nil, ErrMemberAdmissionConflict
 	}
+	capture, err := scoped.captureMemberAdmissionRetirement(ctx, i)
+	if err != nil {
+		return nil, err
+	}
 	if err = scoped.invalidateMemberAdmission(ctx, i); err != nil {
 		return nil, err
+	}
+	if capture != nil {
+		if err = scoped.finishEffectiveMemberMutations(ctx, capture); err != nil {
+			return nil, err
+		}
 	}
 	i.State = "RETIRED"
 	return i, tx.Commit(ctx)
