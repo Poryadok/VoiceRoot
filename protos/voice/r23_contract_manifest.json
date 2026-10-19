@@ -3165,13 +3165,14 @@
           ]
         }
       ],
-      "contract_projection_sha256": "88500debd69207ddde085fcb13bffbe1816b92cd418e3c50d4f6061d96b7e3d2",
+      "contract_projection_sha256": "8a6521aec3bef87424fc1f29a971fce66c7e36a49f55831c6d4b4ee0e5aea750",
       "syntax": "proto3",
       "dependencies": [
         "google/protobuf/timestamp.proto",
         "voice/chat/v1/chat.proto",
         "voice/common/v1/common.proto",
         "voice/common/v1/space_lifecycle.proto",
+        "voice/events/v1/jetstream_events.proto",
         "voice/story/v1/story.proto"
       ],
       "options": {
