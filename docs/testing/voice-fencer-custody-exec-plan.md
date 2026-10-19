@@ -103,12 +103,22 @@ signalling host/foreign processes. An initial fixture attempt lacked `/bin/kill`
 and failed before suspension; the final fixture uses the installed shell builtin.
 That setup failure is not a product RED result.
 
+The prepared-work race uses an installer-held `pg_authid` ShareLock. The test
+observes the real fencer blocked at ALTER ROLE after its read-only prechecks,
+then the predecessor prepares a transaction. Releasing the lock allows NOLOGIN
+and termination, but the final observer refuses positive proof and leaves the
+prepared transaction unresolved. Only the installer fixture rolls it back;
+same-command recovery then succeeds. The barrier uses actual catalog lock
+state, not a production hook or a timing assumption. An initial fixture closed
+the replacement client at subtest exit; that lifetime error was corrected and
+is not a product failure.
+
 These are component proofs. Fixture source/schema/writer/provider manifest
 hashes do not constitute the assembled native package or closed catalogue.
 
 ## Remaining work and honest assumptions
 
-- [ ] Complete c12 post-precheck prepared/delegation race and process-crash
+- [ ] Complete c12 post-precheck delegation race and process-crash
       negative matrix through the separated executable boundary.
 - [ ] Installer-enforced complete deployment/controller/credential history,
       non-restored external incarnation and all writable/promotable endpoints.

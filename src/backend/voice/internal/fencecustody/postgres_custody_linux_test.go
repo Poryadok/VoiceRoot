@@ -139,7 +139,7 @@ func TestSeparatedPostgresFencerCustody(t *testing.T) {
 	}
 	var old *pgx.Conn
 	require.Eventually(t, func() bool { old, err = connect("old_writer", oldPassword); return err == nil }, 30*time.Second, 250*time.Millisecond)
-	defer old.Close(context.Background())
+	defer func() { old.Close(context.Background()) }()
 	other, err := connect("other_writer", otherPassword)
 	require.NoError(t, err)
 	defer other.Close(context.Background())
@@ -179,7 +179,7 @@ func TestSeparatedPostgresFencerCustody(t *testing.T) {
 	copyFile(installer, installedPaths.Secrets, command.CredentialCustodyID.String()+".dsn", []byte("host=/var/run/postgresql port=5432 dbname=postgres user=fencer_admin"), 0400)
 	commonMounts := []mount.Mount{vm(artifact, "/usr/local/bin", true), vm(plans, installedPaths.Plans, true), vm(installation, installedPaths.Installation, true)}
 	callIndex := 0
-	call := func(reader bool, operation string, id uuid.UUID, hash [32]byte, extraEnvironment ...string) (string, int) {
+	startCall := func(reader bool, operation string, id uuid.UUID, hash [32]byte, extraEnvironment ...string) string {
 		callIndex++
 		mounts := append([]mount.Mount(nil), commonMounts...)
 		user := "0:0"
@@ -191,6 +191,9 @@ func TestSeparatedPostgresFencerCustody(t *testing.T) {
 		}
 		idString := newContainer(fmt.Sprintf("call-%d", callIndex), &container.Config{Image: "postgres:16-bookworm", User: user, Entrypoint: []string{"/usr/local/bin/voice-party-fencer"}, Cmd: []string{"-operation", operation, "-id", id.String(), "-hash", hex.EncodeToString(hash[:])}, Env: append([]string{"GOMAXPROCS=1"}, extraEnvironment...)}, &container.HostConfig{NetworkMode: "none", ReadonlyRootfs: true, Mounts: mounts, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges:true"}})
 		require.NoError(t, api.ContainerStart(ctx, idString, container.StartOptions{}))
+		return idString
+	}
+	waitCall := func(idString string) (string, int) {
 		finished, failed := api.ContainerWait(ctx, idString, container.WaitConditionNotRunning)
 		var code int64
 		select {
@@ -208,6 +211,9 @@ func TestSeparatedPostgresFencerCustody(t *testing.T) {
 		_, err = stdcopy.StdCopy(&stdout, &stderr, log)
 		require.NoError(t, err)
 		return stdout.String() + stderr.String(), int(code)
+	}
+	call := func(reader bool, operation string, id uuid.UUID, hash [32]byte, extraEnvironment ...string) (string, int) {
+		return waitCall(startCall(reader, operation, id, hash, extraEnvironment...))
 	}
 	t.Run("unprivileged process cannot launch fencer", func(t *testing.T) {
 		_, status := call(true, "fence", ref.CommandID, ref.Hash)
@@ -292,6 +298,54 @@ func TestSeparatedPostgresFencerCustody(t *testing.T) {
 		require.True(t, login)
 		require.True(t, delegated)
 		installerSQL(`REVOKE old_writer FROM old_delegate; DROP ROLE old_delegate`)
+	})
+	t.Run("prepared transaction after precheck blocks final proof", func(t *testing.T) {
+		// A retained catalog lock lets the actual fencer finish its read-only
+		// prechecks and block at ALTER ROLE. Only this owned installer session
+		// controls the barrier; no production callback or timing sleep is used.
+		application := "custody-authid-barrier-" + suffix
+		execID, err := api.ContainerExecCreate(ctx, pg, container.ExecOptions{User: "postgres", Cmd: []string{"psql", "-X", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-c", "BEGIN; LOCK TABLE pg_authid IN SHARE MODE; SELECT pg_sleep(90)"}, Env: []string{"PGAPPNAME=" + application}, AttachStdout: true, AttachStderr: true})
+		require.NoError(t, err)
+		barrier, err := api.ContainerExecAttach(ctx, execID.ID, container.ExecAttachOptions{})
+		require.NoError(t, err)
+		defer barrier.Close()
+		adminBool := func(sql string) bool {
+			output, status := execute(pg, "postgres", []string{"psql", "-AtX", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-c", sql}, nil)
+			return status == 0 && strings.TrimSpace(output) == "t"
+		}
+		release := func() {
+			installerSQL(fmt.Sprintf("SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE application_name='%s' AND usename='postgres'", application))
+		}
+		released := false
+		defer func() {
+			if !released {
+				release()
+			}
+		}()
+		require.Eventually(t, func() bool {
+			return adminBool(fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE a.application_name='%s' AND l.relation='pg_authid'::regclass AND l.mode='ShareLock' AND l.granted)", application))
+		}, 5*time.Second, 50*time.Millisecond)
+		pending := startCall(false, "fence", ref.CommandID, ref.Hash)
+		require.Eventually(t, func() bool {
+			return adminBool("SELECT EXISTS(SELECT 1 FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE a.application_name='voice-party-fencer' AND a.usename='fencer_admin' AND a.query LIKE 'ALTER ROLE %' AND l.relation='pg_authid'::regclass AND NOT l.granted)")
+		}, 5*time.Second, 50*time.Millisecond)
+		_, err = old.Exec(ctx, `BEGIN; INSERT INTO native_owner_fixture VALUES(5,'raced prepared predecessor'); PREPARE TRANSACTION 'custody_raced_predecessor'`)
+		require.NoError(t, err)
+		release()
+		released = true
+		_, status := waitCall(pending)
+		require.NotZero(t, status, "postcheck must reject work prepared after successful precheck")
+		var login bool
+		var prepared int
+		require.NoError(t, other.QueryRow(ctx, `SELECT rolcanlogin,(SELECT count(*) FROM pg_prepared_xacts WHERE gid='custody_raced_predecessor' AND owner='old_writer') FROM pg_roles WHERE rolname='old_writer'`).Scan(&login, &prepared))
+		require.False(t, login)
+		require.Equal(t, 1, prepared, "no guessed prepared-transaction disposition")
+		installerSQL(`ROLLBACK PREPARED 'custody_raced_predecessor'`)
+		output, status := call(false, "fence", ref.CommandID, ref.Hash)
+		require.Zero(t, status, "%s", output)
+		installerSQL(`ALTER ROLE old_writer LOGIN`)
+		old, err = connect("old_writer", oldPassword)
+		require.NoError(t, err)
 	})
 	paused, err := old.Begin(ctx)
 	require.NoError(t, err)
