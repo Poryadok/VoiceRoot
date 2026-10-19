@@ -219,7 +219,9 @@ func closeFanoutOverflow(c *websocket.Conn, reg *connReg, writeMu *sync.Mutex) {
 
 func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, dap deliveryAckPublisher, requestID string, upgradeAt time.Time, policy wsSessionEpochPolicy) {
 	connID := uuid.NewString()
-	observeWSConnectSuccess()
+	// Keep connect, hello and disconnect on the same registry generation.
+	metrics := rtMetrics.Load()
+	metrics.observeWSConnectSuccess()
 	svcLogger.Info("ws connected",
 		slog.String("event", "ws_connect"),
 		slog.String("conn_id", connID),
@@ -235,7 +237,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 	typingTimers := make(map[string]*time.Timer)
 
 	defer func() {
-		observeWSDisconnect()
+		metrics.observeWSDisconnect()
 		svcLogger.Info("ws disconnected",
 			slog.String("event", "ws_disconnect"),
 			slog.String("conn_id", connID),
@@ -273,7 +275,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 	if err := write("hello", helloD); err != nil {
 		return
 	}
-	observeWSHelloDuration(upgradeAt)
+	metrics.observeWSHelloDuration(upgradeAt)
 	updatePresence(context.Background(), presence, claims, "online", "")
 
 	if lister != nil {
