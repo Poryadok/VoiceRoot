@@ -268,15 +268,19 @@ class AuthBotSessionFloorGrpcTest {
     final Set<String> replay = new HashSet<>();
     volatile boolean keyOutage, replayOutage;
     String signingKid = "current";
+    java.security.PrivateKey signingKey = AuthPrincipalVerifierTest.KEY.getPrivate();
     final Server server;
     final ManagedChannel channel;
     Fixture(String peer, String certificate, boolean tls) throws Exception {
       this(peer, certificate, tls, true);
     }
     Fixture(String peer, String certificate, boolean tls, boolean enabled) throws Exception {
+      this(peer, certificate, tls, enabled, null);
+    }
+    Fixture(String peer, String certificate, boolean tls, boolean enabled, AuthPrincipalJwksResolver suppliedResolver) throws Exception {
       when(accounts.findById(ACCOUNT.toString())).thenReturn(Optional.of(account(7, "active", null)));
       when(floors.requireFloor(ACCOUNT)).thenReturn(9L);
-      var resolver = new AuthPrincipalJwksResolver(issuer -> AuthPrincipalJwksResolverTest.set(
+      var resolver = suppliedResolver != null ? suppliedResolver : new AuthPrincipalJwksResolver(issuer -> AuthPrincipalJwksResolverTest.set(
           AuthPrincipalJwksResolverTest.jwk("current", (RSAPublicKey) AuthPrincipalVerifierTest.KEY.getPublic()),
           AuthPrincipalJwksResolverTest.jwk("next", AuthPrincipalJwksResolverTest.NEXT)),
           Clock.fixed(AuthPrincipalVerifierTest.NOW, ZoneOffset.UTC), Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(1));
@@ -328,14 +332,21 @@ class AuthBotSessionFloorGrpcTest {
       return call(request, claims, new Metadata());
     }
     GetBotSessionEpochFloorResponse call(GetBotSessionEpochFloorRequest request, Map<String,Object> claims, Metadata extra) {
+      return AuthServiceGrpc.newBlockingStub(signed(claims, extra)).withDeadlineAfter(5, TimeUnit.SECONDS).getBotSessionEpochFloor(request);
+    }
+    long callSpace(Map<String,Object> claims) {
+      return AuthServiceGrpc.newBlockingStub(signed(claims, new Metadata())).withDeadlineAfter(5, TimeUnit.SECONDS)
+          .getSpaceSessionEpochFloor(GetSpaceSessionEpochFloorRequest.newBuilder().setAccountId(ACCOUNT.toString()).build())
+          .getSessionEpochFloor();
+    }
+    Channel signed(Map<String,Object> claims, Metadata extra) {
       Metadata headers = new Metadata();
       headers.put(Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER),
           "Bearer " + AuthPrincipalVerifierTest.token(claims, Map.of("alg", "RS256", "kid", signingKid),
-              AuthPrincipalVerifierTest.KEY.getPrivate()));
+              signingKey));
       headers.put(Metadata.Key.of("x-request-id", Metadata.ASCII_STRING_MARSHALLER), "request-1");
       headers.merge(extra);
-      return AuthServiceGrpc.newBlockingStub(ClientInterceptors.intercept(channel,
-          MetadataUtils.newAttachHeadersInterceptor(headers))).withDeadlineAfter(5, TimeUnit.SECONDS).getBotSessionEpochFloor(request);
+      return ClientInterceptors.intercept(channel, MetadataUtils.newAttachHeadersInterceptor(headers));
     }
     @Override public void close() throws Exception {
       channel.shutdownNow(); server.shutdownNow();

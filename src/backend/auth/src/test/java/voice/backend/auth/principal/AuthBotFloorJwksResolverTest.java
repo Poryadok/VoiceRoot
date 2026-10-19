@@ -49,6 +49,19 @@ class AuthBotFloorJwksResolverTest {
     assertEquals(2, fetches.get());
   }
 
+  @Test void subsequentApprovedRotationCanAdmitThePreviouslyAbsentKidAfterCooldown() {
+    assertThrows(AuthPrincipalJwksResolver.UnapprovedPrincipalKeyException.class,
+        () -> resolver.resolveForBotFloor("bot", "rotated"));
+    clock.advance(1);
+    response.set(AuthPrincipalJwksResolverTest.set(
+        AuthPrincipalJwksResolverTest.jwk("rotated", AuthPrincipalJwksResolverTest.CURRENT),
+        AuthPrincipalJwksResolverTest.jwk("next", AuthPrincipalJwksResolverTest.NEXT)));
+    assertEquals(AuthPrincipalJwksResolverTest.CURRENT, resolver.resolveForBotFloor("bot", "rotated"));
+    assertEquals(AuthPrincipalJwksResolverTest.CURRENT, resolver.resolveForBotFloor("bot", "rotated"));
+    assertEquals(2, fetches.get(), "successful rotation replaces negative evidence without unbounded refresh");
+    assertEquals(AuthPrincipalJwksResolverTest.CURRENT, resolver.resolve("bot", "rotated"), "old resolution keeps shared approved snapshot");
+  }
+
   @Test void hardExpiredNegativeCannotAuthorizeAnInvalidClassificationDuringOutage() {
     assertThrows(AuthPrincipalJwksResolver.UnapprovedPrincipalKeyException.class,
         () -> resolver.resolveForBotFloor("bot", "absent"));

@@ -63,6 +63,58 @@ class AuthPrincipalJwksHttpTest {
     assertEquals(1, requests.get());
   }
 
+  @Test void botGrpcUsesRealHttpsAbsenceRotationAndOutageWhileOldSpaceKeepsItsStatus() throws Exception {
+    var body = new java.util.concurrent.atomic.AtomicReference<>(jwks);
+    var status = new AtomicInteger(200);
+    server.createContext("/bot-jwks", exchange -> {
+      requests.incrementAndGet();
+      byte[] bytes = body.get();
+      exchange.sendResponseHeaders(status.get(), bytes.length);
+      try (var output = exchange.getResponseBody()) { output.write(bytes); }
+    });
+    var clock = new AuthPrincipalJwksResolverTest.MutableClock();
+    var resolver = new AuthPrincipalJwksResolver(issuer -> AuthPrincipalConfiguration.fetch(trusted, endpoint("/bot-jwks")),
+        clock, Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(1));
+    try (var f = new AuthBotSessionFloorGrpcTest.Fixture(AuthBotSessionFloorGrpcTest.PEER, "bot", true, true, resolver)) {
+      var request = AuthBotSessionFloorGrpcTest.REQUEST;
+      f.signingKid = "rotated";
+      for (int attempt = 0; attempt < 2; attempt++) assertEquals(io.grpc.Status.Code.UNAUTHENTICATED,
+          assertThrows(io.grpc.StatusRuntimeException.class, () -> f.call(request, f.claims(request))).getStatus().getCode());
+      assertEquals(1, requests.get(), "successful negative is bounded by cooldown");
+      var old = f.claims(request);
+      old.put("iss", "space"); old.put("sub", "service:space"); old.put("rpc", AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC);
+      assertEquals(io.grpc.Status.Code.UNAVAILABLE,
+          assertThrows(io.grpc.StatusRuntimeException.class, () -> f.callSpace(old)).getStatus().getCode());
+      org.mockito.Mockito.verifyNoInteractions(f.accounts, f.floors);
+      clock.advance(1);
+      body.set(AuthPrincipalJwksResolverTest.set(
+          AuthPrincipalJwksResolverTest.jwk("rotated", AuthPrincipalJwksResolverTest.CURRENT),
+          AuthPrincipalJwksResolverTest.jwk("next", AuthPrincipalJwksResolverTest.NEXT)));
+      assertEquals(9, f.call(request, f.claims(request)).getSessionEpochFloor(), "fresh valid signed credential is admitted after approved rotation");
+      org.mockito.Mockito.clearInvocations(f.accounts, f.floors);
+      f.signingKey = AuthPrincipalVerifierTest.key().getPrivate();
+      assertEquals(io.grpc.Status.Code.UNAUTHENTICATED,
+          assertThrows(io.grpc.StatusRuntimeException.class, () -> f.call(request, f.claims(request))).getStatus().getCode());
+      f.signingKey = AuthPrincipalVerifierTest.KEY.getPrivate();
+      for (int fault = 0; fault < 3; fault++) {
+        clock.advance(1); f.signingKid = "unknown-" + fault;
+        status.set(fault == 0 ? 500 : 200);
+        body.set(fault == 1 ? "not-json".getBytes(StandardCharsets.UTF_8)
+            : AuthPrincipalJwksResolverTest.set(AuthPrincipalJwksResolverTest.jwk("current", AuthPrincipalJwksResolverTest.CURRENT)));
+        assertEquals(io.grpc.Status.Code.UNAVAILABLE,
+            assertThrows(io.grpc.StatusRuntimeException.class, () -> f.call(request, f.claims(request))).getStatus().getCode());
+      }
+      clock.advance(10); f.signingKid = "rotated"; status.set(500);
+      assertEquals(io.grpc.Status.Code.UNAVAILABLE,
+          assertThrows(io.grpc.StatusRuntimeException.class, () -> f.call(request, f.claims(request))).getStatus().getCode());
+      var oldOutage = f.claims(request);
+      oldOutage.put("iss", "space"); oldOutage.put("sub", "service:space"); oldOutage.put("rpc", AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC);
+      assertEquals(io.grpc.Status.Code.UNAVAILABLE,
+          assertThrows(io.grpc.StatusRuntimeException.class, () -> f.callSpace(oldOutage)).getStatus().getCode());
+      org.mockito.Mockito.verifyNoInteractions(f.accounts, f.floors);
+    }
+  }
+
   @Test void rejectsUntrustedCertificateAndWrongHostnameBeforeHttpHandler() {
     HttpClient untrusted = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
     try {
