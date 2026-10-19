@@ -36,6 +36,10 @@ type cutoverTarget struct {
 	Source string
 	Row    json.RawMessage
 }
+type cutoverSourceDescriptor struct {
+	Table, Predicate string
+	Rows             int
+}
 type cutoverSource struct{ Table, Predicate string }
 type cutoverRequest struct {
 	WorkID             uuid.UUID
@@ -63,29 +67,39 @@ func CutoverSourceContract(kind string) (string, []byte, retirementproof.Digest,
 }
 
 func cutoverSources(kind string) ([]cutoverSource, error) {
-	var rooms, identities string
+	var rooms, identities, profiles string
 	var sources []cutoverSource
 	switch kind {
 	case OwnedRoomSource:
 		rooms = `SELECT room_id FROM voice_room_instances WHERE purpose='MATCH_SQUAD' UNION SELECT room_id FROM voice_match_squad_operations UNION SELECT room_id FROM voice_match_squad_member_operations UNION SELECT room_id FROM voice_match_squad_member_effects UNION SELECT room_id FROM voice_match_squad_member_grants`
 		identities = `SELECT account_id FROM voice_match_squad_member_operations UNION SELECT account_id FROM voice_match_squad_member_grants`
+		profiles = `SELECT profile_id FROM voice_match_squad_member_operations UNION SELECT profile_id FROM voice_match_squad_member_grants`
 		for _, table := range []string{"voice_match_squad_operations", "voice_match_squad_member_operations", "voice_match_squad_member_effects", "voice_match_squad_member_grants"} {
 			sources = append(sources, cutoverSource{table, "true"})
 		}
 	case GameConversionSource:
 		rooms = `SELECT room_id FROM voice_room_instances WHERE purpose='GAME_SESSION' UNION SELECT room_id FROM voice_game_session_operations UNION SELECT room_id FROM voice_game_session_closures UNION SELECT room_id FROM voice_game_session_roster_receipts`
 		identities = `SELECT source_account_id FROM voice_sdk_conversion_fence_receipts UNION SELECT target_account_id FROM voice_sdk_conversion_fence_receipts`
+		profiles = `SELECT source_profile_id FROM voice_sdk_conversion_fence_receipts UNION SELECT target_profile_id FROM voice_sdk_conversion_fence_receipts`
 		for _, table := range []string{"voice_game_session_operations", "voice_game_session_closures", "voice_game_session_roster_receipts", "voice_sdk_conversion_fence_receipts"} {
 			sources = append(sources, cutoverSource{table, "true"})
 		}
 	default:
 		return nil, retirementproof.ErrUnsupported
 	}
+	// Memberships remain an independent identity source when no operation,
+	// conversion or grant ledger exists. Preserve a moved/newer fence too.
+	profiles += ` UNION SELECT profile_id FROM voice_room_memberships WHERE room_id IN (` + rooms + `)`
+	identities += ` UNION SELECT account_id FROM voice_room_memberships WHERE account_id IS NOT NULL AND room_id IN (` + rooms + `)`
+	// A legacy membership may retain NULL authenticated account provenance.
+	// Capture its independent mapping and account's alternate-profile fence as
+	// evidence, without rewriting/backfilling that legacy membership identity.
+	identities += ` UNION SELECT account_id FROM voice_profile_account_mappings WHERE profile_id IN (` + profiles + `)`
 	sources = append(sources, cutoverSource{"voice_room_instances", "room_id IN (" + rooms + ")"}, cutoverSource{"voice_room_memberships", "room_id IN (" + rooms + ")"})
 	// A newer account fence is retained as contradictory evidence, never omitted
 	// because it no longer points at the captured owner room. It is not releasable
 	// by this snapshot alone.
-	fencePredicate := "room_id IN (SELECT room_id::text FROM (" + rooms + ") captured_rooms) OR account_id IN (" + identities + ")"
+	fencePredicate := "room_id IN (SELECT room_id::text FROM (" + rooms + ") captured_rooms) OR account_id IN (" + identities + ") OR profile_id IN (" + profiles + ")"
 	sources = append(sources, cutoverSource{"voice_account_voice_fences", fencePredicate}, cutoverSource{"voice_profile_account_mappings", "account_id IN (" + identities + ") OR profile_id IN (SELECT profile_id FROM voice_room_memberships WHERE room_id IN (" + rooms + ")) OR profile_id IN (SELECT profile_id FROM voice_account_voice_fences WHERE " + fencePredicate + ")"})
 	sort.Slice(sources, func(i, j int) bool { return sources[i].Table < sources[j].Table })
 	return sources, nil
@@ -119,6 +133,14 @@ func (s *CutoverWorkStore) PrepareCutoverDrain(ctx context.Context, id uuid.UUID
 		return zero, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	// LOCK is a utility command, so a waiter has not acquired its RR snapshot
+	// yet. Serialize this rare two-domain maintenance journal before the first
+	// SELECT; otherwise an advisory-lock waiter can miss the just-committed
+	// winner and fail an exact retry with a duplicate work key. No native owner
+	// row/account locks are taken or nested underneath this journal barrier.
+	if _, err = tx.Exec(ctx, `LOCK TABLE voice_owned_game_cutover_work IN SHARE ROW EXCLUSIVE MODE`); err != nil {
+		return zero, err
+	}
 	// No native row locks or native mutations: the snapshot cannot invert the
 	// existing room/account identity barriers. External fences remain mandatory.
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "voice.owned-game.work/"+id.String()); err != nil {
@@ -141,6 +163,9 @@ func (s *CutoverWorkStore) PrepareCutoverDrain(ctx context.Context, id uuid.UUID
 	}
 	targets, err := captureCutoverTargets(ctx, tx, s.SourceKind)
 	if err != nil {
+		return zero, err
+	}
+	if err = validateCutoverManifest(targets, s.SourceKind); err != nil {
 		return zero, err
 	}
 	providers, unknown, err := deriveCutoverIssuance(targets)
@@ -196,10 +221,7 @@ func captureCutoverTargets(ctx context.Context, tx pgx.Tx, kind string) ([]byte,
 			return nil, err
 		}
 		sort.Slice(captured, func(i, j int) bool { return bytes.Compare(captured[i], captured[j]) < 0 })
-		descriptor, _ := json.Marshal(struct {
-			Table, Predicate string
-			Rows             int
-		}{source.Table, source.Predicate, len(captured)})
+		descriptor, _ := json.Marshal(cutoverSourceDescriptor{source.Table, source.Predicate, len(captured)})
 		targets = append(targets, cutoverTarget{Source: "SOURCE_DESCRIPTOR", Row: descriptor})
 		for _, raw := range captured {
 			targets = append(targets, cutoverTarget{Source: source.Table, Row: raw})
@@ -208,7 +230,7 @@ func captureCutoverTargets(ctx context.Context, tx pgx.Tx, kind string) ([]byte,
 	// Neither owner has complete authenticated historical credential-domain
 	// evidence in its current schema. Empty memberships or expired grants must
 	// therefore still resolve through protected source-specific history.
-	marker, _ := json.Marshal(struct{ SourceKind, Reason string }{kind, "UNKNOWN_HISTORICAL_ISSUANCE_DOMAIN"})
+	marker := cutoverUnknownSource(kind)
 	targets = append(targets, cutoverTarget{Source: "UNKNOWN_ISSUANCE_SOURCE", Row: marker})
 	return json.Marshal(targets)
 }
@@ -258,6 +280,9 @@ func decodeCutoverWork(raw []byte, ref retirementproof.OwnerWorkRef, kind string
 	}
 	// Re-derive every binding and UNKNOWN marker from authoritative retained raw
 	// target bytes. Serialized/caller lists never become verifier authority.
+	if err = validateCutoverManifest(work.SealedTargetManifestBytes, kind); err != nil {
+		return work, err
+	}
 	providers, unknown, err := deriveCutoverIssuance(work.SealedTargetManifestBytes)
 	if err != nil {
 		return work, err
@@ -268,6 +293,103 @@ func decodeCutoverWork(raw []byte, ref retirementproof.OwnerWorkRef, kind string
 	work.CapturedProviderBindings = providers
 	work.UnknownIssuanceMarkers = unknown
 	return work, nil
+}
+
+// validateCutoverManifest checks completeness independently of self-consistent
+// hashes/provider lists: every compiled source must appear exactly once, with
+// exact predicate/count/row shape and the mandatory source-specific history gap.
+func validateCutoverManifest(raw []byte, kind string) error {
+	sources, err := cutoverSources(kind)
+	if err != nil {
+		return err
+	}
+	var targets []cutoverTarget
+	if json.Unmarshal(raw, &targets) != nil {
+		return retirementproof.ErrConflict
+	}
+	canonical, err := json.Marshal(targets)
+	if err != nil || !bytes.Equal(canonical, raw) {
+		return retirementproof.ErrConflict
+	}
+	position := 0
+	for _, source := range sources {
+		if position >= len(targets) || targets[position].Source != "SOURCE_DESCRIPTOR" {
+			return retirementproof.ErrConflict
+		}
+		var descriptor cutoverSourceDescriptor
+		if json.Unmarshal(targets[position].Row, &descriptor) != nil || descriptor.Table != source.Table || descriptor.Predicate != source.Predicate || descriptor.Rows < 0 || descriptor.Rows > len(targets)-position-1 {
+			return retirementproof.ErrConflict
+		}
+		descriptorBytes, _ := json.Marshal(descriptor)
+		if !bytes.Equal(descriptorBytes, targets[position].Row) {
+			return retirementproof.ErrConflict
+		}
+		position++
+		var previous []byte
+		for range descriptor.Rows {
+			target := targets[position]
+			if target.Source != source.Table || (previous != nil && bytes.Compare(previous, target.Row) >= 0) {
+				return retirementproof.ErrConflict
+			}
+			var fields map[string]json.RawMessage
+			if json.Unmarshal(target.Row, &fields) != nil || fields == nil {
+				return retirementproof.ErrConflict
+			}
+			canonicalRow, err := canonicalCutoverJSON(target.Row)
+			if err != nil || !bytes.Equal(canonicalRow, target.Row) {
+				return retirementproof.ErrConflict
+			}
+			for _, key := range cutoverRowKeys(source.Table) {
+				if _, exists := fields[key]; !exists {
+					return retirementproof.ErrConflict
+				}
+			}
+			previous = target.Row
+			position++
+		}
+	}
+	if position != len(targets)-1 || targets[position].Source != "UNKNOWN_ISSUANCE_SOURCE" || !bytes.Equal(targets[position].Row, cutoverUnknownSource(kind)) {
+		return retirementproof.ErrConflict
+	}
+	return nil
+}
+
+func cutoverUnknownSource(kind string) []byte {
+	raw, _ := json.Marshal(struct{ SourceKind, Reason string }{kind, "UNKNOWN_HISTORICAL_ISSUANCE_DOMAIN"})
+	return raw
+}
+
+func cutoverRowKeys(table string) []string {
+	// Required native identity/evidence fields; nullable provenance remains
+	// explicitly NULL. Additional columns are retained, never silently discarded.
+	switch table {
+	case "voice_room_instances":
+		return []string{"room_id", "room_type", "purpose", "state", "owner_id", "livekit_room_name", "created_at"}
+	case "voice_room_memberships":
+		return []string{"profile_id", "room_id", "media_epoch", "account_id", "session_epoch", "membership_state"}
+	case "voice_account_voice_fences":
+		return []string{"account_id", "profile_id", "room_id", "state"}
+	case "voice_profile_account_mappings":
+		return []string{"profile_id", "account_id"}
+	case "voice_match_squad_operations":
+		return []string{"operation_id", "match_id", "room_id", "owner_id", "state", "create_request_sha256", "creation_receipt_id"}
+	case "voice_match_squad_member_operations":
+		return []string{"operation_id", "match_id", "room_id", "profile_id", "account_id", "session_epoch", "media_epoch", "method", "request_sha256", "request_bytes", "state"}
+	case "voice_match_squad_member_effects":
+		return []string{"operation_id", "effect_kind", "match_id", "room_id", "profile_id", "media_epoch", "state"}
+	case "voice_match_squad_member_grants":
+		return []string{"request_id", "match_id", "room_id", "profile_id", "account_id", "session_epoch", "media_epoch", "issued_at", "expires_at"}
+	case "voice_game_session_operations":
+		return []string{"operation_id", "application_id", "environment_id", "session_id", "room_id", "request_hash", "response_bytes", "voice_creation_receipt_id"}
+	case "voice_game_session_closures":
+		return []string{"operation_id", "room_id", "request_hash", "request_bytes", "status", "close_receipt_id"}
+	case "voice_game_session_roster_receipts":
+		return []string{"operation_id", "room_id", "request_hash", "request_bytes", "receipt_id", "response_bytes", "accepted_revision", "lease_expires_at", "removed_profile_ids", "media_fenced_at"}
+	case "voice_sdk_conversion_fence_receipts":
+		return []string{"operation_id", "binding_id", "source_account_id", "source_actor_id", "source_profile_id", "target_account_id", "target_profile_id", "frozen_authority_epoch", "freeze_receipt_id", "request_hash", "receipt_id", "state", "source_room_id", "ordinary_source_snapshot"}
+	default:
+		return nil
+	}
 }
 
 func deriveCutoverIssuance(raw []byte) ([]retirementproof.Digest, []retirementproof.Digest, error) {

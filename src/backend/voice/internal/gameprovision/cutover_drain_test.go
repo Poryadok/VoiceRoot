@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -72,6 +73,135 @@ func TestOwnedGameCutover_SourceCompleteSealing(t *testing.T) {
 	require.Error(t, err, "sealed work is append-only even to its DB owner")
 	_, err = pool.Exec(ctx, `DELETE FROM voice_owned_game_cutover_work WHERE work_id=$1`, ref.WorkID)
 	require.Error(t, err)
+	_, err = pool.Exec(ctx, `TRUNCATE voice_owned_game_cutover_work`)
+	require.Error(t, err, "statement-level truncate cannot erase retained owner history")
+}
+
+func TestOwnedGameCutover_LegacyMembershipRetainsNewerFence(t *testing.T) {
+	ctx := context.Background()
+	pool := cutoverTestDB(t)
+	provisioned, err := NewPostgresStore(pool).Provision(ctx, validProvisionRequest())
+	require.NoError(t, err)
+	account, profile := uuid.New(), uuid.New()
+	_, err = pool.Exec(ctx, `INSERT INTO voice_room_memberships
+ (profile_id,room_id,media_epoch,authorization_digest,can_join,can_publish_audio,can_publish_video,can_publish_screen_share,can_subscribe,can_mute_others,can_deafen_others,can_move_others,can_use_ptt,priority_speaker,joined_at,updated_at,account_id,session_epoch,membership_state)
+ VALUES($1,$2,$3,$4,true,true,false,false,true,false,false,false,false,false,clock_timestamp(),clock_timestamp(),$5,1,'JOINED')`, profile, uuid.MustParse(provisioned.RoomId), uuid.New(), make([]byte, 32), account)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO voice_profile_account_mappings(profile_id,account_id) VALUES($1,$2)`, profile, account)
+	require.NoError(t, err)
+	newerRoom := uuid.NewString()
+	_, err = pool.Exec(ctx, `INSERT INTO voice_account_voice_fences(account_id,profile_id,room_id,state) VALUES($1,$2,$3,'active')`, account, profile, newerRoom)
+	require.NoError(t, err)
+	j := &CutoverWorkStore{Pool: pool, Authority: cutoverFixtureAuthority{}, SourceKind: GameConversionSource}
+	ref, err := j.PrepareCutoverDrain(ctx, uuid.New(), cutoverTestBinding())
+	require.NoError(t, err)
+	work, err := j.ReadOwnerWork(ctx, ref)
+	require.NoError(t, err)
+	require.Contains(t, string(work.SealedTargetManifestBytes), newerRoom, "current/legacy membership identity remains authoritative without member operations, grant or conversion ledger")
+}
+
+func TestOwnedGameCutover_NullMembershipRetainsMappedAlternateFence(t *testing.T) {
+	ctx := context.Background()
+	pool := cutoverTestDB(t)
+	provisioned, err := NewPostgresStore(pool).Provision(ctx, validProvisionRequest())
+	require.NoError(t, err)
+	account, profile, alternate := uuid.New(), uuid.New(), uuid.New()
+	_, err = pool.Exec(ctx, `INSERT INTO voice_room_memberships
+ (profile_id,room_id,media_epoch,authorization_digest,can_join,can_publish_audio,can_publish_video,can_publish_screen_share,can_subscribe,can_mute_others,can_deafen_others,can_move_others,can_use_ptt,priority_speaker,joined_at,updated_at)
+ VALUES($1,$2,$3,$4,true,true,false,false,true,false,false,false,false,false,clock_timestamp(),clock_timestamp())`, profile, uuid.MustParse(provisioned.RoomId), uuid.New(), make([]byte, 32))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO voice_profile_account_mappings(profile_id,account_id) VALUES($1,$3),($2,$3)`, profile, alternate, account)
+	require.NoError(t, err)
+	newerRoom := uuid.NewString()
+	_, err = pool.Exec(ctx, `INSERT INTO voice_account_voice_fences(account_id,profile_id,room_id,state) VALUES($1,$2,$3,'active')`, account, alternate, newerRoom)
+	require.NoError(t, err)
+	j := &CutoverWorkStore{Pool: pool, Authority: cutoverFixtureAuthority{}, SourceKind: GameConversionSource}
+	ref, err := j.PrepareCutoverDrain(ctx, uuid.New(), cutoverTestBinding())
+	require.NoError(t, err)
+	work, err := j.ReadOwnerWork(ctx, ref)
+	require.NoError(t, err)
+	require.Contains(t, string(work.SealedTargetManifestBytes), newerRoom, "NULL legacy account must retain mapped account's newer alternate-profile fence")
+	require.Contains(t, string(work.SealedTargetManifestBytes), `"account_id":null`, "mapping evidence cannot backfill authenticated legacy provenance")
+}
+
+func TestOwnedGameCutover_ClosedCatalogRejectsSelfConsistentSubset(t *testing.T) {
+	ctx := context.Background()
+	pool := cutoverTestDB(t)
+	j := &CutoverWorkStore{Pool: pool, Authority: cutoverFixtureAuthority{}, SourceKind: GameConversionSource}
+	ref, err := j.PrepareCutoverDrain(ctx, uuid.New(), cutoverTestBinding())
+	require.NoError(t, err)
+	work, err := j.ReadOwnerWork(ctx, ref)
+	require.NoError(t, err)
+	var targets []cutoverTarget
+	require.NoError(t, json.Unmarshal(work.SealedTargetManifestBytes, &targets))
+	var descriptors []cutoverTarget
+	for _, target := range targets {
+		if target.Source == "SOURCE_DESCRIPTOR" {
+			descriptors = append(descriptors, target)
+		}
+	}
+	badUnknown := append([]cutoverTarget(nil), targets...)
+	badUnknown[len(badUnknown)-1].Row = json.RawMessage(`{"SourceKind":"OWNED_ROOM","Reason":"UNKNOWN_HISTORICAL_ISSUANCE_DOMAIN"}`)
+	cases := map[string][]cutoverTarget{"descriptors_only": descriptors, "missing_source_descriptor": targets[1:], "wrong_unknown_source": badUnknown, "scalar_source_row": append(append([]cutoverTarget(nil), targets...), cutoverTarget{Source: "voice_game_session_operations", Row: json.RawMessage(`42`)})}
+	for name, bad := range cases {
+		t.Run(name, func(t *testing.T) {
+			forged := work
+			forged.SealedTargetManifestBytes, err = json.Marshal(bad)
+			require.NoError(t, err)
+			forged.SealedTargetManifestHash = retirementproof.Hash(retirementproof.TargetDomain, forged.SealedTargetManifestBytes)
+			forged.SealedTargetCount = uint64(len(bad))
+			forged.CapturedProviderBindings, forged.UnknownIssuanceMarkers, err = deriveCutoverIssuance(forged.SealedTargetManifestBytes)
+			require.NoError(t, err)
+			raw, e := json.Marshal(forged)
+			require.NoError(t, e)
+			_, err = decodeCutoverWork(raw, ref, GameConversionSource)
+			require.ErrorIs(t, err, retirementproof.ErrConflict, "self-consistent target hashes/lists cannot replace closed source completeness")
+		})
+	}
+}
+
+func TestOwnedGameCutover_ConcurrentExactPrepareAfterLockWait(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := cutoverTestDB(t)
+	// Pause the winning public Prepare at INSERT, after its owner-ID lock and
+	// snapshot exist. The second public Prepare must observe that winner after
+	// its real database lock wait, not use a pre-wait repeatable-read snapshot.
+	_, err := pool.Exec(ctx, `CREATE FUNCTION fixture_pause_owned_insert() RETURNS TRIGGER LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(31337272); RETURN NEW; END; $$;
+ CREATE TRIGGER fixture_pause_owned_insert BEFORE INSERT ON voice_owned_game_cutover_work FOR EACH ROW EXECUTE FUNCTION fixture_pause_owned_insert()`)
+	require.NoError(t, err)
+	control, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = control.Rollback(context.Background()) }()
+	_, err = control.Exec(ctx, `SELECT pg_advisory_xact_lock(31337272)`)
+	require.NoError(t, err)
+	j := &CutoverWorkStore{Pool: pool, Authority: cutoverFixtureAuthority{}, SourceKind: GameConversionSource}
+	id, cut := uuid.New(), cutoverTestBinding()
+	type outcome struct {
+		ref retirementproof.OwnerWorkRef
+		err error
+	}
+	results := make(chan outcome, 2)
+	prepare := func() { ref, err := j.PrepareCutoverDrain(ctx, id, cut); results <- outcome{ref, err} }
+	go prepare()
+	waitForBlocked := func(count int) {
+		require.Eventually(t, func() bool {
+			var actual int
+			err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND cardinality(pg_blocking_pids(pid))>0`).Scan(&actual)
+			return err == nil && actual >= count
+		}, 10*time.Second, 20*time.Millisecond, "real owner Prepare must be waiting at its exact database barrier")
+	}
+	waitForBlocked(1)
+	go prepare()
+	waitForBlocked(2)
+	require.NoError(t, control.Commit(ctx))
+	first, second := <-results, <-results
+	require.NoError(t, first.err)
+	require.NoError(t, second.err)
+	require.Equal(t, first.ref, second.ref)
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_owned_game_cutover_work WHERE work_id=$1`, id).Scan(&count))
+	require.Equal(t, 1, count)
 }
 
 func TestOwnedGameCutover_NoAuthorityNoSealing(t *testing.T) {

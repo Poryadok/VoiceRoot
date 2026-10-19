@@ -18,4 +18,6 @@ END;
 $$;
 CREATE TRIGGER voice_owned_game_cutover_immutable BEFORE UPDATE OR DELETE ON voice_owned_game_cutover_work
  FOR EACH ROW EXECUTE FUNCTION voice_owned_game_cutover_immutable_fn();
+CREATE TRIGGER voice_owned_game_cutover_no_truncate BEFORE TRUNCATE ON voice_owned_game_cutover_work
+ FOR EACH STATEMENT EXECUTE FUNCTION voice_owned_game_cutover_immutable_fn();
 COMMIT;
