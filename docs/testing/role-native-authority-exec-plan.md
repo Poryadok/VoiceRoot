@@ -324,3 +324,35 @@ Moderation supplies a verified local actor/assignee. Native44 all-writer/45,
 same-core Assign198c55/current/provider/identity172 and complete public report
 activation remain open. Existing Bot/Space grants are unchanged. Independent
 source review and named consumer intake follow frozen proof, not a ready claim.
+
+2026-10-19 actual247 external consumer found a portable DSN defect; root resumed
+the original183 fixture-export function (BE010 c79). Fresh ownWT19 lease
+c497cde87b42c79a7997edaffcd27b97, base8aa; prior19 leases were returned.
+Pinned pgx5.7.6 ConnConfig.ConnString returns original parsed text even after
+copied User/Password fields are modified. The in-process nonowner pool was
+correct, but the exported text reopened the original administrator. New actual
+reconnect identity regression frozen2c3e0ab failed16.996s without printing
+credentials or DSN. It ran from a Git archive with executed-source manifests
+before/after, not a mutable peer checkout.186 independently confirmed fresh
+prospective NONE observations work under the genuine app LOGIN; no native
+profile bug, initializer fallback or44 qualification bypass is being repaired.
+
+Fixture-only correction rebinds credentials in the original URI/keyword text,
+preserving every other serialized parameter. URI query credentials are also
+replaced because pgx lets them shadow userinfo; keyword quotes/backslashes use
+pgx grammar. Parse-based tests cover special credentials, TLS require/prefer,
+fallback hosts/ports, timeouts, runtime/query/pool options. The build executes
+these tests in each immutable Space source;39/44 isolation passed25.186s.
+Before exporting, the fixture opens a fresh pool from that DSN and verifies
+session identity, database and non-superuser. On initialized44 it also performs
+the actual guarded source read for a fresh prospective profile. Any mismatch
+fails before export; no admin fallback. The parent regression independently
+reopens the exported text and then exercises real Role25->Space44 protected
+receipts and publication. Final frozen-source positive follows separately.
+
+Only fixture/test/build-script/ExecPlan paths change. No Role/Space production,
+Auth identity/provider/core or stopped172/191/230/372 operations. The default
+test Postgres TLS setting is preserved; parser tests additionally preserve TLS
+and fallback parameters, and existing Role/Space mTLS remains exercised. Actual
+current8cd Bot consumer integration belongs to247/186 after this exact export
+fix; no current source readiness may be inferred from the pinneda36 fixture.

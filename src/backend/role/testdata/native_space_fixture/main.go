@@ -12,7 +12,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
 	"net"
+	"net/url"
 	"os"
+	"strings"
+	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/pkg/memberadmission"
 	"voice/backend/space/internal/grpcsvc"
 	"voice/backend/space/internal/memberauthorityprincipal"
@@ -116,7 +119,34 @@ func run() error {
 			return fmt.Errorf("independent application login unavailable: %w", err)
 		}
 		servingLogin = actual
-		servingDSN = application.Config().ConnString()
+		// ConnString retains the ORIGINAL parsed text, not our modified Config
+		// credentials. Rebind the original syntax without discarding TLS/options.
+		servingDSN, err = fixtureDSNWithCredentials(pool.Config().ConnString(), login, cfg.ConnConfig.Password)
+		if err != nil {
+			return err
+		}
+		reopened, err := pgxpool.New(ctx, servingDSN)
+		if err != nil {
+			return fmt.Errorf("exported application connection unavailable")
+		}
+		defer reopened.Close()
+		var reopenedLogin, reopenedDatabase string
+		var reopenedSuperuser bool
+		if err = reopened.QueryRow(ctx, "SELECT session_user,current_database(),(SELECT rolsuper FROM pg_roles WHERE rolname=session_user)").Scan(&reopenedLogin, &reopenedDatabase, &reopenedSuperuser); err != nil || reopenedLogin != login || reopenedSuperuser {
+			return fmt.Errorf("exported application identity roundtrip failed")
+		}
+		if reopenedDatabase != cfg.ConnConfig.Database {
+			return fmt.Errorf("exported application database roundtrip failed")
+		}
+		if prepare44 {
+			// This is a genuinely fresh consumer pool from the exported DSN. The
+			// actual getter enforces nonowner+COMPLETE; no readiness callback or
+			// administrator fallback can supply this prospective NONE observation.
+			external := &store.SpaceStore{Pool: reopened}
+			if _, err = external.ReadMemberAdmissionAuthority(ctx, &spacev1.GetMemberAdmissionAuthorityRequest{ProtocolVersion: 1, SpaceId: space.ID.String(), ProfileId: uuid.NewString()}); err != nil {
+				return fmt.Errorf("exported application scoped authority unavailable")
+			}
+		}
 		if err = application.QueryRow(ctx, "SELECT current_database()").Scan(&databaseName); err != nil {
 			return err
 		}
@@ -201,6 +231,39 @@ func run() error {
 			return fmt.Errorf("unknown fixture action")
 		}
 	}
+}
+
+// fixtureDSNWithCredentials preserves every noncredential parameter in the
+// original pgx URI/keyword syntax. Never rebuild a DSN from a subset of Config.
+func fixtureDSNWithCredentials(source, login, password string) (string, error) {
+	if source == "" || login == "" || password == "" || strings.ContainsRune(source+login+password, 0) {
+		return "", fmt.Errorf("invalid fixture connection settings")
+	}
+	if strings.HasPrefix(source, "postgres://") || strings.HasPrefix(source, "postgresql://") {
+		parsed, err := url.Parse(source)
+		if err != nil {
+			return "", fmt.Errorf("invalid fixture connection URI")
+		}
+		query, err := url.ParseQuery(parsed.RawQuery)
+		if err != nil {
+			return "", fmt.Errorf("invalid fixture connection parameters")
+		}
+		parsed.User = url.UserPassword(login, password)
+		// pgx query credentials override userinfo, so replace them as well when
+		// present. Other query values (including TLS and fallback hosts) survive.
+		if query.Has("user") {
+			query.Set("user", login)
+		}
+		if query.Has("password") {
+			query.Set("password", password)
+		}
+		parsed.RawQuery = query.Encode()
+		return parsed.String(), nil
+	}
+	// pgx keyword parsing uses the final occurrence. Escape both quote and
+	// backslash per its quoted-value grammar rather than shell/URL escaping.
+	escape := strings.NewReplacer("\\", "\\\\", "'", "\\'")
+	return source + " user='" + escape.Replace(login) + "' password='" + escape.Replace(password) + "'", nil
 }
 func main() {
 	if err := run(); err != nil {

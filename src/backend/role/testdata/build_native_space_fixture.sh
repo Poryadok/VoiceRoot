@@ -23,7 +23,9 @@ test -z "$(find "$ROLE_NATIVE_SPACE_OUTPUT_DIR" -mindepth 1 -maxdepth 1 -print -
 tar -xf "${ROLE_NATIVE_SPACE_ARCHIVE_DIR:-$repo_root/tmp/swarm}/native-space-$source_pin.tar" -C "$source_root"
 mkdir -p "$source_root/src/backend/space/cmd/role-native-fixture"
 cp "$role_root/testdata/native_space_fixture/main.go" "$source_root/src/backend/space/cmd/role-native-fixture/main.go"
+cp "$role_root/testdata/native_space_fixture/dsn_test.go" "$source_root/src/backend/space/cmd/role-native-fixture/dsn_test.go"
 cd "$source_root/src/backend/space"
+go test ./cmd/role-native-fixture -run '^TestFixtureDSNCredentialRoundTrip$' -count=1
 go build -o "$ROLE_NATIVE_SPACE_OUTPUT_DIR/fixture" ./cmd/role-native-fixture
 # The actual migrator fixture needs the same immutable migration set, copied
 # outside the temporary build tree for the lifetime of the Role test process.
