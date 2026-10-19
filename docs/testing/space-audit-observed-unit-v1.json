@@ -1,0 +1,328 @@
+{
+  "version": "MASTER-SPACE-AUDIT-OBSERVED-UNIT-v1",
+  "status": "SOURCE_CONSUMPTION_CONTRACT_CLEAR",
+  "source": "8fc9e542acd8039a356c4149ccd0fd4a16f79564",
+  "base": "698d4f064f032ea74abf3ede2017100b26c8ee69",
+  "cases": [
+    {
+      "path": "src/backend/space/internal/grpcsvc/audit_ingestion_test.go",
+      "merge": "c98b95a3f6417b4cf8779bfff062783ef13ca878",
+      "parents": [
+        "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+        "566ec5041050d71a7feeeecbf0bd0e0811238f14"
+      ],
+      "best_bases": [
+        "2f0d5eaafb9ac046e6adda643809a569901f49d7"
+      ],
+      "actual_prior_row": [
+        "src/backend/space/internal/grpcsvc/audit_ingestion_test.go",
+        "false",
+        "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+        "eaf51ba199af1bedf976291303bcc9c611331d16",
+        "698d4f064f032ea74abf3ede2017100b26c8ee69",
+        "47784a68f3ae2276ab34b9b23f3f1974b1b1ee3d",
+        "eaf51ba199af1bedf976291303bcc9c611331d16",
+        "698d4f064f032ea74abf3ede2017100b26c8ee69"
+      ],
+      "actual_incoming_row": [
+        "src/backend/space/internal/grpcsvc/audit_ingestion_test.go",
+        "false",
+        "c98b95a3f6417b4cf8779bfff062783ef13ca878",
+        "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+        "2f0d5eaafb9ac046e6adda643809a569901f49d7",
+        "566ec5041050d71a7feeeecbf0bd0e0811238f14",
+        "eaf51ba199af1bedf976291303bcc9c611331d16",
+        "2f0d5eaafb9ac046e6adda643809a569901f49d7"
+      ],
+      "entries": {
+        "base": {
+          "revision": "2f0d5eaafb9ac046e6adda643809a569901f49d7",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "8ba66b7654e1f76fbe126720d63cf5741677ed36"
+          },
+          "sha256": "f30e74cbf0e0635fc9b181761bbcf59b4214bbb17bc0365087bf3a794b10514c",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__base",
+          "bytes": 8043
+        },
+        "first": {
+          "revision": "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "8ba66b7654e1f76fbe126720d63cf5741677ed36"
+          },
+          "sha256": "f30e74cbf0e0635fc9b181761bbcf59b4214bbb17bc0365087bf3a794b10514c",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__first",
+          "bytes": 8043
+        },
+        "incoming": {
+          "revision": "566ec5041050d71a7feeeecbf0bd0e0811238f14",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "3e431846918af270c3a5eae2e56aef170c14dfcb"
+          },
+          "sha256": "0e77141229b01ed6bb6075285a18d60553289309595b52165f40cf58273b60b0",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__incoming",
+          "bytes": 8132
+        },
+        "result": {
+          "revision": "c98b95a3f6417b4cf8779bfff062783ef13ca878",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "3e431846918af270c3a5eae2e56aef170c14dfcb"
+          },
+          "sha256": "0e77141229b01ed6bb6075285a18d60553289309595b52165f40cf58273b60b0",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__result",
+          "bytes": 8132
+        },
+        "prior_owner": {
+          "revision": "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "8ba66b7654e1f76fbe126720d63cf5741677ed36"
+          },
+          "sha256": "f30e74cbf0e0635fc9b181761bbcf59b4214bbb17bc0365087bf3a794b10514c",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__prior_owner",
+          "bytes": 8043
+        },
+        "prior_source": {
+          "revision": "47784a68f3ae2276ab34b9b23f3f1974b1b1ee3d",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "8ba66b7654e1f76fbe126720d63cf5741677ed36"
+          },
+          "sha256": "f30e74cbf0e0635fc9b181761bbcf59b4214bbb17bc0365087bf3a794b10514c",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__prior_source",
+          "bytes": 8043
+        },
+        "current": {
+          "revision": "8fc9e542acd8039a356c4149ccd0fd4a16f79564",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "3e431846918af270c3a5eae2e56aef170c14dfcb"
+          },
+          "sha256": "0e77141229b01ed6bb6075285a18d60553289309595b52165f40cf58273b60b0",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__current",
+          "bytes": 8132
+        }
+      }
+    },
+    {
+      "path": "src/backend/space/internal/store/audit_ingestion_test.go",
+      "merge": "c98b95a3f6417b4cf8779bfff062783ef13ca878",
+      "parents": [
+        "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+        "566ec5041050d71a7feeeecbf0bd0e0811238f14"
+      ],
+      "best_bases": [
+        "2f0d5eaafb9ac046e6adda643809a569901f49d7"
+      ],
+      "actual_prior_row": [
+        "src/backend/space/internal/store/audit_ingestion_test.go",
+        "false",
+        "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+        "eaf51ba199af1bedf976291303bcc9c611331d16",
+        "698d4f064f032ea74abf3ede2017100b26c8ee69",
+        "47784a68f3ae2276ab34b9b23f3f1974b1b1ee3d",
+        "eaf51ba199af1bedf976291303bcc9c611331d16",
+        "698d4f064f032ea74abf3ede2017100b26c8ee69"
+      ],
+      "actual_incoming_row": [
+        "src/backend/space/internal/store/audit_ingestion_test.go",
+        "false",
+        "c98b95a3f6417b4cf8779bfff062783ef13ca878",
+        "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+        "2f0d5eaafb9ac046e6adda643809a569901f49d7",
+        "566ec5041050d71a7feeeecbf0bd0e0811238f14",
+        "eaf51ba199af1bedf976291303bcc9c611331d16",
+        "2f0d5eaafb9ac046e6adda643809a569901f49d7"
+      ],
+      "entries": {
+        "base": {
+          "revision": "2f0d5eaafb9ac046e6adda643809a569901f49d7",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "b2ef7aa139c0e7cff6a5549098ecf5b646211074"
+          },
+          "sha256": "6ce203e86f51e5506b7887a4e150a49a8e72d31fa3183b01a34ea01c3bfb08e8",
+          "artifact": "src__backend__space__internal__store__audit_ingestion_test.go__base",
+          "bytes": 13874
+        },
+        "first": {
+          "revision": "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "b2ef7aa139c0e7cff6a5549098ecf5b646211074"
+          },
+          "sha256": "6ce203e86f51e5506b7887a4e150a49a8e72d31fa3183b01a34ea01c3bfb08e8",
+          "artifact": "src__backend__space__internal__store__audit_ingestion_test.go__first",
+          "bytes": 13874
+        },
+        "incoming": {
+          "revision": "566ec5041050d71a7feeeecbf0bd0e0811238f14",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "d69e8a6e161b04d448044cca763e01c3752021d6"
+          },
+          "sha256": "81d43821bf35e16d5ecf10cfab7bcfb44cf7b0d9c3f76bbc836ba1fb409f086e",
+          "artifact": "src__backend__space__internal__store__audit_ingestion_test.go__incoming",
+          "bytes": 14493
+        },
+        "result": {
+          "revision": "c98b95a3f6417b4cf8779bfff062783ef13ca878",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "d69e8a6e161b04d448044cca763e01c3752021d6"
+          },
+          "sha256": "81d43821bf35e16d5ecf10cfab7bcfb44cf7b0d9c3f76bbc836ba1fb409f086e",
+          "artifact": "src__backend__space__internal__store__audit_ingestion_test.go__result",
+          "bytes": 14493
+        },
+        "prior_owner": {
+          "revision": "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "b2ef7aa139c0e7cff6a5549098ecf5b646211074"
+          },
+          "sha256": "6ce203e86f51e5506b7887a4e150a49a8e72d31fa3183b01a34ea01c3bfb08e8",
+          "artifact": "src__backend__space__internal__store__audit_ingestion_test.go__prior_owner",
+          "bytes": 13874
+        },
+        "prior_source": {
+          "revision": "47784a68f3ae2276ab34b9b23f3f1974b1b1ee3d",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "b2ef7aa139c0e7cff6a5549098ecf5b646211074"
+          },
+          "sha256": "6ce203e86f51e5506b7887a4e150a49a8e72d31fa3183b01a34ea01c3bfb08e8",
+          "artifact": "src__backend__space__internal__store__audit_ingestion_test.go__prior_source",
+          "bytes": 13874
+        },
+        "current": {
+          "revision": "8fc9e542acd8039a356c4149ccd0fd4a16f79564",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "d69e8a6e161b04d448044cca763e01c3752021d6"
+          },
+          "sha256": "81d43821bf35e16d5ecf10cfab7bcfb44cf7b0d9c3f76bbc836ba1fb409f086e",
+          "artifact": "src__backend__space__internal__store__audit_ingestion_test.go__current",
+          "bytes": 14493
+        }
+      }
+    }
+  ],
+  "criterion": "Only these two exact historical test-source tuples, each now observed at ORIGINAL unchanged collector CLI after legitimate reviewed grpc-only qualification. Preserve both full actual rows and their exact false/false flags; ORfalse is not PG/runtime PASS. No generic identical-blob grant, no current/future path/activation authority. Complete14sourcebindings/fixedrecord/rawhash required. Prior diagnostic forced-taint row assertion INVALIDATED; never normalize actual flags to old diagnostic rows.",
+  "runtime_pass": false,
+  "generic_path_authority": false,
+  "activation_authority": false,
+  "inventory_limitation": "Finaldiagnostic60015 observed3dupes thenlater source_baseFAIL, notexhaustive. OriginalRb04 flags invalidated144c77. grpc original932 capture and store original2ce99 capture are controlling; store reached only after legitimategrpcsourcecontract144c78/carrier418c17. No invented incomingstoreledger: actualCLI8+8 and originalpriornestedmap retained, separate incomingstoremap notfound. Later production source_base STILLUNREACHED/UNKNOWN; falseflags do not waive independent PG/currentCI/runtime obligations.",
+  "artifacts": {
+    "remaining-duplicate-tuples.tsv": {
+      "sha256": "06758b8f7e3c661469e31922416aceda45bdba7f79ed7172215fc4064a707173",
+      "bytes": 1471
+    },
+    "remaining-duplicate-prior-rows.tsv": {
+      "sha256": "c8c0571e53d83e15743bcfef07d5d22e2c4fa9c93235c20a0a08944432839ccd",
+      "bytes": 924
+    },
+    "remaining-duplicate-diagnostic.log": {
+      "sha256": "bbcc8f2a1d842e01a7bb17eeb8af85ccc4fb1134ecb5df84272df7971485e4df",
+      "bytes": 42203
+    },
+    "remaining-duplicate-instrumentation.json": {
+      "sha256": "956b13a9a893649fd72cc2410f273de485cc9dd6c6c669e84a4a5ab2e7d4c54d",
+      "bytes": 584
+    },
+    "remaining-duplicate-receipt.json": {
+      "sha256": "10db3bf363fc562b98f64dc134add4e0cfd3849104303c289c6808b56914ee2e",
+      "bytes": 774
+    },
+    "space-audit-proof/actual-call-receipt.json": {
+      "sha256": "9b2f0d5740a5d67d61103fbb000af34cb990242d10e31a2b3c6435cf84894709",
+      "bytes": 2212
+    },
+    "space-audit-proof/actual-call.stderr": {
+      "sha256": "24c344148a971b06ee8c9e343eb65908e85e2c55af8057e209c1cf45bb38c070",
+      "bytes": 61
+    },
+    "space-audit-proof/call-capture-full-pr.log": {
+      "sha256": "24f9d44b032093ce7c9415a35af2d36fdd36f8f8fbcdd5d64263005ef7ec1cc2",
+      "bytes": 16793
+    },
+    "space-audit-proof/call-capture-runner.json": {
+      "sha256": "161d15e392a760caf7a8379f26ba944ccadd0fef8d2def521e27f8e063038928",
+      "bytes": 315
+    },
+    "416-space-audit-call-capture.sh": {
+      "sha256": "7b991145b72db0e8826f628dba7400449ef3828b9eca3a6af680bb52eaa10e8e",
+      "bytes": 2885
+    },
+    "space-grpc-proof/actual-store-receipt.json": {
+      "sha256": "869d67473c4ddf33a72a520ea7e27e5ee2dc0c0bfb18b845542ab3acdd84ee68",
+      "bytes": 138251
+    },
+    "space-grpc-proof/actual-store.stderr": {
+      "sha256": "a6cb58c78678e1be46f062e95dc5c4b64143112ba253c3bd95b2bedef4dd1679",
+      "bytes": 45
+    },
+    "space-grpc-proof/store-observed-summary.json": {
+      "sha256": "cbf7fe7919f85aad4e714e77376b0358024373115e5f3dca49445518d5e64a94",
+      "bytes": 3055
+    },
+    "space-grpc-proof/full-runner.json": {
+      "sha256": "07b1aa78c03dafbc48a989e7158a542cf23f1322927fcd5f29843e50cc640e7d",
+      "bytes": 289
+    },
+    "space-grpc-proof/store-capture-full-pr.log": {
+      "sha256": "ab675e6f0ddb5cf40b19a1aa6620ade6a0dff7ed27dc983f584f8cf2dad1a4c9",
+      "bytes": 18838
+    },
+    "416-space-grpc-proof.sh": {
+      "sha256": "c7053fa0b1952d0f1c9d86734d6e78e75114264ae4eba1178de7a96f75b95315",
+      "bytes": 3938
+    },
+    "space-grpc-proof/store-original-map-snapshot/tmp.VvSljCS4Ay__f13-nested-map-e6757e8ac26032ac4bad7f4356e91fffbf0725ba-2": {
+      "sha256": "297927543b28a4e821a38f3f19da8760a64a81c84c5596d86e8f0c10891af562",
+      "bytes": 116513
+    },
+    "space-grpc-proof/store-original-map-snapshot/tmp.VvSljCS4Ay__f13-map-rewrite": {
+      "sha256": "e2779c179101b8e6540c6cbadd96f115ee84a275cf2dd0cc0c94be73ef0cef93",
+      "bytes": 116202
+    }
+  },
+  "observations": [
+    {
+      "path": "src/backend/space/internal/grpcsvc/audit_ingestion_test.go",
+      "source": "932d09e351f6823e297be4ff489faf9d88c3c16a",
+      "receipt": "space-audit-proof/actual-call-receipt.json",
+      "input_kind": "Actual unchanged production collector CLI arguments, forwarded unchanged; no row reconstructed from R",
+      "exit": 1,
+      "review": "SWARMc78"
+    },
+    {
+      "path": "src/backend/space/internal/store/audit_ingestion_test.go",
+      "source": "2ce99d04f74172fc5943e16f4517c3e06dd7821e",
+      "receipt": "space-grpc-proof/actual-store-receipt.json",
+      "input_kind": "Original production collector CLI arguments forwarded unchanged, no row reconstructed or forced",
+      "exit": 1,
+      "review": "SWARMc85"
+    }
+  ],
+  "review": "http://192.168.0.109:30990/?project=voice&task=SWARM-DEVELOP-20261018#comment-c87",
+  "proposal_sha256": "f0c16153575fdca7bc0a6b07d20ed33c1938adf332a9f27a1763c93f2edd89a3",
+  "carrier_status": "Metadata only; requires separate later pinned complete2observedcase consumer/review and originalfullPRpush/currentCI. No producer/runtime/master/activation PASS."
+}
