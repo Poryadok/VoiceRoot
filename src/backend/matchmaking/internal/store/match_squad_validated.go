@@ -43,6 +43,11 @@ func (s *MatchStore) AuthorizeMatchSquadProviderDispatch(ctx context.Context, ca
 	}
 	var ticket MatchSquadDispatchTicket
 	err := s.withValidatedProvisionCutTx(ctx, candidate, proof, func(tx pgx.Tx) error {
+		if mismatch, err := matchSquadCreationMismatchTx(ctx, tx, candidate.MatchID); err != nil {
+			return err
+		} else if mismatch {
+			return ErrMatchSquadCreationMismatch
+		}
 		operation, err := scanMatchSquadProvisioningOperation(tx.QueryRow(ctx, `
 		 SELECT match_id,operation_id,participant_manifest_sha256,participant_manifest_bytes,state,
 		 chat_operation_id,chat_request_sha256,chat_request_bytes,chat_receipt_id,chat_receipt_bytes,chat_id,
@@ -110,6 +115,11 @@ func (s *MatchStore) ActivateValidatedProvisionedMatch(ctx context.Context, cand
 	}
 	var activated Match
 	err := s.withValidatedProvisionCutTx(ctx, candidate, proof, func(tx pgx.Tx) error {
+		if mismatch, err := matchSquadCreationMismatchTx(ctx, tx, candidate.MatchID); err != nil {
+			return err
+		} else if mismatch {
+			return ErrMatchSquadCreationMismatch
+		}
 		var persistedID uuid.UUID
 		var protocol int16
 		var disposition, state, chat, voice string

@@ -293,11 +293,11 @@ func (w *MatchSquadProviderWorker) provisionClaimedOperation(ctx context.Context
 		}
 		receiptID, err := uuid.Parse(receipt.GetReceiptId())
 		if err != nil {
-			return operation, fmt.Errorf("%w: Chat receipt ID is invalid", errProviderContract)
+			return operation, w.recordCreationMismatch(ctx, operation, "chat", receiptBytes)
 		}
 		chatID, err := uuid.Parse(receipt.GetChatId())
 		if err != nil {
-			return operation, fmt.Errorf("%w: Chat resource ID is invalid", errProviderContract)
+			return operation, w.recordCreationMismatch(ctx, operation, "chat", receiptBytes)
 		}
 		voiceRequest, err := newVoiceCreateRequest(operation, receipt)
 		if err != nil {
@@ -307,10 +307,14 @@ func (w *MatchSquadProviderWorker) provisionClaimedOperation(ctx context.Context
 		if err != nil {
 			return operation, err
 		}
-		operation, err = w.Store.RecordMatchSquadChatReceipt(ctx, operation.MatchID, receiptID, chatID, receiptBytes, sha256Bytes(voiceBytes), voiceBytes)
-		if err != nil {
-			return operation, err
+		recorded, recordErr := w.Store.RecordMatchSquadChatReceipt(ctx, operation.MatchID, receiptID, chatID, receiptBytes, sha256Bytes(voiceBytes), voiceBytes)
+		if recordErr != nil {
+			if errors.Is(recordErr, store.ErrMatchSquadConflict) {
+				return operation, w.recordCreationMismatch(ctx, operation, "chat", receiptBytes)
+			}
+			return operation, recordErr
 		}
+		operation = recorded
 	}
 	if operation.ChatReceiptID == nil || operation.ChatID == nil || len(operation.ChatReceiptBytes) == 0 || len(operation.VoiceRequestBytes) == 0 {
 		return operation, fmt.Errorf("%w: Chat receipt and Voice request must be durable before Voice creation", errProviderContract)
@@ -348,16 +352,20 @@ func (w *MatchSquadProviderWorker) provisionClaimedOperation(ctx context.Context
 		}
 		receiptID, err := uuid.Parse(receipt.GetReceiptId())
 		if err != nil {
-			return operation, fmt.Errorf("%w: Voice receipt ID is invalid", errProviderContract)
+			return operation, w.recordCreationMismatch(ctx, operation, "voice", receiptBytes)
 		}
 		roomID, err := uuid.Parse(receipt.GetRoomId())
 		if err != nil {
-			return operation, fmt.Errorf("%w: Voice resource ID is invalid", errProviderContract)
+			return operation, w.recordCreationMismatch(ctx, operation, "voice", receiptBytes)
 		}
-		operation, err = w.Store.RecordMatchSquadVoiceReceipt(ctx, operation.MatchID, receiptID, roomID, receiptBytes)
-		if err != nil {
-			return operation, err
+		recorded, recordErr := w.Store.RecordMatchSquadVoiceReceipt(ctx, operation.MatchID, receiptID, roomID, receiptBytes)
+		if recordErr != nil {
+			if errors.Is(recordErr, store.ErrMatchSquadConflict) {
+				return operation, w.recordCreationMismatch(ctx, operation, "voice", receiptBytes)
+			}
+			return operation, recordErr
 		}
+		operation = recorded
 	}
 	if operation.VoiceReceiptID == nil || operation.VoiceRoomID == nil {
 		return operation, fmt.Errorf("%w: Voice creation receipt was not durably recorded", errProviderContract)
@@ -370,6 +378,9 @@ func (w *MatchSquadProviderWorker) provisionClaimedOperation(ctx context.Context
 		// Persisted receipts materialize exact teardown independently. They do
 		// not restore eligibility or make this operation publicly usable.
 		return operation, store.ErrMatchSquadPending
+	}
+	if err := w.Store.CheckMatchSquadCreationEvidence(ctx, operation.MatchID); err != nil {
+		return operation, err
 	}
 	candidate, proof, err := w.partyGate().ValidateAttempt(ctx, operation.MatchID)
 	if err != nil {
@@ -404,6 +415,9 @@ func (w *MatchSquadProviderWorker) authorizeForwardCreate(ctx context.Context, o
 		// Exact replay of a possible dispatch only obtains its original
 		// receipt for cleanup. Never issue a previously NOT_ISSUED provider.
 		return nil
+	}
+	if err := w.Store.CheckMatchSquadCreationEvidence(ctx, operation.MatchID); err != nil {
+		return err
 	}
 	candidate, proof, err := w.partyGate().ValidateAttempt(ctx, operation.MatchID)
 	if err != nil {

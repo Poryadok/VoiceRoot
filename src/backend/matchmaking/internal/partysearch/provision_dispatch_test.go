@@ -99,7 +99,7 @@ func TestAbandonedProviderResumeSettlesOnlyPreviouslyIssuedCreates(t *testing.T)
 	_, _, err = worker.Provision(ctx, intent.MatchID, p.MemberProfileIDs)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 	_, attentionErr := worker.RunProvisioningOnce(ctx, 10)
-	require.ErrorIs(t, attentionErr, squad.ErrProvisionOperatorAttention)
+	require.NoError(t, attentionErr, "terminal transport status alone is not contradictory receipt evidence")
 	require.Equal(t, 1, voice.calls, "another request or process must respect durable creation backoff")
 	var aggregates int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_squad_teardowns WHERE match_id=$1`, intent.MatchID).Scan(&aggregates))

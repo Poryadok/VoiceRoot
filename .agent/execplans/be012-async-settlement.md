@@ -235,3 +235,57 @@ Remaining concrete c9 risk: known contradictory creation receipts need durable p
 Product C4/C5 now actual PG+native pinnedNATS2.12.12 race1PASS/0skip11.496s in settlement-product-pg-ack-v4. Product MatchStore.ApplyVoiceRosterEvent blocks at an actual cancellation-outbox table lock; independent PG sees no committed inbox and broker ACKfloor0/pending1. Forced outbox CHECK failure rolls back real inbox/party/session changes and is not ACKed. Retry commits inbox+2 cancellations+generation reset; test closes actual consumer TCP after COMMIT before product ACK. Native broker retains pending; a new production Consumer binds same unchanged durable/Created/config, redelivery ACKs exact committed inbox with one row/two cancellations/unchanged generations. Original cutF1/L3/M1,targetS2 and consumed sequence/ACK are checked. Broker image immutable2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb, actualversion2.12.12; mutable2.12-alpine was2.12.15 and was not used for this proof.
 
 Preserved harness failures: first C4 compile used nonexistent SourceParty type; v2/v3 failed port-isolation guard before product test because testcontainers0.35 auto-merges image ports after HostConfigModifier. Source inspection established this behavior. v4 explicitly shares ONLY supplied owned Linux runner namespace, asserts emptyHostConfig.PortBindings and uses loopback; all fixture brokers terminated and no firewall/settings changed. No product failure inferred. Fixture uses no installed ACL qualification; accepted220/121 authority, real installation and145 assembly remain separate gates. All three affected package vets0; three new source files match Linux/host SHA exactly. C9 mismatch function BE012-CREATION-MISMATCH-EVIDENCE published AVAILABLE with exact69a2 baseline, no fake receiver or waiting. Text attachment c11 returned internal_error, not retried; immutable Git+portable TT comments preserve evidence. Source/CI147 retained.
+
+### 2026-10-19: sticky creation mismatch continuation
+
+Original author147 atomically claimed BE012-CREATION-MISMATCH-EVIDENCE e2;
+explicit acceptance c1 retains the same primary WT31 lease, no foreign handoff.
+Actual develop8afe8e90285a was read before this continuation. Searches at rev3749
+and consumer145 confirmed MM023 unreserved; 021 and 022 remain unchanged.
+
+MM023 adds per-provider first response bytes/hash/time to the immutable operation.
+The row already binds original operation/provider/frozen request. Store API checks
+the original operation ID and request digest under match -> operation locks.
+Exact witness replay is idempotent; another response cannot replace the first.
+Direct SQL cannot clear/rewrite it or newly activate/close/issue another provider.
+Generic terminal status, timeout and absent response remain uncertain, not absence
+or a positive contradictory receipt. The protected coordinator records actual
+receipt bytes on invalid ID/binding; database failures remain failures, never a
+durable-success claim. No response bytes or resource IDs enter the finite alert.
+
+Both LIVE coordinator boundaries and validated storage transitions fence forward
+dispatch/activation. An ABANDONED already-issued replay still obtains original
+receipts solely for cleanup. Each known teardown receipt commits independently;
+the last receipt leaves the aggregate pending when negative evidence exists.
+No completion event or compaction intent is then produced. A contradiction arriving
+after an ordinary closure is retained and pages without reopening the operation or
+rewriting its sealed provider set. PrepareCompaction checks even an already-frozen
+intent. Operator counts use sticky facts, not replaceable last_error_class, and
+include closed operations with late evidence. No automatic reconciliation clears
+these facts. Runtime startup requires the new schema; no activation is claimed.
+
+Real Linux PG/race evidence (all logs preserved under tmp/swarm/rudeus147-be012):
+- Initial schema/stub RED5.481s: evidence column missing; then GREEN15.342s.
+- Old coordinator production path RED3.680s: ErrConflict without sticky witness;
+  corrected common path GREEN5.531s, actual invalid Chat receipt preserved, fresh
+  source cut cannot authorize retry, restart/Unavailable cannot erase alert.
+- Old teardown implementation with new evidence schema RED14.842s: final receipt
+  transaction rolled back on completion guard. Narrow predicate correction makes
+  both receipts persist and leaves aggregate pending.
+- Final storage3 PG tests PASS40.210s/0skip: independent final cleanup, late closed
+  mismatch, unchanged ordinary valid settlement path. Evidence DOWN refusal and
+  direct SQL immutability/completion guards are exercised.
+- Four coordinator regression PG tests PASS29.467s/0skip: uncertain terminal Voice,
+  source Unknown, abandoned exact Chat replay/no new Voice, progress-clock rules.
+  Terminal status alone now correctly does not count as a sticky contradiction.
+- Empty MM023 UP/DOWN/UP real PG PASS12.041s. Scoped vet0 and full MM build0.
+- Scoped short:24 PASS/108 PG skips/0fail, explicitly not runtime PG coverage.
+- CodeGraph was consulted first; frozen index required current-source reads.
+  Graphify update bounded without output; Treehouse identified own cwd processes,
+  CIM proved15316 -> 57384 -> 50412; only verified own child/launcher stopped.
+  No AST PASS. No Windows test executable/listener/firewall changes, stands or GH.
+
+Source/CI remains147 until an actual accepted handoff. Independent review of this
+new production delta, complete settlement source, full assembly, installed NATS
+rights/JWT/TLS, owning media absence, cold cut and rollout remain separate gates.
+Earlier285 CLEAR applies only to exactbee8 additive tests/proof fidelity.

@@ -27,9 +27,9 @@ func (s *MatchStore) MatchSquadProvisioningAttention(ctx context.Context) (Match
 	}
 	var result MatchSquadProvisioningAttention
 	err := s.Pool.QueryRow(ctx, `SELECT
-		count(*) FILTER(WHERE provision_last_progress_at<=clock_timestamp()-interval '15 minutes'),
-		count(*) FILTER(WHERE provision_last_error_class IN ('provider_contract','invalid_argument','failed_precondition'))
-		FROM matchmaking_match_squad_operations WHERE state IN ('provisioning','compensating')`).Scan(&result.Stalled, &result.ContractMismatch)
+		count(*) FILTER(WHERE state IN ('provisioning','compensating') AND provision_last_progress_at<=clock_timestamp()-interval '15 minutes'),
+		count(*) FILTER(WHERE to_jsonb(o)->>'chat_creation_mismatch_bytes' IS NOT NULL OR to_jsonb(o)->>'voice_creation_mismatch_bytes' IS NOT NULL)
+		FROM matchmaking_match_squad_operations o`).Scan(&result.Stalled, &result.ContractMismatch)
 	return result, err
 }
 
