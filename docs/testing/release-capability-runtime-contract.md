@@ -2,7 +2,7 @@
 
 This is the PL-A4-02 runtime contract accepted in TT c4-c9 (Astra277), alongside
 PLAN A4/G1. The v1 offline evidence format remains inventory-only. The Go v2
-runtime producer and Notification consumer below do not qualify other owners.
+runtime producers below qualify only their named guards, not other owners.
 
 ## Policy authority and schema
 
@@ -86,6 +86,36 @@ forbidden effects and portable artifact **content** digests with trusted
 provenance. URI/PASS strings from v1 cannot attest that. Missing owner/assertion,
 stale instance/policy, swapped artifact, fake/noop adapter or missing barrier is
 failure/unknown. All other owner/Java/Dart/UI/runner work remains open.
+
+## Implemented User and Realtime custom-status boundaries
+
+User and Realtime load the same strict v2 policy schema before dependency startup.
+Their Dockerfiles embed the independently supplied `VOICE_SOURCE_SHA`; local
+Compose explicitly selects development. Alpha requires the private exclusive
+snapshot target. User requires PostgreSQL and presence Redis; Realtime requires
+the actual gRPC User updater. Snapshots are written before listeners/consumers,
+bind the actual serving policy pointer, and name only
+`user.update_profile_custom_status.v1`, `user.update_presence_custom_status.v1`
+or `realtime.presence_update_custom_status.v1`. User's route digest uses the
+generated User service descriptor; Realtime inventories its implemented HTTP
+and inbound WS operations. Config projections record the resolved nonsecret
+profile/presence store or User-updater modes. No token/endpoint is exposed.
+
+With alpha paid disabled, an authenticated nonempty custom status returns
+`FAILED_PRECONDITION/capability_unavailable` at User before profile/presence
+writes or events, retaining the owner-before-capability ordering for a profile.
+Realtime returns WS `error` with `code=capability_unavailable` before its User
+call and local/Redis fanout. It also stops fanout after a failed authoritative
+User update. The production gRPC adapter preserves omission versus explicit
+empty clearing. Ordinary presence, clearing, free profile edits and existing
+reads are preserved. Development retains the current premium domain checks;
+this does not implement or qualify future live revisioned A7 entitlement grants.
+
+Linux regression fixtures use PostgreSQL, Redis protocol/miniredis, actual WS
+connections and a direct User owner fixture. A processed error response plus
+the next allowed observer/Redis event forms the finite effect barrier. These
+are source/component proofs, not the full 18-group UI/REST/WS qualification,
+live provider/replica/image binding, DEV/STAGING or acceptance.
 
 ## Implemented Notification producer/consumer
 

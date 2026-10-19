@@ -22,6 +22,14 @@ func newGRPCPresenceUpdater(cc *grpc.ClientConn) *grpcPresenceUpdater {
 }
 
 func (g *grpcPresenceUpdater) UpdatePresence(ctx context.Context, accountID, profileID, status, customStatus string) error {
+	var custom *string
+	if customStatus != "" {
+		custom = proto.String(customStatus)
+	}
+	return g.UpdatePresenceFields(ctx, accountID, profileID, status, custom)
+}
+
+func (g *grpcPresenceUpdater) UpdatePresenceFields(ctx context.Context, accountID, profileID, status string, customStatus *string) error {
 	if g == nil || g.client == nil {
 		return fmt.Errorf("user client not configured")
 	}
@@ -35,9 +43,7 @@ func (g *grpcPresenceUpdater) UpdatePresence(ctx context.Context, accountID, pro
 	}
 	ctx = presenceIdentityContext(ctx, accountID, profileID, "")
 	req := &userv1.UpdatePresenceRequest{Status: status}
-	if customStatus != "" {
-		req.CustomStatus = proto.String(customStatus)
-	}
+	req.CustomStatus = customStatus
 	_, err = g.client.UpdatePresence(ctx, req)
 	return err
 }

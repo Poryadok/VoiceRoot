@@ -400,6 +400,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
+      VOICE_RELEASE_PROFILE: development
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/user_db?sslmode=disable
       POSTGRES_MAX_CONNS: ${USER_POSTGRES_MAX_CONNS:-10}
@@ -1140,6 +1141,7 @@ services:
       context: ./src/backend
       dockerfile: realtime/Dockerfile
     environment:
+      VOICE_RELEASE_PROFILE: development
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/realtime_db?sslmode=disable
       REALTIME_PRINCIPAL_SIGNING_KEYS_DIR: /etc/voice/lifecycle/keys
