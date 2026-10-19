@@ -542,6 +542,16 @@ deny new publication. Current eligible profile revision need not equal an older
 revision after an unrelated edit. If either saved A or current Auth is guest,
 apply guest restrictions without rewriting A or promoting its bound class.
 
+At START the canonical saved Guest bit comes from the fresh Auth owner type,
+not JWT type alone. Each subsequent decision uses saved Guest OR the current
+verified applicant type, without latching intermediate observations. The
+configured Role default applies to all account types; a role named Member is
+not regular-account evidence and a role named Guest is not Auth account type.
+Type disagreement alone neither denies nor retires an attempt when all actual
+guest gates pass. Missing/stale current-type proof is unavailable, and a known
+guest denial requires authoritative current local gate facts. Existing members
+are not retroactively evicted by this admission rule.
+
 Every owner call has a two-second deadline; nested User work fits the remaining
 Auth deadline. All checks share the strict earliest-call monotonic `<5s` budget,
 rechecked after local waits and immediately before guarded mutation/commit.
@@ -549,6 +559,77 @@ Observe outside Space locks. There is no cached allow or cross-service ACID:
 remote changes after their owner read retain the bounded snapshot race above.
 Producer implementation, secure clients/verifiers, native assembly and real
 I01–I14 transport/SQL/concurrency evidence remain explicit activation gates.
+
+#### Immutable decision basis (SPACE-JOIN-DECISION-BASIS-v1)
+
+Space keeps successful historical decisions in the private operation journal,
+separate from live request/owner capabilities. Three finite kinds are allowed:
+`1 SUBMIT_PENDING`, `2 SUBMIT_READY`, `3 APPROVE_READY`. Start creates no basis;
+wrong/unknown verification creates no successful basis. Kind 1 cannot publish.
+An approval links the sole original kind-1 submission for the same attempt,
+binding and submission digest. No session epoch/floor, bearer, JTI, monotonic
+timestamp, raw owner response or public `Allowed` boolean is stored as authority.
+
+The canonical context `C` contains these fields in order: kind, Space UUID,
+attempt UUID, attempt-binding SHA256, submission SHA256, optional ready-evidence
+SHA256, actor-account UUID, actor-profile UUID, original operation UUID, full
+request method, authenticated final deterministic-protobuf request SHA256,
+optional original-submit-basis SHA256. Kind 1 omits ready evidence; kinds 2/3
+require unchanged journal-v1 ready evidence. Only kind 3 has a submit-basis link.
+Kinds 1/2 require `SubmitJoinAttempt`; kind 3 requires `ApproveJoinRequest`.
+
+Encode kind as unsigned byte, each UUID as its canonical 16 bytes, digests as
+raw 32 bytes, optional digests as byte `0` or byte `1` followed by 32 bytes,
+and method as uint32 big-endian UTF-8 byte length followed by its exact bytes.
+Reject unknown kinds/fields, nil required UUIDs, malformed/zero digests and
+invalid optional combinations; an empty optional value is not absence. JSON
+serialization, property order, locale and normalization do not enter the hash.
+
+`DecisionContextSHA256 = SHA256("voice.space.join.decision-context.v1\0" || C)`.
+The completed basis appends the actual verified applicant observation SHA256
+and optional verified reviewer observation SHA256 (required only for kind 3),
+using the same optional encoding. Its SHA256 domain is
+`"voice.space.join.decision-basis.v1\0"`. Only a checked method-specific private
+request capability plus actual private Subject/Reviewer capabilities may seal
+the writer input; copied public transcript fields or supplied digests cannot.
+The Role transcript already commits its Subject observation and exact Role
+request/response identity. Persist only those observation digests. Use the
+context hash as the exact SUBMIT/APPROVE Auth observation binding, avoiding a
+transcript/P/generation hash cycle.
+
+Reserve `(actor_profile_id, operation_id)` and immutable method/body/selected
+attempt before owner I/O. Submission or approval and its corresponding basis
+are recorded in one shared-fence transaction through an explicit local
+persistence hook, separate from the pure freshness guard. Final collection,
+request and earliest-owner `<5s` checks run after all hook/ledger SQL waits.
+Expiry rolls back both journals. An exact decided retry retains the original
+observations and invokes neither a new hook nor a new first-decision guard.
+
+A new interactive native P requires both the unchanged attempt/evidence
+reference and a separate `DecisionBasisSHA256`; missing/pending/corrupt basis
+does not fall back to noninteractive admission. Native Prepare reloads the
+typed basis and submit chain under the Space fence, validates the original
+operation/A/input/current policy, and atomically pins both journals to its sole
+P with the native intent/head. Include the basis hash in the native request
+fingerprint and resulting Role Ensure binding. Nil noninteractive fields keep
+their previous serialization byte-identical. The P pin is excluded from `C`.
+
+FIRST Publish obtains new applicant and, for manual approval, ORIGINAL reviewer
+eligibility/current membership/Role observations. Its exact owner binding is
+SHA256 of `"voice.space.join.first-publish-context.v1\0"`, basis SHA256, P UUID,
+positive generation uint64 big-endian and native binding SHA256 in that order.
+The scoped historical verifier and fresh private continuation are both required.
+Publication, journal markers/status and native outcome commit together; completed
+native replay invokes no callback, provider, Role call or new membership effect.
+
+Another authorized reviewer/new operation may reference the original winner's
+status/result; it cannot replace the reviewer, body, basis, P or target redemption.
+Recovery before completion still uses the original reviewer and exact P. Missing
+old provenance is scoped unavailable, never reconstructed from today's caller.
+Published historical reads require their own current disclosure authorization
+and cannot recreate membership after removal. All bases, aliases, pins and
+digests remain personal/linkable private data and follow canonical Space P3
+cleanup. This contract adds no account-wide erasure or retention-period promise.
 
 #### Admission Role readiness and ordinary membership generations
 

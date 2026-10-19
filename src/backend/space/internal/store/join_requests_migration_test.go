@@ -68,7 +68,7 @@ func TestJoinAttempt_TerminalPurgeErasesPrivateJournalAtomically(t *testing.T) {
 	pool := startJoinAttemptPostgres(t, ctx)
 	applySpaceMigrationForStoreTest(t, ctx, pool)
 	st := &SpaceStore{Pool: pool}
-	for _, name := range []string{"000014_ownership_outbox_delivery.up.sql", "000015_audit_ledger.up.sql", "000022_lifecycle_runtime.up.sql", "000023_lifecycle_evidence_retention.up.sql", "000025_tree_audit_actions.up.sql", "000027_audit_ingestion.up.sql", "000029_audit_receipt_minimization.up.sql"} {
+	for _, name := range []string{"000014_ownership_outbox_delivery.up.sql", "000015_audit_ledger.up.sql", "000022_lifecycle_runtime.up.sql", "000023_lifecycle_evidence_retention.up.sql", "000025_tree_audit_actions.up.sql", "000027_audit_ingestion.up.sql", "000029_audit_receipt_minimization.up.sql", "000034_realtime_lifecycle_participant.up.sql"} {
 		raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/space_db", name))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(raw))
@@ -76,6 +76,7 @@ func TestJoinAttempt_TerminalPurgeErasesPrivateJournalAtomically(t *testing.T) {
 	}
 	applyEntryPolicyMigration(t, st)
 	applyJoinAttemptMigration(t, st)
+	applyJoinOperationMigration(t, st)
 	owner, account := uuid.New(), uuid.New()
 	space, err := st.CreateSpace(ctx, owner, "R23 durable lifecycle", "", "public")
 	require.NoError(t, err)
@@ -84,6 +85,9 @@ func TestJoinAttempt_TerminalPurgeErasesPrivateJournalAtomically(t *testing.T) {
 	require.NoError(t, err)
 	in := JoinAttemptInput{SpaceID: space.ID, AccountID: uuid.New(), ProfileID: uuid.New()}
 	a, err := st.StartJoinAttempt(ctx, in)
+	require.NoError(t, err)
+	publicOperation := JoinOperationInput{SpaceID: space.ID, ActorAccountID: in.AccountID, ActorProfileID: in.ProfileID, OperationID: uuid.New(), Method: JoinOperationSubmit, RequestSHA256: joinDigest("purge fixture", "submit")}
+	_, err = st.ReserveJoinOperation(ctx, publicOperation, &a.ID)
 	require.NoError(t, err)
 	_, err = st.SubmitJoinAttempt(ctx, in, a.ID, []entrypolicy.Answer{{QuestionID: question, Value: "4"}})
 	require.NoError(t, err)
@@ -95,6 +99,8 @@ func TestJoinAttempt_TerminalPurgeErasesPrivateJournalAtomically(t *testing.T) {
 	other, err := st.CreateSpace(ctx, uuid.New(), "Other", "", "public")
 	require.NoError(t, err)
 	otherAttempt, err := st.StartJoinAttempt(ctx, JoinAttemptInput{SpaceID: other.ID, AccountID: uuid.New(), ProfileID: uuid.New()})
+	require.NoError(t, err)
+	_, err = st.ReserveJoinOperation(ctx, JoinOperationInput{SpaceID: other.ID, ActorAccountID: uuid.New(), ActorProfileID: uuid.New(), OperationID: uuid.New(), Method: JoinOperationStart, RequestSHA256: joinDigest("purge fixture", "other")}, nil)
 	require.NoError(t, err)
 	op := uuid.New()
 	request := lifecycleScheduleRequest(space.ID, op)
@@ -134,6 +140,8 @@ func TestJoinAttempt_TerminalPurgeErasesPrivateJournalAtomically(t *testing.T) {
 	require.Equal(t, 1, count)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM space_join_approval_operations WHERE attempt_id=$1`, a.ID).Scan(&count))
 	require.Equal(t, 1, count)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM space_join_operations WHERE space_id=$1`, space.ID).Scan(&count))
+	require.Equal(t, 1, count)
 	_, err = pool.Exec(ctx, `DROP TRIGGER fail_join_purge_test ON spaces; DROP FUNCTION fail_join_purge_test()`)
 	require.NoError(t, err)
 	_, err = st.FinalizeLifecyclePurge(ctx, space.ID, testLifecycleHasher{})
@@ -142,6 +150,10 @@ func TestJoinAttempt_TerminalPurgeErasesPrivateJournalAtomically(t *testing.T) {
 	require.Zero(t, count)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM space_join_approval_operations WHERE attempt_id=$1`, a.ID).Scan(&count))
 	require.Zero(t, count)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM space_join_operations WHERE space_id=$1`, space.ID).Scan(&count))
+	require.Zero(t, count)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM space_join_operations WHERE space_id=$1`, other.ID).Scan(&count))
+	require.Equal(t, 1, count)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM space_join_attempts WHERE id=$1`, otherAttempt.ID).Scan(&count))
 	require.Equal(t, 1, count)
 }
