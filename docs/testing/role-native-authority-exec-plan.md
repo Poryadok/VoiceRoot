@@ -224,6 +224,17 @@ Role25 cleanup transport ccb3a63 admits only enabled service:bot/full body/opera
 
 ## Current Space44 Consumer Continuation
 
+The concrete producer successor a36cc5e504fab412f6d48dd5233ed199b9b5d243
+now supplies both seams below (independent423 SOURCE CLEAR c106). The unchanged
+UNKNOWN denial oracle passed race48.770s with Unavailable; actual admin
+InitializeNativeMembership, independent nonowner LOGIN and full native25/44
+receipt/publication/mask/chat/42/settings/Bot decision/removal/Redis cleanup
+protocol passed race47.912s. The initialized positive and UNKNOWN negative use
+the same immutable source44 pin and actual API. The prior d410 RED remains
+preserved; it is not relabeled as positive. No bare SQL initialization or
+package-store adapter was introduced. This closes that component composition
+gap, not full all-writer45/current/core or247 public initiation readiness.
+
 The existing Role25 consumer now has an executable denial fixture compiled
 inside immutable Space d410305b2e74993966e07aca5a486c16766d9e9a. It uses
 the official Space34-to44 migrator, an actual independent nonowner LOGIN and

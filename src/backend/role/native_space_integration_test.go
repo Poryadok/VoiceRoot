@@ -137,6 +137,10 @@ func TestRole25RejectsSpace44UnknownRegistry(t *testing.T) {
 	runNativeMemberProtocol(t, false, "25", "44_unknown")
 }
 
+func TestMemberAdmissionRole25Space44ProtectedReceipt(t *testing.T) {
+	runNativeMemberProtocol(t, false, "25", "44")
+}
+
 // This is the deliberately still-red full interactive cutover oracle. The
 // receipt producer's passing test must not be relabeled as this completion.
 func TestNativeAssignmentNeedsQualifiedOperationPublication(t *testing.T) {
@@ -150,8 +154,9 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	}
 	ctx, roles := admissionListenerStoreVersion(t, version)
 	unknownRegistry := len(versions) > 1 && versions[1] == "44_unknown"
+	space44 := unknownRegistry || (len(versions) > 1 && versions[1] == "44")
 	build := exec.CommandContext(ctx, "sh", "testdata/build_native_space_fixture.sh")
-	if unknownRegistry {
+	if space44 {
 		build.Env = append(os.Environ(), "ROLE_NATIVE_SPACE_COHORT=44")
 	}
 	output, err := build.CombinedOutput()
@@ -225,7 +230,7 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	var created nativeSpaceReply
 	require.NoError(t, decoder.Decode(&created), stderr.String())
 	space := uuid.MustParse(created.SpaceID)
-	if unknownRegistry {
+	if space44 {
 		fixture.Run(true, "goto", "44")
 	} else {
 		fixture.Run(true, "up")
@@ -233,12 +238,19 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	action := "prepare"
 	if unknownRegistry {
 		action = "serve_unknown"
+	} else if space44 {
+		action = "prepare44"
 	}
 	require.NoError(t, encoder.Encode(map[string]string{"Action": action}))
 	var preparing nativeSpaceReply
 	require.NoError(t, decoder.Decode(&preparing), stderr.String())
 	if !unknownRegistry {
 		require.NotNil(t, preparing.Binding)
+	}
+	if space44 {
+		require.EqualValues(t, 44, preparing.SchemaVersion)
+		require.True(t, strings.HasPrefix(preparing.ServingLogin, "role_fixture_"))
+		require.Equal(t, !unknownRegistry, preparing.RegistryPresent, "actual admin API, not a serving read, owns cutover")
 	}
 	spaceConn, err := grpc.NewClient(preparing.Address, grpc.WithTransportCredentials(transport))
 	require.NoError(t, err)

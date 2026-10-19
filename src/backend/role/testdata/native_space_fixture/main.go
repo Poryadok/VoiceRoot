@@ -67,16 +67,31 @@ func run() error {
 		return err
 	}
 	unknownRegistry := next.Action == "serve_unknown"
-	if next.Action != "prepare" && !unknownRegistry {
+	prepare44 := next.Action == "prepare44"
+	if next.Action != "prepare" && !prepare44 && !unknownRegistry {
 		return fmt.Errorf("prepare required")
 	}
 	var binding *memberadmission.EnsureBinding
 	var servingLogin string
 	var schemaVersion int64
 	var registryPresent bool
-	if unknownRegistry {
-		// This branch intentionally never initializes the administrative registry.
-		// It is a denial oracle, not a substitute production cutover procedure.
+	if unknownRegistry || prepare44 {
+		if prepare44 {
+			// The source39 build deliberately lacks this administrative API. Only
+			// the actual immutable44 producer can supply it; no SQL substitute,
+			// scoped Store injection or readiness callback is accepted here.
+			initializer, ok := any(st).(interface {
+				InitializeNativeMembership(context.Context, uuid.UUID) error
+			})
+			if !ok {
+				return fmt.Errorf("actual Space administrative initialization API unavailable")
+			}
+			if err = initializer.InitializeNativeMembership(ctx, space.ID); err != nil {
+				return err
+			}
+		}
+		// Both44 branches serve through an independent nonowner LOGIN. UNKNOWN
+		// deliberately omits administrative initialization and remains a denial.
 		login := "role_fixture_" + uuid.New().String()[:8]
 		quoted := pgx.Identifier{login}.Sanitize()
 		if _, err = pool.Exec(ctx, "CREATE ROLE "+quoted+" LOGIN PASSWORD 'isolated-role-fixture-only'"); err != nil {
@@ -104,7 +119,8 @@ func run() error {
 			return err
 		}
 		st = &store.SpaceStore{Pool: application}
-	} else {
+	}
+	if !unknownRegistry {
 		intent, err := st.PrepareMemberAdmission(ctx, store.MemberAdmissionInput{OperationID: init.Operation, SpaceID: space.ID, AccountID: init.Account, ProfileID: init.Profile})
 		if err != nil {
 			return err
