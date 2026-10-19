@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"voice/backend/pkg/releasepolicy"
 	"voice/backend/realtime/internal/lifecycle"
 )
 
@@ -45,6 +46,7 @@ type connReg struct {
 }
 
 type wsHub struct {
+	releasePolicy       *releasepolicy.Policy
 	lifecycle           chatLifecycleRunner
 	mu                  sync.RWMutex
 	byChat              map[string]map[*connReg]struct{}

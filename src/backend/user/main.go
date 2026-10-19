@@ -27,6 +27,7 @@ import (
 	authorityv1 "voice/backend/pkg/pb/voice/authority/v1"
 	"voice/backend/pkg/postgres"
 	voiceprom "voice/backend/pkg/promhttp"
+	"voice/backend/pkg/releasepolicy"
 	"voice/backend/pkg/runtimeconfig"
 	"voice/backend/pkg/socialprincipal"
 	grpcsvc "voice/backend/user/internal/grpcsvc"
@@ -41,6 +42,8 @@ import (
 
 const serviceName = "user"
 
+var buildSourceSHA string
+
 // waitForRequiredGRPCReady establishes a required S2S connection before this
 // service exposes its health endpoint. Lazy gRPC connections otherwise make a
 // healthy User instance fail closed on its first deleted-account lookup.
@@ -54,6 +57,13 @@ func waitForRequiredGRPCReady(ctx context.Context, conn *grpc.ClientConn) error 
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	releaseRuntime, err := releasepolicy.LoadOwnerRuntime(os.LookupEnv, buildSourceSHA, os.ReadFile)
+	if err != nil {
+		log.Fatalf("user release policy: %v", err)
+	}
+	if releaseRuntime.Policy().Profile() == releasepolicy.Alpha && (strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" || strings.TrimSpace(os.Getenv("USER_REDIS_ADDR")) == "") {
+		log.Fatal("user alpha requires PostgreSQL and presence Redis")
+	}
 	sourceConfig, sourceEnabled, err := authoritysource.LoadRuntimeConfig(authorityv1.AuthorityOwner_AUTHORITY_OWNER_USER, ":9097")
 	if err != nil {
 		log.Fatalf("user authority source config: %v", err)
@@ -309,10 +319,6 @@ func main() {
 			}
 		}
 
-		lis, err := net.Listen("tcp", grpcAddr)
-		if err != nil {
-			log.Fatalf("grpc listen: %v", err)
-		}
 		var events grpcsvc.UserEventsPublisher
 		natsURL := strings.TrimSpace(os.Getenv("NATS_URL"))
 		if natsURL != "" {
@@ -323,6 +329,65 @@ func main() {
 			pub.Logger = logger
 			defer func() { _ = pub.Close() }()
 			events = pub
+		}
+
+		dnsResolver := grpcsvc.DNSResolverFromEnv()
+		if dnsResolver != nil {
+			logger.Info("USER_DNS_STUB_URL set; org verification uses HTTP TXT fixture")
+		}
+
+		sharedOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
+
+		ordinaryOptions := append([]grpc.ServerOption{}, sharedOptions...)
+		ordinaryOptions = append(ordinaryOptions, grpc.ChainUnaryInterceptor(socialprincipal.OrdinaryUnaryInterceptor("user")))
+		srv := grpc.NewServer(ordinaryOptions...)
+		userSvc := &grpcsvc.UserGRPC{
+			ReleasePolicy:       releaseRuntime.Policy(),
+			Profiles:            store.NewProfileStore(pool),
+			ProfileMutations:    profileMutations,
+			Privacy:             store.NewPrivacyStore(pool),
+			Presence:            presence,
+			Blocks:              blocks,
+			SocialGraph:         socialGraph,
+			SpaceCoMembership:   spaceCoMembership,
+			AvatarPresigner:     avatarPresigner,
+			AvatarPublicBaseURL: avatarPublicBase,
+			Events:              events,
+			DeletedAccounts:     deletedAccounts,
+			DNSResolver:         dnsResolver,
+		}
+		owner, err := os.Hostname()
+		if err != nil {
+			log.Fatalf("user release instance: %v", err)
+		}
+		routes := []string{}
+		for _, method := range userv1.UserService_ServiceDesc.Methods {
+			routes = append(routes, "grpc:/"+userv1.UserService_ServiceDesc.ServiceName+"/"+method.MethodName)
+		}
+		if err := releaseRuntime.WriteSnapshot("user", owner, userSvc.ReleasePolicy, []string{"user.update_profile_custom_status.v1", "user.update_presence_custom_status.v1"}, routes, map[string]string{"profiles": "postgres", "presence": "redis"}); err != nil {
+			log.Fatalf("user release snapshot: %v", err)
+		}
+		lis, err := net.Listen("tcp", grpcAddr)
+		if err != nil {
+			log.Fatalf("grpc listen: %v", err)
+		}
+
+		if sourceEnabled {
+			sourceServer, sourceRuntime, err := newUserAuthorityServer(context.Background(), sharedOptions, sourceConfig, store.NewProfileStore(pool))
+			if err != nil {
+				log.Fatalf("user authority source startup: %v", err)
+			}
+			defer func() { _ = sourceRuntime.Close() }()
+			sourceListener, err := net.Listen("tcp", sourceConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("user authority source listen: %v", err)
+			}
+			defer sourceServer.Stop()
+			go func() {
+				if err := sourceServer.Serve(sourceListener); err != nil {
+					log.Fatalf("user authority source serve: %v", err)
+				}
+			}()
 		}
 		if accountDeletionConfig.Enabled {
 			accountDeletionConsumer, err := userevents.NewAccountDeletionConsumer(accountDeletionConfig.NATSURL, accountDeletionConfig.CredentialsFile, store.NewProfileStore(pool))
@@ -343,46 +408,6 @@ func main() {
 			}()
 		}
 
-		dnsResolver := grpcsvc.DNSResolverFromEnv()
-		if dnsResolver != nil {
-			logger.Info("USER_DNS_STUB_URL set; org verification uses HTTP TXT fixture")
-		}
-
-		sharedOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
-		if sourceEnabled {
-			sourceServer, sourceRuntime, err := newUserAuthorityServer(context.Background(), sharedOptions, sourceConfig, store.NewProfileStore(pool))
-			if err != nil {
-				log.Fatalf("user authority source startup: %v", err)
-			}
-			defer func() { _ = sourceRuntime.Close() }()
-			sourceListener, err := net.Listen("tcp", sourceConfig.ListenAddr)
-			if err != nil {
-				log.Fatalf("user authority source listen: %v", err)
-			}
-			defer sourceServer.Stop()
-			go func() {
-				if err := sourceServer.Serve(sourceListener); err != nil {
-					log.Fatalf("user authority source serve: %v", err)
-				}
-			}()
-		}
-		ordinaryOptions := append([]grpc.ServerOption{}, sharedOptions...)
-		ordinaryOptions = append(ordinaryOptions, grpc.ChainUnaryInterceptor(socialprincipal.OrdinaryUnaryInterceptor("user")))
-		srv := grpc.NewServer(ordinaryOptions...)
-		userSvc := &grpcsvc.UserGRPC{
-			Profiles:            store.NewProfileStore(pool),
-			ProfileMutations:    profileMutations,
-			Privacy:             store.NewPrivacyStore(pool),
-			Presence:            presence,
-			Blocks:              blocks,
-			SocialGraph:         socialGraph,
-			SpaceCoMembership:   spaceCoMembership,
-			AvatarPresigner:     avatarPresigner,
-			AvatarPublicBaseURL: avatarPublicBase,
-			Events:              events,
-			DeletedAccounts:     deletedAccounts,
-			DNSResolver:         dnsResolver,
-		}
 		if natsURL != "" {
 			owner, hostErr := os.Hostname()
 			if hostErr != nil || strings.TrimSpace(owner) == "" {

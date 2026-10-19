@@ -2,7 +2,7 @@
 
 This is the PL-A4-02 runtime contract accepted in TT c4-c9 (Astra277), alongside
 PLAN A4/G1. The v1 offline evidence format remains inventory-only. The Go v2
-runtime producer and Notification consumer below do not qualify other owners.
+runtime producers below qualify only their named guards, not other owners.
 
 ## Policy authority and schema
 
@@ -87,6 +87,36 @@ provenance. URI/PASS strings from v1 cannot attest that. Missing owner/assertion
 stale instance/policy, swapped artifact, fake/noop adapter or missing barrier is
 failure/unknown. All other owner/Java/Dart/UI/runner work remains open.
 
+## Implemented User and Realtime custom-status boundaries
+
+User and Realtime load the same strict v2 policy schema before dependency startup.
+Their Dockerfiles embed the independently supplied `VOICE_SOURCE_SHA`; local
+Compose explicitly selects development. Alpha requires the private exclusive
+snapshot target. User requires PostgreSQL and presence Redis; Realtime requires
+the actual gRPC User updater. Snapshots are written before listeners/consumers,
+bind the actual serving policy pointer, and name only
+`user.update_profile_custom_status.v1`, `user.update_presence_custom_status.v1`
+or `realtime.presence_update_custom_status.v1`. User's route digest uses the
+generated User service descriptor; Realtime inventories its implemented HTTP
+and inbound WS operations. Config projections record the resolved nonsecret
+profile/presence store or User-updater modes. No token/endpoint is exposed.
+
+With alpha paid disabled, an authenticated nonempty custom status returns
+`FAILED_PRECONDITION/capability_unavailable` at User before profile/presence
+writes or events, retaining the owner-before-capability ordering for a profile.
+Realtime returns WS `error` with `code=capability_unavailable` before its User
+call and local/Redis fanout. It also stops fanout after a failed authoritative
+User update. The production gRPC adapter preserves omission versus explicit
+empty clearing. Ordinary presence, clearing, free profile edits and existing
+reads are preserved. Development retains the current premium domain checks;
+this does not implement or qualify future live revisioned A7 entitlement grants.
+
+Linux regression fixtures use PostgreSQL, Redis protocol/miniredis, actual WS
+connections and a direct User owner fixture. A processed error response plus
+the next allowed observer/Redis event forms the finite effect barrier. These
+are source/component proofs, not the full 18-group UI/REST/WS qualification,
+live provider/replica/image binding, DEV/STAGING or acceptance.
+
 ## Implemented Notification producer/consumer
 
 Notification bootstrap loads the policy before DB/provider/listener work and
@@ -134,3 +164,45 @@ The Notification Docker build accepts `VOICE_SOURCE_SHA` and embeds it through
 `-X main.buildSourceSHA`. An empty/unbound value cannot start alpha. Current
 release image jobs/rollout still need independently resolved build-arg, digest
 and mount binding; this source change does not claim they already supply it.
+
+## Implemented Auth phone owner guard
+
+Auth parses the same closed v2 artifact in an early bean-factory postprocessor,
+before ordinary database/provider/listener beans. Its Docker build writes the
+protected caller's `VOICE_SOURCE_SHA` build argument into the packaged
+`voice-build-source.sha` resource. Runtime environment source strings cannot bind
+an alpha artifact. The Auth image CI job binds this argument to its protected
+`github.sha` context. Compose, the Auth image smoke and test fixtures explicitly select `development`;
+an operator alpha configuration needs the bound policy and a fresh absolute
+`VOICE_RELEASE_SNAPSHOT_FILE` target. There is no implicit production fallback.
+
+The same immutable object is installed once on both AuthService and OtpService.
+Nonempty phone input, including mixed email+phone input, fails before account,
+password, session, OTP throttle/code or provider effects at register/login and
+OTP send/verify. Conversion first preserves current authenticated anonymous-guest
+checks, then denies before password hashing or account/session effects. Old
+phone-only accounts cannot refresh into a replacement session or complete 2FA
+session issuance; refresh denial preserves the unconsumed credential. Profile
+switch denial occurs before floor preparation or access revocation and preserves
+existing access and refresh credentials. Restore denial occurs after validating
+the restore token/account but before floor preparation, token consumption,
+account restoration or restored-event publication; the token remains reusable.
+Email profile switches and restores retain their normal issuance behavior. The final
+session writer also guards phone-only issuance. These failures map to HTTP 412
+and gRPC `FAILED_PRECONDITION`, with `capability_unavailable`. Existing email,
+guest, email OTP/reset, reads, logout and safety cleanup retain their behavior;
+phone contact-sync and unimplemented methods are unchanged.
+
+Before lifecycle listeners start, Auth verifies serving-object identity, real
+JDBC account/refresh/OTP repositories, the configured Resend sender and absence
+of TOTP test bypass. It creates a private exclusive 0600 snapshot without
+following existing symlinks. The snapshot joins build/policy/config/route digests
+and actual adapter modes; route inventory includes the generated gRPC descriptor,
+registered REST mappings and direct owner guard entries. Guard IDs are
+`auth.register_phone.v1`, `auth.login_phone.v1`, `auth.convert_guest_phone.v1`,
+`auth.refresh_phone.v1`, `auth.verify_2fa_phone.v1`, `auth.issue_phone_session.v1`,
+`auth.send_otp_phone.v1` and `auth.verify_otp_phone.v1`.
+
+These are source and local component checks. They do not qualify a provider,
+running alpha image/replica window, Flutter projection, other paid Auth benefits,
+the full 18 groups, shared environments or acceptance.
