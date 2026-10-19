@@ -88,7 +88,7 @@ func (c Client) observe(ctx context.Context, p Purpose, action ID, request Hash)
 	if e != nil {
 		return zero, ErrInvalid
 	}
-	defer raw.Close()
+	defer func() { _ = raw.Close() }()
 	conn, ok := raw.(*net.UnixConn)
 	if !ok {
 		return zero, ErrInvalid

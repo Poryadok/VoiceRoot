@@ -182,7 +182,7 @@ func TestOriginIsImmutableAndRedacted(t *testing.T) {
 	if fmt.Sprintf("%v/%#v", o, o) != "LFP origin/LFP origin" {
 		t.Fatal("private origin formatted")
 	}
-	encoded, err := json.Marshal(o)
+	encoded, err := json.Marshal(o) //nolint:staticcheck // Intentionally prove the opaque origin cannot serialize private fields.
 	if err != nil || string(encoded) != "{}" {
 		t.Fatal("private origin serialized")
 	}

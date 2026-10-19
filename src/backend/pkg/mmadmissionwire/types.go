@@ -3,7 +3,6 @@ package mmadmissionwire
 import (
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"math"
 	"strings"
 )
@@ -287,4 +286,3 @@ func (s AdmissionStampV1) Validate() error {
 	}
 	return nil
 }
-func invalid(what string) error { return fmt.Errorf("%w: %s", ErrInvalid, what) }
