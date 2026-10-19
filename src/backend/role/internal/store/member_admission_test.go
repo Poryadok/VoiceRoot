@@ -17,7 +17,7 @@ func memberAdmissionStore(t *testing.T) (context.Context, *RoleStore) {
 	ctx := context.Background()
 	fixture := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/role_db"))
 	fixture.Run(true, "goto", "16")
-	fixture.Run(true, "up")
+	fixture.Run(true, "goto", "21")
 	return ctx, &RoleStore{Pool: fixture.Pool}
 }
 

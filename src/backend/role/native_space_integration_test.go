@@ -126,14 +126,22 @@ func TestMemberAdmissionPositiveProtectedReceipt(t *testing.T) {
 	runNativeMemberProtocol(t, false)
 }
 
+func TestMemberAdmissionRole25ProtectedReceipt(t *testing.T) {
+	runNativeMemberProtocol(t, false, "25")
+}
+
 // This is the deliberately still-red full interactive cutover oracle. The
 // receipt producer's passing test must not be relabeled as this completion.
 func TestNativeAssignmentNeedsQualifiedOperationPublication(t *testing.T) {
 	runNativeMemberProtocol(t, true)
 }
 
-func runNativeMemberProtocol(t *testing.T, requireInteractive bool) {
-	ctx, roles := admissionListenerStore(t)
+func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...string) {
+	version := "21"
+	if len(versions) != 0 {
+		version = versions[0]
+	}
+	ctx, roles := admissionListenerStoreVersion(t, version)
 	build := exec.CommandContext(ctx, "sh", "testdata/build_native_space_fixture.sh")
 	output, err := build.CombinedOutput()
 	require.NoError(t, err, string(output))
@@ -453,4 +461,21 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool) {
 	_, err = client.CreateRole(delegated(rolev1.RoleService_CreateRole_FullMethodName, create), create)
 	require.Equal(t, codes.Unauthenticated, status.Code(err), "fresh transport must validate the current session before any owner read or saved response")
 	require.Equal(t, beforeAuthority, trackedAuthority.calls.Load())
+	if version == "25" {
+		// The same real Redis/mTLS/RolePG fixture now exercises private cleanup,
+		// not just a recording transport handler or miniredis adapter fixture.
+		cleanup := &rolev1.ApplyBotInstallationRemovalRequest{ProtocolVersion: 1, OperationId: uuid.NewString(), DecisionId: uuid.NewString(), DecisionSha256: bytes.Repeat([]byte{1}, 32), Purpose: "space_uninstall", BotId: uuid.NewString(), ActorProfileId: uuid.NewString(), SpaceId: b.SpaceID, FrozenScopeSha256: bytes.Repeat([]byte{2}, 32), Evidence: &rolev1.ApplyBotInstallationRemovalRequest_Native{Native: &rolev1.BotRemovalNativeEvidence{InstallationId: uuid.NewString(), InstallOperationId: uuid.NewString(), Generation: 1}}}
+		_, err := roles.Pool.Exec(ctx, `INSERT INTO roles(id,space_id,name,is_system,created_by_profile_id) VALUES($1,$2,'Installed Bot custom',false,$3)`, uuid.New(), cleanup.SpaceId, cleanup.ActorProfileId)
+		require.NoError(t, err)
+		method := rolev1.RoleService_ApplyBotInstallationRemoval_FullMethodName
+		call := func() (*rolev1.ApplyBotInstallationRemovalResponse, error) {
+			return client.ApplyBotInstallationRemoval(sourceCallContext(t, current, "bot", method, cleanup.OperationId, cleanup), cleanup)
+		}
+		first, err := call()
+		require.NoError(t, err)
+		require.EqualValues(t, 1, first.GetReceipt().GetDeletedRoleCount())
+		again, err := call()
+		require.NoError(t, err)
+		require.True(t, proto.Equal(first, again))
+	}
 }

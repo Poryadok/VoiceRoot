@@ -15,6 +15,17 @@ decision. The separate development native21/source2 cohort implements protected 
 
 ### Admission readiness target (ADMISSION-ROLE-READINESS-v1)
 
+The development native/state2 cohort also qualifies exact clean25 through the
+same native21 membership facts and pure mask fold. Its additional Bot removal
+tables and immutable guards are mandatory catalog inputs, not permission grants
+or membership sources. Cleanup removes typed contributions/preparations before
+definitions and invalidates the existing Role revision; the independent SDK
+revision is unchanged. State1 is never served for21 or25. Intermediate22-24,
+future/dirty schemas and altered guards remain unavailable. Qualified admission
+receipts are guarded by the same exact catalog inside their operation/Space
+transaction. Bot actor mutation readiness and the durable Assign/Revoke core
+remain separate gates; these component proofs do not activate them.
+
 Accepted BE-010 c12/c13 separates the ordinary membership incarnation from an
 independent community source. Space stores pending admission outside
 `space_members`, allocates a monotonic per-member generation, obtains an inert

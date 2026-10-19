@@ -47,6 +47,9 @@ func (s *RoleStore) prepareDefaultMemberRole(ctx context.Context, binding member
 		// Retirement and ownership/P3 fences dominate even historical replay.
 		return scoped.WithinSpaces(ctx, []uuid.UUID{space}, func(scoped *RoleStore) error {
 			if guard != nil {
+				if err := scoped.checkQualifiedRoleCatalog(ctx); err != nil {
+					return err
+				}
 				if err := guard(false); err != nil {
 					return err
 				}
@@ -129,6 +132,9 @@ func (s *RoleStore) removeOrdinaryMemberRoles(ctx context.Context, binding membe
 	err := s.withLockedTransaction(ctx, operation, []uuid.UUID{space}, func(scoped *RoleStore) error {
 		return scoped.WithinSpaces(ctx, []uuid.UUID{space}, func(scoped *RoleStore) error {
 			if guard != nil {
+				if err := scoped.checkQualifiedRoleCatalog(ctx); err != nil {
+					return err
+				}
 				if err := guard(); err != nil {
 					return err
 				}

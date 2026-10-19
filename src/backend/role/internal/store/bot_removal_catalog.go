@@ -7,8 +7,8 @@ import (
 	"voice/backend/pkg/authoritysource"
 )
 
-// This catalog qualifies only the dedicated cleanup transaction. It does not
-// advertise native member/source2 serving at25 or authorize Bot actor mutations.
+// The25 extension is shared by cleanup and the unchanged state2 mask fold.
+// Its presence does not authorize Bot actor mutations or confer membership.
 // Cleanup removes typed preparations/contributions before definitions, so all
 // native21 clocks and immutable witnesses remain mandatory dependencies.
 var roleBotRemovalCatalog25 = func() authoritysource.Catalog {

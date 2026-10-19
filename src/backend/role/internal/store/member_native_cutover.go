@@ -25,10 +25,10 @@ func (s *RoleStore) NativeMembershipRequired(ctx context.Context) (bool, error) 
 	if err := db.QueryRow(ctx, `SELECT version,dirty FROM schema_migrations`).Scan(&version, &dirty); err != nil {
 		return false, fmt.Errorf("%w: native schema: %w", ErrScopeUnavailable, err)
 	}
-	if dirty || version < 1 || version > 21 {
+	if dirty || version < 1 || (version > 20 && version != 21 && version != 25) {
 		return false, ErrScopeUnavailable
 	}
-	return version == 21, nil
+	return version == 21 || version == 25, nil
 }
 
 // QualifiedRevision is local-only and must run inside the caller's Space fence.
@@ -37,7 +37,7 @@ func (s *RoleStore) QualifiedRevision(ctx context.Context, space uuid.UUID) (uin
 	if s == nil || s.tx == nil {
 		return 0, ErrScopeUnavailable
 	}
-	if err := authoritysource.CheckCatalog(ctx, s.tx, roleAuthorityCatalog21); err != nil {
+	if err := s.checkQualifiedRoleCatalog(ctx); err != nil {
 		return 0, fmt.Errorf("%w: %w", ErrScopeUnavailable, err)
 	}
 	role, sdk, err := roleSourceRevisions(ctx, s.tx, space.String())
@@ -60,7 +60,7 @@ func (s *RoleStore) QualifiedMemberPresent(ctx context.Context, space, profile u
 	if !ok || !observation.Available(time.Now()) {
 		return false, ErrScopeUnavailable
 	}
-	if err := authoritysource.CheckCatalog(ctx, s.tx, roleAuthorityCatalog21); err != nil {
+	if err := s.checkQualifiedRoleCatalog(ctx); err != nil {
 		return false, fmt.Errorf("%w: %w", ErrScopeUnavailable, err)
 	}
 	state, err := readMemberRoleState(ctx, s.db(), space.String())

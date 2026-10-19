@@ -119,7 +119,7 @@ func TestQualifiedLegacyOwnerNeedsActualBootstrapWriterReconciliation(t *testing
 	space, owner := uuid.New(), uuid.New()
 	// This is a real version20 historical bootstrap, not a forged origin row.
 	require.NoError(t, st.BootstrapSpaceRoles(ctx, space, owner))
-	fixture.Run(true, "up")
+	fixture.Run(true, "goto", "21")
 	binding := ensureMemberBinding(space, owner, 1)
 	receipt, err := st.PrepareDefaultMemberRole(ctx, binding)
 	require.NoError(t, err)
