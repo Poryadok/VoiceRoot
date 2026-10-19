@@ -26,7 +26,7 @@ func TestJoinSpace_BlockCheckNotConfigured(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool, skipJoinBlockDefaults())
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{
 		Name:        "Public Plaza",
 		Visibility:  "public",
 		Description: "open",
@@ -59,7 +59,7 @@ func TestJoinByInvite_BlockCheckNotConfigured(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool, skipJoinBlockDefaults())
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Invite block deps"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Invite block deps"})
 	require.NoError(t, err)
 
 	inv, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: created.GetSpace().GetId()})

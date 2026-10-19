@@ -68,7 +68,7 @@ func TestRevokeInvite_RecordsAuditEntry(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Invite audit"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Invite audit"})
 	require.NoError(t, err)
 	spaceID := uuid.MustParse(created.GetSpace().GetId())
 	invite, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID.String()})
@@ -105,9 +105,9 @@ func TestGetAuditLog_MapsFieldsOrdersAndScopesToRequestedSpace(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	requested, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Audit requested"})
+	requested, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Audit requested"})
 	require.NoError(t, err)
-	other, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Audit other"})
+	other, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Audit other"})
 	require.NoError(t, err)
 	requestedID := uuid.MustParse(requested.GetSpace().GetId())
 	otherID := uuid.MustParse(other.GetSpace().GetId())
@@ -149,7 +149,7 @@ func TestGetAuditLog_PageLimitsAndContinuation(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Paged audit"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Paged audit"})
 	require.NoError(t, err)
 	spaceID := uuid.MustParse(created.GetSpace().GetId())
 	base := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
@@ -192,7 +192,7 @@ func TestGetAuditLog_MalformedCursor_InvalidArgument(t *testing.T) {
 	applySpaceMigration(t, ctx, pool)
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Bad cursor"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Bad cursor"})
 	require.NoError(t, err)
 
 	validBase64 := func(json string) string {
@@ -229,9 +229,9 @@ func TestGetAuditLog_SignedCursorRejectsCrossSpaceAndAccessScopeReplay(t *testin
 	roles := &auditPermissionRoleStub{allowed: true}
 	client, cleanup := startSpaceGRPCTestServer(t, pool, withRoleClient(roles))
 	t.Cleanup(cleanup)
-	first, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Signed cursor source"})
+	first, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Signed cursor source"})
 	require.NoError(t, err)
-	second, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Signed cursor other"})
+	second, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Signed cursor other"})
 	require.NoError(t, err)
 	firstID := uuid.MustParse(first.GetSpace().GetId())
 	secondID := uuid.MustParse(second.GetSpace().GetId())
@@ -272,7 +272,7 @@ func TestGetAuditLog_OwnerFallbackOnlyWhenRolesUnwired(t *testing.T) {
 	applySpaceMigration(t, ctx, pool)
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Owner fallback"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Owner fallback"})
 	require.NoError(t, err)
 
 	_, err = client.GetAuditLog(ownerCtx, &spacev1.GetAuditLogRequest{SpaceId: created.GetSpace().GetId()})
@@ -294,7 +294,7 @@ func TestGetAuditLog_UsesViewAuditPermissionAndHonorsExplicitDeny(t *testing.T) 
 	roles := &auditPermissionRoleStub{allowed: false}
 	client, cleanup := startSpaceGRPCTestServer(t, pool, withRoleClient(roles))
 	t.Cleanup(cleanup)
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Explicit deny"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Explicit deny"})
 	require.NoError(t, err)
 
 	_, err = client.GetAuditLog(ownerCtx, &spacev1.GetAuditLogRequest{SpaceId: created.GetSpace().GetId()})
@@ -315,7 +315,7 @@ func TestGetAuditLog_ViewAuditPermissionAllowsNonOwner(t *testing.T) {
 	roles := &auditPermissionRoleStub{allowed: true}
 	client, cleanup := startSpaceGRPCTestServer(t, pool, withRoleClient(roles))
 	t.Cleanup(cleanup)
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Audit role allow"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Audit role allow"})
 	require.NoError(t, err)
 
 	nonOwnerProfile := uuid.New()
@@ -341,7 +341,7 @@ func TestGetAuditLog_ViewAuditPermissionDeniesNonMember(t *testing.T) {
 	roles := &auditPermissionRoleStub{allowed: true}
 	client, cleanup := startSpaceGRPCTestServer(t, pool, withRoleClient(roles))
 	t.Cleanup(cleanup)
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Audit non-member deny"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Audit non-member deny"})
 	require.NoError(t, err)
 
 	nonMemberCtx := withAccountProfileCtx(context.Background(), uuid.New(), uuid.New())
@@ -360,7 +360,7 @@ func TestGetAuditLog_RoleDependencyFailure_Unavailable(t *testing.T) {
 	roles := &auditPermissionRoleStub{allowed: true}
 	client, cleanup := startSpaceGRPCTestServer(t, pool, withRoleClient(roles))
 	t.Cleanup(cleanup)
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Role down"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Role down"})
 	require.NoError(t, err)
 
 	for _, dependencyCode := range []codes.Code{

@@ -25,7 +25,7 @@ func TestCreateInvite_Owner(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "Invites"})
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{Name: "Invites"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -49,7 +49,7 @@ func TestCreateInvite_NonOwnerDenied(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Private"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Private"})
 	require.NoError(t, err)
 
 	_, err = client.CreateInvite(strangerCtx, &spacev1.CreateInviteRequest{
@@ -71,7 +71,7 @@ func TestJoinByInvite_AddsMemberAndListsSpace(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Join Me"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Join Me"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -98,7 +98,7 @@ func TestJoinByInvite_IdempotentForMember(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Again"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Again"})
 	require.NoError(t, err)
 	inv, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{
 		SpaceId: created.GetSpace().GetId(),
@@ -122,7 +122,7 @@ func TestGetInvite_ByCode(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "Preview"})
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{Name: "Preview"})
 	require.NoError(t, err)
 	inv, err := client.CreateInvite(ctx, &spacev1.CreateInviteRequest{
 		SpaceId: created.GetSpace().GetId(),
@@ -147,7 +147,7 @@ func TestRevokeInvite_BlocksJoin(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Revoke"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Revoke"})
 	require.NoError(t, err)
 	inv, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{
 		SpaceId: created.GetSpace().GetId(),
@@ -171,7 +171,7 @@ func TestCreateInvite_DegradedWhenEventsFail(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool, withSpaceEventsPublisher(errSpaceEvents{}))
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "Degraded"})
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{Name: "Degraded"})
 	require.NoError(t, err)
 
 	resp, err := client.CreateInvite(ctx, &spacev1.CreateInviteRequest{
@@ -191,7 +191,7 @@ func TestListInvites_Owner(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "List Invites"})
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{Name: "List Invites"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -220,7 +220,7 @@ func TestInviteManagement_NonOwnerDenied(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Invite owner gate"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Invite owner gate"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -254,7 +254,7 @@ func TestJoinByInvite_Expired(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Expired"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Expired"})
 	require.NoError(t, err)
 	past := time.Now().UTC().Add(-time.Hour)
 	inv, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{

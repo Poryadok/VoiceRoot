@@ -277,7 +277,7 @@ func startSpaceGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...spaceSer
 		_ = conn.Close()
 		srv.Stop()
 	}
-	return spacev1.NewSpaceServiceClient(conn), cleanup
+	return &legacySpaceFixtureClient{SpaceServiceClient: spacev1.NewSpaceServiceClient(conn), fixture: svc}, cleanup
 }
 
 func profileFixture(t *testing.T) (owner, account uuid.UUID, ctx context.Context) {
@@ -375,7 +375,7 @@ func TestUpdateSpace_IconAndDescription_Owner(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{
 		Name:        "Icon space",
 		Description: "Before icon",
 	})
@@ -406,7 +406,7 @@ func TestGetSpace_ReturnsDescriptionAndIcon(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{
 		Name:        "Readable",
 		Description: "About us",
 	})
@@ -438,7 +438,7 @@ func TestListMySpaces_IncludesCreatedSpace(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{
 		Name:        "Listed",
 		Description: "Shows up",
 	})
@@ -580,7 +580,7 @@ func TestUpdateSpace_DescriptionOnly_Owner(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{
 		Name:        "Desc only",
 		Description: "Before",
 	})
@@ -612,7 +612,7 @@ func TestUpdateSpace_NonOwner_PermissionDenied(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{
 		Name:        "Owned",
 		Description: "Not yours",
 	})
@@ -641,7 +641,7 @@ func TestGetSpace_NotMember_PermissionDenied(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{
 		Name:        "Private meta",
 		Description: "Members only",
 	})
@@ -663,7 +663,7 @@ func TestGetSpace_NotFound(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{
 		Name:        "Exists",
 		Description: "For membership",
 	})
@@ -830,7 +830,7 @@ func TestUpdateSpace_NameAndBanner_Owner(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{
 		Name:        "Before rename",
 		Description: "Banner test",
 	})
@@ -893,7 +893,7 @@ func TestJoinByInvite_GuestBlockedWhenAllowGuestsFalse(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "No guests"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "No guests"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 	inv, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID})
@@ -923,7 +923,7 @@ func TestUpdateSpace_AllowGuests_ControlsInviteAdmission(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Guest admission"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Guest admission"})
 	require.NoError(t, err)
 	require.False(t, created.GetSpace().GetAllowGuests())
 	spaceID := created.GetSpace().GetId()
@@ -980,7 +980,7 @@ func TestUpdateSpace_AllowGuests_NonOwnerDenied(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Protected guest admission"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Protected guest admission"})
 	require.NoError(t, err)
 	allowGuests := true
 	_, err = client.UpdateSpace(otherCtx, &spacev1.UpdateSpaceRequest{
@@ -1007,7 +1007,7 @@ func TestDeleteSpace_LegacyRPCPreservesAggregateUntilP3(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool, withSpaceEventsPublisher(spy))
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "Doomed"})
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{Name: "Doomed"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 	parsedID, err := uuid.Parse(spaceID)
@@ -1049,7 +1049,7 @@ func TestDeleteSpace_LegacyRPCDisabledForNonOwner(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Keep"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Keep"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -1074,7 +1074,7 @@ func TestTransferOwnership_ToMember(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool, withSpaceEventsPublisher(spy))
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Hand off"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Hand off"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -1113,7 +1113,7 @@ func TestTransferOwnership_NonMember_FailedPrecondition(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "No outsider"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "No outsider"})
 	require.NoError(t, err)
 
 	_, err = client.TransferOwnership(ownerCtx, &spacev1.TransferOwnershipRequest{
@@ -1137,7 +1137,7 @@ func TestTransferOwnership_NonOwner_PermissionDenied(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Locked"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Locked"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 	inv, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID})

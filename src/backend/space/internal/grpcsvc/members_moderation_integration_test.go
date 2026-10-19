@@ -123,7 +123,7 @@ func TestSpaceModeration_KickMember_ModeratorCanKick(t *testing.T) {
 	targetAccount, targetProfile := uuid.New(), uuid.New()
 	targetCtx := moderationCtx(targetAccount, targetProfile)
 
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Kick mod"})
+	created, err := seedLegacySpaceForTest(t, spaceClient, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Kick mod"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 	joinSpaceViaInvite(t, spaceClient, ownerCtx, modCtx, spaceID)
@@ -156,7 +156,7 @@ func TestSpaceModeration_KickMember_MemberForbidden(t *testing.T) {
 	victimAccount, victimProfile := uuid.New(), uuid.New()
 	victimCtx := moderationCtx(victimAccount, victimProfile)
 
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Kick deny"})
+	created, err := seedLegacySpaceForTest(t, spaceClient, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Kick deny"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 	joinSpaceViaInvite(t, spaceClient, ownerCtx, joinerCtx, spaceID)
@@ -180,7 +180,7 @@ func TestSpaceModeration_KickMember_CannotKickOwner(t *testing.T) {
 	modAccount, modProfile := uuid.New(), uuid.New()
 	modCtx := moderationCtx(modAccount, modProfile)
 
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Kick owner"})
+	created, err := seedLegacySpaceForTest(t, spaceClient, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Kick owner"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 	joinSpaceViaInvite(t, spaceClient, ownerCtx, modCtx, spaceID)
@@ -201,7 +201,7 @@ func TestSpaceModeration_KickMember_NotFound(t *testing.T) {
 	spaceClient, _, _, ownerCtx, cleanup := startSpaceModerationFixture(t)
 	t.Cleanup(cleanup)
 
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Kick missing"})
+	created, err := seedLegacySpaceForTest(t, spaceClient, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Kick missing"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -223,7 +223,7 @@ func TestSpaceModeration_BanMember_RemovesMember(t *testing.T) {
 	targetAccount, targetProfile := uuid.New(), uuid.New()
 	targetCtx := moderationCtx(targetAccount, targetProfile)
 
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Ban evict"})
+	created, err := seedLegacySpaceForTest(t, spaceClient, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Ban evict"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 	joinSpaceViaInvite(t, spaceClient, ownerCtx, targetCtx, spaceID)
@@ -254,7 +254,7 @@ func TestSpaceModeration_BanMember_BannedCannotJoin(t *testing.T) {
 	targetAccount, targetProfile := uuid.New(), uuid.New()
 	targetCtx := moderationCtx(targetAccount, targetProfile)
 
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Ban rejoin"})
+	created, err := seedLegacySpaceForTest(t, spaceClient, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Ban rejoin"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 	joinSpaceViaInvite(t, spaceClient, ownerCtx, targetCtx, spaceID)
@@ -285,7 +285,7 @@ func TestSpaceModeration_UnbanMember_RestoresJoin(t *testing.T) {
 	targetAccount, targetProfile := uuid.New(), uuid.New()
 	targetCtx := moderationCtx(targetAccount, targetProfile)
 
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Unban"})
+	created, err := seedLegacySpaceForTest(t, spaceClient, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Unban"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 	joinSpaceViaInvite(t, spaceClient, ownerCtx, targetCtx, spaceID)
@@ -319,7 +319,7 @@ func TestSpaceModeration_ListBans_IncludesBan(t *testing.T) {
 	targetAccount, targetProfile := uuid.New(), uuid.New()
 	targetCtx := moderationCtx(targetAccount, targetProfile)
 
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "List bans"})
+	created, err := seedLegacySpaceForTest(t, spaceClient, ownerCtx, &spacev1.CreateSpaceRequest{Name: "List bans"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 	joinSpaceViaInvite(t, spaceClient, ownerCtx, targetCtx, spaceID)
@@ -353,7 +353,7 @@ func TestSpaceModeration_BanMember_CannotBanOwner(t *testing.T) {
 	spaceClient, _, ownerProfile, ownerCtx, cleanup := startSpaceModerationFixture(t)
 	t.Cleanup(cleanup)
 
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Ban owner"})
+	created, err := seedLegacySpaceForTest(t, spaceClient, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Ban owner"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 	ownerAccount := accountFromCtx(ownerCtx)
@@ -379,7 +379,7 @@ func TestSpaceModeration_TimeoutMember_ModeratorCanSet(t *testing.T) {
 	targetAccount, targetProfile := uuid.New(), uuid.New()
 	targetCtx := moderationCtx(targetAccount, targetProfile)
 
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Timeout"})
+	created, err := seedLegacySpaceForTest(t, spaceClient, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Timeout"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 	joinSpaceViaInvite(t, spaceClient, ownerCtx, modCtx, spaceID)
@@ -405,7 +405,7 @@ func TestSpaceModeration_RemoveMemberTimeout_ClearsTimeout(t *testing.T) {
 	targetAccount, targetProfile := uuid.New(), uuid.New()
 	targetCtx := moderationCtx(targetAccount, targetProfile)
 
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Untimeout"})
+	created, err := seedLegacySpaceForTest(t, spaceClient, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Untimeout"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 	joinSpaceViaInvite(t, spaceClient, ownerCtx, targetCtx, spaceID)

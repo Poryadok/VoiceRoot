@@ -67,7 +67,7 @@ func TestJoinByInvite_AssignsMemberRole(t *testing.T) {
 	spaceClient, cleanup := startSpaceGRPCTestServer(t, pool, withRoleClient(roleClient))
 	t.Cleanup(cleanup)
 
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Join Roles"})
+	created, err := seedLegacySpaceForTest(t, spaceClient, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Join Roles"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -99,7 +99,7 @@ func TestListMembers_IncludesRoleNames(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool, withRoleClient(roleClient))
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "Roster"})
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{Name: "Roster"})
 	require.NoError(t, err)
 
 	members, err := client.ListMembers(ctx, &spacev1.ListMembersRequest{
@@ -127,7 +127,7 @@ func TestCreateInvite_RequiresManageInvitesPermission(t *testing.T) {
 	spaceClient, cleanup := startSpaceGRPCTestServer(t, pool, withRoleClient(roleClient))
 	t.Cleanup(cleanup)
 
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Delegates"})
+	created, err := seedLegacySpaceForTest(t, spaceClient, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Delegates"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -199,7 +199,7 @@ func TestListInvites_RequiresManageInvitesPermission(t *testing.T) {
 	spaceClient, cleanup := startSpaceGRPCTestServer(t, pool, withRoleClient(roleClient))
 	t.Cleanup(cleanup)
 
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Invite list delegates"})
+	created, err := seedLegacySpaceForTest(t, spaceClient, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Invite list delegates"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -240,7 +240,7 @@ func TestRevokeInvite_RequiresManageInvitesPermission(t *testing.T) {
 	spaceClient, cleanup := startSpaceGRPCTestServer(t, pool, withRoleClient(roleClient))
 	t.Cleanup(cleanup)
 
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Invite revoke delegates"})
+	created, err := seedLegacySpaceForTest(t, spaceClient, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Invite revoke delegates"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 

@@ -36,7 +36,7 @@ func TestListSpaceTree_enrichesTextChatFromChatLookup(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool, withSpaceChatLookup(lookup))
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "Enriched"})
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{Name: "Enriched"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
