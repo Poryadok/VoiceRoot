@@ -4,6 +4,7 @@ package voice.messaging.v1;
 
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
+import "voice/chat/v1/chat_scope_authority.proto";
 import "voice/common/v1/common.proto";
 import "voice/common/v1/space_lifecycle.proto";
 import "voice/gameintegration/v1/game_event.proto";
@@ -45,6 +46,25 @@ message BotRemovalOrphanWhitelistEvidence {
   bytes snapshot_sha256 = 2;
 }
 
+// Exact typed point-in-time facts from the separate Bot-only Chat authority.
+// @voice.unknown_fields=reject
+message BotRemovalChatScopeObservation {
+  voice.chat.v1.GetBotChatScopeAuthorityRequest request = 1;
+  voice.chat.v1.GetBotChatScopeAuthorityResponse response = 2;
+}
+
+// One durable local whitelist/admitted-target lifetime, never a Space grant.
+// @voice.unknown_fields=reject
+message BotChatPinRemovalAttachment {
+  string attachment_id = 1;
+  oneof original_scope_evidence {
+    BotRemovalChatScopeObservation original_scope = 2;
+    bool original_scope_unqualified = 4; // must be true for this arm
+  }
+  BotRemovalChatScopeObservation current_scope = 3;
+  string covering_operation_id = 5; // optional hint to a receiver-owned row
+}
+
 // @voice.unknown_fields=reject
 message ApplyBotChatPinRemovalRequest {
   uint32 protocol_version = 1; // exactly 1
@@ -62,6 +82,17 @@ message ApplyBotChatPinRemovalRequest {
     BotRemovalOrphanWhitelistEvidence orphan_whitelist = 12;
   }
   string chat_id = 13;
+  repeated BotChatPinRemovalAttachment attachments = 14; // nonempty, sorted IDs
+}
+
+// @voice.unknown_fields=reject
+message BotChatPinRemovalTargetReceipt {
+  string attachment_id = 1;
+  bytes effect_target_sha256 = 2;
+  uint64 cleanup_revision = 3;
+  string covering_operation_id = 4;
+  string covering_receipt_id = 5;
+  bytes covering_response_sha256 = 6;
 }
 
 message BotChatPinRemovalReceipt {
@@ -82,6 +113,8 @@ message BotChatPinRemovalReceipt {
   google.protobuf.Timestamp completed_at = 15;
   string chat_id = 16;
   uint64 removed_pin_count = 17;
+  repeated BotChatPinRemovalTargetReceipt targets = 18;
+  uint64 execution_cleanup_revision = 19;
 }
 
 message ApplyBotChatPinRemovalResponse {

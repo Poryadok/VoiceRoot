@@ -2,6 +2,23 @@
 
 ## Durable Bot pin-removal target
 
+Each private per-chat request contains a sorted nonempty batch of durable local
+attachment lifetimes. A lifetime UUID distinguishes remove/readd even within the
+same installation/chat; timestamps and actor-only matching are insufficient.
+Original qualified Chat facts or explicit original-unqualified evidence remain
+immutable; a newer Chat read is separate current qualification, not an origin.
+Receiver-owned coverage is normalized independently of root/purpose/current-read
+hashes while preserving exact installation source, attachment and original arm.
+The domain-separated deterministic projection is specified by BE170 c49/c50.
+
+One CHAT-to-SPACE transaction resolves historical coverage for every target,
+qualifies uncovered targets and performs at most one sender/chat pin DELETE and
+revision increment. All-covered batches return their own count-zero receipt
+without a new mutation. Mixed batches preserve old origins and execute uncovered
+targets once. Each adopted entry points directly to the intact originating
+response/receipt/revision; first-effect entries have empty covering fields to
+avoid self-referential response hashes. Invalid hints never fall back to DELETE.
+
 Private `ApplyBotChatPinRemoval` accepts one frozen whitelisted chat, including
 a disabled whitelist entry. Protocol1 binds child operation, durable decision
 ID/SHA256, purpose `global_delete` or `space_uninstall`, Bot/actor/Space/chat and

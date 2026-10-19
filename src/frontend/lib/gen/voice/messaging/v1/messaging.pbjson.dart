@@ -206,6 +206,91 @@ final $typed_data.Uint8List botRemovalOrphanWhitelistEvidenceDescriptor =
         'CiFCb3RSZW1vdmFsT3JwaGFuV2hpdGVsaXN0RXZpZGVuY2USHwoLc25hcHNob3RfaWQYASABKA'
         'lSCnNuYXBzaG90SWQSJwoPc25hcHNob3Rfc2hhMjU2GAIgASgMUg5zbmFwc2hvdFNoYTI1Ng==');
 
+@$core.Deprecated('Use botRemovalChatScopeObservationDescriptor instead')
+const BotRemovalChatScopeObservation$json = {
+  '1': 'BotRemovalChatScopeObservation',
+  '2': [
+    {
+      '1': 'request',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.GetBotChatScopeAuthorityRequest',
+      '10': 'request'
+    },
+    {
+      '1': 'response',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.GetBotChatScopeAuthorityResponse',
+      '10': 'response'
+    },
+  ],
+};
+
+/// Descriptor for `BotRemovalChatScopeObservation`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botRemovalChatScopeObservationDescriptor =
+    $convert.base64Decode(
+        'Ch5Cb3RSZW1vdmFsQ2hhdFNjb3BlT2JzZXJ2YXRpb24SSAoHcmVxdWVzdBgBIAEoCzIuLnZvaW'
+        'NlLmNoYXQudjEuR2V0Qm90Q2hhdFNjb3BlQXV0aG9yaXR5UmVxdWVzdFIHcmVxdWVzdBJLCghy'
+        'ZXNwb25zZRgCIAEoCzIvLnZvaWNlLmNoYXQudjEuR2V0Qm90Q2hhdFNjb3BlQXV0aG9yaXR5Um'
+        'VzcG9uc2VSCHJlc3BvbnNl');
+
+@$core.Deprecated('Use botChatPinRemovalAttachmentDescriptor instead')
+const BotChatPinRemovalAttachment$json = {
+  '1': 'BotChatPinRemovalAttachment',
+  '2': [
+    {'1': 'attachment_id', '3': 1, '4': 1, '5': 9, '10': 'attachmentId'},
+    {
+      '1': 'original_scope',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.messaging.v1.BotRemovalChatScopeObservation',
+      '9': 0,
+      '10': 'originalScope'
+    },
+    {
+      '1': 'original_scope_unqualified',
+      '3': 4,
+      '4': 1,
+      '5': 8,
+      '9': 0,
+      '10': 'originalScopeUnqualified'
+    },
+    {
+      '1': 'current_scope',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.messaging.v1.BotRemovalChatScopeObservation',
+      '10': 'currentScope'
+    },
+    {
+      '1': 'covering_operation_id',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '10': 'coveringOperationId'
+    },
+  ],
+  '8': [
+    {'1': 'original_scope_evidence'},
+  ],
+};
+
+/// Descriptor for `BotChatPinRemovalAttachment`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botChatPinRemovalAttachmentDescriptor = $convert.base64Decode(
+    'ChtCb3RDaGF0UGluUmVtb3ZhbEF0dGFjaG1lbnQSIwoNYXR0YWNobWVudF9pZBgBIAEoCVIMYX'
+    'R0YWNobWVudElkElsKDm9yaWdpbmFsX3Njb3BlGAIgASgLMjIudm9pY2UubWVzc2FnaW5nLnYx'
+    'LkJvdFJlbW92YWxDaGF0U2NvcGVPYnNlcnZhdGlvbkgAUg1vcmlnaW5hbFNjb3BlEj4KGm9yaW'
+    'dpbmFsX3Njb3BlX3VucXVhbGlmaWVkGAQgASgISABSGG9yaWdpbmFsU2NvcGVVbnF1YWxpZmll'
+    'ZBJXCg1jdXJyZW50X3Njb3BlGAMgASgLMjIudm9pY2UubWVzc2FnaW5nLnYxLkJvdFJlbW92YW'
+    'xDaGF0U2NvcGVPYnNlcnZhdGlvblIMY3VycmVudFNjb3BlEjIKFWNvdmVyaW5nX29wZXJhdGlv'
+    'bl9pZBgFIAEoCVITY292ZXJpbmdPcGVyYXRpb25JZEIZChdvcmlnaW5hbF9zY29wZV9ldmlkZW'
+    '5jZQ==');
+
 @$core.Deprecated('Use applyBotChatPinRemovalRequestDescriptor instead')
 const ApplyBotChatPinRemovalRequest$json = {
   '1': 'ApplyBotChatPinRemovalRequest',
@@ -253,6 +338,14 @@ const ApplyBotChatPinRemovalRequest$json = {
       '10': 'orphanWhitelist'
     },
     {'1': 'chat_id', '3': 13, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'attachments',
+      '3': 14,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.messaging.v1.BotChatPinRemovalAttachment',
+      '10': 'attachments'
+    },
   ],
   '8': [
     {'1': 'evidence'},
@@ -272,8 +365,55 @@ final $typed_data.Uint8List applyBotChatPinRemovalRequestDescriptor = $convert.b
     'GAsgASgLMjgudm9pY2UubWVzc2FnaW5nLnYxLkJvdFJlbW92YWxMZWdhY3lJbnN0YWxsYXRpb2'
     '5FdmlkZW5jZUgAUhJsZWdhY3lJbnN0YWxsYXRpb24SYgoQb3JwaGFuX3doaXRlbGlzdBgMIAEo'
     'CzI1LnZvaWNlLm1lc3NhZ2luZy52MS5Cb3RSZW1vdmFsT3JwaGFuV2hpdGVsaXN0RXZpZGVuY2'
-    'VIAFIPb3JwaGFuV2hpdGVsaXN0EhcKB2NoYXRfaWQYDSABKAlSBmNoYXRJZEIKCghldmlkZW5j'
-    'ZQ==');
+    'VIAFIPb3JwaGFuV2hpdGVsaXN0EhcKB2NoYXRfaWQYDSABKAlSBmNoYXRJZBJRCgthdHRhY2ht'
+    'ZW50cxgOIAMoCzIvLnZvaWNlLm1lc3NhZ2luZy52MS5Cb3RDaGF0UGluUmVtb3ZhbEF0dGFjaG'
+    '1lbnRSC2F0dGFjaG1lbnRzQgoKCGV2aWRlbmNl');
+
+@$core.Deprecated('Use botChatPinRemovalTargetReceiptDescriptor instead')
+const BotChatPinRemovalTargetReceipt$json = {
+  '1': 'BotChatPinRemovalTargetReceipt',
+  '2': [
+    {'1': 'attachment_id', '3': 1, '4': 1, '5': 9, '10': 'attachmentId'},
+    {
+      '1': 'effect_target_sha256',
+      '3': 2,
+      '4': 1,
+      '5': 12,
+      '10': 'effectTargetSha256'
+    },
+    {'1': 'cleanup_revision', '3': 3, '4': 1, '5': 4, '10': 'cleanupRevision'},
+    {
+      '1': 'covering_operation_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'coveringOperationId'
+    },
+    {
+      '1': 'covering_receipt_id',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '10': 'coveringReceiptId'
+    },
+    {
+      '1': 'covering_response_sha256',
+      '3': 6,
+      '4': 1,
+      '5': 12,
+      '10': 'coveringResponseSha256'
+    },
+  ],
+};
+
+/// Descriptor for `BotChatPinRemovalTargetReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botChatPinRemovalTargetReceiptDescriptor = $convert.base64Decode(
+    'Ch5Cb3RDaGF0UGluUmVtb3ZhbFRhcmdldFJlY2VpcHQSIwoNYXR0YWNobWVudF9pZBgBIAEoCV'
+    'IMYXR0YWNobWVudElkEjAKFGVmZmVjdF90YXJnZXRfc2hhMjU2GAIgASgMUhJlZmZlY3RUYXJn'
+    'ZXRTaGEyNTYSKQoQY2xlYW51cF9yZXZpc2lvbhgDIAEoBFIPY2xlYW51cFJldmlzaW9uEjIKFW'
+    'NvdmVyaW5nX29wZXJhdGlvbl9pZBgEIAEoCVITY292ZXJpbmdPcGVyYXRpb25JZBIuChNjb3Zl'
+    'cmluZ19yZWNlaXB0X2lkGAUgASgJUhFjb3ZlcmluZ1JlY2VpcHRJZBI4Chhjb3ZlcmluZ19yZX'
+    'Nwb25zZV9zaGEyNTYYBiABKAxSFmNvdmVyaW5nUmVzcG9uc2VTaGEyNTY=');
 
 @$core.Deprecated('Use botChatPinRemovalReceiptDescriptor instead')
 const BotChatPinRemovalReceipt$json = {
@@ -315,6 +455,21 @@ const BotChatPinRemovalReceipt$json = {
       '5': 4,
       '10': 'removedPinCount'
     },
+    {
+      '1': 'targets',
+      '3': 18,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.messaging.v1.BotChatPinRemovalTargetReceipt',
+      '10': 'targets'
+    },
+    {
+      '1': 'execution_cleanup_revision',
+      '3': 19,
+      '4': 1,
+      '5': 4,
+      '10': 'executionCleanupRevision'
+    },
   ],
 };
 
@@ -331,7 +486,10 @@ final $typed_data.Uint8List botChatPinRemovalReceiptDescriptor = $convert.base64
     'dFNoYTI1NhIgCgtwYXJ0aWNpcGFudBgNIAEoCVILcGFydGljaXBhbnQSGAoHb3V0Y29tZRgOIA'
     'EoCVIHb3V0Y29tZRI9Cgxjb21wbGV0ZWRfYXQYDyABKAsyGi5nb29nbGUucHJvdG9idWYuVGlt'
     'ZXN0YW1wUgtjb21wbGV0ZWRBdBIXCgdjaGF0X2lkGBAgASgJUgZjaGF0SWQSKgoRcmVtb3ZlZF'
-    '9waW5fY291bnQYESABKARSD3JlbW92ZWRQaW5Db3VudA==');
+    '9waW5fY291bnQYESABKARSD3JlbW92ZWRQaW5Db3VudBJMCgd0YXJnZXRzGBIgAygLMjIudm9p'
+    'Y2UubWVzc2FnaW5nLnYxLkJvdENoYXRQaW5SZW1vdmFsVGFyZ2V0UmVjZWlwdFIHdGFyZ2V0cx'
+    'I8ChpleGVjdXRpb25fY2xlYW51cF9yZXZpc2lvbhgTIAEoBFIYZXhlY3V0aW9uQ2xlYW51cFJl'
+    'dmlzaW9u');
 
 @$core.Deprecated('Use applyBotChatPinRemovalResponseDescriptor instead')
 const ApplyBotChatPinRemovalResponse$json = {

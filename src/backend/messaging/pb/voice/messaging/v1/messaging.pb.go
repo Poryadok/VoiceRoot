@@ -13,9 +13,9 @@ import (
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-	v11 "voice.app/voice/chat/v1"
+	v1 "voice.app/voice/chat/v1"
 	v12 "voice.app/voice/common/v1"
-	v1 "voice.app/voice/gameintegration/v1"
+	v11 "voice.app/voice/gameintegration/v1"
 )
 
 const (
@@ -603,6 +603,170 @@ func (x *BotRemovalOrphanWhitelistEvidence) GetSnapshotSha256() []byte {
 	return nil
 }
 
+// Exact typed point-in-time facts from the separate Bot-only Chat authority.
+// @voice.unknown_fields=reject
+type BotRemovalChatScopeObservation struct {
+	state         protoimpl.MessageState               `protogen:"open.v1"`
+	Request       *v1.GetBotChatScopeAuthorityRequest  `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
+	Response      *v1.GetBotChatScopeAuthorityResponse `protobuf:"bytes,2,opt,name=response,proto3" json:"response,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BotRemovalChatScopeObservation) Reset() {
+	*x = BotRemovalChatScopeObservation{}
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BotRemovalChatScopeObservation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BotRemovalChatScopeObservation) ProtoMessage() {}
+
+func (x *BotRemovalChatScopeObservation) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BotRemovalChatScopeObservation.ProtoReflect.Descriptor instead.
+func (*BotRemovalChatScopeObservation) Descriptor() ([]byte, []int) {
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *BotRemovalChatScopeObservation) GetRequest() *v1.GetBotChatScopeAuthorityRequest {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+func (x *BotRemovalChatScopeObservation) GetResponse() *v1.GetBotChatScopeAuthorityResponse {
+	if x != nil {
+		return x.Response
+	}
+	return nil
+}
+
+// One durable local whitelist/admitted-target lifetime, never a Space grant.
+// @voice.unknown_fields=reject
+type BotChatPinRemovalAttachment struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	AttachmentId string                 `protobuf:"bytes,1,opt,name=attachment_id,json=attachmentId,proto3" json:"attachment_id,omitempty"`
+	// Types that are valid to be assigned to OriginalScopeEvidence:
+	//
+	//	*BotChatPinRemovalAttachment_OriginalScope
+	//	*BotChatPinRemovalAttachment_OriginalScopeUnqualified
+	OriginalScopeEvidence isBotChatPinRemovalAttachment_OriginalScopeEvidence `protobuf_oneof:"original_scope_evidence"`
+	CurrentScope          *BotRemovalChatScopeObservation                     `protobuf:"bytes,3,opt,name=current_scope,json=currentScope,proto3" json:"current_scope,omitempty"`
+	CoveringOperationId   string                                              `protobuf:"bytes,5,opt,name=covering_operation_id,json=coveringOperationId,proto3" json:"covering_operation_id,omitempty"` // optional hint to a receiver-owned row
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *BotChatPinRemovalAttachment) Reset() {
+	*x = BotChatPinRemovalAttachment{}
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BotChatPinRemovalAttachment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BotChatPinRemovalAttachment) ProtoMessage() {}
+
+func (x *BotChatPinRemovalAttachment) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BotChatPinRemovalAttachment.ProtoReflect.Descriptor instead.
+func (*BotChatPinRemovalAttachment) Descriptor() ([]byte, []int) {
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *BotChatPinRemovalAttachment) GetAttachmentId() string {
+	if x != nil {
+		return x.AttachmentId
+	}
+	return ""
+}
+
+func (x *BotChatPinRemovalAttachment) GetOriginalScopeEvidence() isBotChatPinRemovalAttachment_OriginalScopeEvidence {
+	if x != nil {
+		return x.OriginalScopeEvidence
+	}
+	return nil
+}
+
+func (x *BotChatPinRemovalAttachment) GetOriginalScope() *BotRemovalChatScopeObservation {
+	if x != nil {
+		if x, ok := x.OriginalScopeEvidence.(*BotChatPinRemovalAttachment_OriginalScope); ok {
+			return x.OriginalScope
+		}
+	}
+	return nil
+}
+
+func (x *BotChatPinRemovalAttachment) GetOriginalScopeUnqualified() bool {
+	if x != nil {
+		if x, ok := x.OriginalScopeEvidence.(*BotChatPinRemovalAttachment_OriginalScopeUnqualified); ok {
+			return x.OriginalScopeUnqualified
+		}
+	}
+	return false
+}
+
+func (x *BotChatPinRemovalAttachment) GetCurrentScope() *BotRemovalChatScopeObservation {
+	if x != nil {
+		return x.CurrentScope
+	}
+	return nil
+}
+
+func (x *BotChatPinRemovalAttachment) GetCoveringOperationId() string {
+	if x != nil {
+		return x.CoveringOperationId
+	}
+	return ""
+}
+
+type isBotChatPinRemovalAttachment_OriginalScopeEvidence interface {
+	isBotChatPinRemovalAttachment_OriginalScopeEvidence()
+}
+
+type BotChatPinRemovalAttachment_OriginalScope struct {
+	OriginalScope *BotRemovalChatScopeObservation `protobuf:"bytes,2,opt,name=original_scope,json=originalScope,proto3,oneof"`
+}
+
+type BotChatPinRemovalAttachment_OriginalScopeUnqualified struct {
+	OriginalScopeUnqualified bool `protobuf:"varint,4,opt,name=original_scope_unqualified,json=originalScopeUnqualified,proto3,oneof"` // must be true for this arm
+}
+
+func (*BotChatPinRemovalAttachment_OriginalScope) isBotChatPinRemovalAttachment_OriginalScopeEvidence() {
+}
+
+func (*BotChatPinRemovalAttachment_OriginalScopeUnqualified) isBotChatPinRemovalAttachment_OriginalScopeEvidence() {
+}
+
 // @voice.unknown_fields=reject
 type ApplyBotChatPinRemovalRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
@@ -622,13 +786,14 @@ type ApplyBotChatPinRemovalRequest struct {
 	//	*ApplyBotChatPinRemovalRequest_OrphanWhitelist
 	Evidence      isApplyBotChatPinRemovalRequest_Evidence `protobuf_oneof:"evidence"`
 	ChatId        string                                   `protobuf:"bytes,13,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	Attachments   []*BotChatPinRemovalAttachment           `protobuf:"bytes,14,rep,name=attachments,proto3" json:"attachments,omitempty"` // nonempty, sorted IDs
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ApplyBotChatPinRemovalRequest) Reset() {
 	*x = ApplyBotChatPinRemovalRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[3]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -640,7 +805,7 @@ func (x *ApplyBotChatPinRemovalRequest) String() string {
 func (*ApplyBotChatPinRemovalRequest) ProtoMessage() {}
 
 func (x *ApplyBotChatPinRemovalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[3]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -653,7 +818,7 @@ func (x *ApplyBotChatPinRemovalRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyBotChatPinRemovalRequest.ProtoReflect.Descriptor instead.
 func (*ApplyBotChatPinRemovalRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{3}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ApplyBotChatPinRemovalRequest) GetProtocolVersion() uint32 {
@@ -760,6 +925,13 @@ func (x *ApplyBotChatPinRemovalRequest) GetChatId() string {
 	return ""
 }
 
+func (x *ApplyBotChatPinRemovalRequest) GetAttachments() []*BotChatPinRemovalAttachment {
+	if x != nil {
+		return x.Attachments
+	}
+	return nil
+}
+
 type isApplyBotChatPinRemovalRequest_Evidence interface {
 	isApplyBotChatPinRemovalRequest_Evidence()
 }
@@ -782,32 +954,119 @@ func (*ApplyBotChatPinRemovalRequest_LegacyInstallation) isApplyBotChatPinRemova
 
 func (*ApplyBotChatPinRemovalRequest_OrphanWhitelist) isApplyBotChatPinRemovalRequest_Evidence() {}
 
+// @voice.unknown_fields=reject
+type BotChatPinRemovalTargetReceipt struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	AttachmentId           string                 `protobuf:"bytes,1,opt,name=attachment_id,json=attachmentId,proto3" json:"attachment_id,omitempty"`
+	EffectTargetSha256     []byte                 `protobuf:"bytes,2,opt,name=effect_target_sha256,json=effectTargetSha256,proto3" json:"effect_target_sha256,omitempty"`
+	CleanupRevision        uint64                 `protobuf:"varint,3,opt,name=cleanup_revision,json=cleanupRevision,proto3" json:"cleanup_revision,omitempty"`
+	CoveringOperationId    string                 `protobuf:"bytes,4,opt,name=covering_operation_id,json=coveringOperationId,proto3" json:"covering_operation_id,omitempty"`
+	CoveringReceiptId      string                 `protobuf:"bytes,5,opt,name=covering_receipt_id,json=coveringReceiptId,proto3" json:"covering_receipt_id,omitempty"`
+	CoveringResponseSha256 []byte                 `protobuf:"bytes,6,opt,name=covering_response_sha256,json=coveringResponseSha256,proto3" json:"covering_response_sha256,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *BotChatPinRemovalTargetReceipt) Reset() {
+	*x = BotChatPinRemovalTargetReceipt{}
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BotChatPinRemovalTargetReceipt) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BotChatPinRemovalTargetReceipt) ProtoMessage() {}
+
+func (x *BotChatPinRemovalTargetReceipt) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BotChatPinRemovalTargetReceipt.ProtoReflect.Descriptor instead.
+func (*BotChatPinRemovalTargetReceipt) Descriptor() ([]byte, []int) {
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *BotChatPinRemovalTargetReceipt) GetAttachmentId() string {
+	if x != nil {
+		return x.AttachmentId
+	}
+	return ""
+}
+
+func (x *BotChatPinRemovalTargetReceipt) GetEffectTargetSha256() []byte {
+	if x != nil {
+		return x.EffectTargetSha256
+	}
+	return nil
+}
+
+func (x *BotChatPinRemovalTargetReceipt) GetCleanupRevision() uint64 {
+	if x != nil {
+		return x.CleanupRevision
+	}
+	return 0
+}
+
+func (x *BotChatPinRemovalTargetReceipt) GetCoveringOperationId() string {
+	if x != nil {
+		return x.CoveringOperationId
+	}
+	return ""
+}
+
+func (x *BotChatPinRemovalTargetReceipt) GetCoveringReceiptId() string {
+	if x != nil {
+		return x.CoveringReceiptId
+	}
+	return ""
+}
+
+func (x *BotChatPinRemovalTargetReceipt) GetCoveringResponseSha256() []byte {
+	if x != nil {
+		return x.CoveringResponseSha256
+	}
+	return nil
+}
+
 type BotChatPinRemovalReceipt struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	ProtocolVersion   uint32                 `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	ReceiptId         string                 `protobuf:"bytes,2,opt,name=receipt_id,json=receiptId,proto3" json:"receipt_id,omitempty"`
-	OperationId       string                 `protobuf:"bytes,3,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
-	DecisionId        string                 `protobuf:"bytes,4,opt,name=decision_id,json=decisionId,proto3" json:"decision_id,omitempty"`
-	Purpose           string                 `protobuf:"bytes,5,opt,name=purpose,proto3" json:"purpose,omitempty"`
-	BotId             string                 `protobuf:"bytes,6,opt,name=bot_id,json=botId,proto3" json:"bot_id,omitempty"`
-	ActorProfileId    string                 `protobuf:"bytes,7,opt,name=actor_profile_id,json=actorProfileId,proto3" json:"actor_profile_id,omitempty"`
-	SpaceId           string                 `protobuf:"bytes,8,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
-	EvidenceKind      string                 `protobuf:"bytes,9,opt,name=evidence_kind,json=evidenceKind,proto3" json:"evidence_kind,omitempty"`
-	EvidenceSha256    []byte                 `protobuf:"bytes,10,opt,name=evidence_sha256,json=evidenceSha256,proto3" json:"evidence_sha256,omitempty"`
-	FrozenScopeSha256 []byte                 `protobuf:"bytes,11,opt,name=frozen_scope_sha256,json=frozenScopeSha256,proto3" json:"frozen_scope_sha256,omitempty"`
-	RequestSha256     []byte                 `protobuf:"bytes,12,opt,name=request_sha256,json=requestSha256,proto3" json:"request_sha256,omitempty"`
-	Participant       string                 `protobuf:"bytes,13,opt,name=participant,proto3" json:"participant,omitempty"` // messaging
-	Outcome           string                 `protobuf:"bytes,14,opt,name=outcome,proto3" json:"outcome,omitempty"`         // COMPLETED
-	CompletedAt       *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=completed_at,json=completedAt,proto3" json:"completed_at,omitempty"`
-	ChatId            string                 `protobuf:"bytes,16,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
-	RemovedPinCount   uint64                 `protobuf:"varint,17,opt,name=removed_pin_count,json=removedPinCount,proto3" json:"removed_pin_count,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                    protoimpl.MessageState            `protogen:"open.v1"`
+	ProtocolVersion          uint32                            `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	ReceiptId                string                            `protobuf:"bytes,2,opt,name=receipt_id,json=receiptId,proto3" json:"receipt_id,omitempty"`
+	OperationId              string                            `protobuf:"bytes,3,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	DecisionId               string                            `protobuf:"bytes,4,opt,name=decision_id,json=decisionId,proto3" json:"decision_id,omitempty"`
+	Purpose                  string                            `protobuf:"bytes,5,opt,name=purpose,proto3" json:"purpose,omitempty"`
+	BotId                    string                            `protobuf:"bytes,6,opt,name=bot_id,json=botId,proto3" json:"bot_id,omitempty"`
+	ActorProfileId           string                            `protobuf:"bytes,7,opt,name=actor_profile_id,json=actorProfileId,proto3" json:"actor_profile_id,omitempty"`
+	SpaceId                  string                            `protobuf:"bytes,8,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
+	EvidenceKind             string                            `protobuf:"bytes,9,opt,name=evidence_kind,json=evidenceKind,proto3" json:"evidence_kind,omitempty"`
+	EvidenceSha256           []byte                            `protobuf:"bytes,10,opt,name=evidence_sha256,json=evidenceSha256,proto3" json:"evidence_sha256,omitempty"`
+	FrozenScopeSha256        []byte                            `protobuf:"bytes,11,opt,name=frozen_scope_sha256,json=frozenScopeSha256,proto3" json:"frozen_scope_sha256,omitempty"`
+	RequestSha256            []byte                            `protobuf:"bytes,12,opt,name=request_sha256,json=requestSha256,proto3" json:"request_sha256,omitempty"`
+	Participant              string                            `protobuf:"bytes,13,opt,name=participant,proto3" json:"participant,omitempty"` // messaging
+	Outcome                  string                            `protobuf:"bytes,14,opt,name=outcome,proto3" json:"outcome,omitempty"`         // COMPLETED
+	CompletedAt              *timestamppb.Timestamp            `protobuf:"bytes,15,opt,name=completed_at,json=completedAt,proto3" json:"completed_at,omitempty"`
+	ChatId                   string                            `protobuf:"bytes,16,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	RemovedPinCount          uint64                            `protobuf:"varint,17,opt,name=removed_pin_count,json=removedPinCount,proto3" json:"removed_pin_count,omitempty"`
+	Targets                  []*BotChatPinRemovalTargetReceipt `protobuf:"bytes,18,rep,name=targets,proto3" json:"targets,omitempty"`
+	ExecutionCleanupRevision uint64                            `protobuf:"varint,19,opt,name=execution_cleanup_revision,json=executionCleanupRevision,proto3" json:"execution_cleanup_revision,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *BotChatPinRemovalReceipt) Reset() {
 	*x = BotChatPinRemovalReceipt{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[4]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -819,7 +1078,7 @@ func (x *BotChatPinRemovalReceipt) String() string {
 func (*BotChatPinRemovalReceipt) ProtoMessage() {}
 
 func (x *BotChatPinRemovalReceipt) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[4]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -832,7 +1091,7 @@ func (x *BotChatPinRemovalReceipt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BotChatPinRemovalReceipt.ProtoReflect.Descriptor instead.
 func (*BotChatPinRemovalReceipt) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{4}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *BotChatPinRemovalReceipt) GetProtocolVersion() uint32 {
@@ -954,6 +1213,20 @@ func (x *BotChatPinRemovalReceipt) GetRemovedPinCount() uint64 {
 	return 0
 }
 
+func (x *BotChatPinRemovalReceipt) GetTargets() []*BotChatPinRemovalTargetReceipt {
+	if x != nil {
+		return x.Targets
+	}
+	return nil
+}
+
+func (x *BotChatPinRemovalReceipt) GetExecutionCleanupRevision() uint64 {
+	if x != nil {
+		return x.ExecutionCleanupRevision
+	}
+	return 0
+}
+
 type ApplyBotChatPinRemovalResponse struct {
 	state         protoimpl.MessageState    `protogen:"open.v1"`
 	Receipt       *BotChatPinRemovalReceipt `protobuf:"bytes,1,opt,name=receipt,proto3" json:"receipt,omitempty"`
@@ -963,7 +1236,7 @@ type ApplyBotChatPinRemovalResponse struct {
 
 func (x *ApplyBotChatPinRemovalResponse) Reset() {
 	*x = ApplyBotChatPinRemovalResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[5]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -975,7 +1248,7 @@ func (x *ApplyBotChatPinRemovalResponse) String() string {
 func (*ApplyBotChatPinRemovalResponse) ProtoMessage() {}
 
 func (x *ApplyBotChatPinRemovalResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[5]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -988,7 +1261,7 @@ func (x *ApplyBotChatPinRemovalResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyBotChatPinRemovalResponse.ProtoReflect.Descriptor instead.
 func (*ApplyBotChatPinRemovalResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{5}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ApplyBotChatPinRemovalResponse) GetReceipt() *BotChatPinRemovalReceipt {
@@ -999,16 +1272,16 @@ func (x *ApplyBotChatPinRemovalResponse) GetReceipt() *BotChatPinRemovalReceipt 
 }
 
 type SendGameEventMessageRequest struct {
-	state           protoimpl.MessageState      `protogen:"open.v1"`
-	Intent          *v1.VerifiedGameEventIntent `protobuf:"bytes,1,opt,name=intent,proto3" json:"intent,omitempty"`
-	SenderProfileId string                      `protobuf:"bytes,2,opt,name=sender_profile_id,json=senderProfileId,proto3" json:"sender_profile_id,omitempty"`
+	state           protoimpl.MessageState       `protogen:"open.v1"`
+	Intent          *v11.VerifiedGameEventIntent `protobuf:"bytes,1,opt,name=intent,proto3" json:"intent,omitempty"`
+	SenderProfileId string                       `protobuf:"bytes,2,opt,name=sender_profile_id,json=senderProfileId,proto3" json:"sender_profile_id,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *SendGameEventMessageRequest) Reset() {
 	*x = SendGameEventMessageRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[6]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1020,7 +1293,7 @@ func (x *SendGameEventMessageRequest) String() string {
 func (*SendGameEventMessageRequest) ProtoMessage() {}
 
 func (x *SendGameEventMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[6]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1033,10 +1306,10 @@ func (x *SendGameEventMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendGameEventMessageRequest.ProtoReflect.Descriptor instead.
 func (*SendGameEventMessageRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{6}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *SendGameEventMessageRequest) GetIntent() *v1.VerifiedGameEventIntent {
+func (x *SendGameEventMessageRequest) GetIntent() *v11.VerifiedGameEventIntent {
 	if x != nil {
 		return x.Intent
 	}
@@ -1051,16 +1324,16 @@ func (x *SendGameEventMessageRequest) GetSenderProfileId() string {
 }
 
 type SendGameEventMessageResponse struct {
-	state         protoimpl.MessageState        `protogen:"open.v1"`
-	Status        v1.GameEventPublicationStatus `protobuf:"varint,1,opt,name=status,proto3,enum=voice.gameintegration.v1.GameEventPublicationStatus" json:"status,omitempty"`
-	MessageId     *string                       `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3,oneof" json:"message_id,omitempty"`
+	state         protoimpl.MessageState         `protogen:"open.v1"`
+	Status        v11.GameEventPublicationStatus `protobuf:"varint,1,opt,name=status,proto3,enum=voice.gameintegration.v1.GameEventPublicationStatus" json:"status,omitempty"`
+	MessageId     *string                        `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3,oneof" json:"message_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SendGameEventMessageResponse) Reset() {
 	*x = SendGameEventMessageResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[7]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1072,7 +1345,7 @@ func (x *SendGameEventMessageResponse) String() string {
 func (*SendGameEventMessageResponse) ProtoMessage() {}
 
 func (x *SendGameEventMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[7]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1085,14 +1358,14 @@ func (x *SendGameEventMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendGameEventMessageResponse.ProtoReflect.Descriptor instead.
 func (*SendGameEventMessageResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{7}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *SendGameEventMessageResponse) GetStatus() v1.GameEventPublicationStatus {
+func (x *SendGameEventMessageResponse) GetStatus() v11.GameEventPublicationStatus {
 	if x != nil {
 		return x.Status
 	}
-	return v1.GameEventPublicationStatus(0)
+	return v11.GameEventPublicationStatus(0)
 }
 
 func (x *SendGameEventMessageResponse) GetMessageId() string {
@@ -1104,7 +1377,7 @@ func (x *SendGameEventMessageResponse) GetMessageId() string {
 
 type SendMessageRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	Chat            *v11.ChatRef           `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
+	Chat            *v1.ChatRef            `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
 	Content         string                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
 	ClientMessageId *string                `protobuf:"bytes,3,opt,name=client_message_id,json=clientMessageId,proto3,oneof" json:"client_message_id,omitempty"`
 	AttachmentsJson string                 `protobuf:"bytes,4,opt,name=attachments_json,json=attachmentsJson,proto3" json:"attachments_json,omitempty"` // JSON array per docs/messaging-service
@@ -1128,7 +1401,7 @@ type SendMessageRequest struct {
 
 func (x *SendMessageRequest) Reset() {
 	*x = SendMessageRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[8]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1140,7 +1413,7 @@ func (x *SendMessageRequest) String() string {
 func (*SendMessageRequest) ProtoMessage() {}
 
 func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[8]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1153,10 +1426,10 @@ func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageRequest.ProtoReflect.Descriptor instead.
 func (*SendMessageRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{8}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *SendMessageRequest) GetChat() *v11.ChatRef {
+func (x *SendMessageRequest) GetChat() *v1.ChatRef {
 	if x != nil {
 		return x.Chat
 	}
@@ -1287,7 +1560,7 @@ type ApplyGameMessageRequest struct {
 
 func (x *ApplyGameMessageRequest) Reset() {
 	*x = ApplyGameMessageRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[9]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1299,7 +1572,7 @@ func (x *ApplyGameMessageRequest) String() string {
 func (*ApplyGameMessageRequest) ProtoMessage() {}
 
 func (x *ApplyGameMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[9]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1312,7 +1585,7 @@ func (x *ApplyGameMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyGameMessageRequest.ProtoReflect.Descriptor instead.
 func (*ApplyGameMessageRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{9}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ApplyGameMessageRequest) GetCompactJws() string {
@@ -1338,7 +1611,7 @@ type ApplyGameMessageResponse struct {
 
 func (x *ApplyGameMessageResponse) Reset() {
 	*x = ApplyGameMessageResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[10]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1350,7 +1623,7 @@ func (x *ApplyGameMessageResponse) String() string {
 func (*ApplyGameMessageResponse) ProtoMessage() {}
 
 func (x *ApplyGameMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[10]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1363,7 +1636,7 @@ func (x *ApplyGameMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyGameMessageResponse.ProtoReflect.Descriptor instead.
 func (*ApplyGameMessageResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{10}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ApplyGameMessageResponse) GetMessage() *Message {
@@ -1388,7 +1661,7 @@ type TombstoneGameMessageRequest struct {
 
 func (x *TombstoneGameMessageRequest) Reset() {
 	*x = TombstoneGameMessageRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[11]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1400,7 +1673,7 @@ func (x *TombstoneGameMessageRequest) String() string {
 func (*TombstoneGameMessageRequest) ProtoMessage() {}
 
 func (x *TombstoneGameMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[11]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1413,7 +1686,7 @@ func (x *TombstoneGameMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TombstoneGameMessageRequest.ProtoReflect.Descriptor instead.
 func (*TombstoneGameMessageRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{11}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *TombstoneGameMessageRequest) GetActionId() string {
@@ -1467,7 +1740,7 @@ type TombstoneGameMessageResponse struct {
 
 func (x *TombstoneGameMessageResponse) Reset() {
 	*x = TombstoneGameMessageResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[12]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1479,7 +1752,7 @@ func (x *TombstoneGameMessageResponse) String() string {
 func (*TombstoneGameMessageResponse) ProtoMessage() {}
 
 func (x *TombstoneGameMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[12]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1492,7 +1765,7 @@ func (x *TombstoneGameMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TombstoneGameMessageResponse.ProtoReflect.Descriptor instead.
 func (*TombstoneGameMessageResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{12}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *TombstoneGameMessageResponse) GetMessage() *Message {
@@ -1521,7 +1794,7 @@ type ScheduledMessagePayload struct {
 
 func (x *ScheduledMessagePayload) Reset() {
 	*x = ScheduledMessagePayload{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[13]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1533,7 +1806,7 @@ func (x *ScheduledMessagePayload) String() string {
 func (*ScheduledMessagePayload) ProtoMessage() {}
 
 func (x *ScheduledMessagePayload) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[13]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1546,7 +1819,7 @@ func (x *ScheduledMessagePayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScheduledMessagePayload.ProtoReflect.Descriptor instead.
 func (*ScheduledMessagePayload) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{13}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ScheduledMessagePayload) GetContent() string {
@@ -1616,7 +1889,7 @@ func (x *ScheduledMessagePayload) GetSendSilent() bool {
 type ScheduledMessage struct {
 	state           protoimpl.MessageState   `protogen:"open.v1"`
 	Id              string                   `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Chat            *v11.ChatRef             `protobuf:"bytes,2,opt,name=chat,proto3" json:"chat,omitempty"`
+	Chat            *v1.ChatRef              `protobuf:"bytes,2,opt,name=chat,proto3" json:"chat,omitempty"`
 	SenderProfileId string                   `protobuf:"bytes,3,opt,name=sender_profile_id,json=senderProfileId,proto3" json:"sender_profile_id,omitempty"`
 	Payload         *ScheduledMessagePayload `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"`
 	ClientMessageId *string                  `protobuf:"bytes,5,opt,name=client_message_id,json=clientMessageId,proto3,oneof" json:"client_message_id,omitempty"`
@@ -1635,7 +1908,7 @@ type ScheduledMessage struct {
 
 func (x *ScheduledMessage) Reset() {
 	*x = ScheduledMessage{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[14]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1647,7 +1920,7 @@ func (x *ScheduledMessage) String() string {
 func (*ScheduledMessage) ProtoMessage() {}
 
 func (x *ScheduledMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[14]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1660,7 +1933,7 @@ func (x *ScheduledMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScheduledMessage.ProtoReflect.Descriptor instead.
 func (*ScheduledMessage) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{14}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ScheduledMessage) GetId() string {
@@ -1670,7 +1943,7 @@ func (x *ScheduledMessage) GetId() string {
 	return ""
 }
 
-func (x *ScheduledMessage) GetChat() *v11.ChatRef {
+func (x *ScheduledMessage) GetChat() *v1.ChatRef {
 	if x != nil {
 		return x.Chat
 	}
@@ -1777,7 +2050,7 @@ type EditMessageRequest struct {
 
 func (x *EditMessageRequest) Reset() {
 	*x = EditMessageRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[15]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1789,7 +2062,7 @@ func (x *EditMessageRequest) String() string {
 func (*EditMessageRequest) ProtoMessage() {}
 
 func (x *EditMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[15]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1802,7 +2075,7 @@ func (x *EditMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EditMessageRequest.ProtoReflect.Descriptor instead.
 func (*EditMessageRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{15}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *EditMessageRequest) GetMessageId() string {
@@ -1829,7 +2102,7 @@ type DeleteMessageRequest struct {
 
 func (x *DeleteMessageRequest) Reset() {
 	*x = DeleteMessageRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[16]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1841,7 +2114,7 @@ func (x *DeleteMessageRequest) String() string {
 func (*DeleteMessageRequest) ProtoMessage() {}
 
 func (x *DeleteMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[16]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1854,7 +2127,7 @@ func (x *DeleteMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteMessageRequest.ProtoReflect.Descriptor instead.
 func (*DeleteMessageRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{16}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *DeleteMessageRequest) GetMessageId() string {
@@ -1873,7 +2146,7 @@ func (x *DeleteMessageRequest) GetScope() DeleteScope {
 
 type GetMessagesRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	Chat            *v11.ChatRef           `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
+	Chat            *v1.ChatRef            `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
 	AfterMessageId  *string                `protobuf:"bytes,2,opt,name=after_message_id,json=afterMessageId,proto3,oneof" json:"after_message_id,omitempty"`
 	BeforeMessageId *string                `protobuf:"bytes,3,opt,name=before_message_id,json=beforeMessageId,proto3,oneof" json:"before_message_id,omitempty"`
 	LastMessageId   *string                `protobuf:"bytes,4,opt,name=last_message_id,json=lastMessageId,proto3,oneof" json:"last_message_id,omitempty"`
@@ -1884,7 +2157,7 @@ type GetMessagesRequest struct {
 
 func (x *GetMessagesRequest) Reset() {
 	*x = GetMessagesRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[17]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1896,7 +2169,7 @@ func (x *GetMessagesRequest) String() string {
 func (*GetMessagesRequest) ProtoMessage() {}
 
 func (x *GetMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[17]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1909,10 +2182,10 @@ func (x *GetMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMessagesRequest.ProtoReflect.Descriptor instead.
 func (*GetMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{17}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{20}
 }
 
-func (x *GetMessagesRequest) GetChat() *v11.ChatRef {
+func (x *GetMessagesRequest) GetChat() *v1.ChatRef {
 	if x != nil {
 		return x.Chat
 	}
@@ -1956,7 +2229,7 @@ type GetMessageRequest struct {
 
 func (x *GetMessageRequest) Reset() {
 	*x = GetMessageRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[18]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1968,7 +2241,7 @@ func (x *GetMessageRequest) String() string {
 func (*GetMessageRequest) ProtoMessage() {}
 
 func (x *GetMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[18]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1981,7 +2254,7 @@ func (x *GetMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMessageRequest.ProtoReflect.Descriptor instead.
 func (*GetMessageRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{18}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GetMessageRequest) GetMessageId() string {
@@ -2001,7 +2274,7 @@ type ResolveGameActionRequest struct {
 
 func (x *ResolveGameActionRequest) Reset() {
 	*x = ResolveGameActionRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[19]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2013,7 +2286,7 @@ func (x *ResolveGameActionRequest) String() string {
 func (*ResolveGameActionRequest) ProtoMessage() {}
 
 func (x *ResolveGameActionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[19]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2026,7 +2299,7 @@ func (x *ResolveGameActionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveGameActionRequest.ProtoReflect.Descriptor instead.
 func (*ResolveGameActionRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{19}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ResolveGameActionRequest) GetMessageId() string {
@@ -2052,7 +2325,7 @@ type ResolveGameActionResponse struct {
 
 func (x *ResolveGameActionResponse) Reset() {
 	*x = ResolveGameActionResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[20]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2064,7 +2337,7 @@ func (x *ResolveGameActionResponse) String() string {
 func (*ResolveGameActionResponse) ProtoMessage() {}
 
 func (x *ResolveGameActionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[20]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2077,7 +2350,7 @@ func (x *ResolveGameActionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveGameActionResponse.ProtoReflect.Descriptor instead.
 func (*ResolveGameActionResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{20}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ResolveGameActionResponse) GetMessage() *Message {
@@ -2104,7 +2377,7 @@ type ProjectGameActionResultRequest struct {
 
 func (x *ProjectGameActionResultRequest) Reset() {
 	*x = ProjectGameActionResultRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[21]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2116,7 +2389,7 @@ func (x *ProjectGameActionResultRequest) String() string {
 func (*ProjectGameActionResultRequest) ProtoMessage() {}
 
 func (x *ProjectGameActionResultRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[21]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2129,7 +2402,7 @@ func (x *ProjectGameActionResultRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectGameActionResultRequest.ProtoReflect.Descriptor instead.
 func (*ProjectGameActionResultRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{21}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ProjectGameActionResultRequest) GetMessageId() string {
@@ -2205,7 +2478,7 @@ type ProjectGameActionResultResponse struct {
 
 func (x *ProjectGameActionResultResponse) Reset() {
 	*x = ProjectGameActionResultResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[22]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2217,7 +2490,7 @@ func (x *ProjectGameActionResultResponse) String() string {
 func (*ProjectGameActionResultResponse) ProtoMessage() {}
 
 func (x *ProjectGameActionResultResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[22]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2230,7 +2503,7 @@ func (x *ProjectGameActionResultResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectGameActionResultResponse.ProtoReflect.Descriptor instead.
 func (*ProjectGameActionResultResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{22}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ProjectGameActionResultResponse) GetReplayed() bool {
@@ -2259,7 +2532,7 @@ type PurgeManagedChatContentRequest struct {
 
 func (x *PurgeManagedChatContentRequest) Reset() {
 	*x = PurgeManagedChatContentRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[23]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2271,7 +2544,7 @@ func (x *PurgeManagedChatContentRequest) String() string {
 func (*PurgeManagedChatContentRequest) ProtoMessage() {}
 
 func (x *PurgeManagedChatContentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[23]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2284,7 +2557,7 @@ func (x *PurgeManagedChatContentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PurgeManagedChatContentRequest.ProtoReflect.Descriptor instead.
 func (*PurgeManagedChatContentRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{23}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *PurgeManagedChatContentRequest) GetOperationId() string {
@@ -2328,7 +2601,7 @@ type PurgeManagedChatContentResponse struct {
 
 func (x *PurgeManagedChatContentResponse) Reset() {
 	*x = PurgeManagedChatContentResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[24]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2340,7 +2613,7 @@ func (x *PurgeManagedChatContentResponse) String() string {
 func (*PurgeManagedChatContentResponse) ProtoMessage() {}
 
 func (x *PurgeManagedChatContentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[24]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2353,7 +2626,7 @@ func (x *PurgeManagedChatContentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PurgeManagedChatContentResponse.ProtoReflect.Descriptor instead.
 func (*PurgeManagedChatContentResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{24}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *PurgeManagedChatContentResponse) GetReceiptId() string {
@@ -2453,7 +2726,7 @@ type MessageList struct {
 
 func (x *MessageList) Reset() {
 	*x = MessageList{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[25]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2465,7 +2738,7 @@ func (x *MessageList) String() string {
 func (*MessageList) ProtoMessage() {}
 
 func (x *MessageList) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[25]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2478,7 +2751,7 @@ func (x *MessageList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageList.ProtoReflect.Descriptor instead.
 func (*MessageList) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{25}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *MessageList) GetMessages() []*Message {
@@ -2512,7 +2785,7 @@ func (x *MessageList) GetPage() *v12.CursorPageResponse {
 type Message struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
 	Id                     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"` // UUIDv7 application-generated
-	Chat                   *v11.ChatRef           `protobuf:"bytes,2,opt,name=chat,proto3" json:"chat,omitempty"`
+	Chat                   *v1.ChatRef            `protobuf:"bytes,2,opt,name=chat,proto3" json:"chat,omitempty"`
 	SenderProfileId        string                 `protobuf:"bytes,4,opt,name=sender_profile_id,json=senderProfileId,proto3" json:"sender_profile_id,omitempty"`
 	PostedAsChat           bool                   `protobuf:"varint,5,opt,name=posted_as_chat,json=postedAsChat,proto3" json:"posted_as_chat,omitempty"`
 	DisplayChatId          *string                `protobuf:"bytes,6,opt,name=display_chat_id,json=displayChatId,proto3,oneof" json:"display_chat_id,omitempty"`
@@ -2531,7 +2804,7 @@ type Message struct {
 	IsPinned               *bool                  `protobuf:"varint,19,opt,name=is_pinned,json=isPinned,proto3,oneof" json:"is_pinned,omitempty"`
 	IsE2E                  bool                   `protobuf:"varint,20,opt,name=is_e2e,json=isE2e,proto3" json:"is_e2e,omitempty"`
 	ContentType            *MessageContentType    `protobuf:"varint,21,opt,name=content_type,json=contentType,proto3,enum=voice.messaging.v1.MessageContentType,oneof" json:"content_type,omitempty"`
-	GameCard               *v1.GameCard           `protobuf:"bytes,22,opt,name=game_card,json=gameCard,proto3" json:"game_card,omitempty"`
+	GameCard               *v11.GameCard          `protobuf:"bytes,22,opt,name=game_card,json=gameCard,proto3" json:"game_card,omitempty"`
 	GameAppId              string                 `protobuf:"bytes,23,opt,name=game_app_id,json=gameAppId,proto3" json:"game_app_id,omitempty"`
 	GameEnvironmentId      string                 `protobuf:"bytes,24,opt,name=game_environment_id,json=gameEnvironmentId,proto3" json:"game_environment_id,omitempty"`
 	GameInstallationId     string                 `protobuf:"bytes,25,opt,name=game_installation_id,json=gameInstallationId,proto3" json:"game_installation_id,omitempty"`
@@ -2545,7 +2818,7 @@ type Message struct {
 
 func (x *Message) Reset() {
 	*x = Message{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[26]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2557,7 +2830,7 @@ func (x *Message) String() string {
 func (*Message) ProtoMessage() {}
 
 func (x *Message) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[26]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2570,7 +2843,7 @@ func (x *Message) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Message.ProtoReflect.Descriptor instead.
 func (*Message) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{26}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *Message) GetId() string {
@@ -2580,7 +2853,7 @@ func (x *Message) GetId() string {
 	return ""
 }
 
-func (x *Message) GetChat() *v11.ChatRef {
+func (x *Message) GetChat() *v1.ChatRef {
 	if x != nil {
 		return x.Chat
 	}
@@ -2713,7 +2986,7 @@ func (x *Message) GetContentType() MessageContentType {
 	return MessageContentType_MESSAGE_CONTENT_TYPE_UNSPECIFIED
 }
 
-func (x *Message) GetGameCard() *v1.GameCard {
+func (x *Message) GetGameCard() *v11.GameCard {
 	if x != nil {
 		return x.GameCard
 	}
@@ -2784,7 +3057,7 @@ type GameActionResult struct {
 
 func (x *GameActionResult) Reset() {
 	*x = GameActionResult{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[27]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2796,7 +3069,7 @@ func (x *GameActionResult) String() string {
 func (*GameActionResult) ProtoMessage() {}
 
 func (x *GameActionResult) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[27]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2809,7 +3082,7 @@ func (x *GameActionResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GameActionResult.ProtoReflect.Descriptor instead.
 func (*GameActionResult) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{27}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *GameActionResult) GetOperationId() string {
@@ -2863,7 +3136,7 @@ func (x *GameActionResult) GetRecordedAt() *timestamppb.Timestamp {
 
 type GetThreadMessagesRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	Chat           *v11.ChatRef           `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
+	Chat           *v1.ChatRef            `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
 	ThreadParentId string                 `protobuf:"bytes,2,opt,name=thread_parent_id,json=threadParentId,proto3" json:"thread_parent_id,omitempty"`
 	Page           *v12.CursorPageRequest `protobuf:"bytes,3,opt,name=page,proto3" json:"page,omitempty"`
 	unknownFields  protoimpl.UnknownFields
@@ -2872,7 +3145,7 @@ type GetThreadMessagesRequest struct {
 
 func (x *GetThreadMessagesRequest) Reset() {
 	*x = GetThreadMessagesRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[28]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2884,7 +3157,7 @@ func (x *GetThreadMessagesRequest) String() string {
 func (*GetThreadMessagesRequest) ProtoMessage() {}
 
 func (x *GetThreadMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[28]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2897,10 +3170,10 @@ func (x *GetThreadMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetThreadMessagesRequest.ProtoReflect.Descriptor instead.
 func (*GetThreadMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{28}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{31}
 }
 
-func (x *GetThreadMessagesRequest) GetChat() *v11.ChatRef {
+func (x *GetThreadMessagesRequest) GetChat() *v1.ChatRef {
 	if x != nil {
 		return x.Chat
 	}
@@ -2933,7 +3206,7 @@ type ThreadSummary struct {
 
 func (x *ThreadSummary) Reset() {
 	*x = ThreadSummary{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[29]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2945,7 +3218,7 @@ func (x *ThreadSummary) String() string {
 func (*ThreadSummary) ProtoMessage() {}
 
 func (x *ThreadSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[29]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2958,7 +3231,7 @@ func (x *ThreadSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ThreadSummary.ProtoReflect.Descriptor instead.
 func (*ThreadSummary) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{29}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ThreadSummary) GetThreadParentId() string {
@@ -2991,7 +3264,7 @@ func (x *ThreadSummary) GetLastReplyPreview() string {
 
 type ListThreadsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chat          *v11.ChatRef           `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
+	Chat          *v1.ChatRef            `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
 	Page          *v12.CursorPageRequest `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2999,7 +3272,7 @@ type ListThreadsRequest struct {
 
 func (x *ListThreadsRequest) Reset() {
 	*x = ListThreadsRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[30]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3011,7 +3284,7 @@ func (x *ListThreadsRequest) String() string {
 func (*ListThreadsRequest) ProtoMessage() {}
 
 func (x *ListThreadsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[30]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3024,10 +3297,10 @@ func (x *ListThreadsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListThreadsRequest.ProtoReflect.Descriptor instead.
 func (*ListThreadsRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{30}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{33}
 }
 
-func (x *ListThreadsRequest) GetChat() *v11.ChatRef {
+func (x *ListThreadsRequest) GetChat() *v1.ChatRef {
 	if x != nil {
 		return x.Chat
 	}
@@ -3051,7 +3324,7 @@ type ThreadList struct {
 
 func (x *ThreadList) Reset() {
 	*x = ThreadList{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[31]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3063,7 +3336,7 @@ func (x *ThreadList) String() string {
 func (*ThreadList) ProtoMessage() {}
 
 func (x *ThreadList) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[31]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3076,7 +3349,7 @@ func (x *ThreadList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ThreadList.ProtoReflect.Descriptor instead.
 func (*ThreadList) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{31}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ThreadList) GetThreads() []*ThreadSummary {
@@ -3103,7 +3376,7 @@ type AddReactionRequest struct {
 
 func (x *AddReactionRequest) Reset() {
 	*x = AddReactionRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[32]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3115,7 +3388,7 @@ func (x *AddReactionRequest) String() string {
 func (*AddReactionRequest) ProtoMessage() {}
 
 func (x *AddReactionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[32]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3128,7 +3401,7 @@ func (x *AddReactionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddReactionRequest.ProtoReflect.Descriptor instead.
 func (*AddReactionRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{32}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *AddReactionRequest) GetMessageId() string {
@@ -3155,7 +3428,7 @@ type RemoveReactionRequest struct {
 
 func (x *RemoveReactionRequest) Reset() {
 	*x = RemoveReactionRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[33]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3167,7 +3440,7 @@ func (x *RemoveReactionRequest) String() string {
 func (*RemoveReactionRequest) ProtoMessage() {}
 
 func (x *RemoveReactionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[33]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3180,7 +3453,7 @@ func (x *RemoveReactionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveReactionRequest.ProtoReflect.Descriptor instead.
 func (*RemoveReactionRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{33}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *RemoveReactionRequest) GetMessageId() string {
@@ -3199,7 +3472,7 @@ func (x *RemoveReactionRequest) GetEmoji() string {
 
 type PinMessageRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chat          *v11.ChatRef           `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
+	Chat          *v1.ChatRef            `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
 	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3207,7 +3480,7 @@ type PinMessageRequest struct {
 
 func (x *PinMessageRequest) Reset() {
 	*x = PinMessageRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[34]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3219,7 +3492,7 @@ func (x *PinMessageRequest) String() string {
 func (*PinMessageRequest) ProtoMessage() {}
 
 func (x *PinMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[34]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3232,10 +3505,10 @@ func (x *PinMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PinMessageRequest.ProtoReflect.Descriptor instead.
 func (*PinMessageRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{34}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{37}
 }
 
-func (x *PinMessageRequest) GetChat() *v11.ChatRef {
+func (x *PinMessageRequest) GetChat() *v1.ChatRef {
 	if x != nil {
 		return x.Chat
 	}
@@ -3251,7 +3524,7 @@ func (x *PinMessageRequest) GetMessageId() string {
 
 type UnpinMessageRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chat          *v11.ChatRef           `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
+	Chat          *v1.ChatRef            `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
 	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3259,7 +3532,7 @@ type UnpinMessageRequest struct {
 
 func (x *UnpinMessageRequest) Reset() {
 	*x = UnpinMessageRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[35]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3271,7 +3544,7 @@ func (x *UnpinMessageRequest) String() string {
 func (*UnpinMessageRequest) ProtoMessage() {}
 
 func (x *UnpinMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[35]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3284,10 +3557,10 @@ func (x *UnpinMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnpinMessageRequest.ProtoReflect.Descriptor instead.
 func (*UnpinMessageRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{35}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{38}
 }
 
-func (x *UnpinMessageRequest) GetChat() *v11.ChatRef {
+func (x *UnpinMessageRequest) GetChat() *v1.ChatRef {
 	if x != nil {
 		return x.Chat
 	}
@@ -3303,14 +3576,14 @@ func (x *UnpinMessageRequest) GetMessageId() string {
 
 type GetPinnedMessagesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chat          *v11.ChatRef           `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
+	Chat          *v1.ChatRef            `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetPinnedMessagesRequest) Reset() {
 	*x = GetPinnedMessagesRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[36]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3322,7 +3595,7 @@ func (x *GetPinnedMessagesRequest) String() string {
 func (*GetPinnedMessagesRequest) ProtoMessage() {}
 
 func (x *GetPinnedMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[36]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3335,10 +3608,10 @@ func (x *GetPinnedMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPinnedMessagesRequest.ProtoReflect.Descriptor instead.
 func (*GetPinnedMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{36}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{39}
 }
 
-func (x *GetPinnedMessagesRequest) GetChat() *v11.ChatRef {
+func (x *GetPinnedMessagesRequest) GetChat() *v1.ChatRef {
 	if x != nil {
 		return x.Chat
 	}
@@ -3348,7 +3621,7 @@ func (x *GetPinnedMessagesRequest) GetChat() *v11.ChatRef {
 type ForwardMessageRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	SourceMessageId string                 `protobuf:"bytes,1,opt,name=source_message_id,json=sourceMessageId,proto3" json:"source_message_id,omitempty"`
-	TargetChat      *v11.ChatRef           `protobuf:"bytes,2,opt,name=target_chat,json=targetChat,proto3" json:"target_chat,omitempty"`
+	TargetChat      *v1.ChatRef            `protobuf:"bytes,2,opt,name=target_chat,json=targetChat,proto3" json:"target_chat,omitempty"`
 	Commentary      *string                `protobuf:"bytes,3,opt,name=commentary,proto3,oneof" json:"commentary,omitempty"`
 	// FW-03 / forward-messages.md «Copy as new message»: copy content (and media)
 	// as a regular message with no "Forwarded from" attribution.
@@ -3359,7 +3632,7 @@ type ForwardMessageRequest struct {
 
 func (x *ForwardMessageRequest) Reset() {
 	*x = ForwardMessageRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[37]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3371,7 +3644,7 @@ func (x *ForwardMessageRequest) String() string {
 func (*ForwardMessageRequest) ProtoMessage() {}
 
 func (x *ForwardMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[37]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3384,7 +3657,7 @@ func (x *ForwardMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForwardMessageRequest.ProtoReflect.Descriptor instead.
 func (*ForwardMessageRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{37}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *ForwardMessageRequest) GetSourceMessageId() string {
@@ -3394,7 +3667,7 @@ func (x *ForwardMessageRequest) GetSourceMessageId() string {
 	return ""
 }
 
-func (x *ForwardMessageRequest) GetTargetChat() *v11.ChatRef {
+func (x *ForwardMessageRequest) GetTargetChat() *v1.ChatRef {
 	if x != nil {
 		return x.TargetChat
 	}
@@ -3417,7 +3690,7 @@ func (x *ForwardMessageRequest) GetWithoutAttribution() bool {
 
 type MarkReadRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
-	Chat              *v11.ChatRef           `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
+	Chat              *v1.ChatRef            `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
 	LastReadMessageId string                 `protobuf:"bytes,2,opt,name=last_read_message_id,json=lastReadMessageId,proto3" json:"last_read_message_id,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
@@ -3425,7 +3698,7 @@ type MarkReadRequest struct {
 
 func (x *MarkReadRequest) Reset() {
 	*x = MarkReadRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[38]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3437,7 +3710,7 @@ func (x *MarkReadRequest) String() string {
 func (*MarkReadRequest) ProtoMessage() {}
 
 func (x *MarkReadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[38]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3450,10 +3723,10 @@ func (x *MarkReadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkReadRequest.ProtoReflect.Descriptor instead.
 func (*MarkReadRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{38}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{41}
 }
 
-func (x *MarkReadRequest) GetChat() *v11.ChatRef {
+func (x *MarkReadRequest) GetChat() *v1.ChatRef {
 	if x != nil {
 		return x.Chat
 	}
@@ -3469,14 +3742,14 @@ func (x *MarkReadRequest) GetLastReadMessageId() string {
 
 type GetReadStateRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chat          *v11.ChatRef           `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
+	Chat          *v1.ChatRef            `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetReadStateRequest) Reset() {
 	*x = GetReadStateRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[39]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3488,7 +3761,7 @@ func (x *GetReadStateRequest) String() string {
 func (*GetReadStateRequest) ProtoMessage() {}
 
 func (x *GetReadStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[39]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3501,10 +3774,10 @@ func (x *GetReadStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetReadStateRequest.ProtoReflect.Descriptor instead.
 func (*GetReadStateRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{39}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{42}
 }
 
-func (x *GetReadStateRequest) GetChat() *v11.ChatRef {
+func (x *GetReadStateRequest) GetChat() *v1.ChatRef {
 	if x != nil {
 		return x.Chat
 	}
@@ -3513,7 +3786,7 @@ func (x *GetReadStateRequest) GetChat() *v11.ChatRef {
 
 type ReadState struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
-	Chat              *v11.ChatRef           `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
+	Chat              *v1.ChatRef            `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
 	ProfileId         string                 `protobuf:"bytes,2,opt,name=profile_id,json=profileId,proto3" json:"profile_id,omitempty"`
 	LastReadMessageId string                 `protobuf:"bytes,3,opt,name=last_read_message_id,json=lastReadMessageId,proto3" json:"last_read_message_id,omitempty"`
 	UpdatedAt         *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
@@ -3523,7 +3796,7 @@ type ReadState struct {
 
 func (x *ReadState) Reset() {
 	*x = ReadState{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[40]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3535,7 +3808,7 @@ func (x *ReadState) String() string {
 func (*ReadState) ProtoMessage() {}
 
 func (x *ReadState) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[40]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3548,10 +3821,10 @@ func (x *ReadState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadState.ProtoReflect.Descriptor instead.
 func (*ReadState) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{40}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{43}
 }
 
-func (x *ReadState) GetChat() *v11.ChatRef {
+func (x *ReadState) GetChat() *v1.ChatRef {
 	if x != nil {
 		return x.Chat
 	}
@@ -3581,14 +3854,14 @@ func (x *ReadState) GetUpdatedAt() *timestamppb.Timestamp {
 
 type GetBulkReadStateRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chats         []*v11.ChatRef         `protobuf:"bytes,1,rep,name=chats,proto3" json:"chats,omitempty"`
+	Chats         []*v1.ChatRef          `protobuf:"bytes,1,rep,name=chats,proto3" json:"chats,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetBulkReadStateRequest) Reset() {
 	*x = GetBulkReadStateRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[41]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3600,7 +3873,7 @@ func (x *GetBulkReadStateRequest) String() string {
 func (*GetBulkReadStateRequest) ProtoMessage() {}
 
 func (x *GetBulkReadStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[41]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3613,10 +3886,10 @@ func (x *GetBulkReadStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBulkReadStateRequest.ProtoReflect.Descriptor instead.
 func (*GetBulkReadStateRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{41}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{44}
 }
 
-func (x *GetBulkReadStateRequest) GetChats() []*v11.ChatRef {
+func (x *GetBulkReadStateRequest) GetChats() []*v1.ChatRef {
 	if x != nil {
 		return x.Chats
 	}
@@ -3625,14 +3898,14 @@ func (x *GetBulkReadStateRequest) GetChats() []*v11.ChatRef {
 
 type GetChatListMetadataRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chats         []*v11.ChatRef         `protobuf:"bytes,1,rep,name=chats,proto3" json:"chats,omitempty"`
+	Chats         []*v1.ChatRef          `protobuf:"bytes,1,rep,name=chats,proto3" json:"chats,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetChatListMetadataRequest) Reset() {
 	*x = GetChatListMetadataRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[42]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3644,7 +3917,7 @@ func (x *GetChatListMetadataRequest) String() string {
 func (*GetChatListMetadataRequest) ProtoMessage() {}
 
 func (x *GetChatListMetadataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[42]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3657,10 +3930,10 @@ func (x *GetChatListMetadataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChatListMetadataRequest.ProtoReflect.Descriptor instead.
 func (*GetChatListMetadataRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{42}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{45}
 }
 
-func (x *GetChatListMetadataRequest) GetChats() []*v11.ChatRef {
+func (x *GetChatListMetadataRequest) GetChats() []*v1.ChatRef {
 	if x != nil {
 		return x.Chats
 	}
@@ -3669,7 +3942,7 @@ func (x *GetChatListMetadataRequest) GetChats() []*v11.ChatRef {
 
 type ChatListMetadata struct {
 	state                    protoimpl.MessageState    `protogen:"open.v1"`
-	Chat                     *v11.ChatRef              `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
+	Chat                     *v1.ChatRef               `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
 	LastMessagePreview       *string                   `protobuf:"bytes,2,opt,name=last_message_preview,json=lastMessagePreview,proto3,oneof" json:"last_message_preview,omitempty"`
 	UnreadCount              int64                     `protobuf:"varint,3,opt,name=unread_count,json=unreadCount,proto3" json:"unread_count,omitempty"`
 	LastMessageAt            *timestamppb.Timestamp    `protobuf:"bytes,4,opt,name=last_message_at,json=lastMessageAt,proto3,oneof" json:"last_message_at,omitempty"`
@@ -3682,7 +3955,7 @@ type ChatListMetadata struct {
 
 func (x *ChatListMetadata) Reset() {
 	*x = ChatListMetadata{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[43]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3694,7 +3967,7 @@ func (x *ChatListMetadata) String() string {
 func (*ChatListMetadata) ProtoMessage() {}
 
 func (x *ChatListMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[43]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3707,10 +3980,10 @@ func (x *ChatListMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatListMetadata.ProtoReflect.Descriptor instead.
 func (*ChatListMetadata) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{43}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{46}
 }
 
-func (x *ChatListMetadata) GetChat() *v11.ChatRef {
+func (x *ChatListMetadata) GetChat() *v1.ChatRef {
 	if x != nil {
 		return x.Chat
 	}
@@ -3769,7 +4042,7 @@ type SendMessageResponse struct {
 
 func (x *SendMessageResponse) Reset() {
 	*x = SendMessageResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[44]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3781,7 +4054,7 @@ func (x *SendMessageResponse) String() string {
 func (*SendMessageResponse) ProtoMessage() {}
 
 func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[44]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3794,7 +4067,7 @@ func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageResponse.ProtoReflect.Descriptor instead.
 func (*SendMessageResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{44}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *SendMessageResponse) GetMessage() *Message {
@@ -3813,7 +4086,7 @@ func (x *SendMessageResponse) GetScheduledMessage() *ScheduledMessage {
 
 type ListScheduledMessagesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chat          *v11.ChatRef           `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
+	Chat          *v1.ChatRef            `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
 	Page          *v12.CursorPageRequest `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3821,7 +4094,7 @@ type ListScheduledMessagesRequest struct {
 
 func (x *ListScheduledMessagesRequest) Reset() {
 	*x = ListScheduledMessagesRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[45]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3833,7 +4106,7 @@ func (x *ListScheduledMessagesRequest) String() string {
 func (*ListScheduledMessagesRequest) ProtoMessage() {}
 
 func (x *ListScheduledMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[45]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3846,10 +4119,10 @@ func (x *ListScheduledMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListScheduledMessagesRequest.ProtoReflect.Descriptor instead.
 func (*ListScheduledMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{45}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{48}
 }
 
-func (x *ListScheduledMessagesRequest) GetChat() *v11.ChatRef {
+func (x *ListScheduledMessagesRequest) GetChat() *v1.ChatRef {
 	if x != nil {
 		return x.Chat
 	}
@@ -3873,7 +4146,7 @@ type ListScheduledMessagesResponse struct {
 
 func (x *ListScheduledMessagesResponse) Reset() {
 	*x = ListScheduledMessagesResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[46]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3885,7 +4158,7 @@ func (x *ListScheduledMessagesResponse) String() string {
 func (*ListScheduledMessagesResponse) ProtoMessage() {}
 
 func (x *ListScheduledMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[46]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3898,7 +4171,7 @@ func (x *ListScheduledMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListScheduledMessagesResponse.ProtoReflect.Descriptor instead.
 func (*ListScheduledMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{46}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ListScheduledMessagesResponse) GetScheduledMessages() []*ScheduledMessage {
@@ -3930,7 +4203,7 @@ type UpdateScheduledMessageRequest struct {
 
 func (x *UpdateScheduledMessageRequest) Reset() {
 	*x = UpdateScheduledMessageRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[47]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3942,7 +4215,7 @@ func (x *UpdateScheduledMessageRequest) String() string {
 func (*UpdateScheduledMessageRequest) ProtoMessage() {}
 
 func (x *UpdateScheduledMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[47]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3955,7 +4228,7 @@ func (x *UpdateScheduledMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateScheduledMessageRequest.ProtoReflect.Descriptor instead.
 func (*UpdateScheduledMessageRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{47}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *UpdateScheduledMessageRequest) GetScheduledMessageId() string {
@@ -4024,7 +4297,7 @@ type UpdateScheduledMessageResponse struct {
 
 func (x *UpdateScheduledMessageResponse) Reset() {
 	*x = UpdateScheduledMessageResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[48]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4036,7 +4309,7 @@ func (x *UpdateScheduledMessageResponse) String() string {
 func (*UpdateScheduledMessageResponse) ProtoMessage() {}
 
 func (x *UpdateScheduledMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[48]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4049,7 +4322,7 @@ func (x *UpdateScheduledMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateScheduledMessageResponse.ProtoReflect.Descriptor instead.
 func (*UpdateScheduledMessageResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{48}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *UpdateScheduledMessageResponse) GetScheduledMessage() *ScheduledMessage {
@@ -4068,7 +4341,7 @@ type CancelScheduledMessageRequest struct {
 
 func (x *CancelScheduledMessageRequest) Reset() {
 	*x = CancelScheduledMessageRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[49]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4080,7 +4353,7 @@ func (x *CancelScheduledMessageRequest) String() string {
 func (*CancelScheduledMessageRequest) ProtoMessage() {}
 
 func (x *CancelScheduledMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[49]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4093,7 +4366,7 @@ func (x *CancelScheduledMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelScheduledMessageRequest.ProtoReflect.Descriptor instead.
 func (*CancelScheduledMessageRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{49}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *CancelScheduledMessageRequest) GetScheduledMessageId() string {
@@ -4111,7 +4384,7 @@ type CancelScheduledMessageResponse struct {
 
 func (x *CancelScheduledMessageResponse) Reset() {
 	*x = CancelScheduledMessageResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[50]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4123,7 +4396,7 @@ func (x *CancelScheduledMessageResponse) String() string {
 func (*CancelScheduledMessageResponse) ProtoMessage() {}
 
 func (x *CancelScheduledMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[50]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4136,7 +4409,7 @@ func (x *CancelScheduledMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelScheduledMessageResponse.ProtoReflect.Descriptor instead.
 func (*CancelScheduledMessageResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{50}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{53}
 }
 
 type SendScheduledMessageNowRequest struct {
@@ -4148,7 +4421,7 @@ type SendScheduledMessageNowRequest struct {
 
 func (x *SendScheduledMessageNowRequest) Reset() {
 	*x = SendScheduledMessageNowRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[51]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4160,7 +4433,7 @@ func (x *SendScheduledMessageNowRequest) String() string {
 func (*SendScheduledMessageNowRequest) ProtoMessage() {}
 
 func (x *SendScheduledMessageNowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[51]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4173,7 +4446,7 @@ func (x *SendScheduledMessageNowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendScheduledMessageNowRequest.ProtoReflect.Descriptor instead.
 func (*SendScheduledMessageNowRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{51}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *SendScheduledMessageNowRequest) GetScheduledMessageId() string {
@@ -4192,7 +4465,7 @@ type SendScheduledMessageNowResponse struct {
 
 func (x *SendScheduledMessageNowResponse) Reset() {
 	*x = SendScheduledMessageNowResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[52]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4204,7 +4477,7 @@ func (x *SendScheduledMessageNowResponse) String() string {
 func (*SendScheduledMessageNowResponse) ProtoMessage() {}
 
 func (x *SendScheduledMessageNowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[52]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4217,7 +4490,7 @@ func (x *SendScheduledMessageNowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendScheduledMessageNowResponse.ProtoReflect.Descriptor instead.
 func (*SendScheduledMessageNowResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{52}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *SendScheduledMessageNowResponse) GetMessage() *Message {
@@ -4236,7 +4509,7 @@ type EditMessageResponse struct {
 
 func (x *EditMessageResponse) Reset() {
 	*x = EditMessageResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[53]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4248,7 +4521,7 @@ func (x *EditMessageResponse) String() string {
 func (*EditMessageResponse) ProtoMessage() {}
 
 func (x *EditMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[53]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4261,7 +4534,7 @@ func (x *EditMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EditMessageResponse.ProtoReflect.Descriptor instead.
 func (*EditMessageResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{53}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *EditMessageResponse) GetMessage() *Message {
@@ -4279,7 +4552,7 @@ type DeleteMessageResponse struct {
 
 func (x *DeleteMessageResponse) Reset() {
 	*x = DeleteMessageResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[54]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4291,7 +4564,7 @@ func (x *DeleteMessageResponse) String() string {
 func (*DeleteMessageResponse) ProtoMessage() {}
 
 func (x *DeleteMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[54]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4304,7 +4577,7 @@ func (x *DeleteMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteMessageResponse.ProtoReflect.Descriptor instead.
 func (*DeleteMessageResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{54}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{57}
 }
 
 type GetMessagesResponse struct {
@@ -4318,7 +4591,7 @@ type GetMessagesResponse struct {
 
 func (x *GetMessagesResponse) Reset() {
 	*x = GetMessagesResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[55]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4330,7 +4603,7 @@ func (x *GetMessagesResponse) String() string {
 func (*GetMessagesResponse) ProtoMessage() {}
 
 func (x *GetMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[55]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4343,7 +4616,7 @@ func (x *GetMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMessagesResponse.ProtoReflect.Descriptor instead.
 func (*GetMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{55}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *GetMessagesResponse) GetMessageList() *MessageList {
@@ -4369,7 +4642,7 @@ type GetMessageResponse struct {
 
 func (x *GetMessageResponse) Reset() {
 	*x = GetMessageResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[56]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4381,7 +4654,7 @@ func (x *GetMessageResponse) String() string {
 func (*GetMessageResponse) ProtoMessage() {}
 
 func (x *GetMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[56]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4394,7 +4667,7 @@ func (x *GetMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMessageResponse.ProtoReflect.Descriptor instead.
 func (*GetMessageResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{56}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *GetMessageResponse) GetMessage() *Message {
@@ -4413,7 +4686,7 @@ type GetThreadMessagesResponse struct {
 
 func (x *GetThreadMessagesResponse) Reset() {
 	*x = GetThreadMessagesResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[57]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4425,7 +4698,7 @@ func (x *GetThreadMessagesResponse) String() string {
 func (*GetThreadMessagesResponse) ProtoMessage() {}
 
 func (x *GetThreadMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[57]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4438,7 +4711,7 @@ func (x *GetThreadMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetThreadMessagesResponse.ProtoReflect.Descriptor instead.
 func (*GetThreadMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{57}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *GetThreadMessagesResponse) GetMessageList() *MessageList {
@@ -4457,7 +4730,7 @@ type ListThreadsResponse struct {
 
 func (x *ListThreadsResponse) Reset() {
 	*x = ListThreadsResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[58]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4469,7 +4742,7 @@ func (x *ListThreadsResponse) String() string {
 func (*ListThreadsResponse) ProtoMessage() {}
 
 func (x *ListThreadsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[58]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4482,7 +4755,7 @@ func (x *ListThreadsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListThreadsResponse.ProtoReflect.Descriptor instead.
 func (*ListThreadsResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{58}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *ListThreadsResponse) GetThreadList() *ThreadList {
@@ -4500,7 +4773,7 @@ type AddReactionResponse struct {
 
 func (x *AddReactionResponse) Reset() {
 	*x = AddReactionResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[59]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4512,7 +4785,7 @@ func (x *AddReactionResponse) String() string {
 func (*AddReactionResponse) ProtoMessage() {}
 
 func (x *AddReactionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[59]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4525,7 +4798,7 @@ func (x *AddReactionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddReactionResponse.ProtoReflect.Descriptor instead.
 func (*AddReactionResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{59}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{62}
 }
 
 type RemoveReactionResponse struct {
@@ -4536,7 +4809,7 @@ type RemoveReactionResponse struct {
 
 func (x *RemoveReactionResponse) Reset() {
 	*x = RemoveReactionResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[60]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4548,7 +4821,7 @@ func (x *RemoveReactionResponse) String() string {
 func (*RemoveReactionResponse) ProtoMessage() {}
 
 func (x *RemoveReactionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[60]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4561,7 +4834,7 @@ func (x *RemoveReactionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveReactionResponse.ProtoReflect.Descriptor instead.
 func (*RemoveReactionResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{60}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{63}
 }
 
 type PinMessageResponse struct {
@@ -4572,7 +4845,7 @@ type PinMessageResponse struct {
 
 func (x *PinMessageResponse) Reset() {
 	*x = PinMessageResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[61]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4584,7 +4857,7 @@ func (x *PinMessageResponse) String() string {
 func (*PinMessageResponse) ProtoMessage() {}
 
 func (x *PinMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[61]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4597,7 +4870,7 @@ func (x *PinMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PinMessageResponse.ProtoReflect.Descriptor instead.
 func (*PinMessageResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{61}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{64}
 }
 
 type UnpinMessageResponse struct {
@@ -4608,7 +4881,7 @@ type UnpinMessageResponse struct {
 
 func (x *UnpinMessageResponse) Reset() {
 	*x = UnpinMessageResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[62]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4620,7 +4893,7 @@ func (x *UnpinMessageResponse) String() string {
 func (*UnpinMessageResponse) ProtoMessage() {}
 
 func (x *UnpinMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[62]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4633,7 +4906,7 @@ func (x *UnpinMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnpinMessageResponse.ProtoReflect.Descriptor instead.
 func (*UnpinMessageResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{62}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{65}
 }
 
 type GetPinnedMessagesResponse struct {
@@ -4645,7 +4918,7 @@ type GetPinnedMessagesResponse struct {
 
 func (x *GetPinnedMessagesResponse) Reset() {
 	*x = GetPinnedMessagesResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[63]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4657,7 +4930,7 @@ func (x *GetPinnedMessagesResponse) String() string {
 func (*GetPinnedMessagesResponse) ProtoMessage() {}
 
 func (x *GetPinnedMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[63]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4670,7 +4943,7 @@ func (x *GetPinnedMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPinnedMessagesResponse.ProtoReflect.Descriptor instead.
 func (*GetPinnedMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{63}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *GetPinnedMessagesResponse) GetMessageList() *MessageList {
@@ -4689,7 +4962,7 @@ type ForwardMessageResponse struct {
 
 func (x *ForwardMessageResponse) Reset() {
 	*x = ForwardMessageResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[64]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4701,7 +4974,7 @@ func (x *ForwardMessageResponse) String() string {
 func (*ForwardMessageResponse) ProtoMessage() {}
 
 func (x *ForwardMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[64]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4714,7 +4987,7 @@ func (x *ForwardMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForwardMessageResponse.ProtoReflect.Descriptor instead.
 func (*ForwardMessageResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{64}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *ForwardMessageResponse) GetMessage() *Message {
@@ -4732,7 +5005,7 @@ type MarkReadResponse struct {
 
 func (x *MarkReadResponse) Reset() {
 	*x = MarkReadResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[65]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4744,7 +5017,7 @@ func (x *MarkReadResponse) String() string {
 func (*MarkReadResponse) ProtoMessage() {}
 
 func (x *MarkReadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[65]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4757,7 +5030,7 @@ func (x *MarkReadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkReadResponse.ProtoReflect.Descriptor instead.
 func (*MarkReadResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{65}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{68}
 }
 
 type GetReadStateResponse struct {
@@ -4769,7 +5042,7 @@ type GetReadStateResponse struct {
 
 func (x *GetReadStateResponse) Reset() {
 	*x = GetReadStateResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[66]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4781,7 +5054,7 @@ func (x *GetReadStateResponse) String() string {
 func (*GetReadStateResponse) ProtoMessage() {}
 
 func (x *GetReadStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[66]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4794,7 +5067,7 @@ func (x *GetReadStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetReadStateResponse.ProtoReflect.Descriptor instead.
 func (*GetReadStateResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{66}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *GetReadStateResponse) GetReadState() *ReadState {
@@ -4813,7 +5086,7 @@ type GetBulkReadStateResponse struct {
 
 func (x *GetBulkReadStateResponse) Reset() {
 	*x = GetBulkReadStateResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[67]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4825,7 +5098,7 @@ func (x *GetBulkReadStateResponse) String() string {
 func (*GetBulkReadStateResponse) ProtoMessage() {}
 
 func (x *GetBulkReadStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[67]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4838,7 +5111,7 @@ func (x *GetBulkReadStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBulkReadStateResponse.ProtoReflect.Descriptor instead.
 func (*GetBulkReadStateResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{67}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *GetBulkReadStateResponse) GetByChatId() map[string]*ReadState {
@@ -4857,7 +5130,7 @@ type GetChatListMetadataResponse struct {
 
 func (x *GetChatListMetadataResponse) Reset() {
 	*x = GetChatListMetadataResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[68]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4869,7 +5142,7 @@ func (x *GetChatListMetadataResponse) String() string {
 func (*GetChatListMetadataResponse) ProtoMessage() {}
 
 func (x *GetChatListMetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[68]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4882,7 +5155,7 @@ func (x *GetChatListMetadataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChatListMetadataResponse.ProtoReflect.Descriptor instead.
 func (*GetChatListMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{68}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *GetChatListMetadataResponse) GetByChatId() map[string]*ChatListMetadata {
@@ -4894,7 +5167,7 @@ func (x *GetChatListMetadataResponse) GetByChatId() map[string]*ChatListMetadata
 
 type ListSharedMediaRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chat          *v11.ChatRef           `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
+	Chat          *v1.ChatRef            `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
 	Kind          SharedMediaKind        `protobuf:"varint,2,opt,name=kind,proto3,enum=voice.messaging.v1.SharedMediaKind" json:"kind,omitempty"`
 	Page          *v12.CursorPageRequest `protobuf:"bytes,3,opt,name=page,proto3" json:"page,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -4903,7 +5176,7 @@ type ListSharedMediaRequest struct {
 
 func (x *ListSharedMediaRequest) Reset() {
 	*x = ListSharedMediaRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[69]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4915,7 +5188,7 @@ func (x *ListSharedMediaRequest) String() string {
 func (*ListSharedMediaRequest) ProtoMessage() {}
 
 func (x *ListSharedMediaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[69]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4928,10 +5201,10 @@ func (x *ListSharedMediaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSharedMediaRequest.ProtoReflect.Descriptor instead.
 func (*ListSharedMediaRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{69}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{72}
 }
 
-func (x *ListSharedMediaRequest) GetChat() *v11.ChatRef {
+func (x *ListSharedMediaRequest) GetChat() *v1.ChatRef {
 	if x != nil {
 		return x.Chat
 	}
@@ -4971,7 +5244,7 @@ type SharedMediaItem struct {
 
 func (x *SharedMediaItem) Reset() {
 	*x = SharedMediaItem{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[70]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4983,7 +5256,7 @@ func (x *SharedMediaItem) String() string {
 func (*SharedMediaItem) ProtoMessage() {}
 
 func (x *SharedMediaItem) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[70]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4996,7 +5269,7 @@ func (x *SharedMediaItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SharedMediaItem.ProtoReflect.Descriptor instead.
 func (*SharedMediaItem) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{70}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *SharedMediaItem) GetMessageId() string {
@@ -5088,7 +5361,7 @@ type SharedMediaList struct {
 
 func (x *SharedMediaList) Reset() {
 	*x = SharedMediaList{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[71]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5100,7 +5373,7 @@ func (x *SharedMediaList) String() string {
 func (*SharedMediaList) ProtoMessage() {}
 
 func (x *SharedMediaList) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[71]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5113,7 +5386,7 @@ func (x *SharedMediaList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SharedMediaList.ProtoReflect.Descriptor instead.
 func (*SharedMediaList) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{71}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *SharedMediaList) GetItems() []*SharedMediaItem {
@@ -5153,7 +5426,7 @@ type ListSharedMediaResponse struct {
 
 func (x *ListSharedMediaResponse) Reset() {
 	*x = ListSharedMediaResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[72]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5165,7 +5438,7 @@ func (x *ListSharedMediaResponse) String() string {
 func (*ListSharedMediaResponse) ProtoMessage() {}
 
 func (x *ListSharedMediaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[72]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5178,7 +5451,7 @@ func (x *ListSharedMediaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSharedMediaResponse.ProtoReflect.Descriptor instead.
 func (*ListSharedMediaResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{72}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *ListSharedMediaResponse) GetSharedMediaList() *SharedMediaList {
@@ -5197,7 +5470,7 @@ type UploadPreKeyBundleRequest struct {
 
 func (x *UploadPreKeyBundleRequest) Reset() {
 	*x = UploadPreKeyBundleRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[73]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5209,7 +5482,7 @@ func (x *UploadPreKeyBundleRequest) String() string {
 func (*UploadPreKeyBundleRequest) ProtoMessage() {}
 
 func (x *UploadPreKeyBundleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[73]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5222,7 +5495,7 @@ func (x *UploadPreKeyBundleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UploadPreKeyBundleRequest.ProtoReflect.Descriptor instead.
 func (*UploadPreKeyBundleRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{73}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *UploadPreKeyBundleRequest) GetBundle() string {
@@ -5240,7 +5513,7 @@ type UploadPreKeyBundleResponse struct {
 
 func (x *UploadPreKeyBundleResponse) Reset() {
 	*x = UploadPreKeyBundleResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[74]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5252,7 +5525,7 @@ func (x *UploadPreKeyBundleResponse) String() string {
 func (*UploadPreKeyBundleResponse) ProtoMessage() {}
 
 func (x *UploadPreKeyBundleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[74]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5265,7 +5538,7 @@ func (x *UploadPreKeyBundleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UploadPreKeyBundleResponse.ProtoReflect.Descriptor instead.
 func (*UploadPreKeyBundleResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{74}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{77}
 }
 
 type UnpinMessagesBySenderInChatsRequest struct {
@@ -5278,7 +5551,7 @@ type UnpinMessagesBySenderInChatsRequest struct {
 
 func (x *UnpinMessagesBySenderInChatsRequest) Reset() {
 	*x = UnpinMessagesBySenderInChatsRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[75]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5290,7 +5563,7 @@ func (x *UnpinMessagesBySenderInChatsRequest) String() string {
 func (*UnpinMessagesBySenderInChatsRequest) ProtoMessage() {}
 
 func (x *UnpinMessagesBySenderInChatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[75]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5303,7 +5576,7 @@ func (x *UnpinMessagesBySenderInChatsRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use UnpinMessagesBySenderInChatsRequest.ProtoReflect.Descriptor instead.
 func (*UnpinMessagesBySenderInChatsRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{75}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *UnpinMessagesBySenderInChatsRequest) GetSenderProfileId() string {
@@ -5328,7 +5601,7 @@ type UnpinMessagesBySenderInChatsResponse struct {
 
 func (x *UnpinMessagesBySenderInChatsResponse) Reset() {
 	*x = UnpinMessagesBySenderInChatsResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[76]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5340,7 +5613,7 @@ func (x *UnpinMessagesBySenderInChatsResponse) String() string {
 func (*UnpinMessagesBySenderInChatsResponse) ProtoMessage() {}
 
 func (x *UnpinMessagesBySenderInChatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[76]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5353,7 +5626,7 @@ func (x *UnpinMessagesBySenderInChatsResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use UnpinMessagesBySenderInChatsResponse.ProtoReflect.Descriptor instead.
 func (*UnpinMessagesBySenderInChatsResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{76}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{79}
 }
 
 type GetPreKeyBundleRequest struct {
@@ -5365,7 +5638,7 @@ type GetPreKeyBundleRequest struct {
 
 func (x *GetPreKeyBundleRequest) Reset() {
 	*x = GetPreKeyBundleRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[77]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5377,7 +5650,7 @@ func (x *GetPreKeyBundleRequest) String() string {
 func (*GetPreKeyBundleRequest) ProtoMessage() {}
 
 func (x *GetPreKeyBundleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[77]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5390,7 +5663,7 @@ func (x *GetPreKeyBundleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPreKeyBundleRequest.ProtoReflect.Descriptor instead.
 func (*GetPreKeyBundleRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{77}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *GetPreKeyBundleRequest) GetProfileId() string {
@@ -5409,7 +5682,7 @@ type GetPreKeyBundleResponse struct {
 
 func (x *GetPreKeyBundleResponse) Reset() {
 	*x = GetPreKeyBundleResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[78]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5421,7 +5694,7 @@ func (x *GetPreKeyBundleResponse) String() string {
 func (*GetPreKeyBundleResponse) ProtoMessage() {}
 
 func (x *GetPreKeyBundleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[78]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5434,7 +5707,7 @@ func (x *GetPreKeyBundleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPreKeyBundleResponse.ProtoReflect.Descriptor instead.
 func (*GetPreKeyBundleResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{78}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *GetPreKeyBundleResponse) GetBundle() string {
@@ -5455,7 +5728,7 @@ type ApplySpaceLifecycleFenceRequest struct {
 
 func (x *ApplySpaceLifecycleFenceRequest) Reset() {
 	*x = ApplySpaceLifecycleFenceRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[79]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5467,7 +5740,7 @@ func (x *ApplySpaceLifecycleFenceRequest) String() string {
 func (*ApplySpaceLifecycleFenceRequest) ProtoMessage() {}
 
 func (x *ApplySpaceLifecycleFenceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[79]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5480,7 +5753,7 @@ func (x *ApplySpaceLifecycleFenceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplySpaceLifecycleFenceRequest.ProtoReflect.Descriptor instead.
 func (*ApplySpaceLifecycleFenceRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{79}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *ApplySpaceLifecycleFenceRequest) GetFence() *v12.SpaceLifecycleFenceRequest {
@@ -5501,7 +5774,7 @@ type ApplySpaceLifecycleFenceResponse struct {
 
 func (x *ApplySpaceLifecycleFenceResponse) Reset() {
 	*x = ApplySpaceLifecycleFenceResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[80]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5513,7 +5786,7 @@ func (x *ApplySpaceLifecycleFenceResponse) String() string {
 func (*ApplySpaceLifecycleFenceResponse) ProtoMessage() {}
 
 func (x *ApplySpaceLifecycleFenceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[80]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5526,7 +5799,7 @@ func (x *ApplySpaceLifecycleFenceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplySpaceLifecycleFenceResponse.ProtoReflect.Descriptor instead.
 func (*ApplySpaceLifecycleFenceResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{80}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *ApplySpaceLifecycleFenceResponse) GetReceipt() *v12.SpaceLifecycleFenceReceipt {
@@ -5547,7 +5820,7 @@ type PurgeSpaceRequest struct {
 
 func (x *PurgeSpaceRequest) Reset() {
 	*x = PurgeSpaceRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[81]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5559,7 +5832,7 @@ func (x *PurgeSpaceRequest) String() string {
 func (*PurgeSpaceRequest) ProtoMessage() {}
 
 func (x *PurgeSpaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[81]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5572,7 +5845,7 @@ func (x *PurgeSpaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PurgeSpaceRequest.ProtoReflect.Descriptor instead.
 func (*PurgeSpaceRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{81}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *PurgeSpaceRequest) GetPurge() *v12.SpacePurgeRequest {
@@ -5593,7 +5866,7 @@ type PurgeSpaceResponse struct {
 
 func (x *PurgeSpaceResponse) Reset() {
 	*x = PurgeSpaceResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[82]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5605,7 +5878,7 @@ func (x *PurgeSpaceResponse) String() string {
 func (*PurgeSpaceResponse) ProtoMessage() {}
 
 func (x *PurgeSpaceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[82]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5618,7 +5891,7 @@ func (x *PurgeSpaceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PurgeSpaceResponse.ProtoReflect.Descriptor instead.
 func (*PurgeSpaceResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{82}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *PurgeSpaceResponse) GetReceipt() *v12.SpacePurgeReceipt {
@@ -5631,20 +5904,20 @@ func (x *PurgeSpaceResponse) GetReceipt() *v12.SpacePurgeReceipt {
 // @voice.unknown_fields=reject
 // @voice.hash=domain_separated_sha256
 type ImportSpacePurgeManifestPageRequest struct {
-	state               protoimpl.MessageState      `protogen:"open.v1"`
-	ProtocolVersion     uint32                      `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	SpaceId             string                      `protobuf:"bytes,2,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
-	DeletionOperationId string                      `protobuf:"bytes,3,opt,name=deletion_operation_id,json=deletionOperationId,proto3" json:"deletion_operation_id,omitempty"`
-	ScheduleGeneration  uint64                      `protobuf:"varint,4,opt,name=schedule_generation,json=scheduleGeneration,proto3" json:"schedule_generation,omitempty"`
-	Page                *v11.SpacePurgeManifestPage `protobuf:"bytes,5,opt,name=page,proto3" json:"page,omitempty"`
-	SealsManifest       bool                        `protobuf:"varint,6,opt,name=seals_manifest,json=sealsManifest,proto3" json:"seals_manifest,omitempty"`
+	state               protoimpl.MessageState     `protogen:"open.v1"`
+	ProtocolVersion     uint32                     `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	SpaceId             string                     `protobuf:"bytes,2,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
+	DeletionOperationId string                     `protobuf:"bytes,3,opt,name=deletion_operation_id,json=deletionOperationId,proto3" json:"deletion_operation_id,omitempty"`
+	ScheduleGeneration  uint64                     `protobuf:"varint,4,opt,name=schedule_generation,json=scheduleGeneration,proto3" json:"schedule_generation,omitempty"`
+	Page                *v1.SpacePurgeManifestPage `protobuf:"bytes,5,opt,name=page,proto3" json:"page,omitempty"`
+	SealsManifest       bool                       `protobuf:"varint,6,opt,name=seals_manifest,json=sealsManifest,proto3" json:"seals_manifest,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ImportSpacePurgeManifestPageRequest) Reset() {
 	*x = ImportSpacePurgeManifestPageRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[83]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5656,7 +5929,7 @@ func (x *ImportSpacePurgeManifestPageRequest) String() string {
 func (*ImportSpacePurgeManifestPageRequest) ProtoMessage() {}
 
 func (x *ImportSpacePurgeManifestPageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[83]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5669,7 +5942,7 @@ func (x *ImportSpacePurgeManifestPageRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use ImportSpacePurgeManifestPageRequest.ProtoReflect.Descriptor instead.
 func (*ImportSpacePurgeManifestPageRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{83}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *ImportSpacePurgeManifestPageRequest) GetProtocolVersion() uint32 {
@@ -5700,7 +5973,7 @@ func (x *ImportSpacePurgeManifestPageRequest) GetScheduleGeneration() uint64 {
 	return 0
 }
 
-func (x *ImportSpacePurgeManifestPageRequest) GetPage() *v11.SpacePurgeManifestPage {
+func (x *ImportSpacePurgeManifestPageRequest) GetPage() *v1.SpacePurgeManifestPage {
 	if x != nil {
 		return x.Page
 	}
@@ -5736,7 +6009,7 @@ type ImportSpacePurgeManifestPageReceipt struct {
 
 func (x *ImportSpacePurgeManifestPageReceipt) Reset() {
 	*x = ImportSpacePurgeManifestPageReceipt{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[84]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5748,7 +6021,7 @@ func (x *ImportSpacePurgeManifestPageReceipt) String() string {
 func (*ImportSpacePurgeManifestPageReceipt) ProtoMessage() {}
 
 func (x *ImportSpacePurgeManifestPageReceipt) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[84]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5761,7 +6034,7 @@ func (x *ImportSpacePurgeManifestPageReceipt) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use ImportSpacePurgeManifestPageReceipt.ProtoReflect.Descriptor instead.
 func (*ImportSpacePurgeManifestPageReceipt) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{84}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *ImportSpacePurgeManifestPageReceipt) GetProtocolVersion() uint32 {
@@ -5859,7 +6132,7 @@ type ImportSpacePurgeManifestPageResponse struct {
 
 func (x *ImportSpacePurgeManifestPageResponse) Reset() {
 	*x = ImportSpacePurgeManifestPageResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[85]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5871,7 +6144,7 @@ func (x *ImportSpacePurgeManifestPageResponse) String() string {
 func (*ImportSpacePurgeManifestPageResponse) ProtoMessage() {}
 
 func (x *ImportSpacePurgeManifestPageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[85]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5884,7 +6157,7 @@ func (x *ImportSpacePurgeManifestPageResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use ImportSpacePurgeManifestPageResponse.ProtoReflect.Descriptor instead.
 func (*ImportSpacePurgeManifestPageResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{85}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *ImportSpacePurgeManifestPageResponse) GetReceipt() *ImportSpacePurgeManifestPageReceipt {
@@ -5909,7 +6182,7 @@ type GetSpacePurgeReceiptRequest struct {
 
 func (x *GetSpacePurgeReceiptRequest) Reset() {
 	*x = GetSpacePurgeReceiptRequest{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[86]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5921,7 +6194,7 @@ func (x *GetSpacePurgeReceiptRequest) String() string {
 func (*GetSpacePurgeReceiptRequest) ProtoMessage() {}
 
 func (x *GetSpacePurgeReceiptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[86]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5934,7 +6207,7 @@ func (x *GetSpacePurgeReceiptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSpacePurgeReceiptRequest.ProtoReflect.Descriptor instead.
 func (*GetSpacePurgeReceiptRequest) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{86}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *GetSpacePurgeReceiptRequest) GetSpaceId() string {
@@ -5983,7 +6256,7 @@ type GetSpacePurgeReceiptResponse struct {
 
 func (x *GetSpacePurgeReceiptResponse) Reset() {
 	*x = GetSpacePurgeReceiptResponse{}
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[87]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5995,7 +6268,7 @@ func (x *GetSpacePurgeReceiptResponse) String() string {
 func (*GetSpacePurgeReceiptResponse) ProtoMessage() {}
 
 func (x *GetSpacePurgeReceiptResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[87]
+	mi := &file_voice_messaging_v1_messaging_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6008,7 +6281,7 @@ func (x *GetSpacePurgeReceiptResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSpacePurgeReceiptResponse.ProtoReflect.Descriptor instead.
 func (*GetSpacePurgeReceiptResponse) Descriptor() ([]byte, []int) {
-	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{87}
+	return file_voice_messaging_v1_messaging_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *GetSpacePurgeReceiptResponse) GetReceipt() *v12.SpacePurgeReceipt {
@@ -6028,122 +6301,195 @@ var file_voice_messaging_v1_messaging_proto_rawDesc = string([]byte{
 	0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2f, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x74,
 	0x61, 0x6d, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x18, 0x76, 0x6f, 0x69, 0x63, 0x65,
 	0x2f, 0x63, 0x68, 0x61, 0x74, 0x2f, 0x76, 0x31, 0x2f, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x1a, 0x1c, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f,
-	0x6e, 0x2f, 0x76, 0x31, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x1a, 0x25, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2f,
-	0x76, 0x31, 0x2f, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x6c, 0x69, 0x66, 0x65, 0x63, 0x79, 0x63,
-	0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x29, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2f,
-	0x67, 0x61, 0x6d, 0x65, 0x69, 0x6e, 0x74, 0x65, 0x67, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2f,
-	0x76, 0x31, 0x2f, 0x67, 0x61, 0x6d, 0x65, 0x5f, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x2e, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x22, 0x95, 0x01, 0x0a, 0x18, 0x42, 0x6f, 0x74, 0x52, 0x65, 0x6d, 0x6f, 0x76,
-	0x61, 0x6c, 0x4e, 0x61, 0x74, 0x69, 0x76, 0x65, 0x45, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65,
-	0x12, 0x27, 0x0a, 0x0f, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e,
-	0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x69, 0x6e, 0x73, 0x74, 0x61,
-	0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x64, 0x12, 0x30, 0x0a, 0x14, 0x69, 0x6e, 0x73,
-	0x74, 0x61, 0x6c, 0x6c, 0x5f, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69,
-	0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x12, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c,
-	0x4f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x64, 0x12, 0x1e, 0x0a, 0x0a, 0x67,
-	0x65, 0x6e, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x04, 0x52,
-	0x0a, 0x67, 0x65, 0x6e, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x22, 0x99, 0x01, 0x0a, 0x24,
-	0x42, 0x6f, 0x74, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x4c, 0x65, 0x67, 0x61, 0x63, 0x79,
-	0x49, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x45, 0x76, 0x69, 0x64,
-	0x65, 0x6e, 0x63, 0x65, 0x12, 0x27, 0x0a, 0x0f, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61,
-	0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x69,
-	0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x64, 0x12, 0x1f, 0x0a,
-	0x0b, 0x73, 0x6e, 0x61, 0x70, 0x73, 0x68, 0x6f, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01,
-	0x28, 0x09, 0x52, 0x0a, 0x73, 0x6e, 0x61, 0x70, 0x73, 0x68, 0x6f, 0x74, 0x49, 0x64, 0x12, 0x27,
-	0x0a, 0x0f, 0x73, 0x6e, 0x61, 0x70, 0x73, 0x68, 0x6f, 0x74, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35,
-	0x36, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0e, 0x73, 0x6e, 0x61, 0x70, 0x73, 0x68, 0x6f,
-	0x74, 0x53, 0x68, 0x61, 0x32, 0x35, 0x36, 0x22, 0x6d, 0x0a, 0x21, 0x42, 0x6f, 0x74, 0x52, 0x65,
-	0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x4f, 0x72, 0x70, 0x68, 0x61, 0x6e, 0x57, 0x68, 0x69, 0x74, 0x65,
-	0x6c, 0x69, 0x73, 0x74, 0x45, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x12, 0x1f, 0x0a, 0x0b,
-	0x73, 0x6e, 0x61, 0x70, 0x73, 0x68, 0x6f, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x0a, 0x73, 0x6e, 0x61, 0x70, 0x73, 0x68, 0x6f, 0x74, 0x49, 0x64, 0x12, 0x27, 0x0a,
-	0x0f, 0x73, 0x6e, 0x61, 0x70, 0x73, 0x68, 0x6f, 0x74, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36,
-	0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0e, 0x73, 0x6e, 0x61, 0x70, 0x73, 0x68, 0x6f, 0x74,
-	0x53, 0x68, 0x61, 0x32, 0x35, 0x36, 0x22, 0x9b, 0x05, 0x0a, 0x1d, 0x41, 0x70, 0x70, 0x6c, 0x79,
-	0x42, 0x6f, 0x74, 0x43, 0x68, 0x61, 0x74, 0x50, 0x69, 0x6e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61,
-	0x6c, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x29, 0x0a, 0x10, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x63, 0x6f, 0x6c, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x0d, 0x52, 0x0f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x56, 0x65, 0x72, 0x73,
-	0x69, 0x6f, 0x6e, 0x12, 0x21, 0x0a, 0x0c, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e,
-	0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x6f, 0x70, 0x65, 0x72, 0x61,
-	0x74, 0x69, 0x6f, 0x6e, 0x49, 0x64, 0x12, 0x1f, 0x0a, 0x0b, 0x64, 0x65, 0x63, 0x69, 0x73, 0x69,
-	0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x64, 0x65, 0x63,
-	0x69, 0x73, 0x69, 0x6f, 0x6e, 0x49, 0x64, 0x12, 0x27, 0x0a, 0x0f, 0x64, 0x65, 0x63, 0x69, 0x73,
-	0x69, 0x6f, 0x6e, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0c,
-	0x52, 0x0e, 0x64, 0x65, 0x63, 0x69, 0x73, 0x69, 0x6f, 0x6e, 0x53, 0x68, 0x61, 0x32, 0x35, 0x36,
-	0x12, 0x18, 0x0a, 0x07, 0x70, 0x75, 0x72, 0x70, 0x6f, 0x73, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x07, 0x70, 0x75, 0x72, 0x70, 0x6f, 0x73, 0x65, 0x12, 0x15, 0x0a, 0x06, 0x62, 0x6f,
-	0x74, 0x5f, 0x69, 0x64, 0x18, 0x06, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x62, 0x6f, 0x74, 0x49,
-	0x64, 0x12, 0x28, 0x0a, 0x10, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x70, 0x72, 0x6f, 0x66, 0x69,
-	0x6c, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x07, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x61, 0x63, 0x74,
-	0x6f, 0x72, 0x50, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x49, 0x64, 0x12, 0x19, 0x0a, 0x08, 0x73,
-	0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x08, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x73,
-	0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12, 0x2e, 0x0a, 0x13, 0x66, 0x72, 0x6f, 0x7a, 0x65, 0x6e,
-	0x5f, 0x73, 0x63, 0x6f, 0x70, 0x65, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x09, 0x20,
-	0x01, 0x28, 0x0c, 0x52, 0x11, 0x66, 0x72, 0x6f, 0x7a, 0x65, 0x6e, 0x53, 0x63, 0x6f, 0x70, 0x65,
-	0x53, 0x68, 0x61, 0x32, 0x35, 0x36, 0x12, 0x46, 0x0a, 0x06, 0x6e, 0x61, 0x74, 0x69, 0x76, 0x65,
-	0x18, 0x0a, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x2c, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x6d,
-	0x65, 0x73, 0x73, 0x61, 0x67, 0x69, 0x6e, 0x67, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x6f, 0x74, 0x52,
-	0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x4e, 0x61, 0x74, 0x69, 0x76, 0x65, 0x45, 0x76, 0x69, 0x64,
-	0x65, 0x6e, 0x63, 0x65, 0x48, 0x00, 0x52, 0x06, 0x6e, 0x61, 0x74, 0x69, 0x76, 0x65, 0x12, 0x6b,
-	0x0a, 0x13, 0x6c, 0x65, 0x67, 0x61, 0x63, 0x79, 0x5f, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c,
-	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x0b, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x38, 0x2e, 0x76, 0x6f,
+	0x6f, 0x74, 0x6f, 0x1a, 0x28, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2f, 0x63, 0x68, 0x61, 0x74, 0x2f,
+	0x76, 0x31, 0x2f, 0x63, 0x68, 0x61, 0x74, 0x5f, 0x73, 0x63, 0x6f, 0x70, 0x65, 0x5f, 0x61, 0x75,
+	0x74, 0x68, 0x6f, 0x72, 0x69, 0x74, 0x79, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x1c, 0x76,
+	0x6f, 0x69, 0x63, 0x65, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x2f, 0x63,
+	0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x25, 0x76, 0x6f, 0x69,
+	0x63, 0x65, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x2f, 0x73, 0x70, 0x61,
+	0x63, 0x65, 0x5f, 0x6c, 0x69, 0x66, 0x65, 0x63, 0x79, 0x63, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f,
+	0x74, 0x6f, 0x1a, 0x29, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2f, 0x67, 0x61, 0x6d, 0x65, 0x69, 0x6e,
+	0x74, 0x65, 0x67, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x2f, 0x67, 0x61, 0x6d,
+	0x65, 0x5f, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x95, 0x01,
+	0x0a, 0x18, 0x42, 0x6f, 0x74, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x4e, 0x61, 0x74, 0x69,
+	0x76, 0x65, 0x45, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x12, 0x27, 0x0a, 0x0f, 0x69, 0x6e,
+	0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x0e, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x49, 0x64, 0x12, 0x30, 0x0a, 0x14, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x5f, 0x6f,
+	0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x12, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x4f, 0x70, 0x65, 0x72, 0x61, 0x74,
+	0x69, 0x6f, 0x6e, 0x49, 0x64, 0x12, 0x1e, 0x0a, 0x0a, 0x67, 0x65, 0x6e, 0x65, 0x72, 0x61, 0x74,
+	0x69, 0x6f, 0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x04, 0x52, 0x0a, 0x67, 0x65, 0x6e, 0x65, 0x72,
+	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x22, 0x99, 0x01, 0x0a, 0x24, 0x42, 0x6f, 0x74, 0x52, 0x65, 0x6d,
+	0x6f, 0x76, 0x61, 0x6c, 0x4c, 0x65, 0x67, 0x61, 0x63, 0x79, 0x49, 0x6e, 0x73, 0x74, 0x61, 0x6c,
+	0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x45, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x12, 0x27,
+	0x0a, 0x0f, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69,
+	0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c,
+	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x64, 0x12, 0x1f, 0x0a, 0x0b, 0x73, 0x6e, 0x61, 0x70, 0x73,
+	0x68, 0x6f, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x73, 0x6e,
+	0x61, 0x70, 0x73, 0x68, 0x6f, 0x74, 0x49, 0x64, 0x12, 0x27, 0x0a, 0x0f, 0x73, 0x6e, 0x61, 0x70,
+	0x73, 0x68, 0x6f, 0x74, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x03, 0x20, 0x01, 0x28,
+	0x0c, 0x52, 0x0e, 0x73, 0x6e, 0x61, 0x70, 0x73, 0x68, 0x6f, 0x74, 0x53, 0x68, 0x61, 0x32, 0x35,
+	0x36, 0x22, 0x6d, 0x0a, 0x21, 0x42, 0x6f, 0x74, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x4f,
+	0x72, 0x70, 0x68, 0x61, 0x6e, 0x57, 0x68, 0x69, 0x74, 0x65, 0x6c, 0x69, 0x73, 0x74, 0x45, 0x76,
+	0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x12, 0x1f, 0x0a, 0x0b, 0x73, 0x6e, 0x61, 0x70, 0x73, 0x68,
+	0x6f, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x73, 0x6e, 0x61,
+	0x70, 0x73, 0x68, 0x6f, 0x74, 0x49, 0x64, 0x12, 0x27, 0x0a, 0x0f, 0x73, 0x6e, 0x61, 0x70, 0x73,
+	0x68, 0x6f, 0x74, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c,
+	0x52, 0x0e, 0x73, 0x6e, 0x61, 0x70, 0x73, 0x68, 0x6f, 0x74, 0x53, 0x68, 0x61, 0x32, 0x35, 0x36,
+	0x22, 0xb7, 0x01, 0x0a, 0x1e, 0x42, 0x6f, 0x74, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x43,
+	0x68, 0x61, 0x74, 0x53, 0x63, 0x6f, 0x70, 0x65, 0x4f, 0x62, 0x73, 0x65, 0x72, 0x76, 0x61, 0x74,
+	0x69, 0x6f, 0x6e, 0x12, 0x48, 0x0a, 0x07, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x0b, 0x32, 0x2e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x63, 0x68, 0x61,
+	0x74, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x42, 0x6f, 0x74, 0x43, 0x68, 0x61, 0x74, 0x53,
+	0x63, 0x6f, 0x70, 0x65, 0x41, 0x75, 0x74, 0x68, 0x6f, 0x72, 0x69, 0x74, 0x79, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x52, 0x07, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x4b, 0x0a,
+	0x08, 0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32,
+	0x2f, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e,
+	0x47, 0x65, 0x74, 0x42, 0x6f, 0x74, 0x43, 0x68, 0x61, 0x74, 0x53, 0x63, 0x6f, 0x70, 0x65, 0x41,
+	0x75, 0x74, 0x68, 0x6f, 0x72, 0x69, 0x74, 0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x52, 0x08, 0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x87, 0x03, 0x0a, 0x1b, 0x42,
+	0x6f, 0x74, 0x43, 0x68, 0x61, 0x74, 0x50, 0x69, 0x6e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c,
+	0x41, 0x74, 0x74, 0x61, 0x63, 0x68, 0x6d, 0x65, 0x6e, 0x74, 0x12, 0x23, 0x0a, 0x0d, 0x61, 0x74,
+	0x74, 0x61, 0x63, 0x68, 0x6d, 0x65, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x0c, 0x61, 0x74, 0x74, 0x61, 0x63, 0x68, 0x6d, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x12,
+	0x5b, 0x0a, 0x0e, 0x6f, 0x72, 0x69, 0x67, 0x69, 0x6e, 0x61, 0x6c, 0x5f, 0x73, 0x63, 0x6f, 0x70,
+	0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x32, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e,
+	0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x69, 0x6e, 0x67, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x6f, 0x74,
+	0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x43, 0x68, 0x61, 0x74, 0x53, 0x63, 0x6f, 0x70, 0x65,
+	0x4f, 0x62, 0x73, 0x65, 0x72, 0x76, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x48, 0x00, 0x52, 0x0d, 0x6f,
+	0x72, 0x69, 0x67, 0x69, 0x6e, 0x61, 0x6c, 0x53, 0x63, 0x6f, 0x70, 0x65, 0x12, 0x3e, 0x0a, 0x1a,
+	0x6f, 0x72, 0x69, 0x67, 0x69, 0x6e, 0x61, 0x6c, 0x5f, 0x73, 0x63, 0x6f, 0x70, 0x65, 0x5f, 0x75,
+	0x6e, 0x71, 0x75, 0x61, 0x6c, 0x69, 0x66, 0x69, 0x65, 0x64, 0x18, 0x04, 0x20, 0x01, 0x28, 0x08,
+	0x48, 0x00, 0x52, 0x18, 0x6f, 0x72, 0x69, 0x67, 0x69, 0x6e, 0x61, 0x6c, 0x53, 0x63, 0x6f, 0x70,
+	0x65, 0x55, 0x6e, 0x71, 0x75, 0x61, 0x6c, 0x69, 0x66, 0x69, 0x65, 0x64, 0x12, 0x57, 0x0a, 0x0d,
+	0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x5f, 0x73, 0x63, 0x6f, 0x70, 0x65, 0x18, 0x03, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x32, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x6d, 0x65, 0x73, 0x73,
+	0x61, 0x67, 0x69, 0x6e, 0x67, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x6f, 0x74, 0x52, 0x65, 0x6d, 0x6f,
+	0x76, 0x61, 0x6c, 0x43, 0x68, 0x61, 0x74, 0x53, 0x63, 0x6f, 0x70, 0x65, 0x4f, 0x62, 0x73, 0x65,
+	0x72, 0x76, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x0c, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74,
+	0x53, 0x63, 0x6f, 0x70, 0x65, 0x12, 0x32, 0x0a, 0x15, 0x63, 0x6f, 0x76, 0x65, 0x72, 0x69, 0x6e,
+	0x67, 0x5f, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x05,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x13, 0x63, 0x6f, 0x76, 0x65, 0x72, 0x69, 0x6e, 0x67, 0x4f, 0x70,
+	0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x64, 0x42, 0x19, 0x0a, 0x17, 0x6f, 0x72, 0x69,
+	0x67, 0x69, 0x6e, 0x61, 0x6c, 0x5f, 0x73, 0x63, 0x6f, 0x70, 0x65, 0x5f, 0x65, 0x76, 0x69, 0x64,
+	0x65, 0x6e, 0x63, 0x65, 0x22, 0xee, 0x05, 0x0a, 0x1d, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x42, 0x6f,
+	0x74, 0x43, 0x68, 0x61, 0x74, 0x50, 0x69, 0x6e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x29, 0x0a, 0x10, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63,
+	0x6f, 0x6c, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d,
+	0x52, 0x0f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f,
+	0x6e, 0x12, 0x21, 0x0a, 0x0c, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69,
+	0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69,
+	0x6f, 0x6e, 0x49, 0x64, 0x12, 0x1f, 0x0a, 0x0b, 0x64, 0x65, 0x63, 0x69, 0x73, 0x69, 0x6f, 0x6e,
+	0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x64, 0x65, 0x63, 0x69, 0x73,
+	0x69, 0x6f, 0x6e, 0x49, 0x64, 0x12, 0x27, 0x0a, 0x0f, 0x64, 0x65, 0x63, 0x69, 0x73, 0x69, 0x6f,
+	0x6e, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0e,
+	0x64, 0x65, 0x63, 0x69, 0x73, 0x69, 0x6f, 0x6e, 0x53, 0x68, 0x61, 0x32, 0x35, 0x36, 0x12, 0x18,
+	0x0a, 0x07, 0x70, 0x75, 0x72, 0x70, 0x6f, 0x73, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x07, 0x70, 0x75, 0x72, 0x70, 0x6f, 0x73, 0x65, 0x12, 0x15, 0x0a, 0x06, 0x62, 0x6f, 0x74, 0x5f,
+	0x69, 0x64, 0x18, 0x06, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x62, 0x6f, 0x74, 0x49, 0x64, 0x12,
+	0x28, 0x0a, 0x10, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65,
+	0x5f, 0x69, 0x64, 0x18, 0x07, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x61, 0x63, 0x74, 0x6f, 0x72,
+	0x50, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x49, 0x64, 0x12, 0x19, 0x0a, 0x08, 0x73, 0x70, 0x61,
+	0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x08, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x73, 0x70, 0x61,
+	0x63, 0x65, 0x49, 0x64, 0x12, 0x2e, 0x0a, 0x13, 0x66, 0x72, 0x6f, 0x7a, 0x65, 0x6e, 0x5f, 0x73,
+	0x63, 0x6f, 0x70, 0x65, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x09, 0x20, 0x01, 0x28,
+	0x0c, 0x52, 0x11, 0x66, 0x72, 0x6f, 0x7a, 0x65, 0x6e, 0x53, 0x63, 0x6f, 0x70, 0x65, 0x53, 0x68,
+	0x61, 0x32, 0x35, 0x36, 0x12, 0x46, 0x0a, 0x06, 0x6e, 0x61, 0x74, 0x69, 0x76, 0x65, 0x18, 0x0a,
+	0x20, 0x01, 0x28, 0x0b, 0x32, 0x2c, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x6d, 0x65, 0x73,
+	0x73, 0x61, 0x67, 0x69, 0x6e, 0x67, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x6f, 0x74, 0x52, 0x65, 0x6d,
+	0x6f, 0x76, 0x61, 0x6c, 0x4e, 0x61, 0x74, 0x69, 0x76, 0x65, 0x45, 0x76, 0x69, 0x64, 0x65, 0x6e,
+	0x63, 0x65, 0x48, 0x00, 0x52, 0x06, 0x6e, 0x61, 0x74, 0x69, 0x76, 0x65, 0x12, 0x6b, 0x0a, 0x13,
+	0x6c, 0x65, 0x67, 0x61, 0x63, 0x79, 0x5f, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74,
+	0x69, 0x6f, 0x6e, 0x18, 0x0b, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x38, 0x2e, 0x76, 0x6f, 0x69, 0x63,
+	0x65, 0x2e, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x69, 0x6e, 0x67, 0x2e, 0x76, 0x31, 0x2e, 0x42,
+	0x6f, 0x74, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x4c, 0x65, 0x67, 0x61, 0x63, 0x79, 0x49,
+	0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x45, 0x76, 0x69, 0x64, 0x65,
+	0x6e, 0x63, 0x65, 0x48, 0x00, 0x52, 0x12, 0x6c, 0x65, 0x67, 0x61, 0x63, 0x79, 0x49, 0x6e, 0x73,
+	0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x62, 0x0a, 0x10, 0x6f, 0x72, 0x70,
+	0x68, 0x61, 0x6e, 0x5f, 0x77, 0x68, 0x69, 0x74, 0x65, 0x6c, 0x69, 0x73, 0x74, 0x18, 0x0c, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x35, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x6d, 0x65, 0x73, 0x73,
+	0x61, 0x67, 0x69, 0x6e, 0x67, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x6f, 0x74, 0x52, 0x65, 0x6d, 0x6f,
+	0x76, 0x61, 0x6c, 0x4f, 0x72, 0x70, 0x68, 0x61, 0x6e, 0x57, 0x68, 0x69, 0x74, 0x65, 0x6c, 0x69,
+	0x73, 0x74, 0x45, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x48, 0x00, 0x52, 0x0f, 0x6f, 0x72,
+	0x70, 0x68, 0x61, 0x6e, 0x57, 0x68, 0x69, 0x74, 0x65, 0x6c, 0x69, 0x73, 0x74, 0x12, 0x17, 0x0a,
+	0x07, 0x63, 0x68, 0x61, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x0d, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06,
+	0x63, 0x68, 0x61, 0x74, 0x49, 0x64, 0x12, 0x51, 0x0a, 0x0b, 0x61, 0x74, 0x74, 0x61, 0x63, 0x68,
+	0x6d, 0x65, 0x6e, 0x74, 0x73, 0x18, 0x0e, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x2f, 0x2e, 0x76, 0x6f,
 	0x69, 0x63, 0x65, 0x2e, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x69, 0x6e, 0x67, 0x2e, 0x76, 0x31,
-	0x2e, 0x42, 0x6f, 0x74, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x4c, 0x65, 0x67, 0x61, 0x63,
-	0x79, 0x49, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x45, 0x76, 0x69,
-	0x64, 0x65, 0x6e, 0x63, 0x65, 0x48, 0x00, 0x52, 0x12, 0x6c, 0x65, 0x67, 0x61, 0x63, 0x79, 0x49,
-	0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x62, 0x0a, 0x10, 0x6f,
-	0x72, 0x70, 0x68, 0x61, 0x6e, 0x5f, 0x77, 0x68, 0x69, 0x74, 0x65, 0x6c, 0x69, 0x73, 0x74, 0x18,
-	0x0c, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x35, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x6d, 0x65,
-	0x73, 0x73, 0x61, 0x67, 0x69, 0x6e, 0x67, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x6f, 0x74, 0x52, 0x65,
-	0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x4f, 0x72, 0x70, 0x68, 0x61, 0x6e, 0x57, 0x68, 0x69, 0x74, 0x65,
-	0x6c, 0x69, 0x73, 0x74, 0x45, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x48, 0x00, 0x52, 0x0f,
-	0x6f, 0x72, 0x70, 0x68, 0x61, 0x6e, 0x57, 0x68, 0x69, 0x74, 0x65, 0x6c, 0x69, 0x73, 0x74, 0x12,
-	0x17, 0x0a, 0x07, 0x63, 0x68, 0x61, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x0d, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x06, 0x63, 0x68, 0x61, 0x74, 0x49, 0x64, 0x42, 0x0a, 0x0a, 0x08, 0x65, 0x76, 0x69, 0x64,
-	0x65, 0x6e, 0x63, 0x65, 0x22, 0x83, 0x05, 0x0a, 0x18, 0x42, 0x6f, 0x74, 0x43, 0x68, 0x61, 0x74,
-	0x50, 0x69, 0x6e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x52, 0x65, 0x63, 0x65, 0x69, 0x70,
-	0x74, 0x12, 0x29, 0x0a, 0x10, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x5f, 0x76, 0x65,
-	0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0f, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x1d, 0x0a, 0x0a,
-	0x72, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x09, 0x72, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x49, 0x64, 0x12, 0x21, 0x0a, 0x0c, 0x6f,
-	0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x0b, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x64, 0x12, 0x1f,
-	0x0a, 0x0b, 0x64, 0x65, 0x63, 0x69, 0x73, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x04, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x0a, 0x64, 0x65, 0x63, 0x69, 0x73, 0x69, 0x6f, 0x6e, 0x49, 0x64, 0x12,
-	0x18, 0x0a, 0x07, 0x70, 0x75, 0x72, 0x70, 0x6f, 0x73, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x07, 0x70, 0x75, 0x72, 0x70, 0x6f, 0x73, 0x65, 0x12, 0x15, 0x0a, 0x06, 0x62, 0x6f, 0x74,
-	0x5f, 0x69, 0x64, 0x18, 0x06, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x62, 0x6f, 0x74, 0x49, 0x64,
-	0x12, 0x28, 0x0a, 0x10, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x6c,
-	0x65, 0x5f, 0x69, 0x64, 0x18, 0x07, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x61, 0x63, 0x74, 0x6f,
-	0x72, 0x50, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x49, 0x64, 0x12, 0x19, 0x0a, 0x08, 0x73, 0x70,
-	0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x08, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x73, 0x70,
-	0x61, 0x63, 0x65, 0x49, 0x64, 0x12, 0x23, 0x0a, 0x0d, 0x65, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63,
-	0x65, 0x5f, 0x6b, 0x69, 0x6e, 0x64, 0x18, 0x09, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0c, 0x65, 0x76,
-	0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x4b, 0x69, 0x6e, 0x64, 0x12, 0x27, 0x0a, 0x0f, 0x65, 0x76,
-	0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x0a, 0x20,
-	0x01, 0x28, 0x0c, 0x52, 0x0e, 0x65, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x53, 0x68, 0x61,
-	0x32, 0x35, 0x36, 0x12, 0x2e, 0x0a, 0x13, 0x66, 0x72, 0x6f, 0x7a, 0x65, 0x6e, 0x5f, 0x73, 0x63,
-	0x6f, 0x70, 0x65, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x0b, 0x20, 0x01, 0x28, 0x0c,
-	0x52, 0x11, 0x66, 0x72, 0x6f, 0x7a, 0x65, 0x6e, 0x53, 0x63, 0x6f, 0x70, 0x65, 0x53, 0x68, 0x61,
-	0x32, 0x35, 0x36, 0x12, 0x25, 0x0a, 0x0e, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x73,
-	0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x0c, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0d, 0x72, 0x65, 0x71,
-	0x75, 0x65, 0x73, 0x74, 0x53, 0x68, 0x61, 0x32, 0x35, 0x36, 0x12, 0x20, 0x0a, 0x0b, 0x70, 0x61,
-	0x72, 0x74, 0x69, 0x63, 0x69, 0x70, 0x61, 0x6e, 0x74, 0x18, 0x0d, 0x20, 0x01, 0x28, 0x09, 0x52,
-	0x0b, 0x70, 0x61, 0x72, 0x74, 0x69, 0x63, 0x69, 0x70, 0x61, 0x6e, 0x74, 0x12, 0x18, 0x0a, 0x07,
-	0x6f, 0x75, 0x74, 0x63, 0x6f, 0x6d, 0x65, 0x18, 0x0e, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x6f,
-	0x75, 0x74, 0x63, 0x6f, 0x6d, 0x65, 0x12, 0x3d, 0x0a, 0x0c, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65,
-	0x74, 0x65, 0x64, 0x5f, 0x61, 0x74, 0x18, 0x0f, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67,
-	0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54,
-	0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0b, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65,
-	0x74, 0x65, 0x64, 0x41, 0x74, 0x12, 0x17, 0x0a, 0x07, 0x63, 0x68, 0x61, 0x74, 0x5f, 0x69, 0x64,
-	0x18, 0x10, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x63, 0x68, 0x61, 0x74, 0x49, 0x64, 0x12, 0x2a,
-	0x0a, 0x11, 0x72, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x64, 0x5f, 0x70, 0x69, 0x6e, 0x5f, 0x63, 0x6f,
-	0x75, 0x6e, 0x74, 0x18, 0x11, 0x20, 0x01, 0x28, 0x04, 0x52, 0x0f, 0x72, 0x65, 0x6d, 0x6f, 0x76,
-	0x65, 0x64, 0x50, 0x69, 0x6e, 0x43, 0x6f, 0x75, 0x6e, 0x74, 0x22, 0x68, 0x0a, 0x1e, 0x41, 0x70,
+	0x2e, 0x42, 0x6f, 0x74, 0x43, 0x68, 0x61, 0x74, 0x50, 0x69, 0x6e, 0x52, 0x65, 0x6d, 0x6f, 0x76,
+	0x61, 0x6c, 0x41, 0x74, 0x74, 0x61, 0x63, 0x68, 0x6d, 0x65, 0x6e, 0x74, 0x52, 0x0b, 0x61, 0x74,
+	0x74, 0x61, 0x63, 0x68, 0x6d, 0x65, 0x6e, 0x74, 0x73, 0x42, 0x0a, 0x0a, 0x08, 0x65, 0x76, 0x69,
+	0x64, 0x65, 0x6e, 0x63, 0x65, 0x22, 0xc0, 0x02, 0x0a, 0x1e, 0x42, 0x6f, 0x74, 0x43, 0x68, 0x61,
+	0x74, 0x50, 0x69, 0x6e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x54, 0x61, 0x72, 0x67, 0x65,
+	0x74, 0x52, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x12, 0x23, 0x0a, 0x0d, 0x61, 0x74, 0x74, 0x61,
+	0x63, 0x68, 0x6d, 0x65, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x0c, 0x61, 0x74, 0x74, 0x61, 0x63, 0x68, 0x6d, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x12, 0x30, 0x0a,
+	0x14, 0x65, 0x66, 0x66, 0x65, 0x63, 0x74, 0x5f, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74, 0x5f, 0x73,
+	0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x12, 0x65, 0x66, 0x66,
+	0x65, 0x63, 0x74, 0x54, 0x61, 0x72, 0x67, 0x65, 0x74, 0x53, 0x68, 0x61, 0x32, 0x35, 0x36, 0x12,
+	0x29, 0x0a, 0x10, 0x63, 0x6c, 0x65, 0x61, 0x6e, 0x75, 0x70, 0x5f, 0x72, 0x65, 0x76, 0x69, 0x73,
+	0x69, 0x6f, 0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x04, 0x52, 0x0f, 0x63, 0x6c, 0x65, 0x61, 0x6e,
+	0x75, 0x70, 0x52, 0x65, 0x76, 0x69, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x32, 0x0a, 0x15, 0x63, 0x6f,
+	0x76, 0x65, 0x72, 0x69, 0x6e, 0x67, 0x5f, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e,
+	0x5f, 0x69, 0x64, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x13, 0x63, 0x6f, 0x76, 0x65, 0x72,
+	0x69, 0x6e, 0x67, 0x4f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x64, 0x12, 0x2e,
+	0x0a, 0x13, 0x63, 0x6f, 0x76, 0x65, 0x72, 0x69, 0x6e, 0x67, 0x5f, 0x72, 0x65, 0x63, 0x65, 0x69,
+	0x70, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x05, 0x20, 0x01, 0x28, 0x09, 0x52, 0x11, 0x63, 0x6f, 0x76,
+	0x65, 0x72, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x49, 0x64, 0x12, 0x38,
+	0x0a, 0x18, 0x63, 0x6f, 0x76, 0x65, 0x72, 0x69, 0x6e, 0x67, 0x5f, 0x72, 0x65, 0x73, 0x70, 0x6f,
+	0x6e, 0x73, 0x65, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x06, 0x20, 0x01, 0x28, 0x0c,
+	0x52, 0x16, 0x63, 0x6f, 0x76, 0x65, 0x72, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x53, 0x68, 0x61, 0x32, 0x35, 0x36, 0x22, 0x8f, 0x06, 0x0a, 0x18, 0x42, 0x6f, 0x74,
+	0x43, 0x68, 0x61, 0x74, 0x50, 0x69, 0x6e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x52, 0x65,
+	0x63, 0x65, 0x69, 0x70, 0x74, 0x12, 0x29, 0x0a, 0x10, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f,
+	0x6c, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52,
+	0x0f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
+	0x12, 0x1d, 0x0a, 0x0a, 0x72, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x72, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x49, 0x64, 0x12,
+	0x21, 0x0a, 0x0c, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x18,
+	0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e,
+	0x49, 0x64, 0x12, 0x1f, 0x0a, 0x0b, 0x64, 0x65, 0x63, 0x69, 0x73, 0x69, 0x6f, 0x6e, 0x5f, 0x69,
+	0x64, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x64, 0x65, 0x63, 0x69, 0x73, 0x69, 0x6f,
+	0x6e, 0x49, 0x64, 0x12, 0x18, 0x0a, 0x07, 0x70, 0x75, 0x72, 0x70, 0x6f, 0x73, 0x65, 0x18, 0x05,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x70, 0x75, 0x72, 0x70, 0x6f, 0x73, 0x65, 0x12, 0x15, 0x0a,
+	0x06, 0x62, 0x6f, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x06, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x62,
+	0x6f, 0x74, 0x49, 0x64, 0x12, 0x28, 0x0a, 0x10, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x70, 0x72,
+	0x6f, 0x66, 0x69, 0x6c, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x07, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e,
+	0x61, 0x63, 0x74, 0x6f, 0x72, 0x50, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x49, 0x64, 0x12, 0x19,
+	0x0a, 0x08, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x08, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x07, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12, 0x23, 0x0a, 0x0d, 0x65, 0x76, 0x69,
+	0x64, 0x65, 0x6e, 0x63, 0x65, 0x5f, 0x6b, 0x69, 0x6e, 0x64, 0x18, 0x09, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x0c, 0x65, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x4b, 0x69, 0x6e, 0x64, 0x12, 0x27,
+	0x0a, 0x0f, 0x65, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35,
+	0x36, 0x18, 0x0a, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0e, 0x65, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63,
+	0x65, 0x53, 0x68, 0x61, 0x32, 0x35, 0x36, 0x12, 0x2e, 0x0a, 0x13, 0x66, 0x72, 0x6f, 0x7a, 0x65,
+	0x6e, 0x5f, 0x73, 0x63, 0x6f, 0x70, 0x65, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x0b,
+	0x20, 0x01, 0x28, 0x0c, 0x52, 0x11, 0x66, 0x72, 0x6f, 0x7a, 0x65, 0x6e, 0x53, 0x63, 0x6f, 0x70,
+	0x65, 0x53, 0x68, 0x61, 0x32, 0x35, 0x36, 0x12, 0x25, 0x0a, 0x0e, 0x72, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x0c, 0x20, 0x01, 0x28, 0x0c, 0x52,
+	0x0d, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x53, 0x68, 0x61, 0x32, 0x35, 0x36, 0x12, 0x20,
+	0x0a, 0x0b, 0x70, 0x61, 0x72, 0x74, 0x69, 0x63, 0x69, 0x70, 0x61, 0x6e, 0x74, 0x18, 0x0d, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x0b, 0x70, 0x61, 0x72, 0x74, 0x69, 0x63, 0x69, 0x70, 0x61, 0x6e, 0x74,
+	0x12, 0x18, 0x0a, 0x07, 0x6f, 0x75, 0x74, 0x63, 0x6f, 0x6d, 0x65, 0x18, 0x0e, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x07, 0x6f, 0x75, 0x74, 0x63, 0x6f, 0x6d, 0x65, 0x12, 0x3d, 0x0a, 0x0c, 0x63, 0x6f,
+	0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x64, 0x5f, 0x61, 0x74, 0x18, 0x0f, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62,
+	0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0b, 0x63, 0x6f,
+	0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x64, 0x41, 0x74, 0x12, 0x17, 0x0a, 0x07, 0x63, 0x68, 0x61,
+	0x74, 0x5f, 0x69, 0x64, 0x18, 0x10, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x63, 0x68, 0x61, 0x74,
+	0x49, 0x64, 0x12, 0x2a, 0x0a, 0x11, 0x72, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x64, 0x5f, 0x70, 0x69,
+	0x6e, 0x5f, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x18, 0x11, 0x20, 0x01, 0x28, 0x04, 0x52, 0x0f, 0x72,
+	0x65, 0x6d, 0x6f, 0x76, 0x65, 0x64, 0x50, 0x69, 0x6e, 0x43, 0x6f, 0x75, 0x6e, 0x74, 0x12, 0x4c,
+	0x0a, 0x07, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74, 0x73, 0x18, 0x12, 0x20, 0x03, 0x28, 0x0b, 0x32,
+	0x32, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x69, 0x6e,
+	0x67, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x6f, 0x74, 0x43, 0x68, 0x61, 0x74, 0x50, 0x69, 0x6e, 0x52,
+	0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x54, 0x61, 0x72, 0x67, 0x65, 0x74, 0x52, 0x65, 0x63, 0x65,
+	0x69, 0x70, 0x74, 0x52, 0x07, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74, 0x73, 0x12, 0x3c, 0x0a, 0x1a,
+	0x65, 0x78, 0x65, 0x63, 0x75, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x63, 0x6c, 0x65, 0x61, 0x6e, 0x75,
+	0x70, 0x5f, 0x72, 0x65, 0x76, 0x69, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x13, 0x20, 0x01, 0x28, 0x04,
+	0x52, 0x18, 0x65, 0x78, 0x65, 0x63, 0x75, 0x74, 0x69, 0x6f, 0x6e, 0x43, 0x6c, 0x65, 0x61, 0x6e,
+	0x75, 0x70, 0x52, 0x65, 0x76, 0x69, 0x73, 0x69, 0x6f, 0x6e, 0x22, 0x68, 0x0a, 0x1e, 0x41, 0x70,
 	0x70, 0x6c, 0x79, 0x42, 0x6f, 0x74, 0x43, 0x68, 0x61, 0x74, 0x50, 0x69, 0x6e, 0x52, 0x65, 0x6d,
 	0x6f, 0x76, 0x61, 0x6c, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x46, 0x0a, 0x07,
 	0x72, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x2c, 0x2e,
@@ -7445,7 +7791,7 @@ func file_voice_messaging_v1_messaging_proto_rawDescGZIP() []byte {
 }
 
 var file_voice_messaging_v1_messaging_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_voice_messaging_v1_messaging_proto_msgTypes = make([]protoimpl.MessageInfo, 90)
+var file_voice_messaging_v1_messaging_proto_msgTypes = make([]protoimpl.MessageInfo, 93)
 var file_voice_messaging_v1_messaging_proto_goTypes = []any{
 	(MessageKind)(0),                             // 0: voice.messaging.v1.MessageKind
 	(DeleteScope)(0),                             // 1: voice.messaging.v1.DeleteScope
@@ -7457,284 +7803,295 @@ var file_voice_messaging_v1_messaging_proto_goTypes = []any{
 	(*BotRemovalNativeEvidence)(nil),             // 7: voice.messaging.v1.BotRemovalNativeEvidence
 	(*BotRemovalLegacyInstallationEvidence)(nil), // 8: voice.messaging.v1.BotRemovalLegacyInstallationEvidence
 	(*BotRemovalOrphanWhitelistEvidence)(nil),    // 9: voice.messaging.v1.BotRemovalOrphanWhitelistEvidence
-	(*ApplyBotChatPinRemovalRequest)(nil),        // 10: voice.messaging.v1.ApplyBotChatPinRemovalRequest
-	(*BotChatPinRemovalReceipt)(nil),             // 11: voice.messaging.v1.BotChatPinRemovalReceipt
-	(*ApplyBotChatPinRemovalResponse)(nil),       // 12: voice.messaging.v1.ApplyBotChatPinRemovalResponse
-	(*SendGameEventMessageRequest)(nil),          // 13: voice.messaging.v1.SendGameEventMessageRequest
-	(*SendGameEventMessageResponse)(nil),         // 14: voice.messaging.v1.SendGameEventMessageResponse
-	(*SendMessageRequest)(nil),                   // 15: voice.messaging.v1.SendMessageRequest
-	(*ApplyGameMessageRequest)(nil),              // 16: voice.messaging.v1.ApplyGameMessageRequest
-	(*ApplyGameMessageResponse)(nil),             // 17: voice.messaging.v1.ApplyGameMessageResponse
-	(*TombstoneGameMessageRequest)(nil),          // 18: voice.messaging.v1.TombstoneGameMessageRequest
-	(*TombstoneGameMessageResponse)(nil),         // 19: voice.messaging.v1.TombstoneGameMessageResponse
-	(*ScheduledMessagePayload)(nil),              // 20: voice.messaging.v1.ScheduledMessagePayload
-	(*ScheduledMessage)(nil),                     // 21: voice.messaging.v1.ScheduledMessage
-	(*EditMessageRequest)(nil),                   // 22: voice.messaging.v1.EditMessageRequest
-	(*DeleteMessageRequest)(nil),                 // 23: voice.messaging.v1.DeleteMessageRequest
-	(*GetMessagesRequest)(nil),                   // 24: voice.messaging.v1.GetMessagesRequest
-	(*GetMessageRequest)(nil),                    // 25: voice.messaging.v1.GetMessageRequest
-	(*ResolveGameActionRequest)(nil),             // 26: voice.messaging.v1.ResolveGameActionRequest
-	(*ResolveGameActionResponse)(nil),            // 27: voice.messaging.v1.ResolveGameActionResponse
-	(*ProjectGameActionResultRequest)(nil),       // 28: voice.messaging.v1.ProjectGameActionResultRequest
-	(*ProjectGameActionResultResponse)(nil),      // 29: voice.messaging.v1.ProjectGameActionResultResponse
-	(*PurgeManagedChatContentRequest)(nil),       // 30: voice.messaging.v1.PurgeManagedChatContentRequest
-	(*PurgeManagedChatContentResponse)(nil),      // 31: voice.messaging.v1.PurgeManagedChatContentResponse
-	(*MessageList)(nil),                          // 32: voice.messaging.v1.MessageList
-	(*Message)(nil),                              // 33: voice.messaging.v1.Message
-	(*GameActionResult)(nil),                     // 34: voice.messaging.v1.GameActionResult
-	(*GetThreadMessagesRequest)(nil),             // 35: voice.messaging.v1.GetThreadMessagesRequest
-	(*ThreadSummary)(nil),                        // 36: voice.messaging.v1.ThreadSummary
-	(*ListThreadsRequest)(nil),                   // 37: voice.messaging.v1.ListThreadsRequest
-	(*ThreadList)(nil),                           // 38: voice.messaging.v1.ThreadList
-	(*AddReactionRequest)(nil),                   // 39: voice.messaging.v1.AddReactionRequest
-	(*RemoveReactionRequest)(nil),                // 40: voice.messaging.v1.RemoveReactionRequest
-	(*PinMessageRequest)(nil),                    // 41: voice.messaging.v1.PinMessageRequest
-	(*UnpinMessageRequest)(nil),                  // 42: voice.messaging.v1.UnpinMessageRequest
-	(*GetPinnedMessagesRequest)(nil),             // 43: voice.messaging.v1.GetPinnedMessagesRequest
-	(*ForwardMessageRequest)(nil),                // 44: voice.messaging.v1.ForwardMessageRequest
-	(*MarkReadRequest)(nil),                      // 45: voice.messaging.v1.MarkReadRequest
-	(*GetReadStateRequest)(nil),                  // 46: voice.messaging.v1.GetReadStateRequest
-	(*ReadState)(nil),                            // 47: voice.messaging.v1.ReadState
-	(*GetBulkReadStateRequest)(nil),              // 48: voice.messaging.v1.GetBulkReadStateRequest
-	(*GetChatListMetadataRequest)(nil),           // 49: voice.messaging.v1.GetChatListMetadataRequest
-	(*ChatListMetadata)(nil),                     // 50: voice.messaging.v1.ChatListMetadata
-	(*SendMessageResponse)(nil),                  // 51: voice.messaging.v1.SendMessageResponse
-	(*ListScheduledMessagesRequest)(nil),         // 52: voice.messaging.v1.ListScheduledMessagesRequest
-	(*ListScheduledMessagesResponse)(nil),        // 53: voice.messaging.v1.ListScheduledMessagesResponse
-	(*UpdateScheduledMessageRequest)(nil),        // 54: voice.messaging.v1.UpdateScheduledMessageRequest
-	(*UpdateScheduledMessageResponse)(nil),       // 55: voice.messaging.v1.UpdateScheduledMessageResponse
-	(*CancelScheduledMessageRequest)(nil),        // 56: voice.messaging.v1.CancelScheduledMessageRequest
-	(*CancelScheduledMessageResponse)(nil),       // 57: voice.messaging.v1.CancelScheduledMessageResponse
-	(*SendScheduledMessageNowRequest)(nil),       // 58: voice.messaging.v1.SendScheduledMessageNowRequest
-	(*SendScheduledMessageNowResponse)(nil),      // 59: voice.messaging.v1.SendScheduledMessageNowResponse
-	(*EditMessageResponse)(nil),                  // 60: voice.messaging.v1.EditMessageResponse
-	(*DeleteMessageResponse)(nil),                // 61: voice.messaging.v1.DeleteMessageResponse
-	(*GetMessagesResponse)(nil),                  // 62: voice.messaging.v1.GetMessagesResponse
-	(*GetMessageResponse)(nil),                   // 63: voice.messaging.v1.GetMessageResponse
-	(*GetThreadMessagesResponse)(nil),            // 64: voice.messaging.v1.GetThreadMessagesResponse
-	(*ListThreadsResponse)(nil),                  // 65: voice.messaging.v1.ListThreadsResponse
-	(*AddReactionResponse)(nil),                  // 66: voice.messaging.v1.AddReactionResponse
-	(*RemoveReactionResponse)(nil),               // 67: voice.messaging.v1.RemoveReactionResponse
-	(*PinMessageResponse)(nil),                   // 68: voice.messaging.v1.PinMessageResponse
-	(*UnpinMessageResponse)(nil),                 // 69: voice.messaging.v1.UnpinMessageResponse
-	(*GetPinnedMessagesResponse)(nil),            // 70: voice.messaging.v1.GetPinnedMessagesResponse
-	(*ForwardMessageResponse)(nil),               // 71: voice.messaging.v1.ForwardMessageResponse
-	(*MarkReadResponse)(nil),                     // 72: voice.messaging.v1.MarkReadResponse
-	(*GetReadStateResponse)(nil),                 // 73: voice.messaging.v1.GetReadStateResponse
-	(*GetBulkReadStateResponse)(nil),             // 74: voice.messaging.v1.GetBulkReadStateResponse
-	(*GetChatListMetadataResponse)(nil),          // 75: voice.messaging.v1.GetChatListMetadataResponse
-	(*ListSharedMediaRequest)(nil),               // 76: voice.messaging.v1.ListSharedMediaRequest
-	(*SharedMediaItem)(nil),                      // 77: voice.messaging.v1.SharedMediaItem
-	(*SharedMediaList)(nil),                      // 78: voice.messaging.v1.SharedMediaList
-	(*ListSharedMediaResponse)(nil),              // 79: voice.messaging.v1.ListSharedMediaResponse
-	(*UploadPreKeyBundleRequest)(nil),            // 80: voice.messaging.v1.UploadPreKeyBundleRequest
-	(*UploadPreKeyBundleResponse)(nil),           // 81: voice.messaging.v1.UploadPreKeyBundleResponse
-	(*UnpinMessagesBySenderInChatsRequest)(nil),  // 82: voice.messaging.v1.UnpinMessagesBySenderInChatsRequest
-	(*UnpinMessagesBySenderInChatsResponse)(nil), // 83: voice.messaging.v1.UnpinMessagesBySenderInChatsResponse
-	(*GetPreKeyBundleRequest)(nil),               // 84: voice.messaging.v1.GetPreKeyBundleRequest
-	(*GetPreKeyBundleResponse)(nil),              // 85: voice.messaging.v1.GetPreKeyBundleResponse
-	(*ApplySpaceLifecycleFenceRequest)(nil),      // 86: voice.messaging.v1.ApplySpaceLifecycleFenceRequest
-	(*ApplySpaceLifecycleFenceResponse)(nil),     // 87: voice.messaging.v1.ApplySpaceLifecycleFenceResponse
-	(*PurgeSpaceRequest)(nil),                    // 88: voice.messaging.v1.PurgeSpaceRequest
-	(*PurgeSpaceResponse)(nil),                   // 89: voice.messaging.v1.PurgeSpaceResponse
-	(*ImportSpacePurgeManifestPageRequest)(nil),  // 90: voice.messaging.v1.ImportSpacePurgeManifestPageRequest
-	(*ImportSpacePurgeManifestPageReceipt)(nil),  // 91: voice.messaging.v1.ImportSpacePurgeManifestPageReceipt
-	(*ImportSpacePurgeManifestPageResponse)(nil), // 92: voice.messaging.v1.ImportSpacePurgeManifestPageResponse
-	(*GetSpacePurgeReceiptRequest)(nil),          // 93: voice.messaging.v1.GetSpacePurgeReceiptRequest
-	(*GetSpacePurgeReceiptResponse)(nil),         // 94: voice.messaging.v1.GetSpacePurgeReceiptResponse
-	nil,                                          // 95: voice.messaging.v1.GetBulkReadStateResponse.ByChatIdEntry
-	nil,                                          // 96: voice.messaging.v1.GetChatListMetadataResponse.ByChatIdEntry
-	(*timestamppb.Timestamp)(nil),                // 97: google.protobuf.Timestamp
-	(*v1.VerifiedGameEventIntent)(nil),           // 98: voice.gameintegration.v1.VerifiedGameEventIntent
-	(v1.GameEventPublicationStatus)(0),           // 99: voice.gameintegration.v1.GameEventPublicationStatus
-	(*v11.ChatRef)(nil),                          // 100: voice.chat.v1.ChatRef
-	(*v12.CursorPageRequest)(nil),                // 101: voice.common.v1.CursorPageRequest
-	(*v12.CursorPageResponse)(nil),               // 102: voice.common.v1.CursorPageResponse
-	(*v1.GameCard)(nil),                          // 103: voice.gameintegration.v1.GameCard
-	(*v12.SpaceLifecycleFenceRequest)(nil),       // 104: voice.common.v1.SpaceLifecycleFenceRequest
-	(*v12.SpaceLifecycleFenceReceipt)(nil),       // 105: voice.common.v1.SpaceLifecycleFenceReceipt
-	(*v12.SpacePurgeRequest)(nil),                // 106: voice.common.v1.SpacePurgeRequest
-	(*v12.SpacePurgeReceipt)(nil),                // 107: voice.common.v1.SpacePurgeReceipt
-	(*v11.SpacePurgeManifestPage)(nil),           // 108: voice.chat.v1.SpacePurgeManifestPage
-	(*v12.ManifestBinding)(nil),                  // 109: voice.common.v1.ManifestBinding
+	(*BotRemovalChatScopeObservation)(nil),       // 10: voice.messaging.v1.BotRemovalChatScopeObservation
+	(*BotChatPinRemovalAttachment)(nil),          // 11: voice.messaging.v1.BotChatPinRemovalAttachment
+	(*ApplyBotChatPinRemovalRequest)(nil),        // 12: voice.messaging.v1.ApplyBotChatPinRemovalRequest
+	(*BotChatPinRemovalTargetReceipt)(nil),       // 13: voice.messaging.v1.BotChatPinRemovalTargetReceipt
+	(*BotChatPinRemovalReceipt)(nil),             // 14: voice.messaging.v1.BotChatPinRemovalReceipt
+	(*ApplyBotChatPinRemovalResponse)(nil),       // 15: voice.messaging.v1.ApplyBotChatPinRemovalResponse
+	(*SendGameEventMessageRequest)(nil),          // 16: voice.messaging.v1.SendGameEventMessageRequest
+	(*SendGameEventMessageResponse)(nil),         // 17: voice.messaging.v1.SendGameEventMessageResponse
+	(*SendMessageRequest)(nil),                   // 18: voice.messaging.v1.SendMessageRequest
+	(*ApplyGameMessageRequest)(nil),              // 19: voice.messaging.v1.ApplyGameMessageRequest
+	(*ApplyGameMessageResponse)(nil),             // 20: voice.messaging.v1.ApplyGameMessageResponse
+	(*TombstoneGameMessageRequest)(nil),          // 21: voice.messaging.v1.TombstoneGameMessageRequest
+	(*TombstoneGameMessageResponse)(nil),         // 22: voice.messaging.v1.TombstoneGameMessageResponse
+	(*ScheduledMessagePayload)(nil),              // 23: voice.messaging.v1.ScheduledMessagePayload
+	(*ScheduledMessage)(nil),                     // 24: voice.messaging.v1.ScheduledMessage
+	(*EditMessageRequest)(nil),                   // 25: voice.messaging.v1.EditMessageRequest
+	(*DeleteMessageRequest)(nil),                 // 26: voice.messaging.v1.DeleteMessageRequest
+	(*GetMessagesRequest)(nil),                   // 27: voice.messaging.v1.GetMessagesRequest
+	(*GetMessageRequest)(nil),                    // 28: voice.messaging.v1.GetMessageRequest
+	(*ResolveGameActionRequest)(nil),             // 29: voice.messaging.v1.ResolveGameActionRequest
+	(*ResolveGameActionResponse)(nil),            // 30: voice.messaging.v1.ResolveGameActionResponse
+	(*ProjectGameActionResultRequest)(nil),       // 31: voice.messaging.v1.ProjectGameActionResultRequest
+	(*ProjectGameActionResultResponse)(nil),      // 32: voice.messaging.v1.ProjectGameActionResultResponse
+	(*PurgeManagedChatContentRequest)(nil),       // 33: voice.messaging.v1.PurgeManagedChatContentRequest
+	(*PurgeManagedChatContentResponse)(nil),      // 34: voice.messaging.v1.PurgeManagedChatContentResponse
+	(*MessageList)(nil),                          // 35: voice.messaging.v1.MessageList
+	(*Message)(nil),                              // 36: voice.messaging.v1.Message
+	(*GameActionResult)(nil),                     // 37: voice.messaging.v1.GameActionResult
+	(*GetThreadMessagesRequest)(nil),             // 38: voice.messaging.v1.GetThreadMessagesRequest
+	(*ThreadSummary)(nil),                        // 39: voice.messaging.v1.ThreadSummary
+	(*ListThreadsRequest)(nil),                   // 40: voice.messaging.v1.ListThreadsRequest
+	(*ThreadList)(nil),                           // 41: voice.messaging.v1.ThreadList
+	(*AddReactionRequest)(nil),                   // 42: voice.messaging.v1.AddReactionRequest
+	(*RemoveReactionRequest)(nil),                // 43: voice.messaging.v1.RemoveReactionRequest
+	(*PinMessageRequest)(nil),                    // 44: voice.messaging.v1.PinMessageRequest
+	(*UnpinMessageRequest)(nil),                  // 45: voice.messaging.v1.UnpinMessageRequest
+	(*GetPinnedMessagesRequest)(nil),             // 46: voice.messaging.v1.GetPinnedMessagesRequest
+	(*ForwardMessageRequest)(nil),                // 47: voice.messaging.v1.ForwardMessageRequest
+	(*MarkReadRequest)(nil),                      // 48: voice.messaging.v1.MarkReadRequest
+	(*GetReadStateRequest)(nil),                  // 49: voice.messaging.v1.GetReadStateRequest
+	(*ReadState)(nil),                            // 50: voice.messaging.v1.ReadState
+	(*GetBulkReadStateRequest)(nil),              // 51: voice.messaging.v1.GetBulkReadStateRequest
+	(*GetChatListMetadataRequest)(nil),           // 52: voice.messaging.v1.GetChatListMetadataRequest
+	(*ChatListMetadata)(nil),                     // 53: voice.messaging.v1.ChatListMetadata
+	(*SendMessageResponse)(nil),                  // 54: voice.messaging.v1.SendMessageResponse
+	(*ListScheduledMessagesRequest)(nil),         // 55: voice.messaging.v1.ListScheduledMessagesRequest
+	(*ListScheduledMessagesResponse)(nil),        // 56: voice.messaging.v1.ListScheduledMessagesResponse
+	(*UpdateScheduledMessageRequest)(nil),        // 57: voice.messaging.v1.UpdateScheduledMessageRequest
+	(*UpdateScheduledMessageResponse)(nil),       // 58: voice.messaging.v1.UpdateScheduledMessageResponse
+	(*CancelScheduledMessageRequest)(nil),        // 59: voice.messaging.v1.CancelScheduledMessageRequest
+	(*CancelScheduledMessageResponse)(nil),       // 60: voice.messaging.v1.CancelScheduledMessageResponse
+	(*SendScheduledMessageNowRequest)(nil),       // 61: voice.messaging.v1.SendScheduledMessageNowRequest
+	(*SendScheduledMessageNowResponse)(nil),      // 62: voice.messaging.v1.SendScheduledMessageNowResponse
+	(*EditMessageResponse)(nil),                  // 63: voice.messaging.v1.EditMessageResponse
+	(*DeleteMessageResponse)(nil),                // 64: voice.messaging.v1.DeleteMessageResponse
+	(*GetMessagesResponse)(nil),                  // 65: voice.messaging.v1.GetMessagesResponse
+	(*GetMessageResponse)(nil),                   // 66: voice.messaging.v1.GetMessageResponse
+	(*GetThreadMessagesResponse)(nil),            // 67: voice.messaging.v1.GetThreadMessagesResponse
+	(*ListThreadsResponse)(nil),                  // 68: voice.messaging.v1.ListThreadsResponse
+	(*AddReactionResponse)(nil),                  // 69: voice.messaging.v1.AddReactionResponse
+	(*RemoveReactionResponse)(nil),               // 70: voice.messaging.v1.RemoveReactionResponse
+	(*PinMessageResponse)(nil),                   // 71: voice.messaging.v1.PinMessageResponse
+	(*UnpinMessageResponse)(nil),                 // 72: voice.messaging.v1.UnpinMessageResponse
+	(*GetPinnedMessagesResponse)(nil),            // 73: voice.messaging.v1.GetPinnedMessagesResponse
+	(*ForwardMessageResponse)(nil),               // 74: voice.messaging.v1.ForwardMessageResponse
+	(*MarkReadResponse)(nil),                     // 75: voice.messaging.v1.MarkReadResponse
+	(*GetReadStateResponse)(nil),                 // 76: voice.messaging.v1.GetReadStateResponse
+	(*GetBulkReadStateResponse)(nil),             // 77: voice.messaging.v1.GetBulkReadStateResponse
+	(*GetChatListMetadataResponse)(nil),          // 78: voice.messaging.v1.GetChatListMetadataResponse
+	(*ListSharedMediaRequest)(nil),               // 79: voice.messaging.v1.ListSharedMediaRequest
+	(*SharedMediaItem)(nil),                      // 80: voice.messaging.v1.SharedMediaItem
+	(*SharedMediaList)(nil),                      // 81: voice.messaging.v1.SharedMediaList
+	(*ListSharedMediaResponse)(nil),              // 82: voice.messaging.v1.ListSharedMediaResponse
+	(*UploadPreKeyBundleRequest)(nil),            // 83: voice.messaging.v1.UploadPreKeyBundleRequest
+	(*UploadPreKeyBundleResponse)(nil),           // 84: voice.messaging.v1.UploadPreKeyBundleResponse
+	(*UnpinMessagesBySenderInChatsRequest)(nil),  // 85: voice.messaging.v1.UnpinMessagesBySenderInChatsRequest
+	(*UnpinMessagesBySenderInChatsResponse)(nil), // 86: voice.messaging.v1.UnpinMessagesBySenderInChatsResponse
+	(*GetPreKeyBundleRequest)(nil),               // 87: voice.messaging.v1.GetPreKeyBundleRequest
+	(*GetPreKeyBundleResponse)(nil),              // 88: voice.messaging.v1.GetPreKeyBundleResponse
+	(*ApplySpaceLifecycleFenceRequest)(nil),      // 89: voice.messaging.v1.ApplySpaceLifecycleFenceRequest
+	(*ApplySpaceLifecycleFenceResponse)(nil),     // 90: voice.messaging.v1.ApplySpaceLifecycleFenceResponse
+	(*PurgeSpaceRequest)(nil),                    // 91: voice.messaging.v1.PurgeSpaceRequest
+	(*PurgeSpaceResponse)(nil),                   // 92: voice.messaging.v1.PurgeSpaceResponse
+	(*ImportSpacePurgeManifestPageRequest)(nil),  // 93: voice.messaging.v1.ImportSpacePurgeManifestPageRequest
+	(*ImportSpacePurgeManifestPageReceipt)(nil),  // 94: voice.messaging.v1.ImportSpacePurgeManifestPageReceipt
+	(*ImportSpacePurgeManifestPageResponse)(nil), // 95: voice.messaging.v1.ImportSpacePurgeManifestPageResponse
+	(*GetSpacePurgeReceiptRequest)(nil),          // 96: voice.messaging.v1.GetSpacePurgeReceiptRequest
+	(*GetSpacePurgeReceiptResponse)(nil),         // 97: voice.messaging.v1.GetSpacePurgeReceiptResponse
+	nil,                                          // 98: voice.messaging.v1.GetBulkReadStateResponse.ByChatIdEntry
+	nil,                                          // 99: voice.messaging.v1.GetChatListMetadataResponse.ByChatIdEntry
+	(*v1.GetBotChatScopeAuthorityRequest)(nil),   // 100: voice.chat.v1.GetBotChatScopeAuthorityRequest
+	(*v1.GetBotChatScopeAuthorityResponse)(nil),  // 101: voice.chat.v1.GetBotChatScopeAuthorityResponse
+	(*timestamppb.Timestamp)(nil),                // 102: google.protobuf.Timestamp
+	(*v11.VerifiedGameEventIntent)(nil),          // 103: voice.gameintegration.v1.VerifiedGameEventIntent
+	(v11.GameEventPublicationStatus)(0),          // 104: voice.gameintegration.v1.GameEventPublicationStatus
+	(*v1.ChatRef)(nil),                           // 105: voice.chat.v1.ChatRef
+	(*v12.CursorPageRequest)(nil),                // 106: voice.common.v1.CursorPageRequest
+	(*v12.CursorPageResponse)(nil),               // 107: voice.common.v1.CursorPageResponse
+	(*v11.GameCard)(nil),                         // 108: voice.gameintegration.v1.GameCard
+	(*v12.SpaceLifecycleFenceRequest)(nil),       // 109: voice.common.v1.SpaceLifecycleFenceRequest
+	(*v12.SpaceLifecycleFenceReceipt)(nil),       // 110: voice.common.v1.SpaceLifecycleFenceReceipt
+	(*v12.SpacePurgeRequest)(nil),                // 111: voice.common.v1.SpacePurgeRequest
+	(*v12.SpacePurgeReceipt)(nil),                // 112: voice.common.v1.SpacePurgeReceipt
+	(*v1.SpacePurgeManifestPage)(nil),            // 113: voice.chat.v1.SpacePurgeManifestPage
+	(*v12.ManifestBinding)(nil),                  // 114: voice.common.v1.ManifestBinding
 }
 var file_voice_messaging_v1_messaging_proto_depIdxs = []int32{
-	7,   // 0: voice.messaging.v1.ApplyBotChatPinRemovalRequest.native:type_name -> voice.messaging.v1.BotRemovalNativeEvidence
-	8,   // 1: voice.messaging.v1.ApplyBotChatPinRemovalRequest.legacy_installation:type_name -> voice.messaging.v1.BotRemovalLegacyInstallationEvidence
-	9,   // 2: voice.messaging.v1.ApplyBotChatPinRemovalRequest.orphan_whitelist:type_name -> voice.messaging.v1.BotRemovalOrphanWhitelistEvidence
-	97,  // 3: voice.messaging.v1.BotChatPinRemovalReceipt.completed_at:type_name -> google.protobuf.Timestamp
-	11,  // 4: voice.messaging.v1.ApplyBotChatPinRemovalResponse.receipt:type_name -> voice.messaging.v1.BotChatPinRemovalReceipt
-	98,  // 5: voice.messaging.v1.SendGameEventMessageRequest.intent:type_name -> voice.gameintegration.v1.VerifiedGameEventIntent
-	99,  // 6: voice.messaging.v1.SendGameEventMessageResponse.status:type_name -> voice.gameintegration.v1.GameEventPublicationStatus
-	100, // 7: voice.messaging.v1.SendMessageRequest.chat:type_name -> voice.chat.v1.ChatRef
-	0,   // 8: voice.messaging.v1.SendMessageRequest.message_kind:type_name -> voice.messaging.v1.MessageKind
-	4,   // 9: voice.messaging.v1.SendMessageRequest.content_type:type_name -> voice.messaging.v1.MessageContentType
-	97,  // 10: voice.messaging.v1.SendMessageRequest.scheduled_at:type_name -> google.protobuf.Timestamp
-	33,  // 11: voice.messaging.v1.ApplyGameMessageResponse.message:type_name -> voice.messaging.v1.Message
-	33,  // 12: voice.messaging.v1.TombstoneGameMessageResponse.message:type_name -> voice.messaging.v1.Message
-	0,   // 13: voice.messaging.v1.ScheduledMessagePayload.message_kind:type_name -> voice.messaging.v1.MessageKind
-	4,   // 14: voice.messaging.v1.ScheduledMessagePayload.content_type:type_name -> voice.messaging.v1.MessageContentType
-	100, // 15: voice.messaging.v1.ScheduledMessage.chat:type_name -> voice.chat.v1.ChatRef
-	20,  // 16: voice.messaging.v1.ScheduledMessage.payload:type_name -> voice.messaging.v1.ScheduledMessagePayload
-	97,  // 17: voice.messaging.v1.ScheduledMessage.scheduled_at:type_name -> google.protobuf.Timestamp
-	3,   // 18: voice.messaging.v1.ScheduledMessage.status:type_name -> voice.messaging.v1.ScheduledMessageStatus
-	97,  // 19: voice.messaging.v1.ScheduledMessage.created_at:type_name -> google.protobuf.Timestamp
-	97,  // 20: voice.messaging.v1.ScheduledMessage.updated_at:type_name -> google.protobuf.Timestamp
-	1,   // 21: voice.messaging.v1.DeleteMessageRequest.scope:type_name -> voice.messaging.v1.DeleteScope
-	100, // 22: voice.messaging.v1.GetMessagesRequest.chat:type_name -> voice.chat.v1.ChatRef
-	101, // 23: voice.messaging.v1.GetMessagesRequest.page:type_name -> voice.common.v1.CursorPageRequest
-	33,  // 24: voice.messaging.v1.ResolveGameActionResponse.message:type_name -> voice.messaging.v1.Message
-	34,  // 25: voice.messaging.v1.ProjectGameActionResultResponse.result:type_name -> voice.messaging.v1.GameActionResult
-	97,  // 26: voice.messaging.v1.PurgeManagedChatContentRequest.purge_after:type_name -> google.protobuf.Timestamp
-	97,  // 27: voice.messaging.v1.PurgeManagedChatContentResponse.purge_after:type_name -> google.protobuf.Timestamp
-	97,  // 28: voice.messaging.v1.PurgeManagedChatContentResponse.completed_at:type_name -> google.protobuf.Timestamp
-	33,  // 29: voice.messaging.v1.MessageList.messages:type_name -> voice.messaging.v1.Message
-	102, // 30: voice.messaging.v1.MessageList.page:type_name -> voice.common.v1.CursorPageResponse
-	100, // 31: voice.messaging.v1.Message.chat:type_name -> voice.chat.v1.ChatRef
-	97,  // 32: voice.messaging.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
-	97,  // 33: voice.messaging.v1.Message.deleted_at:type_name -> google.protobuf.Timestamp
-	97,  // 34: voice.messaging.v1.Message.created_at:type_name -> google.protobuf.Timestamp
-	0,   // 35: voice.messaging.v1.Message.message_kind:type_name -> voice.messaging.v1.MessageKind
-	4,   // 36: voice.messaging.v1.Message.content_type:type_name -> voice.messaging.v1.MessageContentType
-	103, // 37: voice.messaging.v1.Message.game_card:type_name -> voice.gameintegration.v1.GameCard
-	34,  // 38: voice.messaging.v1.Message.game_action_results:type_name -> voice.messaging.v1.GameActionResult
-	97,  // 39: voice.messaging.v1.GameActionResult.recorded_at:type_name -> google.protobuf.Timestamp
-	100, // 40: voice.messaging.v1.GetThreadMessagesRequest.chat:type_name -> voice.chat.v1.ChatRef
-	101, // 41: voice.messaging.v1.GetThreadMessagesRequest.page:type_name -> voice.common.v1.CursorPageRequest
-	97,  // 42: voice.messaging.v1.ThreadSummary.last_reply_at:type_name -> google.protobuf.Timestamp
-	100, // 43: voice.messaging.v1.ListThreadsRequest.chat:type_name -> voice.chat.v1.ChatRef
-	101, // 44: voice.messaging.v1.ListThreadsRequest.page:type_name -> voice.common.v1.CursorPageRequest
-	36,  // 45: voice.messaging.v1.ThreadList.threads:type_name -> voice.messaging.v1.ThreadSummary
-	100, // 46: voice.messaging.v1.PinMessageRequest.chat:type_name -> voice.chat.v1.ChatRef
-	100, // 47: voice.messaging.v1.UnpinMessageRequest.chat:type_name -> voice.chat.v1.ChatRef
-	100, // 48: voice.messaging.v1.GetPinnedMessagesRequest.chat:type_name -> voice.chat.v1.ChatRef
-	100, // 49: voice.messaging.v1.ForwardMessageRequest.target_chat:type_name -> voice.chat.v1.ChatRef
-	100, // 50: voice.messaging.v1.MarkReadRequest.chat:type_name -> voice.chat.v1.ChatRef
-	100, // 51: voice.messaging.v1.GetReadStateRequest.chat:type_name -> voice.chat.v1.ChatRef
-	100, // 52: voice.messaging.v1.ReadState.chat:type_name -> voice.chat.v1.ChatRef
-	97,  // 53: voice.messaging.v1.ReadState.updated_at:type_name -> google.protobuf.Timestamp
-	100, // 54: voice.messaging.v1.GetBulkReadStateRequest.chats:type_name -> voice.chat.v1.ChatRef
-	100, // 55: voice.messaging.v1.GetChatListMetadataRequest.chats:type_name -> voice.chat.v1.ChatRef
-	100, // 56: voice.messaging.v1.ChatListMetadata.chat:type_name -> voice.chat.v1.ChatRef
-	97,  // 57: voice.messaging.v1.ChatListMetadata.last_message_at:type_name -> google.protobuf.Timestamp
-	5,   // 58: voice.messaging.v1.ChatListMetadata.last_message_delivery_state:type_name -> voice.messaging.v1.LastMessageDeliveryState
-	4,   // 59: voice.messaging.v1.ChatListMetadata.last_message_content_type:type_name -> voice.messaging.v1.MessageContentType
-	33,  // 60: voice.messaging.v1.SendMessageResponse.message:type_name -> voice.messaging.v1.Message
-	21,  // 61: voice.messaging.v1.SendMessageResponse.scheduled_message:type_name -> voice.messaging.v1.ScheduledMessage
-	100, // 62: voice.messaging.v1.ListScheduledMessagesRequest.chat:type_name -> voice.chat.v1.ChatRef
-	101, // 63: voice.messaging.v1.ListScheduledMessagesRequest.page:type_name -> voice.common.v1.CursorPageRequest
-	21,  // 64: voice.messaging.v1.ListScheduledMessagesResponse.scheduled_messages:type_name -> voice.messaging.v1.ScheduledMessage
-	102, // 65: voice.messaging.v1.ListScheduledMessagesResponse.page:type_name -> voice.common.v1.CursorPageResponse
-	20,  // 66: voice.messaging.v1.UpdateScheduledMessageRequest.payload:type_name -> voice.messaging.v1.ScheduledMessagePayload
-	97,  // 67: voice.messaging.v1.UpdateScheduledMessageRequest.scheduled_at:type_name -> google.protobuf.Timestamp
-	21,  // 68: voice.messaging.v1.UpdateScheduledMessageResponse.scheduled_message:type_name -> voice.messaging.v1.ScheduledMessage
-	33,  // 69: voice.messaging.v1.SendScheduledMessageNowResponse.message:type_name -> voice.messaging.v1.Message
-	33,  // 70: voice.messaging.v1.EditMessageResponse.message:type_name -> voice.messaging.v1.Message
-	32,  // 71: voice.messaging.v1.GetMessagesResponse.message_list:type_name -> voice.messaging.v1.MessageList
-	6,   // 72: voice.messaging.v1.GetMessagesResponse.dm_peer_state:type_name -> voice.messaging.v1.DmPeerState
-	33,  // 73: voice.messaging.v1.GetMessageResponse.message:type_name -> voice.messaging.v1.Message
-	32,  // 74: voice.messaging.v1.GetThreadMessagesResponse.message_list:type_name -> voice.messaging.v1.MessageList
-	38,  // 75: voice.messaging.v1.ListThreadsResponse.thread_list:type_name -> voice.messaging.v1.ThreadList
-	32,  // 76: voice.messaging.v1.GetPinnedMessagesResponse.message_list:type_name -> voice.messaging.v1.MessageList
-	33,  // 77: voice.messaging.v1.ForwardMessageResponse.message:type_name -> voice.messaging.v1.Message
-	47,  // 78: voice.messaging.v1.GetReadStateResponse.read_state:type_name -> voice.messaging.v1.ReadState
-	95,  // 79: voice.messaging.v1.GetBulkReadStateResponse.by_chat_id:type_name -> voice.messaging.v1.GetBulkReadStateResponse.ByChatIdEntry
-	96,  // 80: voice.messaging.v1.GetChatListMetadataResponse.by_chat_id:type_name -> voice.messaging.v1.GetChatListMetadataResponse.ByChatIdEntry
-	100, // 81: voice.messaging.v1.ListSharedMediaRequest.chat:type_name -> voice.chat.v1.ChatRef
-	2,   // 82: voice.messaging.v1.ListSharedMediaRequest.kind:type_name -> voice.messaging.v1.SharedMediaKind
-	101, // 83: voice.messaging.v1.ListSharedMediaRequest.page:type_name -> voice.common.v1.CursorPageRequest
-	97,  // 84: voice.messaging.v1.SharedMediaItem.created_at:type_name -> google.protobuf.Timestamp
-	77,  // 85: voice.messaging.v1.SharedMediaList.items:type_name -> voice.messaging.v1.SharedMediaItem
-	102, // 86: voice.messaging.v1.SharedMediaList.page:type_name -> voice.common.v1.CursorPageResponse
-	78,  // 87: voice.messaging.v1.ListSharedMediaResponse.shared_media_list:type_name -> voice.messaging.v1.SharedMediaList
-	104, // 88: voice.messaging.v1.ApplySpaceLifecycleFenceRequest.fence:type_name -> voice.common.v1.SpaceLifecycleFenceRequest
-	105, // 89: voice.messaging.v1.ApplySpaceLifecycleFenceResponse.receipt:type_name -> voice.common.v1.SpaceLifecycleFenceReceipt
-	106, // 90: voice.messaging.v1.PurgeSpaceRequest.purge:type_name -> voice.common.v1.SpacePurgeRequest
-	107, // 91: voice.messaging.v1.PurgeSpaceResponse.receipt:type_name -> voice.common.v1.SpacePurgeReceipt
-	108, // 92: voice.messaging.v1.ImportSpacePurgeManifestPageRequest.page:type_name -> voice.chat.v1.SpacePurgeManifestPage
-	109, // 93: voice.messaging.v1.ImportSpacePurgeManifestPageReceipt.manifest:type_name -> voice.common.v1.ManifestBinding
-	97,  // 94: voice.messaging.v1.ImportSpacePurgeManifestPageReceipt.completed_at:type_name -> google.protobuf.Timestamp
-	91,  // 95: voice.messaging.v1.ImportSpacePurgeManifestPageResponse.receipt:type_name -> voice.messaging.v1.ImportSpacePurgeManifestPageReceipt
-	107, // 96: voice.messaging.v1.GetSpacePurgeReceiptResponse.receipt:type_name -> voice.common.v1.SpacePurgeReceipt
-	47,  // 97: voice.messaging.v1.GetBulkReadStateResponse.ByChatIdEntry.value:type_name -> voice.messaging.v1.ReadState
-	50,  // 98: voice.messaging.v1.GetChatListMetadataResponse.ByChatIdEntry.value:type_name -> voice.messaging.v1.ChatListMetadata
-	13,  // 99: voice.messaging.v1.MessagingService.SendGameEventMessage:input_type -> voice.messaging.v1.SendGameEventMessageRequest
-	15,  // 100: voice.messaging.v1.MessagingService.SendMessage:input_type -> voice.messaging.v1.SendMessageRequest
-	16,  // 101: voice.messaging.v1.MessagingService.ApplyGameMessage:input_type -> voice.messaging.v1.ApplyGameMessageRequest
-	18,  // 102: voice.messaging.v1.MessagingService.TombstoneGameMessage:input_type -> voice.messaging.v1.TombstoneGameMessageRequest
-	22,  // 103: voice.messaging.v1.MessagingService.EditMessage:input_type -> voice.messaging.v1.EditMessageRequest
-	23,  // 104: voice.messaging.v1.MessagingService.DeleteMessage:input_type -> voice.messaging.v1.DeleteMessageRequest
-	24,  // 105: voice.messaging.v1.MessagingService.GetMessages:input_type -> voice.messaging.v1.GetMessagesRequest
-	25,  // 106: voice.messaging.v1.MessagingService.GetMessage:input_type -> voice.messaging.v1.GetMessageRequest
-	26,  // 107: voice.messaging.v1.MessagingService.ResolveGameAction:input_type -> voice.messaging.v1.ResolveGameActionRequest
-	28,  // 108: voice.messaging.v1.MessagingService.ProjectGameActionResult:input_type -> voice.messaging.v1.ProjectGameActionResultRequest
-	30,  // 109: voice.messaging.v1.MessagingService.PurgeManagedChatContent:input_type -> voice.messaging.v1.PurgeManagedChatContentRequest
-	35,  // 110: voice.messaging.v1.MessagingService.GetThreadMessages:input_type -> voice.messaging.v1.GetThreadMessagesRequest
-	37,  // 111: voice.messaging.v1.MessagingService.ListThreads:input_type -> voice.messaging.v1.ListThreadsRequest
-	39,  // 112: voice.messaging.v1.MessagingService.AddReaction:input_type -> voice.messaging.v1.AddReactionRequest
-	40,  // 113: voice.messaging.v1.MessagingService.RemoveReaction:input_type -> voice.messaging.v1.RemoveReactionRequest
-	41,  // 114: voice.messaging.v1.MessagingService.PinMessage:input_type -> voice.messaging.v1.PinMessageRequest
-	42,  // 115: voice.messaging.v1.MessagingService.UnpinMessage:input_type -> voice.messaging.v1.UnpinMessageRequest
-	43,  // 116: voice.messaging.v1.MessagingService.GetPinnedMessages:input_type -> voice.messaging.v1.GetPinnedMessagesRequest
-	82,  // 117: voice.messaging.v1.MessagingService.UnpinMessagesBySenderInChats:input_type -> voice.messaging.v1.UnpinMessagesBySenderInChatsRequest
-	10,  // 118: voice.messaging.v1.MessagingService.ApplyBotChatPinRemoval:input_type -> voice.messaging.v1.ApplyBotChatPinRemovalRequest
-	44,  // 119: voice.messaging.v1.MessagingService.ForwardMessage:input_type -> voice.messaging.v1.ForwardMessageRequest
-	45,  // 120: voice.messaging.v1.MessagingService.MarkRead:input_type -> voice.messaging.v1.MarkReadRequest
-	46,  // 121: voice.messaging.v1.MessagingService.GetReadState:input_type -> voice.messaging.v1.GetReadStateRequest
-	48,  // 122: voice.messaging.v1.MessagingService.GetBulkReadState:input_type -> voice.messaging.v1.GetBulkReadStateRequest
-	49,  // 123: voice.messaging.v1.MessagingService.GetChatListMetadata:input_type -> voice.messaging.v1.GetChatListMetadataRequest
-	76,  // 124: voice.messaging.v1.MessagingService.ListSharedMedia:input_type -> voice.messaging.v1.ListSharedMediaRequest
-	80,  // 125: voice.messaging.v1.MessagingService.UploadPreKeyBundle:input_type -> voice.messaging.v1.UploadPreKeyBundleRequest
-	84,  // 126: voice.messaging.v1.MessagingService.GetPreKeyBundle:input_type -> voice.messaging.v1.GetPreKeyBundleRequest
-	52,  // 127: voice.messaging.v1.MessagingService.ListScheduledMessages:input_type -> voice.messaging.v1.ListScheduledMessagesRequest
-	54,  // 128: voice.messaging.v1.MessagingService.UpdateScheduledMessage:input_type -> voice.messaging.v1.UpdateScheduledMessageRequest
-	56,  // 129: voice.messaging.v1.MessagingService.CancelScheduledMessage:input_type -> voice.messaging.v1.CancelScheduledMessageRequest
-	58,  // 130: voice.messaging.v1.MessagingService.SendScheduledMessageNow:input_type -> voice.messaging.v1.SendScheduledMessageNowRequest
-	86,  // 131: voice.messaging.v1.MessagingService.ApplySpaceLifecycleFence:input_type -> voice.messaging.v1.ApplySpaceLifecycleFenceRequest
-	88,  // 132: voice.messaging.v1.MessagingService.PurgeSpace:input_type -> voice.messaging.v1.PurgeSpaceRequest
-	93,  // 133: voice.messaging.v1.MessagingService.GetSpacePurgeReceipt:input_type -> voice.messaging.v1.GetSpacePurgeReceiptRequest
-	90,  // 134: voice.messaging.v1.MessagingService.ImportSpacePurgeManifestPage:input_type -> voice.messaging.v1.ImportSpacePurgeManifestPageRequest
-	14,  // 135: voice.messaging.v1.MessagingService.SendGameEventMessage:output_type -> voice.messaging.v1.SendGameEventMessageResponse
-	51,  // 136: voice.messaging.v1.MessagingService.SendMessage:output_type -> voice.messaging.v1.SendMessageResponse
-	17,  // 137: voice.messaging.v1.MessagingService.ApplyGameMessage:output_type -> voice.messaging.v1.ApplyGameMessageResponse
-	19,  // 138: voice.messaging.v1.MessagingService.TombstoneGameMessage:output_type -> voice.messaging.v1.TombstoneGameMessageResponse
-	60,  // 139: voice.messaging.v1.MessagingService.EditMessage:output_type -> voice.messaging.v1.EditMessageResponse
-	61,  // 140: voice.messaging.v1.MessagingService.DeleteMessage:output_type -> voice.messaging.v1.DeleteMessageResponse
-	62,  // 141: voice.messaging.v1.MessagingService.GetMessages:output_type -> voice.messaging.v1.GetMessagesResponse
-	63,  // 142: voice.messaging.v1.MessagingService.GetMessage:output_type -> voice.messaging.v1.GetMessageResponse
-	27,  // 143: voice.messaging.v1.MessagingService.ResolveGameAction:output_type -> voice.messaging.v1.ResolveGameActionResponse
-	29,  // 144: voice.messaging.v1.MessagingService.ProjectGameActionResult:output_type -> voice.messaging.v1.ProjectGameActionResultResponse
-	31,  // 145: voice.messaging.v1.MessagingService.PurgeManagedChatContent:output_type -> voice.messaging.v1.PurgeManagedChatContentResponse
-	64,  // 146: voice.messaging.v1.MessagingService.GetThreadMessages:output_type -> voice.messaging.v1.GetThreadMessagesResponse
-	65,  // 147: voice.messaging.v1.MessagingService.ListThreads:output_type -> voice.messaging.v1.ListThreadsResponse
-	66,  // 148: voice.messaging.v1.MessagingService.AddReaction:output_type -> voice.messaging.v1.AddReactionResponse
-	67,  // 149: voice.messaging.v1.MessagingService.RemoveReaction:output_type -> voice.messaging.v1.RemoveReactionResponse
-	68,  // 150: voice.messaging.v1.MessagingService.PinMessage:output_type -> voice.messaging.v1.PinMessageResponse
-	69,  // 151: voice.messaging.v1.MessagingService.UnpinMessage:output_type -> voice.messaging.v1.UnpinMessageResponse
-	70,  // 152: voice.messaging.v1.MessagingService.GetPinnedMessages:output_type -> voice.messaging.v1.GetPinnedMessagesResponse
-	83,  // 153: voice.messaging.v1.MessagingService.UnpinMessagesBySenderInChats:output_type -> voice.messaging.v1.UnpinMessagesBySenderInChatsResponse
-	12,  // 154: voice.messaging.v1.MessagingService.ApplyBotChatPinRemoval:output_type -> voice.messaging.v1.ApplyBotChatPinRemovalResponse
-	71,  // 155: voice.messaging.v1.MessagingService.ForwardMessage:output_type -> voice.messaging.v1.ForwardMessageResponse
-	72,  // 156: voice.messaging.v1.MessagingService.MarkRead:output_type -> voice.messaging.v1.MarkReadResponse
-	73,  // 157: voice.messaging.v1.MessagingService.GetReadState:output_type -> voice.messaging.v1.GetReadStateResponse
-	74,  // 158: voice.messaging.v1.MessagingService.GetBulkReadState:output_type -> voice.messaging.v1.GetBulkReadStateResponse
-	75,  // 159: voice.messaging.v1.MessagingService.GetChatListMetadata:output_type -> voice.messaging.v1.GetChatListMetadataResponse
-	79,  // 160: voice.messaging.v1.MessagingService.ListSharedMedia:output_type -> voice.messaging.v1.ListSharedMediaResponse
-	81,  // 161: voice.messaging.v1.MessagingService.UploadPreKeyBundle:output_type -> voice.messaging.v1.UploadPreKeyBundleResponse
-	85,  // 162: voice.messaging.v1.MessagingService.GetPreKeyBundle:output_type -> voice.messaging.v1.GetPreKeyBundleResponse
-	53,  // 163: voice.messaging.v1.MessagingService.ListScheduledMessages:output_type -> voice.messaging.v1.ListScheduledMessagesResponse
-	55,  // 164: voice.messaging.v1.MessagingService.UpdateScheduledMessage:output_type -> voice.messaging.v1.UpdateScheduledMessageResponse
-	57,  // 165: voice.messaging.v1.MessagingService.CancelScheduledMessage:output_type -> voice.messaging.v1.CancelScheduledMessageResponse
-	59,  // 166: voice.messaging.v1.MessagingService.SendScheduledMessageNow:output_type -> voice.messaging.v1.SendScheduledMessageNowResponse
-	87,  // 167: voice.messaging.v1.MessagingService.ApplySpaceLifecycleFence:output_type -> voice.messaging.v1.ApplySpaceLifecycleFenceResponse
-	89,  // 168: voice.messaging.v1.MessagingService.PurgeSpace:output_type -> voice.messaging.v1.PurgeSpaceResponse
-	94,  // 169: voice.messaging.v1.MessagingService.GetSpacePurgeReceipt:output_type -> voice.messaging.v1.GetSpacePurgeReceiptResponse
-	92,  // 170: voice.messaging.v1.MessagingService.ImportSpacePurgeManifestPage:output_type -> voice.messaging.v1.ImportSpacePurgeManifestPageResponse
-	135, // [135:171] is the sub-list for method output_type
-	99,  // [99:135] is the sub-list for method input_type
-	99,  // [99:99] is the sub-list for extension type_name
-	99,  // [99:99] is the sub-list for extension extendee
-	0,   // [0:99] is the sub-list for field type_name
+	100, // 0: voice.messaging.v1.BotRemovalChatScopeObservation.request:type_name -> voice.chat.v1.GetBotChatScopeAuthorityRequest
+	101, // 1: voice.messaging.v1.BotRemovalChatScopeObservation.response:type_name -> voice.chat.v1.GetBotChatScopeAuthorityResponse
+	10,  // 2: voice.messaging.v1.BotChatPinRemovalAttachment.original_scope:type_name -> voice.messaging.v1.BotRemovalChatScopeObservation
+	10,  // 3: voice.messaging.v1.BotChatPinRemovalAttachment.current_scope:type_name -> voice.messaging.v1.BotRemovalChatScopeObservation
+	7,   // 4: voice.messaging.v1.ApplyBotChatPinRemovalRequest.native:type_name -> voice.messaging.v1.BotRemovalNativeEvidence
+	8,   // 5: voice.messaging.v1.ApplyBotChatPinRemovalRequest.legacy_installation:type_name -> voice.messaging.v1.BotRemovalLegacyInstallationEvidence
+	9,   // 6: voice.messaging.v1.ApplyBotChatPinRemovalRequest.orphan_whitelist:type_name -> voice.messaging.v1.BotRemovalOrphanWhitelistEvidence
+	11,  // 7: voice.messaging.v1.ApplyBotChatPinRemovalRequest.attachments:type_name -> voice.messaging.v1.BotChatPinRemovalAttachment
+	102, // 8: voice.messaging.v1.BotChatPinRemovalReceipt.completed_at:type_name -> google.protobuf.Timestamp
+	13,  // 9: voice.messaging.v1.BotChatPinRemovalReceipt.targets:type_name -> voice.messaging.v1.BotChatPinRemovalTargetReceipt
+	14,  // 10: voice.messaging.v1.ApplyBotChatPinRemovalResponse.receipt:type_name -> voice.messaging.v1.BotChatPinRemovalReceipt
+	103, // 11: voice.messaging.v1.SendGameEventMessageRequest.intent:type_name -> voice.gameintegration.v1.VerifiedGameEventIntent
+	104, // 12: voice.messaging.v1.SendGameEventMessageResponse.status:type_name -> voice.gameintegration.v1.GameEventPublicationStatus
+	105, // 13: voice.messaging.v1.SendMessageRequest.chat:type_name -> voice.chat.v1.ChatRef
+	0,   // 14: voice.messaging.v1.SendMessageRequest.message_kind:type_name -> voice.messaging.v1.MessageKind
+	4,   // 15: voice.messaging.v1.SendMessageRequest.content_type:type_name -> voice.messaging.v1.MessageContentType
+	102, // 16: voice.messaging.v1.SendMessageRequest.scheduled_at:type_name -> google.protobuf.Timestamp
+	36,  // 17: voice.messaging.v1.ApplyGameMessageResponse.message:type_name -> voice.messaging.v1.Message
+	36,  // 18: voice.messaging.v1.TombstoneGameMessageResponse.message:type_name -> voice.messaging.v1.Message
+	0,   // 19: voice.messaging.v1.ScheduledMessagePayload.message_kind:type_name -> voice.messaging.v1.MessageKind
+	4,   // 20: voice.messaging.v1.ScheduledMessagePayload.content_type:type_name -> voice.messaging.v1.MessageContentType
+	105, // 21: voice.messaging.v1.ScheduledMessage.chat:type_name -> voice.chat.v1.ChatRef
+	23,  // 22: voice.messaging.v1.ScheduledMessage.payload:type_name -> voice.messaging.v1.ScheduledMessagePayload
+	102, // 23: voice.messaging.v1.ScheduledMessage.scheduled_at:type_name -> google.protobuf.Timestamp
+	3,   // 24: voice.messaging.v1.ScheduledMessage.status:type_name -> voice.messaging.v1.ScheduledMessageStatus
+	102, // 25: voice.messaging.v1.ScheduledMessage.created_at:type_name -> google.protobuf.Timestamp
+	102, // 26: voice.messaging.v1.ScheduledMessage.updated_at:type_name -> google.protobuf.Timestamp
+	1,   // 27: voice.messaging.v1.DeleteMessageRequest.scope:type_name -> voice.messaging.v1.DeleteScope
+	105, // 28: voice.messaging.v1.GetMessagesRequest.chat:type_name -> voice.chat.v1.ChatRef
+	106, // 29: voice.messaging.v1.GetMessagesRequest.page:type_name -> voice.common.v1.CursorPageRequest
+	36,  // 30: voice.messaging.v1.ResolveGameActionResponse.message:type_name -> voice.messaging.v1.Message
+	37,  // 31: voice.messaging.v1.ProjectGameActionResultResponse.result:type_name -> voice.messaging.v1.GameActionResult
+	102, // 32: voice.messaging.v1.PurgeManagedChatContentRequest.purge_after:type_name -> google.protobuf.Timestamp
+	102, // 33: voice.messaging.v1.PurgeManagedChatContentResponse.purge_after:type_name -> google.protobuf.Timestamp
+	102, // 34: voice.messaging.v1.PurgeManagedChatContentResponse.completed_at:type_name -> google.protobuf.Timestamp
+	36,  // 35: voice.messaging.v1.MessageList.messages:type_name -> voice.messaging.v1.Message
+	107, // 36: voice.messaging.v1.MessageList.page:type_name -> voice.common.v1.CursorPageResponse
+	105, // 37: voice.messaging.v1.Message.chat:type_name -> voice.chat.v1.ChatRef
+	102, // 38: voice.messaging.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
+	102, // 39: voice.messaging.v1.Message.deleted_at:type_name -> google.protobuf.Timestamp
+	102, // 40: voice.messaging.v1.Message.created_at:type_name -> google.protobuf.Timestamp
+	0,   // 41: voice.messaging.v1.Message.message_kind:type_name -> voice.messaging.v1.MessageKind
+	4,   // 42: voice.messaging.v1.Message.content_type:type_name -> voice.messaging.v1.MessageContentType
+	108, // 43: voice.messaging.v1.Message.game_card:type_name -> voice.gameintegration.v1.GameCard
+	37,  // 44: voice.messaging.v1.Message.game_action_results:type_name -> voice.messaging.v1.GameActionResult
+	102, // 45: voice.messaging.v1.GameActionResult.recorded_at:type_name -> google.protobuf.Timestamp
+	105, // 46: voice.messaging.v1.GetThreadMessagesRequest.chat:type_name -> voice.chat.v1.ChatRef
+	106, // 47: voice.messaging.v1.GetThreadMessagesRequest.page:type_name -> voice.common.v1.CursorPageRequest
+	102, // 48: voice.messaging.v1.ThreadSummary.last_reply_at:type_name -> google.protobuf.Timestamp
+	105, // 49: voice.messaging.v1.ListThreadsRequest.chat:type_name -> voice.chat.v1.ChatRef
+	106, // 50: voice.messaging.v1.ListThreadsRequest.page:type_name -> voice.common.v1.CursorPageRequest
+	39,  // 51: voice.messaging.v1.ThreadList.threads:type_name -> voice.messaging.v1.ThreadSummary
+	105, // 52: voice.messaging.v1.PinMessageRequest.chat:type_name -> voice.chat.v1.ChatRef
+	105, // 53: voice.messaging.v1.UnpinMessageRequest.chat:type_name -> voice.chat.v1.ChatRef
+	105, // 54: voice.messaging.v1.GetPinnedMessagesRequest.chat:type_name -> voice.chat.v1.ChatRef
+	105, // 55: voice.messaging.v1.ForwardMessageRequest.target_chat:type_name -> voice.chat.v1.ChatRef
+	105, // 56: voice.messaging.v1.MarkReadRequest.chat:type_name -> voice.chat.v1.ChatRef
+	105, // 57: voice.messaging.v1.GetReadStateRequest.chat:type_name -> voice.chat.v1.ChatRef
+	105, // 58: voice.messaging.v1.ReadState.chat:type_name -> voice.chat.v1.ChatRef
+	102, // 59: voice.messaging.v1.ReadState.updated_at:type_name -> google.protobuf.Timestamp
+	105, // 60: voice.messaging.v1.GetBulkReadStateRequest.chats:type_name -> voice.chat.v1.ChatRef
+	105, // 61: voice.messaging.v1.GetChatListMetadataRequest.chats:type_name -> voice.chat.v1.ChatRef
+	105, // 62: voice.messaging.v1.ChatListMetadata.chat:type_name -> voice.chat.v1.ChatRef
+	102, // 63: voice.messaging.v1.ChatListMetadata.last_message_at:type_name -> google.protobuf.Timestamp
+	5,   // 64: voice.messaging.v1.ChatListMetadata.last_message_delivery_state:type_name -> voice.messaging.v1.LastMessageDeliveryState
+	4,   // 65: voice.messaging.v1.ChatListMetadata.last_message_content_type:type_name -> voice.messaging.v1.MessageContentType
+	36,  // 66: voice.messaging.v1.SendMessageResponse.message:type_name -> voice.messaging.v1.Message
+	24,  // 67: voice.messaging.v1.SendMessageResponse.scheduled_message:type_name -> voice.messaging.v1.ScheduledMessage
+	105, // 68: voice.messaging.v1.ListScheduledMessagesRequest.chat:type_name -> voice.chat.v1.ChatRef
+	106, // 69: voice.messaging.v1.ListScheduledMessagesRequest.page:type_name -> voice.common.v1.CursorPageRequest
+	24,  // 70: voice.messaging.v1.ListScheduledMessagesResponse.scheduled_messages:type_name -> voice.messaging.v1.ScheduledMessage
+	107, // 71: voice.messaging.v1.ListScheduledMessagesResponse.page:type_name -> voice.common.v1.CursorPageResponse
+	23,  // 72: voice.messaging.v1.UpdateScheduledMessageRequest.payload:type_name -> voice.messaging.v1.ScheduledMessagePayload
+	102, // 73: voice.messaging.v1.UpdateScheduledMessageRequest.scheduled_at:type_name -> google.protobuf.Timestamp
+	24,  // 74: voice.messaging.v1.UpdateScheduledMessageResponse.scheduled_message:type_name -> voice.messaging.v1.ScheduledMessage
+	36,  // 75: voice.messaging.v1.SendScheduledMessageNowResponse.message:type_name -> voice.messaging.v1.Message
+	36,  // 76: voice.messaging.v1.EditMessageResponse.message:type_name -> voice.messaging.v1.Message
+	35,  // 77: voice.messaging.v1.GetMessagesResponse.message_list:type_name -> voice.messaging.v1.MessageList
+	6,   // 78: voice.messaging.v1.GetMessagesResponse.dm_peer_state:type_name -> voice.messaging.v1.DmPeerState
+	36,  // 79: voice.messaging.v1.GetMessageResponse.message:type_name -> voice.messaging.v1.Message
+	35,  // 80: voice.messaging.v1.GetThreadMessagesResponse.message_list:type_name -> voice.messaging.v1.MessageList
+	41,  // 81: voice.messaging.v1.ListThreadsResponse.thread_list:type_name -> voice.messaging.v1.ThreadList
+	35,  // 82: voice.messaging.v1.GetPinnedMessagesResponse.message_list:type_name -> voice.messaging.v1.MessageList
+	36,  // 83: voice.messaging.v1.ForwardMessageResponse.message:type_name -> voice.messaging.v1.Message
+	50,  // 84: voice.messaging.v1.GetReadStateResponse.read_state:type_name -> voice.messaging.v1.ReadState
+	98,  // 85: voice.messaging.v1.GetBulkReadStateResponse.by_chat_id:type_name -> voice.messaging.v1.GetBulkReadStateResponse.ByChatIdEntry
+	99,  // 86: voice.messaging.v1.GetChatListMetadataResponse.by_chat_id:type_name -> voice.messaging.v1.GetChatListMetadataResponse.ByChatIdEntry
+	105, // 87: voice.messaging.v1.ListSharedMediaRequest.chat:type_name -> voice.chat.v1.ChatRef
+	2,   // 88: voice.messaging.v1.ListSharedMediaRequest.kind:type_name -> voice.messaging.v1.SharedMediaKind
+	106, // 89: voice.messaging.v1.ListSharedMediaRequest.page:type_name -> voice.common.v1.CursorPageRequest
+	102, // 90: voice.messaging.v1.SharedMediaItem.created_at:type_name -> google.protobuf.Timestamp
+	80,  // 91: voice.messaging.v1.SharedMediaList.items:type_name -> voice.messaging.v1.SharedMediaItem
+	107, // 92: voice.messaging.v1.SharedMediaList.page:type_name -> voice.common.v1.CursorPageResponse
+	81,  // 93: voice.messaging.v1.ListSharedMediaResponse.shared_media_list:type_name -> voice.messaging.v1.SharedMediaList
+	109, // 94: voice.messaging.v1.ApplySpaceLifecycleFenceRequest.fence:type_name -> voice.common.v1.SpaceLifecycleFenceRequest
+	110, // 95: voice.messaging.v1.ApplySpaceLifecycleFenceResponse.receipt:type_name -> voice.common.v1.SpaceLifecycleFenceReceipt
+	111, // 96: voice.messaging.v1.PurgeSpaceRequest.purge:type_name -> voice.common.v1.SpacePurgeRequest
+	112, // 97: voice.messaging.v1.PurgeSpaceResponse.receipt:type_name -> voice.common.v1.SpacePurgeReceipt
+	113, // 98: voice.messaging.v1.ImportSpacePurgeManifestPageRequest.page:type_name -> voice.chat.v1.SpacePurgeManifestPage
+	114, // 99: voice.messaging.v1.ImportSpacePurgeManifestPageReceipt.manifest:type_name -> voice.common.v1.ManifestBinding
+	102, // 100: voice.messaging.v1.ImportSpacePurgeManifestPageReceipt.completed_at:type_name -> google.protobuf.Timestamp
+	94,  // 101: voice.messaging.v1.ImportSpacePurgeManifestPageResponse.receipt:type_name -> voice.messaging.v1.ImportSpacePurgeManifestPageReceipt
+	112, // 102: voice.messaging.v1.GetSpacePurgeReceiptResponse.receipt:type_name -> voice.common.v1.SpacePurgeReceipt
+	50,  // 103: voice.messaging.v1.GetBulkReadStateResponse.ByChatIdEntry.value:type_name -> voice.messaging.v1.ReadState
+	53,  // 104: voice.messaging.v1.GetChatListMetadataResponse.ByChatIdEntry.value:type_name -> voice.messaging.v1.ChatListMetadata
+	16,  // 105: voice.messaging.v1.MessagingService.SendGameEventMessage:input_type -> voice.messaging.v1.SendGameEventMessageRequest
+	18,  // 106: voice.messaging.v1.MessagingService.SendMessage:input_type -> voice.messaging.v1.SendMessageRequest
+	19,  // 107: voice.messaging.v1.MessagingService.ApplyGameMessage:input_type -> voice.messaging.v1.ApplyGameMessageRequest
+	21,  // 108: voice.messaging.v1.MessagingService.TombstoneGameMessage:input_type -> voice.messaging.v1.TombstoneGameMessageRequest
+	25,  // 109: voice.messaging.v1.MessagingService.EditMessage:input_type -> voice.messaging.v1.EditMessageRequest
+	26,  // 110: voice.messaging.v1.MessagingService.DeleteMessage:input_type -> voice.messaging.v1.DeleteMessageRequest
+	27,  // 111: voice.messaging.v1.MessagingService.GetMessages:input_type -> voice.messaging.v1.GetMessagesRequest
+	28,  // 112: voice.messaging.v1.MessagingService.GetMessage:input_type -> voice.messaging.v1.GetMessageRequest
+	29,  // 113: voice.messaging.v1.MessagingService.ResolveGameAction:input_type -> voice.messaging.v1.ResolveGameActionRequest
+	31,  // 114: voice.messaging.v1.MessagingService.ProjectGameActionResult:input_type -> voice.messaging.v1.ProjectGameActionResultRequest
+	33,  // 115: voice.messaging.v1.MessagingService.PurgeManagedChatContent:input_type -> voice.messaging.v1.PurgeManagedChatContentRequest
+	38,  // 116: voice.messaging.v1.MessagingService.GetThreadMessages:input_type -> voice.messaging.v1.GetThreadMessagesRequest
+	40,  // 117: voice.messaging.v1.MessagingService.ListThreads:input_type -> voice.messaging.v1.ListThreadsRequest
+	42,  // 118: voice.messaging.v1.MessagingService.AddReaction:input_type -> voice.messaging.v1.AddReactionRequest
+	43,  // 119: voice.messaging.v1.MessagingService.RemoveReaction:input_type -> voice.messaging.v1.RemoveReactionRequest
+	44,  // 120: voice.messaging.v1.MessagingService.PinMessage:input_type -> voice.messaging.v1.PinMessageRequest
+	45,  // 121: voice.messaging.v1.MessagingService.UnpinMessage:input_type -> voice.messaging.v1.UnpinMessageRequest
+	46,  // 122: voice.messaging.v1.MessagingService.GetPinnedMessages:input_type -> voice.messaging.v1.GetPinnedMessagesRequest
+	85,  // 123: voice.messaging.v1.MessagingService.UnpinMessagesBySenderInChats:input_type -> voice.messaging.v1.UnpinMessagesBySenderInChatsRequest
+	12,  // 124: voice.messaging.v1.MessagingService.ApplyBotChatPinRemoval:input_type -> voice.messaging.v1.ApplyBotChatPinRemovalRequest
+	47,  // 125: voice.messaging.v1.MessagingService.ForwardMessage:input_type -> voice.messaging.v1.ForwardMessageRequest
+	48,  // 126: voice.messaging.v1.MessagingService.MarkRead:input_type -> voice.messaging.v1.MarkReadRequest
+	49,  // 127: voice.messaging.v1.MessagingService.GetReadState:input_type -> voice.messaging.v1.GetReadStateRequest
+	51,  // 128: voice.messaging.v1.MessagingService.GetBulkReadState:input_type -> voice.messaging.v1.GetBulkReadStateRequest
+	52,  // 129: voice.messaging.v1.MessagingService.GetChatListMetadata:input_type -> voice.messaging.v1.GetChatListMetadataRequest
+	79,  // 130: voice.messaging.v1.MessagingService.ListSharedMedia:input_type -> voice.messaging.v1.ListSharedMediaRequest
+	83,  // 131: voice.messaging.v1.MessagingService.UploadPreKeyBundle:input_type -> voice.messaging.v1.UploadPreKeyBundleRequest
+	87,  // 132: voice.messaging.v1.MessagingService.GetPreKeyBundle:input_type -> voice.messaging.v1.GetPreKeyBundleRequest
+	55,  // 133: voice.messaging.v1.MessagingService.ListScheduledMessages:input_type -> voice.messaging.v1.ListScheduledMessagesRequest
+	57,  // 134: voice.messaging.v1.MessagingService.UpdateScheduledMessage:input_type -> voice.messaging.v1.UpdateScheduledMessageRequest
+	59,  // 135: voice.messaging.v1.MessagingService.CancelScheduledMessage:input_type -> voice.messaging.v1.CancelScheduledMessageRequest
+	61,  // 136: voice.messaging.v1.MessagingService.SendScheduledMessageNow:input_type -> voice.messaging.v1.SendScheduledMessageNowRequest
+	89,  // 137: voice.messaging.v1.MessagingService.ApplySpaceLifecycleFence:input_type -> voice.messaging.v1.ApplySpaceLifecycleFenceRequest
+	91,  // 138: voice.messaging.v1.MessagingService.PurgeSpace:input_type -> voice.messaging.v1.PurgeSpaceRequest
+	96,  // 139: voice.messaging.v1.MessagingService.GetSpacePurgeReceipt:input_type -> voice.messaging.v1.GetSpacePurgeReceiptRequest
+	93,  // 140: voice.messaging.v1.MessagingService.ImportSpacePurgeManifestPage:input_type -> voice.messaging.v1.ImportSpacePurgeManifestPageRequest
+	17,  // 141: voice.messaging.v1.MessagingService.SendGameEventMessage:output_type -> voice.messaging.v1.SendGameEventMessageResponse
+	54,  // 142: voice.messaging.v1.MessagingService.SendMessage:output_type -> voice.messaging.v1.SendMessageResponse
+	20,  // 143: voice.messaging.v1.MessagingService.ApplyGameMessage:output_type -> voice.messaging.v1.ApplyGameMessageResponse
+	22,  // 144: voice.messaging.v1.MessagingService.TombstoneGameMessage:output_type -> voice.messaging.v1.TombstoneGameMessageResponse
+	63,  // 145: voice.messaging.v1.MessagingService.EditMessage:output_type -> voice.messaging.v1.EditMessageResponse
+	64,  // 146: voice.messaging.v1.MessagingService.DeleteMessage:output_type -> voice.messaging.v1.DeleteMessageResponse
+	65,  // 147: voice.messaging.v1.MessagingService.GetMessages:output_type -> voice.messaging.v1.GetMessagesResponse
+	66,  // 148: voice.messaging.v1.MessagingService.GetMessage:output_type -> voice.messaging.v1.GetMessageResponse
+	30,  // 149: voice.messaging.v1.MessagingService.ResolveGameAction:output_type -> voice.messaging.v1.ResolveGameActionResponse
+	32,  // 150: voice.messaging.v1.MessagingService.ProjectGameActionResult:output_type -> voice.messaging.v1.ProjectGameActionResultResponse
+	34,  // 151: voice.messaging.v1.MessagingService.PurgeManagedChatContent:output_type -> voice.messaging.v1.PurgeManagedChatContentResponse
+	67,  // 152: voice.messaging.v1.MessagingService.GetThreadMessages:output_type -> voice.messaging.v1.GetThreadMessagesResponse
+	68,  // 153: voice.messaging.v1.MessagingService.ListThreads:output_type -> voice.messaging.v1.ListThreadsResponse
+	69,  // 154: voice.messaging.v1.MessagingService.AddReaction:output_type -> voice.messaging.v1.AddReactionResponse
+	70,  // 155: voice.messaging.v1.MessagingService.RemoveReaction:output_type -> voice.messaging.v1.RemoveReactionResponse
+	71,  // 156: voice.messaging.v1.MessagingService.PinMessage:output_type -> voice.messaging.v1.PinMessageResponse
+	72,  // 157: voice.messaging.v1.MessagingService.UnpinMessage:output_type -> voice.messaging.v1.UnpinMessageResponse
+	73,  // 158: voice.messaging.v1.MessagingService.GetPinnedMessages:output_type -> voice.messaging.v1.GetPinnedMessagesResponse
+	86,  // 159: voice.messaging.v1.MessagingService.UnpinMessagesBySenderInChats:output_type -> voice.messaging.v1.UnpinMessagesBySenderInChatsResponse
+	15,  // 160: voice.messaging.v1.MessagingService.ApplyBotChatPinRemoval:output_type -> voice.messaging.v1.ApplyBotChatPinRemovalResponse
+	74,  // 161: voice.messaging.v1.MessagingService.ForwardMessage:output_type -> voice.messaging.v1.ForwardMessageResponse
+	75,  // 162: voice.messaging.v1.MessagingService.MarkRead:output_type -> voice.messaging.v1.MarkReadResponse
+	76,  // 163: voice.messaging.v1.MessagingService.GetReadState:output_type -> voice.messaging.v1.GetReadStateResponse
+	77,  // 164: voice.messaging.v1.MessagingService.GetBulkReadState:output_type -> voice.messaging.v1.GetBulkReadStateResponse
+	78,  // 165: voice.messaging.v1.MessagingService.GetChatListMetadata:output_type -> voice.messaging.v1.GetChatListMetadataResponse
+	82,  // 166: voice.messaging.v1.MessagingService.ListSharedMedia:output_type -> voice.messaging.v1.ListSharedMediaResponse
+	84,  // 167: voice.messaging.v1.MessagingService.UploadPreKeyBundle:output_type -> voice.messaging.v1.UploadPreKeyBundleResponse
+	88,  // 168: voice.messaging.v1.MessagingService.GetPreKeyBundle:output_type -> voice.messaging.v1.GetPreKeyBundleResponse
+	56,  // 169: voice.messaging.v1.MessagingService.ListScheduledMessages:output_type -> voice.messaging.v1.ListScheduledMessagesResponse
+	58,  // 170: voice.messaging.v1.MessagingService.UpdateScheduledMessage:output_type -> voice.messaging.v1.UpdateScheduledMessageResponse
+	60,  // 171: voice.messaging.v1.MessagingService.CancelScheduledMessage:output_type -> voice.messaging.v1.CancelScheduledMessageResponse
+	62,  // 172: voice.messaging.v1.MessagingService.SendScheduledMessageNow:output_type -> voice.messaging.v1.SendScheduledMessageNowResponse
+	90,  // 173: voice.messaging.v1.MessagingService.ApplySpaceLifecycleFence:output_type -> voice.messaging.v1.ApplySpaceLifecycleFenceResponse
+	92,  // 174: voice.messaging.v1.MessagingService.PurgeSpace:output_type -> voice.messaging.v1.PurgeSpaceResponse
+	97,  // 175: voice.messaging.v1.MessagingService.GetSpacePurgeReceipt:output_type -> voice.messaging.v1.GetSpacePurgeReceiptResponse
+	95,  // 176: voice.messaging.v1.MessagingService.ImportSpacePurgeManifestPage:output_type -> voice.messaging.v1.ImportSpacePurgeManifestPageResponse
+	141, // [141:177] is the sub-list for method output_type
+	105, // [105:141] is the sub-list for method input_type
+	105, // [105:105] is the sub-list for extension type_name
+	105, // [105:105] is the sub-list for extension extendee
+	0,   // [0:105] is the sub-list for field type_name
 }
 
 func init() { file_voice_messaging_v1_messaging_proto_init() }
@@ -7742,42 +8099,46 @@ func file_voice_messaging_v1_messaging_proto_init() {
 	if File_voice_messaging_v1_messaging_proto != nil {
 		return
 	}
-	file_voice_messaging_v1_messaging_proto_msgTypes[3].OneofWrappers = []any{
+	file_voice_messaging_v1_messaging_proto_msgTypes[4].OneofWrappers = []any{
+		(*BotChatPinRemovalAttachment_OriginalScope)(nil),
+		(*BotChatPinRemovalAttachment_OriginalScopeUnqualified)(nil),
+	}
+	file_voice_messaging_v1_messaging_proto_msgTypes[5].OneofWrappers = []any{
 		(*ApplyBotChatPinRemovalRequest_Native)(nil),
 		(*ApplyBotChatPinRemovalRequest_LegacyInstallation)(nil),
 		(*ApplyBotChatPinRemovalRequest_OrphanWhitelist)(nil),
 	}
-	file_voice_messaging_v1_messaging_proto_msgTypes[7].OneofWrappers = []any{}
-	file_voice_messaging_v1_messaging_proto_msgTypes[8].OneofWrappers = []any{
+	file_voice_messaging_v1_messaging_proto_msgTypes[10].OneofWrappers = []any{}
+	file_voice_messaging_v1_messaging_proto_msgTypes[11].OneofWrappers = []any{
 		(*SendMessageRequest_ScheduledAt)(nil),
 		(*SendMessageRequest_SendWhenOnline)(nil),
 	}
-	file_voice_messaging_v1_messaging_proto_msgTypes[13].OneofWrappers = []any{}
-	file_voice_messaging_v1_messaging_proto_msgTypes[14].OneofWrappers = []any{
+	file_voice_messaging_v1_messaging_proto_msgTypes[16].OneofWrappers = []any{}
+	file_voice_messaging_v1_messaging_proto_msgTypes[17].OneofWrappers = []any{
 		(*ScheduledMessage_ScheduledAt)(nil),
 		(*ScheduledMessage_SendWhenOnline)(nil),
 	}
-	file_voice_messaging_v1_messaging_proto_msgTypes[16].OneofWrappers = []any{}
-	file_voice_messaging_v1_messaging_proto_msgTypes[17].OneofWrappers = []any{}
-	file_voice_messaging_v1_messaging_proto_msgTypes[25].OneofWrappers = []any{}
-	file_voice_messaging_v1_messaging_proto_msgTypes[26].OneofWrappers = []any{}
+	file_voice_messaging_v1_messaging_proto_msgTypes[19].OneofWrappers = []any{}
+	file_voice_messaging_v1_messaging_proto_msgTypes[20].OneofWrappers = []any{}
+	file_voice_messaging_v1_messaging_proto_msgTypes[28].OneofWrappers = []any{}
 	file_voice_messaging_v1_messaging_proto_msgTypes[29].OneofWrappers = []any{}
-	file_voice_messaging_v1_messaging_proto_msgTypes[37].OneofWrappers = []any{}
-	file_voice_messaging_v1_messaging_proto_msgTypes[43].OneofWrappers = []any{}
-	file_voice_messaging_v1_messaging_proto_msgTypes[47].OneofWrappers = []any{
+	file_voice_messaging_v1_messaging_proto_msgTypes[32].OneofWrappers = []any{}
+	file_voice_messaging_v1_messaging_proto_msgTypes[40].OneofWrappers = []any{}
+	file_voice_messaging_v1_messaging_proto_msgTypes[46].OneofWrappers = []any{}
+	file_voice_messaging_v1_messaging_proto_msgTypes[50].OneofWrappers = []any{
 		(*UpdateScheduledMessageRequest_ScheduledAt)(nil),
 		(*UpdateScheduledMessageRequest_SendWhenOnline)(nil),
 	}
-	file_voice_messaging_v1_messaging_proto_msgTypes[55].OneofWrappers = []any{}
-	file_voice_messaging_v1_messaging_proto_msgTypes[70].OneofWrappers = []any{}
-	file_voice_messaging_v1_messaging_proto_msgTypes[71].OneofWrappers = []any{}
+	file_voice_messaging_v1_messaging_proto_msgTypes[58].OneofWrappers = []any{}
+	file_voice_messaging_v1_messaging_proto_msgTypes[73].OneofWrappers = []any{}
+	file_voice_messaging_v1_messaging_proto_msgTypes[74].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_voice_messaging_v1_messaging_proto_rawDesc), len(file_voice_messaging_v1_messaging_proto_rawDesc)),
 			NumEnums:      7,
-			NumMessages:   90,
+			NumMessages:   93,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
