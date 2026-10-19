@@ -59,6 +59,14 @@ only the immutable legacy Join selection context and its fixed helper. Applying
 it invalidates the retained44 seal, so serving reads and writes remain
 UNAVAILABLE until the trusted installer completes the qualified transition.
 
+Fixed structural qualification covers PostgreSQL16 and the documented local
+Compose PostgreSQL18 for exact schema44/45 cohorts. PostgreSQL18 additionally
+stores named NOT NULL constraints in `pg_constraint`; these rows remain in the
+closed projection alongside `pg_attribute.attnotnull`. Each server/schema family
+has its own compiled canonical hash. Unknown server families and schema versions
+fail closed; no live catalog hash becomes an expected value. This compatibility
+does not change the retained enforcement seal or authorize its transition.
+
 For a known trusted44 installation, retain the actual target identity, original
 installation/custody evidence and exact migration execution record. Apply the
 unchanged migration45, then invoke the owner-only

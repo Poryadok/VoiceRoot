@@ -49,11 +49,17 @@ func checkNativeReadinessCatalog(ctx context.Context, tx pgx.Tx) error {
 }
 
 func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version int64) error {
-	structureSHA := nativeReadinessStructureSHA
+	var serverVersion int
+	if err := tx.QueryRow(ctx, `SELECT current_setting('server_version_num')::integer`).Scan(&serverVersion); err != nil {
+		return ErrMemberAuthorityUnavailable
+	}
+	structureSHA, err := nativeReadinessExpectedStructure(version, serverVersion)
+	if err != nil {
+		return err
+	}
 	pins := append([]nativeReadinessFunctionPin(nil), nativeReadinessFunctionPins...)
 	helperCount := 1
 	if version == 45 {
-		structureSHA = nativeReadinessStructure45SHA
 		pins = append(pins, nativeReadinessLegacySelectionPin)
 		helperCount = 2
 	} else if version != 44 {
