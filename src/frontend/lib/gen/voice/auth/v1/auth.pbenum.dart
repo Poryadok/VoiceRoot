@@ -141,5 +141,90 @@ class ProofPurpose extends $pb.ProtobufEnum {
   const ProofPurpose._(super.value, super.name);
 }
 
+class SpaceAdmissionPhase extends $pb.ProtobufEnum {
+  static const SpaceAdmissionPhase SPACE_ADMISSION_PHASE_UNSPECIFIED =
+      SpaceAdmissionPhase._(
+          0, _omitEnumNames ? '' : 'SPACE_ADMISSION_PHASE_UNSPECIFIED');
+  static const SpaceAdmissionPhase SPACE_ADMISSION_PHASE_START =
+      SpaceAdmissionPhase._(
+          1, _omitEnumNames ? '' : 'SPACE_ADMISSION_PHASE_START');
+  static const SpaceAdmissionPhase SPACE_ADMISSION_PHASE_READ =
+      SpaceAdmissionPhase._(
+          2, _omitEnumNames ? '' : 'SPACE_ADMISSION_PHASE_READ');
+  static const SpaceAdmissionPhase SPACE_ADMISSION_PHASE_SUBMIT =
+      SpaceAdmissionPhase._(
+          3, _omitEnumNames ? '' : 'SPACE_ADMISSION_PHASE_SUBMIT');
+  static const SpaceAdmissionPhase SPACE_ADMISSION_PHASE_APPROVE =
+      SpaceAdmissionPhase._(
+          4, _omitEnumNames ? '' : 'SPACE_ADMISSION_PHASE_APPROVE');
+  static const SpaceAdmissionPhase SPACE_ADMISSION_PHASE_FIRST_PUBLISH =
+      SpaceAdmissionPhase._(
+          5, _omitEnumNames ? '' : 'SPACE_ADMISSION_PHASE_FIRST_PUBLISH');
+
+  static const $core.List<SpaceAdmissionPhase> values = <SpaceAdmissionPhase>[
+    SPACE_ADMISSION_PHASE_UNSPECIFIED,
+    SPACE_ADMISSION_PHASE_START,
+    SPACE_ADMISSION_PHASE_READ,
+    SPACE_ADMISSION_PHASE_SUBMIT,
+    SPACE_ADMISSION_PHASE_APPROVE,
+    SPACE_ADMISSION_PHASE_FIRST_PUBLISH,
+  ];
+
+  static final $core.List<SpaceAdmissionPhase?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 5);
+  static SpaceAdmissionPhase? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const SpaceAdmissionPhase._(super.value, super.name);
+}
+
+class SpaceAdmissionSubjectRole extends $pb.ProtobufEnum {
+  static const SpaceAdmissionSubjectRole
+      SPACE_ADMISSION_SUBJECT_ROLE_UNSPECIFIED = SpaceAdmissionSubjectRole._(
+          0, _omitEnumNames ? '' : 'SPACE_ADMISSION_SUBJECT_ROLE_UNSPECIFIED');
+  static const SpaceAdmissionSubjectRole
+      SPACE_ADMISSION_SUBJECT_ROLE_APPLICANT = SpaceAdmissionSubjectRole._(
+          1, _omitEnumNames ? '' : 'SPACE_ADMISSION_SUBJECT_ROLE_APPLICANT');
+  static const SpaceAdmissionSubjectRole SPACE_ADMISSION_SUBJECT_ROLE_REVIEWER =
+      SpaceAdmissionSubjectRole._(
+          2, _omitEnumNames ? '' : 'SPACE_ADMISSION_SUBJECT_ROLE_REVIEWER');
+
+  static const $core.List<SpaceAdmissionSubjectRole> values =
+      <SpaceAdmissionSubjectRole>[
+    SPACE_ADMISSION_SUBJECT_ROLE_UNSPECIFIED,
+    SPACE_ADMISSION_SUBJECT_ROLE_APPLICANT,
+    SPACE_ADMISSION_SUBJECT_ROLE_REVIEWER,
+  ];
+
+  static final $core.List<SpaceAdmissionSubjectRole?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 2);
+  static SpaceAdmissionSubjectRole? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const SpaceAdmissionSubjectRole._(super.value, super.name);
+}
+
+class SpaceAdmissionDecision extends $pb.ProtobufEnum {
+  static const SpaceAdmissionDecision SPACE_ADMISSION_DECISION_UNSPECIFIED =
+      SpaceAdmissionDecision._(
+          0, _omitEnumNames ? '' : 'SPACE_ADMISSION_DECISION_UNSPECIFIED');
+  static const SpaceAdmissionDecision SPACE_ADMISSION_DECISION_ELIGIBLE =
+      SpaceAdmissionDecision._(
+          1, _omitEnumNames ? '' : 'SPACE_ADMISSION_DECISION_ELIGIBLE');
+
+  static const $core.List<SpaceAdmissionDecision> values =
+      <SpaceAdmissionDecision>[
+    SPACE_ADMISSION_DECISION_UNSPECIFIED,
+    SPACE_ADMISSION_DECISION_ELIGIBLE,
+  ];
+
+  static final $core.List<SpaceAdmissionDecision?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 1);
+  static SpaceAdmissionDecision? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const SpaceAdmissionDecision._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');
