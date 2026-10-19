@@ -210,6 +210,93 @@ projection-class change fetches the matching signed Voice snapshot. `occurred_at
 is diagnostic only. The ordinary WebSocket `s` remains connection-local and does
 not replace roster recovery.
 
+### Space watcher bootstrap and delivery authorization (accepted target)
+
+This section adopts the BE-110 disclosure decision for the BE-103 roster producer
+and BE-167 invalidation consumer. It specifies implementation requirements;
+the protected watcher APIs and complete bootstrap are not implemented yet.
+The execution sequence and source-read prerequisites are recorded in
+[the watcher ExecPlan](../testing/space-watcher-bootstrap-exec-plan.md).
+
+Space owns current viewer membership, lifecycle, room-to-Space mapping and tree
+state. Role owns `SPACE_VIEW_MEMBER_LIST`. Voice owns roster contents, disclosure
+class, `roster_epoch`, projection counters and explicit recipient sets.
+`VOICE_JOIN` or media `can_subscribe` never grants member-list disclosure.
+Realtime routes to active tabs; its disposable watch map and Redis registry
+cannot grant permission or widen a producer's recipients. Explicit Voice
+recipients need no additional client room subscription.
+
+Watcher source calls use dedicated private mTLS and exact workload
+issuer/audience/RPC, deterministic request hash, bounded lifetime and replay
+protection. Verified socket account, profile, account type and session epoch
+replace ambient identity metadata and are bound into requests. Sources verify
+current session authority and profile ownership before disclosure. The existing
+`AuthoritySourceService` remains Federation-only; its caller rights and runtime
+configuration are not reused or expanded for watchers.
+
+Each owner returns complete scoped facts and positive durable source revisions
+from one source transaction. Every covered mutation, including membership ABA,
+policy/override changes, ownership/deletion freeze, tree mutation and room
+recreation, advances its relevant revision. Collect all source snapshots first,
+then reread all revisions within one bounded deadline. Accept only an unchanged
+complete revision vector and exact scope; those unchanged intervals overlap and
+establish a common authorization cut. Existing access/policy epochs are reusable
+only with complete mutation/catalog coverage, never on their names alone.
+Voice snapshot/version/incarnation participates in this validation too.
+
+Bootstrap installs a pending generation for the exact socket/profile/session
+before bounded event buffering. Space discovery is one complete materialized,
+versioned viewer-Space view, not concatenated live `ListMySpaces` pages. Space
+supplies tree discovery, including idle rooms; Voice supplies roster snapshots.
+Signed cursors bind schema, viewer/session, canonical scope/filter, immutable
+snapshot ID, source revisions, incarnation, projection/epoch/version where
+applicable, continuation and expiry. Every page reauthorizes current disclosure;
+a cursor proves positioning, not permission. Completion is explicit, including
+an empty result. Missing/partial/repeated/cyclic pages, expiry, revision change,
+overflow, cancellation or authority failure abort the whole pending generation.
+Final revalidation and compare-and-install under the connection generation
+prevent a late bootstrap from surviving revoke, disconnect or profile switch.
+
+A snapshot at projection version V discards buffered versions at or below V,
+then accepts contiguous V+1 onward with UUID event deduplication. Gap, reconnect,
+overflow, epoch or class change requires a new signed owner snapshot. Tree uses
+a transactional revision/outbox invalidation plus refetch; an unversioned
+`SpaceTreeChanged` event alone does not prove recovery completeness.
+
+Voice constructs full/occupancy recipient sets from a complete current
+Space+Role cut after committing mutation identity, state and counters. The
+internal event binds exact event ID/hash, source revision vector, incarnation,
+epoch and projection. Retry preserves event identity and bytes; changed
+authority suppresses that disclosure attempt and requires reconciliation.
+An old event is never restamped into a new epoch, widened to new recipients or
+treated as currently authorized merely because it is in a durable outbox.
+
+At actual socket dequeue, Realtime obtains fresh Voice-owned authorization for
+the exact event/hash, named profile, projection, incarnation, epoch and source
+vector. Voice validates current source authority through the common cut.
+Realtime may only intersect the original explicit recipients with that result;
+it cannot redact an old full event into an occupancy event. Deny, mismatch or
+unavailability drops the frame and invalidates the local projection/generation
+for snapshot recovery. After the RPC, serialized write checks the same local
+generation and normal session-epoch guard. No reusable subscription allow or
+unchecked authorized queue replaces this gate, including after restart.
+
+Typed `space.voice_room_access_invalidated` and
+`role.voice_policy_invalidated` accelerate whole-scope reconciliation, including
+pending bootstraps and idle-room watchers. Optional room/profile hints never
+prove the impacted audience is complete. Voice owns sanitized roster/control
+recipient sets; Space owns tree invalidation recipients. Raw role override
+details, role names/IDs and participant details are never broadcast to inferred
+Space members or occupancy recipients. Former viewers can receive only a minimal
+clear/refetch control for an already-known scope, with no such details.
+
+Authorization-read linearization applies: an authorization cut overlapping a
+revoke may finish, while a fresh cut after committed revoke must deny. An
+observed local generation change also cancels the pending write. This does not
+promise zero bytes after a revoke API returns; synchronous writer draining is a
+separate consistency contract. Lost invalidations remain safe because delayed
+frames still require fresh owner authorization.
+
 ### Voice participant lifecycle fan-out (shipped compatibility contract)
 
 This contract applies only to the existing participant-targeted Voice events. It
