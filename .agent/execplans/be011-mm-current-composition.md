@@ -74,3 +74,35 @@ must never supply its independent inputs. No installed authority is inferred.
 121 alone publishes source and owns CI/MASTER intake. Preserve this checkpoint
 without offering the unfinished unit for merge. No Voice/Space owner writes,
 new queue work, agents, PRs or stopped-operation recovery belong to this stage.
+
+## Active native serving continuation
+
+Current worktree32, lease42a22873, branch codex/be011-mm-native-145 starts
+from fd43a284, normal-merges e779744 and reviewed35914729. Combined events
+mirrors were regenerated to preserve BE080. CodeGraph was called before new
+root/shared scopes; frozen index warning remains, one bounded call terminated.
+
+Implemented TDD components: forward registration through observation/dispatch/
+receipt, irreversible close/drain including timed-out close; all eight D/I/P
+input combinations and each missing profile; actual PG system/database/schema
+observation and restricted LOGIN/head/history/column grant checks. These are
+not a completed native executable. Wire native_consumer getter/peer addition
+is new source requiring its own review, not covered by35914729 CLEAR.
+
+Accepted332c117-c120 adds response operation_id field3. Implement client-stable
+retry ID, exact final-path-bound Gateway delegated principal on protected mTLS,
+opaque responseprincipal subject, durable account/profile/op semantic receipt
+atomic with validated proposal response. Exact recorded retry is read-only and
+never re-dispatches under CLOSED; decline cannot use terminal cleanup to requeue
+unqualified parties. Direct342/69 nonoverlap and fresh TT reservation confirmed
+in BE011c121. No new task, actor, controller or owner lookup is needed.
+
+Next implementation order: consume real359 privateFD in fixed native command;
+verify executable/config/local database and same authenticated startup stamp;
+construct actual mTLS snapshot/provider, principal/replay, broker/roster and
+queue factories without delivery; private workload close/status and pending
+provider inventory; OPEN-only typed serving and bounded forward loops. Hold
+registration around every live provider path through durable receipt, never
+SQL locks over network. Complete actual client-to-Gateway-to-native response
+positive and negative fixtures, root/privateFD and close tests before offering
+finished work for MASTER. Existing terminal settlement stays independent.
