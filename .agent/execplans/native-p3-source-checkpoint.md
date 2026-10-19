@@ -91,6 +91,28 @@ an exemption. No NATS rights, MM020 or provider registration changes belong here
   differs only by independently reviewed SQL chronology comment.
 - Native/P3 pathspec diff has87 paths at H, versus60 at historical ad4. Seven
   unrelated generated mirrors require explicit context classification.
+- Native Linux dependency extraction at874 completed with network disabled:
+  73 local packages/16 modules. The proposal binds80 native/P3 code paths plus
+  seven owning documents, with451 context entries (including seven unrelated
+  generated mirrors). This is a proposal, not an authorization record.
+- Current874 actual factory8, ordinary outbox1, native/P3 retention17 and
+  EJECT_ONLY/recovery2 test events passed with zero failures/skips; cleanup0.
+- A new executor-boundary regression found all three Voice013/014/015 DOWN
+  files accept an inherited REPEATABLE READ snapshot and can discard evidence
+  committed after that snapshot. All three actual SQL cases failed meaningfully
+  (parent1.249s); prior RC first-writer evidence remains valid in its own scope.
+  Bug `VOICE-NATIVE-DOWN-SNAPSHOT` is owned121. Correction adds fail-closed
+  READ COMMITTED preflight before locks/probes/DDL. Initial three-case GREEN
+  completed; expanded retained-history/RC compatibility matrix passed7.538s
+  (zero failure/skip), affected vet and pinned lint0 issues; cleanup0. Executed
+  formatted test SHA is ca1aa23e084f129af5d01c7f30380afa24e3512b0111f2e92e429060ea446608.
+  The final repaired source H must advance from874
+  and receive independent review before R/K exists.
+- Diagnostic actual B0→874 collector execution stops before routing at a
+  duplicate guarded owner for `internal/livekit/room_lifecycle.go` (commit717a,
+  prior owner2cc948/source496b). Current-event hosted CI has only three scope
+  errors, but the original-baseline proof also requires complete producer
+  history qualification. EXIT-only map capture receives no router PASS credit.
 - Source closure and verifier qualification remain open. No router bypass made.
 
 ## Decisions

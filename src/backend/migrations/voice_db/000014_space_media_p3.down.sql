@@ -2,6 +2,12 @@
 -- grant, terminal admission or deny head is not proof that its old credentials
 -- can no longer be used. Never erase that history to make downgrade succeed.
 BEGIN;
+DO $$ BEGIN
+    IF current_setting('transaction_isolation') <> 'read committed' THEN
+        RAISE EXCEPTION 'Voice P3 DOWN requires READ COMMITTED'
+            USING ERRCODE = '55000';
+    END IF;
+END $$;
 LOCK TABLE voice_space_lifecycle_fence_heads,
     voice_space_lifecycle_fence_receipts,
     voice_space_media_room_heads,
