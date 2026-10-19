@@ -79,12 +79,8 @@ func (t *transcoder) serveInvites(w http.ResponseWriter, r *http.Request, rest s
 		return true
 
 	case r.Method == http.MethodPost && sub == "join":
-		resp, err := t.clients.space.JoinByInvite(ctx, &spacev1.JoinByInviteRequest{Code: code})
-		if err != nil {
-			writeGRPCError(w, err)
-			return true
-		}
-		writeProtoJSON(w, http.StatusOK, resp)
+		// Admission is exclusively dispatched by the protected route.
+		http.NotFound(w, r)
 		return true
 
 	default:

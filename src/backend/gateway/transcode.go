@@ -400,6 +400,10 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		}
 		return t.serveFiles(w, r, rest)
 	case "spaces":
+		if isSpaceJoinRequest(r) {
+			t.serveSpaceJoin(w, r)
+			return true
+		}
 		if isSpaceCreateRequest(r) {
 			t.serveSpaceCreate(w, r)
 			return true
@@ -419,6 +423,10 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		}
 		return t.serveSpaces(w, r, rest)
 	case "invites":
+		if isSpaceJoinRequest(r) {
+			t.serveSpaceJoin(w, r)
+			return true
+		}
 		if t.clients.space == nil {
 			return false
 		}

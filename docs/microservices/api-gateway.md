@@ -651,6 +651,16 @@ protected internal contract documented by Space.
 
 ### Retry and activation
 
+The implemented legacy direct/invite join transport uses the configured
+`GATEWAY_SPACE_LIFECYCLE_*` mTLS client and a fresh Gateway delegated-user
+credential bound to the final protobuf, method and server-generated UUID
+request ID. It requires real JWT delegation validation, blacklist and strict
+session-floor checks, with explicit `regular` or `guest` account type. Both
+routes reject nonempty bodies and have no ordinary-client, REST proxy or
+automatic retry fallback. This transport authenticates the request only;
+Space-owned current eligibility, ordered AND admission, durable completion and
+the assembled runtime remain separate requirements. No ambient proof is used.
+
 Every non-lifecycle mutation above (existing or newly exposed), plus existing
 join/leave, accepts optional `Idempotency-Key: <UUID>`;
 new lifecycle routes use the mandatory body `operation_id`. Gateway copies the
