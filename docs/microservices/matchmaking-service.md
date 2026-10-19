@@ -473,3 +473,18 @@ source authority create no singleton fallback. Installing the protected snapshot
 client, projector and native lifecycle runtime in the executable remains part of
 the complete activation package. `StartSpaceQueue` retains its separate legacy
 implementation until its source adapter is explicitly qualified.
+
+The dedicated snapshot client factory accepts a complete profile:
+`MATCHMAKING_VOICE_PARTY_SNAPSHOT_GRPC_ADDR`,
+`MATCHMAKING_VOICE_PARTY_SNAPSHOT_CA_FILE`,
+`MATCHMAKING_VOICE_PARTY_SNAPSHOT_CLIENT_CERT_FILE`,
+`MATCHMAKING_VOICE_PARTY_SNAPSHOT_CLIENT_KEY_FILE` and
+`MATCHMAKING_VOICE_PARTY_SNAPSHOT_SERVER_NAME`, with the existing two-key
+`MATCHMAKING_PRINCIPAL_SIGNING_KEYS_DIR` and active key ID. It requires mutual
+TLS and signs each snapshot request with a fresh request-bound Matchmaking
+service principal; forwarded caller metadata is replaced. Shared provider
+signing keys alone do not implicitly configure this new client. A partial
+profile fails construction, and a server-name mismatch or a certificate that
+cannot authenticate a client fails before the application handler. Constructing
+this client does not install the complete native serving cohort or authorize
+activation; native main wiring must require the independently qualified package.
