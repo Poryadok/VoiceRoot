@@ -517,3 +517,17 @@ fixtures; this does not qualify current46/all-writer activation. Gateway/Bot
 replay controls use miniredis, while the provider fixtures use real Redis.
 Connections are manually configured equivalent mTLS, not production main
 startup. Full public DeleteBot, Purge/P3/retention and full BE170 remain open.
+
+PURGE-HANDOFF-v1 (BE170c88-c91) now has an agreed finite wire target. Space's
+Bot-only GetBotPurgeHandoff relays only accepted COMPLETE original Role typed
+retirement and Messaging purge entries before aggregate completion; missing
+entries remain absent. Original request/receipt hashes use their fixed producer
+FQN plus NUL and exact deterministic bytes. Messaging's original request is
+the FULL Messaging PurgeSpaceRequest wrapper, not its inner common request.
+The separate Bot-only GetBotPurgeChatCoverage observes exact sealed-manifest
+membership for at most1000 sorted unique chats; it confers no purge completion
+authority. The transport requests bind a fresh read request_id and full body.
+No actor/human identity, caller pages, new clock, permanent personal digest or
+retention exception is added. Canonical Settings/native/batch fields are kept.
+Actual relay/coverage receivers, positively proved local journal retirement,
+P3-native drain and independent global terminal obligations remain required.

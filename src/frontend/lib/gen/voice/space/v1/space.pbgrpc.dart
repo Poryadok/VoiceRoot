@@ -533,6 +533,15 @@ class SpaceServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// Relay only the exact accepted producer-owned Role/Messaging P3 evidence.
+  /// @voice.security=protected;callers=service:bot
+  $grpc.ResponseFuture<$1.GetBotPurgeHandoffResponse> getBotPurgeHandoff(
+    $1.GetBotPurgeHandoffRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getBotPurgeHandoff, request, options: options);
+  }
+
   // method descriptors
 
   static final _$getMemberAdmissionAuthority = $grpc.ClientMethod<
@@ -856,6 +865,11 @@ class SpaceServiceClient extends $grpc.Client {
       '/voice.space.v1.SpaceService/ApplyBotInstallationRemoval',
       ($1.ApplyBotInstallationRemovalRequest value) => value.writeToBuffer(),
       $1.ApplyBotInstallationRemovalResponse.fromBuffer);
+  static final _$getBotPurgeHandoff = $grpc.ClientMethod<
+          $1.GetBotPurgeHandoffRequest, $1.GetBotPurgeHandoffResponse>(
+      '/voice.space.v1.SpaceService/GetBotPurgeHandoff',
+      ($1.GetBotPurgeHandoffRequest value) => value.writeToBuffer(),
+      $1.GetBotPurgeHandoffResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.space.v1.SpaceService')
@@ -1413,6 +1427,15 @@ abstract class SpaceServiceBase extends $grpc.Service {
             $1.ApplyBotInstallationRemovalRequest.fromBuffer(value),
         ($1.ApplyBotInstallationRemovalResponse value) =>
             value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.GetBotPurgeHandoffRequest,
+            $1.GetBotPurgeHandoffResponse>(
+        'GetBotPurgeHandoff',
+        getBotPurgeHandoff_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $1.GetBotPurgeHandoffRequest.fromBuffer(value),
+        ($1.GetBotPurgeHandoffResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.GetMemberAdmissionAuthorityResponse>
@@ -1967,4 +1990,13 @@ abstract class SpaceServiceBase extends $grpc.Service {
   $async.Future<$1.ApplyBotInstallationRemovalResponse>
       applyBotInstallationRemoval($grpc.ServiceCall call,
           $1.ApplyBotInstallationRemovalRequest request);
+
+  $async.Future<$1.GetBotPurgeHandoffResponse> getBotPurgeHandoff_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$1.GetBotPurgeHandoffRequest> $request) async {
+    return getBotPurgeHandoff($call, await $request);
+  }
+
+  $async.Future<$1.GetBotPurgeHandoffResponse> getBotPurgeHandoff(
+      $grpc.ServiceCall call, $1.GetBotPurgeHandoffRequest request);
 }

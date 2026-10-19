@@ -512,6 +512,110 @@ final $typed_data.Uint8List applyBotChatPinRemovalResponseDescriptor =
         'Ch5BcHBseUJvdENoYXRQaW5SZW1vdmFsUmVzcG9uc2USRgoHcmVjZWlwdBgBIAEoCzIsLnZvaW'
         'NlLm1lc3NhZ2luZy52MS5Cb3RDaGF0UGluUmVtb3ZhbFJlY2VpcHRSB3JlY2VpcHQ=');
 
+@$core.Deprecated('Use getBotPurgeChatCoverageRequestDescriptor instead')
+const GetBotPurgeChatCoverageRequest$json = {
+  '1': 'GetBotPurgeChatCoverageRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'request_id', '3': 2, '4': 1, '5': 9, '10': 'requestId'},
+    {'1': 'space_id', '3': 3, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'generation', '3': 5, '4': 1, '5': 4, '10': 'generation'},
+    {
+      '1': 'manifest',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.ManifestBinding',
+      '10': 'manifest'
+    },
+    {'1': 'chat_ids', '3': 7, '4': 3, '5': 9, '10': 'chatIds'},
+  ],
+};
+
+/// Descriptor for `GetBotPurgeChatCoverageRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getBotPurgeChatCoverageRequestDescriptor = $convert.base64Decode(
+    'Ch5HZXRCb3RQdXJnZUNoYXRDb3ZlcmFnZVJlcXVlc3QSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIA'
+    'EoDVIPcHJvdG9jb2xWZXJzaW9uEh0KCnJlcXVlc3RfaWQYAiABKAlSCXJlcXVlc3RJZBIZCghz'
+    'cGFjZV9pZBgDIAEoCVIHc3BhY2VJZBIyChVkZWxldGlvbl9vcGVyYXRpb25faWQYBCABKAlSE2'
+    'RlbGV0aW9uT3BlcmF0aW9uSWQSHgoKZ2VuZXJhdGlvbhgFIAEoBFIKZ2VuZXJhdGlvbhI8Cght'
+    'YW5pZmVzdBgGIAEoCzIgLnZvaWNlLmNvbW1vbi52MS5NYW5pZmVzdEJpbmRpbmdSCG1hbmlmZX'
+    'N0EhkKCGNoYXRfaWRzGAcgAygJUgdjaGF0SWRz');
+
+@$core.Deprecated('Use botPurgeChatCoverageDescriptor instead')
+const BotPurgeChatCoverage$json = {
+  '1': 'BotPurgeChatCoverage',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'covered', '3': 2, '4': 1, '5': 8, '10': 'covered'},
+  ],
+};
+
+/// Descriptor for `BotPurgeChatCoverage`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botPurgeChatCoverageDescriptor = $convert.base64Decode(
+    'ChRCb3RQdXJnZUNoYXRDb3ZlcmFnZRIXCgdjaGF0X2lkGAEgASgJUgZjaGF0SWQSGAoHY292ZX'
+    'JlZBgCIAEoCFIHY292ZXJlZA==');
+
+@$core.Deprecated('Use getBotPurgeChatCoverageResponseDescriptor instead')
+const GetBotPurgeChatCoverageResponse$json = {
+  '1': 'GetBotPurgeChatCoverageResponse',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'request_id', '3': 2, '4': 1, '5': 9, '10': 'requestId'},
+    {'1': 'space_id', '3': 3, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'generation', '3': 5, '4': 1, '5': 4, '10': 'generation'},
+    {
+      '1': 'manifest',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.ManifestBinding',
+      '10': 'manifest'
+    },
+    {
+      '1': 'source_schedule_generation',
+      '3': 7,
+      '4': 1,
+      '5': 4,
+      '10': 'sourceScheduleGeneration'
+    },
+    {
+      '1': 'coverage',
+      '3': 8,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.messaging.v1.BotPurgeChatCoverage',
+      '10': 'coverage'
+    },
+    {'1': 'request_sha256', '3': 9, '4': 1, '5': 12, '10': 'requestSha256'},
+  ],
+};
+
+/// Descriptor for `GetBotPurgeChatCoverageResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getBotPurgeChatCoverageResponseDescriptor = $convert.base64Decode(
+    'Ch9HZXRCb3RQdXJnZUNoYXRDb3ZlcmFnZVJlc3BvbnNlEikKEHByb3RvY29sX3ZlcnNpb24YAS'
+    'ABKA1SD3Byb3RvY29sVmVyc2lvbhIdCgpyZXF1ZXN0X2lkGAIgASgJUglyZXF1ZXN0SWQSGQoI'
+    'c3BhY2VfaWQYAyABKAlSB3NwYWNlSWQSMgoVZGVsZXRpb25fb3BlcmF0aW9uX2lkGAQgASgJUh'
+    'NkZWxldGlvbk9wZXJhdGlvbklkEh4KCmdlbmVyYXRpb24YBSABKARSCmdlbmVyYXRpb24SPAoI'
+    'bWFuaWZlc3QYBiABKAsyIC52b2ljZS5jb21tb24udjEuTWFuaWZlc3RCaW5kaW5nUghtYW5pZm'
+    'VzdBI8Chpzb3VyY2Vfc2NoZWR1bGVfZ2VuZXJhdGlvbhgHIAEoBFIYc291cmNlU2NoZWR1bGVH'
+    'ZW5lcmF0aW9uEkQKCGNvdmVyYWdlGAggAygLMigudm9pY2UubWVzc2FnaW5nLnYxLkJvdFB1cm'
+    'dlQ2hhdENvdmVyYWdlUghjb3ZlcmFnZRIlCg5yZXF1ZXN0X3NoYTI1NhgJIAEoDFINcmVxdWVz'
+    'dFNoYTI1Ng==');
+
 @$core.Deprecated('Use sendGameEventMessageRequestDescriptor instead')
 const SendGameEventMessageRequest$json = {
   '1': 'SendGameEventMessageRequest',

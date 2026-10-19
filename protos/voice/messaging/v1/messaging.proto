@@ -166,6 +166,9 @@ service MessagingService {
   // Durable cleanup of pins in one frozen whitelisted chat. Messages remain.
   // @voice.security=protected;callers=service:bot
   rpc ApplyBotChatPinRemoval(ApplyBotChatPinRemovalRequest) returns (ApplyBotChatPinRemovalResponse);
+  // Exact sealed-manifest membership only; never a purge completion receipt.
+  // @voice.security=protected;callers=service:bot
+  rpc GetBotPurgeChatCoverage(GetBotPurgeChatCoverageRequest) returns (GetBotPurgeChatCoverageResponse);
 
   rpc ForwardMessage(ForwardMessageRequest) returns (ForwardMessageResponse);
 
@@ -199,6 +202,34 @@ service MessagingService {
 
   // @voice.security=protected;callers=service:space
   rpc ImportSpacePurgeManifestPage(voice.messaging.v1.ImportSpacePurgeManifestPageRequest) returns (voice.messaging.v1.ImportSpacePurgeManifestPageResponse);
+}
+
+// @voice.unknown_fields=reject
+message GetBotPurgeChatCoverageRequest {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  string space_id = 3;
+  string deletion_operation_id = 4;
+  uint64 generation = 5;
+  voice.common.v1.ManifestBinding manifest = 6;
+  repeated string chat_ids = 7;
+}
+
+message BotPurgeChatCoverage {
+  string chat_id = 1;
+  bool covered = 2;
+}
+
+message GetBotPurgeChatCoverageResponse {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  string space_id = 3;
+  string deletion_operation_id = 4;
+  uint64 generation = 5;
+  voice.common.v1.ManifestBinding manifest = 6;
+  uint64 source_schedule_generation = 7;
+  repeated voice.messaging.v1.BotPurgeChatCoverage coverage = 8;
+  bytes request_sha256 = 9;
 }
 
 message SendGameEventMessageRequest {
