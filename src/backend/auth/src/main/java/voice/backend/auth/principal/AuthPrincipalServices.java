@@ -10,6 +10,7 @@ public final class AuthPrincipalServices {
 
   public static ServerServiceDefinition legacyService(ServerServiceDefinition all) {
     Set<String> protectedDeletion = Set.of(
+        AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC.substring(1),
         AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC.substring(1),
         AuthPrincipalServerInterceptor.ROLE_SESSION_FLOOR_RPC.substring(1),
         AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC.substring(1),
@@ -63,6 +64,7 @@ public final class AuthPrincipalServices {
   public static ServerServiceDefinition sessionFloorService(
       ServerServiceDefinition all, AuthPrincipalServerInterceptor verifier) {
     Set<String> methods = Set.of(
+        AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC.substring(1),
         AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC.substring(1),
         AuthPrincipalServerInterceptor.ROLE_SESSION_FLOOR_RPC.substring(1),
         AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC.substring(1));
