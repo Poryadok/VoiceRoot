@@ -90,6 +90,24 @@ Artifact `settings-help-browser-<run_id>` содержит head SHA (`VOICE_SOUR
   требует real PostgreSQL 16 с zero skips; Redis 7 понадобится для deferred
   D2/D3 bridge tests, не для D1-only classifier transaction.
 
+### Voice dormant native/P3 composition
+
+`go test -race -run '^TestProduction' .` из `src/backend/voice` выполняет
+production startup factory для обычного режима без Space/NATS и для Space с
+существующими compatibility consumers. Проверяются compatibility delivery,
+pending native roster facts без lease/publish/delivered marker и EJECT_ONLY P3.
+По умолчанию используются Testcontainers. Для собственного изолированного Linux
+runner можно явно передать `VOICE_COMPOSITION_TEST_DATABASE_URL` (PostgreSQL с
+правом создавать disposable databases) и `VOICE_COMPOSITION_TEST_NATS_URL`.
+Voice fixtures создают отдельную БД на тест и применяют те же миграции/SQL;
+серверы должны принадлежать проверяющему. Этот opt-in также доступен focused
+ordinarycall/spacemedia/spacelifecycle PostgreSQL fixtures. Проверка отдельного
+child process сохранённых bytes/pending state выполняется при explicit DSN.
+NATS fixture создаёт только существующие compatibility streams/consumers;
+она не доказывает installed ACL, A3 activation, provider retirement или rollout.
+Startup fixture использует уже committed native факты; arbitration между live
+admission writer и recovery проверяется и исправляется отдельно.
+
 ### Space tree integration proof
 
 Realtime P3 has a scoped Linux-only external-PostgreSQL suite tagged

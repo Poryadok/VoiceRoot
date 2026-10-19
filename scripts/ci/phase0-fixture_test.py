@@ -893,7 +893,8 @@ class ComposeTests(unittest.TestCase):
                          "matchmaking_space_principal_runtime")
 
     def test_voice_startup_categories_cover_static_fatal_sites_without_dynamic_text(self):
-        source = (ROOT / "src/backend/voice/main.go").read_text()
+        source = "\n".join((ROOT / path).read_text() for path in (
+            "src/backend/voice/main.go", "src/backend/voice/space_media_runtime.go"))
         prefixes = dict(startup_diagnostics.VOICE_STARTUP_PREFIXES)
         for literal in re.findall(r'log\.Fatalf?\("([^"\n]+)"', source):
             prefix = literal.split("%", 1)[0].rstrip()
