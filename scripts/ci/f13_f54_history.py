@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -212,6 +213,12 @@ def append(path, kind, frame, operation, repo, values):
         payload=dict(path=name,prior=raw_binding(matches[-1]) if matches else None,
             prior_rows=[raw_binding(v) for v in matches],incoming=raw_binding(incoming[0]) if incoming else None,
             map_before=file_binding(output),phase='before_qualification')
+    elif kind=='reviewed_F_deletion_guard':
+        name,output,target,stored,owner,source,result=values
+        matches=[raw_binding(v) for v in Path(output).read_text().splitlines() if v.split('\t')[0]==name]
+        payload=dict(path=name,prior_rows=matches,map_before=file_binding(output),target=target,
+            stored_entry=raw_binding(stored),guarded_owner=owner,source_head=source,target_entry=raw_binding(result),
+            gate='f13_guarded_entry_matches_final_target',original_status=1,phase='after_original_rejection_before_disposition')
     elif kind in ('row_after', 'row_remove'):
         name, value, reason = values
         payload=dict(path=name,row=raw_binding(value),reason=reason,phase='before_mutation')
@@ -245,6 +252,10 @@ def append(path, kind, frame, operation, repo, values):
     elif kind in ('composition_capability','composition_3071_capability','corrected_F_composition','range_3071_branch'):
         payload=json.loads(Path(values[0]).read_bytes() if kind=='range_3071_branch' else values[0])
         require(payload['admission'] is False,'composition_not_production_authority')
+    elif kind=='reviewed_F_deletion':
+        receipt,output=values
+        value=json.loads(Path(receipt).read_bytes())
+        payload=dict(receipt=value,receipt_sha256=sha(canonical(value)),map_after=file_binding(output),admission=False)
     elif kind == 'boundary_3071_observation':
         output,boundary=values
         payload=dict(history_boundary=boundary,prefix=raw_binding(Path(output).read_bytes()),admission=False)
@@ -483,7 +494,8 @@ def build_3071_I_ready(state, prefix):
     outer=state['ledger'][state['frame']]
     return dict(type='F54_FIXED3071_ACTUAL_I_RANGE_LEDGER',operation=state['operation'],frame=state['frame'],classification=state['classification'],operation_binding=state['operation_binding'],
         capability_sha256=state['capability_sha256'],prefix=prefix,frame_ancestry=state['frame_ancestry'],
-        ledger=state['ledger'],range_branch=branch,coverage=state['coverage'],inherited_M_ledgers=state['M_ready'],
+        ledger=state['ledger'],terminal_dispositions=terminal_dispositions(state['ledger']),
+        range_branch=branch,coverage=state['coverage'],inherited_M_ledgers=state['M_ready'],
         outer_rows=outer['rows'],outer_map_binding=outer['map_binding'],required_qualification=required,
         qualification='HOLD',admission=False,runtime_pass=False)
 
@@ -506,6 +518,8 @@ def consume_3071_I_path(ready_path, expected_sha, trace_path, name, actual_map, 
     require(value['operation_binding']['commit']==J3071_RANGE['integration'] and name in value['operation_binding']['paths'],'fixed3071_I_actual_operation_path')
     trace=Path(trace_path).read_bytes();prefix=value['prefix']
     require(len(trace)>=prefix['bytes'] and sha(trace[:prefix['bytes']])==prefix['sha256'],'fixed3071_I_consumes_sealed_real_prefix')
+    require(value['terminal_dispositions']==terminal_dispositions_in_prefix(value['ledger'],trace,prefix),
+        'fixed3071_I_consumes_terminal_obligations_before_overwrite')
     events=[json.loads(x) for x in trace.splitlines()]
     before=next(e for e in reversed(events) if e['kind']=='row_before' and e['operation']==value['operation'])
     require(before['payload']['path']==name and before['payload']['map_before']==dict(bytes=len(actual_map),sha256=sha(actual_map)),'fixed3071_I_actual_current_map_and_path')
@@ -669,6 +683,129 @@ def corrected_F_receipt(repo, cap, merge, boundary, first, source, name, result)
     require(result==tree_entry(repo,f['merge'],name).rstrip('\0'),'corrected_F_actual_result_entry')
     return dict(cap['whole'],path=name,result_entry=raw_binding(result),capability=cap,
         capability_sha256=sha(canonical(cap)),composition='HISTORICAL_SOURCE_WITH_REQUIRED_CURRENT_CORRECTION')
+
+
+F_DELETION_PATH = 'src/backend/voice/internal/store/space_lifecycle_test.go'
+F_DELETION_ROW_SHA = 'fd8bbc01415e1cc4ea13f4ad3de8ea10bef6be64e7cd79adeae5693392ea7f87'
+F_DELETION_ENTRY = '100644 blob c0569cce36543e032bd4e42e077d63c1df1ed72d\tsrc/backend/voice/internal/store/space_lifecycle_test.go\0'
+F_DELETION_RULING_SHA = '06c8b2bc49910714a29b2976a28a41a24d88b4a2caab82ef558c613ba52f9077'
+
+
+def reviewed_F_deletion_value(repo, cap, state, ruling_path):
+    """A terminal-state obligation, never a replacement contribution or flag."""
+    f=F_CORRECTED_TUPLE;name=F_DELETION_PATH
+    require(sha(Path(ruling_path).read_bytes())==F_DELETION_RULING_SHA,'reviewed_F_deletion_exact_ruling')
+    require(cap==prepare_corrected_F_capability(repo,cap['unit_path']),'reviewed_F_deletion_complete_current_capability')
+    frame=state['frame_context'];operation=state['F_operation'];binding=state['operation_binding']
+    require(state['source_context']==cap['source_context'],'reviewed_F_deletion_actual_carrier_context')
+    guard=state['original_guard']
+    require(guard['gate']=='f13_guarded_entry_matches_final_target' and guard['original_status']==1
+        and guard['path']==name and guard['target']==frame['target']
+        and guard['stored_entry']==raw_binding(F_DELETION_ENTRY.rstrip('\0'))
+        and guard['target_entry']==raw_binding('') and guard['guarded_owner']==f['first']
+        and guard['source_head']==f['first'] and guard['prior_rows']==state['prior_rows']
+        and guard['map_before']==state['map_binding'],'reviewed_F_deletion_actual_original_guard_arguments')
+    require(frame['target']==f['correction'] and frame['base']==J3071_RANGE['base']
+        and frame['allow_direct_followup']=='true' and frame['partition_source_history']=='false',
+        'reviewed_F_deletion_exact_actual_range_frame')
+    require(re.fullmatch('[0-9a-f]{64}',state['range_branch_sha256']) is not None,
+        'reviewed_F_deletion_consumes_actual_range_origin')
+    require(operation==frame['id']+'/'+f['merge']+'/2' and binding['commit']==f['merge']
+        and [binding[k] for k in ('first_parent','boundary','source_head')]==[f['first'],f['base'],f['source']],
+        'reviewed_F_deletion_actual_completed_F_operation')
+    require(state['classification']['trigger']=='true' and state['composition_receipts']
+        and all(x['capability']==cap for x in state['composition_receipts']),
+        'reviewed_F_deletion_actual_whole_consumption_and_classifier')
+    require(name in cap['whole']['complete_manual_paths'] and cap['whole']['current_bindings'][name]=='',
+        'reviewed_F_deletion_reviewed_complete_unit_absence')
+    require(tree_entry(repo,f['first'],name)==F_DELETION_ENTRY
+        and tree_entry(repo,f['automatic_tree'],name)==F_DELETION_ENTRY,
+        'reviewed_F_deletion_exact_prior_mode_type_blob')
+    for ref in (f['base'],f['source'],f['merge'],f['correction'],f['current'],frame['target']):
+        # tree_entry uses checked Git output; a missing object is not ABSENT.
+        require(tree_entry(repo,ref,name)=='','reviewed_F_deletion_checked_absent_entry')
+    require(git(repo,'diff','--name-status','--no-renames',f['first'],f['merge'],'--',name).decode()=='D\t'+name+'\n',
+        'reviewed_F_deletion_real_D_to_F_transition')
+    require(not git(repo,'rev-list','--full-history',f['merge']+'..'+frame['target'],'--',name).strip(),
+        'reviewed_F_deletion_no_unaccounted_later_writer')
+    rows=state['prior_rows'];require(len(rows)==1 and rows[0]==raw_binding(rows[0]['raw'])
+        and rows[0]['sha256']==F_DELETION_ROW_SHA,'reviewed_F_deletion_exact_retained_raw_D_row')
+    parts=row(rows[0]);require(parts==[name,'true',f['first'],f['base'],f['base'],f['first'],f['base'],f['base']],
+        'reviewed_F_deletion_real_owner_source_content_true')
+    require(state['aggregate'] is True and state['path_evidence'],'reviewed_F_deletion_complete_true_history')
+    return dict(type='F54_REVIEWED_F_DELETION_v1',path=name,expected_terminal_state='ABSENT',
+        ruling_path=str(ruling_path),ruling_sha256=F_DELETION_RULING_SHA,capability=cap,
+        state=state,prior_entry=raw_binding(F_DELETION_ENTRY),terminal_entry=raw_binding(''),
+        map_before=state['map_binding'],map_after=state['map_binding'],aggregate=True,
+        historical_rows_unchanged=True,admission=False,runtime_pass=False)
+
+
+def prepare_reviewed_F_deletion(repo, capability_path, trace_path, map_path, ruling_path):
+    cap=json.loads(Path(capability_path).read_bytes());raw=Path(trace_path).read_bytes()
+    events=[json.loads(v) for v in raw.splitlines()]
+    require(events and events[-1]['kind']=='reviewed_F_deletion_guard'
+        and events[-1]['payload']['path']==F_DELETION_PATH,'reviewed_F_deletion_actual_terminal_guard')
+    state=validate_trace(repo,trace_path,sha(raw),deletion_checkpoint=events[-1]['frame'])['deletion_checkpoint']
+    actual=Path(map_path).read_bytes()
+    require(state['map_binding']==file_digest(actual),'reviewed_F_deletion_unchanged_actual_map')
+    return reviewed_F_deletion_value(repo,cap,state,ruling_path)
+
+
+def terminal_dispositions(ledger):
+    """Conservation consumers carry the typed state with its raw true history."""
+    result=[]
+    for frame,value in ledger.items():
+        for name,receipt in value.get('terminal_dispositions',{}).items():
+            require(name==F_DELETION_PATH and receipt['type']=='F54_REVIEWED_F_DELETION_v1'
+                and receipt['expected_terminal_state']=='ABSENT' and receipt['aggregate'] is True,
+                'reviewed_F_deletion_typed_terminal_state_not_false_flag')
+            item=value['paths'].get(name)
+            require(item is not None and item['aggregate'] is True and item['evidence'],
+                'reviewed_F_deletion_cannot_replace_retained_history')
+            actual=[raw_binding(x) for x in value['rows'] if x.split('\t')[0]==name]
+            require(len(actual)==1 and actual==receipt['state']['prior_rows'] and actual[0]['sha256']==F_DELETION_ROW_SHA,
+                'reviewed_F_deletion_no_row_drop_rewrite_or_synthetic_owner')
+            require(receipt['map_before']==receipt['map_after']
+                and receipt['state']['frame_context']['id']==frame,'reviewed_F_deletion_immutable_map_and_origin')
+            result.append(dict(frame=frame,path=name,receipt=receipt,receipt_sha256=sha(canonical(receipt))))
+    return result
+
+
+def terminal_dispositions_in_prefix(ledger, trace, prefix):
+    require(len(trace)>=prefix['bytes'] and sha(trace[:prefix['bytes']])==prefix['sha256'],
+        'reviewed_F_deletion_consumed_with_exact_complete_prefix')
+    events=[json.loads(v) for v in trace[:prefix['bytes']].splitlines()]
+    actual=[]
+    for event in events:
+        if event['kind']=='reviewed_F_deletion':
+            value=event['payload'];receipt=value['receipt']
+            require(value['receipt_sha256']==sha(canonical(receipt)) and event['operation'] is None
+                and value['map_after']==receipt['map_before']==receipt['map_after'],
+                'reviewed_F_deletion_prefix_receipt_binding')
+            actual.append(dict(frame=event['frame'],path=receipt['path'],receipt=receipt,receipt_sha256=value['receipt_sha256']))
+    expected=terminal_dispositions(ledger)
+    key=lambda value:(value['frame'],value['path'])
+    require(sorted(actual,key=key)==sorted(expected,key=key),
+        'reviewed_F_deletion_no_omitted_substituted_or_unconsumed_disposition')
+    return expected
+
+
+def retained_row_for_binding(binding):
+    dispositions=binding.get('terminal_dispositions',[])
+    if not dispositions:return None
+    require(binding['path']==F_DELETION_PATH and binding['covered'] is True and binding['aggregate'] is True
+        and binding['obligations']['aggregate'] is True and binding['obligations']['retained_evidence'],
+        'reviewed_F_deletion_original_router_keeps_full_true_history')
+    rows=[]
+    for disposition in dispositions:
+        receipt=disposition['receipt'];prior=receipt['state']['prior_rows']
+        require(disposition['path']==F_DELETION_PATH and disposition['receipt_sha256']==sha(canonical(receipt))
+            and receipt['type']=='F54_REVIEWED_F_DELETION_v1' and receipt['expected_terminal_state']=='ABSENT'
+            and len(prior)==1 and prior[0]==raw_binding(prior[0]['raw']) and prior[0]['sha256']==F_DELETION_ROW_SHA,
+            'reviewed_F_deletion_original_D_source_content_projection')
+        rows.append(prior[0]['raw'])
+    require(len(set(rows))==1,'reviewed_F_deletion_one_genuine_historical_provenance')
+    return rows[0]
 
 
 def load_unit(repo, directory):
@@ -1182,7 +1319,8 @@ def finalize_collection(repo, trace_path, map_path):
     transitions=[e for e in events if e['kind'] in ('complete_ledger_conserved','row_remove','row_after','row_committed') and e['operation']==operation]
     return dict(type='F54_SEALED_SUCCESSFUL_COLLECTION',collection_prefix=dict(bytes=len(raw),sha256=sha(raw)),
         collection_trace=str(trace_path),map_path=str(map_path),map_binding=outer['map_binding'],outer_rows=outer['rows'],
-        ledger=verified['ledger'],required_qualification=required,coverage=ready['coverage'],
+        ledger=verified['ledger'],terminal_dispositions=terminal_dispositions(verified['ledger']),
+        required_qualification=required,coverage=ready['coverage'],
         child_span=dict(path=ready['span_trace'],sha256=ready['span_trace_sha256']),M_transitions=transitions,
         capability_sha256=ready['capability_sha256'],M=M,source_context=router_source_context(repo),
         master_entry=verified['master_entry'],master_wrapper=verified['master_wrapper'],root_frame=root,M_frame=operation.split('/')[0],
@@ -1203,6 +1341,16 @@ def load_collection(repo, path, expected_sha, map_path):
     require(value['source_context']==router_source_context(repo),'actual_collection_source_context')
     actual=Path(map_path).read_bytes()
     require(value['map_path']==str(map_path) and value['map_binding']==dict(bytes=len(actual),sha256=sha(actual)) and value['outer_rows']==actual.decode().splitlines(),'router_full_original_map_not_selected_rows')
+    require('terminal_dispositions' in value and 'ledger' in value,'complete_collection_terminal_state_fields')
+    require(value['terminal_dispositions']==terminal_dispositions_in_prefix(value['ledger'],trace,seal),
+        'collection_requires_all_typed_terminal_dispositions')
+    for disposition in value['terminal_dispositions']:
+        name=disposition['path'];item=value['required_qualification'].get(name)
+        require(item is not None and item['aggregate'] is True and item['retained_evidence'],
+            'deleted_path_still_requires_runtime_and_retained_history_router')
+        require(tree_entry(repo,value['source_context']['target'],name)==''
+            and not git(repo,'rev-list','--full-history',F_CORRECTED_TUPLE['merge']+'..'+value['source_context']['target'],'--',name).strip(),
+            'reviewed_F_deletion_no_stale_obligation_after_later_writer')
     return value
 
 
@@ -1274,7 +1422,8 @@ def router_binding(repo, seal_path, seal_sha, map_path, context_path, name):
     return dict(path=name,seal_sha256=seal_sha,collection_prefix=collection['collection_prefix'],complete_ledger_sha256=seal['complete_ledger_sha256'],
         map_binding=collection['map_binding'],context_sha256=sha(canonical(context)),obligations=item,
         aggregate=item['aggregate'] if item else None,covered=item is not None,
-        scope='changed' if name in changed else 'retained_history',admission=False)
+        scope='changed' if name in changed else 'retained_history',
+        terminal_dispositions=[v for v in collection['terminal_dispositions'] if v['path']==name],admission=False)
 
 
 def append_router(path, kind, receipt):
@@ -1333,6 +1482,11 @@ def execute_original_router(context, binding):
         script+='f13_f54_router_gate() { python3 -c \'import json,sys;open(sys.argv[1],"a").write(json.dumps(sys.argv[2:])+"\\n")\' "$F54_CAPTURE" "$@"; }\n'
         if binding['covered']:
             script+='f13_runtime_for_path() { printf "%s\\n" "$F54_AGGREGATE"; }\n'
+        historical=retained_row_for_binding(binding)
+        if historical is not None:
+            # Recheck the same already verified data projection; predicates
+            # and their ordering remain the original router's actual bodies.
+            script+='f13_retained_history_row() { printf "%s\\n" '+shlex.quote(historical)+'; }\n'
         script+='for file in "$F54_PATH"; do\n'+original_router_body()+'done\n'
         pairs=sum(([k,v] for k,v in context['values'].items()),[])
         environment=dict(os.environ,**context['event'],F54_CAPTURE=str(capture),F54_PATH=binding['path'],
@@ -1386,13 +1540,14 @@ def validate_router(repo, seal_path, seal_sha, map_path, context_path, sidecar_p
         failures=[v for v in receipts if v['status']!=0],qualification='HOLD',admission=False,runtime_pass=False)
 
 
-def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, range_checkpoint=None, I_checkpoint=None):
+def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, range_checkpoint=None, I_checkpoint=None, deletion_checkpoint=None):
     raw=Path(path).read_bytes();require(sha(raw)==expected_sha,'trace_raw_hash')
     events=[json.loads(v) for v in raw.splitlines()];require(events,'nonempty_producer_trace')
     previous='0'*64;frames={};stack=[];operations={};attempts={};classified={};pending={};cumulative={};child_flags={};child_rows={};frame_rows={};carry={};failures=[];observed=set()
     expected_operations={};seen_operations={};visited={};committed={};maps={};children={};obligations={};native_bindings={}
     M_capabilities={};M_compositions={};M_ready={};M_consumed={};M_supersessions={};master_entry=None;master_wrapper=None
     J_capabilities={};J_compositions={};F_compositions={};range_branches={};frame_results={};I_ready={};I_consumed={}
+    terminal={};final_gates={}
     def map_binding(frame):
         raw=''.join('\t'.join(parts)+'\n' for parts in maps[frame]).encode()
         return dict(bytes=len(raw),sha256=sha(raw))
@@ -1423,7 +1578,28 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
     def ledger_state():
         return {f:dict(map_binding=map_binding(f),rows=['\t'.join(x) for x in maps[f]],paths={
             name:dict(aggregate=cumulative[(f,name)],evidence=obligations[(f,name)])
-            for owner,name in obligations if owner==f}) for f in frames}
+            for owner,name in obligations if owner==f},terminal_dispositions=terminal.get(f,{})) for f in frames}
+    def deletion_state(identity,prefix):
+        require(stack and stack[-1]==identity and not pending and identity in final_gates,
+            'reviewed_F_deletion_live_final_guard_not_old_frame')
+        require(identity in range_branches,'reviewed_F_deletion_actual_qualified_nine_node_range')
+        gate=final_gates[identity];name=F_DELETION_PATH
+        require(gate['kind']=='reviewed_F_deletion_guard' and gate['payload']['path']==name
+            and gate['operation'] is None,'reviewed_F_deletion_exact_final_path_phase')
+        candidates=[op for op,v in operations.items() if op.startswith(identity+'/') and v['commit']==F_CORRECTED_TUPLE['merge']]
+        require(len(candidates)==1,'reviewed_F_deletion_one_real_F_operation');operation=candidates[0]
+        finished(operation)
+        require(seen_operations[identity]==expected_operations[identity] and not failures,
+            'reviewed_F_deletion_all_spine_operations_completed_without_failure')
+        for commit,index in seen_operations[identity]:finished(identity+'/'+commit+'/'+str(index))
+        prior=[raw_binding('\t'.join(x)) for x in maps[identity] if x[0]==name]
+        return dict(frame_context=frames[identity],F_operation=operation,operation_binding=operations[operation],
+            classification=classified[operation],composition_receipts=list(F_compositions.get(operation,{}).values()),
+            prior_rows=prior,path_evidence=obligations.get((identity,name),[]),aggregate=cumulative.get((identity,name)),
+            map_binding=map_binding(identity),prefix=prefix,final_guard_digest=gate['digest'],
+            original_guard=gate['payload'],
+            range_branch_sha256=sha(canonical(range_branches[identity])),
+            frame_ancestry=[dict(frame=f,context=frames[f]) for f in stack],source_context=router_source_context(repo))
     def M_checkpoint_state(operation,prefix_events):
         require(operation in M_capabilities and operation in classified,'typed_classified_M_checkpoint')
         frame=operation.split('/')[0];value=operations[operation]
@@ -1538,6 +1714,9 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         if kind=='frame_exit':
             require(v['final_map']==map_binding(frame),'conserved_final_map')
             r=J3071_RANGE;current=frames[frame]
+            if v['exit']==0 and current['target']==F_CORRECTED_TUPLE['correction'] and any(x[0]==F_DELETION_PATH for x in maps[frame]):
+                require(F_DELETION_PATH in terminal.get(frame,{}),
+                    'reviewed_F_deletion_success_requires_actual_terminal_disposition')
             if v['exit']==0 and [current[k] for k in ('base','target')]==[r['base'],r['target']]:
                 require(frame in range_branches,'fixed3071_nonfirstparent_success_requires_actual_typed_branch')
                 require([commit for commit,index in seen_operations[frame]]==[r['direct'],r['merge'],r['target']],'fixed3071_persistent_three_operation_spine')
@@ -1653,7 +1832,28 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
                 require(M_compositions[op][v['path']]==v and (frame,v['path']) in pending,'repeat_composition_only_for_actual_pending_transition')
             M_compositions[op][v['path']]=v;continue
         if kind=='failure': failures.append(dict(frame=frame,category=v['category']));continue
-        if kind=='final_gate_before':map_before(frame,v);continue
+        if kind=='final_gate_before':
+            map_before(frame,v);final_gates[frame]=e;continue
+        if kind=='reviewed_F_deletion_guard':
+            require(op is None and sequence>1 and events[sequence-2]['kind']=='final_gate_before'
+                and events[sequence-2]['frame']==frame and events[sequence-2]['payload']['path']==F_DELETION_PATH
+                and v['path']==F_DELETION_PATH,'reviewed_F_deletion_original_guard_after_exact_final_visit')
+            map_before(frame,v)
+            require(v['target']==frames[frame]['target'] and v['target_entry']==raw_binding(tree_entry(repo,v['target'],v['path']).rstrip('\0'))
+                and v['stored_entry']!=v['target_entry'],'reviewed_F_deletion_actual_checked_mismatch_not_missing_object')
+            final_gates[frame]=e;continue
+        if kind=='reviewed_F_deletion':
+            require(op is None and v['admission'] is False and F_DELETION_PATH not in terminal.get(frame,{}),
+                'reviewed_F_deletion_one_terminal_obligation_not_owner_event')
+            require(events[sequence-2]['kind']=='reviewed_F_deletion_guard' and events[sequence-2]['frame']==frame,
+                'reviewed_F_deletion_immediately_consumes_original_final_guard')
+            prefix=b''.join(raw.splitlines(keepends=True)[:sequence-1]);receipt=v['receipt']
+            state=deletion_state(frame,file_digest(prefix))
+            expected=reviewed_F_deletion_value(repo,receipt['capability'],state,receipt['ruling_path'])
+            require(receipt==expected and v['receipt_sha256']==sha(canonical(expected))
+                and v['map_after']==map_binding(frame)==receipt['map_before']==receipt['map_after'],
+                'reviewed_F_deletion_independent_receipt_and_byte_identical_map')
+            terminal.setdefault(frame,{})[F_DELETION_PATH]=receipt;continue
         require(op in operations,'referenced_real_operation')
         if kind=='sync_gate_passed':
             require(operations[op]['classification']=='sync' and v['gate']=='f13_validate_sync_merge_resolution' and v['classifier']==classifier_binding(),'actual_sync_gate_identity')
@@ -1802,7 +2002,8 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         else:raise Rejected('unknown_trace_kind')
     range_state=range_checkpoint_state(range_checkpoint) if range_checkpoint else None
     I_state=I_checkpoint_state(I_checkpoint) if I_checkpoint else None
-    checkpoint_state=M_checkpoint_state(checkpoint,events) if checkpoint else range_state or I_state
+    deletion_state_value=deletion_state(deletion_checkpoint,file_digest(raw)) if deletion_checkpoint else None
+    checkpoint_state=M_checkpoint_state(checkpoint,events) if checkpoint else range_state or I_state or deletion_state_value
     require(not stack or checkpoint_state is not None,'closed_frames')
     require(checkpoint_state is not None or master_entry is None or failures or master_wrapper is not None,'successful_master_collection_requires_actual_wrapper_result')
     coverage=dag_dispositions(repo,events) if complete else []
@@ -1812,7 +2013,8 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
     return dict(schema=SCHEMA,trace_sha256=expected_sha,frames=len(frames),operations=len(operations),failures=failures,
         ledger=ledger,coverage=coverage,M_checkpoint=checkpoint_state if checkpoint else None,M_ready=M_ready,M_consumed=M_consumed,
         root_frame=next(iter(frames)),master_entry=master_entry,master_wrapper=master_wrapper,range_checkpoint=range_state,range_branches=range_branches,
-        I_checkpoint=I_state,I_ready=I_ready,I_consumed=I_consumed,
+        I_checkpoint=I_state,I_ready=I_ready,I_consumed=I_consumed,deletion_checkpoint=deletion_state_value,
+        terminal_dispositions=terminal_dispositions(ledger),
         observed_qualification='COMPLETE' if complete else 'OBSERVED_PREFIX_ONLY',admission=False)
 
 
@@ -1848,6 +2050,7 @@ def main():
         if command=='cap-composition':print(json.dumps(composition_capability(*args)));return 0
         if command=='corrected-F-capability':print(json.dumps(prepare_corrected_F_capability(*args)));return 0
         if command=='corrected-F-composition':print(json.dumps(corrected_F_composition(*args)));return 0
+        if command=='reviewed-F-deletion':print(json.dumps(prepare_reviewed_F_deletion(*args)));return 0
         if command=='3071-capabilities':print(json.dumps(prepare_3071_capabilities(*args)));return 0
         if command=='3071-boundary':print(json.dumps(boundary_3071_capability(*args)));return 0
         if command=='3071-composition':print(json.dumps(composition_3071_capability(*args)));return 0
@@ -1881,6 +2084,11 @@ def main():
             repo,path,digest,map_path,context_path,name=args;value=router_binding(repo,path,digest,map_path,context_path,name)
             if not value['covered']:return 3
             print('true' if value['aggregate'] else 'false');return 0
+        if command=='router-history-row':
+            repo,path,digest,map_path,context_path,name=args
+            value=retained_row_for_binding(router_binding(repo,path,digest,map_path,context_path,name))
+            if value is None:return 3
+            print(value);return 0
         if command=='collection-runtime-paths':
             repo,path,digest,map_path=args;value=load_collection(repo,path,digest,map_path)
             print('\n'.join(name for name,item in value['required_qualification'].items() if item['aggregate']));return 0

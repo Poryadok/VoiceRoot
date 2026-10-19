@@ -3302,7 +3302,7 @@ f13_f54_collect_exact_master_unit() {
   local repo="$1" base="$2" target="$3" output="$4" category="$5" unit="$6"
   local f13_f54_original_trace="$7" f13_f54_original_native="$8" f13_f54_current_native="$9"
   local fixed3071_unit="${10:-}" f13_f54_3071_capability_file=''
-  local f13_f54_F_capability_file=''
+  local f13_f54_F_capability_file='' f13_f54_F_deletion_ruling="${unit}/rudeus410-F-reviewed-deletion-decision.md"
   local f13_f54_I_operation='' f13_f54_I_ledger="${TMP_DIR}/fixed3071-I-ledger.json" f13_f54_I_ledger_sha=''
   local f13_f54_capability_file="${TMP_DIR}/f54-exact-source-capabilities.json"
   local f13_f54_M_operation='' f13_f54_M_child_map="${TMP_DIR}/f54-actual-M-child-map"
@@ -4484,6 +4484,24 @@ f13_collect_develop_contributions() {
     fi
     if ! f13_guarded_entry_matches_final_target \
       "${guarded_entries[${path}]}" "${target_entry}"; then
+      # Reviewed terminal ABSENT is distinct from a historical row or a
+      # migration alias. This complete-unit consumer leaves map/owners,
+      # content and raw flags unchanged and emits the actual typed seal.
+      if [[ "${path}" == src/backend/voice/internal/store/space_lifecycle_test.go &&
+        "${target}" == 909090a34743902799306974d6f3ebabe3c02f10 &&
+        -n "${f13_f54_F_capability_file:-}" && -n "${f13_f54_trace_file:-}" &&
+        "${f13_f54_observer:-}" == "${ROOT}/scripts/ci/f13_f54_history.py" ]]; then
+        f13_f54_trace_event reviewed_F_deletion_guard "${repo}" "${path}" "${output}" "${target}" \
+          "${guarded_entries[${path}]}" "${guarded_entry_commits[${path}]:-}" \
+          "${owner_source_heads[${path}]:-}" "${target_entry}" || return 1
+        if python3 "${f13_f54_observer}" reviewed-F-deletion "${repo}" "${f13_f54_F_capability_file}" \
+          "${f13_f54_trace_file}" "${output}" "${f13_f54_F_deletion_ruling}" \
+          >"${TMP_DIR}/reviewed-F-terminal-deletion.json"; then
+          f13_f54_trace_event reviewed_F_deletion "${repo}" \
+            "${TMP_DIR}/reviewed-F-terminal-deletion.json" "${output}" || return 1
+          continue
+        fi
+      fi
       # The only approved non-P retirement is the versioned, complete
       # MatchSquad migration renumber recorded by R2. The helper validates the
       # exact source owner, integration, destination P entry, and competing
@@ -5320,6 +5338,9 @@ f13_changed_content() {
   local repo="$1" map="$2" path="$3" commit first_parent source_base source_head content_base row
   if [[ -s "${map}" ]]; then
     row="$(awk -F '\t' -v path="${path}" '$1 == path { value=$0 } END { if (value != "") print value }' "${map}")"
+    if [[ -z "${row}" ]]; then
+      row="$(f13_retained_history_row "${repo}" "${map}" "${path}")" || return 1
+    fi
     IFS=$'\t' read -r _ _ commit first_parent source_base source_head content_base _ <<<"${row}"
     [[ -n "${commit}" && -n "${first_parent}" && -n "${source_base}" && -n "${source_head}" ]] || return 1
     git -C "${repo}" diff --unified=0 "${content_base:-${first_parent}}" "${commit}" -- "${path}" | sed -n '/^+++ /d; /^+/s/^+//p'
@@ -5979,10 +6000,21 @@ f13_runtime_for_path() {
   fi
 }
 
+f13_retained_history_row() {
+  local repo="$1" map="$2" path="$3"
+  [[ -n "${f13_f54_collection_file:-}" && "${repo}" == "${ROOT}" &&
+    "${map}" == "${TMP_DIR}/f13-contributions" ]] || return 1
+  python3 "${f13_f54_observer}" router-history-row "${repo}" "${f13_f54_router_seal}" \
+    "${f13_f54_router_seal_sha}" "${map}" "${TMP_DIR}/f54-current-policy-context.json" "${path}"
+}
+
 f13_delta_for_path() {
   local repo="$1" map="$2" path="$3" row commit source_base source_head
   if [[ -s "${map}" ]]; then
     row="$(awk -F '\t' -v path="${path}" '$1 == path { value=$0 } END { if (value != "") print value }' "${map}")"
+    if [[ -z "${row}" ]]; then
+      row="$(f13_retained_history_row "${repo}" "${map}" "${path}")" || return 1
+    fi
     IFS=$'\t' read -r _ _ commit _ source_base source_head _ _ <<<"${row}"
     [[ -n "${commit}" && -n "${source_base}" && -n "${source_head}" ]] || return 1
     git -C "${repo}" diff --name-only "${source_base}" "${source_head}" >"${TMP_DIR}/f13-current-delta" || return 1
@@ -5997,6 +6029,9 @@ f13_source_head_for_path() {
   local repo="$1" map="$2" path="$3" row source_head
   if [[ -s "${map}" ]]; then
     row="$(awk -F '\t' -v path="${path}" '$1 == path { value=$0 } END { if (value != "") print value }' "${map}")"
+    if [[ -z "${row}" ]]; then
+      row="$(f13_retained_history_row "${repo}" "${map}" "${path}")" || return 1
+    fi
     IFS=$'\t' read -r _ _ _ _ _ source_head _ _ <<<"${row}"
     [[ -n "${source_head}" ]] || return 1
     printf '%s\n' "${source_head}"

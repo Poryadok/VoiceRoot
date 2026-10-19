@@ -31,8 +31,9 @@ class ProducerTrace(unittest.TestCase):
         # Private real-Git specification at the failing per-entry seam. A
         # corrected target is not a claim that its historical source was safe.
         # No production record, runtime result or manufactured owner row exists.
-        names=sorted([RUNTIME]+['src/backend/voice/internal/spacemedia/private_admission'+str(i)+'.go' for i in range(2)]+
-                     ['docs/private-f-manual/source'+str(i)+'.md' for i in range(30)])
+        retired='src/backend/voice/internal/store/space_lifecycle_test.go'
+        names=sorted([RUNTIME,retired]+['src/backend/voice/internal/spacemedia/private_admission'+str(i)+'.go' for i in range(2)]+
+                     ['docs/private-f-manual/source'+str(i)+'.md' for i in range(29)])
         # Keep explicit conflict names independent of lexicographic positions.
         conflicts=[n for n in names if 'private_admission' in n]
         service='src/backend/voice/internal/spacelifecycle/service.go'
@@ -43,18 +44,22 @@ class ProducerTrace(unittest.TestCase):
         def text(name,left='base-left',right='base-right',manual=False):
             middle='\n'.join('stable '+str(i) for i in range(20))
             return left+'\n'+middle+'\n'+right+'\n'+('reviewed manual contribution\n' if manual else '')
-        for name in names:self.write(name,text(name))
+        for name in names:
+            if name!=retired:self.write(name,text(name))
         base=self.commit('private full33 boundary')
         for name in names:self.write(name,text(name,left='first contribution'))
         for name in conflicts:self.write(name,text(name,left='first contribution',right='first conflict obligation'))
         first=self.commit('private first contributions')
         git(self.repo,'checkout','-qb','corrected-source',base)
-        for name in names:self.write(name,text(name,right='incoming contribution'))
+        for name in names:
+            if name!=retired:self.write(name,text(name,right='incoming contribution'))
         source=self.commit('private incoming contributions')
         git(self.repo,'checkout','-q',first)
         merge=subprocess.run(['git','-C',str(self.repo),'merge','--no-ff','--no-commit',source],capture_output=True,text=True)
         self.assertEqual(merge.returncode,1,merge.stderr)
         for name in names:
+            if name==retired:
+                (self.repo/name).unlink();continue
             raw=text(name,left='first contribution',right='incoming contribution',manual=True)
             if name in conflicts:raw+='first conflict obligation\n'
             if name==RUNTIME:raw+='KNOWN_STARTUP_PUBLICATION_DEFECT\n'
@@ -67,15 +72,13 @@ class ProducerTrace(unittest.TestCase):
         self.assertEqual(git(self.repo,'diff','--name-only',automatic,historical).splitlines(),names)
         self.write(RUNTIME,(self.repo/RUNTIME).read_text().replace('KNOWN_STARTUP_PUBLICATION_DEFECT','CURRENT_REVIEWED_STARTUP_REPAIR'))
         self.write(service,'current immutable snapshot\n');self.write(regression,'current publication regression\n')
-        retired=next(n for n in names if n.startswith('docs/'))
-        (self.repo/retired).unlink()
         correction=self.commit('private required current correction')
         for name in names:
             if name==retired:
                 self.assertEqual(git(self.repo,'ls-tree',correction,'--',name),'')
-                # Retirement is explicit, while the old contributions remain
-                # in historical Git and the source qualification unit.
-                current=git(self.repo,'show',historical+':'+name)
+                self.assertEqual(git(self.repo,'ls-tree',historical,'--',name),'')
+                self.assertIn('first contribution',git(self.repo,'show',first+':'+name))
+                continue
             else:current=git(self.repo,'show',correction+':'+name)
             self.assertIn('first contribution',current);self.assertIn('incoming contribution',current)
             self.assertIn('reviewed manual contribution',current)
@@ -84,8 +87,9 @@ class ProducerTrace(unittest.TestCase):
         # separately from native/M/J authority. The later implementation must
         # validate its whole unit and negatives, not merely select this path.
         m=module();m.ROOT=self.repo
-        whole_entries={n:{k:git(self.repo,'ls-tree',rev,'--',n)+'\0' for k,rev in
-            [('base',base),('first',first),('source',source),('automatic',automatic),('historical',historical)]} for n in names}
+        whole_entries={n:{k:(value+'\0' if value else '') for k,rev in
+            [('base',base),('first',first),('source',source),('automatic',automatic),('historical',historical)]
+            for value in [git(self.repo,'ls-tree',rev,'--',n)]} for n in names}
         # Convert stripped newline records to the canonical single NUL record.
         current_bindings={n:(raw+'\0' if raw else '') for n in sorted(set(names+repair_paths))
             for raw in [git(self.repo,'ls-tree',correction,'--',n)]}
@@ -101,9 +105,14 @@ class ProducerTrace(unittest.TestCase):
         m.F_CORRECTED_UNIT_SHA=m.sha(unit_file.read_bytes());m.F_CORRECTED_REPAIR_PATHS=repair_paths
         m.F_CORRECTED_TUPLE=dict(merge=historical,first=first,source=source,base=base,automatic_tree=automatic,
             result_tree=unit['result_tree'],correction=correction,current=correction,source_ancestor=correction)
+        raw='\t'.join([retired,'true',first,base,base,first,base,base])
+        m.F_DELETION_ROW_SHA=m.sha(raw.encode());m.F_DELETION_ENTRY=git(self.repo,'ls-tree',first,'--',retired)+'\0'
+        ruling=self.folder/'private-reviewed-deletion.txt';ruling.write_text('private fixture review, not production authority')
+        m.F_DELETION_RULING_SHA=m.sha(ruling.read_bytes());m.J3071_RANGE=dict(m.J3071_RANGE,base=base)
         helper=self.repo/'scripts/ci/f13_f54_history.py'
         lines=HELPER.read_text().splitlines(keepends=True);bindings={n:getattr(m,n) for n in
-            ('F_CORRECTED_UNIT_SHA','F_CORRECTED_TUPLE','F_CORRECTED_REPAIR_PATHS')}
+            ('F_CORRECTED_UNIT_SHA','F_CORRECTED_TUPLE','F_CORRECTED_REPAIR_PATHS',
+             'F_DELETION_ROW_SHA','F_DELETION_ENTRY','F_DELETION_RULING_SHA','J3071_RANGE')}
         for node in sorted([n for n in ast.parse(''.join(lines)).body if isinstance(n,ast.Assign)
                 and isinstance(n.targets[0],ast.Name) and n.targets[0].id in bindings],key=lambda n:n.lineno,reverse=True):
             name=node.targets[0].id;lines[node.lineno-1:node.end_lineno]=[name+' = '+repr(bindings[name])+'\n']
@@ -125,6 +134,8 @@ class ProducerTrace(unittest.TestCase):
             self.assertEqual(proof['merge_tree_exit'],1);self.assertEqual(proof['complete_manual_paths'],names)
             self.assertIn('KNOWN_STARTUP_PUBLICATION_DEFECT',proof['historical_gap'])
             self.assertFalse(proof['runtime_pass']);self.assertTrue(proof['retain_runtime_and_content_taint'])
+            self._private_F_case=dict(module=m,capability=json.loads(capability.read_bytes()),proof=proof,
+                target=target,context=context,raw=raw,retired=retired,ruling=ruling)
             original=unit_file.read_bytes()
             import copy
             for error in ('partial','parent','base','tree','auto','mode','entry','current','forged-absence',
@@ -156,6 +167,110 @@ class ProducerTrace(unittest.TestCase):
             self.write(RUNTIME,'regressed current startup binding\n');regressed=self.commit('private current regression')
             with self.assertRaises(m.Rejected):m.corrected_F_whole(self.repo,unit_file,regressed)
             with self.assertRaises(m.Rejected):m.corrected_F_whole(self.repo,unit_file,historical)
+
+    def test_reviewed_deletion_constructor_requires_real_F33_transition_and_repair(self):
+        # Real private Git graph/full33 source/current repair. This exercises
+        # the value constructor, not an invented original-engine trace.
+        import copy
+        self.test_corrected_historical_manual_unit_requires_complete_source_and_current_repair()
+        case=self._private_F_case;m=case['module'];f=m.F_CORRECTED_TUPLE
+        git(self.repo,'checkout','-q',case['target'])
+        raw=case['raw'];binding=m.file_digest((raw+'\n').encode());frame='private-F-frame'
+        state=dict(frame_context=dict(id=frame,base=m.J3071_RANGE['base'],target=f['correction'],
+            allow_direct_followup='true',partition_source_history='false'),F_operation=frame+'/'+f['merge']+'/2',
+            operation_binding=dict(commit=f['merge'],first_parent=f['first'],boundary=f['base'],source_head=f['source']),
+            classification=dict(trigger='true'),composition_receipts=[case['proof']],prior_rows=[m.raw_binding(raw)],
+            aggregate=True,path_evidence=[dict(private_value_fixture_only=True,row=m.raw_binding(raw))],
+            map_binding=binding,source_context=case['capability']['source_context'],range_branch_sha256='1'*64)
+        state['original_guard']=dict(gate='f13_guarded_entry_matches_final_target',original_status=1,
+            path=case['retired'],target=f['correction'],stored_entry=m.raw_binding(m.F_DELETION_ENTRY.rstrip('\0')),
+            target_entry=m.raw_binding(''),guarded_owner=f['first'],source_head=f['first'],
+            prior_rows=state['prior_rows'],map_before=binding)
+        with patch.dict(m.os.environ,case['context']):
+            value=m.reviewed_F_deletion_value(self.repo,case['capability'],state,case['ruling'])
+            self.assertEqual(value['expected_terminal_state'],'ABSENT');self.assertTrue(value['aggregate'])
+            self.assertEqual(value['map_before'],value['map_after']);self.assertEqual(value['state']['prior_rows'],[m.raw_binding(raw)])
+            for error in ('target','base','mode','owner','rawfalse','source','content','context','no-composition',
+                    'no-history','false-aggregate','wrong-operation','missing-range',
+                    'guard-entry','guard-target','guard-owner','guard-source','guard-status'):
+                changed=copy.deepcopy(state)
+                if error in ('target','base'):changed['frame_context'][error]=f['first']
+                elif error in ('owner','rawfalse','source','content'):
+                    parts=raw.split('\t');index=dict(owner=2,rawfalse=1,source=5,content=6)[error]
+                    parts[index]='false' if error=='rawfalse' else f['merge'];changed['prior_rows']=[m.raw_binding('\t'.join(parts))]
+                elif error=='mode':
+                    saved=m.F_DELETION_ENTRY;m.F_DELETION_ENTRY=saved.replace('100644','100755')
+                elif error=='context':changed['source_context']={}
+                elif error=='no-composition':changed['composition_receipts']=[]
+                elif error=='no-history':changed['path_evidence']=[]
+                elif error=='false-aggregate':changed['aggregate']=False
+                elif error=='wrong-operation':changed['F_operation']=frame+'/'+f['first']+'/1'
+                elif error=='missing-range':changed['range_branch_sha256']=''
+                elif error=='guard-entry':changed['original_guard']['stored_entry']=m.raw_binding('')
+                elif error=='guard-target':changed['original_guard']['target_entry']=m.raw_binding(m.F_DELETION_ENTRY.rstrip('\0'))
+                elif error in ('guard-owner','guard-source'):
+                    changed['original_guard']['guarded_owner' if error=='guard-owner' else 'source_head']=f['merge']
+                else:changed['original_guard']['original_status']=0
+                with self.subTest(constructor=error),self.assertRaises(m.Rejected):
+                    m.reviewed_F_deletion_value(self.repo,case['capability'],changed,case['ruling'])
+                if error=='mode':m.F_DELETION_ENTRY=saved
+            with self.assertRaises(m.Rejected):m.tree_entry(self.repo,'0'*40,case['retired'])
+        ordinary=re.search(r'(?ms)^f13_guarded_entry_matches_final_target\(\) \{\n.*?^\}\n',SHELL.read_text()).group(0)
+        result=subprocess.run(['bash','-c',ordinary+'\nf13_guarded_entry_matches_final_target '+
+            shlex.quote(m.F_DELETION_ENTRY.rstrip('\0'))+" ''\n"],capture_output=True)
+        self.assertEqual(result.returncode,1,'Default PRESENT guard must still reject without the typed disposition')
+
+    def test_reviewed_deletion_preserves_raw_history_and_consumes_typed_state(self):
+        # Fold-only finite representation test, not a synthetic source or
+        # original-engine qualification. Real F/repair/gate proof is separate.
+        import copy
+        m=module();f=m.F_CORRECTED_TUPLE;name=m.F_DELETION_PATH;frame='private-retained-frame'
+        raw='\t'.join([name,'true',f['first'],f['base'],f['base'],f['first'],f['base'],f['base']])
+        self.assertEqual(m.sha(raw.encode()),m.F_DELETION_ROW_SHA)
+        binding=m.file_digest((raw+'\n').encode())
+        receipt=dict(type='F54_REVIEWED_F_DELETION_v1',path=name,expected_terminal_state='ABSENT',
+            aggregate=True,map_before=binding,map_after=binding,
+            state=dict(prior_rows=[m.raw_binding(raw)],frame_context=dict(id=frame)))
+        ledger={frame:dict(rows=[raw],map_binding=binding,paths={name:dict(aggregate=True,
+            evidence=[dict(private_fold_only=True,row=m.raw_binding(raw))])},terminal_dispositions={name:receipt})}
+        event=dict(kind='reviewed_F_deletion',frame=frame,operation=None,payload=dict(receipt=receipt,
+            receipt_sha256=m.sha(m.canonical(receipt)),map_after=binding))
+        trace=m.canonical(event)+b'\n';prefix=m.file_digest(trace)
+        expected=m.terminal_dispositions_in_prefix(ledger,trace,prefix)
+        self.assertEqual(len(expected),1);self.assertEqual(ledger[frame]['rows'],[raw])
+        self.assertTrue(ledger[frame]['paths'][name]['aggregate'])
+        bound=dict(path=name,covered=True,aggregate=True,obligations=dict(aggregate=True,
+            retained_evidence=[dict(private_fold_only=True)]),terminal_dispositions=expected)
+        self.assertEqual(m.retained_row_for_binding(bound),raw)
+        for error in ('false-OR','wrong-path','filtered-history','forged-owner'):
+            altered=copy.deepcopy(bound)
+            if error=='false-OR':altered['aggregate']=False
+            elif error=='wrong-path':altered['path']=name+'.future'
+            elif error=='filtered-history':altered['obligations']['retained_evidence']=[]
+            else:
+                item=altered['terminal_dispositions'][0]
+                item['receipt']['state']['prior_rows'][0]=m.raw_binding(raw.replace(f['first'],f['merge']))
+                item['receipt_sha256']=m.sha(m.canonical(item['receipt']))
+            with self.subTest(projection=error),self.assertRaises(m.Rejected):m.retained_row_for_binding(altered)
+        for error in ('row-drop','false','owner','source','content','synthetic-F','missing-history',
+                'missing-disposition','map-mutation','frame','terminal-present','other-path'):
+            altered=copy.deepcopy(ledger);value=altered[frame];r=value['terminal_dispositions'][name]
+            if error=='row-drop':value['rows']=[]
+            elif error in ('false','owner','source','content','synthetic-F'):
+                parts=value['rows'][0].split('\t')
+                index=dict(false=1,owner=2,source=5,content=6,**{'synthetic-F':2})[error]
+                parts[index]='false' if error=='false' else f['merge'];value['rows']=['\t'.join(parts)]
+            elif error=='missing-history':value['paths'][name]['evidence']=[]
+            elif error=='missing-disposition':value['terminal_dispositions']={}
+            elif error=='map-mutation':r['map_after']=m.file_digest(b'changed')
+            elif error=='frame':r['state']['frame_context']['id']='foreign-frame'
+            elif error=='terminal-present':r['expected_terminal_state']='PRESENT'
+            else:r['path']=name+'.future';value['terminal_dispositions']={name+'.future':r}
+            with self.subTest(error=error),self.assertRaises(m.Rejected):
+                m.terminal_dispositions_in_prefix(altered,trace,prefix)
+        # Rehashing transport cannot manufacture or remove the typed state.
+        for modified in (b'',m.canonical(dict(event,operation='fake-F-row'))+b'\n'):
+            with self.assertRaises(m.Rejected):m.terminal_dispositions_in_prefix(ledger,modified,m.file_digest(modified))
 
     def test_large_range_receipts_use_exact_file_transport_not_argv(self):
         # Transport only: the collector stub grants no range/source authority.
@@ -417,7 +532,7 @@ class ProducerTrace(unittest.TestCase):
         collection=dict(type='F54_SEALED_SUCCESSFUL_COLLECTION',admission=False,
             collection_trace=str(trace),collection_prefix=dict(bytes=len(trace_raw),sha256=m.sha(trace_raw)),
             source_context=m.router_source_context(self.repo),map_path=str(actual_map),map_binding=root['map_binding'],outer_rows=root['rows'],
-            required_qualification=root['paths'])
+            required_qualification=root['paths'],ledger=verified['ledger'],terminal_dispositions=[])
         collection_file=out/'private-transport.json';collection_file.write_bytes(m.canonical(collection))
         with self.assertRaises(m.Rejected):m.seal_router(self.repo,collection_file,m.sha(collection_file.read_bytes()),actual_map,context_file)
         seal=dict(type='F54_ORIGINAL_ROUTER_SEAL',collection_path=str(collection_file),collection_sha256=m.sha(collection_file.read_bytes()),

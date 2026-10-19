@@ -1,5 +1,53 @@
 # Native/P3 source qualification for master
 
+## Current e129 exact reviewed-F deletion
+
+Supported e129/readback owner416 precedes fresh WT19 lease
+0668bf11194833fe1ee28e5de6fa9d9a. Baseline source0b68/H4 and comparison1c47
+remain explicit; published candidate4f3391/Auth-generated changes are outside
+this proof. Existing410 decision06c8b2bc (SWARM c143-c145) permits only the
+typed F54_REVIEWED_F_DELETION_v1 terminal ABSENT obligation. Source/runtime
+authority, four nonempty repair bindings and all other guards remain required.
+
+Meaningful original RED is terminal13959, F13 EXIT1/8282events/tracef32750f1:
+the completed fixed9 spine retains the exact raw D test row (true, owner/sourceD,
+content/baseC) while F/909 deliberately lack that path. Preserve the complete
+terminal packet75cedba9/ZIPe74f89f2 and original failure; do not rerun cancelled
+75361 or relabel the old observation. c34 source/current repair applicability
+is distinct from this new terminal-state consumer and full F13 qualification.
+
+The new constructor binds the actual final guard, full F33/current repair,
+completed F operation/classification/whole-unit receipts, exact D/AUTO entry,
+D-to-F deletion and no later path writer. It emits no row and changes no map.
+The trace fold independently reconstructs its receipt and requires it before
+the exact range can report success. I/full collection/router retain the typed
+state with complete raw history and aggregate true; omission/substitution must
+fail against the sealed actual prefix before dependent overwrite/early exits.
+The unchanged original policy still decides permission and may genuinely fail.
+
+Real private-Git full33 deletion/current-repair constructor and fold fixtures
+pass; the default PRESENT predicate still refuses the same absence. The first
+affected run had a checked-transport fixture schema error (42tests/one ERROR),
+preserved before explicit fixture adaptation; affected2 then passes42 and
+affected3 passes43 (log7dc85eb5). Before final guard-argument binding, exact
+prior helper e4e9cddf was reconstructed/hash-matched and rejected by the new
+specification: five real assertion failures accepted forged guard entry,
+target, owner, source and status (RED logb12e77bf). The corrected focused
+constructor/fold plus syntax passes2 tests (log4c5b9bc0). These are private
+Git/representation checks, not a claimed actual original-wrapper successor.
+
+The actual rejected final guard now records its own entry/owner/source/target
+arguments before the independently reconstructed terminal receipt. Missing or
+substituted arguments cannot be inferred from a convenient Git fact alone.
+Sealed retained-history projection supplies genuine D/C source/delta/content
+to the unchanged original router; absent final bytes never become empty history.
+Final frozen-source affected checks and actual wrapper remain separately scoped.
+
+Finite fold fixtures are representation tests, not actual source/engine proof.
+Fresh immutable successor execution must supply the actual typed event and
+downstream evidence or preserve the next real failure. Independent418 review,
+existing R/laterK/currentCI/MASTER intake remain OPEN; no production admission.
+
 ## Current e122 canonical corrected-history applicability
 
 Owner416 accepted dispatch d645c88e (8675B) and canonical findings53165337
