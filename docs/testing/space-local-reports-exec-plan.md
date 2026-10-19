@@ -1,5 +1,57 @@
 # ExecPlan: separate Space-local reports
 
+## Resumed current-cohort implementation
+
+The user explicitly resumed finishing existing work after the stop. The target
+is candidate `78bc80b975bc7df00c8e8902ce58186b0a4e29f7`, with canonical eleven
+P3 participants and Space source595 qualification preserved. Own reviewed
+Chat/Social source da3734 is normally merged; old native33 and prototype38 are
+not merged into this cohort. Existing function
+`IMPL-BE066-EFFECTIVE-EPISODE-v1` c3 reconciles real ordering with owners186/69:
+queue37, native39, admission40, NEW ledger41. Old38 exists only in immutable
+a8eb93fd5 history; its current physical reservation is released. Native39 owns
+the real terminal predicate and source publication/all-writer implementation.
+
+- [x] Restore the private transition/CAS into this cohort; move the unintegrated
+  ledger DDL to forward41 without rewriting historical migrations.
+- [x] Prove and repair the empty-check/DROP race using a real blocked DOWN and
+  first committing writer. Acquire the destructive lock before checking data.
+- [x] Replace the prototype false-P3 fixture with actual native39 and canonical
+  eleven-participant positive/negative P3; invoke the real store finalizer and
+  retain native predicate/catalog guards. Missing provider is not PASS.
+- [ ] Implement real qualified source capture before any native overwrite and
+  finalization after logical publication, with one final all-profile DB clock
+  fence. Missing active ledger fails closed; explicit cutover starts UNKNOWN.
+- [ ] Bind protected read context/full327 consumer, prove actual current writer
+  and owner interfaces, independent changed-head review and accepted121 intake.
+
+Actual native39 source and capture/finalize interfaces are obtained directly from
+owner186. No guessed ACTIVE hook, caller-supplied allow result, minted capability
+or false terminal provider substitutes for them. Current implementations retain
+ONE-source admission identity independently of the effective union episode.
+Existing active heads initialize with UNKNOWN cutoff under an all-writer barrier,
+including community-only sources; overlapping additions never upgrade UNKNOWN.
+The positive P3 test must remove profile heads behind the native permanent Space
+fence while a missing/mismatched/early or ten-participant state denies deletion.
+
+Current scoped proof uses unchanged storage-only native39 from
+`d432852a1d7232cb792ff52bbab157e74b43de41`, not globally activated native writers.
+The actual current eleven-participant store finalizer removes effective heads;
+ten-participant completion denies and preserves them. Domain receipt fixtures
+do not certify eleven hosted transports or global account erasure. The actual
+pinned Linux migrate v4.18.1 proves fresh Up41, empty Down to the preceding
+installed migration, replay and retained Down refusal with data preserved. A
+refused Down leaves that attempted target version dirty; no force-clear is used.
+Seven top-level tests and twenty subtests pass with Linux PostgreSQL16 and
+`-race` (25.246s); affected store vet exits zero. Provisioning-only DSN/migrator
+overlays preserve product SQL and assertions; canonical Testcontainers startup
+is not covered. Native catalog currently accepts exact39 only, so native reader
+compatibility with41 remains owner186's explicit qualification work. No bypass
+or caller-supplied authority substitutes for the missing capture/finalize API.
+The subsequently announced MASTER candidate `fd43a284a6ad312cb7443e1368286002c494fd5f`
+still needs coherent source reconciliation; this proof remains scoped to the
+78bc cohort plus reviewed da3734 and exact storage prerequisite d432.
+
 ## Purpose
 
 A member can explicitly complain about a readable Space message to that Space's

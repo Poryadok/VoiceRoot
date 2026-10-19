@@ -25,6 +25,32 @@ ListMembers page100 and unmanaged Chat entitlement are not substitutes for this
 producer. No foreign database reads, raw viewer identity metadata or public
 caller registration is introduced by this target contract.
 
+The continuous effective binding is distinct from the ONE-source Role/admission
+binding. BE-066 c23 selects a compact generation/episode UUID/retirement floor and
+ledger revision, exact private ordinary/community witnesses and their coverage
+horizon. Capture OLD published support before changing either member or owner
+lease, under the native sorted Space transaction fence. Preserve an episode only
+through an exact surviving source. Community continuity ends at the minimum of
+both strict leases; a later renewal cannot bridge expiry without a sweeper.
+Final fresh DB time must cover all captured profiles after waiting SQL. New entry
+is the owner publication completion time; clock regression and overflow fail.
+
+Explicit all-writer cutover initializes every existing eligible source with
+UNKNOWN cutoff, including community-only and positive ordinary publications.
+An overlapping source cannot upgrade UNKNOWN; a complete break followed by a
+new publication may create a KNOWN boundary. Reads never repair missing heads.
+
+Forward ledger41 follows native39 and admission40; the historical prototype38
+was not integrated and is not rewritten. 41 qualifies the exact native39 terminal
+predicate and canonical34 eleven-participant predicate. Its Space terminal
+cleanup calls that real native predicate, removes profile-bearing effective
+heads and denies late replay behind the permanent Space fence. Reversible freeze
+is not itself a membership-history cut. Destructive DOWN locks Space and ledger
+before checking emptiness, preserving a first concurrent writer. This storage
+composition does not activate native all-writer capture/finalization or protected
+ingress; actual native provider/cutover/catalog and account-erasure composition
+remain required. Head minimization alone is not global physical-erasure proof.
+
 ## Composite Chat creation (accepted implementation contract)
 
 `CommitSpaceChatCreation` admits only a freshly authenticated `service:chat`
