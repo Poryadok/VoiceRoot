@@ -60,3 +60,10 @@ RPO/RTO are available.
 
 - A real target backup/restore drill remains a G1/staging action and must set
   accepted RPO/RTO before it can be reported as alpha evidence.
+- PL-A4-05 adds the separate [synthetic storage drill](../../deploy/recovery/README.md)
+  and a versioned inventory. It exercises native cold restore of PostgreSQL,
+  mixed-authority Redis, object storage, JetStream and ClickHouse on exclusively
+  owned disposable Docker resources. The existing shell command remains dry-run.
+  The new fixture uses canary tables rather than application schemas and does
+  not close current privacy/security-fence reconciliation, product recovery,
+  operator key/config custody or G1 RPO/RTO acceptance.
