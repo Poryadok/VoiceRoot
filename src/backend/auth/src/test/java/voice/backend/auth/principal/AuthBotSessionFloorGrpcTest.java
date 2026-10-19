@@ -22,30 +22,206 @@ class AuthBotSessionFloorGrpcTest {
   static final UUID ACCOUNT = UUID.fromString("00000000-0000-0000-0000-000000000271");
   static final GetBotSessionEpochFloorRequest REQUEST = GetBotSessionEpochFloorRequest.newBuilder()
       .setAccountId(ACCOUNT.toString()).build();
+  static final String INTEROP = "VOICE_AUTH_BOT_FLOOR_INTEROP_";
+  record InteropOptions(Clock clock, String clockMode, java.security.KeyPair signer, String kid,
+      byte[] jwks, UUID accountId, boolean suppliedSigner) {}
+
+  static Fixture portableFixture(Map<String,String> environment) throws Exception {
+    return new Fixture(PEER, "bot", true, true, null, portableOptions(environment));
+  }
+
+  static InteropOptions portableOptions(Map<String,String> environment) {
+    try {
+      String mode = environment.getOrDefault(INTEROP + "CLOCK_MODE", "fixed");
+      if (!Set.of("fixed", "system").contains(mode)) throw new IllegalArgumentException();
+      Clock clock = mode.equals("system") ? Clock.systemUTC() : Clock.fixed(AuthPrincipalVerifierTest.NOW, ZoneOffset.UTC);
+      String rawAccount = environment.getOrDefault(INTEROP + "ACCOUNT_ID", ACCOUNT.toString());
+      UUID account = UUID.fromString(rawAccount);
+      if (!account.toString().equals(rawAccount) || account.equals(new UUID(0, 0))) throw new IllegalArgumentException();
+      var names = List.of("SIGNER_KEY_FILE", "SIGNER_KEY_ID", "JWKS_FILE");
+      long present = names.stream().filter(n -> environment.containsKey(INTEROP + n)).count();
+      if (present != 0 && present != names.size()) throw new IllegalArgumentException();
+      var signer = AuthPrincipalVerifierTest.KEY;
+      String kid = "current";
+      byte[] jwks = AuthPrincipalJwksResolverTest.set(
+          AuthPrincipalJwksResolverTest.jwk(kid, (RSAPublicKey) signer.getPublic()),
+          AuthPrincipalJwksResolverTest.jwk("next", AuthPrincipalJwksResolverTest.NEXT));
+      if (present != 0) {
+        for (String name : names) if (environment.get(INTEROP + name).isBlank()) throw new IllegalArgumentException();
+        kid = environment.get(INTEROP + "SIGNER_KEY_ID");
+        if (!kid.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")) throw new IllegalArgumentException();
+        var keyPath = java.nio.file.Path.of(environment.get(INTEROP + "SIGNER_KEY_FILE"));
+        var jwksPath = java.nio.file.Path.of(environment.get(INTEROP + "JWKS_FILE"));
+        if (java.nio.file.Files.size(keyPath) > 32768 || java.nio.file.Files.size(jwksPath) > 65536)
+          throw new IllegalArgumentException();
+        String pem = java.nio.file.Files.readString(keyPath, java.nio.charset.StandardCharsets.US_ASCII).strip();
+        String begin = "-----BEGIN PRIVATE KEY-----", end = "-----END PRIVATE KEY-----";
+        if (!pem.startsWith(begin) || !pem.endsWith(end)) throw new IllegalArgumentException();
+        byte[] der = Base64.getDecoder().decode(pem.substring(begin.length(), pem.length() - end.length()).replaceAll("\\s", ""));
+        var factory = java.security.KeyFactory.getInstance("RSA");
+        var privateKey = (java.security.interfaces.RSAPrivateCrtKey) factory.generatePrivate(new java.security.spec.PKCS8EncodedKeySpec(der));
+        var publicKey = (RSAPublicKey) factory.generatePublic(new java.security.spec.RSAPublicKeySpec(
+            privateKey.getModulus(), privateKey.getPublicExponent()));
+        signer = new java.security.KeyPair(publicKey, privateKey);
+        jwks = java.nio.file.Files.readAllBytes(jwksPath);
+        byte[] approvedSnapshot = jwks;
+        var approved = new AuthPrincipalJwksResolver(issuer -> approvedSnapshot, clock,
+            Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(1)).resolveForBotFloor("bot", kid);
+        if (!Arrays.equals(publicKey.getEncoded(), approved.getEncoded())) throw new IllegalArgumentException();
+      }
+      return new InteropOptions(clock, mode, signer, kid, jwks, account, present != 0);
+    } catch (Exception invalid) {
+      // This is a test-input error, never disclose private-key bytes or parser diagnostics.
+      throw new IllegalArgumentException("invalid portable fixture inputs");
+    }
+  }
+
+  static String privatePem(java.security.KeyPair signer) {
+    return "-----BEGIN PRIVATE KEY-----\n" + Base64.getMimeEncoder(64, new byte[]{10})
+        .encodeToString(signer.getPrivate().getEncoded()) + "\n-----END PRIVATE KEY-----\n";
+  }
+
+  @Test void portableSystemClockAcceptsARealCurrentSignedRequest() throws Exception {
+    try (var f = portableFixture(Map.of("VOICE_AUTH_BOT_FLOOR_INTEROP_CLOCK_MODE", "system"))) {
+      var claims = f.claims(REQUEST);
+      Instant now = Instant.now();
+      claims.put("iat", now.getEpochSecond()); claims.put("nbf", now.getEpochSecond());
+      claims.put("exp", now.plusSeconds(20).getEpochSecond());
+      assertEquals(9, f.call(REQUEST, claims).getSessionEpochFloor());
+    }
+  }
+
+  @Test void portableDefaultsKeepTheOriginalClockKeyAccountAndServingBehavior() throws Exception {
+    var defaults = portableOptions(Map.of());
+    assertEquals("fixed", defaults.clockMode()); assertEquals(AuthPrincipalVerifierTest.NOW, defaults.clock().instant());
+    assertEquals(ACCOUNT, defaults.accountId()); assertEquals("current", defaults.kid());
+    assertFalse(defaults.suppliedSigner()); assertEquals(AuthPrincipalVerifierTest.KEY.getPublic(), defaults.signer().getPublic());
+    try (var f = portableFixture(Map.of())) {
+      assertEquals(AuthPrincipalVerifierTest.NOW.getEpochSecond(), f.claims(REQUEST).get("iat"));
+      assertEquals(9, f.call(REQUEST, f.claims(REQUEST)).getSessionEpochFloor());
+    }
+  }
+
+  static Map<String,String> suppliedInputs(java.nio.file.Path directory, java.security.KeyPair signer, String kid, UUID account) throws Exception {
+    var key = directory.resolve("caller-owned-key.pem");
+    var jwks = directory.resolve("approved-current-next.json");
+    java.nio.file.Files.writeString(key, privatePem(signer));
+    java.nio.file.Files.write(jwks, AuthPrincipalJwksResolverTest.set(
+        AuthPrincipalJwksResolverTest.jwk(kid, (RSAPublicKey) signer.getPublic()),
+        AuthPrincipalJwksResolverTest.jwk("next", AuthPrincipalJwksResolverTest.NEXT)));
+    return new HashMap<>(Map.of(INTEROP + "SIGNER_KEY_FILE", key.toString(), INTEROP + "SIGNER_KEY_ID", kid,
+        INTEROP + "JWKS_FILE", jwks.toString(), INTEROP + "ACCOUNT_ID", account.toString(), INTEROP + "CLOCK_MODE", "system"));
+  }
+
+  @Test void portableSuppliedSignerSnapshotAndAccountServeTogether(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory) throws Exception {
+    var signer = AuthPrincipalVerifierTest.key(); UUID account = UUID.randomUUID();
+    var inputs = suppliedInputs(directory, signer, "role-fixture-current", account);
+    byte[] snapshot = java.nio.file.Files.readAllBytes(directory.resolve("approved-current-next.json"));
+    assertArrayEquals(snapshot, portableOptions(inputs).jwks(), "approved complete snapshot must remain byte-for-byte unchanged");
+    try (var f = portableFixture(inputs)) {
+      var request = REQUEST.toBuilder().setAccountId(account.toString()).build();
+      assertEquals("role-fixture-current", f.signingKid);
+      assertEquals(signer.getPublic(), portableOptions(inputs).signer().getPublic());
+      assertEquals(9, f.call(request, f.claims(request)).getSessionEpochFloor());
+      verify(f.accounts).findById(account.toString()); verify(f.floors).requireFloor(account);
+      verifyNoMoreInteractions(f.accounts, f.floors);
+    }
+  }
+
+  @Test void portableInvalidInputsFailBeforeAnyListenerIsCreated(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory) throws Exception {
+    var signer = AuthPrincipalVerifierTest.key();
+    var valid = suppliedInputs(directory, signer, "shared-current", ACCOUNT);
+    var triple = List.of("SIGNER_KEY_FILE", "SIGNER_KEY_ID", "JWKS_FILE");
+    for (int mask = 1; mask < 7; mask++) {
+      Map<String,String> partial = new HashMap<>();
+      for (int bit = 0; bit < triple.size(); bit++) if ((mask & (1 << bit)) != 0)
+        partial.put(INTEROP + triple.get(bit), valid.get(INTEROP + triple.get(bit)));
+      assertThrows(IllegalArgumentException.class, () -> portableOptions(partial));
+    }
+    for (String name : triple) {
+      var blank = new HashMap<>(valid); blank.put(INTEROP + name, "");
+      assertThrows(IllegalArgumentException.class, () -> portableOptions(blank));
+    }
+    for (String mode : List.of("", "SYSTEM", "current", "arbitrary"))
+      assertThrows(IllegalArgumentException.class, () -> portableOptions(Map.of(INTEROP + "CLOCK_MODE", mode)));
+    for (String id : List.of("", "not-a-uuid", "00000000-0000-0000-0000-000000000000", "8A78BD68-75E9-4F21-9387-3BDC2F6116AB"))
+      assertThrows(IllegalArgumentException.class, () -> portableOptions(Map.of(INTEROP + "ACCOUNT_ID", id)));
+    var unknownKid = new HashMap<>(valid); unknownKid.put(INTEROP + "SIGNER_KEY_ID", "absent");
+    assertThrows(IllegalArgumentException.class, () -> portableOptions(unknownKid));
+    java.nio.file.Files.writeString(directory.resolve("caller-owned-key.pem"), privatePem(AuthPrincipalVerifierTest.key()));
+    assertThrows(IllegalArgumentException.class, () -> portableOptions(valid), "different private key cannot borrow the approved kid");
+    java.nio.file.Files.writeString(directory.resolve("caller-owned-key.pem"), "not a PKCS8 key");
+    assertThrows(IllegalArgumentException.class, () -> portableOptions(valid));
+    java.nio.file.Files.writeString(directory.resolve("caller-owned-key.pem"), privatePem(signer));
+    java.nio.file.Files.writeString(directory.resolve("approved-current-next.json"), "{}");
+    assertThrows(IllegalArgumentException.class, () -> portableOptions(valid));
+  }
+
+  @Test void portableMainActuallyServesCurrentClockSharedSignerAndSelectedAccount(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory) throws Exception {
+    var signer = AuthPrincipalVerifierTest.key(); UUID account = UUID.randomUUID();
+    var inputs = suppliedInputs(directory, signer, "shared-current", account);
+    var output = directory.resolve("server-output"); java.nio.file.Files.createDirectories(output);
+    var processBuilder = new ProcessBuilder(java.nio.file.Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+        "-cp", System.getProperty("java.class.path"), AuthBotSessionFloorGrpcTest.class.getName(), output.toString(), "30");
+    processBuilder.environment().putAll(inputs);
+    processBuilder.redirectOutput(output.resolve("stdout.log").toFile()); processBuilder.redirectError(output.resolve("stderr.log").toFile());
+    Process process = processBuilder.start(); ManagedChannel channel = null;
+    try {
+      var readyPath = output.resolve("ready.json"); long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+      while (!java.nio.file.Files.exists(readyPath) && process.isAlive() && System.nanoTime() < deadline) Thread.sleep(20);
+      assertTrue(java.nio.file.Files.exists(readyPath), "portable child fixture must become ready");
+      var ready = AuthPrincipalVerifierTest.JSON.readTree(java.nio.file.Files.readString(readyPath));
+      assertEquals("system", ready.get("clock_mode").asText()); assertEquals("supplied", ready.get("signer_mode").asText());
+      assertEquals(account.toString(), ready.get("account_id").asText()); assertEquals("shared-current", ready.get("kid").asText());
+      assertTrue(Duration.between(Instant.parse(ready.get("clock").asText()), Instant.now()).abs().compareTo(Duration.ofSeconds(10)) < 0);
+      assertArrayEquals(java.nio.file.Files.readAllBytes(directory.resolve("approved-current-next.json")),
+          java.nio.file.Files.readAllBytes(output.resolve("bot-jwks.json")));
+      channel = NettyChannelBuilder.forAddress("localhost", ready.get("port").asInt()).sslContext(
+          GrpcSslContexts.forClient().trustManager(output.resolve("server-cert.pem").toFile())
+              .keyManager(output.resolve("bot-cert.pem").toFile(), output.resolve("bot-key.pem").toFile()).build()).build();
+      var request = REQUEST.toBuilder().setAccountId(account.toString()).build();
+      var claims = AuthPrincipalVerifierTest.claims();
+      claims.put("iss", "bot"); claims.put("sub", "service:bot"); claims.put("principal_type", "service");
+      claims.put("rpc", RPC); claims.put("request_hash", AuthPrincipalServerInterceptor.requestHash(request));
+      claims.remove("account_id"); claims.remove("profile_id"); claims.remove("session_epoch");
+      Instant now = Instant.now(); claims.put("iat", now.getEpochSecond()); claims.put("nbf", now.getEpochSecond()); claims.put("exp", now.plusSeconds(20).getEpochSecond());
+      Metadata headers = new Metadata(); headers.put(Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER),
+          "Bearer " + AuthPrincipalVerifierTest.token(claims, Map.of("alg", "RS256", "kid", "shared-current"), signer.getPrivate()));
+      headers.put(Metadata.Key.of("x-request-id", Metadata.ASCII_STRING_MARSHALLER), "request-1");
+      var response = AuthServiceGrpc.newBlockingStub(ClientInterceptors.intercept(channel, MetadataUtils.newAttachHeadersInterceptor(headers)))
+          .withDeadlineAfter(5, TimeUnit.SECONDS).getBotSessionEpochFloor(request);
+      assertEquals(9, response.getSessionEpochFloor());
+    } finally {
+      if (channel != null) channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
+      process.destroy(); if (!process.waitFor(5, TimeUnit.SECONDS)) process.destroyForcibly().waitFor(5, TimeUnit.SECONDS);
+    }
+  }
 
   /** Bounded private-network Go-to-Java interop fixture; every key and account here is test-only. */
   public static void main(String[] args) throws Exception {
     if (args.length != 2) throw new IllegalArgumentException("output directory and lifetime seconds required");
     long seconds = Long.parseLong(args[1]);
     if (seconds < 1 || seconds > 600) throw new IllegalArgumentException("fixture lifetime must be 1..600 seconds");
+    var options = portableOptions(System.getenv());
     var out = java.nio.file.Path.of(args[0]).toAbsolutePath();
     java.nio.file.Files.createDirectories(out);
     var control = out.resolve("retained-floor.txt");
     java.nio.file.Files.writeString(control, "9");
-    try (var f = new Fixture(PEER, "bot", true)) {
-      when(f.floors.requireFloor(ACCOUNT)).thenAnswer(invocation ->
+    try (var f = new Fixture(PEER, "bot", true, true, null, options)) {
+      when(f.floors.requireFloor(options.accountId())).thenAnswer(invocation ->
           Long.parseLong(java.nio.file.Files.readString(control).strip()));
       for (String name : List.of("server-cert.pem", "bot-cert.pem", "bot-key.pem"))
         java.nio.file.Files.copy(resource(name).toPath(), out.resolve(name), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-      String pem = "-----BEGIN PRIVATE KEY-----\n" + Base64.getMimeEncoder(64, new byte[]{10})
-          .encodeToString(AuthPrincipalVerifierTest.KEY.getPrivate().getEncoded()) + "\n-----END PRIVATE KEY-----\n";
-      java.nio.file.Files.writeString(out.resolve("bot-signing-key.pem"), pem);
+      java.nio.file.Files.writeString(out.resolve("bot-signing-key.pem"), privatePem(options.signer()));
+      java.nio.file.Files.write(out.resolve("bot-jwks.json"), options.jwks());
       String ready = AuthPrincipalVerifierTest.JSON.writeValueAsString(Map.ofEntries(
-          Map.entry("port", f.server.getPort()), Map.entry("account_id", ACCOUNT.toString()),
+          Map.entry("port", f.server.getPort()), Map.entry("account_id", options.accountId().toString()),
           Map.entry("floor", 9), Map.entry("durable_epoch", 7), Map.entry("peer_uri", PEER),
-          Map.entry("clock", AuthPrincipalVerifierTest.NOW.toString()), Map.entry("kid", "current"),
+          Map.entry("clock", options.clock().instant().toString()), Map.entry("clock_mode", options.clockMode()),
+          Map.entry("kid", options.kid()), Map.entry("signer_mode", options.suppliedSigner() ? "supplied" : "generated"),
           Map.entry("rpc", RPC), Map.entry("tls_server_name", "localhost"),
           Map.entry("test_signing_key", out.resolve("bot-signing-key.pem").toString()),
+          Map.entry("test_jwks", out.resolve("bot-jwks.json").toString()),
           Map.entry("retained_floor_control", control.toString())));
       java.nio.file.Files.writeString(out.resolve("ready.pending"), ready);
       java.nio.file.Files.move(out.resolve("ready.pending"), out.resolve("ready.json"),
@@ -269,6 +445,8 @@ class AuthBotSessionFloorGrpcTest {
     volatile boolean keyOutage, replayOutage;
     String signingKid = "current";
     java.security.PrivateKey signingKey = AuthPrincipalVerifierTest.KEY.getPrivate();
+    final Clock clock;
+    final UUID accountId;
     final Server server;
     final ManagedChannel channel;
     Fixture(String peer, String certificate, boolean tls) throws Exception {
@@ -278,12 +456,16 @@ class AuthBotSessionFloorGrpcTest {
       this(peer, certificate, tls, enabled, null);
     }
     Fixture(String peer, String certificate, boolean tls, boolean enabled, AuthPrincipalJwksResolver suppliedResolver) throws Exception {
-      when(accounts.findById(ACCOUNT.toString())).thenReturn(Optional.of(account(7, "active", null)));
-      when(floors.requireFloor(ACCOUNT)).thenReturn(9L);
-      var resolver = suppliedResolver != null ? suppliedResolver : new AuthPrincipalJwksResolver(issuer -> AuthPrincipalJwksResolverTest.set(
-          AuthPrincipalJwksResolverTest.jwk("current", (RSAPublicKey) AuthPrincipalVerifierTest.KEY.getPublic()),
-          AuthPrincipalJwksResolverTest.jwk("next", AuthPrincipalJwksResolverTest.NEXT)),
-          Clock.fixed(AuthPrincipalVerifierTest.NOW, ZoneOffset.UTC), Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(1));
+      this(peer, certificate, tls, enabled, suppliedResolver, portableOptions(Map.of()));
+    }
+    Fixture(String peer, String certificate, boolean tls, boolean enabled, AuthPrincipalJwksResolver suppliedResolver,
+        InteropOptions options) throws Exception {
+      clock = options.clock(); accountId = options.accountId();
+      signingKey = options.signer().getPrivate(); signingKid = options.kid();
+      when(accounts.findById(accountId.toString())).thenReturn(Optional.of(account(accountId, 7, "active", null)));
+      when(floors.requireFloor(accountId)).thenReturn(9L);
+      var resolver = suppliedResolver != null ? suppliedResolver : new AuthPrincipalJwksResolver(issuer -> options.jwks(),
+          clock, Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(1));
       var verifier = new AuthPrincipalVerifier((issuer, kid) -> {
             if (keyOutage) throw new PrincipalDependencyUnavailableException();
             return resolver.resolve(issuer, kid);
@@ -293,7 +475,7 @@ class AuthBotSessionFloorGrpcTest {
             if (replayOutage) throw new PrincipalDependencyUnavailableException();
             if (!replay.add(issuer + ":" + jti)) throw new IllegalArgumentException();
           },
-          Clock.fixed(AuthPrincipalVerifierTest.NOW, ZoneOffset.UTC),
+          clock,
           (issuer, kid) -> {
             if (keyOutage) throw new PrincipalDependencyUnavailableException();
             return resolver.resolveForBotFloor(issuer, kid);
@@ -326,6 +508,8 @@ class AuthBotSessionFloorGrpcTest {
       c.put("iss", "bot"); c.put("sub", "service:bot"); c.put("principal_type", "service");
       c.put("rpc", RPC); c.put("request_hash", AuthPrincipalServerInterceptor.requestHash(request));
       c.remove("account_id"); c.remove("profile_id"); c.remove("session_epoch");
+      Instant now = clock.instant();
+      c.put("iat", now.getEpochSecond()); c.put("nbf", now.getEpochSecond()); c.put("exp", now.plusSeconds(30).getEpochSecond());
       return c;
     }
     GetBotSessionEpochFloorResponse call(GetBotSessionEpochFloorRequest request, Map<String,Object> claims) {
@@ -336,7 +520,7 @@ class AuthBotSessionFloorGrpcTest {
     }
     long callSpace(Map<String,Object> claims) {
       return AuthServiceGrpc.newBlockingStub(signed(claims, new Metadata())).withDeadlineAfter(5, TimeUnit.SECONDS)
-          .getSpaceSessionEpochFloor(GetSpaceSessionEpochFloorRequest.newBuilder().setAccountId(ACCOUNT.toString()).build())
+          .getSpaceSessionEpochFloor(GetSpaceSessionEpochFloorRequest.newBuilder().setAccountId(accountId.toString()).build())
           .getSessionEpochFloor();
     }
     Channel signed(Map<String,Object> claims, Metadata extra) {
@@ -354,7 +538,10 @@ class AuthBotSessionFloorGrpcTest {
     }
   }
   static Account account(long epoch, String status, Instant deleted) {
-    return new Account(ACCOUNT, null, null, null, "regular", status, null, false, epoch,
+    return account(ACCOUNT, epoch, status, deleted);
+  }
+  static Account account(UUID id, long epoch, String status, Instant deleted) {
+    return new Account(id, null, null, null, "regular", status, null, false, epoch,
         Instant.parse("2026-01-01T00:00:00Z"), deleted);
   }
   static java.io.File resource(String name) throws Exception { return AuthPrincipalServicesTest.resource(name); }
