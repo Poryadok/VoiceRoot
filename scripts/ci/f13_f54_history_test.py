@@ -1,5 +1,6 @@
 """Actual producer events, never Git-node rows or record-supplied flags."""
 import hashlib
+import ast
 import importlib.util
 import json
 from pathlib import Path
@@ -67,6 +68,103 @@ class ProducerTrace(unittest.TestCase):
         self.write(RUNTIME, 'package main\n// actual runtime change\n'); self.write(PROTO, 'incoming\n')
         self.first = self.commit('runtime and proto actual operation')
         self.write(RUNTIME, 'package main\n'); self.head = self.commit('runtime reverted')
+
+    def exact_M_fixture(self):
+        # Entirely private, internally re-pinned complete source unit. These
+        # constants/files never leave this temporary ROOT or authorize prod.
+        names=sorted(['protos/voice/fixture/v1/cap'+str(i)+'.proto' for i in range(15)]+
+                     ['docs/fixture/cap'+str(i)+'.md' for i in range(26)])
+        for name in names:self.write(name,'left\nstable\nright\n')
+        common=self.commit('complete41 source base')
+        for name in names:self.write(name,'A\nstable\nright\n')
+        self.commit('A actual source')
+        for i in range(14):git(self.repo,'commit','--allow-empty','-qm','A actual empty operation '+str(i))
+        a=git(self.repo,'rev-parse','HEAD')
+        git(self.repo,'checkout','-qb','B-cap',common)
+        for name in names:self.write(name,'left\nstable\nB\n')
+        self.commit('B actual source')
+        for i in range(14):git(self.repo,'commit','--allow-empty','-qm','B actual empty operation '+str(i))
+        b=git(self.repo,'rev-parse','HEAD')
+        git(self.repo,'checkout','-q',a);git(self.repo,'merge','--no-ff','-qm','AB actual',b);p1=git(self.repo,'rev-parse','HEAD')
+        git(self.repo,'checkout','-q',b);git(self.repo,'merge','--no-ff','-qm','BA actual',a);p2=git(self.repo,'rev-parse','HEAD')
+        git(self.repo,'checkout','-q',p1);git(self.repo,'merge','--no-ff','-qm','M actual composition',p2);merge=git(self.repo,'rev-parse','HEAD')
+        m=module();m.M,m.P1,m.P2,m.O,m.BASES,m.TREE=merge,p1,p2,common,git(self.repo,'merge-base','--all',p1,p2).splitlines(),git(self.repo,'rev-parse',merge+'^{tree}')
+        m.SOURCE=m.PROTOTYPE_BASE=merge;m.ROOT=self.repo
+        revisions=dict(zip(('older_common_base','best_base_a','best_base_b','first_parent','source_head','merge_result','native_H53','qualified_H4','current_consumer'),(common,*m.BASES,p1,p2,merge,merge,merge,merge)))
+        entries=[]
+        for name in names:
+            versions={}
+            for label,revision in revisions.items():
+                mode,kind,rest=git(self.repo,'ls-tree',revision,'--',name).split(maxsplit=2)
+                versions[label]=dict(mode=mode,type=kind,oid=rest.split('\t')[0])
+            entries.append(dict(path=name,versions=versions))
+        folder=self.folder/'complete-unit';folder.mkdir();artifacts=[]
+        for i in range(177):
+            name='fixture-fact-'+str(i)+'.json';raw=json.dumps(dict(fixture=True,index=i,merge=merge)).encode();(folder/name).write_bytes(raw)
+            artifacts.append(dict(name=name,bytes=len(raw),sha256=hashlib.sha256(raw).hexdigest()))
+        packet=dict(older_common_base=common,current_consumer=merge,revisions=revisions,entries=entries,all_base_diff_paths=names,traversal_base=common,recursive_target=merge,
+                    guarded_base_difference_paths=[n for n in names if n.startswith('protos/')])
+        contract=dict(merge=merge,ordered_parents=[p1,p2],complete_best_bases=m.BASES,artifacts=artifacts,
+                      complete_candidate_difference_paths=names,guarded_difference_paths=packet['guarded_base_difference_paths'])
+        for name in m.UNIT_HASHES:
+            raw=json.dumps(contract if name=='contract-PROPOSAL.json' else packet if name=='proposal.json' else dict(private_fixture=True)).encode()
+            (folder/name).write_bytes(raw)
+        m.UNIT_HASHES={name:hashlib.sha256((folder/name).read_bytes()).hexdigest() for name in m.UNIT_HASHES}
+        return m,folder,names
+
+    def test_two_M_capabilities_require_complete_source_unit_and_actual_composition(self):
+        m,folder,names=self.exact_M_fixture()
+        cap=m.prepare_capabilities(self.repo,folder)
+        self.assertNotEqual(cap['history_boundary']['type'],cap['whole_parent_composition']['type'])
+        self.assertFalse(cap['admission']);self.assertFalse(m.PRODUCTION_AUTHORITY)
+        self.assertEqual(len(cap['complete_dag']),33)
+        path=self.folder/'capabilities.json';path.write_text(json.dumps(cap))
+        self.assertEqual(m.boundary_capability(self.repo,path,m.M,m.P1,m.P2)['history_boundary'],m.O)
+        result=git(self.repo,'ls-tree',m.M,'--',names[0])
+        self.assertEqual(m.composition_capability(self.repo,path,m.M,m.O,m.P1,m.P2,names[0],result)['result_tree'],m.TREE)
+        for args in ((m.M,m.P2,m.P1),(m.P1,m.P1,m.P2)):
+            with self.assertRaises(m.Rejected):m.boundary_capability(self.repo,path,*args)
+        for name,value in ((names[0],result.replace('100644','100755')),('future.proto','')):
+            with self.assertRaises(m.Rejected):m.composition_capability(self.repo,path,m.M,m.O,m.P1,m.P2,name,value)
+        for change in ('parent','bases','tree','unit','dag'):
+            altered=json.loads(json.dumps(cap))
+            if change=='parent':altered['history_boundary']['parents'].reverse()
+            elif change=='bases':altered['history_boundary']['best_bases'].reverse()
+            elif change=='tree':altered['whole_parent_composition']['result_tree']='0'*40
+            elif change=='unit':altered['source_facts']['artifacts']=176
+            else:altered['complete_dag'].pop()
+            path.write_text(json.dumps(altered))
+            with self.assertRaises(m.Rejected):m.boundary_capability(self.repo,path,m.M,m.P1,m.P2)
+        path.write_text(json.dumps(cap));(folder/'fixture-fact-176.json').unlink()
+        with self.assertRaises(m.Rejected):m.boundary_capability(self.repo,path,m.M,m.P1,m.P2)
+
+    def test_real_two_seams_consume_separate_complete_capabilities_only(self):
+        m,folder,names=self.exact_M_fixture()
+        helper=self.repo/'scripts/ci/f13_f54_history.py';raw=helper.read_text();lines=raw.splitlines(keepends=True)
+        # Literal replacements in a temporary private ROOT only. Actual source
+        # hashes, complete packet and carrier commit are recomputed afterwards.
+        bindings={name:getattr(m,name) for name in ('M','P1','P2','O','BASES','TREE','SOURCE','PROTOTYPE_BASE','UNIT_HASHES')}
+        changes=[n for n in ast.parse(raw).body if isinstance(n,ast.Assign) and len(n.targets)==1 and isinstance(n.targets[0],ast.Name) and n.targets[0].id in bindings]
+        for n in sorted(changes,key=lambda n:n.lineno,reverse=True):
+            name=n.targets[0].id;lines[n.lineno-1:n.end_lineno]=[name+' = '+repr(bindings[name])+'\n']
+        helper.write_text(''.join(lines));self.commit('private immutable capability carrier')
+        cap=self.folder/'two-capabilities.json';cap.write_text(json.dumps(m.prepare_capabilities(self.repo,folder)))
+        out=self.folder/'seam';out.mkdir();boundary=out/'boundary'
+        result=git(self.repo,'ls-tree',m.M,'--',names[0])
+        setup='set -eu\n'+definitions()+'\nTMP_DIR='+shlex.quote(str(out))+'\n'
+        resolver='f13_resolve_source_base '+ ' '.join(map(shlex.quote,map(str,(self.repo,m.P1,m.P2,boundary,m.M,cap,helper))))+'\n'
+        composition='f13_checkpoint_merge_tree_entry_matches '+' '.join(map(shlex.quote,map(str,(self.repo,m.O,m.P1,m.P2,names[0],result,m.M,cap,helper))))+'\n'
+        p=subprocess.run(['bash','-c',setup+resolver+composition],capture_output=True,text=True)
+        self.assertEqual(p.returncode,0,p.stderr)
+        self.assertEqual(boundary.read_text().strip(),m.O)
+        self.assertEqual(Path(str(boundary)+'.candidates').read_text().splitlines(),m.BASES)
+        # Removing either separately typed capability restores the ordinary
+        # scalar gate rejection; a whole-tree match cannot supply a boundary.
+        for command in (
+            'f13_resolve_source_base '+' '.join(map(shlex.quote,map(str,(self.repo,m.P1,m.P2,boundary)))),
+            'f13_checkpoint_merge_tree_entry_matches '+' '.join(map(shlex.quote,map(str,(self.repo,m.O,m.P1,m.P2,names[0],result))))):
+            p=subprocess.run(['bash','-c',setup+command],capture_output=True,text=True)
+            self.assertEqual(p.returncode,1,p.stderr)
 
     def test_runtime_revert_has_real_pre_mutation_events_and_cross_scope_still_fails(self):
         self.hidden_runtime(); p, out = self.collect(cross_scope=True)

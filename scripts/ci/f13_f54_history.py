@@ -11,6 +11,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -200,6 +201,15 @@ def append(path, kind, frame, operation, repo, values):
     elif kind == 'span_link':
         require(previous is None and not frame and not operation,'separate_supplemental_trace')
         payload=json.loads(values[0]);require(payload['admission'] is False,'span_not_admission')
+    elif kind == 'history_capability':
+        capability,receipt=values
+        payload=dict(capability=raw_binding(Path(capability).read_bytes()),receipt=json.loads(receipt),admission=False)
+    elif kind == 'composition_capability':
+        payload=json.loads(values[0]);require(payload['admission'] is False,'composition_not_production_authority')
+    elif kind == 'qualification_pending':
+        name,output,incoming=values
+        payload=dict(path=name,map_before=file_binding(output),after_gate_row=raw_binding(incoming),
+            reason='complete_ledger_consumer_required_before_mutation',admission=False)
     else: raise Rejected('unknown_event_kind')
     e=dict(schema=SCHEMA,sequence=sequence,previous=previous['digest'] if previous else '0'*64,
         kind=kind,frame=identity if kind=='frame_enter' else frame or None,
@@ -267,6 +277,81 @@ def load_unit(repo, directory):
     return dict(type='F54_REVIEWED_SOURCE_FACTS_OBSERVATION',source_context=SOURCE,observer_carrier=carrier,
         changed_source_context_paths=[v for v in changed if v in packet['all_base_diff_paths']],paths=41,versions=9,
         artifacts=177,unit_raw_hash=UNIT_HASHES['contract-PROPOSAL.json'],ruling_raw_hash=UNIT_HASHES['rudeus410-scalar-adjudication.md'],admission=False)
+
+
+def guarded_names(names):
+    """Use the actual collector predicate, not a second path policy."""
+    shell=(ROOT/'scripts/ci/voice-db-runtime-provisioning-contract_test.sh').read_text()
+    match=re.search(r'(?ms)^f13_path_is_guarded\(\) \{\n.*?^\}\n',shell)
+    require(match is not None,'actual_guarded_predicate')
+    program=match.group(0)+'\nfor path; do if f13_path_is_guarded "$path"; then printf "%s\\n" "$path"; fi; done\n'
+    p=subprocess.run(['bash','-c',program,'f54-actual-guarded',*names],capture_output=True)
+    require(p.returncode==0,'guarded_predicate_execution');return p.stdout.decode().splitlines()
+
+
+def prepare_capabilities(repo, directory):
+    """Two independently checked source capabilities for the finite prototype.
+
+    Constants select the question. Complete immutable source facts, actual Git
+    parents/bases/entries/DAG and whole-parent merge computation answer it.
+    This entrypoint grants no production R/K, native or runtime authority.
+    """
+    facts=load_unit(repo,directory);folder=Path(directory)
+    packet=json.loads((folder/'proposal.json').read_bytes())
+    contract=json.loads((folder/'contract-PROPOSAL.json').read_bytes())
+    require(not facts['changed_source_context_paths'],'unchanged_reviewed_candidate_context')
+    names=packet['all_base_diff_paths'];guarded=guarded_names(names)
+    require(len(guarded)==15 and guarded==packet['guarded_base_difference_paths']==contract['guarded_difference_paths'],'complete_actual_15_guarded_bindings')
+    require(names==contract['complete_candidate_difference_paths'],'complete_contract_41_bindings')
+    actual=exact_boundary(repo,M,P1,P2)
+    whole=git(repo,'merge-tree','--write-tree','--name-only','-z','--no-messages',P1,P2)
+    require(whole==TREE.encode()+b'\0' and git(repo,'rev-parse',M+'^{tree}').decode().strip()==TREE,'exact_actual_whole_parent_tree')
+    nodes=git(repo,'rev-list','--topo-order','--reverse',M,'^'+O).decode().splitlines()
+    require(len(nodes)==33,'complete_actual_33_source_dag')
+    dag=[]
+    for node in nodes:
+        parents=git(repo,'rev-list','--parents','-n','1',node).decode().split()[1:]
+        dag.append(dict(node=node,ordered_parents=parents,parent_deltas=[dict(parent=p,delta=raw_binding(git(repo,'diff','--name-only',p,node))) for p in parents]))
+    target=git(repo,'rev-parse','HEAD').decode().strip()
+    allowed={'scripts/ci/f13_f54_history.py','scripts/ci/f13_f54_history_test.py','scripts/ci/voice-db-runtime-provisioning-contract_test.sh','.agent/execplans/native-p3-master-source.md'}
+    require(set(git(repo,'diff','--name-only',PROTOTYPE_BASE,target).decode().splitlines())<=allowed,'exact_prototype_source_context')
+    for name in ('f13_f54_history.py','voice-db-runtime-provisioning-contract_test.sh','voice-r22-runtime-scope.sh'):
+        path='scripts/ci/'+name
+        require((ROOT/path).read_bytes()==git(repo,'show',target+':'+path),'actual_capability_source_carrier')
+    return dict(type='F54_FIXED_COMPLETE_SOURCE_CAPABILITIES_PROTOTYPE',phase='SOURCE_PROVENANCE_ONLY',
+        unit_directory=str(folder.resolve()),source_facts=facts,prepared_at_target=target,
+        producer_binding=classifier_binding(),observer_sha256=sha((ROOT/'scripts/ci/f13_f54_history.py').read_bytes()),
+        history_boundary=dict(actual,type='F54_EXACT_HISTORY_BOUNDARY_CAPABILITY'),
+        whole_parent_composition=dict(type='F54_EXACT_WHOLE_PARENT_COMPOSITION_CAPABILITY',merge=M,parents=[P1,P2],best_bases=BASES,
+            history_boundary=O,result_tree=TREE,actual_merge_tree=raw_binding(whole),admission=False),
+        complete_41_entries=packet['entries'],guarded_difference_paths=guarded,complete_dag=dag,
+        collector_scope=dict(base=packet['traversal_base'],target=packet['recursive_target'],allow_direct_followup='true',partition_source_history='false'),
+        actual_source_delta=raw_binding(git(repo,'diff','--name-only',O,P2)),admission=False)
+
+
+def verified_capabilities(repo, path):
+    value=json.loads(Path(path).read_bytes())
+    require(value==prepare_capabilities(repo,value['unit_directory']),'complete_exact_capability_binding')
+    return value
+
+
+def boundary_capability(repo, path, merge, first, source):
+    require([merge,first,source]==[M,P1,P2],'fixed_historical_tuple')
+    return verified_capabilities(repo,path)['history_boundary']
+
+
+def entry_capability(repo, path, base, target):
+    value=verified_capabilities(repo,path)
+    require(value['collector_scope']==dict(base=base,target=target,allow_direct_followup='true',partition_source_history='false'),'exact_original_collector_context')
+    return dict(type='F54_EXACT_COLLECTOR_PROTOTYPE_CONTEXT',capability_sha256=sha(canonical(value)),admission=False)
+
+
+def composition_capability(repo, path, merge, boundary, first, source, name, result):
+    require([merge,boundary,first,source]==[M,O,P1,P2],'fixed_historical_composition_tuple')
+    value=verified_capabilities(repo,path)
+    require(name in value['actual_source_delta']['raw'].splitlines(),'exact_source_path_not_future_authority')
+    actual=composition(repo,boundary,first,source,name,result)
+    return dict(actual,type=value['whole_parent_composition']['type'],capability_sha256=sha(canonical(value)))
 
 
 def dag_dispositions(repo, events):
@@ -672,6 +757,10 @@ def main():
         if command=='boundary':print(json.dumps(exact_boundary(*args)));return 0
         if command=='composition':print(json.dumps(composition(*args)));return 0
         if command=='unit':print(json.dumps(load_unit(*args)));return 0
+        if command=='capabilities':print(json.dumps(prepare_capabilities(*args)));return 0
+        if command=='cap-boundary':print(json.dumps(boundary_capability(*args)));return 0
+        if command=='cap-entry':print(json.dumps(entry_capability(*args)));return 0
+        if command=='cap-composition':print(json.dumps(composition_capability(*args)));return 0
         if command=='span-origin':print(json.dumps(span_origin(*args)));return 0
         if command=='span-validate':print(json.dumps(validate_aggregate_span(*args)));return 0
         if command=='unit-observe':print(json.dumps(observe_qualified_unit(*args)));return 0
