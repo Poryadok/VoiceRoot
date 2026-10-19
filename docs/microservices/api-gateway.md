@@ -49,6 +49,46 @@ fresh Auth-owned `GetSpaceSessionEpochFloor`, replay continuity and atomic nativ
 publication required by `SPACE-NATIVE-MEMBERSHIP-v1` / creator cases C01–C12.
 Those receiver/Auth/assembled runtime proofs remain separate prerequisites.
 
+## Qualified Story LFP consent dispatch
+
+The additive qualified routes use ONLY the dedicated protected Story consent
+client. `S` is `/api/v1/stories/{canonical_story_uuid}`:
+
+| Method/path | Body/result |
+| --- | --- |
+| `POST S/lfp-consent-offer` | `{"operation_id":"stable UUID"}`; returns `{"offer":...}` |
+| `GET S/lfp-consent-offer` | Current profile-scoped exact offer view |
+| `POST S/lfp-consent-response` | Stable `operation_id`, exact `offer`, `response_type` = `join` or `invite`; empty HTTP204 only after durable qualified ACK |
+
+The offer contains `protocol_version:1`, canonical `story_id`,
+`story_incarnation`, `author_profile_id`, positive `offer_revision`, lowercase
+64-character `criteria_sha256` and `offer_payload_sha256`, and
+`offer_expires_at_unix_millis`. Response offer Story ID must equal the path.
+Unknown fields, caller account/type/epoch, missing operation and malformed
+selectors are rejected. Retry retains the SAME domain operation and offer;
+Gateway issues a fresh exact delegated credential/request ID for each attempt.
+
+These routes require real issuer/audience-pinned Auth JWKS, a single Bearer,
+JTI blacklist and strict live Redis epoch floor. Static credentials cannot mint
+this path. Exact authenticated `account_type` must be `guest` or `regular`;
+compatibility regular defaults, SDK, bot/service inputs and raw identity headers
+cannot supply human authority. Gateway signs the complete final typed protobuf
+for audience `story`, exact full RPC/account/profile/epoch/type with a fresh JTI.
+
+Configure all five `GATEWAY_STORY_CONSENT_GRPC_ADDR`,
+`GATEWAY_STORY_CONSENT_TLS_CA_FILE`, `GATEWAY_STORY_CONSENT_TLS_SERVER_NAME`,
+`GATEWAY_STORY_CONSENT_CLIENT_CERT_FILE`,
+`GATEWAY_STORY_CONSENT_CLIENT_KEY_FILE`, plus existing Gateway principal keys
+and `GATEWAY_SESSION_EPOCH_STRICT=true`/Redis. Partial TLS configuration fails
+startup; the configured mTLS connection must become ready before serving HTTP.
+No configuration leaves these qualified routes unavailable. There is no
+ordinary gRPC/REST fallback. The old profile-only `lfp-response` discovery route
+does not become qualified evidence.
+
+This source wiring does not install the actual Story/MM cohort controller,
+credential/DB/session factory, retention or MM acceptance composition. Those
+remain prerequisites; see [Story private consent](story-service.md).
+
 ## Outbound gRPC resilience
 
 Ordinary upstream ClientConns created by `grpcClientsFromEnv` use the shared

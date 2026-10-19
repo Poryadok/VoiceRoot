@@ -74,10 +74,11 @@ func (v chainedTokenValidator) Validate(r *http.Request) (tokenClaims, string) {
 func (g *gateway) authenticate(r *http.Request) (tokenClaims, string) {
 	validator := g.tokenValidator
 	creator := isSpaceCreateRequest(r)
+	delegating := creator || isStoryConsentRequest(r)
 	var claims tokenClaims
 	var code string
-	if creator {
-		// Static development credentials must never mint a native creator proof.
+	if delegating {
+		// Static development credentials must never mint a native delegated proof.
 		// In chained mode select the real JWKS validator, never its static branch.
 		if chain, ok := validator.(chainedTokenValidator); ok {
 			validator = chain.next
@@ -96,7 +97,7 @@ func (g *gateway) authenticate(r *http.Request) (tokenClaims, string) {
 	if code != "" {
 		return tokenClaims{}, code
 	}
-	if creator && (claims.JTI == "" || !canonicalLifecycleUUID(claims.UserID) || !canonicalLifecycleUUID(claims.ProfileID)) {
+	if delegating && (claims.JTI == "" || !canonicalLifecycleUUID(claims.UserID) || !canonicalLifecycleUUID(claims.ProfileID)) {
 		return tokenClaims{}, "invalid_token"
 	}
 	if claims.JTI != "" {
