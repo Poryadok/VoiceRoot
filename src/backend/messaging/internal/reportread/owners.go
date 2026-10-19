@@ -150,7 +150,9 @@ func (o *Owners) ReadSpace(ctx context.Context, space, viewer uuid.UUID, chat *c
 		}
 		return &SpaceObservation{Facts: proto.Clone(r).(*spacev1.ResolveSpaceReportReadContextResponse)}, nil
 	}
-	if !validCounter(r.SpaceAuthorityRevision) || !validCounter(r.LifecycleGeneration) || !canonicalID(r.TreeAttachmentIncarnation) || !validBinding(r.MembershipBinding) || !canonicalID(r.EffectiveEpisodeId) || !validCounter(r.EffectiveEpisodeGeneration) || !validCounter(r.LedgerRevision) || r.EvaluatedAt == nil || r.EvaluatedAt.CheckValid() != nil || r.ValidityRemainingMs == 0 || r.ValidityRemainingMs > 5000 || r.HistoryKnown != (r.HistoryVisibleSince != nil) {
+	// A genuine initial LIVE Space has lifecycle generation zero until its
+	// first lifecycle aggregate/history exists; it still must fit native int64.
+	if !validCounter(r.SpaceAuthorityRevision) || r.LifecycleGeneration > math.MaxInt64 || !canonicalID(r.TreeAttachmentIncarnation) || !validBinding(r.MembershipBinding) || !canonicalID(r.EffectiveEpisodeId) || !validCounter(r.EffectiveEpisodeGeneration) || !validCounter(r.LedgerRevision) || r.EvaluatedAt == nil || r.EvaluatedAt.CheckValid() != nil || r.ValidityRemainingMs == 0 || r.ValidityRemainingMs > 5000 || r.HistoryKnown != (r.HistoryVisibleSince != nil) {
 		return nil, unavailable()
 	}
 	if r.HistoryKnown && (r.HistoryVisibleSince.CheckValid() != nil || r.HistoryVisibleSince.AsTime().After(r.EvaluatedAt.AsTime())) {

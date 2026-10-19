@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -152,6 +153,24 @@ func TestReportReadActualTLSNative44UNKNOWNAndDenials(t *testing.T) {
 	require.Equal(t, node.ID.String(), response.TreeAttachmentIncarnation)
 	require.NotNil(t, response.MembershipBinding)
 	require.Positive(t, response.LedgerRevision)
+	require.Zero(t, response.LifecycleGeneration, "genuine initial native Space has no lifecycle aggregate/history")
+	// Run the real Messaging owner client against this same native44 producer,
+	// rather than validating a synthetic response that invents generation one.
+	network, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = network.Close() })
+	go func() { _ = server.Serve(network) }()
+	issuerFile := filepath.Join(dir, "messaging-signing.pem")
+	issuerDER, err := x509.MarshalPKCS8PrivateKey(signing)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(issuerFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: issuerDER}), 0600))
+	consumer := exec.Command("go", "test", "-mod=readonly", "-race", "-count=1", "-v", "./internal/reportread", "-run", "^TestReportOwnerActualInitialNative44Space$")
+	consumer.Dir = filepath.Join(repoRoot(t), "src/backend/messaging")
+	consumer.Env = append(os.Environ(), "REPORT_READ_NATIVE_ENDPOINT="+network.Addr().String(), "REPORT_READ_NATIVE_CA="+caFile, "REPORT_READ_NATIVE_CERT="+clientFile, "REPORT_READ_NATIVE_KEY="+clientKeyFile, "REPORT_READ_NATIVE_ISSUER="+issuerFile, "REPORT_READ_NATIVE_SPACE="+space.ID.String(), "REPORT_READ_NATIVE_VIEWER="+viewer.String(), "REPORT_READ_NATIVE_CHAT="+chat.String())
+	consumerOutput, consumerErr := consumer.CombinedOutput()
+	t.Logf("actual Messaging owner client: %s", consumerOutput)
+	require.NoError(t, consumerErr, "native producer must compose with real Messaging validator")
+
 	before := native.calls.Load()
 	_, err = client.ResolveSpaceReportReadContext(signed, req)
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
