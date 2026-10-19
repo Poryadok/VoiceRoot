@@ -73,11 +73,41 @@ func (s *RoleStore) qualifiedMemberRoles(ctx context.Context, space, profile uui
 	return out, nil
 }
 func (s *RoleStore) GetQualifiedEffectiveMask(ctx context.Context, space, profile uuid.UUID, chat, room *uuid.UUID) (uint64, error) {
-	return spaceValue(ctx, s, space, func(scoped *RoleStore) (uint64, error) {
+	mask, err := spaceValue(ctx, s, space, func(scoped *RoleStore) (uint64, error) {
 		roles, err := scoped.qualifiedMemberRoles(ctx, space, profile, chat)
 		if err != nil {
 			return 0, err
 		}
-		return scoped.effectiveMaskForRoles(ctx, space, roles, chat, room, false)
+		mask, err := scoped.effectiveMaskForRoles(ctx, space, roles, chat, room, false)
+		if err != nil {
+			return 0, err
+		}
+		if err := currentQualifiedObservation(ctx, space, profile, chat); err != nil {
+			return 0, err
+		}
+		return mask, nil
 	})
+	if err != nil {
+		return 0, err
+	}
+	// A read-only fence commit can itself wait past the observation deadline.
+	if err := currentQualifiedObservation(ctx, space, profile, chat); err != nil {
+		return 0, err
+	}
+	return mask, nil
+}
+
+func currentQualifiedObservation(ctx context.Context, space, profile uuid.UUID, chat *uuid.UUID) error {
+	var observation memberauthority.Observation
+	var ok bool
+	if chat == nil {
+		observation, ok = memberauthority.FromContext(ctx, space.String(), profile.String())
+	} else {
+		observation, ok = memberauthority.FromChatContext(ctx, space.String(), profile.String(), chat.String())
+		ok = ok && observation.BoundToChat(chat.String(), time.Now())
+	}
+	if !ok || !observation.Available(time.Now()) {
+		return ErrScopeUnavailable
+	}
+	return nil
 }
