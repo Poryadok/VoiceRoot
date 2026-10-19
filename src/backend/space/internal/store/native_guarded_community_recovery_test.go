@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"path/filepath"
+	"sort"
 	"testing"
 	"time"
 
@@ -13,6 +14,35 @@ import (
 	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/pkg/integrationtest"
 )
+
+func TestNative41CommunityRecoveryFinalizesEveryRosterProfile(t *testing.T) {
+	ctx := context.Background()
+	db := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/space_db"))
+	db.Run(true, "goto", "41")
+	st := &SpaceStore{Pool: db.Pool}
+	bootstrap := CommunityBootstrapSpaceInput{OperationID: uuid.New(), ApplicationID: uuid.New(), EnvironmentID: uuid.New(), OwnerAccountID: uuid.New(), OwnerProfileID: uuid.New(), CorporationKey: "recovery41-cohort", TemplateID: "guild-default"}
+	space, _, err := st.CreateCommunityBootstrapSpace(ctx, bootstrap)
+	require.NoError(t, err)
+	profiles := []uuid.UUID{uuid.New(), uuid.New()}
+	sort.Slice(profiles, func(i, j int) bool { return profiles[i].String() < profiles[j].String() })
+	_, err = st.ApplyCommunityRoster(ctx, CommunityRosterInput{OperationID: uuid.New(), ApplicationID: bootstrap.ApplicationID, EnvironmentID: bootstrap.EnvironmentID, SpaceID: space.ID, CorporationKey: bootstrap.CorporationKey, OwnerGeneration: 1, SourceRevision: 1, SnapshotSHA256: make([]byte, 32), LeaseExpiresAt: time.Now().Add(110 * time.Second), ProfileIDs: profiles})
+	require.NoError(t, err)
+	var active int
+	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT count(*) FROM public.space_effective_member_heads WHERE space_id=$1 AND profile_id=ANY($2::uuid[]) AND state='ACTIVE'`, space.ID, profiles).Scan(&active))
+	require.Equal(t, len(profiles), active)
+	in := CommunityOwnerRecoveryInput{OperationID: uuid.New(), ApplicationID: bootstrap.ApplicationID, EnvironmentID: bootstrap.EnvironmentID, CorporationKey: bootstrap.CorporationKey, SpaceID: space.ID, PreviousOwnerAccountID: bootstrap.OwnerAccountID, PreviousOwnerProfileID: bootstrap.OwnerProfileID, ReplacementAccountID: uuid.New(), ReplacementProfileID: uuid.New(), ExpectedGeneration: 1, ReasonCode: "owner_lost", EvidenceSHA256: make([]byte, 32)}
+	_, _, err = st.ReserveCommunityOwnerRecovery(ctx, in)
+	require.NoError(t, err)
+	var retired int
+	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT count(*) FROM public.space_effective_member_heads WHERE space_id=$1 AND profile_id=ANY($2::uuid[]) AND state='RETIRED' AND generation=retired_through`, space.ID, profiles).Scan(&retired))
+	require.Equal(t, len(profiles), retired, "41 has no DB full-cohort expansion: every lost roster source needs explicit history finalization")
+	receipt, err := proto.MarshalOptions{Deterministic: true}.Marshal(&rolev1.OwnershipTransferReceipt{Intent: &rolev1.OwnershipTransferIntent{ProtocolVersion: 2, SpaceId: space.ID.String(), OperationId: in.OperationID.String(), OldOwnerProfileId: in.PreviousOwnerProfileID.String(), NewOwnerProfileId: in.ReplacementProfileID.String()}, State: rolev1.OwnershipTransferState_OWNERSHIP_TRANSFER_STATE_FINALIZED, CurrentOwnerProfileId: in.ReplacementProfileID.String()})
+	require.NoError(t, err)
+	_, err = st.CompleteCommunityOwnerRecovery(ctx, in, receipt)
+	require.NoError(t, err)
+	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT count(*) FROM public.space_effective_member_heads WHERE space_id=$1 AND profile_id=ANY($2::uuid[]) AND state='RETIRED' AND generation=retired_through`, space.ID, profiles).Scan(&retired))
+	require.Equal(t, len(profiles), retired)
+}
 
 // Role receipt bytes exercise the existing local receipt contract only; this
 // Store test does not replace the protected Role caller/authorization assembly.

@@ -62,7 +62,30 @@ func (s *SpaceStore) captureCommunityRecoveryMutation(ctx context.Context, in Co
 	default:
 		return nil, ErrEffectiveEpisodeUnavailable
 	}
-	capture, err := s.captureEffectiveMemberMutationFacts(ctx, in.SpaceID, []uuid.UUID{in.PreviousOwnerProfileID, in.ReplacementProfileID})
+	// Both phases change the authority of the entire roster. Older supported
+	// ledger schemas have no DB frame to expand a requested subset, so derive
+	// every affected profile under the already-held Space fence in all versions.
+	rows, err := s.tx.Query(ctx, `SELECT profile_id FROM public.community_roster_members WHERE space_id=$1
+ UNION SELECT profile_id FROM public.space_community_member_heads WHERE space_id=$1
+ UNION SELECT $2::uuid UNION SELECT $3::uuid ORDER BY profile_id`, in.SpaceID, in.PreviousOwnerProfileID, in.ReplacementProfileID)
+	if err != nil {
+		return nil, err
+	}
+	var profiles []uuid.UUID
+	for rows.Next() {
+		var profile uuid.UUID
+		if err = rows.Scan(&profile); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		profiles = append(profiles, profile)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	capture, err := s.captureEffectiveMemberMutationFacts(ctx, in.SpaceID, profiles)
 	if err != nil {
 		return nil, err
 	}
