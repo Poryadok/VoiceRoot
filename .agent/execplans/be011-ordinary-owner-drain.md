@@ -109,6 +109,20 @@ ordinary native suites, race and vet; compare native event/outbox versions.
 
 ## Decisions
 
+The partial native member-claim planner now derives exact per-entry target hashes
+from authoritative native W and retained legacy C. Current membership claims use
+the membership entry; retired generations use the retained room entry. It leaves
+session pointers, foreign fields and structural custody unassigned. Actual Linux
+race stub RED0.543s -> final GREEN1.283s/test0.22, vet0, runner73350 terminal0;
+3949 source files were checked before execution. An intermediate test fixture
+incorrectly ensured an existing joined room; that failure is retained separately.
+No total R/P, partition ACK, qualified cleanup or final receipt is implemented.
+
+Before qualified terminal effects, resolve the recovery resource-binding seam:
+ClaimRecovery currently schedules CLOSED rows and Reconcile repeatedly closes
+their retained room name. Whole-old-realm retirement must not become a fictional
+SDK-delete observation or direct recovery against a replacement realm.
+
 Retain all historical aggregate JSON and native outbox records, rather than only
 the current membership index. Ordinary provider issuance has no complete grant
 ledger; explicit unknown source markers must require protected historical

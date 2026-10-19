@@ -16,7 +16,8 @@ type CutoverMaintenanceAuthority interface {
 	CheckMaintenance(context.Context, retirementproof.CutBinding) error
 }
 type CutoverDrainOwner struct {
-	Store     *PostgresStore
-	Authority CutoverMaintenanceAuthority
-	Verifier  retirementproof.Verifier
+	Store       *PostgresStore
+	Authority   CutoverMaintenanceAuthority
+	Verifier    retirementproof.Verifier
+	LegacyWorks retirementproof.OwnerWorkReader
 }
