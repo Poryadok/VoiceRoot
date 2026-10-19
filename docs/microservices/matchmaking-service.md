@@ -413,3 +413,17 @@ A partial queue projection, committed disband, expired session or scope mismatch
 must create no match and advance no session generation. Database time is sampled
 after waiting for these locks. These local checks complement the protected fresh
 source revalidation and account-wide ban guard required by the full A3 path.
+### Complete-party queue selection
+
+The matcher groups queued sessions by their persisted MM party before choosing
+participants. A party is selectable only when every recorded member has one
+queued searching session; a missing member never becomes a smaller party.
+Bundles retain the queue position of their first member. A bundle that does
+not fit the remaining slots is skipped as a whole, and compatibility and peer
+bans apply to every pair in the proposed group. PostgreSQL repeats the complete
+membership and live session checks under the reservation locks.
+
+This local grouping does not establish source authority for historical rows.
+Native proposal authorization additionally requires fresh protected source
+revalidation and the account ban guard; LFP qualification uses its separate
+consent source contract.
