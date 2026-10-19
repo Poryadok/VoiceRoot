@@ -160,6 +160,10 @@ func TestPartySnapshotRuntimeUsesMutualTLSAndExactFreshServicePrincipal(t *testi
 	require.True(t, configured)
 	require.NotNil(t, client)
 	t.Cleanup(func() { require.NoError(t, closeClient()) })
+	readyCtx, readyCancel := context.WithTimeout(context.Background(), time.Second)
+	require.NoError(t, client.CheckTransport(readyCtx))
+	readyCancel()
+	require.Zero(t, service.calls.Load(), "startup readiness must not manufacture a snapshot subject or call a domain RPC")
 	subject := partysource.Subject{SearchOperationID: uuid.New(), AccountID: uuid.New(), ProfileID: uuid.New(), SessionEpoch: 9}
 	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer untrusted", "x-voice-profile-id", uuid.NewString()))
 	for i := 0; i < 2; i++ {
@@ -173,6 +177,9 @@ func TestPartySnapshotRuntimeUsesMutualTLSAndExactFreshServicePrincipal(t *testi
 	wrong, closeWrong, _, err := LoadProtectedPartySnapshotReader(func(name string) string { return values[name] })
 	require.NoError(t, err)
 	defer closeWrong()
+	wrongReady, wrongReadyCancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	require.Error(t, wrong.CheckTransport(wrongReady))
+	wrongReadyCancel()
 	bounded, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	_, err = wrong.Snapshot(bounded, subject)

@@ -71,6 +71,8 @@ func TestRosterRuntimePrepareDoesNotFetchAckOrMutateBeforeStart(t *testing.T) {
 	prepared, err := rosterruntime.Prepare(ctx, pool, url, publisher, metrics, nil)
 	require.NoError(t, err)
 	defer prepared.Close()
+	var closures atomic.Int32
+	require.NoError(t, prepared.SetContractMismatchHandler(func() { closures.Add(1) }))
 	require.Never(t, func() bool {
 		info, e := js.ConsumerInfo(rosterconsume.Stream, rosterconsume.Durable)
 		require.NoError(t, e)
@@ -94,6 +96,12 @@ func TestRosterRuntimePrepareDoesNotFetchAckOrMutateBeforeStart(t *testing.T) {
 	require.Equal(t, 1, inboxRows)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM search_sessions WHERE party_id=$1 AND status='searching'`, party.Party.ID).Scan(&searching))
 	require.Zero(t, searching)
+	conflict, err := proto.Marshal(&eventsv1.VoiceStreamEvent{EventId: eventID.String(), OccurredAt: timestamppb.Now(), Payload: &eventsv1.VoiceStreamEvent_VoiceRosterMembershipChanged{VoiceRosterMembershipChanged: &eventsv1.VoiceRosterMembershipChanged{ProtocolVersion: 1, RoomId: p.SourceRoomID.String(), RosterVersion: 4, ProfileId: p.MemberProfileIDs[0].String(), Change: eventsv1.VoiceRosterMembershipChanged_CHANGE_LEFT}}})
+	require.NoError(t, err)
+	_, err = js.Publish(rosterconsume.Subject, conflict)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool { return closures.Load() > 0 }, 10*time.Second, 20*time.Millisecond, "persisted mismatch must invoke native closure")
+	require.Error(t, prepared.SetContractMismatchHandler(func() {}), "closure cannot be rebound after delivery starts")
 	prepared.Close()
 	require.Error(t, prepared.Start(), "closed runtime cannot restart or reopen processing")
 }

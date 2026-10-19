@@ -24,8 +24,9 @@ type ServiceIssuer interface {
 	IssueService(principal.ServiceInput) (string, error)
 }
 type GRPCClient struct {
-	Client SnapshotRPC
-	Issuer ServiceIssuer
+	Client     SnapshotRPC
+	Issuer     ServiceIssuer
+	connection *grpc.ClientConn
 }
 
 func (c *GRPCClient) Snapshot(ctx context.Context, s Subject) (Snapshot, error) {

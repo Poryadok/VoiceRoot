@@ -1,6 +1,7 @@
 package squad
 
 import (
+	"context"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
@@ -21,6 +22,7 @@ import (
 
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
+	"voice/backend/matchmaking/internal/partysource"
 	"voice/backend/matchmaking/internal/store"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/principal"
@@ -49,6 +51,42 @@ type providerRuntimeConfig struct {
 // clients. A partial configuration is an error; absent configuration disables
 // the worker so callers can fail closed without falling back to public RPCs.
 func LoadProtectedProviderWorker(matchStore *store.MatchStore, getenv func(string) string) (*MatchSquadProviderWorker, func() error, bool, error) {
+	runtime, closeRuntime, configured, err := loadProtectedProviderRuntime(matchStore, getenv)
+	if err != nil || !configured || runtime == nil {
+		return nil, closeRuntime, configured, err
+	}
+	return runtime.Worker, closeRuntime, true, nil
+}
+
+// ProtectedProviderRuntime retains the real factory connections for bounded
+// transport preparation. It does not certify provider/source installation.
+type ProtectedProviderRuntime struct {
+	Worker      *MatchSquadProviderWorker
+	chat, voice *grpc.ClientConn
+}
+
+func LoadRequiredProtectedProviderRuntime(matchStore *store.MatchStore, getenv func(string) string) (*ProtectedProviderRuntime, func() error, error) {
+	runtime, closeRuntime, configured, err := loadProtectedProviderRuntime(matchStore, getenv)
+	if err != nil {
+		return nil, closeRuntime, err
+	}
+	if !configured || runtime == nil || runtime.Worker == nil {
+		return nil, closeRuntime, errors.New("required native provider transport unavailable")
+	}
+	return runtime, closeRuntime, nil
+}
+
+func (r *ProtectedProviderRuntime) CheckTransports(ctx context.Context) error {
+	if r == nil || r.Worker == nil || r.chat == nil || r.voice == nil {
+		return errors.New("required native provider transport unavailable")
+	}
+	if err := partysource.WaitForTransport(ctx, r.chat); err != nil {
+		return err
+	}
+	return partysource.WaitForTransport(ctx, r.voice)
+}
+
+func loadProtectedProviderRuntime(matchStore *store.MatchStore, getenv func(string) string) (*ProtectedProviderRuntime, func() error, bool, error) {
 	if getenv == nil {
 		getenv = os.Getenv
 	}
@@ -124,7 +162,7 @@ func LoadProtectedProviderWorker(matchStore *store.MatchStore, getenv func(strin
 		voiceErr := voiceConn.Close()
 		return errors.Join(chatErr, voiceErr)
 	}
-	return worker, closeConnections, true, nil
+	return &ProtectedProviderRuntime{Worker: worker, chat: chatConn, voice: voiceConn}, closeConnections, true, nil
 }
 
 // PrincipalJWKSListener is the HTTPS publisher for Matchmaking's own signed

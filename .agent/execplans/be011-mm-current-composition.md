@@ -37,7 +37,7 @@ No production guard is relaxed to satisfy the test.
 - [x] Run current Linux short/build checks and real PostgreSQL/Redis checks.
 - [x] Incorporate147 FIRST admission before account locks and verify its actual
   held-closer, commit and closed-settlement cases in the composed source.
-- [ ] Consume359's immutable private-FD bootstrap delivery API and proof.
+- [x] Consume359's immutable private-FD bootstrap delivery API and proof.
 - [ ] Implement the actual fixed native root, required factory/validator wiring,
   fresh external observations and workload close/drain barrier together.
 - [ ] Prove positive native serving and negative config/close/restore cases,
@@ -106,3 +106,35 @@ registration around every live provider path through durable receipt, never
 SQL locks over network. Complete actual client-to-Gateway-to-native response
 positive and negative fixtures, root/privateFD and close tests before offering
 finished work for MASTER. Existing terminal settlement stays independent.
+
+### Native preparation/control components (current continuation)
+
+Actual Linux checks now cover existing canonical NATS metadata (2.12.15 own
+fixture, no probe publish/create), both actual provider mTLS transports and
+Snapshot transport without fabricated domain calls, irreversible close/drain,
+kernel-peer Unix control framing, and full retained provider census including
+live claims/backoff. Census overflow is unavailable, not a truncated empty ACK.
+The first census runs failed fixture setup (protocol0); only the corrected
+protocol1 stub run is the meaningful RED, followed by real-PG GREEN.
+
+The closed bootstrap now calls the genuine fixed-FD359 loader, bounded ARMED
+readback and restricted actual DB guard. Local executable checks use the actual
+running bytes/fixed argv; descriptor reading requires a regular root-owned file
+on a read-only filesystem. These checks do not establish installed custody.
+An actual full bootstrap/executable positive has not yet run.
+
+The provider worker's new in-process ForwardLifetime hook remains147-owned;
+145 supplies EnterForward and does not wrap ABANDONED cleanup in fresh admission.
+Roster mismatch callback is bound before Start and cannot be rebound afterward.
+New root must connect it to nonblocking beginClose before actual delivery.
+
+Critical remaining native boundary: existing queue ReadQueueIntent only uses RR
+shape validation. Finish native projection authorization with fresh source and
+external admission outside SQL, then FIRST RC local admission/account locks and
+post-lock ban/cut verification before positive Redis enqueue. RELEASE stays
+independent. This is required implementation under332c53, not a new feature.
+
+No native command/image, complete factory startup, protected response receipt or
+client-to-Gateway-to-native positive is claimed complete. No MASTER-ready offer.
+Graphify update was attempted in this lease and bounded/cancelled terminal1;
+there is no successful current graph-refresh claim.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -101,11 +102,11 @@ type JetStreamPublisher struct {
 }
 
 // NewJetStreamPublisher connects to the centrally provisioned JetStream service.
-func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
+func NewJetStreamPublisher(natsURL string, options ...nats.Option) (*JetStreamPublisher, error) {
 	if natsURL == "" {
 		return nil, fmt.Errorf("empty NATS URL")
 	}
-	nc, err := nats.Connect(natsURL, publisherNATSOptions()...)
+	nc, err := nats.Connect(natsURL, append(publisherNATSOptions(), options...)...)
 	if err != nil {
 		return nil, fmt.Errorf("nats connect: %w", err)
 	}
@@ -126,6 +127,30 @@ func publisherNATSOptions() []nats.Option {
 		nats.MaxReconnects(-1),
 		nats.ReconnectWait(time.Second),
 	}
+}
+
+// CheckNativeConnection inspects existing broker metadata without publishing,
+// creating streams or starting recovery. It supplies no installation authority.
+func (p *JetStreamPublisher) CheckNativeConnection(ctx context.Context) error {
+	if p == nil || p.nc == nil || !p.nc.IsConnected() || p.js == nil {
+		return fmt.Errorf("matchmaking broker unavailable")
+	}
+	info, err := p.js.StreamInfo(streamName, nats.Context(ctx))
+	if err != nil || info == nil || !nativeStreamContract(info.Config) {
+		return fmt.Errorf("matchmaking broker contract unavailable")
+	}
+	return nil
+}
+
+func nativeStreamContract(config nats.StreamConfig) bool {
+	if config.Name != streamName || config.Storage != nats.FileStorage || config.Retention != nats.LimitsPolicy || config.MaxAge != 168*time.Hour {
+		return false
+	}
+	want := []string{subjectSearchStarted, subjectSearchCancel, subjectSearchNudge, subjectSearchTimeout, subjectMatchFound, subjectMatchCompleted, subjectRatingSubmitted, subjectPlayerBanned}
+	actual := slices.Clone(config.Subjects)
+	slices.Sort(want)
+	slices.Sort(actual)
+	return slices.Equal(actual, want)
 }
 
 func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, env *eventsv1.MatchmakingStreamEvent) error {

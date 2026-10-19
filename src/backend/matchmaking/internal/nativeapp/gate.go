@@ -42,6 +42,30 @@ func newForwardGate(binding w.Binding, stamp w.AdmissionStampV1, observer admiss
 	return &forwardGate{binding: binding, stamp: stamp, observer: observer, active: make(map[uuid.UUID]struct{}), drained: make(chan struct{})}
 }
 
+// EnterForward implements the provider coordinator's lifetime seam. The work
+// identifier is a process registration, never a provider business operation.
+func (g *forwardGate) EnterForward(ctx context.Context, workID uuid.UUID, requestHash [32]byte) (func(), error) {
+	return g.enter(ctx, workID, requestHash)
+}
+
+// beginClose is non-blocking so a critical inbox conflict can stop new forward
+// work without waiting for its own consumer callback/ACK to finish.
+func (g *forwardGate) beginClose() {
+	if g == nil {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.closed = true
+	if len(g.active) == 0 {
+		select {
+		case <-g.drained:
+		default:
+			close(g.drained)
+		}
+	}
+}
+
 func (g *forwardGate) enter(ctx context.Context, id uuid.UUID, hash [32]byte) (func(), error) {
 	if g == nil || ctx == nil || ctx.Err() != nil || id == uuid.Nil || hash == [32]byte{} {
 		return nil, errUnavailable
@@ -81,17 +105,8 @@ func (g *forwardGate) closeAndDrain(ctx context.Context) error {
 	if g == nil || ctx == nil {
 		return errUnavailable
 	}
-	g.mu.Lock()
-	g.closed = true
-	if len(g.active) == 0 {
-		select {
-		case <-g.drained:
-		default:
-			close(g.drained)
-		}
-	}
+	g.beginClose()
 	drained := g.drained
-	g.mu.Unlock()
 	select {
 	case <-drained:
 		return nil

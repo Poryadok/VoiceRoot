@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"google.golang.org/grpc"
-	callsv1 "voice.app/voice/calls/v1"
 	"voice/backend/matchmaking/internal/partysource"
 	"voice/backend/pkg/grpcclient"
 )
@@ -59,5 +58,5 @@ func LoadProtectedPartySnapshotReader(getenv func(string) string) (*partysource.
 	if err != nil {
 		return nil, nil, true, errors.New("party snapshot mTLS client unavailable")
 	}
-	return &partysource.GRPCClient{Client: callsv1.NewVoiceServiceClient(conn), Issuer: issuer}, conn.Close, true, nil
+	return partysource.NewGRPCClient(conn, issuer), conn.Close, true, nil
 }

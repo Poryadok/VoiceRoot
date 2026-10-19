@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus"
 	"voice/backend/matchmaking/internal/mmevents"
 	"voice/backend/matchmaking/internal/rosterconsume"
@@ -38,12 +39,13 @@ type Runtime struct {
 	logger          *slog.Logger
 	metrics         *prometheus.Registry
 	gauge           prometheus.Gauge
+	onMismatch      func()
 }
 
 // Prepare validates schema and binds the pre-provisioned durable. It starts no
 // goroutine, Fetch, ACK, SQL mutation or cancellation dispatch. The fixed native
 // root must separately qualify installation admission before calling Start.
-func Prepare(parent context.Context, pool *pgxpool.Pool, natsURL string, events mmevents.Publisher, metrics *prometheus.Registry, logger *slog.Logger) (*Runtime, error) {
+func Prepare(parent context.Context, pool *pgxpool.Pool, natsURL string, events mmevents.Publisher, metrics *prometheus.Registry, logger *slog.Logger, options ...nats.Option) (*Runtime, error) {
 	publisher, ok := events.(cancellationPublisher)
 	if parent == nil || parent.Err() != nil || pool == nil || metrics == nil || strings.TrimSpace(natsURL) == "" || !ok || nilPublisher(publisher) {
 		return nil, ErrUnavailable
@@ -60,7 +62,7 @@ func Prepare(parent context.Context, pool *pgxpool.Pool, natsURL string, events 
 		return nil, ErrUnavailable
 	}
 	st := &store.MatchStore{Pool: pool}
-	consumer, err := rosterconsume.Start(natsURL, st, logger)
+	consumer, err := rosterconsume.Start(natsURL, st, logger, options...)
 	if err != nil {
 		metrics.Unregister(gauge)
 		return nil, ErrUnavailable
@@ -74,6 +76,21 @@ func Prepare(parent context.Context, pool *pgxpool.Pool, natsURL string, events 
 	r := &Runtime{ctx: ctx, cancel: cancel, consumer: consumer, store: st, publisher: publisher, logger: logger, metrics: metrics, gauge: gauge}
 	consumer.OnContractMismatch = r.refresh
 	return r, nil
+}
+
+// SetContractMismatchHandler binds native closure before delivery starts. A
+// callback neither clears the durable conflict nor admits/reopens a runtime.
+func (r *Runtime) SetContractMismatchHandler(handler func()) error {
+	if r == nil || handler == nil {
+		return ErrUnavailable
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed || r.started {
+		return ErrUnavailable
+	}
+	r.onMismatch = handler
+	return nil
 }
 
 func nilPublisher(p cancellationPublisher) bool {
@@ -152,6 +169,14 @@ func (r *Runtime) refresh() {
 	done()
 	if err == nil {
 		r.gauge.Set(float64(count))
+		if count > 0 {
+			r.mu.Lock()
+			handler := r.onMismatch
+			r.mu.Unlock()
+			if handler != nil {
+				handler()
+			}
+		}
 	} else if r.ctx.Err() == nil {
 		r.logger.Warn("Voice roster contract alert query failed", slog.Any("error", err))
 	}
