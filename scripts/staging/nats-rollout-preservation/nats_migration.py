@@ -10,7 +10,7 @@ from controller import Blocked,file_sha
 from docker_runtime import DockerRuntime,NATS_IMAGE
 from native_store import archive_closed_store
 from nats_contract_actor import Actor
-from nats_contract_plan import declarations_for,ContractError,digest,execute,verify_census
+from nats_contract_plan import declarations_for,stream_updates_for,SCHEMA,MIGRATION_ID,V6_SCHEMA,V6_MIGRATION_ID,ContractError,digest,execute,verify_census
 from preserve import verify_post_apply,isolated_census,canonical,recovered_census
 from scenario import ready
 
@@ -23,7 +23,7 @@ def stream_updates(state,archive,manifest):
         if event.get('kind')!='nats_contract_mutation_issued':continue
         obj=event.get('object');attempt=event.get('migration_attempt')
         action=next((a for a in state['nats_contract']['actions'] if a['api']=='$JS.API.STREAM.UPDATE.'+str(obj)),None)
-        if (obj not in ('chat_events','social_events','role_events') or action is None or event.get('api')!=action['api']
+        if (obj not in stream_updates_for(state['nats_contract']) or action is None or event.get('api')!=action['api']
             or event.get('target_sha256')!=digest(action['after'])):continue
         if attempt not in opened or attempt not in closed:raise Blocked('nats_stream_update_attempt_incomplete')
         start=opened[attempt];end=closed[attempt]
@@ -100,6 +100,12 @@ def apply_contract(base,state,stage,journal,*,before_selected_start=None,mutatio
         or binding.get('sources')!=plan.get('sources')):
         raise Blocked('nats_migration_authority_unbound')
     runtime=DockerRuntime(Path(base),state['operation'])
+    v6=plan.get('schema')==V6_SCHEMA
+    def all_proof(archive=None,manifest=None,row=None):
+        if not v6:return {}
+        from nats_deliver_all import collect_created
+        created=collect_created(runtime,state,archive,manifest,row,stage.verify_final_storage) if archive is not None else []
+        return {'deliver_all':{'cut':state['nats_deliver_all_cut'],'created':created,'authority_plan':plan}}
     def records(row):return {f['path']:f for f in row['files'] if '/msgs/' in f['path']}
     def old_consumer_states_unchanged(manifest):
         old={f['path']:f for f in state['cut']['manifest']['files'] if '/obs/' in f['path'] and Path(f['path']).name=='o.dat'}
@@ -109,6 +115,11 @@ def apply_contract(base,state,stage,journal,*,before_selected_start=None,mutatio
     owned_proof={'kind':'nats_contract_old_cut_verified','plan_sha256':digest(plan),
         'old_manifest_sha256':state['cut']['manifest_sha256'],'old_census_sha256':state['cut']['census_sha256']}
     if any(all(event.get(k)==v for k,v in owned_proof.items()) for event in state['events']):
+        if v6:
+            from nats_deliver_all import capture_original_cut
+            if 'nats_deliver_all_cut' not in state and any(e.get('kind')=='nats_contract_mutation_issued' for e in state['events']):
+                raise Blocked('nats_deliver_all_cut_missing_on_retry')
+            capture_original_cut(runtime,state,stage,journal)
         # After an interrupted owned UPDATE, original config bytes differ.
         # Validate every original record byte and only the already-approved
         # subset of exact config changes before continuing the fixed plan.
@@ -117,7 +128,9 @@ def apply_contract(base,state,stage,journal,*,before_selected_start=None,mutatio
         manifest=archive_closed_store(stage.final_path,archive)
         if records(manifest)!=records(state['cut']['manifest']):raise Blocked('nats_migration_record_bytes_changed')
         old_consumer_states_unchanged(manifest)
-        recovery={'stream_updates':stream_updates(state,archive,manifest)};current=isolated_census(runtime,archive,manifest,'contract-retry',recovery)
+        recovery={'stream_updates':stream_updates(state,archive,manifest)}
+        if plan['schema'] in (SCHEMA,V6_SCHEMA):recovery['migration_id']=plan['migration_id']
+        current=isolated_census(runtime,archive,manifest,'contract-retry',recovery)
         current,observations=recovered_census(state['cut']['census'],current,recovery,state['cut']['manifest'])
         partial=copy.deepcopy(plan);partial['actions']=[]
         streams={s['name']:s for s in current['streams']};consumers={(c['stream'],c['name']):c for c in current['consumers']}
@@ -127,13 +140,16 @@ def apply_contract(base,state,stage,journal,*,before_selected_start=None,mutatio
                 if value==digest(action['after']):partial['actions'].append(action)
                 elif value!=digest(action['before']):raise Blocked('nats_migration_retry_config_drift')
         partial['actions'].extend(recovered_consumer_create_actions(plan,consumers,state['events']))
-        verify_census(partial,state['cut']['census'],current)
+        verify_census(partial,state['cut']['census'],current,**all_proof(archive,manifest,current))
     else:
         # Exact unchanged native bytes + full old census before any config write.
         old_proof=verify_post_apply(runtime,stage.final_path,state['cut'],stage.verify_final_storage)
         journal(owned_proof|{'proof':old_proof})
+        if v6:
+            from nats_deliver_all import capture_original_cut
+            capture_original_cut(runtime,state,stage,journal)
     if not plan['actions']:
-        return {'verified':True,'applied':[],'proof':verify_census(plan,state['cut']['census'],state['cut']['census']),
+        return {'verified':True,'applied':[],'proof':verify_census(plan,state['cut']['census'],state['cut']['census'],**all_proof()),
             'old_record_files_verified':True,'cut':copy.deepcopy(state['cut'])}
     runtime.no_operation_containers(running_only=True);stage.verify_final_storage()
     if before_selected_start is not None:before_selected_start()
@@ -145,7 +161,7 @@ def apply_contract(base,state,stage,journal,*,before_selected_start=None,mutatio
         broker=runtime.start_broker('contract-migration',stage.final_path);ready(runtime,broker)
         attempt={'container_id':runtime.owned[broker]['id'],'server_image':NATS_IMAGE,'started_at':started}
         journal({'kind':'nats_contract_broker_opened',**attempt})
-        actor=Actor(runtime,broker,runtime.owned[broker]['id'],stage.final_path,stage.verify_final_storage,mutation_guard=mutation_guard)
+        actor=Actor(runtime,broker,runtime.owned[broker]['id'],stage.final_path,stage.verify_final_storage,mutation_guard=mutation_guard,plan=plan)
         applied=execute(plan,actor,lambda event:journal({**event,'migration_attempt':attempt['container_id']}))
         runtime.stop(broker);stage.verify_final_storage()
         journal({'kind':'nats_contract_broker_closed',**attempt,'finished_at':dt.datetime.now(dt.timezone.utc).isoformat()});closed=True
@@ -153,9 +169,11 @@ def apply_contract(base,state,stage,journal,*,before_selected_start=None,mutatio
         manifest=archive_closed_store(stage.final_path,archive)
         if records(manifest)!=records(state['cut']['manifest']):raise Blocked('nats_migration_record_bytes_changed')
         old_state_count=old_consumer_states_unchanged(manifest)
-        recovery={'stream_updates':stream_updates(state,archive,manifest)};row=isolated_census(runtime,archive,manifest,'contract-after',recovery)
+        recovery={'stream_updates':stream_updates(state,archive,manifest)}
+        if plan['schema'] in (SCHEMA,V6_SCHEMA):recovery['migration_id']=plan['migration_id']
+        row=isolated_census(runtime,archive,manifest,'contract-after',recovery)
         compared,observations=recovered_census(state['cut']['census'],row,recovery,state['cut']['manifest'])
-        proof=verify_census(plan,state['cut']['census'],compared)
+        proof=verify_census(plan,state['cut']['census'],compared,**all_proof(archive,manifest,compared))
         proof['ephemeral_recovery_observations']=observations
         stage.verify_final_storage()
         return {'verified':True,'applied':applied,'proof':proof,'old_record_files_verified':True,'old_consumer_state_files_verified':old_state_count,

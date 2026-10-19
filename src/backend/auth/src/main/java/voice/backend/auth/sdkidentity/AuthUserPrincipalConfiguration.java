@@ -23,7 +23,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/** Enables Auth's dedicated principal issuer and TLS User eligibility client. */
+/** Local Auth signer is independent of the optional SDK/User eligibility client. */
 @Configuration(proxyBeanMethods = false)
 public class AuthUserPrincipalConfiguration {
   private static final String KEYS_DIR = "AUTH_PRINCIPAL_SIGNING_KEYS_DIR";
@@ -44,9 +44,11 @@ public class AuthUserPrincipalConfiguration {
     String address = environment.getProperty(GRPC_ADDR, "");
     String caFile = environment.getProperty(TLS_CA_FILE, "");
     String serverName = environment.getProperty(TLS_SERVER_NAME, "");
-    if (directory.isBlank() || activeKid.isBlank() || address.isBlank()) {
-      throw new IllegalStateException("Auth principal issuer requires signing keys, active key ID, and User TLS endpoint");
+    if (directory.isBlank() || activeKid.isBlank()) {
+      throw new IllegalStateException("Auth principal issuer requires signing keys and active key ID");
     }
+    boolean userConfigured=List.of(GRPC_ADDR,TLS_CA_FILE,TLS_SERVER_NAME).stream().anyMatch(environment::containsProperty);
+    if ((enabled || userConfigured) && address.isBlank()) throw new IllegalStateException("Auth User principal TLS endpoint is required");
     if (environment.containsProperty(TLS_CA_FILE) && caFile.isBlank()) {
       throw new IllegalStateException("Auth User principal TLS CA file must not be blank");
     }
@@ -56,19 +58,19 @@ public class AuthUserPrincipalConfiguration {
 
     AuthUserPrincipalIssuer validatedIssuer = AuthUserPrincipalIssuer.load(Path.of(directory), activeKid, clock);
     try {
-      NettyChannelBuilder.forTarget(address.trim());
+      if(enabled || userConfigured) NettyChannelBuilder.forTarget(address.trim());
       if (!caFile.isBlank()) trustManager(new File(caFile));
     } catch (Exception invalidConfiguration) {
       throw new IllegalStateException("invalid Auth-to-User principal TLS configuration", invalidConfiguration);
     }
-    return new PrincipalSettings(enabled, enabled ? validatedIssuer : null, address, caFile, serverName);
+    return new PrincipalSettings(enabled, validatedIssuer, address, caFile, serverName);
   }
 
   record PrincipalSettings(boolean enabled, AuthUserPrincipalIssuer issuer, String address, String caFile,
       String serverName) {}
 
   @Bean
-  @ConditionalOnProperty(prefix = "auth.sdk-authorization", name = "enabled", havingValue = "true")
+  @ConditionalOnProperty(name = "AUTH_PRINCIPAL_SIGNING_KEYS_DIR")
   AuthUserPrincipalIssuer authUserPrincipalIssuer(
       PrincipalSettings settings) {
     return settings.issuer();

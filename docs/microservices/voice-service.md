@@ -884,6 +884,14 @@ Voice process instances stateless — масштабируются горизо�
 
 ## P3 Space lifecycle participant (target)
 
+The native A3 roster outbox relay is dormant in production composition. Native
+transactions still save their frozen facts and counters, but ordinary Voice,
+Space media and `NATS_URL` configuration do not lease, publish or mark these facts
+delivered. Existing participant/admission compatibility delivery is unchanged.
+A3 relay activation requires a separately qualified canonical broker authority,
+scoped publisher rights and durable consumer/inbox/source-coverage package; a v5
+readiness result or PubAck alone does not authorize that composition change.
+
 Voice adds a durable PostgreSQL lifecycle fence/operation receipt even though
 its media projection is primarily Redis. `FROZEN` atomically fences admission,
 actively ejects every Space session and revokes outstanding grants; ordinary
@@ -893,6 +901,52 @@ terminally fences Space room/session/grant rows and Redis keys. It binds the
 root manifest without inventing chat-owned work. Full request/receipt bytes
 retain 30 days from this participant's completion; the compact max-generation
 `PURGED` fence is permanent.
+
+BE-265 current-provider correction: a local restrictive fence or successful
+participant removal is not a completed `FROZEN` receipt. Completion requires
+complete native/legacy grant coverage, settled exact cleanup and durable provider
+rejection of all old original/refreshed credentials, including pending handshakes,
+or a proved empty credential history. Current self-hosted removal supplies no
+such retirement capability. Voice applies the restrictive barrier and immediate
+exact drain, but keeps the operation pending without a receipt. Full deletion
+activation requires a qualified provider retirement path; `LIVE` and `PURGED`
+cannot bypass this barrier. Original Voice60s expiry, empty Redis/roster and
+DeleteRoom/NotFound are not future-admission proof.
+
+The current native journal participates in the shared two-int PostgreSQL Space
+barrier (`0x53504345`, `hashtext(canonical Space UUID)`), before room resources and
+sorted account/profile identity locks. Forward admission/commit/projection/grant
+authorization checks its saved lifecycle generation; cleanup remains permitted
+for exact captured owners. The restrictive transaction seals typed native/head
+and legacy targets before changing native states. Retries drain saved identities
+even without Redis. Redis projection writers require one per-Space gate containing
+a random incarnation, RESTORING/READY phase, lifecycle generation and LIVE/DENY.
+Missing gates install RESTORING with a fresh incarnation before a fresh PostgreSQL
+barrier read; publication compares that exact incarnation. Dispatch reads READY
+before fresh native authorization, then atomically checks the same incarnation,
+generation and exact native tuple. A delayed callback cannot acquire a replacement
+incarnation or initialize LIVE. Metadata and cleanup cannot recreate active indexes;
+exact cleanup preserves another incarnation's owned pointers. Existing
+COMMITTED journal intent covers projection dispatch before its applied marker.
+Grant authorization saves exact claims/provider binding and absolute Voice expiry
+before signing; retry never extends that expiry. No expiry bounds SFU refresh.
+
+This gate covers deletion, eviction, partial loss, flush and process retry on one
+authoritative Redis history. Restoring an old snapshot with the same READY
+incarnation, asynchronous failover losing an acknowledged DENY, or a writable old
+endpoint requires infrastructure recovery to fence writes and rotate/rebuild gates
+from PostgreSQL before exposure. The nonce does not itself prove that operational
+prerequisite; current qualification must retain this boundary.
+
+`Service.RetirementCapability` and the self-hosted adapter declare `EJECT_ONLY`
+(missing adapter/config is `UNKNOWN`). There is no production retirement proof
+provider or environment switch that can claim full support. Historical issuers
+and old unguarded receipts remain unproven: migration does not rewrite their
+bytes or invent credential coverage. Before any future full activation, inventory
+them and reconcile all issuer/writer versions; reject mixed deployments. Retain
+unresolved targets/grants and deny state beyond receipt retention. Provider
+qualification, protected DEV/STG checks and independent acceptance remain open.
+
 # MatchSquad room provider
 
 Voice exposes the typed `MatchSquadVoiceService` only on its dedicated protected

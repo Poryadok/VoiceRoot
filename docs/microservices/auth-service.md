@@ -3,10 +3,11 @@
 ## Moderation subject and restriction authority (BE-045)
 
 Private `voice.automod.v1.AuthModerationAuthorityService` owns
-`ResolveModerationSubject`, `ListTerminalModerationSubjects` and
-`ReconcileModerationRestriction`. Messaging and Moderation alone may resolve a
+`ResolveModerationSubject`, `ListTerminalModerationSubjects`,
+`ListModerationAccountCensus` and `ReconcileModerationRestriction`.
+Messaging and Moderation alone may resolve a
 subject or obtain the complete opaque terminal snapshot. Only Moderation may
-reconcile a restriction. All methods require mTLS and fresh Phase-0 service
+enumerate the finite account census or reconcile a restriction. All methods require mTLS and fresh Phase-0 service
 credentials bound to audience `auth`, exact RPC/request bytes/request ID, expiry
 and replay. They are absent from the legacy Auth listener.
 
@@ -24,6 +25,72 @@ an empty new projection must never reactivate it.
 All Moderation manual/automatic writers join this fenced path before activation.
 The legacy raw-header `SetAccountStatus` route cannot remain an alternate writer.
 See [the complete privacy/migration/restore contract](../testing/async-automod-exec-plan.md).
+
+Terminal snapshots first settle due work under current account-row locks and
+fresh DB time, serialized with restore, then seal only the durable terminal
+ledger (protocol2). A stale DELETED observation is not a permanent fence.
+The separate bounded census is nonterminal authority and needs fresh checks
+before use; neither seal proves restore currentness.
+The [c19 lifecycle and partition boundary](../testing/async-automod-unknown-deadline.md)
+requires transactional lifecycle delivery and positive winning terminal facts.
+Those producer/catch-up and recipient integrations remain implementation work.
+Canonical physical deadlines do not move, but a complete partition hiding both
+delete and restore authority cannot certify their physical deadline outcome.
+The [c20 feasibility review](../testing/async-automod-identity-bridge-feasibility.md)
+does not select a new capsule/key design or classify retained v2 data anonymous.
+
+The c19 lifecycle producer uses a compact Auth-owned current projection keyed
+only by opaque moderation subject, with random event UUID, authority generation,
+positive lifecycle revision, LIVE/DELETED state and exact owner deletion cycle/
+deadline. An account-row AFTER trigger captures every committed lifecycle change,
+including direct owner SQL, in the same transaction. Two durable recipient intents
+cover Messaging and Moderation; replacement by a newer full projection is atomic.
+Exact event/revision acknowledgement clears only the matching intent. The current
+projection remains available for a finite catch-up even after delivery succeeds.
+No account/profile ID or raw public deletion event is used as lifecycle evidence.
+
+Durable terminal insertion separately creates private recipient intents and
+removes the superseded nonterminal projection. Physical account removal and
+subject mapping erasure cannot discard those terminal intents. Delivery/ACK never
+delays Auth's canonical deadline. The terminal ledger remains the permanent
+opaque authority; pending delivery is not a physical-cleanup receipt. The new
+producer schema is reserved as Flyway V30 / canonical auth_db version31; transport,
+exact recipient application and activation require the remaining vertical work.
+
+The selected private delivery seam is
+`voice.automod.v1.AccountLifecycleReceiverService/ApplyLifecycleFact`, registered
+on each recipient's protected listener and callable only by `service:auth`.
+Audience remains the exact recipient (`messaging` or `moderation`). The protocol1
+fact carries generation/event/subject UUIDs, LIVE/DELETED owner revision and exact
+cycle/deadline, or a positive PURGED fact from the durable owner ledger. PURGED
+does not invent a lifecycle revision/cycle after raw mapping removal. No account
+ID, content, public event envelope or origin-derived hash appears in the fact.
+
+The typed receipt binds the requested event, subject and generation. For a
+nonterminal current projection it includes its revision and canonical fact hash;
+a terminal receipt asserts the recipient's permanent positive fence. Auth
+compares the response to its current owner projection/ledger before removing a
+matching intent. An intervening newer owner event remains queued; a recipient
+ahead of the current owner requires restore-divergence handling. A terminal
+receipt cannot establish Auth terminality when its own positive ledger is absent.
+Neither an elapsed DELETED timer nor an RPC error is a terminal receipt. Peer
+calls run outside owner account transactions. This wire seam is an implementation
+target; SQL producer proof alone does not claim its delivery or activation.
+
+Canonical lifecycle fact hashing uses UTF-8 `voice.automod.lifecycle.v1` plus
+NUL followed by deterministic protobuf fact bytes. Unknown/nested fields and
+duplicate/noncanonical encoded representations are rejected; fact size is at
+most 1,024 bytes. A due DELETED tuple remains representable as nonterminal.
+LIVE requires a positive signed-range revision and absent cycle/deadline;
+DELETED requires the exact UUID cycle and DB-microsecond timestamp; PURGED has
+zero revision and absent erased cycle/deadline. The independently hand-framed
+120-byte LIVE vector has generation `00000000-0000-4000-8000-000000000001`,
+event `00000000-0000-4000-8000-000000000002`, subject
+`80000000-0000-4000-8000-000000000003`, revision7 and SHA-256
+`53043311ff246eba73d39ef71db56fba6a1d299e7fae115fb9ccfcec8190655a`.
+Receipt validation is structural only: a higher revision/hash or positive fence
+must reach the sender's CURRENT owner projection/ledger comparison, not directly
+clear a delivery intent. Equal revision with changed hash is rejected.
 
 ## Обзор
 
@@ -879,6 +946,36 @@ return, fixture capture, NoopMailSender, or CapturingMailSender.
   propagation requires its own protected contract before activation.
 
 ### T056-P1: session epoch
+
+`AuthService.GetRoleSessionEpochFloor` is a separate Role-only protected RPC
+(`GetRoleSessionEpochFloorRequest.account_id = 1`, response
+`session_epoch_floor = 1`). It reads the same durable account epoch and retained
+Redis floor as `GetVoiceSessionEpochFloor`, returns their positive maximum and
+never creates a new epoch/cache. Missing account returns `NOT_FOUND`; missing,
+invalid or unavailable authority returns `UNAVAILABLE`. Both requests reject
+unknown fields and noncanonical or zero account UUIDs before persistence reads.
+The dedicated session-floor listener exposes only its explicitly registered floor RPCs;
+ordinary and ownership/deletion proof listeners expose neither. Role must use
+its own `service:role` principal, exact full RPC/request hash/request ID and fresh
+JTI, issuer-specific HTTPS JWKS in `S2S_JWKS_URLS_JSON`, and a client certificate
+trusted by `AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE`. Voice keeps its exact
+`service:voice` endpoint and cannot call the Role method (or vice versa).
+
+`AuthService.GetSpaceSessionEpochFloor` adds a distinct Space-only method with
+`GetSpaceSessionEpochFloorRequest.account_id = 1` and response
+`session_epoch_floor = 1`. It uses the same positive durable/retained maximum,
+with canonical nonzero account UUID and unknown-field rejection. Missing or
+deleted accounts return `NOT_FOUND`; invalid/missing floor, DB/Redis failure,
+or unavailable JWKS/replay authority returns `UNAVAILABLE`. It never initializes
+or caches an epoch. Only signed `iss=space`, `sub=service:space`,
+`principal_type=service` may call the exact RPC with audience `auth`, exact
+request ID/body hash, fresh JTI and the existing mutually authenticated session
+floor transport. The dedicated floor listener exposes these three exact methods;
+ordinary and ownership/deletion listeners expose none. Gateway delegated user,
+Role, Voice and other services cannot call this method; Space cannot borrow
+Role/Voice floor methods. Existing Role/Voice caller contracts are unchanged.
+This producer is a prerequisite for native Space creator freshness, not proof
+that Gateway/Space creation has been assembled or activated.
 
 `accounts.session_epoch` — положительный монотонный durable source of truth
 Auth. Auth атомарно увеличивает его для отзыва всех сессий и никогда не

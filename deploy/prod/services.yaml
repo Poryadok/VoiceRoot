@@ -1036,7 +1036,7 @@ spec:
             - {name: MODERATION_GRPC_LISTEN, value: ":9090"}
             - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
-          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12-alpine
           args: ["-c", "/etc/nats/leaf.conf"]

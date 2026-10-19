@@ -536,6 +536,47 @@ func marshalSpacePurgeOwnerEvidence(purge *commonv1.SpacePurgeRequest, evidence 
 	return messagingReceipt, fileReceipt, nil
 }
 
+// LookupSpacePurgeReceipt validates the exact request and returns an already
+// committed response during its own retention window. A nil response means the
+// validated local decision has not completed; corrupt/expired evidence is never
+// a reason to repeat owner effects.
+func (s *SpaceLifecycleStore) LookupSpacePurgeReceipt(ctx context.Context, req *chatv1.PurgeSpaceRequest) (*chatv1.PurgeSpaceResponse, error) {
+	if err := s.ValidateSpacePurgeRequest(ctx, req); err != nil {
+		return nil, err
+	}
+	purge := req.GetPurge()
+	var savedRequest, savedHash, savedResponse []byte
+	var retained bool
+	var completedAt time.Time
+	err := s.Pool.QueryRow(ctx, `SELECT request_bytes,request_sha256,response_bytes,completed_at,retain_until > clock_timestamp() FROM chat_space_lifecycle_operations WHERE space_id=$1 AND deletion_operation_id=$2 AND generation=$3 AND operation_kind='PURGE'`, purge.GetSpaceId(), purge.GetDeletionOperationId(), purge.GetGeneration()).Scan(&savedRequest, &savedHash, &savedResponse, &completedAt, &retained)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	requestBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	requestHash := chatLifecycleDigest("voice.chat.v1.PurgeSpaceRequest", requestBytes)
+	if !bytes.Equal(savedRequest, requestBytes) || !bytes.Equal(savedHash, requestHash[:]) {
+		return nil, ErrSpaceLifecycleConflict
+	}
+	if !retained {
+		return nil, ErrSpaceLifecycleState
+	}
+	response := new(chatv1.PurgeSpaceResponse)
+	if err := proto.Unmarshal(savedResponse, response); err != nil {
+		return nil, ErrSpaceLifecycleEvidence
+	}
+	receipt := response.GetReceipt()
+	if receipt == nil || receipt.GetProtocolVersion() != 1 || receipt.GetReceiptId() == "" || receipt.GetSpaceId() != purge.GetSpaceId() || receipt.GetDeletionOperationId() != purge.GetDeletionOperationId() || receipt.GetGeneration() != purge.GetGeneration() || receipt.GetParticipantId() != commonv1.ParticipantId_PARTICIPANT_ID_CHAT || receipt.GetState() != commonv1.PurgeReceiptState_PURGE_RECEIPT_STATE_COMPLETED || !bytes.Equal(receipt.GetRequestSha256(), requestHash[:]) || !proto.Equal(receipt.GetCompletedAt(), timestamppb.New(completedAt)) {
+		return nil, ErrSpaceLifecycleEvidence
+	}
+	return response, nil
+}
+
 // ValidateSpacePurgeRequest checks Chat's durable decision and exact local
 // manifest before the coordinator makes either owner call. PurgeSpace repeats
 // these checks in its destructive transaction after the remote calls return.

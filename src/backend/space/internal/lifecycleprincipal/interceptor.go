@@ -74,6 +74,12 @@ func (v Verifier) Unary() grpc.UnaryServerInterceptor {
 		if err != nil || !canonicalID(verified.AccountID) || !canonicalID(verified.ProfileID) {
 			return nil, deny
 		}
+		ctx = principal.WithVerified(ctx, verified)
+		if info.FullMethod == spacev1.SpaceService_GetAuditLog_FullMethodName {
+			// This migrated chain consumes typed verified identity exclusively.
+			// Preserve transport/tracing metadata; never project raw actor headers.
+			return handler(ctx, req)
+		}
 		accountType := "regular" // Existing lifecycle transport compatibility.
 		if info.FullMethod == spacev1.SpaceService_GetSpaceChatCreationOutcome_FullMethodName {
 			if verified.AccountType != "regular" && verified.AccountType != "guest" {
@@ -84,7 +90,7 @@ func (v Verifier) Unary() grpc.UnaryServerInterceptor {
 		// Legacy handlers consume this projection only after cryptographic verification.
 		// Caller-supplied identity metadata was rejected above; the projection is server-owned.
 		identity := metadata.Pairs(authctx.HeaderUserID, verified.AccountID, authctx.HeaderProfileID, verified.ProfileID, authctx.HeaderSessionEpoch, strconv.FormatInt(verified.SessionEpoch, 10), "x-voice-account-type", accountType)
-		ctx = metadata.NewIncomingContext(principal.WithVerified(ctx, verified), identity)
+		ctx = metadata.NewIncomingContext(ctx, identity)
 		return handler(ctx, req)
 	}
 }

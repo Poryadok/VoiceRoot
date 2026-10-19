@@ -5,7 +5,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
-	"path/filepath"
 	"testing"
 	"voice/backend/moderation/internal/automod"
 	"voice/backend/moderation/internal/store"
@@ -17,7 +16,7 @@ func TestAutoModRestriction_CompleteSetAndStaleAckCannotDropNewIntent(t *testing
 	}
 	ctx := context.Background()
 	pool := automodAdmissionDatabase(t)
-	integrationtestApplySQL(t, ctx, pool, filepath.Join(repoRoot(t), "src/backend/migrations/moderation_db/000006_async_automod.up.sql"))
+	integrationtestApplyAutoMod(t, ctx, pool)
 	s := automod.NewStore(pool)
 	sanctions := &store.SanctionStore{Pool: pool}
 	subject := automod.Subject{ID: uuid.New(), AccountID: uuid.New(), Epoch: uuid.New(), Revision: 1, State: "LIVE"}

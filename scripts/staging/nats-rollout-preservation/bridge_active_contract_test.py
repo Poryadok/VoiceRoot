@@ -5,7 +5,7 @@ from pathlib import Path
 
 from nats_active_contract import LEGACY_NATS_MIGRATION_ID, validate_identity
 from controller import Blocked
-from nats_contract_plan import DECLARATIONS, MIGRATION_ID, verify_census
+from nats_contract_plan import V4_DECLARATIONS as DECLARATIONS, V4_MIGRATION_ID as MIGRATION_ID, verify_census
 from nats_contract_plan_test import CensusTests
 from nats_contract_custody_test import fixture as custody_fixture
 from nats_contract_custody import advance

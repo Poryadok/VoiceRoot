@@ -21,10 +21,10 @@ var (
 )
 
 type Subject struct {
-	ID, AccountID, Epoch uuid.UUID
-	Revision             int64
-	State                string
-	PurgeAt              *time.Time
+	ID, AccountID, Epoch, CycleID uuid.UUID
+	Revision                      int64
+	State                         string
+	PurgeAt                       *time.Time
 }
 type Digest struct {
 	KeyID string
@@ -79,10 +79,12 @@ func (s *Store) BindSubjectTx(ctx context.Context, tx pgx.Tx, binding Subject) e
 	if terminal {
 		return ErrPurged
 	}
-	tag, err := tx.Exec(ctx, `INSERT INTO automod_subjects(subject_id,account_id,lifecycle_revision,lifecycle_state,purge_at) VALUES($1,$2,$3,$4,$5)
-	ON CONFLICT(subject_id) DO UPDATE SET lifecycle_revision=EXCLUDED.lifecycle_revision,lifecycle_state=EXCLUDED.lifecycle_state,purge_at=EXCLUDED.purge_at
- WHERE automod_subjects.account_id=EXCLUDED.account_id AND (automod_subjects.lifecycle_revision < EXCLUDED.lifecycle_revision OR
-	(automod_subjects.lifecycle_revision=EXCLUDED.lifecycle_revision AND automod_subjects.lifecycle_state=EXCLUDED.lifecycle_state AND automod_subjects.purge_at IS NOT DISTINCT FROM EXCLUDED.purge_at))`, binding.ID, binding.AccountID, binding.Revision, binding.State, binding.PurgeAt)
+	tag, err := tx.Exec(ctx, `INSERT INTO automod_subjects(subject_id,account_id,lifecycle_revision,lifecycle_state,purge_at,deletion_cycle_id) VALUES($1,$2,$3,$4,$5,$6)
+	ON CONFLICT(subject_id) DO UPDATE SET lifecycle_revision=EXCLUDED.lifecycle_revision,lifecycle_state=EXCLUDED.lifecycle_state,purge_at=EXCLUDED.purge_at,deletion_cycle_id=EXCLUDED.deletion_cycle_id
+ WHERE automod_subjects.account_id=EXCLUDED.account_id
+ AND (automod_subjects.lifecycle_state <> 'DELETED' OR EXCLUDED.lifecycle_state <> 'DELETED' OR automod_subjects.deletion_cycle_id IS DISTINCT FROM EXCLUDED.deletion_cycle_id OR automod_subjects.purge_at IS NOT DISTINCT FROM EXCLUDED.purge_at)
+ AND (automod_subjects.lifecycle_revision < EXCLUDED.lifecycle_revision OR
+	(automod_subjects.lifecycle_revision=EXCLUDED.lifecycle_revision AND automod_subjects.lifecycle_state=EXCLUDED.lifecycle_state AND automod_subjects.purge_at IS NOT DISTINCT FROM EXCLUDED.purge_at AND automod_subjects.deletion_cycle_id IS NOT DISTINCT FROM EXCLUDED.deletion_cycle_id))`, binding.ID, binding.AccountID, binding.Revision, binding.State, binding.PurgeAt, nullableCycle(binding.CycleID))
 	if err != nil {
 		return err
 	}
@@ -155,16 +157,28 @@ func validSubject(s Subject) bool {
 }
 func validLifecycle(s Subject) bool {
 	return s.ID != uuid.Nil && s.AccountID != uuid.Nil && s.Revision > 0 &&
-		((s.State == "LIVE" && s.PurgeAt == nil) || (s.State == "DELETED" && s.PurgeAt != nil))
+		((s.State == "LIVE" && s.PurgeAt == nil && s.CycleID == uuid.Nil) ||
+			(s.State == "DELETED" && s.PurgeAt != nil && s.CycleID != uuid.Nil && !s.PurgeAt.IsZero() && s.PurgeAt.Nanosecond()%1000 == 0))
+}
+
+func nullableCycle(cycle uuid.UUID) any {
+	if cycle == uuid.Nil {
+		return nil
+	}
+	return cycle
 }
 
 // Provision is called only with freshly verified Auth authority, never an inbox
 // event's claimed identity. An existing source epoch or cursor cannot be reset.
 func (s *Store) Provision(ctx context.Context, subject Subject) error {
+	return s.provision(ctx, subject, nil)
+}
+
+func (s *Store) provision(ctx context.Context, subject Subject, check BootCheck) error {
 	if !validSubject(subject) {
 		return ErrEvidence
 	}
-	return s.accountTx(ctx, subject.AccountID, func(tx pgx.Tx) error {
+	return s.accountTxChecked(ctx, subject.AccountID, check, func(tx pgx.Tx) error {
 		if err := lockSubject(ctx, tx, subject.ID); err != nil {
 			return err
 		}
@@ -176,9 +190,9 @@ func (s *Store) Provision(ctx context.Context, subject Subject) error {
 			return ErrPurged
 		}
 		var existing Subject
-		err := tx.QueryRow(ctx, `SELECT subject_id,account_id,source_epoch,lifecycle_revision,lifecycle_state,purge_at FROM automod_subjects WHERE subject_id=$1 OR account_id=$2 FOR UPDATE`, subject.ID, subject.AccountID).Scan(&existing.ID, &existing.AccountID, &existing.Epoch, &existing.Revision, &existing.State, &existing.PurgeAt)
+		err := tx.QueryRow(ctx, `SELECT subject_id,account_id,source_epoch,lifecycle_revision,lifecycle_state,purge_at,deletion_cycle_id FROM automod_subjects WHERE subject_id=$1 OR account_id=$2 FOR UPDATE`, subject.ID, subject.AccountID).Scan(&existing.ID, &existing.AccountID, &existing.Epoch, &existing.Revision, &existing.State, &existing.PurgeAt, &existing.CycleID)
 		if errors.Is(err, pgx.ErrNoRows) {
-			_, err = tx.Exec(ctx, `INSERT INTO automod_subjects(subject_id,account_id,source_epoch,lifecycle_revision,lifecycle_state,purge_at) VALUES($1,$2,$3,$4,$5,$6)`, subject.ID, subject.AccountID, subject.Epoch, subject.Revision, subject.State, subject.PurgeAt)
+			_, err = tx.Exec(ctx, `INSERT INTO automod_subjects(subject_id,account_id,source_epoch,lifecycle_revision,lifecycle_state,purge_at,deletion_cycle_id) VALUES($1,$2,$3,$4,$5,$6,$7)`, subject.ID, subject.AccountID, subject.Epoch, subject.Revision, subject.State, subject.PurgeAt, nullableCycle(subject.CycleID))
 			return err
 		}
 		if err != nil {
@@ -187,10 +201,13 @@ func (s *Store) Provision(ctx context.Context, subject Subject) error {
 		if existing.ID != subject.ID || existing.AccountID != subject.AccountID || existing.Epoch != uuid.Nil && existing.Epoch != subject.Epoch || existing.Revision > subject.Revision {
 			return ErrConflict
 		}
-		if existing.Revision == subject.Revision && (existing.State != subject.State || !equalTime(existing.PurgeAt, subject.PurgeAt)) {
+		if existing.State == "DELETED" && subject.State == "DELETED" && existing.CycleID == subject.CycleID && !equalTime(existing.PurgeAt, subject.PurgeAt) {
 			return ErrConflict
 		}
-		_, err = tx.Exec(ctx, `UPDATE automod_subjects SET lifecycle_revision=$2,lifecycle_state=$3,purge_at=$4,source_epoch=COALESCE(source_epoch,$5) WHERE subject_id=$1`, subject.ID, subject.Revision, subject.State, subject.PurgeAt, subject.Epoch)
+		if existing.Revision == subject.Revision && (existing.State != subject.State || existing.CycleID != subject.CycleID || !equalTime(existing.PurgeAt, subject.PurgeAt)) {
+			return ErrConflict
+		}
+		_, err = tx.Exec(ctx, `UPDATE automod_subjects SET lifecycle_revision=$2,lifecycle_state=$3,purge_at=$4,source_epoch=COALESCE(source_epoch,$5),deletion_cycle_id=$6 WHERE subject_id=$1`, subject.ID, subject.Revision, subject.State, subject.PurgeAt, subject.Epoch, nullableCycle(subject.CycleID))
 		return err
 	})
 }

@@ -152,7 +152,19 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 		if addr == "" {
 			return nil, nil
 		}
-		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		policy := grpcclient.DefaultBreakerConfig()
+		policy.Observe = func(event grpcclient.BreakerEvent) {
+			if logger != nil {
+				logger.Debug("gateway grpc circuit breaker", slog.String("method", event.Method),
+					slog.String("state", event.State), slog.String("reason", event.Reason))
+			}
+		}
+		breaker, err := grpcclient.NewUnaryBreaker(policy)
+		if err != nil {
+			return nil, err
+		}
+		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithDisableRetry(), grpc.WithChainUnaryInterceptor(breaker.UnaryClientInterceptor()))
 		if err != nil {
 			return nil, err
 		}
@@ -396,6 +408,10 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		}
 		return t.serveFiles(w, r, rest)
 	case "spaces":
+		if isSpaceCreateRequest(r) {
+			t.serveSpaceCreate(w, r)
+			return true
+		}
 		if t.serveSpaceAudit(w, r, rest) {
 			return true
 		}

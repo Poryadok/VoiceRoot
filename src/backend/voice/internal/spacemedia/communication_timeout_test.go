@@ -7,6 +7,7 @@ import (
 	"testing"
 	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/voice/internal/grpcsvc"
+	"voice/backend/voice/internal/spacegatetest"
 	"voice/backend/voice/internal/store"
 )
 
@@ -21,7 +22,7 @@ func TestTimeoutInvalidationEjectsListenOnlyAndUnknownRemainsUnacked(t *testing.
 			_, err := calls.AdmitSpaceMediaParticipant(ctx, room, store.SpaceMediaParticipant{AccountID: uuid.NewString(), AdmissionOperationID: uuid.NewString(), ProfileID: profile, Identity: identity, Generation: generation, Issued: grant, Reconciled: grant}, store.MaxSpaceProVoiceParticipants)
 			require.NoError(t, err)
 			media := &fakeMedia{}
-			coordinator := &Coordinator{Store: calls, Admissions: fakeRecoveryForCommittedCall(t, ctx, calls, room), SessionEpochChecker: currentEpochChecker{}, Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{profile: {SpaceID: space, Member: true, Active: true, AccessEpoch: 4, CommunicationStateResolved: resolved, TimedOut: resolved}}}, Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{profile: {PolicyEpoch: 7, CanJoin: true, CanSubscribe: true}}}, Media: media}
+			coordinator := &Coordinator{ProjectionGates: spacegatetest.New(), Store: calls, Admissions: fakeRecoveryForCommittedCall(t, ctx, calls, room), SessionEpochChecker: currentEpochChecker{}, Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{profile: {SpaceID: space, Member: true, Active: true, AccessEpoch: 4, CommunicationStateResolved: resolved, TimedOut: resolved}}}, Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{profile: {PolicyEpoch: 7, CanJoin: true, CanSubscribe: true}}}, Media: media}
 			envelope := &eventsv1.ChatStreamEvent{EventId: uuid.NewString(), Payload: &eventsv1.ChatStreamEvent_VoiceRoomAccessInvalidated{VoiceRoomAccessInvalidated: &eventsv1.VoiceRoomAccessInvalidated{SpaceId: space, AccessEpoch: 4}}}
 			data, err := proto.Marshal(envelope)
 			require.NoError(t, err)

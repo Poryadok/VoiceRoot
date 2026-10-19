@@ -64,6 +64,7 @@ func ResolveReportSubject(ctx context.Context, resolver ReportSubjectResolver, a
 		}
 		deadline := binding.GetPurgeAt().AsTime()
 		subject.State = "DELETED"
+		subject.CycleID = uuid.MustParse(binding.GetDeletionCycleId())
 		subject.PurgeAt = &deadline
 	}
 	return subject, response.GetSessionEpoch(), nil

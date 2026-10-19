@@ -2,7 +2,7 @@ import copy,hashlib,unittest
 from unittest.mock import Mock
 from nats_contract_custody import advance,ANNOTATION
 from controller import Blocked
-from nats_contract_plan import DECLARATIONS,SCHEMA,MIGRATION_ID
+from nats_contract_plan import V4_DECLARATIONS as DECLARATIONS,V4_SCHEMA as SCHEMA,V4_MIGRATION_ID as MIGRATION_ID
 def fixture():
     old='old fixed script\n';new='reviewed target script\n'
     sha=lambda s:hashlib.sha256(s.encode()).hexdigest()

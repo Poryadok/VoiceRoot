@@ -86,6 +86,8 @@ type AuthorityNotice struct {
 }
 
 type Coordinator struct {
+	ProjectionGates     store.SpaceProjectionGates
+	ResumeP3            func(context.Context) error
 	reconcileMu         sync.Mutex
 	ready               bool
 	Store               Store
@@ -336,6 +338,11 @@ func (c *Coordinator) abortAdmission(ctx context.Context, admission store.SpaceM
 }
 
 func (c *Coordinator) recoverCommittedAdmission(ctx context.Context, admission store.SpaceMediaAdmission) error {
+	ticket, err := c.prepareProjection(ctx, admission)
+	if err != nil {
+		return err
+	}
+
 	if err := c.Admissions.ConfirmRoomHeadOpen(ctx, admission); err != nil {
 		return err
 	}
@@ -382,7 +389,7 @@ func (c *Coordinator) recoverCommittedAdmission(ctx context.Context, admission s
 		if creatorErr != nil {
 			return creatorErr
 		}
-		call = store.Call{RoomID: admission.RoomID, LivekitRoomName: "voice-room-" + admission.VoiceRoomID,
+		call = store.Call{SpaceProjectionTicket: ticket, RoomID: admission.RoomID, SpaceLifecycleGeneration: admission.LifecycleGeneration, LivekitRoomName: "voice-room-" + admission.VoiceRoomID,
 			VoiceRoomID: admission.VoiceRoomID, SpaceID: admission.SpaceID.String(),
 			SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM,
 			InitiatorProfileID: creator.ProfileID.String(), MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
@@ -407,7 +414,7 @@ func (c *Coordinator) recoverCommittedAdmission(ctx context.Context, admission s
 	} else {
 		if _, err := c.Calls.AdmitSpaceMediaParticipant(ctx, call.RoomID, store.SpaceMediaParticipant{
 			AccountID: admission.AccountID.String(), AdmissionOperationID: admission.OperationID.String(),
-			RoomGeneration: admission.RoomGeneration, CreatedRoom: admission.CreatedRoom,
+			ProjectionTicket: ticket, LifecycleGeneration: admission.LifecycleGeneration, RoomGeneration: admission.RoomGeneration, CreatedRoom: admission.CreatedRoom,
 			ProfileID: admission.ProfileID.String(), Identity: admission.Identity, Generation: admission.Generation,
 			Issued: store.SpaceMediaGrant{SessionEpoch: admission.SessionEpoch, AccessEpoch: admission.AccessEpoch, PolicyEpoch: admission.PolicyEpoch,
 				CanJoin: admission.CanJoin, CanPublishAudio: admission.CanPublishAudio, CanSubscribe: admission.CanSubscribe},
@@ -500,7 +507,20 @@ func (c *Coordinator) reconcileParticipant(ctx context.Context, call store.Call,
 		AccessEpoch:  access.AccessEpoch, PolicyEpoch: grants.PolicyEpoch,
 		CanJoin: grants.CanJoin, CanPublishAudio: grants.CanPublishAudio, CanSubscribe: grants.CanSubscribe,
 	}
-	_, _, err = c.Store.ReconcileSpaceMediaParticipant(ctx, call.RoomID, participant.ProfileID, participant.Identity, participant.Generation, grant)
+	projectionCtx := ctx
+	if participant.AdmissionOperationID != "" {
+		op, err := uuid.Parse(participant.AdmissionOperationID)
+		if err != nil {
+			return err
+		}
+		ticket, err := c.prepareProjection(ctx, store.SpaceMediaAdmission{OperationID: op, Generation: participant.Generation, SpaceID: uuid.MustParse(call.SpaceID)})
+		if err != nil {
+			return err
+		}
+		projectionCtx = store.WithSpaceProjectionTicket(ctx, ticket)
+	}
+
+	_, _, err = c.Store.ReconcileSpaceMediaParticipant(projectionCtx, call.RoomID, participant.ProfileID, participant.Identity, participant.Generation, grant)
 	if errors.Is(err, store.ErrSpaceMediaStaleGrant) {
 		return ErrReconciliationPending
 	}
@@ -527,6 +547,8 @@ func (c *Coordinator) RevokeSpaceMediaParticipant(ctx context.Context, call stor
 }
 
 func (c *Coordinator) ejectParticipant(ctx context.Context, call store.Call, participant store.SpaceMediaParticipant) (store.Call, bool, error) {
+	ctx = store.WithSpaceCleanupTarget(ctx, store.SpaceProjectionTicket{SpaceID: call.SpaceID, RoomID: call.RoomID, VoiceRoomID: call.VoiceRoomID, RoomGeneration: participant.RoomGeneration, OperationID: participant.AdmissionOperationID, AdmissionGeneration: participant.Generation, AccountID: participant.AccountID, ProfileID: participant.ProfileID, Identity: participant.Identity})
+
 	if c.Admissions == nil {
 		return call, false, store.ErrInvalidState
 	}
@@ -581,6 +603,26 @@ func (c *Coordinator) ReconcileAll(ctx context.Context) error {
 			c.setReady(false)
 		}
 	}()
+	if c.Admissions != nil {
+		if c.ProjectionGates == nil {
+			return ErrAdmissionUnavailable
+		}
+		authority, ok := c.Admissions.(interface {
+			RebuildLifecycleWatermarks(context.Context, store.SpaceProjectionGates) error
+		})
+		if !ok {
+			return ErrAdmissionUnavailable
+		}
+		if err := authority.RebuildLifecycleWatermarks(ctx, c.ProjectionGates); err != nil {
+			return err
+		}
+	}
+
+	if c.ResumeP3 != nil {
+		if err := c.ResumeP3(ctx); err != nil && c.OnError != nil {
+			c.OnError(err)
+		}
+	}
 	if err := c.reconcileAdmissions(ctx); err != nil {
 		return err
 	}
@@ -636,3 +678,24 @@ func canonicalID(value string) bool {
 }
 
 var _ MediaLifecycle = (*livekit.RoomLifecycle)(nil)
+
+func (c *Coordinator) prepareProjection(ctx context.Context, a store.SpaceMediaAdmission) (store.SpaceProjectionTicket, error) {
+	if c.ProjectionGates == nil {
+		return store.SpaceProjectionTicket{}, ErrAdmissionUnavailable
+	}
+	authority, ok := c.Admissions.(interface {
+		ReadSpaceLifecycle(context.Context, string) (int64, bool, error)
+		AuthorizeSpaceProjection(context.Context, uuid.UUID, string, store.SpaceProjectionTicket) (store.SpaceProjectionTicket, error)
+	})
+	if !ok {
+		return store.SpaceProjectionTicket{}, ErrAdmissionUnavailable
+	}
+	if err := c.ProjectionGates.EnsureSpaceLifecycle(ctx, a.SpaceID.String(), authority.ReadSpaceLifecycle); err != nil {
+		return store.SpaceProjectionTicket{}, err
+	}
+	observed, err := c.ProjectionGates.ReadReadySpaceGate(ctx, a.SpaceID.String())
+	if err != nil {
+		return store.SpaceProjectionTicket{}, err
+	}
+	return authority.AuthorizeSpaceProjection(ctx, a.OperationID, a.Generation, observed)
+}

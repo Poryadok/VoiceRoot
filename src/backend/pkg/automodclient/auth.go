@@ -135,6 +135,22 @@ func (c *AuthClient) TerminalSnapshot(ctx context.Context) (*automodv1.ListTermi
 	}
 	return response, nil
 }
+
+func (c *AuthClient) AccountCensus(ctx context.Context) (*automodv1.ListModerationAccountCensusResponse, error) {
+	request := &automodv1.ListModerationAccountCensusRequest{}
+	signed, err := c.signed(ctx, request, automodv1.AuthModerationAuthorityService_ListModerationAccountCensus_FullMethodName)
+	if err != nil {
+		return nil, err
+	}
+	response, err := c.Client.ListModerationAccountCensus(signed, request)
+	if err != nil {
+		return nil, err
+	}
+	if automodwire.ValidateAccountCensus(response) != nil {
+		return nil, unavailable()
+	}
+	return response, nil
+}
 func (c *AuthClient) Reconcile(ctx context.Context, account, subject uuid.UUID, revision uint64, banned bool) (*automodv1.ReconcileModerationRestrictionResponse, error) {
 	if account == uuid.Nil || subject == uuid.Nil || revision == 0 || revision > math.MaxInt64 {
 		return nil, status.Error(codes.InvalidArgument, "invalid restriction binding")

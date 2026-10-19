@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	AuthModerationAuthorityService_ResolveModerationSubject_FullMethodName       = "/voice.automod.v1.AuthModerationAuthorityService/ResolveModerationSubject"
 	AuthModerationAuthorityService_ListTerminalModerationSubjects_FullMethodName = "/voice.automod.v1.AuthModerationAuthorityService/ListTerminalModerationSubjects"
+	AuthModerationAuthorityService_ListModerationAccountCensus_FullMethodName    = "/voice.automod.v1.AuthModerationAuthorityService/ListModerationAccountCensus"
 	AuthModerationAuthorityService_ReconcileModerationRestriction_FullMethodName = "/voice.automod.v1.AuthModerationAuthorityService/ReconcileModerationRestriction"
 )
 
@@ -34,6 +35,8 @@ type AuthModerationAuthorityServiceClient interface {
 	ResolveModerationSubject(ctx context.Context, in *ResolveModerationSubjectRequest, opts ...grpc.CallOption) (*ResolveModerationSubjectResponse, error)
 	// @voice.security=protected;callers=service:messaging,service:moderation
 	ListTerminalModerationSubjects(ctx context.Context, in *ListTerminalModerationSubjectsRequest, opts ...grpc.CallOption) (*ListTerminalModerationSubjectsResponse, error)
+	// @voice.security=protected;callers=service:moderation
+	ListModerationAccountCensus(ctx context.Context, in *ListModerationAccountCensusRequest, opts ...grpc.CallOption) (*ListModerationAccountCensusResponse, error)
 	// @voice.security=protected;callers=service:moderation
 	ReconcileModerationRestriction(ctx context.Context, in *ReconcileModerationRestrictionRequest, opts ...grpc.CallOption) (*ReconcileModerationRestrictionResponse, error)
 }
@@ -66,6 +69,16 @@ func (c *authModerationAuthorityServiceClient) ListTerminalModerationSubjects(ct
 	return out, nil
 }
 
+func (c *authModerationAuthorityServiceClient) ListModerationAccountCensus(ctx context.Context, in *ListModerationAccountCensusRequest, opts ...grpc.CallOption) (*ListModerationAccountCensusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListModerationAccountCensusResponse)
+	err := c.cc.Invoke(ctx, AuthModerationAuthorityService_ListModerationAccountCensus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *authModerationAuthorityServiceClient) ReconcileModerationRestriction(ctx context.Context, in *ReconcileModerationRestrictionRequest, opts ...grpc.CallOption) (*ReconcileModerationRestrictionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ReconcileModerationRestrictionResponse)
@@ -87,6 +100,8 @@ type AuthModerationAuthorityServiceServer interface {
 	// @voice.security=protected;callers=service:messaging,service:moderation
 	ListTerminalModerationSubjects(context.Context, *ListTerminalModerationSubjectsRequest) (*ListTerminalModerationSubjectsResponse, error)
 	// @voice.security=protected;callers=service:moderation
+	ListModerationAccountCensus(context.Context, *ListModerationAccountCensusRequest) (*ListModerationAccountCensusResponse, error)
+	// @voice.security=protected;callers=service:moderation
 	ReconcileModerationRestriction(context.Context, *ReconcileModerationRestrictionRequest) (*ReconcileModerationRestrictionResponse, error)
 	mustEmbedUnimplementedAuthModerationAuthorityServiceServer()
 }
@@ -103,6 +118,9 @@ func (UnimplementedAuthModerationAuthorityServiceServer) ResolveModerationSubjec
 }
 func (UnimplementedAuthModerationAuthorityServiceServer) ListTerminalModerationSubjects(context.Context, *ListTerminalModerationSubjectsRequest) (*ListTerminalModerationSubjectsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTerminalModerationSubjects not implemented")
+}
+func (UnimplementedAuthModerationAuthorityServiceServer) ListModerationAccountCensus(context.Context, *ListModerationAccountCensusRequest) (*ListModerationAccountCensusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListModerationAccountCensus not implemented")
 }
 func (UnimplementedAuthModerationAuthorityServiceServer) ReconcileModerationRestriction(context.Context, *ReconcileModerationRestrictionRequest) (*ReconcileModerationRestrictionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReconcileModerationRestriction not implemented")
@@ -165,6 +183,24 @@ func _AuthModerationAuthorityService_ListTerminalModerationSubjects_Handler(srv 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthModerationAuthorityService_ListModerationAccountCensus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListModerationAccountCensusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthModerationAuthorityServiceServer).ListModerationAccountCensus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthModerationAuthorityService_ListModerationAccountCensus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthModerationAuthorityServiceServer).ListModerationAccountCensus(ctx, req.(*ListModerationAccountCensusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AuthModerationAuthorityService_ReconcileModerationRestriction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ReconcileModerationRestrictionRequest)
 	if err := dec(in); err != nil {
@@ -197,6 +233,10 @@ var AuthModerationAuthorityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListTerminalModerationSubjects",
 			Handler:    _AuthModerationAuthorityService_ListTerminalModerationSubjects_Handler,
+		},
+		{
+			MethodName: "ListModerationAccountCensus",
+			Handler:    _AuthModerationAuthorityService_ListModerationAccountCensus_Handler,
 		},
 		{
 			MethodName: "ReconcileModerationRestriction",
@@ -531,6 +571,117 @@ var ModerationEvidenceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetEffectiveRestrictionSnapshot",
 			Handler:    _ModerationEvidenceService_GetEffectiveRestrictionSnapshot_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "voice/automod/v1/automod.proto",
+}
+
+const (
+	AccountLifecycleReceiverService_ApplyLifecycleFact_FullMethodName = "/voice.automod.v1.AccountLifecycleReceiverService/ApplyLifecycleFact"
+)
+
+// AccountLifecycleReceiverServiceClient is the client API for AccountLifecycleReceiverService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Each recipient hosts this private Auth-only service. Audience remains the
+// exact recipient; neither listener exposes it through an ordinary route.
+type AccountLifecycleReceiverServiceClient interface {
+	// @voice.security=protected;callers=service:auth
+	ApplyLifecycleFact(ctx context.Context, in *ApplyLifecycleFactRequest, opts ...grpc.CallOption) (*ApplyLifecycleFactResponse, error)
+}
+
+type accountLifecycleReceiverServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewAccountLifecycleReceiverServiceClient(cc grpc.ClientConnInterface) AccountLifecycleReceiverServiceClient {
+	return &accountLifecycleReceiverServiceClient{cc}
+}
+
+func (c *accountLifecycleReceiverServiceClient) ApplyLifecycleFact(ctx context.Context, in *ApplyLifecycleFactRequest, opts ...grpc.CallOption) (*ApplyLifecycleFactResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyLifecycleFactResponse)
+	err := c.cc.Invoke(ctx, AccountLifecycleReceiverService_ApplyLifecycleFact_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// AccountLifecycleReceiverServiceServer is the server API for AccountLifecycleReceiverService service.
+// All implementations must embed UnimplementedAccountLifecycleReceiverServiceServer
+// for forward compatibility.
+//
+// Each recipient hosts this private Auth-only service. Audience remains the
+// exact recipient; neither listener exposes it through an ordinary route.
+type AccountLifecycleReceiverServiceServer interface {
+	// @voice.security=protected;callers=service:auth
+	ApplyLifecycleFact(context.Context, *ApplyLifecycleFactRequest) (*ApplyLifecycleFactResponse, error)
+	mustEmbedUnimplementedAccountLifecycleReceiverServiceServer()
+}
+
+// UnimplementedAccountLifecycleReceiverServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedAccountLifecycleReceiverServiceServer struct{}
+
+func (UnimplementedAccountLifecycleReceiverServiceServer) ApplyLifecycleFact(context.Context, *ApplyLifecycleFactRequest) (*ApplyLifecycleFactResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyLifecycleFact not implemented")
+}
+func (UnimplementedAccountLifecycleReceiverServiceServer) mustEmbedUnimplementedAccountLifecycleReceiverServiceServer() {
+}
+func (UnimplementedAccountLifecycleReceiverServiceServer) testEmbeddedByValue() {}
+
+// UnsafeAccountLifecycleReceiverServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to AccountLifecycleReceiverServiceServer will
+// result in compilation errors.
+type UnsafeAccountLifecycleReceiverServiceServer interface {
+	mustEmbedUnimplementedAccountLifecycleReceiverServiceServer()
+}
+
+func RegisterAccountLifecycleReceiverServiceServer(s grpc.ServiceRegistrar, srv AccountLifecycleReceiverServiceServer) {
+	// If the following call pancis, it indicates UnimplementedAccountLifecycleReceiverServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&AccountLifecycleReceiverService_ServiceDesc, srv)
+}
+
+func _AccountLifecycleReceiverService_ApplyLifecycleFact_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyLifecycleFactRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AccountLifecycleReceiverServiceServer).ApplyLifecycleFact(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AccountLifecycleReceiverService_ApplyLifecycleFact_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AccountLifecycleReceiverServiceServer).ApplyLifecycleFact(ctx, req.(*ApplyLifecycleFactRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// AccountLifecycleReceiverService_ServiceDesc is the grpc.ServiceDesc for AccountLifecycleReceiverService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var AccountLifecycleReceiverService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "voice.automod.v1.AccountLifecycleReceiverService",
+	HandlerType: (*AccountLifecycleReceiverServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ApplyLifecycleFact",
+			Handler:    _AccountLifecycleReceiverService_ApplyLifecycleFact_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

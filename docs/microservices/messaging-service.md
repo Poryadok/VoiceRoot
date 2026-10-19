@@ -38,6 +38,15 @@ local account purge does not wait for delivery. Startup/backup restore requires
 the complete protected Auth terminal-subject snapshot before serving/replay.
 See [the accepted contract and execution plan](../testing/async-automod-exec-plan.md).
 
+Account cleanup follows [c19 positive terminal authority and exact lifecycle
+cycles](../testing/async-automod-unknown-deadline.md), not a stale recipient timer.
+No ACK or outage extends the canonical physical deadline. Complete loss of all
+owner authority through an unknown deletion or winning restore is an explicit
+physical-deadline acceptance limitation; closing admission alone is not erasure.
+The [c20 review](../testing/async-automod-identity-bridge-feasibility.md) preserves
+the v2 PERSONAL classification: removing one association does not anonymize
+account-bearing immutable cores/receipts, joins or globally keyed aliases.
+
 ## Space communication timeout (BE-044-TIMEOUT-v1)
 
 Accepted target: apply the [Space-owned communication state](space-service.md#communication-timeout-authority-be-044-timeout-v1)

@@ -175,6 +175,15 @@ story_media_deletion_outbox
 - **Notification Service** — (через NATS) уведомления об упоминаниях
 - **Subscription Service** — проверка Premium (анонимный просмотр)
 
+### Feed author dependency failure
+
+Production feed requests resolve the viewer's author set through Social before
+querying Story rows. A failed author lookup returns a non-sensitive `Unavailable`
+without a global scan or a partial successful feed, including when Social returns
+partial author IDs alongside its error. Recovery resumes author-scoped cursor
+pagination and the existing per-Story privacy checks. An error querying the
+resolved author set is returned without retrying against all active Stories.
+
 ## Story media admission
 
 `CreateStory` has a closed type set: `photo`, `video`, `text`. Photo/video

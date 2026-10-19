@@ -22,6 +22,9 @@ public final class AuthModerationService extends AuthModerationAuthorityServiceG
   @Override public void reconcileModerationRestriction(ReconcileModerationRestrictionRequest request,StreamObserver<ReconcileModerationRestrictionResponse> observer){
     respond(observer,()->{require(Set.of("moderation"));if(request.getProtocolVersion()!=1)throw Status.INVALID_ARGUMENT.asRuntimeException();return store.reconcile(uuid(request.getAccountId()),uuid(request.getSubjectId()),request.getRevision(),request.getModerationBanned());});
   }
+  @Override public void listModerationAccountCensus(ListModerationAccountCensusRequest request,StreamObserver<ListModerationAccountCensusResponse> observer){
+    respond(observer,()->{require(Set.of("moderation"));if(!request.getUnknownFields().asMap().isEmpty())throw Status.INVALID_ARGUMENT.asRuntimeException();return store.accountCensus();});
+  }
   private static UUID uuid(String raw){try{UUID id=UUID.fromString(raw);if(!id.toString().equals(raw))throw new IllegalArgumentException();return id;}catch(IllegalArgumentException ex){throw Status.INVALID_ARGUMENT.withDescription("invalid authority identifier").asRuntimeException();}}
   private static void require(Set<String> callers){var p=VerifiedPrincipal.current();if(p==null || !VerifiedPrincipal.SERVICE.equals(p.kind()) || !callers.contains(p.issuer()))throw Status.UNAUTHENTICATED.withDescription("private authority required").asRuntimeException();}
   private static <T> void respond(StreamObserver<T> observer,Supplier<T> action){try{T value=action.get();observer.onNext(value);observer.onCompleted();}catch(DataAccessException ex){observer.onError(Status.FAILED_PRECONDITION.withDescription("moderation authority conflict or unavailable").asRuntimeException());}catch(RuntimeException ex){observer.onError(ex instanceof io.grpc.StatusRuntimeException?ex:Status.INTERNAL.withDescription("moderation authority unavailable").asRuntimeException());}}

@@ -72,8 +72,12 @@ func (s *Store) QueueRestrictionTx(ctx context.Context, tx pgx.Tx, account uuid.
 }
 
 func (s *Store) RestrictionSnapshot(ctx context.Context, account, subject uuid.UUID) (result Restriction, err error) {
+	return s.restrictionSnapshot(ctx, account, subject, nil)
+}
+
+func (s *Store) restrictionSnapshot(ctx context.Context, account, subject uuid.UUID, check BootCheck) (result Restriction, err error) {
 	result = Restriction{AccountID: account, SubjectID: subject}
-	err = s.accountTx(ctx, account, func(tx pgx.Tx) error {
+	err = s.accountTxChecked(ctx, account, check, func(tx pgx.Tx) error {
 		var actual uuid.UUID
 		if err := tx.QueryRow(ctx, `SELECT subject_id FROM automod_subjects WHERE account_id=$1`, account).Scan(&actual); err != nil {
 			return err
@@ -109,7 +113,18 @@ func (s *Store) PendingRestrictions(ctx context.Context) ([]Restriction, error) 
 	return result, rows.Err()
 }
 func (s *Store) CompleteRestriction(ctx context.Context, r Restriction) error {
-	return s.accountTx(ctx, r.AccountID, func(tx pgx.Tx) error {
+	return s.completeRestriction(ctx, r, nil)
+}
+
+func (s *Store) CompleteRestrictionChecked(ctx context.Context, r Restriction, check BootCheck) error {
+	if check == nil {
+		return ErrBootClosed
+	}
+	return s.completeRestriction(ctx, r, check)
+}
+
+func (s *Store) completeRestriction(ctx context.Context, r Restriction, check BootCheck) error {
+	return s.accountTxChecked(ctx, r.AccountID, check, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `DELETE FROM automod_restriction_sync q USING automod_subjects a WHERE q.subject_id=a.subject_id AND a.subject_id=$1 AND a.account_id=$2 AND a.restriction_revision=$3 AND a.desired_banned=$4`, r.SubjectID, r.AccountID, r.Revision, r.Banned)
 		return err
 	})

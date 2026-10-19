@@ -13,6 +13,8 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
   public static final String CONSUME_RPC = "/voice.auth.v1.AuthService/ConsumeOwnershipTransferProof";
   public static final String LOOKUP_RPC = "/voice.auth.v1.AuthService/GetOwnershipTransferReceipt";
   public static final String VOICE_SESSION_FLOOR_RPC = "/voice.auth.v1.AuthService/GetVoiceSessionEpochFloor";
+  public static final String SPACE_SESSION_FLOOR_RPC = "/voice.auth.v1.AuthService/GetSpaceSessionEpochFloor";
+  public static final String ROLE_SESSION_FLOOR_RPC = "/voice.auth.v1.AuthService/GetRoleSessionEpochFloor";
   public static final String SPACE_DELETE_CONSUME_RPC =
       "/voice.auth.v1.AuthService/ConsumeSpaceDeletionProof";
   public static final String SPACE_DELETE_LOOKUP_RPC =
@@ -22,7 +24,8 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
   public static final String MODERATION_SUBJECT_RPC = "/voice.automod.v1.AuthModerationAuthorityService/ResolveModerationSubject";
   public static final String MODERATION_TERMINAL_RPC = "/voice.automod.v1.AuthModerationAuthorityService/ListTerminalModerationSubjects";
   public static final String MODERATION_RECONCILE_RPC = "/voice.automod.v1.AuthModerationAuthorityService/ReconcileModerationRestriction";
-  public static final Set<String> MODERATION_RPCS = Set.of(MODERATION_SUBJECT_RPC, MODERATION_TERMINAL_RPC, MODERATION_RECONCILE_RPC);
+  public static final String MODERATION_CENSUS_RPC = "/voice.automod.v1.AuthModerationAuthorityService/ListModerationAccountCensus";
+  public static final Set<String> MODERATION_RPCS = Set.of(MODERATION_SUBJECT_RPC, MODERATION_TERMINAL_RPC, MODERATION_RECONCILE_RPC, MODERATION_CENSUS_RPC);
   private static final Set<String> RAW = Set.of("x-profile-id", "x-account-id", "x-user-id", "x-actor-id", "x-internal-caller");
   private final AuthPrincipalVerifier verifier;
   private final Runnable cleanup;
@@ -40,6 +43,7 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
     String rpc = "/" + call.getMethodDescriptor().getFullMethodName();
     if (!ISSUE_RPC.equals(rpc) && !CONSUME_RPC.equals(rpc) && !LOOKUP_RPC.equals(rpc)
         && !VOICE_SESSION_FLOOR_RPC.equals(rpc)
+        && !ROLE_SESSION_FLOOR_RPC.equals(rpc) && !SPACE_SESSION_FLOOR_RPC.equals(rpc)
         && !SPACE_DELETE_CONSUME_RPC.equals(rpc) && !SPACE_DELETE_LOOKUP_RPC.equals(rpc)
         && !SPACE_DELETE_ACK_RPC.equals(rpc) && !MODERATION_RPCS.contains(rpc)) return next.startCall(call, headers);
     final String token, requestId;
@@ -80,7 +84,9 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
           verified = verifier.verify(token, rpc, requestId, requestHash((MessageLite) request));
         } catch (RuntimeException ex) {
           Status status = Status.fromThrowable(ex);
-          deny(status.getCode() == Status.Code.PERMISSION_DENIED ? Status.PERMISSION_DENIED : Status.UNAUTHENTICATED);
+          deny(SPACE_SESSION_FLOOR_RPC.equals(rpc) && status.getCode() == Status.Code.UNAVAILABLE
+              ? Status.UNAVAILABLE
+              : status.getCode() == Status.Code.PERMISSION_DENIED ? Status.PERMISSION_DENIED : Status.UNAUTHENTICATED);
           return;
         }
         delegate = Contexts.interceptCall(parent.withValue(VerifiedPrincipal.CONTEXT, verified), call, headers, next);

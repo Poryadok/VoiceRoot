@@ -1,6 +1,146 @@
 # ExecPlan: account-scoped asynchronous spam moderation (BE-045)
 
+## Current develop integration checkpoint
+
+Independent source review of Auth snapshot/census `fc364aa` returned scoped
+SOURCE CLEAR, with a runtime source-binding qualification: the old census tar
+was a baseline before overlays, not the complete executed source. That gap was
+corrected by a bounded repeat from the immutable fc364aa Git archive, without
+overlays. All 522 source files matched archive hashes before and after native
+execution; exact eight tests passed with zero failures/errors/skips. The archive
+SHA-256 is `a382abd835871d839561a7682043c3c877d5db78d6d14133309863f14946f026`;
+the unchanged source manifest SHA-256 is
+`96caa12ec9dde87d288a0e138ecb6f3c89eea63349ab21a40683a23f48f358d5`.
+Actual Maven log/manifests/receipt/XML are retained as ignored exact-proof
+artifacts. Review-function c3 records the correction; the old baseline is not
+retrospectively relabeled as exact execution proof. Evidence-only recheck is
+separate from unchanged source review. The lifecycle producer `46d6f24` also
+received independent bounded SOURCE CLEAR; delivery/activation remain open.
+
+Normal merge input `0a0024900b5bb3ba2f6fee391615f0f4fa0864e3` preserves
+the separate Role/Space Auth floor methods and reviewed strict restore deadline.
+The combined issuer inventory retains all six service issuers while each RPC
+keeps its own exact caller allowlist. Moderation retains both scan metrics and
+the private report authority/privacy fields; liveness still mounts metrics and
+configured readiness still requires P5. Auth Go/Dart bindings were regenerated
+from the merged canonical proto, rather than selecting either stale descriptor.
+
+The frozen source tree `f1c6752127db76472a3821172019c127614667e4` passed
+Linux Moderation `go test -short ./...` and `go vet ./...`. The native Maven
+compile and 40 tests passed first, with two fixture errors from unavailable
+Docker. The identical compiled candidate then passed all 42 selected principal,
+Role-floor and Space-floor tests with zero failures/errors/skips using real
+PostgreSQL16/Redis inside an owned private DinD engine. Nested published ports
+existed only in its Linux namespace; there were no Windows host ports/listeners.
+The XML reports are retained in ignored checkpoint evidence. Both runners,
+engine, private inner network and engine volume were removed after terminal
+results. This proves the bounded merge, not P1-P5 or full feature acceptance.
+
 ## Account-core v2 implementation checkpoint
+
+The private lifecycle wire now declares the Auth-only receiver RPC and strict
+opaque fact/typed receipt. Validation rejects unknown/duplicate/noncanonical
+fields, mismatched receipt generation/event/subject, revision overflow, missing
+required cycle/deadline and equal-revision changed fact hashes. A due DELETED fact stays
+nonterminal; a positive PURGED fact carries no invented erased revision/cycle.
+Newer/terminal peer receipts remain inputs to CURRENT owner-state comparison,
+not direct ACK authority. Actual receiver/publisher transactions remain open.
+The independent 120-byte vector is pinned in the Auth service doc.
+
+Linux wire/client race tests passed (1.037s/1.148s), scoped vet and buf lint
+passed. All 318 executed source files matched the frozen source-tree archive
+before/after the final observation (the first manifest was captured during the
+compile, not relabeled as a pre-run observation). Archive SHA-256 is
+`ebdd3a422e591c23722181f77679894c2dcabe988bffb3e4a8d9b1adc0d63023`;
+raw logs/manifests/receipt are retained under ignored lifecycle-wire proof.
+This is protocol validation proof, not method activation or physical cleanup.
+
+C19 transactional producer checkpoint: Auth V30 / canonical version31 capture
+every owner account creation/lifecycle update and physical removal through SQL
+triggers, with an opaque compact current projection and two durable recipient
+intents. Session-only updates do not manufacture another lifecycle event.
+Restore changes the exact revision/state/cycle atomically; rewriting an existing
+DELETED timestamp cannot extend its cycle. Positive terminal insertion removes
+the nonterminal projection and independently preserves both terminal intents.
+No account/profile/content identifier is present in the producer tables.
+
+Native PostgreSQL regression first failed on the absent producer (RED 8.444s).
+The same compiled test then passed after applying the new SQL, together with the
+existing census/store and two-connection restore-race tests: five tests, zero
+failures/errors/skips. The producer test injects a real outbox write failure and
+checks owner restore/projection rollback, exact recipient replacement, distinct
+next deletion cycle and terminal delivery surviving physical account removal.
+All 29 Flyway migrations applied; Flyway and canonical up-SQL bytes are equal.
+The guarded down migration refused to discard populated lifecycle authority,
+leaving its tables/rows intact. Actual wire delivery, recipient application,
+finite lifecycle catch-up and P1-P5 remain open; SQL intent is not a cleanup ACK.
+
+P0 composition checkpoint: main now loads one local issuer and starts its
+certificate-only JWKS and private9467 listener before database connection. The private listener
+registers only `ModerationEvidenceService` with workload mTLS, bounded replay
+verification and lazy Auth/JWKS dependencies. It reuses the same issuer/store/
+Auth client for report validation; the compatibility signer loader is no longer
+used by main. Configured public RPCs and `/ready` remain closed, while `/health`
+and private discovery remain available. The old ungated expiry loop is not
+started in this configured boot. Only actual bound local listeners produce P0;
+no P1–P5 receipt is invented. Coordinator/census and gated expiry remain open.
+Linux runtime TLS tests, readiness/generation tests and existing health tests
+pass under `-race` (1.442s), including a valid signed private request while the
+Auth peer and domain DB are unavailable: it reaches the closed boot gate.
+Dedicated not-ready-publishing ClusterIP Service templates and both Moderation
+readiness probe paths are source-only; no rollout/network/current-tail proof.
+
+Restriction-sync checkpoint: a finite queue worker now requires this boot's P2
+private-repair capability before any peer call. Auth RPCs run outside account
+transactions with a two-second deadline. Only an exact typed account/subject/
+revision/ban acknowledgement can clear the matching durable intent, with the
+captured generation checked again under the account lock and before commit.
+An ahead reply is compared to CURRENT local revision under that lock: a newer
+local committed request remains queued; genuine remote-ahead divergence closes
+the gate without bumping local history. Closed-boot delivery and the ordinary
+in-flight-ahead case were reproduced as RED. Three real PostgreSQL worker tests
+and the existing complete-ban-set/stale-CAS test pass under Linux `-race`
+(3.148s). Main startup/census integration remains open; an empty batch or a
+successful sync call is not itself a P3/P4 receipt.
+
+Private lifecycle mutation boundary: provision, subject binding, lifecycle
+refresh and effective snapshot now carry the captured boot check through the
+account transaction, including after account-lock acquisition and immediately
+before commit. Entry-only checks reproduced four committed-after-close REDs
+(8.563s). All four rollback oracles plus signed evidence RPC and restriction
+worker regressions pass under real Linux PostgreSQL `-race` (9.684s). Legacy
+internal helpers remain for local authoritative participants/tests; the private
+RPC service exclusively uses the checked entry points.
+
+Auth local-issuer/bootstrap checkpoint: native RED reproduced the SDK-off local
+issuer depending on a User endpoint. A complete key pair now creates exactly one
+issuer with no SDK/User client; all twelve configuration tests pass, preserving
+partial-setting failures. The same issuer signs only the fixed Moderation
+snapshot purpose through a dedicated method; eight crypto contract tests pass.
+The standalone certificate-only HTTPS publisher serves current/next public keys
+before domain readiness, without JWT/Redis/User dependence. Two actual HTTPS
+tests reject anonymous, wrong-CA and wrong-host clients and partial settings;
+two existing outbound mTLS tests also pass after the shared TLS loader refactor.
+All 24 distinct scoped tests pass with zero skips. XML evidence exported before
+removing the owned native Maven runner; no Windows listeners or stand changes.
+Actual Auth session/census and public readiness composition remains open.
+
+Auth listener checkpoint: inheriting the proof listener's server-only TLS was
+reproduced as native RED. The moderation authority is now registered solely on
+dedicated9093 with mandatory workload mTLS and request-bound principals; existing
+proof/floor policy remains separate. Native tests: 3 new transport tests, 5
+existing transport tests and 1 existing moderation-principal test pass with zero
+failures/skips. Actual Linux TLS rejects no client certificate and wrong CA;
+a valid but unauthorized Gateway principal is PermissionDenied before dispatch,
+and a valid Messaging principal reaches the fixture. This is private transport
+proof, not the assembled public/session bootstrap or deployment topology.
+An initial incomplete archive extraction was a setup failure, not RED; the
+complete fixture was recopied only after archive completion before actual RED.
+
+The complete c23/c24 offline recovery contract is persisted in
+`async-automod-recovery.md`. Ordinary live startup has no export/sink dependency;
+declared restore still requires protected current-operation evidence and actual
+recoverable history. The production typed adapter/verifier remains to implement.
 
 Privacy-only retained-subject helper checkpoint: naive binding admitted an
 already due DELETED snapshot (real PostgreSQL RED). The dedicated helper now
@@ -312,8 +452,8 @@ Live-account retention table:
 - Effective sanctions and pending appeals retain only the fields needed for enforcement/appeal while the account is live. Verbose automod logs and resolved/revoked evidence follow the thirty-day post-resolution bound. Do not retain message bodies, URLs or copied message evidence in an automod appeal; use minimized sanction/hit receipts. Normal report evidence is outside this slice and retains its existing policy.
 Producer evidence bytes and their hashes are immutable. At content-evidence expiry the source writes a separate durable terminal-expiry receipt referencing the original event/sequence/hash, then erases expired payload bytes. It never rewrites the old event with different fingerprints. The consumer checks the deadline even if an original payload arrives before the expiry receipt. Under the account lock, either the previously valid event was already applied or the sequence becomes EXPIRED_EVIDENCE once; neither branch can later change into the other. It advances sequence and first-ten metadata counters but creates no hit. Thus privacy expiry closes gaps without fabricated moderation success. Missing not-yet-expired sequences remain buffered; they are not skipped merely because later events exist.
 Key rotation: Messaging alone owns versioned HMAC keys. Derive/account-scope the keyed value with moderation_subject_id and normalized text, with versioned domain separation and length-prefixing. Moderation receives digests only. During rotation produce old+new digests in one immutable envelope; alias them to one logical pattern and one count. Retire an old key only after every live state depending on it has either received its new alias or passed the derived retention horizon, and all its admitted old-epoch evidence has been delivered/expired. The upper horizon is computed from the table, never a guessed short TTL. An invalid/partial ring fails startup. On compromise, stop new affected evidence production/admission rather than silently reset strikes; replace the key under a documented operator recovery using the same alias/expiry boundaries. This is a finite operational recovery path, not a request for a new product decision.
-At confirmed account deletion, Auth supplies the authoritative deletion cycle and purge_at (the canonical thirty-day recovery deadline). Messaging and Moderation persist that deadline locally and schedule independent purge; the producer immediately denies new ordinary and Bot sends for the deleted owner. Restore before purge is explicit Auth authority and preserves unexpired sanctions/strikes; it never clears a ban. A restored account's newer lifecycle revision cancels only the matching nonterminal deletion cycle. Purge cannot be undone.
-At purge_at each participant atomically erases raw account/profile/message links, pending digest payloads, samples, strike aliases, personal log details and raw Auth-sync request bytes for that subject, regardless of missing sequence, consumer outage or unacknowledged delivery. Preserve only a permanent opaque terminal subject fence and non-personal sanction/appeal snapshot (random sanction/case ID, type, times, outcome) when needed for an existing case; no raw identity, content or reversible mapping survives. Existing appeals may be resolved against this minimal snapshot; no status change can recreate identity. Terminal receipt explicitly dominates pending gaps. Hashes derived from raw payload/account data are also removed at purge; opaque subject/cycle identifiers are sufficient for the fence.
+At confirmed account deletion, Auth supplies the authoritative deletion cycle and purge_at (the canonical thirty-day recovery deadline). Messaging and Moderation persist that deadline locally and schedule owner-authority reconciliation and cleanup; the producer immediately denies new ordinary and Bot sends for the deleted owner. Restore before purge is explicit Auth authority and preserves unexpired sanctions/strikes; it never clears a ban. A restored account's newer lifecycle revision cancels only the matching nonterminal deletion cycle. Purge cannot be undone. Per [c19](async-automod-unknown-deadline.md), an old schedule alone cannot prove that a newer valid restore did not win.
+The physical-erasure target remains purge_at: each participant atomically erases raw account/profile/message links, pending digest payloads, samples, strike aliases, personal log details and raw Auth-sync request bytes for that subject. With winning positive owner terminal authority established, cleanup does not wait for a missing evidence sequence or ACK. A total partition hiding deletion or a winning restore cannot satisfy both unconditional at-deadline physical erasure and preservation of an indistinguishable live account; this is an explicit remaining failure-model acceptance limitation, never an allowed deadline extension, synthetic terminal fence or global reset. A missed deadline is recorded as such and positive-authority cleanup on recovery is late cleanup. Preserve only a permanent opaque terminal subject fence and non-personal sanction/appeal snapshot (random sanction/case ID, type, times, outcome) when needed for an existing case; no raw identity, content or reversible mapping survives actual terminal cleanup. Existing appeals may be resolved against this minimal snapshot; no status change can recreate identity. Terminal receipt explicitly dominates pending gaps. Hashes derived from raw payload/account data are also removed at purge; opaque subject/cycle identifiers are sufficient for the fence.
 Every producer, consumer and Auth reconciliation verifies terminal subject state BEFORE lower-sequence replay, pending operation or retry handling. A replay containing an old raw account ID cannot recreate a mapping: its bound subject is terminal. New evidence cannot omit/change that subject because the signed request hash, source receipt and current lifecycle authority bind it. Reject source epoch/account-subject remapping; do not bootstrap a stream from an arbitrary late event. Existing retained pre-activation data cannot be backfilled into new strikes without the new authority and deadline checks.
 Offline/backup restore MUST import the protected Auth terminal-subject snapshot and apply local purge before serving or replaying queues. Absence/unavailability of this snapshot keeps that instance unready. Participant receipts are asynchronous proof, not a dependency that can delay erasure. Purge across replicas is idempotent, does not wait for all consumers, and does not retain a raw-ID escape hatch. This applies to payload stores, retries, logs and restored backups; the implementation must not claim closure from database cleanup alone.
 Rationale: content evidence has a bounded lifetime; older pending work becomes explicit expired evidence instead of retaining private derived data forever. A permanent opaque fence prevents backup/replay resurrection without retaining the erased identity. The accepted thirty-day recovery lifecycle takes precedence over pending moderation work.
@@ -339,7 +479,7 @@ T7: data at exact source+thirty-day evidence deadline is expired, not sanctioned
 T8: inject failure at EACH local transactional write; restart after commit/ACK loss; verify exactly one hit/sanction/outbox action and unchanged state on rollback. Concurrency spans two profiles, patterns and consumers.
 T9: rotate key during sample/strike window; dual digest counts once; old delayed event and current alias share history. Key removal before required horizons rejects startup/retirement rather than resetting state.
 T10: old clear-restriction request delayed until after newer ban -> Auth ignores it; revoke one of multiple bans does not activate; deletion beats both ban and clear revisions. Restore before purge retains unexpired restriction; post-purge cannot restore.
-T11: account purge while source gap, pending evidence, missing ACK or Auth unavailable -> deadline erases locally anyway; opaque terminal fence rejects all later retries without raw identity resurrection. Restored old backup stays unready until terminal snapshot imported and purge applied.
+T11 (c19 refinement): known winning terminal plus source gap/pending evidence/missing ACK -> independent local cleanup; opaque fence rejects retries. Unknown deletion or unseen winning restore while every authority path is partitioned -> no guessed terminal/global reset/physical deadline PASS; record unresolved or missed deadline and deny affected authority, then reconcile and clean on recovery. A stale DELETED timer cannot terminalize a possibly restored live account. Restored old backup stays unready until independently current terminal history is imported and cleanup applied. See U1–U14 in the c19 owning contract.
 T12: every enabled insertion path (including forward commentary, attachments, ghostOnly and Bot game) produces one private record on real insert, none on failure/replay. Wrong ingress credentials, metadata duplicates, stale epoch, raw identity, invalid TLS/JWKS or replay never reach domain writes. Shared public message stream/logs/analytics contain no new account/digest/plaintext leakage.
 
 7. IMMEDIATE IMPLEMENTATION CONTINUATION
@@ -347,3 +487,88 @@ P1/P2/P3 are decided under the new delegation; no question to the user and no de
 Deliver the complete activated path with the producer authority, Bot owner check, account lifecycle/terminal snapshot integration, private atomic outbox, protected consumer, existing-state send gate, Auth revision fence, and durable sanction events. This is a cross-service vertical with one implementation owner; ordinary implementation returns to the standard ant. A genuine source incompatibility found on the refreshed base is an implementation finding to resolve, not a reason to reopen these product decisions.
 Validation is scoped RED/GREEN and independent source review against T1-T12/N1-N14, affected Go/Java checks and protobuf checks in owned permitted Linux/Docker runners. No Windows test executables, host listeners, GH probes or shared DEV/STAGING operations are authorized by this decision. Deployment/tester/resource gates remain separate. No tests or source implementation have been performed in this specialist continuation.
 Resource closeout: no stand claims, no worktree lease, no running subprocess or tool operation, no changed source files. Only this local decision artifact and TT handoff are written. c7 remains historical investigation evidence; this document is its policy/contract supersession.
+# Finite recovery artifact inspection
+
+## Auth census and terminal linearization checkpoint
+
+The private account census is finite (10,000 sorted bindings), nonterminal and
+Moderation-only. The real native caller test first failed when Messaging could
+enumerate it (RED 2.881s), then passed with exact method allowlists. Java and Go
+share the independently framed census vector in the startup/restore contract.
+
+A real two-connection PostgreSQL race reproduced the old RR snapshot returning
+a permanent terminal subject while a valid pre-deadline restore held the owner
+row lock (RED 17.38s). Auth now settles finite due work under current owner locks,
+rechecks fresh DB time/state, and seals only its durable terminal ledger using
+protocol2. The native Linux Maven run passed all eight scoped principal,
+store/census, protected transport and restore-race tests with zero skips/errors/
+failures. Surefire XML is preserved in the ignored checkpoint evidence directory.
+Go wire/client race tests passed (1.046s/1.137s); protobuf lint passed.
+
+These are source/fixture proofs, not P1-P5 completion or physical P30D acceptance.
+The [c19 owner lifecycle producer and partition correction](async-automod-unknown-deadline.md)
+and [c20 bridge-feasibility review](async-automod-identity-bridge-feasibility.md)
+remain required owning contracts. Transactional lifecycle delivery, exact
+recipient cycles, positive terminal catch-up and actual activation remain open.
+
+The first file-verifier stage checks a bounded immutable bundle against an
+independently supplied expected operation, deployment generation, environment,
+store identities and required artifact kinds. It rejects duplicate/unknown JSON
+fields, unsafe or symlinked inventory paths, unlisted files, incorrect lengths
+or hashes, and mixed operations/stores. Artifact bytes are retained from the
+verified read, so later file replacement cannot change the inspected input.
+
+This stage returns inspected artifacts, not a `VerifiedRecoveryCut` or a boot
+phase receipt. Native quiescence/drain, lineage/current-tail verification,
+domain replay and participant checks remain separate required steps. Neither a
+valid bundle nor an operator-provided `complete` flag opens the gate.
+
+Actual Linux RED reproduced hash-only acceptance of a foreign operation,
+environment/generation/store, missing coverage, unsupported method, duplicate
+JSON fields, extra files, duplicate artifact kinds and unclean paths. Strict
+inspection now passes these negatives plus nested duplicates, truncated/hash
+and size/schema errors, mixed methods/stores, parent/absolute/Windows paths,
+file/directory symlinks, and immutable byte/metadata readback. Scoped `-race`
+PASS 1.190s and `go vet` PASS. This is artifact inspection proof only; no
+restore operation, current-tail proof or P5 completion is claimed.
+
+Recipient cycle binding slice (BE-045 c19, in progress): retain Auth's exact
+`deletion_cycle_id` in Moderation's subject binding, including report privacy
+projection. A DELETED binding requires a nonzero cycle and microsecond deadline;
+LIVE has neither. Equal revision requires equal state, cycle and deadline.
+Retained rechecks compare that entire tuple using fresh database time; a newer
+LIVE restore clears the previous cycle without resetting detector state.
+Migration 9 adds the nullable cycle column for existing rows without inventing
+legacy cycles; pre-activation recovery must refresh any legacy DELETED binding.
+First demonstrate the old implementation discarding a changed transported cycle
+at the same revision, then verify database binding, retained recheck and restore
+negatives in the private Linux PostgreSQL fixture. This slice does not provide
+the receiver, lifecycle publisher, boot coordinator or physical P30D proof.
+
+The bounded [whole-copy/key/owner-time review](async-automod-whole-copy-custody.md)
+(BE-045 c28-c32, Astra162) selected no candidate under the named faults. Local
+cleanup, all-copy destruction by the deadline, and restored-copy scrubbing are
+three different evidence levels. Current restic/PVC/config/dump custody and a
+paused sole owner do not supply the latter two by a readiness flag or key TTL.
+The physical P30D acceptance criterion stays open under unchanged policy; this
+does not stop the separately testable lifecycle/recipient/current-owner ACK work.
+
+Cycle slice evidence: the old binding accepted a different transported cycle
+at the same revision/deadline (Linux PostgreSQL RED 0.835s). A second negative
+showed that even a greater revision could extend the same cycle (RED 12.558s;
+that run also recorded a teardown timeout, with no database left afterward).
+Binding, provision, refresh and retained checks now preserve the exact cycle;
+the database also rejects rewriting the deadline of the same nonnull cycle.
+The final scoped PostgreSQL race run passed in 58.252s without failed/skipped
+cases; all Moderation short tests and `go vet ./...` passed. The frozen source
+tree is `57091a7e9e8ab7b9a4ac6bee73198d97fab8e214`; portable before/after,
+archive, raw JSON/log and receipt evidence is in the task checkpoint.
+
+The broader 61.117s probe remains FAIL: the existing legacy `CheckMessage`
+path still creates an offence for uncommitted text. Its regression remains a
+required vertical fix, not a cycle-test PASS. Legacy DELETED bindings without
+a cycle remain unavailable to ordinary equal-revision binding; the boot
+coordinator still needs an explicit fresh-Auth repair without deleting/recreating
+their detector stream. Receiver, producer dispatch/current-owner ACK, lifecycle
+repair and real P1-P5 activation remain open. The own Graphify AST update was
+canceled at terminal exit 1 after no progress; no AST verification is claimed.

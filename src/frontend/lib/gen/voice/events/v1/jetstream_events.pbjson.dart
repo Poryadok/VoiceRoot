@@ -1799,6 +1799,15 @@ const VoiceStreamEvent$json = {
       '9': 0,
       '10': 'voiceParticipantLeft'
     },
+    {
+      '1': 'voice_roster_membership_changed',
+      '3': 22,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.VoiceRosterMembershipChanged',
+      '9': 0,
+      '10': 'voiceRosterMembershipChanged'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -1825,8 +1834,49 @@ final $typed_data.Uint8List voiceStreamEventDescriptor = $convert.base64Decode(
     '9pbmVkSABSEXZvaWNlTWVtYmVySm9pbmVkEmMKGHZvaWNlX3BhcnRpY2lwYW50X2pvaW5lZBgU'
     'IAEoCzInLnZvaWNlLmV2ZW50cy52MS5Wb2ljZVBhcnRpY2lwYW50Sm9pbmVkSABSFnZvaWNlUG'
     'FydGljaXBhbnRKb2luZWQSXQoWdm9pY2VfcGFydGljaXBhbnRfbGVmdBgVIAEoCzIlLnZvaWNl'
-    'LmV2ZW50cy52MS5Wb2ljZVBhcnRpY2lwYW50TGVmdEgAUhR2b2ljZVBhcnRpY2lwYW50TGVmdE'
-    'IJCgdwYXlsb2Fk');
+    'LmV2ZW50cy52MS5Wb2ljZVBhcnRpY2lwYW50TGVmdEgAUhR2b2ljZVBhcnRpY2lwYW50TGVmdB'
+    'J2Ch92b2ljZV9yb3N0ZXJfbWVtYmVyc2hpcF9jaGFuZ2VkGBYgASgLMi0udm9pY2UuZXZlbnRz'
+    'LnYxLlZvaWNlUm9zdGVyTWVtYmVyc2hpcENoYW5nZWRIAFIcdm9pY2VSb3N0ZXJNZW1iZXJzaG'
+    'lwQ2hhbmdlZEIJCgdwYXlsb2Fk');
+
+@$core.Deprecated('Use voiceRosterMembershipChangedDescriptor instead')
+const VoiceRosterMembershipChanged$json = {
+  '1': 'VoiceRosterMembershipChanged',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'room_id', '3': 2, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'roster_version', '3': 3, '4': 1, '5': 4, '10': 'rosterVersion'},
+    {
+      '1': 'change',
+      '3': 4,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.events.v1.VoiceRosterMembershipChanged.Change',
+      '10': 'change'
+    },
+    {'1': 'profile_id', '3': 5, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+  '4': [VoiceRosterMembershipChanged_Change$json],
+};
+
+@$core.Deprecated('Use voiceRosterMembershipChangedDescriptor instead')
+const VoiceRosterMembershipChanged_Change$json = {
+  '1': 'Change',
+  '2': [
+    {'1': 'CHANGE_UNSPECIFIED', '2': 0},
+    {'1': 'CHANGE_JOINED', '2': 1},
+    {'1': 'CHANGE_LEFT', '2': 2},
+  ],
+};
+
+/// Descriptor for `VoiceRosterMembershipChanged`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List voiceRosterMembershipChangedDescriptor = $convert.base64Decode(
+    'ChxWb2ljZVJvc3Rlck1lbWJlcnNoaXBDaGFuZ2VkEikKEHByb3RvY29sX3ZlcnNpb24YASABKA'
+    '1SD3Byb3RvY29sVmVyc2lvbhIXCgdyb29tX2lkGAIgASgJUgZyb29tSWQSJQoOcm9zdGVyX3Zl'
+    'cnNpb24YAyABKARSDXJvc3RlclZlcnNpb24STAoGY2hhbmdlGAQgASgOMjQudm9pY2UuZXZlbn'
+    'RzLnYxLlZvaWNlUm9zdGVyTWVtYmVyc2hpcENoYW5nZWQuQ2hhbmdlUgZjaGFuZ2USHQoKcHJv'
+    'ZmlsZV9pZBgFIAEoCVIJcHJvZmlsZUlkIkQKBkNoYW5nZRIWChJDSEFOR0VfVU5TUEVDSUZJRU'
+    'QQABIRCg1DSEFOR0VfSk9JTkVEEAESDwoLQ0hBTkdFX0xFRlQQAg==');
 
 @$core.Deprecated('Use voiceParticipantJoinedDescriptor instead')
 const VoiceParticipantJoined$json = {

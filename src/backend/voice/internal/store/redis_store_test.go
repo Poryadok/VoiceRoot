@@ -19,7 +19,7 @@ func TestRedisCallStore_PersistsGroupVoiceLifecycle(t *testing.T) {
 	ctx := context.Background()
 	store, client := newRedisCallStoreForTest(t, "voice-test:")
 
-	created, err := store.CreateCall(ctx, Call{
+	created, err := createLifecycleCallForTest(ctx, store, Call{
 		RoomID:             "room-group",
 		LivekitRoomName:    "lk-group",
 		ChatID:             "chat-group",
@@ -40,7 +40,7 @@ func TestRedisCallStore_PersistsGroupVoiceLifecycle(t *testing.T) {
 	_, err = persisted.GetActiveCall(ctx, "owner")
 	require.NoError(t, err)
 
-	_, err = persisted.AddParticipant(ctx, "room-group", "member", MaxGroupVoiceParticipants)
+	_, err = addLifecycleParticipantForTest(ctx, persisted, "room-group", "member", MaxGroupVoiceParticipants)
 	require.NoError(t, err)
 	muted := true
 	updated, state, err := persisted.UpdateVoiceState(ctx, "room-group", "member", VoiceStatePatch{IsMuted: &muted})
@@ -77,7 +77,7 @@ func TestRedisCallStore_MatchSquadLastLeaveRemainsProjectionAndOrdinaryLastLeave
 	ctx := context.Background()
 	store, client := newRedisCallStoreForTest(t, "voice-match-squad-projection:")
 
-	ordinary, err := store.CreateCall(ctx, Call{
+	ordinary, err := createLifecycleCallForTest(ctx, store, Call{
 		RoomID: "ordinary-room", ChatID: "ordinary-chat", SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
 		InitiatorProfileID: "ordinary-member", MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
 		Status: callsv1.CallStatus_CALL_STATUS_ACTIVE,
@@ -91,7 +91,7 @@ func TestRedisCallStore_MatchSquadLastLeaveRemainsProjectionAndOrdinaryLastLeave
 	_, err = client.Get(ctx, store.activeChatKey(ordinary.ChatID)).Result()
 	require.ErrorIs(t, err, redis.Nil)
 
-	match, err := store.CreateCall(ctx, Call{
+	match, err := createLifecycleCallForTest(ctx, store, Call{
 		RoomID: "match-room", ChatID: "match-chat", MatchSquadMatchID: "match-id",
 		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
 		InitiatorProfileID: "match-member", MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
@@ -103,7 +103,7 @@ func TestRedisCallStore_MatchSquadLastLeaveRemainsProjectionAndOrdinaryLastLeave
 	require.ErrorIs(t, err, ErrNotFound, "provisioning must not reserve a roster profile")
 	_, err = client.Get(ctx, store.activeChatKey(match.ChatID)).Result()
 	require.ErrorIs(t, err, redis.Nil, "a MatchSquad projection must never claim ordinary Chat discovery")
-	match, err = store.AddParticipant(ctx, match.RoomID, "match-member", MaxGroupVoiceParticipants)
+	match, err = addLifecycleParticipantForTest(ctx, store, match.RoomID, "match-member", MaxGroupVoiceParticipants)
 	require.NoError(t, err, "only the owned current-membership adapter adds a participant")
 	left, err := store.RemoveMatchSquadParticipant(ctx, match.RoomID, "match-id", "match-member")
 	require.NoError(t, err)
@@ -126,7 +126,7 @@ func TestRedisCallStore_MatchSquadLastLeaveRemainsProjectionAndOrdinaryLastLeave
 func TestRedisCallStore_MatchSquadRemovalPreservesDivergentActiveProfileLock(t *testing.T) {
 	ctx := context.Background()
 	store, client := newRedisCallStoreForTest(t, "voice-match-squad-divergence:")
-	match, err := store.CreateCall(ctx, Call{
+	match, err := createLifecycleCallForTest(ctx, store, Call{
 		RoomID: "match-room", ChatID: "match-chat", MatchSquadMatchID: "match-id",
 		SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE,
 	})
@@ -149,7 +149,7 @@ func TestRedisCallStore_MatchSquadEpochCASRejectsDelayedOldEffects(t *testing.T)
 	ctx := context.Background()
 	store, _ := newRedisCallStoreForTest(t, "voice-match-squad-epoch-cas:")
 	room, match, profile := "match-room", "match-id", "member"
-	_, err := store.CreateCall(ctx, Call{
+	_, err := createLifecycleCallForTest(ctx, store, Call{
 		RoomID: room, MatchSquadMatchID: match,
 		SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
 		Status:      callsv1.CallStatus_CALL_STATUS_ACTIVE,
@@ -191,7 +191,7 @@ func TestRedisCallStore_MatchSquadAddRechecksAuthorityAfterWatchConflict(t *test
 	ctx := context.Background()
 	callStore, client := newRedisCallStoreForTest(t, "voice-match-squad-watch-authority:")
 	room, match, profile := "match-room", "match-id", "member"
-	call, err := callStore.CreateCall(ctx, Call{
+	call, err := createLifecycleCallForTest(ctx, callStore, Call{
 		RoomID: room, MatchSquadMatchID: match,
 		SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
 		Status:      callsv1.CallStatus_CALL_STATUS_ACTIVE,
@@ -246,7 +246,7 @@ func TestRedisCallStore_DelayedOldEpochAddCannotResurrectAfterNewEpoch(t *testin
 	ctx := context.Background()
 	callStore, _ := newRedisCallStoreForTest(t, "voice-match-squad-late-add:")
 	room, match, profile := "match-room", "match-id", "member"
-	_, err := callStore.CreateCall(ctx, Call{
+	_, err := createLifecycleCallForTest(ctx, callStore, Call{
 		RoomID: room, MatchSquadMatchID: match,
 		SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
 		Status:      callsv1.CallStatus_CALL_STATUS_ACTIVE,
@@ -304,7 +304,7 @@ func TestRedisCallStore_DelayedOldEpochAddCannotResurrectAfterNewEpoch(t *testin
 func TestRedisCallStore_MatchSquadEpochRemovalRequiresEvidence(t *testing.T) {
 	ctx := context.Background()
 	store, _ := newRedisCallStoreForTest(t, "voice-match-squad-epoch-missing:")
-	call, err := store.CreateCall(ctx, Call{
+	call, err := createLifecycleCallForTest(ctx, store, Call{
 		RoomID: "room", MatchSquadMatchID: "match",
 		SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
 		Status:      callsv1.CallStatus_CALL_STATUS_ACTIVE,
@@ -330,7 +330,7 @@ func TestRedisCallStore_SpaceMediaFloorsAndGenerationFencedRevocation(t *testing
 	ctx := t.Context()
 	store, client := newRedisCallStoreForTest(t, "space-media-store:")
 	const roomID, voiceRoomID, spaceID, profileID = "space-call", "voice-room", "space-id", "member"
-	_, err := store.CreateCall(ctx, Call{
+	_, err := createLifecycleCallForTest(ctx, store, Call{
 		RoomID: roomID, LivekitRoomName: "lk-space", VoiceRoomID: voiceRoomID, SpaceID: spaceID,
 		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM,
 		InitiatorProfileID: "owner", MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
@@ -342,11 +342,11 @@ func TestRedisCallStore_SpaceMediaFloorsAndGenerationFencedRevocation(t *testing
 	_, err = store.RaiseSpaceMediaEpochFloor(ctx, spaceID, RolePolicyEpoch, 7)
 	require.NoError(t, err)
 	stale := testSpaceMediaParticipant(profileID, "identity-1", "generation-1", 3, 7)
-	_, err = store.AdmitSpaceMediaParticipant(ctx, roomID, stale, MaxVoiceRoomParticipants)
+	_, err = admitLifecycleParticipantForTest(ctx, store, roomID, stale, MaxVoiceRoomParticipants)
 	require.ErrorIs(t, err, ErrSpaceMediaStaleGrant)
 
 	first := testSpaceMediaParticipant(profileID, "identity-1", "generation-1", 4, 7)
-	_, err = store.AdmitSpaceMediaParticipant(ctx, roomID, first, MaxVoiceRoomParticipants)
+	_, err = admitLifecycleParticipantForTest(ctx, store, roomID, first, MaxVoiceRoomParticipants)
 	require.NoError(t, err)
 	require.Equal(t, "space-call", client.Get(ctx, store.activeKey(profileID)).Val())
 
@@ -362,7 +362,7 @@ func TestRedisCallStore_SpaceMediaFloorsAndGenerationFencedRevocation(t *testing
 	require.True(t, changed)
 
 	second := testSpaceMediaParticipant(profileID, "identity-2", "generation-2", 4, 7)
-	_, err = store.AdmitSpaceMediaParticipant(ctx, roomID, second, MaxVoiceRoomParticipants)
+	_, err = admitLifecycleParticipantForTest(ctx, store, roomID, second, MaxVoiceRoomParticipants)
 	require.NoError(t, err)
 	call, changed, err = store.BeginSpaceMediaRevocation(ctx, roomID, profileID, first.Identity, first.Generation)
 	require.NoError(t, err)
@@ -386,7 +386,7 @@ func TestRedisCallStore_SpaceAdmissionHasOneActiveRoomIncarnation(t *testing.T) 
 	ctx := t.Context()
 	store, client := newRedisCallStoreForTest(t, "space-media-single-room:")
 	for _, roomID := range []string{"pending-first", "pending-second"} {
-		_, err := store.CreateCall(ctx, Call{
+		_, err := createLifecycleCallForTest(ctx, store, Call{
 			RoomID: roomID, LivekitRoomName: "lk-" + roomID, VoiceRoomID: "voice-room-single",
 			SpaceID: "space", SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM,
 			InitiatorProfileID: roomID, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
@@ -396,11 +396,11 @@ func TestRedisCallStore_SpaceAdmissionHasOneActiveRoomIncarnation(t *testing.T) 
 	}
 	first := testSpaceMediaParticipant("account-a", "identity-a", "generation-a", 1, 1)
 	first.AccountID, first.AdmissionOperationID = "account-a", "operation-a"
-	_, err := store.AdmitSpaceMediaParticipant(ctx, "pending-first", first, MaxVoiceRoomParticipants)
+	_, err := admitLifecycleParticipantForTest(ctx, store, "pending-first", first, MaxVoiceRoomParticipants)
 	require.NoError(t, err)
 	second := testSpaceMediaParticipant("account-b", "identity-b", "generation-b", 1, 1)
 	second.AccountID, second.AdmissionOperationID = "account-b", "operation-b"
-	_, err = store.AdmitSpaceMediaParticipant(ctx, "pending-second", second, MaxVoiceRoomParticipants)
+	_, err = admitLifecycleParticipantForTest(ctx, store, "pending-second", second, MaxVoiceRoomParticipants)
 	require.ErrorIs(t, err, ErrActiveCall, "WATCH must reject a room index owned by another incarnation")
 	require.Equal(t, "pending-first", client.Get(ctx, store.activeVoiceRoomKey("voice-room-single")).Val())
 	loser, err := store.GetCall(ctx, "pending-second")
@@ -417,7 +417,7 @@ func TestRedisCallStore_IndexesVoiceRoomsAndExpiredRingingCalls(t *testing.T) {
 	ctx := context.Background()
 	store, _ := newRedisCallStoreForTest(t, "voice-test:")
 
-	_, err := store.CreateCall(ctx, Call{
+	_, err := createLifecycleCallForTest(ctx, store, Call{
 		RoomID:             "room-space",
 		LivekitRoomName:    "lk-space",
 		VoiceRoomID:        "voice-room-1",
@@ -439,7 +439,7 @@ func TestRedisCallStore_IndexesVoiceRoomsAndExpiredRingingCalls(t *testing.T) {
 	require.ErrorIs(t, err, ErrNotFound)
 
 	expiresAt := time.Unix(1_700_000_000, 0).UTC()
-	_, err = store.CreateCall(ctx, Call{
+	_, err = createLifecycleCallForTest(ctx, store, Call{
 		RoomID:             "room-ringing",
 		InitiatorProfileID: "caller",
 		CalleeProfileID:    "callee",
@@ -448,7 +448,7 @@ func TestRedisCallStore_IndexesVoiceRoomsAndExpiredRingingCalls(t *testing.T) {
 		ExpiresAt:          expiresAt,
 	})
 	require.NoError(t, err)
-	_, err = store.CreateCall(ctx, Call{
+	_, err = createLifecycleCallForTest(ctx, store, Call{
 		RoomID:             "room-active",
 		InitiatorProfileID: "other-caller",
 		CalleeProfileID:    "other-callee",
@@ -532,7 +532,7 @@ func TestRedisCallStore_RestoresPersistedRoomBindingAcrossInstances(t *testing.T
 			ctx := t.Context()
 			first, client := newRedisCallStoreForTest(t, "binding-test:")
 			room := "11111111-1111-4111-8111-111111111111"
-			call, err := first.CreateCall(ctx, Call{RoomID: "33333333-3333-4333-8333-333333333333", VoiceRoomID: room, SpaceID: tc.space, LivekitRoomName: "lk-restored", SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: "owner", MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
+			call, err := createLifecycleCallForTest(ctx, first, Call{RoomID: "33333333-3333-4333-8333-333333333333", VoiceRoomID: room, SpaceID: tc.space, LivekitRoomName: "lk-restored", SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: "owner", MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
 			require.NoError(t, err)
 			raw, err := client.Get(ctx, first.callKey(call.RoomID)).Result()
 			require.NoError(t, err)
@@ -564,7 +564,7 @@ func TestRedisCallStore_MoveConcurrentPublicAddAndRemoveKeepSingleActiveRoster(t
 			ctx := context.Background()
 			store, _ := newRedisCallStoreForTest(t, "voice-move-public-writer:")
 			space, sourceID, destinationID, target, actor := "space", "source", "destination", "target", "actor"
-			source, err := store.CreateCall(ctx, Call{RoomID: "source-call", VoiceRoomID: sourceID, SpaceID: space, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: target, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
+			source, err := createLifecycleCallForTest(ctx, store, Call{RoomID: "source-call", VoiceRoomID: sourceID, SpaceID: space, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: target, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
 			require.NoError(t, err)
 			type outcome struct {
 				move bool
@@ -573,7 +573,7 @@ func TestRedisCallStore_MoveConcurrentPublicAddAndRemoveKeepSingleActiveRoster(t
 			start, outcomes := make(chan struct{}), make(chan outcome, 2)
 			go func() {
 				<-start
-				_, err := store.MoveVoiceRoomParticipant(ctx, VoiceRoomMoveRequest{ActorProfileID: actor, ParticipantProfileID: target, OperationID: "operation", FromVoiceRoomID: sourceID, ToVoiceRoomID: destinationID, SpaceID: space, MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call", Now: time.Unix(1_700_000_000, 0).UTC()})
+				_, err := moveLifecycleParticipantForTest(ctx, store, VoiceRoomMoveRequest{ActorProfileID: actor, ParticipantProfileID: target, OperationID: "operation", FromVoiceRoomID: sourceID, ToVoiceRoomID: destinationID, SpaceID: space, MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call", Now: time.Unix(1_700_000_000, 0).UTC()})
 				outcomes <- outcome{move: true, err: err}
 			}()
 			go func() {
@@ -583,7 +583,7 @@ func TestRedisCallStore_MoveConcurrentPublicAddAndRemoveKeepSingleActiveRoster(t
 					outcomes <- outcome{err: err}
 					return
 				}
-				_, err := store.AddParticipant(ctx, source.RoomID, "independent-joiner", MaxVoiceRoomParticipants)
+				_, err := addLifecycleParticipantForTest(ctx, store, source.RoomID, "independent-joiner", MaxVoiceRoomParticipants)
 				outcomes <- outcome{err: err}
 			}()
 			close(start)
@@ -654,14 +654,14 @@ func TestRedisCallStore_CompetingMovesChooseOneDestination(t *testing.T) {
 	ctx := context.Background()
 	store, client := newRedisCallStoreForTest(t, "voice-competing-moves:")
 	space, sourceID, target, actor := "space", "source", "target", "actor"
-	_, err := store.CreateCall(ctx, Call{RoomID: "source-call", VoiceRoomID: sourceID, SpaceID: space, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: target, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
+	_, err := createLifecycleCallForTest(ctx, store, Call{RoomID: "source-call", VoiceRoomID: sourceID, SpaceID: space, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: target, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
 	require.NoError(t, err)
 	start, errs := make(chan struct{}), make(chan error, 2)
 	for i, dest := range []string{"destination-a", "destination-b"} {
 		i, dest := i, dest
 		go func() {
 			<-start
-			_, err := store.MoveVoiceRoomParticipant(ctx, VoiceRoomMoveRequest{ActorProfileID: actor, ParticipantProfileID: target, OperationID: "op-" + string(rune('a'+i)), FromVoiceRoomID: sourceID, ToVoiceRoomID: dest, SpaceID: space, MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call-" + string(rune('a'+i)), Now: time.Unix(1_700_000_000, 0).UTC()})
+			_, err := moveLifecycleParticipantForTest(ctx, store, VoiceRoomMoveRequest{ActorProfileID: actor, ParticipantProfileID: target, OperationID: "op-" + string(rune('a'+i)), FromVoiceRoomID: sourceID, ToVoiceRoomID: dest, SpaceID: space, MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call-" + string(rune('a'+i)), Now: time.Unix(1_700_000_000, 0).UTC()})
 			errs <- err
 		}()
 	}
@@ -719,7 +719,7 @@ func boolCount(values ...bool) int {
 func TestRedisCallStore_MoveFailureLeavesRosterIndexesAndLedgerUntouched(t *testing.T) {
 	ctx := context.Background()
 	store, client := newRedisCallStoreForTest(t, "voice-move-rollback:")
-	source, err := store.CreateCall(ctx, Call{RoomID: "source-call", VoiceRoomID: "source", SpaceID: "space", SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: "target", MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
+	source, err := createLifecycleCallForTest(ctx, store, Call{RoomID: "source-call", VoiceRoomID: "source", SpaceID: "space", SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: "target", MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
 	require.NoError(t, err)
 	request := VoiceRoomMoveRequest{ActorProfileID: "actor", ParticipantProfileID: "target", OperationID: "op", FromVoiceRoomID: "source", ToVoiceRoomID: "destination", SpaceID: "space", MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call", Now: time.Now().UTC()}
 	keys := []string{store.callKey(source.RoomID), store.callKey(request.DestinationRoomID), store.activeVoiceRoomKey(request.FromVoiceRoomID), store.activeVoiceRoomKey(request.ToVoiceRoomID), store.activeKey(request.ParticipantProfileID), store.moveOperationKey(request.ActorProfileID, request.OperationID)}
@@ -747,7 +747,7 @@ func TestRedisCallStore_MoveRejectsStaleSourceIndexWithoutMutatingRedisProjectio
 		{
 			name: "source index points to an ended call document",
 			setup: func(t *testing.T, ctx context.Context, store *RedisCallStore, client *redis.Client) {
-				_, err := store.CreateCall(ctx, Call{RoomID: "source-call", VoiceRoomID: "source", SpaceID: "space", SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: "target", MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
+				_, err := createLifecycleCallForTest(ctx, store, Call{RoomID: "source-call", VoiceRoomID: "source", SpaceID: "space", SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: "target", MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
 				require.NoError(t, err)
 				_, err = store.SetStatus(ctx, "source-call", callsv1.CallStatus_CALL_STATUS_ENDED, time.Unix(1_700_000_100, 0).UTC())
 				require.NoError(t, err)
@@ -764,7 +764,7 @@ func TestRedisCallStore_MoveRejectsStaleSourceIndexWithoutMutatingRedisProjectio
 			keys := []string{store.callKey("source-call"), store.callKey(request.DestinationRoomID), store.activeVoiceRoomKey(request.FromVoiceRoomID), store.activeVoiceRoomKey(request.ToVoiceRoomID), store.activeKey(request.ParticipantProfileID), store.moveOperationKey(request.ActorProfileID, request.OperationID)}
 			before := redisRawKeySnapshot(t, ctx, client, keys)
 
-			_, err := store.MoveVoiceRoomParticipant(ctx, request)
+			_, err := moveLifecycleParticipantForTest(ctx, store, request)
 			require.ErrorIs(t, err, ErrInvalidState, "a stale source projection is an obsolete move state, never a successful move or discoverability response")
 			require.Equal(t, before, redisRawKeySnapshot(t, ctx, client, keys), "stale source rejection must preserve source/destination documents, both room indices, active session and ledger bytes")
 		})
@@ -795,12 +795,12 @@ func TestRedisCallStore_MovePersistsAtomicSnapshotAndReplayAcrossFreshInstance(t
 		MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call",
 		Now: time.Unix(1_700_000_000, 0).UTC(),
 	}
-	_, err := store.CreateCall(ctx, Call{RoomID: "source-call", VoiceRoomID: request.FromVoiceRoomID, SpaceID: request.SpaceID, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: request.ParticipantProfileID, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
+	_, err := createLifecycleCallForTest(ctx, store, Call{RoomID: "source-call", VoiceRoomID: request.FromVoiceRoomID, SpaceID: request.SpaceID, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: request.ParticipantProfileID, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
 	require.NoError(t, err)
-	_, err = store.AddParticipant(ctx, "source-call", "anchor", MaxVoiceRoomParticipants)
+	_, err = addLifecycleParticipantForTest(ctx, store, "source-call", "anchor", MaxVoiceRoomParticipants)
 	require.NoError(t, err)
 
-	first, err := store.MoveVoiceRoomParticipant(ctx, request)
+	first, err := moveLifecycleParticipantForTest(ctx, store, request)
 	require.NoError(t, err)
 	require.False(t, first.Replayed)
 	snapshot := redisMoveSnapshot(t, ctx, client, store, request)
@@ -861,7 +861,7 @@ func TestRedisCallStore_MoveAndPublicJoinUseDeterministicLegalOrders(t *testing.
 		t.Helper()
 		ctx := t.Context()
 		store, client := newRedisCallStoreForTest(t, prefix)
-		_, err := store.CreateCall(ctx, Call{RoomID: sourceCall, VoiceRoomID: sourceID, SpaceID: "space", SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: target, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
+		_, err := createLifecycleCallForTest(ctx, store, Call{RoomID: sourceCall, VoiceRoomID: sourceID, SpaceID: "space", SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: target, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
 		require.NoError(t, err)
 		return store, client, VoiceRoomMoveRequest{ActorProfileID: "actor", ParticipantProfileID: target, OperationID: "op", FromVoiceRoomID: sourceID, ToVoiceRoomID: destinationID, SpaceID: "space", MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: destinationCall, Now: time.Unix(1_700_000_000, 0).UTC()}
 	}
@@ -870,9 +870,9 @@ func TestRedisCallStore_MoveAndPublicJoinUseDeterministicLegalOrders(t *testing.
 		ctx := t.Context()
 		store, client, request := newFixture(t, "voice-move-before-public-join:")
 
-		_, err := store.MoveVoiceRoomParticipant(ctx, request)
+		_, err := moveLifecycleParticipantForTest(ctx, store, request)
 		require.NoError(t, err)
-		_, err = store.AddParticipant(ctx, sourceCall, joiner, MaxVoiceRoomParticipants)
+		_, err = addLifecycleParticipantForTest(ctx, store, sourceCall, joiner, MaxVoiceRoomParticipants)
 		require.ErrorIs(t, err, ErrInvalidState)
 
 		source, err := store.GetCall(ctx, sourceCall)
@@ -911,10 +911,10 @@ func TestRedisCallStore_MoveAndPublicJoinUseDeterministicLegalOrders(t *testing.
 			if attempt != 0 {
 				return nil
 			}
-			_, err := secondStore.AddParticipant(ctx, sourceCall, joiner, MaxVoiceRoomParticipants)
+			_, err := addLifecycleParticipantForTest(ctx, secondStore, sourceCall, joiner, MaxVoiceRoomParticipants)
 			return err
 		}
-		_, err := store.MoveVoiceRoomParticipant(ctx, request)
+		_, err := moveLifecycleParticipantForTest(ctx, store, request)
 		require.NoError(t, err)
 		require.Equal(t, 2, attempts, "the committed add must invalidate the first WATCH and force a move retry")
 
@@ -946,7 +946,7 @@ func TestRedisCallStore_MoveWatchInvalidationRetriesThenExhaustsWithoutPartialSt
 	second := redis.NewClient(&redis.Options{Addr: client.Options().Addr})
 	t.Cleanup(func(c *redis.Client) func() { return func() { require.NoError(t, c.Close()) } }(second))
 	request := VoiceRoomMoveRequest{ActorProfileID: "actor", ParticipantProfileID: "target", OperationID: "op", FromVoiceRoomID: "source", ToVoiceRoomID: "destination", SpaceID: "space", MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call", Now: time.Unix(1_700_000_000, 0).UTC()}
-	_, err := store.CreateCall(ctx, Call{RoomID: "source-call", VoiceRoomID: request.FromVoiceRoomID, SpaceID: request.SpaceID, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: request.ParticipantProfileID, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
+	_, err := createLifecycleCallForTest(ctx, store, Call{RoomID: "source-call", VoiceRoomID: request.FromVoiceRoomID, SpaceID: request.SpaceID, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: request.ParticipantProfileID, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
 	require.NoError(t, err)
 
 	var invalidations int
@@ -963,7 +963,7 @@ func TestRedisCallStore_MoveWatchInvalidationRetriesThenExhaustsWithoutPartialSt
 		}
 		return second.Set(ctx, store.callKey("source-call"), bytes, 24*time.Hour).Err()
 	}
-	_, err = store.MoveVoiceRoomParticipant(ctx, request)
+	_, err = moveLifecycleParticipantForTest(ctx, store, request)
 	require.NoError(t, err)
 	require.Equal(t, 2, invalidations, "the first real WATCH invalidation must retry before committing")
 
@@ -973,7 +973,7 @@ func TestRedisCallStore_MoveWatchInvalidationRetriesThenExhaustsWithoutPartialSt
 	second = redis.NewClient(&redis.Options{Addr: client.Options().Addr})
 	t.Cleanup(func(c *redis.Client) func() { return func() { require.NoError(t, c.Close()) } }(second))
 	request.OperationID = "exhaust"
-	_, err = store.CreateCall(ctx, Call{RoomID: "source-call", VoiceRoomID: request.FromVoiceRoomID, SpaceID: request.SpaceID, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: request.ParticipantProfileID, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
+	_, err = createLifecycleCallForTest(ctx, store, Call{RoomID: "source-call", VoiceRoomID: request.FromVoiceRoomID, SpaceID: request.SpaceID, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: request.ParticipantProfileID, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
 	require.NoError(t, err)
 	keys := []string{store.callKey("source-call"), store.callKey(request.DestinationRoomID), store.activeVoiceRoomKey(request.FromVoiceRoomID), store.activeVoiceRoomKey(request.ToVoiceRoomID), store.activeKey(request.ParticipantProfileID), store.moveOperationKey(request.ActorProfileID, request.OperationID)}
 	before := redisRawKeySnapshot(t, ctx, client, keys)
@@ -984,7 +984,7 @@ func TestRedisCallStore_MoveWatchInvalidationRetriesThenExhaustsWithoutPartialSt
 		}
 		return second.Set(ctx, store.callKey("source-call"), bytes, 24*time.Hour).Err()
 	}
-	_, err = store.MoveVoiceRoomParticipant(ctx, request)
+	_, err = moveLifecycleParticipantForTest(ctx, store, request)
 	require.ErrorIs(t, err, ErrMoveContention)
 	require.Equal(t, before, redisRawKeySnapshot(t, ctx, client, keys))
 }

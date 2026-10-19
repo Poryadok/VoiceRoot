@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -21,7 +20,7 @@ func TestAutoModStore_OrderedInboxAndAtomicSanction(t *testing.T) {
 	}
 	ctx := context.Background()
 	pool := automodAdmissionDatabase(t)
-	integrationtestApplySQL(t, ctx, pool, filepath.Join(repoRoot(t), "src/backend/migrations/moderation_db/000006_async_automod.up.sql"))
+	integrationtestApplyAutoMod(t, ctx, pool)
 	s := automod.NewStore(pool)
 	subject := automod.Subject{ID: uuid.New(), AccountID: uuid.New(), Epoch: uuid.New(), Revision: 1, State: "LIVE"}
 	tx, err := pool.Begin(ctx)
@@ -96,7 +95,7 @@ func TestAutoModStore_KeyAliasesAndTerminalFence(t *testing.T) {
 	}
 	ctx := context.Background()
 	pool := automodAdmissionDatabase(t)
-	integrationtestApplySQL(t, ctx, pool, filepath.Join(repoRoot(t), "src/backend/migrations/moderation_db/000006_async_automod.up.sql"))
+	integrationtestApplyAutoMod(t, ctx, pool)
 	s := automod.NewStore(pool)
 	subject := automod.Subject{ID: uuid.New(), AccountID: uuid.New(), Epoch: uuid.New(), Revision: 1, State: "LIVE"}
 	require.NoError(t, s.Provision(ctx, subject))
@@ -133,7 +132,7 @@ func TestAutoModStore_TerminalFenceRacesFirstProvisionAndRollsBackParticipants(t
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	pool := automodAdmissionDatabase(t)
-	integrationtestApplySQL(t, ctx, pool, filepath.Join(repoRoot(t), "src/backend/migrations/moderation_db/000006_async_automod.up.sql"))
+	integrationtestApplyAutoMod(t, ctx, pool)
 	s := automod.NewStore(pool)
 	for attempt := 0; attempt < 12; attempt++ {
 		subject := automod.Subject{ID: uuid.New(), AccountID: uuid.New(), Epoch: uuid.New(), Revision: 1, State: "LIVE"}
@@ -176,7 +175,7 @@ func TestAutoModStore_RejectsUnownedMachineSanction(t *testing.T) {
 	}
 	ctx := context.Background()
 	pool := automodAdmissionDatabase(t)
-	integrationtestApplySQL(t, ctx, pool, filepath.Join(repoRoot(t), "src/backend/migrations/moderation_db/000006_async_automod.up.sql"))
+	integrationtestApplyAutoMod(t, ctx, pool)
 	_, err := pool.Exec(ctx, `INSERT INTO sanctions(target_account_id,type,reason,issued_by,issuer_service) VALUES($1,'perm_ban','invalid owner',NULL,NULL)`, uuid.New())
 	require.ErrorContains(t, err, "sanctions_issuer_kind", "SQL UNKNOWN is not an explicit machine issuer")
 	_, err = pool.Exec(ctx, `INSERT INTO sanctions(target_account_id,type,reason,issued_by,issuer_service,machine_case_id) VALUES($1,'shadow_ban','invalid owner',NULL,NULL,$2)`, uuid.New(), uuid.New())
