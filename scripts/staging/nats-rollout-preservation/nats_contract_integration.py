@@ -21,7 +21,7 @@ def select_transport(args, environ=None, platform=None):
         raise SystemExit('github_hosted_fixture_runner_required')
     return 'github-hosted'
 
-def fixture_bootstrap_grants(contract):
+def fixture_bootstrap_grants(contract,*,a3_roster=False):
     """Exact disposable credentials for baseline resources plus v3 consumers."""
     streams=contract['streams'];pairs={tuple(pair) for pair in contract['consumer_pairs']}
     pairs.update((stream,config['durable_name']) for stream,config in V3_DECLARATIONS)
@@ -32,6 +32,8 @@ def fixture_bootstrap_grants(contract):
     grants=['$JS.API.INFO']+[prefix+name for name in streams for prefix in ('$JS.API.STREAM.CREATE.','$JS.API.STREAM.INFO.')]
     grants += ['$JS.API.STREAM.UPDATE.'+name for name in ('chat_events','social_events','role_events','voice_events','user_events')]
     grants += [prefix+stream+'.'+durable for stream,durable in sorted(pairs) for prefix in ('$JS.API.CONSUMER.CREATE.','$JS.API.CONSUMER.INFO.')]
+    if a3_roster:
+        grants += [prefix+'voice_events.matchmaking_voice_roster_v1' for prefix in ('$JS.API.CONSUMER.CREATE.','$JS.API.CONSUMER.INFO.')]
     if len(grants)!=len(set(grants)):raise ValueError('fixture_bootstrap_grants_duplicate')
     return grants
 
@@ -434,11 +436,11 @@ def _captured_python_sources(source):
     return dict(sorted(captured.items()))
 
 
-def build_fixture_records(bundle):
+def build_fixture_records(bundle,*,a3_roster=False):
     source=Path(__file__).resolve().parents[3];module=source/'scripts/staging/nats-known-baseline'
     helper=fixture.HELPER.replace('"fmt"; "os";', '"crypto/sha256"; "encoding/hex"; "encoding/json"; "fmt"; "os"; "reflect";')
     contract=json.loads((module/'deployed-contract.json').read_text())
-    grants=fixture_bootstrap_grants(contract)
+    grants=fixture_bootstrap_grants(contract,a3_roster=a3_roster)
     grant_text=json.dumps(grants,separators=(',',':'))
     old_actor='''
  bootstrap,e:=nkeys.CreateUser();must(e);defer bootstrap.Wipe();bootstrapPublic,e:=bootstrap.PublicKey();must(e)
@@ -448,6 +450,16 @@ def build_fixture_records(bundle):
  accountSeed,e:=app.Seed();must(e);write(base,"inputs/synthetic-account.seed",string(accountSeed))
  write(base,"inputs/operator.jwt",operator);write(base,"inputs/account.jwt",account);write(base,"inputs/system-account.jwt",system);write(base,"inputs/system-account.public",sysPub)
 '''.replace('GRANTS',grant_text)
+    if a3_roster:
+        import yaml
+        policy=yaml.safe_load((Path(__file__).parent/'testdata/a3-roster-acl-intent.yaml').read_bytes())
+        for role in ('voice','matchmaking'):
+            spec=policy['services'][role]
+            publish=json.dumps(spec['publish'],separators=(',',':'))
+            subscribe=json.dumps(spec['subscribe'],separators=(',',':'))
+            # Own synthetic realm only: retain full exact canonical service
+            # rights rather than grant a broad fixture credential to a client.
+            old_actor+='\n { actor,e:=nkeys.CreateUser();must(e);defer actor.Wipe();pub,e:=actor.PublicKey();must(e);claim:=jwt.NewUserClaims(pub);must(json.Unmarshal([]byte(`'+publish+'`),&claim.Pub.Allow));must(json.Unmarshal([]byte(`'+subscribe+'`),&claim.Sub.Allow));token,e:=claim.Encode(app);must(e);seed,e:=actor.Seed();must(e);creds,e:=jwt.FormatUserConfig(token,seed);must(e);write(base,"inputs/a3-'+role+'.creds",string(creds)) }\n'
     helper=helper.replace('\n}\nfunc extra()',old_actor+'\n}\nfunc extra()')
     # Payload/extra-fixture validation uses its separate disposable broad
     # role; the migration actor retains the exact limited old grant list.
@@ -520,7 +532,10 @@ func post(check bool) {
     fixture.call(['go','build','-o',str(bundle/'helper'),str(bundle/'helper.go')],cwd=module,env=env)
     fixture.call(['go','build','-o',str(bundle/'kernel'),'.'],cwd=module,env=env)
     fixture.call(['go','build','-o',str(bundle/'bootstrap-renewer'),'./cmd/nats-jwt-issuer'],cwd=source/'src/backend/pkg',env=env)
+    if a3_roster:
+        fixture.call(['go','build','-o',str(bundle/'a3-client'),str(Path(__file__).parent/'testdata/a3_roster_client.go')],cwd=module,env=env)
     records={n:base64.b64encode((bundle/n).read_bytes()).decode() for n in ('helper','kernel','bootstrap-renewer')}
+    if a3_roster:records['a3-client']=base64.b64encode((bundle/'a3-client').read_bytes()).decode()
     records['nats-9ae-predecessor.json']=base64.b64encode((Path(__file__).parent/'testdata/nats-9ae-predecessor.json').read_bytes()).decode()
     records['contract_fixture_entry.py']=base64.b64encode((Path(__file__).parent/'contract_fixture_entry.py').read_bytes()).decode()
     captured=_captured_python_sources(source)
@@ -544,7 +559,7 @@ func post(check bool) {
         path=bundle/name
         path.parent.mkdir(parents=True,exist_ok=True)
         path.write_bytes(base64.b64decode(encoded))
-        path.chmod(0o755 if name in ('helper','kernel','bootstrap-renewer') or name=='capture/nats-known-baseline/kernel' else 0o644)
+        path.chmod(0o755 if name in ('helper','kernel','bootstrap-renewer','a3-client') or name=='capture/nats-known-baseline/kernel' else 0o644)
 def run_fixture(transport, bundle, environ=None):
     env=os.environ if environ is None else environ
     if transport=='github-hosted':

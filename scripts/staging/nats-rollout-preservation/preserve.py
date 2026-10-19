@@ -116,6 +116,20 @@ def verify_catalog(catalog,row):
 
 def decode_current_consumer(raw):
     """Pure decoder from THIS authenticated capture, never historical runtime."""
+    return _current_native_kernel(raw,['--consumer-state'],2<<20)
+
+
+def checksum_current_metadata(stream,consumer,raw):
+    """Pinned metadata checksum through the same authenticated native kernel."""
+    import re
+    if any(not isinstance(v,str) or not re.fullmatch('[A-Za-z0-9_-]{1,255}',v) for v in (stream,consumer)):
+        raise Blocked('rollout_current_checksum_identity_invalid')
+    result=_current_native_kernel(raw,['--metadata-checksum',stream,consumer],16)
+    if len(result)!=16:raise Blocked('rollout_current_checksum_invalid')
+    return result
+
+
+def _current_native_kernel(raw,arguments,limit):
     import root_cli
     from commands import capture
     from controller import identity
@@ -151,8 +165,8 @@ def decode_current_consumer(raw):
                 or identity(os.stat('kernel',dir_fd=directory,follow_symlinks=False))!=identity(before)):
                 raise Blocked('rollout_current_decoder_changed')
         verify()
-        result=capture(['/proc/self/fd/'+str(fd),'--consumer-state'],body=raw,
-            timeout=10,limit=2<<20,env={'PATH':'/usr/bin:/bin','HOME':'/nonexistent'},pass_fds=(fd,))
+        result=capture(['/proc/self/fd/'+str(fd),*arguments],body=raw,
+            timeout=10,limit=limit,env={'PATH':'/usr/bin:/bin','HOME':'/nonexistent'},pass_fds=(fd,))
         verify();return result
     finally:
         if fd is not None:os.close(fd)
@@ -431,8 +445,8 @@ def recovered_census(before,after,recovery,manifest):
         new=streams.get(old['name'])
         if new is None or new.get('created')==old.get('created'):continue
         evidence=recovery.get('stream_updates',{}).get(old['name'])
-        from nats_contract_plan import MIGRATION_ID
-        allowed=('chat_events','social_events','role_events')+(('voice_events','user_events') if recovery.get('migration_id')==MIGRATION_ID else ())
+        from nats_contract_plan import MIGRATION_ID,V6_MIGRATION_ID
+        allowed=('chat_events','social_events','role_events')+(('voice_events','user_events') if recovery.get('migration_id') in (MIGRATION_ID,V6_MIGRATION_ID) else ())
         if old['name'] not in allowed or not evidence:raise Blocked('rollout_stream_creation_changed')
         attempt=evidence['attempt'];start=dt.datetime.fromisoformat(attempt['started_at']);end=dt.datetime.fromisoformat(attempt['finished_at'])
         created=dt.datetime.fromisoformat(new['created'].replace('Z','+00:00'))

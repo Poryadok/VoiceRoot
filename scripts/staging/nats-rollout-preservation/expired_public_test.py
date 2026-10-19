@@ -97,7 +97,8 @@ class PublicRecoveryTests(unittest.TestCase):
         self.assertTrue(added<=set(bundle.ROLLOUT))
         self.assertIn('nats_active_contract.py',bundle.ROLLOUT)
         self.assertIn('deployment_report.py',bundle.ROLLOUT)
-        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,83)
+        self.assertIn('nats_deliver_all.py',bundle.ROLLOUT)
+        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,84)
         self.assertIn('provisional.py',bundle.ROLLOUT)
         with tempfile.TemporaryDirectory() as folder:
             code=Path(folder)/'code';code.mkdir(mode=0o700)
