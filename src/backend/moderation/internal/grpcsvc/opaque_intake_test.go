@@ -21,6 +21,12 @@ import (
 )
 
 func reportIntakePool(t *testing.T) *pgxpool.Pool {
+	return reportIntakePoolThrough(t, 0)
+}
+
+// A downgrade is tested against its actual predecessor-compatible catalog,
+// without unrelated later constraints making an unsafe DOWN fail accidentally.
+func reportIntakePoolThrough(t *testing.T, version int) *pgxpool.Pool {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("PostgreSQL report intake integration")
@@ -40,6 +46,10 @@ func reportIntakePool(t *testing.T) *pgxpool.Pool {
 	}
 	files, err := filepath.Glob(filepath.Join(repoRoot(t), "src/backend/migrations/moderation_db/*.up.sql"))
 	require.NoError(t, err)
+	if version > 0 {
+		require.LessOrEqual(t, version, len(files))
+		files = files[:version]
+	}
 	for _, path := range files {
 		integrationtestApplySQL(t, ctx, pool, path)
 	}

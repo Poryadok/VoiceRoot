@@ -34,9 +34,16 @@ func TestReportRejectionDownPreservesReceiptCommittedWhileWaiting(t *testing.T) 
 	pid := conn.Conn().PgConn().PID()
 	down := reportRejectionDown(t)
 	done := make(chan error, 1)
+	finished := make(chan struct{})
 	go func() {
+		defer close(finished)
 		_, err := conn.Exec(ctx, down)
 		done <- err
+	}()
+	defer func() {
+		cancel()
+		_ = blocker.Rollback(context.Background())
+		<-finished
 	}()
 	require.Eventually(t, func() bool {
 		var waiting bool
