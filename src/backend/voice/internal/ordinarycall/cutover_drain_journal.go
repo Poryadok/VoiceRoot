@@ -18,4 +18,5 @@ type CutoverMaintenanceAuthority interface {
 type CutoverDrainOwner struct {
 	Store     *PostgresStore
 	Authority CutoverMaintenanceAuthority
+	Verifier  retirementproof.Verifier
 }

@@ -30,7 +30,7 @@ retirement upgrade. Existing whole-realm/authority qualification remains open.
 
 - [x] Capture and immutable journal prepare/replay, including historical members,
   admissions, effects, outbox and unknown issuance markers.
-- [ ] Trusted proof acceptance with retained resolution bytes and exact recheck.
+- [x] Trusted proof acceptance with retained resolution bytes and exact recheck.
 - [ ] Native close/abort and qualified effect completion, exact projection cleanup,
   terminal receipt and crash/retry recovery.
 - [ ] Actual Linux PostgreSQL/race negatives, source review, portable source/proof
@@ -90,6 +90,16 @@ ordinary native suites, race and vet; compare native event/outbox versions.
   Empty025 DOWN/UP succeeds; populated DOWN refuses and preserves exact work
   and target rows. Authority is explicitly a component fixture, not installed
   maintenance qualification. No Redis writes or final receipts implemented.
+- [x] Resource-proof acceptance: actual stub RED7.061s -> PG-race GREEN9.582s
+  (test8.53), vet0, original52952 terminal0. Exact3930-file preflight inventory
+  f617e01c3e6581fda31704afee57b2185ac0cdc366e55cb9f5ae9a06c9c07a20,
+  overlay65924450be0faf34f27f78e01e37c958ec7d18692cf656bfc0a56a34bb2051e3.
+  Checks zero proof, wrong receipt, fresh observation denial before/after saved
+  acceptance, retained exact resolution and lost-ACK replay, and final native
+  incarnation change between external verification and the owner transaction.
+  Two intermediate failing runs corrected test fixtures (SQL JSON/column CHECK,
+  then invalid aggregate); neither is classified as a product defect or PASS.
+  Work remains PREPARED; acceptance changes no native/Redis effects.
 
 ## Decisions
 
