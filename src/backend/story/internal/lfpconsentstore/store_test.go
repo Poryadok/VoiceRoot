@@ -94,7 +94,7 @@ func (p fixturePermit) Release()                         {}
 type fixtureSharedAdmission struct{ o storylfpadmission.Origin }
 
 func (a fixtureSharedAdmission) Enter(context.Context) (storylfpadmission.Permit, error) {
-	return fixturePermit{a.o}, nil
+	return fixturePermit(a), nil
 }
 
 func TestJournalBarrierDrainsThroughActualCommit(t *testing.T) {
