@@ -1,4 +1,9 @@
 BEGIN;
+DO $$ BEGIN
+  IF current_setting('transaction_isolation') <> 'read committed' THEN
+    RAISE EXCEPTION 'automod downgrade requires READ COMMITTED';
+  END IF;
+END $$;
 -- Hold writer exclusion from the history check through destructive DDL.
 LOCK TABLE automod_subjects IN ACCESS EXCLUSIVE MODE;
 DO $$ BEGIN

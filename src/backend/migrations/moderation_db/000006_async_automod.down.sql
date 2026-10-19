@@ -1,6 +1,11 @@
 -- Downgrade may remove only unused automod state. Lock before observing history
 -- so a first concurrent write cannot be committed between the check and DROP.
 BEGIN;
+DO $$ BEGIN
+  IF current_setting('transaction_isolation') <> 'read committed' THEN
+    RAISE EXCEPTION 'automod downgrade requires READ COMMITTED';
+  END IF;
+END $$;
 LOCK TABLE automod_subjects, automod_terminal_subjects, automod_inbox,
   automod_patterns, automod_pattern_aliases, automod_actions,
   automod_event_outbox, automod_restriction_sync, sanctions

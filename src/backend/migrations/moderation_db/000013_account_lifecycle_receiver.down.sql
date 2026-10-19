@@ -1,4 +1,9 @@
 BEGIN;
+DO $$ BEGIN
+  IF current_setting('transaction_isolation') <> 'read committed' THEN
+    RAISE EXCEPTION 'automod downgrade requires READ COMMITTED';
+  END IF;
+END $$;
 LOCK TABLE automod_subjects,automod_terminal_subjects,automod_lifecycle_authority,
   automod_lifecycle_current IN ACCESS EXCLUSIVE MODE;
 DO $$ BEGIN

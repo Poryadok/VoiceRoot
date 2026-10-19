@@ -1,4 +1,12 @@
 -- Never silently discard a lifecycle projection or outstanding terminal fact.
+BEGIN;
+DO $$ BEGIN
+  IF current_setting('transaction_isolation') <> 'read committed' THEN
+    RAISE EXCEPTION 'automod downgrade requires READ COMMITTED';
+  END IF;
+END $$;
+LOCK TABLE accounts,moderation_terminal_subjects,moderation_lifecycle_current,
+  moderation_lifecycle_delivery,moderation_terminal_delivery IN ACCESS EXCLUSIVE MODE;
 DO $$ BEGIN
   IF EXISTS(SELECT 1 FROM moderation_lifecycle_current) OR
      EXISTS(SELECT 1 FROM moderation_lifecycle_delivery) OR
@@ -16,3 +24,4 @@ DROP INDEX moderation_terminal_event_id_idx;
 ALTER TABLE moderation_terminal_subjects DROP COLUMN event_id;
 DROP TABLE moderation_lifecycle_delivery;
 DROP TABLE moderation_lifecycle_current;
+COMMIT;
