@@ -92,7 +92,7 @@ Receipt validation is structural only: a higher revision/hash or positive fence
 must reach the sender's CURRENT owner projection/ledger comparison, not directly
 clear a delivery intent. Equal revision with changed hash is rejected.
 
-The delivery component reads a bounded union of both recipient queues outside
+The delivery component reads an independently bounded batch for EACH recipient outside
 network transactions. After a response it locks the actual Auth account row,
 then checks its current projection or permanent terminal ledger and deletes only
 the requested recipient/event/generation intent. A transition that wins during
@@ -100,6 +100,10 @@ the RPC leaves its newer intent queued. An unowned terminal response or revision
 above CURRENT Auth authority is restore divergence; no synthetic revision or
 terminal fact is created. An unavailable recipient does not consume its intent
 or prevent a bounded attempt to the other recipient.
+`runOnce(perRecipientLimit)` accepts 1..1,000 per recipient and attempts at most
+twice that number in one finite pass. Unavailable Messaging history cannot fill
+Moderation's budget, including at limit1; each recipient still prioritizes its
+own permanent terminal intents.
 
 `AuthLifecycleClientSettings` requires explicit `auth.automod.lifecycle.enabled`
 and complete settings for BOTH `AUTH_AUTOMOD_LIFECYCLE_MESSAGING_` and

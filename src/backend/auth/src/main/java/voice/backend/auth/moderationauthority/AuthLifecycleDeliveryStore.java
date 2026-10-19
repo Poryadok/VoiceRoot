@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -37,6 +38,13 @@ public final class AuthLifecycleDeliveryStore {
     this.transactions.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);this.transactions.setTimeout(5);
   }
   public List<Delivery> pending(int limit) {
+    return pending(null,limit);
+  }
+  public List<Delivery> pendingForRecipient(String recipient,int limit) {
+    if(!"messaging".equals(recipient)&&!"moderation".equals(recipient))throw new IllegalArgumentException("invalid lifecycle recipient");
+    return pending(recipient,limit);
+  }
+  private List<Delivery> pending(String recipient,int limit) {
     standalone();if(limit<1 || limit>1000)throw new IllegalArgumentException("bounded lifecycle batch required");
     return List.copyOf(jdbc.query("""
         SELECT * FROM (
@@ -50,8 +58,9 @@ public final class AuthLifecycleDeliveryStore {
                  0::bigint,'PURGED',NULL::uuid,NULL::timestamptz,g.generation
           FROM moderation_terminal_delivery d JOIN moderation_terminal_subjects t USING(subject_id)
           CROSS JOIN moderation_authority_generation g WHERE g.singleton
-        ) current_intents ORDER BY terminal DESC,requested_at,subject_id,recipient LIMIT :limit
-        """,Map.of("limit",limit),(rs,row)-> {
+        ) current_intents WHERE (:recipient IS NULL OR recipient=:recipient)
+        ORDER BY terminal DESC,requested_at,subject_id,recipient LIMIT :limit
+        """,new MapSqlParameterSource().addValue("limit",limit).addValue("recipient",recipient,java.sql.Types.VARCHAR),(rs,row)-> {
       if(!rs.getObject("requested_event_id",UUID.class).equals(rs.getObject("event_id",UUID.class))
           || !rs.getObject("authority_generation",UUID.class).equals(rs.getObject("current_generation",UUID.class)))
         throw new RestoreDivergence("lifecycle intent differs from current owner projection");

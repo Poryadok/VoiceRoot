@@ -5,7 +5,7 @@ import io.grpc.StatusRuntimeException;
 import java.util.Objects;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-/** One finite pass; counts are observations, never a convergence/erasure seal. */
+/** One finite pass with a separate budget for each recipient; counts are not a convergence seal. */
 public final class AuthLifecyclePublisher {
   @FunctionalInterface public interface Transport { ApplyLifecycleFactResponse send(AuthLifecycleDeliveryStore.Delivery delivery); }
   public record Batch(int attempted,int acknowledged,int superseded,int retryable) {}
@@ -13,9 +13,13 @@ public final class AuthLifecyclePublisher {
   public AuthLifecyclePublisher(AuthLifecycleDeliveryStore store,Transport transport,Runnable authorityCheck) {
     this.store=Objects.requireNonNull(store);this.transport=Objects.requireNonNull(transport);this.authorityCheck=Objects.requireNonNull(authorityCheck);
   }
-  public Batch runOnce(int limit) {
+  public Batch runOnce(int perRecipientLimit) {
     if(TransactionSynchronizationManager.isActualTransactionActive())throw new IllegalStateException("lifecycle network call under transaction");
-    authorityCheck.run();var pending=store.pending(limit);
+    authorityCheck.run();
+    var pending=new java.util.ArrayList<AuthLifecycleDeliveryStore.Delivery>();
+    // One unavailable peer cannot fill the healthy peer's selection budget.
+    pending.addAll(store.pendingForRecipient("messaging",perRecipientLimit));
+    pending.addAll(store.pendingForRecipient("moderation",perRecipientLimit));
     int acknowledged=0,superseded=0,retryable=0;
     for(var delivery:pending) {
       authorityCheck.run();ApplyLifecycleFactResponse response;

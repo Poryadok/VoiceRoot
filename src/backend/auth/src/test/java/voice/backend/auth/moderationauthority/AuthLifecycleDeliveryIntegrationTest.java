@@ -87,6 +87,21 @@ class AuthLifecycleDeliveryIntegrationTest {
       assertThat(f.store.pending(100)).extracting(AuthLifecycleDeliveryStore.Delivery::recipient).containsExactly("messaging");
     }
   }
+  @Test void unavailableRecipientBacklogCannotStarveHealthyRecipientEvenAtLimitOne() throws Exception {
+    for(int limit:java.util.List.of(1,2))try(var f=fixture()) {
+      for(int account=0;account<3;account++)f.account();
+      f.jdbc.update("UPDATE moderation_lifecycle_delivery SET requested_at='1970-01-01' WHERE recipient='messaging'");
+      var publisher=new AuthLifecyclePublisher(f.store,d->{
+        if(d.recipient().equals("messaging"))throw Status.UNAVAILABLE.asRuntimeException();
+        return receipt(d);
+      },CURRENT_AUTHORITY);
+      var result=publisher.runOnce(limit);
+      assertThat(result.acknowledged()).as("healthy recipient budget at per-recipient limit %s",limit).isEqualTo(limit);
+      assertThat(result.retryable()).isEqualTo(limit);
+      assertThat(result.attempted()).isEqualTo(2*limit);
+      assertThat(f.jdbc.queryForObject("SELECT count(*) FROM moderation_lifecycle_delivery WHERE recipient='messaging'",Integer.class)).isEqualTo(3);
+    }
+  }
   @Test void currentOwnerIsRereadAfterAConcurrentTransitionLockSettles() throws Exception {
     try(var f=fixture();var executor=java.util.concurrent.Executors.newSingleThreadExecutor()) {
       UUID account=f.account();var old=f.first("moderation");
