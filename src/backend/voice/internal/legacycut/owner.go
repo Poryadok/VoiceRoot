@@ -168,7 +168,7 @@ func (o *Owner) checkSession(ctx context.Context) error {
 		return retirementproof.ErrUnavailable
 	}
 	var safe bool
-	err := o.Pool.QueryRow(ctx, `SELECT current_user=session_user AND NOT EXISTS(SELECT 1 FROM pg_roles r WHERE (r.rolsuper OR r.rolbypassrls OR r.rolcreaterole) AND pg_has_role(session_user,r.oid,'MEMBER')) AND NOT EXISTS(SELECT 1 FROM pg_class c WHERE c.relname IN ('voice_legacy_owner_works','voice_legacy_owner_acceptances') AND c.relowner=(SELECT oid FROM pg_roles WHERE rolname=current_user))`).Scan(&safe)
+	err := o.Pool.QueryRow(ctx, `SELECT current_user=session_user AND NOT EXISTS(SELECT 1 FROM pg_roles r WHERE (r.rolsuper OR r.rolbypassrls OR r.rolcreaterole) AND pg_has_role(session_user,r.oid,'MEMBER')) AND NOT EXISTS(SELECT 1 FROM pg_class c WHERE c.relname IN ('voice_legacy_owner_works','voice_legacy_owner_acceptances','voice_legacy_partitions','voice_legacy_projection_steps') AND c.relowner=(SELECT oid FROM pg_roles WHERE rolname=current_user))`).Scan(&safe)
 	if err != nil {
 		return err
 	}

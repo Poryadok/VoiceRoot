@@ -131,6 +131,10 @@ func (e *LegacyProjectionExecutor) Apply(ctx context.Context, ref LegacyProjecti
 	return []byte(raw), nil
 }
 
+// ValidateLegacyProjectionIntent validates shape only; protected owner, proof,
+// source and credential authority remain mandatory in the journal resolver.
+func ValidateLegacyProjectionIntent(s LegacyProjectionStep) error { return validateLegacyStep(s) }
+
 func validateLegacyStep(s LegacyProjectionStep) error {
 	if s.ID == uuid.Nil || s.CaptureID == uuid.Nil || s.Ordinal == 0 || s.Ordinal > 1<<53 || len(s.Transitions) == 0 || len(s.Transitions) > 64 || len(s.ExpectedRunID) != 40 || !json.Valid(s.BindingBytes) || len(s.PreviousReceipt) > 32768 {
 		return ErrInvalidState

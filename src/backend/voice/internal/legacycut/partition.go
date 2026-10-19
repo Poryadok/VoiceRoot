@@ -21,6 +21,7 @@ type Obligation struct {
 	ID, Resource, Key, Path string
 	ValueHash               retirementproof.Digest
 	Retain                  bool
+	SourceBytes             []byte
 }
 type OwnershipAssignment struct {
 	ObligationID              string
@@ -36,6 +37,7 @@ type Partition struct {
 	CaptureHash retirementproof.Digest
 	Proof       retirementproof.ProofRef
 	Assignments []OwnershipAssignment
+	Obligations []Obligation
 }
 
 // ValidatePartitionShape checks exact coverage only. It grants no execution
@@ -115,7 +117,7 @@ func DeriveObligations(w retirementproof.OwnerWork) ([]Obligation, error) {
 	result := []Obligation{}
 	appendValue := func(id, resource, key, path string, value any, retain bool) {
 		raw, _ := json.Marshal(value)
-		result = append(result, Obligation{ID: id, Resource: resource, Key: key, Path: path, ValueHash: retirementproof.Hash("voice.legacy.obligation-value.v1", raw), Retain: retain})
+		result = append(result, Obligation{ID: id, Resource: resource, Key: key, Path: path, ValueHash: retirementproof.Hash("voice.legacy.obligation-value.v1", raw), Retain: retain, SourceBytes: raw})
 	}
 	for i, t := range targets {
 		if t.Kind != "REDIS" {

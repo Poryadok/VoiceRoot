@@ -21,6 +21,10 @@ type Endpoint struct {
 	ResourceIdentity retirementproof.Digest
 	Database         int
 	Prefix           string
+	// StorageLineageHash is protected installation/storage lineage. ResourceIdentity
+	// separately binds the currently observed Redis process; neither is authority.
+	StorageLineageHash retirementproof.Digest
+	EvidencePrefix     string
 }
 
 // Inventory comes exclusively from the protected closed deployment inventory.
@@ -53,7 +57,6 @@ type MaintenanceAuthority interface {
 // owner supplies this implementation; IDs/addresses are never writer fences.
 type EndpointOwner interface {
 	Capture(context.Context, Endpoint) (store.LegacyRedisSnapshot, error)
-	CompareCleanup(context.Context, Endpoint, store.LegacyRedisSnapshot) error
 }
 
 type Owner struct {
