@@ -903,7 +903,12 @@ it. Only the eleven required payload claims `iss`, `sub`, `principal_type`,
 for this method; every other name, including null/empty user, Bot actor or
 delegation claims, is rejected. Existing header and old-method claim policies
 remain unchanged. JWKS/replay outages
-return `UNAVAILABLE`; invalid/replayed proof returns `UNAUTHENTICATED` and a
+return `UNAVAILABLE`. A successfully refreshed, fully validated complete JWKS
+that excludes the requested kid is invalid proof (`UNAUTHENTICATED`) on this
+Bot method only. Its bounded cooldown reuses only explicit successful absence
+evidence for that kid and still-usable snapshot; a failed refresh, malformed
+snapshot or hard expiry cannot fabricate that evidence. Existing resolver and
+old caller outcomes remain unchanged. Invalid/replayed proof returns `UNAUTHENTICATED` and a
 verified different service returns `PERMISSION_DENIED`.
 
 The Bot RPC uses the **existing** dedicated floor listener and additionally

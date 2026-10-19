@@ -25,6 +25,7 @@ public final class AuthPrincipalVerifier {
       .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
       .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
   private final KeyResolver keys;
+  private final KeyResolver botFloorKeys;
   private final EpochLookup epochs;
   private final ReplayGuard replay;
   private final Clock clock;
@@ -32,7 +33,12 @@ public final class AuthPrincipalVerifier {
       "request_id", "request_hash", "jti", "iat", "nbf", "exp");
 
   public AuthPrincipalVerifier(KeyResolver keys, EpochLookup epochs, ReplayGuard replay, Clock clock) {
+    this(keys, epochs, replay, clock, keys);
+  }
+
+  public AuthPrincipalVerifier(KeyResolver keys, EpochLookup epochs, ReplayGuard replay, Clock clock, KeyResolver botFloorKeys) {
     this.keys = Objects.requireNonNull(keys);
+    this.botFloorKeys = Objects.requireNonNull(botFloorKeys);
     this.epochs = Objects.requireNonNull(epochs);
     this.replay = Objects.requireNonNull(replay);
     this.clock = Objects.requireNonNull(clock);
@@ -55,7 +61,7 @@ public final class AuthPrincipalVerifier {
       JsonNode claims = JSON.readTree(decoder.decode(parts[1]));
       String issuer = string(claims, "iss");
       if (!Set.of("gateway", "space", "voice", "role", "bot").contains(issuer)) throw invalid();
-      RSAPublicKey key = keys.resolve(issuer, kid);
+      RSAPublicKey key = (AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC.equals(rpc) ? botFloorKeys : keys).resolve(issuer, kid);
       if (key == null || key.getModulus().bitLength() < 2048) throw invalid();
       var signature = Signature.getInstance("SHA256withRSA");
       signature.initVerify(key);

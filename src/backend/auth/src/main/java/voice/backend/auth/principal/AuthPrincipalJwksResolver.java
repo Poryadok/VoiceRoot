@@ -17,11 +17,17 @@ import java.util.Objects;
 public final class AuthPrincipalJwksResolver {
   @FunctionalInterface public interface Fetcher { byte[] fetch(String issuer); }
   private record Snapshot(Map<String, RSAPublicKey> keys, Instant fetched) {}
+  private record SuccessfulAbsence(String kid, Snapshot snapshot, Instant observed) {}
+  static final class UnapprovedPrincipalKeyException extends IllegalArgumentException {
+    UnapprovedPrincipalKeyException() { super("principal key is not approved"); }
+  }
   private final Fetcher fetcher;
   private final Clock clock;
   private final Duration refreshAfter, hardExpiry, cooldown;
   private final Map<String, Snapshot> sets = new HashMap<>();
   private final Map<String, Instant> unknownRefresh = new HashMap<>();
+  // One proven negative per issuer, never an attacker-controlled unbounded kid cache.
+  private final Map<String, SuccessfulAbsence> botFloorAbsence = new HashMap<>();
 
   public AuthPrincipalJwksResolver(Fetcher fetcher, Clock clock, Duration refreshAfter, Duration hardExpiry, Duration cooldown) {
     this.fetcher = Objects.requireNonNull(fetcher);
@@ -59,6 +65,44 @@ public final class AuthPrincipalJwksResolver {
       if (usable(cached, clock.instant()) && cached.keys().containsKey(kid)) return cached.keys().get(kid);
     }
     throw unavailable();
+  }
+
+  /** Bot floor only: distinguish a successfully refreshed authoritative absence from an outage. */
+  public synchronized RSAPublicKey resolveForBotFloor(String issuer, String kid) {
+    if (issuer == null || issuer.isBlank() || kid == null || kid.isBlank()) throw unavailable();
+    Instant now = clock.instant();
+    Snapshot cached = sets.get(issuer);
+    RSAPublicKey known = usable(cached, now) ? cached.keys().get(kid) : null;
+    if (known != null && Duration.between(cached.fetched(), now).compareTo(refreshAfter) < 0) return known;
+    Instant lastUnknown = unknownRefresh.get(issuer);
+    if (lastUnknown != null && Duration.between(lastUnknown, now).compareTo(cooldown) < 0) {
+      if (known != null) return known;
+      SuccessfulAbsence absent = botFloorAbsence.get(issuer);
+      if (absent != null && absent.kid().equals(kid) && absent.snapshot() == cached
+          && absent.observed().equals(lastUnknown) && usable(cached, now)) {
+        throw new UnapprovedPrincipalKeyException();
+      }
+      throw unavailable();
+    }
+    if (cached == null || !cached.keys().containsKey(kid)) unknownRefresh.put(issuer, now);
+    final Map<String, RSAPublicKey> keys;
+    try {
+      keys = parse(fetcher.fetch(issuer));
+    } catch (Exception ex) {
+      unknownRefresh.put(issuer, clock.instant());
+      botFloorAbsence.remove(issuer);
+      if (usable(cached, clock.instant()) && cached.keys().containsKey(kid)) return cached.keys().get(kid);
+      throw unavailable();
+    }
+    Snapshot updated = new Snapshot(keys, clock.instant());
+    sets.put(issuer, updated);
+    RSAPublicKey key = keys.get(kid);
+    if (key != null) return key;
+    Instant observed = clock.instant();
+    unknownRefresh.put(issuer, observed);
+    botFloorAbsence.put(issuer, new SuccessfulAbsence(kid, updated, observed));
+    // Deliberately outside the fetch/parse catch: authoritative rejection is not an outage.
+    throw new UnapprovedPrincipalKeyException();
   }
 
   private boolean usable(Snapshot cached, Instant now) {
