@@ -1,0 +1,27 @@
+{
+  "schema": "voice-durable-stores-v1",
+  "source_of_truth": "docs/DATA_STORES.md",
+  "postgres_databases": [
+    "auth_db", "user_db", "social_db", "chat_db", "messaging_db", "realtime_db",
+    "space_db", "role_db", "voice_db", "file_db", "notification_db", "search_db",
+    "matchmaking_db", "moderation_db", "subscription_db", "bot_db",
+    "game_integration_db", "story_db"
+  ],
+  "cold_store_families": ["postgres", "redis", "object", "jetstream", "clickhouse"],
+  "redis_disposition": "retain-mixed-authority-store",
+  "excluded": {
+    "federation_db": "planned; not provisioned; federation deferred",
+    "meilisearch-elasticsearch": "derived index; rebuild from authoritative owner DB/outbox; never serve until owner reconciliation",
+    "livekit-rooms": "ephemeral media sessions; never revive participants or stale credentials",
+    "process-memory": "WS connections/subscriptions and transient caches must be recreated",
+    "observability-history": "not authoritative product state; provision dashboards/config separately"
+  },
+  "restore_preconditions": [
+    "all writers quiesced and native engines stopped before cold snapshot",
+    "source mounts read-only; target namespace/volumes exclusively new and disjoint",
+    "restore current permanent purge/retirement/session fences before any application serving",
+    "restore operator-owned encrypted key/config material through its separate custody procedure",
+    "no product listeners or external providers in disposable validation"
+  ],
+  "provisional_targets": {"rpo_seconds": 86400, "rto_seconds": 14400, "accepted": false}
+}

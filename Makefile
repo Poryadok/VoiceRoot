@@ -411,6 +411,7 @@ voice-db-runtime-provisioning-contract-test:
 .PHONY: a4-disposable-recovery-harness-test
 a4-disposable-recovery-harness-test:
 	$(BASH) "$(ROOT)/scripts/ci/a4-disposable-recovery-harness_test.sh"
+	python3 "$(ROOT)/scripts/dev/full_profile_restore_test.py"
 
 .PHONY: phase0-fixture-test
 phase0-fixture-test:
