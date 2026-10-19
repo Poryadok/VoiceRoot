@@ -144,6 +144,15 @@ func (s *SpaceStore) ReadJoinApprovalOperation(ctx context.Context, p *JoinAppro
 	if op.State != "DECIDED" {
 		return nil, nil, ErrJoinAttemptUnavailable
 	}
+	var observed []byte
+	if err = tx.QueryRow(ctx, `SELECT observed_basis_sha256 FROM space_join_operations WHERE actor_profile_id=$1 AND operation_id=$2`, p.input.ActorProfileID, p.input.OperationID).Scan(&observed); err != nil {
+		return nil, nil, err
+	}
+	if observed != nil {
+		// An observational alias has its own current ACL path. It never receives
+		// the original winner's owner-free completed retry treatment.
+		return nil, nil, p.ingress()
+	}
 	var sha []byte
 	if err = tx.QueryRow(ctx, `SELECT decision_basis_sha256 FROM space_join_operations WHERE actor_profile_id=$1 AND operation_id=$2`, p.input.ActorProfileID, p.input.OperationID).Scan(&sha); err != nil {
 		return nil, nil, ErrJoinAttemptUnavailable
@@ -212,18 +221,33 @@ func (s *SpaceStore) ReadJoinApprovalOperation(ctx context.Context, p *JoinAppro
 // FIRST publication only. Original reviewer operation receives the applicant's
 // exact saved native outcome, never the reviewer's ambient membership row.
 func (s *SpaceStore) MarkJoinApprovalPublishedOutcome(ctx context.Context, p *JoinApprovalOperation, native *MemberAdmissionIntent) error {
-	if s == nil || s.tx == nil || native == nil || native.Input.JoinAttempt == nil {
-		return ErrJoinAttemptUnavailable
-	}
 	if err := p.ingress(); err != nil {
 		return err
 	}
-	op := p.input
+	original, requestID, explicit, err := s.joinApprovalOriginalOperation(ctx, native)
+	if err != nil {
+		return err
+	}
+	if !sameJoinRequestOperation(original, p.input) || requestID != p.requestID || !sameOptionalJoinAttempt(explicit, p.explicit) {
+		return ErrJoinAttemptUnavailable
+	}
+	if err = s.markJoinApprovalOriginalOutcome(ctx, original, requestID, native); err != nil {
+		return err
+	}
+	return p.ingress()
+}
+
+// Local FIRST-publication bookkeeping. Its original request integrity is
+// reconstructed from durable history; it never creates an authenticated call.
+func (s *SpaceStore) markJoinApprovalOriginalOutcome(ctx context.Context, op JoinOperationInput, requestID uuid.UUID, native *MemberAdmissionIntent) error {
+	if s == nil || s.tx == nil || native == nil || native.Input.JoinAttempt == nil {
+		return ErrJoinAttemptUnavailable
+	}
 	attempt := native.Input.JoinAttempt.AttemptID
 	if native.State != "PUBLISHED" || native.Input.SpaceID != op.SpaceID {
 		return ErrJoinAttemptUnavailable
 	}
-	if err := s.VerifyJoinRequestApprovalSelection(ctx, op, p.requestID, attempt); err != nil {
+	if err := s.VerifyJoinRequestApprovalSelection(ctx, op, requestID, attempt); err != nil {
 		return err
 	}
 	basis, err := s.LoadVersionedJoinDecisionBasis(ctx, native.Input.DecisionBasisSHA256)
@@ -277,7 +301,7 @@ func (s *SpaceStore) MarkJoinApprovalPublishedOutcome(ctx context.Context, p *Jo
 	if err = s.db().QueryRow(ctx, `SELECT published_at FROM space_member_admission_intents WHERE operation_id=$1 AND state='PUBLISHED' AND request_sha256=$2 AND space_id=$3 AND profile_id=$4 AND account_id=$5`, native.Input.OperationID, request[:], op.SpaceID, a.Input.ProfileID, a.Input.AccountID).Scan(&joined); err != nil {
 		return ErrJoinAttemptUnavailable
 	}
-	response := &spacev1.ApproveJoinRequestResponse{Result: &spacev1.JoinAdmissionResult{State: spacev1.JoinAdmissionState_JOIN_ADMISSION_STATE_ADMITTED, RequestId: p.requestID.String(), SpaceMembership: &spacev1.SpaceMembership{SpaceId: op.SpaceID.String(), ProfileId: a.Input.ProfileID.String(), JoinedAt: timestamppb.New(joined)}}}
+	response := &spacev1.ApproveJoinRequestResponse{Result: &spacev1.JoinAdmissionResult{State: spacev1.JoinAdmissionState_JOIN_ADMISSION_STATE_ADMITTED, RequestId: requestID.String(), SpaceMembership: &spacev1.SpaceMembership{SpaceId: op.SpaceID.String(), ProfileId: a.Input.ProfileID.String(), JoinedAt: timestamppb.New(joined)}}}
 	raw, err := proto.MarshalOptions{Deterministic: true}.Marshal(response)
 	if err != nil {
 		return err
@@ -289,5 +313,5 @@ func (s *SpaceStore) MarkJoinApprovalPublishedOutcome(ctx context.Context, p *Jo
 	if tag.RowsAffected() != 1 {
 		return ErrJoinAttemptConflict
 	}
-	return p.ingress()
+	return nil
 }

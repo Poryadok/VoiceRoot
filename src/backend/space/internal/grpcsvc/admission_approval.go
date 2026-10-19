@@ -36,6 +36,11 @@ func (s *admissionServer) ApproveJoinRequest(ctx context.Context, original *spac
 		return saved, nil
 	}
 	if recovery == nil {
+		if alias, handled, aliasErr := s.approveJoinAlias(ctx, operation, call, request); handled || aliasErr != nil {
+			return alias, aliasErr
+		}
+	}
+	if recovery == nil {
 		proposal, err := s.store.PrepareJoinApprovalDecision(ctx, request)
 		if err != nil {
 			// A concurrent exact original winner may have committed while this caller

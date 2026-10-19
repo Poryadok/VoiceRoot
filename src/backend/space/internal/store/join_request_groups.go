@@ -113,13 +113,23 @@ func (s *SpaceStore) AttachJoinRequestAttempt(ctx context.Context, attempt uuid.
 // ResolveJoinRequestApproval fixes Q and exact A atomically with the existing
 // public operation reservation BEFORE remote observations. It is not approval.
 func (s *SpaceStore) ResolveJoinRequestApproval(ctx context.Context, op JoinOperationInput, requestID uuid.UUID, explicitA *uuid.UUID) (*JoinOperation, error) {
+	return s.resolveJoinRequestApproval(ctx, op, requestID, explicitA, false)
+}
+
+// Observation may select a claimed or published original winner. It does not
+// approve, publish, or make the observational operation a new decision owner.
+func (s *SpaceStore) resolveJoinRequestApprovalObservation(ctx context.Context, op JoinOperationInput, requestID uuid.UUID, explicitA *uuid.UUID) (*JoinOperation, error) {
+	return s.resolveJoinRequestApproval(ctx, op, requestID, explicitA, true)
+}
+
+func (s *SpaceStore) resolveJoinRequestApproval(ctx context.Context, op JoinOperationInput, requestID uuid.UUID, explicitA *uuid.UUID, observation bool) (*JoinOperation, error) {
 	if ctx == nil || s == nil || s.Pool == nil || s.tx != nil {
 		return nil, ErrJoinAttemptUnavailable
 	}
 	if !validJoinOperation(op) || op.Method != JoinOperationApprove || requestID == uuid.Nil || (explicitA != nil && *explicitA == uuid.Nil) {
 		return nil, entrypolicy.ErrInvalid
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +168,7 @@ func (s *SpaceStore) ResolveJoinRequestApproval(ctx context.Context, op JoinOper
 	if err != nil {
 		return nil, err
 	}
-	rows, err := tx.Query(ctx, `SELECT a.id FROM space_join_request_attempts c JOIN space_join_attempts a ON a.id=c.attempt_id WHERE c.request_id=$1 AND a.state IN ('PENDING','READY') AND ($2::uuid IS NULL OR a.id=$2) ORDER BY a.id LIMIT 2`, group.ID, explicitA)
+	rows, err := tx.Query(ctx, `SELECT a.id FROM space_join_request_attempts c JOIN space_join_attempts a ON a.id=c.attempt_id WHERE c.request_id=$1 AND (a.state IN ('PENDING','READY') OR ($3 AND a.state IN ('CLAIMED','PUBLISHED'))) AND ($2::uuid IS NULL OR a.id=$2) ORDER BY a.id LIMIT 2`, group.ID, explicitA, observation)
 	if err != nil {
 		return nil, err
 	}

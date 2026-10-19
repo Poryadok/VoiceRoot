@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/json"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,10 +18,26 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 	spacev1 "voice.app/voice/space/v1"
+	"voice/backend/pkg/integrationtest"
 	"voice/backend/pkg/principal"
 	"voice/backend/space/internal/entrypolicy"
 	"voice/backend/space/internal/lifecycleprincipal"
 )
+
+// Retained storage semantics at their genuine historical schema40. This fixture
+// never qualifies current44/45 membership or bypasses their old-writer guard.
+// Current serving and alias authorization are tested on real45 separately.
+func joinApprovalHistoricalStorageFixture(t *testing.T) (*SpaceStore, *SpaceRow) {
+	t.Helper()
+	ctx := context.Background()
+	db := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/space_db"))
+	db.Run(true, "goto", "34")
+	st := &SpaceStore{Pool: db.Pool}
+	space, err := st.CreateSpace(ctx, uuid.New(), "Historical approval storage40", "", "public")
+	require.NoError(t, err)
+	db.Run(true, "goto", "40")
+	return st, space
+}
 
 func signedApprovalOperationFixture(t *testing.T, request *spacev1.ApproveJoinRequestRequest, account, profile uuid.UUID) (*JoinApprovalOperation, *atomic.Int64) {
 	t.Helper()
@@ -47,10 +64,10 @@ func signedApprovalOperationFixture(t *testing.T, request *spacev1.ApproveJoinRe
 // qualify current membership, a Role allow, or the native45 serving producer.
 func TestJoinApprovalOriginalOperationRecoveryAndPublishedSafeOutcome(t *testing.T) {
 	for _, family := range []string{"v1", "legacy_v2"} {
-		for _, mode := range []string{"fresh", "expired", "sql_expiry"} {
+		for _, mode := range []string{"fresh", "expired", "sql_expiry", "historical_alias"} {
 			t.Run(family+"/"+mode, func(t *testing.T) {
 				ctx := context.Background()
-				st, space := joinAdmissionNativeFixture(t)
+				st, space := joinApprovalHistoricalStorageFixture(t)
 				_, err := st.SetEntryPolicy(ctx, SetEntryPolicyInput{SpaceID: space.ID, ActorProfileID: space.OwnerProfileID, OperationID: uuid.New(), ExpectedVersion: 1, Policy: entrypolicy.Policy{SchemaVersion: 1, RequireManualApproval: true, Questions: []entrypolicy.Question{}}})
 				require.NoError(t, err)
 				in := JoinAttemptInput{SpaceID: space.ID, AccountID: uuid.New(), ProfileID: uuid.New()}
@@ -129,6 +146,17 @@ func TestJoinApprovalOriginalOperationRecoveryAndPublishedSafeOutcome(t *testing
 				require.NotNil(t, recovered)
 				require.Equal(t, basisSHA[:], recovered.DecisionBasisSHA256)
 				require.Nil(t, recovered.PublicationOperationID)
+				var aliasOperation *JoinApprovalOperation
+				var aliasProposal *JoinApprovalAliasProposal
+				if mode == "historical_alias" {
+					aliasRequest := proto.Clone(request).(*spacev1.ApproveJoinRequestRequest)
+					aliasRequest.OperationId = uuid.NewString()
+					aliasOperation, _ = signedApprovalOperationFixture(t, aliasRequest, uuid.New(), uuid.New())
+					aliasProposal, err = st.PrepareJoinApprovalAlias(ctx, aliasOperation)
+					require.NoError(t, err)
+					require.NotNil(t, aliasProposal)
+					assertJoinAliasOwnerProtocol(t, aliasProposal, false, in.AccountID, in.ProfileID)
+				}
 				native := &MemberAdmissionIntent{Input: MemberAdmissionInput{OperationID: uuid.New(), SpaceID: space.ID, AccountID: in.AccountID, ProfileID: in.ProfileID, JoinAttempt: &JoinAttemptReference{AttemptID: a.ID, EvidenceSHA256: a.EvidenceSHA256}, DecisionBasisSHA256: basisSHA[:]}, State: "PUBLISHED", Generation: 1, PolicyVersion: a.PolicyVersion}
 				require.ErrorIs(t, st.MarkJoinApprovalPublishedOutcome(ctx, p, native), ErrJoinAttemptUnavailable)
 				require.Error(t, st.withOwnershipScope(ctx, []uuid.UUID{space.ID}, func(local *SpaceStore) error { return local.MarkJoinApprovalPublishedOutcome(ctx, p, native) }), "marker before actual persisted publication rejects")
@@ -178,13 +206,51 @@ func TestJoinApprovalOriginalOperationRecoveryAndPublishedSafeOutcome(t *testing
 					require.NoError(t, holder.Commit(ctx))
 					require.Error(t, <-done)
 				}
-				if mode != "fresh" {
+				if mode == "expired" || mode == "sql_expiry" {
 					var state string
 					require.NoError(t, st.Pool.QueryRow(ctx, `SELECT state FROM space_join_operations WHERE actor_profile_id=$1 AND operation_id=$2`, p.input.ActorProfileID, p.input.OperationID).Scan(&state))
 					require.Equal(t, "DECIDED", state)
 					return
 				}
-				require.NoError(t, st.withOwnershipScope(ctx, []uuid.UUID{space.ID}, func(local *SpaceStore) error { return local.MarkJoinApprovalPublishedOutcome(ctx, p, native) }))
+				if mode == "historical_alias" {
+					// Retained history only: no original-call capability is constructed.
+					// Actual alias authority and native FIRST transaction remain separate.
+					require.NoError(t, st.withOwnershipScope(ctx, []uuid.UUID{space.ID}, func(local *SpaceStore) error {
+						op, requestID, selector, e := local.joinApprovalOriginalOperation(ctx, native)
+						if e != nil {
+							return e
+						}
+						require.Equal(t, p.input, op)
+						require.Equal(t, p.requestID, requestID)
+						require.Equal(t, p.explicit, selector)
+						return local.markJoinApprovalOriginalOutcome(ctx, op, requestID, native)
+					}))
+				} else {
+					require.NoError(t, st.withOwnershipScope(ctx, []uuid.UUID{space.ID}, func(local *SpaceStore) error { return local.MarkJoinApprovalPublishedOutcome(ctx, p, native) }))
+				}
+				if mode == "historical_alias" {
+					invite, e := st.CreateInvite(ctx, CreateInviteInput{SpaceID: space.ID, CreatorProfileID: space.OwnerProfileID})
+					require.NoError(t, e)
+					otherInput := in
+					otherInput.InviteID = &invite.ID
+					otherA, e := st.StartJoinAttempt(ctx, otherInput)
+					require.NoError(t, e)
+					otherA, e = st.SubmitJoinAttempt(ctx, otherInput, otherA.ID, nil)
+					require.NoError(t, e)
+					require.NoError(t, st.withOwnershipScope(ctx, []uuid.UUID{space.ID}, func(local *SpaceStore) error {
+						group, e := local.AttachJoinRequestAttempt(ctx, otherA.ID)
+						if e == nil {
+							require.Equal(t, q.ID, group.ID)
+						}
+						return e
+					}))
+					ambiguousRequest := proto.Clone(request).(*spacev1.ApproveJoinRequestRequest)
+					ambiguousRequest.OperationId = uuid.NewString()
+					ambiguousRequest.AttemptId = nil
+					ambiguous, _ := signedApprovalOperationFixture(t, ambiguousRequest, uuid.New(), uuid.New())
+					_, e = st.PrepareJoinApprovalAlias(ctx, ambiguous)
+					require.ErrorIs(t, e, ErrJoinRequestAmbiguous, "published original must not be filtered out in favor of another pending child")
+				}
 				_, err = st.Pool.Exec(ctx, `UPDATE space_entry_policies SET version=version+1 WHERE space_id=$1`, space.ID)
 				require.NoError(t, err)
 				saved, recovered, err = st.ReadJoinApprovalOperation(ctx, p)
@@ -193,6 +259,23 @@ func TestJoinApprovalOriginalOperationRecoveryAndPublishedSafeOutcome(t *testing
 				require.Equal(t, in.ProfileID.String(), saved.Result.SpaceMembership.ProfileId)
 				require.NotEqual(t, p.input.ActorProfileID.String(), saved.Result.SpaceMembership.ProfileId)
 				require.True(t, saved.Result.SpaceMembership.JoinedAt.AsTime().Equal(joined))
+				if mode == "historical_alias" {
+					publishedAlias, e := st.PrepareJoinApprovalAlias(ctx, aliasOperation)
+					require.NoError(t, e)
+					assertJoinAliasOwnerProtocol(t, publishedAlias, true, in.AccountID, in.ProfileID)
+					_, oldReviewer, e := aliasProposal.OwnerRequests()
+					require.NoError(t, e)
+					_, newReviewer, e := publishedAlias.OwnerRequests()
+					require.NoError(t, e)
+					require.Equal(t, oldReviewer.AdmissionBindingSha256, newReviewer.AdmissionBindingSha256)
+					require.NotEqual(t, oldReviewer.Phase, newReviewer.Phase, "same context never collapses phase authority")
+					var state string
+					var ownBasis, observed []byte
+					require.NoError(t, st.Pool.QueryRow(ctx, `SELECT state,decision_basis_sha256,observed_basis_sha256 FROM space_join_operations WHERE actor_profile_id=$1 AND operation_id=$2`, aliasOperation.input.ActorProfileID, aliasOperation.input.OperationID).Scan(&state, &ownBasis, &observed))
+					require.Equal(t, "RESERVED", state, "prospective alias has no authorization or journal decision yet")
+					require.Nil(t, ownBasis)
+					require.Nil(t, observed)
+				}
 				var count int
 				require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM space_members WHERE space_id=$1 AND profile_id=$2`, space.ID, in.ProfileID).Scan(&count))
 				require.Zero(t, count, "history hook cannot recreate membership")
