@@ -1,7 +1,7 @@
 {
   "version": "NATIVE-P3-SOURCE-v1",
   "base": "8191a36ca3bea7d053df0dd25963ca5133284b41",
-  "source": "e378709d3b97d5535133bfb002efdf6b3975b728",
+  "source": "4f3391ff878f7bd4f2b5dcab461d83eadc0edbe3",
   "classification": "DORMANT-A3-RESTRICTIVE-P3-SOURCE",
   "consumers": [
     "DEVELOP-SOURCE-v1",
@@ -4197,7 +4197,7 @@
       "entry": {
         "mode": "100644",
         "type": "blob",
-        "oid": "8fb9a8814c27aca4b8a78cb9f20d314c72273f6e"
+        "oid": "d43a54d9778dafd1cf137b314c77acb0ed820cf4"
       }
     },
     {
@@ -4205,7 +4205,7 @@
       "entry": {
         "mode": "100644",
         "type": "blob",
-        "oid": "a4b6af873478b5498ef5731422bd2321ca830204"
+        "oid": "a0d584c52980360fc34783f488c291861a5623bf"
       }
     },
     {
@@ -4715,9 +4715,9 @@
     "src/backend/voice/pb/voice/user/v1/user.pb.go",
     "src/backend/voice/pb/voice/user/v1/user_grpc.pb.go"
   ],
-  "closure_review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c28",
+  "closure_review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c35",
   "down_review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-VOICE-NATIVE-DOWN-53f75f745237#comment-c1",
-  "source_proposal_sha256": "26a53770e7caa84df2c64ca30b68cf6dc8708363ae66e00edf9cd87d2d47b938",
+  "source_proposal_sha256": "f366cc94e6c1693675a876c5abae7ed18800dd9623b6303e2db4d533a49ceeab",
   "evidence": [
     {
       "name": "be080-ci-cf7/RESTORE.json",
@@ -5310,6 +5310,78 @@
     {
       "name": "rudeus121-develop/batch3/roster-root-red2.log",
       "sha256": "3e59b8a8638e58c4ac95e3274f905ef97cdfafa57ee31b057c4a7ed5f455d960"
+    },
+    {
+      "name": "native-h7-auth-context-proposal.json",
+      "sha256": "f366cc94e6c1693675a876c5abae7ed18800dd9623b6303e2db4d533a49ceeab"
+    },
+    {
+      "name": "auth-native-input-applicability/manifest.json",
+      "sha256": "8ad5c623ade0206001809600267ab3b855cb05cb9e83b27b5183ad49de902013"
+    },
+    {
+      "name": "auth-native-input-applicability/READING-GUIDE.md",
+      "sha256": "ba1ad77be61a3fed7f31bffc6803bc80bdc2569add8e347a2cd63c59109760f2"
+    },
+    {
+      "name": "auth-native-input-applicability/scoped-proof.zip",
+      "sha256": "6f5654fbe77fca4b3ae7ec8a45f8ac1694fb4d6bd3857204643dd7d385189f0b"
+    },
+    {
+      "name": "auth-native-input-applicability/review418-c35-actual.json",
+      "sha256": "4f54fb431e86861a05fe9656cf48c11d85c65776db1c6a88e2f0787f193c93b0"
+    },
+    {
+      "name": "auth-native-input-applicability/two-inputs.json",
+      "sha256": "65bfc5ad0f0a603a9fccf0c17a1f1958962adbfbf400d0efed3773377374d2ac"
+    },
+    {
+      "name": "auth-native-input-applicability/record-entry-impact.json",
+      "sha256": "65fdddb611d2e64b8cc943f9aef51a7eade17a6b3e999a08731ce19531027e55"
+    },
+    {
+      "name": "auth-native-input-applicability/descriptor-additive-impact.json",
+      "sha256": "1616ae5c29a6da913cf6c4ad008853dc04e72cbf58e119f8b6ecaa10907fe1a6"
+    },
+    {
+      "name": "auth-native-input-applicability/native-generated-AST-equality.json",
+      "sha256": "4630d2df41505e5cc7fb25642f3c93ea63ff8dd5f552b77ba63acacc04eef0a4"
+    },
+    {
+      "name": "auth-native-input-applicability/actual-dependency-Auth-importers.json",
+      "sha256": "b0f91285e51c35d3550618a1e942d4940c15228ea27620adb4bcf7f828f058eb"
+    },
+    {
+      "name": "auth-native-input-applicability/voice-check-receipt.json",
+      "sha256": "290cdf7bba15baf20e63aff524d6c6f5ad56b6668c24bb5c329719677521f927"
+    },
+    {
+      "name": "auth-native-input-applicability/voice-check-summary.json",
+      "sha256": "3e917bf18045abe08967a483a6444ebf8bf733adbc222fc111c23ed0b9fcd3c3"
+    },
+    {
+      "name": "auth-native-input-applicability/voice-check.jsonl",
+      "sha256": "5fa6b8a2a93f447e05c0b3e079cc8efb8e37e93d6eed160ebfcaa68d6bb665f8"
+    },
+    {
+      "name": "auth-native-input-applicability/current-derived-proof.json",
+      "sha256": "e924496ab2441b137be6a040600b9eb25b1c038dd9dd96caca924fc539b2cfb4"
+    },
+    {
+      "name": "auth-native-input-applicability/derived-applicability-comparison.json",
+      "sha256": "69a9fecbcf4265d5cde3ff9335be1f7ddae1df639e6a2b6c2e9442ba6e40f5b9"
+    },
+    {
+      "name": "auth-native-input-applicability/current-go-list.jsonl",
+      "sha256": "8a0040d2e4a9bf35a3c8361d07870d73bbc0a740d7e2e9f94b225eb12b74a089"
+    },
+    {
+      "name": "auth-native-input-applicability/unchanged-callsites-and-module-inputs.json",
+      "sha256": "dc776ff67b859d927722a85855edbfe662dcf3eb33c3aff6c776fc7dd6e26a36"
+    },
+    {
+      "name": "auth-intake-package/manifest.json",
+      "sha256": "b80cb80fdde2d10fd04f7494aaad7e4c894481f027727beb5359489062779d2f"
     }
   ],
   "excluded_authority": [
@@ -5322,43 +5394,43 @@
   "evidence_matrix": {
     "A1": {
       "result": "PASS",
-      "evidence": "Discriminating actual root RED and repaired current factory GREEN, not unused helper. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries. H6 metadata/current source: native-h6-context-proposal-v2.json and h6-review-comments-actual.json bind94projection460context; original89 projection unchanged plus five exact module metadata rows, no generated alias/loader waiver. Prior literal proof limitations retained.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c28 accepts complete H6 source closure/classification and scoped prior eight AB applicability, with c27 exact File descriptor/semantic regeneration/current module inputs and unchanged24 derived mains/toolchain. No new runtime was executed for H6; H5 actual8+1+30+2 and historical literal SQL/helper/writer proofs reused only after exact unchanged semantic inputs review. No native39/Creator/MM/Bot activation or wholeCI grant."
+      "evidence": "Discriminating actual root RED and repaired current factory GREEN, not unused helper. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries. H6 metadata/current source: native-h6-context-proposal-v2.json and h6-review-comments-actual.json bind94projection460context; original89 projection unchanged plus five exact module metadata rows, no generated alias/loader waiver. Prior literal proof limitations retained. H7 exact4f Auth generated dependency delta: native-h7-auth-context-proposal.json binds only two existing context entries;94projection/458othercontext unchanged. Fresh5top26sub current signed Voice-floor/no-effects tests and899GoList/24rawmains/sameGo binary bind current inputs. c35 permits prior literal A1 reuse only for its unchanged facts; no fresh whole-matrix execution claimed.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c28 accepts complete H6 source closure/classification and scoped prior eight AB applicability, with c27 exact File descriptor/semantic regeneration/current module inputs and unchanged24 derived mains/toolchain. No new runtime was executed for H6; H5 actual8+1+30+2 and historical literal SQL/helper/writer proofs reused only after exact unchanged semantic inputs review. No native39/Creator/MM/Bot activation or wholeCI grant. H7 current2-input semantic/applicability and scoped prior A/B reuse independently accepted at http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c35. Full632oldgeneratedfunctions/raw78oldDTO36oldRPC contracts inspected;19populatedAST+2directactualinterface signatures separately verified. No currentconsumer/activation grant."
     },
     "A2": {
       "result": "PASS",
-      "evidence": "Actual factory ordinary-only and Space/NATS-enabled branches leave every A3 fact unleased/undelivered, preserve compatibility and restrictive native drain. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries. H6 metadata/current source: native-h6-context-proposal-v2.json and h6-review-comments-actual.json bind94projection460context; original89 projection unchanged plus five exact module metadata rows, no generated alias/loader waiver. Prior literal proof limitations retained.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c28 accepts complete H6 source closure/classification and scoped prior eight AB applicability, with c27 exact File descriptor/semantic regeneration/current module inputs and unchanged24 derived mains/toolchain. No new runtime was executed for H6; H5 actual8+1+30+2 and historical literal SQL/helper/writer proofs reused only after exact unchanged semantic inputs review. No native39/Creator/MM/Bot activation or wholeCI grant."
+      "evidence": "Actual factory ordinary-only and Space/NATS-enabled branches leave every A3 fact unleased/undelivered, preserve compatibility and restrictive native drain. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries. H6 metadata/current source: native-h6-context-proposal-v2.json and h6-review-comments-actual.json bind94projection460context; original89 projection unchanged plus five exact module metadata rows, no generated alias/loader waiver. Prior literal proof limitations retained. H7 exact4f Auth generated dependency delta: native-h7-auth-context-proposal.json binds only two existing context entries;94projection/458othercontext unchanged. Fresh5top26sub current signed Voice-floor/no-effects tests and899GoList/24rawmains/sameGo binary bind current inputs. c35 permits prior literal A2 reuse only for its unchanged facts; no fresh whole-matrix execution claimed.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c28 accepts complete H6 source closure/classification and scoped prior eight AB applicability, with c27 exact File descriptor/semantic regeneration/current module inputs and unchanged24 derived mains/toolchain. No new runtime was executed for H6; H5 actual8+1+30+2 and historical literal SQL/helper/writer proofs reused only after exact unchanged semantic inputs review. No native39/Creator/MM/Bot activation or wholeCI grant. H7 current2-input semantic/applicability and scoped prior A/B reuse independently accepted at http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c35. Full632oldgeneratedfunctions/raw78oldDTO36oldRPC contracts inspected;19populatedAST+2directactualinterface signatures separately verified. No currentconsumer/activation grant."
     },
     "A3": {
       "result": "PASS",
-      "evidence": "Real native ordinary/Space caller-transaction counters/frozen facts, denied/replay/rollback and actual process restart pending state. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries. H6 metadata/current source: native-h6-context-proposal-v2.json and h6-review-comments-actual.json bind94projection460context; original89 projection unchanged plus five exact module metadata rows, no generated alias/loader waiver. Prior literal proof limitations retained.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c28 accepts complete H6 source closure/classification and scoped prior eight AB applicability, with c27 exact File descriptor/semantic regeneration/current module inputs and unchanged24 derived mains/toolchain. No new runtime was executed for H6; H5 actual8+1+30+2 and historical literal SQL/helper/writer proofs reused only after exact unchanged semantic inputs review. No native39/Creator/MM/Bot activation or wholeCI grant."
+      "evidence": "Real native ordinary/Space caller-transaction counters/frozen facts, denied/replay/rollback and actual process restart pending state. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries. H6 metadata/current source: native-h6-context-proposal-v2.json and h6-review-comments-actual.json bind94projection460context; original89 projection unchanged plus five exact module metadata rows, no generated alias/loader waiver. Prior literal proof limitations retained. H7 exact4f Auth generated dependency delta: native-h7-auth-context-proposal.json binds only two existing context entries;94projection/458othercontext unchanged. Fresh5top26sub current signed Voice-floor/no-effects tests and899GoList/24rawmains/sameGo binary bind current inputs. c35 permits prior literal A3 reuse only for its unchanged facts; no fresh whole-matrix execution claimed.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c28 accepts complete H6 source closure/classification and scoped prior eight AB applicability, with c27 exact File descriptor/semantic regeneration/current module inputs and unchanged24 derived mains/toolchain. No new runtime was executed for H6; H5 actual8+1+30+2 and historical literal SQL/helper/writer proofs reused only after exact unchanged semantic inputs review. No native39/Creator/MM/Bot activation or wholeCI grant. H7 current2-input semantic/applicability and scoped prior A/B reuse independently accepted at http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c35. Full632oldgeneratedfunctions/raw78oldDTO36oldRPC contracts inspected;19populatedAST+2directactualinterface signatures separately verified. No currentconsumer/activation grant."
     },
     "A4": {
       "result": "PASS",
-      "evidence": "EJECT_ONLY never proves retirement/fullFROZEN/LIVE; exact retained targets restart without projection Redis; credential refresh and unknown capability cannot upgrade. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries. H6 metadata/current source: native-h6-context-proposal-v2.json and h6-review-comments-actual.json bind94projection460context; original89 projection unchanged plus five exact module metadata rows, no generated alias/loader waiver. Prior literal proof limitations retained.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c28 accepts complete H6 source closure/classification and scoped prior eight AB applicability, with c27 exact File descriptor/semantic regeneration/current module inputs and unchanged24 derived mains/toolchain. No new runtime was executed for H6; H5 actual8+1+30+2 and historical literal SQL/helper/writer proofs reused only after exact unchanged semantic inputs review. No native39/Creator/MM/Bot activation or wholeCI grant."
+      "evidence": "EJECT_ONLY never proves retirement/fullFROZEN/LIVE; exact retained targets restart without projection Redis; credential refresh and unknown capability cannot upgrade. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries. H6 metadata/current source: native-h6-context-proposal-v2.json and h6-review-comments-actual.json bind94projection460context; original89 projection unchanged plus five exact module metadata rows, no generated alias/loader waiver. Prior literal proof limitations retained. H7 exact4f Auth generated dependency delta: native-h7-auth-context-proposal.json binds only two existing context entries;94projection/458othercontext unchanged. Fresh5top26sub current signed Voice-floor/no-effects tests and899GoList/24rawmains/sameGo binary bind current inputs. c35 permits prior literal A4 reuse only for its unchanged facts; no fresh whole-matrix execution claimed.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c28 accepts complete H6 source closure/classification and scoped prior eight AB applicability, with c27 exact File descriptor/semantic regeneration/current module inputs and unchanged24 derived mains/toolchain. No new runtime was executed for H6; H5 actual8+1+30+2 and historical literal SQL/helper/writer proofs reused only after exact unchanged semantic inputs review. No native39/Creator/MM/Bot activation or wholeCI grant. H7 current2-input semantic/applicability and scoped prior A/B reuse independently accepted at http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c35. Full632oldgeneratedfunctions/raw78oldDTO36oldRPC contracts inspected;19populatedAST+2directactualinterface signatures separately verified. No currentconsumer/activation grant."
     },
     "B1": {
       "result": "PASS",
-      "evidence": "Successful literal H53/H2 DOWN preserves separately owned schema tables/FK/index/view/JSON data and public sentinel complete snapshot; owned targets/grants absent; literal UP roundtrip preserves snapshot. Independent external driver -race PASS1/0skip1.220s, all six commands0. See native-b1-supplement.json and reviewed original empty-roundtrip matrix. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries. H6 metadata/current source: native-h6-context-proposal-v2.json and h6-review-comments-actual.json bind94projection460context; original89 projection unchanged plus five exact module metadata rows, no generated alias/loader waiver. Prior literal proof limitations retained.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c28 accepts complete H6 source closure/classification and scoped prior eight AB applicability, with c27 exact File descriptor/semantic regeneration/current module inputs and unchanged24 derived mains/toolchain. No new runtime was executed for H6; H5 actual8+1+30+2 and historical literal SQL/helper/writer proofs reused only after exact unchanged semantic inputs review. No native39/Creator/MM/Bot activation or wholeCI grant."
+      "evidence": "Successful literal H53/H2 DOWN preserves separately owned schema tables/FK/index/view/JSON data and public sentinel complete snapshot; owned targets/grants absent; literal UP roundtrip preserves snapshot. Independent external driver -race PASS1/0skip1.220s, all six commands0. See native-b1-supplement.json and reviewed original empty-roundtrip matrix. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries. H6 metadata/current source: native-h6-context-proposal-v2.json and h6-review-comments-actual.json bind94projection460context; original89 projection unchanged plus five exact module metadata rows, no generated alias/loader waiver. Prior literal proof limitations retained. H7 exact4f Auth generated dependency delta: native-h7-auth-context-proposal.json binds only two existing context entries;94projection/458othercontext unchanged. Fresh5top26sub current signed Voice-floor/no-effects tests and899GoList/24rawmains/sameGo binary bind current inputs. c35 permits prior literal B1 reuse only for its unchanged facts; no fresh whole-matrix execution claimed.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c28 accepts complete H6 source closure/classification and scoped prior eight AB applicability, with c27 exact File descriptor/semantic regeneration/current module inputs and unchanged24 derived mains/toolchain. No new runtime was executed for H6; H5 actual8+1+30+2 and historical literal SQL/helper/writer proofs reused only after exact unchanged semantic inputs review. No native39/Creator/MM/Bot activation or wholeCI grant. H7 current2-input semantic/applicability and scoped prior A/B reuse independently accepted at http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c35. Full632oldgeneratedfunctions/raw78oldDTO36oldRPC contracts inspected;19populatedAST+2directactualinterface signatures separately verified. No currentconsumer/activation grant."
     },
     "B2": {
       "result": "PASS",
-      "evidence": "Every independently retained lifecycle class refuses destructive rollback with exact rows/columns retained, including grants without cleanup targets. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries. H6 metadata/current source: native-h6-context-proposal-v2.json and h6-review-comments-actual.json bind94projection460context; original89 projection unchanged plus five exact module metadata rows, no generated alias/loader waiver. Prior literal proof limitations retained.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c28 accepts complete H6 source closure/classification and scoped prior eight AB applicability, with c27 exact File descriptor/semantic regeneration/current module inputs and unchanged24 derived mains/toolchain. No new runtime was executed for H6; H5 actual8+1+30+2 and historical literal SQL/helper/writer proofs reused only after exact unchanged semantic inputs review. No native39/Creator/MM/Bot activation or wholeCI grant."
+      "evidence": "Every independently retained lifecycle class refuses destructive rollback with exact rows/columns retained, including grants without cleanup targets. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries. H6 metadata/current source: native-h6-context-proposal-v2.json and h6-review-comments-actual.json bind94projection460context; original89 projection unchanged plus five exact module metadata rows, no generated alias/loader waiver. Prior literal proof limitations retained. H7 exact4f Auth generated dependency delta: native-h7-auth-context-proposal.json binds only two existing context entries;94projection/458othercontext unchanged. Fresh5top26sub current signed Voice-floor/no-effects tests and899GoList/24rawmains/sameGo binary bind current inputs. c35 permits prior literal B2 reuse only for its unchanged facts; no fresh whole-matrix execution claimed.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c28 accepts complete H6 source closure/classification and scoped prior eight AB applicability, with c27 exact File descriptor/semantic regeneration/current module inputs and unchanged24 derived mains/toolchain. No new runtime was executed for H6; H5 actual8+1+30+2 and historical literal SQL/helper/writer proofs reused only after exact unchanged semantic inputs review. No native39/Creator/MM/Bot activation or wholeCI grant. H7 current2-input semantic/applicability and scoped prior A/B reuse independently accepted at http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c35. Full632oldgeneratedfunctions/raw78oldDTO36oldRPC contracts inspected;19populatedAST+2directactualinterface signatures separately verified. No currentconsumer/activation grant."
     },
     "B3": {
       "result": "PASS",
-      "evidence": "Genuine writer-win, DOWN-first exclusion, partial-DDL rollback and timeout rollback are synchronized/observed, not timing-only assumptions. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries. H6 metadata/current source: native-h6-context-proposal-v2.json and h6-review-comments-actual.json bind94projection460context; original89 projection unchanged plus five exact module metadata rows, no generated alias/loader waiver. Prior literal proof limitations retained.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c28 accepts complete H6 source closure/classification and scoped prior eight AB applicability, with c27 exact File descriptor/semantic regeneration/current module inputs and unchanged24 derived mains/toolchain. No new runtime was executed for H6; H5 actual8+1+30+2 and historical literal SQL/helper/writer proofs reused only after exact unchanged semantic inputs review. No native39/Creator/MM/Bot activation or wholeCI grant."
+      "evidence": "Genuine writer-win, DOWN-first exclusion, partial-DDL rollback and timeout rollback are synchronized/observed, not timing-only assumptions. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries. H6 metadata/current source: native-h6-context-proposal-v2.json and h6-review-comments-actual.json bind94projection460context; original89 projection unchanged plus five exact module metadata rows, no generated alias/loader waiver. Prior literal proof limitations retained. H7 exact4f Auth generated dependency delta: native-h7-auth-context-proposal.json binds only two existing context entries;94projection/458othercontext unchanged. Fresh5top26sub current signed Voice-floor/no-effects tests and899GoList/24rawmains/sameGo binary bind current inputs. c35 permits prior literal B3 reuse only for its unchanged facts; no fresh whole-matrix execution claimed.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c28 accepts complete H6 source closure/classification and scoped prior eight AB applicability, with c27 exact File descriptor/semantic regeneration/current module inputs and unchanged24 derived mains/toolchain. No new runtime was executed for H6; H5 actual8+1+30+2 and historical literal SQL/helper/writer proofs reused only after exact unchanged semantic inputs review. No native39/Creator/MM/Bot activation or wholeCI grant. H7 current2-input semantic/applicability and scoped prior A/B reuse independently accepted at http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c35. Full632oldgeneratedfunctions/raw78oldDTO36oldRPC contracts inspected;19populatedAST+2directactualinterface signatures separately verified. No currentconsumer/activation grant."
     },
     "B4": {
       "result": "PASS",
-      "evidence": "Voice013 retained outbox/counter refusal and no MM020 import are preserved; only early inherited-snapshot refusal was added/reviewed408. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries. H6 metadata/current source: native-h6-context-proposal-v2.json and h6-review-comments-actual.json bind94projection460context; original89 projection unchanged plus five exact module metadata rows, no generated alias/loader waiver. Prior literal proof limitations retained.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c28 accepts complete H6 source closure/classification and scoped prior eight AB applicability, with c27 exact File descriptor/semantic regeneration/current module inputs and unchanged24 derived mains/toolchain. No new runtime was executed for H6; H5 actual8+1+30+2 and historical literal SQL/helper/writer proofs reused only after exact unchanged semantic inputs review. No native39/Creator/MM/Bot activation or wholeCI grant."
+      "evidence": "Voice013 retained outbox/counter refusal and no MM020 import are preserved; only early inherited-snapshot refusal was added/reviewed408. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries. H6 metadata/current source: native-h6-context-proposal-v2.json and h6-review-comments-actual.json bind94projection460context; original89 projection unchanged plus five exact module metadata rows, no generated alias/loader waiver. Prior literal proof limitations retained. H7 exact4f Auth generated dependency delta: native-h7-auth-context-proposal.json binds only two existing context entries;94projection/458othercontext unchanged. Fresh5top26sub current signed Voice-floor/no-effects tests and899GoList/24rawmains/sameGo binary bind current inputs. c35 permits prior literal B4 reuse only for its unchanged facts; no fresh whole-matrix execution claimed.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c28 accepts complete H6 source closure/classification and scoped prior eight AB applicability, with c27 exact File descriptor/semantic regeneration/current module inputs and unchanged24 derived mains/toolchain. No new runtime was executed for H6; H5 actual8+1+30+2 and historical literal SQL/helper/writer proofs reused only after exact unchanged semantic inputs review. No native39/Creator/MM/Bot activation or wholeCI grant. H7 current2-input semantic/applicability and scoped prior A/B reuse independently accepted at http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c35. Full632oldgeneratedfunctions/raw78oldDTO36oldRPC contracts inspected;19populatedAST+2directactualinterface signatures separately verified. No currentconsumer/activation grant."
     }
   }
 }
