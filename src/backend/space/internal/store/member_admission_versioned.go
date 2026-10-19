@@ -10,7 +10,7 @@ import (
 
 func (s *SpaceStore) memberDecisionSchema(ctx context.Context) (int64, error) {
 	var version int64
-	if err := s.db().QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || (version != 39 && version != 40 && version != 41 && version != 42 && version != 44 && version != 45 && version != 46) {
+	if err := s.db().QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || (version != 39 && version != 40 && version != 41 && version != 42 && version != 44 && version != 45 && version != 46 && version != 47) {
 		return 0, ErrJoinAttemptUnavailable
 	}
 	return version, nil
@@ -99,7 +99,7 @@ func (s *SpaceStore) markMemberDecisionPublished(ctx context.Context, ref JoinAt
 	if err != nil {
 		return err
 	}
-	if version == 40 || version == 41 || version == 42 || version == 44 || version == 45 || version == 46 {
+	if version == 40 || version == 41 || version == 42 || version == 44 || version == 45 || (version == 46 || version == 47) {
 		return s.MarkVersionedJoinDecisionBasisPublished(ctx, ref, sha, publication)
 	}
 	return s.MarkJoinDecisionBasisPublished(ctx, ref, sha, publication)

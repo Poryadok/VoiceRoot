@@ -1,0 +1,23 @@
+package store
+
+// Exact46 projection: excludes only the authenticated47 objects/column/check,
+// and restores the immutable44 source_before body at its unchanged function OID.
+// It never removes an arbitrary function, table, guard or caller-selected name.
+const nativeReadinessPre47ProjectionSQL = `
+ SELECT sha256(convert_to(jsonb_build_object(
+  'tables',(SELECT jsonb_agg(jsonb_build_array(c.oid,c.relname,c.relowner,c.relkind,c.relpersistence,c.relrowsecurity,c.relforcerowsecurity,
+    CASE WHEN n.nspname='native_membership_guard' THEN c.relacl END) ORDER BY c.oid) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE ((n.nspname='public' AND c.relname=ANY(native_membership_guard.coverage())) OR (n.nspname='native_membership_guard' AND c.relkind='r')) AND c.oid<>ALL($1::oid[])),
+  'columns',(SELECT jsonb_agg(to_jsonb(a) ORDER BY a.attrelid,a.attnum) FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE a.attnum>0 AND NOT a.attisdropped AND ((n.nspname='public' AND c.relname=ANY(native_membership_guard.coverage())) OR n.nspname='native_membership_guard') AND c.oid<>ALL($1::oid[]) AND NOT(c.oid='native_membership_guard.spaces'::regclass AND a.attname='terminal_maintenance_phase')),
+  'triggers',(SELECT jsonb_agg(to_jsonb(t) ORDER BY t.oid) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE ((n.nspname='public' AND c.relname=ANY(native_membership_guard.coverage())) OR n.nspname='native_membership_guard') AND c.oid<>ALL($1::oid[])),
+  'constraints',(SELECT jsonb_agg(to_jsonb(k) ORDER BY k.oid) FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE ((n.nspname='public' AND c.relname=ANY(native_membership_guard.coverage())) OR n.nspname='native_membership_guard') AND c.oid<>ALL($1::oid[]) AND k.oid<>$3::oid),
+  'functions',(SELECT jsonb_agg(jsonb_build_array(p.oid,CASE WHEN p.oid=$5::oid THEN replace(pg_get_functiondef(p.oid),p.prosrc,$4::text) ELSE pg_get_functiondef(p.oid) END,p.proowner,p.proacl) ORDER BY p.oid)
+   FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+   WHERE p.prokind='f' AND n.nspname IN ('public','native_membership_guard') AND p.oid<>ALL($2::oid[]))
+ )::text,'UTF8'))
+`
+
+const nativeReadinessPre47SourceBefore = "\r\nDECLARE s uuid;r jsonb;old_space uuid;p uuid;frame native_membership_guard.frames;\r\nBEGIN\r\n IF TG_OP='TRUNCATE' THEN RAISE EXCEPTION 'membership source TRUNCATE forbidden' USING ERRCODE='55000'; END IF;\r\n IF TG_TABLE_NAME='space_permanent_purge_fences' THEN\r\n  IF TG_OP='DELETE' OR (TG_OP='UPDATE' AND to_jsonb(NEW) IS DISTINCT FROM to_jsonb(OLD)) THEN\r\n   RAISE EXCEPTION 'permanent Space retirement cannot be erased or rebound' USING ERRCODE='55000';\r\n  END IF;\r\n  IF TG_OP='UPDATE' THEN RETURN NEW; END IF;\r\n END IF;\r\n IF TG_TABLE_NAME='spaces' AND TG_OP='UPDATE' AND to_jsonb(NEW)->>'owner_profile_id' IS NOT DISTINCT FROM to_jsonb(OLD)->>'owner_profile_id' THEN RETURN NEW; END IF;\r\n r:=CASE WHEN TG_OP='DELETE' THEN to_jsonb(OLD) ELSE to_jsonb(NEW) END;\r\n s:=(r->>TG_ARGV[0])::uuid;\r\n IF TG_OP='UPDATE' THEN old_space:=(to_jsonb(OLD)->>TG_ARGV[0])::uuid;\r\n  IF old_space IS DISTINCT FROM s THEN RAISE EXCEPTION 'membership source cannot move Space' USING ERRCODE='55000'; END IF;\r\n END IF;\r\n -- Only the exact existing terminal workflow may bypass interactive capture.\r\n -- Existing native guards still impose their own permanent/current11 checks.\r\n IF (TG_OP='DELETE' OR (TG_OP='UPDATE' AND TG_TABLE_NAME IN ('space_ordinary_member_heads','space_community_member_heads','space_membership_ownership_heads')))\r\n  AND native_membership_guard.terminal(s) THEN\r\n  IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;\r\n END IF;\r\n PERFORM native_membership_guard.scope(s);\r\n SELECT * INTO frame FROM native_membership_guard.frames WHERE xid=txid_current() AND space_id=s AND pid=pg_backend_pid() FOR UPDATE;\r\n IF NOT FOUND THEN RAISE EXCEPTION 'native source mutation requires DB capture' USING ERRCODE='55000'; END IF;\r\n p:=(r->>'profile_id')::uuid;\r\n IF p IS NOT NULL AND NOT EXISTS(SELECT 1 FROM native_membership_guard.profiles WHERE xid=txid_current() AND space_id=s AND profile_id=p) THEN\r\n  RAISE EXCEPTION 'native mutation omitted affected profile' USING ERRCODE='55000';\r\n END IF;\r\n UPDATE native_membership_guard.frames SET sequence=sequence+1,completed_sequence=-1,completed_digest=NULL,completed_at=NULL\r\n WHERE xid=txid_current() AND space_id=s;\r\n IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;\r\nEND "

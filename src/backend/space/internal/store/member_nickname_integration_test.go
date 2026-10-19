@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -191,9 +190,16 @@ func TestMemberNickname_ManagedRosterDoesNotCreateLocalOverride(t *testing.T) {
 	st := nicknameStoreFixture(t)
 	ctx := context.Background()
 	app, env, owner, account, target := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	space, _, err := st.CreateCommunityBootstrapSpace(ctx, CommunityBootstrapSpaceInput{OperationID: uuid.New(), ApplicationID: app, EnvironmentID: env, OwnerAccountID: account, OwnerProfileID: owner, CorporationKey: "nickname-corp", TemplateID: "guild-default"})
+	// This fixture intentionally has the pre-native audit/nickname schema.
+	// Seed its existing managed membership facts explicitly; the current GIS
+	// producer requires its real qualified native cohort and is tested there.
+	space, err := st.CreateSpace(ctx, owner, "legacy nickname community", "", "private")
 	require.NoError(t, err)
-	_, err = st.ApplyCommunityRoster(ctx, CommunityRosterInput{OperationID: uuid.New(), ApplicationID: app, EnvironmentID: env, CorporationKey: "nickname-corp", SpaceID: space.ID, OwnerGeneration: 1, SourceRevision: 1, SnapshotSHA256: []byte("11111111111111111111111111111111"), LeaseExpiresAt: time.Now().Add(time.Minute), ProfileIDs: []uuid.UUID{target}})
+	_, err = st.Pool.Exec(ctx, `INSERT INTO community_owner_authority(space_id,application_id,environment_id,corporation_key,owner_account_id,owner_profile_id,owner_generation,status,roster_source_revision,roster_sha256,roster_lease_expires_at)
+ VALUES($1,$2,$3,'nickname-corp',$4,$5,1,'active',1,$6,clock_timestamp()+interval '1 minute')`, space.ID, app, env, account, owner, []byte("11111111111111111111111111111111"))
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, `INSERT INTO community_roster_members(space_id,profile_id,source_rank,source_reasons,source_revision,owner_generation,lease_expires_at)
+ VALUES($1,$2,'member',ARRAY['membership'],1,1,clock_timestamp()+interval '1 minute')`, space.ID, target)
 	require.NoError(t, err)
 	_, err = st.UpdateMemberNickname(ctx, space.ID, target, owner, "Must not override")
 	require.ErrorIs(t, err, ErrNicknameExternallyManaged)

@@ -85,7 +85,7 @@ func (s *SpaceStore) createNativeCommunityBootstrapSpace(ctx context.Context, in
 		return nil, false, err
 	}
 	var capture *effectiveMemberMutations
-	if version == 44 || version == 45 || version == 46 {
+	if version == 44 || version == 45 || (version == 46 || version == 47) {
 		// Same package-private absent identity/cohort protocol as native Creator;
 		// this caller's distinct kind4 proof is the exact GIS operation journal.
 		capture, err = scoped.captureBornCreatorEffectiveMutation(ctx, space, in.OwnerProfileID)
@@ -98,7 +98,7 @@ func (s *SpaceStore) createNativeCommunityBootstrapSpace(ctx context.Context, in
 	if err != nil {
 		return nil, false, err
 	}
-	if version != 44 && version != 45 && version != 46 {
+	if version != 44 && version != 45 && version != 46 && version != 47 {
 		capture, err = scoped.captureNativeEffectiveMemberMutation(ctx, space, []uuid.UUID{in.OwnerProfileID})
 		if err != nil {
 			return nil, false, err

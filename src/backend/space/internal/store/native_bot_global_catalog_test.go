@@ -28,7 +28,7 @@ func TestNativeBotGlobal46CanonicalStructure(t *testing.T) {
 				image = "postgres:18-alpine"
 			}
 			db := integrationtest.NewSourceMigrationFixtureWithImage(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/space_db"), image)
-			db.Run(true, "up")
+			db.Run(true, "goto", "46")
 			var shape string
 			require.NoError(t, db.Pool.QueryRow(ctx, nativeReadinessStructureSQL).Scan(&shape))
 			digest := sha256.Sum256([]byte(shape))

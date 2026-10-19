@@ -1721,3 +1721,39 @@ receipts: the latter require exact sealed coverage and no unresolved durable
 admissions across process incarnations. Dead-incarnation recovery remains
 unsupported without qualified termination evidence; timeout never skips11.
 This extension neither activates public P3 nor establishes old-writer coverage.
+### Native terminal maintenance closure
+
+Migration `000047_native_terminal_maintenance` implements negative maintenance
+after a real native/current11 local purge. Fixed DB-owned operations acknowledge
+the exact saved outbox value, compact FULL evidence into the existing eleven
+completion tuples, expire delivered events, and expire the compact aggregate and
+tombstone. They require an actual non-owner serving LOGIN, READ COMMITTED, the
+same-backend exclusive Space fence and the qualified retained guard epoch.
+They never reopen membership capture, restore, INITIALIZE or BORN for a retired
+Space. Direct terminal evidence/outbox writes cannot use the old DELETE shortcut.
+
+The protected Space-only registry records a monotone FULL → COMPACT → EXPIRED
+representation. Initial certification requires intact full native/current11 P3
+evidence. COMPACT and EXPIRED can only result from the fixed atomic DB operations;
+old compact or missing evidence without that provenance remains unavailable.
+The phase contains no new permanent participant hashes, account/profile identity
+copies or renewed deadlines. The ordinary full-row terminal predicate remains
+unchanged and may correctly become false after certified minimization.
+
+The existing first clocks remain authoritative: full evidence expires at the
+first PURGED completion plus 30 days, the tombstone at its original purge plus 365
+days, and delivered outbox at its first ACK plus 30 days. Saved READY events,
+including their original historical generation, survive tombstone expiry and can
+still be delivered. ACK records the existing worker's successful publication; it
+does not itself prove broker delivery. Each cleanup Space owns its own bounded
+fenced transaction; callbacks and remote I/O do not run under these fences.
+
+Installation is explicit and fail-closed. Published migrations44–46 remain
+unchanged. A trusted installer first admits the exact46 closure, applies47, then
+calls `TransitionNativeMembershipCatalog47`; fresh installs use the same explicit
+46 checkpoint before47. The transition authenticates the complete fixed PG16/18
+closure and the retained46 activation receipt, reconstructs only its exact old
+projection, and atomically changes the seal while preserving epoch, cutovers,
+history and prior receipts. Applying47 alone does not reseal or enable serving.
+Unknown installation custody or a real guard gap cannot be repaired by this API.
+DOWN refuses admitted47 proof; an unused rollback restores the exact old46 seal.

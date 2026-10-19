@@ -106,7 +106,7 @@ func (s *SpaceStore) CreateSpaceWithCreator(ctx context.Context, creator *lifecy
 		return nil, err
 	}
 	var effective *effectiveMemberMutations
-	if schema == 44 || schema == 45 || schema == 46 {
+	if schema == 44 || schema == 45 || (schema == 46 || schema == 47) {
 		effective, err = scoped.captureBornCreatorEffectiveMutation(ctx, w.space, w.profile)
 		if err != nil {
 			return nil, err
@@ -117,7 +117,7 @@ func (s *SpaceStore) CreateSpaceWithCreator(ctx context.Context, creator *lifecy
 	if err != nil {
 		return nil, err
 	}
-	if schema != 44 && schema != 45 && schema != 46 {
+	if schema != 44 && schema != 45 && schema != 46 && schema != 47 {
 		effective, err = scoped.captureNativeEffectiveMemberMutation(ctx, w.space, []uuid.UUID{w.profile})
 		if err != nil {
 			return nil, err

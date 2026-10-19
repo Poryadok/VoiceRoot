@@ -62,7 +62,7 @@ func (s *SpaceStore) ReadMemberAdmissionAuthority(ctx context.Context, req *spac
 	if err = tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&schema); err != nil {
 		return nil, ErrMemberAuthorityUnavailable
 	}
-	if schema == 44 || schema == 45 || schema == 46 {
+	if schema == 44 || schema == 45 || (schema == 46 || schema == 47) {
 		// Catalog authentication above is necessary but not per-Space cutover.
 		// The same fenced snapshot must prove COMPLETE and an actual serving
 		// LOGIN before any positive source facts leave this protected route.

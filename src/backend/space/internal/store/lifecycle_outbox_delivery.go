@@ -3,7 +3,6 @@ package store
 import (
 	"bytes"
 	"context"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"time"
 	"voice/backend/space/internal/spacecore"
@@ -31,6 +30,10 @@ func (s *SpaceStore) MarkLifecycleEventDelivered(ctx context.Context, record spa
 	if err != nil {
 		return err
 	}
+	eventID, err := canonicalLifecycleUUID(record.EventID)
+	if err != nil {
+		return err
+	}
 	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return err
@@ -39,8 +42,14 @@ func (s *SpaceStore) MarkLifecycleEventDelivered(ctx context.Context, record spa
 	if err := lockLifecycleSpace(ctx, tx, spaceID); err != nil {
 		return err
 	}
+	if terminal, err := s.markTerminalLifecycleEventDelivered(ctx, tx, spaceID, eventID, raw, hash[:]); terminal || err != nil {
+		if err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	}
 	var state string
-	if err = tx.QueryRow(ctx, `SELECT state FROM space_lifecycle_outbox WHERE event_id=$1 AND event_bytes=$2 AND event_sha256=$3 FOR UPDATE`, uuid.MustParse(record.EventID), raw, hash[:]).Scan(&state); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT state FROM space_lifecycle_outbox WHERE event_id=$1 AND event_bytes=$2 AND event_sha256=$3 FOR UPDATE`, eventID, raw, hash[:]).Scan(&state); err != nil {
 		return err
 	}
 	if state == "DELIVERED" {
@@ -53,7 +62,7 @@ func (s *SpaceStore) MarkLifecycleEventDelivered(ctx context.Context, record spa
 		return err
 	}
 	var saved []byte
-	err = tx.QueryRow(ctx, `UPDATE space_lifecycle_outbox SET state='DELIVERED',delivered_at=COALESCE(delivered_at,clock_timestamp()) WHERE event_id=$1 AND state IN ('READY','DELIVERED') AND event_bytes=$2 AND event_sha256=$3 RETURNING event_bytes`, uuid.MustParse(record.EventID), raw, hash[:]).Scan(&saved)
+	err = tx.QueryRow(ctx, `UPDATE space_lifecycle_outbox SET state='DELIVERED',delivered_at=COALESCE(delivered_at,clock_timestamp()) WHERE event_id=$1 AND state IN ('READY','DELIVERED') AND event_bytes=$2 AND event_sha256=$3 RETURNING event_bytes`, eventID, raw, hash[:]).Scan(&saved)
 	if err != nil {
 		return err
 	}

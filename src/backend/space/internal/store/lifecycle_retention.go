@@ -11,6 +11,19 @@ func (s *SpaceStore) CleanupLifecycleEvidence(ctx context.Context) error {
 	if s == nil || s.Pool == nil {
 		return ErrLifecycleEvidenceInvalid
 	}
+	var migrated bool
+	if err := s.Pool.QueryRow(ctx, `SELECT to_regclass('public.schema_migrations') IS NOT NULL`).Scan(&migrated); err != nil {
+		return err
+	}
+	if migrated {
+		var version int64
+		if err := s.Pool.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil {
+			return err
+		}
+		if version == 47 {
+			return s.cleanupLifecycleEvidence47(ctx)
+		}
+	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err

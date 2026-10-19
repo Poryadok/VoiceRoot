@@ -47,7 +47,7 @@ func TestNative46TrustedTransitionPreserves44And45(t *testing.T) {
 				var oldSeal []byte
 				require.NoError(t, db.Pool.QueryRow(ctx, snapshotSQL).Scan(&before))
 				require.NoError(t, db.Pool.QueryRow(ctx, `SELECT catalog_sha256 FROM native_membership_guard.epoch`).Scan(&oldSeal))
-				db.Run(true, "up")
+				db.Run(true, "goto", "46")
 				serving := &SpaceStore{Pool: nativeReadinessLogin(t, ctx, db.Pool)}
 				request := &spacev1.GetMemberAdmissionAuthorityRequest{ProtocolVersion: 1, SpaceId: space.ID.String(), ProfileId: space.OwnerProfileID.String()}
 				_, err = serving.ReadMemberAdmissionAuthority(ctx, request)

@@ -26,7 +26,7 @@ func TestNative46LifecycleReservationAndProofUseGuardedOwner(t *testing.T) {
 	account, actor := uuid.New(), uuid.New()
 	space, err := admin.CreateSpace(ctx, actor, "R23 durable lifecycle", "", "private")
 	require.NoError(t, err)
-	db.Run(true, "up")
+	db.Run(true, "goto", "46")
 	_, err = admin.TransitionNativeMembershipCatalog46(ctx)
 	require.NoError(t, err)
 	require.NoError(t, admin.InitializeNativeMembership(ctx, space.ID))

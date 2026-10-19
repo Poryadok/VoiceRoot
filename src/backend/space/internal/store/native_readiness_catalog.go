@@ -60,16 +60,29 @@ func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version 
 	pins := append([]nativeReadinessFunctionPin(nil), nativeReadinessFunctionPins...)
 	helperCount := 1
 	privateTables := []string{"epoch", "spaces", "frames", "profiles"}
-	if version == 45 || version == 46 {
+	if version == 45 || version == 46 || version == 47 {
 		pins = append(pins, nativeReadinessLegacySelectionPin)
 		helperCount = 2
 	} else if version != 44 {
 		return ErrMemberAuthorityUnavailable
 	}
-	if version == 46 {
+	if version == 46 || version == 47 {
 		pins = append(pins, nativeReadinessGlobalRemovalPins...)
 		helperCount += 3 // Three exact public Bot wrappers; five new private functions.
 		privateTables = append(privateTables, "bot_terminals", "bot_removal_receipts", "catalog46_transition")
+	}
+	if version == 47 {
+		// Replace only the authenticated old source_before body. Its unchanged
+		// function metadata and all other old pins remain mandatory.
+		for i := range pins {
+			if pins[i].signature == "native_membership_guard.source_before()" {
+				pins = append(pins[:i:i], pins[i+1:]...)
+				break
+			}
+		}
+		pins = append(pins, nativeReadinessTerminal47Pins...)
+		helperCount += 4 // Four new public terminal wrappers, five new private helpers.
+		privateTables = append(privateTables, "terminal_maintenance_scope", "catalog47_transition")
 	}
 	var structure string
 	if err := tx.QueryRow(ctx, nativeReadinessStructureSQL).Scan(&structure); err != nil {
@@ -174,7 +187,7 @@ func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version 
   AND t.tgtype=19 AND t.tgfoid='public.guard_join_start_selection_immutable()'::regprocedure)`).Scan(&valid); err != nil || !valid {
 		return ErrMemberAuthorityUnavailable
 	}
-	if version == 45 || version == 46 {
+	if version == 45 || version == 46 || version == 47 {
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid='public.space_join_operations'::regclass
  AND t.tgname='space_join_legacy_selection_immutable' AND t.tgenabled='O' AND NOT t.tgdeferrable AND NOT t.tginitdeferred
  AND NOT t.tgisinternal AND t.tgtype=19 AND t.tgnargs=0 AND t.tgargs=''::bytea
@@ -182,8 +195,13 @@ func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version 
 			return ErrMemberAuthorityUnavailable
 		}
 	}
-	if version == 46 {
-		return checkNativeGlobalRemoval46Triggers(ctx, tx)
+	if version == 46 || version == 47 {
+		if err := checkNativeGlobalRemoval46Triggers(ctx, tx); err != nil {
+			return err
+		}
+	}
+	if version == 47 {
+		return checkNativeTerminal47Triggers(ctx, tx)
 	}
 	return nil
 }

@@ -46,7 +46,7 @@ func TestNativeBotGlobal46DownRejectsOldRepeatableSnapshot(t *testing.T) {
 	}
 	ctx := context.Background()
 	db := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/space_db"))
-	db.Run(true, "up")
+	db.Run(true, "goto", "46")
 	old, err := db.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
 	require.NoError(t, err)
 	defer old.Rollback(ctx)
@@ -70,7 +70,7 @@ func TestNativeBotGlobal46DownRCSeesFirstCommittedWriter(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	db := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/space_db"))
-	db.Run(true, "up")
+	db.Run(true, "goto", "46")
 	writer, err := db.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	require.NoError(t, err)
 	defer writer.Rollback(context.Background())

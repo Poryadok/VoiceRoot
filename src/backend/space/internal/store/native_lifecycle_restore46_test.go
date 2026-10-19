@@ -23,7 +23,7 @@ func TestNative46RestoreRetryAndLiveEventUseGuardedOwner(t *testing.T) {
 	f := newLifecycleOutcomeFixtureWithStore(t, admin, len(lifecycleTestParticipants))
 	_, _, err := admin.CompleteLifecycleSchedule(ctx, f.space)
 	require.NoError(t, err)
-	db.Run(true, "up")
+	db.Run(true, "goto", "46")
 	_, err = admin.TransitionNativeMembershipCatalog46(ctx)
 	require.NoError(t, err)
 	require.NoError(t, admin.InitializeNativeMembership(ctx, f.space), "actual administrative first UNKNOWN cutover while frozen")

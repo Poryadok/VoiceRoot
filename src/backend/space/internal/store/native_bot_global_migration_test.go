@@ -25,7 +25,7 @@ func TestNativeBotGlobal46StorageAndUnactivatedDown(t *testing.T) {
 	db.Run(true, "goto", "45")
 	var retained []byte
 	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT catalog_sha256 FROM native_membership_guard.epoch`).Scan(&retained))
-	db.Run(true, "up")
+	db.Run(true, "goto", "46")
 	var unchanged []byte
 	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT catalog_sha256 FROM native_membership_guard.epoch`).Scan(&unchanged))
 	require.Equal(t, retained, unchanged, "UP must not promote/reseal an established guard epoch")
@@ -37,7 +37,7 @@ func TestNativeBotGlobal46StorageAndUnactivatedDown(t *testing.T) {
 	var version int64
 	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version))
 	require.EqualValues(t, 45, version)
-	db.Run(true, "up")
+	db.Run(true, "goto", "46")
 	root, actor := uuid.New(), uuid.New()
 	rootSHA, actorBinding := sha256.Sum256(root[:]), sha256.Sum256(actor[:])
 	_, err := db.Pool.Exec(ctx, `INSERT INTO native_membership_guard.bot_terminals(bot_id,decision_id,decision_sha256,actor_binding_sha256,created_at) VALUES($1,$2,$3,$4,clock_timestamp())`, bot, root, rootSHA[:], actorBinding[:])
@@ -63,7 +63,7 @@ func TestNativeBotGlobal46TerminalSerializesWithAddPredicate(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	db := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/space_db"))
-	db.Run(true, "up")
+	db.Run(true, "goto", "46")
 	bot, root, actor := uuid.New(), uuid.New(), uuid.New()
 	rootSHA, actorSHA := sha256.Sum256(root[:]), sha256.Sum256(actor[:])
 	add, err := db.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})

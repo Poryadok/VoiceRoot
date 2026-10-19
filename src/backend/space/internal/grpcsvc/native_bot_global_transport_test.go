@@ -46,7 +46,7 @@ func TestNativeBotGlobal46ProtectedTransport(t *testing.T) {
 	require.NoError(t, err)
 	other, err := admin.CreateSpace(ctx, uuid.New(), "Global Bot cross Space", "", "public")
 	require.NoError(t, err)
-	db.Run(true, "up")
+	db.Run(true, "goto", "46")
 	_, err = admin.TransitionNativeMembershipCatalog46(ctx)
 	require.NoError(t, err)
 	for _, space := range []uuid.UUID{first.ID, other.ID} {

@@ -100,11 +100,18 @@ func (s *SpaceStore) UpdateMemberNickname(ctx context.Context, spaceID, target, 
 	if row.Nickname == nil && nickname == nil || row.Nickname != nil && nickname != nil && *row.Nickname == *nickname {
 		return row, nil
 	}
+	capture, err := s.captureMemberMutationIfPresent(ctx, spaceID, []uuid.UUID{target})
+	if err != nil {
+		return nil, err
+	}
 	row, err = scanMembershipRow(s.db().QueryRow(ctx, `UPDATE space_members SET nickname=$3 WHERE space_id=$1 AND profile_id=$2 RETURNING space_id,profile_id,joined_at,nickname`, spaceID, target, nickname))
 	if err != nil {
 		return nil, err
 	}
 	_, err = s.db().Exec(ctx, `INSERT INTO audit_log(space_id,actor_profile_id,action,target_type,target_id,details)
  VALUES($1,$2,'member_nickname_updated','profile',$3,'{"changed_fields":["nickname"]}'::jsonb)`, spaceID, actor, target)
+	if err == nil && capture != nil {
+		err = s.finishEffectiveMemberMutations(ctx, capture)
+	}
 	return row, err
 }

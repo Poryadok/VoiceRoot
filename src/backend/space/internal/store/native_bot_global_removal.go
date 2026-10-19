@@ -87,7 +87,7 @@ func (s *SpaceStore) ApplyBotInstallationRemoval(ctx context.Context, proof *bot
 		return nil, err
 	}
 	var version int64
-	if err = tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || version != 46 {
+	if err = tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || version != 46 && version != 47 {
 		return nil, ErrMemberAuthorityUnavailable
 	}
 	var terminal bool
@@ -107,7 +107,9 @@ func (s *SpaceStore) ApplyBotInstallationRemoval(ctx context.Context, proof *bot
 	}
 	// Completed replay skips capture, so the capture's serving LOGIN/COMPLETE
 	// check cannot stand in for this explicit read/response boundary.
-	if err=scoped.RequireScopedNativeMembershipReadiness(ctx,in.SpaceID);err!=nil{return nil,err}
+	if err = scoped.RequireScopedNativeMembershipReadiness(ctx, in.SpaceID); err != nil {
+		return nil, err
+	}
 	var saved []byte
 	if err = tx.QueryRow(ctx, `SELECT public.space_bot_global_removal_saved($1,$2)`, binding.OperationID, in.SpaceID).Scan(&saved); err != nil {
 		return nil, ErrMemberAuthorityUnavailable
