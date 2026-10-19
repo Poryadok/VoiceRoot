@@ -169,9 +169,18 @@ func (s *SpaceStore) ReserveJoinAttemptApproval(ctx context.Context, in JoinAtte
 // It must recheck their strict monotonic freshness budget; no RPC under locks.
 type JoinAttemptApprovalGuard func(context.Context, *SpaceStore, JoinAttemptApprovalInput) error
 
+// joinAttemptDecisionHook persists only local decision data in the same TX.
+// It is separate from the final pure authority guard; no RPC belongs here.
+// Only the private verified decision adapter may supply a production hook.
+type joinAttemptDecisionHook func(context.Context, *SpaceStore, *joinAttemptPrivate) error
+
 // ApproveJoinAttempt records a review decision, not successful admission. The
 // coordinator still owes native Ensure/first publication and fresh owner guards.
 func (s *SpaceStore) ApproveJoinAttempt(ctx context.Context, in JoinAttemptApprovalInput, guard JoinAttemptApprovalGuard) (*JoinAttempt, error) {
+	return s.approveJoinAttempt(ctx, in, guard, nil)
+}
+
+func (s *SpaceStore) approveJoinAttempt(ctx context.Context, in JoinAttemptApprovalInput, guard JoinAttemptApprovalGuard, hook joinAttemptDecisionHook) (*JoinAttempt, error) {
 	if s == nil || s.Pool == nil || s.tx != nil {
 		return nil, ErrJoinAttemptUnavailable
 	}
@@ -258,7 +267,8 @@ func (s *SpaceStore) ApproveJoinAttempt(ctx context.Context, in JoinAttemptAppro
 	if err = guard(ctx, &scoped, in); err != nil {
 		return nil, err
 	}
-	if a.State == "PENDING" {
+	newDecision := a.State == "PENDING"
+	if newDecision {
 		a.approvedAccount = &in.ActorAccountID
 		a.approvedProfile = &in.ActorProfileID
 		a.approvalOperation = &in.OperationID
@@ -278,6 +288,11 @@ func (s *SpaceStore) ApproveJoinAttempt(ctx context.Context, in JoinAttemptAppro
 	}
 	if tag.RowsAffected() != 1 {
 		return nil, ErrJoinAttemptConflict
+	}
+	if newDecision && hook != nil {
+		if err = hook(ctx, &scoped, a); err != nil {
+			return nil, err
+		}
 	}
 	// Recheck after journal writes too: database waits must not extend authority.
 	if err = guard(ctx, &scoped, in); err != nil {
@@ -454,8 +469,15 @@ func canonicalJoinAnswers(p entrypolicy.Policy, answers []entrypolicy.Answer) ([
 }
 
 func (s *SpaceStore) SubmitJoinAttempt(ctx context.Context, in JoinAttemptInput, id uuid.UUID, answers []entrypolicy.Answer) (*JoinAttempt, error) {
+	return s.submitJoinAttempt(ctx, in, id, answers, nil, nil)
+}
+
+func (s *SpaceStore) submitJoinAttempt(ctx context.Context, in JoinAttemptInput, id uuid.UUID, answers []entrypolicy.Answer, hook joinAttemptDecisionHook, guard func() error) (*JoinAttempt, error) {
 	if !validJoinInput(in) || id == uuid.Nil {
 		return nil, entrypolicy.ErrInvalid
+	}
+	if hook != nil && guard == nil {
+		return nil, ErrJoinAttemptUnavailable
 	}
 	result, err := withOwnershipScopeValue(s, ctx, []uuid.UUID{in.SpaceID}, func(scoped *SpaceStore) (*JoinAttempt, error) {
 		a, err := scanJoinAttempt(scoped.db().QueryRow(ctx, `SELECT `+joinAttemptColumns+` FROM space_join_attempts WHERE id=$1 FOR UPDATE`, id))
@@ -511,6 +533,11 @@ func (s *SpaceStore) SubmitJoinAttempt(ctx context.Context, in JoinAttemptInput,
 		if p.RequireCaptcha {
 			return nil, ErrJoinAttemptUnavailable
 		}
+		if guard != nil {
+			if err = guard(); err != nil {
+				return nil, err
+			}
+		}
 		a.submission = submission
 		switch {
 		case answerErr != nil:
@@ -525,6 +552,11 @@ func (s *SpaceStore) SubmitJoinAttempt(ctx context.Context, in JoinAttemptInput,
 		if err != nil {
 			return nil, err
 		}
+		if hook != nil && (a.State == "PENDING" || a.State == "READY") {
+			if err = hook(ctx, scoped, a); err != nil {
+				return nil, err
+			}
+		}
 		// The writer may have waited after the first clock sample (including in
 		// database triggers). A newly collected proof must still be within its
 		// window after those waits; this does not expire historical pending proof.
@@ -533,9 +565,19 @@ func (s *SpaceStore) SubmitJoinAttempt(ctx context.Context, in JoinAttemptInput,
 			return nil, err
 		}
 		if !withinCollection {
+			if hook != nil {
+				// The outer transaction rolls back both newly collected proof and
+				// its decision basis; no partial historical decision survives.
+				return nil, ErrJoinAttemptDenied
+			}
 			_, err = scoped.db().Exec(ctx, `UPDATE space_join_attempts SET state='EXPIRED',evidence_sha256=NULL WHERE id=$1`, id)
 			a.State = "EXPIRED"
 			a.EvidenceSHA256 = nil
+		}
+		if guard != nil {
+			if err = guard(); err != nil {
+				return nil, err
+			}
 		}
 		return &a.JoinAttempt, err
 	})
