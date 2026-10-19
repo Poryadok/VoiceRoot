@@ -13,6 +13,48 @@ the public pin file or from an Observe response. Then call
 `NewReadbackClient(descriptor, validatedBinding, ownLaunchTLS, timeout)` using only
 that process's fresh launch identity. A `Client` literal is nonoperational.
 
+The executable native bootstrap entrypoint is now
+`LoadNativeReadbackClient(ctx, exactDescriptorBytes, timeout)`. It consumes fixed
+inherited **FD3** exactly once. FD3 must be a private Unix stream from the launch
+driver; SO_PEERCRED on this same channel must identify UID0 with a positive PID
+in the consumer's namespace. Serving remains nonroot. A different UID, regular
+file, missing FD, unmappable driver PID or unsupported sandbox rejects; no env,
+arbitrary file or public-pin fallback exists. The loader reinstates CLOEXEC,
+installs the mandatory no-exec sandbox before accepting keys, reads one bounded
+frame plus EOF within two seconds (or the earlier context deadline), and closes
+the original and duplicated private descriptors before returning a client.
+
+The profile is `MM_NATIVE_BOOTSTRAP_PRIVATE_FD_V1`. The private JSON envelope has
+exact tags: `version`, `profile`, `descriptor_bytes_sha256`, `recipient`
+(actual PID/UID/GID), `independent_launch_expectations`,
+`own_client_certificate_der`, and `own_client_private_key_pkcs8`. Expectations
+use the exact seven snake-case tags in `privateLaunchExpectations`. Certificate
+and PKCS8 bytes use bounded canonical base64. Framing is the existing U32BE JSON
+frame; no bytes may follow it. The descriptor hash binds the exact protected
+bytes, and the recipient must be this process. The envelope contains only that
+replica's fresh Ed25519 client identity, never controller/private authority keys.
+The loader obtains public pins only after independent private inputs arrive,
+checks all expectations against those pins, then uses the existing exact client
+constructor. It does not obtain expectations from the public file or Observe.
+
+The trusted driver creates a per-launch CLOEXEC socketpair using
+`mmadmissionctl.NewNativeBootstrapChannel`, passes only `Child` as
+`exec.Cmd.ExtraFiles[0]`, and closes its copy of `Child` immediately after Start.
+After independently observing the actual launch and installing protected public
+pins, it calls `Deliver(ctx, descriptorBytes, actualRecipient, expectations,
+ownClientTLS)`. Delivery is private and ends with write shutdown/close. This lets
+the process start closed while the driver observes its real PID; no pre-minted
+PID or file-as-authority is needed. Independent launch/storage/upstream custody
+is still a prerequisite for the driver; the serialization helper cannot create
+it. First supported topology shares compatible PID/user namespaces; cross-
+namespace driver mapping and installed qualification remain separate gates.
+
+Native roots must validate descriptor/config/executable/argv/local database and
+the required service factories in their existing startup sequence. They call the
+loader while domain ingress is closed, then perform STARTUP observation before
+JWKS/runtime preparation and retain the existing OPEN/fresh admission barriers.
+No HTTP/RPC administration or new network listener is introduced by this ABI.
+
 `ReadbackPeerBindingV1` contains public certificates and DRIVER_OBSERVED
 provenance. Its hash domain is `voice.mm.readback-peer-binding.v1` followed by
 NUL. The binary grammar follows the struct's declared field order, excluding

@@ -19,6 +19,11 @@ and c12–c13 (cross-UID peer v1, SHA256
   connection requires the current exact driver registration, kernel PID/UID/GID
   from that same Unix socket, and mutually pinned per-launch TLS 1.3. Legacy raw
   readback is disabled. Authenticated TLS close-notify is mandatory.
+- A concrete per-launch private FD3 producer delivers independent expectations
+  and only the serving process's own TLS identity to the shared native loader.
+  It uses a root-driver Unix socketpair, CLOEXEC/ExtraFiles custody, real recipient
+  PID/UID/GID and exact descriptor bytes; public pins cannot replace private input.
+  The loader installs no-exec and closes the one-shot channel before returning.
 - PostgreSQL head installation/closure against MM024 and MM025, using the
   existing stable admission gate. The installer validates separate serving and
   controller roles, exact immutable receipt indexes and retained continuity.
@@ -65,8 +70,8 @@ qualification, full launch custody, DEV/STAGING rollout or installed authority.
 
 ## Outstanding before a product admission
 
-There is no controller CLI, complete native Docker driver, protected production
-bootstrap/key delivery, full native source/all-session/intent cycle or successful
+There is no controller CLI, complete native Docker driver, qualified installed
+launch/credential custody, full native source/all-session/intent cycle or successful
 restart/restore qualification in this checkpoint. Unknown domain operations
 currently close admission rather than claiming completed BE012 settlement.
 Reconciliation retains the original interrupted operation as unresolved; it does

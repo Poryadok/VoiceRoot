@@ -27,13 +27,12 @@ import (
 )
 
 type childInput struct {
-	TargetPID    int
-	Mode         string
-	Journal      string
-	Descriptor   w.DescriptorV1
-	Binding      w.ReadbackPeerBindingV1
-	Expectations w.LaunchExpectations
-	PrivateKey   []byte
+	TargetPID  int
+	Mode       string
+	Journal    string
+	Descriptor w.DescriptorV1
+	Binding    w.ReadbackPeerBindingV1
+	PrivateKey []byte
 }
 type fixedReadbackRegistry struct{ launch ReadbackRegistration }
 
@@ -66,15 +65,15 @@ func init() {
 		fmt.Println(w.Hash(sha256.Sum256(b)).String() + " " + ns)
 		os.Exit(0)
 	}
-	key, e := x509.ParsePKCS8PrivateKey(in.PrivateKey)
-	if e != nil {
-		os.Exit(3)
-	}
-	der := in.Binding.ConsumerCertificateDER
+	var own tls.Certificate
+	var e error
 	if in.Mode == "server" {
-		der = in.Binding.ControllerCertificateDER
+		key, err := x509.ParsePKCS8PrivateKey(in.PrivateKey)
+		if err != nil {
+			os.Exit(3)
+		}
+		own = tls.Certificate{Certificate: [][]byte{in.Binding.ControllerCertificateDER}, PrivateKey: key}
 	}
-	own := tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}
 	if e = w.DenyFurtherExec(); e != nil {
 		fmt.Fprintln(os.Stderr, "sandbox", e)
 		os.Exit(4)
@@ -113,14 +112,18 @@ func init() {
 			fmt.Fprintln(os.Stderr, "root exe access must stay denied", e)
 			os.Exit(12)
 		}
-		protected, e := w.LoadValidatedPeerBinding(in.Descriptor, in.Expectations)
+		fmt.Println("PRIVATE_BOOTSTRAP_READY_NOEXEC")
+		descriptorBytes, _ := json.Marshal(in.Descriptor)
+		client, e := w.LoadNativeReadbackClient(context.Background(), descriptorBytes, time.Second)
 		if e != nil {
-			fmt.Fprintln(os.Stderr, "bootstrap", e)
-			os.Exit(13)
-		}
-		client, e := w.NewReadbackClient(in.Descriptor, protected, own, time.Second)
-		if e != nil {
+			fmt.Fprintln(os.Stderr, "private bootstrap", e)
 			os.Exit(14)
+		}
+		if _, _, err := syscall.Syscall(syscall.SYS_FCNTL, w.NativeBootstrapFD, syscall.F_GETFD, 0); err != syscall.EBADF {
+			os.Exit(22)
+		}
+		if _, err := w.LoadNativeReadbackClient(context.Background(), descriptorBytes, time.Second); err == nil {
+			os.Exit(23)
 		}
 		if _, e = client.ObserveStartup(context.Background()); e != nil {
 			fmt.Fprintln(os.Stderr, "startup", e)
@@ -218,6 +221,12 @@ func TestActualCrossUIDLaunchTLS(t *testing.T) {
 	}
 	defer func() { _ = server.Process.Kill(); _ = server.Wait() }()
 	client := exec.Command(executable, "-test.run=^$")
+	bootstrap, e := NewNativeBootstrapChannel()
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer bootstrap.Close()
+	client.ExtraFiles = []*os.File{bootstrap.Child}
 	client.Env = append(os.Environ(), "MM_ADMISSION_CHILD=1")
 	client.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 65532, Gid: 65532}}
 	client.Stderr = os.Stderr
@@ -226,6 +235,7 @@ func TestActualCrossUIDLaunchTLS(t *testing.T) {
 	if e = client.Start(); e != nil {
 		t.Fatal(e)
 	}
+	_ = bootstrap.Child.Close()
 	defer func() { _ = client.Process.Kill(); _ = client.Wait() }()
 	// The owned driver actually observes both binaries before issuing pins.
 	b, e := os.ReadFile(fmt.Sprintf("/proc/%d/exe", server.Process.Pid))
@@ -260,14 +270,25 @@ func TestActualCrossUIDLaunchTLS(t *testing.T) {
 	var namespace w.ID
 	copy(namespace[:], nsHash[:16])
 	s := r.Snapshot
+	controllerObservation := sha256.Sum256([]byte(fmt.Sprintf("owned controller pid=%d exe=%s ns=%s", server.Process.Pid, w.Hash(exeHash).String(), serverNS)))
+	consumerObservation := sha256.Sum256([]byte(fmt.Sprintf("owned consumer pid=%d uid=65532 gid=65532 exe=%s ns=%s", client.Process.Pid, w.Hash(exeHash).String(), clientNS)))
+	protectedDir, e := os.Stat(filepath.Dir(w.ReadbackSocket))
+	if e != nil {
+		t.Fatal(e)
+	}
+	socketObservation := sha256.Sum256([]byte(fmt.Sprintf("owned protected directory %s mode=%s stat=%v", filepath.Dir(w.ReadbackSocket), protectedDir.Mode(), protectedDir.Sys())))
+	custodyObservation := sha256.Sum256([]byte("owned driver verified binary + root channel + actual child TSYNC exec denial + no key/listener delegation"))
+	expectations := w.LaunchExpectations{ControllerProcessLaunchID: w.ID{80}, ControllerObservationHash: controllerObservation, ConsumerObservationHash: consumerObservation, SocketMountObservationHash: socketObservation, CustodyContractHash: custodyObservation, ControllerNamespaceID: namespace, ConsumerNamespaceID: namespace}
+	s.Observation.LaunchesHash = consumerObservation
+	s.OpenReceipt.ObservedLaunchesHash = consumerObservation
 	replica := s.Spec.Replicas[0]
 	descriptor := w.DescriptorV1{ProtocolVersion: 1, Purpose: w.NativePurpose, AuthorityScope: w.LocalOwned, ScopeID: s.Identity.ScopeID, ControllerID: s.Identity.ControllerID, Binding: s.Binding, DatabaseLineageID: s.Identity.DatabaseLineageID, ReplicaID: replica.ReplicaID, ProcessLaunchID: replica.LaunchID, AdmittedImageDigest: s.Spec.ImageDigest, AdmittedExecutableHash: replica.ExecutableHash, AdmittedArgv: replica.Argv, ConfigContractHash: s.Spec.ConfigContractHash, CredentialRefsManifestHash: s.Spec.CredentialRefsManifestHash, UpstreamContractManifestHash: s.Spec.UpstreamContractManifestHash, BrokerContractManifestHash: s.Spec.BrokerContractManifestHash, ReadbackProtocol: w.Protocol}
 	sc, sk := ipcCertificate(t, true)
-	cc, ck := ipcCertificate(t, false)
+	cc, _ := ipcCertificate(t, false)
 	scert, _ := x509.ParseCertificate(sc.Certificate[0])
 	ccert, _ := x509.ParseCertificate(cc.Certificate[0])
 	bindingHash, _ := w.BindingHash(s.Binding)
-	p := w.ReadbackPeerBindingV1{Version: 1, Transport: w.LaunchTransport, AuthorityScope: w.LocalOwned, ScopeID: s.Identity.ScopeID, EnvironmentID: s.Identity.EnvironmentID, InstallationID: s.Identity.InstallationID, ControllerID: s.Identity.ControllerID, BindingHash: bindingHash, ConsumerReplicaID: replica.ReplicaID, ConsumerProcessLaunchID: replica.LaunchID, ControllerProcessLaunchID: w.ID{80}, ControllerLaunchObservationHash: w.Hash{81}, ConsumerLaunchObservationHash: s.Observation.LaunchesHash, SocketMountObservationHash: w.Hash{82}, ControllerExpectedKernelPeer: w.NamespacedKernelPeer{PID: int32(server.Process.Pid), UID: 0, GID: 0, ObserverNamespaceID: namespace}, ConsumerExpectedKernelPeer: w.NamespacedKernelPeer{PID: int32(client.Process.Pid), UID: 65532, GID: 65532, ObserverNamespaceID: namespace}, ControllerImageDigest: s.Spec.ImageDigest, ControllerExecutableHash: exeHash, ConsumerImageDigest: s.Spec.ImageDigest, ConsumerExecutableHash: exeHash, ControllerCertificateDERHash: sha256.Sum256(scert.Raw), ControllerSPKIHash: sha256.Sum256(scert.RawSubjectPublicKeyInfo), ConsumerCertificateDERHash: sha256.Sum256(ccert.Raw), ConsumerSPKIHash: sha256.Sum256(ccert.RawSubjectPublicKeyInfo), ControllerCertificateDER: scert.Raw, ConsumerCertificateDER: ccert.Raw, ControllerServerName: "mm-local-controller.test", LaunchKeyCustodyContractHash: w.Hash{83}}
+	p := w.ReadbackPeerBindingV1{Version: 1, Transport: w.LaunchTransport, AuthorityScope: w.LocalOwned, ScopeID: s.Identity.ScopeID, EnvironmentID: s.Identity.EnvironmentID, InstallationID: s.Identity.InstallationID, ControllerID: s.Identity.ControllerID, BindingHash: bindingHash, ConsumerReplicaID: replica.ReplicaID, ConsumerProcessLaunchID: replica.LaunchID, ControllerProcessLaunchID: expectations.ControllerProcessLaunchID, ControllerLaunchObservationHash: expectations.ControllerObservationHash, ConsumerLaunchObservationHash: expectations.ConsumerObservationHash, SocketMountObservationHash: expectations.SocketMountObservationHash, ControllerExpectedKernelPeer: w.NamespacedKernelPeer{PID: int32(server.Process.Pid), UID: 0, GID: 0, ObserverNamespaceID: namespace}, ConsumerExpectedKernelPeer: w.NamespacedKernelPeer{PID: int32(client.Process.Pid), UID: 65532, GID: 65532, ObserverNamespaceID: namespace}, ControllerImageDigest: s.Spec.ImageDigest, ControllerExecutableHash: exeHash, ConsumerImageDigest: s.Spec.ImageDigest, ConsumerExecutableHash: exeHash, ControllerCertificateDERHash: sha256.Sum256(scert.Raw), ControllerSPKIHash: sha256.Sum256(scert.RawSubjectPublicKeyInfo), ConsumerCertificateDERHash: sha256.Sum256(ccert.Raw), ConsumerSPKIHash: sha256.Sum256(ccert.RawSubjectPublicKeyInfo), ControllerCertificateDER: scert.Raw, ConsumerCertificateDER: ccert.Raw, ControllerServerName: "mm-local-controller.test", LaunchKeyCustodyContractHash: expectations.CustodyContractHash}
 	p.PeerBindingHash, e = w.PeerBindingHash(p)
 	if e != nil {
 		t.Fatal(e)
@@ -295,11 +316,17 @@ func TestActualCrossUIDLaunchTLS(t *testing.T) {
 	if !ready.Scan() || ready.Text() != "READY_NOEXEC" {
 		t.Fatal("root readback not sandboxed/prepared", ready.Text())
 	}
-	expectations := w.LaunchExpectations{ControllerProcessLaunchID: p.ControllerProcessLaunchID, ControllerObservationHash: p.ControllerLaunchObservationHash, ConsumerObservationHash: p.ConsumerLaunchObservationHash, SocketMountObservationHash: p.SocketMountObservationHash, CustodyContractHash: p.LaunchKeyCustodyContractHash, ControllerNamespaceID: namespace, ConsumerNamespaceID: namespace}
-	if e = json.NewEncoder(cin).Encode(childInput{Mode: "client", Descriptor: descriptor, Binding: p, Expectations: expectations, PrivateKey: ck}); e != nil {
+	if e = json.NewEncoder(cin).Encode(childInput{Mode: "client", Descriptor: descriptor, Binding: p}); e != nil {
 		t.Fatal(e)
 	}
 	success := bufio.NewScanner(cout)
+	if !success.Scan() || success.Text() != "PRIVATE_BOOTSTRAP_READY_NOEXEC" {
+		t.Fatal("private bootstrap child not safely prepared", success.Text())
+	}
+	descriptorBytes, _ := json.Marshal(descriptor)
+	if e = bootstrap.Deliver(ctx, descriptorBytes, w.KernelPeer{PID: int32(client.Process.Pid), UID: 65532, GID: 65532}, expectations, cc); e != nil {
+		t.Fatal(e)
+	}
 	if !success.Scan() || success.Text() != "ARMED_TLS_NOEXEC_OK" {
 		t.Fatal("ARMED startup failed", success.Text())
 	}
