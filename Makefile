@@ -313,6 +313,7 @@ ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test bu
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p capability_manifest_test.py
 	python3 "$(ROOT)/src/frontend/docker/version_web_assets_test.py"
 	python3 "$(ROOT)/scripts/prod/verify_prod_images_test.py"
+	python3 "$(ROOT)/docker/postgres/compose-realtime-migrations_test.py"
 	python3 "$(ROOT)/scripts/staging/notification-presence-contract_test.py"
 	$(BASH) "$(ROOT)/scripts/ci/prod-clickhouse-init_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/prod-smoke_test.sh"
