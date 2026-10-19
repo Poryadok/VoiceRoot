@@ -251,6 +251,13 @@ func main() {
 		}
 
 		var ownershipAuthClient authv1.AuthServiceClient
+		if memberAuthorityEnabled && (ownershipRoleClient == nil || principalIssuer == nil) {
+			log.Fatal("Space member authority requires protected Role principal transport")
+		}
+		if memberAuthorityEnabled {
+			stopRoleRemovalDelivery := startMemberRoleRemovalDelivery(runCtx, spaceStore, ownershipRoleClient, principalIssuer, logger)
+			defer stopRoleRemovalDelivery()
+		}
 		if addr := strings.TrimSpace(os.Getenv("AUTH_PRINCIPAL_GRPC_ADDR")); addr != "" {
 			if principalIssuer == nil {
 				log.Fatal("Space principal issuer is required for Auth ownership transport")

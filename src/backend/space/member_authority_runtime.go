@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"voice/backend/pkg/principal"
 	"voice/backend/space/internal/grpcsvc"
 	"voice/backend/space/internal/memberauthorityprincipal"
 	"voice/backend/space/internal/outboxdelivery"
@@ -49,6 +50,17 @@ func startMemberAdmissionDelivery(ctx context.Context, source outboxdelivery.Mem
 	workerCtx, cancel := context.WithCancel(ctx)
 	worker := outboxdelivery.NewWorker(&outboxdelivery.MemberAdmissionDispatcher{Store: source, Publisher: publisher}, time.Second, func(error) {
 		logger.Warn("membership event delivery retry pending")
+	})
+	done := make(chan struct{})
+	go func() { defer close(done); _ = worker.Run(workerCtx) }()
+	var once sync.Once
+	return func() { once.Do(func() { cancel(); <-done }) }
+}
+
+func startMemberRoleRemovalDelivery(ctx context.Context, source outboxdelivery.MemberRoleRemovalStore, client outboxdelivery.MemberRoleRemovalClient, issuer *principal.Issuer, logger *slog.Logger) func() {
+	workerCtx, cancel := context.WithCancel(ctx)
+	worker := outboxdelivery.NewWorker(&outboxdelivery.MemberRoleRemovalDispatcher{Store: source, Client: client, Issuer: issuer}, time.Second, func(error) {
+		logger.Warn("membership role removal retry pending")
 	})
 	done := make(chan struct{})
 	go func() { defer close(done); _ = worker.Run(workerCtx) }()

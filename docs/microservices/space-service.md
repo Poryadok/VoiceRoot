@@ -550,6 +550,9 @@ do not enable this listener; present-empty owned settings fail startup. mTLS,
 exact signed `service:role`/audience `space`/RPC/body/request-ID binding and a
 separate Redis replay namespace are mandatory. Registration exposes this read
 only, and ordinary listener interception denies it explicitly.
+Native membership runtime also requires the existing protected Role principal
+client configuration and Space service issuer; the ordinary Role client is not
+a fallback for admission cleanup.
 
 Each read takes the same Space fence, validates owned relation/trigger/function
 semantics against the migration contract, then samples DB time. Compatible
@@ -578,6 +581,13 @@ newer `g>R` or independently sourced community contributions. System baseline
 Member cleanup is a separate typed source operation; Owner is exclusively
 bootstrap/ownership/P3 authority. Physical cleanup may lag, but new effective
 rights cannot rely on an orphaned ordinary contribution after Space removal.
+Cleanup delivery preserves the committed operation, Space/profile and removal
+floor. Every technical retry signs a fresh request ID/JTI for the exact
+service:space/audience role/RemoveMemberRoles body, outside DB locks. Only a
+matching typed receipt and shared fingerprint can acknowledge the immutable
+queue row under the Space fence; the first acknowledgement cannot be rebound.
+Unknown RPC/commit outcomes remain retryable. Each RPC is bounded to five
+seconds, and worker shutdown waits for the current cancelled pass.
 Rejoin cannot inherit old-generation Admin/custom grants. P3 retirement
 permanently dominates every ordinary generation and late retry.
 

@@ -63,7 +63,9 @@ CREATE TABLE space_member_admission_outbox (
 );
 CREATE TABLE space_member_role_cleanup (
  operation_id UUID PRIMARY KEY, space_id UUID NOT NULL, profile_id UUID NOT NULL,
- removal_floor BIGINT NOT NULL CHECK(removal_floor>0), completed_at TIMESTAMPTZ
+ removal_floor BIGINT NOT NULL CHECK(removal_floor>0), completed_at TIMESTAMPTZ,
+ receipt_sha256 BYTEA CHECK(receipt_sha256 IS NULL OR octet_length(receipt_sha256)=32),
+ CHECK((completed_at IS NULL)=(receipt_sha256 IS NULL))
 );
 CREATE TABLE space_membership_ownership_heads (
  space_id UUID PRIMARY KEY, generation BIGINT NOT NULL CHECK(generation>0),
@@ -324,6 +326,28 @@ CREATE TRIGGER native_member_publication_guard BEFORE UPDATE OR DELETE ON space_
  FOR EACH ROW EXECUTE FUNCTION space_native_member_publication_guard();
 CREATE TRIGGER native_member_publication_truncate BEFORE TRUNCATE ON space_native_member_publications
  FOR EACH STATEMENT EXECUTE FUNCTION space_native_member_publication_guard();
+
+CREATE FUNCTION space_member_role_cleanup_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN
+  IF space_membership_terminal_cleanup_allowed(OLD.space_id) THEN RETURN OLD; END IF;
+ ELSIF TG_OP='UPDATE' THEN
+  IF ROW(NEW.operation_id,NEW.space_id,NEW.profile_id,NEW.removal_floor)
+   IS DISTINCT FROM ROW(OLD.operation_id,OLD.space_id,OLD.profile_id,OLD.removal_floor) THEN
+   RAISE EXCEPTION 'member role removal intent is immutable' USING ERRCODE='55000';
+  END IF;
+  IF OLD.completed_at IS NOT NULL AND ROW(NEW.completed_at,NEW.receipt_sha256)
+   IS DISTINCT FROM ROW(OLD.completed_at,OLD.receipt_sha256) THEN
+   RAISE EXCEPTION 'member role removal acknowledgement is immutable' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+ END IF;
+ RAISE EXCEPTION 'member role cleanup requires terminal P3 minimization' USING ERRCODE='55000';
+END $$;
+CREATE TRIGGER member_role_cleanup_guard BEFORE UPDATE OR DELETE ON space_member_role_cleanup
+ FOR EACH ROW EXECUTE FUNCTION space_member_role_cleanup_guard();
+CREATE TRIGGER member_role_cleanup_truncate BEFORE TRUNCATE ON space_member_role_cleanup
+ FOR EACH STATEMENT EXECUTE FUNCTION space_member_role_cleanup_guard();
 
 -- Existing databases without the unrelated Federation-source preflight still
 -- get permanent heads. Full production migration order supplies its revision

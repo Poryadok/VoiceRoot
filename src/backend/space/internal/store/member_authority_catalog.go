@@ -43,6 +43,8 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 		triggers = append(triggers, authoritysource.CatalogTrigger{Table: table, Name: "space_authority_revision_" + table, Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"}, authoritysource.CatalogTrigger{Table: table, Name: "space_authority_revision_" + table + "_truncate", Function: "space_authority_revision_floor_guard", Type: 34})
 	}
 	triggers = append(triggers,
+		authoritysource.CatalogTrigger{Table: "space_member_role_cleanup", Name: "member_role_cleanup_guard", Function: "space_member_role_cleanup_guard", Type: 27},
+		authoritysource.CatalogTrigger{Table: "space_member_role_cleanup", Name: "member_role_cleanup_truncate", Function: "space_member_role_cleanup_guard", Type: 34},
 		authoritysource.CatalogTrigger{Table: "space_ordinary_member_heads", Name: "ordinary_member_head_guard", Function: "space_member_head_guard", Type: 27},
 		authoritysource.CatalogTrigger{Table: "space_ordinary_member_heads", Name: "ordinary_member_head_truncate", Function: "space_member_head_guard", Type: 34},
 		authoritysource.CatalogTrigger{Table: "space_community_member_heads", Name: "community_member_head_guard", Function: "space_member_head_guard", Type: 27},
