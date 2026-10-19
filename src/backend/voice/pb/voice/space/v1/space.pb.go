@@ -13,9 +13,10 @@ import (
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-	v11 "voice.app/voice/chat/v1"
+	v12 "voice.app/voice/chat/v1"
 	v1 "voice.app/voice/common/v1"
-	v12 "voice.app/voice/file/v1"
+	v13 "voice.app/voice/file/v1"
+	v11 "voice.app/voice/role/v1"
 )
 
 const (
@@ -313,6 +314,343 @@ func (JoinAdmissionState) EnumDescriptor() ([]byte, []int) {
 	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{4}
 }
 
+// @voice.unknown_fields=reject
+type GetBotPurgeHandoffRequest struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	ProtocolVersion     uint32                 `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	RequestId           string                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	SpaceId             string                 `protobuf:"bytes,3,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
+	DeletionOperationId string                 `protobuf:"bytes,4,opt,name=deletion_operation_id,json=deletionOperationId,proto3" json:"deletion_operation_id,omitempty"`
+	Generation          uint64                 `protobuf:"varint,5,opt,name=generation,proto3" json:"generation,omitempty"`
+	Manifest            *v1.ManifestBinding    `protobuf:"bytes,6,opt,name=manifest,proto3" json:"manifest,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *GetBotPurgeHandoffRequest) Reset() {
+	*x = GetBotPurgeHandoffRequest{}
+	mi := &file_voice_space_v1_space_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetBotPurgeHandoffRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBotPurgeHandoffRequest) ProtoMessage() {}
+
+func (x *GetBotPurgeHandoffRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_space_v1_space_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBotPurgeHandoffRequest.ProtoReflect.Descriptor instead.
+func (*GetBotPurgeHandoffRequest) Descriptor() ([]byte, []int) {
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *GetBotPurgeHandoffRequest) GetProtocolVersion() uint32 {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return 0
+}
+
+func (x *GetBotPurgeHandoffRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *GetBotPurgeHandoffRequest) GetSpaceId() string {
+	if x != nil {
+		return x.SpaceId
+	}
+	return ""
+}
+
+func (x *GetBotPurgeHandoffRequest) GetDeletionOperationId() string {
+	if x != nil {
+		return x.DeletionOperationId
+	}
+	return ""
+}
+
+func (x *GetBotPurgeHandoffRequest) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *GetBotPurgeHandoffRequest) GetManifest() *v1.ManifestBinding {
+	if x != nil {
+		return x.Manifest
+	}
+	return nil
+}
+
+type BotPurgeRoleHandoff struct {
+	state                 protoimpl.MessageState  `protogen:"open.v1"`
+	OriginalReceipt       *v11.RetireSpaceReceipt `protobuf:"bytes,1,opt,name=original_receipt,json=originalReceipt,proto3" json:"original_receipt,omitempty"`
+	OriginalRequestBytes  []byte                  `protobuf:"bytes,2,opt,name=original_request_bytes,json=originalRequestBytes,proto3" json:"original_request_bytes,omitempty"`
+	OriginalRequestSha256 []byte                  `protobuf:"bytes,3,opt,name=original_request_sha256,json=originalRequestSha256,proto3" json:"original_request_sha256,omitempty"`
+	OriginalReceiptBytes  []byte                  `protobuf:"bytes,4,opt,name=original_receipt_bytes,json=originalReceiptBytes,proto3" json:"original_receipt_bytes,omitempty"`
+	OriginalReceiptSha256 []byte                  `protobuf:"bytes,5,opt,name=original_receipt_sha256,json=originalReceiptSha256,proto3" json:"original_receipt_sha256,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *BotPurgeRoleHandoff) Reset() {
+	*x = BotPurgeRoleHandoff{}
+	mi := &file_voice_space_v1_space_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BotPurgeRoleHandoff) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BotPurgeRoleHandoff) ProtoMessage() {}
+
+func (x *BotPurgeRoleHandoff) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_space_v1_space_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BotPurgeRoleHandoff.ProtoReflect.Descriptor instead.
+func (*BotPurgeRoleHandoff) Descriptor() ([]byte, []int) {
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *BotPurgeRoleHandoff) GetOriginalReceipt() *v11.RetireSpaceReceipt {
+	if x != nil {
+		return x.OriginalReceipt
+	}
+	return nil
+}
+
+func (x *BotPurgeRoleHandoff) GetOriginalRequestBytes() []byte {
+	if x != nil {
+		return x.OriginalRequestBytes
+	}
+	return nil
+}
+
+func (x *BotPurgeRoleHandoff) GetOriginalRequestSha256() []byte {
+	if x != nil {
+		return x.OriginalRequestSha256
+	}
+	return nil
+}
+
+func (x *BotPurgeRoleHandoff) GetOriginalReceiptBytes() []byte {
+	if x != nil {
+		return x.OriginalReceiptBytes
+	}
+	return nil
+}
+
+func (x *BotPurgeRoleHandoff) GetOriginalReceiptSha256() []byte {
+	if x != nil {
+		return x.OriginalReceiptSha256
+	}
+	return nil
+}
+
+type BotPurgeMessagingHandoff struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	OriginalReceipt       *v1.SpacePurgeReceipt  `protobuf:"bytes,1,opt,name=original_receipt,json=originalReceipt,proto3" json:"original_receipt,omitempty"`
+	OriginalRequestBytes  []byte                 `protobuf:"bytes,2,opt,name=original_request_bytes,json=originalRequestBytes,proto3" json:"original_request_bytes,omitempty"`
+	OriginalRequestSha256 []byte                 `protobuf:"bytes,3,opt,name=original_request_sha256,json=originalRequestSha256,proto3" json:"original_request_sha256,omitempty"`
+	OriginalReceiptBytes  []byte                 `protobuf:"bytes,4,opt,name=original_receipt_bytes,json=originalReceiptBytes,proto3" json:"original_receipt_bytes,omitempty"`
+	OriginalReceiptSha256 []byte                 `protobuf:"bytes,5,opt,name=original_receipt_sha256,json=originalReceiptSha256,proto3" json:"original_receipt_sha256,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *BotPurgeMessagingHandoff) Reset() {
+	*x = BotPurgeMessagingHandoff{}
+	mi := &file_voice_space_v1_space_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BotPurgeMessagingHandoff) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BotPurgeMessagingHandoff) ProtoMessage() {}
+
+func (x *BotPurgeMessagingHandoff) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_space_v1_space_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BotPurgeMessagingHandoff.ProtoReflect.Descriptor instead.
+func (*BotPurgeMessagingHandoff) Descriptor() ([]byte, []int) {
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *BotPurgeMessagingHandoff) GetOriginalReceipt() *v1.SpacePurgeReceipt {
+	if x != nil {
+		return x.OriginalReceipt
+	}
+	return nil
+}
+
+func (x *BotPurgeMessagingHandoff) GetOriginalRequestBytes() []byte {
+	if x != nil {
+		return x.OriginalRequestBytes
+	}
+	return nil
+}
+
+func (x *BotPurgeMessagingHandoff) GetOriginalRequestSha256() []byte {
+	if x != nil {
+		return x.OriginalRequestSha256
+	}
+	return nil
+}
+
+func (x *BotPurgeMessagingHandoff) GetOriginalReceiptBytes() []byte {
+	if x != nil {
+		return x.OriginalReceiptBytes
+	}
+	return nil
+}
+
+func (x *BotPurgeMessagingHandoff) GetOriginalReceiptSha256() []byte {
+	if x != nil {
+		return x.OriginalReceiptSha256
+	}
+	return nil
+}
+
+type GetBotPurgeHandoffResponse struct {
+	state               protoimpl.MessageState    `protogen:"open.v1"`
+	ProtocolVersion     uint32                    `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	RequestId           string                    `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	SpaceId             string                    `protobuf:"bytes,3,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
+	DeletionOperationId string                    `protobuf:"bytes,4,opt,name=deletion_operation_id,json=deletionOperationId,proto3" json:"deletion_operation_id,omitempty"`
+	Generation          uint64                    `protobuf:"varint,5,opt,name=generation,proto3" json:"generation,omitempty"`
+	Manifest            *v1.ManifestBinding       `protobuf:"bytes,6,opt,name=manifest,proto3" json:"manifest,omitempty"`
+	Role                *BotPurgeRoleHandoff      `protobuf:"bytes,7,opt,name=role,proto3" json:"role,omitempty"`
+	Messaging           *BotPurgeMessagingHandoff `protobuf:"bytes,8,opt,name=messaging,proto3" json:"messaging,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *GetBotPurgeHandoffResponse) Reset() {
+	*x = GetBotPurgeHandoffResponse{}
+	mi := &file_voice_space_v1_space_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetBotPurgeHandoffResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBotPurgeHandoffResponse) ProtoMessage() {}
+
+func (x *GetBotPurgeHandoffResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_space_v1_space_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBotPurgeHandoffResponse.ProtoReflect.Descriptor instead.
+func (*GetBotPurgeHandoffResponse) Descriptor() ([]byte, []int) {
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GetBotPurgeHandoffResponse) GetProtocolVersion() uint32 {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return 0
+}
+
+func (x *GetBotPurgeHandoffResponse) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *GetBotPurgeHandoffResponse) GetSpaceId() string {
+	if x != nil {
+		return x.SpaceId
+	}
+	return ""
+}
+
+func (x *GetBotPurgeHandoffResponse) GetDeletionOperationId() string {
+	if x != nil {
+		return x.DeletionOperationId
+	}
+	return ""
+}
+
+func (x *GetBotPurgeHandoffResponse) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *GetBotPurgeHandoffResponse) GetManifest() *v1.ManifestBinding {
+	if x != nil {
+		return x.Manifest
+	}
+	return nil
+}
+
+func (x *GetBotPurgeHandoffResponse) GetRole() *BotPurgeRoleHandoff {
+	if x != nil {
+		return x.Role
+	}
+	return nil
+}
+
+func (x *GetBotPurgeHandoffResponse) GetMessaging() *BotPurgeMessagingHandoff {
+	if x != nil {
+		return x.Messaging
+	}
+	return nil
+}
+
 type Space struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	Id                  string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -340,7 +678,7 @@ type Space struct {
 
 func (x *Space) Reset() {
 	*x = Space{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[0]
+	mi := &file_voice_space_v1_space_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -352,7 +690,7 @@ func (x *Space) String() string {
 func (*Space) ProtoMessage() {}
 
 func (x *Space) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[0]
+	mi := &file_voice_space_v1_space_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -365,7 +703,7 @@ func (x *Space) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Space.ProtoReflect.Descriptor instead.
 func (*Space) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{0}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Space) GetId() string {
@@ -505,7 +843,7 @@ type CreateSpaceRequest struct {
 
 func (x *CreateSpaceRequest) Reset() {
 	*x = CreateSpaceRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[1]
+	mi := &file_voice_space_v1_space_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -517,7 +855,7 @@ func (x *CreateSpaceRequest) String() string {
 func (*CreateSpaceRequest) ProtoMessage() {}
 
 func (x *CreateSpaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[1]
+	mi := &file_voice_space_v1_space_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -530,7 +868,7 @@ func (x *CreateSpaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSpaceRequest.ProtoReflect.Descriptor instead.
 func (*CreateSpaceRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{1}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *CreateSpaceRequest) GetName() string {
@@ -572,7 +910,7 @@ type UpdateSpaceRequest struct {
 
 func (x *UpdateSpaceRequest) Reset() {
 	*x = UpdateSpaceRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[2]
+	mi := &file_voice_space_v1_space_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -584,7 +922,7 @@ func (x *UpdateSpaceRequest) String() string {
 func (*UpdateSpaceRequest) ProtoMessage() {}
 
 func (x *UpdateSpaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[2]
+	mi := &file_voice_space_v1_space_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -597,7 +935,7 @@ func (x *UpdateSpaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateSpaceRequest.ProtoReflect.Descriptor instead.
 func (*UpdateSpaceRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{2}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *UpdateSpaceRequest) GetSpaceId() string {
@@ -680,7 +1018,7 @@ type UpdateSpaceMmConfigRequest struct {
 
 func (x *UpdateSpaceMmConfigRequest) Reset() {
 	*x = UpdateSpaceMmConfigRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[3]
+	mi := &file_voice_space_v1_space_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -692,7 +1030,7 @@ func (x *UpdateSpaceMmConfigRequest) String() string {
 func (*UpdateSpaceMmConfigRequest) ProtoMessage() {}
 
 func (x *UpdateSpaceMmConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[3]
+	mi := &file_voice_space_v1_space_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -705,7 +1043,7 @@ func (x *UpdateSpaceMmConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateSpaceMmConfigRequest.ProtoReflect.Descriptor instead.
 func (*UpdateSpaceMmConfigRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{3}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *UpdateSpaceMmConfigRequest) GetSpaceId() string {
@@ -731,7 +1069,7 @@ type UpdateSpaceMmConfigResponse struct {
 
 func (x *UpdateSpaceMmConfigResponse) Reset() {
 	*x = UpdateSpaceMmConfigResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[4]
+	mi := &file_voice_space_v1_space_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -743,7 +1081,7 @@ func (x *UpdateSpaceMmConfigResponse) String() string {
 func (*UpdateSpaceMmConfigResponse) ProtoMessage() {}
 
 func (x *UpdateSpaceMmConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[4]
+	mi := &file_voice_space_v1_space_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -756,7 +1094,7 @@ func (x *UpdateSpaceMmConfigResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateSpaceMmConfigResponse.ProtoReflect.Descriptor instead.
 func (*UpdateSpaceMmConfigResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{4}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *UpdateSpaceMmConfigResponse) GetSpace() *Space {
@@ -779,7 +1117,7 @@ type DeleteSpaceRequest struct {
 
 func (x *DeleteSpaceRequest) Reset() {
 	*x = DeleteSpaceRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[5]
+	mi := &file_voice_space_v1_space_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -791,7 +1129,7 @@ func (x *DeleteSpaceRequest) String() string {
 func (*DeleteSpaceRequest) ProtoMessage() {}
 
 func (x *DeleteSpaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[5]
+	mi := &file_voice_space_v1_space_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -804,7 +1142,7 @@ func (x *DeleteSpaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteSpaceRequest.ProtoReflect.Descriptor instead.
 func (*DeleteSpaceRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{5}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *DeleteSpaceRequest) GetSpaceId() string {
@@ -844,7 +1182,7 @@ type GetSpaceRequest struct {
 
 func (x *GetSpaceRequest) Reset() {
 	*x = GetSpaceRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[6]
+	mi := &file_voice_space_v1_space_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -856,7 +1194,7 @@ func (x *GetSpaceRequest) String() string {
 func (*GetSpaceRequest) ProtoMessage() {}
 
 func (x *GetSpaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[6]
+	mi := &file_voice_space_v1_space_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -869,7 +1207,7 @@ func (x *GetSpaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSpaceRequest.ProtoReflect.Descriptor instead.
 func (*GetSpaceRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{6}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetSpaceRequest) GetSpaceId() string {
@@ -888,7 +1226,7 @@ type ListMySpacesRequest struct {
 
 func (x *ListMySpacesRequest) Reset() {
 	*x = ListMySpacesRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[7]
+	mi := &file_voice_space_v1_space_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -900,7 +1238,7 @@ func (x *ListMySpacesRequest) String() string {
 func (*ListMySpacesRequest) ProtoMessage() {}
 
 func (x *ListMySpacesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[7]
+	mi := &file_voice_space_v1_space_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -913,7 +1251,7 @@ func (x *ListMySpacesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMySpacesRequest.ProtoReflect.Descriptor instead.
 func (*ListMySpacesRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{7}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ListMySpacesRequest) GetPage() *v1.CursorPageRequest {
@@ -933,7 +1271,7 @@ type SpaceList struct {
 
 func (x *SpaceList) Reset() {
 	*x = SpaceList{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[8]
+	mi := &file_voice_space_v1_space_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -945,7 +1283,7 @@ func (x *SpaceList) String() string {
 func (*SpaceList) ProtoMessage() {}
 
 func (x *SpaceList) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[8]
+	mi := &file_voice_space_v1_space_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -958,7 +1296,7 @@ func (x *SpaceList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpaceList.ProtoReflect.Descriptor instead.
 func (*SpaceList) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{8}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *SpaceList) GetSpaces() []*Space {
@@ -985,7 +1323,7 @@ type SearchPublicSpacesRequest struct {
 
 func (x *SearchPublicSpacesRequest) Reset() {
 	*x = SearchPublicSpacesRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[9]
+	mi := &file_voice_space_v1_space_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -997,7 +1335,7 @@ func (x *SearchPublicSpacesRequest) String() string {
 func (*SearchPublicSpacesRequest) ProtoMessage() {}
 
 func (x *SearchPublicSpacesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[9]
+	mi := &file_voice_space_v1_space_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1010,7 +1348,7 @@ func (x *SearchPublicSpacesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchPublicSpacesRequest.ProtoReflect.Descriptor instead.
 func (*SearchPublicSpacesRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{9}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *SearchPublicSpacesRequest) GetQuery() string {
@@ -1039,7 +1377,7 @@ type VoiceRoom struct {
 
 func (x *VoiceRoom) Reset() {
 	*x = VoiceRoom{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[10]
+	mi := &file_voice_space_v1_space_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1051,7 +1389,7 @@ func (x *VoiceRoom) String() string {
 func (*VoiceRoom) ProtoMessage() {}
 
 func (x *VoiceRoom) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[10]
+	mi := &file_voice_space_v1_space_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1064,7 +1402,7 @@ func (x *VoiceRoom) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoiceRoom.ProtoReflect.Descriptor instead.
 func (*VoiceRoom) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{10}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *VoiceRoom) GetId() string {
@@ -1105,7 +1443,7 @@ type CreateVoiceRoomRequest struct {
 
 func (x *CreateVoiceRoomRequest) Reset() {
 	*x = CreateVoiceRoomRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[11]
+	mi := &file_voice_space_v1_space_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1117,7 +1455,7 @@ func (x *CreateVoiceRoomRequest) String() string {
 func (*CreateVoiceRoomRequest) ProtoMessage() {}
 
 func (x *CreateVoiceRoomRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[11]
+	mi := &file_voice_space_v1_space_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1130,7 +1468,7 @@ func (x *CreateVoiceRoomRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateVoiceRoomRequest.ProtoReflect.Descriptor instead.
 func (*CreateVoiceRoomRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{11}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CreateVoiceRoomRequest) GetSpaceId() string {
@@ -1157,7 +1495,7 @@ type UpdateVoiceRoomRequest struct {
 
 func (x *UpdateVoiceRoomRequest) Reset() {
 	*x = UpdateVoiceRoomRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[12]
+	mi := &file_voice_space_v1_space_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1169,7 +1507,7 @@ func (x *UpdateVoiceRoomRequest) String() string {
 func (*UpdateVoiceRoomRequest) ProtoMessage() {}
 
 func (x *UpdateVoiceRoomRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[12]
+	mi := &file_voice_space_v1_space_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1182,7 +1520,7 @@ func (x *UpdateVoiceRoomRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateVoiceRoomRequest.ProtoReflect.Descriptor instead.
 func (*UpdateVoiceRoomRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{12}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *UpdateVoiceRoomRequest) GetVoiceRoomId() string {
@@ -1208,7 +1546,7 @@ type DeleteVoiceRoomRequest struct {
 
 func (x *DeleteVoiceRoomRequest) Reset() {
 	*x = DeleteVoiceRoomRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[13]
+	mi := &file_voice_space_v1_space_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1220,7 +1558,7 @@ func (x *DeleteVoiceRoomRequest) String() string {
 func (*DeleteVoiceRoomRequest) ProtoMessage() {}
 
 func (x *DeleteVoiceRoomRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[13]
+	mi := &file_voice_space_v1_space_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1233,7 +1571,7 @@ func (x *DeleteVoiceRoomRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteVoiceRoomRequest.ProtoReflect.Descriptor instead.
 func (*DeleteVoiceRoomRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{13}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DeleteVoiceRoomRequest) GetVoiceRoomId() string {
@@ -1249,7 +1587,7 @@ type SpaceTreeNode struct {
 	SpaceId       string                 `protobuf:"bytes,2,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
 	CategoryId    *string                `protobuf:"bytes,3,opt,name=category_id,json=categoryId,proto3,oneof" json:"category_id,omitempty"`
 	Kind          string                 `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"` // text_chat | voice_room
-	LinkedChat    *v11.ChatRef           `protobuf:"bytes,5,opt,name=linked_chat,json=linkedChat,proto3,oneof" json:"linked_chat,omitempty"`
+	LinkedChat    *v12.ChatRef           `protobuf:"bytes,5,opt,name=linked_chat,json=linkedChat,proto3,oneof" json:"linked_chat,omitempty"`
 	VoiceRoomId   *string                `protobuf:"bytes,6,opt,name=voice_room_id,json=voiceRoomId,proto3,oneof" json:"voice_room_id,omitempty"`
 	SortOrder     int32                  `protobuf:"varint,7,opt,name=sort_order,json=sortOrder,proto3" json:"sort_order,omitempty"`
 	IsSystem      bool                   `protobuf:"varint,8,opt,name=is_system,json=isSystem,proto3" json:"is_system,omitempty"`
@@ -1262,7 +1600,7 @@ type SpaceTreeNode struct {
 
 func (x *SpaceTreeNode) Reset() {
 	*x = SpaceTreeNode{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[14]
+	mi := &file_voice_space_v1_space_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1274,7 +1612,7 @@ func (x *SpaceTreeNode) String() string {
 func (*SpaceTreeNode) ProtoMessage() {}
 
 func (x *SpaceTreeNode) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[14]
+	mi := &file_voice_space_v1_space_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1287,7 +1625,7 @@ func (x *SpaceTreeNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpaceTreeNode.ProtoReflect.Descriptor instead.
 func (*SpaceTreeNode) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{14}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SpaceTreeNode) GetId() string {
@@ -1318,7 +1656,7 @@ func (x *SpaceTreeNode) GetKind() string {
 	return ""
 }
 
-func (x *SpaceTreeNode) GetLinkedChat() *v11.ChatRef {
+func (x *SpaceTreeNode) GetLinkedChat() *v12.ChatRef {
 	if x != nil {
 		return x.LinkedChat
 	}
@@ -1377,7 +1715,7 @@ type PinTreeNodeRequest struct {
 
 func (x *PinTreeNodeRequest) Reset() {
 	*x = PinTreeNodeRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[15]
+	mi := &file_voice_space_v1_space_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1389,7 +1727,7 @@ func (x *PinTreeNodeRequest) String() string {
 func (*PinTreeNodeRequest) ProtoMessage() {}
 
 func (x *PinTreeNodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[15]
+	mi := &file_voice_space_v1_space_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1402,7 +1740,7 @@ func (x *PinTreeNodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PinTreeNodeRequest.ProtoReflect.Descriptor instead.
 func (*PinTreeNodeRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{15}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *PinTreeNodeRequest) GetSpaceId() string {
@@ -1429,7 +1767,7 @@ type UnpinTreeNodeRequest struct {
 
 func (x *UnpinTreeNodeRequest) Reset() {
 	*x = UnpinTreeNodeRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[16]
+	mi := &file_voice_space_v1_space_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1441,7 +1779,7 @@ func (x *UnpinTreeNodeRequest) String() string {
 func (*UnpinTreeNodeRequest) ProtoMessage() {}
 
 func (x *UnpinTreeNodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[16]
+	mi := &file_voice_space_v1_space_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1454,7 +1792,7 @@ func (x *UnpinTreeNodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnpinTreeNodeRequest.ProtoReflect.Descriptor instead.
 func (*UnpinTreeNodeRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{16}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *UnpinTreeNodeRequest) GetSpaceId() string {
@@ -1477,7 +1815,7 @@ type UpsertTreeNodeRequest struct {
 	NodeId        *string                `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3,oneof" json:"node_id,omitempty"`
 	CategoryId    *string                `protobuf:"bytes,3,opt,name=category_id,json=categoryId,proto3,oneof" json:"category_id,omitempty"`
 	Kind          string                 `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
-	LinkedChat    *v11.ChatRef           `protobuf:"bytes,5,opt,name=linked_chat,json=linkedChat,proto3,oneof" json:"linked_chat,omitempty"`
+	LinkedChat    *v12.ChatRef           `protobuf:"bytes,5,opt,name=linked_chat,json=linkedChat,proto3,oneof" json:"linked_chat,omitempty"`
 	VoiceRoomId   *string                `protobuf:"bytes,6,opt,name=voice_room_id,json=voiceRoomId,proto3,oneof" json:"voice_room_id,omitempty"`
 	SortOrder     *int32                 `protobuf:"varint,7,opt,name=sort_order,json=sortOrder,proto3,oneof" json:"sort_order,omitempty"`
 	IsSystem      *bool                  `protobuf:"varint,8,opt,name=is_system,json=isSystem,proto3,oneof" json:"is_system,omitempty"`
@@ -1487,7 +1825,7 @@ type UpsertTreeNodeRequest struct {
 
 func (x *UpsertTreeNodeRequest) Reset() {
 	*x = UpsertTreeNodeRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[17]
+	mi := &file_voice_space_v1_space_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1499,7 +1837,7 @@ func (x *UpsertTreeNodeRequest) String() string {
 func (*UpsertTreeNodeRequest) ProtoMessage() {}
 
 func (x *UpsertTreeNodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[17]
+	mi := &file_voice_space_v1_space_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1512,7 +1850,7 @@ func (x *UpsertTreeNodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpsertTreeNodeRequest.ProtoReflect.Descriptor instead.
 func (*UpsertTreeNodeRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{17}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *UpsertTreeNodeRequest) GetSpaceId() string {
@@ -1543,7 +1881,7 @@ func (x *UpsertTreeNodeRequest) GetKind() string {
 	return ""
 }
 
-func (x *UpsertTreeNodeRequest) GetLinkedChat() *v11.ChatRef {
+func (x *UpsertTreeNodeRequest) GetLinkedChat() *v12.ChatRef {
 	if x != nil {
 		return x.LinkedChat
 	}
@@ -1581,7 +1919,7 @@ type RemoveTreeNodeRequest struct {
 
 func (x *RemoveTreeNodeRequest) Reset() {
 	*x = RemoveTreeNodeRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[18]
+	mi := &file_voice_space_v1_space_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1593,7 +1931,7 @@ func (x *RemoveTreeNodeRequest) String() string {
 func (*RemoveTreeNodeRequest) ProtoMessage() {}
 
 func (x *RemoveTreeNodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[18]
+	mi := &file_voice_space_v1_space_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1606,7 +1944,7 @@ func (x *RemoveTreeNodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveTreeNodeRequest.ProtoReflect.Descriptor instead.
 func (*RemoveTreeNodeRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{18}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *RemoveTreeNodeRequest) GetSpaceId() string {
@@ -1635,7 +1973,7 @@ type Category struct {
 
 func (x *Category) Reset() {
 	*x = Category{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[19]
+	mi := &file_voice_space_v1_space_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1647,7 +1985,7 @@ func (x *Category) String() string {
 func (*Category) ProtoMessage() {}
 
 func (x *Category) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[19]
+	mi := &file_voice_space_v1_space_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1660,7 +1998,7 @@ func (x *Category) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Category.ProtoReflect.Descriptor instead.
 func (*Category) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{19}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *Category) GetId() string {
@@ -1702,7 +2040,7 @@ type CreateCategoryRequest struct {
 
 func (x *CreateCategoryRequest) Reset() {
 	*x = CreateCategoryRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[20]
+	mi := &file_voice_space_v1_space_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1714,7 +2052,7 @@ func (x *CreateCategoryRequest) String() string {
 func (*CreateCategoryRequest) ProtoMessage() {}
 
 func (x *CreateCategoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[20]
+	mi := &file_voice_space_v1_space_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1727,7 +2065,7 @@ func (x *CreateCategoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCategoryRequest.ProtoReflect.Descriptor instead.
 func (*CreateCategoryRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{20}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *CreateCategoryRequest) GetSpaceId() string {
@@ -1762,7 +2100,7 @@ type UpdateCategoryRequest struct {
 
 func (x *UpdateCategoryRequest) Reset() {
 	*x = UpdateCategoryRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[21]
+	mi := &file_voice_space_v1_space_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1774,7 +2112,7 @@ func (x *UpdateCategoryRequest) String() string {
 func (*UpdateCategoryRequest) ProtoMessage() {}
 
 func (x *UpdateCategoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[21]
+	mi := &file_voice_space_v1_space_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1787,7 +2125,7 @@ func (x *UpdateCategoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateCategoryRequest.ProtoReflect.Descriptor instead.
 func (*UpdateCategoryRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{21}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *UpdateCategoryRequest) GetCategoryId() string {
@@ -1820,7 +2158,7 @@ type DeleteCategoryRequest struct {
 
 func (x *DeleteCategoryRequest) Reset() {
 	*x = DeleteCategoryRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[22]
+	mi := &file_voice_space_v1_space_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1832,7 +2170,7 @@ func (x *DeleteCategoryRequest) String() string {
 func (*DeleteCategoryRequest) ProtoMessage() {}
 
 func (x *DeleteCategoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[22]
+	mi := &file_voice_space_v1_space_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1845,7 +2183,7 @@ func (x *DeleteCategoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCategoryRequest.ProtoReflect.Descriptor instead.
 func (*DeleteCategoryRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{22}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *DeleteCategoryRequest) GetCategoryId() string {
@@ -1865,7 +2203,7 @@ type ReorderSpaceTreeRequest struct {
 
 func (x *ReorderSpaceTreeRequest) Reset() {
 	*x = ReorderSpaceTreeRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[23]
+	mi := &file_voice_space_v1_space_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1877,7 +2215,7 @@ func (x *ReorderSpaceTreeRequest) String() string {
 func (*ReorderSpaceTreeRequest) ProtoMessage() {}
 
 func (x *ReorderSpaceTreeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[23]
+	mi := &file_voice_space_v1_space_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1890,7 +2228,7 @@ func (x *ReorderSpaceTreeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReorderSpaceTreeRequest.ProtoReflect.Descriptor instead.
 func (*ReorderSpaceTreeRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{23}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ReorderSpaceTreeRequest) GetSpaceId() string {
@@ -1916,7 +2254,7 @@ type ListSpaceTreeRequest struct {
 
 func (x *ListSpaceTreeRequest) Reset() {
 	*x = ListSpaceTreeRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[24]
+	mi := &file_voice_space_v1_space_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1928,7 +2266,7 @@ func (x *ListSpaceTreeRequest) String() string {
 func (*ListSpaceTreeRequest) ProtoMessage() {}
 
 func (x *ListSpaceTreeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[24]
+	mi := &file_voice_space_v1_space_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1941,7 +2279,7 @@ func (x *ListSpaceTreeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSpaceTreeRequest.ProtoReflect.Descriptor instead.
 func (*ListSpaceTreeRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{24}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ListSpaceTreeRequest) GetSpaceId() string {
@@ -1968,7 +2306,7 @@ type Invite struct {
 
 func (x *Invite) Reset() {
 	*x = Invite{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[25]
+	mi := &file_voice_space_v1_space_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1980,7 +2318,7 @@ func (x *Invite) String() string {
 func (*Invite) ProtoMessage() {}
 
 func (x *Invite) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[25]
+	mi := &file_voice_space_v1_space_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1993,7 +2331,7 @@ func (x *Invite) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Invite.ProtoReflect.Descriptor instead.
 func (*Invite) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{25}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *Invite) GetId() string {
@@ -2070,7 +2408,7 @@ type CreateInviteRequest struct {
 
 func (x *CreateInviteRequest) Reset() {
 	*x = CreateInviteRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[26]
+	mi := &file_voice_space_v1_space_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2082,7 +2420,7 @@ func (x *CreateInviteRequest) String() string {
 func (*CreateInviteRequest) ProtoMessage() {}
 
 func (x *CreateInviteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[26]
+	mi := &file_voice_space_v1_space_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2095,7 +2433,7 @@ func (x *CreateInviteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateInviteRequest.ProtoReflect.Descriptor instead.
 func (*CreateInviteRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{26}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *CreateInviteRequest) GetSpaceId() string {
@@ -2128,7 +2466,7 @@ type RevokeInviteRequest struct {
 
 func (x *RevokeInviteRequest) Reset() {
 	*x = RevokeInviteRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[27]
+	mi := &file_voice_space_v1_space_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2140,7 +2478,7 @@ func (x *RevokeInviteRequest) String() string {
 func (*RevokeInviteRequest) ProtoMessage() {}
 
 func (x *RevokeInviteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[27]
+	mi := &file_voice_space_v1_space_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2153,7 +2491,7 @@ func (x *RevokeInviteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeInviteRequest.ProtoReflect.Descriptor instead.
 func (*RevokeInviteRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{27}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *RevokeInviteRequest) GetInviteId() string {
@@ -2172,7 +2510,7 @@ type GetInviteRequest struct {
 
 func (x *GetInviteRequest) Reset() {
 	*x = GetInviteRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[28]
+	mi := &file_voice_space_v1_space_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2184,7 +2522,7 @@ func (x *GetInviteRequest) String() string {
 func (*GetInviteRequest) ProtoMessage() {}
 
 func (x *GetInviteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[28]
+	mi := &file_voice_space_v1_space_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2197,7 +2535,7 @@ func (x *GetInviteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInviteRequest.ProtoReflect.Descriptor instead.
 func (*GetInviteRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{28}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GetInviteRequest) GetCode() string {
@@ -2216,7 +2554,7 @@ type ListInvitesRequest struct {
 
 func (x *ListInvitesRequest) Reset() {
 	*x = ListInvitesRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[29]
+	mi := &file_voice_space_v1_space_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2228,7 +2566,7 @@ func (x *ListInvitesRequest) String() string {
 func (*ListInvitesRequest) ProtoMessage() {}
 
 func (x *ListInvitesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[29]
+	mi := &file_voice_space_v1_space_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2241,7 +2579,7 @@ func (x *ListInvitesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInvitesRequest.ProtoReflect.Descriptor instead.
 func (*ListInvitesRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{29}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ListInvitesRequest) GetSpaceId() string {
@@ -2260,7 +2598,7 @@ type InviteList struct {
 
 func (x *InviteList) Reset() {
 	*x = InviteList{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[30]
+	mi := &file_voice_space_v1_space_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2272,7 +2610,7 @@ func (x *InviteList) String() string {
 func (*InviteList) ProtoMessage() {}
 
 func (x *InviteList) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[30]
+	mi := &file_voice_space_v1_space_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2285,7 +2623,7 @@ func (x *InviteList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InviteList.ProtoReflect.Descriptor instead.
 func (*InviteList) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{30}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *InviteList) GetInvites() []*Invite {
@@ -2305,7 +2643,7 @@ type JoinByInviteRequest struct {
 
 func (x *JoinByInviteRequest) Reset() {
 	*x = JoinByInviteRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[31]
+	mi := &file_voice_space_v1_space_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2317,7 +2655,7 @@ func (x *JoinByInviteRequest) String() string {
 func (*JoinByInviteRequest) ProtoMessage() {}
 
 func (x *JoinByInviteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[31]
+	mi := &file_voice_space_v1_space_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2330,7 +2668,7 @@ func (x *JoinByInviteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinByInviteRequest.ProtoReflect.Descriptor instead.
 func (*JoinByInviteRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{31}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *JoinByInviteRequest) GetCode() string {
@@ -2360,7 +2698,7 @@ type SpaceMembership struct {
 
 func (x *SpaceMembership) Reset() {
 	*x = SpaceMembership{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[32]
+	mi := &file_voice_space_v1_space_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2372,7 +2710,7 @@ func (x *SpaceMembership) String() string {
 func (*SpaceMembership) ProtoMessage() {}
 
 func (x *SpaceMembership) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[32]
+	mi := &file_voice_space_v1_space_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2385,7 +2723,7 @@ func (x *SpaceMembership) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpaceMembership.ProtoReflect.Descriptor instead.
 func (*SpaceMembership) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{32}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *SpaceMembership) GetSpaceId() string {
@@ -2433,7 +2771,7 @@ type JoinSpaceRequest struct {
 
 func (x *JoinSpaceRequest) Reset() {
 	*x = JoinSpaceRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[33]
+	mi := &file_voice_space_v1_space_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2445,7 +2783,7 @@ func (x *JoinSpaceRequest) String() string {
 func (*JoinSpaceRequest) ProtoMessage() {}
 
 func (x *JoinSpaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[33]
+	mi := &file_voice_space_v1_space_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2458,7 +2796,7 @@ func (x *JoinSpaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinSpaceRequest.ProtoReflect.Descriptor instead.
 func (*JoinSpaceRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{33}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *JoinSpaceRequest) GetSpaceId() string {
@@ -2484,7 +2822,7 @@ type LeaveSpaceRequest struct {
 
 func (x *LeaveSpaceRequest) Reset() {
 	*x = LeaveSpaceRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[34]
+	mi := &file_voice_space_v1_space_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2496,7 +2834,7 @@ func (x *LeaveSpaceRequest) String() string {
 func (*LeaveSpaceRequest) ProtoMessage() {}
 
 func (x *LeaveSpaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[34]
+	mi := &file_voice_space_v1_space_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2509,7 +2847,7 @@ func (x *LeaveSpaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaveSpaceRequest.ProtoReflect.Descriptor instead.
 func (*LeaveSpaceRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{34}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *LeaveSpaceRequest) GetSpaceId() string {
@@ -2529,7 +2867,7 @@ type KickMemberRequest struct {
 
 func (x *KickMemberRequest) Reset() {
 	*x = KickMemberRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[35]
+	mi := &file_voice_space_v1_space_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2541,7 +2879,7 @@ func (x *KickMemberRequest) String() string {
 func (*KickMemberRequest) ProtoMessage() {}
 
 func (x *KickMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[35]
+	mi := &file_voice_space_v1_space_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2554,7 +2892,7 @@ func (x *KickMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KickMemberRequest.ProtoReflect.Descriptor instead.
 func (*KickMemberRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{35}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *KickMemberRequest) GetSpaceId() string {
@@ -2583,7 +2921,7 @@ type BanMemberRequest struct {
 
 func (x *BanMemberRequest) Reset() {
 	*x = BanMemberRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[36]
+	mi := &file_voice_space_v1_space_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2595,7 +2933,7 @@ func (x *BanMemberRequest) String() string {
 func (*BanMemberRequest) ProtoMessage() {}
 
 func (x *BanMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[36]
+	mi := &file_voice_space_v1_space_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2608,7 +2946,7 @@ func (x *BanMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BanMemberRequest.ProtoReflect.Descriptor instead.
 func (*BanMemberRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{36}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *BanMemberRequest) GetSpaceId() string {
@@ -2649,7 +2987,7 @@ type UnbanMemberRequest struct {
 
 func (x *UnbanMemberRequest) Reset() {
 	*x = UnbanMemberRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[37]
+	mi := &file_voice_space_v1_space_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2661,7 +2999,7 @@ func (x *UnbanMemberRequest) String() string {
 func (*UnbanMemberRequest) ProtoMessage() {}
 
 func (x *UnbanMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[37]
+	mi := &file_voice_space_v1_space_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2674,7 +3012,7 @@ func (x *UnbanMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnbanMemberRequest.ProtoReflect.Descriptor instead.
 func (*UnbanMemberRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{37}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *UnbanMemberRequest) GetSpaceId() string {
@@ -2701,7 +3039,7 @@ type ListMembersRequest struct {
 
 func (x *ListMembersRequest) Reset() {
 	*x = ListMembersRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[38]
+	mi := &file_voice_space_v1_space_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2713,7 +3051,7 @@ func (x *ListMembersRequest) String() string {
 func (*ListMembersRequest) ProtoMessage() {}
 
 func (x *ListMembersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[38]
+	mi := &file_voice_space_v1_space_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2726,7 +3064,7 @@ func (x *ListMembersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMembersRequest.ProtoReflect.Descriptor instead.
 func (*ListMembersRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{38}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ListMembersRequest) GetSpaceId() string {
@@ -2753,7 +3091,7 @@ type SpaceMemberList struct {
 
 func (x *SpaceMemberList) Reset() {
 	*x = SpaceMemberList{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[39]
+	mi := &file_voice_space_v1_space_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2765,7 +3103,7 @@ func (x *SpaceMemberList) String() string {
 func (*SpaceMemberList) ProtoMessage() {}
 
 func (x *SpaceMemberList) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[39]
+	mi := &file_voice_space_v1_space_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2778,7 +3116,7 @@ func (x *SpaceMemberList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpaceMemberList.ProtoReflect.Descriptor instead.
 func (*SpaceMemberList) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{39}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *SpaceMemberList) GetMembers() []*SpaceMembership {
@@ -2804,7 +3142,7 @@ type ListBansRequest struct {
 
 func (x *ListBansRequest) Reset() {
 	*x = ListBansRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[40]
+	mi := &file_voice_space_v1_space_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2816,7 +3154,7 @@ func (x *ListBansRequest) String() string {
 func (*ListBansRequest) ProtoMessage() {}
 
 func (x *ListBansRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[40]
+	mi := &file_voice_space_v1_space_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2829,7 +3167,7 @@ func (x *ListBansRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBansRequest.ProtoReflect.Descriptor instead.
 func (*ListBansRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{40}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ListBansRequest) GetSpaceId() string {
@@ -2848,7 +3186,7 @@ type BanList struct {
 
 func (x *BanList) Reset() {
 	*x = BanList{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[41]
+	mi := &file_voice_space_v1_space_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2860,7 +3198,7 @@ func (x *BanList) String() string {
 func (*BanList) ProtoMessage() {}
 
 func (x *BanList) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[41]
+	mi := &file_voice_space_v1_space_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2873,7 +3211,7 @@ func (x *BanList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BanList.ProtoReflect.Descriptor instead.
 func (*BanList) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{41}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *BanList) GetBans() []*SpaceBan {
@@ -2896,7 +3234,7 @@ type SpaceBan struct {
 
 func (x *SpaceBan) Reset() {
 	*x = SpaceBan{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[42]
+	mi := &file_voice_space_v1_space_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2908,7 +3246,7 @@ func (x *SpaceBan) String() string {
 func (*SpaceBan) ProtoMessage() {}
 
 func (x *SpaceBan) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[42]
+	mi := &file_voice_space_v1_space_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2921,7 +3259,7 @@ func (x *SpaceBan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpaceBan.ProtoReflect.Descriptor instead.
 func (*SpaceBan) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{42}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *SpaceBan) GetSpaceId() string {
@@ -2971,7 +3309,7 @@ type TimeoutMemberRequest struct {
 
 func (x *TimeoutMemberRequest) Reset() {
 	*x = TimeoutMemberRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[43]
+	mi := &file_voice_space_v1_space_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2983,7 +3321,7 @@ func (x *TimeoutMemberRequest) String() string {
 func (*TimeoutMemberRequest) ProtoMessage() {}
 
 func (x *TimeoutMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[43]
+	mi := &file_voice_space_v1_space_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2996,7 +3334,7 @@ func (x *TimeoutMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimeoutMemberRequest.ProtoReflect.Descriptor instead.
 func (*TimeoutMemberRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{43}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *TimeoutMemberRequest) GetSpaceId() string {
@@ -3037,7 +3375,7 @@ type RemoveMemberTimeoutRequest struct {
 
 func (x *RemoveMemberTimeoutRequest) Reset() {
 	*x = RemoveMemberTimeoutRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[44]
+	mi := &file_voice_space_v1_space_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3049,7 +3387,7 @@ func (x *RemoveMemberTimeoutRequest) String() string {
 func (*RemoveMemberTimeoutRequest) ProtoMessage() {}
 
 func (x *RemoveMemberTimeoutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[44]
+	mi := &file_voice_space_v1_space_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3062,7 +3400,7 @@ func (x *RemoveMemberTimeoutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveMemberTimeoutRequest.ProtoReflect.Descriptor instead.
 func (*RemoveMemberTimeoutRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{44}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *RemoveMemberTimeoutRequest) GetSpaceId() string {
@@ -3089,7 +3427,7 @@ type TransferOwnershipRequest struct {
 
 func (x *TransferOwnershipRequest) Reset() {
 	*x = TransferOwnershipRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[45]
+	mi := &file_voice_space_v1_space_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3101,7 +3439,7 @@ func (x *TransferOwnershipRequest) String() string {
 func (*TransferOwnershipRequest) ProtoMessage() {}
 
 func (x *TransferOwnershipRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[45]
+	mi := &file_voice_space_v1_space_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3114,7 +3452,7 @@ func (x *TransferOwnershipRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransferOwnershipRequest.ProtoReflect.Descriptor instead.
 func (*TransferOwnershipRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{45}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *TransferOwnershipRequest) GetSpaceId() string {
@@ -3142,7 +3480,7 @@ type AddBotMemberRequest struct {
 
 func (x *AddBotMemberRequest) Reset() {
 	*x = AddBotMemberRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[46]
+	mi := &file_voice_space_v1_space_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3154,7 +3492,7 @@ func (x *AddBotMemberRequest) String() string {
 func (*AddBotMemberRequest) ProtoMessage() {}
 
 func (x *AddBotMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[46]
+	mi := &file_voice_space_v1_space_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3167,7 +3505,7 @@ func (x *AddBotMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddBotMemberRequest.ProtoReflect.Descriptor instead.
 func (*AddBotMemberRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{46}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *AddBotMemberRequest) GetSpaceId() string {
@@ -3204,7 +3542,7 @@ type RemoveBotMemberRequest struct {
 
 func (x *RemoveBotMemberRequest) Reset() {
 	*x = RemoveBotMemberRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[47]
+	mi := &file_voice_space_v1_space_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3216,7 +3554,7 @@ func (x *RemoveBotMemberRequest) String() string {
 func (*RemoveBotMemberRequest) ProtoMessage() {}
 
 func (x *RemoveBotMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[47]
+	mi := &file_voice_space_v1_space_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3229,7 +3567,7 @@ func (x *RemoveBotMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveBotMemberRequest.ProtoReflect.Descriptor instead.
 func (*RemoveBotMemberRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{47}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *RemoveBotMemberRequest) GetSpaceId() string {
@@ -3276,7 +3614,7 @@ type BotInstallationIntent struct {
 
 func (x *BotInstallationIntent) Reset() {
 	*x = BotInstallationIntent{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[48]
+	mi := &file_voice_space_v1_space_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3288,7 +3626,7 @@ func (x *BotInstallationIntent) String() string {
 func (*BotInstallationIntent) ProtoMessage() {}
 
 func (x *BotInstallationIntent) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[48]
+	mi := &file_voice_space_v1_space_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3301,7 +3639,7 @@ func (x *BotInstallationIntent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BotInstallationIntent.ProtoReflect.Descriptor instead.
 func (*BotInstallationIntent) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{48}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *BotInstallationIntent) GetOperationId() string {
@@ -3354,7 +3692,7 @@ type ListTemplatesRequest struct {
 
 func (x *ListTemplatesRequest) Reset() {
 	*x = ListTemplatesRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[49]
+	mi := &file_voice_space_v1_space_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3366,7 +3704,7 @@ func (x *ListTemplatesRequest) String() string {
 func (*ListTemplatesRequest) ProtoMessage() {}
 
 func (x *ListTemplatesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[49]
+	mi := &file_voice_space_v1_space_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3379,7 +3717,7 @@ func (x *ListTemplatesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTemplatesRequest.ProtoReflect.Descriptor instead.
 func (*ListTemplatesRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{49}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{53}
 }
 
 type TemplateList struct {
@@ -3391,7 +3729,7 @@ type TemplateList struct {
 
 func (x *TemplateList) Reset() {
 	*x = TemplateList{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[50]
+	mi := &file_voice_space_v1_space_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3403,7 +3741,7 @@ func (x *TemplateList) String() string {
 func (*TemplateList) ProtoMessage() {}
 
 func (x *TemplateList) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[50]
+	mi := &file_voice_space_v1_space_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3416,7 +3754,7 @@ func (x *TemplateList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TemplateList.ProtoReflect.Descriptor instead.
 func (*TemplateList) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{50}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *TemplateList) GetTemplates() []*SpaceTemplate {
@@ -3437,7 +3775,7 @@ type SpaceTemplate struct {
 
 func (x *SpaceTemplate) Reset() {
 	*x = SpaceTemplate{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[51]
+	mi := &file_voice_space_v1_space_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3449,7 +3787,7 @@ func (x *SpaceTemplate) String() string {
 func (*SpaceTemplate) ProtoMessage() {}
 
 func (x *SpaceTemplate) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[51]
+	mi := &file_voice_space_v1_space_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3462,7 +3800,7 @@ func (x *SpaceTemplate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpaceTemplate.ProtoReflect.Descriptor instead.
 func (*SpaceTemplate) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{51}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *SpaceTemplate) GetId() string {
@@ -3496,7 +3834,7 @@ type CreateFromTemplateRequest struct {
 
 func (x *CreateFromTemplateRequest) Reset() {
 	*x = CreateFromTemplateRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[52]
+	mi := &file_voice_space_v1_space_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3508,7 +3846,7 @@ func (x *CreateFromTemplateRequest) String() string {
 func (*CreateFromTemplateRequest) ProtoMessage() {}
 
 func (x *CreateFromTemplateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[52]
+	mi := &file_voice_space_v1_space_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3521,7 +3859,7 @@ func (x *CreateFromTemplateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateFromTemplateRequest.ProtoReflect.Descriptor instead.
 func (*CreateFromTemplateRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{52}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *CreateFromTemplateRequest) GetTemplateId() string {
@@ -3558,7 +3896,7 @@ type ApplyCommunityRosterRequest struct {
 
 func (x *ApplyCommunityRosterRequest) Reset() {
 	*x = ApplyCommunityRosterRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[53]
+	mi := &file_voice_space_v1_space_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3570,7 +3908,7 @@ func (x *ApplyCommunityRosterRequest) String() string {
 func (*ApplyCommunityRosterRequest) ProtoMessage() {}
 
 func (x *ApplyCommunityRosterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[53]
+	mi := &file_voice_space_v1_space_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3583,7 +3921,7 @@ func (x *ApplyCommunityRosterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyCommunityRosterRequest.ProtoReflect.Descriptor instead.
 func (*ApplyCommunityRosterRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{53}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *ApplyCommunityRosterRequest) GetOperationId() string {
@@ -3673,7 +4011,7 @@ type ApplyCommunityRosterResponse struct {
 
 func (x *ApplyCommunityRosterResponse) Reset() {
 	*x = ApplyCommunityRosterResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[54]
+	mi := &file_voice_space_v1_space_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3685,7 +4023,7 @@ func (x *ApplyCommunityRosterResponse) String() string {
 func (*ApplyCommunityRosterResponse) ProtoMessage() {}
 
 func (x *ApplyCommunityRosterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[54]
+	mi := &file_voice_space_v1_space_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3698,7 +4036,7 @@ func (x *ApplyCommunityRosterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyCommunityRosterResponse.ProtoReflect.Descriptor instead.
 func (*ApplyCommunityRosterResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{54}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *ApplyCommunityRosterResponse) GetOperationId() string {
@@ -3779,7 +4117,7 @@ type CreateCommunityBootstrapRequest struct {
 
 func (x *CreateCommunityBootstrapRequest) Reset() {
 	*x = CreateCommunityBootstrapRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[55]
+	mi := &file_voice_space_v1_space_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3791,7 +4129,7 @@ func (x *CreateCommunityBootstrapRequest) String() string {
 func (*CreateCommunityBootstrapRequest) ProtoMessage() {}
 
 func (x *CreateCommunityBootstrapRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[55]
+	mi := &file_voice_space_v1_space_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3804,7 +4142,7 @@ func (x *CreateCommunityBootstrapRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCommunityBootstrapRequest.ProtoReflect.Descriptor instead.
 func (*CreateCommunityBootstrapRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{55}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *CreateCommunityBootstrapRequest) GetOperationId() string {
@@ -3877,7 +4215,7 @@ type RecoverCommunityOwnerRequest struct {
 
 func (x *RecoverCommunityOwnerRequest) Reset() {
 	*x = RecoverCommunityOwnerRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[56]
+	mi := &file_voice_space_v1_space_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3889,7 +4227,7 @@ func (x *RecoverCommunityOwnerRequest) String() string {
 func (*RecoverCommunityOwnerRequest) ProtoMessage() {}
 
 func (x *RecoverCommunityOwnerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[56]
+	mi := &file_voice_space_v1_space_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3902,7 +4240,7 @@ func (x *RecoverCommunityOwnerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecoverCommunityOwnerRequest.ProtoReflect.Descriptor instead.
 func (*RecoverCommunityOwnerRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{56}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *RecoverCommunityOwnerRequest) GetOperationId() string {
@@ -4003,7 +4341,7 @@ type GetAuditLogRequest struct {
 
 func (x *GetAuditLogRequest) Reset() {
 	*x = GetAuditLogRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[57]
+	mi := &file_voice_space_v1_space_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4015,7 +4353,7 @@ func (x *GetAuditLogRequest) String() string {
 func (*GetAuditLogRequest) ProtoMessage() {}
 
 func (x *GetAuditLogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[57]
+	mi := &file_voice_space_v1_space_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4028,7 +4366,7 @@ func (x *GetAuditLogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAuditLogRequest.ProtoReflect.Descriptor instead.
 func (*GetAuditLogRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{57}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *GetAuditLogRequest) GetSpaceId() string {
@@ -4083,7 +4421,7 @@ type AuditLogList struct {
 
 func (x *AuditLogList) Reset() {
 	*x = AuditLogList{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[58]
+	mi := &file_voice_space_v1_space_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4095,7 +4433,7 @@ func (x *AuditLogList) String() string {
 func (*AuditLogList) ProtoMessage() {}
 
 func (x *AuditLogList) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[58]
+	mi := &file_voice_space_v1_space_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4108,7 +4446,7 @@ func (x *AuditLogList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuditLogList.ProtoReflect.Descriptor instead.
 func (*AuditLogList) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{58}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *AuditLogList) GetEntries() []*AuditLogEntry {
@@ -4141,7 +4479,7 @@ type AuditLogEntry struct {
 
 func (x *AuditLogEntry) Reset() {
 	*x = AuditLogEntry{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[59]
+	mi := &file_voice_space_v1_space_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4153,7 +4491,7 @@ func (x *AuditLogEntry) String() string {
 func (*AuditLogEntry) ProtoMessage() {}
 
 func (x *AuditLogEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[59]
+	mi := &file_voice_space_v1_space_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4166,7 +4504,7 @@ func (x *AuditLogEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuditLogEntry.ProtoReflect.Descriptor instead.
 func (*AuditLogEntry) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{59}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *AuditLogEntry) GetId() string {
@@ -4242,7 +4580,7 @@ type AppendAuditEventRequest struct {
 
 func (x *AppendAuditEventRequest) Reset() {
 	*x = AppendAuditEventRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[60]
+	mi := &file_voice_space_v1_space_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4254,7 +4592,7 @@ func (x *AppendAuditEventRequest) String() string {
 func (*AppendAuditEventRequest) ProtoMessage() {}
 
 func (x *AppendAuditEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[60]
+	mi := &file_voice_space_v1_space_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4267,7 +4605,7 @@ func (x *AppendAuditEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppendAuditEventRequest.ProtoReflect.Descriptor instead.
 func (*AppendAuditEventRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{60}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *AppendAuditEventRequest) GetAuditEventId() string {
@@ -4335,7 +4673,7 @@ type AppendAuditEventResponse struct {
 
 func (x *AppendAuditEventResponse) Reset() {
 	*x = AppendAuditEventResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[61]
+	mi := &file_voice_space_v1_space_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4347,7 +4685,7 @@ func (x *AppendAuditEventResponse) String() string {
 func (*AppendAuditEventResponse) ProtoMessage() {}
 
 func (x *AppendAuditEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[61]
+	mi := &file_voice_space_v1_space_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4360,7 +4698,7 @@ func (x *AppendAuditEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppendAuditEventResponse.ProtoReflect.Descriptor instead.
 func (*AppendAuditEventResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{61}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{65}
 }
 
 // Logical reference to space_db.spaces for other services (cf. ChatRef).
@@ -4373,7 +4711,7 @@ type SpaceRef struct {
 
 func (x *SpaceRef) Reset() {
 	*x = SpaceRef{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[62]
+	mi := &file_voice_space_v1_space_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4385,7 +4723,7 @@ func (x *SpaceRef) String() string {
 func (*SpaceRef) ProtoMessage() {}
 
 func (x *SpaceRef) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[62]
+	mi := &file_voice_space_v1_space_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4398,7 +4736,7 @@ func (x *SpaceRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpaceRef.ProtoReflect.Descriptor instead.
 func (*SpaceRef) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{62}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *SpaceRef) GetId() string {
@@ -4417,7 +4755,7 @@ type CreateSpaceResponse struct {
 
 func (x *CreateSpaceResponse) Reset() {
 	*x = CreateSpaceResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[63]
+	mi := &file_voice_space_v1_space_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4429,7 +4767,7 @@ func (x *CreateSpaceResponse) String() string {
 func (*CreateSpaceResponse) ProtoMessage() {}
 
 func (x *CreateSpaceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[63]
+	mi := &file_voice_space_v1_space_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4442,7 +4780,7 @@ func (x *CreateSpaceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSpaceResponse.ProtoReflect.Descriptor instead.
 func (*CreateSpaceResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{63}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *CreateSpaceResponse) GetSpace() *Space {
@@ -4461,7 +4799,7 @@ type UpdateSpaceResponse struct {
 
 func (x *UpdateSpaceResponse) Reset() {
 	*x = UpdateSpaceResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[64]
+	mi := &file_voice_space_v1_space_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4473,7 +4811,7 @@ func (x *UpdateSpaceResponse) String() string {
 func (*UpdateSpaceResponse) ProtoMessage() {}
 
 func (x *UpdateSpaceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[64]
+	mi := &file_voice_space_v1_space_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4486,7 +4824,7 @@ func (x *UpdateSpaceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateSpaceResponse.ProtoReflect.Descriptor instead.
 func (*UpdateSpaceResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{64}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *UpdateSpaceResponse) GetSpace() *Space {
@@ -4505,7 +4843,7 @@ type DeleteSpaceResponse struct {
 
 func (x *DeleteSpaceResponse) Reset() {
 	*x = DeleteSpaceResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[65]
+	mi := &file_voice_space_v1_space_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4517,7 +4855,7 @@ func (x *DeleteSpaceResponse) String() string {
 func (*DeleteSpaceResponse) ProtoMessage() {}
 
 func (x *DeleteSpaceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[65]
+	mi := &file_voice_space_v1_space_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4530,7 +4868,7 @@ func (x *DeleteSpaceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteSpaceResponse.ProtoReflect.Descriptor instead.
 func (*DeleteSpaceResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{65}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{69}
 }
 
 type GetSpaceResponse struct {
@@ -4542,7 +4880,7 @@ type GetSpaceResponse struct {
 
 func (x *GetSpaceResponse) Reset() {
 	*x = GetSpaceResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[66]
+	mi := &file_voice_space_v1_space_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4554,7 +4892,7 @@ func (x *GetSpaceResponse) String() string {
 func (*GetSpaceResponse) ProtoMessage() {}
 
 func (x *GetSpaceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[66]
+	mi := &file_voice_space_v1_space_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4567,7 +4905,7 @@ func (x *GetSpaceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSpaceResponse.ProtoReflect.Descriptor instead.
 func (*GetSpaceResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{66}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *GetSpaceResponse) GetSpace() *Space {
@@ -4586,7 +4924,7 @@ type ListMySpacesResponse struct {
 
 func (x *ListMySpacesResponse) Reset() {
 	*x = ListMySpacesResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[67]
+	mi := &file_voice_space_v1_space_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4598,7 +4936,7 @@ func (x *ListMySpacesResponse) String() string {
 func (*ListMySpacesResponse) ProtoMessage() {}
 
 func (x *ListMySpacesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[67]
+	mi := &file_voice_space_v1_space_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4611,7 +4949,7 @@ func (x *ListMySpacesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMySpacesResponse.ProtoReflect.Descriptor instead.
 func (*ListMySpacesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{67}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *ListMySpacesResponse) GetSpaceList() *SpaceList {
@@ -4630,7 +4968,7 @@ type SearchPublicSpacesResponse struct {
 
 func (x *SearchPublicSpacesResponse) Reset() {
 	*x = SearchPublicSpacesResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[68]
+	mi := &file_voice_space_v1_space_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4642,7 +4980,7 @@ func (x *SearchPublicSpacesResponse) String() string {
 func (*SearchPublicSpacesResponse) ProtoMessage() {}
 
 func (x *SearchPublicSpacesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[68]
+	mi := &file_voice_space_v1_space_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4655,7 +4993,7 @@ func (x *SearchPublicSpacesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchPublicSpacesResponse.ProtoReflect.Descriptor instead.
 func (*SearchPublicSpacesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{68}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *SearchPublicSpacesResponse) GetSpaceList() *SpaceList {
@@ -4674,7 +5012,7 @@ type CreateVoiceRoomResponse struct {
 
 func (x *CreateVoiceRoomResponse) Reset() {
 	*x = CreateVoiceRoomResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[69]
+	mi := &file_voice_space_v1_space_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4686,7 +5024,7 @@ func (x *CreateVoiceRoomResponse) String() string {
 func (*CreateVoiceRoomResponse) ProtoMessage() {}
 
 func (x *CreateVoiceRoomResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[69]
+	mi := &file_voice_space_v1_space_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4699,7 +5037,7 @@ func (x *CreateVoiceRoomResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateVoiceRoomResponse.ProtoReflect.Descriptor instead.
 func (*CreateVoiceRoomResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{69}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *CreateVoiceRoomResponse) GetVoiceRoom() *VoiceRoom {
@@ -4718,7 +5056,7 @@ type UpdateVoiceRoomResponse struct {
 
 func (x *UpdateVoiceRoomResponse) Reset() {
 	*x = UpdateVoiceRoomResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[70]
+	mi := &file_voice_space_v1_space_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4730,7 +5068,7 @@ func (x *UpdateVoiceRoomResponse) String() string {
 func (*UpdateVoiceRoomResponse) ProtoMessage() {}
 
 func (x *UpdateVoiceRoomResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[70]
+	mi := &file_voice_space_v1_space_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4743,7 +5081,7 @@ func (x *UpdateVoiceRoomResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateVoiceRoomResponse.ProtoReflect.Descriptor instead.
 func (*UpdateVoiceRoomResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{70}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *UpdateVoiceRoomResponse) GetVoiceRoom() *VoiceRoom {
@@ -4761,7 +5099,7 @@ type DeleteVoiceRoomResponse struct {
 
 func (x *DeleteVoiceRoomResponse) Reset() {
 	*x = DeleteVoiceRoomResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[71]
+	mi := &file_voice_space_v1_space_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4773,7 +5111,7 @@ func (x *DeleteVoiceRoomResponse) String() string {
 func (*DeleteVoiceRoomResponse) ProtoMessage() {}
 
 func (x *DeleteVoiceRoomResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[71]
+	mi := &file_voice_space_v1_space_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4786,7 +5124,7 @@ func (x *DeleteVoiceRoomResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteVoiceRoomResponse.ProtoReflect.Descriptor instead.
 func (*DeleteVoiceRoomResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{71}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{75}
 }
 
 type UpsertTreeNodeResponse struct {
@@ -4798,7 +5136,7 @@ type UpsertTreeNodeResponse struct {
 
 func (x *UpsertTreeNodeResponse) Reset() {
 	*x = UpsertTreeNodeResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[72]
+	mi := &file_voice_space_v1_space_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4810,7 +5148,7 @@ func (x *UpsertTreeNodeResponse) String() string {
 func (*UpsertTreeNodeResponse) ProtoMessage() {}
 
 func (x *UpsertTreeNodeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[72]
+	mi := &file_voice_space_v1_space_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4823,7 +5161,7 @@ func (x *UpsertTreeNodeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpsertTreeNodeResponse.ProtoReflect.Descriptor instead.
 func (*UpsertTreeNodeResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{72}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *UpsertTreeNodeResponse) GetSpaceTreeNode() *SpaceTreeNode {
@@ -4841,7 +5179,7 @@ type RemoveTreeNodeResponse struct {
 
 func (x *RemoveTreeNodeResponse) Reset() {
 	*x = RemoveTreeNodeResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[73]
+	mi := &file_voice_space_v1_space_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4853,7 +5191,7 @@ func (x *RemoveTreeNodeResponse) String() string {
 func (*RemoveTreeNodeResponse) ProtoMessage() {}
 
 func (x *RemoveTreeNodeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[73]
+	mi := &file_voice_space_v1_space_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4866,7 +5204,7 @@ func (x *RemoveTreeNodeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveTreeNodeResponse.ProtoReflect.Descriptor instead.
 func (*RemoveTreeNodeResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{73}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{77}
 }
 
 type CreateCategoryResponse struct {
@@ -4878,7 +5216,7 @@ type CreateCategoryResponse struct {
 
 func (x *CreateCategoryResponse) Reset() {
 	*x = CreateCategoryResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[74]
+	mi := &file_voice_space_v1_space_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4890,7 +5228,7 @@ func (x *CreateCategoryResponse) String() string {
 func (*CreateCategoryResponse) ProtoMessage() {}
 
 func (x *CreateCategoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[74]
+	mi := &file_voice_space_v1_space_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4903,7 +5241,7 @@ func (x *CreateCategoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCategoryResponse.ProtoReflect.Descriptor instead.
 func (*CreateCategoryResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{74}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *CreateCategoryResponse) GetCategory() *Category {
@@ -4922,7 +5260,7 @@ type UpdateCategoryResponse struct {
 
 func (x *UpdateCategoryResponse) Reset() {
 	*x = UpdateCategoryResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[75]
+	mi := &file_voice_space_v1_space_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4934,7 +5272,7 @@ func (x *UpdateCategoryResponse) String() string {
 func (*UpdateCategoryResponse) ProtoMessage() {}
 
 func (x *UpdateCategoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[75]
+	mi := &file_voice_space_v1_space_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4947,7 +5285,7 @@ func (x *UpdateCategoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateCategoryResponse.ProtoReflect.Descriptor instead.
 func (*UpdateCategoryResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{75}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *UpdateCategoryResponse) GetCategory() *Category {
@@ -4965,7 +5303,7 @@ type DeleteCategoryResponse struct {
 
 func (x *DeleteCategoryResponse) Reset() {
 	*x = DeleteCategoryResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[76]
+	mi := &file_voice_space_v1_space_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4977,7 +5315,7 @@ func (x *DeleteCategoryResponse) String() string {
 func (*DeleteCategoryResponse) ProtoMessage() {}
 
 func (x *DeleteCategoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[76]
+	mi := &file_voice_space_v1_space_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4990,7 +5328,7 @@ func (x *DeleteCategoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCategoryResponse.ProtoReflect.Descriptor instead.
 func (*DeleteCategoryResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{76}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{80}
 }
 
 type ReorderSpaceTreeResponse struct {
@@ -5001,7 +5339,7 @@ type ReorderSpaceTreeResponse struct {
 
 func (x *ReorderSpaceTreeResponse) Reset() {
 	*x = ReorderSpaceTreeResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[77]
+	mi := &file_voice_space_v1_space_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5013,7 +5351,7 @@ func (x *ReorderSpaceTreeResponse) String() string {
 func (*ReorderSpaceTreeResponse) ProtoMessage() {}
 
 func (x *ReorderSpaceTreeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[77]
+	mi := &file_voice_space_v1_space_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5026,7 +5364,7 @@ func (x *ReorderSpaceTreeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReorderSpaceTreeResponse.ProtoReflect.Descriptor instead.
 func (*ReorderSpaceTreeResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{77}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{81}
 }
 
 type PinTreeNodeResponse struct {
@@ -5038,7 +5376,7 @@ type PinTreeNodeResponse struct {
 
 func (x *PinTreeNodeResponse) Reset() {
 	*x = PinTreeNodeResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[78]
+	mi := &file_voice_space_v1_space_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5050,7 +5388,7 @@ func (x *PinTreeNodeResponse) String() string {
 func (*PinTreeNodeResponse) ProtoMessage() {}
 
 func (x *PinTreeNodeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[78]
+	mi := &file_voice_space_v1_space_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5063,7 +5401,7 @@ func (x *PinTreeNodeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PinTreeNodeResponse.ProtoReflect.Descriptor instead.
 func (*PinTreeNodeResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{78}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *PinTreeNodeResponse) GetSpaceTreeNode() *SpaceTreeNode {
@@ -5082,7 +5420,7 @@ type UnpinTreeNodeResponse struct {
 
 func (x *UnpinTreeNodeResponse) Reset() {
 	*x = UnpinTreeNodeResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[79]
+	mi := &file_voice_space_v1_space_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5094,7 +5432,7 @@ func (x *UnpinTreeNodeResponse) String() string {
 func (*UnpinTreeNodeResponse) ProtoMessage() {}
 
 func (x *UnpinTreeNodeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[79]
+	mi := &file_voice_space_v1_space_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5107,7 +5445,7 @@ func (x *UnpinTreeNodeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnpinTreeNodeResponse.ProtoReflect.Descriptor instead.
 func (*UnpinTreeNodeResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{79}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *UnpinTreeNodeResponse) GetSpaceTreeNode() *SpaceTreeNode {
@@ -5128,7 +5466,7 @@ type ListSpaceTreeResponse struct {
 
 func (x *ListSpaceTreeResponse) Reset() {
 	*x = ListSpaceTreeResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[80]
+	mi := &file_voice_space_v1_space_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5140,7 +5478,7 @@ func (x *ListSpaceTreeResponse) String() string {
 func (*ListSpaceTreeResponse) ProtoMessage() {}
 
 func (x *ListSpaceTreeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[80]
+	mi := &file_voice_space_v1_space_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5153,7 +5491,7 @@ func (x *ListSpaceTreeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSpaceTreeResponse.ProtoReflect.Descriptor instead.
 func (*ListSpaceTreeResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{80}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *ListSpaceTreeResponse) GetCategories() []*Category {
@@ -5186,7 +5524,7 @@ type CreateInviteResponse struct {
 
 func (x *CreateInviteResponse) Reset() {
 	*x = CreateInviteResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[81]
+	mi := &file_voice_space_v1_space_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5198,7 +5536,7 @@ func (x *CreateInviteResponse) String() string {
 func (*CreateInviteResponse) ProtoMessage() {}
 
 func (x *CreateInviteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[81]
+	mi := &file_voice_space_v1_space_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5211,7 +5549,7 @@ func (x *CreateInviteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateInviteResponse.ProtoReflect.Descriptor instead.
 func (*CreateInviteResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{81}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *CreateInviteResponse) GetInvite() *Invite {
@@ -5229,7 +5567,7 @@ type RevokeInviteResponse struct {
 
 func (x *RevokeInviteResponse) Reset() {
 	*x = RevokeInviteResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[82]
+	mi := &file_voice_space_v1_space_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5241,7 +5579,7 @@ func (x *RevokeInviteResponse) String() string {
 func (*RevokeInviteResponse) ProtoMessage() {}
 
 func (x *RevokeInviteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[82]
+	mi := &file_voice_space_v1_space_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5254,7 +5592,7 @@ func (x *RevokeInviteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeInviteResponse.ProtoReflect.Descriptor instead.
 func (*RevokeInviteResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{82}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{86}
 }
 
 type GetInviteResponse struct {
@@ -5266,7 +5604,7 @@ type GetInviteResponse struct {
 
 func (x *GetInviteResponse) Reset() {
 	*x = GetInviteResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[83]
+	mi := &file_voice_space_v1_space_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5278,7 +5616,7 @@ func (x *GetInviteResponse) String() string {
 func (*GetInviteResponse) ProtoMessage() {}
 
 func (x *GetInviteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[83]
+	mi := &file_voice_space_v1_space_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5291,7 +5629,7 @@ func (x *GetInviteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInviteResponse.ProtoReflect.Descriptor instead.
 func (*GetInviteResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{83}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *GetInviteResponse) GetInvite() *Invite {
@@ -5310,7 +5648,7 @@ type ListInvitesResponse struct {
 
 func (x *ListInvitesResponse) Reset() {
 	*x = ListInvitesResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[84]
+	mi := &file_voice_space_v1_space_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5322,7 +5660,7 @@ func (x *ListInvitesResponse) String() string {
 func (*ListInvitesResponse) ProtoMessage() {}
 
 func (x *ListInvitesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[84]
+	mi := &file_voice_space_v1_space_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5335,7 +5673,7 @@ func (x *ListInvitesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInvitesResponse.ProtoReflect.Descriptor instead.
 func (*ListInvitesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{84}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *ListInvitesResponse) GetInviteList() *InviteList {
@@ -5354,7 +5692,7 @@ type JoinByInviteResponse struct {
 
 func (x *JoinByInviteResponse) Reset() {
 	*x = JoinByInviteResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[85]
+	mi := &file_voice_space_v1_space_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5366,7 +5704,7 @@ func (x *JoinByInviteResponse) String() string {
 func (*JoinByInviteResponse) ProtoMessage() {}
 
 func (x *JoinByInviteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[85]
+	mi := &file_voice_space_v1_space_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5379,7 +5717,7 @@ func (x *JoinByInviteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinByInviteResponse.ProtoReflect.Descriptor instead.
 func (*JoinByInviteResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{85}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *JoinByInviteResponse) GetSpaceMembership() *SpaceMembership {
@@ -5398,7 +5736,7 @@ type JoinSpaceResponse struct {
 
 func (x *JoinSpaceResponse) Reset() {
 	*x = JoinSpaceResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[86]
+	mi := &file_voice_space_v1_space_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5410,7 +5748,7 @@ func (x *JoinSpaceResponse) String() string {
 func (*JoinSpaceResponse) ProtoMessage() {}
 
 func (x *JoinSpaceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[86]
+	mi := &file_voice_space_v1_space_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5423,7 +5761,7 @@ func (x *JoinSpaceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinSpaceResponse.ProtoReflect.Descriptor instead.
 func (*JoinSpaceResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{86}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *JoinSpaceResponse) GetSpaceMembership() *SpaceMembership {
@@ -5441,7 +5779,7 @@ type LeaveSpaceResponse struct {
 
 func (x *LeaveSpaceResponse) Reset() {
 	*x = LeaveSpaceResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[87]
+	mi := &file_voice_space_v1_space_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5453,7 +5791,7 @@ func (x *LeaveSpaceResponse) String() string {
 func (*LeaveSpaceResponse) ProtoMessage() {}
 
 func (x *LeaveSpaceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[87]
+	mi := &file_voice_space_v1_space_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5466,7 +5804,7 @@ func (x *LeaveSpaceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaveSpaceResponse.ProtoReflect.Descriptor instead.
 func (*LeaveSpaceResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{87}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{91}
 }
 
 type KickMemberResponse struct {
@@ -5477,7 +5815,7 @@ type KickMemberResponse struct {
 
 func (x *KickMemberResponse) Reset() {
 	*x = KickMemberResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[88]
+	mi := &file_voice_space_v1_space_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5489,7 +5827,7 @@ func (x *KickMemberResponse) String() string {
 func (*KickMemberResponse) ProtoMessage() {}
 
 func (x *KickMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[88]
+	mi := &file_voice_space_v1_space_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5502,7 +5840,7 @@ func (x *KickMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KickMemberResponse.ProtoReflect.Descriptor instead.
 func (*KickMemberResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{88}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{92}
 }
 
 type BanMemberResponse struct {
@@ -5513,7 +5851,7 @@ type BanMemberResponse struct {
 
 func (x *BanMemberResponse) Reset() {
 	*x = BanMemberResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[89]
+	mi := &file_voice_space_v1_space_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5525,7 +5863,7 @@ func (x *BanMemberResponse) String() string {
 func (*BanMemberResponse) ProtoMessage() {}
 
 func (x *BanMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[89]
+	mi := &file_voice_space_v1_space_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5538,7 +5876,7 @@ func (x *BanMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BanMemberResponse.ProtoReflect.Descriptor instead.
 func (*BanMemberResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{89}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{93}
 }
 
 type UnbanMemberResponse struct {
@@ -5549,7 +5887,7 @@ type UnbanMemberResponse struct {
 
 func (x *UnbanMemberResponse) Reset() {
 	*x = UnbanMemberResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[90]
+	mi := &file_voice_space_v1_space_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5561,7 +5899,7 @@ func (x *UnbanMemberResponse) String() string {
 func (*UnbanMemberResponse) ProtoMessage() {}
 
 func (x *UnbanMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[90]
+	mi := &file_voice_space_v1_space_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5574,7 +5912,7 @@ func (x *UnbanMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnbanMemberResponse.ProtoReflect.Descriptor instead.
 func (*UnbanMemberResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{90}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{94}
 }
 
 type ListMembersResponse struct {
@@ -5586,7 +5924,7 @@ type ListMembersResponse struct {
 
 func (x *ListMembersResponse) Reset() {
 	*x = ListMembersResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[91]
+	mi := &file_voice_space_v1_space_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5598,7 +5936,7 @@ func (x *ListMembersResponse) String() string {
 func (*ListMembersResponse) ProtoMessage() {}
 
 func (x *ListMembersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[91]
+	mi := &file_voice_space_v1_space_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5611,7 +5949,7 @@ func (x *ListMembersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMembersResponse.ProtoReflect.Descriptor instead.
 func (*ListMembersResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{91}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *ListMembersResponse) GetSpaceMemberList() *SpaceMemberList {
@@ -5630,7 +5968,7 @@ type ListBansResponse struct {
 
 func (x *ListBansResponse) Reset() {
 	*x = ListBansResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[92]
+	mi := &file_voice_space_v1_space_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5642,7 +5980,7 @@ func (x *ListBansResponse) String() string {
 func (*ListBansResponse) ProtoMessage() {}
 
 func (x *ListBansResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[92]
+	mi := &file_voice_space_v1_space_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5655,7 +5993,7 @@ func (x *ListBansResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBansResponse.ProtoReflect.Descriptor instead.
 func (*ListBansResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{92}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *ListBansResponse) GetBanList() *BanList {
@@ -5673,7 +6011,7 @@ type TimeoutMemberResponse struct {
 
 func (x *TimeoutMemberResponse) Reset() {
 	*x = TimeoutMemberResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[93]
+	mi := &file_voice_space_v1_space_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5685,7 +6023,7 @@ func (x *TimeoutMemberResponse) String() string {
 func (*TimeoutMemberResponse) ProtoMessage() {}
 
 func (x *TimeoutMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[93]
+	mi := &file_voice_space_v1_space_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5698,7 +6036,7 @@ func (x *TimeoutMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimeoutMemberResponse.ProtoReflect.Descriptor instead.
 func (*TimeoutMemberResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{93}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{97}
 }
 
 type RemoveMemberTimeoutResponse struct {
@@ -5709,7 +6047,7 @@ type RemoveMemberTimeoutResponse struct {
 
 func (x *RemoveMemberTimeoutResponse) Reset() {
 	*x = RemoveMemberTimeoutResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[94]
+	mi := &file_voice_space_v1_space_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5721,7 +6059,7 @@ func (x *RemoveMemberTimeoutResponse) String() string {
 func (*RemoveMemberTimeoutResponse) ProtoMessage() {}
 
 func (x *RemoveMemberTimeoutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[94]
+	mi := &file_voice_space_v1_space_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5734,7 +6072,7 @@ func (x *RemoveMemberTimeoutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveMemberTimeoutResponse.ProtoReflect.Descriptor instead.
 func (*RemoveMemberTimeoutResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{94}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{98}
 }
 
 type TransferOwnershipResponse struct {
@@ -5745,7 +6083,7 @@ type TransferOwnershipResponse struct {
 
 func (x *TransferOwnershipResponse) Reset() {
 	*x = TransferOwnershipResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[95]
+	mi := &file_voice_space_v1_space_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5757,7 +6095,7 @@ func (x *TransferOwnershipResponse) String() string {
 func (*TransferOwnershipResponse) ProtoMessage() {}
 
 func (x *TransferOwnershipResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[95]
+	mi := &file_voice_space_v1_space_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5770,7 +6108,7 @@ func (x *TransferOwnershipResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransferOwnershipResponse.ProtoReflect.Descriptor instead.
 func (*TransferOwnershipResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{95}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{99}
 }
 
 type AddBotMemberResponse struct {
@@ -5781,7 +6119,7 @@ type AddBotMemberResponse struct {
 
 func (x *AddBotMemberResponse) Reset() {
 	*x = AddBotMemberResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[96]
+	mi := &file_voice_space_v1_space_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5793,7 +6131,7 @@ func (x *AddBotMemberResponse) String() string {
 func (*AddBotMemberResponse) ProtoMessage() {}
 
 func (x *AddBotMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[96]
+	mi := &file_voice_space_v1_space_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5806,7 +6144,7 @@ func (x *AddBotMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddBotMemberResponse.ProtoReflect.Descriptor instead.
 func (*AddBotMemberResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{96}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{100}
 }
 
 type RemoveBotMemberResponse struct {
@@ -5817,7 +6155,7 @@ type RemoveBotMemberResponse struct {
 
 func (x *RemoveBotMemberResponse) Reset() {
 	*x = RemoveBotMemberResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[97]
+	mi := &file_voice_space_v1_space_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5829,7 +6167,7 @@ func (x *RemoveBotMemberResponse) String() string {
 func (*RemoveBotMemberResponse) ProtoMessage() {}
 
 func (x *RemoveBotMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[97]
+	mi := &file_voice_space_v1_space_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5842,7 +6180,7 @@ func (x *RemoveBotMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveBotMemberResponse.ProtoReflect.Descriptor instead.
 func (*RemoveBotMemberResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{97}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{101}
 }
 
 type ListTemplatesResponse struct {
@@ -5854,7 +6192,7 @@ type ListTemplatesResponse struct {
 
 func (x *ListTemplatesResponse) Reset() {
 	*x = ListTemplatesResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[98]
+	mi := &file_voice_space_v1_space_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5866,7 +6204,7 @@ func (x *ListTemplatesResponse) String() string {
 func (*ListTemplatesResponse) ProtoMessage() {}
 
 func (x *ListTemplatesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[98]
+	mi := &file_voice_space_v1_space_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5879,7 +6217,7 @@ func (x *ListTemplatesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTemplatesResponse.ProtoReflect.Descriptor instead.
 func (*ListTemplatesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{98}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{102}
 }
 
 func (x *ListTemplatesResponse) GetTemplateList() *TemplateList {
@@ -5898,7 +6236,7 @@ type CreateFromTemplateResponse struct {
 
 func (x *CreateFromTemplateResponse) Reset() {
 	*x = CreateFromTemplateResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[99]
+	mi := &file_voice_space_v1_space_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5910,7 +6248,7 @@ func (x *CreateFromTemplateResponse) String() string {
 func (*CreateFromTemplateResponse) ProtoMessage() {}
 
 func (x *CreateFromTemplateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[99]
+	mi := &file_voice_space_v1_space_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5923,7 +6261,7 @@ func (x *CreateFromTemplateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateFromTemplateResponse.ProtoReflect.Descriptor instead.
 func (*CreateFromTemplateResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{99}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{103}
 }
 
 func (x *CreateFromTemplateResponse) GetSpace() *Space {
@@ -5943,7 +6281,7 @@ type CreateCommunityBootstrapResponse struct {
 
 func (x *CreateCommunityBootstrapResponse) Reset() {
 	*x = CreateCommunityBootstrapResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[100]
+	mi := &file_voice_space_v1_space_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5955,7 +6293,7 @@ func (x *CreateCommunityBootstrapResponse) String() string {
 func (*CreateCommunityBootstrapResponse) ProtoMessage() {}
 
 func (x *CreateCommunityBootstrapResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[100]
+	mi := &file_voice_space_v1_space_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5968,7 +6306,7 @@ func (x *CreateCommunityBootstrapResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCommunityBootstrapResponse.ProtoReflect.Descriptor instead.
 func (*CreateCommunityBootstrapResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{100}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{104}
 }
 
 func (x *CreateCommunityBootstrapResponse) GetSpace() *Space {
@@ -5996,7 +6334,7 @@ type RecoverCommunityOwnerResponse struct {
 
 func (x *RecoverCommunityOwnerResponse) Reset() {
 	*x = RecoverCommunityOwnerResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[101]
+	mi := &file_voice_space_v1_space_proto_msgTypes[105]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6008,7 +6346,7 @@ func (x *RecoverCommunityOwnerResponse) String() string {
 func (*RecoverCommunityOwnerResponse) ProtoMessage() {}
 
 func (x *RecoverCommunityOwnerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[101]
+	mi := &file_voice_space_v1_space_proto_msgTypes[105]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6021,7 +6359,7 @@ func (x *RecoverCommunityOwnerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecoverCommunityOwnerResponse.ProtoReflect.Descriptor instead.
 func (*RecoverCommunityOwnerResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{101}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{105}
 }
 
 func (x *RecoverCommunityOwnerResponse) GetSpaceId() string {
@@ -6054,7 +6392,7 @@ type GetAuditLogResponse struct {
 
 func (x *GetAuditLogResponse) Reset() {
 	*x = GetAuditLogResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[102]
+	mi := &file_voice_space_v1_space_proto_msgTypes[106]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6066,7 +6404,7 @@ func (x *GetAuditLogResponse) String() string {
 func (*GetAuditLogResponse) ProtoMessage() {}
 
 func (x *GetAuditLogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[102]
+	mi := &file_voice_space_v1_space_proto_msgTypes[106]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6079,7 +6417,7 @@ func (x *GetAuditLogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAuditLogResponse.ProtoReflect.Descriptor instead.
 func (*GetAuditLogResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{102}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{106}
 }
 
 func (x *GetAuditLogResponse) GetAuditLogList() *AuditLogList {
@@ -6100,7 +6438,7 @@ type AreCoMembersRequest struct {
 
 func (x *AreCoMembersRequest) Reset() {
 	*x = AreCoMembersRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[103]
+	mi := &file_voice_space_v1_space_proto_msgTypes[107]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6112,7 +6450,7 @@ func (x *AreCoMembersRequest) String() string {
 func (*AreCoMembersRequest) ProtoMessage() {}
 
 func (x *AreCoMembersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[103]
+	mi := &file_voice_space_v1_space_proto_msgTypes[107]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6125,7 +6463,7 @@ func (x *AreCoMembersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AreCoMembersRequest.ProtoReflect.Descriptor instead.
 func (*AreCoMembersRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{103}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{107}
 }
 
 func (x *AreCoMembersRequest) GetProfileIdA() string {
@@ -6158,7 +6496,7 @@ type AreCoMembersResponse struct {
 
 func (x *AreCoMembersResponse) Reset() {
 	*x = AreCoMembersResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[104]
+	mi := &file_voice_space_v1_space_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6170,7 +6508,7 @@ func (x *AreCoMembersResponse) String() string {
 func (*AreCoMembersResponse) ProtoMessage() {}
 
 func (x *AreCoMembersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[104]
+	mi := &file_voice_space_v1_space_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6183,7 +6521,7 @@ func (x *AreCoMembersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AreCoMembersResponse.ProtoReflect.Descriptor instead.
 func (*AreCoMembersResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{104}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{108}
 }
 
 func (x *AreCoMembersResponse) GetCoMembers() bool {
@@ -6206,7 +6544,7 @@ type ResolveVoiceRoomAccessRequest struct {
 
 func (x *ResolveVoiceRoomAccessRequest) Reset() {
 	*x = ResolveVoiceRoomAccessRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[105]
+	mi := &file_voice_space_v1_space_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6218,7 +6556,7 @@ func (x *ResolveVoiceRoomAccessRequest) String() string {
 func (*ResolveVoiceRoomAccessRequest) ProtoMessage() {}
 
 func (x *ResolveVoiceRoomAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[105]
+	mi := &file_voice_space_v1_space_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6231,7 +6569,7 @@ func (x *ResolveVoiceRoomAccessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveVoiceRoomAccessRequest.ProtoReflect.Descriptor instead.
 func (*ResolveVoiceRoomAccessRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{105}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{109}
 }
 
 func (x *ResolveVoiceRoomAccessRequest) GetVoiceRoomId() string {
@@ -6278,7 +6616,7 @@ type ResolveVoiceRoomAccessResponse struct {
 
 func (x *ResolveVoiceRoomAccessResponse) Reset() {
 	*x = ResolveVoiceRoomAccessResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[106]
+	mi := &file_voice_space_v1_space_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6290,7 +6628,7 @@ func (x *ResolveVoiceRoomAccessResponse) String() string {
 func (*ResolveVoiceRoomAccessResponse) ProtoMessage() {}
 
 func (x *ResolveVoiceRoomAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[106]
+	mi := &file_voice_space_v1_space_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6303,7 +6641,7 @@ func (x *ResolveVoiceRoomAccessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveVoiceRoomAccessResponse.ProtoReflect.Descriptor instead.
 func (*ResolveVoiceRoomAccessResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{106}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{110}
 }
 
 func (x *ResolveVoiceRoomAccessResponse) GetSpaceId() string {
@@ -6388,7 +6726,7 @@ type ResolveMemberCommunicationStateRequest struct {
 
 func (x *ResolveMemberCommunicationStateRequest) Reset() {
 	*x = ResolveMemberCommunicationStateRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[107]
+	mi := &file_voice_space_v1_space_proto_msgTypes[111]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6400,7 +6738,7 @@ func (x *ResolveMemberCommunicationStateRequest) String() string {
 func (*ResolveMemberCommunicationStateRequest) ProtoMessage() {}
 
 func (x *ResolveMemberCommunicationStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[107]
+	mi := &file_voice_space_v1_space_proto_msgTypes[111]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6413,7 +6751,7 @@ func (x *ResolveMemberCommunicationStateRequest) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use ResolveMemberCommunicationStateRequest.ProtoReflect.Descriptor instead.
 func (*ResolveMemberCommunicationStateRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{107}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{111}
 }
 
 func (x *ResolveMemberCommunicationStateRequest) GetProtocolVersion() uint32 {
@@ -6454,7 +6792,7 @@ type ResolveMemberCommunicationStateResponse struct {
 
 func (x *ResolveMemberCommunicationStateResponse) Reset() {
 	*x = ResolveMemberCommunicationStateResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[108]
+	mi := &file_voice_space_v1_space_proto_msgTypes[112]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6466,7 +6804,7 @@ func (x *ResolveMemberCommunicationStateResponse) String() string {
 func (*ResolveMemberCommunicationStateResponse) ProtoMessage() {}
 
 func (x *ResolveMemberCommunicationStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[108]
+	mi := &file_voice_space_v1_space_proto_msgTypes[112]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6479,7 +6817,7 @@ func (x *ResolveMemberCommunicationStateResponse) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use ResolveMemberCommunicationStateResponse.ProtoReflect.Descriptor instead.
 func (*ResolveMemberCommunicationStateResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{108}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{112}
 }
 
 func (x *ResolveMemberCommunicationStateResponse) GetProtocolVersion() uint32 {
@@ -6542,7 +6880,7 @@ type SyncSpaceProSubscriptionRequest struct {
 
 func (x *SyncSpaceProSubscriptionRequest) Reset() {
 	*x = SyncSpaceProSubscriptionRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[109]
+	mi := &file_voice_space_v1_space_proto_msgTypes[113]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6554,7 +6892,7 @@ func (x *SyncSpaceProSubscriptionRequest) String() string {
 func (*SyncSpaceProSubscriptionRequest) ProtoMessage() {}
 
 func (x *SyncSpaceProSubscriptionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[109]
+	mi := &file_voice_space_v1_space_proto_msgTypes[113]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6567,7 +6905,7 @@ func (x *SyncSpaceProSubscriptionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncSpaceProSubscriptionRequest.ProtoReflect.Descriptor instead.
 func (*SyncSpaceProSubscriptionRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{109}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{113}
 }
 
 func (x *SyncSpaceProSubscriptionRequest) GetSpaceId() string {
@@ -6599,7 +6937,7 @@ type SyncSpaceProSubscriptionResponse struct {
 
 func (x *SyncSpaceProSubscriptionResponse) Reset() {
 	*x = SyncSpaceProSubscriptionResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[110]
+	mi := &file_voice_space_v1_space_proto_msgTypes[114]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6611,7 +6949,7 @@ func (x *SyncSpaceProSubscriptionResponse) String() string {
 func (*SyncSpaceProSubscriptionResponse) ProtoMessage() {}
 
 func (x *SyncSpaceProSubscriptionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[110]
+	mi := &file_voice_space_v1_space_proto_msgTypes[114]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6624,7 +6962,7 @@ func (x *SyncSpaceProSubscriptionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncSpaceProSubscriptionResponse.ProtoReflect.Descriptor instead.
 func (*SyncSpaceProSubscriptionResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{110}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{114}
 }
 
 // @voice.unknown_fields=reject
@@ -6638,7 +6976,7 @@ type RestoreSpaceRequest struct {
 
 func (x *RestoreSpaceRequest) Reset() {
 	*x = RestoreSpaceRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[111]
+	mi := &file_voice_space_v1_space_proto_msgTypes[115]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6650,7 +6988,7 @@ func (x *RestoreSpaceRequest) String() string {
 func (*RestoreSpaceRequest) ProtoMessage() {}
 
 func (x *RestoreSpaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[111]
+	mi := &file_voice_space_v1_space_proto_msgTypes[115]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6663,7 +7001,7 @@ func (x *RestoreSpaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreSpaceRequest.ProtoReflect.Descriptor instead.
 func (*RestoreSpaceRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{111}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{115}
 }
 
 func (x *RestoreSpaceRequest) GetSpaceId() string {
@@ -6690,7 +7028,7 @@ type RestoreSpaceResponse struct {
 
 func (x *RestoreSpaceResponse) Reset() {
 	*x = RestoreSpaceResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[112]
+	mi := &file_voice_space_v1_space_proto_msgTypes[116]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6702,7 +7040,7 @@ func (x *RestoreSpaceResponse) String() string {
 func (*RestoreSpaceResponse) ProtoMessage() {}
 
 func (x *RestoreSpaceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[112]
+	mi := &file_voice_space_v1_space_proto_msgTypes[116]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6715,7 +7053,7 @@ func (x *RestoreSpaceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreSpaceResponse.ProtoReflect.Descriptor instead.
 func (*RestoreSpaceResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{112}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{116}
 }
 
 func (x *RestoreSpaceResponse) GetSpace() *Space {
@@ -6734,7 +7072,7 @@ type SpaceDeletionManifestSet struct {
 	DeletionOperationId string                                  `protobuf:"bytes,3,opt,name=deletion_operation_id,json=deletionOperationId,proto3" json:"deletion_operation_id,omitempty"`
 	ScheduleGeneration  uint64                                  `protobuf:"varint,4,opt,name=schedule_generation,json=scheduleGeneration,proto3" json:"schedule_generation,omitempty"`
 	ChatManifest        *v1.ManifestBinding                     `protobuf:"bytes,5,opt,name=chat_manifest,json=chatManifest,proto3" json:"chat_manifest,omitempty"`
-	FileProducers       []*v12.FileReferenceProducerDeclaration `protobuf:"bytes,6,rep,name=file_producers,json=fileProducers,proto3" json:"file_producers,omitempty"`
+	FileProducers       []*v13.FileReferenceProducerDeclaration `protobuf:"bytes,6,rep,name=file_producers,json=fileProducers,proto3" json:"file_producers,omitempty"`
 	RootSha256          []byte                                  `protobuf:"bytes,7,opt,name=root_sha256,json=rootSha256,proto3" json:"root_sha256,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
@@ -6742,7 +7080,7 @@ type SpaceDeletionManifestSet struct {
 
 func (x *SpaceDeletionManifestSet) Reset() {
 	*x = SpaceDeletionManifestSet{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[113]
+	mi := &file_voice_space_v1_space_proto_msgTypes[117]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6754,7 +7092,7 @@ func (x *SpaceDeletionManifestSet) String() string {
 func (*SpaceDeletionManifestSet) ProtoMessage() {}
 
 func (x *SpaceDeletionManifestSet) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[113]
+	mi := &file_voice_space_v1_space_proto_msgTypes[117]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6767,7 +7105,7 @@ func (x *SpaceDeletionManifestSet) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpaceDeletionManifestSet.ProtoReflect.Descriptor instead.
 func (*SpaceDeletionManifestSet) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{113}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{117}
 }
 
 func (x *SpaceDeletionManifestSet) GetProtocolVersion() uint32 {
@@ -6805,7 +7143,7 @@ func (x *SpaceDeletionManifestSet) GetChatManifest() *v1.ManifestBinding {
 	return nil
 }
 
-func (x *SpaceDeletionManifestSet) GetFileProducers() []*v12.FileReferenceProducerDeclaration {
+func (x *SpaceDeletionManifestSet) GetFileProducers() []*v13.FileReferenceProducerDeclaration {
 	if x != nil {
 		return x.FileProducers
 	}
@@ -6833,7 +7171,7 @@ type ParticipantCoordinatorStatus struct {
 
 func (x *ParticipantCoordinatorStatus) Reset() {
 	*x = ParticipantCoordinatorStatus{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[114]
+	mi := &file_voice_space_v1_space_proto_msgTypes[118]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6845,7 +7183,7 @@ func (x *ParticipantCoordinatorStatus) String() string {
 func (*ParticipantCoordinatorStatus) ProtoMessage() {}
 
 func (x *ParticipantCoordinatorStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[114]
+	mi := &file_voice_space_v1_space_proto_msgTypes[118]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6858,7 +7196,7 @@ func (x *ParticipantCoordinatorStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ParticipantCoordinatorStatus.ProtoReflect.Descriptor instead.
 func (*ParticipantCoordinatorStatus) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{114}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{118}
 }
 
 func (x *ParticipantCoordinatorStatus) GetParticipantId() v1.ParticipantId {
@@ -6915,7 +7253,7 @@ type SpaceDeletionCoordinatorStatus struct {
 
 func (x *SpaceDeletionCoordinatorStatus) Reset() {
 	*x = SpaceDeletionCoordinatorStatus{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[115]
+	mi := &file_voice_space_v1_space_proto_msgTypes[119]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6927,7 +7265,7 @@ func (x *SpaceDeletionCoordinatorStatus) String() string {
 func (*SpaceDeletionCoordinatorStatus) ProtoMessage() {}
 
 func (x *SpaceDeletionCoordinatorStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[115]
+	mi := &file_voice_space_v1_space_proto_msgTypes[119]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6940,7 +7278,7 @@ func (x *SpaceDeletionCoordinatorStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpaceDeletionCoordinatorStatus.ProtoReflect.Descriptor instead.
 func (*SpaceDeletionCoordinatorStatus) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{115}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{119}
 }
 
 func (x *SpaceDeletionCoordinatorStatus) GetProtocolVersion() uint32 {
@@ -7025,7 +7363,7 @@ type GetSpaceDeletionCoordinatorStatusRequest struct {
 
 func (x *GetSpaceDeletionCoordinatorStatusRequest) Reset() {
 	*x = GetSpaceDeletionCoordinatorStatusRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[116]
+	mi := &file_voice_space_v1_space_proto_msgTypes[120]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7037,7 +7375,7 @@ func (x *GetSpaceDeletionCoordinatorStatusRequest) String() string {
 func (*GetSpaceDeletionCoordinatorStatusRequest) ProtoMessage() {}
 
 func (x *GetSpaceDeletionCoordinatorStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[116]
+	mi := &file_voice_space_v1_space_proto_msgTypes[120]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7050,7 +7388,7 @@ func (x *GetSpaceDeletionCoordinatorStatusRequest) ProtoReflect() protoreflect.M
 
 // Deprecated: Use GetSpaceDeletionCoordinatorStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetSpaceDeletionCoordinatorStatusRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{116}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{120}
 }
 
 func (x *GetSpaceDeletionCoordinatorStatusRequest) GetProtocolVersion() uint32 {
@@ -7084,7 +7422,7 @@ type GetSpaceDeletionCoordinatorStatusResponse struct {
 
 func (x *GetSpaceDeletionCoordinatorStatusResponse) Reset() {
 	*x = GetSpaceDeletionCoordinatorStatusResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[117]
+	mi := &file_voice_space_v1_space_proto_msgTypes[121]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7096,7 +7434,7 @@ func (x *GetSpaceDeletionCoordinatorStatusResponse) String() string {
 func (*GetSpaceDeletionCoordinatorStatusResponse) ProtoMessage() {}
 
 func (x *GetSpaceDeletionCoordinatorStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[117]
+	mi := &file_voice_space_v1_space_proto_msgTypes[121]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7109,7 +7447,7 @@ func (x *GetSpaceDeletionCoordinatorStatusResponse) ProtoReflect() protoreflect.
 
 // Deprecated: Use GetSpaceDeletionCoordinatorStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetSpaceDeletionCoordinatorStatusResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{117}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{121}
 }
 
 func (x *GetSpaceDeletionCoordinatorStatusResponse) GetStatus() *SpaceDeletionCoordinatorStatus {
@@ -7130,7 +7468,7 @@ type ValidateRoleOverrideTargetRequest struct {
 
 func (x *ValidateRoleOverrideTargetRequest) Reset() {
 	*x = ValidateRoleOverrideTargetRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[118]
+	mi := &file_voice_space_v1_space_proto_msgTypes[122]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7142,7 +7480,7 @@ func (x *ValidateRoleOverrideTargetRequest) String() string {
 func (*ValidateRoleOverrideTargetRequest) ProtoMessage() {}
 
 func (x *ValidateRoleOverrideTargetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[118]
+	mi := &file_voice_space_v1_space_proto_msgTypes[122]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7155,7 +7493,7 @@ func (x *ValidateRoleOverrideTargetRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use ValidateRoleOverrideTargetRequest.ProtoReflect.Descriptor instead.
 func (*ValidateRoleOverrideTargetRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{118}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{122}
 }
 
 func (x *ValidateRoleOverrideTargetRequest) GetSpaceId() string {
@@ -7180,7 +7518,7 @@ type ValidateRoleOverrideTargetResponse struct {
 
 func (x *ValidateRoleOverrideTargetResponse) Reset() {
 	*x = ValidateRoleOverrideTargetResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[119]
+	mi := &file_voice_space_v1_space_proto_msgTypes[123]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7192,7 +7530,7 @@ func (x *ValidateRoleOverrideTargetResponse) String() string {
 func (*ValidateRoleOverrideTargetResponse) ProtoMessage() {}
 
 func (x *ValidateRoleOverrideTargetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[119]
+	mi := &file_voice_space_v1_space_proto_msgTypes[123]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7205,7 +7543,7 @@ func (x *ValidateRoleOverrideTargetResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use ValidateRoleOverrideTargetResponse.ProtoReflect.Descriptor instead.
 func (*ValidateRoleOverrideTargetResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{119}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{123}
 }
 
 type UpdateMemberNicknameRequest struct {
@@ -7222,7 +7560,7 @@ type UpdateMemberNicknameRequest struct {
 
 func (x *UpdateMemberNicknameRequest) Reset() {
 	*x = UpdateMemberNicknameRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[120]
+	mi := &file_voice_space_v1_space_proto_msgTypes[124]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7234,7 +7572,7 @@ func (x *UpdateMemberNicknameRequest) String() string {
 func (*UpdateMemberNicknameRequest) ProtoMessage() {}
 
 func (x *UpdateMemberNicknameRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[120]
+	mi := &file_voice_space_v1_space_proto_msgTypes[124]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7247,7 +7585,7 @@ func (x *UpdateMemberNicknameRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateMemberNicknameRequest.ProtoReflect.Descriptor instead.
 func (*UpdateMemberNicknameRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{120}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{124}
 }
 
 func (x *UpdateMemberNicknameRequest) GetSpaceId() string {
@@ -7280,7 +7618,7 @@ type UpdateMemberNicknameResponse struct {
 
 func (x *UpdateMemberNicknameResponse) Reset() {
 	*x = UpdateMemberNicknameResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[121]
+	mi := &file_voice_space_v1_space_proto_msgTypes[125]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7292,7 +7630,7 @@ func (x *UpdateMemberNicknameResponse) String() string {
 func (*UpdateMemberNicknameResponse) ProtoMessage() {}
 
 func (x *UpdateMemberNicknameResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[121]
+	mi := &file_voice_space_v1_space_proto_msgTypes[125]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7305,7 +7643,7 @@ func (x *UpdateMemberNicknameResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateMemberNicknameResponse.ProtoReflect.Descriptor instead.
 func (*UpdateMemberNicknameResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{121}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{125}
 }
 
 func (x *UpdateMemberNicknameResponse) GetSpaceMembership() *SpaceMembership {
@@ -7329,7 +7667,7 @@ type SpaceChatCreationUser struct {
 
 func (x *SpaceChatCreationUser) Reset() {
 	*x = SpaceChatCreationUser{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[122]
+	mi := &file_voice_space_v1_space_proto_msgTypes[126]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7341,7 +7679,7 @@ func (x *SpaceChatCreationUser) String() string {
 func (*SpaceChatCreationUser) ProtoMessage() {}
 
 func (x *SpaceChatCreationUser) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[122]
+	mi := &file_voice_space_v1_space_proto_msgTypes[126]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7354,7 +7692,7 @@ func (x *SpaceChatCreationUser) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpaceChatCreationUser.ProtoReflect.Descriptor instead.
 func (*SpaceChatCreationUser) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{122}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{126}
 }
 
 func (x *SpaceChatCreationUser) GetAccountId() string {
@@ -7390,7 +7728,7 @@ type SpaceChatCreationBot struct {
 
 func (x *SpaceChatCreationBot) Reset() {
 	*x = SpaceChatCreationBot{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[123]
+	mi := &file_voice_space_v1_space_proto_msgTypes[127]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7402,7 +7740,7 @@ func (x *SpaceChatCreationBot) String() string {
 func (*SpaceChatCreationBot) ProtoMessage() {}
 
 func (x *SpaceChatCreationBot) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[123]
+	mi := &file_voice_space_v1_space_proto_msgTypes[127]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7415,7 +7753,7 @@ func (x *SpaceChatCreationBot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpaceChatCreationBot.ProtoReflect.Descriptor instead.
 func (*SpaceChatCreationBot) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{123}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{127}
 }
 
 func (x *SpaceChatCreationBot) GetBotId() string {
@@ -7447,7 +7785,7 @@ type SpaceChatCreationBinding struct {
 	CreatorProfileId    string                 `protobuf:"bytes,3,opt,name=creator_profile_id,json=creatorProfileId,proto3" json:"creator_profile_id,omitempty"`
 	SpaceId             string                 `protobuf:"bytes,4,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
 	ChatId              string                 `protobuf:"bytes,5,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
-	ChatType            v11.ChatType           `protobuf:"varint,6,opt,name=chat_type,json=chatType,proto3,enum=voice.chat.v1.ChatType" json:"chat_type,omitempty"`
+	ChatType            v12.ChatType           `protobuf:"varint,6,opt,name=chat_type,json=chatType,proto3,enum=voice.chat.v1.ChatType" json:"chat_type,omitempty"`
 	NodeId              string                 `protobuf:"bytes,7,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
 	AuditEventId        string                 `protobuf:"bytes,8,opt,name=audit_event_id,json=auditEventId,proto3" json:"audit_event_id,omitempty"`
 	CreateRequestSha256 []byte                 `protobuf:"bytes,9,opt,name=create_request_sha256,json=createRequestSha256,proto3" json:"create_request_sha256,omitempty"`
@@ -7462,7 +7800,7 @@ type SpaceChatCreationBinding struct {
 
 func (x *SpaceChatCreationBinding) Reset() {
 	*x = SpaceChatCreationBinding{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[124]
+	mi := &file_voice_space_v1_space_proto_msgTypes[128]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7474,7 +7812,7 @@ func (x *SpaceChatCreationBinding) String() string {
 func (*SpaceChatCreationBinding) ProtoMessage() {}
 
 func (x *SpaceChatCreationBinding) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[124]
+	mi := &file_voice_space_v1_space_proto_msgTypes[128]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7487,7 +7825,7 @@ func (x *SpaceChatCreationBinding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpaceChatCreationBinding.ProtoReflect.Descriptor instead.
 func (*SpaceChatCreationBinding) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{124}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{128}
 }
 
 func (x *SpaceChatCreationBinding) GetProtocolVersion() uint32 {
@@ -7525,11 +7863,11 @@ func (x *SpaceChatCreationBinding) GetChatId() string {
 	return ""
 }
 
-func (x *SpaceChatCreationBinding) GetChatType() v11.ChatType {
+func (x *SpaceChatCreationBinding) GetChatType() v12.ChatType {
 	if x != nil {
 		return x.ChatType
 	}
-	return v11.ChatType(0)
+	return v12.ChatType(0)
 }
 
 func (x *SpaceChatCreationBinding) GetNodeId() string {
@@ -7609,7 +7947,7 @@ type SpaceChatCreationOutcome struct {
 
 func (x *SpaceChatCreationOutcome) Reset() {
 	*x = SpaceChatCreationOutcome{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[125]
+	mi := &file_voice_space_v1_space_proto_msgTypes[129]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7621,7 +7959,7 @@ func (x *SpaceChatCreationOutcome) String() string {
 func (*SpaceChatCreationOutcome) ProtoMessage() {}
 
 func (x *SpaceChatCreationOutcome) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[125]
+	mi := &file_voice_space_v1_space_proto_msgTypes[129]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7634,7 +7972,7 @@ func (x *SpaceChatCreationOutcome) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpaceChatCreationOutcome.ProtoReflect.Descriptor instead.
 func (*SpaceChatCreationOutcome) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{125}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{129}
 }
 
 func (x *SpaceChatCreationOutcome) GetBinding() *SpaceChatCreationBinding {
@@ -7675,7 +8013,7 @@ type CommitSpaceChatCreationRequest struct {
 
 func (x *CommitSpaceChatCreationRequest) Reset() {
 	*x = CommitSpaceChatCreationRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[126]
+	mi := &file_voice_space_v1_space_proto_msgTypes[130]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7687,7 +8025,7 @@ func (x *CommitSpaceChatCreationRequest) String() string {
 func (*CommitSpaceChatCreationRequest) ProtoMessage() {}
 
 func (x *CommitSpaceChatCreationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[126]
+	mi := &file_voice_space_v1_space_proto_msgTypes[130]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7700,7 +8038,7 @@ func (x *CommitSpaceChatCreationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitSpaceChatCreationRequest.ProtoReflect.Descriptor instead.
 func (*CommitSpaceChatCreationRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{126}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{130}
 }
 
 func (x *CommitSpaceChatCreationRequest) GetBinding() *SpaceChatCreationBinding {
@@ -7720,7 +8058,7 @@ type CommitSpaceChatCreationResponse struct {
 
 func (x *CommitSpaceChatCreationResponse) Reset() {
 	*x = CommitSpaceChatCreationResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[127]
+	mi := &file_voice_space_v1_space_proto_msgTypes[131]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7732,7 +8070,7 @@ func (x *CommitSpaceChatCreationResponse) String() string {
 func (*CommitSpaceChatCreationResponse) ProtoMessage() {}
 
 func (x *CommitSpaceChatCreationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[127]
+	mi := &file_voice_space_v1_space_proto_msgTypes[131]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7745,7 +8083,7 @@ func (x *CommitSpaceChatCreationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitSpaceChatCreationResponse.ProtoReflect.Descriptor instead.
 func (*CommitSpaceChatCreationResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{127}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{131}
 }
 
 func (x *CommitSpaceChatCreationResponse) GetOutcome() *SpaceChatCreationOutcome {
@@ -7766,7 +8104,7 @@ type GetSpaceChatCreationOutcomeRequest struct {
 
 func (x *GetSpaceChatCreationOutcomeRequest) Reset() {
 	*x = GetSpaceChatCreationOutcomeRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[128]
+	mi := &file_voice_space_v1_space_proto_msgTypes[132]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7778,7 +8116,7 @@ func (x *GetSpaceChatCreationOutcomeRequest) String() string {
 func (*GetSpaceChatCreationOutcomeRequest) ProtoMessage() {}
 
 func (x *GetSpaceChatCreationOutcomeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[128]
+	mi := &file_voice_space_v1_space_proto_msgTypes[132]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7791,7 +8129,7 @@ func (x *GetSpaceChatCreationOutcomeRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use GetSpaceChatCreationOutcomeRequest.ProtoReflect.Descriptor instead.
 func (*GetSpaceChatCreationOutcomeRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{128}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{132}
 }
 
 func (x *GetSpaceChatCreationOutcomeRequest) GetSpaceId() string {
@@ -7818,7 +8156,7 @@ type GetSpaceChatCreationOutcomeResponse struct {
 
 func (x *GetSpaceChatCreationOutcomeResponse) Reset() {
 	*x = GetSpaceChatCreationOutcomeResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[129]
+	mi := &file_voice_space_v1_space_proto_msgTypes[133]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7830,7 +8168,7 @@ func (x *GetSpaceChatCreationOutcomeResponse) String() string {
 func (*GetSpaceChatCreationOutcomeResponse) ProtoMessage() {}
 
 func (x *GetSpaceChatCreationOutcomeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[129]
+	mi := &file_voice_space_v1_space_proto_msgTypes[133]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7843,7 +8181,7 @@ func (x *GetSpaceChatCreationOutcomeResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use GetSpaceChatCreationOutcomeResponse.ProtoReflect.Descriptor instead.
 func (*GetSpaceChatCreationOutcomeResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{129}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{133}
 }
 
 func (x *GetSpaceChatCreationOutcomeResponse) GetOutcome() *SpaceChatCreationOutcome {
@@ -7864,7 +8202,7 @@ type JoinQuestion struct {
 
 func (x *JoinQuestion) Reset() {
 	*x = JoinQuestion{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[130]
+	mi := &file_voice_space_v1_space_proto_msgTypes[134]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7876,7 +8214,7 @@ func (x *JoinQuestion) String() string {
 func (*JoinQuestion) ProtoMessage() {}
 
 func (x *JoinQuestion) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[130]
+	mi := &file_voice_space_v1_space_proto_msgTypes[134]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7889,7 +8227,7 @@ func (x *JoinQuestion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinQuestion.ProtoReflect.Descriptor instead.
 func (*JoinQuestion) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{130}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{134}
 }
 
 func (x *JoinQuestion) GetQuestionId() string {
@@ -7918,7 +8256,7 @@ type JoinRequirements struct {
 
 func (x *JoinRequirements) Reset() {
 	*x = JoinRequirements{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[131]
+	mi := &file_voice_space_v1_space_proto_msgTypes[135]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7930,7 +8268,7 @@ func (x *JoinRequirements) String() string {
 func (*JoinRequirements) ProtoMessage() {}
 
 func (x *JoinRequirements) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[131]
+	mi := &file_voice_space_v1_space_proto_msgTypes[135]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7943,7 +8281,7 @@ func (x *JoinRequirements) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinRequirements.ProtoReflect.Descriptor instead.
 func (*JoinRequirements) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{131}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{135}
 }
 
 func (x *JoinRequirements) GetRequirePhone() bool {
@@ -7985,7 +8323,7 @@ type JoinAnswer struct {
 
 func (x *JoinAnswer) Reset() {
 	*x = JoinAnswer{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[132]
+	mi := &file_voice_space_v1_space_proto_msgTypes[136]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7997,7 +8335,7 @@ func (x *JoinAnswer) String() string {
 func (*JoinAnswer) ProtoMessage() {}
 
 func (x *JoinAnswer) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[132]
+	mi := &file_voice_space_v1_space_proto_msgTypes[136]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8010,7 +8348,7 @@ func (x *JoinAnswer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinAnswer.ProtoReflect.Descriptor instead.
 func (*JoinAnswer) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{132}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{136}
 }
 
 func (x *JoinAnswer) GetQuestionId() string {
@@ -8040,7 +8378,7 @@ type JoinAdmissionResult struct {
 
 func (x *JoinAdmissionResult) Reset() {
 	*x = JoinAdmissionResult{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[133]
+	mi := &file_voice_space_v1_space_proto_msgTypes[137]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8052,7 +8390,7 @@ func (x *JoinAdmissionResult) String() string {
 func (*JoinAdmissionResult) ProtoMessage() {}
 
 func (x *JoinAdmissionResult) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[133]
+	mi := &file_voice_space_v1_space_proto_msgTypes[137]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8065,7 +8403,7 @@ func (x *JoinAdmissionResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinAdmissionResult.ProtoReflect.Descriptor instead.
 func (*JoinAdmissionResult) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{133}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{137}
 }
 
 func (x *JoinAdmissionResult) GetState() JoinAdmissionState {
@@ -8109,7 +8447,7 @@ type JoinAttemptView struct {
 
 func (x *JoinAttemptView) Reset() {
 	*x = JoinAttemptView{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[134]
+	mi := &file_voice_space_v1_space_proto_msgTypes[138]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8121,7 +8459,7 @@ func (x *JoinAttemptView) String() string {
 func (*JoinAttemptView) ProtoMessage() {}
 
 func (x *JoinAttemptView) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[134]
+	mi := &file_voice_space_v1_space_proto_msgTypes[138]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8134,7 +8472,7 @@ func (x *JoinAttemptView) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinAttemptView.ProtoReflect.Descriptor instead.
 func (*JoinAttemptView) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{134}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{138}
 }
 
 func (x *JoinAttemptView) GetAttemptId() string {
@@ -8208,7 +8546,7 @@ type StartJoinAttemptRequest struct {
 
 func (x *StartJoinAttemptRequest) Reset() {
 	*x = StartJoinAttemptRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[135]
+	mi := &file_voice_space_v1_space_proto_msgTypes[139]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8220,7 +8558,7 @@ func (x *StartJoinAttemptRequest) String() string {
 func (*StartJoinAttemptRequest) ProtoMessage() {}
 
 func (x *StartJoinAttemptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[135]
+	mi := &file_voice_space_v1_space_proto_msgTypes[139]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8233,7 +8571,7 @@ func (x *StartJoinAttemptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartJoinAttemptRequest.ProtoReflect.Descriptor instead.
 func (*StartJoinAttemptRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{135}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{139}
 }
 
 func (x *StartJoinAttemptRequest) GetTarget() isStartJoinAttemptRequest_Target {
@@ -8294,7 +8632,7 @@ type StartJoinAttemptResponse struct {
 
 func (x *StartJoinAttemptResponse) Reset() {
 	*x = StartJoinAttemptResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[136]
+	mi := &file_voice_space_v1_space_proto_msgTypes[140]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8306,7 +8644,7 @@ func (x *StartJoinAttemptResponse) String() string {
 func (*StartJoinAttemptResponse) ProtoMessage() {}
 
 func (x *StartJoinAttemptResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[136]
+	mi := &file_voice_space_v1_space_proto_msgTypes[140]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8319,7 +8657,7 @@ func (x *StartJoinAttemptResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartJoinAttemptResponse.ProtoReflect.Descriptor instead.
 func (*StartJoinAttemptResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{136}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{140}
 }
 
 func (x *StartJoinAttemptResponse) GetAttempt() *JoinAttemptView {
@@ -8340,7 +8678,7 @@ type GetJoinAttemptRequest struct {
 
 func (x *GetJoinAttemptRequest) Reset() {
 	*x = GetJoinAttemptRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[137]
+	mi := &file_voice_space_v1_space_proto_msgTypes[141]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8352,7 +8690,7 @@ func (x *GetJoinAttemptRequest) String() string {
 func (*GetJoinAttemptRequest) ProtoMessage() {}
 
 func (x *GetJoinAttemptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[137]
+	mi := &file_voice_space_v1_space_proto_msgTypes[141]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8365,7 +8703,7 @@ func (x *GetJoinAttemptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJoinAttemptRequest.ProtoReflect.Descriptor instead.
 func (*GetJoinAttemptRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{137}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{141}
 }
 
 func (x *GetJoinAttemptRequest) GetSpaceId() string {
@@ -8392,7 +8730,7 @@ type GetJoinAttemptResponse struct {
 
 func (x *GetJoinAttemptResponse) Reset() {
 	*x = GetJoinAttemptResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[138]
+	mi := &file_voice_space_v1_space_proto_msgTypes[142]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8404,7 +8742,7 @@ func (x *GetJoinAttemptResponse) String() string {
 func (*GetJoinAttemptResponse) ProtoMessage() {}
 
 func (x *GetJoinAttemptResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[138]
+	mi := &file_voice_space_v1_space_proto_msgTypes[142]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8417,7 +8755,7 @@ func (x *GetJoinAttemptResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJoinAttemptResponse.ProtoReflect.Descriptor instead.
 func (*GetJoinAttemptResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{138}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{142}
 }
 
 func (x *GetJoinAttemptResponse) GetAttempt() *JoinAttemptView {
@@ -8442,7 +8780,7 @@ type SubmitJoinAttemptRequest struct {
 
 func (x *SubmitJoinAttemptRequest) Reset() {
 	*x = SubmitJoinAttemptRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[139]
+	mi := &file_voice_space_v1_space_proto_msgTypes[143]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8454,7 +8792,7 @@ func (x *SubmitJoinAttemptRequest) String() string {
 func (*SubmitJoinAttemptRequest) ProtoMessage() {}
 
 func (x *SubmitJoinAttemptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[139]
+	mi := &file_voice_space_v1_space_proto_msgTypes[143]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8467,7 +8805,7 @@ func (x *SubmitJoinAttemptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitJoinAttemptRequest.ProtoReflect.Descriptor instead.
 func (*SubmitJoinAttemptRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{139}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{143}
 }
 
 func (x *SubmitJoinAttemptRequest) GetSpaceId() string {
@@ -8515,7 +8853,7 @@ type SubmitJoinAttemptResponse struct {
 
 func (x *SubmitJoinAttemptResponse) Reset() {
 	*x = SubmitJoinAttemptResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[140]
+	mi := &file_voice_space_v1_space_proto_msgTypes[144]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8527,7 +8865,7 @@ func (x *SubmitJoinAttemptResponse) String() string {
 func (*SubmitJoinAttemptResponse) ProtoMessage() {}
 
 func (x *SubmitJoinAttemptResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[140]
+	mi := &file_voice_space_v1_space_proto_msgTypes[144]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8540,7 +8878,7 @@ func (x *SubmitJoinAttemptResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitJoinAttemptResponse.ProtoReflect.Descriptor instead.
 func (*SubmitJoinAttemptResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{140}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{144}
 }
 
 func (x *SubmitJoinAttemptResponse) GetResult() *JoinAdmissionResult {
@@ -8563,7 +8901,7 @@ type JoinRequestSummary struct {
 
 func (x *JoinRequestSummary) Reset() {
 	*x = JoinRequestSummary{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[141]
+	mi := &file_voice_space_v1_space_proto_msgTypes[145]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8575,7 +8913,7 @@ func (x *JoinRequestSummary) String() string {
 func (*JoinRequestSummary) ProtoMessage() {}
 
 func (x *JoinRequestSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[141]
+	mi := &file_voice_space_v1_space_proto_msgTypes[145]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8588,7 +8926,7 @@ func (x *JoinRequestSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinRequestSummary.ProtoReflect.Descriptor instead.
 func (*JoinRequestSummary) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{141}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{145}
 }
 
 func (x *JoinRequestSummary) GetRequestId() string {
@@ -8639,7 +8977,7 @@ type JoinRequestAttempt struct {
 
 func (x *JoinRequestAttempt) Reset() {
 	*x = JoinRequestAttempt{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[142]
+	mi := &file_voice_space_v1_space_proto_msgTypes[146]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8651,7 +8989,7 @@ func (x *JoinRequestAttempt) String() string {
 func (*JoinRequestAttempt) ProtoMessage() {}
 
 func (x *JoinRequestAttempt) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[142]
+	mi := &file_voice_space_v1_space_proto_msgTypes[146]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8664,7 +9002,7 @@ func (x *JoinRequestAttempt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinRequestAttempt.ProtoReflect.Descriptor instead.
 func (*JoinRequestAttempt) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{142}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{146}
 }
 
 func (x *JoinRequestAttempt) GetAttemptId() string {
@@ -8708,7 +9046,7 @@ type ListJoinRequestsRequest struct {
 
 func (x *ListJoinRequestsRequest) Reset() {
 	*x = ListJoinRequestsRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[143]
+	mi := &file_voice_space_v1_space_proto_msgTypes[147]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8720,7 +9058,7 @@ func (x *ListJoinRequestsRequest) String() string {
 func (*ListJoinRequestsRequest) ProtoMessage() {}
 
 func (x *ListJoinRequestsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[143]
+	mi := &file_voice_space_v1_space_proto_msgTypes[147]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8733,7 +9071,7 @@ func (x *ListJoinRequestsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJoinRequestsRequest.ProtoReflect.Descriptor instead.
 func (*ListJoinRequestsRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{143}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{147}
 }
 
 func (x *ListJoinRequestsRequest) GetSpaceId() string {
@@ -8768,7 +9106,7 @@ type ListJoinRequestsResponse struct {
 
 func (x *ListJoinRequestsResponse) Reset() {
 	*x = ListJoinRequestsResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[144]
+	mi := &file_voice_space_v1_space_proto_msgTypes[148]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8780,7 +9118,7 @@ func (x *ListJoinRequestsResponse) String() string {
 func (*ListJoinRequestsResponse) ProtoMessage() {}
 
 func (x *ListJoinRequestsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[144]
+	mi := &file_voice_space_v1_space_proto_msgTypes[148]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8793,7 +9131,7 @@ func (x *ListJoinRequestsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJoinRequestsResponse.ProtoReflect.Descriptor instead.
 func (*ListJoinRequestsResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{144}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{148}
 }
 
 func (x *ListJoinRequestsResponse) GetRequests() []*JoinRequestSummary {
@@ -8821,7 +9159,7 @@ type GetJoinRequestRequest struct {
 
 func (x *GetJoinRequestRequest) Reset() {
 	*x = GetJoinRequestRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[145]
+	mi := &file_voice_space_v1_space_proto_msgTypes[149]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8833,7 +9171,7 @@ func (x *GetJoinRequestRequest) String() string {
 func (*GetJoinRequestRequest) ProtoMessage() {}
 
 func (x *GetJoinRequestRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[145]
+	mi := &file_voice_space_v1_space_proto_msgTypes[149]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8846,7 +9184,7 @@ func (x *GetJoinRequestRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJoinRequestRequest.ProtoReflect.Descriptor instead.
 func (*GetJoinRequestRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{145}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{149}
 }
 
 func (x *GetJoinRequestRequest) GetSpaceId() string {
@@ -8874,7 +9212,7 @@ type GetJoinRequestResponse struct {
 
 func (x *GetJoinRequestResponse) Reset() {
 	*x = GetJoinRequestResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[146]
+	mi := &file_voice_space_v1_space_proto_msgTypes[150]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8886,7 +9224,7 @@ func (x *GetJoinRequestResponse) String() string {
 func (*GetJoinRequestResponse) ProtoMessage() {}
 
 func (x *GetJoinRequestResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[146]
+	mi := &file_voice_space_v1_space_proto_msgTypes[150]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8899,7 +9237,7 @@ func (x *GetJoinRequestResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJoinRequestResponse.ProtoReflect.Descriptor instead.
 func (*GetJoinRequestResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{146}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{150}
 }
 
 func (x *GetJoinRequestResponse) GetRequest() *JoinRequestSummary {
@@ -8930,7 +9268,7 @@ type ApproveJoinRequestRequest struct {
 
 func (x *ApproveJoinRequestRequest) Reset() {
 	*x = ApproveJoinRequestRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[147]
+	mi := &file_voice_space_v1_space_proto_msgTypes[151]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8942,7 +9280,7 @@ func (x *ApproveJoinRequestRequest) String() string {
 func (*ApproveJoinRequestRequest) ProtoMessage() {}
 
 func (x *ApproveJoinRequestRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[147]
+	mi := &file_voice_space_v1_space_proto_msgTypes[151]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8955,7 +9293,7 @@ func (x *ApproveJoinRequestRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveJoinRequestRequest.ProtoReflect.Descriptor instead.
 func (*ApproveJoinRequestRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{147}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{151}
 }
 
 func (x *ApproveJoinRequestRequest) GetSpaceId() string {
@@ -8996,7 +9334,7 @@ type ApproveJoinRequestResponse struct {
 
 func (x *ApproveJoinRequestResponse) Reset() {
 	*x = ApproveJoinRequestResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[148]
+	mi := &file_voice_space_v1_space_proto_msgTypes[152]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9008,7 +9346,7 @@ func (x *ApproveJoinRequestResponse) String() string {
 func (*ApproveJoinRequestResponse) ProtoMessage() {}
 
 func (x *ApproveJoinRequestResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[148]
+	mi := &file_voice_space_v1_space_proto_msgTypes[152]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9021,7 +9359,7 @@ func (x *ApproveJoinRequestResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveJoinRequestResponse.ProtoReflect.Descriptor instead.
 func (*ApproveJoinRequestResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{148}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{152}
 }
 
 func (x *ApproveJoinRequestResponse) GetResult() *JoinAdmissionResult {
@@ -9045,7 +9383,7 @@ type SetEntryPolicyRequest struct {
 
 func (x *SetEntryPolicyRequest) Reset() {
 	*x = SetEntryPolicyRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[149]
+	mi := &file_voice_space_v1_space_proto_msgTypes[153]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9057,7 +9395,7 @@ func (x *SetEntryPolicyRequest) String() string {
 func (*SetEntryPolicyRequest) ProtoMessage() {}
 
 func (x *SetEntryPolicyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[149]
+	mi := &file_voice_space_v1_space_proto_msgTypes[153]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9070,7 +9408,7 @@ func (x *SetEntryPolicyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetEntryPolicyRequest.ProtoReflect.Descriptor instead.
 func (*SetEntryPolicyRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{149}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{153}
 }
 
 func (x *SetEntryPolicyRequest) GetSpaceId() string {
@@ -9112,7 +9450,7 @@ type SetEntryPolicyResponse struct {
 
 func (x *SetEntryPolicyResponse) Reset() {
 	*x = SetEntryPolicyResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[150]
+	mi := &file_voice_space_v1_space_proto_msgTypes[154]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9124,7 +9462,7 @@ func (x *SetEntryPolicyResponse) String() string {
 func (*SetEntryPolicyResponse) ProtoMessage() {}
 
 func (x *SetEntryPolicyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[150]
+	mi := &file_voice_space_v1_space_proto_msgTypes[154]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9137,7 +9475,7 @@ func (x *SetEntryPolicyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetEntryPolicyResponse.ProtoReflect.Descriptor instead.
 func (*SetEntryPolicyResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{150}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{154}
 }
 
 func (x *SetEntryPolicyResponse) GetOperationId() string {
@@ -9176,7 +9514,7 @@ type ApplyBotInstallationRemovalRequest struct {
 
 func (x *ApplyBotInstallationRemovalRequest) Reset() {
 	*x = ApplyBotInstallationRemovalRequest{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[151]
+	mi := &file_voice_space_v1_space_proto_msgTypes[155]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9188,7 +9526,7 @@ func (x *ApplyBotInstallationRemovalRequest) String() string {
 func (*ApplyBotInstallationRemovalRequest) ProtoMessage() {}
 
 func (x *ApplyBotInstallationRemovalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[151]
+	mi := &file_voice_space_v1_space_proto_msgTypes[155]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9201,7 +9539,7 @@ func (x *ApplyBotInstallationRemovalRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use ApplyBotInstallationRemovalRequest.ProtoReflect.Descriptor instead.
 func (*ApplyBotInstallationRemovalRequest) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{151}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{155}
 }
 
 func (x *ApplyBotInstallationRemovalRequest) GetProtocolVersion() uint32 {
@@ -9298,7 +9636,7 @@ type BotInstallationRemovalReceipt struct {
 
 func (x *BotInstallationRemovalReceipt) Reset() {
 	*x = BotInstallationRemovalReceipt{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[152]
+	mi := &file_voice_space_v1_space_proto_msgTypes[156]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9310,7 +9648,7 @@ func (x *BotInstallationRemovalReceipt) String() string {
 func (*BotInstallationRemovalReceipt) ProtoMessage() {}
 
 func (x *BotInstallationRemovalReceipt) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[152]
+	mi := &file_voice_space_v1_space_proto_msgTypes[156]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9323,7 +9661,7 @@ func (x *BotInstallationRemovalReceipt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BotInstallationRemovalReceipt.ProtoReflect.Descriptor instead.
 func (*BotInstallationRemovalReceipt) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{152}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{156}
 }
 
 func (x *BotInstallationRemovalReceipt) GetProtocolVersion() uint32 {
@@ -9447,7 +9785,7 @@ type ApplyBotInstallationRemovalResponse struct {
 
 func (x *ApplyBotInstallationRemovalResponse) Reset() {
 	*x = ApplyBotInstallationRemovalResponse{}
-	mi := &file_voice_space_v1_space_proto_msgTypes[153]
+	mi := &file_voice_space_v1_space_proto_msgTypes[157]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9459,7 +9797,7 @@ func (x *ApplyBotInstallationRemovalResponse) String() string {
 func (*ApplyBotInstallationRemovalResponse) ProtoMessage() {}
 
 func (x *ApplyBotInstallationRemovalResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_space_v1_space_proto_msgTypes[153]
+	mi := &file_voice_space_v1_space_proto_msgTypes[157]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9472,7 +9810,7 @@ func (x *ApplyBotInstallationRemovalResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use ApplyBotInstallationRemovalResponse.ProtoReflect.Descriptor instead.
 func (*ApplyBotInstallationRemovalResponse) Descriptor() ([]byte, []int) {
-	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{153}
+	return file_voice_space_v1_space_proto_rawDescGZIP(), []int{157}
 }
 
 func (x *ApplyBotInstallationRemovalResponse) GetReceipt() *BotInstallationRemovalReceipt {
@@ -9497,9 +9835,94 @@ var file_voice_space_v1_space_proto_rawDesc = string([]byte{
 	0x6d, 0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x2f, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x6c, 0x69, 0x66,
 	0x65, 0x63, 0x79, 0x63, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x18, 0x76, 0x6f,
 	0x69, 0x63, 0x65, 0x2f, 0x66, 0x69, 0x6c, 0x65, 0x2f, 0x76, 0x31, 0x2f, 0x66, 0x69, 0x6c, 0x65,
-	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x25, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2f, 0x73, 0x70,
-	0x61, 0x63, 0x65, 0x2f, 0x76, 0x31, 0x2f, 0x6d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x5f, 0x61, 0x64,
-	0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0xc7, 0x06,
+	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x18, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2f, 0x72, 0x6f,
+	0x6c, 0x65, 0x2f, 0x76, 0x31, 0x2f, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x1a, 0x25, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2f, 0x73, 0x70, 0x61, 0x63, 0x65, 0x2f, 0x76, 0x31,
+	0x2f, 0x6d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x5f, 0x61, 0x64, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f,
+	0x6e, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x92, 0x02, 0x0a, 0x19, 0x47, 0x65, 0x74, 0x42,
+	0x6f, 0x74, 0x50, 0x75, 0x72, 0x67, 0x65, 0x48, 0x61, 0x6e, 0x64, 0x6f, 0x66, 0x66, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x29, 0x0a, 0x10, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f,
+	0x6c, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52,
+	0x0f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
+	0x12, 0x1d, 0x0a, 0x0a, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x49, 0x64, 0x12,
+	0x19, 0x0a, 0x08, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x07, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12, 0x32, 0x0a, 0x15, 0x64, 0x65,
+	0x6c, 0x65, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e,
+	0x5f, 0x69, 0x64, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x13, 0x64, 0x65, 0x6c, 0x65, 0x74,
+	0x69, 0x6f, 0x6e, 0x4f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x64, 0x12, 0x1e,
+	0x0a, 0x0a, 0x67, 0x65, 0x6e, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x05, 0x20, 0x01,
+	0x28, 0x04, 0x52, 0x0a, 0x67, 0x65, 0x6e, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x3c,
+	0x0a, 0x08, 0x6d, 0x61, 0x6e, 0x69, 0x66, 0x65, 0x73, 0x74, 0x18, 0x06, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x20, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e,
+	0x76, 0x31, 0x2e, 0x4d, 0x61, 0x6e, 0x69, 0x66, 0x65, 0x73, 0x74, 0x42, 0x69, 0x6e, 0x64, 0x69,
+	0x6e, 0x67, 0x52, 0x08, 0x6d, 0x61, 0x6e, 0x69, 0x66, 0x65, 0x73, 0x74, 0x22, 0xbf, 0x02, 0x0a,
+	0x13, 0x42, 0x6f, 0x74, 0x50, 0x75, 0x72, 0x67, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x48, 0x61, 0x6e,
+	0x64, 0x6f, 0x66, 0x66, 0x12, 0x4c, 0x0a, 0x10, 0x6f, 0x72, 0x69, 0x67, 0x69, 0x6e, 0x61, 0x6c,
+	0x5f, 0x72, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x21,
+	0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52,
+	0x65, 0x74, 0x69, 0x72, 0x65, 0x53, 0x70, 0x61, 0x63, 0x65, 0x52, 0x65, 0x63, 0x65, 0x69, 0x70,
+	0x74, 0x52, 0x0f, 0x6f, 0x72, 0x69, 0x67, 0x69, 0x6e, 0x61, 0x6c, 0x52, 0x65, 0x63, 0x65, 0x69,
+	0x70, 0x74, 0x12, 0x34, 0x0a, 0x16, 0x6f, 0x72, 0x69, 0x67, 0x69, 0x6e, 0x61, 0x6c, 0x5f, 0x72,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x62, 0x79, 0x74, 0x65, 0x73, 0x18, 0x02, 0x20, 0x01,
+	0x28, 0x0c, 0x52, 0x14, 0x6f, 0x72, 0x69, 0x67, 0x69, 0x6e, 0x61, 0x6c, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x42, 0x79, 0x74, 0x65, 0x73, 0x12, 0x36, 0x0a, 0x17, 0x6f, 0x72, 0x69, 0x67,
+	0x69, 0x6e, 0x61, 0x6c, 0x5f, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x73, 0x68, 0x61,
+	0x32, 0x35, 0x36, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x15, 0x6f, 0x72, 0x69, 0x67, 0x69,
+	0x6e, 0x61, 0x6c, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x53, 0x68, 0x61, 0x32, 0x35, 0x36,
+	0x12, 0x34, 0x0a, 0x16, 0x6f, 0x72, 0x69, 0x67, 0x69, 0x6e, 0x61, 0x6c, 0x5f, 0x72, 0x65, 0x63,
+	0x65, 0x69, 0x70, 0x74, 0x5f, 0x62, 0x79, 0x74, 0x65, 0x73, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0c,
+	0x52, 0x14, 0x6f, 0x72, 0x69, 0x67, 0x69, 0x6e, 0x61, 0x6c, 0x52, 0x65, 0x63, 0x65, 0x69, 0x70,
+	0x74, 0x42, 0x79, 0x74, 0x65, 0x73, 0x12, 0x36, 0x0a, 0x17, 0x6f, 0x72, 0x69, 0x67, 0x69, 0x6e,
+	0x61, 0x6c, 0x5f, 0x72, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35,
+	0x36, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x15, 0x6f, 0x72, 0x69, 0x67, 0x69, 0x6e, 0x61,
+	0x6c, 0x52, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x53, 0x68, 0x61, 0x32, 0x35, 0x36, 0x22, 0xc5,
+	0x02, 0x0a, 0x18, 0x42, 0x6f, 0x74, 0x50, 0x75, 0x72, 0x67, 0x65, 0x4d, 0x65, 0x73, 0x73, 0x61,
+	0x67, 0x69, 0x6e, 0x67, 0x48, 0x61, 0x6e, 0x64, 0x6f, 0x66, 0x66, 0x12, 0x4d, 0x0a, 0x10, 0x6f,
+	0x72, 0x69, 0x67, 0x69, 0x6e, 0x61, 0x6c, 0x5f, 0x72, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x22, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x63, 0x6f,
+	0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x70, 0x61, 0x63, 0x65, 0x50, 0x75, 0x72,
+	0x67, 0x65, 0x52, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x52, 0x0f, 0x6f, 0x72, 0x69, 0x67, 0x69,
+	0x6e, 0x61, 0x6c, 0x52, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x12, 0x34, 0x0a, 0x16, 0x6f, 0x72,
+	0x69, 0x67, 0x69, 0x6e, 0x61, 0x6c, 0x5f, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x62,
+	0x79, 0x74, 0x65, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x14, 0x6f, 0x72, 0x69, 0x67,
+	0x69, 0x6e, 0x61, 0x6c, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x42, 0x79, 0x74, 0x65, 0x73,
+	0x12, 0x36, 0x0a, 0x17, 0x6f, 0x72, 0x69, 0x67, 0x69, 0x6e, 0x61, 0x6c, 0x5f, 0x72, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x03, 0x20, 0x01, 0x28,
+	0x0c, 0x52, 0x15, 0x6f, 0x72, 0x69, 0x67, 0x69, 0x6e, 0x61, 0x6c, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x53, 0x68, 0x61, 0x32, 0x35, 0x36, 0x12, 0x34, 0x0a, 0x16, 0x6f, 0x72, 0x69, 0x67,
+	0x69, 0x6e, 0x61, 0x6c, 0x5f, 0x72, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x5f, 0x62, 0x79, 0x74,
+	0x65, 0x73, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x14, 0x6f, 0x72, 0x69, 0x67, 0x69, 0x6e,
+	0x61, 0x6c, 0x52, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x42, 0x79, 0x74, 0x65, 0x73, 0x12, 0x36,
+	0x0a, 0x17, 0x6f, 0x72, 0x69, 0x67, 0x69, 0x6e, 0x61, 0x6c, 0x5f, 0x72, 0x65, 0x63, 0x65, 0x69,
+	0x70, 0x74, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0c, 0x52,
+	0x15, 0x6f, 0x72, 0x69, 0x67, 0x69, 0x6e, 0x61, 0x6c, 0x52, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74,
+	0x53, 0x68, 0x61, 0x32, 0x35, 0x36, 0x22, 0x94, 0x03, 0x0a, 0x1a, 0x47, 0x65, 0x74, 0x42, 0x6f,
+	0x74, 0x50, 0x75, 0x72, 0x67, 0x65, 0x48, 0x61, 0x6e, 0x64, 0x6f, 0x66, 0x66, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x29, 0x0a, 0x10, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f,
+	0x6c, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52,
+	0x0f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
+	0x12, 0x1d, 0x0a, 0x0a, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x49, 0x64, 0x12,
+	0x19, 0x0a, 0x08, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x07, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12, 0x32, 0x0a, 0x15, 0x64, 0x65,
+	0x6c, 0x65, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e,
+	0x5f, 0x69, 0x64, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x13, 0x64, 0x65, 0x6c, 0x65, 0x74,
+	0x69, 0x6f, 0x6e, 0x4f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x64, 0x12, 0x1e,
+	0x0a, 0x0a, 0x67, 0x65, 0x6e, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x05, 0x20, 0x01,
+	0x28, 0x04, 0x52, 0x0a, 0x67, 0x65, 0x6e, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x3c,
+	0x0a, 0x08, 0x6d, 0x61, 0x6e, 0x69, 0x66, 0x65, 0x73, 0x74, 0x18, 0x06, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x20, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e,
+	0x76, 0x31, 0x2e, 0x4d, 0x61, 0x6e, 0x69, 0x66, 0x65, 0x73, 0x74, 0x42, 0x69, 0x6e, 0x64, 0x69,
+	0x6e, 0x67, 0x52, 0x08, 0x6d, 0x61, 0x6e, 0x69, 0x66, 0x65, 0x73, 0x74, 0x12, 0x37, 0x0a, 0x04,
+	0x72, 0x6f, 0x6c, 0x65, 0x18, 0x07, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x23, 0x2e, 0x76, 0x6f, 0x69,
+	0x63, 0x65, 0x2e, 0x73, 0x70, 0x61, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x6f, 0x74, 0x50,
+	0x75, 0x72, 0x67, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x48, 0x61, 0x6e, 0x64, 0x6f, 0x66, 0x66, 0x52,
+	0x04, 0x72, 0x6f, 0x6c, 0x65, 0x12, 0x46, 0x0a, 0x09, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x69,
+	0x6e, 0x67, 0x18, 0x08, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x28, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
+	0x2e, 0x73, 0x70, 0x61, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x6f, 0x74, 0x50, 0x75, 0x72,
+	0x67, 0x65, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x69, 0x6e, 0x67, 0x48, 0x61, 0x6e, 0x64, 0x6f,
+	0x66, 0x66, 0x52, 0x09, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x69, 0x6e, 0x67, 0x22, 0xc7, 0x06,
 	0x0a, 0x05, 0x53, 0x70, 0x61, 0x63, 0x65, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20,
 	0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18,
 	0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x20, 0x0a, 0x0b, 0x64,
@@ -10988,7 +11411,7 @@ var file_voice_space_v1_space_proto_rawDesc = string([]byte{
 	0x5f, 0x45, 0x58, 0x50, 0x49, 0x52, 0x45, 0x44, 0x10, 0x06, 0x12, 0x24, 0x0a, 0x20, 0x4a, 0x4f,
 	0x49, 0x4e, 0x5f, 0x41, 0x44, 0x4d, 0x49, 0x53, 0x53, 0x49, 0x4f, 0x4e, 0x5f, 0x53, 0x54, 0x41,
 	0x54, 0x45, 0x5f, 0x49, 0x4e, 0x56, 0x41, 0x4c, 0x49, 0x44, 0x41, 0x54, 0x45, 0x44, 0x10, 0x07,
-	0x32, 0xd0, 0x31, 0x0a, 0x0c, 0x53, 0x70, 0x61, 0x63, 0x65, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63,
+	0x32, 0xbd, 0x32, 0x0a, 0x0c, 0x53, 0x70, 0x61, 0x63, 0x65, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63,
 	0x65, 0x12, 0x86, 0x01, 0x0a, 0x1b, 0x47, 0x65, 0x74, 0x4d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x41,
 	0x64, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x41, 0x75, 0x74, 0x68, 0x6f, 0x72, 0x69, 0x74,
 	0x79, 0x12, 0x32, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x73, 0x70, 0x61, 0x63, 0x65, 0x2e,
@@ -11385,9 +11808,16 @@ var file_voice_space_v1_space_proto_rawDesc = string([]byte{
 	0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x73, 0x70, 0x61, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e,
 	0x41, 0x70, 0x70, 0x6c, 0x79, 0x42, 0x6f, 0x74, 0x49, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61,
 	0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x42, 0x22, 0x5a, 0x20, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x61, 0x70, 0x70,
-	0x2f, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2f, 0x73, 0x70, 0x61, 0x63, 0x65, 0x2f, 0x76, 0x31, 0x3b,
-	0x73, 0x70, 0x61, 0x63, 0x65, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x6e, 0x73, 0x65, 0x12, 0x6b, 0x0a, 0x12, 0x47, 0x65, 0x74, 0x42, 0x6f, 0x74, 0x50, 0x75, 0x72,
+	0x67, 0x65, 0x48, 0x61, 0x6e, 0x64, 0x6f, 0x66, 0x66, 0x12, 0x29, 0x2e, 0x76, 0x6f, 0x69, 0x63,
+	0x65, 0x2e, 0x73, 0x70, 0x61, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x42, 0x6f,
+	0x74, 0x50, 0x75, 0x72, 0x67, 0x65, 0x48, 0x61, 0x6e, 0x64, 0x6f, 0x66, 0x66, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x1a, 0x2a, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x73, 0x70, 0x61,
+	0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x42, 0x6f, 0x74, 0x50, 0x75, 0x72, 0x67,
+	0x65, 0x48, 0x61, 0x6e, 0x64, 0x6f, 0x66, 0x66, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x42, 0x22, 0x5a, 0x20, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x61, 0x70, 0x70, 0x2f, 0x76, 0x6f,
+	0x69, 0x63, 0x65, 0x2f, 0x73, 0x70, 0x61, 0x63, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x73, 0x70, 0x61,
+	0x63, 0x65, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 })
 
 var (
@@ -11403,415 +11833,429 @@ func file_voice_space_v1_space_proto_rawDescGZIP() []byte {
 }
 
 var file_voice_space_v1_space_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_voice_space_v1_space_proto_msgTypes = make([]protoimpl.MessageInfo, 154)
+var file_voice_space_v1_space_proto_msgTypes = make([]protoimpl.MessageInfo, 158)
 var file_voice_space_v1_space_proto_goTypes = []any{
 	(MemberCommunicationState)(0),                     // 0: voice.space.v1.MemberCommunicationState
 	(SpaceDeletionPhase)(0),                           // 1: voice.space.v1.SpaceDeletionPhase
 	(ParticipantOperationState)(0),                    // 2: voice.space.v1.ParticipantOperationState
 	(SpaceChatCreationOutcomeState)(0),                // 3: voice.space.v1.SpaceChatCreationOutcomeState
 	(JoinAdmissionState)(0),                           // 4: voice.space.v1.JoinAdmissionState
-	(*Space)(nil),                                     // 5: voice.space.v1.Space
-	(*CreateSpaceRequest)(nil),                        // 6: voice.space.v1.CreateSpaceRequest
-	(*UpdateSpaceRequest)(nil),                        // 7: voice.space.v1.UpdateSpaceRequest
-	(*UpdateSpaceMmConfigRequest)(nil),                // 8: voice.space.v1.UpdateSpaceMmConfigRequest
-	(*UpdateSpaceMmConfigResponse)(nil),               // 9: voice.space.v1.UpdateSpaceMmConfigResponse
-	(*DeleteSpaceRequest)(nil),                        // 10: voice.space.v1.DeleteSpaceRequest
-	(*GetSpaceRequest)(nil),                           // 11: voice.space.v1.GetSpaceRequest
-	(*ListMySpacesRequest)(nil),                       // 12: voice.space.v1.ListMySpacesRequest
-	(*SpaceList)(nil),                                 // 13: voice.space.v1.SpaceList
-	(*SearchPublicSpacesRequest)(nil),                 // 14: voice.space.v1.SearchPublicSpacesRequest
-	(*VoiceRoom)(nil),                                 // 15: voice.space.v1.VoiceRoom
-	(*CreateVoiceRoomRequest)(nil),                    // 16: voice.space.v1.CreateVoiceRoomRequest
-	(*UpdateVoiceRoomRequest)(nil),                    // 17: voice.space.v1.UpdateVoiceRoomRequest
-	(*DeleteVoiceRoomRequest)(nil),                    // 18: voice.space.v1.DeleteVoiceRoomRequest
-	(*SpaceTreeNode)(nil),                             // 19: voice.space.v1.SpaceTreeNode
-	(*PinTreeNodeRequest)(nil),                        // 20: voice.space.v1.PinTreeNodeRequest
-	(*UnpinTreeNodeRequest)(nil),                      // 21: voice.space.v1.UnpinTreeNodeRequest
-	(*UpsertTreeNodeRequest)(nil),                     // 22: voice.space.v1.UpsertTreeNodeRequest
-	(*RemoveTreeNodeRequest)(nil),                     // 23: voice.space.v1.RemoveTreeNodeRequest
-	(*Category)(nil),                                  // 24: voice.space.v1.Category
-	(*CreateCategoryRequest)(nil),                     // 25: voice.space.v1.CreateCategoryRequest
-	(*UpdateCategoryRequest)(nil),                     // 26: voice.space.v1.UpdateCategoryRequest
-	(*DeleteCategoryRequest)(nil),                     // 27: voice.space.v1.DeleteCategoryRequest
-	(*ReorderSpaceTreeRequest)(nil),                   // 28: voice.space.v1.ReorderSpaceTreeRequest
-	(*ListSpaceTreeRequest)(nil),                      // 29: voice.space.v1.ListSpaceTreeRequest
-	(*Invite)(nil),                                    // 30: voice.space.v1.Invite
-	(*CreateInviteRequest)(nil),                       // 31: voice.space.v1.CreateInviteRequest
-	(*RevokeInviteRequest)(nil),                       // 32: voice.space.v1.RevokeInviteRequest
-	(*GetInviteRequest)(nil),                          // 33: voice.space.v1.GetInviteRequest
-	(*ListInvitesRequest)(nil),                        // 34: voice.space.v1.ListInvitesRequest
-	(*InviteList)(nil),                                // 35: voice.space.v1.InviteList
-	(*JoinByInviteRequest)(nil),                       // 36: voice.space.v1.JoinByInviteRequest
-	(*SpaceMembership)(nil),                           // 37: voice.space.v1.SpaceMembership
-	(*JoinSpaceRequest)(nil),                          // 38: voice.space.v1.JoinSpaceRequest
-	(*LeaveSpaceRequest)(nil),                         // 39: voice.space.v1.LeaveSpaceRequest
-	(*KickMemberRequest)(nil),                         // 40: voice.space.v1.KickMemberRequest
-	(*BanMemberRequest)(nil),                          // 41: voice.space.v1.BanMemberRequest
-	(*UnbanMemberRequest)(nil),                        // 42: voice.space.v1.UnbanMemberRequest
-	(*ListMembersRequest)(nil),                        // 43: voice.space.v1.ListMembersRequest
-	(*SpaceMemberList)(nil),                           // 44: voice.space.v1.SpaceMemberList
-	(*ListBansRequest)(nil),                           // 45: voice.space.v1.ListBansRequest
-	(*BanList)(nil),                                   // 46: voice.space.v1.BanList
-	(*SpaceBan)(nil),                                  // 47: voice.space.v1.SpaceBan
-	(*TimeoutMemberRequest)(nil),                      // 48: voice.space.v1.TimeoutMemberRequest
-	(*RemoveMemberTimeoutRequest)(nil),                // 49: voice.space.v1.RemoveMemberTimeoutRequest
-	(*TransferOwnershipRequest)(nil),                  // 50: voice.space.v1.TransferOwnershipRequest
-	(*AddBotMemberRequest)(nil),                       // 51: voice.space.v1.AddBotMemberRequest
-	(*RemoveBotMemberRequest)(nil),                    // 52: voice.space.v1.RemoveBotMemberRequest
-	(*BotInstallationIntent)(nil),                     // 53: voice.space.v1.BotInstallationIntent
-	(*ListTemplatesRequest)(nil),                      // 54: voice.space.v1.ListTemplatesRequest
-	(*TemplateList)(nil),                              // 55: voice.space.v1.TemplateList
-	(*SpaceTemplate)(nil),                             // 56: voice.space.v1.SpaceTemplate
-	(*CreateFromTemplateRequest)(nil),                 // 57: voice.space.v1.CreateFromTemplateRequest
-	(*ApplyCommunityRosterRequest)(nil),               // 58: voice.space.v1.ApplyCommunityRosterRequest
-	(*ApplyCommunityRosterResponse)(nil),              // 59: voice.space.v1.ApplyCommunityRosterResponse
-	(*CreateCommunityBootstrapRequest)(nil),           // 60: voice.space.v1.CreateCommunityBootstrapRequest
-	(*RecoverCommunityOwnerRequest)(nil),              // 61: voice.space.v1.RecoverCommunityOwnerRequest
-	(*GetAuditLogRequest)(nil),                        // 62: voice.space.v1.GetAuditLogRequest
-	(*AuditLogList)(nil),                              // 63: voice.space.v1.AuditLogList
-	(*AuditLogEntry)(nil),                             // 64: voice.space.v1.AuditLogEntry
-	(*AppendAuditEventRequest)(nil),                   // 65: voice.space.v1.AppendAuditEventRequest
-	(*AppendAuditEventResponse)(nil),                  // 66: voice.space.v1.AppendAuditEventResponse
-	(*SpaceRef)(nil),                                  // 67: voice.space.v1.SpaceRef
-	(*CreateSpaceResponse)(nil),                       // 68: voice.space.v1.CreateSpaceResponse
-	(*UpdateSpaceResponse)(nil),                       // 69: voice.space.v1.UpdateSpaceResponse
-	(*DeleteSpaceResponse)(nil),                       // 70: voice.space.v1.DeleteSpaceResponse
-	(*GetSpaceResponse)(nil),                          // 71: voice.space.v1.GetSpaceResponse
-	(*ListMySpacesResponse)(nil),                      // 72: voice.space.v1.ListMySpacesResponse
-	(*SearchPublicSpacesResponse)(nil),                // 73: voice.space.v1.SearchPublicSpacesResponse
-	(*CreateVoiceRoomResponse)(nil),                   // 74: voice.space.v1.CreateVoiceRoomResponse
-	(*UpdateVoiceRoomResponse)(nil),                   // 75: voice.space.v1.UpdateVoiceRoomResponse
-	(*DeleteVoiceRoomResponse)(nil),                   // 76: voice.space.v1.DeleteVoiceRoomResponse
-	(*UpsertTreeNodeResponse)(nil),                    // 77: voice.space.v1.UpsertTreeNodeResponse
-	(*RemoveTreeNodeResponse)(nil),                    // 78: voice.space.v1.RemoveTreeNodeResponse
-	(*CreateCategoryResponse)(nil),                    // 79: voice.space.v1.CreateCategoryResponse
-	(*UpdateCategoryResponse)(nil),                    // 80: voice.space.v1.UpdateCategoryResponse
-	(*DeleteCategoryResponse)(nil),                    // 81: voice.space.v1.DeleteCategoryResponse
-	(*ReorderSpaceTreeResponse)(nil),                  // 82: voice.space.v1.ReorderSpaceTreeResponse
-	(*PinTreeNodeResponse)(nil),                       // 83: voice.space.v1.PinTreeNodeResponse
-	(*UnpinTreeNodeResponse)(nil),                     // 84: voice.space.v1.UnpinTreeNodeResponse
-	(*ListSpaceTreeResponse)(nil),                     // 85: voice.space.v1.ListSpaceTreeResponse
-	(*CreateInviteResponse)(nil),                      // 86: voice.space.v1.CreateInviteResponse
-	(*RevokeInviteResponse)(nil),                      // 87: voice.space.v1.RevokeInviteResponse
-	(*GetInviteResponse)(nil),                         // 88: voice.space.v1.GetInviteResponse
-	(*ListInvitesResponse)(nil),                       // 89: voice.space.v1.ListInvitesResponse
-	(*JoinByInviteResponse)(nil),                      // 90: voice.space.v1.JoinByInviteResponse
-	(*JoinSpaceResponse)(nil),                         // 91: voice.space.v1.JoinSpaceResponse
-	(*LeaveSpaceResponse)(nil),                        // 92: voice.space.v1.LeaveSpaceResponse
-	(*KickMemberResponse)(nil),                        // 93: voice.space.v1.KickMemberResponse
-	(*BanMemberResponse)(nil),                         // 94: voice.space.v1.BanMemberResponse
-	(*UnbanMemberResponse)(nil),                       // 95: voice.space.v1.UnbanMemberResponse
-	(*ListMembersResponse)(nil),                       // 96: voice.space.v1.ListMembersResponse
-	(*ListBansResponse)(nil),                          // 97: voice.space.v1.ListBansResponse
-	(*TimeoutMemberResponse)(nil),                     // 98: voice.space.v1.TimeoutMemberResponse
-	(*RemoveMemberTimeoutResponse)(nil),               // 99: voice.space.v1.RemoveMemberTimeoutResponse
-	(*TransferOwnershipResponse)(nil),                 // 100: voice.space.v1.TransferOwnershipResponse
-	(*AddBotMemberResponse)(nil),                      // 101: voice.space.v1.AddBotMemberResponse
-	(*RemoveBotMemberResponse)(nil),                   // 102: voice.space.v1.RemoveBotMemberResponse
-	(*ListTemplatesResponse)(nil),                     // 103: voice.space.v1.ListTemplatesResponse
-	(*CreateFromTemplateResponse)(nil),                // 104: voice.space.v1.CreateFromTemplateResponse
-	(*CreateCommunityBootstrapResponse)(nil),          // 105: voice.space.v1.CreateCommunityBootstrapResponse
-	(*RecoverCommunityOwnerResponse)(nil),             // 106: voice.space.v1.RecoverCommunityOwnerResponse
-	(*GetAuditLogResponse)(nil),                       // 107: voice.space.v1.GetAuditLogResponse
-	(*AreCoMembersRequest)(nil),                       // 108: voice.space.v1.AreCoMembersRequest
-	(*AreCoMembersResponse)(nil),                      // 109: voice.space.v1.AreCoMembersResponse
-	(*ResolveVoiceRoomAccessRequest)(nil),             // 110: voice.space.v1.ResolveVoiceRoomAccessRequest
-	(*ResolveVoiceRoomAccessResponse)(nil),            // 111: voice.space.v1.ResolveVoiceRoomAccessResponse
-	(*ResolveMemberCommunicationStateRequest)(nil),    // 112: voice.space.v1.ResolveMemberCommunicationStateRequest
-	(*ResolveMemberCommunicationStateResponse)(nil),   // 113: voice.space.v1.ResolveMemberCommunicationStateResponse
-	(*SyncSpaceProSubscriptionRequest)(nil),           // 114: voice.space.v1.SyncSpaceProSubscriptionRequest
-	(*SyncSpaceProSubscriptionResponse)(nil),          // 115: voice.space.v1.SyncSpaceProSubscriptionResponse
-	(*RestoreSpaceRequest)(nil),                       // 116: voice.space.v1.RestoreSpaceRequest
-	(*RestoreSpaceResponse)(nil),                      // 117: voice.space.v1.RestoreSpaceResponse
-	(*SpaceDeletionManifestSet)(nil),                  // 118: voice.space.v1.SpaceDeletionManifestSet
-	(*ParticipantCoordinatorStatus)(nil),              // 119: voice.space.v1.ParticipantCoordinatorStatus
-	(*SpaceDeletionCoordinatorStatus)(nil),            // 120: voice.space.v1.SpaceDeletionCoordinatorStatus
-	(*GetSpaceDeletionCoordinatorStatusRequest)(nil),  // 121: voice.space.v1.GetSpaceDeletionCoordinatorStatusRequest
-	(*GetSpaceDeletionCoordinatorStatusResponse)(nil), // 122: voice.space.v1.GetSpaceDeletionCoordinatorStatusResponse
-	(*ValidateRoleOverrideTargetRequest)(nil),         // 123: voice.space.v1.ValidateRoleOverrideTargetRequest
-	(*ValidateRoleOverrideTargetResponse)(nil),        // 124: voice.space.v1.ValidateRoleOverrideTargetResponse
-	(*UpdateMemberNicknameRequest)(nil),               // 125: voice.space.v1.UpdateMemberNicknameRequest
-	(*UpdateMemberNicknameResponse)(nil),              // 126: voice.space.v1.UpdateMemberNicknameResponse
-	(*SpaceChatCreationUser)(nil),                     // 127: voice.space.v1.SpaceChatCreationUser
-	(*SpaceChatCreationBot)(nil),                      // 128: voice.space.v1.SpaceChatCreationBot
-	(*SpaceChatCreationBinding)(nil),                  // 129: voice.space.v1.SpaceChatCreationBinding
-	(*SpaceChatCreationOutcome)(nil),                  // 130: voice.space.v1.SpaceChatCreationOutcome
-	(*CommitSpaceChatCreationRequest)(nil),            // 131: voice.space.v1.CommitSpaceChatCreationRequest
-	(*CommitSpaceChatCreationResponse)(nil),           // 132: voice.space.v1.CommitSpaceChatCreationResponse
-	(*GetSpaceChatCreationOutcomeRequest)(nil),        // 133: voice.space.v1.GetSpaceChatCreationOutcomeRequest
-	(*GetSpaceChatCreationOutcomeResponse)(nil),       // 134: voice.space.v1.GetSpaceChatCreationOutcomeResponse
-	(*JoinQuestion)(nil),                              // 135: voice.space.v1.JoinQuestion
-	(*JoinRequirements)(nil),                          // 136: voice.space.v1.JoinRequirements
-	(*JoinAnswer)(nil),                                // 137: voice.space.v1.JoinAnswer
-	(*JoinAdmissionResult)(nil),                       // 138: voice.space.v1.JoinAdmissionResult
-	(*JoinAttemptView)(nil),                           // 139: voice.space.v1.JoinAttemptView
-	(*StartJoinAttemptRequest)(nil),                   // 140: voice.space.v1.StartJoinAttemptRequest
-	(*StartJoinAttemptResponse)(nil),                  // 141: voice.space.v1.StartJoinAttemptResponse
-	(*GetJoinAttemptRequest)(nil),                     // 142: voice.space.v1.GetJoinAttemptRequest
-	(*GetJoinAttemptResponse)(nil),                    // 143: voice.space.v1.GetJoinAttemptResponse
-	(*SubmitJoinAttemptRequest)(nil),                  // 144: voice.space.v1.SubmitJoinAttemptRequest
-	(*SubmitJoinAttemptResponse)(nil),                 // 145: voice.space.v1.SubmitJoinAttemptResponse
-	(*JoinRequestSummary)(nil),                        // 146: voice.space.v1.JoinRequestSummary
-	(*JoinRequestAttempt)(nil),                        // 147: voice.space.v1.JoinRequestAttempt
-	(*ListJoinRequestsRequest)(nil),                   // 148: voice.space.v1.ListJoinRequestsRequest
-	(*ListJoinRequestsResponse)(nil),                  // 149: voice.space.v1.ListJoinRequestsResponse
-	(*GetJoinRequestRequest)(nil),                     // 150: voice.space.v1.GetJoinRequestRequest
-	(*GetJoinRequestResponse)(nil),                    // 151: voice.space.v1.GetJoinRequestResponse
-	(*ApproveJoinRequestRequest)(nil),                 // 152: voice.space.v1.ApproveJoinRequestRequest
-	(*ApproveJoinRequestResponse)(nil),                // 153: voice.space.v1.ApproveJoinRequestResponse
-	(*SetEntryPolicyRequest)(nil),                     // 154: voice.space.v1.SetEntryPolicyRequest
-	(*SetEntryPolicyResponse)(nil),                    // 155: voice.space.v1.SetEntryPolicyResponse
-	(*ApplyBotInstallationRemovalRequest)(nil),        // 156: voice.space.v1.ApplyBotInstallationRemovalRequest
-	(*BotInstallationRemovalReceipt)(nil),             // 157: voice.space.v1.BotInstallationRemovalReceipt
-	(*ApplyBotInstallationRemovalResponse)(nil),       // 158: voice.space.v1.ApplyBotInstallationRemovalResponse
-	(*timestamppb.Timestamp)(nil),                     // 159: google.protobuf.Timestamp
-	(*v1.CursorPageRequest)(nil),                      // 160: voice.common.v1.CursorPageRequest
-	(*v11.ChatRef)(nil),                               // 161: voice.chat.v1.ChatRef
-	(*v1.ManifestBinding)(nil),                        // 162: voice.common.v1.ManifestBinding
-	(*v12.FileReferenceProducerDeclaration)(nil),      // 163: voice.file.v1.FileReferenceProducerDeclaration
-	(v1.ParticipantId)(0),                             // 164: voice.common.v1.ParticipantId
-	(v11.ChatType)(0),                                 // 165: voice.chat.v1.ChatType
-	(*GetMemberAdmissionAuthorityRequest)(nil),        // 166: voice.space.v1.GetMemberAdmissionAuthorityRequest
-	(*GetMemberAdmissionAuthorityResponse)(nil),       // 167: voice.space.v1.GetMemberAdmissionAuthorityResponse
+	(*GetBotPurgeHandoffRequest)(nil),                 // 5: voice.space.v1.GetBotPurgeHandoffRequest
+	(*BotPurgeRoleHandoff)(nil),                       // 6: voice.space.v1.BotPurgeRoleHandoff
+	(*BotPurgeMessagingHandoff)(nil),                  // 7: voice.space.v1.BotPurgeMessagingHandoff
+	(*GetBotPurgeHandoffResponse)(nil),                // 8: voice.space.v1.GetBotPurgeHandoffResponse
+	(*Space)(nil),                                     // 9: voice.space.v1.Space
+	(*CreateSpaceRequest)(nil),                        // 10: voice.space.v1.CreateSpaceRequest
+	(*UpdateSpaceRequest)(nil),                        // 11: voice.space.v1.UpdateSpaceRequest
+	(*UpdateSpaceMmConfigRequest)(nil),                // 12: voice.space.v1.UpdateSpaceMmConfigRequest
+	(*UpdateSpaceMmConfigResponse)(nil),               // 13: voice.space.v1.UpdateSpaceMmConfigResponse
+	(*DeleteSpaceRequest)(nil),                        // 14: voice.space.v1.DeleteSpaceRequest
+	(*GetSpaceRequest)(nil),                           // 15: voice.space.v1.GetSpaceRequest
+	(*ListMySpacesRequest)(nil),                       // 16: voice.space.v1.ListMySpacesRequest
+	(*SpaceList)(nil),                                 // 17: voice.space.v1.SpaceList
+	(*SearchPublicSpacesRequest)(nil),                 // 18: voice.space.v1.SearchPublicSpacesRequest
+	(*VoiceRoom)(nil),                                 // 19: voice.space.v1.VoiceRoom
+	(*CreateVoiceRoomRequest)(nil),                    // 20: voice.space.v1.CreateVoiceRoomRequest
+	(*UpdateVoiceRoomRequest)(nil),                    // 21: voice.space.v1.UpdateVoiceRoomRequest
+	(*DeleteVoiceRoomRequest)(nil),                    // 22: voice.space.v1.DeleteVoiceRoomRequest
+	(*SpaceTreeNode)(nil),                             // 23: voice.space.v1.SpaceTreeNode
+	(*PinTreeNodeRequest)(nil),                        // 24: voice.space.v1.PinTreeNodeRequest
+	(*UnpinTreeNodeRequest)(nil),                      // 25: voice.space.v1.UnpinTreeNodeRequest
+	(*UpsertTreeNodeRequest)(nil),                     // 26: voice.space.v1.UpsertTreeNodeRequest
+	(*RemoveTreeNodeRequest)(nil),                     // 27: voice.space.v1.RemoveTreeNodeRequest
+	(*Category)(nil),                                  // 28: voice.space.v1.Category
+	(*CreateCategoryRequest)(nil),                     // 29: voice.space.v1.CreateCategoryRequest
+	(*UpdateCategoryRequest)(nil),                     // 30: voice.space.v1.UpdateCategoryRequest
+	(*DeleteCategoryRequest)(nil),                     // 31: voice.space.v1.DeleteCategoryRequest
+	(*ReorderSpaceTreeRequest)(nil),                   // 32: voice.space.v1.ReorderSpaceTreeRequest
+	(*ListSpaceTreeRequest)(nil),                      // 33: voice.space.v1.ListSpaceTreeRequest
+	(*Invite)(nil),                                    // 34: voice.space.v1.Invite
+	(*CreateInviteRequest)(nil),                       // 35: voice.space.v1.CreateInviteRequest
+	(*RevokeInviteRequest)(nil),                       // 36: voice.space.v1.RevokeInviteRequest
+	(*GetInviteRequest)(nil),                          // 37: voice.space.v1.GetInviteRequest
+	(*ListInvitesRequest)(nil),                        // 38: voice.space.v1.ListInvitesRequest
+	(*InviteList)(nil),                                // 39: voice.space.v1.InviteList
+	(*JoinByInviteRequest)(nil),                       // 40: voice.space.v1.JoinByInviteRequest
+	(*SpaceMembership)(nil),                           // 41: voice.space.v1.SpaceMembership
+	(*JoinSpaceRequest)(nil),                          // 42: voice.space.v1.JoinSpaceRequest
+	(*LeaveSpaceRequest)(nil),                         // 43: voice.space.v1.LeaveSpaceRequest
+	(*KickMemberRequest)(nil),                         // 44: voice.space.v1.KickMemberRequest
+	(*BanMemberRequest)(nil),                          // 45: voice.space.v1.BanMemberRequest
+	(*UnbanMemberRequest)(nil),                        // 46: voice.space.v1.UnbanMemberRequest
+	(*ListMembersRequest)(nil),                        // 47: voice.space.v1.ListMembersRequest
+	(*SpaceMemberList)(nil),                           // 48: voice.space.v1.SpaceMemberList
+	(*ListBansRequest)(nil),                           // 49: voice.space.v1.ListBansRequest
+	(*BanList)(nil),                                   // 50: voice.space.v1.BanList
+	(*SpaceBan)(nil),                                  // 51: voice.space.v1.SpaceBan
+	(*TimeoutMemberRequest)(nil),                      // 52: voice.space.v1.TimeoutMemberRequest
+	(*RemoveMemberTimeoutRequest)(nil),                // 53: voice.space.v1.RemoveMemberTimeoutRequest
+	(*TransferOwnershipRequest)(nil),                  // 54: voice.space.v1.TransferOwnershipRequest
+	(*AddBotMemberRequest)(nil),                       // 55: voice.space.v1.AddBotMemberRequest
+	(*RemoveBotMemberRequest)(nil),                    // 56: voice.space.v1.RemoveBotMemberRequest
+	(*BotInstallationIntent)(nil),                     // 57: voice.space.v1.BotInstallationIntent
+	(*ListTemplatesRequest)(nil),                      // 58: voice.space.v1.ListTemplatesRequest
+	(*TemplateList)(nil),                              // 59: voice.space.v1.TemplateList
+	(*SpaceTemplate)(nil),                             // 60: voice.space.v1.SpaceTemplate
+	(*CreateFromTemplateRequest)(nil),                 // 61: voice.space.v1.CreateFromTemplateRequest
+	(*ApplyCommunityRosterRequest)(nil),               // 62: voice.space.v1.ApplyCommunityRosterRequest
+	(*ApplyCommunityRosterResponse)(nil),              // 63: voice.space.v1.ApplyCommunityRosterResponse
+	(*CreateCommunityBootstrapRequest)(nil),           // 64: voice.space.v1.CreateCommunityBootstrapRequest
+	(*RecoverCommunityOwnerRequest)(nil),              // 65: voice.space.v1.RecoverCommunityOwnerRequest
+	(*GetAuditLogRequest)(nil),                        // 66: voice.space.v1.GetAuditLogRequest
+	(*AuditLogList)(nil),                              // 67: voice.space.v1.AuditLogList
+	(*AuditLogEntry)(nil),                             // 68: voice.space.v1.AuditLogEntry
+	(*AppendAuditEventRequest)(nil),                   // 69: voice.space.v1.AppendAuditEventRequest
+	(*AppendAuditEventResponse)(nil),                  // 70: voice.space.v1.AppendAuditEventResponse
+	(*SpaceRef)(nil),                                  // 71: voice.space.v1.SpaceRef
+	(*CreateSpaceResponse)(nil),                       // 72: voice.space.v1.CreateSpaceResponse
+	(*UpdateSpaceResponse)(nil),                       // 73: voice.space.v1.UpdateSpaceResponse
+	(*DeleteSpaceResponse)(nil),                       // 74: voice.space.v1.DeleteSpaceResponse
+	(*GetSpaceResponse)(nil),                          // 75: voice.space.v1.GetSpaceResponse
+	(*ListMySpacesResponse)(nil),                      // 76: voice.space.v1.ListMySpacesResponse
+	(*SearchPublicSpacesResponse)(nil),                // 77: voice.space.v1.SearchPublicSpacesResponse
+	(*CreateVoiceRoomResponse)(nil),                   // 78: voice.space.v1.CreateVoiceRoomResponse
+	(*UpdateVoiceRoomResponse)(nil),                   // 79: voice.space.v1.UpdateVoiceRoomResponse
+	(*DeleteVoiceRoomResponse)(nil),                   // 80: voice.space.v1.DeleteVoiceRoomResponse
+	(*UpsertTreeNodeResponse)(nil),                    // 81: voice.space.v1.UpsertTreeNodeResponse
+	(*RemoveTreeNodeResponse)(nil),                    // 82: voice.space.v1.RemoveTreeNodeResponse
+	(*CreateCategoryResponse)(nil),                    // 83: voice.space.v1.CreateCategoryResponse
+	(*UpdateCategoryResponse)(nil),                    // 84: voice.space.v1.UpdateCategoryResponse
+	(*DeleteCategoryResponse)(nil),                    // 85: voice.space.v1.DeleteCategoryResponse
+	(*ReorderSpaceTreeResponse)(nil),                  // 86: voice.space.v1.ReorderSpaceTreeResponse
+	(*PinTreeNodeResponse)(nil),                       // 87: voice.space.v1.PinTreeNodeResponse
+	(*UnpinTreeNodeResponse)(nil),                     // 88: voice.space.v1.UnpinTreeNodeResponse
+	(*ListSpaceTreeResponse)(nil),                     // 89: voice.space.v1.ListSpaceTreeResponse
+	(*CreateInviteResponse)(nil),                      // 90: voice.space.v1.CreateInviteResponse
+	(*RevokeInviteResponse)(nil),                      // 91: voice.space.v1.RevokeInviteResponse
+	(*GetInviteResponse)(nil),                         // 92: voice.space.v1.GetInviteResponse
+	(*ListInvitesResponse)(nil),                       // 93: voice.space.v1.ListInvitesResponse
+	(*JoinByInviteResponse)(nil),                      // 94: voice.space.v1.JoinByInviteResponse
+	(*JoinSpaceResponse)(nil),                         // 95: voice.space.v1.JoinSpaceResponse
+	(*LeaveSpaceResponse)(nil),                        // 96: voice.space.v1.LeaveSpaceResponse
+	(*KickMemberResponse)(nil),                        // 97: voice.space.v1.KickMemberResponse
+	(*BanMemberResponse)(nil),                         // 98: voice.space.v1.BanMemberResponse
+	(*UnbanMemberResponse)(nil),                       // 99: voice.space.v1.UnbanMemberResponse
+	(*ListMembersResponse)(nil),                       // 100: voice.space.v1.ListMembersResponse
+	(*ListBansResponse)(nil),                          // 101: voice.space.v1.ListBansResponse
+	(*TimeoutMemberResponse)(nil),                     // 102: voice.space.v1.TimeoutMemberResponse
+	(*RemoveMemberTimeoutResponse)(nil),               // 103: voice.space.v1.RemoveMemberTimeoutResponse
+	(*TransferOwnershipResponse)(nil),                 // 104: voice.space.v1.TransferOwnershipResponse
+	(*AddBotMemberResponse)(nil),                      // 105: voice.space.v1.AddBotMemberResponse
+	(*RemoveBotMemberResponse)(nil),                   // 106: voice.space.v1.RemoveBotMemberResponse
+	(*ListTemplatesResponse)(nil),                     // 107: voice.space.v1.ListTemplatesResponse
+	(*CreateFromTemplateResponse)(nil),                // 108: voice.space.v1.CreateFromTemplateResponse
+	(*CreateCommunityBootstrapResponse)(nil),          // 109: voice.space.v1.CreateCommunityBootstrapResponse
+	(*RecoverCommunityOwnerResponse)(nil),             // 110: voice.space.v1.RecoverCommunityOwnerResponse
+	(*GetAuditLogResponse)(nil),                       // 111: voice.space.v1.GetAuditLogResponse
+	(*AreCoMembersRequest)(nil),                       // 112: voice.space.v1.AreCoMembersRequest
+	(*AreCoMembersResponse)(nil),                      // 113: voice.space.v1.AreCoMembersResponse
+	(*ResolveVoiceRoomAccessRequest)(nil),             // 114: voice.space.v1.ResolveVoiceRoomAccessRequest
+	(*ResolveVoiceRoomAccessResponse)(nil),            // 115: voice.space.v1.ResolveVoiceRoomAccessResponse
+	(*ResolveMemberCommunicationStateRequest)(nil),    // 116: voice.space.v1.ResolveMemberCommunicationStateRequest
+	(*ResolveMemberCommunicationStateResponse)(nil),   // 117: voice.space.v1.ResolveMemberCommunicationStateResponse
+	(*SyncSpaceProSubscriptionRequest)(nil),           // 118: voice.space.v1.SyncSpaceProSubscriptionRequest
+	(*SyncSpaceProSubscriptionResponse)(nil),          // 119: voice.space.v1.SyncSpaceProSubscriptionResponse
+	(*RestoreSpaceRequest)(nil),                       // 120: voice.space.v1.RestoreSpaceRequest
+	(*RestoreSpaceResponse)(nil),                      // 121: voice.space.v1.RestoreSpaceResponse
+	(*SpaceDeletionManifestSet)(nil),                  // 122: voice.space.v1.SpaceDeletionManifestSet
+	(*ParticipantCoordinatorStatus)(nil),              // 123: voice.space.v1.ParticipantCoordinatorStatus
+	(*SpaceDeletionCoordinatorStatus)(nil),            // 124: voice.space.v1.SpaceDeletionCoordinatorStatus
+	(*GetSpaceDeletionCoordinatorStatusRequest)(nil),  // 125: voice.space.v1.GetSpaceDeletionCoordinatorStatusRequest
+	(*GetSpaceDeletionCoordinatorStatusResponse)(nil), // 126: voice.space.v1.GetSpaceDeletionCoordinatorStatusResponse
+	(*ValidateRoleOverrideTargetRequest)(nil),         // 127: voice.space.v1.ValidateRoleOverrideTargetRequest
+	(*ValidateRoleOverrideTargetResponse)(nil),        // 128: voice.space.v1.ValidateRoleOverrideTargetResponse
+	(*UpdateMemberNicknameRequest)(nil),               // 129: voice.space.v1.UpdateMemberNicknameRequest
+	(*UpdateMemberNicknameResponse)(nil),              // 130: voice.space.v1.UpdateMemberNicknameResponse
+	(*SpaceChatCreationUser)(nil),                     // 131: voice.space.v1.SpaceChatCreationUser
+	(*SpaceChatCreationBot)(nil),                      // 132: voice.space.v1.SpaceChatCreationBot
+	(*SpaceChatCreationBinding)(nil),                  // 133: voice.space.v1.SpaceChatCreationBinding
+	(*SpaceChatCreationOutcome)(nil),                  // 134: voice.space.v1.SpaceChatCreationOutcome
+	(*CommitSpaceChatCreationRequest)(nil),            // 135: voice.space.v1.CommitSpaceChatCreationRequest
+	(*CommitSpaceChatCreationResponse)(nil),           // 136: voice.space.v1.CommitSpaceChatCreationResponse
+	(*GetSpaceChatCreationOutcomeRequest)(nil),        // 137: voice.space.v1.GetSpaceChatCreationOutcomeRequest
+	(*GetSpaceChatCreationOutcomeResponse)(nil),       // 138: voice.space.v1.GetSpaceChatCreationOutcomeResponse
+	(*JoinQuestion)(nil),                              // 139: voice.space.v1.JoinQuestion
+	(*JoinRequirements)(nil),                          // 140: voice.space.v1.JoinRequirements
+	(*JoinAnswer)(nil),                                // 141: voice.space.v1.JoinAnswer
+	(*JoinAdmissionResult)(nil),                       // 142: voice.space.v1.JoinAdmissionResult
+	(*JoinAttemptView)(nil),                           // 143: voice.space.v1.JoinAttemptView
+	(*StartJoinAttemptRequest)(nil),                   // 144: voice.space.v1.StartJoinAttemptRequest
+	(*StartJoinAttemptResponse)(nil),                  // 145: voice.space.v1.StartJoinAttemptResponse
+	(*GetJoinAttemptRequest)(nil),                     // 146: voice.space.v1.GetJoinAttemptRequest
+	(*GetJoinAttemptResponse)(nil),                    // 147: voice.space.v1.GetJoinAttemptResponse
+	(*SubmitJoinAttemptRequest)(nil),                  // 148: voice.space.v1.SubmitJoinAttemptRequest
+	(*SubmitJoinAttemptResponse)(nil),                 // 149: voice.space.v1.SubmitJoinAttemptResponse
+	(*JoinRequestSummary)(nil),                        // 150: voice.space.v1.JoinRequestSummary
+	(*JoinRequestAttempt)(nil),                        // 151: voice.space.v1.JoinRequestAttempt
+	(*ListJoinRequestsRequest)(nil),                   // 152: voice.space.v1.ListJoinRequestsRequest
+	(*ListJoinRequestsResponse)(nil),                  // 153: voice.space.v1.ListJoinRequestsResponse
+	(*GetJoinRequestRequest)(nil),                     // 154: voice.space.v1.GetJoinRequestRequest
+	(*GetJoinRequestResponse)(nil),                    // 155: voice.space.v1.GetJoinRequestResponse
+	(*ApproveJoinRequestRequest)(nil),                 // 156: voice.space.v1.ApproveJoinRequestRequest
+	(*ApproveJoinRequestResponse)(nil),                // 157: voice.space.v1.ApproveJoinRequestResponse
+	(*SetEntryPolicyRequest)(nil),                     // 158: voice.space.v1.SetEntryPolicyRequest
+	(*SetEntryPolicyResponse)(nil),                    // 159: voice.space.v1.SetEntryPolicyResponse
+	(*ApplyBotInstallationRemovalRequest)(nil),        // 160: voice.space.v1.ApplyBotInstallationRemovalRequest
+	(*BotInstallationRemovalReceipt)(nil),             // 161: voice.space.v1.BotInstallationRemovalReceipt
+	(*ApplyBotInstallationRemovalResponse)(nil),       // 162: voice.space.v1.ApplyBotInstallationRemovalResponse
+	(*v1.ManifestBinding)(nil),                        // 163: voice.common.v1.ManifestBinding
+	(*v11.RetireSpaceReceipt)(nil),                    // 164: voice.role.v1.RetireSpaceReceipt
+	(*v1.SpacePurgeReceipt)(nil),                      // 165: voice.common.v1.SpacePurgeReceipt
+	(*timestamppb.Timestamp)(nil),                     // 166: google.protobuf.Timestamp
+	(*v1.CursorPageRequest)(nil),                      // 167: voice.common.v1.CursorPageRequest
+	(*v12.ChatRef)(nil),                               // 168: voice.chat.v1.ChatRef
+	(*v13.FileReferenceProducerDeclaration)(nil),      // 169: voice.file.v1.FileReferenceProducerDeclaration
+	(v1.ParticipantId)(0),                             // 170: voice.common.v1.ParticipantId
+	(v12.ChatType)(0),                                 // 171: voice.chat.v1.ChatType
+	(*GetMemberAdmissionAuthorityRequest)(nil),        // 172: voice.space.v1.GetMemberAdmissionAuthorityRequest
+	(*GetMemberAdmissionAuthorityResponse)(nil),       // 173: voice.space.v1.GetMemberAdmissionAuthorityResponse
 }
 var file_voice_space_v1_space_proto_depIdxs = []int32{
-	159, // 0: voice.space.v1.Space.created_at:type_name -> google.protobuf.Timestamp
-	159, // 1: voice.space.v1.Space.updated_at:type_name -> google.protobuf.Timestamp
-	159, // 2: voice.space.v1.Space.deletion_scheduled_at:type_name -> google.protobuf.Timestamp
-	159, // 3: voice.space.v1.Space.purge_after:type_name -> google.protobuf.Timestamp
-	5,   // 4: voice.space.v1.UpdateSpaceMmConfigResponse.space:type_name -> voice.space.v1.Space
-	160, // 5: voice.space.v1.ListMySpacesRequest.page:type_name -> voice.common.v1.CursorPageRequest
-	5,   // 6: voice.space.v1.SpaceList.spaces:type_name -> voice.space.v1.Space
-	160, // 7: voice.space.v1.SearchPublicSpacesRequest.page:type_name -> voice.common.v1.CursorPageRequest
-	159, // 8: voice.space.v1.VoiceRoom.created_at:type_name -> google.protobuf.Timestamp
-	161, // 9: voice.space.v1.SpaceTreeNode.linked_chat:type_name -> voice.chat.v1.ChatRef
-	161, // 10: voice.space.v1.UpsertTreeNodeRequest.linked_chat:type_name -> voice.chat.v1.ChatRef
-	159, // 11: voice.space.v1.Invite.expires_at:type_name -> google.protobuf.Timestamp
-	159, // 12: voice.space.v1.Invite.created_at:type_name -> google.protobuf.Timestamp
-	159, // 13: voice.space.v1.Invite.revoked_at:type_name -> google.protobuf.Timestamp
-	159, // 14: voice.space.v1.CreateInviteRequest.expires_at:type_name -> google.protobuf.Timestamp
-	30,  // 15: voice.space.v1.InviteList.invites:type_name -> voice.space.v1.Invite
-	159, // 16: voice.space.v1.SpaceMembership.joined_at:type_name -> google.protobuf.Timestamp
-	160, // 17: voice.space.v1.ListMembersRequest.page:type_name -> voice.common.v1.CursorPageRequest
-	37,  // 18: voice.space.v1.SpaceMemberList.members:type_name -> voice.space.v1.SpaceMembership
-	47,  // 19: voice.space.v1.BanList.bans:type_name -> voice.space.v1.SpaceBan
-	159, // 20: voice.space.v1.SpaceBan.banned_at:type_name -> google.protobuf.Timestamp
-	53,  // 21: voice.space.v1.AddBotMemberRequest.installation_intent:type_name -> voice.space.v1.BotInstallationIntent
-	53,  // 22: voice.space.v1.RemoveBotMemberRequest.installation_intent:type_name -> voice.space.v1.BotInstallationIntent
-	56,  // 23: voice.space.v1.TemplateList.templates:type_name -> voice.space.v1.SpaceTemplate
-	159, // 24: voice.space.v1.ApplyCommunityRosterRequest.lease_expires_at:type_name -> google.protobuf.Timestamp
-	160, // 25: voice.space.v1.GetAuditLogRequest.page:type_name -> voice.common.v1.CursorPageRequest
-	159, // 26: voice.space.v1.GetAuditLogRequest.from:type_name -> google.protobuf.Timestamp
-	159, // 27: voice.space.v1.GetAuditLogRequest.to:type_name -> google.protobuf.Timestamp
-	64,  // 28: voice.space.v1.AuditLogList.entries:type_name -> voice.space.v1.AuditLogEntry
-	159, // 29: voice.space.v1.AuditLogEntry.created_at:type_name -> google.protobuf.Timestamp
-	159, // 30: voice.space.v1.AppendAuditEventRequest.occurred_at:type_name -> google.protobuf.Timestamp
-	5,   // 31: voice.space.v1.CreateSpaceResponse.space:type_name -> voice.space.v1.Space
-	5,   // 32: voice.space.v1.UpdateSpaceResponse.space:type_name -> voice.space.v1.Space
-	5,   // 33: voice.space.v1.GetSpaceResponse.space:type_name -> voice.space.v1.Space
-	13,  // 34: voice.space.v1.ListMySpacesResponse.space_list:type_name -> voice.space.v1.SpaceList
-	13,  // 35: voice.space.v1.SearchPublicSpacesResponse.space_list:type_name -> voice.space.v1.SpaceList
-	15,  // 36: voice.space.v1.CreateVoiceRoomResponse.voice_room:type_name -> voice.space.v1.VoiceRoom
-	15,  // 37: voice.space.v1.UpdateVoiceRoomResponse.voice_room:type_name -> voice.space.v1.VoiceRoom
-	19,  // 38: voice.space.v1.UpsertTreeNodeResponse.space_tree_node:type_name -> voice.space.v1.SpaceTreeNode
-	24,  // 39: voice.space.v1.CreateCategoryResponse.category:type_name -> voice.space.v1.Category
-	24,  // 40: voice.space.v1.UpdateCategoryResponse.category:type_name -> voice.space.v1.Category
-	19,  // 41: voice.space.v1.PinTreeNodeResponse.space_tree_node:type_name -> voice.space.v1.SpaceTreeNode
-	19,  // 42: voice.space.v1.UnpinTreeNodeResponse.space_tree_node:type_name -> voice.space.v1.SpaceTreeNode
-	24,  // 43: voice.space.v1.ListSpaceTreeResponse.categories:type_name -> voice.space.v1.Category
-	19,  // 44: voice.space.v1.ListSpaceTreeResponse.nodes:type_name -> voice.space.v1.SpaceTreeNode
-	15,  // 45: voice.space.v1.ListSpaceTreeResponse.voice_rooms:type_name -> voice.space.v1.VoiceRoom
-	30,  // 46: voice.space.v1.CreateInviteResponse.invite:type_name -> voice.space.v1.Invite
-	30,  // 47: voice.space.v1.GetInviteResponse.invite:type_name -> voice.space.v1.Invite
-	35,  // 48: voice.space.v1.ListInvitesResponse.invite_list:type_name -> voice.space.v1.InviteList
-	37,  // 49: voice.space.v1.JoinByInviteResponse.space_membership:type_name -> voice.space.v1.SpaceMembership
-	37,  // 50: voice.space.v1.JoinSpaceResponse.space_membership:type_name -> voice.space.v1.SpaceMembership
-	44,  // 51: voice.space.v1.ListMembersResponse.space_member_list:type_name -> voice.space.v1.SpaceMemberList
-	46,  // 52: voice.space.v1.ListBansResponse.ban_list:type_name -> voice.space.v1.BanList
-	55,  // 53: voice.space.v1.ListTemplatesResponse.template_list:type_name -> voice.space.v1.TemplateList
-	5,   // 54: voice.space.v1.CreateFromTemplateResponse.space:type_name -> voice.space.v1.Space
-	5,   // 55: voice.space.v1.CreateCommunityBootstrapResponse.space:type_name -> voice.space.v1.Space
-	63,  // 56: voice.space.v1.GetAuditLogResponse.audit_log_list:type_name -> voice.space.v1.AuditLogList
-	67,  // 57: voice.space.v1.ResolveVoiceRoomAccessRequest.space:type_name -> voice.space.v1.SpaceRef
-	159, // 58: voice.space.v1.ResolveVoiceRoomAccessResponse.evaluated_at:type_name -> google.protobuf.Timestamp
-	0,   // 59: voice.space.v1.ResolveVoiceRoomAccessResponse.communication_state:type_name -> voice.space.v1.MemberCommunicationState
-	159, // 60: voice.space.v1.ResolveVoiceRoomAccessResponse.timed_out_until:type_name -> google.protobuf.Timestamp
-	159, // 61: voice.space.v1.ResolveMemberCommunicationStateResponse.evaluated_at:type_name -> google.protobuf.Timestamp
-	0,   // 62: voice.space.v1.ResolveMemberCommunicationStateResponse.communication_state:type_name -> voice.space.v1.MemberCommunicationState
-	159, // 63: voice.space.v1.ResolveMemberCommunicationStateResponse.timed_out_until:type_name -> google.protobuf.Timestamp
-	5,   // 64: voice.space.v1.RestoreSpaceResponse.space:type_name -> voice.space.v1.Space
-	162, // 65: voice.space.v1.SpaceDeletionManifestSet.chat_manifest:type_name -> voice.common.v1.ManifestBinding
-	163, // 66: voice.space.v1.SpaceDeletionManifestSet.file_producers:type_name -> voice.file.v1.FileReferenceProducerDeclaration
-	164, // 67: voice.space.v1.ParticipantCoordinatorStatus.participant_id:type_name -> voice.common.v1.ParticipantId
-	2,   // 68: voice.space.v1.ParticipantCoordinatorStatus.state:type_name -> voice.space.v1.ParticipantOperationState
-	159, // 69: voice.space.v1.ParticipantCoordinatorStatus.updated_at:type_name -> google.protobuf.Timestamp
-	1,   // 70: voice.space.v1.SpaceDeletionCoordinatorStatus.phase:type_name -> voice.space.v1.SpaceDeletionPhase
-	162, // 71: voice.space.v1.SpaceDeletionCoordinatorStatus.manifest:type_name -> voice.common.v1.ManifestBinding
-	119, // 72: voice.space.v1.SpaceDeletionCoordinatorStatus.participants:type_name -> voice.space.v1.ParticipantCoordinatorStatus
-	159, // 73: voice.space.v1.SpaceDeletionCoordinatorStatus.scheduled_at:type_name -> google.protobuf.Timestamp
-	159, // 74: voice.space.v1.SpaceDeletionCoordinatorStatus.purge_after:type_name -> google.protobuf.Timestamp
-	159, // 75: voice.space.v1.SpaceDeletionCoordinatorStatus.purged_at:type_name -> google.protobuf.Timestamp
-	120, // 76: voice.space.v1.GetSpaceDeletionCoordinatorStatusResponse.status:type_name -> voice.space.v1.SpaceDeletionCoordinatorStatus
-	37,  // 77: voice.space.v1.UpdateMemberNicknameResponse.space_membership:type_name -> voice.space.v1.SpaceMembership
-	165, // 78: voice.space.v1.SpaceChatCreationBinding.chat_type:type_name -> voice.chat.v1.ChatType
-	127, // 79: voice.space.v1.SpaceChatCreationBinding.user:type_name -> voice.space.v1.SpaceChatCreationUser
-	128, // 80: voice.space.v1.SpaceChatCreationBinding.bot:type_name -> voice.space.v1.SpaceChatCreationBot
-	129, // 81: voice.space.v1.SpaceChatCreationOutcome.binding:type_name -> voice.space.v1.SpaceChatCreationBinding
-	3,   // 82: voice.space.v1.SpaceChatCreationOutcome.state:type_name -> voice.space.v1.SpaceChatCreationOutcomeState
-	19,  // 83: voice.space.v1.SpaceChatCreationOutcome.node:type_name -> voice.space.v1.SpaceTreeNode
-	129, // 84: voice.space.v1.CommitSpaceChatCreationRequest.binding:type_name -> voice.space.v1.SpaceChatCreationBinding
-	130, // 85: voice.space.v1.CommitSpaceChatCreationResponse.outcome:type_name -> voice.space.v1.SpaceChatCreationOutcome
-	130, // 86: voice.space.v1.GetSpaceChatCreationOutcomeResponse.outcome:type_name -> voice.space.v1.SpaceChatCreationOutcome
-	135, // 87: voice.space.v1.JoinRequirements.questions:type_name -> voice.space.v1.JoinQuestion
-	4,   // 88: voice.space.v1.JoinAdmissionResult.state:type_name -> voice.space.v1.JoinAdmissionState
-	37,  // 89: voice.space.v1.JoinAdmissionResult.space_membership:type_name -> voice.space.v1.SpaceMembership
-	159, // 90: voice.space.v1.JoinAttemptView.expires_at:type_name -> google.protobuf.Timestamp
-	136, // 91: voice.space.v1.JoinAttemptView.requirements:type_name -> voice.space.v1.JoinRequirements
-	138, // 92: voice.space.v1.JoinAttemptView.result:type_name -> voice.space.v1.JoinAdmissionResult
-	137, // 93: voice.space.v1.JoinAttemptView.submitted_answers:type_name -> voice.space.v1.JoinAnswer
-	139, // 94: voice.space.v1.StartJoinAttemptResponse.attempt:type_name -> voice.space.v1.JoinAttemptView
-	139, // 95: voice.space.v1.GetJoinAttemptResponse.attempt:type_name -> voice.space.v1.JoinAttemptView
-	137, // 96: voice.space.v1.SubmitJoinAttemptRequest.answers:type_name -> voice.space.v1.JoinAnswer
-	138, // 97: voice.space.v1.SubmitJoinAttemptResponse.result:type_name -> voice.space.v1.JoinAdmissionResult
-	159, // 98: voice.space.v1.JoinRequestSummary.created_at:type_name -> google.protobuf.Timestamp
-	136, // 99: voice.space.v1.JoinRequestAttempt.requirements:type_name -> voice.space.v1.JoinRequirements
-	137, // 100: voice.space.v1.JoinRequestAttempt.submitted_answers:type_name -> voice.space.v1.JoinAnswer
-	146, // 101: voice.space.v1.ListJoinRequestsResponse.requests:type_name -> voice.space.v1.JoinRequestSummary
-	146, // 102: voice.space.v1.GetJoinRequestResponse.request:type_name -> voice.space.v1.JoinRequestSummary
-	147, // 103: voice.space.v1.GetJoinRequestResponse.attempts:type_name -> voice.space.v1.JoinRequestAttempt
-	138, // 104: voice.space.v1.ApproveJoinRequestResponse.result:type_name -> voice.space.v1.JoinAdmissionResult
-	52,  // 105: voice.space.v1.ApplyBotInstallationRemovalRequest.native_cancellation:type_name -> voice.space.v1.RemoveBotMemberRequest
-	159, // 106: voice.space.v1.BotInstallationRemovalReceipt.completed_at:type_name -> google.protobuf.Timestamp
-	157, // 107: voice.space.v1.ApplyBotInstallationRemovalResponse.receipt:type_name -> voice.space.v1.BotInstallationRemovalReceipt
-	166, // 108: voice.space.v1.SpaceService.GetMemberAdmissionAuthority:input_type -> voice.space.v1.GetMemberAdmissionAuthorityRequest
-	6,   // 109: voice.space.v1.SpaceService.CreateSpace:input_type -> voice.space.v1.CreateSpaceRequest
-	7,   // 110: voice.space.v1.SpaceService.UpdateSpace:input_type -> voice.space.v1.UpdateSpaceRequest
-	8,   // 111: voice.space.v1.SpaceService.UpdateSpaceMmConfig:input_type -> voice.space.v1.UpdateSpaceMmConfigRequest
-	10,  // 112: voice.space.v1.SpaceService.DeleteSpace:input_type -> voice.space.v1.DeleteSpaceRequest
-	11,  // 113: voice.space.v1.SpaceService.GetSpace:input_type -> voice.space.v1.GetSpaceRequest
-	123, // 114: voice.space.v1.SpaceService.ValidateRoleOverrideTarget:input_type -> voice.space.v1.ValidateRoleOverrideTargetRequest
-	12,  // 115: voice.space.v1.SpaceService.ListMySpaces:input_type -> voice.space.v1.ListMySpacesRequest
-	14,  // 116: voice.space.v1.SpaceService.SearchPublicSpaces:input_type -> voice.space.v1.SearchPublicSpacesRequest
-	16,  // 117: voice.space.v1.SpaceService.CreateVoiceRoom:input_type -> voice.space.v1.CreateVoiceRoomRequest
-	17,  // 118: voice.space.v1.SpaceService.UpdateVoiceRoom:input_type -> voice.space.v1.UpdateVoiceRoomRequest
-	18,  // 119: voice.space.v1.SpaceService.DeleteVoiceRoom:input_type -> voice.space.v1.DeleteVoiceRoomRequest
-	22,  // 120: voice.space.v1.SpaceService.UpsertTreeNode:input_type -> voice.space.v1.UpsertTreeNodeRequest
-	23,  // 121: voice.space.v1.SpaceService.RemoveTreeNode:input_type -> voice.space.v1.RemoveTreeNodeRequest
-	25,  // 122: voice.space.v1.SpaceService.CreateCategory:input_type -> voice.space.v1.CreateCategoryRequest
-	26,  // 123: voice.space.v1.SpaceService.UpdateCategory:input_type -> voice.space.v1.UpdateCategoryRequest
-	27,  // 124: voice.space.v1.SpaceService.DeleteCategory:input_type -> voice.space.v1.DeleteCategoryRequest
-	28,  // 125: voice.space.v1.SpaceService.ReorderSpaceTree:input_type -> voice.space.v1.ReorderSpaceTreeRequest
-	20,  // 126: voice.space.v1.SpaceService.PinTreeNode:input_type -> voice.space.v1.PinTreeNodeRequest
-	21,  // 127: voice.space.v1.SpaceService.UnpinTreeNode:input_type -> voice.space.v1.UnpinTreeNodeRequest
-	29,  // 128: voice.space.v1.SpaceService.ListSpaceTree:input_type -> voice.space.v1.ListSpaceTreeRequest
-	31,  // 129: voice.space.v1.SpaceService.CreateInvite:input_type -> voice.space.v1.CreateInviteRequest
-	32,  // 130: voice.space.v1.SpaceService.RevokeInvite:input_type -> voice.space.v1.RevokeInviteRequest
-	33,  // 131: voice.space.v1.SpaceService.GetInvite:input_type -> voice.space.v1.GetInviteRequest
-	34,  // 132: voice.space.v1.SpaceService.ListInvites:input_type -> voice.space.v1.ListInvitesRequest
-	36,  // 133: voice.space.v1.SpaceService.JoinByInvite:input_type -> voice.space.v1.JoinByInviteRequest
-	38,  // 134: voice.space.v1.SpaceService.JoinSpace:input_type -> voice.space.v1.JoinSpaceRequest
-	140, // 135: voice.space.v1.SpaceService.StartJoinAttempt:input_type -> voice.space.v1.StartJoinAttemptRequest
-	142, // 136: voice.space.v1.SpaceService.GetJoinAttempt:input_type -> voice.space.v1.GetJoinAttemptRequest
-	144, // 137: voice.space.v1.SpaceService.SubmitJoinAttempt:input_type -> voice.space.v1.SubmitJoinAttemptRequest
-	148, // 138: voice.space.v1.SpaceService.ListJoinRequests:input_type -> voice.space.v1.ListJoinRequestsRequest
-	150, // 139: voice.space.v1.SpaceService.GetJoinRequest:input_type -> voice.space.v1.GetJoinRequestRequest
-	152, // 140: voice.space.v1.SpaceService.ApproveJoinRequest:input_type -> voice.space.v1.ApproveJoinRequestRequest
-	154, // 141: voice.space.v1.SpaceService.SetEntryPolicy:input_type -> voice.space.v1.SetEntryPolicyRequest
-	39,  // 142: voice.space.v1.SpaceService.LeaveSpace:input_type -> voice.space.v1.LeaveSpaceRequest
-	40,  // 143: voice.space.v1.SpaceService.KickMember:input_type -> voice.space.v1.KickMemberRequest
-	41,  // 144: voice.space.v1.SpaceService.BanMember:input_type -> voice.space.v1.BanMemberRequest
-	42,  // 145: voice.space.v1.SpaceService.UnbanMember:input_type -> voice.space.v1.UnbanMemberRequest
-	43,  // 146: voice.space.v1.SpaceService.ListMembers:input_type -> voice.space.v1.ListMembersRequest
-	125, // 147: voice.space.v1.SpaceService.UpdateMemberNickname:input_type -> voice.space.v1.UpdateMemberNicknameRequest
-	45,  // 148: voice.space.v1.SpaceService.ListBans:input_type -> voice.space.v1.ListBansRequest
-	48,  // 149: voice.space.v1.SpaceService.TimeoutMember:input_type -> voice.space.v1.TimeoutMemberRequest
-	49,  // 150: voice.space.v1.SpaceService.RemoveMemberTimeout:input_type -> voice.space.v1.RemoveMemberTimeoutRequest
-	50,  // 151: voice.space.v1.SpaceService.TransferOwnership:input_type -> voice.space.v1.TransferOwnershipRequest
-	51,  // 152: voice.space.v1.SpaceService.AddBotMember:input_type -> voice.space.v1.AddBotMemberRequest
-	52,  // 153: voice.space.v1.SpaceService.RemoveBotMember:input_type -> voice.space.v1.RemoveBotMemberRequest
-	54,  // 154: voice.space.v1.SpaceService.ListTemplates:input_type -> voice.space.v1.ListTemplatesRequest
-	57,  // 155: voice.space.v1.SpaceService.CreateFromTemplate:input_type -> voice.space.v1.CreateFromTemplateRequest
-	58,  // 156: voice.space.v1.SpaceService.ApplyCommunityRoster:input_type -> voice.space.v1.ApplyCommunityRosterRequest
-	60,  // 157: voice.space.v1.SpaceService.CreateCommunityBootstrap:input_type -> voice.space.v1.CreateCommunityBootstrapRequest
-	61,  // 158: voice.space.v1.SpaceService.RecoverCommunityOwner:input_type -> voice.space.v1.RecoverCommunityOwnerRequest
-	62,  // 159: voice.space.v1.SpaceService.GetAuditLog:input_type -> voice.space.v1.GetAuditLogRequest
-	65,  // 160: voice.space.v1.SpaceService.AppendAuditEvent:input_type -> voice.space.v1.AppendAuditEventRequest
-	131, // 161: voice.space.v1.SpaceService.CommitSpaceChatCreation:input_type -> voice.space.v1.CommitSpaceChatCreationRequest
-	133, // 162: voice.space.v1.SpaceService.GetSpaceChatCreationOutcome:input_type -> voice.space.v1.GetSpaceChatCreationOutcomeRequest
-	108, // 163: voice.space.v1.SpaceService.AreCoMembers:input_type -> voice.space.v1.AreCoMembersRequest
-	110, // 164: voice.space.v1.SpaceService.ResolveVoiceRoomAccess:input_type -> voice.space.v1.ResolveVoiceRoomAccessRequest
-	112, // 165: voice.space.v1.SpaceService.ResolveMemberCommunicationState:input_type -> voice.space.v1.ResolveMemberCommunicationStateRequest
-	114, // 166: voice.space.v1.SpaceService.SyncSpaceProSubscription:input_type -> voice.space.v1.SyncSpaceProSubscriptionRequest
-	116, // 167: voice.space.v1.SpaceService.RestoreSpace:input_type -> voice.space.v1.RestoreSpaceRequest
-	121, // 168: voice.space.v1.SpaceService.GetSpaceDeletionCoordinatorStatus:input_type -> voice.space.v1.GetSpaceDeletionCoordinatorStatusRequest
-	156, // 169: voice.space.v1.SpaceService.ApplyBotInstallationRemoval:input_type -> voice.space.v1.ApplyBotInstallationRemovalRequest
-	167, // 170: voice.space.v1.SpaceService.GetMemberAdmissionAuthority:output_type -> voice.space.v1.GetMemberAdmissionAuthorityResponse
-	68,  // 171: voice.space.v1.SpaceService.CreateSpace:output_type -> voice.space.v1.CreateSpaceResponse
-	69,  // 172: voice.space.v1.SpaceService.UpdateSpace:output_type -> voice.space.v1.UpdateSpaceResponse
-	9,   // 173: voice.space.v1.SpaceService.UpdateSpaceMmConfig:output_type -> voice.space.v1.UpdateSpaceMmConfigResponse
-	70,  // 174: voice.space.v1.SpaceService.DeleteSpace:output_type -> voice.space.v1.DeleteSpaceResponse
-	71,  // 175: voice.space.v1.SpaceService.GetSpace:output_type -> voice.space.v1.GetSpaceResponse
-	124, // 176: voice.space.v1.SpaceService.ValidateRoleOverrideTarget:output_type -> voice.space.v1.ValidateRoleOverrideTargetResponse
-	72,  // 177: voice.space.v1.SpaceService.ListMySpaces:output_type -> voice.space.v1.ListMySpacesResponse
-	73,  // 178: voice.space.v1.SpaceService.SearchPublicSpaces:output_type -> voice.space.v1.SearchPublicSpacesResponse
-	74,  // 179: voice.space.v1.SpaceService.CreateVoiceRoom:output_type -> voice.space.v1.CreateVoiceRoomResponse
-	75,  // 180: voice.space.v1.SpaceService.UpdateVoiceRoom:output_type -> voice.space.v1.UpdateVoiceRoomResponse
-	76,  // 181: voice.space.v1.SpaceService.DeleteVoiceRoom:output_type -> voice.space.v1.DeleteVoiceRoomResponse
-	77,  // 182: voice.space.v1.SpaceService.UpsertTreeNode:output_type -> voice.space.v1.UpsertTreeNodeResponse
-	78,  // 183: voice.space.v1.SpaceService.RemoveTreeNode:output_type -> voice.space.v1.RemoveTreeNodeResponse
-	79,  // 184: voice.space.v1.SpaceService.CreateCategory:output_type -> voice.space.v1.CreateCategoryResponse
-	80,  // 185: voice.space.v1.SpaceService.UpdateCategory:output_type -> voice.space.v1.UpdateCategoryResponse
-	81,  // 186: voice.space.v1.SpaceService.DeleteCategory:output_type -> voice.space.v1.DeleteCategoryResponse
-	82,  // 187: voice.space.v1.SpaceService.ReorderSpaceTree:output_type -> voice.space.v1.ReorderSpaceTreeResponse
-	83,  // 188: voice.space.v1.SpaceService.PinTreeNode:output_type -> voice.space.v1.PinTreeNodeResponse
-	84,  // 189: voice.space.v1.SpaceService.UnpinTreeNode:output_type -> voice.space.v1.UnpinTreeNodeResponse
-	85,  // 190: voice.space.v1.SpaceService.ListSpaceTree:output_type -> voice.space.v1.ListSpaceTreeResponse
-	86,  // 191: voice.space.v1.SpaceService.CreateInvite:output_type -> voice.space.v1.CreateInviteResponse
-	87,  // 192: voice.space.v1.SpaceService.RevokeInvite:output_type -> voice.space.v1.RevokeInviteResponse
-	88,  // 193: voice.space.v1.SpaceService.GetInvite:output_type -> voice.space.v1.GetInviteResponse
-	89,  // 194: voice.space.v1.SpaceService.ListInvites:output_type -> voice.space.v1.ListInvitesResponse
-	90,  // 195: voice.space.v1.SpaceService.JoinByInvite:output_type -> voice.space.v1.JoinByInviteResponse
-	91,  // 196: voice.space.v1.SpaceService.JoinSpace:output_type -> voice.space.v1.JoinSpaceResponse
-	141, // 197: voice.space.v1.SpaceService.StartJoinAttempt:output_type -> voice.space.v1.StartJoinAttemptResponse
-	143, // 198: voice.space.v1.SpaceService.GetJoinAttempt:output_type -> voice.space.v1.GetJoinAttemptResponse
-	145, // 199: voice.space.v1.SpaceService.SubmitJoinAttempt:output_type -> voice.space.v1.SubmitJoinAttemptResponse
-	149, // 200: voice.space.v1.SpaceService.ListJoinRequests:output_type -> voice.space.v1.ListJoinRequestsResponse
-	151, // 201: voice.space.v1.SpaceService.GetJoinRequest:output_type -> voice.space.v1.GetJoinRequestResponse
-	153, // 202: voice.space.v1.SpaceService.ApproveJoinRequest:output_type -> voice.space.v1.ApproveJoinRequestResponse
-	155, // 203: voice.space.v1.SpaceService.SetEntryPolicy:output_type -> voice.space.v1.SetEntryPolicyResponse
-	92,  // 204: voice.space.v1.SpaceService.LeaveSpace:output_type -> voice.space.v1.LeaveSpaceResponse
-	93,  // 205: voice.space.v1.SpaceService.KickMember:output_type -> voice.space.v1.KickMemberResponse
-	94,  // 206: voice.space.v1.SpaceService.BanMember:output_type -> voice.space.v1.BanMemberResponse
-	95,  // 207: voice.space.v1.SpaceService.UnbanMember:output_type -> voice.space.v1.UnbanMemberResponse
-	96,  // 208: voice.space.v1.SpaceService.ListMembers:output_type -> voice.space.v1.ListMembersResponse
-	126, // 209: voice.space.v1.SpaceService.UpdateMemberNickname:output_type -> voice.space.v1.UpdateMemberNicknameResponse
-	97,  // 210: voice.space.v1.SpaceService.ListBans:output_type -> voice.space.v1.ListBansResponse
-	98,  // 211: voice.space.v1.SpaceService.TimeoutMember:output_type -> voice.space.v1.TimeoutMemberResponse
-	99,  // 212: voice.space.v1.SpaceService.RemoveMemberTimeout:output_type -> voice.space.v1.RemoveMemberTimeoutResponse
-	100, // 213: voice.space.v1.SpaceService.TransferOwnership:output_type -> voice.space.v1.TransferOwnershipResponse
-	101, // 214: voice.space.v1.SpaceService.AddBotMember:output_type -> voice.space.v1.AddBotMemberResponse
-	102, // 215: voice.space.v1.SpaceService.RemoveBotMember:output_type -> voice.space.v1.RemoveBotMemberResponse
-	103, // 216: voice.space.v1.SpaceService.ListTemplates:output_type -> voice.space.v1.ListTemplatesResponse
-	104, // 217: voice.space.v1.SpaceService.CreateFromTemplate:output_type -> voice.space.v1.CreateFromTemplateResponse
-	59,  // 218: voice.space.v1.SpaceService.ApplyCommunityRoster:output_type -> voice.space.v1.ApplyCommunityRosterResponse
-	105, // 219: voice.space.v1.SpaceService.CreateCommunityBootstrap:output_type -> voice.space.v1.CreateCommunityBootstrapResponse
-	106, // 220: voice.space.v1.SpaceService.RecoverCommunityOwner:output_type -> voice.space.v1.RecoverCommunityOwnerResponse
-	107, // 221: voice.space.v1.SpaceService.GetAuditLog:output_type -> voice.space.v1.GetAuditLogResponse
-	66,  // 222: voice.space.v1.SpaceService.AppendAuditEvent:output_type -> voice.space.v1.AppendAuditEventResponse
-	132, // 223: voice.space.v1.SpaceService.CommitSpaceChatCreation:output_type -> voice.space.v1.CommitSpaceChatCreationResponse
-	134, // 224: voice.space.v1.SpaceService.GetSpaceChatCreationOutcome:output_type -> voice.space.v1.GetSpaceChatCreationOutcomeResponse
-	109, // 225: voice.space.v1.SpaceService.AreCoMembers:output_type -> voice.space.v1.AreCoMembersResponse
-	111, // 226: voice.space.v1.SpaceService.ResolveVoiceRoomAccess:output_type -> voice.space.v1.ResolveVoiceRoomAccessResponse
-	113, // 227: voice.space.v1.SpaceService.ResolveMemberCommunicationState:output_type -> voice.space.v1.ResolveMemberCommunicationStateResponse
-	115, // 228: voice.space.v1.SpaceService.SyncSpaceProSubscription:output_type -> voice.space.v1.SyncSpaceProSubscriptionResponse
-	117, // 229: voice.space.v1.SpaceService.RestoreSpace:output_type -> voice.space.v1.RestoreSpaceResponse
-	122, // 230: voice.space.v1.SpaceService.GetSpaceDeletionCoordinatorStatus:output_type -> voice.space.v1.GetSpaceDeletionCoordinatorStatusResponse
-	158, // 231: voice.space.v1.SpaceService.ApplyBotInstallationRemoval:output_type -> voice.space.v1.ApplyBotInstallationRemovalResponse
-	170, // [170:232] is the sub-list for method output_type
-	108, // [108:170] is the sub-list for method input_type
-	108, // [108:108] is the sub-list for extension type_name
-	108, // [108:108] is the sub-list for extension extendee
-	0,   // [0:108] is the sub-list for field type_name
+	163, // 0: voice.space.v1.GetBotPurgeHandoffRequest.manifest:type_name -> voice.common.v1.ManifestBinding
+	164, // 1: voice.space.v1.BotPurgeRoleHandoff.original_receipt:type_name -> voice.role.v1.RetireSpaceReceipt
+	165, // 2: voice.space.v1.BotPurgeMessagingHandoff.original_receipt:type_name -> voice.common.v1.SpacePurgeReceipt
+	163, // 3: voice.space.v1.GetBotPurgeHandoffResponse.manifest:type_name -> voice.common.v1.ManifestBinding
+	6,   // 4: voice.space.v1.GetBotPurgeHandoffResponse.role:type_name -> voice.space.v1.BotPurgeRoleHandoff
+	7,   // 5: voice.space.v1.GetBotPurgeHandoffResponse.messaging:type_name -> voice.space.v1.BotPurgeMessagingHandoff
+	166, // 6: voice.space.v1.Space.created_at:type_name -> google.protobuf.Timestamp
+	166, // 7: voice.space.v1.Space.updated_at:type_name -> google.protobuf.Timestamp
+	166, // 8: voice.space.v1.Space.deletion_scheduled_at:type_name -> google.protobuf.Timestamp
+	166, // 9: voice.space.v1.Space.purge_after:type_name -> google.protobuf.Timestamp
+	9,   // 10: voice.space.v1.UpdateSpaceMmConfigResponse.space:type_name -> voice.space.v1.Space
+	167, // 11: voice.space.v1.ListMySpacesRequest.page:type_name -> voice.common.v1.CursorPageRequest
+	9,   // 12: voice.space.v1.SpaceList.spaces:type_name -> voice.space.v1.Space
+	167, // 13: voice.space.v1.SearchPublicSpacesRequest.page:type_name -> voice.common.v1.CursorPageRequest
+	166, // 14: voice.space.v1.VoiceRoom.created_at:type_name -> google.protobuf.Timestamp
+	168, // 15: voice.space.v1.SpaceTreeNode.linked_chat:type_name -> voice.chat.v1.ChatRef
+	168, // 16: voice.space.v1.UpsertTreeNodeRequest.linked_chat:type_name -> voice.chat.v1.ChatRef
+	166, // 17: voice.space.v1.Invite.expires_at:type_name -> google.protobuf.Timestamp
+	166, // 18: voice.space.v1.Invite.created_at:type_name -> google.protobuf.Timestamp
+	166, // 19: voice.space.v1.Invite.revoked_at:type_name -> google.protobuf.Timestamp
+	166, // 20: voice.space.v1.CreateInviteRequest.expires_at:type_name -> google.protobuf.Timestamp
+	34,  // 21: voice.space.v1.InviteList.invites:type_name -> voice.space.v1.Invite
+	166, // 22: voice.space.v1.SpaceMembership.joined_at:type_name -> google.protobuf.Timestamp
+	167, // 23: voice.space.v1.ListMembersRequest.page:type_name -> voice.common.v1.CursorPageRequest
+	41,  // 24: voice.space.v1.SpaceMemberList.members:type_name -> voice.space.v1.SpaceMembership
+	51,  // 25: voice.space.v1.BanList.bans:type_name -> voice.space.v1.SpaceBan
+	166, // 26: voice.space.v1.SpaceBan.banned_at:type_name -> google.protobuf.Timestamp
+	57,  // 27: voice.space.v1.AddBotMemberRequest.installation_intent:type_name -> voice.space.v1.BotInstallationIntent
+	57,  // 28: voice.space.v1.RemoveBotMemberRequest.installation_intent:type_name -> voice.space.v1.BotInstallationIntent
+	60,  // 29: voice.space.v1.TemplateList.templates:type_name -> voice.space.v1.SpaceTemplate
+	166, // 30: voice.space.v1.ApplyCommunityRosterRequest.lease_expires_at:type_name -> google.protobuf.Timestamp
+	167, // 31: voice.space.v1.GetAuditLogRequest.page:type_name -> voice.common.v1.CursorPageRequest
+	166, // 32: voice.space.v1.GetAuditLogRequest.from:type_name -> google.protobuf.Timestamp
+	166, // 33: voice.space.v1.GetAuditLogRequest.to:type_name -> google.protobuf.Timestamp
+	68,  // 34: voice.space.v1.AuditLogList.entries:type_name -> voice.space.v1.AuditLogEntry
+	166, // 35: voice.space.v1.AuditLogEntry.created_at:type_name -> google.protobuf.Timestamp
+	166, // 36: voice.space.v1.AppendAuditEventRequest.occurred_at:type_name -> google.protobuf.Timestamp
+	9,   // 37: voice.space.v1.CreateSpaceResponse.space:type_name -> voice.space.v1.Space
+	9,   // 38: voice.space.v1.UpdateSpaceResponse.space:type_name -> voice.space.v1.Space
+	9,   // 39: voice.space.v1.GetSpaceResponse.space:type_name -> voice.space.v1.Space
+	17,  // 40: voice.space.v1.ListMySpacesResponse.space_list:type_name -> voice.space.v1.SpaceList
+	17,  // 41: voice.space.v1.SearchPublicSpacesResponse.space_list:type_name -> voice.space.v1.SpaceList
+	19,  // 42: voice.space.v1.CreateVoiceRoomResponse.voice_room:type_name -> voice.space.v1.VoiceRoom
+	19,  // 43: voice.space.v1.UpdateVoiceRoomResponse.voice_room:type_name -> voice.space.v1.VoiceRoom
+	23,  // 44: voice.space.v1.UpsertTreeNodeResponse.space_tree_node:type_name -> voice.space.v1.SpaceTreeNode
+	28,  // 45: voice.space.v1.CreateCategoryResponse.category:type_name -> voice.space.v1.Category
+	28,  // 46: voice.space.v1.UpdateCategoryResponse.category:type_name -> voice.space.v1.Category
+	23,  // 47: voice.space.v1.PinTreeNodeResponse.space_tree_node:type_name -> voice.space.v1.SpaceTreeNode
+	23,  // 48: voice.space.v1.UnpinTreeNodeResponse.space_tree_node:type_name -> voice.space.v1.SpaceTreeNode
+	28,  // 49: voice.space.v1.ListSpaceTreeResponse.categories:type_name -> voice.space.v1.Category
+	23,  // 50: voice.space.v1.ListSpaceTreeResponse.nodes:type_name -> voice.space.v1.SpaceTreeNode
+	19,  // 51: voice.space.v1.ListSpaceTreeResponse.voice_rooms:type_name -> voice.space.v1.VoiceRoom
+	34,  // 52: voice.space.v1.CreateInviteResponse.invite:type_name -> voice.space.v1.Invite
+	34,  // 53: voice.space.v1.GetInviteResponse.invite:type_name -> voice.space.v1.Invite
+	39,  // 54: voice.space.v1.ListInvitesResponse.invite_list:type_name -> voice.space.v1.InviteList
+	41,  // 55: voice.space.v1.JoinByInviteResponse.space_membership:type_name -> voice.space.v1.SpaceMembership
+	41,  // 56: voice.space.v1.JoinSpaceResponse.space_membership:type_name -> voice.space.v1.SpaceMembership
+	48,  // 57: voice.space.v1.ListMembersResponse.space_member_list:type_name -> voice.space.v1.SpaceMemberList
+	50,  // 58: voice.space.v1.ListBansResponse.ban_list:type_name -> voice.space.v1.BanList
+	59,  // 59: voice.space.v1.ListTemplatesResponse.template_list:type_name -> voice.space.v1.TemplateList
+	9,   // 60: voice.space.v1.CreateFromTemplateResponse.space:type_name -> voice.space.v1.Space
+	9,   // 61: voice.space.v1.CreateCommunityBootstrapResponse.space:type_name -> voice.space.v1.Space
+	67,  // 62: voice.space.v1.GetAuditLogResponse.audit_log_list:type_name -> voice.space.v1.AuditLogList
+	71,  // 63: voice.space.v1.ResolveVoiceRoomAccessRequest.space:type_name -> voice.space.v1.SpaceRef
+	166, // 64: voice.space.v1.ResolveVoiceRoomAccessResponse.evaluated_at:type_name -> google.protobuf.Timestamp
+	0,   // 65: voice.space.v1.ResolveVoiceRoomAccessResponse.communication_state:type_name -> voice.space.v1.MemberCommunicationState
+	166, // 66: voice.space.v1.ResolveVoiceRoomAccessResponse.timed_out_until:type_name -> google.protobuf.Timestamp
+	166, // 67: voice.space.v1.ResolveMemberCommunicationStateResponse.evaluated_at:type_name -> google.protobuf.Timestamp
+	0,   // 68: voice.space.v1.ResolveMemberCommunicationStateResponse.communication_state:type_name -> voice.space.v1.MemberCommunicationState
+	166, // 69: voice.space.v1.ResolveMemberCommunicationStateResponse.timed_out_until:type_name -> google.protobuf.Timestamp
+	9,   // 70: voice.space.v1.RestoreSpaceResponse.space:type_name -> voice.space.v1.Space
+	163, // 71: voice.space.v1.SpaceDeletionManifestSet.chat_manifest:type_name -> voice.common.v1.ManifestBinding
+	169, // 72: voice.space.v1.SpaceDeletionManifestSet.file_producers:type_name -> voice.file.v1.FileReferenceProducerDeclaration
+	170, // 73: voice.space.v1.ParticipantCoordinatorStatus.participant_id:type_name -> voice.common.v1.ParticipantId
+	2,   // 74: voice.space.v1.ParticipantCoordinatorStatus.state:type_name -> voice.space.v1.ParticipantOperationState
+	166, // 75: voice.space.v1.ParticipantCoordinatorStatus.updated_at:type_name -> google.protobuf.Timestamp
+	1,   // 76: voice.space.v1.SpaceDeletionCoordinatorStatus.phase:type_name -> voice.space.v1.SpaceDeletionPhase
+	163, // 77: voice.space.v1.SpaceDeletionCoordinatorStatus.manifest:type_name -> voice.common.v1.ManifestBinding
+	123, // 78: voice.space.v1.SpaceDeletionCoordinatorStatus.participants:type_name -> voice.space.v1.ParticipantCoordinatorStatus
+	166, // 79: voice.space.v1.SpaceDeletionCoordinatorStatus.scheduled_at:type_name -> google.protobuf.Timestamp
+	166, // 80: voice.space.v1.SpaceDeletionCoordinatorStatus.purge_after:type_name -> google.protobuf.Timestamp
+	166, // 81: voice.space.v1.SpaceDeletionCoordinatorStatus.purged_at:type_name -> google.protobuf.Timestamp
+	124, // 82: voice.space.v1.GetSpaceDeletionCoordinatorStatusResponse.status:type_name -> voice.space.v1.SpaceDeletionCoordinatorStatus
+	41,  // 83: voice.space.v1.UpdateMemberNicknameResponse.space_membership:type_name -> voice.space.v1.SpaceMembership
+	171, // 84: voice.space.v1.SpaceChatCreationBinding.chat_type:type_name -> voice.chat.v1.ChatType
+	131, // 85: voice.space.v1.SpaceChatCreationBinding.user:type_name -> voice.space.v1.SpaceChatCreationUser
+	132, // 86: voice.space.v1.SpaceChatCreationBinding.bot:type_name -> voice.space.v1.SpaceChatCreationBot
+	133, // 87: voice.space.v1.SpaceChatCreationOutcome.binding:type_name -> voice.space.v1.SpaceChatCreationBinding
+	3,   // 88: voice.space.v1.SpaceChatCreationOutcome.state:type_name -> voice.space.v1.SpaceChatCreationOutcomeState
+	23,  // 89: voice.space.v1.SpaceChatCreationOutcome.node:type_name -> voice.space.v1.SpaceTreeNode
+	133, // 90: voice.space.v1.CommitSpaceChatCreationRequest.binding:type_name -> voice.space.v1.SpaceChatCreationBinding
+	134, // 91: voice.space.v1.CommitSpaceChatCreationResponse.outcome:type_name -> voice.space.v1.SpaceChatCreationOutcome
+	134, // 92: voice.space.v1.GetSpaceChatCreationOutcomeResponse.outcome:type_name -> voice.space.v1.SpaceChatCreationOutcome
+	139, // 93: voice.space.v1.JoinRequirements.questions:type_name -> voice.space.v1.JoinQuestion
+	4,   // 94: voice.space.v1.JoinAdmissionResult.state:type_name -> voice.space.v1.JoinAdmissionState
+	41,  // 95: voice.space.v1.JoinAdmissionResult.space_membership:type_name -> voice.space.v1.SpaceMembership
+	166, // 96: voice.space.v1.JoinAttemptView.expires_at:type_name -> google.protobuf.Timestamp
+	140, // 97: voice.space.v1.JoinAttemptView.requirements:type_name -> voice.space.v1.JoinRequirements
+	142, // 98: voice.space.v1.JoinAttemptView.result:type_name -> voice.space.v1.JoinAdmissionResult
+	141, // 99: voice.space.v1.JoinAttemptView.submitted_answers:type_name -> voice.space.v1.JoinAnswer
+	143, // 100: voice.space.v1.StartJoinAttemptResponse.attempt:type_name -> voice.space.v1.JoinAttemptView
+	143, // 101: voice.space.v1.GetJoinAttemptResponse.attempt:type_name -> voice.space.v1.JoinAttemptView
+	141, // 102: voice.space.v1.SubmitJoinAttemptRequest.answers:type_name -> voice.space.v1.JoinAnswer
+	142, // 103: voice.space.v1.SubmitJoinAttemptResponse.result:type_name -> voice.space.v1.JoinAdmissionResult
+	166, // 104: voice.space.v1.JoinRequestSummary.created_at:type_name -> google.protobuf.Timestamp
+	140, // 105: voice.space.v1.JoinRequestAttempt.requirements:type_name -> voice.space.v1.JoinRequirements
+	141, // 106: voice.space.v1.JoinRequestAttempt.submitted_answers:type_name -> voice.space.v1.JoinAnswer
+	150, // 107: voice.space.v1.ListJoinRequestsResponse.requests:type_name -> voice.space.v1.JoinRequestSummary
+	150, // 108: voice.space.v1.GetJoinRequestResponse.request:type_name -> voice.space.v1.JoinRequestSummary
+	151, // 109: voice.space.v1.GetJoinRequestResponse.attempts:type_name -> voice.space.v1.JoinRequestAttempt
+	142, // 110: voice.space.v1.ApproveJoinRequestResponse.result:type_name -> voice.space.v1.JoinAdmissionResult
+	56,  // 111: voice.space.v1.ApplyBotInstallationRemovalRequest.native_cancellation:type_name -> voice.space.v1.RemoveBotMemberRequest
+	166, // 112: voice.space.v1.BotInstallationRemovalReceipt.completed_at:type_name -> google.protobuf.Timestamp
+	161, // 113: voice.space.v1.ApplyBotInstallationRemovalResponse.receipt:type_name -> voice.space.v1.BotInstallationRemovalReceipt
+	172, // 114: voice.space.v1.SpaceService.GetMemberAdmissionAuthority:input_type -> voice.space.v1.GetMemberAdmissionAuthorityRequest
+	10,  // 115: voice.space.v1.SpaceService.CreateSpace:input_type -> voice.space.v1.CreateSpaceRequest
+	11,  // 116: voice.space.v1.SpaceService.UpdateSpace:input_type -> voice.space.v1.UpdateSpaceRequest
+	12,  // 117: voice.space.v1.SpaceService.UpdateSpaceMmConfig:input_type -> voice.space.v1.UpdateSpaceMmConfigRequest
+	14,  // 118: voice.space.v1.SpaceService.DeleteSpace:input_type -> voice.space.v1.DeleteSpaceRequest
+	15,  // 119: voice.space.v1.SpaceService.GetSpace:input_type -> voice.space.v1.GetSpaceRequest
+	127, // 120: voice.space.v1.SpaceService.ValidateRoleOverrideTarget:input_type -> voice.space.v1.ValidateRoleOverrideTargetRequest
+	16,  // 121: voice.space.v1.SpaceService.ListMySpaces:input_type -> voice.space.v1.ListMySpacesRequest
+	18,  // 122: voice.space.v1.SpaceService.SearchPublicSpaces:input_type -> voice.space.v1.SearchPublicSpacesRequest
+	20,  // 123: voice.space.v1.SpaceService.CreateVoiceRoom:input_type -> voice.space.v1.CreateVoiceRoomRequest
+	21,  // 124: voice.space.v1.SpaceService.UpdateVoiceRoom:input_type -> voice.space.v1.UpdateVoiceRoomRequest
+	22,  // 125: voice.space.v1.SpaceService.DeleteVoiceRoom:input_type -> voice.space.v1.DeleteVoiceRoomRequest
+	26,  // 126: voice.space.v1.SpaceService.UpsertTreeNode:input_type -> voice.space.v1.UpsertTreeNodeRequest
+	27,  // 127: voice.space.v1.SpaceService.RemoveTreeNode:input_type -> voice.space.v1.RemoveTreeNodeRequest
+	29,  // 128: voice.space.v1.SpaceService.CreateCategory:input_type -> voice.space.v1.CreateCategoryRequest
+	30,  // 129: voice.space.v1.SpaceService.UpdateCategory:input_type -> voice.space.v1.UpdateCategoryRequest
+	31,  // 130: voice.space.v1.SpaceService.DeleteCategory:input_type -> voice.space.v1.DeleteCategoryRequest
+	32,  // 131: voice.space.v1.SpaceService.ReorderSpaceTree:input_type -> voice.space.v1.ReorderSpaceTreeRequest
+	24,  // 132: voice.space.v1.SpaceService.PinTreeNode:input_type -> voice.space.v1.PinTreeNodeRequest
+	25,  // 133: voice.space.v1.SpaceService.UnpinTreeNode:input_type -> voice.space.v1.UnpinTreeNodeRequest
+	33,  // 134: voice.space.v1.SpaceService.ListSpaceTree:input_type -> voice.space.v1.ListSpaceTreeRequest
+	35,  // 135: voice.space.v1.SpaceService.CreateInvite:input_type -> voice.space.v1.CreateInviteRequest
+	36,  // 136: voice.space.v1.SpaceService.RevokeInvite:input_type -> voice.space.v1.RevokeInviteRequest
+	37,  // 137: voice.space.v1.SpaceService.GetInvite:input_type -> voice.space.v1.GetInviteRequest
+	38,  // 138: voice.space.v1.SpaceService.ListInvites:input_type -> voice.space.v1.ListInvitesRequest
+	40,  // 139: voice.space.v1.SpaceService.JoinByInvite:input_type -> voice.space.v1.JoinByInviteRequest
+	42,  // 140: voice.space.v1.SpaceService.JoinSpace:input_type -> voice.space.v1.JoinSpaceRequest
+	144, // 141: voice.space.v1.SpaceService.StartJoinAttempt:input_type -> voice.space.v1.StartJoinAttemptRequest
+	146, // 142: voice.space.v1.SpaceService.GetJoinAttempt:input_type -> voice.space.v1.GetJoinAttemptRequest
+	148, // 143: voice.space.v1.SpaceService.SubmitJoinAttempt:input_type -> voice.space.v1.SubmitJoinAttemptRequest
+	152, // 144: voice.space.v1.SpaceService.ListJoinRequests:input_type -> voice.space.v1.ListJoinRequestsRequest
+	154, // 145: voice.space.v1.SpaceService.GetJoinRequest:input_type -> voice.space.v1.GetJoinRequestRequest
+	156, // 146: voice.space.v1.SpaceService.ApproveJoinRequest:input_type -> voice.space.v1.ApproveJoinRequestRequest
+	158, // 147: voice.space.v1.SpaceService.SetEntryPolicy:input_type -> voice.space.v1.SetEntryPolicyRequest
+	43,  // 148: voice.space.v1.SpaceService.LeaveSpace:input_type -> voice.space.v1.LeaveSpaceRequest
+	44,  // 149: voice.space.v1.SpaceService.KickMember:input_type -> voice.space.v1.KickMemberRequest
+	45,  // 150: voice.space.v1.SpaceService.BanMember:input_type -> voice.space.v1.BanMemberRequest
+	46,  // 151: voice.space.v1.SpaceService.UnbanMember:input_type -> voice.space.v1.UnbanMemberRequest
+	47,  // 152: voice.space.v1.SpaceService.ListMembers:input_type -> voice.space.v1.ListMembersRequest
+	129, // 153: voice.space.v1.SpaceService.UpdateMemberNickname:input_type -> voice.space.v1.UpdateMemberNicknameRequest
+	49,  // 154: voice.space.v1.SpaceService.ListBans:input_type -> voice.space.v1.ListBansRequest
+	52,  // 155: voice.space.v1.SpaceService.TimeoutMember:input_type -> voice.space.v1.TimeoutMemberRequest
+	53,  // 156: voice.space.v1.SpaceService.RemoveMemberTimeout:input_type -> voice.space.v1.RemoveMemberTimeoutRequest
+	54,  // 157: voice.space.v1.SpaceService.TransferOwnership:input_type -> voice.space.v1.TransferOwnershipRequest
+	55,  // 158: voice.space.v1.SpaceService.AddBotMember:input_type -> voice.space.v1.AddBotMemberRequest
+	56,  // 159: voice.space.v1.SpaceService.RemoveBotMember:input_type -> voice.space.v1.RemoveBotMemberRequest
+	58,  // 160: voice.space.v1.SpaceService.ListTemplates:input_type -> voice.space.v1.ListTemplatesRequest
+	61,  // 161: voice.space.v1.SpaceService.CreateFromTemplate:input_type -> voice.space.v1.CreateFromTemplateRequest
+	62,  // 162: voice.space.v1.SpaceService.ApplyCommunityRoster:input_type -> voice.space.v1.ApplyCommunityRosterRequest
+	64,  // 163: voice.space.v1.SpaceService.CreateCommunityBootstrap:input_type -> voice.space.v1.CreateCommunityBootstrapRequest
+	65,  // 164: voice.space.v1.SpaceService.RecoverCommunityOwner:input_type -> voice.space.v1.RecoverCommunityOwnerRequest
+	66,  // 165: voice.space.v1.SpaceService.GetAuditLog:input_type -> voice.space.v1.GetAuditLogRequest
+	69,  // 166: voice.space.v1.SpaceService.AppendAuditEvent:input_type -> voice.space.v1.AppendAuditEventRequest
+	135, // 167: voice.space.v1.SpaceService.CommitSpaceChatCreation:input_type -> voice.space.v1.CommitSpaceChatCreationRequest
+	137, // 168: voice.space.v1.SpaceService.GetSpaceChatCreationOutcome:input_type -> voice.space.v1.GetSpaceChatCreationOutcomeRequest
+	112, // 169: voice.space.v1.SpaceService.AreCoMembers:input_type -> voice.space.v1.AreCoMembersRequest
+	114, // 170: voice.space.v1.SpaceService.ResolveVoiceRoomAccess:input_type -> voice.space.v1.ResolveVoiceRoomAccessRequest
+	116, // 171: voice.space.v1.SpaceService.ResolveMemberCommunicationState:input_type -> voice.space.v1.ResolveMemberCommunicationStateRequest
+	118, // 172: voice.space.v1.SpaceService.SyncSpaceProSubscription:input_type -> voice.space.v1.SyncSpaceProSubscriptionRequest
+	120, // 173: voice.space.v1.SpaceService.RestoreSpace:input_type -> voice.space.v1.RestoreSpaceRequest
+	125, // 174: voice.space.v1.SpaceService.GetSpaceDeletionCoordinatorStatus:input_type -> voice.space.v1.GetSpaceDeletionCoordinatorStatusRequest
+	160, // 175: voice.space.v1.SpaceService.ApplyBotInstallationRemoval:input_type -> voice.space.v1.ApplyBotInstallationRemovalRequest
+	5,   // 176: voice.space.v1.SpaceService.GetBotPurgeHandoff:input_type -> voice.space.v1.GetBotPurgeHandoffRequest
+	173, // 177: voice.space.v1.SpaceService.GetMemberAdmissionAuthority:output_type -> voice.space.v1.GetMemberAdmissionAuthorityResponse
+	72,  // 178: voice.space.v1.SpaceService.CreateSpace:output_type -> voice.space.v1.CreateSpaceResponse
+	73,  // 179: voice.space.v1.SpaceService.UpdateSpace:output_type -> voice.space.v1.UpdateSpaceResponse
+	13,  // 180: voice.space.v1.SpaceService.UpdateSpaceMmConfig:output_type -> voice.space.v1.UpdateSpaceMmConfigResponse
+	74,  // 181: voice.space.v1.SpaceService.DeleteSpace:output_type -> voice.space.v1.DeleteSpaceResponse
+	75,  // 182: voice.space.v1.SpaceService.GetSpace:output_type -> voice.space.v1.GetSpaceResponse
+	128, // 183: voice.space.v1.SpaceService.ValidateRoleOverrideTarget:output_type -> voice.space.v1.ValidateRoleOverrideTargetResponse
+	76,  // 184: voice.space.v1.SpaceService.ListMySpaces:output_type -> voice.space.v1.ListMySpacesResponse
+	77,  // 185: voice.space.v1.SpaceService.SearchPublicSpaces:output_type -> voice.space.v1.SearchPublicSpacesResponse
+	78,  // 186: voice.space.v1.SpaceService.CreateVoiceRoom:output_type -> voice.space.v1.CreateVoiceRoomResponse
+	79,  // 187: voice.space.v1.SpaceService.UpdateVoiceRoom:output_type -> voice.space.v1.UpdateVoiceRoomResponse
+	80,  // 188: voice.space.v1.SpaceService.DeleteVoiceRoom:output_type -> voice.space.v1.DeleteVoiceRoomResponse
+	81,  // 189: voice.space.v1.SpaceService.UpsertTreeNode:output_type -> voice.space.v1.UpsertTreeNodeResponse
+	82,  // 190: voice.space.v1.SpaceService.RemoveTreeNode:output_type -> voice.space.v1.RemoveTreeNodeResponse
+	83,  // 191: voice.space.v1.SpaceService.CreateCategory:output_type -> voice.space.v1.CreateCategoryResponse
+	84,  // 192: voice.space.v1.SpaceService.UpdateCategory:output_type -> voice.space.v1.UpdateCategoryResponse
+	85,  // 193: voice.space.v1.SpaceService.DeleteCategory:output_type -> voice.space.v1.DeleteCategoryResponse
+	86,  // 194: voice.space.v1.SpaceService.ReorderSpaceTree:output_type -> voice.space.v1.ReorderSpaceTreeResponse
+	87,  // 195: voice.space.v1.SpaceService.PinTreeNode:output_type -> voice.space.v1.PinTreeNodeResponse
+	88,  // 196: voice.space.v1.SpaceService.UnpinTreeNode:output_type -> voice.space.v1.UnpinTreeNodeResponse
+	89,  // 197: voice.space.v1.SpaceService.ListSpaceTree:output_type -> voice.space.v1.ListSpaceTreeResponse
+	90,  // 198: voice.space.v1.SpaceService.CreateInvite:output_type -> voice.space.v1.CreateInviteResponse
+	91,  // 199: voice.space.v1.SpaceService.RevokeInvite:output_type -> voice.space.v1.RevokeInviteResponse
+	92,  // 200: voice.space.v1.SpaceService.GetInvite:output_type -> voice.space.v1.GetInviteResponse
+	93,  // 201: voice.space.v1.SpaceService.ListInvites:output_type -> voice.space.v1.ListInvitesResponse
+	94,  // 202: voice.space.v1.SpaceService.JoinByInvite:output_type -> voice.space.v1.JoinByInviteResponse
+	95,  // 203: voice.space.v1.SpaceService.JoinSpace:output_type -> voice.space.v1.JoinSpaceResponse
+	145, // 204: voice.space.v1.SpaceService.StartJoinAttempt:output_type -> voice.space.v1.StartJoinAttemptResponse
+	147, // 205: voice.space.v1.SpaceService.GetJoinAttempt:output_type -> voice.space.v1.GetJoinAttemptResponse
+	149, // 206: voice.space.v1.SpaceService.SubmitJoinAttempt:output_type -> voice.space.v1.SubmitJoinAttemptResponse
+	153, // 207: voice.space.v1.SpaceService.ListJoinRequests:output_type -> voice.space.v1.ListJoinRequestsResponse
+	155, // 208: voice.space.v1.SpaceService.GetJoinRequest:output_type -> voice.space.v1.GetJoinRequestResponse
+	157, // 209: voice.space.v1.SpaceService.ApproveJoinRequest:output_type -> voice.space.v1.ApproveJoinRequestResponse
+	159, // 210: voice.space.v1.SpaceService.SetEntryPolicy:output_type -> voice.space.v1.SetEntryPolicyResponse
+	96,  // 211: voice.space.v1.SpaceService.LeaveSpace:output_type -> voice.space.v1.LeaveSpaceResponse
+	97,  // 212: voice.space.v1.SpaceService.KickMember:output_type -> voice.space.v1.KickMemberResponse
+	98,  // 213: voice.space.v1.SpaceService.BanMember:output_type -> voice.space.v1.BanMemberResponse
+	99,  // 214: voice.space.v1.SpaceService.UnbanMember:output_type -> voice.space.v1.UnbanMemberResponse
+	100, // 215: voice.space.v1.SpaceService.ListMembers:output_type -> voice.space.v1.ListMembersResponse
+	130, // 216: voice.space.v1.SpaceService.UpdateMemberNickname:output_type -> voice.space.v1.UpdateMemberNicknameResponse
+	101, // 217: voice.space.v1.SpaceService.ListBans:output_type -> voice.space.v1.ListBansResponse
+	102, // 218: voice.space.v1.SpaceService.TimeoutMember:output_type -> voice.space.v1.TimeoutMemberResponse
+	103, // 219: voice.space.v1.SpaceService.RemoveMemberTimeout:output_type -> voice.space.v1.RemoveMemberTimeoutResponse
+	104, // 220: voice.space.v1.SpaceService.TransferOwnership:output_type -> voice.space.v1.TransferOwnershipResponse
+	105, // 221: voice.space.v1.SpaceService.AddBotMember:output_type -> voice.space.v1.AddBotMemberResponse
+	106, // 222: voice.space.v1.SpaceService.RemoveBotMember:output_type -> voice.space.v1.RemoveBotMemberResponse
+	107, // 223: voice.space.v1.SpaceService.ListTemplates:output_type -> voice.space.v1.ListTemplatesResponse
+	108, // 224: voice.space.v1.SpaceService.CreateFromTemplate:output_type -> voice.space.v1.CreateFromTemplateResponse
+	63,  // 225: voice.space.v1.SpaceService.ApplyCommunityRoster:output_type -> voice.space.v1.ApplyCommunityRosterResponse
+	109, // 226: voice.space.v1.SpaceService.CreateCommunityBootstrap:output_type -> voice.space.v1.CreateCommunityBootstrapResponse
+	110, // 227: voice.space.v1.SpaceService.RecoverCommunityOwner:output_type -> voice.space.v1.RecoverCommunityOwnerResponse
+	111, // 228: voice.space.v1.SpaceService.GetAuditLog:output_type -> voice.space.v1.GetAuditLogResponse
+	70,  // 229: voice.space.v1.SpaceService.AppendAuditEvent:output_type -> voice.space.v1.AppendAuditEventResponse
+	136, // 230: voice.space.v1.SpaceService.CommitSpaceChatCreation:output_type -> voice.space.v1.CommitSpaceChatCreationResponse
+	138, // 231: voice.space.v1.SpaceService.GetSpaceChatCreationOutcome:output_type -> voice.space.v1.GetSpaceChatCreationOutcomeResponse
+	113, // 232: voice.space.v1.SpaceService.AreCoMembers:output_type -> voice.space.v1.AreCoMembersResponse
+	115, // 233: voice.space.v1.SpaceService.ResolveVoiceRoomAccess:output_type -> voice.space.v1.ResolveVoiceRoomAccessResponse
+	117, // 234: voice.space.v1.SpaceService.ResolveMemberCommunicationState:output_type -> voice.space.v1.ResolveMemberCommunicationStateResponse
+	119, // 235: voice.space.v1.SpaceService.SyncSpaceProSubscription:output_type -> voice.space.v1.SyncSpaceProSubscriptionResponse
+	121, // 236: voice.space.v1.SpaceService.RestoreSpace:output_type -> voice.space.v1.RestoreSpaceResponse
+	126, // 237: voice.space.v1.SpaceService.GetSpaceDeletionCoordinatorStatus:output_type -> voice.space.v1.GetSpaceDeletionCoordinatorStatusResponse
+	162, // 238: voice.space.v1.SpaceService.ApplyBotInstallationRemoval:output_type -> voice.space.v1.ApplyBotInstallationRemovalResponse
+	8,   // 239: voice.space.v1.SpaceService.GetBotPurgeHandoff:output_type -> voice.space.v1.GetBotPurgeHandoffResponse
+	177, // [177:240] is the sub-list for method output_type
+	114, // [114:177] is the sub-list for method input_type
+	114, // [114:114] is the sub-list for extension type_name
+	114, // [114:114] is the sub-list for extension extendee
+	0,   // [0:114] is the sub-list for field type_name
 }
 
 func init() { file_voice_space_v1_space_proto_init() }
@@ -11820,42 +12264,42 @@ func file_voice_space_v1_space_proto_init() {
 		return
 	}
 	file_voice_space_v1_member_admission_proto_init()
-	file_voice_space_v1_space_proto_msgTypes[0].OneofWrappers = []any{}
-	file_voice_space_v1_space_proto_msgTypes[2].OneofWrappers = []any{}
-	file_voice_space_v1_space_proto_msgTypes[12].OneofWrappers = []any{}
-	file_voice_space_v1_space_proto_msgTypes[14].OneofWrappers = []any{}
-	file_voice_space_v1_space_proto_msgTypes[17].OneofWrappers = []any{}
+	file_voice_space_v1_space_proto_msgTypes[4].OneofWrappers = []any{}
+	file_voice_space_v1_space_proto_msgTypes[6].OneofWrappers = []any{}
+	file_voice_space_v1_space_proto_msgTypes[16].OneofWrappers = []any{}
+	file_voice_space_v1_space_proto_msgTypes[18].OneofWrappers = []any{}
 	file_voice_space_v1_space_proto_msgTypes[21].OneofWrappers = []any{}
 	file_voice_space_v1_space_proto_msgTypes[25].OneofWrappers = []any{}
-	file_voice_space_v1_space_proto_msgTypes[26].OneofWrappers = []any{}
-	file_voice_space_v1_space_proto_msgTypes[31].OneofWrappers = []any{}
-	file_voice_space_v1_space_proto_msgTypes[32].OneofWrappers = []any{}
-	file_voice_space_v1_space_proto_msgTypes[33].OneofWrappers = []any{}
+	file_voice_space_v1_space_proto_msgTypes[29].OneofWrappers = []any{}
+	file_voice_space_v1_space_proto_msgTypes[30].OneofWrappers = []any{}
+	file_voice_space_v1_space_proto_msgTypes[35].OneofWrappers = []any{}
 	file_voice_space_v1_space_proto_msgTypes[36].OneofWrappers = []any{}
-	file_voice_space_v1_space_proto_msgTypes[42].OneofWrappers = []any{}
-	file_voice_space_v1_space_proto_msgTypes[43].OneofWrappers = []any{}
-	file_voice_space_v1_space_proto_msgTypes[57].OneofWrappers = []any{}
-	file_voice_space_v1_space_proto_msgTypes[115].OneofWrappers = []any{}
-	file_voice_space_v1_space_proto_msgTypes[118].OneofWrappers = []any{}
-	file_voice_space_v1_space_proto_msgTypes[120].OneofWrappers = []any{}
-	file_voice_space_v1_space_proto_msgTypes[124].OneofWrappers = []any{
+	file_voice_space_v1_space_proto_msgTypes[37].OneofWrappers = []any{}
+	file_voice_space_v1_space_proto_msgTypes[40].OneofWrappers = []any{}
+	file_voice_space_v1_space_proto_msgTypes[46].OneofWrappers = []any{}
+	file_voice_space_v1_space_proto_msgTypes[47].OneofWrappers = []any{}
+	file_voice_space_v1_space_proto_msgTypes[61].OneofWrappers = []any{}
+	file_voice_space_v1_space_proto_msgTypes[119].OneofWrappers = []any{}
+	file_voice_space_v1_space_proto_msgTypes[122].OneofWrappers = []any{}
+	file_voice_space_v1_space_proto_msgTypes[124].OneofWrappers = []any{}
+	file_voice_space_v1_space_proto_msgTypes[128].OneofWrappers = []any{
 		(*SpaceChatCreationBinding_User)(nil),
 		(*SpaceChatCreationBinding_Bot)(nil),
 	}
-	file_voice_space_v1_space_proto_msgTypes[134].OneofWrappers = []any{}
-	file_voice_space_v1_space_proto_msgTypes[135].OneofWrappers = []any{
+	file_voice_space_v1_space_proto_msgTypes[138].OneofWrappers = []any{}
+	file_voice_space_v1_space_proto_msgTypes[139].OneofWrappers = []any{
 		(*StartJoinAttemptRequest_SpaceId)(nil),
 		(*StartJoinAttemptRequest_InviteCode)(nil),
 	}
-	file_voice_space_v1_space_proto_msgTypes[139].OneofWrappers = []any{}
-	file_voice_space_v1_space_proto_msgTypes[147].OneofWrappers = []any{}
+	file_voice_space_v1_space_proto_msgTypes[143].OneofWrappers = []any{}
+	file_voice_space_v1_space_proto_msgTypes[151].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_voice_space_v1_space_proto_rawDesc), len(file_voice_space_v1_space_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   154,
+			NumMessages:   158,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

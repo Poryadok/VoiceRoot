@@ -7,6 +7,7 @@ import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
 import "voice/common/v1/space_lifecycle.proto";
 import "voice/file/v1/file.proto";
+import "voice/role/v1/role.proto";
 import "voice/space/v1/member_admission.proto";
 
 option go_package = "voice.app/voice/space/v1;spacev1";
@@ -137,9 +138,47 @@ service SpaceService {
   // permanent Bot Add fence. Ordinary uninstall uses RemoveBotMember.
   // @voice.security=protected;callers=service:bot
   rpc ApplyBotInstallationRemoval(ApplyBotInstallationRemovalRequest) returns (ApplyBotInstallationRemovalResponse);
+  // Relay only the exact accepted producer-owned Role/Messaging P3 evidence.
+  // @voice.security=protected;callers=service:bot
+  rpc GetBotPurgeHandoff(GetBotPurgeHandoffRequest) returns (GetBotPurgeHandoffResponse);
 }
 
+// @voice.unknown_fields=reject
+message GetBotPurgeHandoffRequest {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  string space_id = 3;
+  string deletion_operation_id = 4;
+  uint64 generation = 5;
+  voice.common.v1.ManifestBinding manifest = 6;
+}
 
+message BotPurgeRoleHandoff {
+  voice.role.v1.RetireSpaceReceipt original_receipt = 1;
+  bytes original_request_bytes = 2;
+  bytes original_request_sha256 = 3;
+  bytes original_receipt_bytes = 4;
+  bytes original_receipt_sha256 = 5;
+}
+
+message BotPurgeMessagingHandoff {
+  voice.common.v1.SpacePurgeReceipt original_receipt = 1;
+  bytes original_request_bytes = 2;
+  bytes original_request_sha256 = 3;
+  bytes original_receipt_bytes = 4;
+  bytes original_receipt_sha256 = 5;
+}
+
+message GetBotPurgeHandoffResponse {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  string space_id = 3;
+  string deletion_operation_id = 4;
+  uint64 generation = 5;
+  voice.common.v1.ManifestBinding manifest = 6;
+  voice.space.v1.BotPurgeRoleHandoff role = 7;
+  voice.space.v1.BotPurgeMessagingHandoff messaging = 8;
+}
 
 message Space {
   string id = 1;

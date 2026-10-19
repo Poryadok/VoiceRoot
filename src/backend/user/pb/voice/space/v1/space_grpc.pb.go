@@ -81,6 +81,7 @@ const (
 	SpaceService_RestoreSpace_FullMethodName                      = "/voice.space.v1.SpaceService/RestoreSpace"
 	SpaceService_GetSpaceDeletionCoordinatorStatus_FullMethodName = "/voice.space.v1.SpaceService/GetSpaceDeletionCoordinatorStatus"
 	SpaceService_ApplyBotInstallationRemoval_FullMethodName       = "/voice.space.v1.SpaceService/ApplyBotInstallationRemoval"
+	SpaceService_GetBotPurgeHandoff_FullMethodName                = "/voice.space.v1.SpaceService/GetBotPurgeHandoff"
 )
 
 // SpaceServiceClient is the client API for SpaceService service.
@@ -196,6 +197,9 @@ type SpaceServiceClient interface {
 	// permanent Bot Add fence. Ordinary uninstall uses RemoveBotMember.
 	// @voice.security=protected;callers=service:bot
 	ApplyBotInstallationRemoval(ctx context.Context, in *ApplyBotInstallationRemovalRequest, opts ...grpc.CallOption) (*ApplyBotInstallationRemovalResponse, error)
+	// Relay only the exact accepted producer-owned Role/Messaging P3 evidence.
+	// @voice.security=protected;callers=service:bot
+	GetBotPurgeHandoff(ctx context.Context, in *GetBotPurgeHandoffRequest, opts ...grpc.CallOption) (*GetBotPurgeHandoffResponse, error)
 }
 
 type spaceServiceClient struct {
@@ -826,6 +830,16 @@ func (c *spaceServiceClient) ApplyBotInstallationRemoval(ctx context.Context, in
 	return out, nil
 }
 
+func (c *spaceServiceClient) GetBotPurgeHandoff(ctx context.Context, in *GetBotPurgeHandoffRequest, opts ...grpc.CallOption) (*GetBotPurgeHandoffResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetBotPurgeHandoffResponse)
+	err := c.cc.Invoke(ctx, SpaceService_GetBotPurgeHandoff_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SpaceServiceServer is the server API for SpaceService service.
 // All implementations must embed UnimplementedSpaceServiceServer
 // for forward compatibility.
@@ -939,6 +953,9 @@ type SpaceServiceServer interface {
 	// permanent Bot Add fence. Ordinary uninstall uses RemoveBotMember.
 	// @voice.security=protected;callers=service:bot
 	ApplyBotInstallationRemoval(context.Context, *ApplyBotInstallationRemovalRequest) (*ApplyBotInstallationRemovalResponse, error)
+	// Relay only the exact accepted producer-owned Role/Messaging P3 evidence.
+	// @voice.security=protected;callers=service:bot
+	GetBotPurgeHandoff(context.Context, *GetBotPurgeHandoffRequest) (*GetBotPurgeHandoffResponse, error)
 	mustEmbedUnimplementedSpaceServiceServer()
 }
 
@@ -1134,6 +1151,9 @@ func (UnimplementedSpaceServiceServer) GetSpaceDeletionCoordinatorStatus(context
 }
 func (UnimplementedSpaceServiceServer) ApplyBotInstallationRemoval(context.Context, *ApplyBotInstallationRemovalRequest) (*ApplyBotInstallationRemovalResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ApplyBotInstallationRemoval not implemented")
+}
+func (UnimplementedSpaceServiceServer) GetBotPurgeHandoff(context.Context, *GetBotPurgeHandoffRequest) (*GetBotPurgeHandoffResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetBotPurgeHandoff not implemented")
 }
 func (UnimplementedSpaceServiceServer) mustEmbedUnimplementedSpaceServiceServer() {}
 func (UnimplementedSpaceServiceServer) testEmbeddedByValue()                      {}
@@ -2272,6 +2292,24 @@ func _SpaceService_ApplyBotInstallationRemoval_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SpaceService_GetBotPurgeHandoff_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBotPurgeHandoffRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).GetBotPurgeHandoff(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_GetBotPurgeHandoff_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).GetBotPurgeHandoff(ctx, req.(*GetBotPurgeHandoffRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SpaceService_ServiceDesc is the grpc.ServiceDesc for SpaceService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2526,6 +2564,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ApplyBotInstallationRemoval",
 			Handler:    _SpaceService_ApplyBotInstallationRemoval_Handler,
+		},
+		{
+			MethodName: "GetBotPurgeHandoff",
+			Handler:    _SpaceService_GetBotPurgeHandoff_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

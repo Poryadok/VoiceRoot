@@ -120,6 +120,197 @@ final $typed_data.Uint8List joinAdmissionStateDescriptor = $convert.base64Decode
     'QVRFX0ZBSUxFRBAFEiAKHEpPSU5fQURNSVNTSU9OX1NUQVRFX0VYUElSRUQQBhIkCiBKT0lOX0'
     'FETUlTU0lPTl9TVEFURV9JTlZBTElEQVRFRBAH');
 
+@$core.Deprecated('Use getBotPurgeHandoffRequestDescriptor instead')
+const GetBotPurgeHandoffRequest$json = {
+  '1': 'GetBotPurgeHandoffRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'request_id', '3': 2, '4': 1, '5': 9, '10': 'requestId'},
+    {'1': 'space_id', '3': 3, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'generation', '3': 5, '4': 1, '5': 4, '10': 'generation'},
+    {
+      '1': 'manifest',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.ManifestBinding',
+      '10': 'manifest'
+    },
+  ],
+};
+
+/// Descriptor for `GetBotPurgeHandoffRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getBotPurgeHandoffRequestDescriptor = $convert.base64Decode(
+    'ChlHZXRCb3RQdXJnZUhhbmRvZmZSZXF1ZXN0EikKEHByb3RvY29sX3ZlcnNpb24YASABKA1SD3'
+    'Byb3RvY29sVmVyc2lvbhIdCgpyZXF1ZXN0X2lkGAIgASgJUglyZXF1ZXN0SWQSGQoIc3BhY2Vf'
+    'aWQYAyABKAlSB3NwYWNlSWQSMgoVZGVsZXRpb25fb3BlcmF0aW9uX2lkGAQgASgJUhNkZWxldG'
+    'lvbk9wZXJhdGlvbklkEh4KCmdlbmVyYXRpb24YBSABKARSCmdlbmVyYXRpb24SPAoIbWFuaWZl'
+    'c3QYBiABKAsyIC52b2ljZS5jb21tb24udjEuTWFuaWZlc3RCaW5kaW5nUghtYW5pZmVzdA==');
+
+@$core.Deprecated('Use botPurgeRoleHandoffDescriptor instead')
+const BotPurgeRoleHandoff$json = {
+  '1': 'BotPurgeRoleHandoff',
+  '2': [
+    {
+      '1': 'original_receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.RetireSpaceReceipt',
+      '10': 'originalReceipt'
+    },
+    {
+      '1': 'original_request_bytes',
+      '3': 2,
+      '4': 1,
+      '5': 12,
+      '10': 'originalRequestBytes'
+    },
+    {
+      '1': 'original_request_sha256',
+      '3': 3,
+      '4': 1,
+      '5': 12,
+      '10': 'originalRequestSha256'
+    },
+    {
+      '1': 'original_receipt_bytes',
+      '3': 4,
+      '4': 1,
+      '5': 12,
+      '10': 'originalReceiptBytes'
+    },
+    {
+      '1': 'original_receipt_sha256',
+      '3': 5,
+      '4': 1,
+      '5': 12,
+      '10': 'originalReceiptSha256'
+    },
+  ],
+};
+
+/// Descriptor for `BotPurgeRoleHandoff`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botPurgeRoleHandoffDescriptor = $convert.base64Decode(
+    'ChNCb3RQdXJnZVJvbGVIYW5kb2ZmEkwKEG9yaWdpbmFsX3JlY2VpcHQYASABKAsyIS52b2ljZS'
+    '5yb2xlLnYxLlJldGlyZVNwYWNlUmVjZWlwdFIPb3JpZ2luYWxSZWNlaXB0EjQKFm9yaWdpbmFs'
+    'X3JlcXVlc3RfYnl0ZXMYAiABKAxSFG9yaWdpbmFsUmVxdWVzdEJ5dGVzEjYKF29yaWdpbmFsX3'
+    'JlcXVlc3Rfc2hhMjU2GAMgASgMUhVvcmlnaW5hbFJlcXVlc3RTaGEyNTYSNAoWb3JpZ2luYWxf'
+    'cmVjZWlwdF9ieXRlcxgEIAEoDFIUb3JpZ2luYWxSZWNlaXB0Qnl0ZXMSNgoXb3JpZ2luYWxfcm'
+    'VjZWlwdF9zaGEyNTYYBSABKAxSFW9yaWdpbmFsUmVjZWlwdFNoYTI1Ng==');
+
+@$core.Deprecated('Use botPurgeMessagingHandoffDescriptor instead')
+const BotPurgeMessagingHandoff$json = {
+  '1': 'BotPurgeMessagingHandoff',
+  '2': [
+    {
+      '1': 'original_receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.SpacePurgeReceipt',
+      '10': 'originalReceipt'
+    },
+    {
+      '1': 'original_request_bytes',
+      '3': 2,
+      '4': 1,
+      '5': 12,
+      '10': 'originalRequestBytes'
+    },
+    {
+      '1': 'original_request_sha256',
+      '3': 3,
+      '4': 1,
+      '5': 12,
+      '10': 'originalRequestSha256'
+    },
+    {
+      '1': 'original_receipt_bytes',
+      '3': 4,
+      '4': 1,
+      '5': 12,
+      '10': 'originalReceiptBytes'
+    },
+    {
+      '1': 'original_receipt_sha256',
+      '3': 5,
+      '4': 1,
+      '5': 12,
+      '10': 'originalReceiptSha256'
+    },
+  ],
+};
+
+/// Descriptor for `BotPurgeMessagingHandoff`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botPurgeMessagingHandoffDescriptor = $convert.base64Decode(
+    'ChhCb3RQdXJnZU1lc3NhZ2luZ0hhbmRvZmYSTQoQb3JpZ2luYWxfcmVjZWlwdBgBIAEoCzIiLn'
+    'ZvaWNlLmNvbW1vbi52MS5TcGFjZVB1cmdlUmVjZWlwdFIPb3JpZ2luYWxSZWNlaXB0EjQKFm9y'
+    'aWdpbmFsX3JlcXVlc3RfYnl0ZXMYAiABKAxSFG9yaWdpbmFsUmVxdWVzdEJ5dGVzEjYKF29yaW'
+    'dpbmFsX3JlcXVlc3Rfc2hhMjU2GAMgASgMUhVvcmlnaW5hbFJlcXVlc3RTaGEyNTYSNAoWb3Jp'
+    'Z2luYWxfcmVjZWlwdF9ieXRlcxgEIAEoDFIUb3JpZ2luYWxSZWNlaXB0Qnl0ZXMSNgoXb3JpZ2'
+    'luYWxfcmVjZWlwdF9zaGEyNTYYBSABKAxSFW9yaWdpbmFsUmVjZWlwdFNoYTI1Ng==');
+
+@$core.Deprecated('Use getBotPurgeHandoffResponseDescriptor instead')
+const GetBotPurgeHandoffResponse$json = {
+  '1': 'GetBotPurgeHandoffResponse',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'request_id', '3': 2, '4': 1, '5': 9, '10': 'requestId'},
+    {'1': 'space_id', '3': 3, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'generation', '3': 5, '4': 1, '5': 4, '10': 'generation'},
+    {
+      '1': 'manifest',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.ManifestBinding',
+      '10': 'manifest'
+    },
+    {
+      '1': 'role',
+      '3': 7,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.BotPurgeRoleHandoff',
+      '10': 'role'
+    },
+    {
+      '1': 'messaging',
+      '3': 8,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.BotPurgeMessagingHandoff',
+      '10': 'messaging'
+    },
+  ],
+};
+
+/// Descriptor for `GetBotPurgeHandoffResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getBotPurgeHandoffResponseDescriptor = $convert.base64Decode(
+    'ChpHZXRCb3RQdXJnZUhhbmRvZmZSZXNwb25zZRIpChBwcm90b2NvbF92ZXJzaW9uGAEgASgNUg'
+    '9wcm90b2NvbFZlcnNpb24SHQoKcmVxdWVzdF9pZBgCIAEoCVIJcmVxdWVzdElkEhkKCHNwYWNl'
+    'X2lkGAMgASgJUgdzcGFjZUlkEjIKFWRlbGV0aW9uX29wZXJhdGlvbl9pZBgEIAEoCVITZGVsZX'
+    'Rpb25PcGVyYXRpb25JZBIeCgpnZW5lcmF0aW9uGAUgASgEUgpnZW5lcmF0aW9uEjwKCG1hbmlm'
+    'ZXN0GAYgASgLMiAudm9pY2UuY29tbW9uLnYxLk1hbmlmZXN0QmluZGluZ1IIbWFuaWZlc3QSNw'
+    'oEcm9sZRgHIAEoCzIjLnZvaWNlLnNwYWNlLnYxLkJvdFB1cmdlUm9sZUhhbmRvZmZSBHJvbGUS'
+    'RgoJbWVzc2FnaW5nGAggASgLMigudm9pY2Uuc3BhY2UudjEuQm90UHVyZ2VNZXNzYWdpbmdIYW'
+    '5kb2ZmUgltZXNzYWdpbmc=');
+
 @$core.Deprecated('Use spaceDescriptor instead')
 const Space$json = {
   '1': 'Space',
