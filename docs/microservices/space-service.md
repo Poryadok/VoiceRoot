@@ -357,6 +357,21 @@ through legacy `entry_questions_json`. Submitted answers are visible only to
 the original applicant and authorized request reviewers; never log raw
 answers, captcha tokens, invite codes or answer digests.
 
+The manual review parent `request_id` identifies a server-owned Q group, not an
+attempt ID. Q groups only the same Space, applicant account/profile, policy
+version and policy digest. Each invite-bound attempt A retains its own proof and
+approval. Migration32 stores immutable groups, child associations and approval
+selections; migration35/36 remain the owning attempt and operation journals.
+Successful pending submission attaches A inside the same Space transaction.
+An approval operation reserves its exact Q/A selection before owner calls; an
+omitted selector requires exactly one pending/ready child. A retry retains the
+saved A even after another child appears. No current-invite filtering, newest
+child fallback, Q=A inference, or association-as-authorization is permitted.
+The final scoped verifier reloads the actual association under the Space fence.
+Read-only lookup never creates or backfills Q. These store interfaces do not
+activate the public submission/approval adapter, native membership publication,
+identity erasure, or source-catalog qualification.
+
 `SetEntryPolicy` accepts a complete private policy with UUID `operation_id`
 and `expected_policy_version`. It requires `SPACE_MANAGE_SETTINGS`. An exact
 operation/body replay returns its saved outcome; a changed body is
