@@ -11,6 +11,12 @@ case "${ROLE_NATIVE_SPACE_COHORT:-39}" in
 esac
 source_root="$(mktemp -d /tmp/role-native-space.XXXXXX)"
 trap 'rm -rf "$source_root"' EXIT
+# The calling test owns this fresh directory through its complete lifetime.
+# Binary and SQL must move together; no persistent cross-cohort /tmp outputs.
+: "${ROLE_NATIVE_SPACE_OUTPUT_DIR:?fresh caller-owned output directory required}"
+case "$ROLE_NATIVE_SPACE_OUTPUT_DIR" in /*) ;; *) echo "absolute output directory required" >&2; exit 1 ;; esac
+test -d "$ROLE_NATIVE_SPACE_OUTPUT_DIR"
+test -z "$(find "$ROLE_NATIVE_SPACE_OUTPUT_DIR" -mindepth 1 -maxdepth 1 -print -quit)"
 # Windows worktree .git pointers are intentionally not resolved inside Linux.
 # Host preparation: rtk git archive --format=tar -o
 # tmp/swarm/native-space-$source_pin.tar $source_pin src/backend
@@ -18,8 +24,8 @@ tar -xf "${ROLE_NATIVE_SPACE_ARCHIVE_DIR:-$repo_root/tmp/swarm}/native-space-$so
 mkdir -p "$source_root/src/backend/space/cmd/role-native-fixture"
 cp "$role_root/testdata/native_space_fixture/main.go" "$source_root/src/backend/space/cmd/role-native-fixture/main.go"
 cd "$source_root/src/backend/space"
-go build -o /tmp/role-native-space-fixture ./cmd/role-native-fixture
+go build -o "$ROLE_NATIVE_SPACE_OUTPUT_DIR/fixture" ./cmd/role-native-fixture
 # The actual migrator fixture needs the same immutable migration set, copied
 # outside the temporary build tree for the lifetime of the Role test process.
-mkdir -p /tmp/role-native-space-migrations
-cp "$source_root"/src/backend/migrations/space_db/*.sql /tmp/role-native-space-migrations/
+mkdir "$ROLE_NATIVE_SPACE_OUTPUT_DIR/migrations"
+cp "$source_root"/src/backend/migrations/space_db/*.sql "$ROLE_NATIVE_SPACE_OUTPUT_DIR/migrations/"

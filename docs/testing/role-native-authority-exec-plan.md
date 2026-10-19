@@ -284,3 +284,13 @@ same independent app LOGIN. Do not bypass172/current core or duplicate320's
 protected report/history consumer. This is an unfinished existing task checkpoint.
 
 The native25/state2 extension uses the same immutable21 projection and pure qualifier; Bot terminal fences restrict mutations and confer no mask or binding. Existing cleanup effects invalidate the existing Role clock; SDK clock remains independent. Actual21-to25 native/source parity initially failed5.465s, then passed7.330s. State1 remains exact16/17/20; intermediate22-24/future/dirty/disabled Bot and contribution guards remain unavailable. Qualified Ensure/Remove catalog guards precede receipt/floor writes in their own transaction; dirty-schema regressions failed11.535s before that implementation. The native21 and native25 full transport protocol (including chat expiry and actual Redis cleanup receipt on25) passed race73.669s, source21/25 parity15.963s before the final receipt-guard addition; exact final-source verification follows separately. Full Assign/core, all-writer and owner readiness remain open.
+
+2026-10-19 reviewer82 found a bounded fixture P2 at6b40b56: persistent shared
+/tmp binary/SQL outputs mixed44 into a later39 run. Each build now receives a
+fresh caller-owned t.TempDir; the binary and exact immutable SQL set stay in
+that same directory until test cleanup. The build refuses nonempty/relative
+destinations. No migration catalog or production authority changes. New44->39
+same-runner artifact isolation oracle failed5.400s against the old script's
+missing per-invocation output, then the oracle plus actual historical39 full
+positive passed race47.367s and tag-aware vet0. Original clean44 authorization
+proofs remain scoped; this correction does not claim generic core readiness.

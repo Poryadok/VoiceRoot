@@ -129,6 +129,38 @@ func nativeWorkloadContext(t *testing.T, key *rsa.PrivateKey, issuer, method str
 	return metadata.NewOutgoingContext(ctx, md)
 }
 
+func buildNativeSpaceFixture(t *testing.T, ctx context.Context, cohort string) string {
+	t.Helper()
+	artifacts := t.TempDir()
+	build := exec.CommandContext(ctx, "sh", "testdata/build_native_space_fixture.sh")
+	build.Env = append(os.Environ(), "ROLE_NATIVE_SPACE_COHORT="+cohort, "ROLE_NATIVE_SPACE_OUTPUT_DIR="+artifacts)
+	output, err := build.CombinedOutput()
+	require.NoError(t, err, string(output))
+	require.FileExists(t, filepath.Join(artifacts, "fixture"))
+	return artifacts
+}
+
+func TestNativeSpaceFixtureCohortIsolation(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	// Build44 first in this SAME runner, then39. Selected source artifacts must
+	// never survive into the older migrator, even when the runner is reused.
+	for _, cohort := range []string{"44", "39"} {
+		artifacts := buildNativeSpaceFixture(t, ctx, cohort)
+		files, err := filepath.Glob(filepath.Join(artifacts, "migrations", "*.sql"))
+		require.NoError(t, err)
+		require.NotEmpty(t, files)
+		var highest string
+		for _, file := range files {
+			name := filepath.Base(file)
+			if name[:6] > highest {
+				highest = name[:6]
+			}
+		}
+		require.Equal(t, "0000"+cohort, highest)
+	}
+}
+
 func TestMemberAdmissionPositiveProtectedReceipt(t *testing.T) {
 	runNativeMemberProtocol(t, false)
 }
@@ -159,13 +191,12 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	ctx, roles := admissionListenerStoreVersion(t, version)
 	unknownRegistry := len(versions) > 1 && versions[1] == "44_unknown"
 	space44 := unknownRegistry || (len(versions) > 1 && versions[1] == "44")
-	build := exec.CommandContext(ctx, "sh", "testdata/build_native_space_fixture.sh")
+	cohort := "39"
 	if space44 {
-		build.Env = append(os.Environ(), "ROLE_NATIVE_SPACE_COHORT=44")
+		cohort = "44"
 	}
-	output, err := build.CombinedOutput()
-	require.NoError(t, err, string(output))
-	fixture := integrationtest.NewSourceMigrationFixture(t, ctx, "/tmp/role-native-space-migrations")
+	artifacts := buildNativeSpaceFixture(t, ctx, cohort)
+	fixture := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(artifacts, "migrations"))
 	fixture.Run(true, "goto", "34")
 
 	// Real Redis serves both runtime replay guards; no in-memory replay stand.
@@ -223,7 +254,7 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	require.True(t, roots.AppendCertsFromPEM(certPEM))
 	transport := credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: []tls.Certificate{clientPair}})
 
-	process := exec.CommandContext(ctx, "/tmp/role-native-space-fixture")
+	process := exec.CommandContext(ctx, filepath.Join(artifacts, "fixture"))
 	stdin, err := process.StdinPipe()
 	require.NoError(t, err)
 	stdout, err := process.StdoutPipe()
