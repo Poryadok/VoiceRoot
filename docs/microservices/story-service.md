@@ -79,8 +79,11 @@ canonical_criteria_json contains exact immutable PostgreSQL criteria text whose
 SHA256 is already committed by the v1 receipt. MM must check bytes/hash/shape;
 neither public listings nor JSON map re-encoding can substitute for it.
 HumanVerifier captures exact delegated Gateway actor/type/operation/body and
-rechecks expiry after live dependencies. Actual protected action/registry root
-composition remains an implementation prerequisite. Codec/Store inputs are
+rechecks expiry after live dependencies. Protected ActionServer and the new
+ActorBound RegistryProducer preserve exact original replay, verify full
+qualified ACK and require durable local capture before public success. They do
+not install a listener or actual authority. Gateway routes and protected root
+composition remain implementation prerequisites. Codec/Store inputs are
 data, not proof that a protected Gateway verification occurred.
 `BE011-STORY-LFP-RESTORE-CONTROLLER` owns the still-absent deployment controller,
 full replica/transaction drain, external state and credential/route custody;

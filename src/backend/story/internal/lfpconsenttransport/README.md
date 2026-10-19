@@ -42,7 +42,21 @@ There is no production listener registration, credential loader, replay store,
 controller factory or installed peer trust adapter here. Real controller,
 retirement, retention and activation remain separate prerequisites.
 
-The additive private action protobuf defines stable publication/response
-operations and an exact profile-scoped offer view. Its presence does not implement
-the Gateway/Story delegated action handler. Reviewed protocol1 consent and
-registration hash material remain unchanged.
+`ActorRegistryProducer` uses ONLY new ActorBound methods. It reloads the exact
+immutable local envelope and admitted cohort before EACH outbound call. Only a
+definite NotFound from the admitted actual TLS endpoint allows Register of that
+original envelope/operation; outage and ambiguous results never recapture newer
+intent. Base registration + Q + origin + boundACK hashes all must match before
+atomic durable local ACK. Local write failure recovers the same remote witness.
+
+`ActionServer` implements protected Publish/Observe/Respond. It captures the
+exact HumanVerifier actor, never raw metadata or a caller-supplied account/type.
+Original operation replay loads its immutable sidecar before fresh candidate
+privacy; neither conversion/current epoch nor a retracted/expired Story rewrites
+the original consent/MM capture. Fresh operations need current privacy and exact
+SQL offer. Publish/Observe expose profile-scoped offer views; Respond has empty
+public success only after durable qualified ACK. Actual Linux PostgreSQL+mTLS
+tests cover guest AND regular JOIN/INVITE and lost ACK recovery after type/epoch
+change. Synthetic MM fixture does not implement MM acceptance/source policy.
+Gateway routes and installed protected root composition remain prerequisites.
+Reviewed protocol1 consent and registration hash material remain unchanged.

@@ -136,9 +136,20 @@ CI and product acceptance remain distinct from source/component proof.
 - [x] Add protected HumanVerifier data capture with explicit authenticated type
   and original operation/body projection. Genuine RED reproduced a live epoch
   callback outliving credential expiry; expiry now rechecks after dependencies.
-- [ ] Complete ActorBound RegistryProducer, delegated Story action handlers,
-  Gateway routes and actual protected root/controller/retention composition.
-  Original bare-v1 components cannot qualify the actor-bound path.
+- [x] Implement ActorBound RegistryProducer and delegated Story action handlers.
+  Producer reloads exact sidecar/cohort before EACH outbound request, reads
+  original MM capture first and permits Register only on authenticated definite
+  absence. Full base/Q/Origin/boundACK checks precede atomic local persistence.
+  Action handlers verify actual Gateway human actions; immutable replay lookup
+  precedes fresh candidate privacy and returns original guest/type/epoch/MM
+  witness without recapture. Publish/Observe expose only profile-scoped views;
+  Respond returns an empty success only after original ACK is durable.
+  Actual Linux PostgreSQL + mTLS guest AND regular JOIN/INVITE, lostACK,
+  conversion replay, privacy denial, local ACK rollback and cohort retirement
+  tests pass: transport11top/57sub0skip17.475s, added Store replay1top2.759s,
+  race and vet0. Admission/MM capture-policy fixtures are synthetic.
+- [ ] Complete Gateway routes and actual protected root/controller/retention
+  composition. Original bare-v1 components cannot qualify the actor-bound path.
 
 ## Decisions
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"voice/backend/pkg/lfpconsent"
+	"voice/backend/pkg/principal"
 	"voice/backend/pkg/privacy"
 	"voice/backend/story/internal/lfpconsentstore"
 )
@@ -30,6 +31,22 @@ func (p *ActorPrivacy) CheckActorResponder(ctx context.Context, bound lfpconsent
 	if _, _, e := lfpconsent.EncodeActor(actor); e != nil || actor.ActionKind != lfpconsent.Respond || bound.Offer().StoryID == uuid.Nil || bound.Offer().AuthorProfileID == uuid.Nil {
 		return lfpconsentstore.ErrUnavailable
 	}
+	return p.checkViewer(ctx, bound, actor.ProfileID, actor.AccountType == lfpconsent.Guest)
+}
+
+// Observe is not a persisted decision and has no invented actor-codec kind.
+// Its exact verifier identity still supplies an explicit human viewer type.
+func (p *ActorPrivacy) CheckHumanOfferViewer(ctx context.Context, bound lfpconsentstore.OfferContext, viewer principal.UserIdentity) error {
+	if viewer.AccountID == uuid.Nil || viewer.ProfileID == uuid.Nil || viewer.SessionEpoch <= 0 || (viewer.AccountType != "regular" && viewer.AccountType != "guest") {
+		return lfpconsentstore.ErrUnavailable
+	}
+	return p.checkViewer(ctx, bound, viewer.ProfileID, viewer.AccountType == "guest")
+}
+
+func (p *ActorPrivacy) checkViewer(ctx context.Context, bound lfpconsentstore.OfferContext, viewer uuid.UUID, guest bool) error {
+	if p == nil || p.Floor == nil || bound.Offer().StoryID == uuid.Nil || bound.Offer().AuthorProfileID == uuid.Nil {
+		return lfpconsentstore.ErrUnavailable
+	}
 	audience, e := strictActorAudience(bound.Visibility(), bound.AudienceJSON())
 	if e != nil {
 		return e
@@ -38,9 +55,8 @@ func (p *ActorPrivacy) CheckActorResponder(ctx context.Context, bound lfpconsent
 	if e != nil || privacy.ValidateAudience("show_stories", floor) != nil {
 		return lfpconsentstore.ErrUnavailable
 	}
-	guest := actor.AccountType == lfpconsent.Guest
 	for _, a := range []privacy.Audience{floor, audience} {
-		allowed, e := p.Matcher.Allowed(ctx, bound.Offer().AuthorProfileID, actor.ProfileID, a, guest)
+		allowed, e := p.Matcher.Allowed(ctx, bound.Offer().AuthorProfileID, viewer, a, guest)
 		if e != nil {
 			return lfpconsentstore.ErrUnavailable
 		}

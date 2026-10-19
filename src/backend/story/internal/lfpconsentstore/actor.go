@@ -3,6 +3,7 @@ package lfpconsentstore
 import (
 	"bytes"
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,6 +37,63 @@ func (s *Store) RecordActorResponse(ctx context.Context, r Response, actor lfpco
 	// Re-read the ORIGINAL immutable sidecar after replay, never rebuild it from
 	// today's type/epoch. A cohort change between commits cannot qualify success.
 	return s.readCurrentActorConsent(ctx, c.ConsentID, expected)
+}
+
+// FindActorResponse permits exact authenticated operation replay BEFORE fresh
+// candidate privacy. It never creates/enriches a receipt or renews its actor,
+// epoch, offer or MM witness. Only definite absence yields found=false,nil.
+func (s *Store) FindActorResponse(ctx context.Context, r Response, actor lfpconsent.Actor, expected storylfpadmission.Origin, credentialExpiry time.Time) (lfpconsent.Envelope, bool, error) {
+	empty := func(e error) (lfpconsent.Envelope, bool, error) { return lfpconsent.Envelope{}, false, e }
+	capture, e := newActorCapture(actor, expected, credentialExpiry)
+	if e != nil {
+		return empty(e)
+	}
+	if actor.ActionKind != lfpconsent.Respond || actor.OperationID != r.OperationID || actor.AccountID != r.AccountID || actor.ProfileID != r.ProfileID || actor.SessionEpoch != r.SessionEpoch || actor.PrincipalRequestSHA256 != r.RequestSHA256 {
+		return empty(ErrConflict)
+	}
+	tx, o, release, e := s.begin(ctx)
+	if e != nil {
+		return empty(e)
+	}
+	defer release()
+	defer func() { _ = tx.Rollback(ctx) }()
+	if !sameOrigin(o, expected) {
+		return empty(ErrStale)
+	}
+	_, e = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "story-lfp-response:"+r.OperationID.String())
+	if e != nil {
+		return empty(ErrUnavailable)
+	}
+	c, _, _, offer, e := readConsent(ctx, tx, r.OperationID, false)
+	if errors.Is(e, pgx.ErrNoRows) {
+		if e = capture.current(ctx, tx); e != nil {
+			return empty(e)
+		}
+		if e = tx.Commit(ctx); e != nil {
+			return empty(ErrUnavailable)
+		}
+		return lfpconsent.Envelope{}, false, nil
+	}
+	if e != nil {
+		return empty(ErrUnavailable)
+	}
+	if offer.provenance != o {
+		return empty(ErrStale)
+	}
+	if !matches(c, r) {
+		return empty(ErrConflict)
+	}
+	envelope, e := readActorEnvelope(ctx, tx, c.ConsentID)
+	if e != nil {
+		return empty(e)
+	}
+	if e = capture.current(ctx, tx); e != nil {
+		return empty(e)
+	}
+	if e = tx.Commit(ctx); e != nil {
+		return empty(ErrUnavailable)
+	}
+	return envelope, true, nil
 }
 func (s *Store) ReadActorConsentForDelivery(ctx context.Context, id uuid.UUID, qualified [32]byte, expected storylfpadmission.Origin) (lfpconsent.Envelope, error) {
 	if qualified == [32]byte{} {

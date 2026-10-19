@@ -149,6 +149,32 @@ func TestActorConsentContextBindsCurrentOfferAndOriginalViewer(t *testing.T) {
 	require.ErrorIs(t, e, ErrStale)
 }
 
+func TestActorReplayLookupNeverRenewsOrNeedsCurrentOffer(t *testing.T) {
+	s, id, author := fixture(t)
+	o, origin := actorPublication(t, s, id, author)
+	r := response(o)
+	ctx := context.Background()
+	_, found, e := s.FindActorResponse(ctx, r, actorResponse(r), origin, time.Now().Add(time.Minute))
+	require.NoError(t, e)
+	require.False(t, found)
+	original, e := s.RecordActorResponse(ctx, r, actorResponse(r), origin, time.Now().Add(time.Minute))
+	require.NoError(t, e)
+	_, e = s.Pool.Exec(ctx, "UPDATE stories SET visibility='friends',hidden_from_feed_at=clock_timestamp() WHERE id=$1", id)
+	require.NoError(t, e)
+	r.SessionEpoch++
+	converted := actorResponse(r)
+	converted.AccountType = lfpconsent.Regular
+	again, found, e := s.FindActorResponse(ctx, r, converted, origin, time.Now().Add(time.Minute))
+	require.NoError(t, e)
+	require.True(t, found)
+	require.Equal(t, original.Actor(), again.Actor())
+	require.Equal(t, original.QualifiedSHA256(), again.QualifiedSHA256())
+	r.RequestSHA256[0]++
+	converted.PrincipalRequestSHA256 = r.RequestSHA256
+	_, _, e = s.FindActorResponse(ctx, r, converted, origin, time.Now().Add(time.Minute))
+	require.ErrorIs(t, e, ErrConflict)
+}
+
 func TestActorJournalFailureRollsBackAllNewEvidence(t *testing.T) {
 	for _, stage := range []string{"consent", "ack"} {
 		t.Run(stage, func(t *testing.T) {
