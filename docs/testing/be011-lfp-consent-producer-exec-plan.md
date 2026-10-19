@@ -193,6 +193,14 @@ Final due time must be checked after actual SQL lock waits.
 
 - [x] Define immutable transient final cut, canonical complete historical scope,
   distinct erased/unknown/live-or-unseen results and missing-provider closure.
+- [x] Store defaults closed without a complete current negative-view adapter.
+  Immutable local checks cover cohort, original subjects, offer/consent objects
+  and operations; shared SQL mutation gate precedes operation/Story locks. Both
+  negative and cohort permits span confirmed terminal SQL completion, with
+  uncertain BEGIN/COMMIT/ROLLBACK retained. Synthetic negative-view fixtures do
+  not install a production negative provider or its missing retention policy.
+- [ ] Extend cut serialization over complete outgoing delivery/network attempts
+  and final transport replies; transaction-local views alone are insufficient.
 - [ ] Reserve next migration; atomically inventory qualified actor insertion.
   Add exclusive mutation gate before operation/Story locks shared by readers,
   replay, delivery, ACK and final validation; uncertain SQL completion retains

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"voice/backend/pkg/lfpconsent"
 	"voice/backend/pkg/storylfpadmission"
+	"voice/backend/story/internal/lfperasure"
 )
 
 func fixture(t *testing.T) (*Store, uuid.UUID, uuid.UUID) {
@@ -60,13 +61,28 @@ func fixture(t *testing.T) (*Store, uuid.UUID, uuid.UUID) {
 	o := origin{environment: uuid.New(), installation: uuid.New(), incarnation: uuid.New(), database: [32]byte{1}}
 	_, e = pool.Exec(ctx, `INSERT INTO story_lfp_admission_head(singleton,environment_id,installation_id,authority_incarnation,database_binding_sha256,phase) VALUES(true,$1,$2,$3,$4,'open')`, o.environment, o.installation, o.incarnation, o.database[:])
 	require.NoError(t, e)
-	s := &Store{Pool: pool, authority: fixtureAdmission{o: o}}
+	s := &Store{Pool: pool, authority: fixtureAdmission{o: o}, negative: fixtureNegative{}}
 	_, e = s.PublishOffer(ctx, AuthorAction{OperationID: uuid.New(), StoryID: id, ProfileID: author, RequestSHA256: [32]byte{1}})
 	require.NoError(t, e)
 	return s, id, author
 }
 
 type fixtureAdmission struct{ o origin }
+
+// Synthetic complete negative view ONLY for local journal tests. It proves no
+// installed owner, finite retention policy or restored-backup coverage.
+type fixtureNegative struct{}
+
+func (fixtureNegative) Enter(context.Context) (lfperasure.View, error) {
+	return fixtureNegativeView{}, nil
+}
+
+type fixtureNegativeView struct{}
+
+func (fixtureNegativeView) Check(lfperasure.References) lfperasure.Verdict {
+	return lfperasure.LiveOrUnseen
+}
+func (fixtureNegativeView) Release() {}
 
 func (a fixtureAdmission) enter(context.Context) (origin, func(), error) { return a.o, func() {}, nil }
 
@@ -88,7 +104,7 @@ func TestJournalBarrierDrainsThroughActualCommit(t *testing.T) {
 	shared, e := storylfpadmission.NewOrigin(o.environment, o.installation, o.incarnation, o.database)
 	require.NoError(t, e)
 	barrier := storylfpadmission.NewBarrier(shared, fixtureSharedAdmission{shared})
-	s = NewBoundStore(s.Pool, barrier)
+	s = NewBoundStore(s.Pool, barrier, fixtureNegative{})
 	offer, e := s.ObserveOffer(ctx, id)
 	require.NoError(t, e)
 	// A deferred constraint trigger blocks the owning COMMIT itself, after all
@@ -137,7 +153,7 @@ func TestJournalUncertainCommitNeverClaimsDrained(t *testing.T) {
 	shared, e := storylfpadmission.NewOrigin(o.environment, o.installation, o.incarnation, o.database)
 	require.NoError(t, e)
 	barrier := storylfpadmission.NewBarrier(shared, fixtureSharedAdmission{shared})
-	s = NewBoundStore(s.Pool, barrier)
+	s = NewBoundStore(s.Pool, barrier, fixtureNegative{})
 	offer, e := s.ObserveOffer(ctx, id)
 	require.NoError(t, e)
 	_, e = s.Pool.Exec(ctx, `CREATE FUNCTION wait_uncertain_commit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(2910006); RETURN NEW; END $$;
@@ -190,7 +206,7 @@ func TestJournalUncertainAdmissionRollbackNeverClaimsDrained(t *testing.T) {
 	shared, e := storylfpadmission.NewOrigin(o.environment, o.installation, o.incarnation, o.database)
 	require.NoError(t, e)
 	barrier := storylfpadmission.NewBarrier(shared, fixtureSharedAdmission{shared})
-	s = NewBoundStore(s.Pool, barrier)
+	s = NewBoundStore(s.Pool, barrier, fixtureNegative{})
 	lock, e := s.Pool.Begin(ctx)
 	require.NoError(t, e)
 	defer func() { _ = lock.Rollback(ctx) }()
@@ -232,7 +248,7 @@ func TestJournalConfirmedRejectionRollbackReleasesPermit(t *testing.T) {
 	shared, e := storylfpadmission.NewOrigin(o.environment, o.installation, o.incarnation, o.database)
 	require.NoError(t, e)
 	barrier := storylfpadmission.NewBarrier(shared, fixtureSharedAdmission{shared})
-	s = NewBoundStore(s.Pool, barrier)
+	s = NewBoundStore(s.Pool, barrier, fixtureNegative{})
 	_, e = s.ObserveOffer(ctx, uuid.New())
 	require.ErrorIs(t, e, ErrStale)
 	drain, cancel := context.WithTimeout(ctx, time.Second)

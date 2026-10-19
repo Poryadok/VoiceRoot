@@ -22,6 +22,7 @@ import (
 	"voice/backend/pkg/lfpconsent"
 	"voice/backend/pkg/storylfpadmission"
 	"voice/backend/story/internal/lfpconsentstore"
+	"voice/backend/story/internal/lfperasure"
 )
 
 type actorTestPermit struct{ origin storylfpadmission.Origin }
@@ -30,6 +31,20 @@ func (p actorTestPermit) Origin() storylfpadmission.Origin { return p.origin }
 func (actorTestPermit) Release()                           {}
 
 type actorTestAdmission struct{ origin storylfpadmission.Origin }
+
+// Synthetic negative-view fixture only; not an installed replay/retention root.
+type actorTestNegative struct{}
+
+func (actorTestNegative) Enter(context.Context) (lfperasure.View, error) {
+	return actorTestNegativeView{}, nil
+}
+
+type actorTestNegativeView struct{}
+
+func (actorTestNegativeView) Check(lfperasure.References) lfperasure.Verdict {
+	return lfperasure.LiveOrUnseen
+}
+func (actorTestNegativeView) Release() {}
 
 func (a actorTestAdmission) Enter(context.Context) (storylfpadmission.Permit, error) {
 	return actorTestPermit{a.origin}, nil
@@ -71,7 +86,7 @@ func actorJournalFixture(t *testing.T, accountType uint64) (*lfpconsentstore.Sto
 	require.NoError(t, e)
 	_, e = pool.Exec(ctx, `INSERT INTO story_lfp_admission_head VALUES(true,$1,$2,$3,$4,'open')`, env, install, inc, db[:])
 	require.NoError(t, e)
-	s := lfpconsentstore.NewBoundStore(pool, storylfpadmission.NewBarrier(origin, actorTestAdmission{origin}))
+	s := lfpconsentstore.NewBoundStore(pool, storylfpadmission.NewBarrier(origin, actorTestAdmission{origin}), actorTestNegative{})
 	id, author := uuid.New(), uuid.New()
 	_, e = pool.Exec(ctx, `INSERT INTO stories(id,author_profile_id,type,is_looking_for_party,lfp_criteria,visibility,expires_at,archived_until) VALUES($1,$2,'text',true,'{"game_id":"test","mode":"pair"}','everyone',clock_timestamp()+interval '1 hour',clock_timestamp()+interval '31 days')`, id, author)
 	require.NoError(t, e)

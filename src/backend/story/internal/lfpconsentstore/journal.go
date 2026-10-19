@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"voice/backend/pkg/lfpconsent"
+	"voice/backend/story/internal/lfperasure"
 )
 
 type Offer struct {
@@ -54,6 +55,13 @@ func (s *Store) publishOffer(ctx context.Context, a AuthorAction, capture *actor
 	}
 	defer release()
 	defer func() { _ = tx.Rollback(ctx) }()
+	refs := lfperasure.References{Operations: []uuid.UUID{a.OperationID}, Profiles: []uuid.UUID{a.ProfileID}}
+	if capture != nil {
+		refs.Accounts = []uuid.UUID{capture.actor.AccountID}
+	}
+	if e = checkNegative(tx, refs); e != nil {
+		return Offer{}, e
+	}
 	if capture != nil && !sameOrigin(o, capture.expected) {
 		return Offer{}, ErrStale
 	}
@@ -196,6 +204,9 @@ func (s *Store) recordResponse(ctx context.Context, r Response, capture *actorCa
 	}
 	defer release()
 	defer func() { _ = tx.Rollback(ctx) }()
+	if e = checkNegative(tx, responseReferences(r)); e != nil {
+		return empty(e)
+	}
 	if capture != nil && !sameOrigin(o, capture.expected) {
 		return empty(ErrStale)
 	}
@@ -324,10 +335,41 @@ func lockStory(ctx context.Context, tx pgx.Tx, id uuid.UUID) (Offer, error) {
 const offerColumns = `o.story_id,o.revision,o.incarnation,o.author_profile_id,o.criteria_sha256,o.payload_sha256,o.state_sha256,o.expires_at_millis,o.environment_id,o.installation_id,o.authority_incarnation,o.database_binding_sha256`
 
 func lastOffer(ctx context.Context, tx pgx.Tx, id uuid.UUID) (Offer, error) {
-	return scanOffer(tx.QueryRow(ctx, `SELECT `+offerColumns+` FROM story_lfp_offer_heads h JOIN story_lfp_offers o ON(o.story_id,o.incarnation,o.revision)=(h.story_id,h.incarnation,h.revision) WHERE h.story_id=$1`, id))
+	o, e := scanOffer(tx.QueryRow(ctx, `SELECT `+offerColumns+` FROM story_lfp_offer_heads h JOIN story_lfp_offers o ON(o.story_id,o.incarnation,o.revision)=(h.story_id,h.incarnation,h.revision) WHERE h.story_id=$1`, id))
+	if e != nil {
+		return Offer{}, e
+	}
+	if e = checkNegative(tx, offerReferences(o)); e != nil {
+		return Offer{}, e
+	}
+	return o, nil
 }
 func offerAt(ctx context.Context, tx pgx.Tx, id, inc uuid.UUID, rev int64) (Offer, error) {
-	return scanOffer(tx.QueryRow(ctx, `SELECT `+offerColumns+` FROM story_lfp_offers o WHERE o.story_id=$1 AND o.incarnation=$2 AND o.revision=$3`, id, inc, rev))
+	if rev <= 0 {
+		return Offer{}, ErrUnavailable
+	}
+	if e := checkNegative(tx, lfperasure.References{Offers: []lfperasure.OfferReference{{Story: id, Incarnation: inc, Revision: uint64(rev)}}}); e != nil {
+		return Offer{}, e
+	}
+	o, e := scanOffer(tx.QueryRow(ctx, `SELECT `+offerColumns+` FROM story_lfp_offers o WHERE o.story_id=$1 AND o.incarnation=$2 AND o.revision=$3`, id, inc, rev))
+	if e != nil {
+		return Offer{}, e
+	}
+	if e = checkNegative(tx, offerReferences(o)); e != nil {
+		return Offer{}, e
+	}
+	return o, nil
+}
+
+func offerReferences(o Offer) lfperasure.References {
+	return lfperasure.References{Profiles: []uuid.UUID{o.AuthorProfileID}, Offers: []lfperasure.OfferReference{{Story: o.StoryID, Incarnation: o.Incarnation, Revision: o.Revision}}}
+}
+func responseReferences(r Response) lfperasure.References {
+	refs := offerReferences(r.Offer)
+	refs.Accounts = []uuid.UUID{r.AccountID}
+	refs.Profiles = append(refs.Profiles, r.ProfileID)
+	refs.Operations = []uuid.UUID{r.OperationID}
+	return refs
 }
 func scanOffer(row pgx.Row) (Offer, error) {
 	var o Offer

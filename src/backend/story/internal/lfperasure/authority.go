@@ -189,7 +189,7 @@ func Enter(ctx context.Context, authority NegativeAuthority) (View, error) {
 }
 
 func Check(view View, refs References) error {
-	if view == nil || refs.CohortEnvironment == uuid.Nil || refs.CohortInstallation == uuid.Nil || refs.CohortIncarnation == uuid.Nil || refs.DatabaseBinding == [32]byte{} || len(refs.Accounts)+len(refs.Profiles)+len(refs.Operations)+len(refs.Consents)+len(refs.Offers) == 0 {
+	if view == nil || refs.CohortEnvironment == uuid.Nil || refs.CohortInstallation == uuid.Nil || refs.CohortIncarnation == uuid.Nil || refs.DatabaseBinding == [32]byte{} {
 		return ErrUnavailable
 	}
 	for _, ids := range [][]uuid.UUID{refs.Accounts, refs.Profiles, refs.Operations, refs.Consents} {

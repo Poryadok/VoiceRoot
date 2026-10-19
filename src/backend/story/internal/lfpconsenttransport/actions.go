@@ -165,7 +165,7 @@ func (s *ActionServer) RespondWithLfpConsent(ctx context.Context, r *storyv1.Res
 
 func invalidAction() error { return status.Error(codes.InvalidArgument, "invalid LFP action") }
 func actionError(e error) error {
-	if errors.Is(e, ErrResponderIneligible) || errors.Is(e, lfpconsentstore.ErrStale) || errors.Is(e, lfpconsentstore.ErrConflict) || status.Code(e) == codes.FailedPrecondition {
+	if errors.Is(e, ErrResponderIneligible) || errors.Is(e, lfpconsentstore.ErrStale) || errors.Is(e, lfpconsentstore.ErrErased) || errors.Is(e, lfpconsentstore.ErrConflict) || status.Code(e) == codes.FailedPrecondition {
 		return status.Error(codes.FailedPrecondition, "LFP action ineligible")
 	}
 	return status.Error(codes.Unavailable, "LFP action unavailable")

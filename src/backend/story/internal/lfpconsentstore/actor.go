@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"voice/backend/pkg/lfpconsent"
 	"voice/backend/pkg/storylfpadmission"
+	"voice/backend/story/internal/lfperasure"
 )
 
 func (s *Store) PublishActorOffer(ctx context.Context, a AuthorAction, actor lfpconsent.Actor, expected storylfpadmission.Origin, credentialExpiry time.Time) (Offer, error) {
@@ -57,6 +58,9 @@ func (s *Store) FindActorResponse(ctx context.Context, r Response, actor lfpcons
 	}
 	defer release()
 	defer func() { _ = tx.Rollback(ctx) }()
+	if e = checkNegative(tx, responseReferences(r)); e != nil {
+		return empty(e)
+	}
 	if !sameOrigin(o, expected) {
 		return empty(ErrStale)
 	}
@@ -267,6 +271,9 @@ func readPublicationProof(ctx context.Context, tx pgx.Tx, offer Offer) (lfpconse
 	}
 	bound, e := parseOfferContext(offer, snapshot)
 	if e != nil {
+		return empty()
+	}
+	if e = checkNegative(tx, lfperasure.References{Accounts: []uuid.UUID{a.AccountID}, Profiles: []uuid.UUID{a.ProfileID}, Operations: []uuid.UUID{a.OperationID}}); e != nil {
 		return empty()
 	}
 	return a, bound, nil

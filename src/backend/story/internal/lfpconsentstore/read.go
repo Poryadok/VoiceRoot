@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"voice/backend/pkg/lfpconsent"
+	"voice/backend/story/internal/lfperasure"
 )
 
 // Canonical bytes and EVERY relational selector must agree before following
@@ -17,8 +18,13 @@ func readConsent(ctx context.Context, tx pgx.Tx, id uuid.UUID, byConsentID bool)
 		return lfpconsent.Consent{}, nil, [32]byte{}, Offer{}, e
 	}
 	predicate := "response_operation_id=$1"
+	refs := lfperasure.References{Operations: []uuid.UUID{id}}
 	if byConsentID {
 		predicate = "consent_id=$1"
+		refs = lfperasure.References{Consents: []uuid.UUID{id}}
+	}
+	if e := checkNegative(tx, refs); e != nil {
+		return empty(e)
 	}
 	var op, consent, story, inc, account, profile uuid.UUID
 	var revision int64
@@ -37,6 +43,14 @@ func readConsent(ctx context.Context, tx pgx.Tx, id uuid.UUID, byConsentID bool)
 	offer, e := offerAt(ctx, tx, c.StoryID, c.StoryIncarnation, int64(c.OfferRevision))
 	if e != nil || offer.AuthorProfileID != c.AuthorProfileID || offer.CriteriaSHA256 != c.CriteriaSHA256 || offer.PayloadSHA256 != c.OfferPayloadSHA256 || offer.ExpiresAtUnixMillis != c.OfferExpiresAtUnixMillis {
 		return empty(ErrUnavailable)
+	}
+	refs = offerReferences(offer)
+	refs.Accounts = []uuid.UUID{account}
+	refs.Profiles = append(refs.Profiles, profile)
+	refs.Operations = []uuid.UUID{op}
+	refs.Consents = []uuid.UUID{consent}
+	if e = checkNegative(tx, refs); e != nil {
+		return empty(e)
 	}
 	return c, b, h, offer, nil
 }

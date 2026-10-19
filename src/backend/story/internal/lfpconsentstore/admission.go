@@ -5,17 +5,20 @@ package lfpconsentstore
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"voice/backend/pkg/storylfpadmission"
+	"voice/backend/story/internal/lfperasure"
 )
 
 var (
 	ErrUnavailable = errors.New("LFP consent journal unavailable")
 	ErrConflict    = errors.New("LFP consent operation conflict")
 	ErrStale       = errors.New("LFP offer changed or unavailable")
+	ErrErased      = lfperasure.ErrErased
 )
 
 // origin is authenticated deployment provenance, never a public request field.
@@ -40,12 +43,19 @@ type admission interface {
 type Store struct {
 	Pool      *pgxpool.Pool
 	authority admission
+	negative  lfperasure.NegativeAuthority
 }
 
 // NewBoundStore never creates authority. Only a controller-verified adapter can
-// provide admission; nil/unknown authority leaves every qualified API closed.
-func NewBoundStore(pool *pgxpool.Pool, barrier *storylfpadmission.Barrier) *Store {
-	return &Store{Pool: pool, authority: barrierAdmission{barrier}}
+// provide admission. The optional negative authority must supply a complete
+// authenticated current replay view under its approved finite retention policy;
+// omitted/nil/ambiguous authority leaves every API closed, even with a cohort.
+func NewBoundStore(pool *pgxpool.Pool, barrier *storylfpadmission.Barrier, negative ...lfperasure.NegativeAuthority) *Store {
+	s := &Store{Pool: pool, authority: barrierAdmission{barrier}}
+	if len(negative) == 1 {
+		s.negative = negative[0]
+	}
+	return s
 }
 
 type barrierAdmission struct{ barrier *storylfpadmission.Barrier }
@@ -69,15 +79,26 @@ func (s *Store) begin(ctx context.Context) (pgx.Tx, origin, func(), error) {
 	if s == nil || s.Pool == nil || s.authority == nil {
 		return nil, origin{}, nil, ErrUnavailable
 	}
+	view, e := lfperasure.Enter(ctx, s.negative)
+	if e != nil {
+		return nil, origin{}, nil, ErrUnavailable
+	}
 	o, release, e := s.authority.enter(ctx)
 	if e != nil || !o.valid() || release == nil {
 		if release != nil {
 			release()
 		}
+		view.Release()
 		if errors.Is(e, ErrStale) {
 			return nil, origin{}, nil, ErrStale
 		}
 		return nil, origin{}, nil, ErrUnavailable
+	}
+	refs := negativeReferences(o)
+	if e = lfperasure.Check(view, refs); e != nil {
+		release()
+		view.Release()
+		return nil, origin{}, nil, negativeError(e)
 	}
 	tx, e := s.Pool.Begin(ctx)
 	if e != nil {
@@ -86,11 +107,19 @@ func (s *Store) begin(ctx context.Context) (pgx.Tx, origin, func(), error) {
 		// Retain restrictive admission until the bound runtime is retired.
 		return nil, origin{}, nil, ErrUnavailable
 	}
-	guard := &completionTx{Tx: tx}
+	guard := &completionTx{Tx: tx, negative: view, origin: o}
+	var released sync.Once
 	confirmedRelease := func() {
 		if guard.terminal {
-			release()
+			released.Do(func() { release(); view.Release() })
 		}
+	}
+	// Service-wide local mutation gate precedes operation and Story locks. The
+	// erasure worker takes the exclusive form before selecting any closure.
+	if _, e = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(2910007)`); e != nil {
+		_ = guard.Rollback(ctx)
+		confirmedRelease()
+		return nil, origin{}, nil, ErrUnavailable
 	}
 	var dbOrigin origin
 	var db []byte
@@ -124,6 +153,35 @@ type completionTx struct {
 	pgx.Tx
 	commitAttempted bool
 	terminal        bool
+	negative        lfperasure.View
+	origin          origin
+}
+
+func negativeReferences(o origin) lfperasure.References {
+	return lfperasure.References{CohortEnvironment: o.environment, CohortInstallation: o.installation, CohortIncarnation: o.incarnation, DatabaseBinding: o.database}
+}
+
+func negativeError(e error) error {
+	if errors.Is(e, lfperasure.ErrErased) {
+		return ErrErased
+	}
+	return ErrUnavailable
+}
+
+// Only immutable locally acquired snapshot checks occur inside SQL.
+func checkNegative(tx pgx.Tx, refs lfperasure.References) error {
+	t, ok := tx.(*completionTx)
+	if !ok || t.negative == nil {
+		return ErrUnavailable
+	}
+	refs.CohortEnvironment = t.origin.environment
+	refs.CohortInstallation = t.origin.installation
+	refs.CohortIncarnation = t.origin.incarnation
+	refs.DatabaseBinding = t.origin.database
+	if e := lfperasure.Check(t.negative, refs); e != nil {
+		return negativeError(e)
+	}
+	return nil
 }
 
 func (t *completionTx) Commit(ctx context.Context) error {
