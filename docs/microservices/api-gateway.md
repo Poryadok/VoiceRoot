@@ -524,7 +524,7 @@ identity come only from the verified principal.
 | `POST S/join-attempts/{attempt_id}/submit` | `SubmitJoinAttempt`; original applicant | `{operation_id,answers:[{question_id,value}],captcha_token?}` | `200 {state:"admitted",space_membership}` after completed admission, or `202 {state:"pending",request_id}` after automatic AND passes and manual is required |
 | `GET S/join-requests` | `ListJoinRequests`; current member + `SPACE_APPROVE_JOIN_REQUESTS` | Query `limit,cursor` | `200` pending-only page; limit default 50/max 100, opaque Space/order-bound cursor, stable `created_at,id` order |
 | `GET S/join-requests/{request_id}` | `GetJoinRequest`; same review permission and membership | None | `200` authorized request detail |
-| `POST S/join-requests/{request_id}/approve` | `ApproveJoinRequest`; same review permission and membership | `{operation_id}` | Durable admission outcome after final guards; no success before completion |
+| `POST S/join-requests/{request_id}/approve` | `ApproveJoinRequest`; same review permission and membership | `{operation_id,attempt_id?}`; exact attempt required for an ambiguous grouped request | Durable admission outcome after final guards; no success before completion |
 
 Request IDs and operations are UUIDs; applicant/approver selectors are not
 accepted in bodies. Requirements never expose configured answers/digests.
@@ -545,6 +545,26 @@ implemented merely by the review permission or this table.
 Policy normalization, immutable submission, collection deadline, trusted proof
 binding and admission atomicity are defined in
 [Space Service](space-service.md#versioned-entry-policy-target).
+
+Admission identity uses the accepted
+[SPACE-ADMISSION-IDENTITY-v1](space-service.md#admission-identity-authority-space-admission-identity-v1)
+boundary: exact protected Gateway delegated-user call, final request hash,
+explicit verified regular/guest type, account/profile/session epoch and fresh
+request ID/JTI. Never reuse a CreateSpace capability, accept SDK/Bot/service
+identity, default a missing type to regular or use raw actor/proof headers.
+Gateway signs only the final method-bound request and caps its credential by
+client expiry; ordinary/direct Space calls deny. Current account/profile
+eligibility comes from the separate authenticated Auth/User observation chain,
+not JWT type or a session floor alone.
+
+Approval's operation durably selects its exact attempt before owner calls;
+another pending child cannot change that selection on retry. Grouping owns no
+invite/proof/approval and never moves evidence to a valid replacement invite.
+Delayed approval authenticates the current reviewer, not an old applicant bearer.
+Native first publication requires fresh owner/ACL observations plus immutable
+historical proof; GET remains read-only and completed replay attaches no effects.
+No new route is available until generated RPCs, finite verifier/replay, producers
+and native consumer are actually wired and verified.
 
 ### Tree, category and room entities
 
