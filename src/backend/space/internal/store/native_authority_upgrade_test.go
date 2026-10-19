@@ -53,7 +53,7 @@ func TestNativeAuthorityForwardUpgradeFromOfficial34(t *testing.T) {
 	require.Equal(t, first, publication, "migration allocates once; reads cannot remint a legacy identity")
 	var version int64
 	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version))
-	require.EqualValues(t, 39, version, "official34 advances forward, never a retroactive33/history rewrite")
+	require.EqualValues(t, 40, version, "official34 advances through native39 and journal40, never a retroactive33/history rewrite")
 	require.NoError(t, st.RemoveMember(ctx, space.ID, profile))
 	read()
 	require.Equal(t, "RETIRED", state)
@@ -79,7 +79,7 @@ func TestNativeAuthorityFreshMigrationTo39(t *testing.T) {
 	}
 	ctx := context.Background()
 	database := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/space_db"))
-	database.Run(true, "up")
+	database.Run(true, "goto", "39")
 	var version int64
 	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version))
 	require.EqualValues(t, 39, version)

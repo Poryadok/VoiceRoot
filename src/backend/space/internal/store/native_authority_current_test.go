@@ -53,8 +53,8 @@ func TestNativeAuthorityCurrent39ReadAndPreparing(t *testing.T) {
 	t.Logf("canonical current11 terminal prosrc SHA256=%x", sha256.Sum256([]byte(terminalBody)))
 	cases := []struct{ name, mutate, restore string }{
 		{"dirty", `UPDATE schema_migrations SET dirty=true`, `UPDATE schema_migrations SET dirty=false`},
-		{"future", `UPDATE schema_migrations SET version=40`, `UPDATE schema_migrations SET version=39`},
-		{"historical", `UPDATE schema_migrations SET version=34`, `UPDATE schema_migrations SET version=39`},
+		{"future", `UPDATE schema_migrations SET version=41`, `UPDATE schema_migrations SET version=40`},
+		{"historical", `UPDATE schema_migrations SET version=34`, `UPDATE schema_migrations SET version=40`},
 		{"disabled_guard", `ALTER TABLE space_members DISABLE TRIGGER space_ordinary_publication_guard`, `ALTER TABLE space_members ENABLE TRIGGER space_ordinary_publication_guard`},
 		{"row_security", `ALTER TABLE space_ordinary_member_heads ENABLE ROW LEVEL SECURITY`, `ALTER TABLE space_ordinary_member_heads DISABLE ROW LEVEL SECURITY`},
 		{"missing_private_journal", `ALTER TABLE space_join_operations RENAME TO missing_join_operations`, `ALTER TABLE missing_join_operations RENAME TO space_join_operations`},

@@ -13,7 +13,7 @@ import (
 // This native contract validates its consumed facts and owner functions rather
 // than borrowing the Federation source's exact migration25 activation gate.
 // The current cohort is official34, private journals35/36, queue37 and forward
-// native39. Native39 preserves the unpublished33 guard/function bodies while
+// native39 and explicit versioned decision40. Native39 preserves the unpublished33 guard/function bodies while
 // current34 retains the mandatory eleven-participant terminal predicate.
 // Earlier, dirty and future schemas are unavailable; journals grant no authority.
 func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
@@ -35,7 +35,7 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 		return ErrMemberAuthorityUnavailable
 	}
 	var valid bool
-	if err := tx.QueryRow(ctx, `SELECT count(*)=1 AND bool_and(version=39 AND NOT dirty) FROM public.schema_migrations`).Scan(&valid); err != nil || !valid {
+	if err := tx.QueryRow(ctx, `SELECT count(*)=1 AND bool_and(version IN (39,40) AND NOT dirty) FROM public.schema_migrations`).Scan(&valid); err != nil || !valid {
 		return ErrMemberAuthorityUnavailable
 	}
 	if err := tx.QueryRow(ctx, `SELECT count(*)=$2 AND bool_and(c.relkind='r' AND c.relpersistence='p' AND NOT c.relrowsecurity AND NOT c.relforcerowsecurity

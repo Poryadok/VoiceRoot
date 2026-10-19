@@ -423,7 +423,7 @@ func (s *SpaceStore) publishMemberAdmission(ctx context.Context, operation, role
 		if err = scoped.MarkJoinAttemptPublished(ctx, *i.Input.JoinAttempt, operation); err != nil {
 			return nil, err
 		}
-		if err = scoped.MarkJoinDecisionBasisPublished(ctx, *i.Input.JoinAttempt, i.Input.DecisionBasisSHA256, operation); err != nil {
+		if err = scoped.markMemberDecisionPublished(ctx, *i.Input.JoinAttempt, i.Input.DecisionBasisSHA256, operation); err != nil {
 			return nil, err
 		}
 		if err = scoped.checkContinuationReviewer(ctx, continuation); err != nil {
