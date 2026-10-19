@@ -39,6 +39,7 @@ type Runtime struct {
 	closeErr                      error
 	ownershipV2CapabilitiesActive atomic.Bool
 	delegatedUserEnabled          bool
+	botLifecycleEnabled           bool
 	sessionEpochChecker           principal.SessionEpochChecker
 	authoritySourceEnabled        bool
 	authoritySourceServer         *authoritysource.Server
@@ -146,6 +147,7 @@ func NewWithSessionEpochChecker(ctx context.Context, config Config, checker prin
 	})}
 	runtime.authoritySourceEnabled = config.AuthoritySourceEnabled
 	runtime.delegatedUserEnabled = config.DelegatedUserEnabled
+	runtime.botLifecycleEnabled = config.BotLifecycleEnabled
 	runtime.sessionEpochChecker = checker
 	startup, cancel := context.WithTimeout(ctx, dependencyTimeout)
 	defer cancel()
@@ -240,6 +242,15 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash str
 	}
 	if principalgrpc.IsDelegatedRoleMethod(method) {
 		return r.verifyPublicRole(ctx, token, method, requestID, hash)
+	}
+	if r.botLifecycleEnabled && method == rolev1.RoleService_CheckPermission_FullMethodName {
+		verified, err := principal.VerifyService(ctx, token, principal.VerifyConfig{ExpectedIssuer: "bot", ExpectedAudience: "role", ExpectedRPC: method, ExpectedRequestID: requestID, ExpectedRequestHash: hash, KeyResolver: r.resolver.Resolve, ReplayGuard: r.recordReplay})
+		if err == nil {
+			return verified, nil
+		}
+		if principalgrpc.IsUnavailable(err) {
+			return principal.Principal{}, err
+		}
 	}
 	issuer := ""
 	switch method {

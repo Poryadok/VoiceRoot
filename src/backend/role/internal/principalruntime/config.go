@@ -20,6 +20,7 @@ type Config struct {
 	TLSCertFile, TLSKeyFile, ClientCAFile, ListenAddr string
 	AuthoritySourceEnabled                            bool
 	DelegatedUserEnabled                              bool
+	BotLifecycleEnabled                               bool
 }
 
 var issuerPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
@@ -32,6 +33,9 @@ func LoadFromEnv() (Config, bool, error) {
 		enabled = true
 	}
 	if _, present := os.LookupEnv("ROLE_DELEGATED_USER_ENABLED"); present {
+		enabled = true
+	}
+	if _, present := os.LookupEnv("ROLE_BOT_LIFECYCLE_ENABLED"); present {
 		enabled = true
 	}
 	for _, name := range names {
@@ -57,6 +61,12 @@ func LoadFromEnv() (Config, bool, error) {
 			return Config{}, true, errors.New("ROLE_DELEGATED_USER_ENABLED must be true or false")
 		}
 		cfg.DelegatedUserEnabled = value == "true"
+	}
+	if value, ok := os.LookupEnv("ROLE_BOT_LIFECYCLE_ENABLED"); ok {
+		if value != "true" && value != "false" {
+			return Config{}, true, errors.New("ROLE_BOT_LIFECYCLE_ENABLED must be true or false")
+		}
+		cfg.BotLifecycleEnabled = value == "true"
 	}
 	if err := json.Unmarshal([]byte(os.Getenv("S2S_JWKS_URLS_JSON")), &cfg.JWKSURLs); err != nil {
 		return Config{}, true, errors.New("invalid principal JWKS configuration")
@@ -101,6 +111,9 @@ func (c Config) validate() error {
 		return errors.New("invalid principal listener address")
 	}
 	allowedIssuers := map[string]struct{}{"space": {}, "gameintegration": {}, "voice": {}}
+	if c.BotLifecycleEnabled {
+		allowedIssuers["bot"] = struct{}{}
+	}
 	if c.DelegatedUserEnabled {
 		allowedIssuers["gateway"] = struct{}{}
 	}
