@@ -19,6 +19,7 @@ func TestP3FreezeSerializesBeforeEveryForwardNativeWriter(t *testing.T) {
 			defer cancel()
 			s := NewPostgresAdmissionStore(pool)
 			a := admissionFixture()
+			ctx = ownAdmission(ctx, &a)
 			head, err := s.ClaimRoomHead(ctx, a.VoiceRoomID, a.SpaceID.String(), a.RoomID, a.OperationID, true)
 			require.NoError(t, err)
 			a.RoomGeneration = head.RoomGeneration

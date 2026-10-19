@@ -60,6 +60,17 @@ type readySpaceMediaAdmission struct {
 	cleanupFailuresToInject *int
 }
 
+// Explicit healthy workflow authority for memory-only handler unit fixtures.
+func (r readySpaceMediaAdmission) HoldAdmissionOwnership(ctx context.Context, _ uuid.UUID) (context.Context, func(), error) {
+	return ctx, func() {}, r.err
+}
+func (r readySpaceMediaAdmission) ReadAdmissionDispatch(context.Context, string) (int64, bool, error) {
+	return 1, true, r.err
+}
+func (r readySpaceMediaAdmission) FenceAbortedAdmission(context.Context, uuid.UUID, voicestore.SpaceAdmissionProjectionGates) error {
+	return r.err
+}
+
 type currentSessionCheckerFunc func(context.Context, string, int64) error
 
 func (f currentSessionCheckerFunc) RequireCurrent(ctx context.Context, accountID string, epoch int64) error {

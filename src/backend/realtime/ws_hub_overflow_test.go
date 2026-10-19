@@ -243,8 +243,8 @@ func TestProfileFanoutIsZeroWaitAndHealthyRecipientKeepsFIFO(t *testing.T) {
 
 func TestProfileFanoutRecordsOnlyBoundedMetricOutcomes(t *testing.T) {
 	reg := prometheus.NewRegistry()
-	previous := rtMetrics
-	t.Cleanup(func() { rtMetrics = previous })
+	previous := rtMetrics.Load()
+	t.Cleanup(func() { rtMetrics.Store(previous) })
 	metrics := initRealtimeMetrics(reg)
 	hub := newWSHub()
 	enqueued := hub.attachConn("i", "enqueued", "profile", 2)

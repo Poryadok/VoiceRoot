@@ -93,7 +93,7 @@ bridge is rebuilt on product restore. See [the explicit c17 contract](testing/as
 | Realtime Service     | `realtime_db` (P3 metadata only; migration `000001_admission`) | Pub/Sub; session-epoch floor; protected Space principal replay; WS connections/subscriptions remain instance-local memory | NATS; no message payload or recipient history |
 | Space Service        | `space_db`        | Social principal replay; shared signed Voice/Messaging communication-decision replay | — |
 | Role Service         | `role_db`         | Shared principal replay Redis | —                                |
-| Voice Service        | `voice_db`        | active-call compatibility projection + lifecycle admission/receipt mirror; `voice_match_squad_operations` and `voice_room_instances` own MatchSquad operation/resource state | Redis call/session projection; LiveKit room `match-squad-<room UUID>` |
+| Voice Service        | `voice_db`, including `voice_space_media_admission_owners` workflow token/epoch/DB lease and exact dispatch-fence acknowledgement | active-call compatibility projection + lifecycle admission/receipt mirror; per-admission dispatch nonce/epoch gate; `voice_match_squad_operations` and `voice_room_instances` own MatchSquad operation/resource state | Redis call/session projection; LiveKit room `match-squad-<room UUID>` |
 | File Service         | `file_db`         | Shared principal replay Redis | R2, воркеры конвертации       |
 | Notification Service | `notification_db` | grouping push, limits     | FCM, APNs, email                 |
 | Search Service       | `search_db` (target) | —                      | Meilisearch v2, Elasticsearch v3 |

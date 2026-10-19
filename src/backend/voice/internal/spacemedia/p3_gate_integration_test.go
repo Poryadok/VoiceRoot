@@ -1,6 +1,7 @@
 package spacemedia
 
 import (
+	"context"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -16,6 +17,7 @@ func TestP3GateRejectsOldAuthorizedDispatchAfterPartialRedisLoss(t *testing.T) {
 	pool := startSpaceMediaAdmissionPostgres(t, ctx)
 	s := NewPostgresAdmissionStore(pool)
 	a := admissionFixture()
+	ctx = ownAdmission(ctx, &a)
 	a.Identity, _ = livekit.SpaceParticipantIdentity(a.ProfileID.String(), a.Generation)
 	require.NoError(t, prepareAdmission(ctx, s, &a))
 	require.NoError(t, s.Fence(ctx, a))
@@ -24,7 +26,7 @@ func TestP3GateRejectsOldAuthorizedDispatchAfterPartialRedisLoss(t *testing.T) {
 	require.NoError(t, calls.EnsureSpaceLifecycle(ctx, a.SpaceID.String(), s.ReadSpaceLifecycle))
 	gate, err := calls.ReadReadySpaceGate(ctx, a.SpaceID.String())
 	require.NoError(t, err)
-	ticket, err := s.AuthorizeSpaceProjection(ctx, a.OperationID, a.Generation, gate)
+	ticket, err := authorizeNativeFixtureProjection(ctx, s, calls, a, gate)
 	require.NoError(t, err)
 	call := store.Call{RoomID: a.RoomID, VoiceRoomID: a.VoiceRoomID, SpaceID: a.SpaceID.String(), SpaceLifecycleGeneration: ticket.Generation, SpaceProjectionTicket: ticket, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, LivekitRoomName: "voice-room-" + a.VoiceRoomID, States: map[string]store.ParticipantState{}, Status: callsv1.CallStatus_CALL_STATUS_UNSPECIFIED}
 	_, err = calls.CreateCall(ctx, call)
@@ -61,7 +63,7 @@ func TestP3GateRejectsOldAuthorizedDispatchAfterPartialRedisLoss(t *testing.T) {
 	require.NoError(t, calls.EnsureSpaceLifecycle(ctx, a.SpaceID.String(), s.ReadSpaceLifecycle))
 	_, err = calls.CreateCall(ctx, call)
 	require.ErrorIs(t, err, store.ErrSpaceMediaStaleGrant, "FLUSHALL cannot revive the old native dispatch")
-	_, err = s.AuthorizeSpaceProjection(ctx, a.OperationID, a.Generation, gate)
+	_, err = authorizeNativeFixtureProjection(ctx, s, calls, a, gate)
 	require.Error(t, err, "READY acquired before freeze cannot authorize after it")
 	require.Len(t, media.removed, 1)
 }
@@ -71,6 +73,7 @@ func TestP3GateSameGenerationNeedsNewNativeAuthorization(t *testing.T) {
 	pool := startSpaceMediaAdmissionPostgres(t, ctx)
 	s := NewPostgresAdmissionStore(pool)
 	a := admissionFixture()
+	ctx = ownAdmission(ctx, &a)
 	require.NoError(t, prepareAdmission(ctx, s, &a))
 	require.NoError(t, s.Fence(ctx, a))
 	require.NoError(t, s.MarkCommitted(ctx, a.OperationID, a.Generation))
@@ -78,7 +81,7 @@ func TestP3GateSameGenerationNeedsNewNativeAuthorization(t *testing.T) {
 	require.NoError(t, calls.EnsureSpaceLifecycle(ctx, a.SpaceID.String(), s.ReadSpaceLifecycle))
 	gate, err := calls.ReadReadySpaceGate(ctx, a.SpaceID.String())
 	require.NoError(t, err)
-	old, err := s.AuthorizeSpaceProjection(ctx, a.OperationID, a.Generation, gate)
+	old, err := authorizeNativeFixtureProjection(ctx, s, calls, a, gate)
 	require.NoError(t, err)
 	require.NoError(t, client.Del(ctx, "p3:space_lifecycle:"+a.SpaceID.String()).Err())
 	require.NoError(t, calls.EnsureSpaceLifecycle(ctx, a.SpaceID.String(), s.ReadSpaceLifecycle))
@@ -88,8 +91,21 @@ func TestP3GateSameGenerationNeedsNewNativeAuthorization(t *testing.T) {
 	fresh, err := calls.ReadReadySpaceGate(ctx, a.SpaceID.String())
 	require.NoError(t, err)
 	require.NotEqual(t, old.Incarnation, fresh.Incarnation)
-	call.SpaceProjectionTicket, err = s.AuthorizeSpaceProjection(ctx, a.OperationID, a.Generation, fresh)
+	call.SpaceProjectionTicket, err = authorizeNativeFixtureProjection(ctx, s, calls, a, fresh)
 	require.NoError(t, err)
 	_, err = calls.CreateCall(ctx, call)
 	require.NoError(t, err)
+}
+
+// The native fixture acquires both gates before fresh PG authorization. A stale
+// Space ticket stays stale; this helper never replaces its Space incarnation.
+func authorizeNativeFixtureProjection(ctx context.Context, s *PostgresAdmissionStore, calls *store.RedisCallStore, a Admission, gate store.SpaceProjectionTicket) (store.SpaceProjectionTicket, error) {
+	dispatch, err := calls.EnsureAdmissionDispatch(ctx, a.OperationID.String(), s.ReadAdmissionDispatch)
+	if err != nil {
+		return store.SpaceProjectionTicket{}, err
+	}
+	gate.AdmissionIncarnation = dispatch.AdmissionIncarnation
+	gate.AdmissionOwnerEpoch = dispatch.AdmissionOwnerEpoch
+	gate.AdmissionLive = dispatch.AdmissionLive
+	return s.AuthorizeSpaceProjection(ctx, a.OperationID, a.Generation, gate)
 }

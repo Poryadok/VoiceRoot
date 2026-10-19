@@ -1,5 +1,16 @@
 # Voice Service
 
+## Legacy public principal startup
+
+The pre-cut executable validates and binds its own public HTTPS JWKS publisher
+before initial Space admission reconciliation. It publishes the same configured
+current and next public signing keys; it exposes no readiness or mutation route.
+TLS/bind errors fail startup synchronously, and unexpected serving failure is
+fatal even during recovery. Cold Space verifiers can therefore authenticate
+recovery requests for persisted ACTIVE/COMMITTED admissions. This ordering does
+not move any listener ahead of the additive native executable's protected
+installation/cohort gates and does not activate the native roster relay.
+
 ## Space communication timeout (BE-044-TIMEOUT-v1)
 
 Accepted target: the [Space timeout matrix](../features/spaces.md#communication-timeout-be-044-timeout-v1-accepted-target)
@@ -883,6 +894,86 @@ monotonic roster version before it can ship.
 Voice process instances stateless — масштабируются горизонтально. Durable lifecycle и divergence evidence находятся в `voice_db`; Redis rebuildable. LiveKit масштабируется независимо (SFU per region для low-latency).
 
 ## P3 Space lifecycle participant (target)
+
+### Native admission workflow ownership
+
+Migration `000015_space_admission_ownership` adds
+`voice_space_media_admission_owners`. A fresh admission creates a random private
+owner token and owner epoch `1` in the transaction before its first durable room
+head claim. Ownership is separate from immutable admission operation/media,
+room and P3 lifecycle generations. Takeover never regenerates event IDs,
+payloads, account-fence tuples or room identities.
+
+Authority expires on PostgreSQL time after 30 seconds. The executing foreground
+or recovery workflow renews every five seconds using a two-second DB budget;
+renewal cannot revive an expired/replaced owner. This detection window covers
+multiple bounded recovery effects and six renewal opportunities. It never
+extends the foreground's existing two-second Space communication decision
+deadline, cached grants, bearer expiry or provider admission authority. Failed
+or uncertain renewal cancels forward work. Workflow completion/cancellation
+relinquishes only the exact token/epoch; failed acknowledgement leaves the
+durable journal and bounded lease for later readback/recovery.
+
+Every forward journal mutation and owner-driven abort/fence-release/cleanup
+completion verifies the current unexpired token/epoch under the existing Space
+barrier, room and sorted identity lock order. It first acquires the owner row's
+exclusive lock, then checks token, epoch and fresh PostgreSQL time in a separate
+statement. A valid transaction retains that lock through commit and may finish
+after its lease deadline while waiting for downstream rows; takeover serializes
+after it. A new transaction or renewal must acquire the lock and check freshness
+again, so a lock wait cannot preserve a pre-lock lease observation or revive an
+expired owner. SQL authority does not carry into a separate Redis effect or ACK
+transaction. Recovery enumeration is only a
+candidate list: healthy owners are filtered before the page limit. An atomic
+claim rechecks current eligibility and state under the Space barrier and room
+head, then rotates the token and increments its epoch. Expired/relinquished
+PREPARED/FENCED work becomes ABORTING; COMMITTED-unapplied work uses its freshly
+read state and authority to roll forward or deny. A stale PREPARED snapshot
+cannot select an abort after a later commit. A committed creator can restore
+its own missing shell from its immutable journal; other joiners still require
+the finalized creator/survivor witness. Orphan heads without an admission use
+the same locked owner-expiry arbitration, never a fixed head age.
+
+Redis has a separate `space_admission_dispatch:<operation UUID>` gate containing
+a fresh incarnation, RESTORING/READY phase, owner epoch and allow/deny state.
+Dispatch tickets bind both the Space lifecycle gate and this admission gate.
+After observing a missing/replaced gate, maintenance installs RESTORING and
+reads fresh PostgreSQL authority before publishing READY. Redis projection
+transactions WATCH and verify the original admission incarnation/epoch at the
+sink, including retries; delayed callbacks cannot adopt a newer gate. Recovery
+first durably takes ownership, then establishes admission DENY before exact
+projection drain, account-fence release and cleanup completion. PostgreSQL
+records the matching `dispatch_fenced_epoch`; an unknown Redis result cannot
+produce that acknowledgement. A lost gate remains fail-closed and terminal
+abort cannot restore forward dispatch.
+
+Owned revocation uses explicit `BeginOwnedRoomLeave`/`CompleteOwnedRoomLeave`
+arguments and an owner-bound sink loader. Missing or replaced ownership fails
+before Redis mutation and before an idempotent terminal return. Verified public
+leave, authority-loss cleanup and P3 captured drain use separate restrictive
+APIs: they persist REVOKING and obtain an exact admission tuple with the current
+owner epoch, without acquiring or borrowing a writer token. The full expected
+account/profile/Space/room/incarnation/identity tuple is compared under canonical
+locks before any restrictive SQL mutation. Both fencers validate their explicit
+owner or restrictive target before allocating even a missing Redis gate, then
+reload authority after gate observation. Owned DENY APIs reject forward LIVE
+state. Their loader can
+only publish DENY for that persisted restrictive target. A takeover invalidates
+the old target and acknowledgement; cleanup must explicitly obtain a fresh
+target and re-fence. Redis revocation transactions check the captured DENY nonce
+and epoch as well as the immutable tuple in the same WATCH/EXEC. Removing owner
+context never selects the restrictive path, and old owned calls cannot fall
+back to it. P3 retains its existing captured-target and provider retirement
+proof requirements.
+
+Native startup requires the ownership schema and rejects any unfinished/live
+admission or nonterminal head without matching ownership metadata. Before
+cutover, fence every pre-ownership writer and explicitly reconcile historical
+rows; no invented backfill, age-based adoption or mixed-writer serving is
+supported. The existing Redis snapshot rollback/old-writable-endpoint recovery
+boundary applies to both Space and admission gates: fence infrastructure writes
+and rotate/rebuild from PostgreSQL before exposure. This source contract does
+not establish rollout, activation, provider retirement or acceptance.
 
 The native A3 roster outbox relay is dormant in production composition. Native
 transactions still save their frozen facts and counters, but ordinary Voice,

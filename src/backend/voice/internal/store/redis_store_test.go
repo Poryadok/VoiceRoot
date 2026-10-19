@@ -350,24 +350,24 @@ func TestRedisCallStore_SpaceMediaFloorsAndGenerationFencedRevocation(t *testing
 	require.NoError(t, err)
 	require.Equal(t, "space-call", client.Get(ctx, store.activeKey(profileID)).Val())
 
-	call, changed, err := store.BeginSpaceMediaRevocation(ctx, roomID, profileID, "identity-old", "generation-old")
+	cleanupCtx := fixtureCleanupContext(t, ctx, store, roomID, first)
+	call, changed, err := store.BeginSpaceMediaRevocation(cleanupCtx, roomID, profileID, "identity-old", "generation-old")
 	require.NoError(t, err)
 	require.False(t, changed)
 	require.Equal(t, "generation-1", call.SpaceMedia[profileID].Generation)
-	_, changed, err = store.BeginSpaceMediaRevocation(ctx, roomID, profileID, first.Identity, first.Generation)
+	_, changed, err = store.BeginSpaceMediaRevocation(cleanupCtx, roomID, profileID, first.Identity, first.Generation)
 	require.NoError(t, err)
 	require.True(t, changed)
-	_, changed, err = store.CompleteSpaceMediaRevocation(ctx, roomID, profileID, first.Identity, first.Generation)
+	_, changed, err = store.CompleteSpaceMediaRevocation(cleanupCtx, roomID, profileID, first.Identity, first.Generation)
 	require.NoError(t, err)
 	require.True(t, changed)
 
 	second := testSpaceMediaParticipant(profileID, "identity-2", "generation-2", 4, 7)
 	_, err = admitLifecycleParticipantForTest(ctx, store, roomID, second, MaxVoiceRoomParticipants)
 	require.NoError(t, err)
-	call, changed, err = store.BeginSpaceMediaRevocation(ctx, roomID, profileID, first.Identity, first.Generation)
-	require.NoError(t, err)
+	_, changed, err = store.BeginSpaceMediaRevocation(cleanupCtx, roomID, profileID, first.Identity, first.Generation)
+	require.ErrorIs(t, err, ErrSpaceMediaTransition)
 	require.False(t, changed)
-	require.Equal(t, "generation-2", call.SpaceMedia[profileID].Generation)
 	call, err = store.GetCall(ctx, roomID)
 	require.NoError(t, err)
 	require.Equal(t, second, call.SpaceMedia[profileID])
@@ -410,7 +410,7 @@ func TestRedisCallStore_SpaceAdmissionHasOneActiveRoomIncarnation(t *testing.T) 
 
 func testSpaceMediaParticipant(profileID, identity, generation string, accessEpoch, policyEpoch uint64) SpaceMediaParticipant {
 	grant := SpaceMediaGrant{SessionEpoch: 2, AccessEpoch: accessEpoch, PolicyEpoch: policyEpoch, CanJoin: true, CanPublishAudio: true, CanSubscribe: true}
-	return SpaceMediaParticipant{ProfileID: profileID, Identity: identity, Generation: generation, Issued: grant, Reconciled: grant}
+	return SpaceMediaParticipant{AdmissionOperationID: "fixture:" + generation, ProfileID: profileID, Identity: identity, Generation: generation, Issued: grant, Reconciled: grant}
 }
 
 func TestRedisCallStore_IndexesVoiceRoomsAndExpiredRingingCalls(t *testing.T) {

@@ -75,6 +75,8 @@ func (s *PostgresAdmissionStore) CheckSchema(ctx context.Context) error {
 	var ready bool
 	err := s.pool.QueryRow(ctx, `SELECT
 	to_regclass('voice_space_media_grants') IS NOT NULL
+ AND to_regclass('voice_space_media_admission_owners') IS NOT NULL
+ AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='voice_space_media_admission_owners' AND column_name='dispatch_fenced_epoch')
  AND to_regclass('voice_space_lifecycle_targets') IS NOT NULL
  AND to_regclass('voice_space_media_admissions') IS NOT NULL
 	AND to_regclass('voice_roster_outbox') IS NOT NULL
@@ -89,6 +91,19 @@ func (s *PostgresAdmissionStore) CheckSchema(ctx context.Context) error {
 		return fmt.Errorf("check Space media admission schema: %w", err)
 	}
 	if !ready {
+		return ErrAdmissionUnavailable
+	}
+	// Missing historic authority is a fenced-cutover requirement, not a lease
+	// that a new replica may manufacture from updated_at or a startup timestamp.
+	var unknownOwner bool
+	err = s.pool.QueryRow(ctx, `SELECT
+EXISTS(SELECT 1 FROM voice_space_media_admissions a WHERE (a.participant_state<>'ENDED'
+ OR (a.state IN ('PREPARED','FENCED','ABORTING') AND a.cleanup_completed_at IS NULL)
+ OR (a.state='COMMITTED' AND a.projection_applied_at IS NULL))
+ AND NOT EXISTS(SELECT 1 FROM voice_space_media_admission_owners o WHERE o.operation_id=a.operation_id AND o.space_id=a.space_id AND o.voice_room_id=a.voice_room_id))
+OR EXISTS(SELECT 1 FROM voice_space_media_room_heads h WHERE h.state<>'ENDED'
+ AND NOT EXISTS(SELECT 1 FROM voice_space_media_admission_owners o WHERE o.operation_id=h.creator_operation_id AND o.space_id=h.space_id AND o.voice_room_id=h.voice_room_id))`).Scan(&unknownOwner)
+	if err != nil || unknownOwner {
 		return ErrAdmissionUnavailable
 	}
 	return nil
@@ -112,6 +127,14 @@ func (s *PostgresAdmissionStore) ClaimRoomHead(ctx context.Context, voiceRoomID,
 	}
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))`, voiceRoomID); err != nil {
 		return store.SpaceMediaRoomHead{}, fmt.Errorf("serialize Space voice-room claim: %w", err)
+	}
+	owner, ok := store.SpaceAdmissionOwnershipFromContext(ctx, operationID)
+	if !ok || owner.Epoch != 1 {
+		return store.SpaceMediaRoomHead{}, ErrAdmissionConflict
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO voice_space_media_admission_owners(operation_id,space_id,voice_room_id,owner_token,owner_epoch,lease_until)
+VALUES($1,$2,$3,$4,1,clock_timestamp()+$5) ON CONFLICT(operation_id) DO NOTHING`, operationID, spaceID, voiceRoomID, owner.Token, admissionOwnershipLease); err != nil {
+		return store.SpaceMediaRoomHead{}, err
 	}
 	var head store.SpaceMediaRoomHead
 	var roomGeneration int64
@@ -140,6 +163,13 @@ FROM voice_space_media_room_heads WHERE voice_room_id=$1 ORDER BY room_generatio
 	}
 	if err != nil {
 		return store.SpaceMediaRoomHead{}, fmt.Errorf("read Space voice-room incarnation: %w", err)
+	}
+	if err := requireAdmissionOwnership(ctx, tx, operationID); err != nil {
+		return store.SpaceMediaRoomHead{}, err
+	}
+	var sameOwnerScope bool
+	if err := tx.QueryRow(ctx, `SELECT space_id=$2 AND voice_room_id=$3 FROM voice_space_media_admission_owners WHERE operation_id=$1`, operationID, spaceID, voiceRoomID).Scan(&sameOwnerScope); err != nil || !sameOwnerScope {
+		return store.SpaceMediaRoomHead{}, ErrAdmissionConflict
 	}
 	if head.SpaceID != spaceID || (head.State != "ENDED" && head.LifecycleGeneration != lifecycleGeneration) {
 		return store.SpaceMediaRoomHead{}, ErrAdmissionConflict
@@ -202,7 +232,25 @@ func (s *PostgresAdmissionStore) AbandonRoomClaim(ctx context.Context, voiceRoom
 	if !s.usable() || voiceRoomID == "" || roomGeneration == 0 || operationID == uuid.Nil {
 		return ErrAdmissionUnavailable
 	}
-	tag, err := s.pool.Exec(ctx, `UPDATE voice_space_media_room_heads h SET state='ENDED',updated_at=clock_timestamp()
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var space string
+	if err := tx.QueryRow(ctx, `SELECT space_id FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2`, voiceRoomID, int64(roomGeneration)).Scan(&space); err != nil {
+		return err
+	}
+	if err := spacebarrier.Lock(ctx, tx, space); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, voiceRoomID, int64(roomGeneration)); err != nil {
+		return err
+	}
+	if err := requireAdmissionOwnership(ctx, tx, operationID); err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, `UPDATE voice_space_media_room_heads h SET state='ENDED',updated_at=clock_timestamp()
 WHERE h.voice_room_id=$1 AND h.room_generation=$2 AND h.creator_operation_id=$3 AND h.state='OPEN'
  AND NOT EXISTS (SELECT 1 FROM voice_space_media_admissions a WHERE a.voice_room_id=h.voice_room_id AND a.room_generation=h.room_generation
   AND (a.participant_state <> 'ENDED' OR (a.state='ABORTING' AND a.cleanup_completed_at IS NULL)
@@ -213,7 +261,7 @@ WHERE h.voice_room_id=$1 AND h.room_generation=$2 AND h.creator_operation_id=$3 
 	if tag.RowsAffected() != 1 {
 		return ErrRoomHeadPending
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func admissionFingerprint(a Admission) ([32]byte, error) {
@@ -314,6 +362,9 @@ FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 
 		(a.CreatedRoom && claimedCreator != a.OperationID) || (!a.CreatedRoom && claimedCreator == a.OperationID) {
 		return ErrRoomHeadPending
 	}
+	if err := requireAdmissionOwnership(ctx, tx, a.OperationID); err != nil {
+		return err
+	}
 	_, err = tx.Exec(ctx, `INSERT INTO voice_space_media_admissions
 (operation_id,generation,account_id,profile_id,space_id,room_id,voice_room_id,room_generation,livekit_identity,created_room,call_started_at,max_participants,session_epoch,access_epoch,policy_epoch,can_join,can_publish_audio,can_subscribe,state,request_sha256,lifecycle_generation)
 SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'PREPARED',$19,$20
@@ -381,6 +432,9 @@ func (s *PostgresAdmissionStore) Fence(ctx context.Context, a Admission) error {
 	if err := spacebarrier.LockIdentities(ctx, tx, a.AccountID.String(), a.ProfileID.String()); err != nil {
 		return err
 	}
+	if err := requireAdmissionOwnership(ctx, tx, a.OperationID); err != nil {
+		return err
+	}
 	if _, err = tx.Exec(ctx, `INSERT INTO voice_profile_account_mappings(profile_id,account_id) VALUES($1,$2) ON CONFLICT(profile_id) DO NOTHING`, a.ProfileID, a.AccountID); err != nil {
 		return fmt.Errorf("persist Space media account mapping: %w", err)
 	}
@@ -442,6 +496,9 @@ func (s *PostgresAdmissionStore) MarkCommitted(ctx context.Context, operationID 
 	if err != nil || headState != "OPEN" || currentRoomGeneration != roomGeneration || headRoomID != roomID {
 		return ErrRoomHeadPending
 	}
+	if err := requireAdmissionOwnership(ctx, tx, operationID); err != nil {
+		return err
+	}
 	var storedRoomID string
 	err = tx.QueryRow(ctx, `SELECT room_id FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2 FOR UPDATE`, operationID, generation).Scan(&storedRoomID)
 	if err != nil || storedRoomID != roomID {
@@ -484,6 +541,9 @@ func (s *PostgresAdmissionStore) MarkProjectionApplied(ctx context.Context, oper
 	var currentGeneration int64
 	if err = tx.QueryRow(ctx, `SELECT state,room_generation FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, voiceRoomID, roomGeneration).Scan(&state, &currentGeneration); err != nil || state != "OPEN" || currentGeneration != roomGeneration {
 		return ErrRoomHeadPending
+	}
+	if err := requireAdmissionOwnership(ctx, tx, operationID); err != nil {
+		return err
 	}
 	var storedGeneration int64
 	var participantState, admissionState string
@@ -547,18 +607,38 @@ WHERE voice_room_id=$1 AND room_generation=$2 AND call_room_id=$3`, a.VoiceRoomI
 }
 
 // RecoverOrphanRoomHeads closes only an old creator claim that has no durable
-// admission row. The age guard prevents recovery from racing the short
-// claim-to-Prepare window of a live request.
+// admission row. Durable ownership covers the claim-to-Prepare window; an
+// unexpired owner cannot be declared dead by an updated_at age heuristic.
 func (s *PostgresAdmissionStore) RecoverOrphanRoomHeads(ctx context.Context) error {
 	if !s.usable() {
 		return ErrAdmissionUnavailable
 	}
-	_, err := s.pool.Exec(ctx, `UPDATE voice_space_media_room_heads h SET state='ENDED',updated_at=clock_timestamp()
-WHERE h.state='OPEN' AND h.created_at < clock_timestamp()-interval '30 seconds'
+	rows, err := s.pool.Query(ctx, `SELECT h.voice_room_id,h.room_generation,h.space_id,h.creator_operation_id
+FROM voice_space_media_room_heads h JOIN voice_space_media_admission_owners o ON o.operation_id=h.creator_operation_id
+WHERE h.state='OPEN' AND o.lease_until<=clock_timestamp()
  AND NOT EXISTS (SELECT 1 FROM voice_space_media_admissions a WHERE a.operation_id=h.creator_operation_id)
  AND NOT EXISTS (SELECT 1 FROM voice_space_media_admissions a WHERE a.voice_room_id=h.voice_room_id AND a.room_generation=h.room_generation)`)
 	if err != nil {
 		return fmt.Errorf("recover orphan Space voice-room claims: %w", err)
+	}
+	var candidates []store.SpaceMediaRoomHead
+	for rows.Next() {
+		var h store.SpaceMediaRoomHead
+		if err := rows.Scan(&h.VoiceRoomID, &h.RoomGeneration, &h.SpaceID, &h.CreatorOperationID); err != nil {
+			rows.Close()
+			return err
+		}
+		candidates = append(candidates, h)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, head := range candidates {
+		if err := s.closeExpiredOrphanHead(ctx, head); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -584,6 +664,9 @@ func (s *PostgresAdmissionStore) MarkAborting(ctx context.Context, operationID u
 	var headState string
 	if err = tx.QueryRow(ctx, `SELECT room_generation,state FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, voiceRoomID, roomGeneration).Scan(&headGeneration, &headState); err != nil || headGeneration != roomGeneration {
 		return ErrRoomHeadPending
+	}
+	if err := requireAdmissionOwnership(ctx, tx, operationID); err != nil {
+		return err
 	}
 	tag, err := tx.Exec(ctx, `UPDATE voice_space_media_admissions SET state='ABORTING',updated_at=clock_timestamp()
 WHERE operation_id=$1 AND generation=$2 AND (state IN ('PREPARED','FENCED') OR (state='COMMITTED' AND projection_applied_at IS NULL))`, operationID, generation)
@@ -626,6 +709,12 @@ func (s *PostgresAdmissionStore) ReleaseFence(ctx context.Context, a Admission) 
 	if err := spacebarrier.LockIdentities(ctx, tx, a.AccountID.String(), a.ProfileID.String()); err != nil {
 		return err
 	}
+	if err := requireAdmissionOwnership(ctx, tx, a.OperationID); err != nil {
+		return err
+	}
+	if err := requireAdmissionDispatchFenced(ctx, tx, a.OperationID); err != nil {
+		return err
+	}
 	tag, err := tx.Exec(ctx, `DELETE FROM voice_account_voice_fences WHERE account_id=$1 AND profile_id=$2 AND room_id=$3 AND admission_operation_id=$4 AND admission_generation=$5`, a.AccountID, a.ProfileID, a.RoomID, a.OperationID, a.Generation)
 	if err != nil {
 		return fmt.Errorf("release exact Space media fence: %w", err)
@@ -636,13 +725,37 @@ func (s *PostgresAdmissionStore) ReleaseFence(ctx context.Context, a Admission) 
 	return tx.Commit(ctx)
 }
 
-// BeginRoomLeave serializes a participant drain with admissions and room
-// closure. The Redis identity remains revoking until CompleteRoomLeave.
-func (s *PostgresAdmissionStore) BeginRoomLeave(ctx context.Context, operationID uuid.UUID, generation string) error {
-	return s.beginRoomLeave(ctx, operationID, generation, nil)
+// BeginOwnedRoomLeave serializes a workflow-owned participant drain with
+// admissions and room closure. The exact owner is checked before idempotence.
+func (s *PostgresAdmissionStore) BeginOwnedRoomLeave(ctx context.Context, owner store.SpaceAdmissionOwnership, operationID uuid.UUID, generation string) error {
+	if owner.OperationID != operationID {
+		return ErrAdmissionConflict
+	}
+	ctx = store.WithSpaceAdmissionOwnership(ctx, owner)
+	return s.beginRoomLeave(ctx, operationID, generation, nil, func(tx pgx.Tx) error { return requireAdmissionOwnership(ctx, tx, operationID) })
 }
 
-func (s *PostgresAdmissionStore) beginRoomLeave(ctx context.Context, operationID uuid.UUID, generation string, loss *PartyEligibilityLoss) error {
+// BeginRestrictiveRoomLeave is called only after the trusted leave/ACL boundary.
+// It never substitutes for failed workflow ownership.
+func (s *PostgresAdmissionStore) BeginRestrictiveRoomLeave(ctx context.Context, expected Admission) (store.SpaceAdmissionRevocation, error) {
+	var target store.SpaceAdmissionRevocation
+	if expected.OperationID == uuid.Nil || expected.Generation == "" || expected.AccountID == uuid.Nil || expected.ProfileID == uuid.Nil || expected.SpaceID == uuid.Nil || expected.RoomID == "" || expected.VoiceRoomID == "" || expected.RoomGeneration == 0 || expected.Identity == "" {
+		return target, ErrAdmissionConflict
+	}
+	err := s.beginRoomLeave(ctx, expected.OperationID, expected.Generation, nil, func(tx pgx.Tx) error {
+		if err := readRevocationTarget(ctx, tx, expected.OperationID, expected.Generation, &target); err != nil {
+			return err
+		}
+		a := target.Admission
+		if a.AccountID != expected.AccountID || a.ProfileID != expected.ProfileID || a.SpaceID != expected.SpaceID || a.RoomID != expected.RoomID || a.VoiceRoomID != expected.VoiceRoomID || a.RoomGeneration != expected.RoomGeneration || a.Identity != expected.Identity {
+			return ErrAdmissionConflict
+		}
+		return nil
+	})
+	return target, err
+}
+
+func (s *PostgresAdmissionStore) beginRoomLeave(ctx context.Context, operationID uuid.UUID, generation string, loss *PartyEligibilityLoss, guard func(pgx.Tx) error) error {
 	if !s.usable() || operationID == uuid.Nil || generation == "" {
 		return ErrAdmissionUnavailable
 	}
@@ -668,11 +781,21 @@ func (s *PostgresAdmissionStore) beginRoomLeave(ctx context.Context, operationID
 	var headState string
 	var headGeneration int64
 	var incarnation, headRoomID uuid.UUID
-	if err = tx.QueryRow(ctx, `SELECT state,room_generation,creator_operation_id,call_room_id FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, voiceRoomID, roomGeneration).Scan(&headState, &headGeneration, &incarnation, &headRoomID); err != nil || headGeneration != roomGeneration || (headState != "OPEN" && headState != "CLOSING") {
+	if err = tx.QueryRow(ctx, `SELECT state,room_generation,creator_operation_id,call_room_id FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, voiceRoomID, roomGeneration).Scan(&headState, &headGeneration, &incarnation, &headRoomID); err != nil || headGeneration != roomGeneration {
 		if loss != nil && (err == nil || errors.Is(err, pgx.ErrNoRows)) {
 			return ErrPartySourceChanged
 		}
 		return ErrRoomHeadPending
+	}
+	var account, profile string
+	if err := tx.QueryRow(ctx, `SELECT account_id,profile_id FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2`, operationID, generation).Scan(&account, &profile); err != nil {
+		return err
+	}
+	if err := spacebarrier.LockIdentities(ctx, tx, account, profile); err != nil {
+		return err
+	}
+	if err := guard(tx); err != nil {
+		return err
 	}
 	var participantState, admissionState string
 	var applied bool
@@ -692,6 +815,9 @@ func (s *PostgresAdmissionStore) beginRoomLeave(ctx context.Context, operationID
 	}
 	if participantState == "ENDED" {
 		return tx.Commit(ctx)
+	}
+	if headState != "OPEN" && headState != "CLOSING" {
+		return ErrRoomHeadPending
 	}
 	if participantState != "ACTIVE" && participantState != "REVOKING" && (participantState != "PREPARED" || admissionState != "ABORTING") {
 		return ErrAdmissionConflict
@@ -729,9 +855,26 @@ WHERE voice_room_id=$1 AND room_generation=$2 AND state='COMMITTED' AND projecti
 	return tx.Commit(ctx)
 }
 
-// CompleteRoomLeave releases only the exact admission-owned fence after the
+// CompleteOwnedRoomLeave releases only the exact admission-owned fence after the
 // caller has confirmed removal (or NotFound) of that exact LiveKit identity.
-func (s *PostgresAdmissionStore) CompleteRoomLeave(ctx context.Context, a Admission) error {
+func (s *PostgresAdmissionStore) CompleteOwnedRoomLeave(ctx context.Context, owner store.SpaceAdmissionOwnership, a Admission) error {
+	if owner.OperationID != a.OperationID {
+		return ErrAdmissionConflict
+	}
+	ctx = store.WithSpaceAdmissionOwnership(ctx, owner)
+	return s.completeRoomLeave(ctx, a, func(tx pgx.Tx) error {
+		if err := requireAdmissionOwnership(ctx, tx, a.OperationID); err != nil {
+			return err
+		}
+		return requireAdmissionDispatchFenced(ctx, tx, a.OperationID)
+	})
+}
+
+func (s *PostgresAdmissionStore) CompleteRestrictiveRoomLeave(ctx context.Context, target store.SpaceAdmissionRevocation) error {
+	return s.completeRoomLeave(ctx, target.Admission, func(tx pgx.Tx) error { return requireRevocationTarget(ctx, tx, target, true) })
+}
+
+func (s *PostgresAdmissionStore) completeRoomLeave(ctx context.Context, a Admission, guard func(pgx.Tx) error) error {
 	if !s.usable() || a.OperationID == uuid.Nil || a.Generation == "" || a.AccountID == uuid.Nil || a.ProfileID == uuid.Nil || a.RoomID == "" {
 		return ErrAdmissionUnavailable
 	}
@@ -753,9 +896,19 @@ func (s *PostgresAdmissionStore) CompleteRoomLeave(ctx context.Context, a Admiss
 	if err = tx.QueryRow(ctx, `SELECT state,room_generation FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, voiceRoomID, roomGeneration).Scan(&headState, &headGeneration); err != nil || headGeneration != roomGeneration {
 		return ErrRoomHeadPending
 	}
-	var state string
-	if err = tx.QueryRow(ctx, `SELECT participant_state FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2 FOR UPDATE`, a.OperationID, a.Generation).Scan(&state); err != nil {
+	if err := spacebarrier.LockIdentities(ctx, tx, a.AccountID.String(), a.ProfileID.String()); err != nil {
 		return err
+	}
+	if err := guard(tx); err != nil {
+		return err
+	}
+	var state string
+	var exact bool
+	if err = tx.QueryRow(ctx, `SELECT participant_state,account_id=$3 AND profile_id=$4 AND room_id=$5 AND space_id=$6 FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2 FOR UPDATE`, a.OperationID, a.Generation, a.AccountID, a.ProfileID, a.RoomID, a.SpaceID).Scan(&state, &exact); err != nil {
+		return err
+	}
+	if !exact {
+		return ErrAdmissionConflict
 	}
 	if state == "ENDED" {
 		return tx.Commit(ctx)
@@ -812,12 +965,19 @@ func (s *PostgresAdmissionStore) MarkCleanupCompleted(ctx context.Context, opera
 	if err = tx.QueryRow(ctx, `SELECT state,room_generation,creator_operation_id FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, voiceRoomID, roomGeneration).Scan(&headState, &headGeneration, &creator); err != nil || headGeneration != roomGeneration {
 		return ErrRoomHeadPending
 	}
+	if err := requireAdmissionOwnership(ctx, tx, operationID); err != nil {
+		return err
+	}
+	if err := requireAdmissionDispatchFenced(ctx, tx, operationID); err != nil {
+		return err
+	}
 	var admissionState string
 	if err = tx.QueryRow(ctx, `SELECT state FROM voice_space_media_admissions WHERE operation_id=$1 AND generation=$2 FOR UPDATE`, operationID, generation).Scan(&admissionState); err != nil || admissionState != string(AdmissionAborting) {
 		return ErrAdmissionConflict
 	}
 	tag, err := tx.Exec(ctx, `UPDATE voice_space_media_admissions SET cleanup_completed_at=COALESCE(cleanup_completed_at,clock_timestamp()),participant_state='ENDED',updated_at=clock_timestamp()
-WHERE operation_id=$1 AND generation=$2 AND state='ABORTING'`, operationID, generation)
+WHERE operation_id=$1 AND generation=$2 AND state='ABORTING'
+ AND NOT EXISTS(SELECT 1 FROM voice_account_voice_fences f WHERE f.admission_operation_id=$1 AND f.admission_generation=$2)`, operationID, generation)
 	if err != nil {
 		return fmt.Errorf("complete Space media cleanup: %w", err)
 	}
@@ -851,6 +1011,7 @@ func (s *PostgresAdmissionStore) RecoveryRows(ctx context.Context, limit int) ([
 	}
 	rows, err := s.pool.Query(ctx, `SELECT operation_id,generation,account_id,profile_id,space_id,room_id,voice_room_id,room_generation,livekit_identity,created_room,call_started_at,max_participants,session_epoch,access_epoch,policy_epoch,can_join,can_publish_audio,can_subscribe,state,participant_state,projection_applied_at IS NOT NULL,lifecycle_generation
 FROM voice_space_media_admissions a WHERE NOT EXISTS(SELECT 1 FROM voice_space_lifecycle_targets t WHERE t.source_kind='native' AND t.target_id='native:'||a.operation_id) AND cleanup_completed_at IS NULL
+ AND EXISTS(SELECT 1 FROM voice_space_media_admission_owners o WHERE o.operation_id=a.operation_id AND o.lease_until<=clock_timestamp())
  AND (state <> 'COMMITTED' OR projection_applied_at IS NULL OR participant_state='REVOKING') ORDER BY updated_at,operation_id LIMIT $1`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("read Space media recovery rows: %w", err)

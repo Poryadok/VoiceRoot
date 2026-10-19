@@ -65,10 +65,10 @@ func TestWSMetricsConnectSuccessAndHelloDuration(t *testing.T) {
 	require.NoError(t, conn.ReadJSON(&frame))
 	require.Equal(t, "hello", frame.Op)
 
-	require.Equal(t, float64(1), testutil.ToFloat64(rtMetrics.connectTotal.WithLabelValues("success")))
-	require.Equal(t, float64(0), testutil.ToFloat64(rtMetrics.connectTotal.WithLabelValues("fail")))
-	require.Equal(t, float64(1), testutil.ToFloat64(rtMetrics.connectionsActive))
-	require.Equal(t, 1, testutil.CollectAndCount(rtMetrics.helloDuration))
+	require.Equal(t, float64(1), testutil.ToFloat64(rtMetrics.Load().connectTotal.WithLabelValues("success")))
+	require.Equal(t, float64(0), testutil.ToFloat64(rtMetrics.Load().connectTotal.WithLabelValues("fail")))
+	require.Equal(t, float64(1), testutil.ToFloat64(rtMetrics.Load().connectionsActive))
+	require.Equal(t, 1, testutil.CollectAndCount(rtMetrics.Load().helloDuration))
 }
 
 func TestWSMetricsConnectFail(t *testing.T) {
@@ -83,8 +83,8 @@ func TestWSMetricsConnectFail(t *testing.T) {
 	require.NotNil(t, resp)
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
-	require.Equal(t, float64(1), testutil.ToFloat64(rtMetrics.connectTotal.WithLabelValues("fail")))
-	require.Equal(t, float64(0), testutil.ToFloat64(rtMetrics.connectTotal.WithLabelValues("success")))
+	require.Equal(t, float64(1), testutil.ToFloat64(rtMetrics.Load().connectTotal.WithLabelValues("fail")))
+	require.Equal(t, float64(0), testutil.ToFloat64(rtMetrics.Load().connectTotal.WithLabelValues("success")))
 }
 
 func TestWSMetricsActiveConnectionsDecrementOnClose(t *testing.T) {
@@ -102,7 +102,7 @@ func TestWSMetricsActiveConnectionsDecrementOnClose(t *testing.T) {
 	var frame wsOutbound
 	require.NoError(t, conn.ReadJSON(&frame))
 	require.Equal(t, "hello", frame.Op)
-	require.Equal(t, float64(1), testutil.ToFloat64(rtMetrics.connectionsActive))
+	require.Equal(t, float64(1), testutil.ToFloat64(rtMetrics.Load().connectionsActive))
 
 	// Graceful close so the server read loop unblocks promptly (bare Close can race under load).
 	_ = conn.WriteControl(
@@ -112,6 +112,32 @@ func TestWSMetricsActiveConnectionsDecrementOnClose(t *testing.T) {
 	)
 	require.NoError(t, conn.Close())
 	require.Eventually(t, func() bool {
-		return testutil.ToFloat64(rtMetrics.connectionsActive) == 0
+		return testutil.ToFloat64(rtMetrics.Load().connectionsActive) == 0
 	}, 5*time.Second, 20*time.Millisecond)
+}
+
+func TestWSMetricsDisconnectStaysWithConnectedRegistry(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	h := testRealtimeHandlerWithMetrics(staticTokenValidator{"tok": {UserID: "a", ProfileID: "p"}}, nil, reg)
+	connectedMetrics := rtMetrics.Load()
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	headers := wsUpgradeHeaders("tok")
+	headers.Set("X-Profile-Id", "p")
+	conn, _, err := websocket.DefaultDialer.Dial(wsEndpoint(t, srv), headers)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	var hello wsOutbound
+	require.NoError(t, conn.ReadJSON(&hello))
+	require.Equal(t, "hello", hello.Op)
+	require.Equal(t, float64(1), testutil.ToFloat64(connectedMetrics.connectionsActive))
+
+	// A hijacked WebSocket can outlive its HTTP test server. Replacing the
+	// registry must not redirect its eventual decrement to the next instance.
+	replacement := initRealtimeMetrics(prometheus.NewRegistry())
+	require.NoError(t, conn.Close())
+	require.Eventually(t, func() bool {
+		return testutil.ToFloat64(connectedMetrics.connectionsActive) == 0
+	}, 5*time.Second, 20*time.Millisecond)
+	require.Equal(t, float64(0), testutil.ToFloat64(replacement.connectionsActive))
 }
