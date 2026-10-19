@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"testing"
+	"time"
 	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/notification/internal/consumer"
 	"voice/backend/notification/internal/delivery"
@@ -13,9 +14,10 @@ import (
 
 type participantAckSpy struct{ ack, nak, term int }
 
-func (s *participantAckSpy) Ack(...nats.AckOpt) error  { s.ack++; return nil }
-func (s *participantAckSpy) Nak(...nats.AckOpt) error  { s.nak++; return nil }
-func (s *participantAckSpy) Term(...nats.AckOpt) error { s.term++; return nil }
+func (s *participantAckSpy) Ack(...nats.AckOpt) error                         { s.ack++; return nil }
+func (s *participantAckSpy) Nak(...nats.AckOpt) error                         { s.nak++; return nil }
+func (s *participantAckSpy) NakWithDelay(time.Duration, ...nats.AckOpt) error { s.nak++; return nil }
+func (s *participantAckSpy) Term(...nats.AckOpt) error                        { s.term++; return nil }
 
 func TestVoiceParticipantFactsAckWithoutNotificationEffects(t *testing.T) {
 	for _, left := range []bool{false, true} {
