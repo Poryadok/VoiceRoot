@@ -234,7 +234,16 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 	guard := policy.newConnectionGuard(c, claims, &writeMu)
 	reg.setWriteGuard(func() bool { return guard.authorizeWrite("fanout") })
 	lastTypingStart := make(map[string]time.Time)
-	typingTimers := make(map[string]*time.Timer)
+	type typingExpiry struct {
+		key       string
+		timer     *time.Timer
+		broadcast func()
+	}
+	typingTimers := make(map[string]*typingExpiry)
+	// Timer callbacks only notify the connection loop. That loop owns all
+	// typing state and side effects, including expiry and disconnect cleanup.
+	typingExpired := make(chan *typingExpiry, 32)
+	readerCtx, cancelReader := context.WithCancel(context.Background())
 
 	defer func() {
 		metrics.observeWSDisconnect()
@@ -245,8 +254,8 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 			slog.String("instance_id", instanceID),
 			slog.String("request_id", requestID),
 		)
-		for _, timer := range typingTimers {
-			timer.Stop()
+		for _, expiry := range typingTimers {
+			expiry.timer.Stop()
 		}
 		hasLocalProfileConn := hub.unregisterConn(reg)
 		if !hasLocalProfileConn {
@@ -254,10 +263,8 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 		}
 		_ = c.Close()
 	}()
-	readerCtx, cancelReader := context.WithCancel(context.Background())
 	defer cancelReader()
 
-	var mu sync.Mutex
 	var seq int64
 	write := func(op string, d json.RawMessage) error {
 		writeMu.Lock()
@@ -336,6 +343,15 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 			// the only slow recipient; do not stall or evict healthy peers.
 			closeFanoutOverflow(c, reg, &writeMu)
 			return
+		case expiry := <-typingExpired:
+			// Stop may lose to a callback already in flight. A replaced or
+			// explicitly stopped timer must not erase or expire its successor.
+			if typingTimers[expiry.key] != expiry {
+				continue
+			}
+			delete(lastTypingStart, expiry.key)
+			delete(typingTimers, expiry.key)
+			expiry.broadcast()
 		case env := <-reg.fanout:
 			reg.beforeFanoutWrite()
 			if err := write(env.Op, env.D); err != nil {
@@ -469,35 +485,29 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						cancel()
 					}
 				}
-				mu.Lock()
-				timer := typingTimers[typingKey]
-				if timer != nil {
-					timer.Stop()
+				if expiry := typingTimers[typingKey]; expiry != nil {
+					expiry.timer.Stop()
 					delete(typingTimers, typingKey)
 				}
-				mu.Unlock()
 				if kind == "stop" {
-					mu.Lock()
 					delete(lastTypingStart, typingKey)
-					mu.Unlock()
 					broadcastTyping("stop", false)
 					continue
 				}
 				now := time.Now()
-				mu.Lock()
 				last, ok := lastTypingStart[typingKey]
 				shouldBroadcast := !ok || now.Sub(last) >= typingThrottle
 				if shouldBroadcast {
 					lastTypingStart[typingKey] = now
 				}
-				typingTimers[typingKey] = time.AfterFunc(typingIdleTimeout, func() {
-					mu.Lock()
-					delete(lastTypingStart, typingKey)
-					delete(typingTimers, typingKey)
-					mu.Unlock()
-					broadcastTyping("stop", true)
+				expiry := &typingExpiry{key: typingKey, broadcast: func() { broadcastTyping("stop", true) }}
+				expiry.timer = time.AfterFunc(typingIdleTimeout, func() {
+					select {
+					case typingExpired <- expiry:
+					case <-readerCtx.Done():
+					}
 				})
-				mu.Unlock()
+				typingTimers[typingKey] = expiry
 				if shouldBroadcast {
 					broadcastTyping("start", false)
 				}
