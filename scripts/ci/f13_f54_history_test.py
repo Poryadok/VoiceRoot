@@ -41,7 +41,7 @@ class ProducerTrace(unittest.TestCase):
         git(self.repo, 'add', '.'); git(self.repo, 'commit', '-qm', message)
         return git(self.repo, 'rev-parse', 'HEAD')
 
-    def collect(self, target=None, cross_scope=False):
+    def collect(self, target=None, cross_scope=False, partition=True, allow=True, origin=None):
         out = self.folder / ('out' + str(len(list(self.folder.iterdir())))); out.mkdir()
         for name in ('game-checkpoint-tree', 'be255-checkpoint-tree'): (out / name).write_text('')
         extra_names = {'f13_cross_scope_path_allowed'}
@@ -55,7 +55,8 @@ class ProducerTrace(unittest.TestCase):
             f13_f54_trace_file=str(out / 'trace.jsonl'), f13_f54_observer=str(HELPER))
         program = 'set -eu\n' + definitions() + '\n' + extra + '\n'
         program += '\n'.join(k + '=' + shlex.quote(v) for k, v in values.items()) + '\n'
-        program += f'f13_collect_develop_contributions "$ROOT" {self.base} {target or git(self.repo,"rev-parse","HEAD")} "$TMP_DIR/map" "$TMP_DIR/category" true true\n'
+        if origin is not None:program+='f13_f54_trace_event span_link "$ROOT" '+shlex.quote(json.dumps(origin))+'\n'
+        program += f'f13_collect_develop_contributions "$ROOT" {self.base} {target or git(self.repo,"rev-parse","HEAD")} "$TMP_DIR/map" "$TMP_DIR/category" {str(allow).lower()} {str(partition).lower()}\n'
         if cross_scope: program += 'f13_cross_scope_path_allowed ' + shlex.quote(PROTO) + ' true\n'
         p = subprocess.run(['bash', '-c', program], capture_output=True, text=True)
         return p, out
@@ -83,6 +84,89 @@ class ProducerTrace(unittest.TestCase):
         self.hidden_runtime();p,_=self.collect()
         self.assertEqual(p.returncode,0,p.stderr)
         self.assertEqual(p.stdout,'','observer must not change original emitted prefix')
+
+    def test_raw_false_append_preserves_and_consumes_prior_true_ledger(self):
+        name='.agent/execplans/append-fixture.md'
+        self.write(name,'first\n');self.write(RUNTIME,'package main\n// true contribution\n')
+        first=self.commit('actual true operation and nonguarded document')
+        self.write(name,'second\n');self.commit('actual false document append')
+        p,out=self.collect();self.assertEqual(p.returncode,0,p.stderr)
+        raw=(out/'trace.jsonl').read_bytes();m=module()
+        result=m.validate_trace(self.repo,out/'trace.jsonl',hashlib.sha256(raw).hexdigest())
+        rows=[v.split('\t') for v in (out/'map').read_text().splitlines() if v.startswith(name+'\t')]
+        self.assertEqual([v[1] for v in rows],['true','false'])
+        self.assertEqual(rows[0][2],first)
+        self.assertTrue(m.consume_aggregate(result,'F1',name,(out/'map').read_bytes(),'true')['aggregate'])
+        with self.assertRaises(m.Rejected):m.consume_aggregate(result,'F1',name,(out/'map').read_bytes(),'false')
+        lost='\t'.join(rows[-1])+'\n'
+        with self.assertRaises(m.Rejected):m.consume_aggregate(result,'F1',name,lost.encode(),'false')
+        with self.assertRaises(m.Rejected):m.consume_aggregate(result,'F1',name,(out/'map').read_bytes()+('\t'.join(rows[0])+'\n').encode(),'true')
+        events=[json.loads(v) for v in raw.splitlines()]
+        changed=json.loads(json.dumps(events));e=next(e for e in changed if e['kind']=='row_after' and e['payload']['path']==name and e['payload']['row']['raw'].split('\t')[1]=='false')
+        parts=e['payload']['row']['raw'].split('\t');parts[1]='true';e['payload']['row']=m.raw_binding('\t'.join(parts))
+        path=out/'normalized-raw-false.jsonl';m.write_events(path,changed)
+        with self.assertRaises(m.Rejected):m.validate_trace(self.repo,path,hashlib.sha256(path.read_bytes()).hexdigest())
+
+    def bound_span_fixture(self, hidden_runtime=False):
+        self.write('README','first lane\n');first_lane=self.commit('first lane')
+        git(self.repo,'checkout','-qb','span',self.base)
+        if hidden_runtime:self.hidden_runtime()
+        else:
+            self.write('span-doc.md','first\n');self.write(PROTO,'actual source\n');self.first=self.commit('first actual source')
+            self.write('span-doc.md','second\n');self.head=self.commit('second actual source')
+        source=self.head
+        git(self.repo,'checkout','-q',first_lane);git(self.repo,'merge','--no-ff','-qm','original aggregate',source)
+        aggregate=git(self.repo,'rev-parse','HEAD')
+        p,original=self.collect(partition=False);self.assertEqual(p.returncode,0,p.stderr)
+        original_raw=(original/'trace.jsonl').read_bytes();m=module()
+        # Exact private fixture constants only; no production pin/record flag.
+        m.SPAN_BASE,m.SPAN_HEAD,m.SPAN_AGGREGATE,m.SPAN_NODES=self.base,source,aggregate,[self.first,self.head]
+        m.ORIGINAL_TRACE_SHA=hashlib.sha256(original_raw).hexdigest();m.ORIGINAL_PRODUCER_SHA=m.classifier_binding()['producer_sha256'];m.PROTOTYPE_BASE=aggregate
+        old=dict(base=first_lane,consumer='MASTER-SOURCE-v1',version='NATIVE-P3-SOURCE-v1',snapshot=self.base,source=aggregate,target=aggregate,paths=[PROTO,RUNTIME])
+        old_path=self.folder/'original-native.json';old_path.write_text(json.dumps(old));m.ORIGINAL_NATIVE_SHA=hashlib.sha256(old_path.read_bytes()).hexdigest()
+        target=git(self.repo,'commit-tree',aggregate+'^{tree}','-p',first_lane,'-p',aggregate,'-m','private target')
+        git(self.repo,'checkout','-q',target);current_path=self.folder/'current-native.json';current_path.write_text(json.dumps(dict(old,target=target)))
+        binding=m.span_origin(self.repo,original/'trace.jsonl',old_path,current_path)
+        return m,original,original_raw,aggregate,source,old_path,current_path,binding
+
+    def test_genuine_supplemental_span_keeps_original_aggregate_owner(self):
+        m,original,original_raw,aggregate,source,old_path,current_path,binding=self.bound_span_fixture()
+        p,span=self.collect(target=source,allow=False,origin=binding);self.assertEqual(p.returncode,0,p.stderr)
+        digest=hashlib.sha256((span/'trace.jsonl').read_bytes()).hexdigest()
+        result=m.validate_aggregate_span(self.repo,original/'trace.jsonl',span/'trace.jsonl',digest,old_path,current_path)
+        self.assertEqual([v['node'] for v in result['dispositions']],m.SPAN_NODES)
+        self.assertTrue(all(v['disposition']=='aggregate_span_qualified' for v in result['dispositions']))
+        self.assertFalse(m.consume_span_aggregate(result,PROTO,'false')['aggregate'])
+        with self.assertRaises(m.Rejected):m.consume_span_aggregate(result,PROTO,'true')
+        original_owner=next(v.split('\t')[2] for v in (original/'map').read_text().splitlines() if v.startswith(PROTO+'\t'))
+        self.assertEqual(original_owner,aggregate)
+        self.assertEqual((original/'trace.jsonl').read_bytes(),original_raw)
+        events=[json.loads(v) for v in (span/'trace.jsonl').read_text().splitlines()]
+        for change in ('missing_link','wrong_hash','wrong_context','missing_second','failure_as_success','wrong_partition'):
+            with self.subTest(change=change):
+                altered=json.loads(json.dumps(events))
+                if change=='missing_link':altered=[e for e in altered if e['kind']!='span_link']
+                elif change=='wrong_hash':altered[0]['payload']['original_trace_sha256']='0'*64
+                elif change=='wrong_context':altered[0]['payload']['current_native']['snapshot']='0'*40
+                elif change=='missing_second':altered=[e for e in altered if e['operation'] and self.head not in e['operation'] or e['operation'] is None]
+                elif change=='failure_as_success':next(e for e in altered if e['kind']=='frame_exit')['payload']['exit']=1
+                else:next(e for e in altered if e['kind']=='frame_enter')['payload']['partition_source_history']='false'
+                path=span/(change+'.jsonl');m.write_events(path,altered)
+                with self.assertRaises((m.Rejected,KeyError)):
+                    m.validate_aggregate_span(self.repo,original/'trace.jsonl',path,hashlib.sha256(path.read_bytes()).hexdigest(),old_path,current_path)
+
+    def test_hidden_runtime_revert_span_retains_true_and_real_gate_failure(self):
+        m,original,original_raw,aggregate,source,old_path,current_path,binding=self.bound_span_fixture(True)
+        p,span=self.collect(target=source,allow=False,origin=binding)
+        self.assertEqual(p.returncode,1,p.stderr)
+        self.assertEqual((span/'category').read_text().strip(),'duplicate_guarded_owner')
+        raw=(span/'trace.jsonl').read_bytes();digest=hashlib.sha256(raw).hexdigest()
+        prefix=m.validate_trace(self.repo,span/'trace.jsonl',digest)
+        frame=next(iter(prefix['ledger']))
+        self.assertTrue(prefix['ledger'][frame]['paths'][PROTO]['aggregate'])
+        with self.assertRaises(m.Rejected):m.consume_aggregate(prefix,frame,PROTO,(span/'map').read_bytes(),'false')
+        with self.assertRaises(m.Rejected):m.validate_aggregate_span(self.repo,original/'trace.jsonl',span/'trace.jsonl',digest,old_path,current_path)
+        self.assertEqual((original/'trace.jsonl').read_bytes(),original_raw)
 
     def test_rehashed_drop_reorder_forgery_and_raw_dag_do_not_substitute_trace(self):
         self.hidden_runtime(); p, out = self.collect(); self.assertEqual(p.returncode, 0, p.stderr)

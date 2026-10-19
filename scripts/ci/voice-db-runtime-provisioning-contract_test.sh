@@ -3219,6 +3219,20 @@ f13_f54_observe_child() {
   return 0
 }
 
+f13_f54_observe_span() {
+  local repo="$1" original_trace="$2" original_native="$3" current_native="$4"
+  local trace="$5" map="$6" category="$7" binding
+  local f13_f54_trace_file="${trace}" f13_f54_frame='' f13_f54_operation=''
+  [[ -n "${f13_f54_observer:-}" && ! -e "${trace}" && "${map}" != "${TMP_DIR}/f13-contributions" ]] || return 1
+  binding="$(python3 "${f13_f54_observer}" span-origin "${repo}" "${original_trace}" \
+    "${original_native}" "${current_native}")" || return 1
+  f13_f54_trace_event span_link "${repo}" "${binding}" || return 1
+  # This is new supplemental evidence, not an original recursive call. Keep
+  # the observed integration owner/map and propagate every genuine failure.
+  f13_collect_develop_contributions "${repo}" 2445e81de07681cfd5f1491e4c793aaac747f571 \
+    23551116ac5e741d3ec4ff7b412b7c9e248539ff "${map}" "${category}" false true
+}
+
 f13_resolve_source_base() {
   local repo="$1" first_parent="$2" source_head="$3" output_file="$4"
   local bases canonical base path first_entry entry first_entry_set

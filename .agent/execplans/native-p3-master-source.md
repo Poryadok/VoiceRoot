@@ -89,6 +89,29 @@ identity receipts. No new admission or pin is introduced. Missing observations
 remain rejection/HOLD, not reconstructed rows. Independent frozen review and
 complete actual33-node qualification are still OPEN.
 
+### Existing AUTHOR continuation after410 ledger/span decision
+
+Supported e103 returns exclusive scope to416 on exact prototypebase6d1f60f;
+fresh WT19 leasebc5bbbca27e54180151e3988cd07c7f1. Ruling dcda673f clarifies
+rawfalse append with retained true evidence versus derived consumed aggregate OR.
+No raw prefix normalization, M admission, production R/K or other pin change.
+Implement discriminating append/loss/last-row-consumer checks, and a separately
+bound genuine supplemental2445e81..235511 frame (allowfalse/partitiontrue)
+linked to exact original8afe/2 operation and originaltracee2d4184. Internal
+operations add evidence, never replace original integration owners/maps.
+All prior6f84/6d1 evidence stays immutable. New frozen proof and independent
+144/418 assessment are required; any genuine gate failure remains HOLD.
+
+Current focused evidence: ledger rawfalse/priortrue meaningful RED at the old
+cumulative_operation_or predicate, followed by mandatory complete-map aggregate
+consumer checks. Ten private tests and35 existing affected tests pass; negative
+oracles cover row loss/normalization/duplicates, false last-row consumption,
+missing/forged span link/context/hash/second node and genuine guarded runtime
+revert failure (never relabeled success). Early real span execution on untouched
+6d1/H4:108events/one frame/two direct operations, both raw classifierfalse,
+collector0; this is feasibility evidence, not the new linked-unit qualification.
+Later exact frozen source/current trace/independent review remain required.
+
 - [x] Existing stage custody accepted; exclusive WT19 lease acquired at ac7e039.
 - [x] Master route read, independent418 closure c1 and121 exclusive-write freeze confirmed.
 - [x] Focused Linux qualification9/history4/unchanged correction10 pass; history tests exposed and corrected lost runtime taint.

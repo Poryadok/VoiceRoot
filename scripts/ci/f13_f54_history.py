@@ -22,6 +22,14 @@ SOURCE = 'd38b699d3d3d641fe2415ed7f841dfe1f7360bc1'
 SCHEMA = 'F54-PRODUCER-OBSERVATION-v2'
 ROOT = Path(__file__).resolve().parents[2]
 PRODUCTION_AUTHORITY = False
+PROTOTYPE_BASE = '6d1f60f955a79e0378a3532750d209e3a11c8f23'
+SPAN_AGGREGATE = '8afe8e90285aa59c19ac011ded7260d2f191fa59'
+SPAN_BASE = '2445e81de07681cfd5f1491e4c793aaac747f571'
+SPAN_HEAD = '23551116ac5e741d3ec4ff7b412b7c9e248539ff'
+SPAN_NODES = ['4f5b30c27cb288b249ef5e517c79c1d766f4e6e1',SPAN_HEAD]
+ORIGINAL_TRACE_SHA = 'e2d4184b796496e5d98448c146636b779024a6315f65bc055262c1e029a18c25'
+ORIGINAL_PRODUCER_SHA = 'b09dfe5eee5cca0d760c833b8fe32f7547563558f83d235d4fa27bd899ddd7d8'
+ORIGINAL_NATIVE_SHA = '0f6b40dce786a964dd8616e12cdbf51c9c9fb2c4b255e147c9df142a53d3c294'
 UNIT_HASHES = {
     'corrected-contract-v3-PROPOSAL.json':'62a00947187fa58b2815b13877a2c15a94ecb588c8d5fc06ca46aceb1cc24dde',
     'corrected-history-composition-contract-v3-PROPOSED.md':'04ab09c4094a35e256c4cb6642f54cd24c22f58b166ad013e29f7470953ed943',
@@ -180,6 +188,9 @@ def append(path, kind, frame, operation, repo, values):
         payload=json.loads(values[0]);require(payload['admission'] is False,'observation_not_authority')
     elif kind == 'scalar_seam_observation':
         payload=dict(status=int(values[0]),original_gate='single_best_base_required',admission=False)
+    elif kind == 'span_link':
+        require(previous is None and not frame and not operation,'separate_supplemental_trace')
+        payload=json.loads(values[0]);require(payload['admission'] is False,'span_not_admission')
     else: raise Rejected('unknown_event_kind')
     e=dict(schema=SCHEMA,sequence=sequence,previous=previous['digest'] if previous else '0'*64,
         kind=kind,frame=identity if kind=='frame_enter' else frame or None,
@@ -281,11 +292,141 @@ def dag_dispositions(repo, events):
     return result
 
 
+def span_origin(repo, original_path, original_native_path, current_native_path):
+    """Fixed old observation is provenance, never an admission record.
+
+    Only this exact missing two-node span is permitted. Current native pins
+    must be identical to the observed H4 context; a newer H5 is separate work.
+    """
+    raw=Path(original_path).read_bytes();require(sha(raw)==ORIGINAL_TRACE_SHA,'fixed_original_trace_hash')
+    events=[json.loads(v) for v in raw.splitlines()];previous='0'*64
+    for sequence,e in enumerate(events,1):
+        value=dict(e);digest=value.pop('digest')
+        require(e['sequence']==sequence and e['previous']==previous and sha(canonical(value))==digest,'original_append_only_chain');previous=digest
+    reference='F1/'+SPAN_AGGREGATE+'/2'
+    operation=next(e for e in events if e['kind']=='operation_begin' and e['operation']==reference)
+    frame=next(e for e in events if e['kind']=='frame_enter' and e['payload']['id']==operation['frame'])
+    classified=next(e for e in events if e['kind']=='classification' and e['operation']==reference)
+    value=operation['payload'];parents=git(repo,'rev-list','--parents','-n','1',SPAN_AGGREGATE).decode().split()[1:]
+    require(len(parents)==2 and value['ordered_parents']==parents and value['first_parent']==parents[0] and value['parent_index']==2 and parents[1]==SPAN_HEAD,'fixed_aggregate_ordered_parents')
+    require(value['boundary']==SPAN_BASE and value['source_head']==SPAN_HEAD,'fixed_aggregate_source_span')
+    require(git(repo,'merge-base','--all',parents[0],SPAN_HEAD).decode().splitlines()==[SPAN_BASE],'actual_aggregate_boundary')
+    require(git(repo,'rev-list','--first-parent','--reverse',SPAN_BASE+'..'+SPAN_HEAD).decode().splitlines()==SPAN_NODES,'exact_two_internal_nodes')
+    require(frame['payload']['partition_source_history']=='false','original_aggregate_not_a_child')
+    require(classified['payload']['classifier']['producer_sha256']==ORIGINAL_PRODUCER_SHA and classified['payload']['classifier']['sha256']==classifier_binding()['sha256'],'fixed_original_classifier')
+    require(classified['payload']['trigger']==classify(classified['payload']['unapproved_delta']['raw'].splitlines()),'observed_aggregate_raw_classification')
+    require(value['delta']==raw_binding(git(repo,'diff','--name-only',SPAN_BASE,SPAN_HEAD)),'original_aggregate_delta')
+    old_raw=Path(original_native_path).read_bytes();require(sha(old_raw)==ORIGINAL_NATIVE_SHA,'fixed_original_native_context')
+    old=json.loads(old_raw);current_raw=Path(current_native_path).read_bytes();current=json.loads(current_raw)
+    require({k:v for k,v in old.items() if k not in ('source','target')}=={k:v for k,v in current.items() if k not in ('source','target')},'unchanged_inherited_native_pins')
+    target=git(repo,'rev-parse','HEAD').decode().strip();target_parents=git(repo,'rev-list','--parents','-n','1',target).decode().split()[1:]
+    require(current['target']==target and target_parents==[current['base'],current['source']],'actual_supplemental_current_target')
+    require(git(repo,'rev-parse',target+'^{tree}').strip()==git(repo,'rev-parse',current['source']+'^{tree}').strip(),'supplemental_source_result_parity')
+    allowed={'scripts/ci/f13_f54_history.py','scripts/ci/f13_f54_history_test.py','scripts/ci/voice-db-runtime-provisioning-contract_test.sh','.agent/execplans/native-p3-master-source.md'}
+    require(set(git(repo,'diff','--name-only',PROTOTYPE_BASE,current['source']).decode().splitlines())<=allowed,'no_foreign_context_or_pin_drift')
+    retained=[e for e in events if e['kind']=='row_committed' and e['operation']==reference]
+    require([e['payload']['path'] for e in retained]==value['paths'],'original_aggregate_all_committed_paths')
+    return dict(type='F54_FIXED_AGGREGATE_SPAN_OBSERVATION',original_trace_sha256=ORIGINAL_TRACE_SHA,
+        original_operation=operation,original_frame=frame,original_classification=classified,
+        original_committed=retained,original_native_sha256=ORIGINAL_NATIVE_SHA,current_native=current,
+        current_native_sha256=sha(current_raw),supplemental_classifier=classifier_binding(),
+        base=SPAN_BASE,head=SPAN_HEAD,allow_direct_followup='false',partition_source_history='true',admission=False)
+
+
+def validate_aggregate_span(repo, original_path, span_path, span_sha, original_native_path, current_native_path):
+    origin=span_origin(repo,original_path,original_native_path,current_native_path)
+    raw=Path(span_path).read_bytes();require(sha(raw)==span_sha,'supplemental_trace_raw_hash')
+    events=[json.loads(v) for v in raw.splitlines()]
+    require(events and events[0]['kind']=='span_link' and events[0]['payload']==origin,'exact_observed_aggregate_link')
+    require(sum(e['kind']=='span_link' for e in events)==1,'one_supplemental_link')
+    verified=validate_trace(repo,span_path,span_sha)
+    entered=[e for e in events if e['kind']=='frame_enter'];exits=[e for e in events if e['kind']=='frame_exit']
+    require(len(entered)==len(exits)==1 and entered[0]['payload']['parent'] is None,'separate_exact_supplemental_frame')
+    frame=entered[0]['payload'];identity=frame['id']
+    require([frame['base'],frame['target'],frame['allow_direct_followup'],frame['partition_source_history']]==[SPAN_BASE,SPAN_HEAD,'false','true'],'exact_recursive_span_parameters')
+    require(exits[0]['payload']['exit']==0 and not verified['failures'],'supplemental_gate_failure_keeps_hold')
+    operations=[e for e in events if e['kind']=='operation_begin']
+    require([e['payload']['commit'] for e in operations]==SPAN_NODES and all(e['payload']['parent_index']==1 for e in operations),'complete_actual_internal_operations')
+    original_owner_rows={e['payload']['path']:e for e in origin['original_committed']}
+    obligations={}
+    for name,value in verified['ledger'][identity]['paths'].items():
+        retained=original_owner_rows.get(name)
+        if retained:
+            parts=row(retained['payload']['row'])
+            require(parts[2]==SPAN_AGGREGATE and parts[4:6]==[SPAN_BASE,SPAN_HEAD],'original_integration_owner_is_not_replaced')
+            require(entry_binding(repo,SPAN_HEAD,name)==entry_binding(repo,operations[-1]['payload']['commit'],name),'exact_source_content_lineage')
+        obligations[name]=dict(aggregate=value['aggregate'] or bool(retained and any(row(x)[1]=='true' for x in retained['payload']['retained_rows'])),
+            internal_evidence=value['evidence'],original_aggregate_row=retained,
+            hidden_from_net_delta=retained is None)
+    dispositions=[dict(node=e['payload']['commit'],parent_index=1,disposition='aggregate_span_qualified',
+        original_trace_sha256=ORIGINAL_TRACE_SHA,aggregate_reference=origin['original_operation']['operation'],
+        supplemental_trace_sha256=span_sha,frame=identity,operation_reference=e['operation'],
+        classification_reference=next(x['digest'] for x in events if x['kind']=='classification' and x['operation']==e['operation']),
+        completed_frame_reference=exits[0]['digest']) for e in operations]
+    return dict(type='F54_FIXED_AGGREGATE_SPAN_QUALIFICATION',original_trace_sha256=ORIGINAL_TRACE_SHA,
+        supplemental_trace_sha256=span_sha,original_owner=SPAN_AGGREGATE,dispositions=dispositions,
+        obligations=obligations,verified_supplemental=verified,admission=False)
+
+
+def consume_span_aggregate(verified, name, actual_trigger):
+    value=verified['obligations'][name]
+    require(actual_trigger in ('true','false') and (actual_trigger=='true')==value['aggregate'],'aggregate_span_consumer_must_keep_internal_taint')
+    require(value['internal_evidence'],'actual_span_obligations_consumed')
+    return dict(path=name,aggregate=value['aggregate'],evidence=value,
+        supplemental_trace_sha256=verified['supplemental_trace_sha256'],admission=False)
+
+
+def observe_qualified_unit(repo, main_path, main_sha, original_path, span_path, span_sha, original_native_path, current_native_path):
+    """Consume two source-specific actual traces, without merging their rows.
+
+    Only the exact two missing nodes may obtain a supplemental disposition.
+    Original f54 remains attempted/HOLD and original integration rows remain
+    the only outer rows; internal owners are referenced evidence only.
+    """
+    main=validate_trace(repo,main_path,main_sha)
+    span=validate_aggregate_span(repo,original_path,span_path,span_sha,original_native_path,current_native_path)
+    events=[json.loads(v) for v in Path(main_path).read_bytes().splitlines()]
+    original_events=[json.loads(v) for v in Path(original_path).read_bytes().splitlines()]
+    reference='F1/'+SPAN_AGGREGATE+'/2'
+    old=next(e for e in original_events if e['kind']=='operation_begin' and e['operation']==reference)
+    current=next(e for e in events if e['kind']=='operation_begin' and e['operation']==reference)
+    require(current['payload']==old['payload'],'current_aggregate_exact_original_operation')
+    old_rows=[e['payload'] for e in original_events if e['kind']=='row_committed' and e['operation']==reference]
+    current_rows=[e['payload'] for e in events if e['kind']=='row_committed' and e['operation']==reference]
+    require(current_rows==old_rows,'original_aggregate_owners_maps_flags_unchanged')
+    coverage=dag_dispositions(repo,events)
+    replacements={v['node']:v for v in span['dispositions']}
+    require(set(replacements)==set(SPAN_NODES),'complete_fixed_span_dispositions')
+    for value in coverage:
+        if value['node'] in replacements:
+            require(len(value['operations'])==1 and value['operations'][0]['disposition']=='UNREACHED','supplement_only_original_missing_node')
+            value['operations']=[dict(replacements[value['node']],current_aggregate_trace_sha256=main_sha,
+                current_aggregate_operation_reference=reference)]
+    root=main['ledger']['F1'];required={name:dict(aggregate=v['aggregate'],outer_evidence=v['evidence'],internal_evidence=None)
+        for name,v in root['paths'].items()}
+    for name,value in span['obligations'].items():
+        item=required.setdefault(name,dict(aggregate=False,outer_evidence=[],internal_evidence=None))
+        item['aggregate']=item['aggregate'] or value['aggregate'];item['internal_evidence']=value
+    return dict(type='F54_FIXED_COMPLETE_UNIT_OBSERVATION',main_trace_sha256=main_sha,
+        supplemental_trace_sha256=span_sha,coverage=coverage,required_qualification=required,
+        outer_map_binding=root['map_binding'],outer_rows=root['rows'],main_failures=main['failures'],
+        original_owner=SPAN_AGGREGATE,qualification='HOLD',admission=False)
+
+
+def consume_unit_path(verified, name, actual_map, actual_trigger):
+    value=verified['required_qualification'][name]
+    require(verified['outer_map_binding']==dict(bytes=len(actual_map),sha256=sha(actual_map)) and actual_map.decode().splitlines()==verified['outer_rows'],'qualification_consumes_original_complete_outer_map')
+    require(actual_trigger in ('true','false') and (actual_trigger=='true')==value['aggregate'],'qualification_consumes_outer_and_internal_or')
+    require(value['outer_evidence'] or value['internal_evidence'],'qualification_consumes_full_owner_content_evidence')
+    return dict(path=name,aggregate=value['aggregate'],obligations=value,
+        main_trace_sha256=verified['main_trace_sha256'],supplemental_trace_sha256=verified['supplemental_trace_sha256'],admission=False)
+
+
 def validate_trace(repo, path, expected_sha, complete=False):
     raw=Path(path).read_bytes();require(sha(raw)==expected_sha,'trace_raw_hash')
     events=[json.loads(v) for v in raw.splitlines()];require(events,'nonempty_producer_trace')
     previous='0'*64;frames={};stack=[];operations={};attempts={};classified={};pending={};cumulative={};child_flags={};child_rows={};frame_rows={};carry={};failures=[];observed=set()
-    expected_operations={};seen_operations={};visited={};committed={};maps={};children={}
+    expected_operations={};seen_operations={};visited={};committed={};maps={};children={};obligations={}
     def map_binding(frame):
         raw=''.join('\t'.join(parts)+'\n' for parts in maps[frame]).encode()
         return dict(bytes=len(raw),sha256=sha(raw))
@@ -310,6 +451,10 @@ def validate_trace(repo, path, expected_sha, complete=False):
         value=dict(e);digest=value.pop('digest')
         require(e['sequence']==sequence and e['previous']==previous and sha(canonical(value))==digest,'append_only_chain');previous=digest
         kind=e['kind'];v=e['payload'];frame=e['frame'];op=e['operation']
+        if kind=='span_link':
+            require(sequence==1 and not frames and frame is None and op is None and v['admission'] is False,'separate_span_link_before_execution')
+            require(v['supplemental_classifier']==classifier_binding(),'supplemental_collector_context')
+            continue
         if kind=='frame_enter':
             identity=v['id'];require(identity not in frames and v['parent']==(stack[-1] if stack else None),'frame_parent_and_order')
             require((not v['parent'] and v['parent_operation'] is None) or v['parent_operation'] in attempts,'actual_parent_operation_reference')
@@ -402,16 +547,25 @@ def validate_trace(repo, path, expected_sha, complete=False):
             else:
                 require(incoming[4:6]==[operation['boundary'],operation['source_head']],'actual_incoming_source_boundary')
                 require(incoming[1]==('true' if carry.get(op,False) or classified[op]['trigger']=='true' else 'false'),'actual_path_trigger_carry')
-            pending[key]=dict(prior=prior,incoming=incoming,op=op,after=None)
+            pending[key]=dict(prior=prior,incoming=incoming,op=op,after=None,removed=False)
             previous_rows=[row(value) for value in v['prior_rows']]
             require((previous_rows[-1] if previous_rows else None)==prior,'actual_prior_row_order')
             cumulative[key]=cumulative.get(key,False) or any(p[1]=='true' for p in previous_rows) or incoming[1]=='true' or classified[op]['trigger']=='true' or child_flags.get((op,v['path']),False)
+            obligations.setdefault(key,[]).append(dict(operation=op,classification=classified[op],prior_rows=v['prior_rows'],incoming=v['incoming'],child_aggregate=child_flags.get((op,v['path']),False)))
         elif kind in ('row_after','row_remove'):
             require(key in pending and pending[key]['op']==op,'pre_mutation_prior_reference')
             parts=row(v['row']);require(parts[6]==pending[key]['incoming'][6],'original_content_base')
-            require(parts[1]==('true' if cumulative[key] else 'false'),'cumulative_operation_or')
-            if kind=='row_after':pending[key]['after']=parts;carry[op]=parts[1]=='true'
-            else:maps[frame]=[x for x in maps[frame] if x[0]!=v['path']]
+            if kind=='row_remove':
+                require(pending[key]['prior'] is not None and not pending[key]['removed'],'actual_single_reduction')
+                pending[key]['removed']=True;maps[frame]=[x for x in maps[frame] if x[0]!=v['path']]
+            else:
+                if not pending[key]['removed']:
+                    # An append keeps all prior flags/owners in the map. Its
+                    # original raw false flag must not be normalized to true.
+                    require(parts==pending[key]['incoming'],'original_raw_append_row')
+                else:
+                    require(parts[1]==pending[key]['incoming'][1] or (parts[1]=='true' and cumulative[key]),'no_fabricated_reduction_flag')
+                pending[key]['after']=parts;carry[op]=parts[1]=='true'
         elif kind=='row_committed':
             require(key in pending and pending[key]['after']==row(v['row']),'actual_committed_row')
             frame_rows[key]=row(v['row'])
@@ -424,8 +578,26 @@ def validate_trace(repo, path, expected_sha, complete=False):
     coverage=dag_dispositions(repo,events) if complete else []
     accepted={'visited_real_operation','shared_real_operation','exact_single_commit_source_of_real_operation'}
     require(not complete or (all(v['disposition'] in accepted for node in coverage for v in node['operations']) and not failures),'complete_33_real_producer_coverage_and_gates')
+    ledger={f:dict(map_binding=map_binding(f),rows=['\t'.join(x) for x in maps[f]],paths={
+        name:dict(aggregate=cumulative[(f,name)],evidence=obligations[(f,name)])
+        for owner,name in obligations if owner==f}) for f in frames}
     return dict(schema=SCHEMA,trace_sha256=expected_sha,frames=len(frames),operations=len(operations),failures=failures,
-        coverage=coverage,observed_qualification='COMPLETE' if complete else 'OBSERVED_PREFIX_ONLY',admission=False)
+        ledger=ledger,coverage=coverage,observed_qualification='COMPLETE' if complete else 'OBSERVED_PREFIX_ONLY',admission=False)
+
+
+def consume_aggregate(verified, frame, name, actual_map, actual_trigger):
+    """Consume the verified full ledger, never a last-row flag or sidecar bit.
+
+    CLI callers must validate the exact hashed trace in this process first.
+    This is prototype qualification evidence, not production admission.
+    """
+    ledger=verified['ledger'][frame];required=ledger['paths'][name]
+    require(ledger['map_binding']==dict(bytes=len(actual_map),sha256=sha(actual_map)),'consumed_complete_map_binding')
+    require(actual_map.decode().splitlines()==ledger['rows'],'consumed_exact_ordered_rows')
+    require(actual_trigger in ('true','false') and (actual_trigger=='true')==required['aggregate'],'qualification_must_consume_aggregate_or')
+    require(required['evidence'],'consumed_owner_content_obligations')
+    return dict(trace_sha256=verified['trace_sha256'],frame=frame,path=name,
+        aggregate=required['aggregate'],evidence=required['evidence'],map_binding=ledger['map_binding'],admission=False)
 
 
 def main():
@@ -439,6 +611,9 @@ def main():
         if command=='boundary':print(json.dumps(exact_boundary(*args)));return 0
         if command=='composition':print(json.dumps(composition(*args)));return 0
         if command=='unit':print(json.dumps(load_unit(*args)));return 0
+        if command=='span-origin':print(json.dumps(span_origin(*args)));return 0
+        if command=='span-validate':print(json.dumps(validate_aggregate_span(*args)));return 0
+        if command=='unit-observe':print(json.dumps(observe_qualified_unit(*args)));return 0
         if command=='coverage':
             repo,path,digest=args;raw=Path(path).read_bytes();require(sha(raw)==digest,'coverage_trace_raw_hash')
             events=[json.loads(v) for v in raw.splitlines()]
@@ -446,6 +621,9 @@ def main():
             print(json.dumps(dict(trace_sha256=digest,dispositions=dag_dispositions(repo,events),admission=False)));return 0
         if command=='validate':
             repo,path,digest,*flags=args;print(json.dumps(validate_trace(repo,path,digest,bool(flags))));return 0
+        if command=='consume':
+            repo,path,digest,frame,name,map_path,trigger=args
+            print(json.dumps(consume_aggregate(validate_trace(repo,path,digest),frame,name,Path(map_path).read_bytes(),trigger)));return 0
         raise Rejected('prototype_command')
     except (Rejected,ValueError,KeyError,TypeError,OSError) as exc:
         print('F54 observation rejected: '+str(exc),file=sys.stderr);return 1
