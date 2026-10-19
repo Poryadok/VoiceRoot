@@ -32,13 +32,13 @@ func newJoinGroupFixture(t *testing.T) joinGroupFixture {
 	space, err := st.CreateSpace(ctx, owner, "Exact review group", "", "public")
 	require.NoError(t, err)
 	applyEntryPolicyMigration(t, st)
-	// Source order matters:32 must not require future35/36 tables to exist.
+	applyJoinAttemptMigration(t, st)
+	applyJoinOperationMigration(t, st)
+	// This forward cohort applies after the actual private35/36 ledgers.
 	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/space_db/000037_join_request_groups_forward.up.sql"))
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(raw))
 	require.NoError(t, err)
-	applyJoinAttemptMigration(t, st)
-	applyJoinOperationMigration(t, st)
 	_, err = st.SetEntryPolicy(ctx, SetEntryPolicyInput{SpaceID: space.ID, ActorProfileID: owner, OperationID: uuid.New(), ExpectedVersion: 1, Policy: entrypolicy.Policy{SchemaVersion: 1, RequireManualApproval: true, Questions: []entrypolicy.Question{}}})
 	require.NoError(t, err)
 	return joinGroupFixture{ctx: ctx, store: st, space: space.ID, owner: owner, account: uuid.New(), profile: uuid.New()}
