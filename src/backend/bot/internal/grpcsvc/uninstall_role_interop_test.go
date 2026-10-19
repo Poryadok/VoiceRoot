@@ -42,6 +42,9 @@ func (c uninstallRoleLostACK) ApplyBotInstallationRemoval(ctx context.Context, q
 }
 
 func TestUninstallRoleActualParticipantLostACKRecovery(t *testing.T) {
+	mode := os.Getenv("VOICE_BOT_ROLE_UNINSTALL_NONZERO")
+	require.True(t, mode == "" || mode == "1", "explicit fixture opt-in only")
+	nonzero := mode == "1"
 	dir := os.Getenv("VOICE_BOT_ROLE_UNINSTALL_HANDOFF_DIR")
 	if dir == "" {
 		t.Skip("requires owned source-only Role25/Space44 fixture")
@@ -70,7 +73,11 @@ func TestUninstallRoleActualParticipantLostACKRecovery(t *testing.T) {
 	require.True(t, ready.FixtureOnly)
 	require.Equal(t, 25, ready.RoleSchema)
 	require.Equal(t, 44, ready.SpaceSchema)
-	require.Equal(t, "eef1f09afb3e7c82565473e8ed894c312cacc0d3", ready.RoleSource)
+	expectedSource := "eef1f09afb3e7c82565473e8ed894c312cacc0d3"
+	if nonzero {
+		expectedSource = "d7932413187f60a5bdd245fddee9a649d10cebd0"
+	}
+	require.Equal(t, expectedSource, ready.RoleSource)
 	require.True(t, time.Now().Before(ready.ExpiresAt))
 	t.Cleanup(func() { require.NoError(t, os.WriteFile(ready.StopFile, []byte("stop"), 0600)) })
 	ca, err := os.ReadFile(ready.CAFile)
@@ -101,6 +108,10 @@ func TestUninstallRoleActualParticipantLostACKRecovery(t *testing.T) {
 	intent, err := st.PrepareInstallation(ctx, bot.ID, space, manager, nil)
 	require.NoError(t, err)
 	require.NoError(t, st.CompleteInstallation(ctx, intent, nil))
+	var seed *roleNonzeroSeed
+	if nonzero {
+		seed = seedActualRoleCleanupTarget(t, dir, bot, intent)
+	}
 	q := &botv1.UninstallBotFromSpaceRequest{BotId: bot.ID.String(), SpaceId: space.String()}
 	body, err := (proto.MarshalOptions{Deterministic: true}).Marshal(q)
 	require.NoError(t, err)
@@ -153,8 +164,14 @@ func TestUninstallRoleActualParticipantLostACKRecovery(t *testing.T) {
 			var response rolev1.ApplyBotInstallationRemovalResponse
 			require.NoError(t, proto.Unmarshal(child.ReceiptBytes, &response))
 			require.Equal(t, "space_uninstall", response.Receipt.Purpose)
-			require.Zero(t, response.Receipt.DeletedRoleCount, "fixture has no Bot-created Role rows; no deletion-effect claim")
-			require.Zero(t, response.Receipt.RemovedAssignmentCount)
+			if nonzero {
+				require.EqualValues(t, 1, response.Receipt.DeletedRoleCount)
+				require.EqualValues(t, 2, response.Receipt.RemovedAssignmentCount)
+				checkActualRoleCleanupTarget(t, dir, *seed, child.EffectID.String(), response.Receipt.ReceiptId, root.OperationID.String())
+			} else {
+				require.Zero(t, response.Receipt.DeletedRoleCount, "fixture has no Bot-created Role rows; no deletion-effect claim")
+				require.Zero(t, response.Receipt.RemovedAssignmentCount)
+			}
 		}
 	}
 	current, err := st.GetBotByID(ctx, bot.ID)

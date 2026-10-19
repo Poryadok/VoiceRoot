@@ -480,3 +480,19 @@ not public Gateway/Auth proof. Bot short220 passes/238 test integration skips
 plus2 package skips; scoped vet/full build0. First4.832s missing-column failure
 was the existing test helpers omitting new013; both migration lists now include
 it, and the failure log is retained as fixture setup evidence.
+
+The original183 fixture-only d793241 successor now closes the separate nonzero
+Role target-selection seam. Actual caller6.657s/provider50.630s pass without
+skips, scoped caller vet0. No provider SELFTEST runs. After real Bot Create and
+PrepareInstallation, the exact persisted Bot/actor/Space/installation/add-op/
+generation tuple configures the private fixture. The real Bot012 root/worker
+then sends its signed cleanup; lost ACK, corrupt purpose and fresh-JWT exact
+replay retain the original receipt counts1 created role/2 assignments. Only
+after Bot validates/persists that receipt does the provider independently check
+its own committed request/receipt, removed target rows, preserved human/system
+Member/Owner controls and one immutable operation. JSON is setup/synchronization,
+never cleanup authority. Bot stays live/no global root and replacement admission
+remains possible. Source d793241 uses the same qualified Space44/a36 input;
+native cancellation/initiating facts remain controlled, recovery SAME Pool and
+manual equivalent mTLS. This closes the nonzero producer/receiver effect risk;
+it does not qualify public/current46/Purge/post30day/full-BE170 composition.
