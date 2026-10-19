@@ -72,7 +72,7 @@ func ConfigFromEnv() (Config, string, bool, error) {
 		return Config{}, "", false, nil
 	}
 	if listen == "" || cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || cfg.ClientCAFile == "" || cfg.JWKSURL == "" || cfg.JWKSCAFile == "" || cfg.ReplayAddr == "" || (cfg.JWKSClientCertFile == "") != (cfg.JWKSClientKeyFile == "") {
-		return Config{}, "", true, errors.New("Realtime lifecycle principal configuration is incomplete")
+		return Config{}, "", true, errors.New("realtime lifecycle principal configuration is incomplete")
 	}
 	return cfg, listen, true, nil
 }
@@ -113,11 +113,11 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		return nil, errors.New("chat principal issuer and audience are required")
 	}
 	if cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || cfg.ClientCAFile == "" || cfg.JWKSURL == "" || cfg.ReplayAddr == "" {
-		return nil, errors.New("Realtime lifecycle principal configuration is incomplete")
+		return nil, errors.New("realtime lifecycle principal configuration is incomplete")
 	}
 	jwksURL, err := url.Parse(cfg.JWKSURL)
 	if err != nil || jwksURL.Scheme != "https" || jwksURL.Host == "" || jwksURL.User != nil || jwksURL.Fragment != "" {
-		return nil, errors.New("Realtime lifecycle principal JWKS URL must be an HTTPS endpoint")
+		return nil, errors.New("realtime lifecycle principal JWKS URL must be an HTTPS endpoint")
 	}
 	serverTLS, err := loadServerTLS(cfg.TLSCertFile, cfg.TLSKeyFile, cfg.ClientCAFile)
 	if err != nil {
