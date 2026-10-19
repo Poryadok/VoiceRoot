@@ -3563,9 +3563,10 @@ f13_guarded_correction_qualified() {
 
 f13_collect_develop_contributions() {
   if [[ -n "${f13_f54_trace_file:-}" && "${f13_f54_running:-false}" != true ]]; then
-    local f13_f54_parent="${f13_f54_frame:-}" f13_f54_frame='' f13_f54_operation=''
+    local f13_f54_parent="${f13_f54_frame:-}" f13_f54_parent_operation="${f13_f54_operation:-}"
+    local f13_f54_frame='' f13_f54_operation=''
     local f13_f54_running=true f13_f54_status=0
-    f13_f54_frame="$(f13_f54_trace_event frame_enter "$1" "${f13_f54_parent}" "$2" "$3" "${6:-false}" "${7:-false}" "$4")" || return 1
+    f13_f54_frame="$(f13_f54_trace_event frame_enter "$1" "${f13_f54_parent}" "$2" "$3" "${6:-false}" "${7:-false}" "$4" "${f13_f54_parent_operation}")" || return 1
     f13_collect_develop_contributions "$@" || f13_f54_status=$?
     f13_f54_trace_event frame_exit "$1" "${f13_f54_status}" "$4" "${5:-}" || return 1
     return "${f13_f54_status}"
@@ -3627,6 +3628,8 @@ f13_collect_develop_contributions() {
     if ((parent_count == 2)) && [[ "${commit_line[2]}" == "${base}" ]]; then
       if [[ -n "${f13_f54_trace_file:-}" ]]; then
         : >"${TMP_DIR}/f54-sync-empty-delta"
+        f13_f54_operation="$(f13_f54_trace_event operation_attempt "${repo}" "${commit}" 2 \
+          "${commit_line[1]}" "${base}" sync)" || return 1
         f13_f54_operation="$(f13_f54_trace_event operation_begin "${repo}" "${commit}" 2 \
           "${commit_line[1]}" "${base}" "${base}" "${base}" sync "${TMP_DIR}/f54-sync-empty-delta")" || return 1
       fi
@@ -3681,6 +3684,9 @@ f13_collect_develop_contributions() {
     is_direct=false
     if ((parent_count >= 2)); then
       source_head="${commit_line[${source_parent_index}]}"
+      if [[ -n "${f13_f54_trace_file:-}" ]]; then
+        f13_f54_operation="$(f13_f54_trace_event operation_attempt "${repo}" "${commit}" "${source_parent_index}" "${first_parent}" "${source_head}" merge)" || return 1
+      fi
       source_base_file="${TMP_DIR}/f13-source-base-${contribution_id}"
       f13_resolve_source_base "${repo}" "${first_parent}" "${source_head}" "${source_base_file}" || {
         if [[ -n "${f13_f54_trace_file:-}" ]]; then
@@ -3700,6 +3706,9 @@ f13_collect_develop_contributions() {
     else
       is_direct=true
       source_head="${commit}"
+      if [[ -n "${f13_f54_trace_file:-}" ]]; then
+        f13_f54_operation="$(f13_f54_trace_event operation_attempt "${repo}" "${commit}" "${source_parent_index}" "${first_parent}" "${source_head}" direct)" || return 1
+      fi
       source_base="${first_parent}"
       source_base_candidates="${source_base}"
       git -C "${repo}" diff --name-only "${source_base}" "${source_head}" 2>/dev/null >"${TMP_DIR}/f13-source-delta-${contribution_id}" || {
@@ -4080,6 +4089,7 @@ f13_collect_develop_contributions() {
 
   # Historical source versions may be superseded by later direct commits in
   # this PR. The final owner must still retain the exact guarded tree entry.
+  f13_f54_operation=''
   for path in "${!guarded_entries[@]}"; do
     if [[ -n "${f13_f54_trace_file:-}" ]]; then
       f13_f54_trace_event final_gate_before "${repo}" "${path}" "${output}" || return 1

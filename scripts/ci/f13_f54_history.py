@@ -19,9 +19,15 @@ O = '4d943fac27fd247d136d84ae145440e54485d3ab'
 BASES = ['f3feccef198b444699e66c960b84dc9c77ba4bc0', '516e6d9d92f477bbf09b2c66ef2476b6956a9b15']
 TREE = '4c24a19991d52acb2507590d4c95ff19c983d359'
 SOURCE = 'd38b699d3d3d641fe2415ed7f841dfe1f7360bc1'
-SCHEMA = 'F54-PRODUCER-OBSERVATION-v1'
+SCHEMA = 'F54-PRODUCER-OBSERVATION-v2'
 ROOT = Path(__file__).resolve().parents[2]
 PRODUCTION_AUTHORITY = False
+UNIT_HASHES = {
+    'corrected-contract-v3-PROPOSAL.json':'62a00947187fa58b2815b13877a2c15a94ecb588c8d5fc06ca46aceb1cc24dde',
+    'corrected-history-composition-contract-v3-PROPOSED.md':'04ab09c4094a35e256c4cb6642f54cd24c22f58b166ad013e29f7470953ed943',
+    'rudeus410-scalar-adjudication.md':'a4ae57d62556172567844319c00475b25cf61f9276a5580794af17293daa7ffc',
+    'contract-PROPOSAL.json':'f8785bc3cc33dfb2ef68f0f3160d9e8862b1e82ce78fdea7ca65b409414edb33',
+    'proposal.json':'fb1d3de95269e4e1bd860aa14b6d59d46dec85c87e5783dc3872c2807e39206a'}
 
 
 class Rejected(ValueError): pass
@@ -114,15 +120,21 @@ def append(path, kind, frame, operation, repo, values):
     payload = {}
     identity = ''
     if kind == 'frame_enter':
-        parent, start, target, allow, partition, output = values
+        parent, start, target, allow, partition, output, parent_operation = values
         identity = 'F' + str(sequence)
-        payload = dict(id=identity, parent=parent or None, repo=str(Path(repo).resolve()), base=start, target=target,
+        payload = dict(id=identity, parent=parent or None,parent_operation=parent_operation or None,repo=str(Path(repo).resolve()),base=start,target=target,
             allow_direct_followup=allow, partition_source_history=partition, output=output,
             first_parent_operations=git(repo,'rev-list','--first-parent','--reverse',start+'..'+target).decode().splitlines(),
             initial_map=file_binding(output))
     elif kind == 'frame_exit':
         code, output, category = values
         payload = dict(exit=int(code), final_map=file_binding(output), category=Path(category).read_text().strip() if category and Path(category).is_file() else None)
+    elif kind == 'operation_attempt':
+        commit,index,first,source,classification=values
+        identity=frame+'/'+commit+'/'+index
+        parents=git(repo,'rev-list','--parents','-n','1',commit).decode().split()[1:]
+        payload=dict(id=identity,commit=commit,parent_index=int(index),ordered_parents=parents,first_parent=first,
+            source_head=source,classification=classification,candidates=git(repo,'merge-base','--all',first,source).decode().splitlines())
     elif kind == 'operation_begin':
         commit, index, first, boundary, source, candidates, classification, delta = values
         identity = frame + '/' + commit + '/' + index
@@ -167,7 +179,7 @@ def append(path, kind, frame, operation, repo, values):
     else: raise Rejected('unknown_event_kind')
     e=dict(schema=SCHEMA,sequence=sequence,previous=previous['digest'] if previous else '0'*64,
         kind=kind,frame=identity if kind=='frame_enter' else frame or None,
-        operation=identity if kind=='operation_begin' else operation or None,payload=payload)
+        operation=identity if kind in ('operation_attempt','operation_begin') else operation or None,payload=payload)
     e['digest']=sha(canonical(e))
     with p.open('a',encoding='utf-8',newline='\n') as stream: stream.write(json.dumps(e,sort_keys=True)+'\n')
     return identity
@@ -193,10 +205,82 @@ def composition(repo, boundary, first, source, name, result):
         history_boundary=O,result_tree=TREE,path=name,result_entry=raw_binding(result),admission=False)
 
 
+def load_unit(repo, directory):
+    """Observe the fixed reviewed factual packet, not an approved source record.
+
+    Directory selects transport location only; no caller-selected hash, tuple,
+    source/context or flag is accepted. Existing 177 source reviews are reused
+    through exact byte bindings; no new semantic/runtime acceptance is claimed.
+    """
+    folder=Path(directory);loaded={}
+    for name,digest in UNIT_HASHES.items():
+        path=folder/name;require(path.is_file(),'fixed_unit_file')
+        data=path.read_bytes();require(sha(data)==digest,'fixed_unit_raw_hash')
+        if name.endswith('.json'):loaded[name]=json.loads(data)
+    contract=loaded['contract-PROPOSAL.json'];packet=loaded['proposal.json']
+    exact_boundary(repo,contract['merge'],*contract['ordered_parents'])
+    require(contract['complete_best_bases']==BASES and packet['older_common_base']==O,'unit_complete_bases')
+    require(packet['current_consumer']==SOURCE and len(contract['artifacts'])==177,'fixed_source_context_and_artifacts')
+    require(len(packet['revisions'])==9 and len(packet['entries'])==41,'complete_nine_version_unit')
+    require(git(repo,'diff','--name-only',*BASES).decode().splitlines()==packet['all_base_diff_paths'],'complete_41_base_paths')
+    require([e['path'] for e in packet['entries']]==packet['all_base_diff_paths'],'complete_ordered_entry_unit')
+    for entry in packet['entries']:
+        require(set(entry['versions'])==set(packet['revisions']),'all_nine_versions')
+        for label,revision in packet['revisions'].items():
+            actual=tree_entry(repo,revision,entry['path'])
+            expected=entry['versions'][label]
+            if expected is None:require(actual=='','actual_absence')
+            else:
+                require(actual==expected['mode']+' '+expected['type']+' '+expected['oid']+'\t'+entry['path']+'\0','actual_versioned_entry')
+    names=set()
+    for artifact in contract['artifacts']:
+        name=artifact['name'];require(name not in names and Path(name).name==name,'unique_literal_artifact')
+        names.add(name);path=folder/name;require(path.is_file(),'complete_177_artifacts')
+        data=path.read_bytes();require(len(data)==artifact['bytes'] and sha(data)==artifact['sha256'],'exact_artifact_bytes')
+    require(git(repo,'rev-parse',M+'^{tree}').decode().strip()==TREE,'unit_committed_whole_tree')
+    carrier=git(repo,'rev-parse','HEAD').decode().strip()
+    changed=git(repo,'diff','--name-only',SOURCE,carrier).decode().splitlines()
+    return dict(type='F54_REVIEWED_SOURCE_FACTS_OBSERVATION',source_context=SOURCE,observer_carrier=carrier,
+        changed_source_context_paths=[v for v in changed if v in packet['all_base_diff_paths']],paths=41,versions=9,
+        artifacts=177,unit_raw_hash=UNIT_HASHES['contract-PROPOSAL.json'],ruling_raw_hash=UNIT_HASHES['rudeus410-scalar-adjudication.md'],admission=False)
+
+
+def dag_dispositions(repo, events):
+    """Every raw node gets a factual disposition, never an invented owner row.
+
+    Absence of a real producer operation stays UNREACHED. Merely appearing in
+    an ancestor range or equal endpoint is not sufficient to label it covered.
+    Shared visits reference the actual same immutable commit/parent operation.
+    """
+    nodes=git(repo,'rev-list','--topo-order','--reverse',M,'^'+O).decode().splitlines()
+    require(len(nodes)==33,'fixed_complete_33_dag')
+    operations=[e for e in events if e.get('kind')=='operation_begin']
+    attempts=[e for e in events if e.get('kind')=='operation_attempt']
+    result=[]
+    for node in nodes:
+        parents=git(repo,'rev-list','--parents','-n','1',node).decode().split()[1:]
+        observed=[e for e in operations if e['payload']['commit']==node]
+        expected=list(range(2,len(parents)+1)) if len(parents)>1 else [1]
+        per_parent=[]
+        for index in expected:
+            refs=[e['payload']['id'] for e in observed if e['payload']['parent_index']==index]
+            kind='shared_real_operation' if len(refs)>1 else 'visited_real_operation' if refs else 'UNREACHED'
+            if not refs and len(parents)==1:
+                refs=[e['payload']['id'] for e in operations if e['payload']['source_head']==node and e['payload']['boundary']==parents[0]]
+                if refs:kind='exact_single_commit_source_of_real_operation'
+            if not refs:
+                refs=[e['payload']['id'] for e in attempts if e['payload']['commit']==node and e['payload']['parent_index']==index]
+                if refs:kind='attempted_boundary_no_classification'
+            per_parent.append(dict(parent_index=index,disposition=kind,references=refs))
+        result.append(dict(node=node,ordered_parents=parents,ordered_parent_deltas=[dict(parent=p,
+            delta=raw_binding(git(repo,'diff','--name-only',p,node))) for p in parents],operations=per_parent))
+    return result
+
+
 def validate_trace(repo, path, expected_sha, complete=False):
     raw=Path(path).read_bytes();require(sha(raw)==expected_sha,'trace_raw_hash')
     events=[json.loads(v) for v in raw.splitlines()];require(events,'nonempty_producer_trace')
-    previous='0'*64;frames={};stack=[];operations={};classified={};pending={};cumulative={};failures=[];observed=set()
+    previous='0'*64;frames={};stack=[];operations={};attempts={};classified={};pending={};cumulative={};child_flags={};child_rows={};frame_rows={};carry={};failures=[];observed=set()
     for sequence,e in enumerate(events,1):
         require(set(e)=={'schema','sequence','previous','kind','frame','operation','payload','digest'} and e['schema']==SCHEMA,'producer_event_schema')
         value=dict(e);digest=value.pop('digest')
@@ -204,6 +288,7 @@ def validate_trace(repo, path, expected_sha, complete=False):
         kind=e['kind'];v=e['payload'];frame=e['frame'];op=e['operation']
         if kind=='frame_enter':
             identity=v['id'];require(identity not in frames and v['parent']==(stack[-1] if stack else None),'frame_parent_and_order')
+            require((not v['parent'] and v['parent_operation'] is None) or v['parent_operation'] in attempts,'actual_parent_operation_reference')
             actual=git(repo,'rev-list','--first-parent','--reverse',v['base']+'..'+v['target']).decode().splitlines()
             require(v['first_parent_operations']==actual,'actual_frame_operations');frames[identity]=v;stack.append(identity)
             continue
@@ -211,10 +296,25 @@ def validate_trace(repo, path, expected_sha, complete=False):
         if kind=='frame_exit':
             require(v['exit']!=0 or not any(key[0]==frame for key in pending),'row_without_commit')
             if v['exit']!=0: failures.append(dict(frame=frame,category=v['category']))
+            parent_operation=frames[frame]['parent_operation']
+            if parent_operation and v['exit']==0:
+                for (owner,name),flag in cumulative.items():
+                    if owner==frame:child_flags[(parent_operation,name)]=child_flags.get((parent_operation,name),False) or flag
+                for (owner,name),parts in frame_rows.items():
+                    if owner==frame:child_rows[(parent_operation,name)]=parts
             pending={key:value for key,value in pending.items() if key[0]!=frame}
             stack.pop();continue
+        if kind=='operation_attempt':
+            require(v['id']==op and op not in attempts and v['commit'] in frames[frame]['first_parent_operations'],'unique_actual_attempt')
+            parents=git(repo,'rev-list','--parents','-n','1',v['commit']).decode().split()[1:]
+            require(v['ordered_parents']==parents and v['first_parent']==parents[0],'actual_attempt_parents')
+            index=v['parent_index'];require(type(index) is int and 1<=index<=len(parents),'actual_attempt_index')
+            require(v['source_head']==(v['commit'] if len(parents)==1 else parents[index-1]),'actual_attempt_source')
+            require(v['candidates']==git(repo,'merge-base','--all',v['first_parent'],v['source_head']).decode().splitlines(),'actual_attempt_bases')
+            attempts[op]=v;continue
         if kind=='operation_begin':
             require(op==v['id'] and v['id'] not in operations and v['commit'] in frames[frame]['first_parent_operations'],'actual_unique_operation')
+            require(op in attempts and all(v[k]==attempts[op][k] for k in ('commit','ordered_parents','parent_index','first_parent','source_head')),'actual_attempt_before_begin')
             parents=git(repo,'rev-list','--parents','-n','1',v['commit']).decode().split()[1:]
             require(v['ordered_parents']==parents and v['first_parent']==parents[0],'actual_ordered_parents')
             index=v['parent_index'];require(type(index) is int and 1<=index<=len(parents),'parent_index')
@@ -240,27 +340,33 @@ def validate_trace(repo, path, expected_sha, complete=False):
         if kind=='row_before':
             prior=row(v['prior']);incoming=row(v['incoming'])
             require(key not in pending and incoming[0]==v['path'] and incoming[2]==operations[op]['commit'],'actual_incoming_operation')
+            operation=operations[op]
+            require(incoming[3]==operation['first_parent'] and incoming[7]==','.join(operation['candidates']),'actual_incoming_parent_and_bases')
+            require(incoming[6]==(prior[6] if prior else operation['first_parent']),'actual_pre_qualification_content_base')
+            if (op,v['path']) in child_rows:
+                parts=child_rows[(op,v['path'])]
+                require([incoming[i] for i in (1,4,5)]==[parts[i] for i in (1,4,5)],'actual_nested_source_row_reference')
+            else:
+                require(incoming[4:6]==[operation['boundary'],operation['source_head']],'actual_incoming_source_boundary')
+                require(incoming[1]==('true' if carry.get(op,False) or classified[op]['trigger']=='true' else 'false'),'actual_path_trigger_carry')
             pending[key]=dict(prior=prior,incoming=incoming,op=op,after=None)
             previous_rows=[row(value) for value in v['prior_rows']]
             require((previous_rows[-1] if previous_rows else None)==prior,'actual_prior_row_order')
-            cumulative[key]=cumulative.get(key,False) or any(p[1]=='true' for p in previous_rows) or incoming[1]=='true' or classified[op]['trigger']=='true'
+            cumulative[key]=cumulative.get(key,False) or any(p[1]=='true' for p in previous_rows) or incoming[1]=='true' or classified[op]['trigger']=='true' or child_flags.get((op,v['path']),False)
         elif kind in ('row_after','row_remove'):
             require(key in pending and pending[key]['op']==op,'pre_mutation_prior_reference')
             parts=row(v['row']);require(parts[6]==pending[key]['incoming'][6],'original_content_base')
             require(parts[1]==('true' if cumulative[key] else 'false'),'cumulative_operation_or')
-            if kind=='row_after':pending[key]['after']=parts
+            if kind=='row_after':pending[key]['after']=parts;carry[op]=parts[1]=='true'
         elif kind=='row_committed':
             require(key in pending and pending[key]['after']==row(v['row']),'actual_committed_row')
+            frame_rows[key]=row(v['row'])
             pending.pop(key)
         else:raise Rejected('unknown_trace_kind')
     require(not stack,'closed_frames')
-    dag=set(git(repo,'rev-list',M,'^'+O).decode().splitlines()) if complete else set()
-    coverage=[]
-    for node in sorted(dag):
-        refs=[key for key,v in operations.items() if v['commit']==node]
-        bases=[key for key,v in frames.items() if subprocess.run(['git','-C',str(repo),'merge-base','--is-ancestor',node,v['base']],capture_output=True).returncode==0]
-        coverage.append(dict(node=node,disposition='visited_operation' if refs else 'observed_frame_base' if bases else 'UNREACHED',references=refs or bases))
-    require(not complete or (len(dag)==33 and all(v['disposition']!='UNREACHED' for v in coverage) and not failures),'complete_33_real_producer_coverage_and_gates')
+    coverage=dag_dispositions(repo,events) if complete else []
+    accepted={'visited_real_operation','shared_real_operation','exact_single_commit_source_of_real_operation'}
+    require(not complete or (all(v['disposition'] in accepted for node in coverage for v in node['operations']) and not failures),'complete_33_real_producer_coverage_and_gates')
     return dict(schema=SCHEMA,trace_sha256=expected_sha,frames=len(frames),operations=len(operations),failures=failures,
         coverage=coverage,observed_qualification='COMPLETE' if complete else 'OBSERVED_PREFIX_ONLY',admission=False)
 
@@ -272,6 +378,12 @@ def main():
             path,kind,frame,op,repo,*values=args;print(append(path,kind,frame,op,repo,values));return 0
         if command=='boundary':print(json.dumps(exact_boundary(*args)));return 0
         if command=='composition':print(json.dumps(composition(*args)));return 0
+        if command=='unit':print(json.dumps(load_unit(*args)));return 0
+        if command=='coverage':
+            repo,path,digest=args;raw=Path(path).read_bytes();require(sha(raw)==digest,'coverage_trace_raw_hash')
+            events=[json.loads(v) for v in raw.splitlines()]
+            validate_trace(repo,path,digest)
+            print(json.dumps(dict(trace_sha256=digest,dispositions=dag_dispositions(repo,events),admission=False)));return 0
         if command=='validate':
             repo,path,digest,*flags=args;print(json.dumps(validate_trace(repo,path,digest,bool(flags))));return 0
         raise Rejected('prototype_command')

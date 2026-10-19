@@ -82,7 +82,7 @@ class ProducerTrace(unittest.TestCase):
     def test_rehashed_drop_reorder_forgery_and_raw_dag_do_not_substitute_trace(self):
         self.hidden_runtime(); p, out = self.collect(); self.assertEqual(p.returncode, 0, p.stderr)
         m = module(); original = [json.loads(v) for v in (out/'trace.jsonl').read_text().splitlines()]
-        for change in ('drop_classification', 'reorder', 'duplicate', 'flag', 'content_base', 'parent_index', 'raw_dag'):
+        for change in ('drop_classification', 'reorder', 'duplicate', 'flag', 'content_base', 'incoming_source', 'parent_index', 'raw_dag'):
             with self.subTest(change=change):
                 events = json.loads(json.dumps(original))
                 if change == 'drop_classification': events = [e for e in events if e['kind'] != 'classification']
@@ -92,12 +92,31 @@ class ProducerTrace(unittest.TestCase):
                 elif change == 'content_base':
                     e = next(e for e in events if e['kind']=='row_after'); parts=e['payload']['row']['raw'].split('\t');parts[6]=self.head
                     e['payload']['row'] = m.raw_binding('\t'.join(parts))
+                elif change == 'incoming_source':
+                    e=next(e for e in events if e['kind']=='row_before');parts=e['payload']['incoming']['raw'].split('\t');parts[5]='0'*40
+                    e['payload']['incoming']=m.raw_binding('\t'.join(parts))
                 elif change == 'parent_index': next(e for e in events if e['kind']=='operation_begin')['payload']['parent_index']=2
                 else: events=[dict(commit=self.first),dict(commit=self.head)]
                 path = out / (change + '.jsonl'); m.write_events(path, events)
                 with self.assertRaises((m.Rejected, KeyError, TypeError)):
                     m.validate_trace(self.repo,path,hashlib.sha256(path.read_bytes()).hexdigest())
         with self.assertRaises(m.Rejected): m.validate_trace(self.repo,out/'trace.jsonl','0'*64)
+
+    def test_side_frame_runtime_history_retains_parent_operation_and_true_proto_flag(self):
+        self.write('README','first lane\n');first=self.commit('first parent lane')
+        git(self.repo,'checkout','-qb','side',self.base);self.hidden_runtime()
+        source=self.head;git(self.repo,'checkout','-q',first)
+        git(self.repo,'merge','--no-ff','-qm','real side history merge',source)
+        p,out=self.collect(cross_scope=True);self.assertEqual(p.returncode,1,p.stderr)
+        events=[json.loads(v) for v in (out/'trace.jsonl').read_text().splitlines()]
+        child=next(e for e in events if e['kind']=='frame_enter' and e['payload']['parent'])
+        parent=next(e for e in events if e['kind']=='operation_begin' and e['frame']==child['payload']['parent'] and e['payload']['commit']==git(self.repo,'rev-parse','HEAD'))
+        self.assertEqual(child['payload']['parent_operation'],parent['payload']['id'])
+        final=next(v.split('\t') for v in (out/'map').read_text().splitlines() if v.startswith(PROTO+'\t'))
+        self.assertEqual(final[1],'true')
+        original_trigger=next(e for e in events if e['kind']=='classification' and e['operation']==parent['payload']['id'])
+        self.assertEqual(original_trigger['payload']['trigger'],'false')
+        m=module();self.assertFalse(m.validate_trace(self.repo,out/'trace.jsonl',hashlib.sha256((out/'trace.jsonl').read_bytes()).hexdigest())['admission'])
 
     def test_same_bytes_independent_owners_remain_a_duplicate_failure(self):
         self.write(PROTO, 'same final\n');self.write(RUNTIME,'package main\n// earlier true operation\n')
@@ -123,6 +142,30 @@ class ProducerTrace(unittest.TestCase):
         command='set -eu\n'+definitions()+f'\nTMP_DIR={shlex.quote(str(out))}\nf13_checkpoint_merge_tree_entry_matches {shlex.quote(str(self.repo))} {self.base} {p1} {p2} {PROTO} unused\n'
         p=subprocess.run(['bash','-c',command],capture_output=True,text=True)
         self.assertEqual(p.returncode,1,p.stderr)
+
+    def test_fixed_private_composition_observation_is_distinct_and_cannot_admit(self):
+        self.write(RUNTIME,'package main\n// A\n');a=self.commit('A runtime')
+        git(self.repo,'checkout','-qb','B',self.base);self.write(PROTO,'B\n');b=self.commit('B proto')
+        git(self.repo,'checkout','-q',a);git(self.repo,'merge','--no-ff','-qm','AB',b);p1=git(self.repo,'rev-parse','HEAD')
+        git(self.repo,'checkout','-q',b);git(self.repo,'merge','--no-ff','-qm','BA',a);p2=git(self.repo,'rev-parse','HEAD')
+        git(self.repo,'checkout','-q',p1);git(self.repo,'merge','--no-ff','-qm','actual composed M',p2);merge=git(self.repo,'rev-parse','HEAD')
+        m=module()
+        # In-memory fixture-only constants; no production file, ROOT pin or
+        # caller-selected record is edited or accepted.
+        m.M,m.P1,m.P2,m.O,m.BASES,m.TREE=merge,p1,p2,self.base,git(self.repo,'merge-base','--all',p1,p2).splitlines(),git(self.repo,'rev-parse',merge+'^{tree}')
+        history=m.exact_boundary(self.repo,merge,p1,p2)
+        raw=git(self.repo,'ls-tree',merge,'--',PROTO)
+        composition=m.composition(self.repo,self.base,p1,p2,PROTO,raw)
+        self.assertNotEqual(history['type'],composition['type'])
+        self.assertFalse(history['admission']);self.assertFalse(composition['admission']);self.assertFalse(m.PRODUCTION_AUTHORITY)
+        for args in ((merge,p2,p1),(p1,p1,p2)):
+            with self.assertRaises(m.Rejected):m.exact_boundary(self.repo,*args)
+        with self.assertRaises(m.Rejected):m.composition(self.repo,a,p1,p2,PROTO,raw)
+        with self.assertRaises(m.Rejected):m.composition(self.repo,self.base,p1,p2,PROTO,raw.replace('100644','100755'))
+        m.BASES.reverse()
+        with self.assertRaises(m.Rejected):m.exact_boundary(self.repo,merge,p1,p2)
+        unit=self.folder/'unit';unit.mkdir();(unit/'corrected-contract-v3-PROPOSAL.json').write_text('{}')
+        with self.assertRaises(m.Rejected):m.load_unit(self.repo,unit)
 
 
 if __name__ == '__main__': unittest.main()
