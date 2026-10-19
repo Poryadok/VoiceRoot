@@ -12,6 +12,10 @@ import (
 // directory; renaming the complete nonempty directory publishes its manifest.
 // A pre-existing snapshot is verified, never silently replaced or repaired.
 func PublishDirectory(parent string, manifest []byte, chunks map[string][]byte, expected Cut) (string, error) {
+	return publishDirectory(parent, manifest, chunks, expected, syncDirectory)
+}
+
+func publishDirectory(parent string, manifest []byte, chunks map[string][]byte, expected Cut, syncDir func(string) error) (string, error) {
 	if _, err := Parse(manifest, chunks, expected); err != nil {
 		return "", err
 	}
@@ -25,6 +29,11 @@ func PublishDirectory(parent string, manifest []byte, chunks map[string][]byte, 
 	final := filepath.Join(parent, "report-journal-"+expected.View.SnapshotID.String())
 	if _, err := os.Lstat(final); err == nil {
 		if _, err := ReadDirectory(final, expected); err != nil {
+			return "", err
+		}
+		// The previous attempt may have renamed successfully but failed or
+		// crashed before synchronizing the parent. Readable is not yet durable.
+		if err := syncDir(parent); err != nil {
 			return "", err
 		}
 		return final, nil
@@ -49,7 +58,7 @@ func PublishDirectory(parent string, manifest []byte, chunks map[string][]byte, 
 	if _, err := ReadDirectory(staging, expected); err != nil {
 		return "", err
 	}
-	if err := syncDirectory(staging); err != nil {
+	if err := syncDir(staging); err != nil {
 		return "", err
 	}
 	if err := os.Rename(staging, final); err != nil {
@@ -59,7 +68,7 @@ func PublishDirectory(parent string, manifest []byte, chunks map[string][]byte, 
 			return "", err
 		}
 	}
-	if err := syncDirectory(parent); err != nil {
+	if err := syncDir(parent); err != nil {
 		return "", err
 	}
 	return final, nil

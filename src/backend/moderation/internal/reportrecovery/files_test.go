@@ -1,6 +1,7 @@
 package reportrecovery
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -153,5 +154,41 @@ func TestInterruptedStagingAndConcurrentSameSnapshotPublication(t *testing.T) {
 	}
 	if _, err := PublishDirectory(parent, otherManifest, otherChunks, otherCut); err == nil {
 		t.Fatal("same snapshot UUID silently replaced with different bytes")
+	}
+}
+
+func TestPublicationRetryRequiresParentDurability(t *testing.T) {
+	parent := privateTempDir(t)
+	m, chunks, cut := fixture(t, fixtureView(), line(t, fixtureRecord()))
+	failedSync := errors.New("injected parent synchronization failure")
+	_, err := publishDirectory(parent, m, chunks, cut, func(path string) error {
+		if path == parent {
+			return failedSync
+		}
+		return syncDirectory(path)
+	})
+	if !errors.Is(err, failedSync) {
+		t.Fatalf("initial parent sync failure: %v", err)
+	}
+	final := filepath.Join(parent, "report-journal-"+cut.View.SnapshotID.String())
+	if _, err := ReadDirectory(final, cut); err != nil {
+		t.Fatalf("renamed bytes must be present before retry: %v", err)
+	}
+	// Existing readable bytes do not establish that the previous rename was
+	// durable. Retrying while parent synchronization still fails must fail too.
+	_, err = publishDirectory(parent, m, chunks, cut, func(string) error { return failedSync })
+	if !errors.Is(err, failedSync) {
+		t.Fatalf("retry bypassed parent durability: %v", err)
+	}
+	parentChecks := 0
+	path, err := publishDirectory(parent, m, chunks, cut, func(path string) error {
+		if path != parent {
+			t.Fatal("existing snapshot should synchronize only its parent")
+		}
+		parentChecks++
+		return syncDirectory(path)
+	})
+	if err != nil || path != final || parentChecks != 1 {
+		t.Fatalf("durable retry: %s %v checks=%d", path, err, parentChecks)
 	}
 }
