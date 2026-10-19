@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
 	"net"
@@ -24,11 +25,14 @@ type setup struct {
 	Config                             memberauthorityprincipal.Config
 }
 type reply struct {
-	SpaceID   string
-	Address   string
-	NodeID    string
-	Binding   *memberadmission.EnsureBinding
-	Published bool
+	SpaceID         string
+	Address         string
+	NodeID          string
+	Binding         *memberadmission.EnsureBinding
+	Published       bool
+	ServingLogin    string
+	SchemaVersion   int64
+	RegistryPresent bool
 }
 type command struct {
 	Action, RoleID string
@@ -62,12 +66,51 @@ func run() error {
 	if err = input.Decode(&next); err != nil {
 		return err
 	}
-	if next.Action != "prepare" {
+	unknownRegistry := next.Action == "serve_unknown"
+	if next.Action != "prepare" && !unknownRegistry {
 		return fmt.Errorf("prepare required")
 	}
-	intent, err := st.PrepareMemberAdmission(ctx, store.MemberAdmissionInput{OperationID: init.Operation, SpaceID: space.ID, AccountID: init.Account, ProfileID: init.Profile})
-	if err != nil {
-		return err
+	var binding *memberadmission.EnsureBinding
+	var servingLogin string
+	var schemaVersion int64
+	var registryPresent bool
+	if unknownRegistry {
+		// This branch intentionally never initializes the administrative registry.
+		// It is a denial oracle, not a substitute production cutover procedure.
+		login := "role_fixture_" + uuid.New().String()[:8]
+		quoted := pgx.Identifier{login}.Sanitize()
+		if _, err = pool.Exec(ctx, "CREATE ROLE "+quoted+" LOGIN PASSWORD 'isolated-role-fixture-only'"); err != nil {
+			return err
+		}
+		if _, err = pool.Exec(ctx, "GRANT USAGE ON SCHEMA public TO "+quoted+"; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO "+quoted); err != nil {
+			return err
+		}
+		cfg := pool.Config().Copy()
+		cfg.ConnConfig.User, cfg.ConnConfig.Password = login, "isolated-role-fixture-only"
+		application, err := pgxpool.NewWithConfig(ctx, cfg)
+		if err != nil {
+			return err
+		}
+		defer application.Close()
+		var actual string
+		if err = application.QueryRow(ctx, "SELECT session_user").Scan(&actual); err != nil || actual != login {
+			return fmt.Errorf("independent application login unavailable: %w", err)
+		}
+		servingLogin = actual
+		if err = application.QueryRow(ctx, "SELECT version FROM schema_migrations WHERE NOT dirty").Scan(&schemaVersion); err != nil {
+			return err
+		}
+		if err = pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM native_membership_guard.spaces WHERE space_id=$1)", space.ID).Scan(&registryPresent); err != nil {
+			return err
+		}
+		st = &store.SpaceStore{Pool: application}
+	} else {
+		intent, err := st.PrepareMemberAdmission(ctx, store.MemberAdmissionInput{OperationID: init.Operation, SpaceID: space.ID, AccountID: init.Account, ProfileID: init.Profile})
+		if err != nil {
+			return err
+		}
+		b := intent.EnsureBinding()
+		binding = &b
 	}
 	runtime, err := memberauthorityprincipal.New(ctx, init.Config)
 	if err != nil {
@@ -83,8 +126,7 @@ func run() error {
 	served := make(chan error, 1)
 	go func() { served <- server.Serve(listener) }()
 	defer func() { server.Stop(); <-served }()
-	binding := intent.EnsureBinding()
-	if err = output.Encode(reply{Address: listener.Addr().String(), Binding: &binding}); err != nil {
+	if err = output.Encode(reply{Address: listener.Addr().String(), Binding: binding, ServingLogin: servingLogin, SchemaVersion: schemaVersion, RegistryPresent: registryPresent}); err != nil {
 		return err
 	}
 	for {

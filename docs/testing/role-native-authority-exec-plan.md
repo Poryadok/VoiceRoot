@@ -222,4 +222,33 @@ Reviewed44 Role25 source8f9+99 was imported as328314057+16145fa56. Dedicated cle
 
 Role25 cleanup transport ccb3a63 admits only enabled service:bot/full body/operation-bound request IDs on the protected mTLS listener; ordinary dispatch is denied. Actual TLS positives/negative replay, issuer, RPC, body, nested unknown and raw identity controls failed0.328s before implementation, then runtime race17.866s/principal1.020s plus vet/build passed. The real Role25 store/handler transport receipt/retry/conflict/catalog-no-effects component passed race6.851s (miniredis explicitly).
 
+## Current Space44 Consumer Continuation
+
+The existing Role25 consumer now has an executable denial fixture compiled
+inside immutable Space d410305b2e74993966e07aca5a486c16766d9e9a. It uses
+the official Space34-to44 migrator, an actual independent nonowner LOGIN and
+the real protected getter. The administrator verifies that this Space has no
+registry row; the fixture does not initialize it, wrap the getter with a
+replacement guard, manufacture observations or issue readiness capabilities.
+
+The signed Bot decision through real Role25 and Space44 mTLS/Redis returned
+allowed=true/error=nil for that UNKNOWN registry (causal RED17.071s). The
+fixture checks actual schema44, serving session_user and absent registry before
+the decision. An earlier same-boundary run without the diagnostic fields also
+failed and is retained. The changed harness retains its real native39/Role25
+positive, race44.714s plus scoped vet/build, and does not relabel it Space44 PASS.
+
+The producer186 confirms two concrete current gaps: the actual getter must call
+RequireScopedNativeMembershipReadiness inside its owning transaction; and the
+administrative initializer needs an exported own-RC/same-fence entrypoint
+InitializeNativeMembership. Its existing InitializeScopedNativeMembership is
+not callable from this consumer with a genuine scoped store. Both are existing
+producer-owned implementation, not permission to add a Role guard wrapper,
+bare SQL initializer, synthetic scope or alternative authority. Actual positive
+44 composition and247 portable serving handoff remain unavailable until an
+immutable producer successor supplies both seams. Continue from this exact
+denial test, then add the real admin cutover/known positive control under the
+same independent app LOGIN. Do not bypass172/current core or duplicate320's
+protected report/history consumer. This is an unfinished existing task checkpoint.
+
 The native25/state2 extension uses the same immutable21 projection and pure qualifier; Bot terminal fences restrict mutations and confer no mask or binding. Existing cleanup effects invalidate the existing Role clock; SDK clock remains independent. Actual21-to25 native/source parity initially failed5.465s, then passed7.330s. State1 remains exact16/17/20; intermediate22-24/future/dirty/disabled Bot and contribution guards remain unavailable. Qualified Ensure/Remove catalog guards precede receipt/floor writes in their own transaction; dirty-schema regressions failed11.535s before that implementation. The native21 and native25 full transport protocol (including chat expiry and actual Redis cleanup receipt on25) passed race73.669s, source21/25 parity15.963s before the final receipt-guard addition; exact final-source verification follows separately. Full Assign/core, all-writer and owner readiness remain open.

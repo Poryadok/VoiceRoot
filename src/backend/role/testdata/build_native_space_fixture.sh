@@ -2,7 +2,11 @@
 set -eu
 # The fixture's implementation and source are independently pinned. No peer
 # worktree, generated fake DTO, old catalog relabel, or mutable branch is used.
-source_pin=5e0fc4f551dd9dd4659d5a6da1b7393608cf0cff
+case "${ROLE_NATIVE_SPACE_COHORT:-39}" in
+  39) source_pin=5e0fc4f551dd9dd4659d5a6da1b7393608cf0cff ;;
+  44) source_pin=d410305b2e74993966e07aca5a486c16766d9e9a ;;
+  *) echo "unsupported immutable Space fixture cohort" >&2; exit 1 ;;
+esac
 source_root="$(mktemp -d /tmp/role-native-space.XXXXXX)"
 trap 'rm -rf "$source_root"' EXIT
 # Windows worktree .git pointers are intentionally not resolved inside Linux.

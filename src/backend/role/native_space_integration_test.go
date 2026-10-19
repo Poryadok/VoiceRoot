@@ -55,6 +55,9 @@ type nativeSpaceReply struct {
 	NodeID           string
 	Binding          *memberadmission.EnsureBinding
 	Published        bool
+	ServingLogin     string
+	SchemaVersion    int64
+	RegistryPresent  bool
 }
 
 type nativeFixtureLog struct {
@@ -130,6 +133,10 @@ func TestMemberAdmissionRole25ProtectedReceipt(t *testing.T) {
 	runNativeMemberProtocol(t, false, "25")
 }
 
+func TestRole25RejectsSpace44UnknownRegistry(t *testing.T) {
+	runNativeMemberProtocol(t, false, "25", "44_unknown")
+}
+
 // This is the deliberately still-red full interactive cutover oracle. The
 // receipt producer's passing test must not be relabeled as this completion.
 func TestNativeAssignmentNeedsQualifiedOperationPublication(t *testing.T) {
@@ -142,7 +149,11 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 		version = versions[0]
 	}
 	ctx, roles := admissionListenerStoreVersion(t, version)
+	unknownRegistry := len(versions) > 1 && versions[1] == "44_unknown"
 	build := exec.CommandContext(ctx, "sh", "testdata/build_native_space_fixture.sh")
+	if unknownRegistry {
+		build.Env = append(os.Environ(), "ROLE_NATIVE_SPACE_COHORT=44")
+	}
 	output, err := build.CombinedOutput()
 	require.NoError(t, err, string(output))
 	fixture := integrationtest.NewSourceMigrationFixture(t, ctx, "/tmp/role-native-space-migrations")
@@ -214,11 +225,21 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	var created nativeSpaceReply
 	require.NoError(t, decoder.Decode(&created), stderr.String())
 	space := uuid.MustParse(created.SpaceID)
-	fixture.Run(true, "up")
-	require.NoError(t, encoder.Encode(map[string]string{"Action": "prepare"}))
+	if unknownRegistry {
+		fixture.Run(true, "goto", "44")
+	} else {
+		fixture.Run(true, "up")
+	}
+	action := "prepare"
+	if unknownRegistry {
+		action = "serve_unknown"
+	}
+	require.NoError(t, encoder.Encode(map[string]string{"Action": action}))
 	var preparing nativeSpaceReply
 	require.NoError(t, decoder.Decode(&preparing), stderr.String())
-	require.NotNil(t, preparing.Binding)
+	if !unknownRegistry {
+		require.NotNil(t, preparing.Binding)
+	}
 	spaceConn, err := grpc.NewClient(preparing.Address, grpc.WithTransportCredentials(transport))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, spaceConn.Close()) })
@@ -245,6 +266,17 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, roleConn.Close()) })
 	client := rolev1.NewRoleServiceClient(roleConn)
+	if unknownRegistry {
+		require.EqualValues(t, 44, preparing.SchemaVersion)
+		require.True(t, strings.HasPrefix(preparing.ServingLogin, "role_fixture_"))
+		require.False(t, preparing.RegistryPresent, "actual administrative registry has no cutover for this Space")
+		decision := &rolev1.CheckPermissionRequest{SpaceId: space.String(), ProfileId: owner.String(), PermissionName: permissions.SpaceManageBots}
+		response, err := client.CheckPermission(nativeWorkloadContext(t, current, "bot", rolev1.RoleService_CheckPermission_FullMethodName, decision), decision)
+		t.Logf("actualSpace44 UNKNOWN registry Role decision: allowed=%t error=%v", response.GetAllowed(), err)
+		require.Equal(t, codes.Unavailable, status.Code(err), "exact44 catalog and actual owner membership cannot replace missing per-Space administrative cutover")
+		require.Nil(t, response, "UNKNOWN registry must never produce a positive Role decision")
+		return
+	}
 	b := preparing.Binding
 	request := &rolev1.EnsureDefaultMemberRoleRequest{ProtocolVersion: b.ProtocolVersion, SpaceId: b.SpaceID, ProfileId: b.ProfileID, MembershipGeneration: b.MembershipGeneration, AdmissionOperationId: b.AdmissionOperationID, AdmissionBindingSha256: b.AdmissionBindingSHA256}
 	call := func(req *rolev1.EnsureDefaultMemberRoleRequest) (*rolev1.EnsureDefaultMemberRoleResponse, error) {
