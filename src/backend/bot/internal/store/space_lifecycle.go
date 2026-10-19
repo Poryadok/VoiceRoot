@@ -187,6 +187,9 @@ func (s *BotStore) PurgeSpace(ctx context.Context, req *commonv1.SpacePurgeReque
 	if state != "PURGE_DECIDED" {
 		return nil, ErrSpaceLifecycleConflict
 	}
+	if err = s.markRetiredCleanupUnresolved(ctx, tx, spaceID); err != nil {
+		return nil, err
+	}
 	// Match whitelist-before-delivery ordering. The exclusive Space guard excludes
 	// all message senders while cleanup rows and the terminal receipt commit.
 	whitelist, err := tx.Query(ctx, `SELECT bot_id,chat_id FROM bot_chat_whitelist WHERE space_id=$1 ORDER BY bot_id,chat_id FOR UPDATE`, spaceID)

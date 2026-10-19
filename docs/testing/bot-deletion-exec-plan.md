@@ -451,3 +451,32 @@ effects retain their separately reviewed proof. Provider serving source remains
 qualified Space44; no Role current46 or complete public composition is inferred.
 Recovery is SAME-Pool service reset/manual equivalent mTLS. Provider stop-file
 teardown completed, removed credentials and left the private engine empty.
+
+Minimal c57 retired-source uncertainty safeguard (separate from missing P3
+proof/snapshot/retention adapters): real PG/race RED5.900s shows successful local
+Space Purge erases an actual installation and a later owner DeleteBot falsely
+starts COMPLETE from zero remaining sources. Bot013 adds only an ordinary
+Bot-level unresolved bit, without Space/chat/actor history or a retention clock.
+Purge marks actual eligible associations under Space->sorted Bot locks before
+erasure, except obligations already owned by immutable global/pending-uninstall
+snapshots. Owner revoke still commits; zero-target admission and final global
+completion remain pending while that bit is set. Final completion locks the
+actual Bot before its root, matching admission and excluding the first marker
+write. DOWN requires RC and serializes against all Bot writers before refusing
+to lose any true bit. No clear/proof/provider/compactor is invented. Retired
+source snapshots, exact own downstream P3 coverage, unfinished-journal purge
+handling and the post30day missing provider remain original OPEN work.
+
+The strengthened unchanged-final-test oracle on exact43ed plus its sole test
+overlay reproduces false COMPLETE in9.562s. Stable final production/test source
+passes the affected PG/race matrix:22 top-level/32 total test passes,
+store147.864s/grpc81.374s, with only two explicit optional ordinary Role/Messaging
+handoff skips (provider environments absent; their earlier transport evidence
+retains its own source scope). The direct revocation control12.251s proves live
+token lookup before owner admission, disabled status/token denial afterward,
+persisted immutable decision/root PENDING, refused completion and RETRY_WAIT
+with identical bytes/SHA. Already-verified initiating facts are controlled here,
+not public Gateway/Auth proof. Bot short220 passes/238 test integration skips
+plus2 package skips; scoped vet/full build0. First4.832s missing-column failure
+was the existing test helpers omitting new013; both migration lists now include
+it, and the failure log is retained as fixture setup evidence.

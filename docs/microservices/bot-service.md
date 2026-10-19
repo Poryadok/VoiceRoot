@@ -432,6 +432,16 @@ persists a permanent compact `PURGED` fence. Full request/receipt bytes retain
 30 days from this participant's completion; delayed lower-generation work is a
 no-op.
 
+Bot013 retains only an ordinary Bot-level `retired_cleanup_unresolved` bit when
+local Purge retires actual associations whose obligations are not already
+owned by an immutable global or pending-uninstall journal. The bit contains no
+retired Space/chat/actor history, grants no cleanup authority and introduces no
+retention clock. Owner revocation still commits, but absent source rows cannot
+produce zero-target or final global `COMPLETE` while it is set. This minimum
+safeguard does not resolve the separate BE-170 retired snapshot/downstream P3
+coverage and post30day proof-provider gap; no clearing or compaction provider
+is implied. Existing unfinished cleanup journals remain separate obligations.
+
 The message recipient producer, webhook worker and development polling send
 share the participant's Space advisory guard. They acquire all distinct actual
 Space keys in ascending order before bot, whitelist and delivery/event row locks,
@@ -490,6 +500,13 @@ proof is not full Gateway cutover, native membership cleanup, or global deletion
 completion. Empty DeleteBot success requires every required participant effect's
 verified immutable completion receipt; retained installation/whitelist snapshots
 are recovery input and never restore live access to a terminal Bot.
+
+After verified owner admission, the local transaction commits the immutable
+deletion root and disables the Bot before downstream cleanup. Missing retired
+cleanup proof keeps that root nonterminal/retryable and the Bot disabled; it
+does not roll back owner revocation or turn an empty local target set into
+success. Bot-token lookup admits only live Bots. Ordinary Space uninstall uses
+its separate accepted-native-cancellation protocol described above.
 
 New public install/cancel permission decisions use the separate
 `BOT_ROLE_INSTALLATION_GRPC_ADDR`, `BOT_ROLE_INSTALLATION_TLS_CA_FILE`,

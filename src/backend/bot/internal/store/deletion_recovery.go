@@ -217,11 +217,30 @@ func (s *BotStore) CompleteBotDeletion(ctx context.Context, claim *BotDeletion) 
 	if claim != nil && claim.Purpose == "space_uninstall" {
 		return s.completeUninstallCleanup(ctx, claim)
 	}
-	tx, err := s.deletionClaimTx(ctx, claim)
+	if claim == nil || claim.OperationID == uuid.Nil || claim.ClaimGeneration <= 0 {
+		return ErrDeletionClaimLost
+	}
+	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
+	// Serialize with Space->Bot purge and owner admission using the actual root's
+	// Bot before locking the root. No Space lock is acquired below this lock.
+	var retiredUnresolved bool
+	err = tx.QueryRow(ctx, `SELECT b.retired_cleanup_unresolved FROM bots b JOIN bot_deletion_operations o ON o.bot_id=b.id WHERE o.operation_id=$1 FOR UPDATE OF b`, claim.OperationID).Scan(&retiredUnresolved)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrDeletionClaimLost
+	}
+	if err != nil {
+		return err
+	}
+	if err = s.lockLifecycleClaim(ctx, tx, claim); err != nil {
+		return err
+	}
+	if retiredUnresolved {
+		return ErrDeletionPending
+	}
 	var pending bool
 	err = tx.QueryRow(ctx, lifecycleQuery(claim, `SELECT EXISTS(SELECT 1 FROM bot_deletion_effects e JOIN bot_deletion_installations t ON t.target_id=e.target_id WHERE t.operation_id=$1 AND e.state<>'COMPLETE')`), claim.OperationID).Scan(&pending)
 	if err != nil {
