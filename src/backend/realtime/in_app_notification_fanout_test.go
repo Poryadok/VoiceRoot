@@ -351,7 +351,9 @@ func TestConsumeMessageEventMessage_ChatTypeLookupFailureFailsClosedAndStillAcks
 	acked := false
 	consumeMessageEventMessage(&nats.Msg{Data: payload}, hub, nil, func(*nats.Msg) error { acked = true; return nil })
 	require.True(t, acked, "chat-type uncertainty must not stall the durable source consumer")
-	require.Contains(t, drainFanoutOps(t, sender, 50*time.Millisecond), "message_create", "sender self-delivery skips recipient checks")
+	// Accepted Realtime P3 admission contract: missing/unavailable authoritative
+	// chat lookup denies every recipient, including the sender shortcut.
+	require.Empty(t, drainFanoutOps(t, sender, 50*time.Millisecond), "unknown chat type must deny sender self-delivery too")
 	require.Empty(t, drainFanoutOps(t, recipient, 50*time.Millisecond), "unknown chat type must fail closed for recipients")
 }
 

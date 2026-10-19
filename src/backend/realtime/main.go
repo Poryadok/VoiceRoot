@@ -85,9 +85,22 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	startup, startupCancel := context.WithTimeout(ctx, 20*time.Second)
+	lifecycleRuntime, lifecycleErr := newRealtimeLifecycleRuntime(startup, hub)
+	startupCancel()
+	if lifecycleErr != nil {
+		logger.Error("Realtime durable lifecycle startup failed", slog.Any("error", lifecycleErr))
+		os.Exit(1)
+	}
+	defer func() {
+		closing, stop := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
+		defer stop()
+		lifecycleRuntime.Close(closing)
+	}()
 
 	var rf *redisFanout
 	var ready readinessDeps
+	ready.Lifecycle = lifecycleRuntime
 	natsURL := strings.TrimSpace(os.Getenv("NATS_URL"))
 	ready.NatsURL = natsURL
 	if redisAddr := strings.TrimSpace(os.Getenv("REALTIME_REDIS_ADDR")); redisAddr != "" {

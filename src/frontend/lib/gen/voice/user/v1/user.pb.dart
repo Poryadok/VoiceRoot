@@ -7299,6 +7299,217 @@ class GetSearchProfileCheckpointResponse extends $pb.GeneratedMessage {
   void clearHighWatermark() => $_clearField(1);
 }
 
+class GetSpaceAdmissionProfileEligibilityRequest extends $pb.GeneratedMessage {
+  factory GetSpaceAdmissionProfileEligibilityRequest({
+    $core.String? accountId,
+    $core.String? profileId,
+    $core.List<$core.int>? observationBindingSha256,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    if (profileId != null) result.profileId = profileId;
+    if (observationBindingSha256 != null)
+      result.observationBindingSha256 = observationBindingSha256;
+    return result;
+  }
+
+  GetSpaceAdmissionProfileEligibilityRequest._();
+
+  factory GetSpaceAdmissionProfileEligibilityRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetSpaceAdmissionProfileEligibilityRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetSpaceAdmissionProfileEligibilityRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..a<$core.List<$core.int>>(3,
+        _omitFieldNames ? '' : 'observationBindingSha256', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceAdmissionProfileEligibilityRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceAdmissionProfileEligibilityRequest copyWith(
+          void Function(GetSpaceAdmissionProfileEligibilityRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetSpaceAdmissionProfileEligibilityRequest))
+          as GetSpaceAdmissionProfileEligibilityRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceAdmissionProfileEligibilityRequest create() =>
+      GetSpaceAdmissionProfileEligibilityRequest._();
+  @$core.override
+  GetSpaceAdmissionProfileEligibilityRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceAdmissionProfileEligibilityRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          GetSpaceAdmissionProfileEligibilityRequest>(create);
+  static GetSpaceAdmissionProfileEligibilityRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.List<$core.int> get observationBindingSha256 => $_getN(2);
+  @$pb.TagNumber(3)
+  set observationBindingSha256($core.List<$core.int> value) =>
+      $_setBytes(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasObservationBindingSha256() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearObservationBindingSha256() => $_clearField(3);
+}
+
+class GetSpaceAdmissionProfileEligibilityResponse extends $pb.GeneratedMessage {
+  factory GetSpaceAdmissionProfileEligibilityResponse({
+    $core.String? accountId,
+    $core.String? profileId,
+    $core.List<$core.int>? observationBindingSha256,
+    $fixnum.Int64? profileRevision,
+    $core.bool? deleted,
+    $core.bool? frozen,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    if (profileId != null) result.profileId = profileId;
+    if (observationBindingSha256 != null)
+      result.observationBindingSha256 = observationBindingSha256;
+    if (profileRevision != null) result.profileRevision = profileRevision;
+    if (deleted != null) result.deleted = deleted;
+    if (frozen != null) result.frozen = frozen;
+    return result;
+  }
+
+  GetSpaceAdmissionProfileEligibilityResponse._();
+
+  factory GetSpaceAdmissionProfileEligibilityResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetSpaceAdmissionProfileEligibilityResponse.fromJson(
+          $core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetSpaceAdmissionProfileEligibilityResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..a<$core.List<$core.int>>(3,
+        _omitFieldNames ? '' : 'observationBindingSha256', $pb.PbFieldType.OY)
+    ..a<$fixnum.Int64>(
+        4, _omitFieldNames ? '' : 'profileRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOB(5, _omitFieldNames ? '' : 'deleted')
+    ..aOB(6, _omitFieldNames ? '' : 'frozen')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceAdmissionProfileEligibilityResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceAdmissionProfileEligibilityResponse copyWith(
+          void Function(GetSpaceAdmissionProfileEligibilityResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetSpaceAdmissionProfileEligibilityResponse))
+          as GetSpaceAdmissionProfileEligibilityResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceAdmissionProfileEligibilityResponse create() =>
+      GetSpaceAdmissionProfileEligibilityResponse._();
+  @$core.override
+  GetSpaceAdmissionProfileEligibilityResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceAdmissionProfileEligibilityResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          GetSpaceAdmissionProfileEligibilityResponse>(create);
+  static GetSpaceAdmissionProfileEligibilityResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.List<$core.int> get observationBindingSha256 => $_getN(2);
+  @$pb.TagNumber(3)
+  set observationBindingSha256($core.List<$core.int> value) =>
+      $_setBytes(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasObservationBindingSha256() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearObservationBindingSha256() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get profileRevision => $_getI64(3);
+  @$pb.TagNumber(4)
+  set profileRevision($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasProfileRevision() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearProfileRevision() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.bool get deleted => $_getBF(4);
+  @$pb.TagNumber(5)
+  set deleted($core.bool value) => $_setBool(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasDeleted() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearDeleted() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.bool get frozen => $_getBF(5);
+  @$pb.TagNumber(6)
+  set frozen($core.bool value) => $_setBool(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasFrozen() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearFrozen() => $_clearField(6);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

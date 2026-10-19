@@ -311,6 +311,11 @@ services:
       - space_principal_keys:/space-signing
       - story_principal_keys:/story-signing
       - messaging_principal_keys:/messaging-signing
+      - realtime_principal_keys:/realtime-signing
+      - lifecycle_public_jwks:/jwks-public
+      - realtime_principal_tls:/realtime
+      - chat_realtime_principal_tls:/chat
+      - lifecycle_jwks_tls:/principal-jwks
       - social_principal_tls:/social
       - user_principal_tls:/user
       - space_principal_tls:/space
@@ -320,6 +325,27 @@ services:
       - messaging_principal_tls:/messaging
       - matchmaking_principal_tls:/matchmaking
       - social_principal_ca:/ca
+
+  lifecycle-principal-jwks:
+    profiles: ["app"]
+    build:
+      context: ./docker/social-principal
+      dockerfile: JWKS.Dockerfile
+    networks:
+      default:
+        aliases: [principal-jwks]
+    volumes:
+      - lifecycle_public_jwks:/srv/jwks:ro
+      - lifecycle_jwks_tls:/etc/voice/tls:ro
+      - social_principal_ca:/etc/voice/ca:ro
+    depends_on:
+      social-principal-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent --cacert /etc/voice/ca/ca.crt https://principal-jwks:8443/realtime.json >/dev/null && curl --fail --silent --cacert /etc/voice/ca/ca.crt https://principal-jwks:8443/space.json >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   social:
     profiles: ["app"]
@@ -471,13 +497,27 @@ services:
       POSTGRES_MAX_CONNS: ${CHAT_POSTGRES_MAX_CONNS:-10}
       SPACE_DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/space_db?sslmode=disable
       CHAT_GRPC_LISTEN: :9090
+      CHAT_REALTIME_LIFECYCLE_GRPC_LISTEN: :9099
+      CHAT_REALTIME_LIFECYCLE_TLS_CERT_FILE: /etc/voice/realtime-principal/tls/tls.crt
+      CHAT_REALTIME_LIFECYCLE_TLS_KEY_FILE: /etc/voice/realtime-principal/tls/tls.key
+      CHAT_REALTIME_LIFECYCLE_CLIENT_CA_FILE: /etc/voice/realtime-principal/ca/ca.crt
+      CHAT_REALTIME_PRINCIPAL_JWKS_URL: https://principal-jwks:8443/realtime.json
+      CHAT_REALTIME_PRINCIPAL_JWKS_CA_FILE: /etc/voice/realtime-principal/ca/ca.crt
+      CHAT_REALTIME_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
       SOCIAL_GRPC_ADDR: social:9090
       USER_GRPC_ADDR: user:9090
       AUTH_GRPC_ADDR: auth:9090
       MESSAGING_GRPC_ADDR: messaging:9090
       ROLE_GRPC_ADDR: role:9090
       NATS_URL: nats://nats:4222
+    volumes:
+      - chat_realtime_principal_tls:/etc/voice/realtime-principal/tls:ro
+      - social_principal_ca:/etc/voice/realtime-principal/ca:ro
     depends_on:
+      lifecycle-principal-jwks:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       compose-db-init:
@@ -791,6 +831,8 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/notification_db?sslmode=disable
       POSTGRES_MAX_CONNS: ${NOTIFICATION_POSTGRES_MAX_CONNS:-10}
       NOTIFICATION_GRPC_LISTEN: :9090
+      # Explicit disposable development mode; this fixture cannot qualify as alpha.
+      VOICE_RELEASE_PROFILE: development
       NOTIFICATION_REDIS_ADDR: redis:6379
       NOTIFICATION_RECORD_PUSHES: "true"
       NOTIFICATION_DEBUG_HTTP_ENABLED: "true"
@@ -1098,6 +1140,22 @@ services:
       dockerfile: realtime/Dockerfile
     environment:
       LOG_LEVEL: debug
+      DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/realtime_db?sslmode=disable
+      REALTIME_PRINCIPAL_SIGNING_KEYS_DIR: /etc/voice/lifecycle/keys
+      REALTIME_PRINCIPAL_ACTIVE_KID: current
+      REALTIME_PRINCIPAL_JWKS_FILE: /etc/voice/lifecycle/public/realtime.json
+      REALTIME_CHAT_LIFECYCLE_ADDR: chat:9099
+      REALTIME_CHAT_LIFECYCLE_SERVER_NAME: chat
+      REALTIME_CHAT_LIFECYCLE_CA_FILE: /etc/voice/lifecycle/ca/ca.crt
+      REALTIME_CHAT_LIFECYCLE_CERT_FILE: /etc/voice/lifecycle/tls/tls.crt
+      REALTIME_CHAT_LIFECYCLE_KEY_FILE: /etc/voice/lifecycle/tls/tls.key
+      REALTIME_SPACE_LIFECYCLE_GRPC_LISTEN: :9091
+      REALTIME_SPACE_LIFECYCLE_TLS_CERT_FILE: /etc/voice/lifecycle/tls/tls.crt
+      REALTIME_SPACE_LIFECYCLE_TLS_KEY_FILE: /etc/voice/lifecycle/tls/tls.key
+      REALTIME_SPACE_LIFECYCLE_CLIENT_CA_FILE: /etc/voice/lifecycle/ca/ca.crt
+      REALTIME_SPACE_PRINCIPAL_JWKS_URL: https://principal-jwks:8443/space.json
+      REALTIME_SPACE_PRINCIPAL_JWKS_CA_FILE: /etc/voice/lifecycle/ca/ca.crt
+      REALTIME_SPACE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
       REALTIME_REDIS_ADDR: redis:6379
       REALTIME_SESSION_EPOCH_STRICT: "true"
       NATS_URL: nats://nats:4222
@@ -1111,7 +1169,18 @@ services:
       REALTIME_MESSAGING_GRPC_ADDR: messaging:9090
       REALTIME_USER_GRPC_ADDR: user:9090
       REALTIME_SOCIAL_GRPC_ADDR: social:9090
+    volumes:
+      - realtime_principal_keys:/etc/voice/lifecycle/keys:ro
+      - realtime_principal_tls:/etc/voice/lifecycle/tls:ro
+      - lifecycle_public_jwks:/etc/voice/lifecycle/public:ro
+      - social_principal_ca:/etc/voice/lifecycle/ca:ro
     depends_on:
+      postgres:
+        condition: service_healthy
+      compose-db-init:
+        condition: service_completed_successfully
+      lifecycle-principal-jwks:
+        condition: service_healthy
       redis:
         condition: service_healthy
       nats:
@@ -1493,6 +1562,11 @@ services:
       start_period: 30s
 
 volumes:
+  realtime_principal_keys:
+  realtime_principal_tls:
+  chat_realtime_principal_tls:
+  lifecycle_public_jwks:
+  lifecycle_jwks_tls:
   social_principal_keys:
   file_principal_keys:
   search_principal_keys:

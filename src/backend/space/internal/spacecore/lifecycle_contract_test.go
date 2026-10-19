@@ -40,6 +40,7 @@ var (
 		commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION,
 		commonv1.ParticipantId_PARTICIPANT_ID_BOT,
 		commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION,
+		commonv1.ParticipantId_PARTICIPANT_ID_REALTIME,
 	}
 	testParticipantRequestPackages = map[commonv1.ParticipantId]string{
 		commonv1.ParticipantId_PARTICIPANT_ID_ROLE:         "voice.role.v1",
@@ -52,6 +53,7 @@ var (
 		commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION: "voice.subscription.v1",
 		commonv1.ParticipantId_PARTICIPANT_ID_BOT:          "voice.bot.v1",
 		commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION: "voice.notification.v1",
+		commonv1.ParticipantId_PARTICIPANT_ID_REALTIME:     "voice.realtime.v1",
 	}
 )
 
@@ -101,7 +103,7 @@ func TestLifecycleScheduleRequiresEveryCanonicalParticipant(t *testing.T) {
 func TestLifecycleRejectsZeroAndUnknownParticipantIDs(t *testing.T) {
 	for _, participantID := range []commonv1.ParticipantId{
 		commonv1.ParticipantId_PARTICIPANT_ID_UNSPECIFIED,
-		commonv1.ParticipantId(11),
+		commonv1.ParticipantId(12),
 		commonv1.ParticipantId(65535),
 	} {
 		participantID := participantID

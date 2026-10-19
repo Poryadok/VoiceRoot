@@ -104,6 +104,7 @@ require (
 	voice.app/voice/matchmaking v0.0.0
 	voice.app/voice/messaging v0.0.0
 	voice.app/voice/notification v0.0.0
+	voice.app/voice/realtime v0.0.0
 	voice.app/voice/search v0.0.0
 	voice.app/voice/story v0.0.0 // indirect
 	voice.app/voice/subscription v0.0.0
@@ -148,3 +149,5 @@ replace voice.app/voice/bot => ../voice/pb/voice/bot
 replace voice.app/voice/search => ../voice/pb/voice/search
 
 replace voice.app/voice/subscription => ../voice/pb/voice/subscription
+
+replace voice.app/voice/realtime => ../realtime/pb/voice/realtime

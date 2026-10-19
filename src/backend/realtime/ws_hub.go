@@ -11,16 +11,21 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"voice/backend/realtime/internal/lifecycle"
 )
 
 // fanoutEnvelope is delivered to a WebSocket pump when another instance (or local peer) fans out.
 type fanoutEnvelope struct {
-	Op string
-	D  json.RawMessage
+	chatID         string
+	admission      *lifecycle.Scope
+	observeMetrics bool
+	Op             string
+	D              json.RawMessage
 }
 
 // connReg is one authenticated WebSocket registered for cross-connection fan-out.
 type connReg struct {
+	hub          *wsHub
 	instanceID   string
 	connID       string
 	accountID    string
@@ -40,6 +45,7 @@ type connReg struct {
 }
 
 type wsHub struct {
+	lifecycle           chatLifecycleRunner
 	mu                  sync.RWMutex
 	byChat              map[string]map[*connReg]struct{}
 	byProfile           map[string]map[*connReg]struct{}
@@ -332,6 +338,23 @@ const (
 )
 
 func (r *connReg) enqueue(env fanoutEnvelope, disconnectOnOverflow bool) fanoutEnqueueResult {
+	if r.hub != nil && r.hub.lifecycle != nil {
+		_, required, valid := chatOrigin(env)
+		if !valid || required && env.admission == nil {
+			return fanoutDropped
+		}
+	}
+	if env.admission != nil {
+		result := fanoutDropped
+		if err := env.admission.Enqueue(func() { result = r.enqueueRaw(env, disconnectOnOverflow) }); err != nil {
+			return fanoutDropped
+		}
+		return result
+	}
+	return r.enqueueRaw(env, disconnectOnOverflow)
+}
+
+func (r *connReg) enqueueRaw(env fanoutEnvelope, disconnectOnOverflow bool) fanoutEnqueueResult {
 	r.guardMu.RLock()
 	guard := r.writeGuard
 	r.guardMu.RUnlock()
@@ -374,6 +397,7 @@ func (h *wsHub) attachAccountConn(instanceID, connID, accountID, profileID strin
 
 func (h *wsHub) attachAccountTypeConn(instanceID, connID, accountID, accountType, profileID string, fanoutBuf int) *connReg {
 	reg := &connReg{
+		hub:         h,
 		instanceID:  instanceID,
 		connID:      connID,
 		accountID:   canonicalUUID(accountID),
@@ -497,10 +521,8 @@ func (h *wsHub) broadcastTypingExcept(chatID, excludeInstance, excludeConn strin
 	}
 	h.mu.RUnlock()
 
-	env := fanoutEnvelope{Op: "typing", D: d}
-	for _, reg := range targets {
-		reg.enqueue(env, false)
-	}
+	env := fanoutEnvelope{Op: "typing", D: d, chatID: chatID}
+	h.sendFanout(targets, env, false)
 }
 
 // broadcastMarkReadSameProfileExcept delivers op "mark_read" to other connections of the same profile
@@ -521,9 +543,7 @@ func (h *wsHub) broadcastMarkReadSameProfileExcept(profileID, excludeInstance, e
 	h.mu.RUnlock()
 
 	env := fanoutEnvelope{Op: "mark_read", D: d}
-	for _, reg := range targets {
-		reg.enqueue(env, false)
-	}
+	h.sendFanout(targets, env, false)
 }
 
 // broadcastPresenceSameProfileExcept delivers op "presence_update" to other connections of the same profile.
@@ -543,9 +563,7 @@ func (h *wsHub) broadcastPresenceSameProfileExcept(profileID, excludeInstance, e
 	h.mu.RUnlock()
 
 	env := fanoutEnvelope{Op: "presence_update", D: d}
-	for _, reg := range targets {
-		reg.enqueue(env, false)
-	}
+	h.sendFanout(targets, env, false)
 }
 
 // broadcastPresenceInChatExcept delivers op "presence_update" to connections subscribed to chatID,
@@ -569,10 +587,8 @@ func (h *wsHub) broadcastPresenceInChatExcept(chatID, senderProfileID, excludeIn
 	}
 	h.mu.RUnlock()
 
-	env := fanoutEnvelope{Op: "presence_update", D: d}
-	for _, reg := range targets {
-		reg.enqueue(env, false)
-	}
+	env := fanoutEnvelope{Op: "presence_update", D: d, chatID: chatID}
+	h.sendFanout(targets, env, false)
 }
 
 const presencePrivacyFanoutConcurrency = 16
@@ -624,7 +640,7 @@ func (h *wsHub) fanoutPrivatePresence(targets map[*connReg]string, viewer presen
 				}
 				return
 			}
-			reg.enqueue(fanoutEnvelope{Op: "presence_update", D: d}, false)
+			h.sendFanout([]*connReg{reg}, fanoutEnvelope{Op: "presence_update", D: d, chatID: chatID}, false)
 		}(reg, chatID)
 	}
 	wg.Wait()
@@ -738,6 +754,7 @@ func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope, logger *slog.
 // excluded from this one message event. A nil allow set preserves ordinary fanout.
 func (h *wsHub) broadcastToChatFiltered(chatID string, env fanoutEnvelope, allowedProfiles map[string]bool, logger *slog.Logger, requestID string) {
 	chatID = canonicalChatID(chatID)
+	env.chatID = chatID
 	if chatID == "" {
 		return
 	}
@@ -754,9 +771,7 @@ func (h *wsHub) broadcastToChatFiltered(chatID string, env fanoutEnvelope, allow
 	if logger != nil {
 		logger.LogAttrs(context.Background(), slog.LevelDebug, "ws fanout", fanoutLogAttrs(chatID, "", env.Op, requestID, targets)...)
 	}
-	for _, reg := range targets {
-		reg.enqueue(env, false)
-	}
+	h.sendFanout(targets, env, false)
 }
 
 // profileFanoutDisconnectsOnOverflow lists lifecycle state transitions that a
@@ -787,8 +802,6 @@ func (h *wsHub) broadcastToProfile(profileID string, env fanoutEnvelope, logger 
 	if logger != nil {
 		logger.LogAttrs(context.Background(), slog.LevelDebug, "ws fanout", fanoutLogAttrs("", profileID, env.Op, requestID, targets)...)
 	}
-	for _, reg := range targets {
-		result := reg.enqueue(env, profileFanoutDisconnectsOnOverflow(env.Op))
-		observeWSFanoutEnqueue(result)
-	}
+	env.observeMetrics = true
+	h.sendFanout(targets, env, profileFanoutDisconnectsOnOverflow(env.Op))
 }

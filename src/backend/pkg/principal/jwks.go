@@ -200,6 +200,22 @@ func (r *JWKSResolver) Refresh(ctx context.Context, issuer string) error {
 	return r.refreshLocked(ctx, issuer)
 }
 
+// Usable observes the existing complete issuer cache without fetching keys,
+// consuming replay state, or extending the original last-good expiry.
+func (r *JWKSResolver) Usable(issuer string) bool {
+	if r == nil || strings.TrimSpace(issuer) == "" {
+		return false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entry, ok := r.sets[issuer]
+	if !ok || len(entry.keys) == 0 || entry.lastGoodAt.IsZero() {
+		return false
+	}
+	age := r.clock().UTC().Sub(entry.lastGoodAt)
+	return age >= 0 && age < r.hardExpiry
+}
+
 func (r *JWKSResolver) refreshLocked(ctx context.Context, issuer string) error {
 	document, err := r.fetch(ctx, issuer)
 	if err != nil {

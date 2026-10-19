@@ -122,6 +122,11 @@ public final class AuthUserPrincipalIssuer implements SdkDeviceStatusIssuer {
     return issueService("moderation",MODERATION_SNAPSHOT_RPC,requestId,requestHash);
   }
 
+  /** Fixed admission read only; SDK credentials remain restricted to their original RPC. */
+  public String issueAdmissionProfile(String requestId, String requestHash) {
+    return issueService("user", "/voice.user.v1.UserService/GetSpaceAdmissionProfileEligibility", requestId, requestHash);
+  }
+
   private String issueService(String audience,String rpc,String requestId,String requestHash) {
     if (requestId == null || !requestId.matches(
         "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")

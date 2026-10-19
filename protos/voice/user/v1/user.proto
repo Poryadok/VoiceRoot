@@ -84,6 +84,9 @@ service UserService {
   rpc MarkAccountRegular(MarkAccountRegularRequest) returns (MarkAccountRegularResponse);
   // Auth-only protected listener: exact read-only SDK target profile snapshot.
   rpc GetSdkProfileEligibility(GetSdkProfileEligibilityRequest) returns (GetSdkProfileEligibilityResponse);
+  // @voice.security=protected;callers=service:auth
+  // Dedicated admission listener only; no SDK consent or target conversion authority.
+  rpc GetSpaceAdmissionProfileEligibility(GetSpaceAdmissionProfileEligibilityRequest) returns (GetSpaceAdmissionProfileEligibilityResponse);
   // Auth-only protected listener: immutable historical SDK actor tombstone receipt.
   rpc RecordSdkAuthorTombstone(RecordSdkAuthorTombstoneRequest) returns (RecordSdkAuthorTombstoneResponse);
 
@@ -641,4 +644,19 @@ message ListSearchProfileJournalResponse {
 message GetSearchProfileCheckpointRequest {}
 message GetSearchProfileCheckpointResponse {
   uint64 high_watermark = 1;
+}
+
+message GetSpaceAdmissionProfileEligibilityRequest {
+  string account_id = 1;
+  string profile_id = 2;
+  bytes observation_binding_sha256 = 3;
+}
+
+message GetSpaceAdmissionProfileEligibilityResponse {
+  string account_id = 1;
+  string profile_id = 2;
+  bytes observation_binding_sha256 = 3;
+  uint64 profile_revision = 4;
+  bool deleted = 5;
+  bool frozen = 6;
 }

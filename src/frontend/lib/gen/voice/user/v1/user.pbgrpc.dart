@@ -121,6 +121,17 @@ class UserServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// @voice.security=protected;callers=service:auth
+  /// Dedicated admission listener only; no SDK consent or target conversion authority.
+  $grpc.ResponseFuture<$1.GetSpaceAdmissionProfileEligibilityResponse>
+      getSpaceAdmissionProfileEligibility(
+    $1.GetSpaceAdmissionProfileEligibilityRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getSpaceAdmissionProfileEligibility, request,
+        options: options);
+  }
+
   /// Auth-only protected listener: immutable historical SDK actor tombstone receipt.
   $grpc.ResponseFuture<$1.RecordSdkAuthorTombstoneResponse>
       recordSdkAuthorTombstone(
@@ -436,6 +447,13 @@ class UserServiceClient extends $grpc.Client {
       '/voice.user.v1.UserService/GetSdkProfileEligibility',
       ($1.GetSdkProfileEligibilityRequest value) => value.writeToBuffer(),
       $1.GetSdkProfileEligibilityResponse.fromBuffer);
+  static final _$getSpaceAdmissionProfileEligibility = $grpc.ClientMethod<
+          $1.GetSpaceAdmissionProfileEligibilityRequest,
+          $1.GetSpaceAdmissionProfileEligibilityResponse>(
+      '/voice.user.v1.UserService/GetSpaceAdmissionProfileEligibility',
+      ($1.GetSpaceAdmissionProfileEligibilityRequest value) =>
+          value.writeToBuffer(),
+      $1.GetSpaceAdmissionProfileEligibilityResponse.fromBuffer);
   static final _$recordSdkAuthorTombstone = $grpc.ClientMethod<
           $1.RecordSdkAuthorTombstoneRequest,
           $1.RecordSdkAuthorTombstoneResponse>(
@@ -698,6 +716,17 @@ abstract class UserServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $1.GetSdkProfileEligibilityRequest.fromBuffer(value),
         ($1.GetSdkProfileEligibilityResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<
+            $1.GetSpaceAdmissionProfileEligibilityRequest,
+            $1.GetSpaceAdmissionProfileEligibilityResponse>(
+        'GetSpaceAdmissionProfileEligibility',
+        getSpaceAdmissionProfileEligibility_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $1.GetSpaceAdmissionProfileEligibilityRequest.fromBuffer(value),
+        ($1.GetSpaceAdmissionProfileEligibilityResponse value) =>
+            value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$1.RecordSdkAuthorTombstoneRequest,
             $1.RecordSdkAuthorTombstoneResponse>(
         'RecordSdkAuthorTombstone',
@@ -1079,6 +1108,18 @@ abstract class UserServiceBase extends $grpc.Service {
 
   $async.Future<$1.GetSdkProfileEligibilityResponse> getSdkProfileEligibility(
       $grpc.ServiceCall call, $1.GetSdkProfileEligibilityRequest request);
+
+  $async.Future<$1.GetSpaceAdmissionProfileEligibilityResponse>
+      getSpaceAdmissionProfileEligibility_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$1.GetSpaceAdmissionProfileEligibilityRequest>
+              $request) async {
+    return getSpaceAdmissionProfileEligibility($call, await $request);
+  }
+
+  $async.Future<$1.GetSpaceAdmissionProfileEligibilityResponse>
+      getSpaceAdmissionProfileEligibility($grpc.ServiceCall call,
+          $1.GetSpaceAdmissionProfileEligibilityRequest request);
 
   $async.Future<$1.RecordSdkAuthorTombstoneResponse>
       recordSdkAuthorTombstone_Pre($grpc.ServiceCall $call,

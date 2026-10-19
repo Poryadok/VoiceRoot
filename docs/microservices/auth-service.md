@@ -91,6 +91,35 @@ event `00000000-0000-4000-8000-000000000002`, subject
 Receipt validation is structural only: a higher revision/hash or positive fence
 must reach the sender's CURRENT owner projection/ledger comparison, not directly
 clear a delivery intent. Equal revision with changed hash is rejected.
+## Space admission owner observation (SPACE-ADMISSION-IDENTITY-v1)
+
+`ObserveSpaceAdmissionSubject` is an additive read-only RPC on the existing
+mutual-TLS session-floor listener. Only the exact signed `service:space`
+principal may call it; the ordinary and proof listeners omit it. It binds the
+full deterministic protobuf request, request ID and fresh replay-protected JTI.
+Version 1 carries phase, applicant/reviewer role, exact account/profile/Space,
+32-byte admission-context digest and an optional interactive epoch. START and
+SUBMIT are applicant-only with an epoch; READ requires the acting subject's
+epoch; APPROVE has an epoch only for the reviewer; FIRST_PUBLISH has none.
+
+Auth reads active/nondeleted account type (`regular|guest`), positive security
+revision and max(durable epoch, retained Redis floor), checks the interactive
+epoch when present, calls User's dedicated admission eligibility method, then
+reads Auth again. User I/O holds no Auth mutation transaction or monitor. The
+response is ELIGIBLE only with exact request digest/account/profile echoes and
+positive revisions/floor; it never attests phone, Role permission or membership.
+Missing/ineligible facts deny; unknown/corrupt/unavailable authority fails closed.
+No positive cache or old applicant session is used for delayed decisions.
+
+`auth.space-admission.enabled=true` requires JDBC, the shared Auth principal
+issuer bean and `AUTH_SPACE_ADMISSION_USER_GRPC_ADDR`, `_TLS_CA_FILE`,
+`_TLS_CERT_FILE`, `_TLS_KEY_FILE`, `_TLS_SERVER_NAME`. These names share the
+`AUTH_SPACE_ADMISSION_USER` prefix. They configure a separate mutual-TLS User
+connection; SDK client settings are not reused. The outer observation is capped
+at 2 seconds and the nested User deadline cannot exceed its remaining time.
+Space still owns the strict earliest-observation-to-local-decision 5-second
+budget and all journal/policy/Role/native first-publication gates. This source
+does not establish assembled admission runtime or authorize activation.
 
 ## Обзор
 

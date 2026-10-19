@@ -9,6 +9,7 @@ import java.util.Set;
 
 /** Buffers the unary message before creating any protected handler. */
 public final class AuthPrincipalServerInterceptor implements ServerInterceptor, AutoCloseable {
+  public static final String SPACE_ADMISSION_RPC = "/voice.auth.v1.AuthService/ObserveSpaceAdmissionSubject";
   public static final String ISSUE_RPC = "/voice.auth.v1.AuthService/IssueOwnershipTransferProof";
   public static final String CONSUME_RPC = "/voice.auth.v1.AuthService/ConsumeOwnershipTransferProof";
   public static final String LOOKUP_RPC = "/voice.auth.v1.AuthService/GetOwnershipTransferReceipt";
@@ -41,7 +42,7 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
   @Override public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
       ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
     String rpc = "/" + call.getMethodDescriptor().getFullMethodName();
-    if (!ISSUE_RPC.equals(rpc) && !CONSUME_RPC.equals(rpc) && !LOOKUP_RPC.equals(rpc)
+    if (!ISSUE_RPC.equals(rpc) && !CONSUME_RPC.equals(rpc) && !LOOKUP_RPC.equals(rpc) && !SPACE_ADMISSION_RPC.equals(rpc)
         && !VOICE_SESSION_FLOOR_RPC.equals(rpc)
         && !ROLE_SESSION_FLOOR_RPC.equals(rpc) && !SPACE_SESSION_FLOOR_RPC.equals(rpc)
         && !SPACE_DELETE_CONSUME_RPC.equals(rpc) && !SPACE_DELETE_LOOKUP_RPC.equals(rpc)

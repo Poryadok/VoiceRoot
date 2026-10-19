@@ -1,5 +1,26 @@
 # User Service
 
+## Space admission profile eligibility (SPACE-ADMISSION-IDENTITY-v1)
+
+`GetSpaceAdmissionProfileEligibility` is a separate Auth-only current-pair
+read. Its dedicated mutual-TLS listener defaults to `:9097` and uses
+`USER_ADMISSION_PRINCIPAL_*` settings, including replay Redis, TLS certificate/key,
+client CA and JWKS client identity, plus Auth's HTTPS JWKS entry. Partial config
+fails startup. The ordinary, Social and SDK listeners do not register this RPC;
+the SDK caller allowlist remains unchanged.
+
+The signed request binds exact account/profile IDs and a 32-byte observation
+digest of Auth's full request. User echoes all three and reads its owned current
+row's positive `sdk_eligibility_revision`, deleted and frozen flags. This reuses
+the existing read-only store query, never the SDK wire method or SDK consent.
+Guests and regular profiles work equally; no provisioning, switching, membership
+grant, history/lifetime or terminal-erasure authority is added. Unknown/foreign
+pairs deny; invalid revisions and storage failure are unavailable. Auth rejects
+deleted/frozen profiles and validates the exact response binding before its
+final account reread. Existing eligibility revision triggers remain authoritative
+for relevant owner/deleted/frozen changes. Deployment/assembled admission and
+acceptance require their separate version-bound proof.
+
 ## Обзор
 
 Управление профилями пользователей, настройками, приватностью и онлайн-статусом.

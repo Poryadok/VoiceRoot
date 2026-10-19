@@ -572,3 +572,28 @@ coordinator still needs an explicit fresh-Auth repair without deleting/recreatin
 their detector stream. Receiver, producer dispatch/current-owner ACK, lifecycle
 repair and real P1-P5 activation remain open. The own Graphify AST update was
 canceled at terminal exit 1 after no progress; no AST verification is claimed.
+
+Develop integration checkpoint (immutable input `c850c2e4d56b2130cf739dbcddde8faf6d72a663`):
+preserve the existing Moderation caller restrictions and shared issuer together
+with the incoming fixed Space-admission method and capability. Regenerate the
+Auth/User Go and Dart mirrors; buf lint and scoped Go tests/vet pass. The initial
+User root check lacked its exact root Compose fixture; its same-source rerun
+passes after supplying that tracked file. Other successful package results are
+retained, not relabeled as one uninterrupted full run.
+
+Auth compilation and the final aggregate XML report 64 cases with no failure,
+error or skip. The first run had eleven resource-fixture errors: archive mtime
+zero prevented Maven from copying TLS test resources. Copying those resources
+with corrected timestamps leaves all source bytes unchanged. One remaining
+two-second mTLS fetch timed out at one CPU; the same compiled two-case class
+passes at two CPUs without changing TLS policy or timeout. This is an explicitly
+qualified aggregate, not a single clean 64-case execution. Source tree
+`5320d6de601a0bf891301e7967bcec17415d7204`, archive and native before/after
+inventories are preserved in the portable merge receipt. Graphify was canceled
+at terminal exit 1; no AST pass is claimed. These checks do not activate P1-P5
+or satisfy physical P30D acceptance.
+
+Independent cycle review identified a separate migration-9 DOWN race: the
+emptiness check must exclude concurrent writers through the destructive DDL.
+Keep the existing source review open and fix that guard with a two-connection
+negative before claiming the cycle slice clear.

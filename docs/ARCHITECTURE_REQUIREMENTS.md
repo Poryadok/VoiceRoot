@@ -80,6 +80,7 @@ fan-out.
 | Загрузка файлов       | 10 загрузок / час на пользователя           | —                            |
 | Создание спейсов      | 5 спейсов / день на аккаунт                 | —                            |
 | Создание текстовых чатов в спейсе | 20 чатов (`group` \| `channel`) / день на аккаунт | —            |
+| Notification ordinary chat push | 60 logical messages / rolling 60 seconds per recipient; shared variants/devices/retries, decisions retained192h | push suppressed; in-app unchanged |
 | Регистрация ботов     | 5 ботов / день на аккаунт                   | —                            |
 | Bot API (slash / webhook через Gateway) | 5000 запросов / 1 мин на ключ лимита (см. [microservices/api-gateway.md](microservices/api-gateway.md)) | —                            |
 

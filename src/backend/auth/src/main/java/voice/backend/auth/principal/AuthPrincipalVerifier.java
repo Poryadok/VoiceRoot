@@ -82,6 +82,8 @@ public final class AuthPrincipalVerifier {
           JsonNode epoch = claims.get("session_epoch");
           if (epoch != null && (!epoch.isIntegralNumber() || !epoch.canConvertToLong() || epoch.longValue() != 0)) throw invalid();
         }
+        if (AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC.equals(rpc)
+            && (claims.has("account_id") || claims.has("profile_id") || claims.has("session_epoch"))) throw invalid();
         principal = new VerifiedPrincipal(kind, issuer, null, null, 0);
       } else if (VerifiedPrincipal.DELEGATED_USER.equals(kind)) {
         if (!"gateway".equals(issuer) || !subject.equals(string(claims, "account_id"))) throw invalid();
@@ -102,7 +104,9 @@ public final class AuthPrincipalVerifier {
       // Do not expose credentials, identities, network endpoints or parser details.
       throw Status.UNAUTHENTICATED.withDescription("invalid principal").asRuntimeException();
     }
-    boolean allowed = AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC.equals(rpc)
+    boolean allowed = AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC.equals(rpc)
+        ? principal.kind().equals(VerifiedPrincipal.SERVICE) && principal.issuer().equals("space")
+        : AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC.equals(rpc)
         ? principal.kind().equals(VerifiedPrincipal.SERVICE) && principal.issuer().equals("voice")
         : AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC.equals(rpc)
         ? principal.kind().equals(VerifiedPrincipal.SERVICE) && principal.issuer().equals("space")
