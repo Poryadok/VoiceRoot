@@ -56,6 +56,9 @@ func (s *MatchmakingGRPC) StartSearch(ctx context.Context, req *matchmakingv1.St
 }
 
 func (s *MatchmakingGRPC) StartSpaceQueue(ctx context.Context, req *matchmakingv1.StartSpaceQueueRequest) (*matchmakingv1.StartSpaceQueueResponse, error) {
+	if s.freshRoutes != preCutFreshRoutes {
+		return nil, status.Error(codes.Unavailable, "space matchmaking source unavailable")
+	}
 	spaceID, err := uuid.Parse(strings.TrimSpace(req.GetSpaceId()))
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid space_id")

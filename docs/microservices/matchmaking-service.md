@@ -495,6 +495,14 @@ not substitute for it. The required native route set denies `StartSpaceQueue` an
 profile-only `DecideLfpRequest` until genuine typed adapters are qualified. The
 existing pre-cut executable remains a separately admitted artifact.
 
+`NewNativeRouteHandler` binds that policy in the handler itself, so direct
+invocation and ordinary gRPC registration cannot reopen the current
+`StartSpaceQueue` or `DecideLfpRequest` implementations. Denial precedes request
+parsing, membership lookup and all mutation, including the unqualified DECLINE
+path. It does not mint a protected `StartSearch` subject, installation admission
+or readiness. The separate fixed native root must use this constructor and
+validate its complete required dependencies before exposing the service.
+
 Migration 024 adds an installer-owned local admission head. An incomplete
 CLOSED/PREPARED marker is sufficient to prevent legacy fallback; only a complete
 ADMITTED binding can pass the cooperating transition guard. That guard takes one

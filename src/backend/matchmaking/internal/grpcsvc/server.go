@@ -44,6 +44,7 @@ type MatchmakingGRPC struct {
 	Lfp                     *store.LfpStore
 	SpaceLifecycle          *spacelifecycle.Store
 	PartySnapshots          partysource.SnapshotReader
+	freshRoutes             freshRoutePolicy
 }
 
 func (s *MatchmakingGRPC) ListGames(ctx context.Context, req *matchmakingv1.ListGamesRequest) (*matchmakingv1.ListGamesResponse, error) {

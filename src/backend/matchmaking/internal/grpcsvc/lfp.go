@@ -33,6 +33,9 @@ type lfpStoryCriteria struct {
 // DecideLfpRequest accepts or declines a JOIN/INVITE from an LFP story
 // (docs/features/matchmaking.md Social Discovery; roadmap П.3).
 func (s *MatchmakingGRPC) DecideLfpRequest(ctx context.Context, req *matchmakingv1.DecideLfpRequestRequest) (*matchmakingv1.DecideLfpRequestResponse, error) {
+	if s.freshRoutes != preCutFreshRoutes {
+		return nil, status.Error(codes.Unavailable, "lfp consent source unavailable")
+	}
 	authorID, ok := authctx.ProfileID(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
