@@ -19,6 +19,7 @@ import (
 // Its constructor stays internal until the Q-to-exact-A resolver is assembled.
 type JoinApprovalProposal struct {
 	decisionContext JoinDecisionContext
+	legacyContext   *JoinLegacyDecisionContext
 	request         *spacev1.ApproveJoinRequestRequest
 	call            *lifecycleprincipal.VerifiedAdmissionCall
 	input           JoinAttemptInput
@@ -28,10 +29,11 @@ type JoinApprovalProposal struct {
 // VerifiedJoinApprovalDecision retains only checked constructor-private current
 // capabilities. Its historical observation hashes cannot authorize another call.
 type VerifiedJoinApprovalDecision struct {
-	proposal  *JoinApprovalProposal
-	applicant *admissionauthority.VerifiedSubject
-	reviewer  *admissionauthority.VerifiedReviewerPermission
-	basis     JoinDecisionBasis
+	proposal    *JoinApprovalProposal
+	applicant   *admissionauthority.VerifiedSubject
+	reviewer    *admissionauthority.VerifiedReviewerPermission
+	basis       JoinDecisionBasis
+	legacyBasis *JoinLegacyDecisionBasis
 }
 
 func (p *JoinApprovalProposal) Context() JoinDecisionContext {
@@ -52,6 +54,9 @@ func (p *JoinApprovalProposal) Context() JoinDecisionContext {
 func (p *JoinApprovalProposal) OwnerRequests() (*authv1.ObserveSpaceAdmissionSubjectRequest, *authv1.ObserveSpaceAdmissionSubjectRequest, error) {
 	if p == nil || p.call == nil || p.request == nil {
 		return nil, nil, ErrJoinAttemptUnavailable
+	}
+	if p.legacyContext != nil {
+		return p.legacyOwnerRequests()
 	}
 	actor, err := p.call.ActorFor(p.request)
 	c := p.decisionContext
@@ -78,6 +83,17 @@ func (p *JoinApprovalProposal) Seal(applicant *admissionauthority.VerifiedSubjec
 	if err != nil {
 		return nil, ErrJoinAttemptUnavailable
 	}
+	if p.legacyContext != nil {
+		context, err := p.LegacyContext()
+		if err != nil {
+			return nil, err
+		}
+		basis := JoinLegacyDecisionBasis{Context: context, ApplicantObservationSHA256: slices.Clone(app.ObservationSHA256[:]), ReviewerObservationSHA256: slices.Clone(review.ObservationSHA256[:])}
+		if _, err = basis.SHA256(); err != nil {
+			return nil, ErrJoinAttemptUnavailable
+		}
+		return &VerifiedJoinApprovalDecision{proposal: p, applicant: applicant, reviewer: reviewer, legacyBasis: &basis}, nil
+	}
 	basis := JoinDecisionBasis{Context: p.Context(), ApplicantObservationSHA256: slices.Clone(app.ObservationSHA256[:]), ReviewerObservationSHA256: slices.Clone(review.ObservationSHA256[:])}
 	if _, err = basis.SHA256(); err != nil {
 		return nil, ErrJoinAttemptUnavailable
@@ -99,6 +115,20 @@ func (d *VerifiedJoinApprovalDecision) currentApplicant() (admissionauthority.Su
 	}
 	review, err := d.reviewer.Transcript(r)
 	if err != nil {
+		return admissionauthority.SubjectIdentity{}, ErrJoinAttemptUnavailable
+	}
+	if d.proposal.legacyContext != nil {
+		if d.legacyBasis == nil {
+			return admissionauthority.SubjectIdentity{}, ErrJoinAttemptUnavailable
+		}
+		actual, e := d.legacyBasis.Context.SHA256()
+		expected, e2 := d.proposal.legacyContext.SHA256()
+		if e != nil || e2 != nil || actual != expected || !bytes.Equal(d.legacyBasis.ApplicantObservationSHA256, app.ObservationSHA256[:]) || !bytes.Equal(d.legacyBasis.ReviewerObservationSHA256, review.ObservationSHA256[:]) {
+			return admissionauthority.SubjectIdentity{}, ErrJoinAttemptUnavailable
+		}
+		return app.Identity, nil
+	}
+	if d.legacyBasis != nil {
 		return admissionauthority.SubjectIdentity{}, ErrJoinAttemptUnavailable
 	}
 	actual, err := d.basis.Context.SHA256()
@@ -171,9 +201,12 @@ func (s *SpaceStore) prepareJoinApprovalProposal(ctx context.Context, op JoinOpe
 		if !member {
 			return nil, ErrJoinAttemptDenied
 		}
-		var parentSHA []byte
-		if err = scoped.db().QueryRow(ctx, `SELECT decision_basis_sha256 FROM space_join_operations WHERE selected_attempt_id=$1 AND request_method=$2 AND state<>'RESERVED' AND decision_basis->'context'->>'kind'='1'`, a.ID, JoinOperationSubmit).Scan(&parentSHA); err != nil {
-			return nil, ErrJoinAttemptUnavailable
+		parentSHA, legacy, err := scoped.joinApprovalOriginalParent(ctx, a.ID)
+		if err != nil {
+			return nil, err
+		}
+		if legacy {
+			return scoped.prepareLegacyJoinApprovalProposal(ctx, op, request, call, a, parentSHA)
 		}
 		parent, err := scoped.loadJoinDecision(ctx, parentSHA, false)
 		if err != nil {

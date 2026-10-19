@@ -92,6 +92,9 @@ func (s *SpaceStore) CommitJoinApprovalDecision(ctx context.Context, d *Verified
 	if err != nil {
 		return nil, err
 	}
+	if d.legacyBasis != nil {
+		return s.commitLegacyJoinApprovalDecision(ctx, d, identity)
+	}
 	if s == nil || s.Pool == nil || s.tx != nil {
 		return nil, ErrJoinAttemptUnavailable
 	}
@@ -111,10 +114,7 @@ func (s *SpaceStore) CommitJoinApprovalDecision(ctx context.Context, d *Verified
 	}
 	op := JoinOperationInput{SpaceID: c.SpaceID, ActorAccountID: c.ActorAccountID, ActorProfileID: c.ActorProfileID, OperationID: c.OperationID, Method: c.RequestMethod, RequestSHA256: c.RequestSHA256}
 	in := JoinAttemptApprovalInput{SpaceID: c.SpaceID, AttemptID: c.AttemptID, ActorAccountID: c.ActorAccountID, ActorProfileID: c.ActorProfileID, OperationID: c.OperationID}
-	guard := func(context.Context, *SpaceStore, JoinAttemptApprovalInput) error {
-		_, err := d.currentApplicant()
-		return err
-	}
+	guard := joinApprovalCurrentGuard(d, op)
 	hookRan := false
 	hook := func(ctx context.Context, local *SpaceStore, a *joinAttemptPrivate) error {
 		if err := local.VerifyJoinRequestApprovalSelection(ctx, op, q, c.AttemptID); err != nil {

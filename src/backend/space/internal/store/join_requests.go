@@ -187,11 +187,18 @@ func (s *SpaceStore) approveJoinAttempt(ctx context.Context, in JoinAttemptAppro
 	if in.SpaceID == uuid.Nil || in.AttemptID == uuid.Nil || in.ActorAccountID == uuid.Nil || in.ActorProfileID == uuid.Nil || in.OperationID == uuid.Nil {
 		return nil, entrypolicy.ErrInvalid
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}
 	defer func() { cleanup, cancel := BoundedCleanupContext(ctx); defer cancel(); _ = tx.Rollback(cleanup) }()
+	if hook != nil {
+		// Public decision hooks update the shared journal too. Take its common
+		// actor/operation lock before the approval lock and Space fence.
+		if err = lockJoinPublicOperation(ctx, tx, JoinOperationInput{ActorProfileID: in.ActorProfileID, OperationID: in.OperationID}); err != nil {
+			return nil, err
+		}
+	}
 	// Lock actor/operation before the Space key. Same operation can never select
 	// another attempt/Space while a remote authorization is in flight.
 	key := joinDigest("approval-operation", struct{ Actor, Operation uuid.UUID }{in.ActorProfileID, in.OperationID})
