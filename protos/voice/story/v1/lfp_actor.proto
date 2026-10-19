@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package voice.story.v1;
+
+import "voice/story/v1/lfp_consent.proto";
+
+option go_package = "voice.app/voice/story/v1;storyv1";
+
+// PRIVATE immutable original actor sidecar. Deterministic canonical fields1-12
+// exactly once, no unknown fields. A valid encoding/hash is data, not live auth.
+message LfpActorProvenanceMaterial {
+  uint64 protocol_version = 1;
+  LfpActorActionKind action_kind = 2;
+  LfpActorKind actor_kind = 3;
+  LfpActorAccountType account_type = 4;
+  bytes account_id = 5;
+  bytes profile_id = 6;
+  int64 session_epoch = 7;
+  bytes action_operation_id = 8;
+  string issuer = 9;
+  string audience = 10;
+  string full_rpc = 11;
+  bytes principal_request_sha256 = 12;
+}
+
+enum LfpActorActionKind {
+  LFP_ACTOR_ACTION_KIND_UNSPECIFIED = 0;
+  LFP_ACTOR_ACTION_KIND_PUBLISH_OFFER = 1;
+  LFP_ACTOR_ACTION_KIND_RESPOND = 2;
+  LFP_ACTOR_ACTION_KIND_ACCEPT = 3;
+  LFP_ACTOR_ACTION_KIND_DECLINE = 4;
+}
+
+enum LfpActorKind {
+  LFP_ACTOR_KIND_UNSPECIFIED = 0;
+  LFP_ACTOR_KIND_HUMAN_DELEGATED_USER = 1;
+}
+
+enum LfpActorAccountType {
+  LFP_ACTOR_ACCOUNT_TYPE_UNSPECIFIED = 0;
+  LFP_ACTOR_ACCOUNT_TYPE_REGULAR = 1;
+  LFP_ACTOR_ACCOUNT_TYPE_GUEST = 2;
+}
+
+// Persisted original306/314 provenance. Only actual controller-admitted
+// credential/peer/DB composition establishes authority for these private bytes.
+message LfpConsentOrigin {
+  bytes environment_id = 1;
+  bytes installation_id = 2;
+  bytes authority_incarnation = 3;
+  bytes database_binding_sha256 = 4;
+}
+
+message LfpActorBoundConsentEnvelope {
+  uint64 protocol_version = 1;
+  bytes canonical_v1_consent = 2;
+  bytes canonical_actor = 3;
+  LfpConsentOrigin origin = 4;
+  bytes consent_sha256 = 5;
+  bytes actor_sha256 = 6;
+  bytes qualified_consent_sha256 = 7;
+}
+
+// All fields required. Base registration retains its unchangedv1 hash.
+message LfpActorBoundRegistrationAck {
+  uint64 protocol_version = 1;
+  LfpConsentRegistration registration = 2;
+  LfpConsentOrigin origin = 3;
+  bytes qualified_consent_sha256 = 4;
+  bytes actor_bound_registration_sha256 = 5;
+}
+
+// PRIVATE Story -> MM. Exact service principal/method/body/JTI, replay, verified
+// TLS and current admitted cohort required. Never fall back to barev1 methods.
+service LfpActorBoundConsentRegistryService {
+  rpc RegisterActorBoundLfpConsent(RegisterActorBoundLfpConsentRequest) returns (RegisterActorBoundLfpConsentResponse);
+  rpc ReadActorBoundLfpConsentRegistration(ReadActorBoundLfpConsentRegistrationRequest) returns (ReadActorBoundLfpConsentRegistrationResponse);
+}
+
+message RegisterActorBoundLfpConsentRequest {
+  uint64 protocol_version = 1;
+  bytes registration_operation_id = 2;
+  LfpActorBoundConsentEnvelope envelope = 3;
+}
+
+message RegisterActorBoundLfpConsentResponse {
+  LfpActorBoundRegistrationAck acknowledgement = 1;
+}
+
+message ReadActorBoundLfpConsentRegistrationRequest {
+  uint64 protocol_version = 1;
+  bytes registration_operation_id = 2;
+  bytes consent_id = 3;
+  bytes consent_sha256 = 4;
+  bytes actor_sha256 = 5;
+  bytes qualified_consent_sha256 = 6;
+  LfpConsentOrigin origin = 7;
+}
+
+message ReadActorBoundLfpConsentRegistrationResponse {
+  LfpActorBoundRegistrationAck acknowledgement = 1;
+}
+
+// PRIVATE MM -> Story. Load original sidecar, use explicit saved viewer type for
+// fresh privacy, then recheck exact active Story/offer/sidecar/Origin under SQL.
+service LfpActorBoundConsentOfferService {
+  rpc ValidateActorBoundLfpConsentOffer(ValidateActorBoundLfpConsentOfferRequest) returns (ValidateActorBoundLfpConsentOfferResponse);
+}
+
+message ValidateActorBoundLfpConsentOfferRequest {
+  uint64 protocol_version = 1;
+  ValidateLfpConsentOfferRequest offer = 2;
+  bytes qualified_consent_sha256 = 3;
+  bytes actor_sha256 = 4;
+  LfpConsentOrigin origin = 5;
+}
+
+message ValidateActorBoundLfpConsentOfferResponse {
+  uint64 protocol_version = 1;
+  ValidateLfpConsentOfferResponse offer = 2;
+  bytes qualified_consent_sha256 = 3;
+  bytes actor_sha256 = 4;
+  LfpConsentOrigin origin = 5;
+}

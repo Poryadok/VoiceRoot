@@ -102,9 +102,16 @@ CI and product acceptance remain distinct from source/component proof.
 - [x] Add actor-neutral private action protobuf: stable publication/response IDs,
   exact offer view, no public account/epoch/receipt bytes. Buf lint, Go/Dart
   generation succeeded; delegated action handlers remain to implement.
-- [ ] Resolve c12 actor/account-type sideproof with Astra301 before implementing
+- [x] Resolve c12 actor/account-type sideproof with Astra301 before implementing
   real eligibility. Canon permits contextual guest flows and separate guest
   privacy; regular-only is not an assumed replacement. No current-ID inference.
+- [x] Accepted301 c14 freezes12-tag actor codec, mandatory qualified consent/ACK/
+  source domains and NEW ActorBound wrapper methods. Independent literal Python
+  goldens, strict codec negatives and generated parity cover both human types;
+  v1 bytes/domains/goldens remain unchanged. Codec construction is data only.
+- [ ] Implement additive migration000006 (reserved c15 after actual catalog and
+  fresh search), atomic immutable actor sidecars/qualified ACK, saved-viewer
+  privacy and actual protected action/wrapper composition. No legacy enrichment.
 
 ## Decisions
 

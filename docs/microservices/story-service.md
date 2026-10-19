@@ -58,6 +58,17 @@ COMMIT or ROLLBACK retains restrictive admission: pgx's closed transaction or
 asynchronous connection close is not database-session quiescence. No local timeout
 or reopen releases this uncertainty; the actual controller must retire the old
 runtime and its database sessions before admitting replacement execution.
+Producer c14 additionally requires immutable explicit HUMAN guest/regular actor
+provenance, captured by the protected Gateway verifier and persisted alongside
+consent/offer/cohort. The additive `lfp_actor.proto` ActorBound wrappers and
+`pkg/lfpconsent/ACTOR_PROTOCOL.md` pin the sidecar/envelope/ACK domains while
+retaining original v1 bytes. Bare v1 registration/validation endpoints or old ACKs
+cannot qualify this path; no fallback or current-caller enrichment is allowed.
+Fresh service validation must load the saved original viewer type and pass it
+explicitly to current privacy rules. It cannot obtain regular by defaulting a
+service context, ID or epoch floor. Guest and regular LFP paths are supported;
+existing guest DM/Chat/Space restrictions remain separate. Actual actor sidecar
+persistence and wrapper runtime are implementation prerequisites.
 `BE011-STORY-LFP-RESTORE-CONTROLLER` owns the still-absent deployment controller,
 full replica/transaction drain, external state and credential/route custody;
 consumers are Story291 and MM145. Unknown authority leaves qualification closed.
