@@ -2,6 +2,19 @@
 
 ## Account-core v2 implementation checkpoint
 
+Restriction-sync checkpoint: a finite queue worker now requires this boot's P2
+private-repair capability before any peer call. Auth RPCs run outside account
+transactions with a two-second deadline. Only an exact typed account/subject/
+revision/ban acknowledgement can clear the matching durable intent, with the
+captured generation checked again under the account lock and before commit.
+An ahead reply is compared to CURRENT local revision under that lock: a newer
+local committed request remains queued; genuine remote-ahead divergence closes
+the gate without bumping local history. Closed-boot delivery and the ordinary
+in-flight-ahead case were reproduced as RED. Three real PostgreSQL worker tests
+and the existing complete-ban-set/stale-CAS test pass under Linux `-race`
+(3.148s). Main startup/census integration remains open; an empty batch or a
+successful sync call is not itself a P3/P4 receipt.
+
 Auth local-issuer/bootstrap checkpoint: native RED reproduced the SDK-off local
 issuer depending on a User endpoint. A complete key pair now creates exactly one
 issuer with no SDK/User client; all twelve configuration tests pass, preserving
