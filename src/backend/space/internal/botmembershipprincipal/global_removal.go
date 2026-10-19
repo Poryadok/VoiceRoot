@@ -99,7 +99,7 @@ func (p *VerifiedGlobalRemoval) Check(r *spacev1.ApplyBotInstallationRemovalRequ
 	}
 	hash, err := principal.RequestHash(r)
 	a := p.actor
-	if err != nil || binding != p.binding || a.Issuer != "bot" || a.Subject != "service:bot" || a.Audience != "space" || a.RPC != spacev1.SpaceService_ApplyBotInstallationRemoval_FullMethodName || a.RequestID != binding.OperationID.String() || a.RequestHash != hash || !p.clock().Before(a.ExpiresAt) {
+	if err != nil || binding != p.binding || a.Kind != "service" || a.Issuer != "bot" || a.Subject != "service:bot" || a.AccountID != "" || a.ProfileID != "" || a.SessionEpoch != 0 || a.AccountType != "" || a.ActorProfileID != "" || a.BotID != "" || a.SpaceID != "" || a.InstallationID != "" || a.BotScope != "" || a.Audience != "space" || a.RPC != spacev1.SpaceService_ApplyBotInstallationRemoval_FullMethodName || a.RequestID != binding.OperationID.String() || a.RequestHash != hash || !p.clock().Before(a.ExpiresAt) {
 		return GlobalRemovalBinding{}, deny
 	}
 	return binding, nil

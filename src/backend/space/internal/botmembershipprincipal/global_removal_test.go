@@ -2,9 +2,13 @@ package botmembershipprincipal
 
 import (
 	"context"
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,6 +26,42 @@ func globalRemovalRequest() *spacev1.ApplyBotInstallationRemovalRequest {
 	cancel := nested.(*spacev1.RemoveBotMemberRequest)
 	root, frozen := sha256.Sum256([]byte(uuid.NewString())), sha256.Sum256([]byte(uuid.NewString()))
 	return &spacev1.ApplyBotInstallationRemovalRequest{ProtocolVersion: 1, OperationId: uuid.NewString(), DecisionId: uuid.NewString(), DecisionSha256: root[:], Purpose: "global_delete", BotId: cancel.InstallationIntent.BotId, ActorProfileId: cancel.ProfileId, SpaceId: cancel.SpaceId, NativeCancellation: cancel, FrozenScopeSha256: frozen[:]}
+}
+
+func TestGlobalRemovalRejectsSignedHumanCredentialFields(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	now := time.Now().UTC()
+	v := Verifier{Keys: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil }, Replay: func(context.Context, string, string, time.Time) error { return nil }, Clock: func() time.Time { return now }}
+	for _, field := range []string{"account_id", "profile_id", "session_epoch"} {
+		t.Run(field, func(t *testing.T) {
+			r := globalRemovalRequest()
+			ctx := signGlobalRemoval(t, key, now, r)
+			md, _ := metadata.FromIncomingContext(ctx)
+			parts := strings.Split(strings.TrimPrefix(md.Get("authorization")[0], "Bearer "), ".")
+			raw, err := base64.RawURLEncoding.DecodeString(parts[1])
+			require.NoError(t, err)
+			var claims map[string]any
+			require.NoError(t, json.Unmarshal(raw, &claims))
+			if field == "session_epoch" {
+				claims[field] = 7
+			} else {
+				claims[field] = uuid.NewString()
+			}
+			raw, err = json.Marshal(claims)
+			require.NoError(t, err)
+			parts[1] = base64.RawURLEncoding.EncodeToString(raw)
+			hash := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
+			signature, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, hash[:])
+			require.NoError(t, err)
+			parts[2] = base64.RawURLEncoding.EncodeToString(signature)
+			ctx = metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+strings.Join(parts, "."), "x-request-id", r.OperationId))
+			called := false
+			_, err = v.Unary()(ctx, r, &grpc.UnaryServerInfo{FullMethod: spacev1.SpaceService_ApplyBotInstallationRemoval_FullMethodName}, func(context.Context, any) (any, error) { called = true; return nil, nil })
+			require.Error(t, err, "pure service credential cannot carry an ambient human identity")
+			require.False(t, called)
+		})
+	}
 }
 
 func signGlobalRemoval(t *testing.T, key *rsa.PrivateKey, now time.Time, r *spacev1.ApplyBotInstallationRemovalRequest) context.Context {
