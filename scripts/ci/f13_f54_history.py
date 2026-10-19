@@ -322,6 +322,9 @@ def span_origin(repo, original_path, original_native_path, current_native_path):
     target=git(repo,'rev-parse','HEAD').decode().strip();target_parents=git(repo,'rev-list','--parents','-n','1',target).decode().split()[1:]
     require(current['target']==target and target_parents==[current['base'],current['source']],'actual_supplemental_current_target')
     require(git(repo,'rev-parse',target+'^{tree}').strip()==git(repo,'rev-parse',current['source']+'^{tree}').strip(),'supplemental_source_result_parity')
+    for name in ('f13_f54_history.py','voice-db-runtime-provisioning-contract_test.sh','voice-r22-runtime-scope.sh'):
+        path='scripts/ci/'+name
+        require((ROOT/path).read_bytes()==git(repo,'show',target+':'+path),'actual_supplemental_observer_source_bytes')
     allowed={'scripts/ci/f13_f54_history.py','scripts/ci/f13_f54_history_test.py','scripts/ci/voice-db-runtime-provisioning-contract_test.sh','.agent/execplans/native-p3-master-source.md'}
     require(set(git(repo,'diff','--name-only',PROTOTYPE_BASE,current['source']).decode().splitlines())<=allowed,'no_foreign_context_or_pin_drift')
     retained=[e for e in events if e['kind']=='row_committed' and e['operation']==reference]
@@ -330,6 +333,7 @@ def span_origin(repo, original_path, original_native_path, current_native_path):
         original_operation=operation,original_frame=frame,original_classification=classified,
         original_committed=retained,original_native_sha256=ORIGINAL_NATIVE_SHA,current_native=current,
         current_native_sha256=sha(current_raw),supplemental_classifier=classifier_binding(),
+        observer_sha256=sha((ROOT/'scripts/ci/f13_f54_history.py').read_bytes()),
         base=SPAN_BASE,head=SPAN_HEAD,allow_direct_followup='false',partition_source_history='true',admission=False)
 
 
@@ -347,6 +351,13 @@ def validate_aggregate_span(repo, original_path, span_path, span_sha, original_n
     require(exits[0]['payload']['exit']==0 and not verified['failures'],'supplemental_gate_failure_keeps_hold')
     operations=[e for e in events if e['kind']=='operation_begin']
     require([e['payload']['commit'] for e in operations]==SPAN_NODES and all(e['payload']['parent_index']==1 for e in operations),'complete_actual_internal_operations')
+    # These two fixed direct operations have no checkpoint exclusions. Their
+    # actual classifier inputs must retain every operation path, even when a
+    # forged shorter input happens to yield the same false Boolean.
+    require(not any(e['kind']=='disposition' for e in events),'no_unreviewed_span_classifier_exclusion')
+    for operation in operations:
+        classification=next(e for e in events if e['kind']=='classification' and e['operation']==operation['operation'])
+        require(classification['payload']['unapproved_delta']==operation['payload']['delta'],'complete_exact_span_classifier_input')
     original_owner_rows={e['payload']['path']:e for e in origin['original_committed']}
     obligations={}
     for name,value in verified['ledger'][identity]['paths'].items():

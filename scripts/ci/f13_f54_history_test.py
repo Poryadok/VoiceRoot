@@ -32,6 +32,8 @@ class ProducerTrace(unittest.TestCase):
         git(self.repo, 'config', 'user.name', 'Finite producer fixture')
         git(self.repo, 'config', 'user.email', 'fixture@example.invalid')
         self.write(RUNTIME, 'package main\n'); self.write(PROTO, 'base\n')
+        for name in ('f13_f54_history.py','voice-db-runtime-provisioning-contract_test.sh','voice-r22-runtime-scope.sh'):
+            self.write('scripts/ci/'+name,(ROOT/'scripts/ci'/name).read_text())
         self.base = self.commit('base')
 
     def write(self, path, text):
@@ -142,14 +144,15 @@ class ProducerTrace(unittest.TestCase):
         self.assertEqual(original_owner,aggregate)
         self.assertEqual((original/'trace.jsonl').read_bytes(),original_raw)
         events=[json.loads(v) for v in (span/'trace.jsonl').read_text().splitlines()]
-        for change in ('missing_link','wrong_hash','wrong_context','missing_second','failure_as_success','wrong_partition'):
+        for change in ('net_delta_only','missing_link','wrong_hash','wrong_context','missing_second','forged_failure','wrong_partition'):
             with self.subTest(change=change):
                 altered=json.loads(json.dumps(events))
-                if change=='missing_link':altered=[e for e in altered if e['kind']!='span_link']
+                if change=='net_delta_only':next(e for e in altered if e['kind']=='classification')['payload']['unapproved_delta']=m.raw_binding('')
+                elif change=='missing_link':altered=[e for e in altered if e['kind']!='span_link']
                 elif change=='wrong_hash':altered[0]['payload']['original_trace_sha256']='0'*64
                 elif change=='wrong_context':altered[0]['payload']['current_native']['snapshot']='0'*40
                 elif change=='missing_second':altered=[e for e in altered if e['operation'] and self.head not in e['operation'] or e['operation'] is None]
-                elif change=='failure_as_success':next(e for e in altered if e['kind']=='frame_exit')['payload']['exit']=1
+                elif change=='forged_failure':next(e for e in altered if e['kind']=='frame_exit')['payload']['exit']=1
                 else:next(e for e in altered if e['kind']=='frame_enter')['payload']['partition_source_history']='false'
                 path=span/(change+'.jsonl');m.write_events(path,altered)
                 with self.assertRaises((m.Rejected,KeyError)):
@@ -166,6 +169,10 @@ class ProducerTrace(unittest.TestCase):
         self.assertTrue(prefix['ledger'][frame]['paths'][PROTO]['aggregate'])
         with self.assertRaises(m.Rejected):m.consume_aggregate(prefix,frame,PROTO,(span/'map').read_bytes(),'false')
         with self.assertRaises(m.Rejected):m.validate_aggregate_span(self.repo,original/'trace.jsonl',span/'trace.jsonl',digest,old_path,current_path)
+        altered=[e for e in [json.loads(v) for v in raw.splitlines()] if e['kind']!='failure']
+        next(e for e in altered if e['kind']=='frame_exit')['payload'].update(exit=0,category=None)
+        path=span/'failure-relabeled-success.jsonl';m.write_events(path,altered)
+        with self.assertRaises(m.Rejected):m.validate_aggregate_span(self.repo,original/'trace.jsonl',path,hashlib.sha256(path.read_bytes()).hexdigest(),old_path,current_path)
         self.assertEqual((original/'trace.jsonl').read_bytes(),original_raw)
 
     def test_rehashed_drop_reorder_forgery_and_raw_dag_do_not_substitute_trace(self):
