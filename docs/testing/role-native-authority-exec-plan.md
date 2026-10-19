@@ -235,6 +235,17 @@ preserved; it is not relabeled as positive. No bare SQL initialization or
 package-store adapter was introduced. This closes that component composition
 gap, not full all-writer45/current/core or247 public initiation readiness.
 
+The named247 consumer also needs a portable caller-owned Linux serving harness.
+Before export implementation, an explicit export run completed the actual44
+positive but failed its required ready.json postcondition (runner32155 exit1);
+the ready artifact was absent. Export is opt-in only after the complete real44
+positive, with a fresh directory, short-lived fixture files, separate Bot-only
+fixture signer, independent PostgreSQL identifiers and a bounded consumer stop
+file. It must not export Auth attestations, bearer tokens or readiness/private
+capabilities. The longer test-process lifetime does not extend authority TTLs.
+The actual standalone signed consumer probe and stop/teardown proof are still
+required for this new harness; no portable serving PASS is claimed by compile.
+
 The existing Role25 consumer now has an executable denial fixture compiled
 inside immutable Space d410305b2e74993966e07aca5a486c16766d9e9a. It uses
 the official Space34-to44 migrator, an actual independent nonowner LOGIN and

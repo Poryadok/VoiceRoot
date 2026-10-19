@@ -25,14 +25,17 @@ type setup struct {
 	Config                             memberauthorityprincipal.Config
 }
 type reply struct {
-	SpaceID         string
-	Address         string
-	NodeID          string
-	Binding         *memberadmission.EnsureBinding
-	Published       bool
-	ServingLogin    string
-	SchemaVersion   int64
-	RegistryPresent bool
+	SpaceID          string
+	Address          string
+	NodeID           string
+	Binding          *memberadmission.EnsureBinding
+	Published        bool
+	ServingLogin     string
+	SchemaVersion    int64
+	RegistryPresent  bool
+	ServingDSN       string
+	DatabaseName     string
+	DatabaseSystemID string
 }
 type command struct {
 	Action, RoleID string
@@ -75,6 +78,7 @@ func run() error {
 	var servingLogin string
 	var schemaVersion int64
 	var registryPresent bool
+	var servingDSN, databaseName, databaseSystemID string
 	if unknownRegistry || prepare44 {
 		if prepare44 {
 			// The source39 build deliberately lacks this administrative API. Only
@@ -112,6 +116,13 @@ func run() error {
 			return fmt.Errorf("independent application login unavailable: %w", err)
 		}
 		servingLogin = actual
+		servingDSN = application.Config().ConnString()
+		if err = application.QueryRow(ctx, "SELECT current_database()").Scan(&databaseName); err != nil {
+			return err
+		}
+		if err = pool.QueryRow(ctx, "SELECT system_identifier::text FROM pg_control_system()").Scan(&databaseSystemID); err != nil {
+			return err
+		}
 		if err = application.QueryRow(ctx, "SELECT version FROM schema_migrations WHERE NOT dirty").Scan(&schemaVersion); err != nil {
 			return err
 		}
@@ -142,7 +153,7 @@ func run() error {
 	served := make(chan error, 1)
 	go func() { served <- server.Serve(listener) }()
 	defer func() { server.Stop(); <-served }()
-	if err = output.Encode(reply{Address: listener.Addr().String(), Binding: binding, ServingLogin: servingLogin, SchemaVersion: schemaVersion, RegistryPresent: registryPresent}); err != nil {
+	if err = output.Encode(reply{Address: listener.Addr().String(), Binding: binding, ServingLogin: servingLogin, SchemaVersion: schemaVersion, RegistryPresent: registryPresent, ServingDSN: servingDSN, DatabaseName: databaseName, DatabaseSystemID: databaseSystemID}); err != nil {
 		return err
 	}
 	for {

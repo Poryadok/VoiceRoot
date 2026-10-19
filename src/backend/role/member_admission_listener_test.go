@@ -34,7 +34,13 @@ func admissionListenerStore(t *testing.T) (context.Context, *store.RoleStore) {
 func admissionListenerStoreVersion(t *testing.T, version string) (context.Context, *store.RoleStore) {
 	t.Helper()
 	integrationtest.ConfigureDockerTesting()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	lifetime := 2 * time.Minute
+	if os.Getenv("ROLE_NATIVE_FIXTURE_EXPORT_DIR") != "" {
+		lifetime = 10 * time.Minute
+	}
+	// Only the disposable fixture lifecycle changes; all authority observations,
+	// signed request deadlines and credential lifetimes retain their own bounds.
+	ctx, cancel := context.WithTimeout(context.Background(), lifetime)
 	t.Cleanup(cancel)
 	pg, err := postgres.Run(ctx, integrationtest.PostgresImage, postgres.BasicWaitStrategies(), postgres.WithDatabase("admission"), postgres.WithUsername("fixture"), postgres.WithPassword("fixture_only"))
 	require.NoError(t, err)

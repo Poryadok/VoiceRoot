@@ -1,5 +1,7 @@
 #!/bin/sh
 set -eu
+role_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+repo_root="$(CDPATH= cd -- "$role_root/../../.." && pwd)"
 # The fixture's implementation and source are independently pinned. No peer
 # worktree, generated fake DTO, old catalog relabel, or mutable branch is used.
 case "${ROLE_NATIVE_SPACE_COHORT:-39}" in
@@ -12,9 +14,9 @@ trap 'rm -rf "$source_root"' EXIT
 # Windows worktree .git pointers are intentionally not resolved inside Linux.
 # Host preparation: rtk git archive --format=tar -o
 # tmp/swarm/native-space-$source_pin.tar $source_pin src/backend
-tar -xf "/workspace/tmp/swarm/native-space-$source_pin.tar" -C "$source_root"
+tar -xf "${ROLE_NATIVE_SPACE_ARCHIVE_DIR:-$repo_root/tmp/swarm}/native-space-$source_pin.tar" -C "$source_root"
 mkdir -p "$source_root/src/backend/space/cmd/role-native-fixture"
-cp /workspace/src/backend/role/testdata/native_space_fixture/main.go "$source_root/src/backend/space/cmd/role-native-fixture/main.go"
+cp "$role_root/testdata/native_space_fixture/main.go" "$source_root/src/backend/space/cmd/role-native-fixture/main.go"
 cd "$source_root/src/backend/space"
 go build -o /tmp/role-native-space-fixture ./cmd/role-native-fixture
 # The actual migrator fixture needs the same immutable migration set, copied

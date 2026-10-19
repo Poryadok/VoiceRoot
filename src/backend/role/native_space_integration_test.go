@@ -48,6 +48,7 @@ import (
 	"voice/backend/role/internal/principalruntime"
 	"voice/backend/role/internal/store"
 	"voice/backend/role/permissions"
+	"voice/backend/role/testdata/nativefixture"
 )
 
 type nativeSpaceReply struct {
@@ -58,6 +59,9 @@ type nativeSpaceReply struct {
 	ServingLogin     string
 	SchemaVersion    int64
 	RegistryPresent  bool
+	ServingDSN       string
+	DatabaseName     string
+	DatabaseSystemID string
 }
 
 type nativeFixtureLog struct {
@@ -182,10 +186,16 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	require.NoError(t, err)
 	next, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
+	botSigningKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
 	jwk := func(kid string, key *rsa.PrivateKey) map[string]string {
 		return map[string]string{"kid": kid, "kty": "RSA", "use": "sig", "alg": "RS256", "n": base64.RawURLEncoding.EncodeToString(key.N.Bytes()), "e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.E)).Bytes())}
 	}
-	jwks := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	jwks := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/bot" {
+			require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{jwk("current", botSigningKey)}}))
+			return
+		}
 		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{jwk("current", current), jwk("next", next)}}))
 	}))
 	t.Cleanup(jwks.Close)
@@ -263,7 +273,7 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	ownerAccount := uuid.NewString()
 	var floor atomic.Int64
 	floor.Store(7)
-	runtime, err := principalruntime.NewWithSessionEpochChecker(ctx, principalruntime.Config{ListenAddr: "127.0.0.1:0", TLSCertFile: certFile, TLSKeyFile: keyFile, ClientCAFile: clientCA, ReplayAddr: redisAddress, JWKSCAFile: certFile, JWKSURLs: map[string]string{"space": jwks.URL, "voice": jwks.URL, "gameintegration": jwks.URL, "gateway": jwks.URL, "bot": jwks.URL}, BotLifecycleEnabled: true, DelegatedUserEnabled: true, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: time.Second}, func(_ context.Context, observedAccount string, epoch int64) error {
+	runtime, err := principalruntime.NewWithSessionEpochChecker(ctx, principalruntime.Config{ListenAddr: "127.0.0.1:0", TLSCertFile: certFile, TLSKeyFile: keyFile, ClientCAFile: clientCA, ReplayAddr: redisAddress, JWKSCAFile: certFile, JWKSURLs: map[string]string{"space": jwks.URL, "voice": jwks.URL, "gameintegration": jwks.URL, "gateway": jwks.URL, "bot": jwks.URL + "/bot"}, BotLifecycleEnabled: true, DelegatedUserEnabled: true, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: time.Second}, func(_ context.Context, observedAccount string, epoch int64) error {
 		if (observedAccount != ownerAccount && observedAccount != account.String()) || epoch < floor.Load() {
 			return errors.New("stale session")
 		}
@@ -283,7 +293,7 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 		require.True(t, strings.HasPrefix(preparing.ServingLogin, "role_fixture_"))
 		require.False(t, preparing.RegistryPresent, "actual administrative registry has no cutover for this Space")
 		decision := &rolev1.CheckPermissionRequest{SpaceId: space.String(), ProfileId: owner.String(), PermissionName: permissions.SpaceManageBots}
-		response, err := client.CheckPermission(nativeWorkloadContext(t, current, "bot", rolev1.RoleService_CheckPermission_FullMethodName, decision), decision)
+		response, err := client.CheckPermission(nativeWorkloadContext(t, botSigningKey, "bot", rolev1.RoleService_CheckPermission_FullMethodName, decision), decision)
 		t.Logf("actualSpace44 UNKNOWN registry Role decision: allowed=%t error=%v", response.GetAllowed(), err)
 		require.Equal(t, codes.Unavailable, status.Code(err), "exact44 catalog and actual owner membership cannot replace missing per-Space administrative cutover")
 		require.Nil(t, response, "UNKNOWN registry must never produce a positive Role decision")
@@ -329,7 +339,7 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	require.NotZero(t, voiceResponse.GetPolicyEpoch())
 	require.True(t, voiceResponse.GetGrants().GetCanJoin(), "published default Member's qualified Voice grant remains usable")
 	botDecision := &rolev1.CheckPermissionRequest{SpaceId: b.SpaceID, ProfileId: owner.String(), PermissionName: "SPACE_MANAGE_BOTS"}
-	botContext := nativeWorkloadContext(t, current, "bot", rolev1.RoleService_CheckPermission_FullMethodName, botDecision)
+	botContext := nativeWorkloadContext(t, botSigningKey, "bot", rolev1.RoleService_CheckPermission_FullMethodName, botDecision)
 	botResponse, err := client.CheckPermission(botContext, botDecision)
 	require.NoError(t, err, "exact Bot installation decision must use the protected qualified receiver")
 	require.True(t, botResponse.GetAllowed())
@@ -337,17 +347,17 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	require.Equal(t, codes.Unauthenticated, status.Code(err), "Bot decision transport replay must be rejected")
 	botMemberDecision := proto.Clone(botDecision).(*rolev1.CheckPermissionRequest)
 	botMemberDecision.ProfileId = b.ProfileID
-	botResponse, err = client.CheckPermission(nativeWorkloadContext(t, current, "bot", rolev1.RoleService_CheckPermission_FullMethodName, botMemberDecision), botMemberDecision)
+	botResponse, err = client.CheckPermission(nativeWorkloadContext(t, botSigningKey, "bot", rolev1.RoleService_CheckPermission_FullMethodName, botMemberDecision), botMemberDecision)
 	require.NoError(t, err)
 	require.False(t, botResponse.GetAllowed(), "ordinary qualified Member is not a Bot administrator")
 	botScopedDecision := proto.Clone(botDecision).(*rolev1.CheckPermissionRequest)
 	room := uuid.NewString()
 	botScopedDecision.VoiceRoomId = &room
-	_, err = client.CheckPermission(nativeWorkloadContext(t, current, "bot", rolev1.RoleService_CheckPermission_FullMethodName, botScopedDecision), botScopedDecision)
+	_, err = client.CheckPermission(nativeWorkloadContext(t, botSigningKey, "bot", rolev1.RoleService_CheckPermission_FullMethodName, botScopedDecision), botScopedDecision)
 	require.Equal(t, codes.PermissionDenied, status.Code(err), "Bot management accepts no client-selected node")
 	botWrongPurpose := proto.Clone(botDecision).(*rolev1.CheckPermissionRequest)
 	botWrongPurpose.PermissionName = "SPACE_MANAGE_SETTINGS"
-	_, err = client.CheckPermission(nativeWorkloadContext(t, current, "bot", rolev1.RoleService_CheckPermission_FullMethodName, botWrongPurpose), botWrongPurpose)
+	_, err = client.CheckPermission(nativeWorkloadContext(t, botSigningKey, "bot", rolev1.RoleService_CheckPermission_FullMethodName, botWrongPurpose), botWrongPurpose)
 	require.Equal(t, codes.Unauthenticated, status.Code(err), "Bot cannot borrow the Space settings purpose")
 	gateway, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "current", PrivateKey: current})
 	require.NoError(t, err)
@@ -513,7 +523,7 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 		require.NoError(t, err)
 		method := rolev1.RoleService_ApplyBotInstallationRemoval_FullMethodName
 		call := func() (*rolev1.ApplyBotInstallationRemovalResponse, error) {
-			return client.ApplyBotInstallationRemoval(sourceCallContext(t, current, "bot", method, cleanup.OperationId, cleanup), cleanup)
+			return client.ApplyBotInstallationRemoval(sourceCallContext(t, botSigningKey, "bot", method, cleanup.OperationId, cleanup), cleanup)
 		}
 		first, err := call()
 		require.NoError(t, err)
@@ -521,5 +531,13 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 		again, err := call()
 		require.NoError(t, err)
 		require.True(t, proto.Equal(first, again))
+	}
+	if os.Getenv("ROLE_NATIVE_FIXTURE_EXPORT_DIR") != "" {
+		require.True(t, space44, "portable serving requires the actual initialized44 path")
+		var roleDatabase, roleSystemID string
+		require.NoError(t, roles.Pool.QueryRow(ctx, "SELECT current_database(),system_identifier::text FROM pg_control_system()").Scan(&roleDatabase, &roleSystemID))
+		require.NotEqual(t, roleSystemID, preparing.DatabaseSystemID, "actual independent Role and Space databases")
+		manifest := nativefixture.Manifest{RoleSchema: 25, SpaceSchema: preparing.SchemaVersion, SpaceSource: "a36cc5e504fab412f6d48dd5233ed199b9b5d243", RoleAddress: address, TLSServerName: "127.0.0.1", BotSignerKeyID: "current", BotJWKSURL: jwks.URL + "/bot", OwnerProfileID: owner.String(), OwnerAccountID: ownerAccount, SpaceID: space.String(), SpaceServingDSN: preparing.ServingDSN, RoleDatabase: roleDatabase, SpaceDatabase: preparing.DatabaseName, RoleDatabaseSystemID: roleSystemID, SpaceDatabaseSystemID: preparing.DatabaseSystemID}
+		holdPortableNativeFixture(t, ctx, manifest, certPEM, clientPEM, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: clientDER}), botSigningKey)
 	}
 }
