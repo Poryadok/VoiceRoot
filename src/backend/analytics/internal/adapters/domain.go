@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	analyticsv1 "voice.app/voice/analytics/v1"
@@ -289,6 +290,9 @@ func (m Mapper) FromAnalyticsSubject(subject string, data []byte) *analyticsv1.A
 	}
 	var ev analyticsv1.AnalyticsEvent
 	if err := protojson.Unmarshal(data, &ev); err == nil && ev.GetEventId() != "" {
+		return &ev
+	}
+	if err := proto.Unmarshal(data, &ev); err == nil && ev.GetEventId() != "" {
 		return &ev
 	}
 	parts := strings.Split(subject, ".")

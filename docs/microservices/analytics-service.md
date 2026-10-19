@@ -28,6 +28,13 @@
 1. **Stream adapters** — подписка на доменные JetStream streams (`message_events`, `user_events`, `chat_events`, …) и маппинг `eventsv1.*StreamEvent` → `AnalyticsEvent`.
 2. **Прямые `analytics.*`** — telemetry без доменного stream: Notification (push), Search (queries), Gateway (sampled API latency), Subscription (payments), Moderation (reports).
 
+Direct telemetry publishers encode `voice.analytics.v1.AnalyticsEvent` as
+protobuf binary in `analytics_events`. `properties_json` remains the JSON
+properties field inside that typed envelope. Analytics also accepts retained
+ProtoJSON envelopes during migration; changing the writer does not rewrite or
+discard the existing stream. Both encodings preserve the source event ID,
+timestamp, hashed identity and properties through ingestion and redelivery.
+
 ```
 Domain NATS streams ──► adapters ──┐
 analytics.* publishers ──► ingest gRPC ──┤
