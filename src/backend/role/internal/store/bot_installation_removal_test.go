@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -339,6 +340,28 @@ func TestBotInstallationRemoval_FirstWriterPreventsSourceDown(t *testing.T) {
 		t.Fatal("source DOWN did not settle")
 	}
 	var count int
+	require.NoError(t, f.Pool.QueryRow(ctx, "SELECT count(*) FROM role_bot_actor_bindings").Scan(&count))
+	require.Equal(t, 1, count)
+}
+
+func TestBotInstallationRemoval_StaleRepeatableReadCannotDropEvidence(t *testing.T) {
+	ctx := context.Background()
+	f := removalFixture(t)
+	stale, err := f.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
+	require.NoError(t, err)
+	defer func() { _ = stale.Rollback(context.Background()) }()
+	var count int
+	require.NoError(t, stale.QueryRow(ctx, "SELECT count(*) FROM role_bot_actor_bindings").Scan(&count))
+	require.Zero(t, count)
+	_, err = f.Pool.Exec(ctx, "INSERT INTO role_bot_actor_bindings(bot_id,actor_profile_id) VALUES($1,$2)", uuid.New(), uuid.New())
+	require.NoError(t, err)
+	// Execute the actual DOWN SQL on the old snapshot. Table locks alone do
+	// not refresh this snapshot and must never authorize erasing the new row.
+	down, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/role_db/000025_bot_installation_removal.down.sql"))
+	require.NoError(t, err)
+	_, err = stale.Exec(ctx, string(down))
+	require.ErrorContains(t, err, "READ COMMITTED")
+	_ = stale.Rollback(ctx)
 	require.NoError(t, f.Pool.QueryRow(ctx, "SELECT count(*) FROM role_bot_actor_bindings").Scan(&count))
 	require.Equal(t, 1, count)
 }
