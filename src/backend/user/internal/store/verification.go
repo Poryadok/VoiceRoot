@@ -36,7 +36,7 @@ func (s *ProfileStore) ApplyVerificationSourceState(
 	verificationType string,
 	badge string,
 ) (*ProfileRow, bool, error) {
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.beginIdentityMutationTx(ctx)
 	if err != nil {
 		return nil, false, err
 	}
@@ -64,6 +64,9 @@ func applyVerificationSourceStateTx(
 	verificationType string,
 	badge string,
 ) (*ProfileRow, bool, error) {
+	if _, err := identityTxForMutation(tx); err != nil {
+		return nil, false, err
+	}
 	var lockedProfileID uuid.UUID
 	err := tx.QueryRow(ctx, `
 		SELECT id FROM profiles
@@ -272,7 +275,7 @@ func (s *ProfileStore) StartOrgVerification(ctx context.Context, profileID uuid.
 		return "", err
 	}
 	txt := "voice-verify=" + token
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.beginIdentityMutationTx(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -311,7 +314,7 @@ func (s *ProfileStore) LatestOrgVerification(ctx context.Context, profileID uuid
 // MarkOrgVerificationVerified consumes only the current, unexpired token that
 // DNS actually proved. No network work occurs while the profile lock is held.
 func (s *ProfileStore) MarkOrgVerificationVerified(ctx context.Context, profileID uuid.UUID, token string) (*ProfileRow, error) {
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.beginIdentityMutationTx(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -346,6 +349,9 @@ func (s *ProfileStore) MarkOrgVerificationVerified(ctx context.Context, profileI
 }
 
 func lockOrgVerificationProfile(ctx context.Context, tx pgx.Tx, profileID uuid.UUID) error {
+	if _, err := identityTxForMutation(tx); err != nil {
+		return err
+	}
 	var id uuid.UUID
 	return tx.QueryRow(ctx, `SELECT id FROM profiles
 		WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, profileID).Scan(&id)

@@ -17,7 +17,7 @@ import (
 // allocator row used by AppendSearchProjection serializes this with every live
 // mutation, so the returned H is a real immutable boundary.
 func (s *ProfileStore) MaterializeSearchProjectionBaseline(ctx context.Context) error {
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.beginIdentityMutationTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -150,6 +150,9 @@ func (s *ProfileStore) ListSearchProjectionJournal(ctx context.Context, after ui
 // AppendSearchProjection atomically records the immutable User event and its
 // publishable outbox row in the caller's profile-mutation transaction.
 func AppendSearchProjection(ctx context.Context, tx pgx.Tx, event *userv1.SearchProfileProjectionEvent) error {
+	if _, err := identityTxForMutation(tx); err != nil {
+		return err
+	}
 	if tx == nil || event == nil || event.GetProtocolVersion() != 1 || event.GetSourceRevision() == 0 {
 		return fmt.Errorf("valid v1 search projection event required")
 	}

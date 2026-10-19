@@ -7,6 +7,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"math"
 	"time"
+	"voice/backend/pkg/authoritysource"
+	"voice/backend/user/internal/userauthoritycatalog"
 )
 
 // ExpectedFence is a pinned owner-generation/keyset expectation, not a grant.
@@ -55,6 +57,12 @@ func acquireIdentityTx(ctx context.Context, tx pgx.Tx, expected *ExpectedFence) 
 	}
 	bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
+	if err := authoritysource.ValidateTx(bounded, tx, userauthoritycatalog.Catalog()); err != nil {
+		return nil, err
+	}
+	if err := validateIdentityShape(bounded, tx); err != nil {
+		return nil, err
+	}
 	cap := &IdentityTx{tx: tx}
 	if err := tx.QueryRow(bounded, `SELECT history_generation,keyset_revision,txid_current() FROM public.identity_meta WHERE singleton FOR UPDATE`).Scan(&cap.generation, &cap.keysetRevision, &cap.txid); err != nil {
 		return nil, err
