@@ -63,7 +63,7 @@ func (s *SpaceStore) mutateBotInstallation(ctx context.Context, proof *botmember
 		return err
 	}
 	var version int64
-	if err = tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || version != 42 {
+	if err = tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || (version != 42 && version != 44) {
 		return ErrMemberAuthorityUnavailable
 	}
 	scoped := *s
@@ -94,7 +94,10 @@ func (s *SpaceStore) mutateBotInstallation(ctx context.Context, proof *botmember
 		}
 	}
 	var capture *effectiveMemberMutations
-	if mutatesSource {
+	// Guarded44 journals and cancellation tombstones are native source state
+	// even when no current membership is removed. Complete the full DB cohort
+	// for those writes too; the domain primitive still rejects unknown sources.
+	if mutatesSource || version == 44 {
 		capture, err = scoped.captureNativeEffectiveMemberMutation(ctx, in.SpaceID, []uuid.UUID{in.ProfileID})
 		if err != nil {
 			return err
@@ -112,6 +115,8 @@ func (s *SpaceStore) mutateBotInstallation(ctx context.Context, proof *botmember
 		if err = scoped.refreshEffectiveMemberCount(ctx, in.SpaceID); err != nil {
 			return err
 		}
+	}
+	if capture != nil {
 		if err = scoped.finishEffectiveMemberMutations(ctx, capture); err != nil {
 			return err
 		}
