@@ -1,0 +1,4673 @@
+{
+  "version": "NATIVE-P3-SOURCE-v1",
+  "base": "8191a36ca3bea7d053df0dd25963ca5133284b41",
+  "source": "53f75f74523735ac594e21582bea659f567a7288",
+  "classification": "DORMANT-A3-RESTRICTIVE-P3-SOURCE",
+  "consumers": [
+    "DEVELOP-SOURCE-v1",
+    "MASTER-SOURCE-v1"
+  ],
+  "projection": [
+    {
+      "path": ".agent/execplans/be012-roster-outbox-reset.md",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9bb4e3751d1e9c30baafc7813d86c84938166a72"
+      }
+    },
+    {
+      "path": ".agent/execplans/be265-native-p3.md",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2752b84ae1acc4de32f59b151b50cb20711a2a82"
+      }
+    },
+    {
+      "path": ".agent/execplans/space-admission-recovery-ownership.md",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8dd7f1823c8a64670525765150d38cf80caa1950"
+      }
+    },
+    {
+      "path": ".agent/execplans/voice-dormant-roster-relay.md",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e3a95b32b252adcdb72b96e3185b3306099078eb"
+      }
+    },
+    {
+      "path": "docs/DATA_STORES.md",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cc8bea40fc45bac0d79781a35a62e99d0bccb945"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2823cfa8f904846c26f9572fbc01d5e19850291d"
+      }
+    },
+    {
+      "path": "docs/microservices/space-service.md",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b02a7f46bb8c566d6fe0fa4afa6a8ebb8e384252"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d3330b04c059434e8be4746d1796233973d37f17"
+      }
+    },
+    {
+      "path": "docs/microservices/voice-service.md",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "76ae6515680deb830709bd4c36c787c91dc3e838"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "0e717f7e9c3dad3560945127e6fea6dbe3e1f422"
+      }
+    },
+    {
+      "path": "protos/voice/events/v1/jetstream_events.proto",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "bdac2e21d185c36878a362739622cdec8b0ea701"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d6a817fe31aa9820e1c27e1e1491adb8ca8605dd"
+      }
+    },
+    {
+      "path": "src/backend/messaging/pb/voice/events/v1/jetstream_events.pb.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "aa3d196cdeb8a427b3d5f156ba404753ecab1257"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8bc81e2f6d400b926e14124ad22c99aca33124a1"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000013_a3_roster_outbox.down.sql",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "47f8f4249efb5051731086e24d5855130ac1cb19"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000013_a3_roster_outbox.up.sql",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "bf34f06f817b882bf977b218cc9758bccbc4ed81"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000014_space_media_p3.down.sql",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a6257305c8d718cf895883b4cb11e677775e3901"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000014_space_media_p3.up.sql",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "0244a7c65f31f45549acc8dd3cf49aa5f43b2fb4"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000015_space_admission_ownership.down.sql",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ba751aa8b4c6d2fbc08f41c37479e453111604d1"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000015_space_admission_ownership.up.sql",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7697d22e4387eabf75da6f46c5578c20c9203f30"
+      }
+    },
+    {
+      "path": "src/backend/user/pb/voice/events/v1/jetstream_events.pb.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "aa3d196cdeb8a427b3d5f156ba404753ecab1257"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8bc81e2f6d400b926e14124ad22c99aca33124a1"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/screen_share_test.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "58856b467d1b9fb7e0d090603bbbf3466077f104"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "05ac3aa6bd4b8a38bb9e19130f0a898f5d4aec84"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/space_media_join.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "86321375a98f190ddd8fadea8e37f980563a264b"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "db94e8a8b0719600a4de9209ad0b3adce12afd0e"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/space_media_join_test.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "eea97fcc0e794b4b1be21e285c0956a89a1eb9ee"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "3c0733fb786547f15e7052393139f6b313cece02"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/voice_grpc.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8d39df7adf7eb772dae25755eac157e6982cff06"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "dc47f6b335d39e21944aee408f03efdd6057e781"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/voice_grpc_test.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f5974ed688238b4f6c703b46026eeb48b2f96ed1"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "123064bf046368d8ffd788c254aed8a5ab3c9144"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/voice_room.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f91c06e95023ee6b78859eeb9497fc55b4117ed2"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a6a52dfc85168d7cac3b28cfc74ab0113306df66"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/livekit/room_lifecycle.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6e2b8a2b8ef52f1bcb5b832940946f6a66c1e425"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cce65c1a6a9563767d8f80b592212a284ab04990"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/livekit/space_token.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ee9a2b828de9b6e32850aab0c58fc699484d8914"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "34d07ec372c57650aa3db538f3540b630a37585f"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/party_loss.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7962b93b71bc5b7497f042cb1b3c5f63ef8f5171"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/party_outbox_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5109d229001491e6ba2b9ac1ba26acd07a6df69c"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/postgres.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "addd04e6fee5f5f50254b4e7fba901bcd30a8413"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "86ad6d9ba5ef95a9dce45305a1bad29219a2b808"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/postgres_test.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d947eb22f19c06f23a4eb5ad999526bdab6c1c6f"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9647d38d47d90c01f3064742b02780236694c8ce"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/principaljwks/publisher.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "086f9040e285313ab07b3637b923a6fb276e55de"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/principaljwks/publisher_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "19982c59814fec3bcfb7bc1e517dc3934dd91197"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/rosteroutbox/delivery.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7e69b7b638cca71645706a94308c96a3372215aa"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/rosteroutbox/event.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "3016be1c5ad3a8024d5670253337d3ddddbaca8f"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacebarrier/barrier.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6d787b1e3d9929bcff57d678846a9cfc840bb502"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacebarrier/identity.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "064826902a6047026be4fd7a614f5ac0416592ff"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacegatetest/gates.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "575579c76f7e4f5bdc66b8192cae374cb77a9b74"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacegatetest/postgres.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "21995aa5584d90429ebf67d5bcd755b4694b982f"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/capture.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b3ab397e5c415068b2724d4093f6b5312e2d49c0"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/effects.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2174781f38b8fe99f07164ccba6b43580f35ef6e"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "33761d6cb090755ebba7b85ec2a43cb229829deb"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/postgres.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1ec062257bef2a886c0b4cc23297f3a154393da0"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "0b46ecb0f84afe4a57e8da06b77beab62cf84bc4"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/postgres_store_test.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a6eedc42f12d9550be63f1fb1d0fa1db97cd5c88"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5b949947a9196de809b2c82dac969823149a2eb0"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/provider_retirement_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7165433a062be36ac6dd53b4dd3c718975f42673"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/recovery_publication_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d945e5e75de9dceda69eac8424cef4004b35655c"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/service.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d77e4477cf5008d83edc2d50a37c5af13ef1b66e"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "45afb942be29f3b02a80b01f9ee195ff141e16d4"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/store.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "42f5ab256d7dbedbd76cacce6b84d7dd6d942a33"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "67e2a25efd8297aacc46ba5445aab1610c4d8911"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/admission_dispatch.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "83045696d2c00af5b1aa3cd1423f7603f39757e5"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/admission_ownership.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a04cef76fad665fe92ef274afc8e0e0c21e9c85a"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/admission_ownership_down_integration_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f3706ffb15349e7fbafabb617be5f0d492ecf390"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/admission_ownership_integration_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c6ce637203e814ad1afeceab206451f6e16ca579"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/admission_revocation.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "66fca14ec4984384b9b709ea7b4c5669cbf0ca07"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/captured_drain.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "451b3a80e38758f95ae5df76da5818384134cc16"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/communication_timeout_test.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "71dfac95684a911c262babd9e7ae12573797554e"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2cbaf4d23418d7ca936e6c1a4942f2e2001fedd0"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/consumer_test.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "bca3b3a2fa1b76513fab0e3133e36be7a1ce0157"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4e8b112d504ab9bbc742c0c462eba6babe26616f"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/coordinator.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d45768344c26dce8446eef8996546af066b046f4"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "93454778dbf31c5aaeca6c3923d8bdf5020cd14f"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/coordinator_floor_test.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d4b28ba9c3c758de83dcfebfb0522c6d1796d3f1"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7cf293c162a3a5ff230d581024b4c93eda73c44b"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/coordinator_test.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d8c3988fa20af20d285a820d74866e9b39a03f09"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1898ee9d93803247b3b139e8c78d795942d2f52a"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/grants.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "31f9a524aebb60a025355e4395d2f22c8ea6da6e"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/native_down_snapshot_integration_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "84533faa062705bb3293e90079e614e7b485ea2e"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/p3_barrier.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "15a20530b2e4787f7eda017a2a90a9614ee5f3d8"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/p3_barrier_integration_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "04744b6833d4e523358b3528a71007c54c005329"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/p3_composition_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "794e9e9b32b6d3a07a78870a13fa4f5e5cf17497"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/p3_down_retention_integration_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "81c5110138346168ff14deca78c9010621cb0621"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/p3_gate_integration_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b57b5133cf73949bdf769d268a6276b536ece7da"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/party_loss.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d1a48f01f4715c805c3db930e073637f8dc8167d"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/party_room_close.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c9d1fe78d9f68149745a75dce1f896a7b7e42bf7"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/party_roster_integration_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "32eb23ee68f97b585fc887af2e212b2d64fc726e"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/postgres_admission.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4178c9a38cb4c342d54f1c03dca57e91c12415d7"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4ebac4b08044ee918b287040231e8b340f748185"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/postgres_admission_integration_test.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e95d16f154f71114319c6dcc17284f2c95af34ad"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "266ae736561c75b830c6e34071e3697223bcf2ec"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/projection_authority.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d24d2d7fbd4137f887d4e2496396ffdb07e8548f"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/store/call_store.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "369f412bc31b63949bf920baf4bd93835ad0fd65"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "16d691b13e16861b5ab5bf7ad56785dab7fe9fd6"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/store/redis_store.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e83042971ccb4dc7c8501ab7858dd0edef1d531e"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "906b69408f7b08bdb227836ba99a87f25de0dc89"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/store/redis_store_test.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cf2bf69c2882d79f72ed7d1ceae187d52b606401"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6ff65cefba8aedae7d348484f0b23b159d13e3d5"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/store/space_admission_dispatch_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "375199bcbf5c62a0a196ddef2c3226c7d796d6a4"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/store/space_admission_ownership.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "3fdcc797284eb44ff69f1e554403da3fe4bf1cce"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/store/space_gate_incarnation_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9f648a193f9ac2670b7feb49a71d4b2bec1e07d2"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/store/space_lifecycle.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "06b10b13f105347cf894c23629036f01a9c0558c"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/voiceevents/jetstream.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "184cc3a9788cf3d1acb58fe9a40ffd9b00facfe2"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7b4fbd181f1455e2c438abd0b7dff1ebd7e1d022"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/voiceevents/roster_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "59258c3874c4b348941a44f01d67c05130fca09d"
+      }
+    },
+    {
+      "path": "src/backend/voice/jwks_recovery_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "54c87f1450650038b561dd109c034bbc78b7b6ba"
+      }
+    },
+    {
+      "path": "src/backend/voice/jwks_startup_order_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e197505cf8cdf44a88635b3b3c596b53acc9e4d0"
+      }
+    },
+    {
+      "path": "src/backend/voice/main.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5bccd3403595a606c9fd689fb68af1fafd3610f1"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "eb2c4f2b13aa361b5f8d01238546afb8d925458e"
+      }
+    },
+    {
+      "path": "src/backend/voice/party_outbox_runtime.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e7c5eab30a054008d7d16862f622f5d92f5351f6"
+      }
+    },
+    {
+      "path": "src/backend/voice/party_outbox_runtime_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e6c286935c56516ec861d12634fc74eb7122d1bd"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/events/v1/jetstream_events.pb.go",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "aa3d196cdeb8a427b3d5f156ba404753ecab1257"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8bc81e2f6d400b926e14124ad22c99aca33124a1"
+      }
+    },
+    {
+      "path": "src/backend/voice/space_media_runtime.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "beff70aecd2d4dd42cbc21ba88691193caf4ac56"
+      }
+    },
+    {
+      "path": "src/backend/voice/space_media_runtime_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "0cbe83b8f584c384c9c783f8665077cdedd2901d"
+      }
+    },
+    {
+      "path": "src/frontend/lib/gen/voice/events/v1/jetstream_events.pb.dart",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6fda874f3bfeebcfed0c655c1e71b7d1315d2e7f"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4c087e4a90d8070e4e380acfd8a670b7386788bd"
+      }
+    },
+    {
+      "path": "src/frontend/lib/gen/voice/events/v1/jetstream_events.pbenum.dart",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cfbe2b1192f48b6c14e62ad55c522c708d8767e4"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cb047aa14edbe49d4910ab887c8fe2cef3acd866"
+      }
+    },
+    {
+      "path": "src/frontend/lib/gen/voice/events/v1/jetstream_events.pbjson.dart",
+      "before": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2cd6a2ef145f71bbaf43e820e64769051c2b07e0"
+      },
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ee9b403946df64be375d9289e17dacc8c199b40f"
+      }
+    }
+  ],
+  "context": [
+    {
+      "path": ".golangci.yml",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d37b2e749f2bd4fedc5f9be016ab23a590e1a0e2"
+      }
+    },
+    {
+      "path": "Makefile",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ff9642b0c6d1fa75a280953c8868b26eefea0b0b"
+      }
+    },
+    {
+      "path": "buf.gen.yaml",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f8342eb99c43cf58fc6003cc88a7240d1d5ccecf"
+      }
+    },
+    {
+      "path": "deploy/nats/README.md",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b994dd0e5912e4ed35218177e9d28fa0b91797f8"
+      }
+    },
+    {
+      "path": "deploy/nats/acl-intent.yaml",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5da3a004cf01bf2b0ced9d183d2fc2d6f0f41ae1"
+      }
+    },
+    {
+      "path": "deploy/nats/jetstream-publisher-streams.yaml",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "303e938fb0ea3514b9653b4daca0346d0408a213"
+      }
+    },
+    {
+      "path": "deploy/nats/leaf-sidecar.template.yaml",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "bf36b9243398d6088623f8f8d1c449dfd2e421d5"
+      }
+    },
+    {
+      "path": "deploy/nats/secret-contract.example.yaml",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6230e590ae2c2d8e38a56d2da0c6069f8c7521a7"
+      }
+    },
+    {
+      "path": "docs/ARCHITECTURE_REQUIREMENTS.md",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "31644e4123575093861683998798859c0274473b"
+      }
+    },
+    {
+      "path": "docs/DATA_MODEL.md",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e07dddd5fe58d62fc3da2365c5447ca1e1100120"
+      }
+    },
+    {
+      "path": "docs/testing/nats-v5-authority-exec-plan.md",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "372f785f4a9c7530db62a861cb9666730f25f984"
+      }
+    },
+    {
+      "path": "protos/buf.yaml",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ab515e1aaf4317fd301b6087d128d7a854720b5a"
+      }
+    },
+    {
+      "path": "src/backend/chat/pb/voice/chat/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7e2764fca269a35c28b652146421dfd083385aa5"
+      }
+    },
+    {
+      "path": "src/backend/chat/pb/voice/chat/v1/chat.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8"
+      }
+    },
+    {
+      "path": "src/backend/chat/pb/voice/chat/v1/chat_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "0db4d24d9d4c3f4aa0b9adada64433e76fff306e"
+      }
+    },
+    {
+      "path": "src/backend/chat/pb/voice/chat/v1/chat_lifecycle.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2e3d47150856f044205cd9c9b48c448e0e253909"
+      }
+    },
+    {
+      "path": "src/backend/chat/pb/voice/chat/v1/chat_lifecycle_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2b8f08b99d3411fc8eb0ccc97a616ff279554c18"
+      }
+    },
+    {
+      "path": "src/backend/chat/pb/voice/chat/v1/chat_scope_authority.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d2932b7b1bf150ae29edda7aa265015ac97ad0de"
+      }
+    },
+    {
+      "path": "src/backend/chat/pb/voice/chat/v1/chat_scope_authority_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "aa9ea91ebb9b18058c7adafd3b8fa155b8eb23d3"
+      }
+    },
+    {
+      "path": "src/backend/federation/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "91931d8e2c9ce33d0e48ad2f49c5b68e19d8a5b4"
+      }
+    },
+    {
+      "path": "src/backend/federation/go.sum",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9b35ff8fb544ea87125cbfe1c5d5b6d144e74bbf"
+      }
+    },
+    {
+      "path": "src/backend/federation/mediaauthority/boot_directory.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "0920db0a5a8b0435612cec91e680f5552b67088f"
+      }
+    },
+    {
+      "path": "src/backend/federation/mediaauthority/boot_directory_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a24c5efa29962a30c8f27d99bfda702e69d6174d"
+      }
+    },
+    {
+      "path": "src/backend/federation/mediaauthority/boot_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "728f2ba29cde66f74aaab22957717cae1f35bf41"
+      }
+    },
+    {
+      "path": "src/backend/federation/mediaauthority/directory.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e5c9dedcfc72110d5139316005e93be4c5c0f7aa"
+      }
+    },
+    {
+      "path": "src/backend/federation/mediaauthority/exchange.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "65b8a92844bd1ab3414a9687d1c3cdb18380d07b"
+      }
+    },
+    {
+      "path": "src/backend/federation/mediaauthority/exchange_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "769c457b4ecbfccc31b76533b23a49c83595c500"
+      }
+    },
+    {
+      "path": "src/backend/federation/mediaauthority/grant.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "20d76a8d5852328bc168315f4adae41ae2819b6d"
+      }
+    },
+    {
+      "path": "src/backend/federation/mediaauthority/grant_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "531a193d0aa08f4dc8bf6bb6d4bb9576486a453e"
+      }
+    },
+    {
+      "path": "src/backend/federation/mediaauthority/registry.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ef2559fe52d33a928433a490f7f23b32b200c67e"
+      }
+    },
+    {
+      "path": "src/backend/federation/mediaauthority/registry_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "571bba7d6c1ac0e3cb346ea2dd3477550cfebf93"
+      }
+    },
+    {
+      "path": "src/backend/federation/mediaauthority/request.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a25ee32fbc6a0abe8e3297c44ddeb01c1c359574"
+      }
+    },
+    {
+      "path": "src/backend/federation/nodecache/cache.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e06d27279dd3723c1b351a147ce8379b7409c80d"
+      }
+    },
+    {
+      "path": "src/backend/federation/nodecache/cache_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7dfa9f33bfdfeecf2a46f1d316245374c18804c7"
+      }
+    },
+    {
+      "path": "src/backend/federation/nodecache/media_watchdog.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "95c914c6d32130e6163305ddcbf75bb80660ba79"
+      }
+    },
+    {
+      "path": "src/backend/federation/nodecache/media_watchdog_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e5479bfff127c80750df0748ec89acea4b5d5ae5"
+      }
+    },
+    {
+      "path": "src/backend/federation/protocol/boot_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "21c948cf51a61d156535a77ecbd09eea261f034d"
+      }
+    },
+    {
+      "path": "src/backend/federation/protocol/protocol.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "406732c49e6ee889450409d5673e68dac9e1adbf"
+      }
+    },
+    {
+      "path": "src/backend/federation/protocol/scoped_permission_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2b233efda25d46f3a20d6726190b9d3f8f82b515"
+      }
+    },
+    {
+      "path": "src/backend/file/pb/voice/file/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8cc884d2216172250f65224150d8f4055bed3e96"
+      }
+    },
+    {
+      "path": "src/backend/file/pb/voice/file/v1/file.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "57a78c7e3394c1f7fac48a634f44798abecd9ba6"
+      }
+    },
+    {
+      "path": "src/backend/file/pb/voice/file/v1/file_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "08d2e33f83d9dbdb3cb945ab01c85ab9efce446e"
+      }
+    },
+    {
+      "path": "src/backend/messaging/pb/voice/events/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "55147001a4c21a94cb2cceded6c4a9c195f32cd7"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000001_room_lifecycle.down.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4c3f4593c18e823fbee10451d63ac3261c515c17"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000001_room_lifecycle.up.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7488b750ad727802fc8af54eb074ce7df57d338b"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000002_redis_divergence.down.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "3f34e8eb65b61d28200149df0a1542237d7d707a"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000002_redis_divergence.up.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "634e220af6b56b1de78d12b36eefd63a89ec6c79"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000003_matchmaking_membership.down.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "34566c4ab369754f5fe0fe8659634a2b8c5d4321"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000003_matchmaking_membership.up.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "fe61aef43722661e88cd1402ea151b40891296f2"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000004_game_session_rooms.down.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "77c6a6c5e247cb5dcb32ac39f22b186efb1ee32e"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000004_game_session_rooms.up.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7d71408e9784851bb2f7a38f1875b76278b43a6b"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000005_game_session_close.down.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c68bbc289840589b7a0802d8d648b3b087d9edba"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000005_game_session_close.up.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "026445737df22e9537fd5ca5844922cf48a5a078"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000006_game_session_roster_lease.down.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6e4f2887f9e71cc6b8a4219a86fc06b9374d27b4"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000006_game_session_roster_lease.up.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e3fe000190e20f17cfeda225d317d6eb072d8a93"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000007_t17_sdk_conversion_fence.down.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "df9026dde7dceb2d192be3c7909b386d13af3483"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000007_t17_sdk_conversion_fence.up.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b863bd2d7bd9971e4a0c8d24adc0635de01b341f"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000008_account_voice_fence.down.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d8e0c28c6fc76a77ceea216c9c7469e3ecef2412"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000008_account_voice_fence.up.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "30650e3e27ff2234bf327beb0cacae1da4e707bc"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000009_space_lifecycle.down.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7ad1a3e38936396f897c9df91fdfee3c72f1bd60"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000009_space_lifecycle.up.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e0fc5e76ac49ec6e81840832e0fc43aca2efdeb4"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000010_space_media_admission.down.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "83953384c9caa2ae2aa8d9485a208bb5ead5e33f"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000010_space_media_admission.up.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "171033aaf172370f76ede86349b042154bd2ff71"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000011_match_squad_operations.down.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9c506399d95a0f460bbdff8972b14fff9bd645ca"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000011_match_squad_operations.up.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "19bd5687fea0f556260d27fd1ecf5308de835395"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000012_ordinary_calls.down.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d9c893160d3f061be073641d10633a8f53c88043"
+      }
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000012_ordinary_calls.up.sql",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "62c51fe56513abcafae3bc7ba5ce05bfa1f989e7"
+      }
+    },
+    {
+      "path": "src/backend/pkg/authoritysource/auth_state.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "175e2747f69a744cdb4dedb764b13b2875de8c6d"
+      }
+    },
+    {
+      "path": "src/backend/pkg/authoritysource/auth_state_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e13daf83c46cc4313c3343a2857cd4f9b10dea25"
+      }
+    },
+    {
+      "path": "src/backend/pkg/authoritysource/postgres.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d223ed67231679615301536591677a709a39742a"
+      }
+    },
+    {
+      "path": "src/backend/pkg/authoritysource/role_state.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1bd18ca59fabb9c614ab1266af3f67c8d3a6ffbb"
+      }
+    },
+    {
+      "path": "src/backend/pkg/authoritysource/role_state_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7adc29fadda2fb5bbce81eb7f3d4a3d00255872b"
+      }
+    },
+    {
+      "path": "src/backend/pkg/authoritysource/runtime.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b24fa7650c44f46f5cf3da47fffdeedf18d2d198"
+      }
+    },
+    {
+      "path": "src/backend/pkg/authoritysource/runtime_config.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a5875903ac59fb5a55757d23126fa436d50e5d53"
+      }
+    },
+    {
+      "path": "src/backend/pkg/authoritysource/runtime_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d401cbff20405e5025cd20d2f7c59832d58ddc2b"
+      }
+    },
+    {
+      "path": "src/backend/pkg/authoritysource/server.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "0ab35df4592110780fd446156f5c198108a0736d"
+      }
+    },
+    {
+      "path": "src/backend/pkg/authoritysource/server_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5935b8f95e0fd67beb362492441aa895a24d28a3"
+      }
+    },
+    {
+      "path": "src/backend/pkg/authoritysource/space_state.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5717e154c7e2217ebc575d4d1e28e28bf81b7335"
+      }
+    },
+    {
+      "path": "src/backend/pkg/authoritysource/space_state_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "17b605fe8f8fb37473edeae82a307f0b0c1f209d"
+      }
+    },
+    {
+      "path": "src/backend/pkg/authoritysource/user_state.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c3f1ab10386dd3ca0790170b8f1533f4f461a20b"
+      }
+    },
+    {
+      "path": "src/backend/pkg/authoritysource/user_state_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e7682f065e7a8565e6f1445ac4091fe3375a10ff"
+      }
+    },
+    {
+      "path": "src/backend/pkg/correlation/correlation.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f760650a670d8e6d606d25366f66f0bf2c9cb3f4"
+      }
+    },
+    {
+      "path": "src/backend/pkg/correlation/correlation_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c77a9cc5fa5bcc6c4c98f771b53da433201870b5"
+      }
+    },
+    {
+      "path": "src/backend/pkg/gisowner/rejection.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b2ea91b4ffbdef69db66d9417e268bad5dafc377"
+      }
+    },
+    {
+      "path": "src/backend/pkg/gisowner/rejection_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e139c221718c65dfb04bf1d7a71f62b3bdf77e3b"
+      }
+    },
+    {
+      "path": "src/backend/pkg/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7fde68dc8f0b454ba2a16bb47a7da6dc913b2374"
+      }
+    },
+    {
+      "path": "src/backend/pkg/go.sum",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "bc33569c007bd66e44702f859e43be94a9f6c8ff"
+      }
+    },
+    {
+      "path": "src/backend/pkg/grpcclient/README.md",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "507f764f50df22f8a1dda501f37f1fac7923e07a"
+      }
+    },
+    {
+      "path": "src/backend/pkg/grpcclient/breaker.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ffb91f32d39f35437da37b83d65d9c46d0d1c708"
+      }
+    },
+    {
+      "path": "src/backend/pkg/grpcclient/breaker_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5bd8824d9966ae4db21b6ec03e54425c353a6351"
+      }
+    },
+    {
+      "path": "src/backend/pkg/grpcclient/dial.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "86076b0944b4ae9b848e572999161c04fcd4c123"
+      }
+    },
+    {
+      "path": "src/backend/pkg/grpcclient/dial_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "0d72deed23d53258c6e3278e6c84f97f500bd5cd"
+      }
+    },
+    {
+      "path": "src/backend/pkg/grpcclient/wait.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "fb89ec9fd50d8fc269112cd0bd5bbfdeae80a383"
+      }
+    },
+    {
+      "path": "src/backend/pkg/grpcclient/wait_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "066bdd66e801e81d2a55de1e776f4c98d1e779c0"
+      }
+    },
+    {
+      "path": "src/backend/pkg/grpcmw/interceptor.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5aacea3a9545dcdcc95a229163c758265ec73bae"
+      }
+    },
+    {
+      "path": "src/backend/pkg/grpcmw/interceptor_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "dd0f332392573751f3e16abd59fa8a9a5f987e28"
+      }
+    },
+    {
+      "path": "src/backend/pkg/grpcmw/metrics.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2eeae6496217562769b05d1603ceefe8b1786041"
+      }
+    },
+    {
+      "path": "src/backend/pkg/grpcmw/metrics_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e904db1e13c246c6422fe81ba67039c5b57a4362"
+      }
+    },
+    {
+      "path": "src/backend/pkg/guestguard/guestguard.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "57405f352bb7718de9dda626d18641638e9df59b"
+      }
+    },
+    {
+      "path": "src/backend/pkg/guestguard/guestguard_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "bb620515fba88e5414cb6af656ed33392c6695d0"
+      }
+    },
+    {
+      "path": "src/backend/pkg/guestprofile/placeholder.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7602b67c8bc071ff825e0f92c79d118eee7e301e"
+      }
+    },
+    {
+      "path": "src/backend/pkg/guestprofile/placeholder_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5e7f2511bcb8c8921af696d57308e7cd539f89ce"
+      }
+    },
+    {
+      "path": "src/backend/pkg/httpserver/httpserver.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e56be7a3ef6277d21da6b3bf0f287f6bc5657413"
+      }
+    },
+    {
+      "path": "src/backend/pkg/httpserver/timeouts.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1acce3fa328738bbca5d2146c6e848829b8f5f2c"
+      }
+    },
+    {
+      "path": "src/backend/pkg/integrationtest/authority_migrator.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "de25af00012fd6a2d2ad15fda83f0dc7814f571e"
+      }
+    },
+    {
+      "path": "src/backend/pkg/integrationtest/authority_source.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "bd574472e1e0d8f93f4acbb4e8374067fbad4980"
+      }
+    },
+    {
+      "path": "src/backend/pkg/integrationtest/docker.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "00dcc5c9aefd44a0352c87ab8a442dc1f54e2bb9"
+      }
+    },
+    {
+      "path": "src/backend/pkg/integrationtest/docker_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "130d09b3286c0f4655b8613b73d000bd0225f7a0"
+      }
+    },
+    {
+      "path": "src/backend/pkg/integrationtest/migrations.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "3d5352419c29fd3d118aec3a75e70535752c9716"
+      }
+    },
+    {
+      "path": "src/backend/pkg/integrationtest/migrations_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "45d2136fb9d66560a24ca8ec3f137a9acc22fcde"
+      }
+    },
+    {
+      "path": "src/backend/pkg/integrationtest/postgres.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a17e120c6746a9d356fc9ab3c2a4cbdad9936977"
+      }
+    },
+    {
+      "path": "src/backend/pkg/integrationtest/postgres_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6e580910aa9cfe1db4a3d748663c7115a5ba1ce0"
+      }
+    },
+    {
+      "path": "src/backend/pkg/integrationtest/user_migrations.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "898c39b6482a427be01549535ce19ee7ce29216f"
+      }
+    },
+    {
+      "path": "src/backend/pkg/integrationtest/user_migrations_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1e00baeb31c09185fe7abbb530b4d70bbeab45b5"
+      }
+    },
+    {
+      "path": "src/backend/pkg/logging/slog.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "735e25a9f8ce503ae8396c18f834b321db6689b3"
+      }
+    },
+    {
+      "path": "src/backend/pkg/logging/slog_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "09d5d2613f608dcb1cf169a8abdd8f342ef58dfc"
+      }
+    },
+    {
+      "path": "src/backend/pkg/middleware/accesslog.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b290c46baf22e3f52e835202c45c9347627851db"
+      }
+    },
+    {
+      "path": "src/backend/pkg/middleware/accesslog_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d5212b34de2ab8104151c1eacb36abe34ca06031"
+      }
+    },
+    {
+      "path": "src/backend/pkg/middleware/middleware_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f6be4dfe2bff5b0d2a603ac449e35898c63a8f94"
+      }
+    },
+    {
+      "path": "src/backend/pkg/middleware/requestid.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ae9a4079870372b64d159e13e10f3be8cd03604d"
+      }
+    },
+    {
+      "path": "src/backend/pkg/natslog/natslog.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4fceb9fa31df5b1c66d3ce81087f2a2e53ebd827"
+      }
+    },
+    {
+      "path": "src/backend/pkg/natslog/natslog_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "181fbb5feaf35031fb73044a568e9122c57a0158"
+      }
+    },
+    {
+      "path": "src/backend/pkg/pb/voice/authority/v1/authority.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5a01e5f3bc60cec4ef3af321876d374dcfb019c0"
+      }
+    },
+    {
+      "path": "src/backend/pkg/pb/voice/authority/v1/authority_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a4794ce87530ed0fb3a8b1e80382ec1f64109b4e"
+      }
+    },
+    {
+      "path": "src/backend/pkg/postgres/pool.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5a8169b78f32f57814f596257e9e6ec4093912ca"
+      }
+    },
+    {
+      "path": "src/backend/pkg/postgres/pool_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4c3a1366b8de60061433ffe4c64dfce83795afcb"
+      }
+    },
+    {
+      "path": "src/backend/pkg/principal/bot_actor.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "246fba4d767eeca3e8536bf81b481bf8aaae6d2c"
+      }
+    },
+    {
+      "path": "src/backend/pkg/principal/bot_actor_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a9e5ded63b52ed3b2240f91cd685eeda0eac1eda"
+      }
+    },
+    {
+      "path": "src/backend/pkg/principal/issuer.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1476a29218c73deda1d94c9113a2b844f0dba1c3"
+      }
+    },
+    {
+      "path": "src/backend/pkg/principal/jwks.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e8ecbd78a1d124c5e2a22f3f7d86b81f19ed7c6c"
+      }
+    },
+    {
+      "path": "src/backend/pkg/principal/jwks_http.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5cfa3d0efac7a2465dc0a9e55bb4b8465d842d80"
+      }
+    },
+    {
+      "path": "src/backend/pkg/principal/jwks_http_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "671745395f8c77768d2fc433364ac9c3a777eaf8"
+      }
+    },
+    {
+      "path": "src/backend/pkg/principal/jwks_readiness_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c2a25835624fcfec8afe5c386913da956ea771c8"
+      }
+    },
+    {
+      "path": "src/backend/pkg/principal/jwks_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4d0af18c2e4a9fcdc2c4504a039fac4815485562"
+      }
+    },
+    {
+      "path": "src/backend/pkg/principal/metadata.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a722a5067e7435c2acaca179bf174fb562799c0f"
+      }
+    },
+    {
+      "path": "src/backend/pkg/principal/metadata_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "377a01ec9129e9711a4483bf957672ec74a3df31"
+      }
+    },
+    {
+      "path": "src/backend/pkg/principal/principal_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f22060cc0593f0f50e3e0d5273a2c768f61bc10f"
+      }
+    },
+    {
+      "path": "src/backend/pkg/principal/request_hash.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5d58886e2eeec315cd1120988cb53ebb30e965f0"
+      }
+    },
+    {
+      "path": "src/backend/pkg/principal/request_hash_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "80171a2caa6afaaf9d0f867466715d024784192f"
+      }
+    },
+    {
+      "path": "src/backend/pkg/principal/social_privacy_rollout_red_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "fb2f54beb15bfc0a6bf428b6b5f8ae047450ae35"
+      }
+    },
+    {
+      "path": "src/backend/pkg/principal/user_identity.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "68daa3a03533f7410e8dcc527d2efa427f36ed2a"
+      }
+    },
+    {
+      "path": "src/backend/pkg/principal/user_identity_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "73610ccb065c86e16347e8f58f75cc1b65d329d5"
+      }
+    },
+    {
+      "path": "src/backend/pkg/principal/verifier.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2246134b1cf172c4fd4c5b8bec9dd7a827fce581"
+      }
+    },
+    {
+      "path": "src/backend/pkg/privacy/audience.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ce1aef680080236c7db94f247d38965998029750"
+      }
+    },
+    {
+      "path": "src/backend/pkg/privacy/audience_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "fe4e7fe6600a0c40f56680815028513652ed8483"
+      }
+    },
+    {
+      "path": "src/backend/pkg/privacy/enforce.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "45f3c89e4edb3673cbfdc57ae4774bc85c327030"
+      }
+    },
+    {
+      "path": "src/backend/pkg/privacy/enforce_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7fb674742655f34a0aa4e951139357eb97bd0a41"
+      }
+    },
+    {
+      "path": "src/backend/pkg/privacy/errors.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "063cc5e87995cac7feff5912a39cec770ff8c0da"
+      }
+    },
+    {
+      "path": "src/backend/pkg/privacy/matcher.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "16a72eb5463e144cc968a57c6ff556c7504082bc"
+      }
+    },
+    {
+      "path": "src/backend/pkg/privacy/matcher_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7c101c283c0c01345296ffab2848b9c8bfc01855"
+      }
+    },
+    {
+      "path": "src/backend/pkg/privacy/presets.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "151cedf290fe24cb1fc8bebc3b431a3788257b79"
+      }
+    },
+    {
+      "path": "src/backend/pkg/promhttp/metrics.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "96cc1260136bf9cbdfffdf4c3cb329955344b7ae"
+      }
+    },
+    {
+      "path": "src/backend/pkg/promhttp/metrics_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "460f303d3f3290e7f7978e4f3a168e7d52fa6f39"
+      }
+    },
+    {
+      "path": "src/backend/pkg/runtimeconfig/duration.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b516db8e9b4d005dab20f97bc91d56d7318d29c4"
+      }
+    },
+    {
+      "path": "src/backend/pkg/runtimeconfig/duration_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a48592c981382a71cfdb49fd4ec20b95aedf519a"
+      }
+    },
+    {
+      "path": "src/backend/pkg/socialprincipal/auth_sdk_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8d3d0b6d7ccd0beb4bca9c9bf38a8a59f06a6652"
+      }
+    },
+    {
+      "path": "src/backend/pkg/socialprincipal/communication_runtime_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ab646031b3c35a7e6c4aa686aac6681d13b44f8b"
+      }
+    },
+    {
+      "path": "src/backend/pkg/socialprincipal/communication_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "84f3d58cb60c4028f445730488a505fbd5be0e77"
+      }
+    },
+    {
+      "path": "src/backend/pkg/socialprincipal/config.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "879501f19c820540ad5d1972c5a67fdfcffacb9c"
+      }
+    },
+    {
+      "path": "src/backend/pkg/socialprincipal/config_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f6d1c4fcdb73ce52a313f500f824222e45f715c8"
+      }
+    },
+    {
+      "path": "src/backend/pkg/socialprincipal/diagnostic_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "abc4c9e8107d2d40037d4116171945527c92f8fc"
+      }
+    },
+    {
+      "path": "src/backend/pkg/socialprincipal/interceptor.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f41c8431189a94d75608094afaf7c725e1cc1a25"
+      }
+    },
+    {
+      "path": "src/backend/pkg/socialprincipal/interceptor_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2dce3cbb0b209942ada17148a982e17dfac7d958"
+      }
+    },
+    {
+      "path": "src/backend/pkg/socialprincipal/listener_ca_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f0c7cd091adbde6c4683c58f63ae4aee1606be77"
+      }
+    },
+    {
+      "path": "src/backend/pkg/socialprincipal/listener_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "292594006557ae5608cee76c9a85dbf76abc8fcd"
+      }
+    },
+    {
+      "path": "src/backend/pkg/socialprincipal/runtime.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a3a257396c37dad8e155df32a6d8189231d040ee"
+      }
+    },
+    {
+      "path": "src/backend/pkg/socialprincipal/runtime_allowlist_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5d9866b3fd3a5a37038037398cfaab667195ec46"
+      }
+    },
+    {
+      "path": "src/backend/pkg/socialprincipal/runtime_integration_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d9c53f3aa63e1b0185883b5a217c6695c5a96ded"
+      }
+    },
+    {
+      "path": "src/backend/pkg/socialprincipal/runtime_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2a1054a20a091a0e62b819dced8db36e7221111a"
+      }
+    },
+    {
+      "path": "src/backend/pkg/spacecommunication/client.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9c865a67d2802558666da8d8fc62020494ca5392"
+      }
+    },
+    {
+      "path": "src/backend/pkg/spacecommunication/client_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ae115c7ad8191633d3e088559a1360fa311577c7"
+      }
+    },
+    {
+      "path": "src/backend/pkg/spacecommunication/snapshot.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8867e25c7f2ffd8d343ca46e36924810ff06bbb9"
+      }
+    },
+    {
+      "path": "src/backend/pkg/spacecommunication/snapshot_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b062210d4e9a2e4df9ce6e68b85775a4ef91f57e"
+      }
+    },
+    {
+      "path": "src/backend/role/pb/voice/role/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "20fa7175f4b222f40957f0fcb92daf42d7f84b02"
+      }
+    },
+    {
+      "path": "src/backend/role/pb/voice/role/v1/member_admission.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "45e694b07216fe4d89d0c8eecd5d42edf46b26a4"
+      }
+    },
+    {
+      "path": "src/backend/role/pb/voice/role/v1/role.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "79833e0a0e1085b1964ac89603db5df5e55c0cdc"
+      }
+    },
+    {
+      "path": "src/backend/role/pb/voice/role/v1/role_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a93bacf9397ff42c63766de5a739e5ab6b815ca9"
+      }
+    },
+    {
+      "path": "src/backend/role/pb/voice/role/v1/space_chat_permissions.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1cf87a794d855a3481e4c7e502b61f34ff7b122e"
+      }
+    },
+    {
+      "path": "src/backend/role/pb/voice/role/v1/space_chat_permissions_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9eb3a0c16a6e2fc81d958e8285395e059c32140d"
+      }
+    },
+    {
+      "path": "src/backend/user/pb/voice/common/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "581e4ebd2981c4471b8ef869d0a3fa0b973bf9aa"
+      }
+    },
+    {
+      "path": "src/backend/user/pb/voice/common/go.sum",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "980e15bcbe469250837130b5abfa31fd14e231c4"
+      }
+    },
+    {
+      "path": "src/backend/user/pb/voice/common/v1/common.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "17224a2f39fd5f2df4f7122ce64d1ae58dbffeaf"
+      }
+    },
+    {
+      "path": "src/backend/user/pb/voice/common/v1/space_lifecycle.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4d476867354b8da634a4524f75b901f7e4f598c2"
+      }
+    },
+    {
+      "path": "src/backend/user/pb/voice/gameintegration/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ff529d4955d9304c8fac3e64c47c2fd6bec7233e"
+      }
+    },
+    {
+      "path": "src/backend/user/pb/voice/gameintegration/go.sum",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b91f33177510eb32e57d07183f745666d37c01f0"
+      }
+    },
+    {
+      "path": "src/backend/user/pb/voice/gameintegration/v1/game_event.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7cd9a5571d80817f97a80d982ddbb95f420f80b0"
+      }
+    },
+    {
+      "path": "src/backend/user/pb/voice/social/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "76be43ae364ae27042c66412ac22117cc49a1eca"
+      }
+    },
+    {
+      "path": "src/backend/user/pb/voice/social/v1/social.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9ae7e1ea6ad6451b4c97662cf34ca450f1aec0c6"
+      }
+    },
+    {
+      "path": "src/backend/user/pb/voice/social/v1/social_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4872fc77b23bad5f9cc19058ff70adffeae503d9"
+      }
+    },
+    {
+      "path": "src/backend/user/pb/voice/user/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "71e6b375b208b96439e9b599f29813c1935ea1a5"
+      }
+    },
+    {
+      "path": "src/backend/user/pb/voice/user/go.sum",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "fb2a0582d0e778f87f18c03abb1f33c190849ad5"
+      }
+    },
+    {
+      "path": "src/backend/user/pb/voice/user/v1/user.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "37fed3e42e6c952492642b0d501acc6e132b88e7"
+      }
+    },
+    {
+      "path": "src/backend/user/pb/voice/user/v1/user_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b4a1fa2177c33f9340d55d1352ef87947c47d79b"
+      }
+    },
+    {
+      "path": "src/backend/voice/$prof",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8396509f4f08067e9e22259ab80fa0a1e54040c6"
+      }
+    },
+    {
+      "path": "src/backend/voice/Dockerfile",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "03e931004f83bcd12a1a4f65f1ac8d928a8ae797"
+      }
+    },
+    {
+      "path": "src/backend/voice/README.md",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "12214f46f3c67000283819b5b703db55d5c2064c"
+      }
+    },
+    {
+      "path": "src/backend/voice/coverage",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b0fc65f7610932a47e645544052a17bda8594404"
+      }
+    },
+    {
+      "path": "src/backend/voice/database.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "141029253f3327994e0956478d0c56bc4f7bfbd5"
+      }
+    },
+    {
+      "path": "src/backend/voice/database_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b1f843a48d8f14ee2833b74560b338c710eda580"
+      }
+    },
+    {
+      "path": "src/backend/voice/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4234ee41b4ea080e84c82beb8f3e2537240f822f"
+      }
+    },
+    {
+      "path": "src/backend/voice/go.sum",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1151714bf63c7b954921658abf54d4a2d0d3888d"
+      }
+    },
+    {
+      "path": "src/backend/voice/health.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5c83067b069d50b0f1061af32f55c20f9581ddde"
+      }
+    },
+    {
+      "path": "src/backend/voice/health_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "acbe9f3015165178210e8b13d87c0ecc94000ccd"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/admissionlock/identity.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "90129b1637dce25c6800fb7c32bd52c87e008013"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/admissionlock/identity_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8edbaf030d2a5eb455e825afbdf142775260db31"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/authctx/authctx.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7c2d34a085e920d56a8bacb84b4fc96293f86152"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/authctx/authctx_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5cc70ca9a2b6e1ae1b02a88a1c828a3eb35c6668"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/federationmedia/client.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e44af56d7b2b080e8831b28d447b3a4600e8e408"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/federationmedia/client_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d6e74a3f3e3f48183538dde91105ce83122f93c3"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/federationmedia/runtime.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b41f034d9cf614c1748840b83d71762b3201d2c6"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/gameprincipal/config.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "90ab7a32a5679e47951e1037c22c36ce7d742db2"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/gameprincipal/interceptor.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "28b6ac267bad4f2bdfa51d963ddb14bea70fc064"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/gameprincipal/interceptor_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f07ba92193082f774f05c1c047763b523f2f876f"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/gameprincipal/runtime.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "bdef0256191247acb293c157a1d9a3c0109d995b"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/gameprincipal/tls_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1082b46569f6a7959e32711af40f62311d8a07c0"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/gameprovision/account_voice_fence.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "901fb1952369f1093fa23baed913c7648cdf11c8"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/gameprovision/account_voice_fence_integration_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ae3278c807701f850a2e3a2f1acb772bbd614b61"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/gameprovision/livekit_fencer.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c12ca86e4f63b3124357113dc1f8557875f0b3e2"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/gameprovision/ordinary_conversion.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "887a4e7cc0079308f57fa6391ff7797679d6dcfb"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/gameprovision/sdk_conversion_fence.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6bd43fb55a20b9ae4ad629aa7e2871c3f2fb1d18"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/gameprovision/store_integration_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c5ff1f993622ce488debd49b066cc9ce0e771dc5"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/gameprovision/store_postgres.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b7964283d40d03a7b4e25b8bdf342b760e7004bf"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/account_voice_admission.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "bd21d3028e8a4fd801c4ede228827b3bb9410dd9"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/account_voice_admission_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cc90be7f24e4811f4d87af733a895efccdb6ec5e"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/call_privacy.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "896f4d8a596b9d3e3510869acca6830f8b0703ad"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/call_privacy_degradation_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d0eca38d625193e23e569290762a17e1644eee70"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/call_privacy_integration_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7881c067a7e3b9761790e3f59a2b68e0c5b10fe3"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/call_privacy_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1557ae8626799f00489db19b312468c3b292d4e0"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/chat_guard.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "be08bd01f5f874ab64c6faa46b55ce06fcb7409c"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/communication_timeout_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7b293dfef32a05401fca88f193da79e463cb7f70"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/federation_media_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "731a0ddaee76ab1c9104b16c17e40430e7350332"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/game_session_admission_integration_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "170addc525f2c292b82900fe095c9dd401e9efca"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/game_session_contract_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c446ed1d36b8332c55041a204124cd7782d5fc1a"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/game_session_provisioning.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "fefdd17f88caf93ad113db344024fd13160b2143"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/game_session_rejection_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5b611c5f7826e416303a576c6f72ff8675e6953c"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/matchsquad_member.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "210a155f69b0ed8a4dee174b82d65c2bc97efc51"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/matchsquad_member_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6b69dcf23c9c3fb0fc60881256d3b620b7c497e7"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/matchsquad_voice.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "25eae9f156da9e75bb548b69a163f75c807bfe39"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/ordinary_calls.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2f0e76f755855c76bb46297fc9cd304679e88a4d"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/ordinary_calls_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "92ea8c06459e86b73d63478dde5ebb12d6832ce0"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/ordinary_control.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b8552fca258cd2ef5b815663e2ec8379377d2a12"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/ordinary_events.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b74b0b4694a78ae1de591250529bb888363c7a81"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/ordinary_events_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "3c98d93d44952801ad9297a7d2495b2666226578"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/ordinary_identity.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c9eec2034c639e7bf730a928a350bedc040b8e8a"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/ordinary_identity_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e8c8d9c867c35ba7931c1321e5d6ef23f566fbe2"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/ordinary_projection.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6c4a4672dc35c80d2ab97528a1859db21ee0444c"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/ordinary_projection_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1afa87ebfb4b0b6f636581d6f715e18a8676de1e"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/ordinary_read.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "562e3b1569176f8c10be8b02b6551893b4bda9f9"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/publish_log.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7d97c59dc5a8d5dbc1dc354de732d0448d19489f"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/publish_log_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "3b4aeeca8ad7028fbc677f5a382ba3b0bba6d609"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/role_guard.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9cf7a0d6cfd5e118cd0c9050e60e47716cdd9d3d"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/screen_share.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "26e0c627f297ff4bb2b8253a45500ebebce8cb01"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/screen_share_degradation_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "979f77f651f39124b1a9ff195d544993f8a94349"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/sdk_conversion_fence_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "30fa25eac746abb7431cebd5fe309a2ace2b43e4"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/space_lifecycle.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e77be6b98ef68e641f5d7df1a4c98331dddd078c"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/space_media_session_floor_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6ae6b04c8c7d5bbebc445cf6262d43dbec10900b"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/space_member_degradation_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "23dad5a1d65b8b63063bef0b00286b4fbf27b96f"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/subscription_voice_limits_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b4dc4a023b7d69be8d5435e574cb05ba2cfec56f"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/voice_commander.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b4489491c9b138bbac1fd99abd4bf2f37e8da8a1"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/voice_commander_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a5793336eaea104861c24755846f900840b4f54e"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/voice_grpc_group_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "49ed85cbacb17cd7f1ffefc3e421c9e9be2797b5"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/voice_room_access.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "87789044e7630fca6fbe4f82287bb98ebbbc3790"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/voice_room_access_canonical_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f3ca5c83b77620a3f779ed6ebd8adc91a8671a9a"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/voice_room_integration_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9cbeaae34df455a895c3a72546e414a0c4deb7dc"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/voice_room_move_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "441912801ae9cc50e1e7e30af67e4d4ade4cef84"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/voice_session_binding_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "225ce91a0012446ad1889fe119577cfe0709e6d7"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/livekit/room_lifecycle_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "80045c923976cdc9b782c94b787aced264466a30"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/livekit/space_token_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ef16dbd21e20ee55e120ecf282e806993fccf129"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/livekit/token.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8e09a19fc5496f4ebbdaf0af45b3625d8a070b34"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/livekit/token_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c239e96d14e51bdfed8c3aea5e1bdbe4a187e9fa"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/matchsquad/compaction.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "276ef17a8d3bf768ac0d2dd9f79440ffbab45f49"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/matchsquad/member.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "54dac2a046c6d411fd276e75a72c32f8e3d6df6a"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/matchsquad/member_repair.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a52d7a6e26d51fd0a5367c206ef872cb9360384e"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/matchsquad/member_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a9071c48a38090c931275d9fd07fd723e6c56b9d"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/matchsquad/postgres_integration_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cc96e05622a3e6825621359cb22409a2454bcc15"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/matchsquad/service.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8731d5982bbc46e6562508f8330681fd315194e2"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/matchsquad/service_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "30611158cdf911c8d60595b3f2ecfff275fc3967"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/matchsquadmemberprincipal/config.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "fe1e3aa15a68157914cafbb3b2df4321301e1023"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/matchsquadmemberprincipal/config_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "42a98bc88b76d148af2589cc4aef271e773199d3"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/matchsquadmemberprincipal/interceptor.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "27add503c32a4c6f387c9504ef8d673723b26f8f"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/matchsquadmemberprincipal/interceptor_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "925ca8e114ae39a56a8b472525989614272b264d"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/matchsquadmemberprincipal/runtime.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4c05054efb749cc64defebd1e0062cf30f72258b"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/matchsquadmemberprincipal/runtime_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c1c6c57f2ae875bbaef9127a4835a29e93f96b54"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/matchsquadprincipal/config.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7ed63cb5ab09c23a6451f63e4f47f443495059c9"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/matchsquadprincipal/config_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e805c0f85fd1a7882b5fbce2186e5db42a02dad3"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/matchsquadprincipal/interceptor.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4bea2de6c04599dc3a4c45828d4ab50893131e64"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/matchsquadprincipal/interceptor_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b26077b6cf87347acc914813b8b0ceadbae1069e"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/matchsquadprincipal/runtime.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2c128cba6eb55bbbe9e7eb424123cd22cb24489b"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/conversion.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9d720337a45739aa4b7e5ae69d21bdf7827a5d12"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/coordinator.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4b4a3edc19d9538b2e4043e81db900aa059a30c4"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/coordinator_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "fd32eb293dde4325af4a82a11c30e36bc4144293"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/lookup.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f6142e171db5dee994ccddc652b1a24f77f3fbee"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/media_authorization.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "48dfcbd161cf00e496175eb37ce99eb681a399ad"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/model.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b2c95844a52108e852bde053a215aec47aa59af7"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/model_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f9fe0c339b17417b6558979b2a71a19e993203e1"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/outbox.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b152bbec98041f3560314ef422e3c70ac50bddad"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/outbox_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "64cbd343d5775e243101c4800ae74bf23f7c79a6"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/recovery.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "dda20ec0505d19920b7e9ec232fd167ce147b665"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/validation.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "60a70f01cf1f03ac7fe0c03091dee832a7f99227"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/principalgrpc/dependency.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "559ea091adcd91216beff00ce5d636917ef242d7"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/principalgrpc/dependency_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "60b1d1f9fc824695ba888b3d519983b6341519b6"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/principalgrpc/interceptor.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "36340dbc32e2d8ef39a2d261d72eb81ad9aa5636"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/principalgrpc/interceptor_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "899540d413798cb6ebf2df3caff4043fdca6fa0d"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/principaljwks/config.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e8683fb6355dc59844c3b65ef110d5d51d208e0b"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/principaljwks/config_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "07492bce7a14a29f5b1ea1610d78b71246f436fa"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/rolegrant/client.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f34c178d0515ecb92df91c9f31156008f06d3d01"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/rolegrant/client_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1fc5d4041bc733b40f2ea92aa12bb5feadb435c5"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/authority.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "135a61c83137df9b8a3cb6b893a6530251b7caa4"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/authority_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ad7a71f60e0b4e0692b08f381afc385d3fb00719"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/binding.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d51bb5085cf89f8feaa3e0d34c0497da62520363"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/binding_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7af716c47f0b7dd1f53a8ee3e07f6556fe56755f"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/crash_harness_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8db182f9bd7ccfd33ea7a45607bf8eaf1ba18c2e"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/ledger.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "102eec292ef41d7e5677563c1ea7a2463d8bdeb9"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/ledger_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5f241815dc988c71128a961af08f3db62a966ff3"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/lifecycle_store.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "21bb1b2294a0f1238a53af115bf17762799da38d"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/matchmaking_membership.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "266d4217c15017d0e77bb3fe9a9756ac45bd45fe"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/matchmaking_membership_concurrency_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9ab20bbe164894c9b19cfbc90cec3a23bbb53203"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/matchmaking_membership_legacy_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "0b928fdc23a58053d361cbaa0db65e0f2558a36d"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/matchmaking_membership_migration_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "99eab775d7f1f898ad33a7ec1fe3d4407e9c76c9"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/matchmaking_membership_store_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2d1c0e97d63b75cd5f251db42868399d5f546de7"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/matchmaking_membership_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "3663e9e11b9182676826a9d09350cbbcfe7bdd13"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/memory_ledger.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1cfa9f713a6d6b9295c56af04c9888b8528cdb6b"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/postgres_concurrency_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6b64f6042579d1801084a913a1a552873b86ad5a"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/postgres_decision.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "95d6cf2f2aaa9d889c82e38c24089237d4a643a7"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/postgres_delivery.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b4cbc43d5e8a04eae24b113684ec6491e0409890"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/postgres_migration_down_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "79539ebb95aaf7877c781ad4eb6eec666a4a21ed"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/postgres_migration_integrity_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "43b165ec2a1d8a197d7f9ababcd36a6be0228583"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/postgres_migration_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b399d648c8fe715f4f037c0a8456c46fcf20555e"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/postgres_source_review_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cdc3c32599e17cf178035b6c4062976d8169a2bb"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/postgres_store.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "3760d64ef8ce9c0cdbcf913b7d8fcf71ffddeafe"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/postgres_store_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8d3280205d7ec6a219382c60ad795178dbda77c0"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/postgres_test_helpers_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "dbeebcc0de9b301a1afcd3d96edd9de160a0cc56"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/r22_proto_contract_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d122f4c32ce04aa52197e30a8833252179dbf781"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/redis_bridge.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "671e46f0568696019c7d761626f9b3d8c0344f7a"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/redis_divergence.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1ce35d35f5b5817644826d312149384ab3ad189a"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/redis_divergence_migration_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5dfb68e64d4821672137a71d571fd4dcf0ee97b9"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/redis_divergence_store_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "df87c8c239b86760239a939ae954e83384df0be5"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/redis_ledger.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9939f3df7506dd156bb2972838ce4b8a93480323"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/redis_ledger_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "52379fabeb61d1f505596b59c4ae73c131d81f1a"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/redis_mirror.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "fa7f5d9c7f2a65a3d89c3de832e13ae15c6b1aec"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/redis_mirror_d2d3_red_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7459d4a9539f056140215813c795fc0bad54b44a"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/roomlifecycle/redis_mirror_real_d2d3_red_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cd8353fd581cfdb3fc270c9b935e69dd394d65f1"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/s2s/chat_membership.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "30ac4f48dce96e8a12889ef1c27ede778cf38c3e"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/s2s/forward_meta.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5663d280989848f01a3950b67dac41bbbd5e2fa1"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/s2s/privacy.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d707b99ec135913c6adb2e7352c8ef165d73c494"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/s2s/profile_account.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b3aa088e31ccdbc3cdff6303fe416cde53cf63a7"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/s2s/profile_account_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "3e2f580e93c76868ba36c3d4a74ffed7daab75a1"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/s2s/role_permissions.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ecfeeb3940dffe2138b37b44ffeb7cef16346a55"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/s2s/role_permissions_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d244ea2d4b1e9487d828c347f520b1920bb1fd07"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/s2s/role_voice_room_grants.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "accb01a24db7297085ae31398314cad8878faa1c"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/s2s/space_membership.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2e256fa13639593742b97c0eb3da7ad2a6580e69"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/s2s/space_pro.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "079adf5b90943744e97092344594e2756f1ca763"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/s2s/voice_room_access.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "38b4467838476f7595a72fbdfd476ddef5f6c988"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/s2s/voice_room_access_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d013f995219481c7c828fc9129233fce195a35a2"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/sessionfloor/client.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "53d031d9e9b1b6c7d8c4a98897dcc3446ee5a5eb"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/sessionfloor/client_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "073885b856b7fc0d2dc6fb67bad339708a44d648"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/effects_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5e7eef76f3e4d665ad345f27d91c1be19d4a3e4e"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/store_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cb587a858d0103dc5f869abb4272e5f34958e654"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/consumer.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c5eca4ff2eb85274c466f67820064804f90dae03"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/outbox.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4305db380e1af4086097cebc3864234ecf1eeb23"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/outbox_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "df033fc39274ac364df126f851aba940f3bbdbf4"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/postgres_admission_diagnostics_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "11e6e1dddca6a4e1c009526b26e2abe893ce9695"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spaceprincipalruntime/config.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2f7bb025a98942212f366a543bcb78e57cb7579b"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spaceprincipalruntime/config_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b545202bf1a2a6d2f42b0950ad6293156326bee2"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spaceprincipalruntime/runtime.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7fbee5cef1605556b2eb4a7fe0dbedbee1918921"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/spaceprincipalruntime/runtime_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cb4f8fb40876b2c290b4c4195a1603425bba950e"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/store/call_store_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d87f58c373e6d0fee7a87618522e7c73684ae3ab"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/store/ordinary_cutover.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e417196ba0bc0fdcbd24ced8ba13062b64a47a3e"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/store/ordinary_projection.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b22492a6c1cbb56935a96d7341365550144618a1"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/store/ordinary_projection_integration_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "740fb73374ee295e02d2e2bbb8eb738205fd28d3"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/store/ordinary_projection_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cc610e53812811cc107c225e558b57b5fe1fe802"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/store/screen_share_store_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "41d0763c4e564fdf9aae12d3703ede2a35f4c28b"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/voiceevents/jetstream_contract_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f3985d48647d070956cfb6522cd9c4235c788f70"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/voiceevents/jetstream_inbox_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "72687171fd1384f1fe6edfe854894a221ffc31c7"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/voiceevents/ordinary.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4f1ef415b00dceee266eff99a1d8328e0f6b76cc"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/voiceevents/ordinary_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a3ab714f113247ed39c0049019fea33312dac0e5"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/voiceevents/participant.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "283235df93119cf6a95a363e4ded91d5431dc706"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/voiceevents/participant_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8e2f8f88da1b213984b1b5a95cbb9ceac3edfae9"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/voiceevents/publisher.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "dfd483220c79d38b7b69d15038c2364a565d9ed0"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/voiceuserprincipalruntime/bootstrap_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "0fb3fad10a0ab3168d812619c6ab94b18af5021e"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/voiceuserprincipalruntime/config.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "61cab344bfe2cd5ea12220f1283b6e11760bb302"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/voiceuserprincipalruntime/config_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1576ba10bf355b4ba56a2636d64f4618c3a5a8a8"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/voiceuserprincipalruntime/diagnostics_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f2c493792847315f1fddeaf8231d528b466f5f9c"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/voiceuserprincipalruntime/interceptor.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a5ec7602b4eaeeaa00c5729b9ce884aa4438a562"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/voiceuserprincipalruntime/interceptor_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4e081c52a2dc5141991b75133484b0a750e30778"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/voiceuserprincipalruntime/runtime.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b1fcb80d7b56185f3e80b06d74d947e2d04a7e38"
+      }
+    },
+    {
+      "path": "src/backend/voice/internal/voiceuserprincipalruntime/runtime_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cbfae396aed8a7e2cf3f4e0d23fbf381a64b8848"
+      }
+    },
+    {
+      "path": "src/backend/voice/logger.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "44ff46d26c9e4f9d7b067e84d4e7771a797290f3"
+      }
+    },
+    {
+      "path": "src/backend/voice/logger_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b1d99e247933172595d7b23f2d8a7b901846152e"
+      }
+    },
+    {
+      "path": "src/backend/voice/metrics_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ef06daae6839ae250c7b7839a5bc06d5ffa9af3e"
+      }
+    },
+    {
+      "path": "src/backend/voice/ordinary_runtime.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b51436bec28c17c8ecb93cad68176564026802e3"
+      }
+    },
+    {
+      "path": "src/backend/voice/ordinary_runtime_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "35d8892bd870ab6dba1237576380ea1dabf6149a"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/analytics/v1/analytics.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "70714e67e54474b3658360aa0fc0bf4f94550923"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/analytics/v1/analytics_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "791d11d0428581ff3ccbb3373fa2352a2ccdfad5"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/auth/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "deeb1a897fb0c97b4f6038cef29278259e53fe94"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/auth/v1/auth.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8fb9a8814c27aca4b8a78cb9f20d314c72273f6e"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/auth/v1/auth_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a4b6af873478b5498ef5731422bd2321ca830204"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/bot/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c95b5224c0ce864ed24ee5e58e1e9cd212f798e2"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/bot/go.sum",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "fb2a0582d0e778f87f18c03abb1f33c190849ad5"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/bot/v1/bot.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cf0644a3ef884c9c40030c83d9024eeef97b4d86"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/bot/v1/bot_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f76bc8c142efc8e4ce4e723c2fa4927b103c3e32"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/calls/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "10c411002f74b3dbab7463c7d1e3a7211587d81f"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/calls/v1/calls.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6dca3634d1ebf3d7447db9bcc8c47f8000311f41"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/calls/v1/calls_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "08d7ffa5b1dbdde4ac12daf8d043f1172a767190"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/chat/v1/chat.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/chat/v1/chat_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "0db4d24d9d4c3f4aa0b9adada64433e76fff306e"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/chat/v1/chat_lifecycle.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2e3d47150856f044205cd9c9b48c448e0e253909"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/chat/v1/chat_lifecycle_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2b8f08b99d3411fc8eb0ccc97a616ff279554c18"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/chat/v1/chat_scope_authority.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d2932b7b1bf150ae29edda7aa265015ac97ad0de"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/chat/v1/chat_scope_authority_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "aa9ea91ebb9b18058c7adafd3b8fa155b8eb23d3"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/common/v1/common.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "17224a2f39fd5f2df4f7122ce64d1ae58dbffeaf"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/common/v1/space_lifecycle.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4d476867354b8da634a4524f75b901f7e4f598c2"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/file/v1/file.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "57a78c7e3394c1f7fac48a634f44798abecd9ba6"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/file/v1/file_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "08d2e33f83d9dbdb3cb945ab01c85ab9efce446e"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/gameintegration/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d92f86d37e897f2685611f61ea96d26b5648e197"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/gameintegration/v1/game_event.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7cd9a5571d80817f97a80d982ddbb95f420f80b0"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/matchmaking/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6bf7c9115ac22835eb87e89bbe522cf16904da04"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/matchmaking/v1/matchmaking.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "fd5452a4a6f6f02ff6a358c04fb6a5911a3e5d2b"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/matchmaking/v1/matchmaking_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d6ca08b8fee85fe703deb63f6d9d4b14faa6f3a8"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/messaging/v1/messaging.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a9ee2e33156e91ee0e11c386c8f983f8e647873b"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/messaging/v1/messaging_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c19d422b70687a14d8b32a5a59ff52c9c7f9273a"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/moderation/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "bcfe1b1346c6e9a63ac1d257e1cef6b8b7a7df1c"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/moderation/go.sum",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "fb2a0582d0e778f87f18c03abb1f33c190849ad5"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/moderation/v1/moderation.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "fa2a02323109d47630bd03768932c490bd03abd6"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/moderation/v1/moderation_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d321ec177981ae4a2130c2f3cd549e3e6b916354"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/notification/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "662addddd8f6b4fc57a5e59d3297a8610bf37c81"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/notification/go.sum",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2e9519d3af70db21695903e709e06a92ef65e0bf"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/notification/v1/notification.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "175d64b6498c00340115b5a78344fc703c23782f"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/notification/v1/notification_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "0838811b7ce5424fd9fc507c086147dd39643d25"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/role/v1/member_admission.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "45e694b07216fe4d89d0c8eecd5d42edf46b26a4"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/role/v1/role.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "79833e0a0e1085b1964ac89603db5df5e55c0cdc"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/role/v1/role_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a93bacf9397ff42c63766de5a739e5ab6b815ca9"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/role/v1/space_chat_permissions.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1cf87a794d855a3481e4c7e502b61f34ff7b122e"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/role/v1/space_chat_permissions_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9eb3a0c16a6e2fc81d958e8285395e059c32140d"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/s2s/v1/federation_management.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "43d12f92fdab166fcbf679c942a418362f726b01"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/s2s/v1/federation_management_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ab3c384fd210e126f05ed022249c148070ac52c3"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/s2s/v1/s2s.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a3390cdf9f12d7d292b21f8f6fda8487377703b0"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/s2s/v1/s2s_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "0f3c825513887197d5af1f2002493de57d847daf"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/search/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a1cebaac0f4e75e3dd9b06dd6d2b28a5eb8d4411"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/search/v1/search.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "981df6a2295b3cfd839265f46bcc332c900f34b6"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/search/v1/search_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "398b0e314b67c589939e4b26291fe3c0272b8272"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/social/v1/social.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9ae7e1ea6ad6451b4c97662cf34ca450f1aec0c6"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/social/v1/social_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4872fc77b23bad5f9cc19058ff70adffeae503d9"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/space/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "565c94233315706878500ecfb68b01f0c6bded47"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/space/v1/space.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "db8d89708042545148e565057283494f4ffbfe1f"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/space/v1/space_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "55255e6ff5b4836b48988a9e471bd82422b68a2c"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/story/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "09b47d1625b7988999a268a5bb1c5d6ec125f900"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/story/v1/story.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b68730d1edad25b22e10c946a2554d5f7f884939"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/story/v1/story_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a3a46861b7b300d5a1415bb9387ada00d85b2bf2"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/subscription/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ee27de85258f862190924f7717d2a9ce31c5857d"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/subscription/go.sum",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "fb2a0582d0e778f87f18c03abb1f33c190849ad5"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/subscription/v1/subscription.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "97ee386cb448f57196bee62fd8e7b6fbdaa4b55e"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/subscription/v1/subscription_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "94779669c3356a5365a76de59869752616fc13b5"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/user/v1/user.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "37fed3e42e6c952492642b0d501acc6e132b88e7"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/user/v1/user_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b4a1fa2177c33f9340d55d1352ef87947c47d79b"
+      }
+    }
+  ],
+  "context_only_changed_generated": [
+    "src/backend/voice/pb/voice/auth/v1/auth.pb.go",
+    "src/backend/voice/pb/voice/auth/v1/auth_grpc.pb.go",
+    "src/backend/voice/pb/voice/chat/v1/chat_lifecycle.pb.go",
+    "src/backend/voice/pb/voice/chat/v1/chat_lifecycle_grpc.pb.go",
+    "src/backend/voice/pb/voice/common/v1/space_lifecycle.pb.go",
+    "src/backend/voice/pb/voice/user/v1/user.pb.go",
+    "src/backend/voice/pb/voice/user/v1/user_grpc.pb.go"
+  ],
+  "closure_review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c1",
+  "down_review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-VOICE-NATIVE-DOWN-53f75f745237#comment-c1",
+  "source_proposal_sha256": "633ba3e803d969a564f0b1b2292ff17a633f752765f4f1c1cbc3f2a042eb7a59",
+  "evidence": [
+    {
+      "name": "native-source-53f75-closure-proof.json",
+      "sha256": "d2d1d03d7bde9583531642549168b04b7fc801d36ecd7af0adf7bb9aaa5fa028"
+    },
+    {
+      "name": "native-down-snapshot-proof.json",
+      "sha256": "a595d15486b4ea688865e5e3a3fe8e5165ad67934916e214f3915bec12fe050c"
+    },
+    {
+      "name": "native-composition-summary.json",
+      "sha256": "25b03d6c35e089da6205acd55ade16767f0248793bca6b551451756763aa21be"
+    },
+    {
+      "name": "native-closure-matrix-receipt.json",
+      "sha256": "1b2498c90161428d2f1a6da438b790b5023dea583b9531867d6200347270d5f1"
+    }
+  ],
+  "excluded_authority": [
+    "master/release/deployment",
+    "NATS ACL/template/consumer changes",
+    "MM020",
+    "provider registration or installed rights",
+    "unrelated BE041/product changes"
+  ],
+  "evidence_matrix": {
+    "A1": {
+      "result": "OPEN",
+      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+    },
+    "A2": {
+      "result": "OPEN",
+      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+    },
+    "A3": {
+      "result": "OPEN",
+      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+    },
+    "A4": {
+      "result": "OPEN",
+      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+    },
+    "B1": {
+      "result": "OPEN",
+      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+    },
+    "B2": {
+      "result": "OPEN",
+      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+    },
+    "B3": {
+      "result": "OPEN",
+      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+    },
+    "B4": {
+      "result": "OPEN",
+      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+    }
+  }
+}
