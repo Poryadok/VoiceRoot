@@ -449,3 +449,16 @@ message is terminated/moved to DLQ with an alert, never ACKed as successfully
 applied. Billing/provider records keep their separate legal retention only in
 the pseudonymized/minimized form allowed by the account-deletion contract; that
 policy overrides generic `P400D` raw-payload retention.
+
+### Space coordinator Bot P3 handoff
+
+`GetBotPurgeHandoff` is a protected Bot-only read relay of Space's already
+accepted COMPLETE Role `ROLE_RETIREMENT` and Messaging `PURGE` entries. It
+returns their original typed receipts and exact request/receipt bytes and
+existing FQN+NUL+bytes hashes, bound to the same Space/deletion operation/
+generation/manifest. It never exports Auth/owner evidence or other participants,
+and absence is not completion. No storage or retention clock is added: pending
+aggregate evidence remains retained, and full coordinator originals expire on
+the existing aggregate PURGED+30d clock. Compact hashes cannot recreate erased
+originals. This read seam is neither a P3 native drain nor a global Bot terminal
+fence or an authorization to retain personal root/actor fingerprints forever.

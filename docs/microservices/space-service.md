@@ -1757,3 +1757,37 @@ projection, and atomically changes the seal while preserving epoch, cutovers,
 history and prior receipts. Applying47 alone does not reseal or enable serving.
 Unknown installation custody or a real guard gap cannot be repaired by this API.
 DOWN refuses admitted47 proof; an unused rollback restores the exact old46 seal.
+
+### Bot-only relay of accepted P3 participant originals
+
+The protected Bot membership listener exposes `GetBotPurgeHandoff` only to a
+pure `service:bot` credential bound to the exact audience, RPC, request ID and
+deterministic body. Its existing mTLS, HTTPS JWKS and Redis JTI checks apply.
+Mixed human/Bot-actor claims, unknown fields and the ordinary Space listener
+are rejected. The private read capability does not authorize native removal,
+global Bot deletion or a human permission decision.
+
+The request binds Space, deletion operation, positive generation and exact
+`ManifestBinding`. Space reads its own accepted coordinator ledger under an
+owned READ COMMITTED transaction and the same Space fence. Eligible phases are
+PURGE_DECIDED/PURGING or the matching retained PURGED operation; Bot completion
+and aggregate PURGED are not prerequisites. Only individually COMPLETE typed
+Role retirement and Messaging purge entries are returned. A missing entry is
+absent, with no synthesized receipt or completion flag.
+
+Each entry preserves the original request bytes, receipt bytes, typed receipt
+and their existing domain-separated hashes. Role request bytes are the complete
+`voice.role.v1.RetireSpaceRequest`. Messaging request bytes are the complete
+`voice.messaging.v1.PurgeSpaceRequest` field-1 wrapper, rather than only its
+inner common request. Domains are fixed message FQNs followed by NUL and the
+original bytes. No Auth evidence, owner status or other participant is exported.
+
+The relay uses existing coordinator retention through aggregate PURGED+30d;
+it creates no table, durable copy or new clock. After originals are compacted
+or expired, it cannot reconstruct them from a terminal head or digest. The
+caller must treat absent/evidence-unavailable originals as incomplete.
+
+This relay is separate from `ReconcileBotPurgeInstallation` and root-only global
+Bot terminal registration. Those mutation/receipt arms and legacy46 personal
+fingerprint erasure remain unimplemented by this read seam. Ordinary public
+uninstall still preserves its accepted Empty-after-durable-native-ACK policy.

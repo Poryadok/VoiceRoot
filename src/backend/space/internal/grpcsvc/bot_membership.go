@@ -94,7 +94,7 @@ func RegisterBotMembershipServer(server grpc.ServiceRegistrar, service *BotMembe
 	desc.Methods = nil
 	desc.Streams = nil
 	for _, method := range spacev1.SpaceService_ServiceDesc.Methods {
-		if method.MethodName == "AddBotMember" || method.MethodName == "RemoveBotMember" || method.MethodName == "ApplyBotInstallationRemoval" {
+		if method.MethodName == "GetBotPurgeHandoff" || method.MethodName == "AddBotMember" || method.MethodName == "RemoveBotMember" || method.MethodName == "ApplyBotInstallationRemoval" {
 			desc.Methods = append(desc.Methods, method)
 		}
 	}
