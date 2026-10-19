@@ -20,6 +20,16 @@ class AuthPrincipalConfigurationTest {
     verifyNoInteractions(epochs, redis);
   }
 
+  @Test void optionalBotPeerConfigurationNeverDisablesTheExistingVerifier() {
+    for (String value : List.of("", "not a URI", "urn:voice:*", "urn:voice:test:bot-floor")) {
+      try (var interceptor = AuthPrincipalConfiguration.fromEnvironment(new MockEnvironment()
+          .withProperty(URLS, VALID).withProperty("AUTH_BOT_SESSION_FLOOR_ALLOWED_CLIENT_URI_SAN", value), epochs, redis)) {
+        assertTrue(interceptor.enabled());
+      }
+    }
+    verifyNoInteractions(epochs, redis);
+  }
+
   @Test void completeHttpsConfigurationUsesDefaultsAndDoesNotFetchUntilRequest() {
     // These deliberately unresolvable hosts make eager fetching observable as a failure.
     var environment = new MockEnvironment().withProperty(URLS, VALID);
