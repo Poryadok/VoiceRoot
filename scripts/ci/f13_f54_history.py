@@ -299,7 +299,10 @@ def prepare_capabilities(repo, directory):
     facts=load_unit(repo,directory);folder=Path(directory)
     packet=json.loads((folder/'proposal.json').read_bytes())
     contract=json.loads((folder/'contract-PROPOSAL.json').read_bytes())
-    require(not facts['changed_source_context_paths'],'unchanged_reviewed_candidate_context')
+    producer_sources=['scripts/ci/'+name for name in ('f13_f54_history.py','voice-db-runtime-provisioning-contract_test.sh','voice-r22-runtime-scope.sh')]
+    # The nine historical versions remain exact. A new verifier implementation
+    # is a separate current carrier, not a replacement historical source fact.
+    require(all(name in producer_sources for name in facts['changed_source_context_paths']),'unchanged_historical_candidate_product_context')
     names=packet['all_base_diff_paths'];guarded=guarded_names(names)
     require(len(guarded)==15 and guarded==packet['guarded_base_difference_paths']==contract['guarded_difference_paths'],'complete_actual_15_guarded_bindings')
     require(names==contract['complete_candidate_difference_paths'],'complete_contract_41_bindings')
@@ -315,8 +318,7 @@ def prepare_capabilities(repo, directory):
     target=git(repo,'rev-parse','HEAD').decode().strip()
     allowed={'scripts/ci/f13_f54_history.py','scripts/ci/f13_f54_history_test.py','scripts/ci/voice-db-runtime-provisioning-contract_test.sh','.agent/execplans/native-p3-master-source.md'}
     require(set(git(repo,'diff','--name-only',PROTOTYPE_BASE,target).decode().splitlines())<=allowed,'exact_prototype_source_context')
-    for name in ('f13_f54_history.py','voice-db-runtime-provisioning-contract_test.sh','voice-r22-runtime-scope.sh'):
-        path='scripts/ci/'+name
+    for path in producer_sources:
         require((ROOT/path).read_bytes()==git(repo,'show',target+':'+path),'actual_capability_source_carrier')
     return dict(type='F54_FIXED_COMPLETE_SOURCE_CAPABILITIES_PROTOTYPE',phase='SOURCE_PROVENANCE_ONLY',
         unit_directory=str(folder.resolve()),source_facts=facts,prepared_at_target=target,
@@ -325,6 +327,9 @@ def prepare_capabilities(repo, directory):
         whole_parent_composition=dict(type='F54_EXACT_WHOLE_PARENT_COMPOSITION_CAPABILITY',merge=M,parents=[P1,P2],best_bases=BASES,
             history_boundary=O,result_tree=TREE,actual_merge_tree=raw_binding(whole),admission=False),
         complete_41_entries=packet['entries'],guarded_difference_paths=guarded,complete_dag=dag,
+        carrier_context_transition=[dict(path=name,historical_source=SOURCE,current_carrier=target,
+            historical_entry=entry_binding(repo,SOURCE,name),current_entry=entry_binding(repo,target,name),
+            disposition='CURRENT_VERIFIER_CARRIER_ONLY; historical tuple/entries unchanged') for name in facts['changed_source_context_paths']],
         collector_scope=dict(base=packet['traversal_base'],target=packet['recursive_target'],allow_direct_followup='true',partition_source_history='false'),
         actual_source_delta=raw_binding(git(repo,'diff','--name-only',O,P2)),admission=False)
 

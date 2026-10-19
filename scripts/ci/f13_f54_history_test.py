@@ -72,16 +72,21 @@ class ProducerTrace(unittest.TestCase):
     def exact_M_fixture(self):
         # Entirely private, internally re-pinned complete source unit. These
         # constants/files never leave this temporary ROOT or authorize prod.
+        carrier_shell='scripts/ci/voice-db-runtime-provisioning-contract_test.sh'
         names=sorted(['protos/voice/fixture/v1/cap'+str(i)+'.proto' for i in range(15)]+
-                     ['docs/fixture/cap'+str(i)+'.md' for i in range(26)])
-        for name in names:self.write(name,'left\nstable\nright\n')
+                     ['docs/fixture/cap'+str(i)+'.md' for i in range(25)]+[carrier_shell])
+        original_shell=(self.repo/carrier_shell).read_text()
+        def content(name,side):
+            if name==carrier_shell:return original_shell+'\n# fixture '+('A' if side=='A' else 'left')+'\n# fixture stable\n# fixture '+('B' if side=='B' else 'right')+'\n'
+            return ('A' if side=='A' else 'left')+'\nstable\n'+('B' if side=='B' else 'right')+'\n'
+        for name in names:self.write(name,content(name,'base'))
         common=self.commit('complete41 source base')
-        for name in names:self.write(name,'A\nstable\nright\n')
+        for name in names:self.write(name,content(name,'A'))
         self.commit('A actual source')
         for i in range(14):git(self.repo,'commit','--allow-empty','-qm','A actual empty operation '+str(i))
         a=git(self.repo,'rev-parse','HEAD')
         git(self.repo,'checkout','-qb','B-cap',common)
-        for name in names:self.write(name,'left\nstable\nB\n')
+        for name in names:self.write(name,content(name,'B'))
         self.commit('B actual source')
         for i in range(14):git(self.repo,'commit','--allow-empty','-qm','B actual empty operation '+str(i))
         b=git(self.repo,'rev-parse','HEAD')
@@ -165,6 +170,21 @@ class ProducerTrace(unittest.TestCase):
             'f13_checkpoint_merge_tree_entry_matches '+' '.join(map(shlex.quote,map(str,(self.repo,m.O,m.P1,m.P2,names[0],result))))):
             p=subprocess.run(['bash','-c',setup+command],capture_output=True,text=True)
             self.assertEqual(p.returncode,1,p.stderr)
+
+    def test_historical_shell_fact_and_current_carrier_are_separately_bound(self):
+        m,folder,names=self.exact_M_fixture()
+        shell='scripts/ci/voice-db-runtime-provisioning-contract_test.sh'
+        self.write(shell,(self.repo/shell).read_text()+'\n# new exact verifier carrier\n')
+        target=self.commit('new current verifier implementation only')
+        cap=m.prepare_capabilities(self.repo,folder)
+        change=cap['carrier_context_transition']
+        self.assertEqual([v['path'] for v in change],[shell])
+        self.assertEqual(change[0]['historical_source'],m.SOURCE)
+        self.assertEqual(change[0]['current_carrier'],target)
+        self.assertNotEqual(change[0]['historical_entry'],change[0]['current_entry'])
+        self.assertEqual(cap['source_facts']['source_context'],m.SOURCE)
+        self.write(names[0],'unreviewed product source\n');self.commit('product context drift')
+        with self.assertRaises(m.Rejected):m.prepare_capabilities(self.repo,folder)
 
     def test_runtime_revert_has_real_pre_mutation_events_and_cross_scope_still_fails(self):
         self.hidden_runtime(); p, out = self.collect(cross_scope=True)
