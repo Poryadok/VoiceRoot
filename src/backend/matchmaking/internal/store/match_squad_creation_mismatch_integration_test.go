@@ -1,16 +1,18 @@
-package store
+package store_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"os"
-	"path/filepath"
-	"testing"
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
+	"voice/backend/matchmaking/internal/store"
 )
 
 func TestCreationMismatchMigrationEmptyRoundTrip(t *testing.T) {
@@ -43,12 +45,12 @@ func testCreationMismatchCleanup(t *testing.T, late bool) {
 	}
 	ctx := context.Background()
 	pool := rosterResetDB(t)
-	st := &MatchStore{Pool: pool}
+	st := &store.MatchStore{Pool: pool}
 	_, members := capturedRosterParty(t, pool, nil, 0, uuid.New())
 	s := members[0]
-	proposal, err := st.CreateProposal(ctx, CreateProposalParams{GameID: s.GameID, Mode: "test", Region: "eu", Sessions: []ProposalSession{{SessionID: s.ID, ProfileID: s.ProfileID, PartyID: s.PartyID}}})
+	proposal, err := qualifiedProposal(t, pool, st, store.CreateProposalParams{GameID: s.GameID, Mode: "test", Region: "eu", Sessions: []store.ProposalSession{{SessionID: s.ID, ProfileID: s.ProfileID, PartyID: s.PartyID}}})
 	require.NoError(t, err)
-	_, err = st.SetProposalResponse(ctx, proposal.Match.ID, s.ProfileID, ProposalResponseAccepted)
+	_, err = st.SetProposalResponse(ctx, proposal.Match.ID, s.ProfileID, store.ProposalResponseAccepted)
 	require.NoError(t, err)
 	manifest := append([]byte(nil), s.ProfileID[:]...)
 	chatOp, voiceOp := uuid.New(), uuid.New()
@@ -57,7 +59,7 @@ func testCreationMismatchCleanup(t *testing.T, late bool) {
 		ProtocolVersion: 1, OperationId: chatOp.String(), MatchId: proposal.Match.ID.String(),
 		Participants: participants, ParticipantManifestSha256: sumSHA256(manifest)})
 	require.NoError(t, err)
-	_, err = st.SaveMatchSquadProvisioningIntent(ctx, MatchSquadProvisioningIntent{MatchID: proposal.Match.ID, OperationID: uuid.New(),
+	_, err = st.SaveMatchSquadProvisioningIntent(ctx, store.MatchSquadProvisioningIntent{MatchID: proposal.Match.ID, OperationID: uuid.New(),
 		ParticipantManifestHash: sumSHA256(manifest), ParticipantManifestBytes: manifest, ChatOperationID: chatOp,
 		ChatRequestHash: sumSHA256(chatRequest), ChatRequestBytes: chatRequest, VoiceOperationID: voiceOp})
 	require.NoError(t, err)
@@ -91,14 +93,14 @@ func testCreationMismatchCleanup(t *testing.T, late bool) {
 		require.NoError(t, pool.QueryRow(ctx, `SELECT voice_creation_mismatch_bytes FROM matchmaking_match_squad_operations WHERE match_id=$1`, proposal.Match.ID).Scan(&durableWitness))
 		require.Equal(t, witness, durableWitness)
 		require.NoError(t, st.RecordMatchSquadCreationMismatch(ctx, proposal.Match.ID, operationBefore.OperationID, "voice", sumSHA256(voiceRequest), witness))
-		require.ErrorIs(t, st.RecordMatchSquadCreationMismatch(ctx, proposal.Match.ID, operationBefore.OperationID, "voice", sumSHA256(voiceRequest), []byte("different contradiction")), ErrMatchSquadCreationMismatch)
-		require.ErrorIs(t, st.RecordMatchSquadCreationMismatch(ctx, proposal.Match.ID, uuid.New(), "voice", sumSHA256(voiceRequest), witness), ErrMatchSquadConflict)
+		require.ErrorIs(t, st.RecordMatchSquadCreationMismatch(ctx, proposal.Match.ID, operationBefore.OperationID, "voice", sumSHA256(voiceRequest), []byte("different contradiction")), store.ErrMatchSquadCreationMismatch)
+		require.ErrorIs(t, st.RecordMatchSquadCreationMismatch(ctx, proposal.Match.ID, uuid.New(), "voice", sumSHA256(voiceRequest), witness), store.ErrMatchSquadConflict)
 		// Ordinary retry diagnostics may change after restart, but cannot replace
 		// the first negative fact or stop its immediate operator signal.
 		_, err = pool.Exec(ctx, `UPDATE matchmaking_match_squad_operations SET provision_last_error_class='unavailable' WHERE match_id=$1`, proposal.Match.ID)
 		require.NoError(t, err)
-		restarted := &MatchStore{Pool: pool}
-		require.ErrorIs(t, restarted.CheckMatchSquadCreationEvidence(ctx, proposal.Match.ID), ErrMatchSquadCreationMismatch)
+		restarted := &store.MatchStore{Pool: pool}
+		require.ErrorIs(t, restarted.CheckMatchSquadCreationEvidence(ctx, proposal.Match.ID), store.ErrMatchSquadCreationMismatch)
 		_, err = pool.Exec(ctx, `UPDATE matchmaking_match_squad_operations SET voice_creation_mismatch_bytes=NULL,voice_creation_mismatch_sha256=NULL,voice_creation_mismatch_at=NULL WHERE match_id=$1`, proposal.Match.ID)
 		require.ErrorContains(t, err, "cannot rewrite creation mismatch evidence")
 	}
@@ -107,7 +109,7 @@ func testCreationMismatchCleanup(t *testing.T, late bool) {
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = tx.Exec(ctx, `UPDATE matches SET status='abandoned' WHERE id=$1`, proposal.Match.ID)
 	require.NoError(t, err)
-	require.NoError(t, LatchMatchSquadAbandonmentTx(ctx, tx, proposal.Match.ID, "VOICE_ROSTER_CHANGED", [32]byte{1}))
+	require.NoError(t, store.LatchMatchSquadAbandonmentTx(ctx, tx, proposal.Match.ID, "VOICE_ROSTER_CHANGED", [32]byte{1}))
 	require.NoError(t, tx.Commit(ctx))
 	var aggregateID uuid.UUID
 	var required []string
@@ -160,7 +162,7 @@ func testCreationMismatchCleanup(t *testing.T, late bool) {
 	if late {
 		require.Equal(t, "complete", complete.State, "ordinary valid path completes before the late contradiction")
 		require.NoError(t, st.RecordMatchSquadCreationMismatch(ctx, proposal.Match.ID, operationBefore.OperationID, "voice", sumSHA256(voiceRequest), witness))
-		require.ErrorIs(t, st.CheckMatchSquadCreationEvidence(ctx, proposal.Match.ID), ErrMatchSquadCreationMismatch)
+		require.ErrorIs(t, st.CheckMatchSquadCreationEvidence(ctx, proposal.Match.ID), store.ErrMatchSquadCreationMismatch)
 		attention, e := st.MatchSquadProvisioningAttention(ctx)
 		require.NoError(t, e)
 		require.Equal(t, 1, attention.ContractMismatch, "late closed mismatch still pages")
@@ -177,7 +179,7 @@ func testCreationMismatchCleanup(t *testing.T, late bool) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_squad_teardown_participants WHERE aggregate_id=$1 AND receipt_bytes IS NOT NULL`, aggregateID).Scan(&participantReceipts))
 	require.Equal(t, 2, participantReceipts, "the last cleanup receipt must commit despite the mismatch")
 	_, err = st.PrepareMatchSquadCompaction(ctx, aggregateID, "voice")
-	require.ErrorIs(t, err, ErrMatchSquadCreationMismatch)
+	require.ErrorIs(t, err, store.ErrMatchSquadCreationMismatch)
 	if !late {
 		_, err = pool.Exec(ctx, `UPDATE matchmaking_match_squad_teardowns SET state='complete',aggregate_completed_at=clock_timestamp() WHERE aggregate_id=$1`, aggregateID)
 		require.ErrorContains(t, err, "creation mismatch requires reconciliation")
@@ -191,7 +193,7 @@ func testCreationMismatchCleanup(t *testing.T, late bool) {
 	require.NoError(t, downTx.Rollback(ctx))
 	match, err := st.Get(ctx, proposal.Match.ID)
 	require.NoError(t, err)
-	require.Equal(t, MatchStatusAbandoned, match.Status)
+	require.Equal(t, store.MatchStatusAbandoned, match.Status)
 	operation, err := st.GetMatchSquadProvisioningOperation(ctx, proposal.Match.ID)
 	require.NoError(t, err)
 	if late {

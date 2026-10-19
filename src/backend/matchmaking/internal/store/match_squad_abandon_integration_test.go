@@ -1,4 +1,4 @@
-package store
+package store_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"voice/backend/matchmaking/internal/store"
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
 )
@@ -22,8 +23,8 @@ func TestDispatchUpgradeRefusesSealedLegacyUnknownCreation(t *testing.T) {
 	pool := rosterResetDB(t)
 	_, members := capturedRosterParty(t, pool, nil, 0, uuid.New())
 	s := members[0]
-	st := &MatchStore{Pool: pool}
-	proposal, err := st.CreateProposal(ctx, CreateProposalParams{GameID: s.GameID, Mode: "test", Region: "eu", Sessions: []ProposalSession{{SessionID: s.ID, ProfileID: s.ProfileID, PartyID: s.PartyID}}})
+	st := &store.MatchStore{Pool: pool}
+	proposal, err := qualifiedProposal(t, pool, st, store.CreateProposalParams{GameID: s.GameID, Mode: "test", Region: "eu", Sessions: []store.ProposalSession{{SessionID: s.ID, ProfileID: s.ProfileID, PartyID: s.PartyID}}})
 	require.NoError(t, err)
 	// An old closed operation can contain a frozen Voice request but no Voice
 	// receipt. Historical terminal state is not evidence that no RPC happened.
@@ -53,12 +54,12 @@ func TestMatchSquadUnknownChatAbandonmentSharesRollbackAndFreezesObligations(t *
 	}
 	ctx := context.Background()
 	pool := rosterResetDB(t)
-	st := &MatchStore{Pool: pool}
+	st := &store.MatchStore{Pool: pool}
 	_, members := capturedRosterParty(t, pool, nil, 0, uuid.New())
 	s := members[0]
-	proposal, err := st.CreateProposal(ctx, CreateProposalParams{GameID: s.GameID, Mode: "test", Region: "eu", Sessions: []ProposalSession{{SessionID: s.ID, ProfileID: s.ProfileID, PartyID: s.PartyID}}})
+	proposal, err := qualifiedProposal(t, pool, st, store.CreateProposalParams{GameID: s.GameID, Mode: "test", Region: "eu", Sessions: []store.ProposalSession{{SessionID: s.ID, ProfileID: s.ProfileID, PartyID: s.PartyID}}})
 	require.NoError(t, err)
-	_, err = st.SetProposalResponse(ctx, proposal.Match.ID, s.ProfileID, ProposalResponseAccepted)
+	_, err = st.SetProposalResponse(ctx, proposal.Match.ID, s.ProfileID, store.ProposalResponseAccepted)
 	require.NoError(t, err)
 	chatOp := uuid.New()
 	manifest := append([]byte(nil), s.ProfileID[:]...)
@@ -67,7 +68,7 @@ func TestMatchSquadUnknownChatAbandonmentSharesRollbackAndFreezesObligations(t *
 		Participants: []*chatv1.MatchSquadParticipant{{ProfileId: s.ProfileID.String()}}, ParticipantManifestSha256: sumSHA256(manifest),
 	})
 	require.NoError(t, err)
-	_, err = st.SaveMatchSquadProvisioningIntent(ctx, MatchSquadProvisioningIntent{MatchID: proposal.Match.ID, OperationID: uuid.New(), ParticipantManifestHash: sumSHA256(manifest), ParticipantManifestBytes: manifest, ChatOperationID: chatOp, ChatRequestHash: sumSHA256(request), ChatRequestBytes: request, VoiceOperationID: uuid.New()})
+	_, err = st.SaveMatchSquadProvisioningIntent(ctx, store.MatchSquadProvisioningIntent{MatchID: proposal.Match.ID, OperationID: uuid.New(), ParticipantManifestHash: sumSHA256(manifest), ParticipantManifestBytes: manifest, ChatOperationID: chatOp, ChatRequestHash: sumSHA256(request), ChatRequestBytes: request, VoiceOperationID: uuid.New()})
 	require.NoError(t, err)
 	migration, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/matchmaking_db/000021_match_squad_dispatch_settlement.up.sql"))
 	require.NoError(t, err)
@@ -82,7 +83,7 @@ func TestMatchSquadUnknownChatAbandonmentSharesRollbackAndFreezesObligations(t *
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = tx.Exec(ctx, `UPDATE matches SET status='abandoned' WHERE id=$1`, proposal.Match.ID)
 	require.NoError(t, err)
-	require.NoError(t, LatchMatchSquadAbandonmentTx(ctx, tx, proposal.Match.ID, "VOICE_ROSTER_CHANGED", [32]byte{1}))
+	require.NoError(t, store.LatchMatchSquadAbandonmentTx(ctx, tx, proposal.Match.ID, "VOICE_ROSTER_CHANGED", [32]byte{1}))
 	require.NoError(t, tx.QueryRow(ctx, `SELECT provision_disposition FROM matchmaking_match_squad_operations WHERE match_id=$1`, proposal.Match.ID).Scan(&disposition))
 	require.Equal(t, "ABANDONED", disposition)
 	var required []string
@@ -102,11 +103,11 @@ func TestMatchSquadUnknownChatAbandonmentSharesRollbackAndFreezesObligations(t *
 	require.NoError(t, err)
 	_, err = tx.Exec(ctx, `UPDATE matches SET status='abandoned' WHERE id=$1`, proposal.Match.ID)
 	require.NoError(t, err)
-	require.NoError(t, LatchMatchSquadAbandonmentTx(ctx, tx, proposal.Match.ID, "VOICE_ROSTER_CHANGED", [32]byte{1}))
+	require.NoError(t, store.LatchMatchSquadAbandonmentTx(ctx, tx, proposal.Match.ID, "VOICE_ROSTER_CHANGED", [32]byte{1}))
 	require.NoError(t, tx.Commit(ctx))
 	tx, err = pool.Begin(ctx)
 	require.NoError(t, err)
-	require.NoError(t, LatchMatchSquadAbandonmentTx(ctx, tx, proposal.Match.ID, "REPLAY_MUST_NOT_REWRITE", [32]byte{2}))
+	require.NoError(t, store.LatchMatchSquadAbandonmentTx(ctx, tx, proposal.Match.ID, "REPLAY_MUST_NOT_REWRITE", [32]byte{2}))
 	require.NoError(t, tx.Commit(ctx))
 	_, err = pool.Exec(ctx, `UPDATE matchmaking_match_squad_operations SET provision_disposition='LIVE',provision_abandoned_at=NULL,provision_abandon_reason=NULL,provision_abandon_evidence_sha256=NULL WHERE match_id=$1`, proposal.Match.ID)
 	require.Error(t, err, "abandonment is monotone even for a direct storage caller")
@@ -175,12 +176,12 @@ func TestMatchSquadUnissuedAbandonmentClosesWithoutSyntheticTeardown(t *testing.
 	}
 	ctx := context.Background()
 	pool := rosterResetDB(t)
-	st := &MatchStore{Pool: pool}
+	st := &store.MatchStore{Pool: pool}
 	_, members := capturedRosterParty(t, pool, nil, 0, uuid.New())
 	s := members[0]
-	proposal, err := st.CreateProposal(ctx, CreateProposalParams{GameID: s.GameID, Mode: "test", Region: "eu", Sessions: []ProposalSession{{SessionID: s.ID, ProfileID: s.ProfileID, PartyID: s.PartyID}}})
+	proposal, err := qualifiedProposal(t, pool, st, store.CreateProposalParams{GameID: s.GameID, Mode: "test", Region: "eu", Sessions: []store.ProposalSession{{SessionID: s.ID, ProfileID: s.ProfileID, PartyID: s.PartyID}}})
 	require.NoError(t, err)
-	_, err = st.SetProposalResponse(ctx, proposal.Match.ID, s.ProfileID, ProposalResponseAccepted)
+	_, err = st.SetProposalResponse(ctx, proposal.Match.ID, s.ProfileID, store.ProposalResponseAccepted)
 	require.NoError(t, err)
 	migration, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/matchmaking_db/000021_match_squad_dispatch_settlement.up.sql"))
 	require.NoError(t, err)
@@ -195,7 +196,7 @@ func TestMatchSquadUnissuedAbandonmentClosesWithoutSyntheticTeardown(t *testing.
 		Participants: []*chatv1.MatchSquadParticipant{{ProfileId: s.ProfileID.String()}}, ParticipantManifestSha256: sumSHA256(manifest),
 	})
 	require.NoError(t, err)
-	_, err = st.SaveMatchSquadProvisioningIntent(ctx, MatchSquadProvisioningIntent{MatchID: proposal.Match.ID, OperationID: uuid.New(),
+	_, err = st.SaveMatchSquadProvisioningIntent(ctx, store.MatchSquadProvisioningIntent{MatchID: proposal.Match.ID, OperationID: uuid.New(),
 		ParticipantManifestHash: sumSHA256(manifest), ParticipantManifestBytes: manifest, ChatOperationID: chatOp,
 		ChatRequestHash: sumSHA256(request), ChatRequestBytes: request, VoiceOperationID: uuid.New()})
 	require.Error(t, err, "upgraded schema rejects new unmarked legacy intent")
@@ -212,7 +213,7 @@ func TestMatchSquadUnissuedAbandonmentClosesWithoutSyntheticTeardown(t *testing.
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = tx.Exec(ctx, `UPDATE matches SET status='abandoned' WHERE id=$1`, proposal.Match.ID)
 	require.NoError(t, err)
-	require.NoError(t, LatchMatchSquadAbandonmentTx(ctx, tx, proposal.Match.ID, "VOICE_ROSTER_CHANGED", [32]byte{1}))
+	require.NoError(t, store.LatchMatchSquadAbandonmentTx(ctx, tx, proposal.Match.ID, "VOICE_ROSTER_CHANGED", [32]byte{1}))
 	require.NoError(t, tx.Commit(ctx))
 	var disposition, state string
 	require.NoError(t, pool.QueryRow(ctx, `SELECT provision_disposition,state FROM matchmaking_match_squad_operations WHERE match_id=$1`, proposal.Match.ID).Scan(&disposition, &state))
@@ -231,12 +232,12 @@ func TestMatchSquadKnownChatCleanupDoesNotCompleteUnknownVoice(t *testing.T) {
 	}
 	ctx := context.Background()
 	pool := rosterResetDB(t)
-	st := &MatchStore{Pool: pool}
+	st := &store.MatchStore{Pool: pool}
 	_, members := capturedRosterParty(t, pool, nil, 0, uuid.New())
 	s := members[0]
-	proposal, err := st.CreateProposal(ctx, CreateProposalParams{GameID: s.GameID, Mode: "test", Region: "eu", Sessions: []ProposalSession{{SessionID: s.ID, ProfileID: s.ProfileID, PartyID: s.PartyID}}})
+	proposal, err := qualifiedProposal(t, pool, st, store.CreateProposalParams{GameID: s.GameID, Mode: "test", Region: "eu", Sessions: []store.ProposalSession{{SessionID: s.ID, ProfileID: s.ProfileID, PartyID: s.PartyID}}})
 	require.NoError(t, err)
-	_, err = st.SetProposalResponse(ctx, proposal.Match.ID, s.ProfileID, ProposalResponseAccepted)
+	_, err = st.SetProposalResponse(ctx, proposal.Match.ID, s.ProfileID, store.ProposalResponseAccepted)
 	require.NoError(t, err)
 	manifest := append([]byte(nil), s.ProfileID[:]...)
 	chatOp, voiceOp := uuid.New(), uuid.New()
@@ -245,7 +246,7 @@ func TestMatchSquadKnownChatCleanupDoesNotCompleteUnknownVoice(t *testing.T) {
 		ProtocolVersion: 1, OperationId: chatOp.String(), MatchId: proposal.Match.ID.String(),
 		Participants: participants, ParticipantManifestSha256: sumSHA256(manifest)})
 	require.NoError(t, err)
-	_, err = st.SaveMatchSquadProvisioningIntent(ctx, MatchSquadProvisioningIntent{MatchID: proposal.Match.ID, OperationID: uuid.New(),
+	_, err = st.SaveMatchSquadProvisioningIntent(ctx, store.MatchSquadProvisioningIntent{MatchID: proposal.Match.ID, OperationID: uuid.New(),
 		ParticipantManifestHash: sumSHA256(manifest), ParticipantManifestBytes: manifest, ChatOperationID: chatOp,
 		ChatRequestHash: sumSHA256(chatRequest), ChatRequestBytes: chatRequest, VoiceOperationID: voiceOp})
 	require.NoError(t, err)
@@ -270,7 +271,7 @@ func TestMatchSquadKnownChatCleanupDoesNotCompleteUnknownVoice(t *testing.T) {
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = tx.Exec(ctx, `UPDATE matches SET status='abandoned' WHERE id=$1`, proposal.Match.ID)
 	require.NoError(t, err)
-	require.NoError(t, LatchMatchSquadAbandonmentTx(ctx, tx, proposal.Match.ID, "VOICE_ROSTER_CHANGED", [32]byte{1}))
+	require.NoError(t, store.LatchMatchSquadAbandonmentTx(ctx, tx, proposal.Match.ID, "VOICE_ROSTER_CHANGED", [32]byte{1}))
 	require.NoError(t, tx.Commit(ctx))
 	var aggregateID uuid.UUID
 	var required []string
@@ -323,7 +324,7 @@ func TestMatchSquadKnownChatCleanupDoesNotCompleteUnknownVoice(t *testing.T) {
 	require.Equal(t, "complete", complete.State)
 	match, err := st.Get(ctx, proposal.Match.ID)
 	require.NoError(t, err)
-	require.Equal(t, MatchStatusAbandoned, match.Status)
+	require.Equal(t, store.MatchStatusAbandoned, match.Status)
 	operation, err := st.GetMatchSquadProvisioningOperation(ctx, proposal.Match.ID)
 	require.NoError(t, err)
 	require.Equal(t, "closed", operation.State)

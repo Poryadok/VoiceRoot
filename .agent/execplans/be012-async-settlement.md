@@ -416,3 +416,26 @@ proved own54996 ->33980 ->30728; only own children stopped, no AST PASS.
 All native test/graph sessions terminal; own keeper runner+portlessPG and WT31
 lease retained. Exact299 c110 SOURCE CLEAR and309 eac SOURCE CLEAR are scoped
 prerequisites, not approval of this new dependency/fixture composition.
+
+
+## Qualified owning-store fixture continuation
+
+BE012-QUALIFIED-STORE-FIXTURES atomically claimed147 e1 on currentec6.
+Three owning integration files now external store_test, breaking the import
+cycle without exposing private attempt construction. New fixture applies exact
+001..020 plus022 for fresh private captures through CreateSourceParty; tests
+explicitly apply021 themselves. This is a protocol storage fixture, never a
+chronological pre022 production upgrade or adoption of old captures. Existing
+rollback, required-provider, receipt, reset, mismatch and guardedDOWN assertions
+remain. Seven native reservation callsites use genuine CaptureProposalCandidate,
+partysource.Revalidator and CreateValidatedProposal. Source transport verifies
+exact subject and released SQL connection; no fake proof or production change.
+
+Optional BE011_TEST_PG_DSN creates/drops private databases on existing portless
+Linux PG; CI fallback retains existing Testcontainers helper. Real PG/race RED
+reached authoritative-party guard (2.571s), unlike previous mapping-only failure.
+After qualification all15 owning tests PASS0skip/0fail37.108s, vet0. Failed
+harness and RED logs remain separate. Earlier composed23top+13sub proof reused.
+Graphify after batch bounded without output: canonical31/CIM proved own50000
+Python ->41200 launcher ->25244rtk; only verified children stopped, no ASTPASS.
+Source/CI147, no stand/GH/security/activation/acceptance inference.
