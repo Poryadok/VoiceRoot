@@ -277,3 +277,16 @@ and tests, actual GameIntegration Dockerfile build, buf format/lint/breaking
 and generated parity, and realPG lifecycle/preview rollback cases must pass.
 OwnWT31/privateLinux fixtures only; no shared stands/host tests/GH/F13 edits.
 Genuine378 reviews frozen delta before actual121accepted delivery.
+
+Census result:44 backend modules,19 reach File,15 root Docker consumers.
+The four missing local Events replacements are GameIntegration and standalone
+Calls/Space/Subscription. Other Docker contexts copy Events directly or via
+the Messaging pb ancestor. Standalone Calls/Space had no go.sum; the new
+readonly checks exposed this baseline checksum gap, so exact existing-version
+lockfiles are added without dependency upgrades. GameIntegration go.sum stays
+unchanged because the new Events module is local. Original K5 readonly build
+RED is the missing Events checksum/resolution; original PG exact fingerprint
+RED is the expected11/actual12 equality, and canonical buf format RED is100.
+The first corrected Game build/short/vet and actual Dockerfile build pass;
+strict lifecycle and preview rollback PG suites pass. Final immutable archive
+checks include the standalone lockfiles and retain all initial results.
