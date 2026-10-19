@@ -28,6 +28,10 @@ import (
 )
 
 func admissionListenerStore(t *testing.T) (context.Context, *store.RoleStore) {
+	return admissionListenerStoreVersion(t, "21")
+}
+
+func admissionListenerStoreVersion(t *testing.T, version string) (context.Context, *store.RoleStore) {
 	t.Helper()
 	integrationtest.ConfigureDockerTesting()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -55,7 +59,7 @@ func admissionListenerStore(t *testing.T) (context.Context, *store.RoleStore) {
 	}
 	database := &url.URL{Scheme: "postgres", User: url.UserPassword("fixture", "fixture_only"), Host: "127.0.0.1:5432", Path: "/admission", RawQuery: "sslmode=disable"}
 	// These are native21 protocol fixtures, not qualification of future DDL.
-	migration, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{ContainerRequest: testcontainers.ContainerRequest{Image: "migrate/migrate:v4.18.1", NetworkMode: container.NetworkMode("container:" + pg.GetContainerID()), Files: copied, Cmd: []string{"-path", "/migrations", "-database", database.String(), "goto", "21"}, WaitingFor: wait.ForExit()}, Started: true})
+	migration, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{ContainerRequest: testcontainers.ContainerRequest{Image: "migrate/migrate:v4.18.1", NetworkMode: container.NetworkMode("container:" + pg.GetContainerID()), Files: copied, Cmd: []string{"-path", "/migrations", "-database", database.String(), "goto", version}, WaitingFor: wait.ForExit()}, Started: true})
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)

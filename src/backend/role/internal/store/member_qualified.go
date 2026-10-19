@@ -41,7 +41,7 @@ func (s *RoleStore) qualifiedMemberRoles(ctx context.Context, space, profile uui
 	if !observation.Available(time.Now()) {
 		return nil, fmt.Errorf("%w: membership observation inactive or expired", ErrScopeUnavailable)
 	}
-	if err := authoritysource.CheckCatalog(ctx, s.tx, roleAuthorityCatalog21); err != nil {
+	if err := s.checkQualifiedRoleCatalog(ctx); err != nil {
 		return nil, fmt.Errorf("%w: native Role catalog: %w", ErrScopeUnavailable, err)
 	}
 	state, err := readMemberRoleState(ctx, s.db(), space.String())

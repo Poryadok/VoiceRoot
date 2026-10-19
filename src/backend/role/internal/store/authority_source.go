@@ -33,10 +33,11 @@ func beginRoleAuthorityReadSchema(ctx context.Context, pool *pgxpool.Pool, schem
 	}
 	catalog := roleAuthorityCatalog
 	if schema == authoritysource.QualifiedSchemaVersion {
-		if version != 21 {
-			return nil, errors.New("qualified Role source requires exact21")
+		qualified, err := qualifiedRoleCatalog(version)
+		if err != nil {
+			return nil, err
 		}
-		return authoritysource.BeginRead(ctx, pool, roleAuthorityCatalog21)
+		return authoritysource.BeginRead(ctx, pool, qualified)
 	}
 	switch version {
 	case 16, 17:
@@ -62,7 +63,7 @@ func (s *RoleStore) CheckAuthoritySourceSchema(ctx context.Context) error {
 		return err
 	}
 	schema := uint32(authoritysource.SchemaVersion)
-	if version == 21 {
+	if version == 21 || version == 25 {
 		schema = authoritysource.QualifiedSchemaVersion
 	}
 	tx, err := beginRoleAuthorityReadSchema(ctx, s.Pool, schema)
