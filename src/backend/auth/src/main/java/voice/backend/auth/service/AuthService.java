@@ -1015,7 +1015,7 @@ public class AuthService {
       throw new AuthException("validation_failed");
     }
     Instant precheckNow = Instant.now(clock);
-    if (account.deletedAt().plus(ACCOUNT_RESTORE_GRACE).isBefore(precheckNow)) {
+    if (!account.deletedAt().plus(ACCOUNT_RESTORE_GRACE).isAfter(precheckNow)) {
       throw new AuthException("account_inactive");
     }
   }

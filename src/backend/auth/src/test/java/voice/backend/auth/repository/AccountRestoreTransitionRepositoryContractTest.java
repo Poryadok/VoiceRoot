@@ -41,15 +41,15 @@ class AccountRestoreTransitionRepositoryContractTest {
   }
 
   @Test
-  void inMemoryRestoreAllowsExactCutoffAndClearsDeletedState() throws Exception {
+  void inMemoryRestoreRejectsExactCutoffAndKeepsDeletedState() throws Exception {
     InMemoryAccountRepository accounts = inMemoryRepositoryWithClock(CUTOFF);
     Account account = accounts.create("repository-boundary@example.com", null, "hash", "regular");
     accounts.markDeleted(account.id(), DELETED_AT);
 
-    assertThat(invokeConditionalRestore(accounts, account.id())).isTrue();
+    assertThat(invokeConditionalRestore(accounts, account.id())).isFalse();
     assertThat(accounts.findById(account.id().toString()).orElseThrow())
         .extracting(Account::status, Account::deletedAt)
-        .containsExactly("active", null);
+        .containsExactly("deleted", DELETED_AT);
   }
 
   @Test
@@ -68,8 +68,8 @@ class AccountRestoreTransitionRepositoryContractTest {
     String normalizedSql = sql.getValue().replaceAll("\\s+", " ").toLowerCase();
     String whereClause = normalizedSql.substring(normalizedSql.indexOf("where"));
     assertThat(whereClause).contains("interval '30 days'");
-    assertThat(whereClause).containsAnyOf("current_timestamp", "now()");
-    assertThat(whereClause).contains(">=");
+    assertThat(whereClause).contains("clock_timestamp()");
+    assertThat(whereClause).doesNotContain("current_timestamp", ">=");
     Map<String, Object> values = parameters.getValue().getValues();
     assertThat(values).containsOnlyKeys("id").containsEntry("id", accountId);
   }
