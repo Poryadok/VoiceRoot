@@ -1,5 +1,23 @@
 # Auth Service
 
+## Private moderation authority (BE-045)
+
+`voice.automod.v1.AuthModerationAuthorityService` is registered only on the
+dedicated `AUTH_AUTOMOD_GRPC_PORT` (default 9093), separate from legacy, proof
+and session-floor listeners. It requires request-bound principal verification,
+the existing `AUTH_GRPC_TLS_CERT_FILE`/`AUTH_GRPC_TLS_KEY_FILE` server pair and
+`AUTH_AUTOMOD_TLS_CLIENT_CA_FILE`. There is no local plaintext or server-only
+TLS fallback. Port collisions and partial trust settings fail before binding.
+Messaging/Moderation caller grants remain method-specific; Role/User gain none.
+The private readiness-independent Service route is
+`voice-auth-authority:9093`; deployment must provision its matching TLS SAN and
+dedicated private Service before activation.
+
+Terminal snapshots carry a finite count/hash/cut/generation seal. This detects
+incomplete/mixed views, not a jointly rolled-back Auth/Moderation history.
+See [startup/restore](../../../docs/testing/async-automod-startup-restore.md) and
+the [protected offline recovery boundary](../../../docs/testing/async-automod-recovery.md).
+
 Java/Spring Boot service: register, login, refresh (rotation), logout, JWT validation, JWKS.
 
 ## Ports

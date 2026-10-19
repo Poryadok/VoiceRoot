@@ -5,7 +5,9 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// BindRetainedSubjectTx is reserved for owner-authorized privacy recovery.
+// BindRetainedSubjectTx serves owner-authorized privacy recovery and retention
+// rechecks of an already accepted reporter. New submission/target admission
+// still requires LIVE authority; this helper grants no report/vote eligibility.
 // The caller holds every relevant sorted account lock before this call.
 func (s *Store) BindRetainedSubjectTx(ctx context.Context, tx pgx.Tx, binding Subject) error {
 	if tx == nil || !validLifecycle(binding) {
@@ -32,7 +34,9 @@ func (s *Store) BindRetainedSubjectTx(ctx context.Context, tx pgx.Tx, binding Su
 }
 
 // RequireRetainedSubjectTx is a privacy-only recheck, including a fresh database
-// deadline. It never admits a new send, validates a report, or changes counters.
+// deadline. It does not itself admit a new send, decide report validity/voting
+// eligibility, or change counters. An accepted reporter may remain retained
+// DELETED until its deadline while the target keeps its separate LIVE check.
 // Call again before committing privacy recovery after any intervening work.
 func (s *Store) RequireRetainedSubjectTx(ctx context.Context, tx pgx.Tx, binding Subject) error {
 	if tx == nil || !validLifecycle(binding) {

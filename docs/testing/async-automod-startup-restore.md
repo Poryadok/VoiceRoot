@@ -1,5 +1,12 @@
 BE-045 c12: startup and restore contract, v1
 
+The [c23/c24 recovery implementation contract](async-automod-recovery.md)
+distinguishes `LIVE_CURRENT` from `DECLARED_RESTORE`: ordinary current live DB
+restart has no remote sink/export prerequisite; declared or uncertain restore
+requires independently preserved actual history and a protected operation-bound
+offline bundle. Counts/hashes alone do not prove a current tail. A local ready
+bit or absent/malformed restore material cannot select live mode.
+
 Implemented terminal-view framing checkpoint: `ListTerminalModerationSubjects`
 returns a `ModerationAuthoritySnapshotSeal` with protocol1, persisted Auth
 authority generation, fresh snapshot UUID, repeatable-read DB cut, permanent

@@ -2,6 +2,23 @@
 
 ## Account-core v2 implementation checkpoint
 
+Auth listener checkpoint: inheriting the proof listener's server-only TLS was
+reproduced as native RED. The moderation authority is now registered solely on
+dedicated9093 with mandatory workload mTLS and request-bound principals; existing
+proof/floor policy remains separate. Native tests: 3 new transport tests, 5
+existing transport tests and 1 existing moderation-principal test pass with zero
+failures/skips. Actual Linux TLS rejects no client certificate and wrong CA;
+a valid but unauthorized Gateway principal is PermissionDenied before dispatch,
+and a valid Messaging principal reaches the fixture. This is private transport
+proof, not the assembled public/session bootstrap or deployment topology.
+An initial incomplete archive extraction was a setup failure, not RED; the
+complete fixture was recopied only after archive completion before actual RED.
+
+The complete c23/c24 offline recovery contract is persisted in
+`async-automod-recovery.md`. Ordinary live startup has no export/sink dependency;
+declared restore still requires protected current-operation evidence and actual
+recoverable history. The production typed adapter/verifier remains to implement.
+
 Privacy-only retained-subject helper checkpoint: naive binding admitted an
 already due DELETED snapshot (real PostgreSQL RED). The dedicated helper now
 checks fresh DB time, exact lifecycle/state/deadline and permanent terminal
