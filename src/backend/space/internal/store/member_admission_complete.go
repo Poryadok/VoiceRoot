@@ -56,6 +56,18 @@ func (s *SpaceStore) memberAdmissionCompletionUncertain(ctx context.Context, ope
 	return nil, ErrJoinAttemptUnavailable
 }
 
+// ReadMemberAdmissionOutcome reads only a saved publication outcome. It never
+// starts admission, calls an owner or runs a completion hook. A true result is
+// historical operation data, including after leave; it is not current access.
+// False means no retained published outcome, including erased/unknown history.
+// The handler must independently authorize and bind its exact A/P/actor tuple.
+func (s *SpaceStore) ReadMemberAdmissionOutcome(ctx context.Context, operation uuid.UUID) (*MembershipRow, bool, error) {
+	if s == nil || s.Pool == nil || s.tx != nil || ctx == nil || ctx.Err() != nil || operation == uuid.Nil {
+		return nil, false, ErrJoinAttemptUnavailable
+	}
+	return s.replayCompletedMemberAdmission(ctx, operation)
+}
+
 func (s *SpaceStore) replayCompletedMemberAdmission(ctx context.Context, operation uuid.UUID) (*MembershipRow, bool, error) {
 	var role uuid.UUID
 	var receipt []byte
