@@ -60,8 +60,8 @@ public class OtpAndMailConfiguration {
 
   @Bean
   @ConditionalOnProperty(name = "auth.persistence", havingValue = "memory")
-  OtpThrottle inMemoryOtpThrottle() {
-    return new InMemoryOtpThrottle();
+  OtpThrottle inMemoryOtpThrottle(java.time.Clock clock) {
+    return new InMemoryOtpThrottle(clock);
   }
 
   @Bean

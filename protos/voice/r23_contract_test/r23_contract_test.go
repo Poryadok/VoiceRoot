@@ -318,6 +318,7 @@ func TestManifestSelfConsistency(t *testing.T) {
 		"voice/matchmaking/v1/matchmaking.proto",
 		"voice/messaging/v1/messaging.proto",
 		"voice/notification/v1/notification.proto",
+		"voice/realtime/v1/realtime.proto",
 		"voice/role/v1/role.proto",
 		"voice/search/v1/search.proto",
 		"voice/space/v1/space.proto",
@@ -371,16 +372,17 @@ func TestManifestSelfConsistency(t *testing.T) {
 func requireParticipantCoverage(t *testing.T, m manifest) {
 	t.Helper()
 	want := map[string]string{
-		"voice.role.v1.RoleService":                 "RetireSpace",
-		"voice.chat.v1.ChatService":                 "PurgeSpace",
-		"voice.messaging.v1.MessagingService":       "PurgeSpace",
-		"voice.file.v1.FileService":                 "PurgeSpace",
-		"voice.calls.v1.VoiceService":               "PurgeSpace",
-		"voice.matchmaking.v1.MatchmakingService":   "PurgeSpace",
-		"voice.search.v1.SearchService":             "PurgeSpace",
-		"voice.subscription.v1.SubscriptionService": "PurgeSpace",
-		"voice.bot.v1.BotService":                   "PurgeSpace",
-		"voice.notification.v1.NotificationService": "PurgeSpace",
+		"voice.role.v1.RoleService":                  "RetireSpace",
+		"voice.chat.v1.ChatService":                  "PurgeSpace",
+		"voice.messaging.v1.MessagingService":        "PurgeSpace",
+		"voice.file.v1.FileService":                  "PurgeSpace",
+		"voice.calls.v1.VoiceService":                "PurgeSpace",
+		"voice.matchmaking.v1.MatchmakingService":    "PurgeSpace",
+		"voice.search.v1.SearchService":              "PurgeSpace",
+		"voice.subscription.v1.SubscriptionService":  "PurgeSpace",
+		"voice.bot.v1.BotService":                    "PurgeSpace",
+		"voice.notification.v1.NotificationService":  "PurgeSpace",
+		"voice.realtime.v1.RealtimeLifecycleService": "PurgeSpace",
 	}
 	covered := map[string]bool{}
 	for _, file := range m.Files {
@@ -417,6 +419,13 @@ func validateForbiddenRPCExposure(t *testing.T, specs []forbiddenRPCExposure) {
 			sort.Strings(got)
 			if !reflect.DeepEqual(got, want) {
 				t.Errorf("Auth allowed R23 RPCs = %v, want %v", got, want)
+			}
+		} else if spec.Package == "voice.realtime.v1" {
+			want := []string{"ApplySpaceLifecycleFence", "ImportSpacePurgeManifestPage", "PurgeSpace"}
+			got := append([]string(nil), spec.AllowedR23Methods...)
+			sort.Strings(got)
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("Realtime allowed R23 RPCs = %v, want %v", got, want)
 			}
 		} else if len(spec.AllowedR23Methods) != 0 {
 			t.Errorf("%s must expose no R23 RPC", spec.Package)
@@ -915,11 +924,33 @@ func checkForbiddenRPCExposure(t *testing.T, specs []forbiddenRPCExposure, files
 		}
 		for _, service := range file.Services {
 			for _, method := range service.Methods {
-				if isR23Method(method.Name) && !packageAllowed[method.Name] {
+				if isR23Method(method.Name) && !allowedR23Exposure(file.Package, service.Name, method.Name, packageAllowed) {
 					t.Errorf("forbidden R23 RPC exposure %s.%s/%s", file.Package, service.Name, method.Name)
 				}
 			}
 		}
+	}
+}
+
+func allowedR23Exposure(pkg, service, method string, allowed map[string]bool) bool {
+	if pkg == "voice.realtime.v1" && service != "RealtimeLifecycleService" {
+		return false
+	}
+	return allowed[method]
+}
+
+func TestRealtimeR23ExposureRemainsServiceBound(t *testing.T) {
+	allowed := map[string]bool{"ApplySpaceLifecycleFence": true, "ImportSpacePurgeManifestPage": true, "PurgeSpace": true}
+	for _, method := range []string{"ApplySpaceLifecycleFence", "ImportSpacePurgeManifestPage", "PurgeSpace"} {
+		if !allowedR23Exposure("voice.realtime.v1", "RealtimeLifecycleService", method, allowed) {
+			t.Errorf("protected lifecycle service lost %s", method)
+		}
+		if allowedR23Exposure("voice.realtime.v1", "RealtimeService", method, allowed) {
+			t.Errorf("ordinary Realtime service exposes %s", method)
+		}
+	}
+	if allowedR23Exposure("voice.realtime.v1", "RealtimeLifecycleService", "RetireSpace", allowed) {
+		t.Error("unreviewed lifecycle RPC allowed")
 	}
 }
 

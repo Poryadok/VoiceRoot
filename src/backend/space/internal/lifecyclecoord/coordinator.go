@@ -180,6 +180,7 @@ func (c *Coordinator) ApplyPurgeBarrier(ctx context.Context, spaceID uuid.UUID) 
 		commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION,
 		commonv1.ParticipantId_PARTICIPANT_ID_BOT,
 		commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION,
+		commonv1.ParticipantId_PARTICIPANT_ID_REALTIME,
 	}
 	for _, participantID := range purgeOrder {
 		if c.dependencies.PurgeParticipants[participantID] == nil {

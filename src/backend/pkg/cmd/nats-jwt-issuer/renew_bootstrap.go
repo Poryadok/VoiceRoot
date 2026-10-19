@@ -15,6 +15,7 @@ import (
 var bootstrapRenewSubjects = []string{
 	"$JS.API.STREAM.UPDATE.chat_events",
 	"$JS.API.STREAM.UPDATE.social_events",
+	"$JS.API.STREAM.UPDATE.voice_events",
 	"$JS.API.STREAM.UPDATE.role_events",
 	"$JS.API.CONSUMER.INFO.social_events.rt_realtime1_friend_removed",
 	"$JS.API.CONSUMER.CREATE.social_events.rt_realtime1_friend_removed",

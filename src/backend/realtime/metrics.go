@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -17,7 +18,7 @@ type realtimeMetrics struct {
 	fanoutEnqueueTotal *prometheus.CounterVec
 }
 
-var rtMetrics *realtimeMetrics
+var rtMetrics atomic.Pointer[realtimeMetrics]
 
 func initRealtimeMetrics(reg *prometheus.Registry) *realtimeMetrics {
 	m := &realtimeMetrics{
@@ -56,51 +57,53 @@ func initRealtimeMetrics(reg *prometheus.Registry) *realtimeMetrics {
 	m.fanoutEnqueueTotal.WithLabelValues("enqueued")
 	m.fanoutEnqueueTotal.WithLabelValues("dropped")
 	m.fanoutEnqueueTotal.WithLabelValues("disconnect_on_overflow")
-	rtMetrics = m
+	rtMetrics.Store(m)
 	return m
 }
 
 func observeWSFanoutEnqueue(result fanoutEnqueueResult) {
-	if rtMetrics == nil {
+	m := rtMetrics.Load()
+	if m == nil {
 		return
 	}
 	switch result {
 	case fanoutEnqueued:
-		rtMetrics.fanoutEnqueueTotal.WithLabelValues("enqueued").Inc()
+		m.fanoutEnqueueTotal.WithLabelValues("enqueued").Inc()
 	case fanoutDisconnectOnOverflow:
-		rtMetrics.fanoutEnqueueTotal.WithLabelValues("disconnect_on_overflow").Inc()
+		m.fanoutEnqueueTotal.WithLabelValues("disconnect_on_overflow").Inc()
 	default:
-		rtMetrics.fanoutEnqueueTotal.WithLabelValues("dropped").Inc()
+		m.fanoutEnqueueTotal.WithLabelValues("dropped").Inc()
 	}
 }
 
 func observeWSConnectFail() {
-	if rtMetrics == nil {
+	m := rtMetrics.Load()
+	if m == nil {
 		return
 	}
-	rtMetrics.connectTotal.WithLabelValues("fail").Inc()
+	m.connectTotal.WithLabelValues("fail").Inc()
 }
 
-func observeWSConnectSuccess() {
-	if rtMetrics == nil {
+func (m *realtimeMetrics) observeWSConnectSuccess() {
+	if m == nil {
 		return
 	}
-	rtMetrics.connectTotal.WithLabelValues("success").Inc()
-	rtMetrics.connectionsActive.Inc()
+	m.connectTotal.WithLabelValues("success").Inc()
+	m.connectionsActive.Inc()
 }
 
-func observeWSDisconnect() {
-	if rtMetrics == nil {
+func (m *realtimeMetrics) observeWSDisconnect() {
+	if m == nil {
 		return
 	}
-	rtMetrics.connectionsActive.Dec()
+	m.connectionsActive.Dec()
 }
 
-func observeWSHelloDuration(start time.Time) {
-	if rtMetrics == nil {
+func (m *realtimeMetrics) observeWSHelloDuration(start time.Time) {
+	if m == nil {
 		return
 	}
-	rtMetrics.helloDuration.Observe(time.Since(start).Seconds())
+	m.helloDuration.Observe(time.Since(start).Seconds())
 }
 
 type jetStreamConsumerRef struct {
@@ -120,7 +123,8 @@ func realtimeJetStreamConsumers(instanceID string) []jetStreamConsumerRef {
 }
 
 func runNatsConsumeLagPoller(ctx context.Context, js nats.JetStreamContext, instanceID string) {
-	if rtMetrics == nil || js == nil {
+	m := rtMetrics.Load()
+	if m == nil || js == nil {
 		return
 	}
 	consumers := realtimeJetStreamConsumers(instanceID)
@@ -131,10 +135,10 @@ func runNatsConsumeLagPoller(ctx context.Context, js nats.JetStreamContext, inst
 		for _, c := range consumers {
 			info, err := js.ConsumerInfo(c.stream, c.consumer)
 			if err != nil {
-				rtMetrics.natsConsumeLag.DeleteLabelValues(c.stream, c.consumer)
+				m.natsConsumeLag.DeleteLabelValues(c.stream, c.consumer)
 				continue
 			}
-			rtMetrics.natsConsumeLag.WithLabelValues(c.stream, c.consumer).Set(float64(info.NumPending))
+			m.natsConsumeLag.WithLabelValues(c.stream, c.consumer).Set(float64(info.NumPending))
 		}
 	}
 	update()

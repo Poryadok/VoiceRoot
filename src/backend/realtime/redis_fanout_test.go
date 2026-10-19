@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"slices"
 	"testing"
 	"time"
 
@@ -11,45 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
-
-func TestRedisProfileRegistryRegisterUnregister(t *testing.T) {
-	t.Parallel()
-	s := miniredis.RunT(t)
-	t.Cleanup(s.Close)
-
-	rdb := redis.NewClient(&redis.Options{Addr: s.Addr()})
-	t.Cleanup(func() { _ = rdb.Close() })
-
-	ctx := context.Background()
-	inst := "instance-a"
-	conn := "conn-1"
-	prof := "profile-xyz"
-
-	reg := newRedisProfileRegistry(rdb, "voice:rt:test:prof:")
-	if err := reg.Register(ctx, prof, inst, conn); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
-	members, err := rdb.SMembers(ctx, "voice:rt:test:prof:"+prof).Result()
-	if err != nil {
-		t.Fatalf("SMembers: %v", err)
-	}
-	slices.Sort(members)
-	want := []string{inst + ":" + conn}
-	if len(members) != 1 || members[0] != want[0] {
-		t.Fatalf("members = %v, want %v", members, want)
-	}
-
-	if err := reg.Unregister(ctx, prof, inst, conn); err != nil {
-		t.Fatalf("Unregister: %v", err)
-	}
-	n, err := rdb.SCard(ctx, "voice:rt:test:prof:"+prof).Result()
-	if err != nil {
-		t.Fatalf("SCard: %v", err)
-	}
-	if n != 0 {
-		t.Fatalf("SCard after unregister = %d, want 0", n)
-	}
-}
 
 func TestRedisTypingFanoutCrossInstanceViaPubSub(t *testing.T) {
 	t.Parallel()
@@ -80,7 +40,6 @@ func TestRedisTypingFanoutCrossInstanceViaPubSub(t *testing.T) {
 		Client:        sub,
 		Hub:           hub,
 		InstanceID:    instB,
-		KeyPrefix:     "voice:rt:test:prof:",
 		FanoutChannel: "voice:rt:test:fanout",
 	})
 	go func() { _ = rf.runSubscriber(ctx) }()
@@ -133,7 +92,6 @@ func TestRedisFanoutPublishRoundTrip(t *testing.T) {
 		Client:        rdb,
 		Hub:           hub,
 		InstanceID:    inst,
-		KeyPrefix:     "voice:rt:test:prof:",
 		FanoutChannel: "voice:rt:test:fanout2",
 	})
 	go func() { _ = rf.runSubscriber(ctx) }()
@@ -145,7 +103,6 @@ func TestRedisFanoutPublishRoundTrip(t *testing.T) {
 		Client:        publisher,
 		Hub:           hub,
 		InstanceID:    inst,
-		KeyPrefix:     "voice:rt:test:prof:",
 		FanoutChannel: "voice:rt:test:fanout2",
 	})
 
@@ -181,7 +138,6 @@ func TestRedisDeliveryAckFanoutCrossInstance(t *testing.T) {
 		Client:        sub,
 		Hub:           hub,
 		InstanceID:    "inst-b",
-		KeyPrefix:     "voice:rt:test:prof:",
 		FanoutChannel: "voice:rt:test:fanout:delivery",
 	})
 	go func() { _ = rf.runSubscriber(ctx) }()
@@ -191,7 +147,6 @@ func TestRedisDeliveryAckFanoutCrossInstance(t *testing.T) {
 		Client:        pub,
 		Hub:           hub,
 		InstanceID:    "inst-a",
-		KeyPrefix:     "voice:rt:test:prof:",
 		FanoutChannel: "voice:rt:test:fanout:delivery",
 	})
 	chatID := "33333333-3333-3333-3333-333333333333"

@@ -53,6 +53,31 @@ func TestRoomLifecycleRemovesParticipantIdempotently(t *testing.T) {
 	require.Equal(t, []string{"room-a/profile-a"}, fake.removed)
 }
 
+type listingRoomService struct {
+	fakeRoomService
+	list    *protocol.ListParticipantsResponse
+	listErr error
+}
+
+func (f *listingRoomService) ListParticipants(context.Context, *protocol.ListParticipantsRequest) (*protocol.ListParticipantsResponse, error) {
+	return f.list, f.listErr
+}
+
+func TestRoomLifecycleListsExactCurrentMediaIdentities(t *testing.T) {
+	fake := &listingRoomService{list: &protocol.ListParticipantsResponse{Participants: []*protocol.ParticipantInfo{
+		{Identity: "ov:profile-b:generation"}, {Identity: "ov:profile-a:generation"}, {Identity: "ov:profile-b:generation"},
+	}}}
+	identities, err := NewRoomLifecycle(fake).ListParticipantIdentities(context.Background(), "room-a")
+	require.NoError(t, err)
+	require.Equal(t, []string{"ov:profile-a:generation", "ov:profile-b:generation"}, identities)
+	fake.listErr = twirp.NotFound.Error("room absent")
+	identities, err = NewRoomLifecycle(fake).ListParticipantIdentities(context.Background(), "room-a")
+	require.NoError(t, err)
+	require.Empty(t, identities)
+	_, err = NewRoomLifecycle(&fakeRoomService{}).ListParticipantIdentities(context.Background(), "room-a")
+	require.ErrorIs(t, err, ErrRoomServiceNotConfigured)
+}
+
 type fakeRoomService struct {
 	created   []string
 	deleted   []string

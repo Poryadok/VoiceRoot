@@ -58,6 +58,7 @@ func TestRenewBootstrapPreservesIdentitySeedAndAllOtherClaims(t *testing.T) {
 	want := map[string]bool{
 		"$JS.API.STREAM.UPDATE.chat_events": true, "$JS.API.STREAM.UPDATE.social_events": true,
 		"$JS.API.STREAM.UPDATE.role_events":                                 true,
+		"$JS.API.STREAM.UPDATE.voice_events":                                true,
 		"$JS.API.CONSUMER.INFO.social_events.rt_realtime1_friend_removed":   true,
 		"$JS.API.CONSUMER.CREATE.social_events.rt_realtime1_friend_removed": true,
 		"$JS.API.CONSUMER.INFO.chat_events.voice_space_media_chat":          true,
@@ -126,6 +127,7 @@ func TestRenewBootstrapDenyPreservedAsVeto(t *testing.T) {
 
 func TestRenewBootstrapNewConsumersRemainVetoedByExactDenies(t *testing.T) {
 	denies := []string{
+		"$JS.API.STREAM.UPDATE.voice_events",
 		"$JS.API.STREAM.UPDATE.role_events",
 		"$JS.API.CONSUMER.INFO.chat_events.voice_space_media_chat",
 		"$JS.API.CONSUMER.CREATE.chat_events.>",

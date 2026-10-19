@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package voice.role.v1;
+
+option go_package = "voice.app/voice/role/v1;rolev1";
+
+// Exact Space-owned eligibility incarnation. A selector is not authority: Role
+// must verify it against a fresh protected Space observation before use.
+// BOTH is deliberately absent; each contribution selects exactly one source.
+message MembershipBinding {
+  oneof source {
+    OrdinaryMembershipBinding ordinary = 1;
+    CommunityMembershipBinding community = 2;
+  }
+}
+
+message OrdinaryMembershipBinding {
+  // Positive int64-compatible admission generation, or zero ONLY for an
+  // explicitly tagged legacy publication issued and persisted by Space.
+  uint64 membership_generation = 1;
+  string publication_identity = 2; // canonical nonzero UUID; never generated on read
+  bool legacy = 3; // true iff membership_generation == 0
+}
+
+message CommunityMembershipBinding {
+  uint64 owner_generation = 1; // positive, at most signed int64 max
+  uint64 membership_generation = 2; // independent positive per-profile counter
+  string membership_episode_id = 3; // canonical nonzero UUID, never reused
+}

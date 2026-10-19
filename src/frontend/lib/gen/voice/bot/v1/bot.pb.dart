@@ -28,6 +28,234 @@ export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
 
 export 'bot.pbenum.dart';
 
+/// No caller-supplied identity is authority: only a verified Space principal may
+/// ask this current-state decision for its immutable composite intent.
+class CheckBotInstallationScopeRequest extends $pb.GeneratedMessage {
+  factory CheckBotInstallationScopeRequest({
+    $core.String? botId,
+    $core.String? spaceId,
+    $core.String? actorProfileId,
+    $core.String? installationId,
+    $core.String? botScope,
+  }) {
+    final result = create();
+    if (botId != null) result.botId = botId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (actorProfileId != null) result.actorProfileId = actorProfileId;
+    if (installationId != null) result.installationId = installationId;
+    if (botScope != null) result.botScope = botScope;
+    return result;
+  }
+
+  CheckBotInstallationScopeRequest._();
+
+  factory CheckBotInstallationScopeRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CheckBotInstallationScopeRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CheckBotInstallationScopeRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'botId')
+    ..aOS(2, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(3, _omitFieldNames ? '' : 'actorProfileId')
+    ..aOS(4, _omitFieldNames ? '' : 'installationId')
+    ..aOS(5, _omitFieldNames ? '' : 'botScope')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CheckBotInstallationScopeRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CheckBotInstallationScopeRequest copyWith(
+          void Function(CheckBotInstallationScopeRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as CheckBotInstallationScopeRequest))
+          as CheckBotInstallationScopeRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CheckBotInstallationScopeRequest create() =>
+      CheckBotInstallationScopeRequest._();
+  @$core.override
+  CheckBotInstallationScopeRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CheckBotInstallationScopeRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CheckBotInstallationScopeRequest>(
+          create);
+  static CheckBotInstallationScopeRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get botId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set botId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasBotId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearBotId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get spaceId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set spaceId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSpaceId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSpaceId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get actorProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set actorProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasActorProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearActorProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get installationId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set installationId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasInstallationId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearInstallationId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get botScope => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set botScope($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasBotScope() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearBotScope() => $_clearField(5);
+}
+
+class CheckBotInstallationScopeResponse extends $pb.GeneratedMessage {
+  factory CheckBotInstallationScopeResponse({
+    $core.bool? allowed,
+    $core.String? botId,
+    $core.String? spaceId,
+    $core.String? actorProfileId,
+    $core.String? installationId,
+    $core.String? botScope,
+  }) {
+    final result = create();
+    if (allowed != null) result.allowed = allowed;
+    if (botId != null) result.botId = botId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (actorProfileId != null) result.actorProfileId = actorProfileId;
+    if (installationId != null) result.installationId = installationId;
+    if (botScope != null) result.botScope = botScope;
+    return result;
+  }
+
+  CheckBotInstallationScopeResponse._();
+
+  factory CheckBotInstallationScopeResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CheckBotInstallationScopeResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CheckBotInstallationScopeResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'allowed')
+    ..aOS(2, _omitFieldNames ? '' : 'botId')
+    ..aOS(3, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(4, _omitFieldNames ? '' : 'actorProfileId')
+    ..aOS(5, _omitFieldNames ? '' : 'installationId')
+    ..aOS(6, _omitFieldNames ? '' : 'botScope')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CheckBotInstallationScopeResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CheckBotInstallationScopeResponse copyWith(
+          void Function(CheckBotInstallationScopeResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as CheckBotInstallationScopeResponse))
+          as CheckBotInstallationScopeResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CheckBotInstallationScopeResponse create() =>
+      CheckBotInstallationScopeResponse._();
+  @$core.override
+  CheckBotInstallationScopeResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CheckBotInstallationScopeResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CheckBotInstallationScopeResponse>(
+          create);
+  static CheckBotInstallationScopeResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get allowed => $_getBF(0);
+  @$pb.TagNumber(1)
+  set allowed($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAllowed() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAllowed() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get botId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set botId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasBotId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearBotId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get spaceId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set spaceId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSpaceId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSpaceId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get actorProfileId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set actorProfileId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasActorProfileId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearActorProfileId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get installationId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set installationId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasInstallationId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearInstallationId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get botScope => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set botScope($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasBotScope() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearBotScope() => $_clearField(6);
+}
+
 class PublishGameEventRequest extends $pb.GeneratedMessage {
   factory PublishGameEventRequest({
     $1.VerifiedGameEventIntent? intent,

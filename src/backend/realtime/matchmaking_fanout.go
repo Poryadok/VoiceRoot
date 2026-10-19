@@ -82,9 +82,9 @@ func matchCompletedFanouts(ev *eventsv1.MatchCompleted) ([]profileFanout, bool) 
 		return nil, false
 	}
 	payload := map[string]string{
-		"type":              "match_completed",
-		"match_id":          ev.GetMatchId(),
-		"duration_seconds":  fmt.Sprintf("%d", ev.GetDurationSeconds()),
+		"type":             "match_completed",
+		"match_id":         ev.GetMatchId(),
+		"duration_seconds": fmt.Sprintf("%d", ev.GetDurationSeconds()),
 	}
 	return fanoutsForProfiles(ev.GetProfileIds(), "match_completed", payload)
 }

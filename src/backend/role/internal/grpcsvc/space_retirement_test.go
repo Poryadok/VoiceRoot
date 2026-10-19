@@ -458,6 +458,9 @@ func TestRetireSpace_RejectsUnknownAndInvalidRequestsBeforeMutation(t *testing.T
 		{"timestamp", func(r *rolev1.RetireSpaceRequest) { r.PurgeDecidedAt = nil }},
 		{"timestamp_invalid", func(r *rolev1.RetireSpaceRequest) { r.PurgeDecidedAt = &timestamppb.Timestamp{Seconds: 253402300800} }},
 		{"timestamp_submicrosecond", func(r *rolev1.RetireSpaceRequest) { r.PurgeDecidedAt.Nanos++ }},
+		{"timestamp_unknown", func(r *rolev1.RetireSpaceRequest) {
+			r.PurgeDecidedAt.ProtoReflect().SetUnknown([]byte{0xa0, 0x06, 0x01})
+		}},
 		{"manifest", func(r *rolev1.RetireSpaceRequest) { r.Manifest = nil }},
 		{"manifest_id", func(r *rolev1.RetireSpaceRequest) { r.Manifest.ManifestId = "not-a-uuid" }},
 		{"manifest_id_noncanonical", func(r *rolev1.RetireSpaceRequest) { r.Manifest.ManifestId = strings.ToUpper(r.Manifest.ManifestId) }},

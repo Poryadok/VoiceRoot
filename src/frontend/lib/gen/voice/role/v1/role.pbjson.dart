@@ -67,6 +67,212 @@ final $typed_data.Uint8List gameSessionGrantOutcomeDescriptor = $convert.base64D
     '9HUkFOVF9PVVRDT01FX1NUQUxFEAMSJgoiR0FNRV9TRVNTSU9OX0dSQU5UX09VVENPTUVfUkVW'
     'T0tFRBAE');
 
+@$core.Deprecated('Use ensureDefaultMemberRoleRequestDescriptor instead')
+const EnsureDefaultMemberRoleRequest$json = {
+  '1': 'EnsureDefaultMemberRoleRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'profile_id', '3': 3, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'membership_generation',
+      '3': 4,
+      '4': 1,
+      '5': 4,
+      '10': 'membershipGeneration'
+    },
+    {
+      '1': 'admission_operation_id',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '10': 'admissionOperationId'
+    },
+    {
+      '1': 'admission_binding_sha256',
+      '3': 6,
+      '4': 1,
+      '5': 12,
+      '10': 'admissionBindingSha256'
+    },
+  ],
+};
+
+/// Descriptor for `EnsureDefaultMemberRoleRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List ensureDefaultMemberRoleRequestDescriptor = $convert.base64Decode(
+    'Ch5FbnN1cmVEZWZhdWx0TWVtYmVyUm9sZVJlcXVlc3QSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIA'
+    'EoDVIPcHJvdG9jb2xWZXJzaW9uEhkKCHNwYWNlX2lkGAIgASgJUgdzcGFjZUlkEh0KCnByb2Zp'
+    'bGVfaWQYAyABKAlSCXByb2ZpbGVJZBIzChVtZW1iZXJzaGlwX2dlbmVyYXRpb24YBCABKARSFG'
+    '1lbWJlcnNoaXBHZW5lcmF0aW9uEjQKFmFkbWlzc2lvbl9vcGVyYXRpb25faWQYBSABKAlSFGFk'
+    'bWlzc2lvbk9wZXJhdGlvbklkEjgKGGFkbWlzc2lvbl9iaW5kaW5nX3NoYTI1NhgGIAEoDFIWYW'
+    'RtaXNzaW9uQmluZGluZ1NoYTI1Ng==');
+
+@$core.Deprecated('Use defaultMemberRoleReceiptDescriptor instead')
+const DefaultMemberRoleReceipt$json = {
+  '1': 'DefaultMemberRoleReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'profile_id', '3': 3, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'membership_generation',
+      '3': 4,
+      '4': 1,
+      '5': 4,
+      '10': 'membershipGeneration'
+    },
+    {
+      '1': 'admission_operation_id',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '10': 'admissionOperationId'
+    },
+    {
+      '1': 'admission_binding_sha256',
+      '3': 6,
+      '4': 1,
+      '5': 12,
+      '10': 'admissionBindingSha256'
+    },
+    {'1': 'role_id', '3': 7, '4': 1, '5': 9, '10': 'roleId'},
+    {'1': 'receipt_sha256', '3': 8, '4': 1, '5': 12, '10': 'receiptSha256'},
+  ],
+};
+
+/// Descriptor for `DefaultMemberRoleReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List defaultMemberRoleReceiptDescriptor = $convert.base64Decode(
+    'ChhEZWZhdWx0TWVtYmVyUm9sZVJlY2VpcHQSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDVIPcH'
+    'JvdG9jb2xWZXJzaW9uEhkKCHNwYWNlX2lkGAIgASgJUgdzcGFjZUlkEh0KCnByb2ZpbGVfaWQY'
+    'AyABKAlSCXByb2ZpbGVJZBIzChVtZW1iZXJzaGlwX2dlbmVyYXRpb24YBCABKARSFG1lbWJlcn'
+    'NoaXBHZW5lcmF0aW9uEjQKFmFkbWlzc2lvbl9vcGVyYXRpb25faWQYBSABKAlSFGFkbWlzc2lv'
+    'bk9wZXJhdGlvbklkEjgKGGFkbWlzc2lvbl9iaW5kaW5nX3NoYTI1NhgGIAEoDFIWYWRtaXNzaW'
+    '9uQmluZGluZ1NoYTI1NhIXCgdyb2xlX2lkGAcgASgJUgZyb2xlSWQSJQoOcmVjZWlwdF9zaGEy'
+    'NTYYCCABKAxSDXJlY2VpcHRTaGEyNTY=');
+
+@$core.Deprecated('Use ensureDefaultMemberRoleResponseDescriptor instead')
+const EnsureDefaultMemberRoleResponse$json = {
+  '1': 'EnsureDefaultMemberRoleResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.DefaultMemberRoleReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `EnsureDefaultMemberRoleResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List ensureDefaultMemberRoleResponseDescriptor =
+    $convert.base64Decode(
+        'Ch9FbnN1cmVEZWZhdWx0TWVtYmVyUm9sZVJlc3BvbnNlEkEKB3JlY2VpcHQYASABKAsyJy52b2'
+        'ljZS5yb2xlLnYxLkRlZmF1bHRNZW1iZXJSb2xlUmVjZWlwdFIHcmVjZWlwdA==');
+
+@$core.Deprecated('Use removeMemberRolesRequestDescriptor instead')
+const RemoveMemberRolesRequest$json = {
+  '1': 'RemoveMemberRolesRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'profile_id', '3': 3, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'removal_generation_floor',
+      '3': 4,
+      '4': 1,
+      '5': 4,
+      '10': 'removalGenerationFloor'
+    },
+    {
+      '1': 'removal_operation_id',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '10': 'removalOperationId'
+    },
+    {
+      '1': 'removal_binding_sha256',
+      '3': 6,
+      '4': 1,
+      '5': 12,
+      '10': 'removalBindingSha256'
+    },
+  ],
+};
+
+/// Descriptor for `RemoveMemberRolesRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List removeMemberRolesRequestDescriptor = $convert.base64Decode(
+    'ChhSZW1vdmVNZW1iZXJSb2xlc1JlcXVlc3QSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDVIPcH'
+    'JvdG9jb2xWZXJzaW9uEhkKCHNwYWNlX2lkGAIgASgJUgdzcGFjZUlkEh0KCnByb2ZpbGVfaWQY'
+    'AyABKAlSCXByb2ZpbGVJZBI4ChhyZW1vdmFsX2dlbmVyYXRpb25fZmxvb3IYBCABKARSFnJlbW'
+    '92YWxHZW5lcmF0aW9uRmxvb3ISMAoUcmVtb3ZhbF9vcGVyYXRpb25faWQYBSABKAlSEnJlbW92'
+    'YWxPcGVyYXRpb25JZBI0ChZyZW1vdmFsX2JpbmRpbmdfc2hhMjU2GAYgASgMUhRyZW1vdmFsQm'
+    'luZGluZ1NoYTI1Ng==');
+
+@$core.Deprecated('Use memberRolesRemovalReceiptDescriptor instead')
+const MemberRolesRemovalReceipt$json = {
+  '1': 'MemberRolesRemovalReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'profile_id', '3': 3, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'removal_generation_floor',
+      '3': 4,
+      '4': 1,
+      '5': 4,
+      '10': 'removalGenerationFloor'
+    },
+    {
+      '1': 'removal_operation_id',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '10': 'removalOperationId'
+    },
+    {
+      '1': 'removal_binding_sha256',
+      '3': 6,
+      '4': 1,
+      '5': 12,
+      '10': 'removalBindingSha256'
+    },
+    {'1': 'receipt_sha256', '3': 7, '4': 1, '5': 12, '10': 'receiptSha256'},
+  ],
+};
+
+/// Descriptor for `MemberRolesRemovalReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List memberRolesRemovalReceiptDescriptor = $convert.base64Decode(
+    'ChlNZW1iZXJSb2xlc1JlbW92YWxSZWNlaXB0EikKEHByb3RvY29sX3ZlcnNpb24YASABKA1SD3'
+    'Byb3RvY29sVmVyc2lvbhIZCghzcGFjZV9pZBgCIAEoCVIHc3BhY2VJZBIdCgpwcm9maWxlX2lk'
+    'GAMgASgJUglwcm9maWxlSWQSOAoYcmVtb3ZhbF9nZW5lcmF0aW9uX2Zsb29yGAQgASgEUhZyZW'
+    '1vdmFsR2VuZXJhdGlvbkZsb29yEjAKFHJlbW92YWxfb3BlcmF0aW9uX2lkGAUgASgJUhJyZW1v'
+    'dmFsT3BlcmF0aW9uSWQSNAoWcmVtb3ZhbF9iaW5kaW5nX3NoYTI1NhgGIAEoDFIUcmVtb3ZhbE'
+    'JpbmRpbmdTaGEyNTYSJQoOcmVjZWlwdF9zaGEyNTYYByABKAxSDXJlY2VpcHRTaGEyNTY=');
+
+@$core.Deprecated('Use removeMemberRolesResponseDescriptor instead')
+const RemoveMemberRolesResponse$json = {
+  '1': 'RemoveMemberRolesResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.MemberRolesRemovalReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `RemoveMemberRolesResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List removeMemberRolesResponseDescriptor =
+    $convert.base64Decode(
+        'ChlSZW1vdmVNZW1iZXJSb2xlc1Jlc3BvbnNlEkIKB3JlY2VpcHQYASABKAsyKC52b2ljZS5yb2'
+        'xlLnYxLk1lbWJlclJvbGVzUmVtb3ZhbFJlY2VpcHRSB3JlY2VpcHQ=');
+
 @$core.Deprecated('Use bootstrapSpaceRolesRequestDescriptor instead')
 const BootstrapSpaceRolesRequest$json = {
   '1': 'BootstrapSpaceRolesRequest',

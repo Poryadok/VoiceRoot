@@ -11,10 +11,51 @@ import (
 )
 
 func TestRequirePersistence(t *testing.T) {
+	for _, value := range []string{"1", "true", "yes", " TRUE "} {
+		t.Setenv("ANALYTICS_REQUIRE_PERSISTENCE", value)
+		require.True(t, RequirePersistence(), value)
+	}
+	for _, value := range []string{"", "0", "false", "no", " FALSE "} {
+		t.Setenv("ANALYTICS_REQUIRE_PERSISTENCE", value)
+		require.False(t, RequirePersistence(), value)
+	}
+}
+
+func TestPersistenceConfigurationFatal(t *testing.T) {
+	for _, tc := range []struct{ name, mode, dsn, want string }{
+		{"missing DSN", "true", "", "CLICKHOUSE_DSN required"},
+		{"blank DSN", "yes", " \t ", "CLICKHOUSE_DSN required"},
+		{"numeric required mode", "1", "", "CLICKHOUSE_DSN required"},
+		{"misspelled mode", "ture", "", "ANALYTICS_REQUIRE_PERSISTENCE must be"},
+		{"invalid mode with DSN", "enabled", "clickhouse://localhost:9000/voice", "ANALYTICS_REQUIRE_PERSISTENCE must be"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := exec.Command(os.Args[0], "-test.run=^TestPersistenceConfigurationFatalHelper$")
+			cmd.Env = append(envWithout("ANALYTICS_REQUIRE_PERSISTENCE", "CLICKHOUSE_DSN", "ANALYTICS_DSN_FATAL_HELPER"),
+				"ANALYTICS_DSN_FATAL_HELPER=1", "ANALYTICS_REQUIRE_PERSISTENCE="+tc.mode, "CLICKHOUSE_DSN="+tc.dsn)
+			output, err := cmd.CombinedOutput()
+			require.Error(t, err)
+			require.Contains(t, string(output), tc.want)
+		})
+	}
+}
+
+func TestPersistenceConfigurationFatalHelper(t *testing.T) {
+	if os.Getenv("ANALYTICS_DSN_FATAL_HELPER") != "1" {
+		t.Skip("fatal-path subprocess helper")
+	}
+	RequirePersistence()
+	ResolveClickHouseDSN(nil)
+	os.Exit(0)
+}
+
+func TestResolveClickHouseDSN(t *testing.T) {
 	t.Setenv("ANALYTICS_REQUIRE_PERSISTENCE", "true")
-	require.True(t, RequirePersistence())
-	t.Setenv("ANALYTICS_REQUIRE_PERSISTENCE", "0")
-	require.False(t, RequirePersistence())
+	t.Setenv("CLICKHOUSE_DSN", "  clickhouse://localhost:9000/voice  ")
+	require.Equal(t, "clickhouse://localhost:9000/voice", ResolveClickHouseDSN(nil))
+	t.Setenv("ANALYTICS_REQUIRE_PERSISTENCE", "false")
+	t.Setenv("CLICKHOUSE_DSN", "")
+	require.Empty(t, ResolveClickHouseDSN(nil))
 }
 
 func TestResolveHashKeyDevDefault(t *testing.T) {

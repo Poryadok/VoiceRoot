@@ -63,7 +63,7 @@ func (c lifecycleClientConfig) dial() (*grpc.ClientConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return grpc.NewClient(grpcclient.DialTarget(c.address), grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+	return grpc.NewClient(grpcclient.DialTarget(c.address), grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)), grpc.WithDisableRetry())
 }
 
 func (t *transcoder) lifecycleContext(r *http.Request, req proto.Message, method, requestID string) (context.Context, error) {
@@ -71,7 +71,8 @@ func (t *transcoder) lifecycleContext(r *http.Request, req proto.Message, method
 	if !ok || !canonicalLifecycleUUID(claims.UserID) || !canonicalLifecycleUUID(claims.ProfileID) || claims.SessionEpoch <= 0 || claims.ExpiresAt.IsZero() {
 		return nil, status.Error(codes.Unauthenticated, "verified lifecycle actor required")
 	}
-	if method != spacev1.SpaceService_GetSpace_FullMethodName && effectiveAccountType(claims) != "regular" {
+	isRead := method == spacev1.SpaceService_GetSpace_FullMethodName || method == spacev1.SpaceService_GetAuditLog_FullMethodName
+	if !isRead && effectiveAccountType(claims) != "regular" {
 		return nil, status.Error(codes.PermissionDenied, "regular account required")
 	}
 	if t.lifecycleIssuer == nil || t.clients.spaceLifecycle == nil {

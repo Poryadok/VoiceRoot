@@ -7,7 +7,7 @@ class BotPrerequisiteTest(unittest.TestCase):
         from pathlib import Path
         files=(Path(__file__).resolve().parents[3]/'src/backend/migrations/bot_db').glob('*.up.sql')
         version=max(int(path.name.split('_',1)[0]) for path in files)
-        self.assertEqual(version,6)
+        self.assertEqual(version,7)
         for current in range(1,version+1):
             row=dict(self.row(),version=current)
             with self.subTest(version=current):self.assertEqual(bot_migration.verify(row),row)
@@ -22,7 +22,6 @@ class BotPrerequisiteTest(unittest.TestCase):
         row=self.row();row['duplicate_token_groups']=1
         with self.assertRaises(bot_migration.PrerequisiteError):bot_migration.verify(row)
         self.assertIn('interaction_token IS NOT NULL',bot_migration.SQL)
-        self.assertNotIn("interaction_token <> ''",bot_migration.SQL)
     def test_clean_bound_schema_retains_exact_observation(self):
         row=self.row()
         self.assertEqual(bot_migration.verify(row),row)

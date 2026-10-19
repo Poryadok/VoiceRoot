@@ -52,9 +52,12 @@ func LoadFromEnvWithAudience(target, capability, prefix, defaultListen string) (
 	if strings.TrimSpace(prefix) == "" || strings.TrimSpace(defaultListen) == "" {
 		return Config{}, false, errors.New("principal listener prefix and default address required")
 	}
-	names := []string{prefix + "REPLAY_REDIS_ADDR", prefix + "REPLAY_REDIS_PASSWORD", prefix + "TLS_CERT_FILE", prefix + "TLS_KEY_FILE", prefix + "GRPC_LISTEN"}
-	if capability == "messaging" {
+	names := []string{prefix + "REPLAY_REDIS_ADDR", prefix + "REPLAY_REDIS_PASSWORD", prefix + "TLS_CERT_FILE", prefix + "TLS_KEY_FILE", prefix + "GRPC_LISTEN", prefix + "JWKS_CA_FILE"}
+	if RequiresMutualTLS(capability) {
 		names = append(names, prefix+"CLIENT_CA_FILE")
+		if capability != "messaging" {
+			names = append(names, prefix+"JWKS_CLIENT_CERT_FILE", prefix+"JWKS_CLIENT_KEY_FILE")
+		}
 	}
 	enabled := false
 	for _, name := range names {
@@ -66,10 +69,20 @@ func LoadFromEnvWithAudience(target, capability, prefix, defaultListen string) (
 		return Config{}, false, nil
 	}
 	cfg := Config{Target: target, Capability: capability, ReplayAddr: strings.TrimSpace(os.Getenv(prefix + "REPLAY_REDIS_ADDR")), ReplayPassword: os.Getenv(prefix + "REPLAY_REDIS_PASSWORD"), JWKSCAFile: strings.TrimSpace(os.Getenv("S2S_JWKS_CA_FILE")), TLSCertFile: strings.TrimSpace(os.Getenv(prefix + "TLS_CERT_FILE")), TLSKeyFile: strings.TrimSpace(os.Getenv(prefix + "TLS_KEY_FILE")), ListenAddr: defaultListen}
-	if capability == "messaging" {
+	if value, ok := os.LookupEnv(prefix + "JWKS_CA_FILE"); ok {
+		cfg.JWKSCAFile = strings.TrimSpace(value)
+		if cfg.JWKSCAFile == "" {
+			return Config{}, true, errors.New("principal listener JWKS CA file required when configured")
+		}
+	}
+	if RequiresMutualTLS(capability) {
 		cfg.ClientCAFile = strings.TrimSpace(os.Getenv(prefix + "CLIENT_CA_FILE"))
 		cfg.JWKSClientCertFile = strings.TrimSpace(os.Getenv("USER_PRINCIPAL_JWKS_CLIENT_CERT_FILE"))
 		cfg.JWKSClientKeyFile = strings.TrimSpace(os.Getenv("USER_PRINCIPAL_JWKS_CLIENT_KEY_FILE"))
+		if capability != "messaging" {
+			cfg.JWKSClientCertFile = strings.TrimSpace(os.Getenv(prefix + "JWKS_CLIENT_CERT_FILE"))
+			cfg.JWKSClientKeyFile = strings.TrimSpace(os.Getenv(prefix + "JWKS_CLIENT_KEY_FILE"))
+		}
 		var err error
 		cfg.ClientCAs, err = loadClientCAs(cfg.ClientCAFile)
 		if err != nil {
@@ -124,10 +137,10 @@ func (c Config) validate() error {
 	if strings.TrimSpace(c.ReplayAddr) == "" || strings.TrimSpace(c.TLSCertFile) == "" || strings.TrimSpace(c.TLSKeyFile) == "" {
 		return errors.New("principal Redis and TLS certificate/key required")
 	}
-	if c.Capability == "messaging" && (strings.TrimSpace(c.ClientCAFile) == "" || c.ClientCAs == nil) {
+	if RequiresMutualTLS(c.Capability) && (strings.TrimSpace(c.ClientCAFile) == "" || c.ClientCAs == nil) {
 		return errors.New("messaging principal client CA required")
 	}
-	if c.Capability == "messaging" && (strings.TrimSpace(c.JWKSClientCertFile) == "" || strings.TrimSpace(c.JWKSClientKeyFile) == "") {
+	if RequiresMutualTLS(c.Capability) && (strings.TrimSpace(c.JWKSClientCertFile) == "" || strings.TrimSpace(c.JWKSClientKeyFile) == "") {
 		return errors.New("messaging principal JWKS client certificate/key required")
 	}
 	if _, _, err := net.SplitHostPort(c.ListenAddr); err != nil {

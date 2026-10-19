@@ -40,17 +40,14 @@ func ValidateWebhookSecretConfig() error {
 }
 
 func requiresProductionWebhookSecret() bool {
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("SUBSCRIPTION_ALLOW_TEST_WEBHOOK_SECRET")), "true") {
-		return false
-	}
 	env := strings.ToLower(strings.TrimSpace(os.Getenv("VOICE_ENV")))
 	return env == "production" || env == "prod"
 }
 
 // PaddleEvent is a minimal Paddle Billing webhook payload.
 type PaddleEvent struct {
-	EventID   string         `json:"event_id"`
-	EventType string         `json:"event_type"`
+	EventID   string          `json:"event_id"`
+	EventType string          `json:"event_type"`
 	Data      PaddleEventData `json:"data"`
 }
 

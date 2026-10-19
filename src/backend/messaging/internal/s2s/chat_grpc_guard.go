@@ -26,6 +26,39 @@ func NewGRPCChatGuard(c chatv1.ChatServiceClient) *GRPCChatGuard {
 	return &GRPCChatGuard{Client: c}
 }
 
+// CanPostAsChat obtains a fresh caller-relative Chat decision. The subject must
+// match the authenticated Messaging caller; no body-selected identity or cached
+// ListMembers role/grant snapshot can substitute for this decision.
+func (g *GRPCChatGuard) CanPostAsChat(ctx context.Context, chatID, profileID uuid.UUID) (bool, error) {
+	if g == nil || g.Client == nil {
+		return false, status.Error(codes.Unavailable, "chat service not configured")
+	}
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok || len(md.Get("x-voice-profile-id")) != 1 {
+		return false, status.Error(codes.Unauthenticated, "missing authenticated profile")
+	}
+	actor, err := uuid.Parse(md.Get("x-voice-profile-id")[0])
+	if err != nil || actor != profileID {
+		return false, status.Error(codes.PermissionDenied, "chat permission subject mismatch")
+	}
+	// Trusted Gateway user metadata, with service-caller identity set locally.
+	outgoing := metadata.MD{}
+	for _, key := range []string{"x-voice-user-id", "x-voice-profile-id", "x-voice-account-type"} {
+		if values := md.Get(key); len(values) > 0 {
+			outgoing[key] = append([]string(nil), values...)
+		}
+	}
+	outgoing.Set("x-voice-internal-caller", "messaging")
+	resp, err := g.Client.GetChatPermissions(metadata.NewOutgoingContext(ctx, outgoing), &chatv1.GetChatPermissionsRequest{ChatId: chatID.String()})
+	if err != nil {
+		return false, err
+	}
+	if resp == nil {
+		return false, status.Error(codes.Unavailable, "chat permissions missing")
+	}
+	return resp.GetCanPostAsChat(), nil
+}
+
 func (g *GRPCChatGuard) dmMembers(ctx context.Context, chatID uuid.UUID) ([]*chatv1.ChatMember, error) {
 	if g == nil || g.Client == nil {
 		return nil, status.Error(codes.FailedPrecondition, "chat service not configured")

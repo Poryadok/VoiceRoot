@@ -15,16 +15,40 @@ Replace the limit-only `ListThreads` implementation with a bounded, per-viewer M
 
 - In: durable membership inbox and per-viewer build lifecycle; journalled mutation projection; immutable dual AVL indexes and cursor states; `ListThreads` activation; schema, workers, observability, migration/backfill, docs and contract tests.
 - Out: reuse, cherry-pick, or extension of PR #364; a candidate-limited SQL aggregate; global WebSocket history catch-up; cross-database foreign keys; changing Chat's membership authority.
-- Documentation gap: Chat must expose the durable membership-outbox payload and delivery/retry guarantees. The Sol contract fixes required fields and semantics; the implementation must document its concrete Chat event transport before activation.
+- The effective-membership source, admission and backfill contract is defined below. Its owner APIs, durable bridge and concrete event transport must be implemented and verified before activation.
 
 ## Milestones
 
 - [x] Record the successor contract and RED-only groundwork without production changes.
+- [x] Independently review the BE-183 source-consistency protocol and record the effective-membership contract v1 and owner obligations below.
 - [ ] Add `messaging_db` migrations and stores for viewer records, changes, immutable nodes, cursor states and membership inbox.
 - [ ] Deliver durable Chat membership events and the Messaging consumer/backfill worker.
 - [ ] Implement serialized, atomic projectors and immutable AVL traversal.
 - [ ] Activate `ListThreads` after readiness, zero lag, invariant checks and sampled dual reads.
 - [ ] Complete unit, integration, migration and hosted CI evidence; retire the legacy list path only after activation evidence.
+
+### BE-184 persistent-index implementation checkpoint
+
+The first implementation slice is the dual immutable AVL primitive consumed by
+the BE-184 transactional viewer projector, and then BE-185's page reader. It
+stores exact per-viewer summaries in content-addressed Messaging-owned nodes;
+activity order is `(last_reply_at DESC, parent_id DESC)` and a second parent-ID
+tree supports logarithmic replacement/removal. Updates path-copy both roots.
+The SQL adapter accepts the same pgx transaction as future journal/root writes.
+Migration `000032_thread_list_nodes` rejects in-place SQL updates; deleting nodes
+is reserved for future reachability GC. No runtime RPC or authorization path is
+enabled by this checkpoint.
+
+Acceptance cases: old roots remain unchanged after upsert/delete; identical retry
+keeps the roots; randomized edits match a sorted oracle; adversarial sorted
+insertion remains balanced; each page reads at most height + page size nodes;
+100k replies remain one summary; missing/corrupt nodes fail closed; real SQL
+rejects updates and rolls back all inserted nodes with the owning transaction.
+Use owned Linux Go 1.26 + PostgreSQL 16 without exposed host ports. Ordinary TDD;
+migration/privacy/concurrency risk requires independent review. Source-revision
+APIs/outboxes, Q/J journals, durable roots/build/GC, all visibility projectors and
+complete admission remain subsequent BE-184/185 work before activation. Do not
+mark the full successor or task complete from this primitive's checks.
 
 ## Detailed Steps
 
@@ -65,9 +89,198 @@ Replace the limit-only `ListThreads` implementation with a bounded, per-viewer M
 
 ## Risks And Follow-Ups
 
-- The current Chat membership path lacks the required durable outbox contract; activation is blocked until it exists and Messaging consumes it idempotently.
+- The current Chat membership path lacks the required durable source/export implementation; activation is blocked until the contract below is implemented and Messaging consumes it idempotently.
 - A failed or lagging projector must block the affected page rather than return stale data or fall back to SQL.
 - The final migration and backfill plan needs production rollout evidence and a retention calculation for the oldest BUILDING baseline.
+
+## Effective-membership contract v1
+
+This is the reviewed BE-183 technical contract for BE-184/185, not a claim that
+the bridge or read model is implemented. Chat owns effective membership;
+Messaging owns its projection. Keep `ListThreads` unavailable until the complete
+protocol and all existing message-visibility gates are verified. No direct reads
+of another service's database, fixed first-N admission or SQL fallback qualify.
+
+### Source revisions and complete snapshots
+
+Every source coordinate is `(owner, scope, incarnation, revision)`. Revisions
+never decrease or repeat within an incarnation; loss of journal continuity or
+identity reset creates a new incarnation. Each owner commits state, its serialized
+head increment, exact replay record and outbox entry in one local transaction.
+Use a locked head or another proved committed prefix, never `MAX(sequence)`,
+allocation order, wall-clock time or broker delivery sequence. Rollback cannot
+leave a committed head without its event. Every mutation, batch, cleanup and
+lifecycle writer affecting the scope participates.
+
+| Owner / scope | Inputs covered by the revision |
+| --- | --- |
+| Chat / chat | Local membership, DM `deleted_for_self`/actual reopen, Space binding, resource lifecycle/fences and authority-changing managed membership |
+| Space / Space | Complete membership, join/leave/kick/ban and lifecycle/allowed restoration |
+| Role / Space | Every `TEXT_CHAT_VIEW` input: role assignment, permission bits, text overrides, Owner/Admin effects, ownership prepare/finalize/abort and lifecycle fences |
+| User / profile | Eligibility and all deleted/disabled/frozen causes, including durable negative/tombstone lookup |
+
+Each scope also persists monotonic `revocation_revision`. Every potentially
+restrictive change increments it; uncertainty is restrictive. Grant-only changes
+still increment the ordinary revision. Broad Role edits may conservatively fence
+the entire Space; narrower invalidation requires complete affected-viewer proof.
+This counter preserves remove/rejoin and deny/allow evidence even when snapshots
+coalesce intermediate states; it does not become a permission authority.
+
+Replay binds event ID, source coordinate and payload hash. Identical duplicates
+are idempotent; conflicting bytes for the same identity/revision quarantine the
+scope. A missing or unapplied tail is not caught up. A sealed complete snapshot
+can repair a gap only while preserving the revocation counter. Unknown revocation
+history requires a new incarnation and invalidates previous cursor lineages.
+
+Owners expose immutable paged snapshots with sealed heads, or atomic state/head
+reads followed by authoritative head validation. Every page binds scope,
+incarnation, snapshot ID and position; explicit terminal completion proves full
+enumeration. Empty pages and transport success alone do not. A registered
+consumer/build pin retains snapshots and replay history until released; expiry
+forces a fresh baseline rather than best-effort continuation.
+
+Chat captures its local definition and complete local candidates or complete
+Space member set, thereby discovering every dependency scope. Role evaluates
+`TEXT_CHAT_VIEW` for that exact set at a pinned revision; User supplies eligibility
+for every candidate at pinned per-profile revisions. Role remains the permission
+calculator. Results include all actual ownership/lifecycle dependencies.
+
+After **all** state reads/pages finish, Chat authoritatively rereads **every**
+dependency head. Accept only identical incarnations/revisions and complete
+coverage, otherwise retry within a bounded budget then return unavailable.
+State/head reads serialize with owner writes; stale allow caches or lagging
+replicas cannot validate. An unchanged interval for each dependency overlaps
+between the last state read and first validation, proving a common historical
+cut. A changed Chat/Space head invalidates the candidate/dependency set too.
+Point admission needs only the exact viewer's dependencies. This cut is not an
+ongoing permission grant: later pages still require fresh admission.
+
+### Protected internal API obligations
+
+These are required additive API capabilities, not existing callable RPCs. The
+implementation freezes their protobuf full method names, request/response fields
+and caller allow-lists before enabling them. All use the signed-principal
+[Phase-0 contract](../ARCHITECTURE_REQUIREMENTS.md):
+exact issuer/subject, audience, full RPC, request ID and deterministic protobuf
+request hash; bounded credential lifetime, TLS/JWKS and replay checks. Raw caller
+metadata and public viewer-filtered profile APIs grant no authority.
+
+| Caller → owner | Permitted capability and binding |
+| --- | --- |
+| `chat` → `space` | Complete member snapshot, replay/head validation and retention pin for the exact Space |
+| `chat` → `role` | Pinned effective `TEXT_CHAT_VIEW` decisions and head validation for exact Space/chat/candidate IDs |
+| `chat` → `user` | Exact profile eligibility/tombstone revision and head validation; no public profile disclosure |
+| `messaging` → `chat` | Complete effective-member generation/export, replay/head/pin and request-bound exact `(chat_id, profile_id)` admission |
+
+Snapshot/pin/continuation requests bind their exact scope, handle, position and
+expected source coordinates; no caller may cross scopes through a cursor or
+retention handle. Admission returns decision, source vector/revocation fences,
+lineage and required committed Chat journal offset. A missing/unreconciled source
+or lifecycle freeze is unavailable; a known non-member/ineligible viewer is
+denied. No Gateway/public route is added. These callers do not inherit the
+Auth-only `GetSdkProfileEligibility` grant. Auth still validates account/session
+state; User's delayed account overlay cannot replace it.
+
+### Chat generation and durable journal Q
+
+Chat persists complete effective-member generation `G`, its validated vector,
+candidate coverage, decisions and revocation fences. A single `chat_db`
+transaction checks the local Chat revision, activates `G`, updates pair states
+and appends committed per-chat prefix `Q`. Each pair has monotonic
+`membership_revision` and admission lineage. Effective false→true emits `joined`;
+true→false emits `removed|left` with the actual reason. Preserve the accepted
+`event_id`, `chat_id`, `profile_id`, `membership_revision`, `kind` payload and add
+lineage, source fences and journal offset. No-op refresh can advance a barrier
+without fabricating a join. One DM side's denial does not remove the peer.
+
+Potential-revocation barriers are durable even if recomputation ends allowed.
+They block older lineages until reconciled. Confirmed revoke/regrant creates a
+new lineage; conservatively retire the old lineage whenever continuously allowed
+intermediate states cannot be proved. An old cursor never silently restarts or
+revives; before expiry it retains the opaque unavailable result.
+
+Chat exports immutable `G` plus `Q`, complete pages and replay strictly after
+`Q`, with retention registered before export. Missing required history expires
+the export. Later external changes still require fresh point admission and
+reconciliation. Messaging commits inbox deduplication, events/barriers and viewer
+state together before ACK. Duplicate/reordered events cannot resurrect revoked
+lineages; a high pair revision is not proof of a complete chat prefix. Track `Q`
+or an explicitly sealed complete per-viewer range separately.
+
+### Messaging baseline J, READY and page admission
+
+Chat membership prefix `Q` and Messaging message/visibility journal `J` are
+different clocks; never compare or collapse them. Persist
+`BUILDING(chat, viewer, lineage, G, Q)`, pin retention, take a repeatable-read
+Messaging baseline with rows and committed `J` in the same snapshot, bulk-build
+both immutable trees and replay local changes after `J` plus membership/barriers
+after `Q`.
+
+Finalization obtains fresh authoritative exact-pair Chat admission naming current
+vector, lineage and required `Q`. Within Messaging's local serialization
+transaction, require fully consumed `Q`, an allowed matching lineage, no fan-out
+or replay gap, and `J` equal to the current committed local head. CAS the build
+generation/revision to READY with roots and both watermarks. A late worker cannot
+overwrite a newer revoke/lineage. READY proves local readiness, never cached
+authorization or a globally atomic permission decision.
+
+Every page first obtains exact-pair Chat admission **before cursor parsing**,
+including malformed cursors. Only READY roots/cursor states matching lineage and
+consumed required `Q` may be read. Stage the bounded tree result, then obtain a
+second fresh Chat proof before cursor progress commits or bytes return. Changed
+relevant vector/fence or denial discards the result. A local version/CAS check
+also proves no Messaging visibility mutation or `UPDATING` barrier committed
+between capture and final proof. Bounded retries end in the fixed unavailable
+response, without partial metadata.
+
+This orders an overlapping revoke at the final completed permission decision,
+as in the existing Role authorization contract. A revoke committed before the
+call or between pages is detected even with outbox delivery stopped. A
+revoke/regrant cannot restore an old lineage. Already authorized overlapping
+requests may finish; the protocol makes no zero-network-bytes-after-revoke
+guarantee. Original 15-minute cursor expiry, immutable traversal bounds and
+opaque unavailable/invalid error distinctions remain unchanged.
+
+### DM, profile and message visibility boundaries
+
+- DM `deleted_for_self=true` retires only that viewer's lineage atomically with
+  Chat's state/outbox. An actual existing reopen creates a fresh lineage and
+  BUILDING state; no new automatic reopen trigger or history truncation is added.
+- Chat archive is navigation state and preserves ordinary history access.
+  Deleted/archived profiles are ineligible as viewers; disabled/frozen causes
+  must all be cleared by their owner before eligibility returns. Profile switch
+  and presence do not revoke another profile. Archived domain data is retained.
+- Deleting a peer/author does not remove the surviving viewer's known DM history.
+  Auth account/session revocation remains separate; Chat's fresh-inbox peer
+  filter does not become a history policy.
+- Membership does not replace per-message directional Social blocks, hides,
+  ghost visibility, managed message-time entitlement intervals or deletion
+  fences. Their projection and cursor invalidation remain activation gates.
+
+### Consumer implementation and adversarial proof
+
+BE-184 implements owner revisions/outboxes/snapshot APIs, complete Chat
+reconciliation/export and Messaging inbox/build/AVL/journal/GC. BE-185 replaces
+first-100 admission and wires page proofs/cursor bindings/activation. Contract
+publication may unblock only the explicitly pinned implementation gate; it does
+not satisfy deployment, acceptance or full-done prerequisites.
+
+Required GREEN evidence supplements the original validation matrix:
+
+1. Transaction rollback/crash; conflicting duplicate hashes; reordered/missing
+   tails with a silent broker; retention expiry, reset and incarnation mismatch.
+2. More than 100 members and multi-page snapshots; candidate insertion during
+   enumeration; concurrent Role/User changes; reject a fractured cut where Space
+   allows before removal but Role allows only after removal.
+3. Revoke during BUILDING, between proof and READY CAS, between pages and during
+   staged reads; delayed/coalesced revoke/regrant; stale worker completion;
+   previous cursor lineage never revives.
+4. One-side DM delete/reopen, archive versus profile delete, independent freeze
+   causes, and peer deletion preserving surviving known history.
+5. Missing Role, unavailable/stale authority, wrong signed caller/request/scope
+   and malformed cursor: authorization first, opaque failure and no legacy read.
+6. Real persistence tests for atomic message/visibility journals and barriers,
+   zero-lag READY, immutable AVL bounds, original expiry and shared-node GC.
 
 ## Readiness containment implementation plan
 
@@ -98,18 +311,14 @@ Sources inspected: the service contract above; `docs/todo/backend.md`;
    successful CI on the current head. Keep the successor TODO and all production
    projection milestones unchecked.
 
-The authorization/outbox review must resolve how Space membership and Role
-`TEXT_CHAT_VIEW` changes reach Chat's effective membership revision. Chat currently
-reads Space's database and filters through Role; a trigger on `chat_members`
-alone cannot durably enumerate this membership set.
-
-Independent review confirmed that activation also needs DM delete/reopen
-invalidation, archived-profile eligibility and complete authoritative admission:
-the current Messaging Chat adapter reads only the first 100 members. A transport
-subject/table/backoff choice is routine implementation work; it does not resolve
-missing source revisions, an effective-viewer enumeration watermark or recovery
-from missed Space/Role invalidations. Record those semantics before implementing
-the full bridge. Keep archived domain data intact.
+The effective-membership contract above resolves source revisions, complete
+enumeration/watermarks, DM delete/reopen invalidation and profile eligibility.
+The current bridge still lacks that implementation; a trigger on `chat_members`
+alone cannot durably enumerate Space/Role-derived viewers. The Messaging Chat
+adapter still reads only the first 100 members. Replace it with exact-pair
+authoritative admission, implement source recovery and verify every activation
+barrier before enabling the full successor. Transport subject/table/backoff is
+routine implementation work under this contract. Keep archived domain data intact.
 
 Before the full successor GREEN cycle, replace the tagged RED scaffold's
 disconnected fixture seams with actual persistence tests: cursor registration

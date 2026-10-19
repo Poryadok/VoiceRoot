@@ -5,7 +5,58 @@
 WebSocket-шлюз для доставки событий в реальном времени. Не хранит бизнес-данные — только управляет соединениями и fan-out.
 
 **Язык**: Go
-**Хранилище**: Redis (Pub/Sub, connection registry)
+**Хранилище**: Redis (Pub/Sub, minimum-epoch floor, protected principal replay), PostgreSQL `realtime_db` (только P3 metadata); подключения и подписки — в памяти каждого инстанса
+
+### P3 durable admission (BE-REALTIME-P3-DURABLE-ADMISSION-v1)
+
+Every chat-origin enqueue requires a committed `PENDING` admission tied to a
+never-reused process incarnation. Realtime stores lifecycle gates, admissions,
+exact manifest imports and operation receipts in its own database, never message
+payloads or recipient history. A finite synchronous scope settles only after
+every possible local sink finishes; captured scopes cannot enqueue afterward.
+Connection loss, cancellation, restart and timeout never imply completion.
+
+The protected native Chat resolver supplies only structural chat/Space lifecycle
+enrollment. Missing rows, unavailable authority/schema and unknown state deny
+delivery, including sender fallback. Recipient authorization remains independent.
+Typed chat origins cover profile-targeted notifications, archive activity,
+Redis fanout, messages, chat updates and ephemeral chat events. Non-chat controls
+keep their existing behavior. Already queued frames are outside this boundary.
+
+Space imports the exact immutable Chat manifest pages into Realtime before the
+eleven-participant barrier. Import closes listed gates; a strong FROZEN receipt
+requires sealed complete coverage and zero unresolved admissions across every
+incarnation, checked in the same transaction that saves the receipt. PURGED
+denies remain permanent; stale native LIVE hydration cannot reopen them. LIVE
+restoration requires a completed freeze and the allowed newer generation.
+Full exact request/receipt bytes replay for the original 30 days. Compaction
+retains binding hashes and completion time without renewing the replay window,
+and never removes pending tickets or permanent denies.
+
+The dedicated Space listener exposes only the three Realtime lifecycle RPCs,
+requiring mTLS, exact Space service principal, request/RPC/operation binding,
+issuer-specific HTTPS current+next JWKS and shared replay Redis. Realtime uses
+its own canonical `REALTIME_PRINCIPAL_SIGNING_KEYS_DIR` and
+`REALTIME_PRINCIPAL_ACTIVE_KID`: exactly two top-level PKCS#8 RSA keys, matched
+against its independently published public JWKS. The Chat resolver has its own
+protected listener; ordinary Chat APIs never expose it.
+
+Local Compose uses an independent HTTPS public-key publisher after the existing
+principal initializer; it mounts public documents and its own TLS identity only.
+Its health validates the CA/SAN and both Space/Realtime documents. This static
+generation supports switching to an already published next key, not hot key
+replacement; repeat initialization rejects mismatches and partial volumes.
+This scoped bootstrap DAG does not prove startup of every Compose dependency.
+
+Runtime health requires the local listener, PostgreSQL, usable unexpired Space
+JWKS cache, replay Redis and the protected Chat TLS connection. It performs no
+synthetic domain mutation and does not qualify public P3 activation. Cooperative
+incarnation closure is supported; dead-incarnation recovery without qualified
+exact termination proof is **unsupported** and leaves unresolved work pending.
+Public activation still requires migrated/restorable metadata, complete writer
+coverage (including old binaries), eleven-participant release coverage and a
+qualified recovery/rollback package. A healthy binary or environment flag does
+not establish these gates.
 
 ## Ответственность
 
@@ -321,6 +372,11 @@ unsupported payload that it intentionally does not fan out.
 ## Конфигурация (NATS / JetStream)
 
 - **`NATS_URL`** — URL NATS Server с JetStream (порт **4222**). В Compose: `nats://nats:4222`; с хоста: `nats://127.0.0.1:${NATS_PORT:-4222}` (см. [`docker-compose.yml`](../../docker-compose.yml)).
+- **`NATS_CONNECT_TIMEOUT`** — положительная Go duration для установления NATS-соединения, по умолчанию `10s`.
+- **`NATS_RECONNECT_WAIT`** — положительная Go duration между попытками переподключения NATS, по умолчанию `1s`. Оба параметра читаются общим `natsConnectOptions` для consumers, publishers, lag monitor и readiness; пустое, некорректное, нулевое или отрицательное значение использует default. Задавайте их в окружении процесса/контейнера Realtime; запись в Compose `.env` сама по себе не передаёт переменную контейнеру. Число попыток переподключения остаётся неограниченным; эти параметры не меняют WS reconnect или срок ожидания JetStream ACK.
+
+Один process-owned NATS connection используется всеми доменными consumers, lag poller, delivery-ack publisher и readiness. Consumers освобождают собственные subscriptions при остановке или повторном запуске; общий transport закрывает только process. Readiness проверяет состояние этого connection без нового подключения. Subjects, per-instance durables и scoped request inbox сохраняются.
+
 - Подписки на доменные потоки для fan-out и отзыва доступа — в первую очередь **`message.events`** (consume: `message.sent`, …; **publish:** client `delivery_ack` → `message.delivery_ack`), **`chat.events`**, **`social.user_blocked`** из `social.events`, **`role.events`** для role policy и с Фазы 2 **`voice.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)); детали subject/consumer — в реализации сервиса.
 - **`REALTIME_CHAT_GRPC_ADDR`** (опционально) — gRPC адрес **Chat Service** для bootstrap списка DM при открытии WebSocket и проверки lazy `subscribe` через `GetChat` (например `chat:50051` в compose). Если не задан, сервер **не** вызывает Chat и **не** шлёт `subscription_sync`; valid lazy `subscribe` fail-closed с generic `permission_denied`, а не создаёт неподтверждённую подписку. TLS/insecure — как принято в окружении (локально часто plaintext внутри mesh).
 - **`REALTIME_MESSAGING_GRPC_ADDR`** (опционально) — gRPC адрес Messaging Service для авторитетной проверки `delivery_ack`. Realtime вызывает `GetMessage` с `x-voice-profile-id`, взятым из проверенных claims WS-соединения; Messaging проверяет членство и текущую видимость сообщения. Без адреса или при ошибке lookup delivery ack отклоняется без sender fan-out, Redis или durable publish.
@@ -344,6 +400,15 @@ Redis и проверка JWT остаются correctness path.
 2. Все инстансы Realtime подписаны на релевантные NATS subjects
 3. Каждый инстанс доставляет событие своим подключённым клиентам
 4. Typing indicators — через Redis Pub/Sub (не персистентные, не нужен NATS)
+
+Маршрутизация использует broadcast и локальный hub: каждый инстанс получает
+событие, затем выбирает свои соединения по авторизованным подпискам или
+`profile_id`. Redis Pub/Sub также переносит live `mark_read`, delivery ACK и
+presence updates; `src_instance`/`src_conn` исключают исходное соединение там,
+где это требуется. Общий connection registry для доставки не нужен и не
+записывается. Старые `voice:rt:prof:*` sets не читаются и не дают права доступа;
+их наличие или отсутствие не влияет на fan-out. Этот релиз не удаляет старые
+ключи автоматически и не меняет session-epoch floor namespace.
 
 ## Подписки
 
@@ -379,7 +444,7 @@ DM дополнительно применяется account-level block policy:
 
 ## Зависимости
 
-- **Redis** — Pub/Sub, registry подключений `{profile_id → [instance_id, ws_conn_id]}` и minimum-epoch floor для fail-closed проверок аккаунта
+- **Redis** — Pub/Sub и minimum-epoch floor для fail-closed проверок аккаунта; connection registry отсутствует
 - **NATS** — получение событий от всех сервисов
 - **Chat / User / Social gRPC** — membership/type, DM peer account resolution и двунаправленный DM block decision; sender account и однонаправленная block-проверка для новых shared-chat live fanouts
 
@@ -400,6 +465,6 @@ DM дополнительно применяется account-level block policy:
 ## Масштабирование
 
 - **Балансировка**: клиент подключается по WSS через **L7 load balancer** (или L4 с TLS на LB). Запрос уходит на **любой** инстанс Realtime; **sticky sessions не нужны** — после reconnect клиент может оказаться на другом инстансе.
-- **Несколько инстансов**: каждый подписан на NATS; между инстансами **Redis Pub/Sub** и общий **registry** подключений (см. выше), чтобы fan-out доходил до клиента независимо от того, на каком инстансе открыт сокет.
+- **Несколько инстансов**: каждый имеет отдельный durable NATS consumer на релевантных subjects и Redis Pub/Sub subscription; полученное событие доставляется только подходящим локальным соединениям. Общий registry не участвует в маршрутизации.
 - **Падение инстанса**: соединения на нём обрываются; клиент переподключается с exponential backoff ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md)). Глобальное состояние списка сверяется через Chat `ListChats`, а выбранные пропущенные **сообщения** догружаются через Messaging и API Gateway, а не через «догон» в Realtime.
 - **Эфемерные события** (typing, часть presence): гарантии catch-up как у сообщений **нет** — после reconnect состояние восстанавливается из следующих live-событий или снимка из других API.

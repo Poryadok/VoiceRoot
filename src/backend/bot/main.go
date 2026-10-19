@@ -107,7 +107,7 @@ func main() {
 			if err != nil {
 				log.Fatalf("Bot game-event listen: %v", err)
 			}
-			gameEventGRPC = grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)), grpc.UnaryInterceptor(principalgrpc.GameEventUnaryInterceptor(botPrincipalRuntime)))
+			gameEventGRPC = grpc.NewServer(grpc.InTapHandle(grpcsvc.PollEventsTransportTap()), grpc.Creds(credentials.NewTLS(tlsConfig)), grpc.UnaryInterceptor(principalgrpc.GameEventUnaryInterceptor(botPrincipalRuntime)))
 			botv1.RegisterBotServiceServer(gameEventGRPC, svc)
 			go func() {
 				if err := gameEventGRPC.Serve(listener); err != nil {
@@ -133,7 +133,7 @@ func main() {
 				if err != nil {
 					log.Fatalf("Bot Space lifecycle listen: %v", err)
 				}
-				spaceLifecycleGRPC = grpc.NewServer(grpc.Creds(credentials.NewTLS(lifecycleTLS)), grpc.UnaryInterceptor(principalgrpc.SpaceLifecycleUnaryInterceptor(botPrincipalRuntime)))
+				spaceLifecycleGRPC = grpc.NewServer(grpc.InTapHandle(grpcsvc.PollEventsTransportTap()), grpc.Creds(credentials.NewTLS(lifecycleTLS)), grpc.UnaryInterceptor(principalgrpc.SpaceLifecycleUnaryInterceptor(botPrincipalRuntime)))
 				botv1.RegisterBotServiceServer(spaceLifecycleGRPC, svc)
 				go func() {
 					if err := spaceLifecycleGRPC.Serve(lifecycleListener); err != nil {
@@ -173,6 +173,7 @@ func main() {
 			logger.Info("bot message consumer enabled")
 		}
 		grpcSrv = grpc.NewServer(
+			grpc.InTapHandle(grpcsvc.PollEventsTransportTap()),
 			grpc.ChainUnaryInterceptor(
 				principalgrpc.OrdinaryUnaryInterceptor(),
 				ratelimit.GatewayAccessFromEnv(),

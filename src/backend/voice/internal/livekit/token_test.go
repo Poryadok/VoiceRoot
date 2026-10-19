@@ -35,6 +35,38 @@ func TestJoinTokenOmitsObjectMetadataClaim(t *testing.T) {
 	require.Equal(t, "voice-dm-room-1", video["room"])
 }
 
+func TestJoinTokenExplicitMediaGrants(t *testing.T) {
+	t.Parallel()
+	allow, deny := true, false
+	for _, tc := range []struct {
+		name        string
+		publish     *bool
+		wantPublish bool
+	}{
+		{"ordinary call defaults", nil, true},
+		{"explicit publish allow", &allow, true},
+		{"explicit publish deny", &deny, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			issuer := NewHS256TokenIssuer("devkey", "secret", "ws://livekit:7880", time.Hour)
+			now := time.Unix(1_700_000_000, 0).UTC()
+			token, expiry, err := issuer.JoinToken("profile-a", "ordinary-room", tc.publish, now)
+			require.NoError(t, err)
+			require.Equal(t, now.Add(time.Hour), expiry)
+			payload, err := base64.RawURLEncoding.DecodeString(strings.Split(token, ".")[1])
+			require.NoError(t, err)
+			var claims map[string]any
+			require.NoError(t, json.Unmarshal(payload, &claims))
+			require.Equal(t, "profile-a", claims["sub"])
+			require.Equal(t, float64(expiry.Unix()), claims["exp"])
+			require.Equal(t, map[string]any{
+				"roomJoin": true, "room": "ordinary-room",
+				"canPublish": tc.wantPublish, "canSubscribe": true,
+			}, claims["video"], "room-scoped media grants must be explicit without administrative grants")
+		})
+	}
+}
+
 func TestMatchSquadJoinTokenIsBoundedByActorValidity(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(1_700_000_000, 0)

@@ -243,15 +243,19 @@ message PlayerRating {
 }
 
 message BanFromMMRequest {
+  reserved 3;
+  reserved "until", "account_id";
   string target_profile_id = 1;
   optional string reason = 2;
 }
 
 message UnbanFromMMRequest {
+  reserved "account_id";
   string target_profile_id = 1;
 }
 
 message GetMMBanStatusRequest {
+  reserved "account_id";
   string target_profile_id = 1;
 }
 

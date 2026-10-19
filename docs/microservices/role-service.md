@@ -1,11 +1,107 @@
 # Role Service
 
+### Admission readiness target (ADMISSION-ROLE-READINESS-v1)
+
+Accepted BE-010 c12/c13 separates the ordinary membership incarnation from an
+independent community source. Space stores pending admission outside
+`space_members`, allocates a monotonic per-member generation, obtains an inert
+Role READY receipt, then publishes membership/count/invite use/outcome/event in
+one local transaction after fresh final admission checks. Role preparation is
+not membership and cannot authorize an ordinary role grant by row presence.
+
+`EnsureDefaultMemberRole` takes protocol1, canonical Space/profile UUIDs,
+positive membership generation, admission operation UUID and exact32-byte
+admission binding digest. Role resolves its current configured default role;
+the caller cannot select a role, permission or human actor. An immutable receipt
+echoes the request and selected role UUID. Exact replay returns the same receipt;
+changed operation binding conflicts and never chooses a new default role.
+`RemoveMemberRoles` binds protocol1, Space/profile, a monotonic removal floor,
+removal operation UUID and exact intent digest. It persists the floor even when
+no role rows exist; late Ensure at/below that floor cannot materialize rights.
+Both methods use fresh exact-request service:space credentials on the dedicated
+Role principal listener and are denied on every ordinary listener.
+
+Receipt SHA256 framing is fixed by `pkg/memberadmission`, independently from
+protobuf authentication hashes. Ensure hashes the ASCII domain
+`voice.member-admission.ensure-receipt.v1` plus NUL, protocol BE32, Space UUID16,
+profile UUID16, membership generation BE64, operation UUID16, original binding
+SHA25632 and selected Role UUID16. Remove uses domain
+`voice.member-admission.remove-receipt.v1` plus NUL and the same fixed fields
+through the original removal binding digest, without a role UUID. IDs must be
+canonical nonzero UUIDs; generation is positive and at most signed int64 max.
+The exported receipt fingerprints have independent Python golden vectors.
+
+Role-owned storage distinguishes ordinary generation-tagged contributions,
+immutable operation receipts, generation floors and independent community
+baseline provenance. It does not insert an inert READY projection into the
+unqualified legacy `member_roles` relation. A default-role receipt remains
+historical evidence after removal, role edits or generation supersession; its
+replay cannot restore a contribution. Owner/bootstrap/ownership/P3 and typed
+community Member-only projection remain separate authorities.
+
+Before preparation/effective authorization, Role fetches protected Space
+`GetMemberAdmissionAuthority` outside its transaction/Space lock. Expected
+generation+operation are supplied together for Ensure. Ordinary rights require
+current LIVE/ownership availability and matching published generation,
+operation and exact Role receipt digest; PREPARING authorizes inert Ensure
+only. No positive membership cache, caller assertion, cross-DB query or missing
+row fallback can substitute. A wait beyond the accepted5s observation budget
+requires a fresh owner read. Space's authority lookup never calls Role.
+
+The same source eligibility guard must cover effective-role/permission/hierarchy
+reads, generic Assign/Revoke actor and target incarnation, authority snapshots
+and derived voice-policy grants. Unknown owner/transport/storage state denies
+or remains unavailable. A completed local leave observed by a new authorization
+cannot leave an orphan Role grant effective; the accepted overlapping-operation
+snapshot limitation remains. Legacy generation0 needs explicit verified Space
+authority and proven provenance backfill, never zero-on-error. Retirement
+dominates the new ledgers and prevents identity reuse.
+
+The c15/c16 clarification preserves unknown legacy grant evidence as
+`UNRESOLVED`; even one current membership source does not prove the old grant's
+origin. Such grants contribute no rights after qualified-reader cutover until a
+new normally authorized assignment reconciles them. New Assign with two eligible
+sources requires an explicit verified membership binding; with one source the
+server may pin that exact incarnation. Never infer both or rebind a retry.
+COMMUNITY eligibility binds positive int64-compatible owner generation and
+per-profile membership generation plus a never-reused membership episode UUID;
+roster revision or row replacement is not episode identity. Generic Revoke pins
+a finite set of legal contribution IDs, never a wildcard against future joins.
+
+This is an implementation target. The current bounded artifact freezes additive
+request/receipt protobufs, the receipt fingerprint codec and ordinary-listener
+denies only. No Role20 schema/receiver, Space authority/head, qualified legacy
+read/write/export cutover or reconciliation is activated. Those remain open
+delivery work after the current finish-and-develop directive. Consumers are the
+future Space admission/publication and Role lifecycle slices; the current Space
+author did not release its planned authority API. No P3/GIS/Voice capability is
+activated here.
+
+For the BE-131 composite vertical, the existing dedicated Role principal
+listener additionally accepts signed `service:space` `CheckPermission` for
+`TEXT_CHAT_CREATE_IN_SPACE` only. The exact request binds canonical nonzero
+Space and subject profile UUIDs, has no Chat or Voice room override, and uses
+fresh method/body/request-ID credentials and single-use JTI. Space derives the
+subject from its verified immutable composite intent; it cannot substitute the
+owner. The protected interceptor rejects all other principal kinds, issuers,
+permissions and scope expansion before the ordinary permission evaluator.
+Unrelated legacy decision reads keep their existing migration boundary. A
+transport/authentication failure is unknown; only a valid authenticated negative
+decision can be treated as permission denial for composite admission.
+
 ## Обзор
 
 Управление ролями и правами в пространствах. Иерархия ролей, гранулярные права, оверрайды по текстовым чатам (`group` / `channel`) и голосовым комнатам.
 
 **Язык**: Go
 **БД**: PostgreSQL `role_db`
+
+Accepted audit producer details use the frozen
+[external codec](space-service.md#external-audit-details-codec-v1) and
+[replay identity](space-service.md#durable-external-replay-codec-v1), shared through
+`src/backend/pkg/spaceaudit`. Build actual normalized changes once inside the
+mutation/outbox transaction; retries preserve those bytes. Producer runtime is
+tracked separately by BE-131; this codec contract does not activate its transport.
 
 ## Ответственность
 
@@ -20,6 +116,16 @@
 - Проверка прав (вычисление effective permissions)
 
 ## API (gRPC)
+
+The additive [ListThreads membership source contract](../testing/listthreads-versioned-readmodel-exec-plan.md#effective-membership-contract-v1)
+requires a Space-scoped transactional revision covering every `TEXT_CHAT_VIEW`
+input, including role assignments, text overrides, Owner/Admin effects and
+ownership/lifecycle fences. Role supplies pinned effective decisions and
+authoritative head validation to signed caller `chat`; Chat does not duplicate
+permission precedence. Potential restrictions also increment a durable revocation
+counter. A voice-only epoch or best-effort event cannot satisfy this contract.
+This target is not yet implemented and does not bypass the existing ownership
+freeze or change authorization's completed-decision linearization point.
 
 ```protobuf
 service RoleService {
@@ -138,6 +244,7 @@ BE-116 implementation dependency.
 | `SPACE_MANAGE_SETTINGS` | Название, иконка, видимость, правила входа и пр. |
 | `SPACE_MANAGE_ROLES` | Создавать/редактировать/удалять роли ниже своей позиции (политика иерархии) |
 | `SPACE_MANAGE_INVITES` | Создавать и отзывать инвайт-ссылки |
+| `SPACE_APPROVE_JOIN_REQUESTS` | Принятый target: читать заявки/ответы, approve/reject; отдельное делегируемое право, по умолчанию Owner/Admin/Moderator |
 | `SPACE_VIEW_AUDIT_LOG` | Читать аудит-лог |
 | `SPACE_MANAGE_CUSTOM_EMOJIS` | Кастомные эмодзи спейса |
 | `SPACE_MANAGE_BOTS` | Добавлять/удалять ботов, их scopes |
@@ -145,6 +252,15 @@ BE-116 implementation dependency.
 | `SPACE_VIEW_MEMBER_LIST` | Видеть список участников спейса (ростер, не контент чатов) |
 
 ### Участники спейса
+
+`SPACE_APPROVE_JOIN_REQUESTS` относится к Space, а не к отдельному текстовому
+чату или голосовой комнате. Admission API должен проверять его для текущего
+actor и точного Space при каждом чтении/решении. `SPACE_MANAGE_INVITES`,
+`SPACE_MANAGE_SETTINGS`, `MEMBER_BAN` и имя `Moderator` не заменяют effective
+permission. Member и Guest не получают его по умолчанию; custom roles могут
+делегировать его по обычным правилам Role. Runtime registry, defaults,
+миграция существующих системных ролей и admission consumers ещё входят в
+реализацию BE-010; строка таблицы не означает, что они уже реализованы.
 
 | Константа | Назначение |
 |-----------|------------|
@@ -173,13 +289,45 @@ BE-116 implementation dependency.
 | `TEXT_CHAT_USE_EXTERNAL_EMOJIS` | Внешние эмодзи |
 | `TEXT_CHAT_MENTION_ALL_ONLINE` | Упоминание всех онлайн в этом чате (`@here`) |
 | `TEXT_CHAT_MENTION_ALL_IN_CHAT` | Упоминание всех участников чата (`@everyone`) |
-| `TEXT_CHAT_MANAGE_MESSAGES` | Удалять/закреплять чужие сообщения |
+| `TEXT_CHAT_MANAGE_MESSAGES` | Удалять чужие сообщения; закрепление требует отдельного `TEXT_CHAT_PIN_MESSAGES` |
 | `TEXT_CHAT_READ_HISTORY` | Читать историю (если выключено — виден только «с момента входа») |
 | `TEXT_CHAT_PIN_MESSAGES` | Закреплять сообщения |
 | `TEXT_CHAT_CREATE_THREADS` | Создавать треды |
 | `TEXT_CHAT_SEND_IN_THREADS` | Писать в тредах |
 | `TEXT_CHAT_MANAGE_THREADS` | Модерировать треды |
 | `TEXT_CHAT_SET_SLOW_MODE` | Выставлять slow mode на чате |
+| `TEXT_CHAT_POST_AS_CHAT` | Отдельная official-publication capability; ordinary member дополнительно требует текущий individual grant |
+| `TEXT_CHAT_ADD_MEMBERS` | Инициировать chat-targeted приглашение в родительский Space; отдельно требуется `SPACE_MANAGE_INVITES` |
+
+### Space-chat individual capabilities (accepted implementation contract)
+
+The registry reserves bit 43 for `TEXT_CHAT_POST_AS_CHAT` and bit 44 for
+`TEXT_CHAT_ADD_MEMBERS`, without renumbering existing permissions. New system
+Member/Moderator seeds include only the latter. Guest seeds acquire neither;
+existing guest/admission policy remains conjunctive. Owner/Admin include both
+ordinary bits, but dedicated grant management requires actual current system
+Owner/Admin authority, not an all-bits custom role or a role with the same name.
+
+For an ordinary current Space member, official publication requires a separate
+Role-owned grant bound to this exact chat and current membership incarnation;
+a role-wide allow alone is insufficient, and an explicit node deny wins.
+Addition requires the chat's `member_additions_enabled` policy (default true),
+effective `TEXT_CHAT_ADD_MEMBERS` and separately authorized Space invitation.
+Neither capability implies visibility, send/settings rights, admission bypass
+or local Chat membership. Current Owner/Admin bypass the toggle/individual
+grant only after current membership, exact scope and lifecycle validation.
+
+Only current system Owner/Admin manages the toggle and individual grant.
+Promotion invents no explicit grant; demotion drops implicit authority while
+preserving a separately explicit grant in the same membership incarnation.
+Leave/rejoin, scope move and retirement cannot resurrect or migrate old grants.
+Role owns this state for Space chats; Chat owns equivalent state only for
+standalone chats. Signed caller-relative reads and delegated-user setters,
+authority revision revalidation, additive existing-role migration and the
+targeted-invite consumer are tracked in the
+[implementation plan](../testing/space-chat-permissions-exec-plan.md).
+Registry/seed support alone does not activate those endpoints or prove the
+complete parent-Space admission and exact-chat navigation flow.
 
 ### Голосовая комната (`voice_room_id`)
 
@@ -196,6 +344,17 @@ BE-116 implementation dependency.
 | `VOICE_PRIORITY_SPEAKER` | Приоритетный говорящий |
 
 ### Модерация (спейс)
+
+BE-273 accepted target extends the same protected `ResolveVoiceRoomGrants`
+projection with explicit versioned audio/video/share-source capability. Voice
+must not infer `VOICE_VIDEO` or `VOICE_SCREEN_SHARE` from `VOICE_SPEAK`, or
+authorize an unproven source from a legacy/malformed response. Role retains the
+policy epoch and sole Owner bypass; Voice intersects its durable moderator
+restriction with those grants without mutating Role state. Target moderation
+requires `VOICE_MUTE_OTHERS` in the canonical room and `SPACE_VIEW_MEMBER_LIST`;
+the target must be a current Space member. Source construction and the distinct
+Voice-owned moderation version are defined in the
+[Voice contract](voice-service.md#moderator-mute-accepted-target-be-273).
 
 | Константа | Назначение |
 |-----------|------------|
@@ -260,10 +419,34 @@ voice_room_overrides
 3. Для каждой роли пользователя (по позиции):
    Base |= role.permissions
 4. Применить оверрайды целевого узла (chat или voice_room):
-   Base &= ~node_override.deny
    Base |= node_override.allow
-5. Admin → все права кроме Owner-specific
+   Base &= ~node_override.deny
+5. Admin использует обычное объединение ролей и оверрайды; финального bypass нет
 ```
+
+`SPACE_MANAGE_ROLES` — обычное делегируемое право на управление кастомными
+ролями строго ниже максимальной позиции вызывающего. Новая позиция при
+`UpdateRole` тоже обязана оставаться ниже неё; проверка и запись выполняются
+в одной fenced Space-транзакции. `MEMBER_ASSIGN_ROLES` отдельно управляет
+назначением/снятием нижестоящих ролей. Node override может менять mask узла,
+но не разрешает глобальное управление ролями: для него всегда нужен unscoped
+permission decision без `chat_id` / `voice_room_id`.
+
+Системный Admin по умолчанию имеет все ordinary permission bits, включая
+`SPACE_MANAGE_ROLES`. Его mask может совпадать с mask Owner; Owner-specific
+authority не является permission bit и не возникает из mask. Только настоящий
+Owner имеет существующий bypass после lifecycle fences; generic назначение и
+снятие Owner запрещено даже самому Owner. Передача и owner-only lifecycle
+сохраняют отдельные identity/proof gates.
+
+Миграция `role_db/000017_admin_role_management` добавляет только отсутствующий
+bit 2 реальным system Admin rows, сохраняя остальные bits, custom roles и
+overrides. Существующие policy triggers записывают durable invalidation.
+Повторный UP не меняет данные; DOWN отказывает вместо отзыва ранее выданных
+прав без доказательства их происхождения. Для исправления нужен отдельный
+reviewed forward migration. Authority snapshot reader принимает clean schema
+16 и 17 с одним и тем же полным catalog/trigger/function proof; unknown/dirty
+версии и изменённый catalog по-прежнему fail closed.
 
 ## Phase-0 principal и caller matrix (target; не реализовано)
 
@@ -293,7 +476,12 @@ service JWT whose `principal_type=service`, `iss=space`, `sub=service:space`,
 The verified Space principal may request only these global permission names:
 `SPACE_VIEW_AUDIT_LOG`, `SPACE_MANAGE_BOTS`, `SPACE_MANAGE_INVITES`,
 `MEMBER_KICK`, `MEMBER_BAN`, `MODERATION_TIMEOUT_MEMBERS`,
-`SPACE_MANAGE_SETTINGS`, and `TEXT_CHAT_CREATE_IN_SPACE`. `profile_id` remains
+`SPACE_MANAGE_SETTINGS`, `SPACE_APPROVE_JOIN_REQUESTS`, and
+`TEXT_CHAT_CREATE_IN_SPACE`. This is the accepted target allowlist. The current
+protected runtime's narrow `CheckPermission` routing supports
+`TEXT_CHAT_CREATE_IN_SPACE`; adding an allowlist name here does not expand that
+listener. Admission must explicitly add and test the exact signed decision
+before depending on `SPACE_APPROVE_JOIN_REQUESTS`. `profile_id` remains
 decision data asserted by verified Space; it is never identity authority derived
 from request metadata.
 
@@ -363,7 +551,58 @@ to `bot_actor` in the same cutover that enforces their Role allow-list.
 `CheckPermission` cannot become globally strict until every caller of that RPC
 uses a signed principal; each migrated caller is enforced independently while
 remaining callers follow the explicitly tracked migration path.
+
+BE-234-nickname-v2-transport adds one executable exception to the otherwise
+target-only Space permission allowlist: the protected mTLS listener accepts
+`CheckPermission` only for exact `MEMBER_MANAGE_NICKNAMES`, `service:space`,
+audience `role`, exact RPC/request ID/hash binding and absent `chat` and
+`voice_room_id` (present-empty is forbidden). Space vouches for the verified
+actor profile in the request, not the edited member. The service JWT carries no
+user authority. The Role handler repeats the gate before `WithinSpaces` and
+effective-mask calculation, preserving retirement/ownership freeze. Ordinary
+Role listener rejects only this nickname selector; other legacy permission
+branches keep their existing routing. No wildcard, default-role grant or global
+CheckPermission cutover is introduced.
 `Owner` нельзя назначить, снять или переназначить через generic client/member RPC.
+
+### Audit producer initiating authority (BE131-INITIATING-AUTHORITY-v1 target)
+
+This accepted cutover is part of the consumed audit vertical, not a claim that
+the current ordinary listener verifies user or bot identity. Audit-producing
+interactive methods are `CreateRole`, `UpdateRole`, `DeleteRole`, `ReorderRoles`,
+`AssignRole`, `RevokeRole`, both set/remove override pairs, and
+`SetDefaultJoinRole`. Gateway uses the delegated-user matrix above; Bot may use
+only its three existing `bot_actor` methods/scopes. A service principal cannot
+impersonate an interactive actor. Every migrated exact method is denied on all
+ordinary/alternate listeners, including when protected configuration is absent.
+
+The signed initiating profile, rather than the target, Space owner, worker or
+service subject, becomes immutable `actor_profile_id` in the transaction's audit
+fact. User admission verifies current Auth session-epoch floor and the existing
+account/profile eligibility policy; removal of raw metadata must not default a
+guest to regular. Internal adapters may project verified identity for existing
+helpers only after the interceptor rejects raw identity metadata and the
+handler requires the verified context. Fresh delivery credentials assert only
+producer provenance and cannot repair an unverified initiating actor.
+
+Space bootstrap, default membership/community baseline projection and member
+cleanup remain distinct service lifecycle operations. Space cannot use generic
+`AssignRole`/`RevokeRole`; Role selects the bounded default or baseline Member
+role, preserves independently retained community membership, and never widens
+`RemoveMemberRoles` to Owner/system-role cleanup. Bootstrap owner is a subject
+of the persisted Space creation, not an audit actor. Existing bootstrap
+`role.created` notifications are not hooks for synthetic user audit entries.
+Join/leave and Bot mass cleanup remain outside audit v1. Signed Bot uninstall
+cleanup uses its exact durable installation intent and cannot enter interactive
+handlers. Bot Install/Uninstall must verify the initiating Gateway user, current
+epoch and `SPACE_MANAGE_BOTS` before asserting service cleanup authority.
+
+Configuration, JWKS refresh/rotation, replay and epoch checks, Gateway/Bot/Space
+caller wiring, listener denial and producer transaction hooks ship as one
+consumed cutover. Existing ownership/GIS/Voice principals retain their exact
+authority. Do not globally lock unrelated `CheckPermission` callers before
+their own migration; remaining broad S2S work belongs to BE-181. The producer
+is not enabled by a future auth-migration promise.
 Только dedicated authenticated Space transfer lifecycle меняет Owner и обязан быть
 idempotent по `operation_id`. Unknown caller/RPC, caller с неправильной audience
 или read, раскрывающий member data вне своей ACL, fail closed.
@@ -553,6 +792,110 @@ Retired spaces cannot be recreated by bootstrap. These scoped-integrity rules
 also apply while transfer entrypoints remain disabled; implementing them does
 not activate the v2 ownership feature.
 
+## BE-065 protected override target validation (accepted target)
+
+`BE-065-target-v1` is the accepted implementation contract. The source setters
+require fresh protected validation; rollout and real-store acceptance remain
+separate evidence. The executable plan and required
+negative-case matrix are in
+[role-override-target-validation-exec-plan.md](../testing/role-override-target-validation-exec-plan.md).
+
+Every `SetChatOverride` attempt freshly calls both
+`/voice.space.v1.SpaceService/ValidateRoleOverrideTarget` (without a room) and
+`/voice.chat.v1.ChatService/ValidateRoleOverrideTarget`. Every
+`SetVoiceRoomOverride` attempt freshly calls Space's same method with the room
+present. A missing client/configuration, optional environment skip, positive
+cache, legacy `GetChat`/`GetSpace`/tree lookup or cross-database query cannot
+authorize a write. Provider success validates existence and local lifecycle;
+it grants no actor permission and returns no owner/member projection.
+
+Both owner methods accept only verified `principal_type=service`, `iss=role`,
+`sub=service:role`, exact `aud=chat|space` and exact full RPC name. The Phase-0
+credential binds the whole deterministic protobuf request (including optional
+field presence), canonical `request_id`, fresh `jti`, `kid` and bounded temporal
+claims (TTL <=30 s). One bearer and one matching `x-request-id` are required;
+raw identity metadata and duplicate authority headers reject before handler.
+Use protected TLS/mTLS with Role JWKS and replay verification. Retry signs a
+fresh JTI and performs a fresh owner read; validation is not a durable receipt
+or reusable capability. Gateway delegated-user, end-user, bot and other service
+principals are forbidden. There is no public Gateway route.
+
+The lock order is mandatory: first perform actor/role-scope/permission/hierarchy
+checks in a short existing fenced Role transaction, release that transaction,
+then make bounded owner RPCs with **no Role transaction or advisory lock held**.
+Finally open the normal fenced Role mutation transaction, repeat all current
+actor/role/hierarchy checks and write in that same transaction. Parent
+cancellation and deadline propagate; each owner call has a bounded deadline.
+Events occur only after successful Role commit. Providers use only their own
+store and lifecycle/journal authority; they never call Role or an ACL-enriched
+provider lookup. This avoids Role -> provider -> Role recursion and lock inversion.
+
+Space validates a live Space, plus a live room in that exact Space if supplied.
+Chat validates an active group/channel row with non-null matching Space ID and
+ordinary local admission. DM, standalone, foreign, deleted and missing targets
+are indistinguishable `NOT_FOUND`. Both providers require canonical non-nil
+UUIDs; a present-empty optional room is `INVALID_ARGUMENT`. Tree placement is
+not resource authority. Nonterminal Space deletion/recovery state, active
+ownership journal and non-LIVE Chat fence deny with `UNAVAILABLE`; known
+terminal fences also deny. Missing legacy fence permits admission only where
+the existing owner's canonical semantics permit it; lookup failure never means
+LIVE. Role's own prepared/frozen/purge/retired fences always win before Owner
+shortcuts. A higher permitted LIVE restoration requires new validation.
+
+This is point-in-time reference validation, **not distributed referential
+integrity**. Deletion after provider snapshot and before Role commit may leave
+an inert logical override row. Actual resource operations must still enforce
+existence/lifecycle; the row cannot resurrect or authorize a deleted resource.
+IDs are not reusable or reparentable; recreation uses a fresh server UUID.
+Group <-> channel conversion preserves identity and remains eligible.
+`RemoveChatOverride` and `RemoveVoiceRoomOverride` remain locally authorized
+cleanup paths and never require live-target lookup. P3 retirement removes Space
+overrides. No `voice.room_deleted` consumer is presumed: that subject is reserved.
+
+Provider errors: malformed input `INVALID_ARGUMENT`; ineligible/missing target
+`NOT_FOUND`; invalid signature/claims/binding/replay `UNAUTHENTICATED`;
+authenticated wrong caller `PERMISSION_DENIED`; known lifecycle fence or
+DB/JWKS/replay dependency failure `UNAVAILABLE`. TLS failure precedes handler.
+Role preserves its own actor/ACL errors and owner `NOT_FOUND`/`INVALID_ARGUMENT`;
+owner transport/config/verifier failure, `UNIMPLEMENTED` or unavailable validation
+becomes `UNAVAILABLE` on the user mutation. Parent cancellation/deadline remains
+typed. Every failed validation leaves existing rows and mutation events unchanged.
+
+### BE-065 runtime configuration
+
+Role signs with `ROLE_PRINCIPAL_SIGNING_KEYS_DIR` and
+`ROLE_PRINCIPAL_ACTIVE_KID` (the standard current/next PKCS#8 key directory).
+Its separate HTTPS JWKS endpoint is `/.well-known/jwks.json`, configured by
+`ROLE_PRINCIPAL_JWKS_TLS_CERT_FILE`, `ROLE_PRINCIPAL_JWKS_TLS_KEY_FILE` and
+`ROLE_PRINCIPAL_JWKS_HTTPS_LISTEN` (default `:9092`); health HTTP does not expose
+JWKS. Publish only public current/next keys through that TLS endpoint.
+
+Set both `ROLE_CHAT_TARGET_GRPC_ADDR` and `ROLE_SPACE_TARGET_GRPC_ADDR`, each
+owner's `ROLE_CHAT_TARGET_TLS_CA_FILE` / `ROLE_SPACE_TARGET_TLS_CA_FILE` and
+`ROLE_CHAT_TARGET_TLS_SERVER_NAME` / `ROLE_SPACE_TARGET_TLS_SERVER_NAME`, plus
+Role's `ROLE_OVERRIDE_TARGET_CLIENT_CERT_FILE` and
+`ROLE_OVERRIDE_TARGET_CLIENT_KEY_FILE`. Partial configuration fails startup;
+absent configuration never permits a setter write and returns `UNAVAILABLE`.
+No plaintext or ordinary-listener fallback exists. Owner calls each inherit the
+parent deadline and have a maximum two-second call budget.
+
+Each owner has a dedicated listener prefix:
+`CHAT_ROLE_OVERRIDE_PRINCIPAL_` or `SPACE_ROLE_OVERRIDE_PRINCIPAL_`, with required
+`GRPC_LISTEN`, `TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, and
+`REPLAY_REDIS_ADDR`; `REPLAY_REDIS_PASSWORD` is optional. The client CA verifies
+Role's mTLS certificate before the workload JWT reaches the handler. Shared
+`S2S_JWKS_URLS_JSON` must include Role's HTTPS endpoint; `S2S_JWKS_CA_FILE` supplies
+an optional private issuer CA. Standard Phase-0 refresh/hard-expiry/unknown-kid
+settings apply. Each owner periodically refreshes Role's complete key set and
+fails closed after hard expiry. Other configured service issuers may be verified
+only to deny their caller authority; none gains this RPC.
+
+Redis replay keys are owner-scoped
+`chat:role-override:principal:replay:<sha256(issuer + NUL + jti)>` and the matching
+`space:` prefix, atomically admitted with `SET NX` for the remaining credential
+lifetime rounded up to milliseconds. Redis failure denies before domain access;
+there is no process-local fallback or reusable positive-validation cache.
+
 ## P3 permanent Space retirement
 
 Role is participant 1 of the common Space lifecycle barrier. Before retirement,
@@ -626,7 +969,8 @@ The immutable request fields are `protocol_version`, `space_id`,
 `receipt_id`, the same Space/operation/generation, state exactly `RETIRED`,
 `request_sha256`, `manifest_sha256` and database `retired_at`. Receipt-wrapper
 unknown fields are preserved after known-field validation; request and nested
-unknown fields are rejected before mutation.
+unknown fields, including fields inside `purge_decided_at` Timestamp, are
+rejected before mutation.
 
 The implementation lives behind Role's authenticated TLS listener. Migration
 `000012_space_retirement` extends `role_space_lifecycle` and stores permanent

@@ -492,6 +492,8 @@ FROM files
 WHERE status = 'ready'
   AND expires_at IS NOT NULL
   AND expires_at <= $1
+  AND NOT EXISTS(SELECT 1 FROM files alias JOIN file_references r ON r.file_id=alias.id WHERE alias.blob_id=files.blob_id AND r.released_at IS NULL)
+  AND NOT EXISTS(SELECT 1 FROM files alias WHERE alias.blob_id=files.blob_id AND alias.id<>files.id AND alias.status NOT IN ('deleted','expired','failed'))
 ORDER BY expires_at ASC
 LIMIT $2
 `, now.UTC(), limit)

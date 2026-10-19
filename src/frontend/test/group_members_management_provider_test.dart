@@ -278,6 +278,20 @@ class _ScriptedChatsClient extends VoiceChatsClient {
   onAdd;
 
   @override
+  Future<ChatsApiResult<ChatPermissions>> getChatPermissions({
+    required String authorization,
+    required String chatId,
+  }) async => const ChatsApiOk(
+    ChatPermissions(
+      canPostAsChat: false,
+      canAddMembers: true,
+      canManagePermissions: false,
+      memberAdditionsEnabled: true,
+      explicitPostAsChat: false,
+    ),
+  );
+
+  @override
   Future<ChatsApiResult<MemberListData>> listGroupMembers({
     required String authorization,
     required String chatId,

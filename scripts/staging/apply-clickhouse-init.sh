@@ -96,8 +96,8 @@ apply_clickhouse_init_sql() {
 }
 
 if [ ! -f "${SQL_FILE}" ]; then
-  echo "skip clickhouse init: missing ${SQL_FILE}"
-  exit 0
+  echo "ERROR: missing ClickHouse init SQL: ${SQL_FILE}" >&2
+  exit 1
 fi
 
 echo "Applying ConfigMap ${CM_NAME} from ${SQL_FILE}"

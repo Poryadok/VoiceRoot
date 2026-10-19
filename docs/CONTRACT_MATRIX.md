@@ -69,6 +69,14 @@ room-привязки. WS `call_started` допускает additive `room_type`
 
 ## NATS JetStream: streams, publishers, subscribers
 
+Auth's ordinary registered/logged_in/logged_out/2fa_enabled observations use
+binary `UserStreamEvent` on `user_events` under BE211-OBS-v1 in
+[auth-service.md](microservices/auth-service.md#be211-obs-v1-ordinary-auth-observations-accepted-contract).
+They are bounded best-effort observations after successful operation/SQL commit,
+with stable retry bytes and PubAck, never authorization/audit authority. Empty
+login IP intentionally means unavailable/unverified. This does not weaken the
+separate durable guest-conversion/account-deletion contracts.
+
 **Владелец схемы событий** для stream — сервис из колонки Publishers. Breaking changes в payload / `.proto` — порядок выката [REPOSITORIES.md](REPOSITORIES.md).
 
 | Stream                 | Publishers        | Subscribers |
@@ -77,7 +85,7 @@ room-привязки. WS `call_started` допускает additive `room_type`
 | `social.events`        | Social            | Analytics, Notification, Chat, Federation |
 | `role.events`          | Role              | Analytics, Notification, Federation, Realtime |
 | `message.events`       | Messaging         | Analytics, Notification, Search, Moderation, Realtime |
-| `chat.events`          | Chat, Space       | Analytics, Notification, Realtime |
+| `chat.events`          | Chat, Space       | Analytics, Notification, Realtime, Search |
 | `voice.events`         | Voice             | Analytics, Notification, Realtime |
 | `moderation.events`    | Moderation        | Analytics, Notification, User |
 | `subscription.events`  | Subscription      | Auth, Analytics, User, Space, Voice, File, Notification |
@@ -204,12 +212,14 @@ version 1 evidence and no public Gateway route unless stated.
 | Space | Messaging `ApplySpaceLifecycleFence`, manifest import/page acknowledgement, `PurgeSpace` | bounded message purge and File release handoff |
 | Space | File `ApplySpaceLifecycleFence`, prepare/register/seal producer manifests, `PurgeSpace` | exact reference denial/release and durable GC handoff |
 | Space | Voice, Matchmaking, Search, Subscription, Bot, Notification `ApplySpaceLifecycleFence`, `PurgeSpace` | service-owned deny/cleanup receipt for every fixed participant |
+| Space | Realtime `ImportSpacePurgeManifestPage`, `ApplySpaceLifecycleFence`, `PurgeSpace` | exact Chat manifest and committed-admission drain before strong participant11 receipt |
+| Realtime | Chat `ChatRealtimeLifecycleService.ResolveChatLifecycle` | native structural enrollment under Chat's mutation barrier; no recipient ACL or scope-authority grant |
 | Space/Chat/Messaging | File reference acquire/release and producer registration | caller identity fixes allowed producer/owner type |
 | Messaging/Chat/Story/User (reference owner) | File `IssueFileAccessCapability` | exact live reference, authenticated subject, sorted URL/metadata surfaces, at most one hour |
 | Gateway/public File routes | File URL/metadata/bulk reads | subject-bound capability required after activation; no file_id-only authority |
 
 Participant IDs are fixed: Role=1, Chat=2, Messaging=3, File=4, Voice=5,
-Matchmaking=6, Search=7, Subscription=8, Bot=9, Notification=10. Every fence,
+Matchmaking=6, Search=7, Subscription=8, Bot=9, Notification=10, Realtime=11. Every fence,
 purge request and receipt binds canonical Space/deletion IDs, positive
 generation and exact root manifest; Role uses its stricter retirement wire.
 
@@ -217,7 +227,7 @@ generation and exact root manifest; Role uses its stricter retirement wire.
 |---|---|---|
 | `space.deletion_scheduled` / `SpaceDeletionScheduled` v1 | Space after full FROZEN barrier | generation-aware projections; notification only |
 | `space.restored` / `SpaceRestored` v1 | Space after full LIVE barrier | generation-aware projections; notification only |
-| `space.deleted` / additive `SpaceDeleted` v2 | Space after ten purge receipts plus tombstone/local purge | Realtime and projections; legacy field 1 remains `space_id` |
+| `space.deleted` / additive `SpaceDeleted` v2 | Space after eleven completion receipts plus tombstone/local purge | Realtime and projections; legacy field 1 remains `space_id` |
 | `chat.updated` / `ChatUpdated` v1 | Chat after successful metadata mutation | Realtime chat refresh and Search title projection; no new Analytics mapping |
 | `chat.deleted` / `ChatDeleted` v1 | Chat transactional outbox after exact P3 local purge commit | Realtime chat refresh and Search terminal projection removal after its matching permanent PURGED fence; Analytics safely ignores the unmapped fact |
 | `chat.member_changed` / `ChatMemberChanged` v1 | Chat after successful membership mutation | Realtime targeted refresh/revocation; Search/Analytics keep their established mappings and tolerate the complete change union |

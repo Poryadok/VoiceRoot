@@ -49,6 +49,8 @@ message UserRegistered {
 message UserLoggedIn {
   string account_id = 1;
   string device_info_json = 2;
+  // BE211-OBS-v1: empty means unavailable/unverified. Current Auth producers
+  // deliberately emit empty; never infer IP from device data or Gateway peer.
   string ip = 3;
 }
 
@@ -335,6 +337,7 @@ message ChatStreamEvent {
     voice.events.v1.SpaceRestored space_restored = 22;
     ChatUpdated chat_updated = 23;
     ChatDeleted chat_deleted = 24;
+    SpaceMemberBanned space_member_banned = 25;
   }
 }
 
@@ -382,6 +385,9 @@ message SpaceMemberLeft {
 
 message SpaceUpdated {
   string space_id = 1;
+  // Sorted unique persisted property/aggregate names. Empty or unknown means
+  // full invalidation; this is not a revision or an authorization grant.
+  repeated string changed_fields = 2;
 }
 
 // @voice.unknown_fields=accept_preserve
@@ -427,7 +433,35 @@ message VoiceStreamEvent {
     VoiceStateChanged voice_state_changed = 17;
     ScreenShareStopped screen_share_stopped = 18;
     VoiceMemberJoined voice_member_joined = 19;
+    VoiceParticipantJoined voice_participant_joined = 20;
+    VoiceParticipantLeft voice_participant_left = 21;
+    VoiceRosterMembershipChanged voice_roster_membership_changed = 22;
   }
+}
+
+// A3 party eligibility fact, committed with the source membership transaction.
+message VoiceRosterMembershipChanged {
+  uint32 protocol_version = 1;
+  string room_id = 2;
+  uint64 roster_version = 3;
+  enum Change {
+    CHANGE_UNSPECIFIED = 0;
+    CHANGE_JOINED = 1;
+    CHANGE_LEFT = 2;
+  }
+  Change change = 4;
+  string profile_id = 5;
+}
+
+// A committed ordinary-call membership fact; not an SFU connection or invite.
+message VoiceParticipantJoined {
+  string room_id = 1;
+  string profile_id = 2;
+}
+
+message VoiceParticipantLeft {
+  string room_id = 1;
+  string profile_id = 2;
 }
 
 message VoiceMemberJoined {
@@ -789,6 +823,7 @@ message MatchCompleted {
 }
 
 message RatingSubmitted {
+  reserved "profile_id";
   string match_id = 1;
   string rater_profile_id = 2;
   string rated_profile_id = 3;
@@ -973,4 +1008,11 @@ message ChatDeleted {
   uint64 generation = 4;
   string manifest_id = 5;
   bytes manifest_sha256 = 6;
+}
+
+// Privileged internal fact. Never broadcast account/actor identity to members.
+message SpaceMemberBanned {
+  string space_id = 1;
+  string account_id = 2;
+  string banned_by_profile_id = 3;
 }

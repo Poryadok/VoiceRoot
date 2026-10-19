@@ -2102,6 +2102,7 @@ const GetBulkReadStateResponse$json = {
     },
   ],
   '3': [GetBulkReadStateResponse_ByChatIdEntry$json],
+  '10': ['bulk_read_state'],
 };
 
 @$core.Deprecated('Use getBulkReadStateResponseDescriptor instead')
@@ -2126,7 +2127,8 @@ final $typed_data.Uint8List getBulkReadStateResponseDescriptor = $convert.base64
     'ChhHZXRCdWxrUmVhZFN0YXRlUmVzcG9uc2USWAoKYnlfY2hhdF9pZBgBIAMoCzI6LnZvaWNlLm'
     '1lc3NhZ2luZy52MS5HZXRCdWxrUmVhZFN0YXRlUmVzcG9uc2UuQnlDaGF0SWRFbnRyeVIIYnlD'
     'aGF0SWQaWgoNQnlDaGF0SWRFbnRyeRIQCgNrZXkYASABKAlSA2tleRIzCgV2YWx1ZRgCIAEoCz'
-    'IdLnZvaWNlLm1lc3NhZ2luZy52MS5SZWFkU3RhdGVSBXZhbHVlOgI4AQ==');
+    'IdLnZvaWNlLm1lc3NhZ2luZy52MS5SZWFkU3RhdGVSBXZhbHVlOgI4AVIPYnVsa19yZWFkX3N0'
+    'YXRl');
 
 @$core.Deprecated('Use getChatListMetadataResponseDescriptor instead')
 const GetChatListMetadataResponse$json = {

@@ -70,6 +70,23 @@ func TestCompleteSpaceLifecyclePurgeCommitsExactReceiptAndFenceAtomically(t *tes
 	receipt, err := service.GetSpacePurgeReceipt(ctx, key)
 	require.NoError(t, err)
 	require.True(t, proto.Equal(response.GetReceipt(), receipt))
+	// A fresh store instance must replay the complete saved response without
+	// rebuilding manifests or dropping future response/receipt fields.
+	response.ProtoReflect().SetUnknown([]byte{0xa0, 0x06, 1})
+	response.Receipt.ProtoReflect().SetUnknown([]byte{0xa0, 0x06, 2})
+	exact, err := proto.MarshalOptions{Deterministic: true}.Marshal(response)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE messaging_space_purge_receipts SET receipt_bytes=$4 WHERE space_id=$1 AND deletion_operation_id=$2 AND purge_generation=$3`, spaceID, operationID, key.PurgeGeneration, exact)
+	require.NoError(t, err)
+	restarted := &MessagesStore{Pool: pool}
+	saved, err := restarted.GetSpacePurgeResponse(ctx, key)
+	require.NoError(t, err)
+	require.Equal(t, exact, saved)
+	wrongKey := key
+	wrongKey.MessagingRequestSHA256 = append([]byte(nil), key.MessagingRequestSHA256...)
+	wrongKey.MessagingRequestSHA256[0] ^= 1
+	_, err = restarted.GetSpacePurgeResponse(ctx, wrongKey)
+	require.ErrorIs(t, err, ErrSpacePurgeReceiptBinding)
 	changed := proto.Clone(request).(*messagingv1.PurgeSpaceRequest)
 	changed.Purge.Manifest.ItemCount++
 	_, err = service.CompleteSpaceLifecyclePurge(ctx, changed, uuid.NewString())
@@ -78,6 +95,10 @@ func TestCompleteSpaceLifecyclePurgeCommitsExactReceiptAndFenceAtomically(t *tes
 	var state string
 	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM messaging_space_lifecycle_fences WHERE space_id=$1`, spaceID).Scan(&state))
 	require.Equal(t, "PURGED", state)
+	_, err = pool.Exec(ctx, `UPDATE messaging_space_purge_receipts SET completed_at=clock_timestamp()-interval '30 days' WHERE space_id=$1 AND deletion_operation_id=$2 AND purge_generation=$3`, spaceID, operationID, key.PurgeGeneration)
+	require.NoError(t, err)
+	_, err = restarted.GetSpacePurgeResponse(ctx, key)
+	require.ErrorIs(t, err, ErrSpacePurgeReceiptNotFound, "replay never extends the original database retention window")
 }
 
 func spacePurgeRequestHash(request *messagingv1.PurgeSpaceRequest) []byte {

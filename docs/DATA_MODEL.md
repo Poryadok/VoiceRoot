@@ -120,6 +120,35 @@ strict proof не завершает rollout во всех окружениях;
 
 ---
 
+## Space moderator mute ownership (BE-273 accepted target)
+
+Voice owns durable moderation state keyed by canonical
+`(space_id, voice_room_id, target_profile_id)`, not by account, LiveKit identity
+or room incarnation. UUIDs are logical references to Space/User without
+cross-database foreign keys. The desired `moderator_muted` flag and monotonic
+`moderation_version` survive transport/Redis loss, leave/rejoin and logical-room
+empty/reopen. Only authorized clear or permanent logical room/profile/Space
+deletion removes the restriction. Persisting the false state/version preserves
+CAS after clear; zero is reserved for never-created state.
+
+The moderation transaction serializes with the existing Space room-head/media
+admission authority and records the actor/target binding, exact canonical
+operation request, pending cleanup effect and captured admission tuple:
+account/profile, Auth session epoch, Space/logical room, call room/generation,
+admission operation/generation and exact LiveKit room/identity. The issued
+effective publish-source vector and moderation version belong to that same
+admission; no network call spans the transaction. Auth/Space/Role epochs,
+moderation version, roster epoch and media generation are distinct domains.
+
+Voice's existing 24-hour actor/operation/method/request ledger supports replay;
+the moderation-version CAS survives ledger expiry. Pending effects and retired
+identity tombstones remain until safely reconciled, never merely until the
+original Voice JWT expiry. Redis is a projection. Schema/migrations and exact
+retired-bearer reconciliation remain implementation work; this section does not
+declare tables deployed. See the
+[service contract](microservices/voice-service.md#moderator-mute-accepted-target-be-273)
+and [ExecPlan](testing/space-moderator-mute-exec-plan.md).
+
 ## T05. Game integration ownership target
 
 This is the resource-ownership contract for the game-integration target, not a
@@ -216,6 +245,50 @@ See
 - После стабилизации черновика — короткая отсылка из этого файла в [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) (по желанию), чтобы не дублировать длинные абзацы.
 
 ## P3 Space deletion ownership and File references (accepted target)
+
+Space-attached Chat creation uses `BE131-COMPOSITE-v1`: Chat owns the prepared
+operation and HELD audit fact; Space owns the atomic tree node and immutable
+COMMITTED/ABORTED result. The complete original binding includes protocol
+version, operation/creator/Space/Chat/node/audit IDs, group/channel type, a
+32-byte versioned normalized-create digest and the verified original user
+(account, positive epoch, explicit regular/guest type) or bot (bot,
+installation, exact scope) context. No bearer token is persisted. A changed
+binding conflicts; missing/ambiguous evidence never authorizes compensation.
+Replay does not reinsert a moved/deleted node or re-evaluate an already committed
+decision. Gateway is stateless and returns the original typed node after Chat
+has completed; it must not create a second node through ordinary Upsert.
+
+`BE131-COMPOSITE-PURGE-v1` bounds full result replay at terminal deletion.
+Before purge, original full evidence has no ordinary TTL. Separate permanent
+fences retain only server operation/resource IDs, version/execution kind,
+Chat type, original terminal state/safe failure code, deletion operation and
+generation, local completion and fixed evidence deadline. They contain no
+creator/account/profile/session/bot identity, client replay index, content,
+full binding/create/result digest, or hash/HMAC derived from those personal
+fields. Permanent Space PURGED and operation/resource/audit-ID fences survive
+owner tombstone expiry. Full Space evidence expires at aggregate PURGED+30d;
+full Chat evidence expires at its own successful local purge completion+30d.
+The clocks are independent and retries never move either deadline.
+
+At/after the database deadline, a private Commit/Get returns
+`FAILED_PRECONDITION` with reason `COMPOSITE_RESULT_EXPIRED` and no outcome.
+It never fabricates a partial binding, changes COMMITTED to ABORTED, recreates
+resources or authorizes finalization/cleanup. Structural collisions still
+conflict; exact old personal-body comparison is no longer promised after its
+evidence is erased. The erased creator/client-key history ends: a distinct
+live Space requires fresh admission; the old Space/resource IDs stay unusable.
+Public PURGED resources remain undiscoverable even during private retention.
+
+Chat freezes new preparation under its Space lock, durably enters
+`DRAINING_COMPOSITES`, settles every prepared/HELD operation using fresh private
+credentials, then seals the immutable manifest under the same local lock.
+UNKNOWN/mismatch blocks sealing; lease expiry is not an abort. COMMITTED rolls
+forward while ordinary frozen access stays denied; ABORTED is compensated before
+sealing. Successful local purge requires authenticated prerequisite receipts,
+zero incomplete/HELD work and actual sink/PubAck evidence for pre-purge audit
+and `chat.created` obligations. Neither lock nor DB transaction spans an RPC.
+Backup restore applies permanent purge fences and passed retention deadlines
+before serving; inconsistent stale work is quarantined without payload diagnostics.
 
 Space owns lifecycle state, generation, deadline, immutable root manifest and
 participant receipts; each participant owns its fence, cleanup rows and receipt

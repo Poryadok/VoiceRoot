@@ -29,7 +29,7 @@ func Unavailable(err error) error {
 }
 
 func isSpaceLifecycleMethod(method string) bool {
-	return method == botv1.BotService_ApplySpaceLifecycleFence_FullMethodName || method == botv1.BotService_PurgeSpace_FullMethodName
+	return method == botv1.BotService_ApplySpaceLifecycleFence_FullMethodName || method == botv1.BotService_PurgeSpace_FullMethodName || method == botv1.BotService_CheckBotInstallationScope_FullMethodName
 }
 
 func isProtectedServiceMethod(method string) bool {
@@ -47,7 +47,7 @@ func OrdinaryUnaryInterceptor() grpc.UnaryServerInterceptor {
 	}
 }
 
-// SpaceLifecycleUnaryInterceptor accepts only the two owner lifecycle methods
+// SpaceLifecycleUnaryInterceptor accepts only owner lifecycle and exact installation decision methods
 // and binds the signed service principal to exact protobuf request bytes.
 func SpaceLifecycleUnaryInterceptor(verifier SpaceVerifier) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {

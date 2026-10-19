@@ -39,7 +39,7 @@ func (f *routedMediaFixture) JoinToken(_ context.Context, request mediaauthority
 func TestGetJoinTokenUsesFederatedEdgeAfterCanonicalChecksAndNeverFallsBackOnFailure(t *testing.T) {
 	account, profile, space, room := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	svc := newTestVoiceService(time.Now(), &recordingEvents{})
-	resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: space, Active: true, Member: true, AccessEpoch: 11}}
+	resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: space, Active: true, Member: true, AccessEpoch: 11, CommunicationStateResolved: true}}
 	svc.VoiceRoomAccessResolver = resolver
 	svc.Roles = &canonicalRolePermissions{}
 	svc.SpaceMediaReady = true
@@ -195,7 +195,7 @@ func TestGetJoinTokenFederationRequiresCurrentAuthFloorBeforeHandler(t *testing.
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := newTestVoiceService(time.Now(), &recordingEvents{})
-			resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: space, Active: true, Member: true, AccessEpoch: 11}}
+			resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: space, Active: true, Member: true, AccessEpoch: 11, CommunicationStateResolved: true}}
 			svc.VoiceRoomAccessResolver = resolver
 			svc.Roles = &canonicalRolePermissions{}
 			svc.SpaceMediaReady = true

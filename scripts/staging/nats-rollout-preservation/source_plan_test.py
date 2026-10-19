@@ -71,6 +71,33 @@ def fixture():
         's3_signing_endpoint': endpoint, 'gateway_host': '', 'livekit_host': '', 'storage_host': '', 'web_host': 'app.example.invalid'}
 
 class SourceTests(unittest.TestCase):
+    def test_p3_principal_replay_secret_is_required(self):
+        name = 'voice-p3-principal-replay'
+        self.assertEqual(nonnats_plan.SECRET_CONTRACTS['principal-secrets'][name], {'password'})
+        for change in ('missing-secret', 'missing-password'):
+            with self.subTest(change=change):
+                kube, params = self.canonical_fixture()
+                if change == 'missing-secret':
+                    del kube.objects[('Secret', name)]
+                else:
+                    del kube.objects[('Secret', name)]['data']['password']
+                with self.assertRaises(nonnats_plan.PlanError):
+                    source_plan.compile_plan(SOURCE, params, decoder, kube)
+
+    def test_notification_principal_signing_and_tls_keys_are_required(self):
+        expected = {
+            'voice-notification-principal-signing': {'current.pem', 'next.pem', 'active-kid'},
+            'voice-notification-principal-tls': {'tls.crt', 'tls.key'},
+        }
+        for name, keys in expected.items():
+            self.assertEqual(nonnats_plan.SECRET_CONTRACTS['principal-secrets'][name], keys)
+            for key in keys:
+                with self.subTest(secret=name, key=key):
+                    kube, params = self.canonical_fixture()
+                    del kube.objects[('Secret', name)]['data'][key]
+                    with self.assertRaises(nonnats_plan.PlanError):
+                        source_plan.compile_plan(SOURCE, params, decoder, kube)
+
     def test_realtime_dual_leaf_monitor_ports(self):
         obj = decoder((SOURCE / 'deploy/templates/nats-realtime-acl-proof.yaml').read_bytes())
         regular, proof = obj['spec']['template']['spec']['initContainers']

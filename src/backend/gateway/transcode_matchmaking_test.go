@@ -4,11 +4,14 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
@@ -16,18 +19,22 @@ import (
 
 type recordingMatchmakingGRPC struct {
 	matchmakingv1.UnimplementedMatchmakingServiceServer
-	lastList     *matchmakingv1.ListGamesRequest
-	lastGet      *matchmakingv1.GetGameRequest
-	lastSearch   *matchmakingv1.SearchGamesRequest
-	lastCreate   *matchmakingv1.CreateGameRequest
-	lastSubmit   *matchmakingv1.SubmitGameRequestRequest
-	lastListReq  *matchmakingv1.ListGameRequestsRequest
-	lastApprove  *matchmakingv1.ApproveGameRequestRequest
-	lastReject   *matchmakingv1.RejectGameRequestRequest
+	lastList    *matchmakingv1.ListGamesRequest
+	lastGet     *matchmakingv1.GetGameRequest
+	lastSearch  *matchmakingv1.SearchGamesRequest
+	lastCreate  *matchmakingv1.CreateGameRequest
+	lastSubmit  *matchmakingv1.SubmitGameRequestRequest
+	lastListReq *matchmakingv1.ListGameRequestsRequest
+	lastApprove *matchmakingv1.ApproveGameRequestRequest
+	lastReject  *matchmakingv1.RejectGameRequestRequest
+	listErr     error
 }
 
 func (s *recordingMatchmakingGRPC) ListGames(_ context.Context, req *matchmakingv1.ListGamesRequest) (*matchmakingv1.ListGamesResponse, error) {
 	s.lastList = req
+	if s.listErr != nil {
+		return nil, s.listErr
+	}
 	return &matchmakingv1.ListGamesResponse{
 		GameList: &matchmakingv1.GameList{
 			Games: []*matchmakingv1.Game{{
@@ -169,6 +176,61 @@ func TestTranscodeMatchmakingListGames(t *testing.T) {
 	})
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.NotNil(t, grpcRec.lastList)
+}
+
+func TestTranscodeMatchmakingPublicCursorErrors(t *testing.T) {
+	for _, tc := range []struct {
+		code    codes.Code
+		message string
+		want    int
+	}{
+		{codes.FailedPrecondition, "games_cursor_stale", http.StatusPreconditionFailed},
+		{codes.InvalidArgument, "invalid games cursor", http.StatusBadRequest},
+	} {
+		t.Run(tc.code.String(), func(t *testing.T) {
+			grpcRec := &recordingMatchmakingGRPC{listErr: status.Error(tc.code, tc.message)}
+			conn, cleanup := startBufconnMatchmakingConn(t, grpcRec)
+			t.Cleanup(cleanup)
+			h := newGatewayForContract(t, gatewayTestOptions{
+				tokenClaims: map[string]tokenClaims{"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"}},
+				transcoder:  &transcoder{clients: grpcClients{matchmaking: matchmakingv1.NewMatchmakingServiceClient(conn)}},
+			})
+			cursor := "gpop1.opaque.1"
+			rec := performRequest(h, http.MethodGet, "/api/v1/matchmaking/games?cursor="+url.QueryEscape(cursor), "", map[string]string{"Authorization": "Bearer valid-user-token"})
+			require.Equal(t, tc.want, rec.Code)
+			require.Contains(t, rec.Body.String(), tc.message)
+			require.Equal(t, cursor, grpcRec.lastList.GetPage().GetCursor())
+			if tc.code == codes.FailedPrecondition {
+				require.Contains(t, rec.Body.String(), `"error_code":"games_cursor_stale"`)
+			}
+		})
+	}
+}
+
+func TestTranscodeMatchmakingMalformedPageDoesNotRestartListing(t *testing.T) {
+	grpcRec := &recordingMatchmakingGRPC{}
+	conn, cleanup := startBufconnMatchmakingConn(t, grpcRec)
+	t.Cleanup(cleanup)
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"}},
+		transcoder:  &transcoder{clients: grpcClients{matchmaking: matchmakingv1.NewMatchmakingServiceClient(conn)}},
+	})
+	rec := performRequest(h, http.MethodGet, "/api/v1/matchmaking/games?page="+url.QueryEscape(`{"cursor":`), "", map[string]string{"Authorization": "Bearer valid-user-token"})
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Nil(t, grpcRec.lastList, "invalid page must not become a fresh catalog request")
+}
+
+func TestTranscodeMatchmakingCursorWhitespaceIsNotAnEmptyRestart(t *testing.T) {
+	grpcRec := &recordingMatchmakingGRPC{listErr: status.Error(codes.InvalidArgument, "invalid games cursor")}
+	conn, cleanup := startBufconnMatchmakingConn(t, grpcRec)
+	t.Cleanup(cleanup)
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"}},
+		transcoder:  &transcoder{clients: grpcClients{matchmaking: matchmakingv1.NewMatchmakingServiceClient(conn)}},
+	})
+	rec := performRequest(h, http.MethodGet, "/api/v1/matchmaking/games?cursor=%20", "", map[string]string{"Authorization": "Bearer valid-user-token"})
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Equal(t, " ", grpcRec.lastList.GetPage().GetCursor())
 }
 
 func TestTranscodeMatchmakingGetGame(t *testing.T) {
@@ -356,4 +418,3 @@ func TestTranscodeAdminMatchmaking_ApproveStaffOnly(t *testing.T) {
 	})
 	require.Equal(t, http.StatusForbidden, denied.Code)
 }
-

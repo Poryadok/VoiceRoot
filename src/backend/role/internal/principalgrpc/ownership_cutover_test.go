@@ -24,6 +24,7 @@ func TestOwnershipUnaryInterceptor_DrainsEveryProtectedProtocolOnLegacyListener(
 		rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName,
 		rolev1.RoleService_CompensateOwnershipTransfer_FullMethodName,
 		rolev1.RoleService_ResolveVoiceRoomGrants_FullMethodName,
+		rolev1.RoleService_RetireSpace_FullMethodName,
 	}
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {

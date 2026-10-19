@@ -174,6 +174,26 @@ class RoleServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getDefaultJoinRole, request, options: options);
   }
 
+  /// Inert admission projection; READY never establishes Space membership.
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.EnsureDefaultMemberRoleResponse>
+      ensureDefaultMemberRole(
+    $0.EnsureDefaultMemberRoleRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$ensureDefaultMemberRole, request,
+        options: options);
+  }
+
+  /// Writes a generation floor even when no ordinary grants exist.
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.RemoveMemberRolesResponse> removeMemberRoles(
+    $0.RemoveMemberRolesRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$removeMemberRoles, request, options: options);
+  }
+
   /// Called by Space Service after CreateSpace — seeds system roles and assigns Owner.
   $grpc.ResponseFuture<$0.BootstrapSpaceRolesResponse> bootstrapSpaceRoles(
     $0.BootstrapSpaceRolesRequest request, {
@@ -394,6 +414,17 @@ class RoleServiceClient extends $grpc.Client {
       '/voice.role.v1.RoleService/GetDefaultJoinRole',
       ($0.GetDefaultJoinRoleRequest value) => value.writeToBuffer(),
       $0.GetDefaultJoinRoleResponse.fromBuffer);
+  static final _$ensureDefaultMemberRole = $grpc.ClientMethod<
+          $0.EnsureDefaultMemberRoleRequest,
+          $0.EnsureDefaultMemberRoleResponse>(
+      '/voice.role.v1.RoleService/EnsureDefaultMemberRole',
+      ($0.EnsureDefaultMemberRoleRequest value) => value.writeToBuffer(),
+      $0.EnsureDefaultMemberRoleResponse.fromBuffer);
+  static final _$removeMemberRoles = $grpc.ClientMethod<
+          $0.RemoveMemberRolesRequest, $0.RemoveMemberRolesResponse>(
+      '/voice.role.v1.RoleService/RemoveMemberRoles',
+      ($0.RemoveMemberRolesRequest value) => value.writeToBuffer(),
+      $0.RemoveMemberRolesResponse.fromBuffer);
   static final _$bootstrapSpaceRoles = $grpc.ClientMethod<
           $0.BootstrapSpaceRolesRequest, $0.BootstrapSpaceRolesResponse>(
       '/voice.role.v1.RoleService/BootstrapSpaceRoles',
@@ -633,6 +664,24 @@ abstract class RoleServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.GetDefaultJoinRoleRequest.fromBuffer(value),
         ($0.GetDefaultJoinRoleResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.EnsureDefaultMemberRoleRequest,
+            $0.EnsureDefaultMemberRoleResponse>(
+        'EnsureDefaultMemberRole',
+        ensureDefaultMemberRole_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.EnsureDefaultMemberRoleRequest.fromBuffer(value),
+        ($0.EnsureDefaultMemberRoleResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.RemoveMemberRolesRequest,
+            $0.RemoveMemberRolesResponse>(
+        'RemoveMemberRoles',
+        removeMemberRoles_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.RemoveMemberRolesRequest.fromBuffer(value),
+        ($0.RemoveMemberRolesResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.BootstrapSpaceRolesRequest,
             $0.BootstrapSpaceRolesResponse>(
         'BootstrapSpaceRoles',
@@ -919,6 +968,24 @@ abstract class RoleServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetDefaultJoinRoleResponse> getDefaultJoinRole(
       $grpc.ServiceCall call, $0.GetDefaultJoinRoleRequest request);
+
+  $async.Future<$0.EnsureDefaultMemberRoleResponse> ensureDefaultMemberRole_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.EnsureDefaultMemberRoleRequest> $request) async {
+    return ensureDefaultMemberRole($call, await $request);
+  }
+
+  $async.Future<$0.EnsureDefaultMemberRoleResponse> ensureDefaultMemberRole(
+      $grpc.ServiceCall call, $0.EnsureDefaultMemberRoleRequest request);
+
+  $async.Future<$0.RemoveMemberRolesResponse> removeMemberRoles_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.RemoveMemberRolesRequest> $request) async {
+    return removeMemberRoles($call, await $request);
+  }
+
+  $async.Future<$0.RemoveMemberRolesResponse> removeMemberRoles(
+      $grpc.ServiceCall call, $0.RemoveMemberRolesRequest request);
 
   $async.Future<$0.BootstrapSpaceRolesResponse> bootstrapSpaceRoles_Pre(
       $grpc.ServiceCall $call,

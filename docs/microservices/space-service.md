@@ -1,5 +1,126 @@
 # Space Service
 
+## Composite Chat creation (accepted implementation contract)
+
+`CommitSpaceChatCreation` admits only a freshly authenticated `service:chat`
+credential bound to exact RPC, operation/request ID and protobuf hash over mTLS;
+shared replay storage and rotating HTTPS JWKS fail closed. Ordinary listeners
+deny this method. `GetSpaceChatCreationOutcome` accepts private Chat recovery or
+the protected Gateway delegated-user path. Gateway additionally proves original
+creator/account ownership and current Space membership/lifecycle admission;
+service authentication alone never authorizes public disclosure.
+
+Space rechecks current membership, guest policy, Role
+`TEXT_CHAT_CREATE_IN_SPACE`, lifecycle/ownership fencing and capacity before the
+first node commit. Bot creation additionally requires Bot-owned current exact
+bot/actor/installation/scope admission. Missing authority is UNKNOWN, never an
+ABORTED result. Network checks hold no Space DB lock; local transaction checks
+repeat under the shared Space advisory lock. The same lock serializes composite
+node/result writes with freeze, audit ingress and terminal purge. The operation
+lock is acquired before the Space lock. Node plus immutable COMMITTED result,
+or deterministic domain refusal plus ABORTED result, commit atomically; ordinary
+tree audit is not emitted for this internal step. Ordinary Upsert keeps its audit.
+
+Chat owns prepared/HELD work and autonomous recovery. Exact replay returns the
+original typed snapshot even after node movement/removal and never reinserts it.
+Gateway waits for Chat completion and reads that snapshot instead of issuing a
+second ordinary tree Upsert. An absent receipt/timeout does not prove abort.
+The complete tuple, terminal retention and pre-manifest drain contract are in
+[DATA_MODEL.md](../DATA_MODEL.md#p3-space-deletion-ownership-and-file-references-accepted-target).
+
+During freeze/purging, protected Chat audit ingress may finish only the original
+`chat_created` fact matching a saved COMMITTED composite's audit/Space/Chat/creator
+binding and exact empty details codec. It does not rerun interactive ACL or admit
+new ordinary commits. Ingress takes the shared Space transaction lock before
+receipt lookup, including duplicate/retry paths. Terminal purge records a
+permanent Space fence atomically with fixed evidence deadlines and local deletion;
+late signed deliveries cannot insert audit, outbox or node rows. Reserved composite
+audit IDs remain unavailable for a different fact after payload minimization.
+Actual participant drain/completion proof is required before aggregate purge.
+
+Migration `000031_composite_audit_reservation` serializes composite reservation,
+protected ingress and audit INSERT through one transaction advisory lock per
+audit UUID. The order is Space, audit UUID, then reservation/receipt rows.
+Composite commit rejects any pre-existing receipt or different composite fence;
+the audit trigger rejects local/different facts using a reserved ID while allowing
+the original COMMITTED Chat tuple. The protected ingress additionally verifies
+the complete saved creator binding. No provisional receipt/fingerprint is created.
+Receipt minimization takes no audit UUID lock and runs after Space cleanup locks.
+Startup of the composite receiver requires migrations `000028` and `000031`.
+The migration refuses every pre-existing receipt/composite audit-ID overlap:
+producer/Space equality and a hash alone cannot prove the full original creator
+binding, particularly after audit payload retention. Even apparently matching
+historical Chat overlaps require explicit verified reconciliation; the migration
+preserves both records and supplies no bypass or automatic evidence deletion.
+
+The receiver config prefix is `SPACE_CHAT_COMPOSITE_`: `GRPC_LISTEN`,
+`TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, `PRINCIPAL_JWKS_URL`,
+`PRINCIPAL_JWKS_CA_FILE`, `PRINCIPAL_JWKS_CLIENT_CERT_FILE`,
+`PRINCIPAL_JWKS_CLIENT_KEY_FILE`, `PRINCIPAL_REDIS_ADDR` and optional
+`PRINCIPAL_REDIS_PASSWORD`. JWKS fetching itself uses mTLS against Chat's existing
+HTTPS principal endpoint; Space never copies Chat signing keys. Partial config
+fails startup. Enabled composite requires the protected Gateway listener and
+Role principal client/Space signer. Its narrow Role decision is a fresh signed
+`service:space` `CheckPermission`, restricted to the immutable actor/Space and
+`TEXT_CHAT_CREATE_IN_SPACE`; the legacy ordinary client is never a fallback.
+Bot's current installation decision uses `SPACE_BOT_COMPOSITE_GRPC_ADDR`,
+`SPACE_BOT_COMPOSITE_TLS_CA_FILE`, `SPACE_BOT_COMPOSITE_TLS_SERVER_NAME`,
+`SPACE_BOT_COMPOSITE_CLIENT_CERT_FILE` and `SPACE_BOT_COMPOSITE_CLIENT_KEY_FILE`,
+pointing to Bot's existing protected Space lifecycle listener. It verifies the
+exact echoed tuple and treats missing/malformed/unauthenticated responses as
+UNKNOWN. Only a valid authenticated `allowed=false` is a domain refusal.
+
+## Communication timeout authority (BE-044-TIMEOUT-v1)
+
+Accepted implementation target; not a shipped/runtime-acceptance claim. The
+[product action matrix](../features/spaces.md#communication-timeout-be-044-timeout-v1-accepted-target)
+is an additional profile/Space deny. Space owns timeout and evaluation time.
+It evaluates live membership/lifecycle, timeout state and positive `access_epoch`
+under the existing serialized authority snapshot, using its DB clock. Missing or
+expired timeout is CLEAR only for an eligible current member; equality is expired.
+
+`ResolveMemberCommunicationState` is a read-only protected RPC for
+`service:messaging` only: protocol1, exact Space/profile, explicit
+UNSPECIFIED/CLEAR/TIMED_OUT enum, echoed IDs, positive access epoch and evaluation
+timestamp. TIMED_OUT requires an until strictly after evaluation; CLEAR omits it.
+No moderator/reason/audit details or REST route. Voice alone uses the existing
+`ResolveVoiceRoomAccess`, extended with the same versioned evidence from the same
+snapshot; membership/active/discoverable keep their existing meanings.
+
+Both covered decisions require signed exact-RPC/hash/audience/request-bound
+service authority, mTLS, HTTPS trusted JWKS and shared replay protection. Ordinary
+listeners and legacy bearer/header fallback cannot provide this capability.
+All-absent consumer capability leaves covered Space writes/grants unavailable;
+partial configuration fails startup. Unknown version/enum, default/missing data,
+wrong IDs, epoch0 or impossible timestamps are unavailable, never CLEAR.
+Nonmember/undiscoverable resources preserve their generic discovery response.
+
+Timeout set/replace/remove atomically updates the existing access epoch and
+immutable `space.voice_room_access_invalidated` outbox with timeout/audit.
+Migration24 already supplies the timeout mutation trigger; do not double-increment.
+No positive/negative decision cache or downstream SQL into `space_db` is allowed.
+Each new effect obtains a fresh decision within one two-second monotonic
+check-to-commit deadline; a concurrent already-admitted effect may finish within
+that budget. Consumer-local time cannot convert a previous deny into allow.
+
+The provider has two separately configured narrow listeners, both addressed to
+audience `space`: `SPACE_VOICE_COMMUNICATION_` (default `:9094`, Voice room
+resolver only) and `SPACE_MESSAGING_COMMUNICATION_` (default `:9095`, member
+communication resolver only). Each prefix requires `REPLAY_REDIS_ADDR`,
+`TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, `JWKS_CLIENT_CERT_FILE` and
+`JWKS_CLIENT_KEY_FILE`; `GRPC_LISTEN` and `REPLAY_REDIS_PASSWORD` are optional.
+`S2S_JWKS_URLS_JSON` supplies the exact trusted caller's HTTPS endpoint, with
+`S2S_JWKS_CA_FILE` extending server trust when necessary. A listener may instead
+set its own `<prefix>JWKS_CA_FILE`; absent retains the shared CA, while an
+explicitly blank, unreadable or invalid override fails without falling back.
+Local trust configuration alone is partial listener configuration and fails;
+shared trust settings alone enable no listener. This permits separate Social
+and Voice CAs without a combined trust bundle or sharing private keys. Replicas use shared
+replay storage; each listener authenticates its one caller and exact method.
+All-absent provider settings leave that listener disabled. Partial settings
+fail startup. The ordinary listener rejects both methods, and the legacy
+`SPACE_VOICE_S2S_TOKEN` cannot authenticate either decision.
+
 ## Обзор
 
 Управление пространствами (аналог Discord-серверов): **дерево sidebar** — единая таблица **`space_tree_nodes`** (текстовые чаты `group`/`channel` и **голосовые комнаты** в одном порядке сортировки), категории, инвайты, участники, шаблоны.
@@ -28,6 +149,15 @@
 - Бан пользователя (с сохранением сообщений)
 
 ## API (gRPC)
+
+The additive [ListThreads membership source contract](../testing/listthreads-versioned-readmodel-exec-plan.md#effective-membership-contract-v1)
+requires Space-scoped transactional membership/lifecycle revisions, revocation
+counters, exact replay/outbox records and complete pinned snapshots/head
+validation for signed caller `chat`. Every join/leave/kick/ban and allowed
+restoration participates. A paginated response is complete only with its sealed
+terminal proof; retention pins preserve replay across Chat reconciliation.
+This is an unimplemented activation prerequisite, not a grant on an existing
+ordinary listener or a claim of runtime delivery.
 
 The Social privacy transport exposes only `AreCoMembers` on a dedicated TLS
 listener (9091). Signature, request binding, expiry, Redis replay admission and
@@ -120,8 +250,8 @@ service SpaceService {
 | TransferOwnership | ✓ | Disabled | Production still denies before dependencies. Auth proof consume/receipt lookup, Role v2, and the Space protocol-2 journal through terminal evidence, ordinary freeze and the ready-row scan are shipped foundations. Network recovery/orchestration, capability activation, public operation idempotency and the Gateway/Flutter vertical remain open. See § Ownership lifecycle principal transport. |
 | AddBotMember, RemoveBotMember | ✓ | ✓ | |
 | ListTemplates, CreateFromTemplate | ✓ | ✗ | |
-| GetAuditLog | ✓ | Partial | `created_at DESC, id DESC`; 15-minute HMAC-signed snapshot cursor; default 50/max 100; exact `SPACE_VIEW_AUDIT_LOG`. Additive actor/action/time proto fields are shipped, but handler filter mapping and REST/Flutter surfaces remain backlog |
-| AppendAuditEvent | ✓ | ✗ | Protected Role/Chat audit ingestion contract; runtime verifier, idempotent store and producer outboxes remain backlog |
+| GetAuditLog | ✓ | ✓ backend gRPC/REST source | `created_at DESC, id DESC`; actor/action/from/to filters; 15-minute HMAC-signed snapshot cursor bound to viewer, query and key; default 50/max 100; exact `SPACE_VIEW_AUDIT_LOG`. Flutter remains backlog; source integration is not deployed proof |
+| AppendAuditEvent | ✓ | ✗ | Dedicated signed Role/Chat ingestion listener and idempotent store; producer outboxes tracked separately by BE-131 |
 | AreCoMembers | ✓ | ✓ | S2S co-membership check |
 | SyncSpaceProSubscription | ✓ | ✓ | Subscription sync |
 
@@ -160,6 +290,281 @@ not evict existing guests, revoke their memberships, or retroactively remove
 downstream access. It does not implement `entry_policy`, the Space+Chat effective
 access rule, Chat R3-A15, or Chat/Messaging/Realtime enforcement.
 
+### Versioned entry policy (target)
+
+The accepted product contract is [Space entry verification](../features/spaces.md#верификация-при-вступлении).
+The implementation must replace the single legacy `entry_requirement` with a
+monotonic policy revision and composable AND configuration. Questions are
+machine-checked against configured answers; a wrong answer fails. Questions
+never imply manual approval. Manual approve never substitutes for automatic
+requirements. `SPACE_APPROVE_JOIN_REQUESTS` is the separate delegable permission
+for moderator request/answer reads and approve/reject, defaulting to
+Owner/Admin/Moderator. Settings, invite and ban powers are insufficient alone.
+
+All direct, invite and approval paths use the same ordered evaluation:
+ban/member-cap/guest admission, phone, captcha, questions, manual approval.
+Existing visibility, privacy and account-block gates remain effective. Pending
+manual review requires successful automatic stages, creates no membership and
+reserves neither invite uses nor member capacity. The existing empty-body join
+contract and pending `409 failed_precondition` response remain unchanged;
+proof submission and applicant/moderator operations require documented additive
+APIs rather than caller-controlled identity or success metadata.
+
+Verification binds purpose, authenticated account and active profile, Space,
+admission kind, exact invite when used, monotonic policy/config revision and
+immutable submission identity/digest. A policy revision is never reused after
+an A→B→A edit. Unknown/malformed legacy policy or question configuration must
+not migrate to unrestricted admission. Legacy writers must not replace an AND
+policy with a single flag. A phone value, User badge or client boolean is not
+authoritative verified-phone evidence; a missing verifier remains fail-closed.
+
+Space-owned admission state is committed in one transaction under the shared
+per-Space PostgreSQL mutation fence, not only the process-local handler lock.
+Re-read policy, ban, current cap, guest/visibility state, lifecycle/ownership
+freeze and exact invite after acquiring the fence. Sample the database clock
+after lock waits for expiry checks. Membership insertion, member_count,
+invite-use increment and durable operation outcome must agree at commit;
+rollback changes none. Pending approve cannot bypass a subsequent ban, expired
+or revoked invite, changed policy, full Space or lifecycle freeze. Successful
+retry consumes no extra use and cannot resurrect access after leave/ban/purge.
+
+Remote Auth/Role checks are not made atomic by that local transaction. The
+bounded snapshot profile below makes this limitation explicit. Default
+Role assignment and membership events need durable, idempotent completion
+with readiness and generation fences: a failure after local commit must not
+lose the consumed admission or grant a role after leave/ban/purge. The current
+post-commit `finalizeMembership` call does not prove this guarantee.
+
+#### Policy schema, answers and compatibility
+
+The private policy JSON has `schema_version:1`, required boolean fields
+`require_phone`, `require_captcha`, `require_manual_approval`, and a required
+`questions` array. Each question is
+`{id:UUID,prompt:string,kind:"exact_text",expected_answer:string}`. An empty
+array disables questions; otherwise every question must pass. There are at most
+10 questions, with unique nonzero IDs and prompts of 1–1024 UTF-8 bytes.
+Normalized configured/submitted answers are 1–256 UTF-8 bytes.
+
+Normalize answers with Unicode NFC, then trim only outer U+0009, U+000A,
+U+000D and U+0020. Preserve interior whitespace, case and punctuation; reject
+other C0 controls and DEL. Comparison is exact after normalization, with no
+numeric coercion, expression evaluation, regex or fuzzy/LLM grading. For an
+expected `4`, outer ASCII whitespace is accepted, but `04`, `4.0`, `+4`,
+`four` and a full-width digit fail. Settings explain this comparison rule.
+Reject invalid UTF-8, unknown/duplicate JSON fields, unsupported schema/kind,
+missing/duplicate/extra answer IDs, normalized blank answers and oversized
+payloads before verification. Prompt text is never executable.
+
+Configured answers and their digests are private: only settings-authorized
+reads may return the configured values. Public Space, GetInvite, requirements,
+lists and events use explicit safe DTOs. Do not serialize the private policy
+through legacy `entry_questions_json`. Submitted answers are visible only to
+the original applicant and authorized request reviewers; never log raw
+answers, captcha tokens, invite codes or answer digests.
+
+`SetEntryPolicy` accepts a complete private policy with UUID `operation_id`
+and `expected_policy_version`. It requires `SPACE_MANAGE_SETTINGS`. An exact
+operation/body replay returns its saved outcome; a changed body is
+`ALREADY_EXISTS`, revision mismatch is `FAILED_PRECONDITION`, both without
+mutation. Server-owned `entry_policy_version` is positive, monotonically
+increasing and distinct from JSON `schema_version`. Every canonical config
+change, including prompt/answer/question IDs or provider config, increments
+the revision under the Space fence; a semantic no-op preserves it.
+
+Migration maps legacy `none` to all disabled/empty questions, and legacy
+`phone`, `captcha`, `manual` to the corresponding single flag. Legacy
+`questions` needs a complete machine-checkable answer mapping. Unknown or
+malformed values, and questions without configured answers, remain explicitly
+invalid/unavailable for admission with preserved repair data. Migrated spaces
+reject legacy `entry_requirement`/`entry_questions_json` writes with
+`FAILED_PRECONDITION`; unrelated `UpdateSpace` fields continue to work.
+
+#### Additive attempts and immutable submissions
+
+The [Gateway admission routes](api-gateway.md#entry-policy-and-admission-attempts-target)
+are the public projection of `SetEntryPolicy`, `StartJoinAttempt`,
+`GetJoinAttempt`, `SubmitJoinAttempt`, `ListJoinRequests`, `GetJoinRequest`
+and `ApproveJoinRequest`. They are target RPCs, not currently shipped methods.
+Applicant exceptions to membership checks do not remove visibility, binding
+or lifecycle checks. Moderator reads/approve require current membership and
+`SPACE_APPROVE_JOIN_REQUESTS`. Private RPCs bind the exact method/request via
+the trusted principal framework; legacy identity metadata is insufficient.
+
+Start creates a server UUID/challenge nonce bound to authenticated account,
+profile, Space, admission kind/exact invite, policy revision/config digest.
+The collection window is 600 seconds from fresh database creation time;
+expiry equality is expired, and retry cannot extend it. This is a collection
+deadline, not a pending-review expiry. Reuse the collecting attempt or pending
+request for the exact binding rather than permitting unlimited active attempts
+through new operation IDs.
+
+Each attempt accepts one immutable canonical submission. Sort answers by
+question ID, normalize values and bind their digest to the exact attempt and
+token digest. Never persist the raw captcha token. A changed payload for the
+same attempt/operation returns `ALREADY_EXISTS`. A wrong answer terminally
+fails the attempt with generic `PERMISSION_DENIED`, without per-question
+correctness disclosure, pending request, membership, invite use or Role call.
+A fresh attempt is allowed; no extra cooldown/lockout is implied.
+
+Validate shape, then local gates, phone, captcha, questions and manual.
+Durably claim a captcha token digest for the exact attempt before provider
+verification. Concurrent exact retries do not start another verifier call;
+provider uncertainty or a crash before a durable positive receipt fails
+closed. An already-used provider result is never success. A saved exact pass
+receipt permits retry without consuming the token again. Pending stores
+normalized submitted answers and immutable pass receipts/digests, never phone
+numbers or captcha tokens. The new additive API explicitly permits this
+attempt/verification ledger; the old join API still permits only pending
+manual review as an intermediate effect.
+
+Old empty-body joins do not select an ambient last proof or unrelated attempt.
+They may admit a policy requiring no client-supplied input, or create manual
+pending after all automatic stages pass. Captcha/questions requiring client
+input return `FAILED_PRECONDITION`; the caller uses the additive attempt API.
+
+#### Freshness, final decision and recovery
+
+Auth-owned verified-phone/account eligibility and Role-owned approver
+authorization are mutable decisions. Fetch authenticated owner decisions for
+the exact applicant account/profile/Space/attempt/policy at submission and
+again at approval as required. A guest with phone required fails before the
+phone call. Approval authenticates the current actor/session, checks current
+local membership and online `SPACE_APPROVE_JOIN_REQUESTS`. Missing true
+verified-phone capability remains unavailable; phone/SMS scope is unchanged.
+
+Request mutable owner decisions immediately before the local final transaction,
+using 2-second RPC deadlines. The guarded local decision must occur strictly
+within 5 seconds of the earliest required owner-call start, measured with a
+local monotonic clock. Recheck after lock acquisition and honor any stricter
+owner validity. Equality/exceeded budget returns unavailable with no mutation;
+retry fetches fresh decisions. A restart cannot reuse monotonic evidence.
+This is a bounded snapshot: remote revocation after an authenticated owner
+decision may race admission. Only Space-local deny gates serialize through
+the common fence. No global current-at-commit remote guarantee or distributed
+2PC is implied.
+
+Captcha action/site/audience/nonce/expiry and one-use checks occur at submit.
+A durable authenticated positive observation is a historical fact bound to the
+immutable attempt/submission/policy, not a reusable bearer token. Delayed
+manual approval uses that exact receipt without re-consuming the provider
+token, even after token expiry. Policy/provider-config revision changes
+invalidate it. Questions similarly retain exact config/submission/pass
+bindings; approval may recompute against that same revision and cannot regrade
+against a new policy or override wrong answers.
+
+The collection deadline applies before successful automatic submission. Minimal
+admission has no automatic age-based pending-review expiry. Current policy,
+bindings, invite state, ban/cap/guest/visibility, identity eligibility and
+lifecycle still govern approval; existing Space/account data lifecycle still
+applies. Reject/cancel/cooldown and a numeric answer-retention period are
+separate product extensions, not inferred requirements for the minimal
+questions/manual protocol.
+
+The operation ledger is keyed by authenticated actor profile and UUID
+`operation_id`, with immutable request kind, target and canonical payload
+digest. Original-actor completed retry returns only its saved outcome, with
+no new checks, Role calls, counter/use/event or fresh resource projection.
+After leave/ban it cannot recreate membership. The old empty-body join remains
+subject to its ordinary code/transport checks. Another approve may return the
+stable completed decision only to a currently authorized reviewer.
+
+A new approve reloads the bound pending request, obtains fresh remote mutable
+decisions and enters the existing scoped outer transaction for all local final
+guards, snapshot budget and single pending-to-admission CAS. Exact submit retry
+with a durable successful captcha receipt may retry fresh mutable checks
+without provider reuse; it never changes answers/token. Concurrent processing
+returns `FAILED_PRECONDITION`. Wrong answers terminally fail; an unknown
+provider outcome without a durable positive receipt cannot become a pass.
+
+Approval returns success only after authoritative admission and required Role
+completion. Recovery in progress returns `UNAVAILABLE` with a stable operation
+ID/status, never a second consumed invite. Preserve a durable outbox/outcome
+and recover actual committed state after an ambiguous timeout. Generation and
+readiness fences must prevent a late completion from granting after
+leave/ban/purge; generic post-commit AssignRole plus retry is insufficient.
+
+Runtime remains open: conservative migration, additive APIs/generated contracts, approval
+authorization and transaction, Role completion, Gateway wiring and negative
+concurrency/runtime evidence. No admission capability is enabled by this
+documentation change.
+
+#### Admission Role readiness and ordinary membership generations
+
+Space stores a decided admission candidate outside `space_members`. A permanent
+ordinary-member head allocates monotonically increasing positive generations
+per `(space_id,profile_id)`; failures, removal and rejoin never reuse them.
+Existing published ordinary members backfill explicit generation zero, which
+still requires authoritative Space confirmation. Missing head/unknown source
+is not a legacy-zero fallback. Independent community membership has a durable
+per-profile episode: positive owner generation, independently monotonic
+membership generation and a UUID allocated once per episode. Continuous valid
+refresh preserves that token; roster/source revision is a heartbeat, not an
+incarnation. Removal, lease equality/gap or owner-generation change invalidates
+the old episode before a new higher generation/UUID. Its permanent head/floor
+survives roster replacement; cleanup of an old source cannot remove a new one.
+Only currently authoritative active legacy rows may initialize an explicit
+migrated episode under the Space fence and fresh DB time. Expired/unknown rows
+are not active. This does not classify historical ambiguous Role grants:
+unproven old provenance remains unresolved rather than guessed as both sources.
+
+`PREPARING_ROLE` is inert technical continuation after automatic/manual
+authorization. It is not membership, reserves no capacity/invite use, and is
+excluded from every existing ordinary membership reader. A handler-only
+`ready=false` row in `space_members` is forbidden because existing Chat/Space
+SQL readers would expose access. The candidate commits exact original
+operation, account/profile/Space, admission kind/invite, policy/submission
+binding digest and allocated generation before any Role call.
+
+Role's protected `EnsureDefaultMemberRole` receives protocol version 1, Space,
+profile, generation, stable admission operation and binding SHA-256. Role picks
+the allowed current default join role and saves an immutable exact receipt;
+callers cannot select role ID, permissions, Owner or a forged human actor.
+`READY` means only that Role prepared its own generation-qualified projection.
+It remains ineffective without matching published Space membership. Generic
+AssignRole with owner metadata is not an admission protocol.
+
+After verifying the exact READY receipt, Space gathers fresh mutable owner
+decisions before taking any local mutation lock, then re-enters the shared
+Space fence and all current final guards. It CASes the same candidate/head/
+generation and commits published membership, member_count, exact invite use,
+Role receipt, durable outcome and member-joined event together. Only published
+membership is inserted into `space_members`. Final guard failure or removal
+supersession invalidates the candidate and durably queues cleanup without a
+member/count/use/event success. Unknown COMMIT is resolved from durable state.
+
+Role obtains current eligibility through protected
+`GetMemberAdmissionAuthority`, caller `service:role` only, binding exact Space,
+profile and optionally a paired expected generation/admission operation.
+Response echoes identity, explicit ordinary head/state, published generation/
+operation/receipt digest, LIVE/ownership availability and separately typed
+community authority. The endpoint reads Space-owned state and never calls
+Role. Role queries it before its local transaction; this avoids recursive or
+opposite-order locks. PREPARING permits only inert preparation; effective
+ordinary rights require matching published generation/operation/receipt and
+fresh owner eligibility. Unknown/error is unavailable. This remains a bounded
+owner observation under the snapshot limitation above, not distributed ACID.
+
+Leave/kick/ban/purge invalidate pending candidates under the same Space fence,
+advance the permanent ordinary generation and persist typed removal work even
+if no membership row exists. Account ban invalidates all pending profile aliases
+for that account. Role's `RemoveMemberRoles` writes a generation floor even
+without existing grants. Floor `R` defeats Ensure at `g<=R` without deleting
+newer `g>R` or independently sourced community contributions. System baseline
+Member cleanup is a separate typed source operation; Owner is exclusively
+bootstrap/ownership/P3 authority. Physical cleanup may lag, but new effective
+rights cannot rely on an orphaned ordinary contribution after Space removal.
+Rejoin cannot inherit old-generation Admin/custom grants. P3 retirement
+permanently dominates every ordinary generation and late retry.
+
+Role effective role/permission/hierarchy reads and generic user/bot mutations
+must qualify ordinary contributions against this live incarnation; actor and
+target checks apply where required. Raw authority-source exports, policy epochs
+and downstream consumers must not export an inert contribution as an active
+grant. Space's own authority revision/catalog and cleanup include new head,
+candidate, receipt and outbox data. Existing published-only readers, Chat's
+legacy direct readers and community unions must be tested with candidate plus
+published fixtures; do not introduce new cross-database reads.
+
 ### Phase-0 S2S decision callers (target)
 
 `AreCoMembers`, subscription sync и новые internal decision RPC не получают actor
@@ -174,7 +579,21 @@ permission subset и Owner lifecycle paths определены в
 `ApplyOwnershipTransfer`/`CompensateOwnershipTransfer` с проверенным
 `operation_id`.
 
-`GetAuditLog` читает только строки запрошенного `space_id` и возвращает все поля `AuditLogEntry`. Ошибка Role Service закрывает доступ (`UNAVAILABLE`), явный deny даёт `PERMISSION_DENIED`, malformed cursor — `INVALID_ARGUMENT`. Текущий handler выпускает signed snapshot cursor для unfiltered запроса. Proto уже содержит additive actor/action/time filters, но handler их ещё не передаёт в готовую filter-bound store query. Остальные writers и клиентские REST/Flutter поверхности остаются в [backend backlog](../todo/backend.md).
+`GetAuditLog` читает только строки запрошенного `space_id` и возвращает все поля `AuditLogEntry`. Ошибка Role Service закрывает доступ (`UNAVAILABLE`), явный deny даёт `PERMISSION_DENIED`, malformed cursor — `INVALID_ARGUMENT`. Handler передаёт actor/action/time filters в filter-bound store query; каждый cursor связывает authenticated viewer, scope, filters и page size. Остальные writers и клиентские REST/Flutter поверхности остаются в [backend backlog](../todo/backend.md).
+
+The audit read chain consumes `pkg/principal.RequireDelegatedUser` from the
+already verified Gateway delegated context. The shared reader binds canonical
+non-nil account/profile UUIDs, positive session epoch and exact audience, RPC and
+protobuf request hash; it never derives an actor from raw identity metadata.
+For this method the protected lifecycle interceptor preserves the signed
+transport metadata without manufacturing `x-voice-*` headers. The public
+disclosure wrapper, membership checks, explicit profile permission/owner cores
+and cursor viewer all use that typed profile. The ordinary listener still
+rejects audit reads, and missing protected transport has no ordinary fallback.
+Other lifecycle methods retain their explicitly unmigrated verified-first
+projection. The current ordinary Space-to-Role decision transport is a separate
+BE-181 residual; this cutover does not claim its S2S authorization or production
+PKI rollout. See the [BE-041 execution plan](../testing/be041-verified-audit-identity-exec-plan.md).
 
 **Invite permissions:** shipped `CreateInvite`, `RevokeInvite` and `ListInvites`
 handlers use the exact `SPACE_MANAGE_INVITES` decision. An unavailable configured
@@ -210,7 +629,7 @@ through the bounded `internal/auditretention` worker.
 BE-116 deliberately has no aggregate audit purge authority. Migration
 `000015_audit_ledger` blocks direct `spaces` deletion before its foreign-key
 cascades can erase audit/outbox evidence, so the obsolete legacy `DeleteSpace`
-RPC now fails closed. BE-245 must supply the documented terminal same-transaction
+RPC now fails closed. BE-005 must supply the documented terminal same-transaction
 P3 purge coordinator before that guard can be replaced. The public gRPC status
 mapping for this temporarily disabled legacy RPC is still a contract gap; BE-116
 does not invent one.
@@ -261,6 +680,34 @@ atomically with the outbox. Space validates its UUID and caller/action ownership
 must consume the hash-bound body value, and does not compare it to a principal
 actor. No caller/source-service identity appears in the request body.
 
+The ingestion implementation is opt-in on its own mTLS listener. Presence of any
+`SPACE_AUDIT_PRINCIPAL_*` setting enables validation; partial or blank required
+configuration fails startup. Required settings are `SPACE_AUDIT_PRINCIPAL_TLS_CERT_FILE`,
+`SPACE_AUDIT_PRINCIPAL_TLS_KEY_FILE`, `SPACE_AUDIT_PRINCIPAL_CLIENT_CA_FILE` and
+`SPACE_AUDIT_PRINCIPAL_REPLAY_REDIS_ADDR`; the optional Redis password is
+`SPACE_AUDIT_PRINCIPAL_REPLAY_REDIS_PASSWORD`. `SPACE_AUDIT_PRINCIPAL_GRPC_LISTEN`
+defaults to `:9098`. `DATABASE_URL` is required. This listener registers only
+`AppendAuditEvent`; the ordinary listener explicitly denies that RPC before legacy
+metadata handling. There is no raw actor, shared token or insecure fallback.
+
+`S2S_JWKS_URLS_JSON` must contain exact HTTPS endpoints for `role` and `chat`;
+other shared-map issuers confer no audit authority. Each trusted JWKS contains
+distinct current+next RS256 keys of at least 2048 bits. Optional `S2S_JWKS_CA_FILE`
+and paired `S2S_JWKS_CLIENT_CERT_FILE`/`S2S_JWKS_CLIENT_KEY_FILE` configure HTTPS
+trust/client identity. Redirects and oversized JWKS responses are rejected.
+`S2S_JWKS_REFRESH_AFTER`/`S2S_JWKS_HARD_EXPIRY`/`S2S_UNKNOWN_KID_COOLDOWN`
+default to `30s`/`2m`/`5s`; invalid values fail startup. Redis is required at
+startup and each credential's JTI is consumed atomically until expiry plus skew;
+Redis failure or an unusable JWKS fails closed. These settings describe source
+capability and do not establish deployment or completed PostgreSQL verification.
+The accepted composite freeze/purge guard from BE-A2-COMPOSITE-CHAT-NODE c4/c5
+checks its persisted COMMITTED audit/Space/Chat/creator binding under the shared
+Space lifecycle transaction lock. A permanent PURGED fence rejects late delivery
+before even an existing receipt can acknowledge success. Current interactive ACL
+is not rerun for an already committed fact. The same guard runs after a uniqueness
+collision rollback in the fresh receipt transaction. Real PostgreSQL concurrency
+proof and independent review remain delivery gates; this does not activate P3.
+
 Exact replay of the same `audit_event_id` and canonical payload returns the empty
 success response; the same ID with any changed field is `ALREADY_EXISTS`.
 Space-local writers never call this RPC, and Role/Chat never write directly to
@@ -273,6 +720,47 @@ empty response accepts and preserves unknown fields after known validation for
 forward-compatible acknowledgement handling.
 
 ### Details registry v1
+
+BE-234 adds the Space-owned `member_nickname_updated` action: target_type is
+`profile`, target_id is the edited local member, and details is exactly
+`{"changed_fields":["nickname"]}`. Neither nickname value is retained. The
+nickname mutation and audit/outbox commit atomically; unchanged canonical values
+produce no new fact. Migration `000026_member_nickname_audit` extends the closed
+registry additively; downgrade refuses while nickname audit evidence exists.
+
+### Member nickname RPC (BE-234-nickname-v2-transport)
+
+`UpdateMemberNicknameRequest` has mandatory UUID `space_id` and target
+`profile_id`, plus required presence of optional string `nickname`. Missing
+nickname is `INVALID_ARGUMENT`; explicitly empty/Unicode White_Space-only clears
+SQL NULL and the response omits nickname. The response contains authoritative
+`SpaceMembership`; `joined_at`, member_count and global profile data do not change.
+See [Spaces](../features/spaces.md#ник-участника-в-спейсе) for the exact 64-scalar
+Unicode validation contract.
+
+Only a verified active-profile actor may invoke the RPC. Current membership and
+effective global `MEMBER_MANAGE_NICKNAMES` are required even for self; no node
+override, omitted target or legacy actor metadata supplies authority. Non-owner
+editing Owner is `FAILED_PRECONDITION`; other target ranks do not add a hierarchy
+gate. Missing local target is `NOT_FOUND` only after caller authorization;
+visible roster-only targets return `FAILED_PRECONDITION` without creating a row.
+Ownership/deletion freeze is checked under the same PostgreSQL Space lock as
+leave/kick and the nickname update, including same-value/clear requests. No-op
+requests recheck authorization. The RPC emits no new domain/Realtime event and
+adds no HTTP/UI route.
+
+The nickname RPC is added to the existing Gateway delegated-user mTLS listener
+and denied by the ordinary listener. The handler requires verified `gateway`
+delegated-user principal, audience `space`, exact RPC/hash and canonical
+account/active-profile UUIDs; metadata alone never supplies an actor. Existing
+JWT/replay/session-epoch checks remain required. Its permission request uses the
+existing protected Role connection (`OwnershipRoles`) and Space signer, with a
+fresh service JWT and exact `MEMBER_MANAGE_NICKNAMES` request for the actor;
+outgoing metadata contains only credential/request binding. Owner/Admin and
+no-op requests also require that signed decision; missing Role connection/signer
+or unavailable dependency returns `UNAVAILABLE`, never the old owner fallback.
+Other existing Space and Role permission transports are unchanged. The broader
+signed Space CheckPermission allowlist remains target-only outside this branch.
 
 `target_type` is one of `space`, `invite`, `profile`, `account`, `role`, `chat`,
 `voice_room`, `category`, `tree_node`; `target_id` is always a UUID. Aggregate
@@ -296,6 +784,106 @@ TOTP or backup codes, session/header/IP, email/phone, invite code, URLs, or mess
 content. A normalized moderation reason is the sole privileged sensitive field
 required by the product audit UX and remains protected by `SPACE_VIEW_AUDIT_LOG`.
 
+### External audit details codec v1
+
+This accepted wire codec applies only to the closed Role/Chat actions above;
+Space-local builders and their stored JSONB are not reinterpreted. Producers and
+ingress share `src/backend/pkg/spaceaudit`. Producer outboxes preserve the built
+bytes; retries never rebuild them with a later codec.
+
+The object has ASCII keys in ascending order, no whitespace/BOM/newline, escapes,
+duplicate members or trailing value. Strings are unescaped ASCII tokens or
+canonical lowercase hyphenated UUIDs. No null, free-form text, nested objects or
+arrays except `changed_fields` are accepted. Integers are unquoted decimal
+`0` or `[1-9][0-9]*`, exactly parsed as uint64; signs, leading zeroes, fractions,
+exponents and overflow are invalid. Ingress emits the action-specific canonical
+form and compares it with the original bytes; it rejects differences rather than
+normalizing the request. JSONB normalization and the 4096-byte database check are
+separate. Invalid details reserve no ID, including when an existing ID is replayed.
+
+| Actions | Exact required details |
+|---|---|
+| `role_created`, `role_deleted`, `default_join_role_set`, `chat_created`, `chat_deleted` | `{}` |
+| `role_updated`, `chat_updated` | `changed_fields` |
+| `role_assigned`, `role_revoked` | `role_id` |
+| `chat_override_set`, `chat_override_removed`, `voice_room_override_set`, `voice_room_override_removed` | `allow_mask`, `deny_mask`, `role_id` |
+| `roles_reordered` | `count` |
+
+No other or optional members are allowed in this external subset. `role_id` has no
+UUID-version restriction. Both masks use the entire uint64 range, including high
+and unknown future bits, zero and overlapping allow/deny bits; ingress records
+facts rather than applying Role policy. Removed overrides record the deleted
+row's prior masks captured in the mutation/outbox transaction. A missing row is a
+no-op and emits no fact.
+
+`changed_fields` is nonempty, unique and ASCII-sorted. Role tokens are `name`,
+`permissions`, `position`; request `permissions_mask` maps to domain token
+`permissions`. Chat tokens are `allow_guests`, `allow_user_main_feed`,
+`avatar_url`, `name`, `slow_mode_seconds`, `threads_enabled`, `topic`. Tokens
+describe actual normalized before/after value differences, not request presence;
+unchanged updates emit no fact. No updated values or URLs are included. Future
+fields need an explicit registry extension. `count` is a positive uint64 counting
+distinct role IDs in the successfully committed reorder batch, including listed
+roles retaining their position. Only an actual order change emits a fact. This
+codec bound introduces no new domain quota.
+
+### Durable external replay codec v1
+
+The signed deterministic-protobuf request hash remains transport authentication.
+Durable replay uses a separate frozen frame after authentication, recursive
+unknown-field rejection and registry/field/details validation, before UUID/string,
+JSONB or SQL timestamp conversion. The frame starts with ASCII domain tag
+`voice.space.audit.append.v1`, then these strings in order: `audit_event_id`,
+`space_id`, `actor_profile_id`, `action`, `target_type`, `target_id`,
+`details_json`. Each string has a uint32 big-endian UTF-8 byte length followed by
+its original validated bytes. Timestamp seconds follow as signed int64 big-endian
+two's-complement, then nanos as uint32 big-endian. Missing Timestamp is invalid;
+present epoch is valid. Valid protobuf dates and nanoseconds are accepted; never
+convert to UnixNano. Full seconds/nanos survive in replay identity even though
+the query projection remains a microsecond PostgreSQL timestamp.
+
+SHA-256 of this frame is fingerprint version 1. The trusted `role`/`chat` origin
+is compared separately. Credential, JTI, request ID and transport metadata are
+excluded; retries use fresh credentials. Accepted alternate outer UUID spellings
+remain different body bytes. New semantic fields require an explicit codec
+version/compatibility decision. Fingerprint equality assumes SHA-256 collision
+resistance; it does not claim indefinite lossless payload retention.
+
+One immutable Space-owned ID registry is keyed globally by `audit_event_id`, not
+by Space or producer. It stores Space ID, `local`/`role`/`chat` origin and external
+fingerprint version/digest without actor/target/details/time payload copies.
+Every local audit INSERT reserves this same namespace. Migration excludes
+concurrent insertion/retention and backfills surviving old IDs as local markers;
+already-deleted historical IDs cannot be reconstructed.
+
+Audit INSERT, same-ID outbox and registry reservation commit in one transaction;
+there is no committed pending receipt. External exact origin/version/fingerprint
+replay succeeds without inserting even after payload retention. A different
+valid body, producer, Space or local-origin collision is `ALREADY_EXISTS` and
+never overwrites evidence. Uniqueness conflicts roll back the attempted
+transaction before reading the committed registry in a fresh transaction.
+Validation/authentication is repeated before replay lookup; invalid changed
+details are `INVALID_ARGUMENT`, not replay success/conflict.
+
+Registry entries have no ordinary TTL or audit/outbox cascade. Delivered-only
+365-day retention removes payload/outbox, preserving receipts so late retries
+cannot resurrect effects. Existing capability-bound compensation may remove its
+pristine local audit/outbox but leaves its non-payload ID fence.
+
+Under accepted composite terminal minimization, migration
+`000029_audit_receipt_minimization` allows only the exact external fingerprint
+erasure at database time `>= space_permanent_purge_fences.purged_at + 30 days`.
+It clears version/digest, retaining the global ID/Space/origin nonpayload marker;
+no actor/content-derived hash remains permanently. The database trigger refuses
+early erasure, marker insertion, key/origin changes, restoration and deletion.
+Cleanup is bounded to 1000 due rows per transaction with `SKIP LOCKED`; retries
+never move the fixed deadline. A failed enclosing transaction restores all
+pre-state, and migration rollback refuses to fabricate already-erased hashes.
+The permanent Space fence already denies late ingestion before any receipt read,
+including while physical cleanup is delayed; a marker never implies historical
+success or permits resurrection. BE-005 owns terminal coordinator integration;
+source capability does not activate P3, and existing hard-delete guards remain.
+
 ### Query, cursor and retention v1
 
 `GetAuditLogRequest` now exposes optional `actor_profile_id` UUID, optional exact
@@ -304,11 +892,11 @@ filters are `INVALID_ARGUMENT`; absent means no filter. Timestamps are valid UTC
 instants and, when both are present, require `from < to`. Page size is 1..100,
 default 50. Results are ordered `created_at DESC,id DESC`.
 
-The shipped unfiltered gRPC read uses a 15-minute HMAC cursor bound to `space_id`,
-reader/access scope and page size, with a first-page tuple ceiling; all replicas
-use the database-owned signing key and recheck ACL on every page. The store already
-supports the full filter-bound query. The handler mapping for the new proto fields
-and the complete target cursor envelope remain pending.
+The gRPC read uses a 15-minute HMAC cursor bound to `space_id`, authenticated
+viewer, access scope, normalized filters and page size, with a first-page tuple
+ceiling; all replicas use the database-owned signing key and recheck ACL on every
+page. `kid` is the base64url SHA-256 identifier of that singleton key; replacing
+the key invalidates old cursors. Issue time and expiry stay fixed across pages.
 
 The complete cursor v1 binds `kid`, version, `space_id`, authenticated
 `viewer_profile_id`, scope `space.audit.read.v1`, normalized actor/action/from/to,
@@ -324,7 +912,8 @@ While a Space is live, ordinary audit rows retain 365 days and only the shipped
 Space-owned retention worker removes delivered expired rows. Accepted P3 purge is
 the other allowed deletion path: ordinary rows are removed after mandatory
 lifecycle facts are reduced to the sole minimal tombstone, retained until
-`purged_at + 365 days`. That BE-245 terminal purge path remains pending.
+`purged_at + 365 days`. Terminal purge is tracked by BE-005 and its Chat
+continuations BE-006/BE-007; this ingestion change does not activate that path.
 
 
 The current `TransferOwnershipRequest` only carries `space_id` and
@@ -419,7 +1008,7 @@ space_members
 ├── space_id (FK)
 ├── profile_id (FK)
 ├── joined_at
-├── nickname (nullable, space-specific)
+├── nickname (nullable, space-specific; UpdateMemberNickname, BE-234-nickname-v1)
 └── UNIQUE(space_id, profile_id)
 
 space_bans
@@ -473,21 +1062,37 @@ message UnpinTreeNodeRequest {
 
 Доменный поток JetStream: **`chat.events`** (совместно с Chat; события спейса и дерева — те же потребители; матрица: [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
 
+Accepted target `BE038-ORDINARY-v1`, not a shipped guarantee: ordinary mutations
+commit domain data and immutable deterministic event bytes/ID/subject in one
+`space_db` transaction. Success records a durable publication obligation without
+waiting for NATS. Fenced expiring claims retry indefinitely; only a matching
+`chat_events` PubAck marks delivery. No global/per-Space ordering is promised:
+consumers refresh current authority rather than replay state deltas. The exact
+coverage, failure/recovery, audience, P3 cleanup and T1–T12 acceptance rules are
+in [ordinary event delivery](../testing/space-ordinary-events-exec-plan.md).
+Audit, ownership, media invalidation and P3 delivery remain distinct.
+
 | Событие                 | Данные                          |
 |-------------------------|---------------------------------|
-| `space.created`         | space_id, owner_id              |
+| `space.created`         | space_id, owner_profile_id      |
 | `space.updated`         | space_id, changed_fields        |
 | `space.deletion_scheduled` | space_id, owner_id, purge_after |
 | `space.restored`        | space_id, owner_id              |
 | `space.deleted`         | space_id (only after converged irreversible purge) |
 | `space.member_joined`   | space_id, profile_id            |
 | `space.member_left`     | space_id, profile_id            |
-| `space.member_banned`   | space_id, account_id, banned_by |
+| `space.member_banned`   | target additive payload: space_id, account_id, banned_by_profile_id |
 | `voice.room_created`         | reserved; not currently emitted |
 | `voice.room_deleted`         | reserved; not currently emitted |
-| `space.tree_node_upserted`   | space_id, node_id, kind, chat_id?, voice_room_id?, **is_pinned**, **pin_order** |
-| `space.tree_node_removed`    | space_id, node_id               |
+| `space.tree_changed` (`change=upserted`) | space_id, node_id, kind, chat_id?, voice_room_id?, **is_pinned**, **pin_order** |
+| `space.tree_changed` (`change=removed`) | space_id, node_id |
 | `space.invite_created`  | space_id, invite_code           |
+
+`SpaceUpdated.changed_fields` is an additive target. Empty legacy or unknown
+keys mean full invalidation; ownership's already saved bytes are not rewritten.
+Tree rows above retain the existing wire subject, not new dual-published
+`space.tree_node_*` subjects. Invite codes and ban identities are privileged
+internal data: no generic Space WS/push broadcast is authorized.
 
 The separate `space.voice_room_access_invalidated` subject carries an
 immutable `ChatStreamEvent` with `event_id`, `space_id`, `access_epoch` and
@@ -496,6 +1101,43 @@ outbox with the authority mutation. Voice's durable `voice_space_media_chat`
 consumer ACKs after current Space/Role authority is reconciled across the
 active Space room index; optional hints never narrow that full pass. This typed
 arm does not change the legacy Chat stream envelope or `space.updated` payload.
+
+## BE-065 Role override target validation (accepted target)
+
+Add `/voice.space.v1.SpaceService/ValidateRoleOverrideTarget` with package-local
+`ValidateRoleOverrideTargetRequest { string space_id = 1; optional string voice_room_id = 2; }`
+and empty `ValidateRoleOverrideTargetResponse`. The source implementation uses
+a dedicated protected listener; runtime acceptance is separate. Configuration
+is documented with the complete caller/error/consistency contract in
+[Role's BE-065 contract](role-service.md#be-065-protected-override-target-validation-accepted-target);
+the [execution plan](../testing/role-override-target-validation-exec-plan.md)
+defines required verification.
+
+Only a verified Role workload (`principal_type=service`, `iss=role`,
+`sub=service:role`, `aud=space`, exact full RPC and deterministic whole-body hash,
+including optional presence) may call. Use protected TLS/mTLS, Role JWKS/replay,
+fresh JTI and canonical signed request ID matching the sole `x-request-id`, with
+the standard Phase-0 <=30 s lifetime. Raw identity metadata, duplicates,
+delegated-user/end-user/bot and all other services reject before store. The
+handler independently requires verified Role context. Do not widen existing
+Social-only or Gateway lifecycle listeners; ordinary/public listeners return
+`UNAVAILABLE` before domain access. No public Gateway route is added.
+
+Under one consistent local store/lifecycle serialization boundary, an absent
+room field validates the live Space only. A present room must be a canonical
+non-nil UUID (present-empty is `INVALID_ARGUMENT`) resolving to a live
+`voice_rooms` row in that exact Space. Space ID also must be canonical/non-nil.
+Missing Space or absent/deleted/foreign room is indistinguishable `NOT_FOUND`.
+All known non-live deletion/recovery states, active ownership journal and
+terminal lifecycle fences deny with `UNAVAILABLE`; DB/state failure never means
+LIVE. Missing legacy fence follows existing canonical admission semantics.
+Do not return owner/member projection or call Role/ACL-enriched provider APIs.
+
+This result is a fresh point-in-time existence check, not a distributed foreign
+key or reservation. Deletion after owner read may leave an inert Role reference;
+actual operations still enforce current existence/lifecycle. IDs cannot be reused
+or reparented, and a permitted LIVE restoration requires a new validation attempt.
+Role override removal remains local cleanup even for an absent target.
 
 ## Зависимости
 
@@ -735,18 +1377,30 @@ not expand the ownership-proof implementation or reuse its tokens/receipts.
 
 ## P3 Space lifecycle coordinator (accepted target; not implemented)
 
+Full deletion activation must preflight the complete participant capability
+manifest before `SCHEDULE_PENDING` or Auth consume. Voice currently declares
+`EJECT_ONLY`; see [Voice P3](voice-service.md#p3-space-lifecycle-participant-target).
+Its restrictive native barrier/exact drain is local progress, not a completed
+freeze receipt: self-hosted original/refreshed credentials lack durable provider
+retirement proof. Keep Voice outstanding and do not start the seven-day schedule,
+restore LIVE or bypass revocation through purge. A capability downgrade preserves
+already committed restrictive intent and exact retry targets; no compensating
+LIVE or weaker success grade is authorized. A future provider path requires
+operation-bound coverage/retirement proof and qualified current/historical issuer
+coverage; a boolean setting or empty roster does not satisfy this prerequisite.
+
 Space owns the aggregate and durable participant ledger. States are `LIVE`,
 `SCHEDULE_PENDING`, `FREEZE_PENDING`, `SCHEDULED`, `RESTORE_DECIDED`,
 `PURGE_DECIDED`, `PURGING`, `PURGED`; generations are positive and monotonic.
-The release manifest fixes ten participants: Role, Chat, Messaging, File, Voice,
-Matchmaking, Search, Subscription, Bot and Notification. Service absence never
+The release manifest fixes eleven participants: Role, Chat, Messaging, File, Voice,
+Matchmaking, Search, Subscription, Bot, Notification and Realtime. Service absence never
 removes a participant: an empty result still has an immutable receipt.
 
 Before Auth consume Space commits the immutable operation binding and
 `SCHEDULE_PENDING`. After an exact receipt it enters `FREEZE_PENDING`, where
 Chat first fences and captures the immutable sorted chat manifest; Messaging
-imports it; File preliminarily fences and seals exact `SPACE`, `CHAT` and
-`MESSAGING` reference declarations/pages; then all ten participants acknowledge
+imports it; Notification and Realtime import every exact Chat page; File preliminarily fences and seals exact `SPACE`, `CHAT` and
+`MESSAGING` reference declarations/pages; then all eleven participants acknowledge
 the same root manifest. Only after the complete barrier does fresh PostgreSQL
 time under the Space lock set `SCHEDULED`, `scheduled_at` and
 `purge_after = scheduled_at + interval '7 days'`. Subphases and exact manifest
@@ -759,7 +1413,7 @@ commits irreversible `PURGE_DECIDED`, sends that fence to all participants,
 then retries destructive work. Role retirement is first. Messaging deletes the
 saved Chat domain and obtains File release acceptance; Chat deletes its rows
 only afterward. Other participants may converge in parallel. Local `PURGED`,
-the tombstone and ready `space.deleted` outbox row commit only after all ten
+the tombstone and ready `space.deleted` outbox row commit only after all eleven
 validated completion receipts. File receipt proves durable reference/GC
 handoff, not physical R2 absence.
 
@@ -775,7 +1429,7 @@ transaction. Concurrent participant responses cannot replace each other's
 progress. Exact receipt replay remains valid after the aggregate advances; a
 changed receipt for an already completed participant conflicts. Restore completion
 uses fresh database time under that same lock and commits `LIVE` with its stable
-`space.restored` outbox row only after the ten-participant barrier. These durable
+`space.restored` outbox row only after the eleven-participant barrier. These durable
 transitions do not themselves authenticate network callers or activate the public
 coordinator. Schedule reservation replay validates the original immutable binding
 and loads saved progress without resetting generation or repeating current-owner
@@ -845,7 +1499,7 @@ manifest_sha256,item_count)`. Its receipt adds stable `receipt_id`, fixed
 `applied_at`. A purge request replaces desired state with `purge_decided_at`;
 its receipt accepts only `COMPLETED` and records `completed_at`. Participant IDs
 are Role=1, Chat=2, Messaging=3, File=4, Voice=5, Matchmaking=6, Search=7,
-Subscription=8, Bot=9, Notification=10; zero/unknown IDs or states are invalid.
+Subscription=8, Bot=9, Notification=10, Realtime=11; zero/unknown IDs or states are invalid.
 Role returns the stricter retirement receipt. Exact replay returns stored bytes;
 changed bytes for the same operation/generation conflict, timeouts never
 manufacture a receipt, and `CONTRACT_MISMATCH` is never auto-skipped.
@@ -865,3 +1519,15 @@ is audited, and uses the shared `P30D` maximum restorable-backup window. Old
 versions are destroyed only after no retained row or restorable backup needs
 them. The owner-approved U5-A decision explicitly accepts this purpose-specific
 pseudonymous Space tombstone HMAC as compatible with account erasure.
+
+### Realtime participant11 admission boundary
+
+BE-REALTIME-P3-DURABLE-ADMISSION-v1 adds Realtime without renumbering IDs1–10.
+Migration `000034_realtime_lifecycle_participant` widens the durable participant
+and compact completion constraints and terminal hard-delete predicate to11.
+Ten historical completions cannot schedule, start destructive work or authorize
+local hard deletion. Realtime manifest-import receipts are not strong FROZEN
+receipts: the latter require exact sealed coverage and no unresolved durable
+admissions across process incarnations. Dead-incarnation recovery remains
+unsupported without qualified termination evidence; timeout never skips11.
+This extension neither activates public P3 nor establishes old-writer coverage.

@@ -1,5 +1,35 @@
 # Auth Service
 
+## Space admission owner observation (SPACE-ADMISSION-IDENTITY-v1)
+
+`ObserveSpaceAdmissionSubject` is an additive read-only RPC on the existing
+mutual-TLS session-floor listener. Only the exact signed `service:space`
+principal may call it; the ordinary and proof listeners omit it. It binds the
+full deterministic protobuf request, request ID and fresh replay-protected JTI.
+Version 1 carries phase, applicant/reviewer role, exact account/profile/Space,
+32-byte admission-context digest and an optional interactive epoch. START and
+SUBMIT are applicant-only with an epoch; READ requires the acting subject's
+epoch; APPROVE has an epoch only for the reviewer; FIRST_PUBLISH has none.
+
+Auth reads active/nondeleted account type (`regular|guest`), positive security
+revision and max(durable epoch, retained Redis floor), checks the interactive
+epoch when present, calls User's dedicated admission eligibility method, then
+reads Auth again. User I/O holds no Auth mutation transaction or monitor. The
+response is ELIGIBLE only with exact request digest/account/profile echoes and
+positive revisions/floor; it never attests phone, Role permission or membership.
+Missing/ineligible facts deny; unknown/corrupt/unavailable authority fails closed.
+No positive cache or old applicant session is used for delayed decisions.
+
+`auth.space-admission.enabled=true` requires JDBC, the shared Auth principal
+issuer bean and `AUTH_SPACE_ADMISSION_USER_GRPC_ADDR`, `_TLS_CA_FILE`,
+`_TLS_CERT_FILE`, `_TLS_KEY_FILE`, `_TLS_SERVER_NAME`. These names share the
+`AUTH_SPACE_ADMISSION_USER` prefix. They configure a separate mutual-TLS User
+connection; SDK client settings are not reused. The outer observation is capped
+at 2 seconds and the nested User deadline cannot exceed its remaining time.
+Space still owns the strict earliest-observation-to-local-decision 5-second
+budget and all journal/policy/Role/native first-publication gates. This source
+does not establish assembled admission runtime or authorize activation.
+
 ## Обзор
 
 Сервис аутентификации и управления сессиями. Единственный сервис на Java — обусловлено зрелостью Spring Security для сложных auth-сценариев.
@@ -364,6 +394,9 @@ session revocation, then enroll the new factor.
 the response contains the replacement `AuthSession`. The active profile claim is
 selected by Auth using the User-owned profile contract described in
 [multi-profile.md](../features/multi-profile.md).
+The legacy User `SwitchProfile` RPC supplies profile validation and a profile
+response; it does not replace an Auth session. The public switch route stays
+on Auth REST. See the [User/Auth boundary](user-service.md#переключение-профиля-и-сессия-auth).
 
 `SetAccountStatus` is the internal platform-moderation RPC. Its request carries
 `account_id`, `status` (`active` or `suspended`), and `reason`; it returns an
@@ -721,6 +754,45 @@ acceptance are tracked in [todo/client.md](../todo/client.md) and
 
 ## Публикуемые события (→ NATS)
 
+### BE211-OBS-v1: ordinary Auth observations (accepted contract)
+
+`user.registered`, `user.logged_in`, `user.logged_out`, and `user.2fa_enabled`
+are observations of completed operations, not authorization or exhaustive audit
+authority. Their consumer is Analytics (registered/login). Publish the existing
+binary `UserStreamEvent` with UUID `event_id`, UTC `occurred_at`, matching
+subject/oneof to externally provisioned `user_events`; never create the stream.
+Retries retain exact bytes, ID, timestamp and `Nats-Msg-Id`. Only a positive
+PubAck for `user_events` confirms publication. Duplicates and loss are possible;
+there is no ordering, exactly-once, durable spool or backfill guarantee.
+
+Enqueue only after the whole service operation succeeds and relevant SQL commits,
+using an outer transaction's after-commit callback when necessary. Observation
+failure must not undo security state, fail the API, wait for NATS on the request
+thread, or use caller-runs fallback. Existing Auth failures remain unchanged.
+One process dispatcher bounds outstanding (including retry/in-flight) to 1024,
+serialized bytes to 8 MiB, and each event to 16 KiB. It attempts at most three
+publications with one-second PubAck timeout, delays 100 ms then one second, and
+30-second queue lifetime. Shutdown drains for a bounded interval; crash, expiry,
+overflow, oversize, shutdown and exhausted attempts may lose observations.
+Fixed-label accepted/published/retried/dropped counters and pending gauge expose
+operational outcomes; dropped reasons are serialization, oversize, capacity,
+expired, attempts_exhausted, shutdown, and unavailable. Unconfirmed delivery is
+not certainty of broker loss. Never log payloads, account IDs, IP, device info or
+credentials, or use them as labels. Noop/test mode is not delivery evidence.
+
+Register emits only after full ordinary registration, with persisted account type
+and method guest/email/phone; pending email may still be guest. Login emits only
+for ordinary Login session issuance, never refresh/profile switch. Logout uses
+account/device from its validated refresh record and emits after revocation
+succeeds. Verify2FA emits only for a committed false-to-true confirmation, never
+secret enrollment, failed/repeated confirmation or rolled-back issuance. Missing
+device info uses `{}`. All current REST/gRPC producers deliberately set login
+`ip` to empty, meaning unavailable/unverified; consumers accept it. Forwarding
+headers, Gateway peer and device fields are not client-IP provenance. This slice
+adds no LoginRequest/Gateway metadata. Existing guest conversion, deletion and
+restoration contracts are unchanged. Runtime and deployed acceptance require
+their own evidence.
+
 Доменный поток JetStream: **`user.events`** (совместно с User для событий профиля; матрица: [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
 
 | Событие                 | Данные                      |
@@ -758,6 +830,23 @@ pending targets. Provider outage сохраняет последнее verified 
   каждого `ClientCall`, а не один раз при создании Spring singleton stub.
 - **Redis** — JWT blacklist (запись при logout и отзыве одного access token), OTP throttling и T056-P1 minimum-epoch floor без TTL. Auth записывает floor операцией `max` без TTL, а Gateway и Realtime в strict-режиме читают его fail-closed. Сквозные HTTP rate limits (в т.ч. лимит попыток входа с одного IP) — на **API Gateway**; те же лимиты вторым слоем в Auth не дублируем. Подробнее: [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).
 - **Resend** — отправка email (верификация, password reset)
+
+### Local mail transport acceptance
+
+`BE107-MAIL-HARNESS-v1` separates successful provider submission from inbox
+delivery. The disposable Resend fixture supports per-recipient
+`ACCEPT_THEN_DELIVER`, `REJECT_AT_SUBMISSION`, and `ACCEPT_THEN_BOUNCE` modes.
+An accepted submission has an immutable message ID; a test explicitly settles
+that ID after Auth's send response. Submission capture (`/emails/latest`) is
+inspection only. Only the separate delivered inbox is recipient delivery proof.
+A rejected submission returns non-2xx and has no accepted/inbox message.
+
+The fixture's permanent bounce produces no Auth webhook or callback. It cannot
+verify/promote an account, reset a password, revoke sessions, or invalidate an
+otherwise valid OTP. Recovery uses the ordinary resend and expiry rules. OTPs
+expire at equality with their ten-minute deadline; invalid and expired codes
+share `invalid_otp`. No live delivery guarantee follows from a successful adapter
+return, fixture capture, NoopMailSender, or CapturingMailSender.
 - **NATS** — публикация событий
 
 ## Безопасность
@@ -766,9 +855,41 @@ pending targets. Provider outage сохраняет последнее verified 
 - TOTP секреты: AES-256-GCM шифрование at rest; `AUTH_TOTP_ENCRYPTION_KEY` обязателен при `auth.persistence=jdbc` без `auth.totp.test-bypass` (иначе Auth не стартует; `DEFAULT_DEV_KEY` только memory/dev bypass)
 - Refresh token: только хэш в БД, оригинал — только клиенту
 - Нет SMS 2FA (v1) — только TOTP
-- IP logging для аудита
+- Ordinary Auth observations are not an audit ledger; BE211-OBS-v1 uses unknown
+  login IP and never logs raw IP/device/account data. Verified client-IP
+  propagation requires its own protected contract before activation.
 
 ### T056-P1: session epoch
+
+`AuthService.GetRoleSessionEpochFloor` is a separate Role-only protected RPC
+(`GetRoleSessionEpochFloorRequest.account_id = 1`, response
+`session_epoch_floor = 1`). It reads the same durable account epoch and retained
+Redis floor as `GetVoiceSessionEpochFloor`, returns their positive maximum and
+never creates a new epoch/cache. Missing account returns `NOT_FOUND`; missing,
+invalid or unavailable authority returns `UNAVAILABLE`. Both requests reject
+unknown fields and noncanonical or zero account UUIDs before persistence reads.
+The dedicated session-floor listener exposes only its explicitly registered floor RPCs;
+ordinary and ownership/deletion proof listeners expose neither. Role must use
+its own `service:role` principal, exact full RPC/request hash/request ID and fresh
+JTI, issuer-specific HTTPS JWKS in `S2S_JWKS_URLS_JSON`, and a client certificate
+trusted by `AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE`. Voice keeps its exact
+`service:voice` endpoint and cannot call the Role method (or vice versa).
+
+`AuthService.GetSpaceSessionEpochFloor` adds a distinct Space-only method with
+`GetSpaceSessionEpochFloorRequest.account_id = 1` and response
+`session_epoch_floor = 1`. It uses the same positive durable/retained maximum,
+with canonical nonzero account UUID and unknown-field rejection. Missing or
+deleted accounts return `NOT_FOUND`; invalid/missing floor, DB/Redis failure,
+or unavailable JWKS/replay authority returns `UNAVAILABLE`. It never initializes
+or caches an epoch. Only signed `iss=space`, `sub=service:space`,
+`principal_type=service` may call the exact RPC with audience `auth`, exact
+request ID/body hash, fresh JTI and the existing mutually authenticated session
+floor transport. The dedicated floor listener exposes these three exact methods;
+ordinary and ownership/deletion listeners expose none. Gateway delegated user,
+Role, Voice and other services cannot call this method; Space cannot borrow
+Role/Voice floor methods. Existing Role/Voice caller contracts are unchanged.
+This producer is a prerequisite for native Space creator freshness, not proof
+that Gateway/Space creation has been assembled or activated.
 
 `accounts.session_epoch` — положительный монотонный durable source of truth
 Auth. Auth атомарно увеличивает его для отзыва всех сессий и никогда не

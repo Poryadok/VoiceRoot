@@ -143,6 +143,9 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 	if row.Type != "group" && row.Type != "channel" {
 		return nil, status.Error(codes.InvalidArgument, "only group and channel chats can be updated")
 	}
+	if req.MemberAdditionsEnabled != nil && (row.SpaceID != nil || row.ManagedByApplicationID != nil) {
+		return nil, status.Error(codes.FailedPrecondition, "ordinary chat permissions unavailable for this scope")
+	}
 	role, err := s.DM.GetMemberRole(ctx, chatID, caller)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -181,7 +184,7 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 	}
 	changedFields := updateChatChangedFields(req)
 
-	slowModeOnly := slowMode != nil && name == nil && avatar == nil && topic == nil && threadsEnabled == nil && allowUserMainFeed == nil && allowGuests == nil
+	slowModeOnly := slowMode != nil && name == nil && avatar == nil && topic == nil && threadsEnabled == nil && allowUserMainFeed == nil && allowGuests == nil && req.MemberAdditionsEnabled == nil
 	if row.SpaceID != nil && slowModeOnly && s.Roles != nil {
 		if err := canSetSpaceChatSlowMode(ctx, s.Roles, *row.SpaceID, caller); err != nil {
 			return nil, err
@@ -195,8 +198,23 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 	if row.SpaceID != nil && allowGuests != nil {
 		return nil, status.Error(codes.FailedPrecondition, "space chat guest admission is owned by Space and Role services")
 	}
-	updated, err := s.DM.UpdateGroupChat(ctx, chatID, name, avatar, topic, slowMode, threadsEnabled, allowUserMainFeed, allowGuests)
+	if row.SpaceID != nil && req.MemberAdditionsEnabled != nil {
+		return nil, status.Error(codes.FailedPrecondition, "space invitations are owned by Space and Role services")
+	}
+	var updated *store.ChatRow
+	if req.MemberAdditionsEnabled == nil {
+		updated, err = s.DM.UpdateGroupChat(ctx, chatID, name, avatar, topic, slowMode, threadsEnabled, allowUserMainFeed, allowGuests)
+	} else {
+		permissionStore, permissionErr := s.permissionStore()
+		if permissionErr != nil {
+			return nil, permissionErr
+		}
+		updated, err = permissionStore.UpdateGroupChatWithPermissions(ctx, chatID, caller, name, avatar, topic, slowMode, threadsEnabled, allowUserMainFeed, allowGuests, req.MemberAdditionsEnabled)
+	}
 	if err != nil {
+		if req.MemberAdditionsEnabled != nil {
+			return nil, chatPermissionError(err)
+		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if updated == nil {
@@ -235,6 +253,9 @@ func updateChatChangedFields(req *chatv1.UpdateChatRequest) []string {
 	}
 	if req.AllowGuests != nil {
 		fields = append(fields, "allow_guests")
+	}
+	if req.MemberAdditionsEnabled != nil {
+		fields = append(fields, "member_additions_enabled")
 	}
 	return fields
 }
@@ -316,7 +337,14 @@ func (s *ChatGRPC) AddMembers(ctx context.Context, req *chatv1.AddMembersRequest
 	if authctx.IsInternalService(ctx) {
 		ctx = store.WithGroupMinMembers(ctx, 2)
 	}
-	added, err := s.DM.AddGroupMembersWithGuestAdmission(ctx, chatID, ids, guestIDs)
+	permissionStore, permissionErr := s.permissionStore()
+	if permissionErr != nil {
+		return nil, permissionErr
+	}
+	added, err := permissionStore.AddGroupMembersAs(ctx, chatID, caller, ids, guestIDs)
+	if errors.Is(err, store.ErrRoleChangeForbidden) || errors.Is(err, store.ErrNotGroupMember) || errors.Is(err, store.ErrChatPermissionScope) {
+		return nil, chatPermissionError(err)
+	}
 	if errors.Is(err, store.ErrGroupTooFewMembers) {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}

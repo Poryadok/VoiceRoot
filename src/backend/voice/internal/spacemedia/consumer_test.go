@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"voice/backend/voice/internal/spacegatetest"
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
@@ -40,12 +41,12 @@ func TestSpaceAccessMessageACKFollowsFullReconciliation(t *testing.T) {
 	ctx := context.Background()
 	spaceID, roomID, voiceRoomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	calls := newRoomStore(t, ctx, spaceID, roomID, voiceRoomID, profileID)
-	coordinator := &Coordinator{
+	coordinator := &Coordinator{ProjectionGates: spacegatetest.New(),
 		Store:               calls,
 		SessionEpochChecker: currentEpochChecker{},
 		Admissions:          fakeRecoveryForCommittedCall(t, ctx, calls, roomID),
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			profileID: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 4},
+			profileID: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 4, CommunicationStateResolved: true},
 		}},
 		Grants: fakeGrants{byProfile: map[string]s2s.VoiceRoomGrants{
 			profileID: {PolicyEpoch: 7, CanJoin: true, CanSubscribe: true, CanPublishAudio: true},
@@ -81,12 +82,12 @@ func TestSpaceAccessMessageNAKsUntilEveryEjectionIsComplete(t *testing.T) {
 	require.NoError(t, err)
 	participant := call.SpaceMedia[profileID]
 	media := &fakeMedia{err: errors.New("remove failed")}
-	coordinator := &Coordinator{
+	coordinator := &Coordinator{ProjectionGates: spacegatetest.New(),
 		Store:               calls,
 		SessionEpochChecker: currentEpochChecker{},
 		Admissions:          fakeRecoveryForCommittedCall(t, ctx, calls, roomID),
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			profileID: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 4},
+			profileID: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 4, CommunicationStateResolved: true},
 		}},
 		Grants: fakeGrants{byProfile: map[string]s2s.VoiceRoomGrants{}},
 		Media:  media,
@@ -122,7 +123,7 @@ func TestSpaceAccessMessageNAKsUntilEveryEjectionIsComplete(t *testing.T) {
 
 func TestMalformedSpaceAccessMessageIsTerminatedWithoutPayloadLogging(t *testing.T) {
 	msg := &invalidationAckMessage{}
-	err := handleSpaceAccessInvalidation(context.Background(), spaceAccessSubject, []byte("not-protobuf"), msg, &Coordinator{})
+	err := handleSpaceAccessInvalidation(context.Background(), spaceAccessSubject, []byte("not-protobuf"), msg, &Coordinator{ProjectionGates: spacegatetest.New()})
 	require.Error(t, err)
 	require.Zero(t, msg.acked)
 	require.Zero(t, msg.nacked)

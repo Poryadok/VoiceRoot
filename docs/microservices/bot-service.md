@@ -1,10 +1,34 @@
 # Bot Service
 
+`SPACE_PRINCIPAL_JWKS_URL` accepts the canonical Space provider path
+`/.well-known/jwks.json` and the existing dedicated-provider alias
+`/space/jwks.json`. Both require exact HTTPS URLs without credentials, query,
+fragment or alternate escaped paths. Space's dedicated JWKS provider currently
+requires trusted server TLS and does not request a client certificate. The alias
+already worked; canonical-path compatibility does not imply an existing
+deployment outage or introduce another JWKS server.
+
 Игровые сценарии и source audit baseline: [game-bot-interactions.md](../features/game-bot-interactions.md).
 Новые card/command/opt-in contracts там помечены **proposed**; существующие RPC
 и scopes этого документа не получают новые гарантии доставки автоматически.
 
 ## Обзор
+
+### BE-131 current installation authority
+
+`CheckBotInstallationScope` is a protected Space-only decision read on Bot's
+existing Space lifecycle mTLS listener. Its signed request binds bot, Space,
+actor profile, exact installation UUID and `TEXT_CHAT_CREATE_IN_SPACE`. Ordinary
+and Game Integration listeners do not expose it. Bot checks its current exact
+installation, actor, live bot status, current scope and local LIVE lifecycle
+fence; missing/revoked/mismatched state returns `allowed=false` with the exact
+requested tuple. Authority/storage failure returns `UNAVAILABLE`, never a
+negative decision or permission to compensate. This read grants no user
+identity and does not bypass Space's current admission checks. Space consumes
+the response only after authenticating its transport and comparing every echoed
+field to the immutable composite intent. No raw GetBot/ListInstalledBots
+fallback is permitted. Existing Space lifecycle TLS/JWKS/replay configuration
+is reused; this does not activate P3 or change generic bot scopes.
 
 Платформа для ботов: реестр приложений, slash-команды, webhook-доставка, install в спейс, presence.
 
@@ -22,6 +46,11 @@
 - Bot presence (`bot_presence`, `TouchPresence`); `online` в `ListSlashCommandsForChat` и `ListInstalledBots`
 - Scopes: `TEXT_CHAT_SEND_MESSAGES`, `DM_SEND`, `SPACE_VIEW_MEMBER_LIST`, `MEMBER_ASSIGN_ROLES`, `TEXT_CHAT_CREATE_IN_SPACE`, `SPACE_MANAGE_ROLES` (privileged), `TEXT_CHAT_READ_HISTORY` (privileged); строки совпадают с [role-service.md](role-service.md)
 - Rate limits: 5000 API req/min и 100 role ops/min — Gateway REST (`BotAPI`, `BotRoleOps`, `429` + `Retry-After`); 10 созданий текстовых чатов / день — Bot Service (`bot_daily_chat_creates`, `CreateBotChat`); прямой gRPC обходит Gateway limiter — см. [api-gateway.md](api-gateway.md)
+- Bot-token runtime gRPC дополнительно ограничивается Bot-owned limiter. При
+  настроенном `BOT_REDIS_ADDR` ошибка Redis возвращает `Unavailable` до вызова
+  обработчика; запрос без проверки общей квоты не выполняется. Исчерпанная
+  квота возвращает `ResourceExhausted`, после восстановления Redis запросы
+  снова проверяются по общей квоте. Внешний ответ не содержит диагностику Redis.
 - **gRPC access (v1):** `BOT_GRPC_GATEWAY_ONLY=true` отклоняет прямой gRPC без `x-voice-internal: true` (Gateway) или bot token / account context. Эти legacy callers остаются ограничены Bot-owned method/scope checks; прямой сетевой доступ к Bot не заменяет проверку actor. Prod NetworkPolicy — [`deploy/templates/network-policy-voice-bot.yaml`](../../deploy/templates/network-policy-voice-bot.yaml); mTLS — [`DEPLOYMENT.md`](../DEPLOYMENT.md).
 - Bot token: перманентный, ручной отзыв (`RegenerateToken`)
 - Bot DM: только в ответ на сообщение пользователя (v1)
@@ -131,6 +160,12 @@ service BotService {
   - Role: `DeleteRolesCreatedByProfile` (роли с `created_by_profile_id = actor_profile_id`), затем `GetMemberRoles` + `RevokeRole` для назначенных ролей бота
   - Messaging: `UnpinMessagesBySenderInChats` по whitelisted `chat_id` и `sender_profile_id = actor_profile_id`
 - **ListInstalledBots**: `InstalledBot.online` из `bot_presence` (тот же порог, что для slash `online`).
+- `ListInstalledBots.allowed_chats` получает текущий group/channel type через
+  Chat `GetChat` с исходным caller context. Тип принимается только для точного
+  Chat ID в запрошенном Space. При недоступном/запрещённом lookup, неполном или
+  несовпадающем ответе ID из whitelist сохраняется, optional `ChatRef.type`
+  отсутствует; channel по умолчанию не подставляется. Повторяющиеся Chat ID
+  гидратируются один раз на запрос; следующий запрос снова читает Chat.
 
 ### Presence
 
@@ -212,6 +247,14 @@ bot_message_deliveries
 ```
 
 ## Webhook доставка
+
+`BOT_WEBHOOK_DELIVERY_ATTEMPTS` задаёт число HTTP attempts на один вызов
+interaction/autocomplete delivery, включая первый (default `3`).
+`BOT_WEBHOOK_RETRY_BACKOFF_MS` задаёт начальную задержку в миллисекундах
+(default `100`); следующие задержки удваиваются. Пустые, нечисловые и
+неположительные значения используют default. Значения читаются при каждом
+вызове delivery; context cancellation прерывает ожидание следующей попытки.
+Это настройки HTTP delivery, а не durable outbox lease/retry budget.
 
 ```
 Event (NATS: message in whitelisted chat) ──► Bot Service
@@ -324,3 +367,29 @@ chat whitelists, bot memberships/projections and deferred deliveries, then
 persists a permanent compact `PURGED` fence. Full request/receipt bytes retain
 30 days from this participant's completion; delayed lower-generation work is a
 no-op.
+
+The message recipient producer, webhook worker and development polling send
+share the participant's Space advisory guard. They acquire all distinct actual
+Space keys in ascending order before bot, whitelist and delivery/event row locks,
+then read lifecycle state in a fresh statement after waiting. A missing local
+head preserves sparse admission; any persisted non-`LIVE` state denies. A changed
+captured whitelist binding rolls back for rediscovery, never adds another Space
+lock after row locks. Installation/uninstallation and whitelist mutations take
+the exclusive guard first. An admitted bounded webhook/stream send holds its
+shared guard through transaction end, so freeze cannot acknowledge its receipt
+until that attempt finishes. Message polling rows persist their validated Space;
+legacy NULL-Space message rows must resolve current whitelist authority and
+cannot bypass a known fence. Terminal canceled work cannot be rearmed by retry
+bookkeeping. This is the message-path protocol; command/deferred authority,
+manifest import, retention and full participant convergence remain target work.
+
+Every listener registering BotService installs a method-specific native gRPC
+transport tap for `PollEvents`. It caps the whole RPC at 25 seconds, preserving
+an earlier client deadline. In pinned grpc-go 1.70 the tap context is captured
+before native stream write quota initialization, so expiration terminates an
+actual flow-control-blocked `Send`, rather than only a DB/application context.
+The handler calls `Send` synchronously under the guard and cancels the tap budget
+on exit; no send goroutine survives rollback or guard release. A successful
+`Send` means transport enqueue, not receiver acknowledgement: bytes from an
+already admitted send may arrive after a fence receipt. The guarantee is no new
+post-fence admission and no active application send after releasing its guard.

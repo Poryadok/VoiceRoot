@@ -7,7 +7,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	rolev1 "voice.app/voice/role/v1"
 	"voice/backend/pkg/principal"
+	"voice/backend/role/permissions"
 )
 
 type Verifier interface {
@@ -49,6 +51,17 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 		if err != nil {
 			return nil, verificationStatus(err)
 		}
+		if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
+			var decisionErr error
+			if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.MemberManageNicknames {
+				decisionErr = RequireNicknamePermission(principal.WithVerified(ctx, verified), req)
+			} else {
+				decisionErr = validateCreationDecision(verified, message, transport.RequestID, requestHash)
+			}
+			if decisionErr != nil {
+				return nil, decisionErr
+			}
+		}
 		return handler(principal.WithVerified(ctx, verified), request)
 	}
 }
@@ -75,7 +88,16 @@ func verificationStatus(err error) error {
 // listener without consuming protected verifier dependencies.
 func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+
+		if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
+			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.MemberManageNicknames {
+				return nil, status.Error(codes.PermissionDenied, "protected nickname decision listener required")
+			}
+		}
 		switch info.FullMethod {
+		case rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName,
+			rolev1.RoleService_RemoveMemberRoles_FullMethodName:
+			return nil, status.Error(codes.Unavailable, "protected method unavailable on ordinary listener")
 		case "/voice.role.v1.RoleService/ApplySpaceLifecycleFence":
 			return nil, status.Error(codes.Unavailable, "protected method unavailable on ordinary listener")
 		case "/voice.role.v1.RoleService/GetOwnershipTransferCapabilities",

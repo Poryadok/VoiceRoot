@@ -90,7 +90,7 @@ func ConfigFromEnv(getenv func(string) string) (Config, bool, error) {
 	}
 	if spaceCount > 0 {
 		parsed, err := url.Parse(cfg.SpaceJWKSURL)
-		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != "/space/jwks.json" {
+		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.RawPath != "" || (parsed.Path != "/.well-known/jwks.json" && parsed.Path != "/space/jwks.json") {
 			return Config{}, true, errors.New("space principal JWKS URL must use the HTTPS Space JWKS endpoint")
 		}
 	}
@@ -308,7 +308,7 @@ func (r *Runtime) VerifySpace(ctx context.Context, token, method, requestID, has
 	if r == nil || r.spaceResolver == nil || r.replayGuard == nil {
 		return principal.Principal{}, errors.New("bot Space lifecycle runtime unavailable")
 	}
-	if method != "" && method != "/voice.bot.v1.BotService/ApplySpaceLifecycleFence" && method != "/voice.bot.v1.BotService/PurgeSpace" {
+	if method != "" && method != "/voice.bot.v1.BotService/ApplySpaceLifecycleFence" && method != "/voice.bot.v1.BotService/PurgeSpace" && method != "/voice.bot.v1.BotService/CheckBotInstallationScope" {
 		return principal.Principal{}, errors.New("space principal method is not allowed")
 	}
 	parts := strings.Split(token, ".")

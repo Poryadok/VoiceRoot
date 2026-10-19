@@ -10,6 +10,11 @@ var (
 		Name: "analytics_ingest_events_total",
 		Help: "Total analytics events accepted for buffering",
 	})
+	BatchSize = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "analytics_ingest_batch_size",
+		Help:    "Events per nonempty batch flush attempt, including failed attempts and retries",
+		Buckets: prometheus.ExponentialBuckets(1, 10, 5),
+	})
 	FlushBatches = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "analytics_flush_batches_total",
 		Help: "Total ClickHouse batch flushes",

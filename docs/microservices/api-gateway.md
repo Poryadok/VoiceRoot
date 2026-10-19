@@ -20,6 +20,52 @@
 - TLS termination
 - Request ID генерация и propagation (для трейсинга)
 
+## Verified Space creator dispatch
+
+`POST /api/v1/spaces` uses the protected Space public lifecycle client configured
+by `GATEWAY_SPACE_LIFECYCLE_*`. It has no ordinary gRPC or REST fallback.
+The existing protobuf request and successful HTTP200 response stay unchanged;
+unknown/duplicate protobuf JSON fields are rejected before dispatch. This POST
+performs one dispatch and does not retry an ambiguous result with a new token.
+
+Creator authority requires a real Auth JWKS-validated Bearer JWT with configured
+issuer and audience, blacklist and
+strict session-floor checks. Static development tokens, including the static
+branch of mixed authentication, cannot issue it. Account/profile IDs must be
+canonical nonnil UUIDs, epoch positive, session unexpired, and the signed
+`account_type` exactly `regular`; the legacy missing-type default is not proof.
+The JWT projection retains the raw authenticated account type separately from
+the compatibility value used by older routes.
+
+Gateway signs `delegated_user` for audience `space`, exact full `CreateSpace`
+method, complete deterministic protobuf hash, fresh transport request UUID and
+JTI, verified account/profile/epoch and explicit regular type. Its lifetime is
+at most 30 seconds and no longer than the authenticated session. Only this
+credential and transport request ID are forwarded as authority metadata.
+
+This producer does not activate native Space creation on its own. The receiving
+Space implementation must enforce the protected method, ordinary-listener deny,
+fresh Auth-owned `GetSpaceSessionEpochFloor`, replay continuity and atomic native
+publication required by `SPACE-NATIVE-MEMBERSHIP-v1` / creator cases C01–C12.
+Those receiver/Auth/assembled runtime proofs remain separate prerequisites.
+
+## Outbound gRPC resilience
+
+Ordinary upstream ClientConns created by `grpcClientsFromEnv` use the shared
+unary breaker contract in [MICROSERVICES](../MICROSERVICES.md#отказоустойчивость).
+Each connection has independent full-method state and shared immutable
+defaults; there is no enable switch or environment tuning in this slice.
+OPEN/capacity admission rejects with `Unavailable` and the existing HTTP503
+mapping. It never returns cached authority, empty success or fallback content.
+Health Check/List bypass business state; startup/readiness semantics stay intact.
+
+The interceptor does not replay mutations or add application retries/deadlines.
+Configured grpc-go retry is disabled; transparent retries of unprocessed calls
+remain possible. Dedicated protected Space lifecycle, MatchSquad member,
+Matchmaking completion, Voice user and later protected transports keep their
+own unchanged TLS/principal options and are outside this activation. Other Go,
+Java and streaming adoption remains open; this is not all-service completion.
+
 ## Rate Limiting
 
 Правила (из ARCHITECTURE_REQUIREMENTS.md):
@@ -277,6 +323,17 @@ blacklist-механизмом и не заменяется epoch.
 
 ## Конфигурация Gateway
 
+BE-131 initiating transports use dedicated `GATEWAY_ROLE_AUDIT_*`,
+`GATEWAY_CHAT_AUDIT_*` and `GATEWAY_BOT_ADMIN_AUDIT_*` settings. Each prefix
+requires `GRPC_ADDR`, `TLS_CA_FILE`, `TLS_SERVER_NAME`, `CLIENT_CERT_FILE` and
+`CLIENT_KEY_FILE` together. An explicitly empty, partial or invalid setting is
+a startup error. Enabled transports require Gateway principal signing keys and
+strict session epochs; startup waits for mutual-TLS readiness. The initiating
+signer uses verified request-context claims with an explicit account type and
+fresh exact method/body/request-ID credentials, replacing forwarded metadata.
+These settings do not authorize ordinary-listener mutation fallbacks; complete
+route and receiver cutover follows the exact BE-131 c8/c9 caller matrix.
+
 | Переменная | Назначение |
 |------------|------------|
 | `GATEWAY_JWKS_URL` | JWKS endpoint Auth Service |
@@ -451,6 +508,44 @@ a current member retry does not consume another use. Pending approval returns
 `409 failed_precondition` and no membership; the durable pending request is the
 only permitted intermediate effect of canonical entry-policy evaluation.
 
+### Entry policy and admission attempts (target)
+
+`S=/api/v1/spaces/{space_id}`. These additive routes are the accepted target;
+the existing empty-body join endpoints above do not accept proofs in hidden
+headers or find an ambient previous submission. Account/profile and approver
+identity come only from the verified principal.
+
+| Method/path | RPC / ACL | Body | Success |
+|---|---|---|---|
+| `PUT S/entry-policy` | `SetEntryPolicy`; `SPACE_MANAGE_SETTINGS` | `{operation_id,expected_policy_version,policy}` complete private policy | Saved policy/version outcome; only authorized settings reads expose configured answers |
+| `POST S/join-attempts` | `StartJoinAttempt`; authenticated direct applicant, public Space eligibility | `{operation_id}` | `201 {attempt_id,space_id,policy_version,expires_at,requirements,captcha_challenge_context?}` |
+| `POST /api/v1/invites/{code}/join-attempts` | `StartJoinAttempt`; authenticated invite applicant, canonical invite/Space eligibility | `{operation_id}` | Same `201` safe attempt projection |
+| `GET S/join-attempts/{attempt_id}` | `GetJoinAttempt`; original authenticated account **and** profile | None | `200` safe state/outcome; foreign/missing attempt is `404` |
+| `POST S/join-attempts/{attempt_id}/submit` | `SubmitJoinAttempt`; original applicant | `{operation_id,answers:[{question_id,value}],captcha_token?}` | `200 {state:"admitted",space_membership}` after completed admission, or `202 {state:"pending",request_id}` after automatic AND passes and manual is required |
+| `GET S/join-requests` | `ListJoinRequests`; current member + `SPACE_APPROVE_JOIN_REQUESTS` | Query `limit,cursor` | `200` pending-only page; limit default 50/max 100, opaque Space/order-bound cursor, stable `created_at,id` order |
+| `GET S/join-requests/{request_id}` | `GetJoinRequest`; same review permission and membership | None | `200` authorized request detail |
+| `POST S/join-requests/{request_id}/approve` | `ApproveJoinRequest`; same review permission and membership | `{operation_id}` | Durable admission outcome after final guards; no success before completion |
+
+Request IDs and operations are UUIDs; applicant/approver selectors are not
+accepted in bodies. Requirements never expose configured answers/digests.
+Submitted answers are restricted to their original applicant and authorized
+reviewers. Wrong answers return generic `403 permission_denied`, without a
+per-question correctness oracle or side effects. Exact operation/body replay
+returns the saved authorized outcome; changed payload is `409 already_exists`.
+Policy revision conflict is `409 failed_precondition`. Approval is `200` only
+after required Role completion; recovery in progress is `503 unavailable` with
+stable operation status. Invalid invite disclosure
+and pending behavior of old joins remain as specified above. Reject/cancel
+endpoints and a numeric terminal-answer-retention policy are separate product
+extensions. Minimal pending review has no automatic age-based expiry; the
+600-second collection deadline is not a moderator deadline. Exact response
+DTOs must be completed with generated contracts before exposure; no route is
+implemented merely by the review permission or this table.
+
+Policy normalization, immutable submission, collection deadline, trusted proof
+binding and admission atomicity are defined in
+[Space Service](space-service.md#versioned-entry-policy-target).
+
 ### Tree, category and room entities
 
 Tree mutations require `TEXT_CHAT_CREATE_IN_SPACE`, the existing Space tree-manage
@@ -491,7 +586,41 @@ tree node and follows the Voice cleanup contract. Chat->node creation must retai
 a durable operation record across both calls so retry cannot create a duplicate
 Chat; a failed node link is retried/compensated before success is exposed.
 
+### Space participant moderator mute (BE-273 accepted target; not implemented)
+
+`POST /api/v1/spaces/{space_id}/voice-rooms/{voice_room_id}/participants/{target_profile_id}/mute`
+calls protected Voice `SetVoiceRoomParticipantMute` with a Gateway-derived
+delegated-user principal and canonical path IDs. Required JSON fields:
+`moderator_muted` (presence-aware boolean), `operation_id` (UUID), and
+`expected_moderation_version` (zero only for never-created state). Client body
+actor/account/media identity is never authority. Success is a receipt with
+`operation_id`, `target_profile_id`, `moderator_muted`, `self_is_muted`,
+`moderation_version` and `enforcement_completed_at`; changed state leaves
+`self_is_muted=true`. It does not return a grant or start the target microphone.
+
+Use `400 invalid_argument`, `401 unauthenticated`, generic `404 not_found` for
+undiscoverable/nonmember/absent resources, `403 permission_denied` for explicit
+policy deny or self-target, `409 failed_precondition` for version/state/pending
+conflicts, and `503 unavailable` for unknown authority/media outcome. Pre-decision
+denials cause no effects; post-commit failure preserves the restriction, so the
+client retries the same operation. The 24-hour ledger, version CAS, target
+disclosure and confirmed-cleanup success semantics are specified by
+[Voice](voice-service.md#moderator-mute-accepted-target-be-273). This target is
+not an available endpoint until the coherent runtime and media proof land.
+
 ### Audit read
+
+The audit-read implementation uses the existing delegated Gateway-to-Space
+listener (`GATEWAY_SPACE_LIFECYCLE_*` / `SPACE_GATEWAY_LIFECYCLE_*` and
+`SPACE_GATEWAY_PRINCIPAL_*`). It has no
+ordinary-connection fallback: absent signed transport returns `503`. The query
+is validated before its complete protobuf request is hashed and signed; raw
+client identity headers are discarded. Space's ordinary listener rejects
+`GetAuditLog`, and the protected listener rechecks current membership, exact
+Role permission and frozen-Space disclosure on each page. Responses are private,
+`no-store` and retain explicit empty entries/terminal cursor fields. Source
+implementation is separate from exact-head integration, rollout and the pending
+Flutter audit vertical; see [audit REST plan](../testing/space-audit-rest-exec-plan.md).
 
 `GET S/audit-log` → `GetAuditLog`, membership and `SPACE_VIEW_AUDIT_LOG`.
 Query: `actor_profile_id?` (UUID), `action?` (exact nonempty action string),

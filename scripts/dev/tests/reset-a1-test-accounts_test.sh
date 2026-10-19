@@ -12,7 +12,7 @@ if [[ "$1" == "compose" ]] && [[ " $* " == *" ps -q postgres "* ]]; then echo pg
 if [[ "$1" == "compose" ]] && [[ " $* " == *" ps -q auth "* ]]; then exit 0; fi
 if [[ "$1" == "compose" ]] && [[ " $* " == *" ps -q user "* ]]; then exit 0; fi
 if [[ "$1" == "inspect" ]]; then
-  case "$3" in *compose.project*) echo voice ;; *compose.service*) echo postgres ;; *.Config.Image*) echo postgres:16-alpine ;; *.State.Running*) echo false ;; esac
+  case "$3" in *compose.project*) echo voice ;; *compose.service*) echo postgres ;; *.Config.Image*) echo postgres:18-alpine ;; *.State.Running*) echo false ;; esac
   exit 0
 fi
 if [[ "$1" == "compose" ]] && [[ " $* " == *" exec -T postgres psql "* ]]; then
