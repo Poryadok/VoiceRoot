@@ -43,6 +43,9 @@ func TestReportProvenanceSeparatesPrivacyRecovery(t *testing.T) {
 		require.NoError(t, reports.Subjects.BindSubject(ctx, subject))
 		_, err = pool.Exec(ctx, `UPDATE reports SET reporter_account_id=$2,reporter_subject_id=$3,reporter_subject_revision=1,reporter_provenance='OWNER_RECOVERED_LEGACY' WHERE id=$1`, row.ID, subject.AccountID, subject.ID)
 		require.NoError(t, err) // Explicit verified privacy-authority fixture, not a production adapter.
+		_, err = pool.Exec(ctx, `INSERT INTO report_privacy_journal(report_id,slot,disposition,subject_id,evidence_kind,evidence_id,evidence_version)
+ VALUES($1,'REPORTER','BOUND',$2,'USER_OWNER_FACT',$3,1)`, row.ID, subject.ID, uuid.New())
+		require.NoError(t, err) // Owning fact receipt is required alongside recovery-only provenance.
 		require.NoError(t, reports.RequirePrivacyRecovery(ctx))
 		_, err = reports.ClaimValidation(ctx)
 		require.ErrorIs(t, err, pgx.ErrNoRows, "privacy repair cannot promote historical pending intake")

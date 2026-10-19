@@ -162,12 +162,32 @@ private PostgreSQL capture through file publication. A temporary filesystem
 fixture and a successful command do not demonstrate durable off-node backup,
 FINAL writer drain, other domain cuts or a real restore operation.
 
+### Journal-aware final checker
+
+`RequirePrivacyRecovery` remains read-only. It requires durable nonzero journal
+generation, valid opaque receipt identities and the local permanent terminal
+union for every `AUTH_TERMINAL` receipt. Every retained reporter must have its
+exact subject in a `BOUND` receipt and the evidence kind corresponding to its
+explicit provenance class. The same holds for a VALID User target or an existing
+User-target receipt restored alongside an older raw row. Redacted raw residue,
+unknown classes, missing/mismatched receipts and unresolved retained bindings
+reject. A recovered legacy class requires its User owner fact and confers no
+new submission, vote or validation authority.
+
+A fresh opaque pending target without a target receipt still has no inferred
+owner or eligibility; it does not require synchronous target lookup at intake or
+this checker. Known current receipts cannot be discarded to make an older row
+look like that case. The checker creates no events or ownership, performs no
+purge and cannot establish fresh remote owner state or physical deadline
+completion. The shared coordinator still needs actual current lifecycle/terminal
+authority, participant cleanup and restore continuity before admitting effects.
+
 The initial source slice implements explicit provenance, transactional opaque
 journal writes at submission/validation and terminal account/subject/late-result
 cleanup. It also implements bounded journal byte verification, finite SQL capture
 and authorized journal-only import as enabling inputs for the shared coordinator.
 
-It does **not** complete legacy owner recovery, journal-aware boot repair/checking,
+It does **not** complete legacy owner recovery or authoritative boot repair,
 the protected User recovery RPC or assembled
 P0-P5 activation. Those remain required before complete BE-137 integration and
 acceptance. Publication or a scoped source review of this slice grants none of
