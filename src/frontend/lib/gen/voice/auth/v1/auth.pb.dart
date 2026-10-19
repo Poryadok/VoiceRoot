@@ -5480,6 +5480,313 @@ class GetSpaceSessionEpochFloorResponse extends $pb.GeneratedMessage {
   void clearSessionEpochFloor() => $_clearField(1);
 }
 
+class ObserveSpaceAdmissionSubjectRequest extends $pb.GeneratedMessage {
+  factory ObserveSpaceAdmissionSubjectRequest({
+    $core.int? protocolVersion,
+    SpaceAdmissionPhase? phase,
+    SpaceAdmissionSubjectRole? subjectRole,
+    $core.String? accountId,
+    $core.String? profileId,
+    $core.String? spaceId,
+    $core.List<$core.int>? admissionBindingSha256,
+    $fixnum.Int64? interactiveSessionEpoch,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (phase != null) result.phase = phase;
+    if (subjectRole != null) result.subjectRole = subjectRole;
+    if (accountId != null) result.accountId = accountId;
+    if (profileId != null) result.profileId = profileId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (admissionBindingSha256 != null)
+      result.admissionBindingSha256 = admissionBindingSha256;
+    if (interactiveSessionEpoch != null)
+      result.interactiveSessionEpoch = interactiveSessionEpoch;
+    return result;
+  }
+
+  ObserveSpaceAdmissionSubjectRequest._();
+
+  factory ObserveSpaceAdmissionSubjectRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ObserveSpaceAdmissionSubjectRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ObserveSpaceAdmissionSubjectRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aE<SpaceAdmissionPhase>(2, _omitFieldNames ? '' : 'phase',
+        enumValues: SpaceAdmissionPhase.values)
+    ..aE<SpaceAdmissionSubjectRole>(3, _omitFieldNames ? '' : 'subjectRole',
+        enumValues: SpaceAdmissionSubjectRole.values)
+    ..aOS(4, _omitFieldNames ? '' : 'accountId')
+    ..aOS(5, _omitFieldNames ? '' : 'profileId')
+    ..aOS(6, _omitFieldNames ? '' : 'spaceId')
+    ..a<$core.List<$core.int>>(
+        7, _omitFieldNames ? '' : 'admissionBindingSha256', $pb.PbFieldType.OY)
+    ..a<$fixnum.Int64>(8, _omitFieldNames ? '' : 'interactiveSessionEpoch',
+        $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ObserveSpaceAdmissionSubjectRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ObserveSpaceAdmissionSubjectRequest copyWith(
+          void Function(ObserveSpaceAdmissionSubjectRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as ObserveSpaceAdmissionSubjectRequest))
+          as ObserveSpaceAdmissionSubjectRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ObserveSpaceAdmissionSubjectRequest create() =>
+      ObserveSpaceAdmissionSubjectRequest._();
+  @$core.override
+  ObserveSpaceAdmissionSubjectRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ObserveSpaceAdmissionSubjectRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ObserveSpaceAdmissionSubjectRequest>(create);
+  static ObserveSpaceAdmissionSubjectRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  SpaceAdmissionPhase get phase => $_getN(1);
+  @$pb.TagNumber(2)
+  set phase(SpaceAdmissionPhase value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasPhase() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearPhase() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  SpaceAdmissionSubjectRole get subjectRole => $_getN(2);
+  @$pb.TagNumber(3)
+  set subjectRole(SpaceAdmissionSubjectRole value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSubjectRole() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSubjectRole() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get accountId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set accountId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasAccountId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearAccountId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get profileId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set profileId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasProfileId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearProfileId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get spaceId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set spaceId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasSpaceId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearSpaceId() => $_clearField(6);
+
+  /// Exactly 32 SHA-256 bytes of the server-owned admission context.
+  @$pb.TagNumber(7)
+  $core.List<$core.int> get admissionBindingSha256 => $_getN(6);
+  @$pb.TagNumber(7)
+  set admissionBindingSha256($core.List<$core.int> value) =>
+      $_setBytes(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasAdmissionBindingSha256() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearAdmissionBindingSha256() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $fixnum.Int64 get interactiveSessionEpoch => $_getI64(7);
+  @$pb.TagNumber(8)
+  set interactiveSessionEpoch($fixnum.Int64 value) => $_setInt64(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasInteractiveSessionEpoch() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearInteractiveSessionEpoch() => $_clearField(8);
+}
+
+class ObserveSpaceAdmissionSubjectResponse extends $pb.GeneratedMessage {
+  factory ObserveSpaceAdmissionSubjectResponse({
+    $core.List<$core.int>? requestBindingSha256,
+    $core.String? accountId,
+    $core.String? profileId,
+    $core.String? accountType,
+    $fixnum.Int64? accountSecurityRevision,
+    $fixnum.Int64? sessionEpochFloor,
+    $fixnum.Int64? profileRevision,
+    SpaceAdmissionDecision? decision,
+  }) {
+    final result = create();
+    if (requestBindingSha256 != null)
+      result.requestBindingSha256 = requestBindingSha256;
+    if (accountId != null) result.accountId = accountId;
+    if (profileId != null) result.profileId = profileId;
+    if (accountType != null) result.accountType = accountType;
+    if (accountSecurityRevision != null)
+      result.accountSecurityRevision = accountSecurityRevision;
+    if (sessionEpochFloor != null) result.sessionEpochFloor = sessionEpochFloor;
+    if (profileRevision != null) result.profileRevision = profileRevision;
+    if (decision != null) result.decision = decision;
+    return result;
+  }
+
+  ObserveSpaceAdmissionSubjectResponse._();
+
+  factory ObserveSpaceAdmissionSubjectResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ObserveSpaceAdmissionSubjectResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ObserveSpaceAdmissionSubjectResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..a<$core.List<$core.int>>(
+        1, _omitFieldNames ? '' : 'requestBindingSha256', $pb.PbFieldType.OY)
+    ..aOS(2, _omitFieldNames ? '' : 'accountId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..aOS(4, _omitFieldNames ? '' : 'accountType')
+    ..a<$fixnum.Int64>(5, _omitFieldNames ? '' : 'accountSecurityRevision',
+        $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$fixnum.Int64>(
+        6, _omitFieldNames ? '' : 'sessionEpochFloor', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$fixnum.Int64>(
+        7, _omitFieldNames ? '' : 'profileRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aE<SpaceAdmissionDecision>(8, _omitFieldNames ? '' : 'decision',
+        enumValues: SpaceAdmissionDecision.values)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ObserveSpaceAdmissionSubjectResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ObserveSpaceAdmissionSubjectResponse copyWith(
+          void Function(ObserveSpaceAdmissionSubjectResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ObserveSpaceAdmissionSubjectResponse))
+          as ObserveSpaceAdmissionSubjectResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ObserveSpaceAdmissionSubjectResponse create() =>
+      ObserveSpaceAdmissionSubjectResponse._();
+  @$core.override
+  ObserveSpaceAdmissionSubjectResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ObserveSpaceAdmissionSubjectResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ObserveSpaceAdmissionSubjectResponse>(create);
+  static ObserveSpaceAdmissionSubjectResponse? _defaultInstance;
+
+  /// SHA-256 of the exact deterministic ObserveSpaceAdmissionSubjectRequest.
+  @$pb.TagNumber(1)
+  $core.List<$core.int> get requestBindingSha256 => $_getN(0);
+  @$pb.TagNumber(1)
+  set requestBindingSha256($core.List<$core.int> value) => $_setBytes(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasRequestBindingSha256() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearRequestBindingSha256() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get accountId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set accountId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasAccountId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearAccountId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get accountType => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set accountType($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasAccountType() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearAccountType() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $fixnum.Int64 get accountSecurityRevision => $_getI64(4);
+  @$pb.TagNumber(5)
+  set accountSecurityRevision($fixnum.Int64 value) => $_setInt64(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasAccountSecurityRevision() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearAccountSecurityRevision() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $fixnum.Int64 get sessionEpochFloor => $_getI64(5);
+  @$pb.TagNumber(6)
+  set sessionEpochFloor($fixnum.Int64 value) => $_setInt64(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasSessionEpochFloor() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearSessionEpochFloor() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $fixnum.Int64 get profileRevision => $_getI64(6);
+  @$pb.TagNumber(7)
+  set profileRevision($fixnum.Int64 value) => $_setInt64(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasProfileRevision() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearProfileRevision() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  SpaceAdmissionDecision get decision => $_getN(7);
+  @$pb.TagNumber(8)
+  set decision(SpaceAdmissionDecision value) => $_setField(8, value);
+  @$pb.TagNumber(8)
+  $core.bool hasDecision() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearDecision() => $_clearField(8);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =
