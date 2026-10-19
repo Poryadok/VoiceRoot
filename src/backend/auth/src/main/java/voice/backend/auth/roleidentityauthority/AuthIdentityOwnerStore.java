@@ -32,9 +32,11 @@ public final class AuthIdentityOwnerStore {
   private final JdbcTemplate jdbc;
   private final TransactionTemplate transactions;
   private final RoleIdentitySelectors selectors;
+  private final AuthIdentityCatalog catalog = new AuthIdentityCatalog();
 
   public AuthIdentityOwnerStore(DataSource source, RoleIdentitySelectors selectors) {
     this.jdbc = new JdbcTemplate(Objects.requireNonNull(source));
+    this.jdbc.setQueryTimeout(2);
     this.selectors = Objects.requireNonNull(selectors);
     this.transactions = new TransactionTemplate(new DataSourceTransactionManager(source));
     this.transactions.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
@@ -56,6 +58,7 @@ public final class AuthIdentityOwnerStore {
 
   private Observed resolve(UUID accountId, Map<Integer, byte[]> lookups,
       Map<Integer, byte[]> fingerprints) {
+    catalog.validate(jdbc);
     validateKeys(head(false), fingerprints);
     var rawHandles = jdbc.query("SELECT role_identity_handle FROM accounts WHERE id=? FOR UPDATE",
         (rs, row) -> rs.getObject(1, UUID.class), accountId);

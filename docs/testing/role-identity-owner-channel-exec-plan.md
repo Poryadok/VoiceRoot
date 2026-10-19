@@ -382,6 +382,30 @@ existing host module ZIP cache as a read-only file:// proxy and extracted module
 into the owned Linux build volume, with network none. No source, versions or
 runtime checks were relaxed; these attempts establish no PostgreSQL behavior.
 
+## Auth owned-catalog runtime gate
+
+An actual Linux PostgreSQL RED1/0error/0skip at04:18:14Z proved that disabling
+auth_role_identity_account_guard still allowed owner observation. The new gate
+checks six owned tables/column constraints, six normalized function bodies and
+security attributes, three enabled triggers, and the exact successful V28
+history entry/checksum. Access-share locks precede account/lifetime/head locks.
+Metadata loads from an immutable resource outside SQL; observation statements
+now also have the existing2s bound, with the3s transaction budget unchanged.
+
+Initial catalog6/0skip passed on pureV28 and exact156 ae4298 V27/V29/V30. A second
+actual RED1/0error/0skip at04:24:05Z showed a failed duplicate28 record hiding
+behind its valid sibling. The corrected gate requires exactly one owned history
+row and validates its success/checksum. Final catalog7/0skip passed04:25:50Z on
+the combined schema. The negative fixtures restore every altered definition or
+history record in finally blocks. Unrelated additive tables remain accepted;
+no fixed global migration version or Federation catalog rewrite is introduced.
+The unchanged owner-store positive/race suite passed5/0skip at04:26:47Z on a
+separate combined-schema database with the final gate (12 final accepted cases).
+
+Raw logs/XML remain outside the lease in owner-auth-parent. Catalog-specific
+source review, protected production serving, bounded connection acquisition and
+full producer readiness remain open; this gate is not independent CURRENT proof.
+
 Before runtime qualification, real PostgreSQL barriers must demonstrate I-before-
 profile/allocator lock order for these entrypoints on the coherent immutable22 DDL.
 All births additionally require typed Auth preflight outside I and canonical birth

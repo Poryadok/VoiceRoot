@@ -75,6 +75,15 @@ settings is allowed before capture cutover; once enforcement is enabled, omittin
 the required snapshot prevents JDBC startup. There is no hot file reload or
 automatic key destruction. This wiring does not register a private RPC listener.
 
+Before selector registration or owner observation, an owned SQL catalog gate
+validates the six required tables/column constraints, six function bodies and
+security attributes, three enabled triggers, and the single successful V28
+migration record/checksum. Access-share locks stabilize those definitions before
+domain-row locks. Missing or modified guards, row security, dirty or duplicated
+owned history fail closed. Compatible additive Mod migrations remain allowed;
+this gate does not require the global schema version to equal28. It is separate
+from the deferred Federation source-catalog protocol and does not grant CURRENT.
+
 User's canonical association/nonreuse core has its own key family and records
 profile history. Every new birth requires verified nonnull Auth parent authority;
 retained-row NOW baseline with missing parent cannot certify Role history.

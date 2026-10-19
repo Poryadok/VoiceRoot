@@ -17,6 +17,7 @@ public final class AuthIdentityKeysetBootstrap {
   private final RoleIdentitySelectors selectors;
   private final JdbcTemplate jdbc;
   private final TransactionTemplate transactions;
+  private final AuthIdentityCatalog catalog = new AuthIdentityCatalog();
 
   public AuthIdentityKeysetBootstrap(DataSource source, RoleIdentitySelectors selectors) {
     this.selectors = selectors;
@@ -53,6 +54,7 @@ public final class AuthIdentityKeysetBootstrap {
       throw new IllegalStateException("identity owner keyset unavailable");
     }
     transactions.executeWithoutResult(status -> {
+      catalog.validate(jdbc);
       jdbc.execute("SET LOCAL lock_timeout='2s'");
       jdbc.execute("SET LOCAL statement_timeout='2s'");
       Long revision = jdbc.queryForObject("SELECT role_identity_register_keyset(?,?,?::jsonb)",
