@@ -36,11 +36,48 @@ service ModerationEvidenceService {
   rpc GetEffectiveRestrictionSnapshot(GetEffectiveRestrictionSnapshotRequest) returns (GetEffectiveRestrictionSnapshotResponse);
 }
 
+// Each recipient hosts this private Auth-only service. Audience remains the
+// exact recipient; neither listener exposes it through an ordinary route.
+service AccountLifecycleReceiverService {
+  // @voice.security=protected;callers=service:auth
+  rpc ApplyLifecycleFact(ApplyLifecycleFactRequest) returns (ApplyLifecycleFactResponse);
+}
+
 enum SubjectState {
   SUBJECT_STATE_UNSPECIFIED = 0;
   SUBJECT_STATE_LIVE = 1;
   SUBJECT_STATE_DELETED = 2;
   SUBJECT_STATE_PURGED = 3;
+}
+
+// Auth-owned opaque notification. No raw account/profile/origin identity.
+// DELETED may already be due; it is still not positive terminal authority.
+message AccountLifecycleFact {
+  uint32 protocol_version = 1;
+  string authority_generation = 2;
+  string event_id = 3;
+  string subject_id = 4;
+  SubjectState state = 5;
+  // Positive only for LIVE/DELETED. PURGED carries no invented revision/cycle.
+  uint64 lifecycle_revision = 6;
+  optional string deletion_cycle_id = 7;
+  optional google.protobuf.Timestamp purge_at = 8;
+}
+message ApplyLifecycleFactRequest {
+  AccountLifecycleFact fact = 1;
+}
+// A durable local receipt, never a physical erase-at-deadline certificate.
+// Auth compares it with CURRENT owner authority before removing an intent.
+message ApplyLifecycleFactResponse {
+  uint32 protocol_version = 1;
+  string authority_generation = 2;
+  string subject_id = 3;
+  string requested_event_id = 4;
+  // True only for an applied positive permanent fence, never a stale timer.
+  bool terminal = 5;
+  // For a nonterminal projection: its exact revision and canonical fact hash.
+  uint64 lifecycle_revision = 6;
+  bytes current_fact_sha256 = 7;
 }
 
 message SubjectBinding {

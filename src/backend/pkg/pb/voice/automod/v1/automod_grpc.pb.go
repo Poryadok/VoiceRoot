@@ -576,3 +576,114 @@ var ModerationEvidenceService_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "voice/automod/v1/automod.proto",
 }
+
+const (
+	AccountLifecycleReceiverService_ApplyLifecycleFact_FullMethodName = "/voice.automod.v1.AccountLifecycleReceiverService/ApplyLifecycleFact"
+)
+
+// AccountLifecycleReceiverServiceClient is the client API for AccountLifecycleReceiverService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Each recipient hosts this private Auth-only service. Audience remains the
+// exact recipient; neither listener exposes it through an ordinary route.
+type AccountLifecycleReceiverServiceClient interface {
+	// @voice.security=protected;callers=service:auth
+	ApplyLifecycleFact(ctx context.Context, in *ApplyLifecycleFactRequest, opts ...grpc.CallOption) (*ApplyLifecycleFactResponse, error)
+}
+
+type accountLifecycleReceiverServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewAccountLifecycleReceiverServiceClient(cc grpc.ClientConnInterface) AccountLifecycleReceiverServiceClient {
+	return &accountLifecycleReceiverServiceClient{cc}
+}
+
+func (c *accountLifecycleReceiverServiceClient) ApplyLifecycleFact(ctx context.Context, in *ApplyLifecycleFactRequest, opts ...grpc.CallOption) (*ApplyLifecycleFactResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyLifecycleFactResponse)
+	err := c.cc.Invoke(ctx, AccountLifecycleReceiverService_ApplyLifecycleFact_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// AccountLifecycleReceiverServiceServer is the server API for AccountLifecycleReceiverService service.
+// All implementations must embed UnimplementedAccountLifecycleReceiverServiceServer
+// for forward compatibility.
+//
+// Each recipient hosts this private Auth-only service. Audience remains the
+// exact recipient; neither listener exposes it through an ordinary route.
+type AccountLifecycleReceiverServiceServer interface {
+	// @voice.security=protected;callers=service:auth
+	ApplyLifecycleFact(context.Context, *ApplyLifecycleFactRequest) (*ApplyLifecycleFactResponse, error)
+	mustEmbedUnimplementedAccountLifecycleReceiverServiceServer()
+}
+
+// UnimplementedAccountLifecycleReceiverServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedAccountLifecycleReceiverServiceServer struct{}
+
+func (UnimplementedAccountLifecycleReceiverServiceServer) ApplyLifecycleFact(context.Context, *ApplyLifecycleFactRequest) (*ApplyLifecycleFactResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyLifecycleFact not implemented")
+}
+func (UnimplementedAccountLifecycleReceiverServiceServer) mustEmbedUnimplementedAccountLifecycleReceiverServiceServer() {
+}
+func (UnimplementedAccountLifecycleReceiverServiceServer) testEmbeddedByValue() {}
+
+// UnsafeAccountLifecycleReceiverServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to AccountLifecycleReceiverServiceServer will
+// result in compilation errors.
+type UnsafeAccountLifecycleReceiverServiceServer interface {
+	mustEmbedUnimplementedAccountLifecycleReceiverServiceServer()
+}
+
+func RegisterAccountLifecycleReceiverServiceServer(s grpc.ServiceRegistrar, srv AccountLifecycleReceiverServiceServer) {
+	// If the following call pancis, it indicates UnimplementedAccountLifecycleReceiverServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&AccountLifecycleReceiverService_ServiceDesc, srv)
+}
+
+func _AccountLifecycleReceiverService_ApplyLifecycleFact_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyLifecycleFactRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AccountLifecycleReceiverServiceServer).ApplyLifecycleFact(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AccountLifecycleReceiverService_ApplyLifecycleFact_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AccountLifecycleReceiverServiceServer).ApplyLifecycleFact(ctx, req.(*ApplyLifecycleFactRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// AccountLifecycleReceiverService_ServiceDesc is the grpc.ServiceDesc for AccountLifecycleReceiverService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var AccountLifecycleReceiverService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "voice.automod.v1.AccountLifecycleReceiverService",
+	HandlerType: (*AccountLifecycleReceiverServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ApplyLifecycleFact",
+			Handler:    _AccountLifecycleReceiverService_ApplyLifecycleFact_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "voice/automod/v1/automod.proto",
+}

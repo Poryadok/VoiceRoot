@@ -2,6 +2,21 @@
 
 ## Current develop integration checkpoint
 
+Independent source review of Auth snapshot/census `fc364aa` returned scoped
+SOURCE CLEAR, with a runtime source-binding qualification: the old census tar
+was a baseline before overlays, not the complete executed source. That gap was
+corrected by a bounded repeat from the immutable fc364aa Git archive, without
+overlays. All 522 source files matched archive hashes before and after native
+execution; exact eight tests passed with zero failures/errors/skips. The archive
+SHA-256 is `a382abd835871d839561a7682043c3c877d5db78d6d14133309863f14946f026`;
+the unchanged source manifest SHA-256 is
+`96caa12ec9dde87d288a0e138ecb6f3c89eea63349ab21a40683a23f48f358d5`.
+Actual Maven log/manifests/receipt/XML are retained as ignored exact-proof
+artifacts. Review-function c3 records the correction; the old baseline is not
+retrospectively relabeled as exact execution proof. Evidence-only recheck is
+separate from unchanged source review. The lifecycle producer `46d6f24` also
+received independent bounded SOURCE CLEAR; delivery/activation remain open.
+
 Normal merge input `0a0024900b5bb3ba2f6fee391615f0f4fa0864e3` preserves
 the separate Role/Space Auth floor methods and reviewed strict restore deadline.
 The combined issuer inventory retains all six service issuers while each RPC
@@ -22,6 +37,23 @@ engine, private inner network and engine volume were removed after terminal
 results. This proves the bounded merge, not P1-P5 or full feature acceptance.
 
 ## Account-core v2 implementation checkpoint
+
+The private lifecycle wire now declares the Auth-only receiver RPC and strict
+opaque fact/typed receipt. Validation rejects unknown/duplicate/noncanonical
+fields, mismatched receipt generation/event/subject, revision overflow, missing
+required cycle/deadline and equal-revision changed fact hashes. A due DELETED fact stays
+nonterminal; a positive PURGED fact carries no invented erased revision/cycle.
+Newer/terminal peer receipts remain inputs to CURRENT owner-state comparison,
+not direct ACK authority. Actual receiver/publisher transactions remain open.
+The independent 120-byte vector is pinned in the Auth service doc.
+
+Linux wire/client race tests passed (1.037s/1.148s), scoped vet and buf lint
+passed. All 318 executed source files matched the frozen source-tree archive
+before/after the final observation (the first manifest was captured during the
+compile, not relabeled as a pre-run observation). Archive SHA-256 is
+`ebdd3a422e591c23722181f77679894c2dcabe988bffb3e4a8d9b1adc0d63023`;
+raw logs/manifests/receipt are retained under ignored lifecycle-wire proof.
+This is protocol validation proof, not method activation or physical cleanup.
 
 C19 transactional producer checkpoint: Auth V30 / canonical version31 capture
 every owner account creation/lifecycle update and physical removal through SQL

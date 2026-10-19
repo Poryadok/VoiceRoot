@@ -57,6 +57,41 @@ opaque authority; pending delivery is not a physical-cleanup receipt. The new
 producer schema is reserved as Flyway V30 / canonical auth_db version31; transport,
 exact recipient application and activation require the remaining vertical work.
 
+The selected private delivery seam is
+`voice.automod.v1.AccountLifecycleReceiverService/ApplyLifecycleFact`, registered
+on each recipient's protected listener and callable only by `service:auth`.
+Audience remains the exact recipient (`messaging` or `moderation`). The protocol1
+fact carries generation/event/subject UUIDs, LIVE/DELETED owner revision and exact
+cycle/deadline, or a positive PURGED fact from the durable owner ledger. PURGED
+does not invent a lifecycle revision/cycle after raw mapping removal. No account
+ID, content, public event envelope or origin-derived hash appears in the fact.
+
+The typed receipt binds the requested event, subject and generation. For a
+nonterminal current projection it includes its revision and canonical fact hash;
+a terminal receipt asserts the recipient's permanent positive fence. Auth
+compares the response to its current owner projection/ledger before removing a
+matching intent. An intervening newer owner event remains queued; a recipient
+ahead of the current owner requires restore-divergence handling. A terminal
+receipt cannot establish Auth terminality when its own positive ledger is absent.
+Neither an elapsed DELETED timer nor an RPC error is a terminal receipt. Peer
+calls run outside owner account transactions. This wire seam is an implementation
+target; SQL producer proof alone does not claim its delivery or activation.
+
+Canonical lifecycle fact hashing uses UTF-8 `voice.automod.lifecycle.v1` plus
+NUL followed by deterministic protobuf fact bytes. Unknown/nested fields and
+duplicate/noncanonical encoded representations are rejected; fact size is at
+most 1,024 bytes. A due DELETED tuple remains representable as nonterminal.
+LIVE requires a positive signed-range revision and absent cycle/deadline;
+DELETED requires the exact UUID cycle and DB-microsecond timestamp; PURGED has
+zero revision and absent erased cycle/deadline. The independently hand-framed
+120-byte LIVE vector has generation `00000000-0000-4000-8000-000000000001`,
+event `00000000-0000-4000-8000-000000000002`, subject
+`80000000-0000-4000-8000-000000000003`, revision7 and SHA-256
+`53043311ff246eba73d39ef71db56fba6a1d299e7fae115fb9ccfcec8190655a`.
+Receipt validation is structural only: a higher revision/hash or positive fence
+must reach the sender's CURRENT owner projection/ledger comparison, not directly
+clear a delivery intent. Equal revision with changed hash is rejected.
+
 ## Обзор
 
 Сервис аутентификации и управления сессиями. Единственный сервис на Java — обусловлено зрелостью Spring Security для сложных auth-сценариев.
