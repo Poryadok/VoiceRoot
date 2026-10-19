@@ -299,6 +299,12 @@ func (s *SpaceStore) PublishMemberAdmission(ctx context.Context, operation, role
 			if rollbackErr := guardTx.Rollback(ctx); rollbackErr != nil {
 				return nil, rollbackErr
 			}
+			// A missing/expired observation or conflicting immutable binding is
+			// not evidence that the candidate lost authority. Preserve it for
+			// a fresh attempt; all callback SQL is already rolled back.
+			if !knownMemberAdmissionGuardDenial(guardErr) {
+				return nil, guardErr
+			}
 			if err = scoped.invalidateMemberAdmission(ctx, i); err != nil {
 				return nil, err
 			}
@@ -342,6 +348,10 @@ func (s *SpaceStore) PublishMemberAdmission(ctx context.Context, operation, role
 		return nil, err
 	}
 	return member, nil
+}
+
+func knownMemberAdmissionGuardDenial(err error) bool {
+	return !errors.Is(err, ErrMemberAdmissionConflict) && knownMemberAdmissionDenial(err)
 }
 
 func knownMemberAdmissionDenial(err error) bool {

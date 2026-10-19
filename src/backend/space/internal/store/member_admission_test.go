@@ -73,7 +73,7 @@ func TestMemberAdmissionPreparationIsInvisibleAndPublicationIsAtomic(t *testing.
 	roleID := uuid.New()
 	receipt, err := memberadmission.EnsureReceiptFingerprint(intent.EnsureBinding(), roleID.String())
 	require.NoError(t, err)
-	guardFailure := errors.New("current targeted authority changed")
+	guardFailure := ErrInviteRevoked
 	_, err = w.PublishMemberAdmission(ctx, in.OperationID, roleID, receipt[:], func(context.Context, *SpaceStore, *MemberAdmissionIntent) error { return guardFailure })
 	require.ErrorIs(t, err, guardFailure)
 	member, err = st.IsSpaceMember(ctx, space.ID, in.ProfileID)
@@ -125,4 +125,48 @@ func TestMemberAdmissionPreparationIsInvisibleAndPublicationIsAtomic(t *testing.
 	member, err = st.IsSpaceMember(ctx, space.ID, in.ProfileID)
 	require.NoError(t, err)
 	require.False(t, member, "historical publication replay cannot recreate membership")
+}
+
+func TestMemberAdmissionUnavailableGuardPreservesCandidate(t *testing.T) {
+	ctx := context.Background()
+	pool := startSpacePostgresForStoreTest(t, ctx)
+	applySpaceMigrationForStoreTest(t, ctx, pool)
+	st := &SpaceStore{Pool: pool}
+	owner := uuid.New()
+	space, err := st.CreateSpace(ctx, owner, "Guard retry", "", "public")
+	require.NoError(t, err)
+	invite, err := st.CreateInvite(ctx, CreateInviteInput{SpaceID: space.ID, CreatorProfileID: owner})
+	require.NoError(t, err)
+	applyMemberAuthorityIfPresent(t, st)
+	in := MemberAdmissionInput{OperationID: uuid.New(), SpaceID: space.ID, AccountID: uuid.New(), ProfileID: uuid.New(), InviteID: &invite.ID}
+	i, err := st.PrepareMemberAdmission(ctx, in)
+	require.NoError(t, err)
+	role := uuid.New()
+	receipt, err := memberadmission.EnsureReceiptFingerprint(i.EnsureBinding(), role.String())
+	require.NoError(t, err)
+	for _, failure := range []error{context.DeadlineExceeded, ErrMemberAdmissionConflict, errors.New("owner observation unavailable")} {
+		_, err = st.PublishMemberAdmission(ctx, in.OperationID, role, receipt[:], func(ctx context.Context, scoped *SpaceStore, _ *MemberAdmissionIntent) error {
+			_, writeErr := scoped.db().Exec(ctx, `UPDATE invites SET use_count=use_count+1 WHERE id=$1`, invite.ID)
+			require.NoError(t, writeErr)
+			return failure
+		})
+		require.ErrorIs(t, err, failure)
+		var state string
+		var generation, floor int64
+		require.NoError(t, pool.QueryRow(ctx, `SELECT state,generation,retired_through FROM space_ordinary_member_heads WHERE space_id=$1 AND profile_id=$2`, in.SpaceID, in.ProfileID).Scan(&state, &generation, &floor))
+		require.Equal(t, "PREPARING", state, "an unavailable observation is not a known denial")
+		require.EqualValues(t, i.Generation, generation)
+		require.Zero(t, floor)
+		replay, err := st.PrepareMemberAdmission(ctx, in)
+		require.NoError(t, err)
+		require.Equal(t, i, replay)
+		var cleanups, members, events, uses int
+		require.NoError(t, pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM space_member_role_cleanup WHERE space_id=$1 AND profile_id=$2),(SELECT count(*) FROM space_members WHERE space_id=$1 AND profile_id=$2),(SELECT count(*) FROM space_member_admission_outbox WHERE operation_id=$3),(SELECT use_count FROM invites WHERE id=$4)`, in.SpaceID, in.ProfileID, in.OperationID, invite.ID).Scan(&cleanups, &members, &events, &uses))
+		require.Zero(t, cleanups)
+		require.Zero(t, members)
+		require.Zero(t, events)
+		require.Zero(t, uses, "a failing guard's SQL must roll back")
+	}
+	_, err = st.PublishMemberAdmission(ctx, in.OperationID, role, receipt[:], nil)
+	require.NoError(t, err, "same candidate may publish after a fresh successful observation")
 }
