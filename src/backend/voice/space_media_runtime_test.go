@@ -8,12 +8,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
@@ -21,7 +24,10 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	callsv1 "voice.app/voice/calls/v1"
 	commonv1 "voice.app/voice/common/v1"
+	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/pkg/principal"
 	grpcsvc "voice/backend/voice/internal/grpcsvc"
 	"voice/backend/voice/internal/livekit"
 	"voice/backend/voice/internal/rosteroutbox"
@@ -38,6 +44,13 @@ type compositionPublisher struct {
 	voiceevents.Publisher
 	mu       sync.Mutex
 	subjects []string
+}
+
+func (p *compositionPublisher) PublishCallEnded(_ context.Context, _ *eventsv1.CallEnded) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.subjects = append(p.subjects, "voice.call_ended")
+	return nil
 }
 
 func (p *compositionPublisher) PublishAdmissionEvent(_ context.Context, _ uuid.UUID, subject string, _ []byte) error {
@@ -60,6 +73,123 @@ func (p *compositionPublisher) count(subject string) int {
 }
 
 type compositionAuthority struct{}
+
+type compositionRecoveryTrace struct{ completed atomic.Int64 }
+type compositionRecoveryQuery struct{}
+
+func (t *compositionRecoveryTrace) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	if strings.Contains(data.SQL, "FROM voice_space_media_admissions a WHERE NOT EXISTS") {
+		return context.WithValue(ctx, compositionRecoveryQuery{}, true)
+	}
+	return ctx
+}
+func (t *compositionRecoveryTrace) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryEndData) {
+	if marked, _ := ctx.Value(compositionRecoveryQuery{}).(bool); marked && data.Err == nil {
+		t.completed.Add(1)
+	}
+}
+
+func TestProductionSpaceMediaFactoryPreservesLiveAdmissionThroughBothStartupPasses(t *testing.T) {
+	if testing.Short() {
+		t.Skip("PostgreSQL/NATS production factory integration")
+	}
+	for _, boundary := range []string{spacemedia.AdmissionPrepared, spacemedia.AdmissionFenced, spacemedia.AdmissionCommitted} {
+		t.Run(boundary, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			originalPool := compositionPostgres(t, ctx)
+			trace := &compositionRecoveryTrace{}
+			config := originalPool.Config()
+			config.ConnConfig.Tracer = trace
+			pool, err := pgxpool.NewWithConfig(ctx, config)
+			require.NoError(t, err)
+			defer pool.Close()
+			admissions := spacemedia.NewPostgresAdmissionStore(pool)
+			a := store.SpaceMediaAdmission{OperationID: uuid.New(), Generation: uuid.NewString(), AccountID: uuid.New(), ProfileID: uuid.New(), SpaceID: uuid.New(), RoomID: uuid.NewString(), VoiceRoomID: uuid.NewString(), CreatedRoom: true, CallStartedAt: time.Now().UTC(), MaxParticipants: 32, SessionEpoch: 3, AccessEpoch: 4, PolicyEpoch: 5, CanJoin: true, CanSubscribe: true,
+				Events: []store.SpaceMediaAdmissionEvent{{ID: uuid.New(), Subject: "voice.call_started", Payload: []byte("fixed creator fact")}, {ID: uuid.New(), Subject: "voice.member_joined", Payload: []byte("fixed participant fact")}}}
+			a.Identity, _ = livekit.SpaceParticipantIdentity(a.ProfileID.String(), a.Generation)
+			a.Ownership = store.NewSpaceAdmissionOwnership(a.OperationID)
+			writer := store.WithSpaceAdmissionOwnership(ctx, a.Ownership)
+			head, err := admissions.ClaimRoomHead(writer, a.VoiceRoomID, a.SpaceID.String(), a.RoomID, a.OperationID, true)
+			require.NoError(t, err)
+			a.RoomGeneration, a.LifecycleGeneration = head.RoomGeneration, head.LifecycleGeneration
+			writer, stop, err := admissions.HoldAdmissionOwnership(writer, a.OperationID)
+			require.NoError(t, err)
+			defer stop()
+			require.NoError(t, admissions.Prepare(writer, a))
+			if boundary != spacemedia.AdmissionPrepared {
+				require.NoError(t, admissions.Fence(writer, a))
+			}
+			if boundary == spacemedia.AdmissionCommitted {
+				require.NoError(t, admissions.MarkCommitted(writer, a.OperationID, a.Generation))
+			}
+			addr := os.Getenv("VOICE_GATE_TEST_REDIS_ADDR")
+			if addr == "" {
+				addr = miniredis.RunT(t).Addr()
+			}
+			redisClient := redis.NewClient(&redis.Options{Addr: addr})
+			defer redisClient.Close()
+			calls := store.NewRedisCallStore(redisClient, uuid.NewString()+":")
+			publisher := &compositionPublisher{}
+			media := &compositionMedia{}
+			lifecycle := &spacelifecycle.Service{Store: spacelifecycle.NewPostgresStore(pool, spacemedia.BeginPartyRoomClose), Effects: spacelifecycle.NewEffects(pool, media)}
+			voice := &grpcsvc.VoiceGRPC{Calls: calls, SpaceMediaAdmissions: admissions, Events: publisher, SpaceLifecycle: lifecycle, VoiceRoomAccessResolver: compositionAuthority{}, SpaceVoiceRoomGrants: compositionAuthority{}}
+			closeRuntime := startSpaceMediaRuntime(ctx, voice, pool, compositionAuthority{}, true, compositionNATS(t, ctx), media, slog.New(slog.NewTextHandler(io.Discard, nil)))
+			defer func() { cancel(); require.NoError(t, closeRuntime()) }()
+			// The tracer observes completed native SQL from the real factory. No
+			// duplicate coordinator or test-only factory hook substitutes for Run.
+			require.Eventually(t, func() bool { return trace.completed.Load() >= 2 }, 4*time.Second, 10*time.Millisecond, "factory initial reconciliation and Run's immediate second pass must both finish")
+			var state string
+			require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM voice_space_media_admissions WHERE operation_id=$1`, a.OperationID).Scan(&state))
+			require.Equal(t, boundary, state)
+			require.True(t, voice.SpaceMediaServing.Load())
+			if boundary == spacemedia.AdmissionPrepared {
+				require.NoError(t, admissions.Fence(writer, a))
+			}
+			require.NoError(t, admissions.MarkCommitted(writer, a.OperationID, a.Generation))
+			require.NoError(t, calls.EnsureSpaceLifecycle(writer, a.SpaceID.String(), admissions.ReadSpaceLifecycle))
+			gate, err := calls.ReadReadySpaceGate(writer, a.SpaceID.String())
+			require.NoError(t, err)
+			dispatch, err := calls.EnsureAdmissionDispatch(writer, a.OperationID.String(), admissions.ReadAdmissionDispatch)
+			require.NoError(t, err)
+			gate.AdmissionIncarnation, gate.AdmissionOwnerEpoch, gate.AdmissionLive = dispatch.AdmissionIncarnation, dispatch.AdmissionOwnerEpoch, dispatch.AdmissionLive
+			ticket, err := admissions.AuthorizeSpaceProjection(writer, a.OperationID, a.Generation, gate)
+			require.NoError(t, err)
+			call, err := calls.CreateCall(writer, store.Call{SpaceProjectionTicket: ticket, SpaceLifecycleGeneration: a.LifecycleGeneration, RoomID: a.RoomID, VoiceRoomID: a.VoiceRoomID, SpaceID: a.SpaceID.String(), LivekitRoomName: "voice-room-" + a.VoiceRoomID, InitiatorProfileID: a.ProfileID.String(), SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, Status: callsv1.CallStatus_CALL_STATUS_UNSPECIFIED, StartedAt: a.CallStartedAt, States: map[string]store.ParticipantState{}})
+			require.NoError(t, err)
+			call, err = calls.AdmitSpaceMediaParticipant(writer, call.RoomID, store.SpaceMediaParticipant{ProjectionTicket: ticket, LifecycleGeneration: a.LifecycleGeneration, RoomGeneration: a.RoomGeneration, CreatedRoom: true, AccountID: a.AccountID.String(), ProfileID: a.ProfileID.String(), AdmissionOperationID: a.OperationID.String(), Identity: a.Identity, Generation: a.Generation, Issued: store.SpaceMediaGrant{SessionEpoch: a.SessionEpoch, AccessEpoch: a.AccessEpoch, PolicyEpoch: a.PolicyEpoch, CanJoin: true, CanSubscribe: true}}, a.MaxParticipants)
+			require.NoError(t, err)
+			require.NoError(t, admissions.MarkProjectionApplied(writer, a.OperationID, a.Generation))
+			require.NoError(t, admissions.ConfirmProjection(writer, a.OperationID, a.Generation))
+			require.Equal(t, a.OperationID.String(), call.SpaceMedia[a.ProfileID.String()].AdmissionOperationID)
+			var roster int64
+			require.NoError(t, pool.QueryRow(ctx, `SELECT roster_version FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2`, a.VoiceRoomID, a.RoomGeneration).Scan(&roster))
+			require.Equal(t, int64(1), roster)
+			for _, event := range a.Events {
+				var saved []byte
+				require.NoError(t, pool.QueryRow(ctx, `SELECT payload FROM voice_space_media_admission_outbox WHERE event_id=$1 AND operation_id=$2`, event.ID, a.OperationID).Scan(&saved))
+				require.Equal(t, event.Payload, saved)
+			}
+			require.Eventually(t, func() bool {
+				return publisher.count("voice.call_started") == 1 && publisher.count("voice.member_joined") == 1
+			}, 4*time.Second, 20*time.Millisecond)
+			require.Zero(t, publisher.count(rosteroutbox.Subject), "admission ownership cannot activate native A3 delivery")
+			// Enter the actual public handler after a trusted delegated-principal
+			// fixture boundary. JWT transport verification is outside this component
+			// proof; factory revoker, PG and Redis are the production implementations.
+			leaveCtx := principal.WithVerified(ctx, principal.Principal{Issuer: "gateway", Audience: "voice", AccountID: a.AccountID.String(), ProfileID: a.ProfileID.String(), SessionEpoch: int64(a.SessionEpoch)})
+			_, err = voice.LeaveVoiceRoom(leaveCtx, &callsv1.LeaveVoiceRoomRequest{VoiceRoomId: a.VoiceRoomID})
+			require.NoError(t, err, "public leave is restrictive even while the original writer lease is healthy")
+			var remaining int
+			require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_account_voice_fences WHERE admission_operation_id=$1`, a.OperationID).Scan(&remaining))
+			require.Zero(t, remaining)
+			require.NoError(t, pool.QueryRow(ctx, `SELECT roster_version FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2`, a.VoiceRoomID, a.RoomGeneration).Scan(&roster))
+			require.Equal(t, int64(2), roster)
+			require.Equal(t, 1, publisher.count("voice.call_ended"))
+			require.Zero(t, publisher.count(rosteroutbox.Subject))
+		})
+	}
+}
 
 func (compositionAuthority) RequireCurrent(context.Context, string, int64) error { return nil }
 func (compositionAuthority) CurrentFloor(context.Context, string) (int64, error) { return 3, nil }
@@ -213,6 +343,9 @@ func compositionAdmission(t *testing.T, ctx context.Context, admissions *spaceme
 		SpaceID: uuid.New(), RoomID: uuid.NewString(), VoiceRoomID: uuid.NewString(), CreatedRoom: true,
 		CallStartedAt: time.Now().UTC(), MaxParticipants: store.MaxVoiceRoomParticipants, SessionEpoch: 3, AccessEpoch: 4, PolicyEpoch: 5, CanJoin: true, CanSubscribe: true,
 		Events: []store.SpaceMediaAdmissionEvent{{ID: uuid.New(), Subject: "voice.call_started", Payload: []byte("fixed call event")}, {ID: uuid.New(), Subject: "voice.member_joined", Payload: []byte("fixed member event")}}}
+	a.Ownership = store.NewSpaceAdmissionOwnership(a.OperationID)
+	ctx = store.WithSpaceAdmissionOwnership(ctx, a.Ownership)
+	defer func() { require.NoError(t, admissions.RelinquishAdmissionOwnership(ctx, a.OperationID)) }()
 	a.Identity, _ = livekit.SpaceParticipantIdentity(a.ProfileID.String(), a.Generation)
 	head, err := admissions.ClaimRoomHead(ctx, a.VoiceRoomID, a.SpaceID.String(), a.RoomID, a.OperationID, true)
 	require.NoError(t, err)
@@ -224,10 +357,44 @@ func compositionAdmission(t *testing.T, ctx context.Context, admissions *spaceme
 	return a
 }
 
+func TestProductionSpaceMediaFactoryP3WithoutNATSUsesRestrictiveGate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("PostgreSQL/Redis production P3 composition integration")
+	}
+	ctx := t.Context()
+	pool := compositionPostgres(t, ctx)
+	admissions := spacemedia.NewPostgresAdmissionStore(pool)
+	a := compositionAdmission(t, ctx, admissions)
+	addr := os.Getenv("VOICE_GATE_TEST_REDIS_ADDR")
+	if addr == "" {
+		addr = miniredis.RunT(t).Addr()
+	}
+	client := redis.NewClient(&redis.Options{Addr: addr})
+	defer client.Close()
+	prefix := uuid.NewString() + ":"
+	calls := store.NewRedisCallStore(client, prefix)
+	media := &compositionMedia{}
+	lifecycle := &spacelifecycle.Service{Store: spacelifecycle.NewPostgresStore(pool, spacemedia.BeginPartyRoomClose), Effects: spacelifecycle.NewEffects(pool, media)}
+	voice := &grpcsvc.VoiceGRPC{Calls: calls, SpaceMediaAdmissions: admissions, SpaceLifecycle: lifecycle}
+	closeRuntime := startSpaceMediaRuntime(ctx, voice, pool, nil, true, "", media, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	defer func() { require.NoError(t, closeRuntime()) }()
+	fence := &commonv1.SpaceLifecycleFenceRequest{ProtocolVersion: 1, SpaceId: a.SpaceID.String(), DeletionOperationId: uuid.NewString(), Generation: 1, DesiredState: commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_FROZEN, Manifest: &commonv1.ManifestBinding{ManifestId: uuid.NewString(), ManifestSha256: make([]byte, 32)}}
+	receipt, err := lifecycle.ApplySpaceLifecycleFence(ctx, fence)
+	require.ErrorIs(t, err, spacelifecycle.ErrUnavailable)
+	require.Nil(t, receipt, "exact drain does not establish full provider retirement")
+	var complete bool
+	require.NoError(t, pool.QueryRow(ctx, `SELECT cleanup_completed_at IS NOT NULL FROM voice_space_lifecycle_targets WHERE space_id=$1 AND generation=1 AND target_id=$2`, a.SpaceID, "native:"+a.OperationID.String()).Scan(&complete))
+	require.True(t, complete, "the actual no-NATS factory must wire the restrictive sink fence before captured completion")
+	require.Equal(t, int64(1), client.Exists(ctx, prefix+"space_admission_dispatch:"+a.OperationID.String()).Val())
+	var remaining int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_account_voice_fences WHERE admission_operation_id=$1`, a.OperationID).Scan(&remaining))
+	require.Zero(t, remaining)
+}
+
 func compositionPostgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	t.Helper()
 	pool := spacegatetest.StartPostgres(t, ctx, "voice_composition", "")
-	for _, migration := range []string{"000001_room_lifecycle", "000002_redis_divergence", "000003_matchmaking_membership", "000004_game_session_rooms", "000005_game_session_close", "000006_game_session_roster_lease", "000007_t17_sdk_conversion_fence", "000008_account_voice_fence", "000009_space_lifecycle", "000010_space_media_admission", "000013_a3_roster_outbox", "000014_space_media_p3"} {
+	for _, migration := range []string{"000001_room_lifecycle", "000002_redis_divergence", "000003_matchmaking_membership", "000004_game_session_rooms", "000005_game_session_close", "000006_game_session_roster_lease", "000007_t17_sdk_conversion_fence", "000008_account_voice_fence", "000009_space_lifecycle", "000010_space_media_admission", "000013_a3_roster_outbox", "000014_space_media_p3", "000015_space_admission_ownership"} {
 		body, err := os.ReadFile(filepath.Join("..", "migrations", "voice_db", migration+".up.sql"))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(body))

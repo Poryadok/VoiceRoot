@@ -71,6 +71,28 @@ type fakeAdmissionRecovery struct {
 	releasedRows    []store.SpaceMediaAdmission
 }
 
+// Explicit healthy authority for memory-store coordinator unit cases. Real
+// arbitration, expiry, PostgreSQL CAS and Redis sink proof use integration tests.
+func (f *fakeAdmissionRecovery) ClaimAdmissionRecovery(_ context.Context, a store.SpaceMediaAdmission) (store.SpaceMediaAdmission, bool, error) {
+	for _, current := range f.recoveryRows {
+		if current.OperationID == a.OperationID {
+			a = current
+			break
+		}
+	}
+	a.Ownership = store.NewSpaceAdmissionOwnership(a.OperationID)
+	return a, true, nil
+}
+func (f *fakeAdmissionRecovery) HoldAdmissionOwnership(ctx context.Context, _ uuid.UUID) (context.Context, func(), error) {
+	return ctx, func() {}, nil
+}
+func (f *fakeAdmissionRecovery) ReadAdmissionDispatch(context.Context, string) (int64, bool, error) {
+	return 1, true, nil
+}
+func (f *fakeAdmissionRecovery) FenceAbortedAdmission(context.Context, uuid.UUID, store.SpaceAdmissionProjectionGates) error {
+	return nil
+}
+
 func (f *fakeAdmissionRecovery) RecoveryRows(context.Context, int) ([]store.SpaceMediaAdmission, error) {
 	f.reads++
 	if f.recoveryRows != nil {
@@ -154,12 +176,27 @@ func (f *fakeAdmissionRecovery) MarkProjectionApplied(context.Context, uuid.UUID
 	f.projected++
 	return nil
 }
-func (f *fakeAdmissionRecovery) BeginRoomLeave(context.Context, uuid.UUID, string) error { return nil }
+func (f *fakeAdmissionRecovery) BeginOwnedRoomLeave(context.Context, store.SpaceAdmissionOwnership, uuid.UUID, string) error {
+	return nil
+}
+func (f *fakeAdmissionRecovery) BeginRestrictiveRoomLeave(_ context.Context, a store.SpaceMediaAdmission) (store.SpaceAdmissionRevocation, error) {
+	return store.SpaceAdmissionRevocation{Admission: a, OwnerEpoch: 1}, nil
+}
+func (f *fakeAdmissionRecovery) CompleteRestrictiveRoomLeave(context.Context, store.SpaceAdmissionRevocation) error {
+	f.released++
+	return nil
+}
+func (f *fakeAdmissionRecovery) FenceRestrictiveRoomLeave(_ context.Context, t store.SpaceAdmissionRevocation, _ store.SpaceAdmissionProjectionGates) (store.SpaceProjectionTicket, error) {
+	return store.SpaceProjectionTicket{AdmissionIncarnation: uuid.NewString(), AdmissionOwnerEpoch: t.OwnerEpoch}, nil
+}
+func (f *fakeAdmissionRecovery) FenceOwnedRoomLeave(_ context.Context, o store.SpaceAdmissionOwnership, _ uuid.UUID, _ store.SpaceAdmissionProjectionGates) (store.SpaceProjectionTicket, error) {
+	return store.SpaceProjectionTicket{AdmissionIncarnation: uuid.NewString(), AdmissionOwnerEpoch: o.Epoch}, nil
+}
 func (f *fakeAdmissionRecovery) ConfirmRoomHeadOpen(context.Context, store.SpaceMediaAdmission) error {
 	return nil
 }
 func (f *fakeAdmissionRecovery) RecoverOrphanRoomHeads(context.Context) error { return nil }
-func (f *fakeAdmissionRecovery) CompleteRoomLeave(context.Context, store.SpaceMediaAdmission) error {
+func (f *fakeAdmissionRecovery) CompleteOwnedRoomLeave(context.Context, store.SpaceAdmissionOwnership, store.SpaceMediaAdmission) error {
 	f.released++
 	return nil
 }
@@ -264,7 +301,7 @@ func TestFakeAdmissionRecoveryConfirmProjectionRequiresExactCommittedBinding(t *
 }
 
 func TestCoordinatorDrainsEveryAdmissionRecoveryPageBeforeReady(t *testing.T) {
-	row := store.SpaceMediaAdmission{State: AdmissionCommitted, ProjectionApplied: true, ParticipantState: "ACTIVE"}
+	row := store.SpaceMediaAdmission{OperationID: uuid.New(), State: AdmissionCommitted, ProjectionApplied: true, ParticipantState: "ACTIVE"}
 	admissions := &fakeAdmissionRecovery{pages: [][]store.SpaceMediaAdmission{{row}, nil}}
 	c := &Coordinator{ProjectionGates: spacegatetest.New(),
 		Store: store.NewMemoryCallStore(), Calls: store.NewMemoryCallStore(),
@@ -490,6 +527,7 @@ func TestAbortRetryDrainsExactCommittedProjectionBeforeReleasingFence(t *testing
 		VoiceRoomID: voiceRoomID, Identity: participant.Identity, State: AdmissionAborting,
 	}
 
+	ctx = store.WithSpaceAdmissionOwnership(ctx, store.NewSpaceAdmissionOwnership(row.OperationID))
 	err = c.abortAdmission(ctx, row)
 
 	require.NoError(t, err)
@@ -544,6 +582,7 @@ func TestCommittedDuplicateRoomAdmissionRecoversByAbortingHiddenLoser(t *testing
 		CanJoin: true, CanSubscribe: true, State: AdmissionCommitted,
 	}
 
+	ctx = store.WithSpaceAdmissionOwnership(ctx, store.NewSpaceAdmissionOwnership(row.OperationID))
 	err = c.recoverCommittedAdmission(ctx, row)
 
 	require.NoError(t, err)

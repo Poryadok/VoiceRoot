@@ -211,6 +211,9 @@ func (r *screenShareLeaveRevoker) RevokeSpaceMediaParticipant(ctx context.Contex
 		participant.Identity == "" || participant.RoomGeneration == 0 || participant.Generation == "" {
 		return voicestore.Call{}, false, status.Error(codes.FailedPrecondition, "test revoker requires the exact confirmed admission")
 	}
+	if err := r.media.admissions.BeginRoomLeave(ctx, uuid.MustParse(participant.AdmissionOperationID), participant.Generation); err != nil {
+		return call, false, err
+	}
 	_, matched, err := r.calls.BeginSpaceMediaRevocation(ctx, call.RoomID, participant.ProfileID, participant.Identity, participant.Generation)
 	if err != nil {
 		return call, false, err
@@ -227,6 +230,9 @@ func (r *screenShareLeaveRevoker) RevokeSpaceMediaParticipant(ctx context.Contex
 	}
 	if !completed {
 		return updated, false, status.Error(codes.FailedPrecondition, "test revoker could not complete the matching media participant")
+	}
+	if err := r.media.admissions.CompleteRoomLeave(ctx, voicestore.SpaceMediaAdmission{OperationID: uuid.MustParse(participant.AdmissionOperationID), Generation: participant.Generation, AccountID: uuid.MustParse(participant.AccountID), ProfileID: uuid.MustParse(participant.ProfileID), SpaceID: uuid.MustParse(call.SpaceID), RoomID: call.RoomID}); err != nil {
+		return updated, false, err
 	}
 	r.removedProfiles = append(r.removedProfiles, participant.ProfileID)
 	return updated, true, nil

@@ -68,6 +68,20 @@ WHERE a.operation_id=$1 AND a.generation=$2 AND a.state='COMMITTED' AND a.partic
 		return store.SpaceProjectionTicket{}, err
 	}
 	var owned bool
+	var ownerEpoch int64
+	var settled bool
+	if err := tx.QueryRow(ctx, `SELECT o.owner_epoch,a.projection_applied_at IS NOT NULL AND a.participant_state='ACTIVE'
+FROM voice_space_media_admission_owners o JOIN voice_space_media_admissions a USING(operation_id) WHERE o.operation_id=$1 FOR UPDATE OF o`, operation).Scan(&ownerEpoch, &settled); err != nil {
+		return store.SpaceProjectionTicket{}, err
+	}
+	if t.AdmissionIncarnation == "" || t.AdmissionOwnerEpoch != ownerEpoch || !t.AdmissionLive {
+		return store.SpaceProjectionTicket{}, ErrAdmissionConflict
+	}
+	if !settled {
+		if err := requireAdmissionOwnership(ctx, tx, operation); err != nil {
+			return store.SpaceProjectionTicket{}, err
+		}
+	}
 	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM voice_account_voice_fences f JOIN voice_profile_account_mappings m ON m.profile_id=f.profile_id
 WHERE f.account_id=$1 AND f.profile_id=$2 AND f.room_id=$3 AND f.admission_operation_id=$4 AND f.admission_generation=$5 AND m.account_id=f.account_id)`, t.AccountID, t.ProfileID, t.RoomID, operation, generation).Scan(&owned)
 	if err != nil || !owned {

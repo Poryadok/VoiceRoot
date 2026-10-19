@@ -46,3 +46,19 @@ func (g *Gates) ReadReadySpaceGate(_ context.Context, space string) (store.Space
 	}
 	return t, nil
 }
+
+func (g *Gates) EnsureAdmissionDispatch(ctx context.Context, operation string, load store.SpaceAdmissionGateLoader) (store.SpaceProjectionTicket, error) {
+	epoch, live, err := load(ctx, operation)
+	if err != nil {
+		return store.SpaceProjectionTicket{}, err
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	key := "admission:" + operation
+	t, ok := g.entries[key]
+	if !ok || t.AdmissionOwnerEpoch != epoch || t.AdmissionLive != live {
+		t = store.SpaceProjectionTicket{OperationID: operation, AdmissionIncarnation: uuid.NewString(), AdmissionOwnerEpoch: epoch, AdmissionLive: live}
+		g.entries[key] = t
+	}
+	return t, nil
+}
