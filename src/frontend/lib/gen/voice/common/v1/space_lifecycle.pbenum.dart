@@ -37,6 +37,8 @@ class ParticipantId extends $pb.ProtobufEnum {
       ParticipantId._(9, _omitEnumNames ? '' : 'PARTICIPANT_ID_BOT');
   static const ParticipantId PARTICIPANT_ID_NOTIFICATION =
       ParticipantId._(10, _omitEnumNames ? '' : 'PARTICIPANT_ID_NOTIFICATION');
+  static const ParticipantId PARTICIPANT_ID_REALTIME =
+      ParticipantId._(11, _omitEnumNames ? '' : 'PARTICIPANT_ID_REALTIME');
 
   static const $core.List<ParticipantId> values = <ParticipantId>[
     PARTICIPANT_ID_UNSPECIFIED,
@@ -50,10 +52,11 @@ class ParticipantId extends $pb.ProtobufEnum {
     PARTICIPANT_ID_SUBSCRIPTION,
     PARTICIPANT_ID_BOT,
     PARTICIPANT_ID_NOTIFICATION,
+    PARTICIPANT_ID_REALTIME,
   ];
 
   static final $core.List<ParticipantId?> _byValue =
-      $pb.ProtobufEnum.$_initByValueList(values, 10);
+      $pb.ProtobufEnum.$_initByValueList(values, 11);
   static ParticipantId? valueOf($core.int value) =>
       value < 0 || value >= _byValue.length ? null : _byValue[value];
 

@@ -400,6 +400,10 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		}
 		return t.serveFiles(w, r, rest)
 	case "spaces":
+		if isSpaceCreateRequest(r) {
+			t.serveSpaceCreate(w, r)
+			return true
+		}
 		if t.serveSpaceAudit(w, r, rest) {
 			return true
 		}

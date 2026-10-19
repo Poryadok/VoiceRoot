@@ -20,6 +20,10 @@ service AuthService {
   // @voice.security=protected;callers=service:role
   // Private Role-only read; shares Auth's durable account and retained floor authority.
   rpc GetRoleSessionEpochFloor(GetRoleSessionEpochFloorRequest) returns (GetRoleSessionEpochFloorResponse);
+  rpc GetSpaceSessionEpochFloor(GetSpaceSessionEpochFloorRequest) returns (GetSpaceSessionEpochFloorResponse);
+  // @voice.security=protected;callers=service:space
+  // Exact read-only current Auth account + User profile observation; never grants membership.
+  rpc ObserveSpaceAdmissionSubject(ObserveSpaceAdmissionSubjectRequest) returns (ObserveSpaceAdmissionSubjectResponse);
   rpc Register(RegisterRequest) returns (RegisterResponse);
   rpc Login(LoginRequest) returns (LoginResponse);
   rpc Logout(LogoutRequest) returns (LogoutResponse);
@@ -514,4 +518,57 @@ message AcknowledgeSpaceDeletionProofReceiptRequest {
 // @voice.hash=domain_separated_sha256
 message AcknowledgeSpaceDeletionProofReceiptResponse {
   google.protobuf.Timestamp acknowledged_at = 1;
+}
+
+// Space-only authoritative session floor; separate from Role and Voice callers.
+message GetSpaceSessionEpochFloorRequest {
+  string account_id = 1;
+}
+
+message GetSpaceSessionEpochFloorResponse {
+  int64 session_epoch_floor = 1;
+}
+
+enum SpaceAdmissionPhase {
+  SPACE_ADMISSION_PHASE_UNSPECIFIED = 0;
+  SPACE_ADMISSION_PHASE_START = 1;
+  SPACE_ADMISSION_PHASE_READ = 2;
+  SPACE_ADMISSION_PHASE_SUBMIT = 3;
+  SPACE_ADMISSION_PHASE_APPROVE = 4;
+  SPACE_ADMISSION_PHASE_FIRST_PUBLISH = 5;
+}
+
+enum SpaceAdmissionSubjectRole {
+  SPACE_ADMISSION_SUBJECT_ROLE_UNSPECIFIED = 0;
+  SPACE_ADMISSION_SUBJECT_ROLE_APPLICANT = 1;
+  SPACE_ADMISSION_SUBJECT_ROLE_REVIEWER = 2;
+}
+
+enum SpaceAdmissionDecision {
+  SPACE_ADMISSION_DECISION_UNSPECIFIED = 0;
+  SPACE_ADMISSION_DECISION_ELIGIBLE = 1;
+}
+
+message ObserveSpaceAdmissionSubjectRequest {
+  uint32 protocol_version = 1;
+  SpaceAdmissionPhase phase = 2;
+  SpaceAdmissionSubjectRole subject_role = 3;
+  string account_id = 4;
+  string profile_id = 5;
+  string space_id = 6;
+  // Exactly 32 SHA-256 bytes of the server-owned admission context.
+  bytes admission_binding_sha256 = 7;
+  optional uint64 interactive_session_epoch = 8;
+}
+
+message ObserveSpaceAdmissionSubjectResponse {
+  // SHA-256 of the exact deterministic ObserveSpaceAdmissionSubjectRequest.
+  bytes request_binding_sha256 = 1;
+  string account_id = 2;
+  string profile_id = 3;
+  string account_type = 4;
+  uint64 account_security_revision = 5;
+  uint64 session_epoch_floor = 6;
+  uint64 profile_revision = 7;
+  SpaceAdmissionDecision decision = 8;
 }

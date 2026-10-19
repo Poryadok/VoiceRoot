@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestLifecycleRuntimeRequiresAllTenEndpointsAndExplicitActivation(t *testing.T) {
+func TestLifecycleRuntimeRequiresAllElevenEndpointsAndExplicitActivation(t *testing.T) {
 	env := map[string]string{}
 	config, enabled, err := loadLifecycleRuntimeConfig(func(k string) string { return env[k] })
 	require.NoError(t, err)
@@ -20,13 +20,13 @@ func TestLifecycleRuntimeRequiresAllTenEndpointsAndExplicitActivation(t *testing
 	env["SPACE_ROLE_CLIENT_KEY_FILE"] = "role.key"
 	env["SPACE_LIFECYCLE_MODE"] = "development"
 	env["SPACE_LIFECYCLE_DEV_TOMBSTONE_KEY_FILE"] = "private.json"
-	for _, name := range []string{"ROLE", "CHAT", "MESSAGING", "FILE", "VOICE", "MATCHMAKING", "SEARCH", "SUBSCRIPTION", "BOT", "NOTIFICATION"} {
+	for _, name := range []string{"ROLE", "CHAT", "MESSAGING", "FILE", "VOICE", "MATCHMAKING", "SEARCH", "SUBSCRIPTION", "BOT", "NOTIFICATION", "REALTIME"} {
 		env["SPACE_LIFECYCLE_"+name+"_GRPC_ADDR"] = "owner:9443"
 	}
 	config, enabled, err = loadLifecycleRuntimeConfig(func(k string) string { return env[k] })
 	require.NoError(t, err)
 	require.True(t, enabled)
-	require.Len(t, config.Owners, 10)
+	require.Len(t, config.Owners, 11)
 	for key := range env {
 		if len(key) > 10 && key[len(key)-10:] == "_GRPC_ADDR" {
 			saved := env[key]

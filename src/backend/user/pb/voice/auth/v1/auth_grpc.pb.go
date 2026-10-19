@@ -24,6 +24,8 @@ const (
 	AuthService_GetOwnershipTransferReceipt_FullMethodName          = "/voice.auth.v1.AuthService/GetOwnershipTransferReceipt"
 	AuthService_GetVoiceSessionEpochFloor_FullMethodName            = "/voice.auth.v1.AuthService/GetVoiceSessionEpochFloor"
 	AuthService_GetRoleSessionEpochFloor_FullMethodName             = "/voice.auth.v1.AuthService/GetRoleSessionEpochFloor"
+	AuthService_GetSpaceSessionEpochFloor_FullMethodName            = "/voice.auth.v1.AuthService/GetSpaceSessionEpochFloor"
+	AuthService_ObserveSpaceAdmissionSubject_FullMethodName         = "/voice.auth.v1.AuthService/ObserveSpaceAdmissionSubject"
 	AuthService_Register_FullMethodName                             = "/voice.auth.v1.AuthService/Register"
 	AuthService_Login_FullMethodName                                = "/voice.auth.v1.AuthService/Login"
 	AuthService_Logout_FullMethodName                               = "/voice.auth.v1.AuthService/Logout"
@@ -71,6 +73,10 @@ type AuthServiceClient interface {
 	// @voice.security=protected;callers=service:role
 	// Private Role-only read; shares Auth's durable account and retained floor authority.
 	GetRoleSessionEpochFloor(ctx context.Context, in *GetRoleSessionEpochFloorRequest, opts ...grpc.CallOption) (*GetRoleSessionEpochFloorResponse, error)
+	GetSpaceSessionEpochFloor(ctx context.Context, in *GetSpaceSessionEpochFloorRequest, opts ...grpc.CallOption) (*GetSpaceSessionEpochFloorResponse, error)
+	// @voice.security=protected;callers=service:space
+	// Exact read-only current Auth account + User profile observation; never grants membership.
+	ObserveSpaceAdmissionSubject(ctx context.Context, in *ObserveSpaceAdmissionSubjectRequest, opts ...grpc.CallOption) (*ObserveSpaceAdmissionSubjectResponse, error)
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
 	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error)
@@ -169,6 +175,26 @@ func (c *authServiceClient) GetRoleSessionEpochFloor(ctx context.Context, in *Ge
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetRoleSessionEpochFloorResponse)
 	err := c.cc.Invoke(ctx, AuthService_GetRoleSessionEpochFloor_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) GetSpaceSessionEpochFloor(ctx context.Context, in *GetSpaceSessionEpochFloorRequest, opts ...grpc.CallOption) (*GetSpaceSessionEpochFloorResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSpaceSessionEpochFloorResponse)
+	err := c.cc.Invoke(ctx, AuthService_GetSpaceSessionEpochFloor_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) ObserveSpaceAdmissionSubject(ctx context.Context, in *ObserveSpaceAdmissionSubjectRequest, opts ...grpc.CallOption) (*ObserveSpaceAdmissionSubjectResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ObserveSpaceAdmissionSubjectResponse)
+	err := c.cc.Invoke(ctx, AuthService_ObserveSpaceAdmissionSubject_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -481,6 +507,10 @@ type AuthServiceServer interface {
 	// @voice.security=protected;callers=service:role
 	// Private Role-only read; shares Auth's durable account and retained floor authority.
 	GetRoleSessionEpochFloor(context.Context, *GetRoleSessionEpochFloorRequest) (*GetRoleSessionEpochFloorResponse, error)
+	GetSpaceSessionEpochFloor(context.Context, *GetSpaceSessionEpochFloorRequest) (*GetSpaceSessionEpochFloorResponse, error)
+	// @voice.security=protected;callers=service:space
+	// Exact read-only current Auth account + User profile observation; never grants membership.
+	ObserveSpaceAdmissionSubject(context.Context, *ObserveSpaceAdmissionSubjectRequest) (*ObserveSpaceAdmissionSubjectResponse, error)
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)
 	Logout(context.Context, *LogoutRequest) (*LogoutResponse, error)
@@ -549,6 +579,12 @@ func (UnimplementedAuthServiceServer) GetVoiceSessionEpochFloor(context.Context,
 }
 func (UnimplementedAuthServiceServer) GetRoleSessionEpochFloor(context.Context, *GetRoleSessionEpochFloorRequest) (*GetRoleSessionEpochFloorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetRoleSessionEpochFloor not implemented")
+}
+func (UnimplementedAuthServiceServer) GetSpaceSessionEpochFloor(context.Context, *GetSpaceSessionEpochFloorRequest) (*GetSpaceSessionEpochFloorResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSpaceSessionEpochFloor not implemented")
+}
+func (UnimplementedAuthServiceServer) ObserveSpaceAdmissionSubject(context.Context, *ObserveSpaceAdmissionSubjectRequest) (*ObserveSpaceAdmissionSubjectResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ObserveSpaceAdmissionSubject not implemented")
 }
 func (UnimplementedAuthServiceServer) Register(context.Context, *RegisterRequest) (*RegisterResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Register not implemented")
@@ -744,6 +780,42 @@ func _AuthService_GetRoleSessionEpochFloor_Handler(srv interface{}, ctx context.
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthServiceServer).GetRoleSessionEpochFloor(ctx, req.(*GetRoleSessionEpochFloorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_GetSpaceSessionEpochFloor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSpaceSessionEpochFloorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).GetSpaceSessionEpochFloor(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_GetSpaceSessionEpochFloor_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).GetSpaceSessionEpochFloor(ctx, req.(*GetSpaceSessionEpochFloorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_ObserveSpaceAdmissionSubject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ObserveSpaceAdmissionSubjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ObserveSpaceAdmissionSubject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ObserveSpaceAdmissionSubject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ObserveSpaceAdmissionSubject(ctx, req.(*ObserveSpaceAdmissionSubjectRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1296,6 +1368,14 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetRoleSessionEpochFloor",
 			Handler:    _AuthService_GetRoleSessionEpochFloor_Handler,
+		},
+		{
+			MethodName: "GetSpaceSessionEpochFloor",
+			Handler:    _AuthService_GetSpaceSessionEpochFloor_Handler,
+		},
+		{
+			MethodName: "ObserveSpaceAdmissionSubject",
+			Handler:    _AuthService_ObserveSpaceAdmissionSubject_Handler,
 		},
 		{
 			MethodName: "Register",

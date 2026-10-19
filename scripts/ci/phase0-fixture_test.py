@@ -893,7 +893,8 @@ class ComposeTests(unittest.TestCase):
                          "matchmaking_space_principal_runtime")
 
     def test_voice_startup_categories_cover_static_fatal_sites_without_dynamic_text(self):
-        source = (ROOT / "src/backend/voice/main.go").read_text()
+        source = "\n".join((ROOT / path).read_text() for path in (
+            "src/backend/voice/main.go", "src/backend/voice/space_media_runtime.go"))
         prefixes = dict(startup_diagnostics.VOICE_STARTUP_PREFIXES)
         for literal in re.findall(r'log\.Fatalf?\("([^"\n]+)"', source):
             prefix = literal.split("%", 1)[0].rstrip()
@@ -902,6 +903,23 @@ class ComposeTests(unittest.TestCase):
             summary, first = startup_diagnostics.sanitize_logs(raw, "complete", ("voice",))
             self.assertEqual(first["startup_category"], prefixes[prefix])
             self.assertNotIn("private-sentinel", json.dumps({"summary": summary, "first": first}))
+
+    def test_voice_p3_startup_categories_are_finite_and_redacted(self):
+        cases = {
+            "P3 requires durable lifecycle-fenced Redis": "voice_p3_durable_redis_required",
+            "Space requires an incarnation-fenced projection store": "voice_space_incarnation_projection_required",
+            "P3 requires lifecycle-fenced Redis projection": "voice_p3_projection_fence_required",
+        }
+        for message, expected in cases.items():
+            with self.subTest(category=expected):
+                raw = ("voice | " + message + " private-sentinel\n").encode()
+                summary, first = startup_diagnostics.sanitize_logs(raw, "complete", ("voice",))
+                self.assertEqual(first["startup_category"], expected)
+                self.assertNotIn("private-sentinel", json.dumps({"summary": summary, "first": first}))
+        summary, first = startup_diagnostics.sanitize_logs(
+            b"voice | P3 requires unknown-private-sentinel\n", "complete", ("voice",))
+        self.assertEqual(first["startup_category"], "unknown")
+        self.assertNotIn("private-sentinel", json.dumps({"summary": summary, "first": first}))
 
     def test_t31_match_squad_runtime_detail_is_allowlisted_and_redacted(self):
         secret = "private-certificate-or-endpoint-detail"

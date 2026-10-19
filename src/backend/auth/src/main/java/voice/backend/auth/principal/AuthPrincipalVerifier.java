@@ -74,6 +74,8 @@ public final class AuthPrincipalVerifier {
       String subject = string(claims, "sub");
       if (VerifiedPrincipal.SERVICE.equals(kind)) {
         if (!subject.equals("service:" + issuer)) throw invalid();
+        if (AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC.equals(rpc)
+            && (claims.has("account_id") || claims.has("profile_id") || claims.has("session_epoch"))) throw invalid();
         principal = new VerifiedPrincipal(kind, issuer, null, null, 0);
       } else if (VerifiedPrincipal.DELEGATED_USER.equals(kind)) {
         if (!"gateway".equals(issuer) || !subject.equals(string(claims, "account_id"))) throw invalid();
@@ -87,11 +89,19 @@ public final class AuthPrincipalVerifier {
         throw invalid();
       }
     } catch (Exception ex) {
+      if (AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC.equals(rpc)
+          && ex instanceof PrincipalDependencyUnavailableException) {
+        throw Status.UNAVAILABLE.withDescription("principal authority unavailable").asRuntimeException();
+      }
       // Do not expose credentials, identities, network endpoints or parser details.
       throw Status.UNAUTHENTICATED.withDescription("invalid principal").asRuntimeException();
     }
-    boolean allowed = AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC.equals(rpc)
+    boolean allowed = AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC.equals(rpc)
+        ? principal.kind().equals(VerifiedPrincipal.SERVICE) && principal.issuer().equals("space")
+        : AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC.equals(rpc)
         ? principal.kind().equals(VerifiedPrincipal.SERVICE) && principal.issuer().equals("voice")
+        : AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC.equals(rpc)
+        ? principal.kind().equals(VerifiedPrincipal.SERVICE) && principal.issuer().equals("space")
         : AuthPrincipalServerInterceptor.ROLE_SESSION_FLOOR_RPC.equals(rpc)
         ? principal.kind().equals(VerifiedPrincipal.SERVICE) && principal.issuer().equals("role")
         : AuthPrincipalServerInterceptor.ISSUE_RPC.equals(rpc)
@@ -110,6 +120,10 @@ public final class AuthPrincipalVerifier {
       replay.record(principal.issuer(), jti, expires);
       if (!expires.isAfter(clock.instant())) throw invalid();
     } catch (Exception ex) {
+      if (AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC.equals(rpc)
+          && ex instanceof PrincipalDependencyUnavailableException) {
+        throw Status.UNAVAILABLE.withDescription("principal authority unavailable").asRuntimeException();
+      }
       throw Status.UNAUTHENTICATED.withDescription("invalid principal").asRuntimeException();
     }
     return principal;

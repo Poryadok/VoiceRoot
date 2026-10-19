@@ -25,11 +25,7 @@ func sharedChatRecipientAllowSet(hub *wsHub, chatID, senderProfileID string, pro
 	if hub == nil {
 		return allowed
 	}
-	for _, profileID := range profileIDs {
-		if profileID == senderProfileID && profileID != "" {
-			allowed[profileID] = true
-		}
-	}
+
 	policy, ok := hub.subscriptionChecker.(messageSentBlockPolicy)
 	if hub.subscriptionChecker == nil {
 		for _, profileID := range profileIDs {
@@ -62,6 +58,9 @@ func sharedChatRecipientAllowSet(hub *wsHub, chatID, senderProfileID string, pro
 			allowed[profileID] = true
 		}
 		return allowed
+	}
+	if senderProfileID != "" {
+		allowed[senderProfileID] = true
 	}
 	profilesByAccount := make(map[string][]string)
 	hub.mu.RLock()

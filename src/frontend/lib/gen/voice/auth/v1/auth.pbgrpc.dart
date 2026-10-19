@@ -83,6 +83,26 @@ class AuthServiceClient extends $grpc.Client {
         options: options);
   }
 
+  $grpc.ResponseFuture<$0.GetSpaceSessionEpochFloorResponse>
+      getSpaceSessionEpochFloor(
+    $0.GetSpaceSessionEpochFloorRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getSpaceSessionEpochFloor, request,
+        options: options);
+  }
+
+  /// @voice.security=protected;callers=service:space
+  /// Exact read-only current Auth account + User profile observation; never grants membership.
+  $grpc.ResponseFuture<$0.ObserveSpaceAdmissionSubjectResponse>
+      observeSpaceAdmissionSubject(
+    $0.ObserveSpaceAdmissionSubjectRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$observeSpaceAdmissionSubject, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.RegisterResponse> register(
     $0.RegisterRequest request, {
     $grpc.CallOptions? options,
@@ -347,6 +367,18 @@ class AuthServiceClient extends $grpc.Client {
       '/voice.auth.v1.AuthService/GetRoleSessionEpochFloor',
       ($0.GetRoleSessionEpochFloorRequest value) => value.writeToBuffer(),
       $0.GetRoleSessionEpochFloorResponse.fromBuffer);
+  static final _$getSpaceSessionEpochFloor = $grpc.ClientMethod<
+          $0.GetSpaceSessionEpochFloorRequest,
+          $0.GetSpaceSessionEpochFloorResponse>(
+      '/voice.auth.v1.AuthService/GetSpaceSessionEpochFloor',
+      ($0.GetSpaceSessionEpochFloorRequest value) => value.writeToBuffer(),
+      $0.GetSpaceSessionEpochFloorResponse.fromBuffer);
+  static final _$observeSpaceAdmissionSubject = $grpc.ClientMethod<
+          $0.ObserveSpaceAdmissionSubjectRequest,
+          $0.ObserveSpaceAdmissionSubjectResponse>(
+      '/voice.auth.v1.AuthService/ObserveSpaceAdmissionSubject',
+      ($0.ObserveSpaceAdmissionSubjectRequest value) => value.writeToBuffer(),
+      $0.ObserveSpaceAdmissionSubjectResponse.fromBuffer);
   static final _$register =
       $grpc.ClientMethod<$0.RegisterRequest, $0.RegisterResponse>(
           '/voice.auth.v1.AuthService/Register',
@@ -553,6 +585,25 @@ abstract class AuthServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.GetRoleSessionEpochFloorRequest.fromBuffer(value),
         ($0.GetRoleSessionEpochFloorResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetSpaceSessionEpochFloorRequest,
+            $0.GetSpaceSessionEpochFloorResponse>(
+        'GetSpaceSessionEpochFloor',
+        getSpaceSessionEpochFloor_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetSpaceSessionEpochFloorRequest.fromBuffer(value),
+        ($0.GetSpaceSessionEpochFloorResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ObserveSpaceAdmissionSubjectRequest,
+            $0.ObserveSpaceAdmissionSubjectResponse>(
+        'ObserveSpaceAdmissionSubject',
+        observeSpaceAdmissionSubject_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ObserveSpaceAdmissionSubjectRequest.fromBuffer(value),
+        ($0.ObserveSpaceAdmissionSubjectResponse value) =>
+            value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.RegisterRequest, $0.RegisterResponse>(
         'Register',
         register_Pre,
@@ -853,6 +904,27 @@ abstract class AuthServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetRoleSessionEpochFloorResponse> getRoleSessionEpochFloor(
       $grpc.ServiceCall call, $0.GetRoleSessionEpochFloorRequest request);
+
+  $async.Future<$0.GetSpaceSessionEpochFloorResponse>
+      getSpaceSessionEpochFloor_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.GetSpaceSessionEpochFloorRequest> $request) async {
+    return getSpaceSessionEpochFloor($call, await $request);
+  }
+
+  $async.Future<$0.GetSpaceSessionEpochFloorResponse> getSpaceSessionEpochFloor(
+      $grpc.ServiceCall call, $0.GetSpaceSessionEpochFloorRequest request);
+
+  $async.Future<$0.ObserveSpaceAdmissionSubjectResponse>
+      observeSpaceAdmissionSubject_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.ObserveSpaceAdmissionSubjectRequest>
+              $request) async {
+    return observeSpaceAdmissionSubject($call, await $request);
+  }
+
+  $async.Future<$0.ObserveSpaceAdmissionSubjectResponse>
+      observeSpaceAdmissionSubject($grpc.ServiceCall call,
+          $0.ObserveSpaceAdmissionSubjectRequest request);
 
   $async.Future<$0.RegisterResponse> register_Pre($grpc.ServiceCall $call,
       $async.Future<$0.RegisterRequest> $request) async {

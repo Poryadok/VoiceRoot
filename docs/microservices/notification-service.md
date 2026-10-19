@@ -1,5 +1,19 @@
 # Notification Service
 
+## Release capability enforcement
+
+Notification consumes the immutable, source/digest-bound
+[owner capability policy](../testing/release-capability-runtime-contract.md).
+The same bootstrap object feeds mobile RegisterDevice admission, every final
+PushDispatcher provider call and the private effective snapshot. Alpha rejects
+Android/iOS registration before token writes and suppresses mobile dispatch for
+old tokens/events/retries; web push, unregister/settings and in-app behavior
+retain their ordinary rules. Unknown/conflicting platform/provider metadata
+cannot fall through to FCM. No token purge or provider activation is implied.
+Release bootstrap rejects absent/unbound policy, recording/debug test mode and
+missing private snapshot configuration before serving. Explicit development
+cannot qualify as alpha. Other owners and actual UI/REST/WS proof remain open.
+
 ## Обзор
 
 Маршрутизация уведомлений по каналам доставки: push (FCM/APNs), in-app (WebSocket), email.
@@ -382,3 +396,30 @@ removes `space`, `channel` and `chat` settings for the exact imported work set,
 while keeping global/unrelated settings. Full pages and receipts expire after
 30 days from participant purge completion; only compact non-content chat/Space
 fences remain to suppress delayed deliveries and resurrection after cleanup.
+
+## Ordinary chat push quota
+
+Only MessagePusher new_message/message_request/reply/mention share a default
+60 distinct logical messages per rolling 60 seconds per recipient across chats.
+NOTIFICATION_CHAT_PUSH_LIMIT and NOTIFICATION_CHAT_PUSH_WINDOW accept positive
+integer and Go duration values (window 1ms through192h); malformed, out-of-range
+or nonpositive values fail startup.
+Identity is canonical recipient + chat_id + message_id, independent of device,
+notification variant and retry. Redis atomically retains ADMITTED or SUPPRESSED
+for 192h from the first decision (168h message stream age plus margin). Replays
+neither consume again nor refresh expiry/window timestamps. After retention or
+Redis loss a replay may be evaluated anew; this is soft QoS, not durable dedupe.
+
+Admission follows settings/presence/quiet-hours and first eligible device policy,
+before grouping. No eligible token, game denial or lifecycle fence consumes no
+unit. SUPPRESSED settles ordinary push with no grouping/provider effect; Redis
+or malformed identity errors fail the event attempt for retry. No local fallback
+and no refund after provider failure; admitted retries can finish partial fanout.
+Provider delivery remains at-least-once; cached admission never bypasses current
+policy or per-device lifecycle checks. In-app/unread state is unchanged.
+
+Calls, all system/security/moderation, grace reminders, match/voice, Story/social
+and direct/bulk RPC delivery are outside this quota. PushDispatcher has no quota.
+Missing NOTIFICATION_REDIS_ADDR with message consumption enabled fails startup;
+runtime Redis outage fails ordinary attempts without adding a whole-service
+readiness gate. Grouping retains its independent existing degraded policy.

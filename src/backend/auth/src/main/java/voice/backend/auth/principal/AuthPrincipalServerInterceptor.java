@@ -9,10 +9,12 @@ import java.util.Set;
 
 /** Buffers the unary message before creating any protected handler. */
 public final class AuthPrincipalServerInterceptor implements ServerInterceptor, AutoCloseable {
+  public static final String SPACE_ADMISSION_RPC = "/voice.auth.v1.AuthService/ObserveSpaceAdmissionSubject";
   public static final String ISSUE_RPC = "/voice.auth.v1.AuthService/IssueOwnershipTransferProof";
   public static final String CONSUME_RPC = "/voice.auth.v1.AuthService/ConsumeOwnershipTransferProof";
   public static final String LOOKUP_RPC = "/voice.auth.v1.AuthService/GetOwnershipTransferReceipt";
   public static final String VOICE_SESSION_FLOOR_RPC = "/voice.auth.v1.AuthService/GetVoiceSessionEpochFloor";
+  public static final String SPACE_SESSION_FLOOR_RPC = "/voice.auth.v1.AuthService/GetSpaceSessionEpochFloor";
   public static final String ROLE_SESSION_FLOOR_RPC = "/voice.auth.v1.AuthService/GetRoleSessionEpochFloor";
   public static final String SPACE_DELETE_CONSUME_RPC =
       "/voice.auth.v1.AuthService/ConsumeSpaceDeletionProof";
@@ -35,9 +37,9 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
   @Override public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
       ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
     String rpc = "/" + call.getMethodDescriptor().getFullMethodName();
-    if (!ISSUE_RPC.equals(rpc) && !CONSUME_RPC.equals(rpc) && !LOOKUP_RPC.equals(rpc)
+    if (!ISSUE_RPC.equals(rpc) && !CONSUME_RPC.equals(rpc) && !LOOKUP_RPC.equals(rpc) && !SPACE_ADMISSION_RPC.equals(rpc)
         && !VOICE_SESSION_FLOOR_RPC.equals(rpc)
-        && !ROLE_SESSION_FLOOR_RPC.equals(rpc)
+        && !ROLE_SESSION_FLOOR_RPC.equals(rpc) && !SPACE_SESSION_FLOOR_RPC.equals(rpc)
         && !SPACE_DELETE_CONSUME_RPC.equals(rpc) && !SPACE_DELETE_LOOKUP_RPC.equals(rpc)
         && !SPACE_DELETE_ACK_RPC.equals(rpc)) return next.startCall(call, headers);
     final String token, requestId;
@@ -78,7 +80,9 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
           verified = verifier.verify(token, rpc, requestId, requestHash((MessageLite) request));
         } catch (RuntimeException ex) {
           Status status = Status.fromThrowable(ex);
-          deny(status.getCode() == Status.Code.PERMISSION_DENIED ? Status.PERMISSION_DENIED : Status.UNAUTHENTICATED);
+          deny(SPACE_SESSION_FLOOR_RPC.equals(rpc) && status.getCode() == Status.Code.UNAVAILABLE
+              ? Status.UNAVAILABLE
+              : status.getCode() == Status.Code.PERMISSION_DENIED ? Status.PERMISSION_DENIED : Status.UNAUTHENTICATED);
           return;
         }
         delegate = Contexts.interceptCall(parent.withValue(VerifiedPrincipal.CONTEXT, verified), call, headers, next);

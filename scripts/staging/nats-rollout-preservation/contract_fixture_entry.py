@@ -88,3 +88,17 @@ def inner(base):
     _materialize_capture(base)
     from nats_contract_integration import inner as run_fixture
     return run_fixture(str(base))
+
+
+def inner_a3(base):
+    base=Path(base)
+    _materialize_capture(base)
+    from nats_a3_roster_integration import inner as run_fixture
+    return run_fixture(str(base))
+
+
+def inner_a3_existing(base):
+    base=Path(base)
+    _materialize_capture(base)
+    from nats_a3_roster_integration import inner_existing as run_fixture
+    return run_fixture(str(base))

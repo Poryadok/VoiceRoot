@@ -5,7 +5,58 @@
 WebSocket-шлюз для доставки событий в реальном времени. Не хранит бизнес-данные — только управляет соединениями и fan-out.
 
 **Язык**: Go
-**Хранилище**: Redis (Pub/Sub, minimum-epoch floor); подключения и подписки — в памяти каждого инстанса
+**Хранилище**: Redis (Pub/Sub, minimum-epoch floor, protected principal replay), PostgreSQL `realtime_db` (только P3 metadata); подключения и подписки — в памяти каждого инстанса
+
+### P3 durable admission (BE-REALTIME-P3-DURABLE-ADMISSION-v1)
+
+Every chat-origin enqueue requires a committed `PENDING` admission tied to a
+never-reused process incarnation. Realtime stores lifecycle gates, admissions,
+exact manifest imports and operation receipts in its own database, never message
+payloads or recipient history. A finite synchronous scope settles only after
+every possible local sink finishes; captured scopes cannot enqueue afterward.
+Connection loss, cancellation, restart and timeout never imply completion.
+
+The protected native Chat resolver supplies only structural chat/Space lifecycle
+enrollment. Missing rows, unavailable authority/schema and unknown state deny
+delivery, including sender fallback. Recipient authorization remains independent.
+Typed chat origins cover profile-targeted notifications, archive activity,
+Redis fanout, messages, chat updates and ephemeral chat events. Non-chat controls
+keep their existing behavior. Already queued frames are outside this boundary.
+
+Space imports the exact immutable Chat manifest pages into Realtime before the
+eleven-participant barrier. Import closes listed gates; a strong FROZEN receipt
+requires sealed complete coverage and zero unresolved admissions across every
+incarnation, checked in the same transaction that saves the receipt. PURGED
+denies remain permanent; stale native LIVE hydration cannot reopen them. LIVE
+restoration requires a completed freeze and the allowed newer generation.
+Full exact request/receipt bytes replay for the original 30 days. Compaction
+retains binding hashes and completion time without renewing the replay window,
+and never removes pending tickets or permanent denies.
+
+The dedicated Space listener exposes only the three Realtime lifecycle RPCs,
+requiring mTLS, exact Space service principal, request/RPC/operation binding,
+issuer-specific HTTPS current+next JWKS and shared replay Redis. Realtime uses
+its own canonical `REALTIME_PRINCIPAL_SIGNING_KEYS_DIR` and
+`REALTIME_PRINCIPAL_ACTIVE_KID`: exactly two top-level PKCS#8 RSA keys, matched
+against its independently published public JWKS. The Chat resolver has its own
+protected listener; ordinary Chat APIs never expose it.
+
+Local Compose uses an independent HTTPS public-key publisher after the existing
+principal initializer; it mounts public documents and its own TLS identity only.
+Its health validates the CA/SAN and both Space/Realtime documents. This static
+generation supports switching to an already published next key, not hot key
+replacement; repeat initialization rejects mismatches and partial volumes.
+This scoped bootstrap DAG does not prove startup of every Compose dependency.
+
+Runtime health requires the local listener, PostgreSQL, usable unexpired Space
+JWKS cache, replay Redis and the protected Chat TLS connection. It performs no
+synthetic domain mutation and does not qualify public P3 activation. Cooperative
+incarnation closure is supported; dead-incarnation recovery without qualified
+exact termination proof is **unsupported** and leaves unresolved work pending.
+Public activation still requires migrated/restorable metadata, complete writer
+coverage (including old binaries), eleven-participant release coverage and a
+qualified recovery/rollback package. A healthy binary or environment flag does
+not establish these gates.
 
 ## Ответственность
 
