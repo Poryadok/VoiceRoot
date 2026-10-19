@@ -47,6 +47,7 @@ room-привязки. WS `call_started` допускает additive `room_type`
 
 | Клиент / граница | Протокол | Сервис |
 |------------------|----------|--------|
+| Bot initiating lifecycle admission | Protected gRPC `GetBotSessionEpochFloor(account_id=1)` → positive `int64 session_epoch_floor=1`; exact signed `service:bot`, complete request hash/ID/JTI and verified exact configured Bot URI SAN on existing mTLS floor listener; no public Gateway route | [Auth](microservices/auth-service.md#t056-p1-session-epoch), BE170-AUTH-BOT-FLOOR-v1 |
 | Клиенты Flutter  | —        | **Federation Service** не вызывается с клиента; S2S gRPC / отдельный ingress, см. [microservices/federation-service.md](microservices/federation-service.md) |
 
 Типичные **синхронные** gRPC между сервисами (не через Gateway) и async-паттерн для ядра чата — таблица «Tier 0: типичные связи» в [MICROSERVICES.md](MICROSERVICES.md).

@@ -15,6 +15,7 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
   public static final String LOOKUP_RPC = "/voice.auth.v1.AuthService/GetOwnershipTransferReceipt";
   public static final String VOICE_SESSION_FLOOR_RPC = "/voice.auth.v1.AuthService/GetVoiceSessionEpochFloor";
   public static final String SPACE_SESSION_FLOOR_RPC = "/voice.auth.v1.AuthService/GetSpaceSessionEpochFloor";
+  public static final String BOT_SESSION_FLOOR_RPC = "/voice.auth.v1.AuthService/GetBotSessionEpochFloor";
   public static final String ROLE_SESSION_FLOOR_RPC = "/voice.auth.v1.AuthService/GetRoleSessionEpochFloor";
   public static final String SPACE_DELETE_CONSUME_RPC =
       "/voice.auth.v1.AuthService/ConsumeSpaceDeletionProof";
@@ -25,11 +26,16 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
   private static final Set<String> RAW = Set.of("x-profile-id", "x-account-id", "x-user-id", "x-actor-id", "x-internal-caller");
   private final AuthPrincipalVerifier verifier;
   private final Runnable cleanup;
+  private final String botPeerUri;
 
   public AuthPrincipalServerInterceptor(AuthPrincipalVerifier verifier) { this(verifier, () -> {}); }
   AuthPrincipalServerInterceptor(AuthPrincipalVerifier verifier, Runnable cleanup) {
+    this(verifier, cleanup, null);
+  }
+  AuthPrincipalServerInterceptor(AuthPrincipalVerifier verifier, Runnable cleanup, String botPeerUri) {
     this.verifier = verifier;
     this.cleanup = cleanup;
+    this.botPeerUri = BotSessionFloorPeer.normalized(botPeerUri);
   }
   @Override public void close() { cleanup.run(); }
   public boolean enabled() { return verifier != null; }
@@ -39,12 +45,13 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
     String rpc = "/" + call.getMethodDescriptor().getFullMethodName();
     if (!ISSUE_RPC.equals(rpc) && !CONSUME_RPC.equals(rpc) && !LOOKUP_RPC.equals(rpc) && !SPACE_ADMISSION_RPC.equals(rpc)
         && !VOICE_SESSION_FLOOR_RPC.equals(rpc)
-        && !ROLE_SESSION_FLOOR_RPC.equals(rpc) && !SPACE_SESSION_FLOOR_RPC.equals(rpc)
+        && !ROLE_SESSION_FLOOR_RPC.equals(rpc) && !SPACE_SESSION_FLOOR_RPC.equals(rpc) && !BOT_SESSION_FLOOR_RPC.equals(rpc)
         && !SPACE_DELETE_CONSUME_RPC.equals(rpc) && !SPACE_DELETE_LOOKUP_RPC.equals(rpc)
         && !SPACE_DELETE_ACK_RPC.equals(rpc)) return next.startCall(call, headers);
     final String token, requestId;
     try {
       if (verifier == null) throw new IllegalArgumentException();
+      if (BOT_SESSION_FLOOR_RPC.equals(rpc)) BotSessionFloorPeer.require(call.getAttributes(), botPeerUri);
       for (String key : headers.keys()) {
         if (key.startsWith("x-voice-") || RAW.contains(key)) throw new IllegalArgumentException();
       }
@@ -80,7 +87,7 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
           verified = verifier.verify(token, rpc, requestId, requestHash((MessageLite) request));
         } catch (RuntimeException ex) {
           Status status = Status.fromThrowable(ex);
-          deny(SPACE_SESSION_FLOOR_RPC.equals(rpc) && status.getCode() == Status.Code.UNAVAILABLE
+          deny((SPACE_SESSION_FLOOR_RPC.equals(rpc) || BOT_SESSION_FLOOR_RPC.equals(rpc)) && status.getCode() == Status.Code.UNAVAILABLE
               ? Status.UNAVAILABLE
               : status.getCode() == Status.Code.PERMISSION_DENIED ? Status.PERMISSION_DENIED : Status.UNAUTHENTICATED);
           return;

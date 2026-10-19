@@ -5480,6 +5480,122 @@ class GetSpaceSessionEpochFloorResponse extends $pb.GeneratedMessage {
   void clearSessionEpochFloor() => $_clearField(1);
 }
 
+/// Bot-only read on the existing protected session-floor listener.
+class GetBotSessionEpochFloorRequest extends $pb.GeneratedMessage {
+  factory GetBotSessionEpochFloorRequest({
+    $core.String? accountId,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    return result;
+  }
+
+  GetBotSessionEpochFloorRequest._();
+
+  factory GetBotSessionEpochFloorRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetBotSessionEpochFloorRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetBotSessionEpochFloorRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetBotSessionEpochFloorRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetBotSessionEpochFloorRequest copyWith(
+          void Function(GetBotSessionEpochFloorRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as GetBotSessionEpochFloorRequest))
+          as GetBotSessionEpochFloorRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetBotSessionEpochFloorRequest create() =>
+      GetBotSessionEpochFloorRequest._();
+  @$core.override
+  GetBotSessionEpochFloorRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetBotSessionEpochFloorRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetBotSessionEpochFloorRequest>(create);
+  static GetBotSessionEpochFloorRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+}
+
+class GetBotSessionEpochFloorResponse extends $pb.GeneratedMessage {
+  factory GetBotSessionEpochFloorResponse({
+    $fixnum.Int64? sessionEpochFloor,
+  }) {
+    final result = create();
+    if (sessionEpochFloor != null) result.sessionEpochFloor = sessionEpochFloor;
+    return result;
+  }
+
+  GetBotSessionEpochFloorResponse._();
+
+  factory GetBotSessionEpochFloorResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetBotSessionEpochFloorResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetBotSessionEpochFloorResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aInt64(1, _omitFieldNames ? '' : 'sessionEpochFloor')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetBotSessionEpochFloorResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetBotSessionEpochFloorResponse copyWith(
+          void Function(GetBotSessionEpochFloorResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as GetBotSessionEpochFloorResponse))
+          as GetBotSessionEpochFloorResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetBotSessionEpochFloorResponse create() =>
+      GetBotSessionEpochFloorResponse._();
+  @$core.override
+  GetBotSessionEpochFloorResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetBotSessionEpochFloorResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetBotSessionEpochFloorResponse>(
+          create);
+  static GetBotSessionEpochFloorResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $fixnum.Int64 get sessionEpochFloor => $_getI64(0);
+  @$pb.TagNumber(1)
+  set sessionEpochFloor($fixnum.Int64 value) => $_setInt64(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSessionEpochFloor() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSessionEpochFloor() => $_clearField(1);
+}
+
 class ObserveSpaceAdmissionSubjectRequest extends $pb.GeneratedMessage {
   factory ObserveSpaceAdmissionSubjectRequest({
     $core.int? protocolVersion,

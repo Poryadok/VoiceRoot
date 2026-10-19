@@ -250,6 +250,30 @@ gate. Actual media/cleanup evidence still requires the authorized live run.
 - Юнит и slice-тесты: **JUnit 5**, **Spring Boot Test** (`@WebMvcTest`, `@DataJpaTest` и т.д. по слою).
 - Контейнер БД в CI: **Testcontainers** для PostgreSQL, если тесту нужна реальная схема.
 
+The BE170 test-only `AuthBotSessionFloorGrpcTest.main` runs the existing protected
+Auth floor fixture for private Go-to-Java composition. Compile its test class,
+then launch it with an output directory and bounded lifetime (1..600 seconds).
+Default inputs retain the original fixed clock, generated test signer and
+account. Set `VOICE_AUTH_BOT_FLOOR_INTEROP_CLOCK_MODE=system` to use the same
+live UTC clock for principal verification, JWKS caching and readiness. In this
+mode the readiness `clock` is an observed startup instant; the shared Go issuer
+must keep using its live clock, rather than freezing that instant.
+
+For one caller-owned test Bot signer shared with Role/Space/Chat, supply **all
+three** `VOICE_AUTH_BOT_FLOOR_INTEROP_SIGNER_KEY_FILE` (RSA PKCS8),
+`VOICE_AUTH_BOT_FLOOR_INTEROP_SIGNER_KEY_ID` and
+`VOICE_AUTH_BOT_FLOOR_INTEROP_JWKS_FILE`. The latter must be the complete approved
+current/next public snapshot fetched by the fixture owner through its existing
+protected JWKS transport. The private/public pair and kid must match it; the
+snapshot bytes are reused unchanged. Partial, blank, invalid or mismatched
+inputs fail before a listener starts. The optional
+`VOICE_AUTH_BOT_FLOOR_INTEROP_ACCOUNT_ID` selects a canonical nonzero UUID only
+for the existing mock account/floor facts and readiness. It performs no identity
+write. The ready record preserves prior fields and adds `clock_mode`,
+`signer_mode`, and the copied public `test_jwks` path. Never print private-key
+contents. These inputs do not configure production Auth or grant new authority;
+run only in an owned private Linux fixture without outer ports or schema work.
+
 ### Flutter (клиент)
 
 - Виджеты и логика: **`flutter test`**.

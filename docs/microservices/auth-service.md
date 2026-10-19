@@ -891,6 +891,37 @@ Role/Voice floor methods. Existing Role/Voice caller contracts are unchanged.
 This producer is a prerequisite for native Space creator freshness, not proof
 that Gateway/Space creation has been assembled or activated.
 
+The additive BE170 `AuthService.GetBotSessionEpochFloor` reads the same
+positive durable/retained maximum and rejects missing/deleted accounts. Its
+request is only canonical nonzero lowercase `account_id = 1`; response is only
+positive `int64 session_epoch_floor = 1`. Unknown fields and malformed IDs fail
+before owner reads. It never initializes, repairs, advances or caches a floor.
+Only signed `iss=bot`, `sub=service:bot`, `principal_type=service`, audience
+`auth`, exact RPC/request ID/deterministic full-body hash and fresh JTI may call
+it. Only the eleven required payload claims `iss`, `sub`, `principal_type`,
+`aud`, `rpc`, `request_id`, `request_hash`, `jti`, `iat`, `nbf`, `exp` are accepted
+for this method; every other name, including null/empty user, Bot actor or
+delegation claims, is rejected. Existing header and old-method claim policies
+remain unchanged. JWKS/replay outages
+return `UNAVAILABLE`. A successfully refreshed, fully validated complete JWKS
+that excludes the requested kid is invalid proof (`UNAUTHENTICATED`) on this
+Bot method only. Its bounded cooldown reuses only explicit successful absence
+evidence for that kid and still-usable snapshot; a failed refresh, malformed
+snapshot or hard expiry cannot fabricate that evidence. Existing resolver and
+old caller outcomes remain unchanged. Invalid/replayed proof returns `UNAUTHENTICATED` and a
+verified different service returns `PERMISSION_DENIED`.
+
+The Bot RPC uses the **existing** dedicated floor listener and additionally
+requires a verified client certificate whose URI SAN (type 6) exactly matches
+the single deployment-owned normalized URI in
+`AUTH_BOT_SESSION_FLOOR_ALLOWED_CLIENT_URI_SAN`. No CN/header/wildcard/shared-CA
+identity substitute or plaintext local/test exception is accepted. Missing,
+blank or malformed Bot peer configuration denies only this method; old
+Role/Voice/Space routes retain their prior behavior and do not require Bot JWKS
+or peer configuration. Bot cannot borrow any old protected Auth method. The Bot
+method is absent from ordinary and proof listeners. Deployment must supply its
+actual Bot identity; test fixture URI values are not deployment defaults.
+
 `accounts.session_epoch` — положительный монотонный durable source of truth
 Auth. Auth атомарно увеличивает его для отзыва всех сессий и никогда не
 уменьшает. Каждый access JWT, выпущенный Auth, содержит положительный integer

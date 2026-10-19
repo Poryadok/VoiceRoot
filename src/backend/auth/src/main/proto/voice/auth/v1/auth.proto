@@ -21,6 +21,7 @@ service AuthService {
   // Private Role-only read; shares Auth's durable account and retained floor authority.
   rpc GetRoleSessionEpochFloor(GetRoleSessionEpochFloorRequest) returns (GetRoleSessionEpochFloorResponse);
   rpc GetSpaceSessionEpochFloor(GetSpaceSessionEpochFloorRequest) returns (GetSpaceSessionEpochFloorResponse);
+  rpc GetBotSessionEpochFloor(GetBotSessionEpochFloorRequest) returns (GetBotSessionEpochFloorResponse);
   // @voice.security=protected;callers=service:space
   // Exact read-only current Auth account + User profile observation; never grants membership.
   rpc ObserveSpaceAdmissionSubject(ObserveSpaceAdmissionSubjectRequest) returns (ObserveSpaceAdmissionSubjectResponse);
@@ -529,6 +530,15 @@ message GetSpaceSessionEpochFloorResponse {
   int64 session_epoch_floor = 1;
 }
 
+// Bot-only read on the existing protected session-floor listener.
+message GetBotSessionEpochFloorRequest {
+  string account_id = 1;
+}
+
+message GetBotSessionEpochFloorResponse {
+  int64 session_epoch_floor = 1;
+}
+
 enum SpaceAdmissionPhase {
   SPACE_ADMISSION_PHASE_UNSPECIFIED = 0;
   SPACE_ADMISSION_PHASE_START = 1;
@@ -536,12 +546,14 @@ enum SpaceAdmissionPhase {
   SPACE_ADMISSION_PHASE_SUBMIT = 3;
   SPACE_ADMISSION_PHASE_APPROVE = 4;
   SPACE_ADMISSION_PHASE_FIRST_PUBLISH = 5;
+  SPACE_ADMISSION_PHASE_SET_ENTRY_POLICY = 6;
 }
 
 enum SpaceAdmissionSubjectRole {
   SPACE_ADMISSION_SUBJECT_ROLE_UNSPECIFIED = 0;
   SPACE_ADMISSION_SUBJECT_ROLE_APPLICANT = 1;
   SPACE_ADMISSION_SUBJECT_ROLE_REVIEWER = 2;
+  SPACE_ADMISSION_SUBJECT_ROLE_SETTINGS_ACTOR = 3;
 }
 
 enum SpaceAdmissionDecision {

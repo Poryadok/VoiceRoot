@@ -32,6 +32,7 @@ class AuthPrincipalServerLifecycleTest {
   static final MethodDescriptor<Struct,Struct> FLOOR = method(AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC);
   static final MethodDescriptor<Struct,Struct> SPACE_FLOOR = method(AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC);
   static final MethodDescriptor<Struct,Struct> ROLE_FLOOR = method(AuthPrincipalServerInterceptor.ROLE_SESSION_FLOOR_RPC);
+  static final MethodDescriptor<Struct,Struct> BOT_FLOOR = method(AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC);
   static final MethodDescriptor<Struct,Struct> ADMISSION = method(AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC);
   static final MethodDescriptor<Struct,Struct> LOGIN = method("/" + SERVICE + "/Login");
   final AuthGrpcService service = mock(AuthGrpcService.class);
@@ -72,6 +73,7 @@ class AuthPrincipalServerLifecycleTest {
       assertStatus(legacy, FLOOR, Status.Code.UNIMPLEMENTED);
       assertStatus(legacy, ROLE_FLOOR, Status.Code.UNIMPLEMENTED);
       assertStatus(legacy, SPACE_FLOOR, Status.Code.UNIMPLEMENTED);
+      assertStatus(legacy, BOT_FLOOR, Status.Code.UNIMPLEMENTED);
       assertStatus(legacy, ADMISSION, Status.Code.UNIMPLEMENTED);
       assertEquals(0, proofCalls.get());
       assertEquals(REQUEST, call(legacy, LOGIN));
@@ -87,6 +89,7 @@ class AuthPrincipalServerLifecycleTest {
       assertStatus(privateChannel, FLOOR, Status.Code.UNIMPLEMENTED);
       assertStatus(privateChannel, ROLE_FLOOR, Status.Code.UNIMPLEMENTED);
       assertStatus(privateChannel, SPACE_FLOOR, Status.Code.UNIMPLEMENTED);
+      assertStatus(privateChannel, BOT_FLOOR, Status.Code.UNIMPLEMENTED);
       assertStatus(privateChannel, ADMISSION, Status.Code.UNIMPLEMENTED);
       assertEquals(REQUEST, call(floorChannel, FLOOR));
       assertEquals(voicePrincipal, observed.get());
@@ -99,6 +102,7 @@ class AuthPrincipalServerLifecycleTest {
       verify(verifier).verify("test-credential", AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC,
           "lifecycle-request", AuthPrincipalServerInterceptor.requestHash(REQUEST));
       assertStatus(floorChannel, ISSUE, Status.Code.UNIMPLEMENTED);
+      assertStatus(floorChannel, BOT_FLOOR, Status.Code.UNAUTHENTICATED);
       assertStatus(floorChannel, LOGIN, Status.Code.UNIMPLEMENTED);
       assertStatus(privateChannel, LOGIN, Status.Code.UNIMPLEMENTED);
       for(var sourceRpc : java.util.List.of("ReadSnapshot","ReadRevision")) {
@@ -190,6 +194,10 @@ class AuthPrincipalServerLifecycleTest {
 
   ServerServiceDefinition definition(boolean includeConsume) {
     var definition = ServerServiceDefinition.builder(SERVICE)
+        .addMethod(BOT_FLOOR, ServerCalls.asyncUnaryCall((request, observer) -> {
+          proofCalls.incrementAndGet(); observed.set(VerifiedPrincipal.current());
+          observer.onNext(request); observer.onCompleted();
+        }))
         .addMethod(ISSUE, ServerCalls.asyncUnaryCall((request, observer) -> {
           proofCalls.incrementAndGet(); observed.set(VerifiedPrincipal.current());
           observer.onNext(request); observer.onCompleted();
