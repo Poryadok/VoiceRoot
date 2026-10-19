@@ -264,6 +264,35 @@ or malformed cursor returns `INVALID_ARGUMENT`, rather than a false complete
 empty result. Newly issued tuple cursors do not require the boundary row to remain
 present. Pagination does not create a roster snapshot or bypass eligibility checks.
 
+### Tree read authorization cut
+
+`ListSpaceTree` reads the current viewer's effective membership, local categories,
+nodes and rooms under one qualified read-only source transaction and
+captures the durable Space authority revision. Ordinary and leased-community
+membership use the same canonical eligibility rule. Chat-name enrichment runs
+outside that scope; before returning any tree or enriched chat fields, the
+handler obtains a fresh membership/revision cut. A removed viewer receives
+`PERMISSION_DENIED`; a changed revision, including remove/rejoin ABA or a tree
+mutation during enrichment, returns `UNAVAILABLE` without a partial response.
+Both the initial read and the final recheck validate the exact migration pin,
+clean migration metadata, canonical relation shape, enabled revision triggers
+and unchanged function-body hashes in the same repeatable-read snapshot as
+the local authority facts. This guard is unconditional, including when the
+separate Federation source listener is disabled. Missing/dirty/unknown metadata,
+pre-24 schemas or altered trigger/function catalogs fail closed before content
+or enrichment is exposed. Qualified tree-read migration pins at this checkpoint
+are 24-31 and 34; later owner migrations need explicit qualification. The
+Federation source service retains its separate exact version-25 gate.
+The revision remains internal positioning evidence and is not a reusable allow.
+
+Complete tree revision coverage is supplied by the authoritative revision
+migration (`000024_authority_revision`), including category/node mutations;
+the earlier media-only epoch is not sufficient watcher snapshot evidence.
+This current-tree read guard does not implement materialized viewer-Space
+discovery, protected watcher bootstrap, a signed cursor or Voice roster delivery.
+It uses authorization-read linearization and does not promise synchronous
+post-revoke draining of all writers.
+
 ### Migration runbook -- fail-closed guest admission
 
 `000016_allow_guests_fail_closed` is a forward-only security correction. It sets

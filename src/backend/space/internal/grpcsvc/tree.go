@@ -48,14 +48,31 @@ func (s *SpaceGRPC) ListSpaceTree(ctx context.Context, req *spacev1.ListSpaceTre
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireSpaceMember(ctx, spaceID); err != nil {
-		return nil, err
+	viewer, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
-	data, err := s.Store.ListSpaceTree(ctx, spaceID)
+	cut, err := s.Store.ReadSpaceTreeForViewer(ctx, spaceID, viewer)
 	if err != nil {
-		return nil, mapSpaceStoreError(err)
+		return nil, mapTreeViewerError(err)
 	}
-	return s.spaceTreeDataToProto(ctx, data), nil
+	// Chat enrichment performs network I/O outside the Space transaction. Its
+	// completion cannot extend a membership or source revision checked earlier.
+	response := s.spaceTreeDataToProto(ctx, cut.Data)
+	if err := s.Store.ValidateSpaceTreeViewer(ctx, cut); err != nil {
+		return nil, mapTreeViewerError(err)
+	}
+	return response, nil
+}
+
+func mapTreeViewerError(err error) error {
+	if errors.Is(err, store.ErrTreeViewerDenied) {
+		return status.Error(codes.PermissionDenied, "not a space member")
+	}
+	if errors.Is(err, store.ErrTreeViewerChanged) {
+		return status.Error(codes.Unavailable, "space tree temporarily unavailable")
+	}
+	return mapSpaceStoreError(err)
 }
 
 func (s *SpaceGRPC) CreateCategory(ctx context.Context, req *spacev1.CreateCategoryRequest) (*spacev1.CreateCategoryResponse, error) {
