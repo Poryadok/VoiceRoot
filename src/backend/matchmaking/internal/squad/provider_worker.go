@@ -39,11 +39,12 @@ var ErrProvisionOperatorAttention = errors.New("match squad provisioning require
 // the dedicated protected provider clients. The clients must use the provider
 // mTLS listeners; this worker never falls back to the public service clients.
 type MatchSquadProviderWorker struct {
-	Store          *store.MatchStore
-	Chat           chatv1.MatchSquadChatServiceClient
-	Voice          callsv1.MatchSquadVoiceServiceClient
-	Issuer         *principal.Issuer
-	PartyValidator partysource.ProvisionValidator
+	Store           *store.MatchStore
+	Chat            chatv1.MatchSquadChatServiceClient
+	Voice           callsv1.MatchSquadVoiceServiceClient
+	Issuer          *principal.Issuer
+	PartyValidator  partysource.ProvisionValidator
+	ForwardLifetime ForwardLifetime
 }
 
 // Provision is the request-path entry to the durable provider saga. Every RPC
@@ -52,11 +53,16 @@ func (w *MatchSquadProviderWorker) provisionAttempt(ctx context.Context, matchID
 	if w == nil || w.Store == nil || w.Issuer == nil || w.Chat == nil || w.Voice == nil || matchID == uuid.Nil {
 		return "", "", errors.New("MatchSquad protected provider worker unavailable")
 	}
+	lifetime := &forwardAttempt{worker: w}
+	defer lifetime.finish()
 	operation, err := w.Store.GetMatchSquadProvisioningOperation(ctx, matchID)
 	if errors.Is(err, store.ErrMatchSquadPending) {
 		candidate, proof, gateErr := w.partyGate().ValidateAttempt(ctx, matchID)
 		if gateErr != nil {
 			return "", "", gateErr
+		}
+		if err := lifetime.enter(ctx, candidate.Hash()); err != nil {
+			return "", "", err
 		}
 		intent, buildErr := newProvisioningIntent(matchID, profileIDs)
 		if buildErr != nil {
@@ -79,7 +85,7 @@ func (w *MatchSquadProviderWorker) provisionAttempt(ctx context.Context, matchID
 	if err != nil {
 		return "", "", err
 	}
-	operation, err = w.provisionOperation(ctx, operation)
+	operation, err = w.provisionOperationWithinLifetime(ctx, operation, lifetime)
 	if err != nil {
 		return "", "", err
 	}
@@ -193,6 +199,12 @@ func newProvisioningIntent(matchID uuid.UUID, profileIDs []uuid.UUID) (store.Mat
 }
 
 func (w *MatchSquadProviderWorker) provisionOperation(ctx context.Context, operation store.MatchSquadProvisioningOperation) (store.MatchSquadProvisioningOperation, error) {
+	lifetime := &forwardAttempt{worker: w}
+	defer lifetime.finish()
+	return w.provisionOperationWithinLifetime(ctx, operation, lifetime)
+}
+
+func (w *MatchSquadProviderWorker) provisionOperationWithinLifetime(ctx context.Context, operation store.MatchSquadProvisioningOperation, lifetime *forwardAttempt) (store.MatchSquadProvisioningOperation, error) {
 	if operation.State == "active" {
 		return w.Store.GetMatchSquadProvisioningOperation(ctx, operation.MatchID)
 	}
@@ -206,7 +218,7 @@ func (w *MatchSquadProviderWorker) provisionOperation(ctx context.Context, opera
 	// Keep the whole attempt shorter than its claim. Permanent dispatch markers
 	// remain the effect authority; an expired lease never proves no creation.
 	attemptCtx, cancel := context.WithTimeout(ctx, 55*time.Second)
-	result, attemptErr := w.provisionClaimedOperation(attemptCtx, operation)
+	result, attemptErr := w.provisionClaimedOperation(attemptCtx, operation, lifetime)
 	cancel()
 	if attemptErr == nil && result.State == "active" {
 		if err := w.Store.ReleaseMatchSquadProvisioningClaim(ctx, claim); err != nil {
@@ -247,7 +259,7 @@ func matchSquadProvisionErrorClass(err error) string {
 	}
 }
 
-func (w *MatchSquadProviderWorker) provisionClaimedOperation(ctx context.Context, operation store.MatchSquadProvisioningOperation) (store.MatchSquadProvisioningOperation, error) {
+func (w *MatchSquadProviderWorker) provisionClaimedOperation(ctx context.Context, operation store.MatchSquadProvisioningOperation, lifetime *forwardAttempt) (store.MatchSquadProvisioningOperation, error) {
 	// A scan item is discovery only; reload before deciding whether a forward
 	// attempt or receipt-only settlement is still permitted.
 	var err error
@@ -281,7 +293,7 @@ func (w *MatchSquadProviderWorker) provisionClaimedOperation(ctx context.Context
 		return operation, fmt.Errorf("%w: stored Chat creation request is invalid", errProviderContract)
 	}
 	if operation.ChatReceiptID == nil {
-		if err := w.authorizeForwardCreate(ctx, operation, "chat"); err != nil {
+		if err := w.authorizeForwardCreate(ctx, operation, "chat", lifetime); err != nil {
 			return operation, err
 		}
 		attemptCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -344,7 +356,7 @@ func (w *MatchSquadProviderWorker) provisionClaimedOperation(ctx context.Context
 		return operation, fmt.Errorf("%w: stored Voice creation request is invalid", errProviderContract)
 	}
 	if operation.VoiceReceiptID == nil {
-		if err := w.authorizeForwardCreate(ctx, operation, "voice"); err != nil {
+		if err := w.authorizeForwardCreate(ctx, operation, "voice", lifetime); err != nil {
 			return operation, err
 		}
 		attemptCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -410,6 +422,9 @@ func (w *MatchSquadProviderWorker) provisionClaimedOperation(ctx context.Context
 	if err != nil {
 		return operation, err
 	}
+	if err := lifetime.enter(ctx, candidate.Hash()); err != nil {
+		return operation, err
+	}
 	if _, err := w.Store.ActivateValidatedProvisionedMatch(ctx, candidate, proof, operation.OperationID); err != nil {
 		if errors.Is(err, store.ErrPlatformBanDenied) {
 			return operation, w.partyGate().ResetDeniedParties(ctx, candidate, err)
@@ -423,7 +438,7 @@ func (w *MatchSquadProviderWorker) partyGate() *PartySourceGate {
 	return &PartySourceGate{Store: w.Store, Validator: w.PartyValidator}
 }
 
-func (w *MatchSquadProviderWorker) authorizeForwardCreate(ctx context.Context, operation store.MatchSquadProvisioningOperation, provider string) error {
+func (w *MatchSquadProviderWorker) authorizeForwardCreate(ctx context.Context, operation store.MatchSquadProvisioningOperation, provider string, lifetime *forwardAttempt) error {
 	dispatch, err := w.Store.GetMatchSquadDispatchState(ctx, operation.MatchID)
 	if err != nil {
 		return err
@@ -445,6 +460,9 @@ func (w *MatchSquadProviderWorker) authorizeForwardCreate(ctx context.Context, o
 	}
 	candidate, proof, err := w.partyGate().ValidateAttempt(ctx, operation.MatchID)
 	if err != nil {
+		return err
+	}
+	if err := lifetime.enter(ctx, candidate.Hash()); err != nil {
 		return err
 	}
 	_, err = w.Store.AuthorizeMatchSquadProviderDispatch(ctx, candidate, proof, operation.OperationID, provider)
