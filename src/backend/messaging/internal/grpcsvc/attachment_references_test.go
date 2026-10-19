@@ -13,6 +13,25 @@ import (
 	filev1 "voice.app/voice/file/v1"
 )
 
+func TestAttachmentAcquisitionRequestRejectsMalformedJSONWithOpaqueStatus(t *testing.T) {
+	for _, raw := range []string{`not-json`, `"private malformed attachment"`, `{"file_id":"private"}`, `[1]`} {
+		t.Run(raw, func(t *testing.T) {
+			request, err := attachmentAcquisitionRequest(raw)
+			require.Nil(t, request)
+			require.Equal(t, codes.InvalidArgument, status.Code(err))
+			require.Equal(t, "attachments_json must be a JSON array", status.Convert(err).Message())
+		})
+	}
+	request, err := attachmentAcquisitionRequest(`[]`)
+	require.NoError(t, err)
+	require.Empty(t, request.References)
+	fileID := uuid.NewString()
+	request, err = attachmentAcquisitionRequest(`[{"file_id":"` + fileID + `"}]`)
+	require.NoError(t, err)
+	require.Len(t, request.References, 1)
+	require.Equal(t, fileID, request.References[0].FileId)
+}
+
 type attachmentReferenceStub struct {
 	filev1.FileServiceClient
 	mutate func(*filev1.AcquireFileReferencesReceipt)
