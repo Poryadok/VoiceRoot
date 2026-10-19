@@ -342,6 +342,44 @@ func TestLegacyDecisionUsesTrueContext2AndIndependentManualGate(t *testing.T) {
 				require.Equal(t, "READY", record.Attempt.State)
 				require.Nil(t, record.RequestID)
 				require.Equal(t, store.JoinLegacyReady, kind)
+				ownerCalls := len(phases)
+				_, err = st.Pool.Exec(ctx, `UPDATE space_entry_policies SET version=version+1 WHERE space_id=$1`, space)
+				require.NoError(t, err)
+				// A restarted dispatcher must recover the original decision without
+				// replaying START/SUBMIT owner observations or allocating another P.
+				restarted := &store.SpaceStore{Pool: st.Pool}
+				recovered, recoveryErr := verifier.Unary()(incoming, request, &grpc.UnaryServerInfo{FullMethod: spacev1.SpaceService_JoinSpace_FullMethodName}, func(callctx context.Context, _ any) (any, error) {
+					p, e := restarted.PrepareLegacyJoinStart(callctx, request)
+					if e != nil {
+						return nil, e
+					}
+					return restarted.RecoverLegacyJoinDecision(callctx, p)
+				})
+				require.NoError(t, recoveryErr)
+				history := recovered.(*store.JoinSubmissionRecovery)
+				require.Equal(t, record.Attempt.ID, history.AttemptID)
+				require.Equal(t, store.JoinLegacyReady, history.DecisionKind)
+				require.Equal(t, record.DecisionBasisSHA256, history.DecisionBasisSHA256)
+				require.Nil(t, history.PublicationOperationID)
+				require.Len(t, phases, ownerCalls)
+				// A new request without the original key has no historical grant
+				// to recover this READY decision, even for the same actor/Space.
+				noKey := &spacev1.JoinSpaceRequest{SpaceId: space.String()}
+				noKeyHash, e := principal.RequestHash(noKey)
+				require.NoError(t, e)
+				noKeyID := uuid.NewString()
+				noKeyToken, e := gateway.IssueDelegatedUser(principal.DelegatedUserInput{Audience: "space", RPC: spacev1.SpaceService_JoinSpace_FullMethodName, RequestID: noKeyID, RequestHash: noKeyHash, AccountID: account.String(), ProfileID: profile.String(), SessionEpoch: 7, AccountType: "regular", ClientExpiresAt: now.Add(time.Minute)})
+				require.NoError(t, e)
+				noKeyContext := metadata.NewIncomingContext(ctx, metadata.Pairs("authorization", "Bearer "+noKeyToken, "x-request-id", noKeyID))
+				_, e = verifier.Unary()(noKeyContext, noKey, &grpc.UnaryServerInfo{FullMethod: spacev1.SpaceService_JoinSpace_FullMethodName}, func(callctx context.Context, _ any) (any, error) {
+					p, e := restarted.PrepareLegacyJoinStart(callctx, noKey)
+					if e != nil {
+						return nil, e
+					}
+					return restarted.RecoverLegacyJoinDecision(callctx, p)
+				})
+				require.ErrorIs(t, e, store.ErrJoinAttemptUnavailable)
+				require.Len(t, phases, ownerCalls)
 			}
 			var members int
 			require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM space_members WHERE profile_id=$1`, profile).Scan(&members))
