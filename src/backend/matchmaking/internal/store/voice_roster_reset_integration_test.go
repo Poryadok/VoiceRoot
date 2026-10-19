@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"voice/backend/matchmaking/internal/store"
 	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/matchmaking/internal/store"
 )
 
 func TestVoiceRosterInboxDowngradePreservesSettledEvidence(t *testing.T) {

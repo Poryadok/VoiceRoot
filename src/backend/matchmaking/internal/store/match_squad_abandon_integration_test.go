@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"voice/backend/matchmaking/internal/store"
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
+	"voice/backend/matchmaking/internal/store"
 )
 
 func TestDispatchUpgradeRefusesSealedLegacyUnknownCreation(t *testing.T) {
