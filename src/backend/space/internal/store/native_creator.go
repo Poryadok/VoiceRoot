@@ -99,10 +99,29 @@ func (s *SpaceStore) CreateSpaceWithCreator(ctx context.Context, creator *lifecy
 	if _, err = creator.ActorFor(request); err != nil {
 		return nil, err
 	}
+	scoped := *s
+	scoped.tx = tx
+	schema, err := scoped.memberDecisionSchema(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var effective *effectiveMemberMutations
+	if schema == 44 || schema == 45 {
+		effective, err = scoped.captureBornCreatorEffectiveMutation(ctx, w.space, w.profile)
+		if err != nil {
+			return nil, err
+		}
+	}
 	row, err := scanSpaceRow(tx.QueryRow(ctx, `INSERT INTO spaces(id,name,description,visibility,owner_profile_id,member_count)
 	 VALUES($1,$2,$3,$4,$5,1) RETURNING `+spaceSelectColumns, w.space, name, request.Description, visibility, w.profile))
 	if err != nil {
 		return nil, err
+	}
+	if schema != 44 && schema != 45 {
+		effective, err = scoped.captureNativeEffectiveMemberMutation(ctx, w.space, []uuid.UUID{w.profile})
+		if err != nil {
+			return nil, err
+		}
 	}
 	var published time.Time
 	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&published); err != nil {
@@ -117,6 +136,11 @@ func (s *SpaceStore) CreateSpaceWithCreator(ctx context.Context, creator *lifecy
 	binding := &spacev1.NativeMembershipPublicationBinding{ProtocolVersion: 1, PublicationOperationId: w.operation.String(), SpaceId: w.space.String(), ProfileId: w.profile.String(), OrdinaryGeneration: 1, Kind: spacev1.MemberAdmissionPublicationKind_MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_OWNER_CREATE, InitiatingService: "gateway", InitiatingAccountId: &account, InitiatingProfileId: w.profile.String(), RequestSha256: w.requestHash, ProducerOperationId: w.operation.String(), ProducerEvidenceSha256: evidence[:], PublishedAt: timestamppb.New(published)}
 	if err = insertNativeOrdinaryPublication(ctx, tx, binding, w.account); err != nil {
 		return nil, err
+	}
+	if effective != nil {
+		if err = scoped.finishEffectiveMemberMutations(ctx, effective); err != nil {
+			return nil, err
+		}
 	}
 	if _, err = creator.ActorFor(request); err != nil {
 		return nil, err

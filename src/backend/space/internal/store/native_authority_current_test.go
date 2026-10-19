@@ -24,7 +24,9 @@ func TestNativeAuthorityCurrent39ReadAndPreparing(t *testing.T) {
 	owner := uuid.New()
 	space, err := st.CreateSpace(ctx, owner, "Current native authority", "", "public")
 	require.NoError(t, err)
-	database.Run(true, "up")
+	// Retain the historical exact41 qualification oracle independently of the
+	// new native42 Bot cohort, whose own positives/negatives run separately.
+	database.Run(true, "goto", "41")
 	request := &spacev1.GetMemberAdmissionAuthorityRequest{ProtocolVersion: 1, SpaceId: space.ID.String(), ProfileId: owner.String()}
 	first, err := st.ReadMemberAdmissionAuthority(ctx, request)
 	require.NoError(t, err, "actual current39 source must qualify; no historical version relabeling")
@@ -53,11 +55,15 @@ func TestNativeAuthorityCurrent39ReadAndPreparing(t *testing.T) {
 	t.Logf("canonical current11 terminal prosrc SHA256=%x", sha256.Sum256([]byte(terminalBody)))
 	cases := []struct{ name, mutate, restore string }{
 		{"dirty", `UPDATE schema_migrations SET dirty=true`, `UPDATE schema_migrations SET dirty=false`},
-		{"future", `UPDATE schema_migrations SET version=40`, `UPDATE schema_migrations SET version=39`},
-		{"historical", `UPDATE schema_migrations SET version=34`, `UPDATE schema_migrations SET version=39`},
+		{"future", `UPDATE schema_migrations SET version=43`, `UPDATE schema_migrations SET version=41`},
+		{"historical", `UPDATE schema_migrations SET version=34`, `UPDATE schema_migrations SET version=41`},
 		{"disabled_guard", `ALTER TABLE space_members DISABLE TRIGGER space_ordinary_publication_guard`, `ALTER TABLE space_members ENABLE TRIGGER space_ordinary_publication_guard`},
 		{"row_security", `ALTER TABLE space_ordinary_member_heads ENABLE ROW LEVEL SECURITY`, `ALTER TABLE space_ordinary_member_heads DISABLE ROW LEVEL SECURITY`},
 		{"missing_private_journal", `ALTER TABLE space_join_operations RENAME TO missing_join_operations`, `ALTER TABLE missing_join_operations RENAME TO space_join_operations`},
+		{"missing_effective_ledger", `ALTER TABLE space_effective_member_heads RENAME TO missing_effective_heads`, `ALTER TABLE missing_effective_heads RENAME TO space_effective_member_heads`},
+		{"disabled_effective_liveness", `ALTER TABLE space_effective_member_heads DISABLE TRIGGER effective_member_liveness_guard`, `ALTER TABLE space_effective_member_heads ENABLE TRIGGER effective_member_liveness_guard`},
+		{"effective_rls", `ALTER TABLE space_effective_member_heads ENABLE ROW LEVEL SECURITY`, `ALTER TABLE space_effective_member_heads DISABLE ROW LEVEL SECURITY`},
+		{"effective_function_settings", `ALTER FUNCTION space_effective_member_head_guard() SET search_path=pg_catalog`, `ALTER FUNCTION space_effective_member_head_guard() RESET ALL`},
 		{"corrupt_terminal_predicate", `CREATE OR REPLACE FUNCTION space_terminal_purge_ready(target uuid) RETURNS boolean LANGUAGE sql STABLE AS 'SELECT true'`, terminalDDL},
 	}
 	for _, test := range cases {

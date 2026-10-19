@@ -15,7 +15,7 @@ const admissionRPCPrefix = "/voice.space.v1.SpaceService/"
 
 func admissionMethod(method string) bool {
 	switch method {
-	case admissionRPCPrefix + "StartJoinAttempt", admissionRPCPrefix + "GetJoinAttempt", admissionRPCPrefix + "SubmitJoinAttempt", admissionRPCPrefix + "ListJoinRequests", admissionRPCPrefix + "GetJoinRequest", admissionRPCPrefix + "ApproveJoinRequest", admissionRPCPrefix + "JoinSpace", admissionRPCPrefix + "JoinByInvite":
+	case admissionRPCPrefix + "StartJoinAttempt", admissionRPCPrefix + "GetJoinAttempt", admissionRPCPrefix + "SubmitJoinAttempt", admissionRPCPrefix + "ListJoinRequests", admissionRPCPrefix + "GetJoinRequest", admissionRPCPrefix + "ApproveJoinRequest", admissionRPCPrefix + "JoinSpace", admissionRPCPrefix + "JoinByInvite", admissionRPCPrefix + "SetEntryPolicy":
 		return true
 	}
 	return false
@@ -124,4 +124,10 @@ func RequireAdmissionJoinSpace(ctx context.Context, request proto.Message) (*Ver
 }
 func RequireAdmissionJoinInvite(ctx context.Context, request proto.Message) (*VerifiedAdmissionCall, error) {
 	return requireAdmissionCall(ctx, admissionRPCPrefix+"JoinByInvite", request)
+}
+
+// RequireEntryPolicySet authenticates the exact settings request. The separate
+// settings permission and current policy CAS remain the handler's responsibility.
+func RequireEntryPolicySet(ctx context.Context, request proto.Message) (*VerifiedAdmissionCall, error) {
+	return requireAdmissionCall(ctx, admissionRPCPrefix+"SetEntryPolicy", request)
 }

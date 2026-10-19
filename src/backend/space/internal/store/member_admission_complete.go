@@ -13,6 +13,17 @@ import (
 // CompleteInteractiveMemberAdmission coordinates inert Role preparation and
 // fresh owner checks outside locks, then enters the sole local publisher.
 func (s *SpaceStore) CompleteInteractiveMemberAdmission(ctx context.Context, operation uuid.UUID, roles *memberadmissionrole.Client, subjects *admissionauthority.Client, reviewers *admissionauthority.ReviewerClient, completion MemberAdmissionFinalGuard) (*MembershipRow, error) {
+	return s.CompleteInteractiveMemberAdmissionWithPublicationHook(ctx, operation, roles, subjects, reviewers, completion, nil)
+}
+
+// CompleteInteractiveMemberAdmissionWithPublicationHook preserves the pre-write
+// final guard and adds a distinct local FIRST-publication journal phase. Saved
+// completed outcomes return before Role, owner calls or either callback.
+func (s *SpaceStore) CompleteInteractiveMemberAdmissionWithPublicationHook(ctx context.Context, operation uuid.UUID, roles *memberadmissionrole.Client, subjects *admissionauthority.Client, reviewers *admissionauthority.ReviewerClient, completion MemberAdmissionFinalGuard, publicationHook MemberAdmissionPublicationHook) (*MembershipRow, error) {
+	return s.completeInteractiveMemberAdmission(ctx, operation, roles, subjects, reviewers, completion, publicationHook, nil)
+}
+
+func (s *SpaceStore) completeInteractiveMemberAdmission(ctx context.Context, operation uuid.UUID, roles *memberadmissionrole.Client, subjects *admissionauthority.Client, reviewers *admissionauthority.ReviewerClient, completion MemberAdmissionFinalGuard, publicationHook MemberAdmissionPublicationHook, initiating *memberAdmissionInitiatingCall) (*MembershipRow, error) {
 	if s == nil || s.Pool == nil || s.tx != nil || operation == uuid.Nil {
 		return nil, ErrJoinAttemptUnavailable
 	}
@@ -30,6 +41,11 @@ func (s *SpaceStore) CompleteInteractiveMemberAdmission(ctx context.Context, ope
 	if i.State != "PREPARING" {
 		return nil, ErrMemberAdmissionStale
 	}
+	if initiating != nil {
+		if err = initiating.check(ctx); err != nil {
+			return nil, err
+		}
+	}
 	if i.Input.JoinAttempt == nil {
 		return nil, ErrJoinAttemptUnavailable
 	}
@@ -46,7 +62,7 @@ func (s *SpaceStore) CompleteInteractiveMemberAdmission(ctx context.Context, ope
 	if err != nil {
 		return s.memberAdmissionCompletionUncertain(ctx, operation)
 	}
-	return s.PublishMemberAdmissionWithContinuation(ctx, operation, role, receipt, continuation, completion)
+	return s.publishMemberAdmissionWithInitiatingCall(ctx, operation, role, receipt, completion, continuation, publicationHook, initiating)
 }
 
 func (s *SpaceStore) memberAdmissionCompletionUncertain(ctx context.Context, operation uuid.UUID) (*MembershipRow, error) {
@@ -54,6 +70,18 @@ func (s *SpaceStore) memberAdmissionCompletionUncertain(ctx context.Context, ope
 		return member, err
 	}
 	return nil, ErrJoinAttemptUnavailable
+}
+
+// ReadMemberAdmissionOutcome reads only a saved publication outcome. It never
+// starts admission, calls an owner or runs a completion hook. A true result is
+// historical operation data, including after leave; it is not current access.
+// False means no retained published outcome, including erased/unknown history.
+// The handler must independently authorize and bind its exact A/P/actor tuple.
+func (s *SpaceStore) ReadMemberAdmissionOutcome(ctx context.Context, operation uuid.UUID) (*MembershipRow, bool, error) {
+	if s == nil || s.Pool == nil || s.tx != nil || ctx == nil || ctx.Err() != nil || operation == uuid.Nil {
+		return nil, false, ErrJoinAttemptUnavailable
+	}
+	return s.replayCompletedMemberAdmission(ctx, operation)
 }
 
 func (s *SpaceStore) replayCompletedMemberAdmission(ctx context.Context, operation uuid.UUID) (*MembershipRow, bool, error) {

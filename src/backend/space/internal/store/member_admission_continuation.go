@@ -12,9 +12,10 @@ import (
 // VerifiedAdmissionContinuation is local, fresh authority for one exact saved
 // P. Historical journal/transcript data and caller booleans cannot construct it.
 type VerifiedAdmissionContinuation struct {
-	basis     *JoinDecisionBasis
-	applicant *admissionauthority.VerifiedSubject
-	reviewer  *admissionauthority.VerifiedReviewerPermission
+	basis       *JoinDecisionBasis
+	legacyBasis *JoinLegacyDecisionBasis
+	applicant   *admissionauthority.VerifiedSubject
+	reviewer    *admissionauthority.VerifiedReviewerPermission
 }
 
 func continuationRequest(i *MemberAdmissionIntent, basis *JoinDecisionBasis, reviewer bool) (*authv1.ObserveSpaceAdmissionSubjectRequest, error) {
@@ -52,11 +53,11 @@ func (s *SpaceStore) ObserveMemberAdmissionContinuation(ctx context.Context, ope
 	if err != nil || i.State != "PREPARING" || i.Input.JoinAttempt == nil {
 		return nil, ErrJoinAttemptUnavailable
 	}
-	basis, err := s.LoadJoinDecisionBasis(ctx, i.Input.DecisionBasisSHA256)
+	verified, err := s.loadContinuationDecision(ctx, i.Input.DecisionBasisSHA256)
 	if err != nil {
 		return nil, ErrJoinAttemptUnavailable
 	}
-	request, err := continuationRequest(i, basis, false)
+	request, err := verified.request(i, false)
 	if err != nil {
 		return nil, err
 	}
@@ -64,9 +65,13 @@ func (s *SpaceStore) ObserveMemberAdmissionContinuation(ctx context.Context, ope
 	if err != nil {
 		return nil, ErrJoinAttemptUnavailable // Coarse owner denial cannot retire P.
 	}
-	verified := &VerifiedAdmissionContinuation{basis: basis, applicant: applicant}
-	if basis.Context.Kind == JoinDecisionApproveReady {
-		reviewerRequest, err := continuationRequest(i, basis, true)
+	verified.applicant = applicant
+	_, _, reviewerRequired, err := verified.originalReviewer()
+	if err != nil {
+		return nil, err
+	}
+	if reviewerRequired {
+		reviewerRequest, err := verified.request(i, true)
 		if err != nil {
 			return nil, err
 		}
@@ -91,7 +96,7 @@ func (v *VerifiedAdmissionContinuation) check(i *MemberAdmissionIntent) (bool, e
 	if v == nil || v.applicant == nil {
 		return false, ErrJoinAttemptUnavailable
 	}
-	request, err := continuationRequest(i, v.basis, false)
+	request, err := v.request(i, false)
 	if err != nil {
 		return false, err
 	}
@@ -99,8 +104,12 @@ func (v *VerifiedAdmissionContinuation) check(i *MemberAdmissionIntent) (bool, e
 	if err != nil {
 		return false, ErrJoinAttemptUnavailable
 	}
-	if v.basis.Context.Kind == JoinDecisionApproveReady {
-		reviewerRequest, err := continuationRequest(i, v.basis, true)
+	_, _, reviewerRequired, err := v.originalReviewer()
+	if err != nil {
+		return false, err
+	}
+	if reviewerRequired {
+		reviewerRequest, err := v.request(i, true)
 		if err != nil || v.reviewer.Check(reviewerRequest) != nil {
 			return false, ErrJoinAttemptUnavailable
 		}
@@ -109,10 +118,14 @@ func (v *VerifiedAdmissionContinuation) check(i *MemberAdmissionIntent) (bool, e
 }
 
 func (s *SpaceStore) checkContinuationReviewer(ctx context.Context, v *VerifiedAdmissionContinuation) error {
-	if v.basis.Context.Kind != JoinDecisionApproveReady {
+	space, profile, required, err := v.originalReviewer()
+	if err != nil {
+		return err
+	}
+	if !required {
 		return nil
 	}
-	member, err := s.IsSpaceMember(ctx, v.basis.Context.SpaceID, v.basis.Context.ActorProfileID)
+	member, err := s.IsSpaceMember(ctx, space, profile)
 	if err != nil || !member {
 		return ErrJoinAttemptUnavailable
 	}
@@ -123,5 +136,5 @@ func (s *SpaceStore) checkContinuationReviewer(ctx context.Context, v *VerifiedA
 // entrypoint. The completion hook is local SQL only and runs once. Exact saved
 // publication replay bypasses fresh proof/hooks and never recreates membership.
 func (s *SpaceStore) PublishMemberAdmissionWithContinuation(ctx context.Context, operation, role uuid.UUID, receipt []byte, continuation *VerifiedAdmissionContinuation, completion MemberAdmissionFinalGuard) (*MembershipRow, error) {
-	return s.publishMemberAdmission(ctx, operation, role, receipt, completion, continuation)
+	return s.publishMemberAdmission(ctx, operation, role, receipt, completion, continuation, nil)
 }

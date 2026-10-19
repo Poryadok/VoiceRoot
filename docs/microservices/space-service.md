@@ -1,5 +1,83 @@
 # Space Service
 
+## Local-report read context (BE-066 accepted target)
+
+NEW `ResolveSpaceReportReadContext` accepts only exact signed
+`service:messaging`, audience `space`, bound to protocol1, operation ID,
+`space_id`, canonical `ChatRef` and viewer profile. Use normal Phase-0
+method/body/request/JTI/JWKS/epoch where applicable and protected mTLS guards.
+The existing communication/timeout RPC does not grant this read capability.
+
+One native Space snapshot reads live/unfrozen lifecycle, exact Chat tree
+attachment and current active published membership. Return the request binding,
+`eligible`, Space authority revision, lifecycle generation, tree attachment
+incarnation, membership binding and `history_visible_since` with explicit
+known/unknown state. Do not return roster, owner IDs or other members.
+Pending/revoked/left membership is ineligible. A timeout alone does not deny read.
+
+The history boundary is the canonical continuous effective membership episode
+across ordinary/community sources. Rejoining cannot revive a previous episode;
+consumers cannot choose the oldest historical join. Missing exact history
+provenance is unknown, never time zero; Messaging fails UNAVAILABLE in the
+since-entry branch. It separately requires current Role TEXT_CHAT_VIEW and, for
+older history, TEXT_CHAT_READ_HISTORY, plus native message visibility and Social.
+ListMembers page100 and unmanaged Chat entitlement are not substitutes for this
+producer. No foreign database reads, raw viewer identity metadata or public
+caller registration is introduced by this target contract.
+
+The continuous effective binding is distinct from the ONE-source Role/admission
+binding. BE-066 c23 selects a compact generation/episode UUID/retirement floor and
+ledger revision, exact private ordinary/community witnesses and their coverage
+horizon. Capture OLD published support before changing either member or owner
+lease, under the native sorted Space transaction fence. Preserve an episode only
+through an exact surviving source. Community continuity ends at the minimum of
+both strict leases; a later renewal cannot bridge expiry without a sweeper.
+Final fresh DB time must cover all captured profiles after waiting SQL. New entry
+is the owner publication completion time; clock regression and overflow fail.
+
+Explicit all-writer cutover initializes every existing eligible source with
+UNKNOWN cutoff, including community-only and positive ordinary publications.
+An overlapping source cannot upgrade UNKNOWN; a complete break followed by a
+new publication may create a KNOWN boundary. Reads never repair missing heads.
+
+Forward ledger41 follows native39 and admission40; the historical prototype38
+was not integrated and is not rewritten. 41 qualifies the exact native39 terminal
+predicate and canonical34 eleven-participant predicate. Its Space terminal
+cleanup calls that real native predicate, removes profile-bearing effective
+heads and denies late replay behind the permanent Space fence. Reversible freeze
+is not itself a membership-history cut. Destructive DOWN locks Space and ledger
+before checking emptiness, preserving a first concurrent writer. This storage
+composition does not activate native all-writer capture/finalization or protected
+ingress; actual native provider/cutover/catalog and account-erasure composition
+remain required. Head minimization alone is not global physical-erasure proof.
+
+### Fixed native catalog transition 44 to 45
+
+The native serving gate qualifies exact schemas and a persisted enforcement
+seal; a numerically newer migration never implies readiness. Migration45 adds
+only the immutable legacy Join selection context and its fixed helper. Applying
+it invalidates the retained44 seal, so serving reads and writes remain
+UNAVAILABLE until the trusted installer completes the qualified transition.
+
+For a known trusted44 installation, retain the actual target identity, original
+installation/custody evidence and exact migration execution record. Apply the
+unchanged migration45, then invoke the owner-only
+`TransitionNativeMembershipCatalog45` through a separate maintenance connection.
+The method owns an explicit READ COMMITTED transaction, drains writers with the
+catalog/source locks, authenticates the complete45 shape and guards, reconstructs
+the exact44 closure excluding only the authenticated new45 helper, and CASes
+the retained seal. It preserves the enforcement epoch, per-Space COMPLETE state,
+head-local cutover IDs, generations and KNOWN/UNKNOWN history. Matching retries
+return an unchanged receipt. Retain its actual database/installer/transaction
+identity, migration SHA and old/new seal hashes with deployment evidence.
+
+This transition assumes a trusted installer and DDL-incapable serving LOGINs.
+Current snapshots do not attest absence of arbitrary earlier privileged DDL.
+Unknown baseline provenance, a known disabled-guard interval or an untrusted
+restore remains a deployment HOLD; do not self-reseal or recut existing history.
+Readers never invoke this maintenance method. Qualification of this transition
+does not activate remaining unadapted writers or the full public admission flow.
+
 ## Composite Chat creation (accepted implementation contract)
 
 `CommitSpaceChatCreation` admits only a freshly authenticated `service:chat`

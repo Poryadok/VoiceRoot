@@ -60,6 +60,16 @@ func (s *SpaceStore) verifyMemberAdmissionReference(ctx context.Context, intent 
 		return ErrJoinAttemptUnavailable
 	}
 	selected := JoinAttemptInput{SpaceID: in.SpaceID, AccountID: in.AccountID, ProfileID: in.ProfileID, InviteID: in.InviteID, Guest: in.Guest}
+	version, err := s.memberDecisionSchema(ctx)
+	if err != nil {
+		return err
+	}
+	if version == 40 || version == 41 || version == 42 {
+		if err := s.VerifyVersionedJoinDecisionBasis(ctx, selected, *in.JoinAttempt, in.DecisionBasisSHA256, intent.PolicyVersion, in.OperationID); err != nil {
+			return err
+		}
+		return s.VerifyJoinAttemptAdmission(ctx, selected, *in.JoinAttempt, intent.PolicyVersion, in.OperationID)
+	}
 	if err := verifier.VerifyJoinDecisionBasis(ctx, selected, *in.JoinAttempt, in.DecisionBasisSHA256, intent.PolicyVersion, in.OperationID); err != nil {
 		return err
 	}
