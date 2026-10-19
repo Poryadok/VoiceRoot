@@ -88,18 +88,26 @@ def main(output):
 
     def new_network(suffix):
         nid = docker('network', 'create', '--internal', prefix + suffix)
+        if not re.fullmatch('[a-f0-9]{64}', nid):
+            raise RuntimeError('created network UID required')
+        networks.append(nid)
+        report.setdefault('network_births', []).append({'network_uid': nid, 'role': suffix})
+        save()  # Retain exact custody before any fallible inspection.
         value = json.loads(docker('network', 'inspect', nid))[0]
         if value['Id'] != nid or not value['Internal']:
             raise RuntimeError('private network mismatch')
-        networks.append(nid)
-        save()
         return nid
 
     def create(suffix, network, *command):
         cid = docker('create', '--name', prefix + suffix, '--network', network, '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--pids-limit', '32', '--memory', '128m', '--restart', 'no', IMAGE, 'python', '/fixture.py', *command)
+        if not re.fullmatch('[a-f0-9]{64}', cid):
+            raise RuntimeError('created runtime UID required')
         created.append(cid)
-        report.setdefault('births', []).append({'runtime_uid': cid, 'role': suffix, 'created': inspection(cid)['Created']})
-        save()  # Preserve exact returned runtime UID before starting it.
+        birth = {'runtime_uid': cid, 'role': suffix}
+        report.setdefault('births', []).append(birth)
+        save()  # Preserve exact custody even if inspection fails.
+        birth['created'] = inspection(cid)['Created']
+        save()
         docker('cp', HERE / 'peer.py', cid + ':/fixture.py')
         return cid
 

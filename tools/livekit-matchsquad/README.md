@@ -117,6 +117,9 @@ checks actual Docker running/PID/attachment state, unchanged host boot and absen
 old parent/child PID births, direct-path denial, positive TCP forwarding, and no
 new client delivery after the final owned fence marker. Container/network cleanup
 is guarded by recorded exact UIDs. An incomplete observation is a failure.
+Returned network and container UIDs are persisted before fallible inspection.
+The mocked custody regressions run with `python -m unittest discover -s fixture
+-p test_fence_probe.py -v` from this directory; they create no Docker resources.
 
 This is raw evidence for a **fixture UDP/TCP process/network boundary**, not a
 LiveKit media, ICE/TURN, owner-routing or participant-epoch qualification. It
