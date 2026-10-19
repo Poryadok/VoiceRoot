@@ -61,6 +61,8 @@ func TestNativeInitiatingCallExpiryRollsBackAfterSQL(t *testing.T) {
 	space, err := legacy.CreateSpace(ctx, uuid.New(), "earliest ingress deadline", "", "public")
 	require.NoError(t, err)
 	db.Run(true, "up")
+	_, err = legacy.TransitionNativeMembershipCatalog45(ctx)
+	require.NoError(t, err, "actual fixed45 transition precedes initialization, never a marker override")
 	require.NoError(t, nativeReadinessTx(ctx, db.Pool, space.ID, func(tx pgx.Tx) error {
 		return (&SpaceStore{Pool: db.Pool, tx: tx}).InitializeScopedNativeMembership(ctx, space.ID)
 	}))

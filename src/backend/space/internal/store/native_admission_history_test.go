@@ -21,7 +21,9 @@ func TestNativeAdmissionWriterHistoryAndFirstPublicationHook(t *testing.T) {
 	st := &SpaceStore{Pool: db.Pool}
 	space, err := st.CreateSpace(ctx, uuid.New(), "Native admission history", "", "public")
 	require.NoError(t, err)
-	db.Run(true, "up")
+	// Preserve this original pre-DB-frame history/POST contract on its exact
+	// supported ledger layer. Native44/45 serving completion has separate tests.
+	db.Run(true, "goto", "41")
 	input := MemberAdmissionInput{OperationID: uuid.New(), SpaceID: space.ID, AccountID: uuid.New(), ProfileID: uuid.New()}
 	intent, err := st.PrepareMemberAdmission(ctx, input)
 	require.NoError(t, err)
