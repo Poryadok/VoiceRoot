@@ -3,6 +3,7 @@ package principalgrpc
 import (
 	"context"
 	"errors"
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -43,6 +44,12 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 		if !ok || message == nil {
 			return nil, status.Error(codes.InvalidArgument, "invalid request")
 		}
+		if info.FullMethod == rolev1.RoleService_BootstrapSpaceRoles_FullMethodName {
+			bootstrap, ok := message.(*rolev1.BootstrapSpaceRolesRequest)
+			if !ok || len(bootstrap.ProtoReflect().GetUnknown()) != 0 || !bootstrapUUID(bootstrap.GetSpaceId()) || !bootstrapUUID(bootstrap.GetOwnerProfileId()) {
+				return nil, status.Error(codes.InvalidArgument, "invalid bootstrap binding")
+			}
+		}
 		requestHash, err := principal.RequestHash(message)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, "invalid request")
@@ -51,9 +58,34 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 		if err != nil {
 			return nil, verificationStatus(err)
 		}
+		if IsDelegatedRoleMethod(info.FullMethod) {
+			if err := RequirePublicRole(principal.WithVerified(ctx, verified), message, info.FullMethod); err != nil {
+				return nil, err
+			}
+		}
+		if info.FullMethod == rolev1.RoleService_ApplyBotInstallationRemoval_FullMethodName {
+			removal, ok := message.(*rolev1.ApplyBotInstallationRemovalRequest)
+			if !ok {
+				return nil, status.Error(codes.InvalidArgument, "invalid Bot removal request")
+			}
+			if err := RequireBotRemoval(principal.WithVerified(ctx, verified), removal); err != nil {
+				return nil, err
+			}
+		}
+		if info.FullMethod == rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName || info.FullMethod == rolev1.RoleService_RemoveMemberRoles_FullMethodName {
+			if err := RequireMemberAdmission(principal.WithVerified(ctx, verified), message, info.FullMethod); err != nil {
+				return nil, err
+			}
+		}
 		if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
 			var decisionErr error
-			if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.MemberManageNicknames {
+			if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceManageBots {
+				decisionErr = RequireBotManagementPermission(principal.WithVerified(ctx, verified), req)
+			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceApproveJoinRequests {
+				decisionErr = RequireJoinApprovalPermission(principal.WithVerified(ctx, verified), req)
+			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceManageSettings {
+				decisionErr = RequireSettingsPermission(principal.WithVerified(ctx, verified), req)
+			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.MemberManageNicknames {
 				decisionErr = RequireNicknamePermission(principal.WithVerified(ctx, verified), req)
 			} else {
 				decisionErr = validateCreationDecision(verified, message, transport.RequestID, requestHash)
@@ -76,6 +108,10 @@ func Unavailable(err error) error {
 	}
 	return unavailableError{err}
 }
+func IsUnavailable(err error) bool {
+	var dependency unavailableError
+	return errors.As(err, &dependency)
+}
 func verificationStatus(err error) error {
 	var unavailable unavailableError
 	if errors.As(err, &unavailable) {
@@ -88,13 +124,25 @@ func verificationStatus(err error) error {
 // listener without consuming protected verifier dependencies.
 func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if IsDelegatedRoleMethod(info.FullMethod) {
+			return nil, status.Error(codes.Unauthenticated, "protected verified Role actor listener required")
+		}
 
 		if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
+			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && (req.GetPermissionName() == permissions.SpaceApproveJoinRequests || req.GetPermissionName() == permissions.SpaceManageSettings || req.GetPermissionName() == permissions.SpaceManageBots) {
+				return nil, status.Error(codes.PermissionDenied, "protected approval decision listener required")
+			}
 			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.MemberManageNicknames {
 				return nil, status.Error(codes.PermissionDenied, "protected nickname decision listener required")
 			}
 		}
 		switch info.FullMethod {
+		case rolev1.RoleService_ApplyBotInstallationRemoval_FullMethodName:
+			return nil, status.Error(codes.Unavailable, "protected Bot cleanup listener required")
+		case rolev1.RoleService_DeleteRolesCreatedByProfile_FullMethodName:
+			return nil, status.Error(codes.Unavailable, "protected Bot cleanup adapter required")
+		case rolev1.RoleService_BootstrapSpaceRoles_FullMethodName:
+			return nil, status.Error(codes.Unavailable, "protected bootstrap listener required")
 		case rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName,
 			rolev1.RoleService_RemoveMemberRoles_FullMethodName:
 			return nil, status.Error(codes.Unavailable, "protected method unavailable on ordinary listener")
@@ -116,4 +164,9 @@ func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 			return handler(ctx, request)
 		}
 	}
+}
+
+func bootstrapUUID(raw string) bool {
+	id, err := uuid.Parse(raw)
+	return err == nil && id != uuid.Nil && id.String() == raw
 }

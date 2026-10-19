@@ -34,7 +34,7 @@ func TestRuntimeListenerNicknamePermissionExactSignedBranch(t *testing.T) {
 			issuer := "space"
 			switch name {
 			case "other_permission":
-				req.PermissionName = "SPACE_MANAGE_SETTINGS"
+				req.PermissionName = "SPACE_MANAGE_INVITES"
 			case "chat_empty":
 				req.Chat = &chatv1.ChatRef{}
 			case "voice_empty":

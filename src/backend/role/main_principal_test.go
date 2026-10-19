@@ -259,13 +259,17 @@ func newMainPrincipalRuntime(t *testing.T, enableAuthority ...bool) (*principalr
 	clientCertificate, err := tls.X509KeyPair(clientCertPEM, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: clientKeyDER}))
 	require.NoError(t, err)
 	replay := miniredis.RunT(t)
-	sourceEnabled := len(enableAuthority) == 1 && enableAuthority[0]
+	sourceEnabled := len(enableAuthority) > 0 && enableAuthority[0]
+	botEnabled := len(enableAuthority) > 1 && enableAuthority[1]
 	urls := map[string]string{"space": server.URL, "gameintegration": server.URL, "voice": server.URL}
 	if sourceEnabled {
 		urls["federation"] = server.URL
 	}
+	if botEnabled {
+		urls["bot"] = server.URL
+	}
 	runtime, err := principalruntime.New(context.Background(), principalruntime.Config{
-		JWKSURLs: urls, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute, AuthoritySourceEnabled: sourceEnabled,
+		JWKSURLs: urls, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute, AuthoritySourceEnabled: sourceEnabled, BotLifecycleEnabled: botEnabled,
 		UnknownKIDCooldown: time.Second, ReplayAddr: replay.Addr(), JWKSCAFile: certFile,
 		TLSCertFile: certFile, TLSKeyFile: keyFile, ClientCAFile: clientCAFile, ListenAddr: "127.0.0.1:0",
 	})

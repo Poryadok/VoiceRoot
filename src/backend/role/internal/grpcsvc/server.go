@@ -13,5 +13,6 @@ type RoleGRPC struct {
 	Store               *store.RoleStore
 	Events              roleevents.Publisher
 	OverrideTargets     OverrideTargetValidator
+	MemberAuthority     MemberAuthorityObserver
 	voiceRoomGrantStore voiceRoomGrantDecisionStore
 }

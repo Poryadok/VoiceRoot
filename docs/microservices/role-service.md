@@ -11,10 +11,20 @@ unchanged SDK revision, and compares the executed snapshot fold with native
 GetEffectiveMask. The original source DDL/function hashes remain unchanged;
 catalog20 additionally guards both new SpaceChat clock inputs and four triggers.
 This projection does not represent the separate binding-aware SpaceChat policy
-decision or activate admission RPCs. EnsureDefaultMemberRole/RemoveMemberRoles
-remain unimplemented; ordinary network calls and the protected allowlist deny.
+decision. The separate development native21/source2 cohort implements protected EnsureDefaultMemberRole/RemoveMemberRoles with fresh Space authority, immutable receipts and generation floors; ordinary listeners deny these methods. Component transport/RolePG/SpacePG proof does not establish complete all-writer cutover, current owner-channel readiness or full runtime activation.
 
 ### Admission readiness target (ADMISSION-ROLE-READINESS-v1)
+
+The development native/state2 cohort also qualifies exact clean25 through the
+same native21 membership facts and pure mask fold. Its additional Bot removal
+tables and immutable guards are mandatory catalog inputs, not permission grants
+or membership sources. Cleanup removes typed contributions/preparations before
+definitions and invalidates the existing Role revision; the independent SDK
+revision is unchanged. State1 is never served for21 or25. Intermediate22-24,
+future/dirty schemas and altered guards remain unavailable. Qualified admission
+receipts are guarded by the same exact catalog inside their operation/Space
+transaction. Bot actor mutation readiness and the durable Assign/Revoke core
+remain separate gates; these component proofs do not activate them.
 
 Accepted BE-010 c12/c13 separates the ordinary membership incarnation from an
 independent community source. Space stores pending admission outside
@@ -476,7 +486,7 @@ interceptor ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md));
 | `space` trusted transfer | `GetOwnershipTransferCapabilities`, `PrepareOwnershipTransfer`, `FinalizeOwnershipTransfer`, `AbortOwnershipTransfer` | protocol 2 and exact `space_id`, `old_owner_profile_id`, `new_owner_profile_id`, `operation_id` and request binding; same action is idempotent; no generic Role RPC may mutate `Owner` |
 | `voice`, `chat`, `messaging` service | `CheckPermission` | explicit `profile_id` only as the decision subject, plus requested `space_id`/node scope; no actor mutation authority |
 | `moderation` service (BE-066 target) | `CheckPermission` only | exact `MODERATION_MANAGE_REPORTS` decision for a verified local-report actor/assignee and authoritative Space Chat node; no platform report or mutation authority |
-| `bot` service | `CheckPermission`, `GetMemberRoles`, `RevokeRole`, `DeleteRolesCreatedByProfile` | only signed `service:bot` lifecycle/decision calls below; no actor-mutation authority; cleanup cannot touch `Owner` or system roles |
+| `bot` service | `CheckPermission`, `ApplyBotInstallationRemoval` (durable lifecycle target); historical uninstall helpers below | only signed `service:bot` lifecycle/decision calls below; no actor-mutation authority; cleanup cannot touch `Owner` or system roles |
 | `bot` signed `bot_actor` capability | `CreateRole`, `AssignRole`, `RevokeRole` | only the exact scope and claim-bound space below; no generic Gateway principal or metadata fallback; `Owner` and every system-role mutation are rejected |
 
 ### Moderation local-report decision contract (accepted target)
@@ -513,6 +523,15 @@ make unrelated callers globally strict. New caller routing needs negative
 principal/request-binding tests and actual protected-listener qualification.
 
 ### Space `CheckPermission` decision contract
+
+The protected Bot installation decision is a separate exact branch: only
+`service:bot`, `SPACE_MANAGE_BOTS`, canonical Space/profile IDs and no chat/voice
+node. `ROLE_BOT_LIFECYCLE_ENABLED=true` adds only the configured `bot` HTTPS JWKS
+issuer to the closed listener trust set. Missing/partial configuration fails
+closed; the ordinary listener rejects this decision. This branch uses current
+native membership qualification, never a raw Owner/Admin label. Cleanup RPC
+activation additionally requires its durable participant adapter and fences;
+enabling the decision flag alone does not establish cleanup readiness.
 
 Space may call only `/voice.role.v1.RoleService/CheckPermission` with a signed
 service JWT whose `principal_type=service`, `iss=space`, `sub=service:space`,
@@ -566,6 +585,39 @@ lifecycle/decision calls. It carries the exact RPC, `request_id`, `request_hash`
 
 This service principal has no authority for interactive bot actor mutations;
 those require the capability below.
+
+### Durable Bot removal target
+
+`ApplyBotInstallationRemoval` is a private `service:bot` operation for one frozen
+Bot/Space target. Protocol1 binds child operation, durable decision ID/SHA256,
+purpose `global_delete` or `space_uninstall`, Bot/actor/Space and frozen-scope
+SHA256. Its evidence is exactly one of native installation/add-operation/positive
+int64-range generation, actual legacy installation plus snapshot ID/digest, or
+orphan-whitelist snapshot ID/digest. The orphan arm is global-delete only.
+The trusted Bot service asserts its own saved source and authorization; digest
+fields alone are not independent ownership evidence. Known conflicting actor
+bindings reject. Global deletion derives from a persisted verified Bot-owner
+decision, not invented Space-admin permission. Ordinary uninstall still requires
+current verified initiating `SPACE_MANAGE_BOTS` admission.
+
+The protected mTLS receiver accepts only signed `service:bot`, audience `role`,
+exact method/request ID and full deterministic request hash, fresh bounded JWT
+and JTI. Ordinary/Gateway listeners deny this method. It does not loop through
+generic `GetMemberRoles`/`RevokeRole` handlers. Under the existing Space mutation
+guard it installs the terminal global Bot marker and/or exact installation
+tombstone, removes only non-system/non-Owner roles created by this actor and
+non-system/non-Owner assignments to this actor, and stores exact request and
+receipt bytes atomically. Owner anomalies fail closed with retained evidence;
+cleanup never grants Member or mutates Owner/system roles.
+
+The receipt binds every request identity/digest, participant `role`, outcome
+`COMPLETED`, immutable receipt ID/time and bounded role/assignment counts. Exact
+operation replay returns byte-identical saved response; changed body conflicts.
+All admitted Bot-actor writers must check the global marker and exact
+installation tombstone under the same guard; unsupported actor routes remain
+denied. A new legitimate installation UUID survives an old cleanup replay.
+This accepted BE170c8-c10 target requires its actual receiver/journal/runtime
+implementation and tests before readiness; adding wire is not activation.
 
 ### Bot actor mutation contract
 

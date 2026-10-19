@@ -38,6 +38,7 @@ const (
 	MessagingService_UnpinMessage_FullMethodName                 = "/voice.messaging.v1.MessagingService/UnpinMessage"
 	MessagingService_GetPinnedMessages_FullMethodName            = "/voice.messaging.v1.MessagingService/GetPinnedMessages"
 	MessagingService_UnpinMessagesBySenderInChats_FullMethodName = "/voice.messaging.v1.MessagingService/UnpinMessagesBySenderInChats"
+	MessagingService_ApplyBotChatPinRemoval_FullMethodName       = "/voice.messaging.v1.MessagingService/ApplyBotChatPinRemoval"
 	MessagingService_ForwardMessage_FullMethodName               = "/voice.messaging.v1.MessagingService/ForwardMessage"
 	MessagingService_MarkRead_FullMethodName                     = "/voice.messaging.v1.MessagingService/MarkRead"
 	MessagingService_GetReadState_FullMethodName                 = "/voice.messaging.v1.MessagingService/GetReadState"
@@ -98,6 +99,9 @@ type MessagingServiceClient interface {
 	GetPinnedMessages(ctx context.Context, in *GetPinnedMessagesRequest, opts ...grpc.CallOption) (*GetPinnedMessagesResponse, error)
 	// BOT-B: bulk unpin for bot uninstall cleanup (sender_profile_id + chat_ids).
 	UnpinMessagesBySenderInChats(ctx context.Context, in *UnpinMessagesBySenderInChatsRequest, opts ...grpc.CallOption) (*UnpinMessagesBySenderInChatsResponse, error)
+	// Durable cleanup of pins in one frozen whitelisted chat. Messages remain.
+	// @voice.security=protected;callers=service:bot
+	ApplyBotChatPinRemoval(ctx context.Context, in *ApplyBotChatPinRemovalRequest, opts ...grpc.CallOption) (*ApplyBotChatPinRemovalResponse, error)
 	ForwardMessage(ctx context.Context, in *ForwardMessageRequest, opts ...grpc.CallOption) (*ForwardMessageResponse, error)
 	MarkRead(ctx context.Context, in *MarkReadRequest, opts ...grpc.CallOption) (*MarkReadResponse, error)
 	GetReadState(ctx context.Context, in *GetReadStateRequest, opts ...grpc.CallOption) (*GetReadStateResponse, error)
@@ -323,6 +327,16 @@ func (c *messagingServiceClient) UnpinMessagesBySenderInChats(ctx context.Contex
 	return out, nil
 }
 
+func (c *messagingServiceClient) ApplyBotChatPinRemoval(ctx context.Context, in *ApplyBotChatPinRemovalRequest, opts ...grpc.CallOption) (*ApplyBotChatPinRemovalResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyBotChatPinRemovalResponse)
+	err := c.cc.Invoke(ctx, MessagingService_ApplyBotChatPinRemoval_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *messagingServiceClient) ForwardMessage(ctx context.Context, in *ForwardMessageRequest, opts ...grpc.CallOption) (*ForwardMessageResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ForwardMessageResponse)
@@ -525,6 +539,9 @@ type MessagingServiceServer interface {
 	GetPinnedMessages(context.Context, *GetPinnedMessagesRequest) (*GetPinnedMessagesResponse, error)
 	// BOT-B: bulk unpin for bot uninstall cleanup (sender_profile_id + chat_ids).
 	UnpinMessagesBySenderInChats(context.Context, *UnpinMessagesBySenderInChatsRequest) (*UnpinMessagesBySenderInChatsResponse, error)
+	// Durable cleanup of pins in one frozen whitelisted chat. Messages remain.
+	// @voice.security=protected;callers=service:bot
+	ApplyBotChatPinRemoval(context.Context, *ApplyBotChatPinRemovalRequest) (*ApplyBotChatPinRemovalResponse, error)
 	ForwardMessage(context.Context, *ForwardMessageRequest) (*ForwardMessageResponse, error)
 	MarkRead(context.Context, *MarkReadRequest) (*MarkReadResponse, error)
 	GetReadState(context.Context, *GetReadStateRequest) (*GetReadStateResponse, error)
@@ -616,6 +633,9 @@ func (UnimplementedMessagingServiceServer) GetPinnedMessages(context.Context, *G
 }
 func (UnimplementedMessagingServiceServer) UnpinMessagesBySenderInChats(context.Context, *UnpinMessagesBySenderInChatsRequest) (*UnpinMessagesBySenderInChatsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnpinMessagesBySenderInChats not implemented")
+}
+func (UnimplementedMessagingServiceServer) ApplyBotChatPinRemoval(context.Context, *ApplyBotChatPinRemovalRequest) (*ApplyBotChatPinRemovalResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyBotChatPinRemoval not implemented")
 }
 func (UnimplementedMessagingServiceServer) ForwardMessage(context.Context, *ForwardMessageRequest) (*ForwardMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ForwardMessage not implemented")
@@ -1028,6 +1048,24 @@ func _MessagingService_UnpinMessagesBySenderInChats_Handler(srv interface{}, ctx
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MessagingService_ApplyBotChatPinRemoval_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyBotChatPinRemovalRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).ApplyBotChatPinRemoval(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_ApplyBotChatPinRemoval_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).ApplyBotChatPinRemoval(ctx, req.(*ApplyBotChatPinRemovalRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MessagingService_ForwardMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ForwardMessageRequest)
 	if err := dec(in); err != nil {
@@ -1398,6 +1436,10 @@ var MessagingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UnpinMessagesBySenderInChats",
 			Handler:    _MessagingService_UnpinMessagesBySenderInChats_Handler,
+		},
+		{
+			MethodName: "ApplyBotChatPinRemoval",
+			Handler:    _MessagingService_ApplyBotChatPinRemoval_Handler,
 		},
 		{
 			MethodName: "ForwardMessage",

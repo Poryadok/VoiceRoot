@@ -77,7 +77,7 @@ func TestSourceDomainRejectsUnverifiedWrongScopeAndUnavailableReader(t *testing.
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	require.Zero(t, reader.calls)
 	for _, mutation := range []func(*authorityv1.SourceScope){
-		func(scope *authorityv1.SourceScope) { scope.SchemaVersion = 2 },
+		func(scope *authorityv1.SourceScope) { scope.SchemaVersion = 3 },
 		func(scope *authorityv1.SourceScope) { scope.ProfileIds = []string{uuid.NewString()} },
 		func(scope *authorityv1.SourceScope) { scope.ProtoReflect().SetUnknown([]byte{0xf8, 0x07, 0x01}) },
 	} {
