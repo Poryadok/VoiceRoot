@@ -3735,10 +3735,13 @@ class AddBotMemberRequest extends $pb.GeneratedMessage {
   factory AddBotMemberRequest({
     $core.String? spaceId,
     $core.String? profileId,
+    BotInstallationIntent? installationIntent,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
     if (profileId != null) result.profileId = profileId;
+    if (installationIntent != null)
+      result.installationIntent = installationIntent;
     return result;
   }
 
@@ -3757,6 +3760,8 @@ class AddBotMemberRequest extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
     ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..aOM<BotInstallationIntent>(3, _omitFieldNames ? '' : 'installationIntent',
+        subBuilder: BotInstallationIntent.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3795,16 +3800,33 @@ class AddBotMemberRequest extends $pb.GeneratedMessage {
   $core.bool hasProfileId() => $_has(1);
   @$pb.TagNumber(2)
   void clearProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  BotInstallationIntent get installationIntent => $_getN(2);
+  @$pb.TagNumber(3)
+  set installationIntent(BotInstallationIntent value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasInstallationIntent() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearInstallationIntent() => $_clearField(3);
+  @$pb.TagNumber(3)
+  BotInstallationIntent ensureInstallationIntent() => $_ensure(2);
 }
 
 class RemoveBotMemberRequest extends $pb.GeneratedMessage {
   factory RemoveBotMemberRequest({
     $core.String? spaceId,
     $core.String? profileId,
+    BotInstallationIntent? installationIntent,
+    $core.String? installOperationId,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
     if (profileId != null) result.profileId = profileId;
+    if (installationIntent != null)
+      result.installationIntent = installationIntent;
+    if (installOperationId != null)
+      result.installOperationId = installOperationId;
     return result;
   }
 
@@ -3823,6 +3845,9 @@ class RemoveBotMemberRequest extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
     ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..aOM<BotInstallationIntent>(3, _omitFieldNames ? '' : 'installationIntent',
+        subBuilder: BotInstallationIntent.create)
+    ..aOS(4, _omitFieldNames ? '' : 'installOperationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3862,6 +3887,146 @@ class RemoveBotMemberRequest extends $pb.GeneratedMessage {
   $core.bool hasProfileId() => $_has(1);
   @$pb.TagNumber(2)
   void clearProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  BotInstallationIntent get installationIntent => $_getN(2);
+  @$pb.TagNumber(3)
+  set installationIntent(BotInstallationIntent value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasInstallationIntent() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearInstallationIntent() => $_clearField(3);
+  @$pb.TagNumber(3)
+  BotInstallationIntent ensureInstallationIntent() => $_ensure(2);
+
+  /// Original add operation, retained when the cancellation has its own key.
+  @$pb.TagNumber(4)
+  $core.String get installOperationId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set installOperationId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasInstallOperationId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearInstallOperationId() => $_clearField(4);
+}
+
+/// Bot-owned durable identity, verified only under the Bot service principal.
+/// Generation is distinct from Space's ordinary membership generation.
+class BotInstallationIntent extends $pb.GeneratedMessage {
+  factory BotInstallationIntent({
+    $core.String? operationId,
+    $core.String? botId,
+    $core.String? installationId,
+    $core.String? spaceId,
+    $core.String? actorProfileId,
+    $fixnum.Int64? generation,
+  }) {
+    final result = create();
+    if (operationId != null) result.operationId = operationId;
+    if (botId != null) result.botId = botId;
+    if (installationId != null) result.installationId = installationId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (actorProfileId != null) result.actorProfileId = actorProfileId;
+    if (generation != null) result.generation = generation;
+    return result;
+  }
+
+  BotInstallationIntent._();
+
+  factory BotInstallationIntent.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory BotInstallationIntent.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'BotInstallationIntent',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'operationId')
+    ..aOS(2, _omitFieldNames ? '' : 'botId')
+    ..aOS(3, _omitFieldNames ? '' : 'installationId')
+    ..aOS(4, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(5, _omitFieldNames ? '' : 'actorProfileId')
+    ..a<$fixnum.Int64>(
+        6, _omitFieldNames ? '' : 'generation', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  BotInstallationIntent clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  BotInstallationIntent copyWith(
+          void Function(BotInstallationIntent) updates) =>
+      super.copyWith((message) => updates(message as BotInstallationIntent))
+          as BotInstallationIntent;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static BotInstallationIntent create() => BotInstallationIntent._();
+  @$core.override
+  BotInstallationIntent createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static BotInstallationIntent getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<BotInstallationIntent>(create);
+  static BotInstallationIntent? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get operationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set operationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOperationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOperationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get botId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set botId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasBotId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearBotId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get installationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set installationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasInstallationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearInstallationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get spaceId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set spaceId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasSpaceId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearSpaceId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get actorProfileId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set actorProfileId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasActorProfileId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearActorProfileId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $fixnum.Int64 get generation => $_getI64(5);
+  @$pb.TagNumber(6)
+  set generation($fixnum.Int64 value) => $_setInt64(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasGeneration() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearGeneration() => $_clearField(6);
 }
 
 class ListTemplatesRequest extends $pb.GeneratedMessage {

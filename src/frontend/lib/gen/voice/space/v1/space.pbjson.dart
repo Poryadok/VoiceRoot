@@ -1359,13 +1359,23 @@ const AddBotMemberRequest$json = {
   '2': [
     {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
     {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'installation_intent',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.BotInstallationIntent',
+      '10': 'installationIntent'
+    },
   ],
 };
 
 /// Descriptor for `AddBotMemberRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List addBotMemberRequestDescriptor = $convert.base64Decode(
     'ChNBZGRCb3RNZW1iZXJSZXF1ZXN0EhkKCHNwYWNlX2lkGAEgASgJUgdzcGFjZUlkEh0KCnByb2'
-    'ZpbGVfaWQYAiABKAlSCXByb2ZpbGVJZA==');
+    'ZpbGVfaWQYAiABKAlSCXByb2ZpbGVJZBJWChNpbnN0YWxsYXRpb25faW50ZW50GAMgASgLMiUu'
+    'dm9pY2Uuc3BhY2UudjEuQm90SW5zdGFsbGF0aW9uSW50ZW50UhJpbnN0YWxsYXRpb25JbnRlbn'
+    'Q=');
 
 @$core.Deprecated('Use removeBotMemberRequestDescriptor instead')
 const RemoveBotMemberRequest$json = {
@@ -1373,14 +1383,51 @@ const RemoveBotMemberRequest$json = {
   '2': [
     {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
     {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'installation_intent',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.BotInstallationIntent',
+      '10': 'installationIntent'
+    },
+    {
+      '1': 'install_operation_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'installOperationId'
+    },
   ],
 };
 
 /// Descriptor for `RemoveBotMemberRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List removeBotMemberRequestDescriptor =
-    $convert.base64Decode(
-        'ChZSZW1vdmVCb3RNZW1iZXJSZXF1ZXN0EhkKCHNwYWNlX2lkGAEgASgJUgdzcGFjZUlkEh0KCn'
-        'Byb2ZpbGVfaWQYAiABKAlSCXByb2ZpbGVJZA==');
+final $typed_data.Uint8List removeBotMemberRequestDescriptor = $convert.base64Decode(
+    'ChZSZW1vdmVCb3RNZW1iZXJSZXF1ZXN0EhkKCHNwYWNlX2lkGAEgASgJUgdzcGFjZUlkEh0KCn'
+    'Byb2ZpbGVfaWQYAiABKAlSCXByb2ZpbGVJZBJWChNpbnN0YWxsYXRpb25faW50ZW50GAMgASgL'
+    'MiUudm9pY2Uuc3BhY2UudjEuQm90SW5zdGFsbGF0aW9uSW50ZW50UhJpbnN0YWxsYXRpb25Jbn'
+    'RlbnQSMAoUaW5zdGFsbF9vcGVyYXRpb25faWQYBCABKAlSEmluc3RhbGxPcGVyYXRpb25JZA==');
+
+@$core.Deprecated('Use botInstallationIntentDescriptor instead')
+const BotInstallationIntent$json = {
+  '1': 'BotInstallationIntent',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'bot_id', '3': 2, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'installation_id', '3': 3, '4': 1, '5': 9, '10': 'installationId'},
+    {'1': 'space_id', '3': 4, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'actor_profile_id', '3': 5, '4': 1, '5': 9, '10': 'actorProfileId'},
+    {'1': 'generation', '3': 6, '4': 1, '5': 4, '10': 'generation'},
+  ],
+};
+
+/// Descriptor for `BotInstallationIntent`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botInstallationIntentDescriptor = $convert.base64Decode(
+    'ChVCb3RJbnN0YWxsYXRpb25JbnRlbnQSIQoMb3BlcmF0aW9uX2lkGAEgASgJUgtvcGVyYXRpb2'
+    '5JZBIVCgZib3RfaWQYAiABKAlSBWJvdElkEicKD2luc3RhbGxhdGlvbl9pZBgDIAEoCVIOaW5z'
+    'dGFsbGF0aW9uSWQSGQoIc3BhY2VfaWQYBCABKAlSB3NwYWNlSWQSKAoQYWN0b3JfcHJvZmlsZV'
+    '9pZBgFIAEoCVIOYWN0b3JQcm9maWxlSWQSHgoKZ2VuZXJhdGlvbhgGIAEoBFIKZ2VuZXJhdGlv'
+    'bg==');
 
 @$core.Deprecated('Use listTemplatesRequestDescriptor instead')
 const ListTemplatesRequest$json = {
