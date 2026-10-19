@@ -189,6 +189,17 @@ class MessagingServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// Durable cleanup of pins in one frozen whitelisted chat. Messages remain.
+  /// @voice.security=protected;callers=service:bot
+  $grpc.ResponseFuture<$0.ApplyBotChatPinRemovalResponse>
+      applyBotChatPinRemoval(
+    $0.ApplyBotChatPinRemovalRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applyBotChatPinRemoval, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.ForwardMessageResponse> forwardMessage(
     $0.ForwardMessageRequest request, {
     $grpc.CallOptions? options,
@@ -420,6 +431,11 @@ class MessagingServiceClient extends $grpc.Client {
       '/voice.messaging.v1.MessagingService/UnpinMessagesBySenderInChats',
       ($0.UnpinMessagesBySenderInChatsRequest value) => value.writeToBuffer(),
       $0.UnpinMessagesBySenderInChatsResponse.fromBuffer);
+  static final _$applyBotChatPinRemoval = $grpc.ClientMethod<
+          $0.ApplyBotChatPinRemovalRequest, $0.ApplyBotChatPinRemovalResponse>(
+      '/voice.messaging.v1.MessagingService/ApplyBotChatPinRemoval',
+      ($0.ApplyBotChatPinRemovalRequest value) => value.writeToBuffer(),
+      $0.ApplyBotChatPinRemovalResponse.fromBuffer);
   static final _$forwardMessage =
       $grpc.ClientMethod<$0.ForwardMessageRequest, $0.ForwardMessageResponse>(
           '/voice.messaging.v1.MessagingService/ForwardMessage',
@@ -678,6 +694,15 @@ abstract class MessagingServiceBase extends $grpc.Service {
             $0.UnpinMessagesBySenderInChatsRequest.fromBuffer(value),
         ($0.UnpinMessagesBySenderInChatsResponse value) =>
             value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApplyBotChatPinRemovalRequest,
+            $0.ApplyBotChatPinRemovalResponse>(
+        'ApplyBotChatPinRemoval',
+        applyBotChatPinRemoval_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApplyBotChatPinRemovalRequest.fromBuffer(value),
+        ($0.ApplyBotChatPinRemovalResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ForwardMessageRequest,
             $0.ForwardMessageResponse>(
         'ForwardMessage',
@@ -987,6 +1012,15 @@ abstract class MessagingServiceBase extends $grpc.Service {
   $async.Future<$0.UnpinMessagesBySenderInChatsResponse>
       unpinMessagesBySenderInChats($grpc.ServiceCall call,
           $0.UnpinMessagesBySenderInChatsRequest request);
+
+  $async.Future<$0.ApplyBotChatPinRemovalResponse> applyBotChatPinRemoval_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ApplyBotChatPinRemovalRequest> $request) async {
+    return applyBotChatPinRemoval($call, await $request);
+  }
+
+  $async.Future<$0.ApplyBotChatPinRemovalResponse> applyBotChatPinRemoval(
+      $grpc.ServiceCall call, $0.ApplyBotChatPinRemovalRequest request);
 
   $async.Future<$0.ForwardMessageResponse> forwardMessage_Pre(
       $grpc.ServiceCall $call,

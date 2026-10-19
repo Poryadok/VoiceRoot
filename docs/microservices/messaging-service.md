@@ -1,5 +1,35 @@
 # Messaging Service
 
+## Durable Bot pin-removal target
+
+Private `ApplyBotChatPinRemoval` accepts one frozen whitelisted chat, including
+a disabled whitelist entry. Protocol1 binds child operation, durable decision
+ID/SHA256, purpose `global_delete` or `space_uninstall`, Bot/actor/Space/chat and
+frozen-scope SHA256. Service-local evidence is native actual installation/add
+operation/positive int64-range generation, actual legacy installation with
+snapshot ID/digest, or orphan-whitelist snapshot ID/digest (global-delete only).
+Bot is the authenticated authority for its persisted source assertion; known
+conflicting actor bindings reject. It never accepts wildcard or chat arrays.
+
+Only the dedicated mTLS receiver accepts exact signed `service:bot`, audience
+`messaging`, method/request ID/full request hash and fresh bounded JWT/JTI.
+Ordinary and Gateway methods cannot authorize this cleanup. Under the existing
+CHAT-then-SPACE mutation guards, it removes pins joined to messages whose sender
+is exactly this actor in exactly this chat. Messages, attachments and other
+senders/chats remain. The same transaction advances a per-chat/actor cleanup
+revision and stores canonical request and deterministic response/receipt bytes.
+Pin admission observes the revision, then rechecks it under these guards before
+pin/outbox writes; a stale pre-cleanup attempt aborts without an event. A fresh
+authorized human repin remains possible after cleanup. Exact cleanup replay
+returns the saved receipt and preserves such a later repin.
+
+Receipt fields bind every identity/evidence/scope/request digest, participant
+`messaging`, outcome `COMPLETED`, immutable receipt ID/time, exact chat ID and
+removed-pin count. Changed-body operation reuse conflicts. Frozen/unavailable
+Space retries; only an exact Messaging-owned covering purge receipt can replace
+effects. This accepted BE170c8-c10 target needs actual receiver/journal/writer
+implementation and positive/negative tests before readiness or activation.
+
 ## Space communication timeout (BE-044-TIMEOUT-v1)
 
 Accepted target: apply the [Space-owned communication state](space-service.md#communication-timeout-authority-be-044-timeout-v1)

@@ -38,6 +38,10 @@ type Runtime struct {
 	closeOnce                     sync.Once
 	closeErr                      error
 	ownershipV2CapabilitiesActive atomic.Bool
+	delegatedUserEnabled          bool
+	botLifecycleEnabled           bool
+	reportPermissionEnabled       bool
+	sessionEpochChecker           principal.SessionEpochChecker
 	authoritySourceEnabled        bool
 	authoritySourceServer         *authoritysource.Server
 	authoritySourceInterceptor    grpc.UnaryServerInterceptor
@@ -50,6 +54,13 @@ type OwnershipV2Activation struct {
 }
 
 func New(ctx context.Context, config Config) (*Runtime, error) {
+	return NewWithSessionEpochChecker(ctx, config, nil)
+}
+
+func NewWithSessionEpochChecker(ctx context.Context, config Config, checker principal.SessionEpochChecker) (*Runtime, error) {
+	if config.DelegatedUserEnabled && checker == nil {
+		return nil, errors.New("delegated Role requires current Auth session checker")
+	}
 	if err := config.validate(); err != nil {
 		return nil, err
 	}
@@ -136,6 +147,10 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 		MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs,
 	})}
 	runtime.authoritySourceEnabled = config.AuthoritySourceEnabled
+	runtime.delegatedUserEnabled = config.DelegatedUserEnabled
+	runtime.botLifecycleEnabled = config.BotLifecycleEnabled
+	runtime.reportPermissionEnabled = config.ReportPermissionEnabled
+	runtime.sessionEpochChecker = checker
 	startup, cancel := context.WithTimeout(ctx, dependencyTimeout)
 	defer cancel()
 	if err := replay.Ping(startup).Err(); err != nil {
@@ -191,6 +206,9 @@ func isOwnershipMethod(method string) bool {
 }
 
 func isTrustedServiceMethod(method string) bool {
+	if method == rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName || method == rolev1.RoleService_RemoveMemberRoles_FullMethodName {
+		return true
+	}
 	if method == rolev1.RoleService_CheckPermission_FullMethodName || method == rolev1.RoleService_BootstrapSpaceRoles_FullMethodName {
 		return true
 	}
@@ -224,8 +242,40 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash str
 	if r == nil || r.resolver == nil || r.replay == nil {
 		return principal.Principal{}, principalgrpc.Unavailable(errors.New("principal runtime unavailable"))
 	}
+	if principalgrpc.IsDelegatedRoleMethod(method) {
+		return r.verifyPublicRole(ctx, token, method, requestID, hash)
+	}
+	if r.reportPermissionEnabled && method == rolev1.RoleService_CheckPermission_FullMethodName {
+		for _, issuer := range []string{"messaging", "moderation"} {
+			verified, err := principal.VerifyService(ctx, token, principal.VerifyConfig{ExpectedIssuer: issuer, ExpectedAudience: "role", ExpectedRPC: method, ExpectedRequestID: requestID, ExpectedRequestHash: hash, KeyResolver: r.resolver.Resolve, ReplayGuard: r.recordReplay})
+			if err == nil {
+				if verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 {
+					return principal.Principal{}, errors.New("service principal contains user authority")
+				}
+				return verified, nil
+			}
+			if principalgrpc.IsUnavailable(err) {
+				return principal.Principal{}, err
+			}
+		}
+	}
+	if r.botLifecycleEnabled && method == rolev1.RoleService_CheckPermission_FullMethodName {
+		verified, err := principal.VerifyService(ctx, token, principal.VerifyConfig{ExpectedIssuer: "bot", ExpectedAudience: "role", ExpectedRPC: method, ExpectedRequestID: requestID, ExpectedRequestHash: hash, KeyResolver: r.resolver.Resolve, ReplayGuard: r.recordReplay})
+		if err == nil {
+			return verified, nil
+		}
+		if principalgrpc.IsUnavailable(err) {
+			return principal.Principal{}, err
+		}
+	}
 	issuer := ""
 	switch method {
+	case rolev1.RoleService_ApplyBotInstallationRemoval_FullMethodName:
+		if r.botLifecycleEnabled {
+			issuer = "bot"
+		}
+	case rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName, rolev1.RoleService_RemoveMemberRoles_FullMethodName:
+		issuer = "space"
 	case rolev1.RoleService_CheckPermission_FullMethodName, rolev1.RoleService_BootstrapSpaceRoles_FullMethodName:
 		issuer = "space"
 	case rolev1.RoleService_ApplyGameSessionGrants_FullMethodName, rolev1.RoleService_RevokeGameSessionGrants_FullMethodName:

@@ -245,3 +245,32 @@ The events stay in `chat.events`; direct participant receipts prove convergence.
 at-least-once with `Nats-Msg-Id=event_id`; consumer inbox and generation state
 provide logical dedup. Unknown payload/protocol and same-generation changed bytes
 are contract mismatch and are not ACKed as success.
+
+### BE170 durable Bot removal (accepted private target)
+
+| Producer | Exact private method | Durable result |
+|---|---|---|
+| Bot, verified `service:bot`, dedicated mTLS, `aud=role` | `RoleService/ApplyBotInstallationRemoval` | One frozen Bot/Space target: global Bot marker and/or installation tombstone; non-system/non-Owner created roles and assignments removed; exact immutable completion receipt |
+| Bot, verified `service:bot`, dedicated mTLS, `aud=messaging` | `MessagingService/ApplyBotChatPinRemoval` | One saved whitelist chat: exact sender pins removed, messages retained; cleanup revision fences stale pin writes; exact immutable completion receipt |
+
+Both requests bind protocol1, child operation UUID, persisted initiating decision
+UUID/SHA256, purpose `global_delete` or `space_uninstall`, Bot/actor/Space and
+frozen scope SHA256. Evidence is a native actual installation/add operation and
+positive int64-range generation, an actual legacy installation plus snapshot
+ID/digest, or an orphan-whitelist snapshot ID/digest (global-delete only).
+Messaging additionally binds one exact chat UUID. Signed request ID equals the
+child operation and full deterministic request hash covers every field; each
+delivery has a fresh bounded JWT/JTI. Ordinary/alternate listeners deny these
+methods. A trusted Bot source assertion is not proof that an unknown legacy
+Space membership was caused by Bot: its qualification/removal is separate.
+
+Receipts echo identity/purpose/evidence/scope/request bindings, participant,
+`COMPLETED`, immutable receipt ID/time and bounded effect counts. Receiver
+transaction commits effect, fence, exact request and deterministic response
+together; identical retry returns saved bytes and changed-body reuse conflicts.
+Bot stores only fully validated receipts and returns DeleteBot success only
+after all obligations. Missing configuration/authority/receipt is never skipped
+success. Initiation requires actual verified Gateway user/current Auth Bot-only
+floor and locked Bot-owner/current manage-bots decision as appropriate; raw
+identity headers cannot create lifecycle authority. Wire alone is not readiness,
+deployment, legacy qualification or full original-task completion.

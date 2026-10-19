@@ -19,6 +19,9 @@ type Config struct {
 	ReplayAddr, ReplayPassword, JWKSCAFile            string
 	TLSCertFile, TLSKeyFile, ClientCAFile, ListenAddr string
 	AuthoritySourceEnabled                            bool
+	DelegatedUserEnabled                              bool
+	BotLifecycleEnabled                               bool
+	ReportPermissionEnabled                           bool
 }
 
 var issuerPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
@@ -28,6 +31,15 @@ func LoadFromEnv() (Config, bool, error) {
 	names := []string{"S2S_JWKS_URLS_JSON", "S2S_JWKS_REFRESH_AFTER", "S2S_JWKS_HARD_EXPIRY", "S2S_UNKNOWN_KID_COOLDOWN", "S2S_JWKS_CA_FILE", "ROLE_PRINCIPAL_REPLAY_REDIS_ADDR", "ROLE_PRINCIPAL_REPLAY_REDIS_PASSWORD", "ROLE_PRINCIPAL_TLS_CERT_FILE", "ROLE_PRINCIPAL_TLS_KEY_FILE", "ROLE_PRINCIPAL_CLIENT_CA_FILE", "ROLE_PRINCIPAL_GRPC_LISTEN"}
 	enabled := false
 	if _, present := os.LookupEnv("ROLE_AUTHORITY_SOURCE_ENABLED"); present {
+		enabled = true
+	}
+	if _, present := os.LookupEnv("ROLE_DELEGATED_USER_ENABLED"); present {
+		enabled = true
+	}
+	if _, present := os.LookupEnv("ROLE_BOT_LIFECYCLE_ENABLED"); present {
+		enabled = true
+	}
+	if _, present := os.LookupEnv("ROLE_REPORT_PERMISSION_ENABLED"); present {
 		enabled = true
 	}
 	for _, name := range names {
@@ -47,6 +59,24 @@ func LoadFromEnv() (Config, bool, error) {
 			return Config{}, true, errors.New("ROLE_AUTHORITY_SOURCE_ENABLED must be true or false")
 		}
 		cfg.AuthoritySourceEnabled = value == "true"
+	}
+	if value, ok := os.LookupEnv("ROLE_DELEGATED_USER_ENABLED"); ok {
+		if value != "true" && value != "false" {
+			return Config{}, true, errors.New("ROLE_DELEGATED_USER_ENABLED must be true or false")
+		}
+		cfg.DelegatedUserEnabled = value == "true"
+	}
+	if value, ok := os.LookupEnv("ROLE_BOT_LIFECYCLE_ENABLED"); ok {
+		if value != "true" && value != "false" {
+			return Config{}, true, errors.New("ROLE_BOT_LIFECYCLE_ENABLED must be true or false")
+		}
+		cfg.BotLifecycleEnabled = value == "true"
+	}
+	if value, ok := os.LookupEnv("ROLE_REPORT_PERMISSION_ENABLED"); ok {
+		if value != "true" && value != "false" {
+			return Config{}, true, errors.New("ROLE_REPORT_PERMISSION_ENABLED must be true or false")
+		}
+		cfg.ReportPermissionEnabled = value == "true"
 	}
 	if err := json.Unmarshal([]byte(os.Getenv("S2S_JWKS_URLS_JSON")), &cfg.JWKSURLs); err != nil {
 		return Config{}, true, errors.New("invalid principal JWKS configuration")
@@ -91,6 +121,16 @@ func (c Config) validate() error {
 		return errors.New("invalid principal listener address")
 	}
 	allowedIssuers := map[string]struct{}{"space": {}, "gameintegration": {}, "voice": {}}
+	if c.ReportPermissionEnabled {
+		allowedIssuers["messaging"] = struct{}{}
+		allowedIssuers["moderation"] = struct{}{}
+	}
+	if c.BotLifecycleEnabled {
+		allowedIssuers["bot"] = struct{}{}
+	}
+	if c.DelegatedUserEnabled {
+		allowedIssuers["gateway"] = struct{}{}
+	}
 	if c.AuthoritySourceEnabled {
 		allowedIssuers["federation"] = struct{}{}
 	}

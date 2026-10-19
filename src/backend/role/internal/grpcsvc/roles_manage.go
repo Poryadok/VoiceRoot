@@ -39,7 +39,7 @@ func (s *RoleGRPC) requireReorderRolesAuthorization(ctx context.Context, spaceID
 	}
 	actorTop := int32(-1)
 	for _, role := range actorRoles {
-		if role.Name == permissions.RoleOwner {
+		if role.Managed && role.Name == permissions.RoleOwner {
 			return nil
 		}
 		if role.Position > actorTop {
