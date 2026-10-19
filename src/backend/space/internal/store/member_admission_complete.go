@@ -20,6 +20,10 @@ func (s *SpaceStore) CompleteInteractiveMemberAdmission(ctx context.Context, ope
 // final guard and adds a distinct local FIRST-publication journal phase. Saved
 // completed outcomes return before Role, owner calls or either callback.
 func (s *SpaceStore) CompleteInteractiveMemberAdmissionWithPublicationHook(ctx context.Context, operation uuid.UUID, roles *memberadmissionrole.Client, subjects *admissionauthority.Client, reviewers *admissionauthority.ReviewerClient, completion MemberAdmissionFinalGuard, publicationHook MemberAdmissionPublicationHook) (*MembershipRow, error) {
+	return s.completeInteractiveMemberAdmission(ctx, operation, roles, subjects, reviewers, completion, publicationHook, nil)
+}
+
+func (s *SpaceStore) completeInteractiveMemberAdmission(ctx context.Context, operation uuid.UUID, roles *memberadmissionrole.Client, subjects *admissionauthority.Client, reviewers *admissionauthority.ReviewerClient, completion MemberAdmissionFinalGuard, publicationHook MemberAdmissionPublicationHook, initiating *memberAdmissionInitiatingCall) (*MembershipRow, error) {
 	if s == nil || s.Pool == nil || s.tx != nil || operation == uuid.Nil {
 		return nil, ErrJoinAttemptUnavailable
 	}
@@ -37,6 +41,11 @@ func (s *SpaceStore) CompleteInteractiveMemberAdmissionWithPublicationHook(ctx c
 	if i.State != "PREPARING" {
 		return nil, ErrMemberAdmissionStale
 	}
+	if initiating != nil {
+		if err = initiating.check(ctx); err != nil {
+			return nil, err
+		}
+	}
 	if i.Input.JoinAttempt == nil {
 		return nil, ErrJoinAttemptUnavailable
 	}
@@ -53,7 +62,7 @@ func (s *SpaceStore) CompleteInteractiveMemberAdmissionWithPublicationHook(ctx c
 	if err != nil {
 		return s.memberAdmissionCompletionUncertain(ctx, operation)
 	}
-	return s.publishMemberAdmission(ctx, operation, role, receipt, completion, continuation, publicationHook)
+	return s.publishMemberAdmissionWithInitiatingCall(ctx, operation, role, receipt, completion, continuation, publicationHook, initiating)
 }
 
 func (s *SpaceStore) memberAdmissionCompletionUncertain(ctx context.Context, operation uuid.UUID) (*MembershipRow, error) {
