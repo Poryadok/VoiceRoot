@@ -24,6 +24,10 @@ import (
 
 type allowMembershipClient struct{ chatv1.ChatServiceClient }
 
+func (allowMembershipClient) GetChat(context.Context, *chatv1.GetChatRequest, ...grpc.CallOption) (*chatv1.GetChatResponse, error) {
+	return nil, status.Error(codes.Unavailable, "chat metadata not provided by membership fixture")
+}
+
 func (allowMembershipClient) ListMembers(context.Context, *chatv1.ListMembersRequest, ...grpc.CallOption) (*chatv1.ListMembersResponse, error) {
 	return &chatv1.ListMembersResponse{}, nil
 }

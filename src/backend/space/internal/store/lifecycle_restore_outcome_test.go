@@ -85,6 +85,11 @@ type lifecycleRestoreFixture struct {
 func newLifecycleRestoreFixture(t *testing.T) lifecycleRestoreFixture {
 	t.Helper()
 	f := newLifecycleOutcomeFixture(t, len(lifecycleTestParticipants))
+	return scheduledLifecycleRestoreFixture(t, f)
+}
+
+func scheduledLifecycleRestoreFixture(t *testing.T, f lifecycleOutcomeFixture) lifecycleRestoreFixture {
+	t.Helper()
 	_, _, err := f.store.CompleteLifecycleSchedule(context.Background(), f.space)
 	require.NoError(t, err)
 	return lifecycleRestoreFixture{f, &spacev1.RestoreSpaceRequest{SpaceId: f.space.String(), OperationId: uuid.NewString()}}
