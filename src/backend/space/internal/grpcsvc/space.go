@@ -101,6 +101,9 @@ func (s *SpaceGRPC) CreateCommunityBootstrap(ctx context.Context, req *spacev1.C
 	if templateID != "guild-default" {
 		return nil, status.Error(codes.PermissionDenied, "community template is not supported")
 	}
+	if err := s.creatorRoleRuntimeReady(); err != nil {
+		return nil, err
+	}
 	row, created, err := s.Store.CreateCommunityBootstrapSpace(ctx, store.CommunityBootstrapSpaceInput{
 		OperationID: operationID, ApplicationID: applicationID, EnvironmentID: environmentID,
 		OwnerAccountID: ownerAccountID, OwnerProfileID: ownerProfileID, CorporationKey: corporationKey, TemplateID: templateID,
@@ -118,7 +121,7 @@ func (s *SpaceGRPC) CreateCommunityBootstrap(ctx context.Context, req *spacev1.C
 		return nil, mapSpaceStoreError(err)
 	}
 	if current {
-		if err := s.bootstrapSpaceRoles(ctx, row.ID, ownerProfileID); err != nil {
+		if err := s.bootstrapCreatorRoles(ctx, row.ID, ownerProfileID); err != nil {
 			return nil, status.Error(codes.Unavailable, "community owner roles are unavailable")
 		}
 	}

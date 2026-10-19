@@ -9,7 +9,7 @@ import (
 	rolev1 "voice.app/voice/role/v1"
 )
 
-// Native creation never treats an absent Role dependency or the legacy
+// Public and GIS creation never treat an absent Role dependency or the legacy
 // ordinary client as successful Owner bootstrap.
 func (s *SpaceGRPC) bootstrapCreatorRoles(ctx context.Context, spaceID, ownerID uuid.UUID) error {
 	if err := s.creatorRoleRuntimeReady(); err != nil {

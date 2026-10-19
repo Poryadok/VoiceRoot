@@ -22,6 +22,11 @@ type communityRecoveryRoleClient struct {
 	finalizeCalls   int
 	finalizeFailure error
 	newOwnerProfile uuid.UUID
+	bootstrap       func(context.Context, *rolev1.BootstrapSpaceRolesRequest) (*rolev1.BootstrapSpaceRolesResponse, error)
+}
+
+func (c *communityRecoveryRoleClient) BootstrapSpaceRoles(ctx context.Context, req *rolev1.BootstrapSpaceRolesRequest, _ ...grpc.CallOption) (*rolev1.BootstrapSpaceRolesResponse, error) {
+	return c.bootstrap(ctx, req)
 }
 
 func (c *communityRecoveryRoleClient) PrepareOwnershipTransfer(_ context.Context, req *rolev1.PrepareOwnershipTransferRequest, _ ...grpc.CallOption) (*rolev1.PrepareOwnershipTransferResponse, error) {
@@ -42,9 +47,14 @@ func TestRecoverCommunityOwnerUsesRoleV2ReceiptAndFencesGeneration(t *testing.T)
 	ctx := context.Background()
 	pool := startSpacePostgresForTest(t, ctx)
 	applySpaceMigration(t, ctx, pool)
+	applyCommunityBootstrapAuthorityMigrations(t, ctx, pool)
 	ownerAccount, ownerProfile, replacementAccount, replacementProfile := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	role := &communityRecoveryRoleClient{newOwnerProfile: replacementProfile}
-	issuer := ownershipTestIssuer(t)
+	issuer, key := newOwnershipTestIssuer(t)
+	role.bootstrap = func(ctx context.Context, req *rolev1.BootstrapSpaceRolesRequest) (*rolev1.BootstrapSpaceRolesResponse, error) {
+		verifyOwnershipCredential(t, ctx, req, rolev1.RoleService_BootstrapSpaceRoles_FullMethodName, key)
+		return &rolev1.BootstrapSpaceRolesResponse{}, nil
+	}
 	svc := &SpaceGRPC{Store: &store.SpaceStore{Pool: pool}, OwnershipRoles: role, PrincipalIssuer: issuer}
 	bootstrap := &spacev1.CreateCommunityBootstrapRequest{OperationId: uuid.NewString(), ApplicationId: uuid.NewString(), EnvironmentId: uuid.NewString(), OwnerAccountId: ownerAccount.String(), OwnerProfileId: ownerProfile.String(), CorporationKey: "corp-7", TemplateId: "guild-default"}
 	created, err := svc.CreateCommunityBootstrap(authctx.WithVerifiedServiceIdentity(ctx, authctx.ServiceIdentityGameIntegration), bootstrap)

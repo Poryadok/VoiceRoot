@@ -91,6 +91,22 @@ existing cases; hosted proof remains the integration owner's separate stage.
 
 ## Decisions
 
+Independent review382 rejected frozen `8ba0e6a`: denying ordinary Role bootstrap
+also affects the existing GIS `CreateCommunityBootstrap` consumer, which still
+used that client. The successor must migrate this consumer to the same signed
+protected client, check readiness before creating durable Space state, and
+prove successful creation and replay with an ordinary client that rejects.
+The ordinary-listener denial remains mandatory. Public Compose proof above is
+the actual `8ba0e6a` run, not a claim that the corrected successor was rerun.
+
+The GIS regression produced real PostgreSQL RED (10.690s): missing protected
+dependencies still left a durable community operation. After the correction,
+race checks passed (44.239s, no skipped tests) for GIS creation and exact replay,
+missing-dependency zero-write assertions, signed Role request verification,
+Owner recovery receipt/generation fencing and the protected Creator caller.
+The two GIS fixtures explicitly configure protected Role dependencies and apply
+the required native membership DDL; no nil Role success is used.
+
 The Role caller matrix already authorizes exact Space-service bootstrap.
 Implement that boundary instead of enabling the legacy ordinary transport.
 The native Creator is independent of unrelated memberAuthority/Role9096 setup.
