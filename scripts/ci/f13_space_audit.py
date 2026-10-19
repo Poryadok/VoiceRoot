@@ -1,4 +1,4 @@
-"""Only two fixed historical Space test-source duplicates; no path grant."""
+"""One observed historical grpc test tuple; unobserved store has no grant."""
 import argparse
 import hashlib
 import json
@@ -7,12 +7,19 @@ import re
 import subprocess
 import sys
 
-PINNED_RECORD_COMMIT = "b04a556971250a11666848b414054fae8382e13b"
-PINNED_RECORD_SHA256 = "310afcda1ecf7bef45c6cd8182c145f2e2eaa9349122bf9dff046c974df30871"
+PINNED_RECORD_COMMIT = "94ef37a52029aa12059eef2b070b52ccf9e86836"
+PINNED_RECORD_SHA256 = "5572b351d0517539dcda521c9fbcf328d17f205a4ccdcffdc1cb9feee2ef9a36"
 PINNED_SOURCE = "8fc9e542acd8039a356c4149ccd0fd4a16f79564"
 PINNED_BASE = "698d4f064f032ea74abf3ede2017100b26c8ee69"
-RECORD_PATH = "docs/testing/space-audit-test-duplicates-v1.json"
+RECORD_PATH = "docs/testing/space-audit-grpc-observed-v1.json"
 VERIFIER_PATH = "scripts/ci/f13_space_audit.py"
+GRPC_PATH = "src/backend/space/internal/grpcsvc/audit_ingestion_test.go"
+STORE_HOLD = "HOLD_NO_ORIGINAL_ARGUMENTS: src/backend/space/internal/store/audit_ingestion_test.go must reject. Actual original store caller is unreachable until legitimate grpc qualification; diagnostic forced-taint rows are not authority."
+ARTIFACTS = {'remaining-duplicate-tuples.tsv', 'remaining-duplicate-prior-rows.tsv',
+    'remaining-duplicate-diagnostic.log', 'remaining-duplicate-instrumentation.json', 'remaining-duplicate-receipt.json',
+    'space-audit-proof/actual-call-receipt.json', 'space-audit-proof/actual-call.stderr',
+    'space-audit-proof/call-capture-full-pr.log', 'space-audit-proof/call-capture-runner.json',
+    '416-space-audit-call-capture.sh'}
 
 
 class Rejected(ValueError): pass
@@ -69,8 +76,8 @@ def load_unit(repo, target):
     r = json.loads(raw, object_pairs_hook=pairs)
     require(isinstance(r, dict) and set(r) == {'version', 'status', 'source', 'base', 'cases', 'criterion',
         'runtime_pass', 'generic_path_authority', 'activation_authority', 'inventory_limitation', 'artifacts',
-        'review', 'proposal_sha256', 'carrier_status'}, 'record_shape')
-    require(r['version'] == 'MASTER-SPACE-AUDIT-TEST-DUPLICATES-v1'
+        'review', 'proposal_sha256', 'carrier_status', 'unobserved_store_status', 'observation'}, 'record_shape')
+    require(r['version'] == 'MASTER-SPACE-AUDIT-GRPC-OBSERVED-v1'
             and r['status'] == 'SOURCE_CONSUMPTION_CONTRACT_CLEAR', 'typed_source_contract')
     require(r['source'] == PINNED_SOURCE and r['base'] == PINNED_BASE, 'source_boundary')
     require(all(r[k] is False for k in ('runtime_pass', 'generic_path_authority', 'activation_authority')), 'source_only_authority')
@@ -80,12 +87,14 @@ def load_unit(repo, target):
     require(target != PINNED_RECORD_COMMIT, 'later_carrier')
     require(git(repo, 'show', target + ':' + VERIFIER_PATH) == Path(__file__).read_bytes(), 'executed_carrier')
     require(git(repo, 'show', target + ':' + RECORD_PATH) == raw, 'record_drift')
-    require(isinstance(r['cases'], list) and len(r['cases']) == 2, 'complete_two_cases')
+    require(r['unobserved_store_status'] == STORE_HOLD, 'unobserved_store_hold')
+    require(isinstance(r['cases'], list) and len(r['cases']) == 1, 'exact_one_observed_case')
     cases, bindings = {}, set()
     for case in r['cases']:
         require(set(case) == {'path', 'merge', 'parents', 'best_bases', 'actual_prior_row', 'actual_incoming_row', 'entries'}, 'case_shape')
         prior, incoming = row(case['actual_prior_row']), row(case['actual_incoming_row'])
         name = case['path']; require(name == prior[0] == incoming[0] and name not in cases, 'unique_test_path')
+        require(name == GRPC_PATH and prior[1] == incoming[1] == 'false', 'only_observed_grpc_false_false')
         merge = oid(case['merge']); parents = case['parents']; bases = case['best_bases']
         require(isinstance(parents, list) and len(parents) == 2, 'two_parents')
         for value in parents: oid(value)
@@ -117,13 +126,24 @@ def load_unit(repo, target):
                 and e['base']['entry'] != e['incoming']['entry'], 'reviewed_test_delta_not_identical_parents')
         actual_entry(repo, target, name, e['current']['entry'])
         cases[name] = case
-    require(list(cases) == sorted(cases) and len(bindings) == 14, 'complete_fourteen_binding_unit')
-    require(isinstance(r['artifacts'], dict) and len(r['artifacts']) == 5, 'diagnostic_metadata')
+    require(list(cases) == [GRPC_PATH] and len(bindings) == 7, 'complete_seven_binding_unit')
+    require(isinstance(r['artifacts'], dict) and set(r['artifacts']) == ARTIFACTS, 'ten_provenance_bindings')
     for name, value in r['artifacts'].items():
         require(isinstance(name, str) and set(value) == {'sha256', 'bytes'}
                 and re.fullmatch(r'[0-9a-f]{64}', value['sha256'])
                 and type(value['bytes']) is int and value['bytes'] >= 0, 'diagnostic_binding')
     require(re.fullmatch(r'[0-9a-f]{64}', r['proposal_sha256']), 'proposal_binding')
+    observed = r['observation']
+    require(isinstance(observed, dict) and set(observed) == {'source', 'private_target', 'receipt', 'receipt_sha256',
+        'input_kind', 'actual_exit', 'runtime_obligation'}, 'observation_shape')
+    oid(observed['source']); oid(observed['private_target'])
+    git(repo, 'merge-base', '--is-ancestor', PINNED_SOURCE, observed['source'])
+    git(repo, 'merge-base', '--is-ancestor', observed['source'], PINNED_RECORD_COMMIT)
+    require(observed['receipt'] == 'space-audit-proof/actual-call-receipt.json'
+            and observed['receipt_sha256'] == r['artifacts'][observed['receipt']]['sha256']
+            and type(observed['actual_exit']) is int and observed['actual_exit'] == 1
+            and observed['input_kind'] == 'Actual unchanged production collector CLI arguments, forwarded unchanged; no row reconstructed from R'
+            and observed['runtime_obligation'], 'original_observation_binding')
     return cases, r['inventory_limitation']
 
 
@@ -132,10 +152,11 @@ def qualify(repo, target, prior_raw, incoming_raw):
     cases, limitation = load_unit(repo, target)
     case = cases.get(prior[0]); require(case is not None, 'historical_path')
     require(prior == case['actual_prior_row'] and incoming == case['actual_incoming_row'], 'exact_two_actual_rows_and_flags')
-    return dict(version='MASTER-SPACE-AUDIT-TEST-DUPLICATES-v1', record=PINNED_RECORD_COMMIT,
-                record_sha256=PINNED_RECORD_SHA256, source_boundary=PINNED_SOURCE, cases=2, raw_bindings=14,
+    return dict(version='MASTER-SPACE-AUDIT-GRPC-OBSERVED-v1', record=PINNED_RECORD_COMMIT,
+                record_sha256=PINNED_RECORD_SHA256, source_boundary=PINNED_SOURCE, cases=1, raw_bindings=7, artifact_bindings=10,
                 prior_row=prior, incoming_row=incoming, runtime_pass=False, activation_authority=False,
-                generic_path_authority=False, retain_runtime_and_content_taint=True, inventory_limitation=limitation)
+                generic_path_authority=False, retain_runtime_and_content_taint=True, inventory_limitation=limitation,
+                unobserved_store_status=STORE_HOLD)
 
 
 def main():
