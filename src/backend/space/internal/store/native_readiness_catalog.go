@@ -16,6 +16,8 @@ type nativeReadinessFunctionPin struct {
 	config                                        string
 }
 
+var nativeMembershipGuardCoverage = []string{"spaces", "space_members", "space_ordinary_member_heads", "space_community_member_heads", "community_roster_members", "community_owner_authority", "space_membership_ownership_heads", "space_member_admission_intents", "space_native_member_publications", "space_native_creator_operations", "space_bot_installation_attempts", "space_bot_installation_heads", "space_bot_installation_cancellations", "space_effective_member_heads", "space_bans", "ownership_journal", "space_lifecycle_aggregates", "space_permanent_purge_fences", "community_owner_recovery_operations", "community_bootstrap_operations", "space_lifecycle_operations", "space_lifecycle_participants", "space_lifecycle_completions", "space_lifecycle_outbox", "space_deletion_tombstones"}
+
 // Stable names/types/definitions, independent of installer OIDs and LOGIN names.
 const nativeReadinessStructureSQL = `SELECT jsonb_build_object(
  'columns',(SELECT jsonb_agg(jsonb_build_array(n.nspname,c.relname,a.attnum,a.attname,format_type(a.atttypid,a.atttypmod),a.attnotnull,a.attidentity,a.attgenerated,pg_get_expr(d.adbin,d.adrelid)) ORDER BY n.nspname,c.relname,a.attnum)
@@ -97,8 +99,7 @@ func checkNativeReadinessCatalog(ctx context.Context, tx pgx.Tx) error {
     OR EXISTS(SELECT 1 FROM aclexplode(COALESCE(c.relacl,acldefault('r',c.relowner))) a WHERE a.grantee<>c.relowner)))`, len(nativeReadinessFunctionPins)-1).Scan(&valid); err != nil || !valid {
 		return ErrMemberAuthorityUnavailable
 	}
-	coverage := []string{"spaces", "space_members", "space_ordinary_member_heads", "space_community_member_heads", "community_roster_members", "community_owner_authority", "space_membership_ownership_heads", "space_member_admission_intents", "space_native_member_publications", "space_native_creator_operations", "space_bot_installation_attempts", "space_bot_installation_heads", "space_bot_installation_cancellations", "space_effective_member_heads", "space_bans", "ownership_journal", "space_lifecycle_aggregates", "space_permanent_purge_fences", "community_owner_recovery_operations", "community_bootstrap_operations", "space_lifecycle_operations", "space_lifecycle_participants", "space_lifecycle_completions", "space_lifecycle_outbox", "space_deletion_tombstones"}
-	for _, table := range coverage {
+	for _, table := range nativeMembershipGuardCoverage {
 		argument := "space_id"
 		if table == "spaces" {
 			argument = "id"

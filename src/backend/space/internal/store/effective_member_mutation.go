@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,6 +26,46 @@ type effectiveMemberMutations struct {
 	profiles   []effectiveMemberMutation
 	dbMutation *nativeMembershipDBMutation
 	used       bool
+}
+
+// Only the Creator's already verified, preallocated new identity enters here.
+// Unlike an existing Space mutation, no LIVE Space row can exist before this
+// capture: the protected DB frame must precede the first spaces INSERT.
+func (s *SpaceStore) captureBornCreatorEffectiveMutation(ctx context.Context, space, profile uuid.UUID) (*effectiveMemberMutations, error) {
+	if profile == uuid.Nil {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	if err := s.effectiveMutationStorageScope(ctx, space); err != nil {
+		return nil, err
+	}
+	version, err := s.memberDecisionSchema(ctx)
+	if err != nil || version != 44 {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	parts := make([]string, 0, len(nativeMembershipGuardCoverage))
+	for _, table := range nativeMembershipGuardCoverage {
+		column := "space_id"
+		if table == "spaces" {
+			column = "id"
+		}
+		parts = append(parts, "SELECT 1 FROM "+pgx.Identifier{"public", table}.Sanitize()+" WHERE "+pgx.Identifier{column}.Sanitize()+"=$1")
+	}
+	var empty bool
+	if err = s.tx.QueryRow(ctx, "SELECT NOT EXISTS("+strings.Join(parts, " UNION ALL ")+")", space).Scan(&empty); err != nil || !empty {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	token, err := s.beginNativeMembershipDBMutation(ctx, space, []uuid.UUID{profile})
+	if err != nil {
+		return nil, err
+	}
+	if len(token.profiles) != 1 || token.profiles[0] != profile {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	capture := &effectiveMemberMutations{tx: s.tx, space: space, dbMutation: token, profiles: []effectiveMemberMutation{{profile: profile, cutover: uuid.New()}}}
+	if err = s.tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&capture.started); err != nil {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	return capture, nil
 }
 
 // Pre-ledger native39/40 have no effective-history storage. Forward41 always

@@ -99,16 +99,29 @@ func (s *SpaceStore) CreateSpaceWithCreator(ctx context.Context, creator *lifecy
 	if _, err = creator.ActorFor(request); err != nil {
 		return nil, err
 	}
+	scoped := *s
+	scoped.tx = tx
+	schema, err := scoped.memberDecisionSchema(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var effective *effectiveMemberMutations
+	if schema == 44 {
+		effective, err = scoped.captureBornCreatorEffectiveMutation(ctx, w.space, w.profile)
+		if err != nil {
+			return nil, err
+		}
+	}
 	row, err := scanSpaceRow(tx.QueryRow(ctx, `INSERT INTO spaces(id,name,description,visibility,owner_profile_id,member_count)
 	 VALUES($1,$2,$3,$4,$5,1) RETURNING `+spaceSelectColumns, w.space, name, request.Description, visibility, w.profile))
 	if err != nil {
 		return nil, err
 	}
-	scoped := *s
-	scoped.tx = tx
-	effective, err := scoped.captureNativeEffectiveMemberMutation(ctx, w.space, []uuid.UUID{w.profile})
-	if err != nil {
-		return nil, err
+	if schema != 44 {
+		effective, err = scoped.captureNativeEffectiveMemberMutation(ctx, w.space, []uuid.UUID{w.profile})
+		if err != nil {
+			return nil, err
+		}
 	}
 	var published time.Time
 	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&published); err != nil {
