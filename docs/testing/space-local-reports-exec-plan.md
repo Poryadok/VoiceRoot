@@ -175,6 +175,35 @@ sanction or local appeal system. Existing global intake semantics are unchanged.
   protected chain and local scenario without waiting for that review.
   The current reader now requires schema26; the two prior25 reader tests have
   explicit26 fixtures, while backfill assertions still begin at25. No feature PASS.
+- [x] Independent executable Social edge: exact `social-messaging-report`
+  capability, dedicated mTLS production factory/configuration, bounded unique
+  directional pairs, protocol/operation/viewer echoes and ordinary versioned
+  request rejection. Existing native account mapping/block reads remain owned by
+  Social; the production factory test substitutes only profile-owner mapping.
+  Archive `4405d762f3ca8da6d23ba8d44cf628dd498fc9fc1bcf2ae522513f8653439eef`:
+  full shared principal package 28 top-level PASS and selected Social packages
+  22 PASS, no FAIL/SKIP, Linux `-race`, vet0/runner0. Real PostgreSQL16, real
+  private Redis7 for existing shared receiver/JTI/TTL integration; the new
+  factory test explicitly uses Miniredis. Fixture-only PG/Redis overlays replace
+  container provisioning, preserving assertions; no Testcontainers startup proof.
+  The first unadapted hosted Redis test panicked on its missing private Docker
+  socket before product execution; raw setup failure is retained separately.
+  Full protobuf lint/format/breaking against exact e774 descriptor pass; two Go
+  mirrors and Dart regenerated. Own Graphify worker31852 was bounded-cancelled
+  after validated process ancestry; handle32266 terminal1, no freshness PASS.
+- [x] Resolve the subsequent named Space union-history producer uncertainty:
+  Astra381 BE-066 c23 / `DECISION-BE066-EFFECTIVE-EPISODE-v1`, exact durable
+  contract SHA256 `fc98f277c7f926228b56c6bf4cf26f0e16d6535632c0befa2b56ab90a277e8c2`.
+  It separates effective episode identity from ONE-source admission binding and
+  settles the OLD coverage horizon before lease overwrite; legacy cutoff remains
+  UNKNOWN. No additional product or general Astra gate remains.
+- [ ] Next coherent source: canonicalize381 in owning Space/Messaging docs,
+  consume actual native33 baseline `fdd2035fd3e817d280e1f657033a47d949025bca`
+  in a real owned lease and coordinate exact source SQL hooks with owner186.
+  Owner186 confirms no whole-native integration/activation acceptance: scoped
+  source CLEARs are separate, Bot/Ban/GIS account capture and global logical
+  finalizers remain open. Do not edit migration33 in place or infer activated
+  writers from this immutable pin. Reconcile reservations before a new migration.
 
 ## Decisions
 

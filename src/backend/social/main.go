@@ -41,6 +41,13 @@ func main() {
 		log.Fatalf("social principal configuration: %v", err)
 	}
 	defer principalRuntime.Close()
+	reportConfig, reportEnabled, err := loadMessagingReportConfig()
+	if err != nil {
+		log.Fatalf("social report policy configuration: %v", err)
+	}
+	if reportEnabled && (strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" || principalRuntime.User == nil || principalRuntime.Issuer == nil) {
+		log.Fatal("social report policy requires DATABASE_URL and signed User resolver")
+	}
 	errCh := make(chan error, 2)
 	if principalRuntime.JWKS != nil {
 		listener, err := net.Listen("tcp", principalRuntime.JWKS.Addr)
@@ -102,7 +109,9 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
-		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
+		ordinaryOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
+		ordinaryOptions = append(ordinaryOptions, grpc.ChainUnaryInterceptor(grpcsvc.OrdinaryMessagingReportUnary()))
+		grpcSrv = grpc.NewServer(ordinaryOptions...)
 		socialSvc := &grpcsvc.SocialGRPC{
 			Friends:            &store.FriendshipStore{Pool: pool},
 			Blocks:             &store.BlockStore{Pool: pool},
@@ -114,6 +123,13 @@ func main() {
 			AccountProfiles:    accountProfiles,
 			ProfileAccounts:    profileAccounts,
 			BlockedProfiles:    blockedProfiles,
+		}
+		if reportEnabled {
+			closeReport, err := startMessagingReportListener(outboxCtx, reportConfig, socialSvc, errCh)
+			if err != nil {
+				log.Fatalf("social report policy listener: %v", err)
+			}
+			defer closeReport()
 		}
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			go runFriendRequestOutbox(outboxCtx, socialSvc.Friends, natsURL, logger)

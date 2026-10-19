@@ -13,6 +13,18 @@ Raw forwarded identity metadata is not this registration. Ordinary unrelated
 callers retain their existing separately qualified migration scope. No reporter,
 message content or Space roster is exposed by this new caller contract.
 
+The protected request sets `protocol_version=1` and canonical `operation_id`
+alongside viewer and 1..100 unique canonical sender profile IDs. Its response
+echoes protocol/operation/viewer and one ordered result per exact requested ID.
+Legacy responses without these echoes are not authority for this consumer.
+The dedicated `SOCIAL_REPORT_MESSAGING_*` listener uses the
+`social-messaging-report` capability (Social audience, Messaging issuer), exact
+`IsProfilePairsBlocked` method, mTLS, request hash and replay validation.
+Partial configuration fails startup; a configured listener requires the native
+database and Social's signed User profile-owner resolver. Versioned requests
+are rejected on the ordinary listener. This does not complete the Messaging
+facade or change unrelated legacy caller migration scope.
+
 ## Обзор
 
 Управление социальным графом: друзья, контакты, блокировки.

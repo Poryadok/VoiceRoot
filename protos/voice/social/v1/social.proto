@@ -177,6 +177,9 @@ message IsProfilePairBlockedResponse {
 message IsProfilePairsBlockedRequest {
   string viewer_profile_id = 1;
   repeated string other_profile_ids = 2;
+  // Required only by the dedicated Messaging report-policy listener.
+  uint32 protocol_version = 3;
+  string operation_id = 4;
 }
 
 message ProfilePairBlockResult {
@@ -186,6 +189,10 @@ message ProfilePairBlockResult {
 
 message IsProfilePairsBlockedResponse {
   repeated ProfilePairBlockResult results = 1;
+  // Exact echoes on the protected Messaging report-policy listener only.
+  uint32 protocol_version = 2;
+  string operation_id = 3;
+  string viewer_profile_id = 4;
 }
 
 message AreFriendsRequest {
