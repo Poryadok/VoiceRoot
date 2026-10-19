@@ -2,6 +2,21 @@
 
 ## Account-core v2 implementation checkpoint
 
+P0 composition checkpoint: main now loads one local issuer and starts its
+certificate-only JWKS and private9467 listener before database connection. The private listener
+registers only `ModerationEvidenceService` with workload mTLS, bounded replay
+verification and lazy Auth/JWKS dependencies. It reuses the same issuer/store/
+Auth client for report validation; the compatibility signer loader is no longer
+used by main. Configured public RPCs and `/ready` remain closed, while `/health`
+and private discovery remain available. The old ungated expiry loop is not
+started in this configured boot. Only actual bound local listeners produce P0;
+no P1–P5 receipt is invented. Coordinator/census and gated expiry remain open.
+Linux runtime TLS tests, readiness/generation tests and existing health tests
+pass under `-race` (1.442s), including a valid signed private request while the
+Auth peer and domain DB are unavailable: it reaches the closed boot gate.
+Dedicated not-ready-publishing ClusterIP Service templates and both Moderation
+readiness probe paths are source-only; no rollout/network/current-tail proof.
+
 Restriction-sync checkpoint: a finite queue worker now requires this boot's P2
 private-repair capability before any peer call. Auth RPCs run outside account
 transactions with a two-second deadline. Only an exact typed account/subject/
