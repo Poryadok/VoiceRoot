@@ -170,6 +170,9 @@ func (s *SpaceStore) IsCommunityBootstrapPublicationCurrent(ctx context.Context,
 			return scoped.IsCommunityBootstrapPublicationCurrent(ctx, operation, space)
 		})
 	}
+	if err := checkMemberAuthorityCatalog(ctx, s.tx); err != nil {
+		return false, err
+	}
 	var current bool
 	err := s.db().QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_native_member_publications p
 	 JOIN space_ordinary_member_heads h ON h.space_id=p.space_id AND h.profile_id=p.profile_id AND h.generation=p.generation AND h.publication_id=p.operation_id AND h.native_publication_sha256=p.binding_sha256 AND h.state='ACTIVE'
