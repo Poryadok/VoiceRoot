@@ -48,12 +48,7 @@ func (s *MatchmakingGRPC) searchDeps() SearchDeps {
 }
 
 func (s *MatchmakingGRPC) StartSearch(ctx context.Context, req *matchmakingv1.StartSearchRequest) (*matchmakingv1.StartSearchResponse, error) {
-	sess, err := s.startSearch(ctx, startSearchParams{
-		GameID:       req.GetGameId(),
-		Mode:         req.GetMode(),
-		CriteriaJSON: req.GetCriteriaJson(),
-		PartyID:      req.PartyId,
-	})
+	sess, err := s.startProtectedSearch(ctx, req)
 	if err != nil {
 		return nil, err
 	}

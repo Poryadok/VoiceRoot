@@ -458,3 +458,18 @@ An absent validator retains only the public pre-cut legacy reservation path,
 whose storage guard refuses typed sources. Native startup must install the
 actual protected validator and qualify the complete source package; this Worker
 component does not install that authority or qualify LFP historical rows.
+
+`StartSearch` consumes only the dedicated verified subject bound to its exact
+request bytes. Legacy forwarded identity metadata cannot authorize this handler.
+The protected Voice snapshot supplies the complete private party; criteria and
+mode limits use its actual member count. One PostgreSQL transaction commits the
+immutable capture, every member session and its durable queue intent, including
+the fresh account-wide ban check. The response contains the initiating profile's
+session. Retrying the same verified operation returns the original sessions;
+another active search, changed capture or operation conflict cannot replace them.
+Redis projection follows the committed intent, so request retries do not create
+another party or recapture unrelated searches. Missing dependencies and unknown
+source authority create no singleton fallback. Installing the protected snapshot
+client, projector and native lifecycle runtime in the executable remains part of
+the complete activation package. `StartSpaceQueue` retains its separate legacy
+implementation until its source adapter is explicitly qualified.

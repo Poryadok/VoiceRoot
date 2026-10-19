@@ -42,6 +42,19 @@ const (
 
 type Revalidator struct{ Snapshots SnapshotReader }
 
+// ValidateSearchSnapshot checks a new capture against the exact verified search
+// subject before mode validation or persistence. It supplies no source authority
+// itself; the reader must be the protected Voice client.
+func ValidateSearchSnapshot(s Snapshot, subject Subject) error {
+	if _, err := validateSnapshot(s, subject.ProfileID); err != nil {
+		return ErrUnknown
+	}
+	if _, err := validateMemberAuthority(s, subject); err != nil {
+		return ErrUnknown
+	}
+	return nil
+}
+
 func (r *Revalidator) RevalidateCapturedParty(ctx context.Context, p store.SourceParty) (Validation, error) {
 	if r == nil || r.Snapshots == nil || p.ID == uuid.Nil || p.SearchOperationID == uuid.Nil || p.SearchRequestHash == [32]byte{} || p.InitiatorAccountID == uuid.Nil || p.LeaderProfileID == uuid.Nil || p.InitiatorSessionEpoch <= 0 || p.DisbandedAt != nil {
 		return ValidationUnknown, ErrUnknown

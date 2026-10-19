@@ -22,14 +22,14 @@ func TestStartSearch_ExternalPartyIDRejectedBeforeState(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pool := startDB(t, ctx)
+	pool := startNativeSearchTestDB(t, ctx)
 	srv := searchTestServer(t, pool)
 	profileID := uuid.New()
 	ctx = ctxWithProfileAccount(profileID, uuid.New())
 	gameID := dotaGameID(t, srv, ctx)
 	partyID := uuid.New().String()
 
-	_, err := srv.StartSearch(ctx, &matchmakingv1.StartSearchRequest{
+	_, err := startProtectedSearchForTest(t, srv, ctx, &matchmakingv1.StartSearchRequest{
 		GameId:       gameID,
 		Mode:         "5v5 Ranked",
 		CriteriaJson: validDotaCriteriaJSON(),
