@@ -155,6 +155,32 @@ baseline reader62860 stalled, verified own4928 was stopped, no producer PASS.
 No host ports or Docker socket in this runner. No SDK/projection IO in excluded
 paths, original Applied/effect facts and native document bytes remain unchanged.
 
+Independent340 review of413 is scoped CLEAR for capture/proof/partial claims and
+serialized native mutation only. c19 corrects the broader dispatch claim: a
+takeover after the LAST successful CheckExecution can still precede the actual
+Media/Projection call. Current tests cover takeover after the first check only.
+Atomic dispatch exclusion remains HOLD until exact resource-bound execution and
+custody close that window; no installed qualification or full no-IO claim.
+
+The next independent stage reserves voice026 (TTc17) for append-only original
+effect plans. Prepare/Read bind exact W, full closure target, every effect ID and
+revision including zero, original bytes/hash and Applied history; current effect
+changes reject without rewriting the plan. The plan is source intent only.
+ENSURE is preserve-or-cancel intent, media removal requires later qualification,
+and local fence work requires actual native verification. No effect is completed.
+Actual private PG stub RED0.897s/test0.77 -> GREEN3.914s/test2.73, ordinary short
+30PASS15intentionalSKIP1.598s and vet0, original61519 terminal0. Intermediate1.320s
+was a fixture's missing AbortAdmission(Join), not a production defect; corrected
+via the real native transition. Tests retain exact zero revisions, restart/replay,
+wrong refs, stale requireClose revision, native bytes, failed second-item atomic
+rollback and empty026 DOWN/UP/populated DOWN refusal. Overlay128392e569c5b11452e919f62fa4babf744aad137f2a8399a50bbbee4218371d,
+all3955-file inventory87e3c0a662c30f6e6f8262e975aedf24a7290c9efdd7cb0a46242a08f595c340.
+
+Qualified effect outcomes/native completion need the accepted protected R/P and
+bound command/projection authority from260, not this plan. Historical SDK binding
+and post-ACTIVE continuity from307c14 also lack installed composition. Source
+planning is not a substitute for those prerequisites or full feature completion.
+
 Retain all historical aggregate JSON and native outbox records, rather than only
 the current membership index. Ordinary provider issuance has no complete grant
 ledger; explicit unknown source markers must require protected historical
