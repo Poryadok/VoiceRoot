@@ -37,6 +37,7 @@ type BotGRPC struct {
 	Hub            *dispatch.Hub
 	HTTPClient     *http.Client
 	Chat           chatv1.ChatServiceClient
+	ChatScope      chatv1.ChatScopeAuthorityServiceClient
 	Messaging      messagingv1.MessagingServiceClient
 	Role           rolev1.RoleServiceClient
 	User           userv1.UserServiceClient
@@ -454,6 +455,10 @@ func (s *BotGRPC) SetChatWhitelist(ctx context.Context, req *botv1.SetChatWhitel
 			return nil, err
 		}
 		chats = append(chats, cid)
+	}
+	ctx, err = s.qualifyChatScopes(ctx, spaceID, chats)
+	if err != nil {
+		return nil, err
 	}
 	_, err = s.Store.InstallInSpace(ctx, botID, spaceID, profile, chats)
 	if err != nil {

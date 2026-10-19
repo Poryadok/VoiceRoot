@@ -193,6 +193,13 @@ func main() {
 		if installationRoleConn != nil {
 			defer func() { _ = installationRoleConn.Close() }()
 		}
+		chatScopeConn, err := wireChatScope(svc, os.Getenv)
+		if err != nil {
+			log.Fatalf("Bot protected Chat scope client: %v", err)
+		}
+		if chatScopeConn != nil {
+			defer func() { _ = chatScopeConn.Close() }()
+		}
 		svc.RehydrateDeferred(context.Background())
 		startDeferredTTLSweeper(svc, logger)
 		slashWorkerCtx, stopSlashWorker := context.WithCancel(context.Background())

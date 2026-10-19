@@ -350,6 +350,10 @@ func (s *BotStore) InstallInSpace(ctx context.Context, botID, spaceID, installer
 	if canceling {
 		return uuid.Nil, ErrInstallationConflict
 	}
+	scopeIDs, err := persistChatScopeObservations(ctx, tx, botID, spaceID, chats, nil, "whitelist_admission")
+	if err != nil {
+		return uuid.Nil, err
+	}
 	var lifecycleState string
 	err = tx.QueryRow(ctx, `SELECT desired_state FROM bot_space_lifecycle_heads WHERE space_id=$1`, spaceID).Scan(&lifecycleState)
 	if err == nil && lifecycleState != "LIVE" {
@@ -368,45 +372,11 @@ RETURNING id`,
 	if err != nil {
 		return uuid.Nil, err
 	}
-	rows, err := tx.Query(ctx, `DELETE FROM bot_chat_whitelist WHERE bot_id = $1 AND space_id = $2 RETURNING chat_id`, botID, spaceID)
-	if err != nil {
+	if err = replaceInstallationWhitelist(ctx, tx, botID, spaceID, installer, chats); err != nil {
 		return uuid.Nil, err
 	}
-	requestedChats := make(map[uuid.UUID]struct{}, len(chats))
-	for _, chatID := range chats {
-		requestedChats[chatID] = struct{}{}
-	}
-	var removedChatIDs []uuid.UUID
-	for rows.Next() {
-		var chatID uuid.UUID
-		if err := rows.Scan(&chatID); err != nil {
-			rows.Close()
-			return uuid.Nil, err
-		}
-		if _, keep := requestedChats[chatID]; !keep {
-			removedChatIDs = append(removedChatIDs, chatID)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
+	if err = attachChatScopeObservations(ctx, tx, botID, spaceID, scopeIDs); err != nil {
 		return uuid.Nil, err
-	}
-	rows.Close()
-	if len(removedChatIDs) > 0 {
-		if _, err := tx.Exec(ctx, `
-UPDATE bot_message_deliveries SET status = 'canceled', claimed_until = NULL
-WHERE bot_id = $1 AND chat_id = ANY($2) AND status = 'pending'`, botID, removedChatIDs); err != nil {
-			return uuid.Nil, err
-		}
-	}
-	for _, chatID := range chats {
-		_, err = tx.Exec(ctx, `
-INSERT INTO bot_chat_whitelist (bot_id, chat_id, space_id, enabled, added_by_profile_id)
-VALUES ($1, $2, $3, true, $4)`,
-			botID, chatID, spaceID, installer)
-		if err != nil {
-			return uuid.Nil, err
-		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return uuid.Nil, err
@@ -523,6 +493,13 @@ SELECT EXISTS(SELECT 1 FROM bot_space_installations WHERE bot_id = $1 AND space_
 	if !exists {
 		return ErrNotFound
 	}
+	var scopeIDs []uuid.UUID
+	if enabled {
+		scopeIDs, err = persistChatScopeObservations(ctx, tx, botID, spaceID, []uuid.UUID{chatID}, nil, "enable_admission")
+		if err != nil {
+			return err
+		}
+	}
 	var whitelisted bool
 	err = tx.QueryRow(ctx, `
 SELECT EXISTS(SELECT 1 FROM bot_chat_whitelist WHERE bot_id = $1 AND chat_id = $2 AND space_id = $3)`,
@@ -557,6 +534,9 @@ UPDATE bot_message_deliveries SET status = 'canceled', claimed_until = NULL
 WHERE bot_id = $1 AND chat_id = $2 AND status = 'pending'`, botID, chatID); err != nil {
 			return err
 		}
+	}
+	if err = attachChatScopeObservations(ctx, tx, botID, spaceID, scopeIDs); err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }

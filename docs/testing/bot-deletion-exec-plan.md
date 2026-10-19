@@ -148,6 +148,23 @@ observation is not a cross-service lease and introduces no public reparent API.
 
 ## Risks and follow-ups
 
+Bot now persists the authenticated Chat request/response bytes and digests in
+the same transaction that creates an installation intent. Exact native retry
+uses that original accepted observation, rather than requiring a new Chat read
+or replacing later whitelist changes. New targets and reinstall generations
+require fresh observations. A real-PG old-source relabel RED guards that boundary.
+Whitelist rows retain original and current observations separately, bound to
+the actual installation ID; overlapping setter rows survive replacement. The
+global deletion snapshot freezes both observations before deleting local rows.
+Real missing-origin and missing-snapshot REDs distinguish these guarantees.
+Migration10 has first-writer DOWN, old-RR and empty default-RC controls.
+
+This component does not yet qualify public install/whitelist/enable initiation
+or cross-process Chat consumption. The existing whitelist owner path and enable
+permission path still need their verified Gateway/Bot initiation cut after an
+actual positive HTTP proof. Messaging must consume preserved original lineage
+for covering receipt adoption; the private receiver and worker remain open.
+
 Unknown legacy unqualified in-flight adds require explicit release reconciliation,
 not a fabricated fence receipt. Role cleanup must preserve Owner/system roles.
 Current service contract scopes unpin to saved current whitelist chats; historical

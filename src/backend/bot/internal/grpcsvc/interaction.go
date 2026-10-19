@@ -65,9 +65,19 @@ func (s *BotGRPC) InstallBotInSpace(ctx context.Context, req *botv1.InstallBotIn
 	if s.InstallationSpace == nil || s.PrincipalIssuer == nil {
 		return nil, status.Error(codes.FailedPrecondition, "protected Bot installation client is not configured")
 	}
-	intent, err := s.Store.PrepareInstallation(ctx, botID, spaceID, profile, chats)
+	intent, err := s.Store.ReusableInstallationIntent(ctx, botID, spaceID, chats)
 	if err != nil {
 		return nil, mapStoreErr(err)
+	}
+	if intent == nil {
+		ctx, err = s.qualifyChatScopes(ctx, spaceID, chats)
+		if err != nil {
+			return nil, err
+		}
+		intent, err = s.Store.PrepareInstallation(ctx, botID, spaceID, profile, chats)
+		if err != nil {
+			return nil, mapStoreErr(err)
+		}
 	}
 	if err := s.addInstallationMember(ctx, intent); err != nil {
 		return nil, err
@@ -313,6 +323,12 @@ func (s *BotGRPC) SetBotChatEnabled(ctx context.Context, req *botv1.SetBotChatEn
 	profile, err := s.checkManageBots(ctx, spaceID)
 	if err != nil {
 		return nil, err
+	}
+	if req.GetEnabled() {
+		ctx, err = s.qualifyChatScopes(ctx, spaceID, []uuid.UUID{chatID})
+		if err != nil {
+			return nil, err
+		}
 	}
 	if err := s.Store.SetChatEnabled(ctx, botID, chatID, spaceID, profile, req.GetEnabled()); err != nil {
 		return nil, mapStoreErr(err)

@@ -103,6 +103,9 @@ func (s *BotStore) PrepareInstallation(ctx context.Context, botID, spaceID, inst
 	if err != nil {
 		return nil, err
 	}
+	if err = persistInitialInstallationScopes(ctx, tx, i); err != nil {
+		return nil, err
+	}
 	return i, tx.Commit(ctx)
 }
 
@@ -158,6 +161,30 @@ func (s *BotStore) CompleteInstallation(ctx context.Context, want *InstallationI
 	if got.State == "PREPARING" && !slices.Equal(got.Chats, chats) {
 		return ErrInstallationConflict
 	}
+	if got.State == "INSTALLED" && slices.Equal(got.Chats, chats) {
+		// Exact native acknowledgement recovery must not replace a whitelist
+		// subsequently changed through its separate authorized writer.
+		return tx.Commit(ctx)
+	}
+	var rawScopeIDs []byte
+	if err = tx.QueryRow(ctx, `SELECT to_jsonb(i)->'chat_scope_observation_ids' FROM bot_installation_intents i WHERE operation_id=$1`, got.OperationID).Scan(&rawScopeIDs); err != nil {
+		return err
+	}
+	var scopeIDs []uuid.UUID
+	if len(rawScopeIDs) > 0 {
+		if err = json.Unmarshal(rawScopeIDs, &scopeIDs); err != nil {
+			return ErrChatScopeObservation
+		}
+	}
+	if got.State == "INSTALLED" || len(scopeIDs) == 0 {
+		scopeIDs, err = persistChatScopeObservations(ctx, tx, got.BotID, got.SpaceID, chats, &got.OperationID, "whitelist_admission")
+		if err != nil {
+			return err
+		}
+	}
+	if len(scopeIDs) > 0 && len(scopeIDs) != len(chats) {
+		return ErrChatScopeObservation
+	}
 	var actual uuid.UUID
 	err = tx.QueryRow(ctx, `INSERT INTO bot_space_installations(id,bot_id,space_id,installed_by_profile_id) VALUES($1,$2,$3,$4) ON CONFLICT(bot_id,space_id) DO UPDATE SET installed_by_profile_id=EXCLUDED.installed_by_profile_id RETURNING id`, got.InstallationID, got.BotID, got.SpaceID, got.InstallerProfileID).Scan(&actual)
 	if err != nil {
@@ -169,6 +196,9 @@ func (s *BotStore) CompleteInstallation(ctx context.Context, want *InstallationI
 	if err := replaceInstallationWhitelist(ctx, tx, got.BotID, got.SpaceID, got.InstallerProfileID, chats); err != nil {
 		return err
 	}
+	if err = attachChatScopeObservations(ctx, tx, got.BotID, got.SpaceID, scopeIDs); err != nil {
+		return err
+	}
 	// This acknowledgement qualifies the new exact native request only. A
 	// historical legacy source remains a separate provenance/cleanup obligation.
 	if _, err = tx.Exec(ctx, `UPDATE bot_installation_intents SET state='INSTALLED',updated_at=now() WHERE installation_id=$1`, got.InstallationID); err != nil {
@@ -178,7 +208,8 @@ func (s *BotStore) CompleteInstallation(ctx context.Context, want *InstallationI
 }
 
 func replaceInstallationWhitelist(ctx context.Context, tx pgx.Tx, botID, spaceID, installer uuid.UUID, chats []uuid.UUID) error {
-	rows, err := tx.Query(ctx, `DELETE FROM bot_chat_whitelist WHERE bot_id=$1 AND space_id=$2 RETURNING chat_id`, botID, spaceID)
+	chats = normalizedInstallationChats(chats)
+	rows, err := tx.Query(ctx, `DELETE FROM bot_chat_whitelist WHERE bot_id=$1 AND space_id=$2 AND NOT(chat_id=ANY($3::uuid[])) RETURNING chat_id`, botID, spaceID, chats)
 	if err != nil {
 		return err
 	}
@@ -204,7 +235,7 @@ func replaceInstallationWhitelist(ctx context.Context, tx pgx.Tx, botID, spaceID
 		}
 	}
 	for _, id := range chats {
-		if _, err = tx.Exec(ctx, `INSERT INTO bot_chat_whitelist(bot_id,chat_id,space_id,enabled,added_by_profile_id) VALUES($1,$2,$3,true,$4)`, botID, id, spaceID, installer); err != nil {
+		if _, err = tx.Exec(ctx, `INSERT INTO bot_chat_whitelist(bot_id,chat_id,space_id,enabled,added_by_profile_id) VALUES($1,$2,$3,true,$4) ON CONFLICT(bot_id,chat_id) DO UPDATE SET enabled=true,added_by_profile_id=EXCLUDED.added_by_profile_id WHERE bot_chat_whitelist.space_id=EXCLUDED.space_id`, botID, id, spaceID, installer); err != nil {
 			return err
 		}
 	}

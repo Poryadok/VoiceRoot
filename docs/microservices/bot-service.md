@@ -34,6 +34,25 @@ the current installation; it has no cross-generation client retry precondition.
 Space-attached group/channel membership inherits the Space native source; this
 path sends no redundant unfenced `Chat.AddMembers` request.
 
+Before authorizing new or enabled whitelist targets, Bot performs the separate
+protected `ChatScopeAuthorityService.GetBotChatScopeAuthority` read. The stored
+Chat type and exact Space attachment are authoritative; caller `ChatRef.type`
+is not. New admission requires an existing group/channel and LIVE lifecycle.
+Validate the entire deduplicated proposed set before any native Add or durable
+whitelist admission; an empty set is empty. Save exact deterministic read request
+and response bytes/hashes with the native intent or whitelist mutation. Source
+observations do not reserve Chat state or grant membership. Historical retries
+retain their original native operation and source evidence; cleanup may reconcile
+retired heads separately, never manufacture install-time provenance. Disabling
+or removing an existing target does not require a fresh Chat row.
+
+The Chat source client uses distinct `BOT_CHAT_SCOPE_*` values: `GRPC_ADDR`,
+`TLS_CA_FILE`, `TLS_SERVER_NAME`, `TLS_CERT_FILE` and `TLS_KEY_FILE`, plus the
+existing Bot service issuer. Each bounded call signs exact audience `chat`, new
+RPC, fresh read operation, complete request hash and fresh JTI. No ordinary Chat
+client, public `GetChat`, borrowed Role/Space credential or raw metadata fallback
+can authorize this source fact. Existing owner/manageBots decisions remain.
+
 The dedicated client requires all five `BOT_SPACE_INSTALLATION_*` values:
 `GRPC_ADDR` (Space's dedicated listener, normally `space:9098`), `TLS_CA_FILE`,
 `TLS_SERVER_NAME`, `TLS_CERT_FILE` and `TLS_KEY_FILE`. It uses verified server TLS

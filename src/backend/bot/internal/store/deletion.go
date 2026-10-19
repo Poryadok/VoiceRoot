@@ -42,19 +42,20 @@ type BotDeletion struct {
 // BotDeletionTarget is an immutable recovery snapshot. LegacyEvidence is
 // explicit: absent historical installation credentials are never invented.
 type BotDeletionTarget struct {
-	TargetID           uuid.UUID   `json:"target_id"`
-	OperationID        uuid.UUID   `json:"operation_id"`
-	BotID              uuid.UUID   `json:"bot_id"`
-	SpaceID            uuid.UUID   `json:"space_id"`
-	ActorProfileID     uuid.UUID   `json:"actor_profile_id"`
-	InstallationID     uuid.UUID   `json:"installation_id"`
-	InstallOperationID uuid.UUID   `json:"install_operation_id"`
-	BotGeneration      int64       `json:"bot_generation"`
-	CancelOperationID  uuid.UUID   `json:"cancel_operation_id"`
-	Chats              []uuid.UUID `json:"chat_ids"`
-	LegacyEvidence     bool        `json:"legacy_evidence"`
-	ScopeBytes         []byte      `json:"-"`
-	ScopeSHA256        []byte      `json:"-"`
+	TargetID           uuid.UUID                `json:"target_id"`
+	OperationID        uuid.UUID                `json:"operation_id"`
+	BotID              uuid.UUID                `json:"bot_id"`
+	SpaceID            uuid.UUID                `json:"space_id"`
+	ActorProfileID     uuid.UUID                `json:"actor_profile_id"`
+	InstallationID     uuid.UUID                `json:"installation_id"`
+	InstallOperationID uuid.UUID                `json:"install_operation_id"`
+	BotGeneration      int64                    `json:"bot_generation"`
+	CancelOperationID  uuid.UUID                `json:"cancel_operation_id"`
+	Chats              []uuid.UUID              `json:"chat_ids"`
+	LegacyEvidence     bool                     `json:"legacy_evidence"`
+	ChatSources        []ChatScopeCleanupSource `json:"chat_sources,omitempty"`
+	ScopeBytes         []byte                   `json:"-"`
+	ScopeSHA256        []byte                   `json:"-"`
 }
 
 const deletionColumns = `operation_id,bot_id,owner_account_id,actor_profile_id,decision_bytes,decision_sha256,state,claim_generation`
@@ -248,6 +249,10 @@ func (s *BotStore) snapshotDeletionTarget(ctx context.Context, tx pgx.Tx, op *Bo
 		return nil, err
 	}
 	t.Chats = normalizedInstallationChats(t.Chats)
+	t.ChatSources, err = snapshotChatScopeSources(ctx, tx, op.BotID, space)
+	if err != nil {
+		return nil, err
+	}
 	t.ScopeBytes, err = json.Marshal(t)
 	if err != nil {
 		return nil, err

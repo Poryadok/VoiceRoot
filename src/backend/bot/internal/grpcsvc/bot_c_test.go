@@ -188,6 +188,7 @@ type botCDeps struct {
 	user         *fakeUserClient
 	msg          messagingv1.MessagingServiceServer
 	chat         *fakeChatClient
+	scope        chatv1.ChatScopeAuthorityServiceClient
 	role         rolev1.RoleServiceServer
 	space        *fakeSpaceClient
 	noChatClient bool
@@ -208,6 +209,7 @@ func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceCli
 		svc.Chat = allowMembershipClient{}
 	}
 	if deps != nil {
+		svc.ChatScope = deps.scope
 		if deps.user != nil {
 			ul := bufconn.Listen(1024)
 			us := grpc.NewServer()
