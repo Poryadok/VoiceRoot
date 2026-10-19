@@ -46,6 +46,12 @@ const (
 	SpaceService_ListInvites_FullMethodName                       = "/voice.space.v1.SpaceService/ListInvites"
 	SpaceService_JoinByInvite_FullMethodName                      = "/voice.space.v1.SpaceService/JoinByInvite"
 	SpaceService_JoinSpace_FullMethodName                         = "/voice.space.v1.SpaceService/JoinSpace"
+	SpaceService_StartJoinAttempt_FullMethodName                  = "/voice.space.v1.SpaceService/StartJoinAttempt"
+	SpaceService_GetJoinAttempt_FullMethodName                    = "/voice.space.v1.SpaceService/GetJoinAttempt"
+	SpaceService_SubmitJoinAttempt_FullMethodName                 = "/voice.space.v1.SpaceService/SubmitJoinAttempt"
+	SpaceService_ListJoinRequests_FullMethodName                  = "/voice.space.v1.SpaceService/ListJoinRequests"
+	SpaceService_GetJoinRequest_FullMethodName                    = "/voice.space.v1.SpaceService/GetJoinRequest"
+	SpaceService_ApproveJoinRequest_FullMethodName                = "/voice.space.v1.SpaceService/ApproveJoinRequest"
 	SpaceService_LeaveSpace_FullMethodName                        = "/voice.space.v1.SpaceService/LeaveSpace"
 	SpaceService_KickMember_FullMethodName                        = "/voice.space.v1.SpaceService/KickMember"
 	SpaceService_BanMember_FullMethodName                         = "/voice.space.v1.SpaceService/BanMember"
@@ -114,6 +120,20 @@ type SpaceServiceClient interface {
 	ListInvites(ctx context.Context, in *ListInvitesRequest, opts ...grpc.CallOption) (*ListInvitesResponse, error)
 	JoinByInvite(ctx context.Context, in *JoinByInviteRequest, opts ...grpc.CallOption) (*JoinByInviteResponse, error)
 	JoinSpace(ctx context.Context, in *JoinSpaceRequest, opts ...grpc.CallOption) (*JoinSpaceResponse, error)
+	// Exact authenticated applicant; no ambient proof or latest-attempt lookup.
+	// @voice.security=public_gateway;callers=service:gateway
+	StartJoinAttempt(ctx context.Context, in *StartJoinAttemptRequest, opts ...grpc.CallOption) (*StartJoinAttemptResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	GetJoinAttempt(ctx context.Context, in *GetJoinAttemptRequest, opts ...grpc.CallOption) (*GetJoinAttemptResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	SubmitJoinAttempt(ctx context.Context, in *SubmitJoinAttemptRequest, opts ...grpc.CallOption) (*SubmitJoinAttemptResponse, error)
+	// Current member plus SPACE_APPROVE_JOIN_REQUESTS; not invite/settings ACL.
+	// @voice.security=public_gateway;callers=service:gateway
+	ListJoinRequests(ctx context.Context, in *ListJoinRequestsRequest, opts ...grpc.CallOption) (*ListJoinRequestsResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	GetJoinRequest(ctx context.Context, in *GetJoinRequestRequest, opts ...grpc.CallOption) (*GetJoinRequestResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	ApproveJoinRequest(ctx context.Context, in *ApproveJoinRequestRequest, opts ...grpc.CallOption) (*ApproveJoinRequestResponse, error)
 	LeaveSpace(ctx context.Context, in *LeaveSpaceRequest, opts ...grpc.CallOption) (*LeaveSpaceResponse, error)
 	KickMember(ctx context.Context, in *KickMemberRequest, opts ...grpc.CallOption) (*KickMemberResponse, error)
 	BanMember(ctx context.Context, in *BanMemberRequest, opts ...grpc.CallOption) (*BanMemberResponse, error)
@@ -448,6 +468,66 @@ func (c *spaceServiceClient) JoinSpace(ctx context.Context, in *JoinSpaceRequest
 	return out, nil
 }
 
+func (c *spaceServiceClient) StartJoinAttempt(ctx context.Context, in *StartJoinAttemptRequest, opts ...grpc.CallOption) (*StartJoinAttemptResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StartJoinAttemptResponse)
+	err := c.cc.Invoke(ctx, SpaceService_StartJoinAttempt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) GetJoinAttempt(ctx context.Context, in *GetJoinAttemptRequest, opts ...grpc.CallOption) (*GetJoinAttemptResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetJoinAttemptResponse)
+	err := c.cc.Invoke(ctx, SpaceService_GetJoinAttempt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) SubmitJoinAttempt(ctx context.Context, in *SubmitJoinAttemptRequest, opts ...grpc.CallOption) (*SubmitJoinAttemptResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SubmitJoinAttemptResponse)
+	err := c.cc.Invoke(ctx, SpaceService_SubmitJoinAttempt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) ListJoinRequests(ctx context.Context, in *ListJoinRequestsRequest, opts ...grpc.CallOption) (*ListJoinRequestsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListJoinRequestsResponse)
+	err := c.cc.Invoke(ctx, SpaceService_ListJoinRequests_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) GetJoinRequest(ctx context.Context, in *GetJoinRequestRequest, opts ...grpc.CallOption) (*GetJoinRequestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetJoinRequestResponse)
+	err := c.cc.Invoke(ctx, SpaceService_GetJoinRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) ApproveJoinRequest(ctx context.Context, in *ApproveJoinRequestRequest, opts ...grpc.CallOption) (*ApproveJoinRequestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApproveJoinRequestResponse)
+	err := c.cc.Invoke(ctx, SpaceService_ApproveJoinRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *spaceServiceClient) LeaveSpace(ctx context.Context, in *LeaveSpaceRequest, opts ...grpc.CallOption) (*LeaveSpaceResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(LeaveSpaceResponse)
@@ -757,6 +837,20 @@ type SpaceServiceServer interface {
 	ListInvites(context.Context, *ListInvitesRequest) (*ListInvitesResponse, error)
 	JoinByInvite(context.Context, *JoinByInviteRequest) (*JoinByInviteResponse, error)
 	JoinSpace(context.Context, *JoinSpaceRequest) (*JoinSpaceResponse, error)
+	// Exact authenticated applicant; no ambient proof or latest-attempt lookup.
+	// @voice.security=public_gateway;callers=service:gateway
+	StartJoinAttempt(context.Context, *StartJoinAttemptRequest) (*StartJoinAttemptResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	GetJoinAttempt(context.Context, *GetJoinAttemptRequest) (*GetJoinAttemptResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	SubmitJoinAttempt(context.Context, *SubmitJoinAttemptRequest) (*SubmitJoinAttemptResponse, error)
+	// Current member plus SPACE_APPROVE_JOIN_REQUESTS; not invite/settings ACL.
+	// @voice.security=public_gateway;callers=service:gateway
+	ListJoinRequests(context.Context, *ListJoinRequestsRequest) (*ListJoinRequestsResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	GetJoinRequest(context.Context, *GetJoinRequestRequest) (*GetJoinRequestResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	ApproveJoinRequest(context.Context, *ApproveJoinRequestRequest) (*ApproveJoinRequestResponse, error)
 	LeaveSpace(context.Context, *LeaveSpaceRequest) (*LeaveSpaceResponse, error)
 	KickMember(context.Context, *KickMemberRequest) (*KickMemberResponse, error)
 	BanMember(context.Context, *BanMemberRequest) (*BanMemberResponse, error)
@@ -901,6 +995,24 @@ func (UnimplementedSpaceServiceServer) JoinByInvite(context.Context, *JoinByInvi
 }
 func (UnimplementedSpaceServiceServer) JoinSpace(context.Context, *JoinSpaceRequest) (*JoinSpaceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method JoinSpace not implemented")
+}
+func (UnimplementedSpaceServiceServer) StartJoinAttempt(context.Context, *StartJoinAttemptRequest) (*StartJoinAttemptResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StartJoinAttempt not implemented")
+}
+func (UnimplementedSpaceServiceServer) GetJoinAttempt(context.Context, *GetJoinAttemptRequest) (*GetJoinAttemptResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetJoinAttempt not implemented")
+}
+func (UnimplementedSpaceServiceServer) SubmitJoinAttempt(context.Context, *SubmitJoinAttemptRequest) (*SubmitJoinAttemptResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SubmitJoinAttempt not implemented")
+}
+func (UnimplementedSpaceServiceServer) ListJoinRequests(context.Context, *ListJoinRequestsRequest) (*ListJoinRequestsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListJoinRequests not implemented")
+}
+func (UnimplementedSpaceServiceServer) GetJoinRequest(context.Context, *GetJoinRequestRequest) (*GetJoinRequestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetJoinRequest not implemented")
+}
+func (UnimplementedSpaceServiceServer) ApproveJoinRequest(context.Context, *ApproveJoinRequestRequest) (*ApproveJoinRequestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApproveJoinRequest not implemented")
 }
 func (UnimplementedSpaceServiceServer) LeaveSpace(context.Context, *LeaveSpaceRequest) (*LeaveSpaceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LeaveSpace not implemented")
@@ -1486,6 +1598,114 @@ func _SpaceService_JoinSpace_Handler(srv interface{}, ctx context.Context, dec f
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SpaceServiceServer).JoinSpace(ctx, req.(*JoinSpaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_StartJoinAttempt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartJoinAttemptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).StartJoinAttempt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_StartJoinAttempt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).StartJoinAttempt(ctx, req.(*StartJoinAttemptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_GetJoinAttempt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetJoinAttemptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).GetJoinAttempt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_GetJoinAttempt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).GetJoinAttempt(ctx, req.(*GetJoinAttemptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_SubmitJoinAttempt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubmitJoinAttemptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).SubmitJoinAttempt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_SubmitJoinAttempt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).SubmitJoinAttempt(ctx, req.(*SubmitJoinAttemptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_ListJoinRequests_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListJoinRequestsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).ListJoinRequests(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_ListJoinRequests_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).ListJoinRequests(ctx, req.(*ListJoinRequestsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_GetJoinRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetJoinRequestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).GetJoinRequest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_GetJoinRequest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).GetJoinRequest(ctx, req.(*GetJoinRequestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_ApproveJoinRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApproveJoinRequestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).ApproveJoinRequest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_ApproveJoinRequest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).ApproveJoinRequest(ctx, req.(*ApproveJoinRequestRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2090,6 +2310,30 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "JoinSpace",
 			Handler:    _SpaceService_JoinSpace_Handler,
+		},
+		{
+			MethodName: "StartJoinAttempt",
+			Handler:    _SpaceService_StartJoinAttempt_Handler,
+		},
+		{
+			MethodName: "GetJoinAttempt",
+			Handler:    _SpaceService_GetJoinAttempt_Handler,
+		},
+		{
+			MethodName: "SubmitJoinAttempt",
+			Handler:    _SpaceService_SubmitJoinAttempt_Handler,
+		},
+		{
+			MethodName: "ListJoinRequests",
+			Handler:    _SpaceService_ListJoinRequests_Handler,
+		},
+		{
+			MethodName: "GetJoinRequest",
+			Handler:    _SpaceService_GetJoinRequest_Handler,
+		},
+		{
+			MethodName: "ApproveJoinRequest",
+			Handler:    _SpaceService_ApproveJoinRequest_Handler,
 		},
 		{
 			MethodName: "LeaveSpace",

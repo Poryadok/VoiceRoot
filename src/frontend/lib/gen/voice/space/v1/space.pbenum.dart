@@ -168,5 +168,50 @@ class SpaceChatCreationOutcomeState extends $pb.ProtobufEnum {
   const SpaceChatCreationOutcomeState._(super.value, super.name);
 }
 
+class JoinAdmissionState extends $pb.ProtobufEnum {
+  static const JoinAdmissionState JOIN_ADMISSION_STATE_UNSPECIFIED =
+      JoinAdmissionState._(
+          0, _omitEnumNames ? '' : 'JOIN_ADMISSION_STATE_UNSPECIFIED');
+  static const JoinAdmissionState JOIN_ADMISSION_STATE_COLLECTING =
+      JoinAdmissionState._(
+          1, _omitEnumNames ? '' : 'JOIN_ADMISSION_STATE_COLLECTING');
+  static const JoinAdmissionState JOIN_ADMISSION_STATE_PENDING =
+      JoinAdmissionState._(
+          2, _omitEnumNames ? '' : 'JOIN_ADMISSION_STATE_PENDING');
+  static const JoinAdmissionState JOIN_ADMISSION_STATE_PROCESSING =
+      JoinAdmissionState._(
+          3, _omitEnumNames ? '' : 'JOIN_ADMISSION_STATE_PROCESSING');
+  static const JoinAdmissionState JOIN_ADMISSION_STATE_ADMITTED =
+      JoinAdmissionState._(
+          4, _omitEnumNames ? '' : 'JOIN_ADMISSION_STATE_ADMITTED');
+  static const JoinAdmissionState JOIN_ADMISSION_STATE_FAILED =
+      JoinAdmissionState._(
+          5, _omitEnumNames ? '' : 'JOIN_ADMISSION_STATE_FAILED');
+  static const JoinAdmissionState JOIN_ADMISSION_STATE_EXPIRED =
+      JoinAdmissionState._(
+          6, _omitEnumNames ? '' : 'JOIN_ADMISSION_STATE_EXPIRED');
+  static const JoinAdmissionState JOIN_ADMISSION_STATE_INVALIDATED =
+      JoinAdmissionState._(
+          7, _omitEnumNames ? '' : 'JOIN_ADMISSION_STATE_INVALIDATED');
+
+  static const $core.List<JoinAdmissionState> values = <JoinAdmissionState>[
+    JOIN_ADMISSION_STATE_UNSPECIFIED,
+    JOIN_ADMISSION_STATE_COLLECTING,
+    JOIN_ADMISSION_STATE_PENDING,
+    JOIN_ADMISSION_STATE_PROCESSING,
+    JOIN_ADMISSION_STATE_ADMITTED,
+    JOIN_ADMISSION_STATE_FAILED,
+    JOIN_ADMISSION_STATE_EXPIRED,
+    JOIN_ADMISSION_STATE_INVALIDATED,
+  ];
+
+  static final $core.List<JoinAdmissionState?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 7);
+  static JoinAdmissionState? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const JoinAdmissionState._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');
