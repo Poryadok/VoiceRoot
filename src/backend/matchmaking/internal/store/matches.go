@@ -783,10 +783,14 @@ func (s *MatchStore) CreateProposal(ctx context.Context, p CreateProposalParams)
 		requestedByID[candidate.SessionID] = candidate
 		sessionIDs = append(sessionIDs, candidate.SessionID)
 	}
+	partyIDs, err := lockProposalParties(ctx, tx, proposalSessions)
+	if err != nil {
+		return CreateProposalResult{}, err
+	}
 	lockedRows, err := tx.Query(ctx, `
 		SELECT `+sessionSelectCols+`
-		FROM search_sessions WHERE id = ANY($1) ORDER BY id FOR UPDATE
-	`, sessionIDs)
+		FROM search_sessions WHERE id = ANY($1::uuid[]) OR party_id = ANY($2::uuid[]) ORDER BY id FOR UPDATE
+	`, sessionIDs, partyIDs)
 	if err != nil {
 		return CreateProposalResult{}, err
 	}
@@ -796,6 +800,13 @@ func (s *MatchStore) CreateProposal(ctx context.Context, p CreateProposalParams)
 		if err != nil {
 			lockedRows.Close()
 			return CreateProposalResult{}, err
+		}
+		if _, requested := requestedByID[sess.ID]; !requested {
+			if sess.Status == SessionStatusSearching || sess.Status == SessionStatusPendingAccept {
+				lockedRows.Close()
+				return CreateProposalResult{}, ErrSessionNotSearchable
+			}
+			continue
 		}
 		lockedSessions[sess.ID] = sess
 	}
@@ -807,15 +818,22 @@ func (s *MatchStore) CreateProposal(ctx context.Context, p CreateProposalParams)
 	if len(lockedSessions) != len(proposalSessions) {
 		return CreateProposalResult{}, ErrSessionNotSearchable
 	}
+	var now time.Time
+	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+		return CreateProposalResult{}, err
+	}
+	var spaceID *uuid.UUID
+	if len(proposalSessions) > 0 {
+		spaceID = lockedSessions[proposalSessions[0].SessionID].SpaceID
+	}
 	for _, candidate := range proposalSessions {
 		sess, ok := lockedSessions[candidate.SessionID]
-		if !ok || sess.Status != SessionStatusSearching || sess.ProfileID != candidate.ProfileID || !samePartyID(sess.PartyID, candidate.PartyID) {
+		if !ok || sess.Status != SessionStatusSearching || sess.ProfileID != candidate.ProfileID || !samePartyID(sess.PartyID, candidate.PartyID) || !samePartyID(sess.SpaceID, spaceID) || !proposalSessionScopeMatches(sess, p, now) {
 			return CreateProposalResult{}, ErrSessionNotSearchable
 		}
 	}
 
 	matchID := uuid.New()
-	now := time.Now().UTC()
 	participants := make([]MatchParticipant, len(proposalSessions))
 	for i, sess := range proposalSessions {
 		participants[i] = MatchParticipant{

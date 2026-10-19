@@ -29,8 +29,28 @@ func nativePostgres(t *testing.T) *pgxpool.Pool {
 	t.Cleanup(func() { pool.Close(); _, _ = admin.Exec(context.Background(), `DROP DATABASE `+database) })
 	files, err := filepath.Glob("../../../migrations/voice_db/*.up.sql")
 	require.NoError(t, err)
-	require.Len(t, files, 12, "pin the native schema under test rather than silently omit new migrations")
 	sort.Strings(files)
+	names := make([]string, len(files))
+	for i, file := range files {
+		names[i] = filepath.Base(file)
+	}
+	require.Equal(t, []string{
+		"000001_room_lifecycle.up.sql",
+		"000002_redis_divergence.up.sql",
+		"000003_matchmaking_membership.up.sql",
+		"000004_game_session_rooms.up.sql",
+		"000005_game_session_close.up.sql",
+		"000006_game_session_roster_lease.up.sql",
+		"000007_t17_sdk_conversion_fence.up.sql",
+		"000008_account_voice_fence.up.sql",
+		"000009_space_lifecycle.up.sql",
+		"000010_space_media_admission.up.sql",
+		"000011_match_squad_operations.up.sql",
+		"000012_ordinary_calls.up.sql",
+		"000013_a3_roster_outbox.up.sql",
+		"000015_party_coverage.up.sql",
+		"000016_party_resource_retirement.up.sql",
+	}, names, "pin the actual assembled native schema; 014 remains a separate producer dependency")
 	for _, file := range files {
 		body, err := os.ReadFile(file)
 		require.NoError(t, err)
