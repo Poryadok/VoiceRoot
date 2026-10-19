@@ -13,7 +13,7 @@ import (
 )
 
 func (t *transcoder) serveBots(w http.ResponseWriter, r *http.Request, rest string) bool {
-	if t.clients.bot == nil {
+	if t.clients.bot == nil && !(isBotLifecycleRequest(r) && t.clients.botAuditAdmin != nil) {
 		return false
 	}
 
