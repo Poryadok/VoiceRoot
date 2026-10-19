@@ -178,7 +178,7 @@ spec:
       containers:
         - name: user
           image: __IMAGE_REGISTRY__/user:__IMAGE_TAG__
-          ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 9091}, {containerPort: 9092}, {containerPort: 9093}]
+          ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 9091}, {containerPort: 9092}, {containerPort: 9093}, {containerPort: 9095, name: notif-presence}]
           env:
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_DATABASE_URL}}}
             - {name: USER_ACCOUNT_DELETE_CONSUMER_ENABLED, value: "false"}
@@ -195,8 +195,12 @@ spec:
             - {name: USER_SEARCH_PRINCIPAL_TLS_CERT_FILE, value: "/etc/voice/principal/tls/tls.crt"}
             - {name: USER_SEARCH_PRINCIPAL_TLS_KEY_FILE, value: "/etc/voice/principal/tls/tls.key"}
             - {name: USER_SEARCH_PRINCIPAL_REPLAY_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: USER_NOTIFICATION_PRINCIPAL_GRPC_LISTEN, value: ":9095"}
+            - {name: USER_NOTIFICATION_PRINCIPAL_TLS_CERT_FILE, value: "/etc/voice/principal/tls/tls.crt"}
+            - {name: USER_NOTIFICATION_PRINCIPAL_TLS_KEY_FILE, value: "/etc/voice/principal/tls/tls.key"}
+            - {name: USER_NOTIFICATION_PRINCIPAL_REPLAY_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
             - {name: USER_SEARCH_PROJECTION_CURSOR_HMAC_KEY, valueFrom: {secretKeyRef: {name: voice-user-search-projection, key: cursor-hmac-key}}}
-            - {name: S2S_JWKS_URLS_JSON, value: '{"social":"https://voice-social:8443/.well-known/jwks.json","file":"https://voice-file:8443/.well-known/jwks.json","search":"https://voice-search:8443/.well-known/jwks.json"}'}
+            - {name: S2S_JWKS_URLS_JSON, value: '{"social":"https://voice-social:8443/.well-known/jwks.json","file":"https://voice-file:8443/.well-known/jwks.json","search":"https://voice-search:8443/.well-known/jwks.json","notification":"https://voice-notification:8443/.well-known/jwks.json"}'}
             - {name: S2S_JWKS_CA_FILE, value: "/etc/voice/principal/ca/ca.crt"}
             - {name: S2S_JWKS_REFRESH_AFTER, value: "30s"}
             - {name: S2S_JWKS_HARD_EXPIRY, value: "2m"}
@@ -245,7 +249,7 @@ metadata:
   namespace: voice-prod
 spec:
   selector: {app: voice-user}
-  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}, {name: principal-grpc, port: 9091}, {name: file-principal-grpc, port: 9092}, {name: search-projection-grpc, port: 9093}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}, {name: principal-grpc, port: 9091}, {name: file-principal-grpc, port: 9092}, {name: search-projection-grpc, port: 9093}, {name: notif-presence, port: 9095}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -387,11 +391,20 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext: {fsGroup: 65532}
       containers:
         - name: chat
           image: __IMAGE_REGISTRY__/chat:__IMAGE_TAG__
           ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 8443}]
           env:
+            - {name: CHAT_REALTIME_LIFECYCLE_GRPC_LISTEN, value: ":9099"}
+            - {name: CHAT_REALTIME_LIFECYCLE_TLS_CERT_FILE, value: /etc/voice/realtime-p3/tls/tls.crt}
+            - {name: CHAT_REALTIME_LIFECYCLE_TLS_KEY_FILE, value: /etc/voice/realtime-p3/tls/tls.key}
+            - {name: CHAT_REALTIME_LIFECYCLE_CLIENT_CA_FILE, value: /etc/voice/realtime-p3/trust/realtime-client-ca.crt}
+            - {name: CHAT_REALTIME_PRINCIPAL_JWKS_URL, value: "https://voice-p3-principal-jwks.voice-prod.svc:8443/realtime.json"}
+            - {name: CHAT_REALTIME_PRINCIPAL_JWKS_CA_FILE, value: /etc/voice/realtime-p3/trust/realtime-jwks-ca.crt}
+            - {name: CHAT_REALTIME_PRINCIPAL_REPLAY_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: CHAT_REALTIME_PRINCIPAL_REPLAY_REDIS_PASSWORD, valueFrom: {secretKeyRef: {name: voice-p3-principal-replay, key: password}}}
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: CHAT_DATABASE_URL}}}
             - {name: SPACE_DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SPACE_DATABASE_URL}}}
             - {name: CHAT_GRPC_LISTEN, value: ":9090"}
@@ -403,10 +416,16 @@ spec:
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/chat.creds"}]
           volumeMounts:
+            - {name: realtime-p3-server, mountPath: /etc/voice/realtime-p3/tls, readOnly: true}
+            - {name: realtime-p3-trust, mountPath: /etc/voice/realtime-p3/trust, readOnly: true}
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
             - {name: nats-service-creds, mountPath: /var/run/nats/creds/chat.creds, subPath: chat.creds, readOnly: true}
             - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
       volumes:
+        - name: realtime-p3-server
+          secret: {secretName: voice-chat-realtime-p3-tls, defaultMode: 0440}
+        - name: realtime-p3-trust
+          secret: {secretName: voice-p3-principal-trust, defaultMode: 0440, items: [{key: realtime-client-ca.crt, path: realtime-client-ca.crt}, {key: realtime-jwks-ca.crt, path: realtime-jwks-ca.crt}]}
         - name: nats-leaf-config
           configMap: {name: voice-nats-leaf-config}
         - name: nats-service-creds
@@ -421,7 +440,7 @@ metadata:
   namespace: voice-prod
 spec:
   selector: {app: voice-chat}
-  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+  ports: [{name: realtime-lifecycle, port: 9099}, {name: http, port: 8080}, {name: grpc, port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -766,10 +785,11 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext: {fsGroup: 65532}
       containers:
         - name: notification
           image: __IMAGE_REGISTRY__/notification:__IMAGE_TAG__
-          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 8443, name: principal-jwks}]
           env:
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: NOTIFICATION_DATABASE_URL}}}
             - {name: NOTIFICATION_GRPC_LISTEN, value: ":9090"}
@@ -783,12 +803,25 @@ spec:
             - {name: APNS_BUNDLE_ID, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: APNS_BUNDLE_ID, optional: true}}}
             - {name: APNS_VOIP_TOPIC, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: APNS_VOIP_TOPIC, optional: true}}}
             - {name: APNS_PRODUCTION, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: APNS_PRODUCTION, optional: true}}}
+            - {name: NOTIFICATION_RECORD_PUSHES, value: "false"}
+            - {name: NOTIFICATION_PRINCIPAL_SIGNING_KEYS_DIR, value: /etc/voice/notification-principal/keys}
+            - {name: NOTIFICATION_PRINCIPAL_ACTIVE_KID, valueFrom: {secretKeyRef: {name: voice-notification-principal-signing, key: active-kid}}}
+            - {name: NOTIFICATION_PRINCIPAL_JWKS_LISTEN, value: ":8443"}
+            - {name: NOTIFICATION_PRINCIPAL_JWKS_TLS_CERT_FILE, value: /etc/voice/notification-principal/tls/tls.crt}
+            - {name: NOTIFICATION_PRINCIPAL_JWKS_TLS_KEY_FILE, value: /etc/voice/notification-principal/tls/tls.key}
+            - {name: USER_NOTIFICATION_PRINCIPAL_GRPC_ADDR, value: "voice-user:9095"}
+            - {name: USER_NOTIFICATION_PRINCIPAL_TLS_CA_FILE, value: /etc/voice/notification-principal/ca/ca.crt}
+            - {name: USER_NOTIFICATION_PRINCIPAL_TLS_SERVER_NAME, value: voice-user}
             - {name: USER_GRPC_ADDR, value: "voice-user:9090"}
             - {name: CHAT_GRPC_ADDR, value: "voice-chat:9090"}
             - {name: MESSAGING_GRPC_ADDR, value: "voice-messaging:9090"}
             - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+          volumeMounts:
+            - {name: notification-principal-signing, mountPath: /etc/voice/notification-principal/keys, readOnly: true}
+            - {name: notification-principal-tls, mountPath: /etc/voice/notification-principal/tls, readOnly: true}
+            - {name: principal-ca, mountPath: /etc/voice/notification-principal/ca, readOnly: true}
         - name: nats-leaf
           image: nats:2.12-alpine
           args: ["-c", "/etc/nats/leaf.conf"]
@@ -804,6 +837,12 @@ spec:
           secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: notification.creds, path: notification.creds}]}
         - name: nats-hub-tls
           secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
+        - name: notification-principal-signing
+          secret: {secretName: voice-notification-principal-signing, defaultMode: 0440, items: [{key: current.pem, path: current.pem}, {key: next.pem, path: next.pem}]}
+        - name: notification-principal-tls
+          secret: {secretName: voice-notification-principal-tls, defaultMode: 0440, items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]}
+        - name: principal-ca
+          secret: {secretName: voice-principal-ca, defaultMode: 0440, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -812,7 +851,7 @@ metadata:
   namespace: voice-prod
 spec:
   selector: {app: voice-notification}
-  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}, {name: principal-jwks, port: 8443}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -834,16 +873,39 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext: {fsGroup: 65532}
       containers:
         - name: realtime
           image: __IMAGE_REGISTRY__/realtime:__IMAGE_TAG__
-          ports: [{containerPort: 8080}]
+          ports: [{containerPort: 8080}, {containerPort: 9091}]
           env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: REALTIME_DATABASE_URL}}}
+            - {name: REALTIME_PRINCIPAL_SIGNING_KEYS_DIR, value: /etc/voice/p3/keys}
+            - {name: REALTIME_PRINCIPAL_ACTIVE_KID, value: current}
+            - {name: REALTIME_PRINCIPAL_JWKS_FILE, value: /etc/voice/p3/public/realtime.json}
+            - {name: REALTIME_CHAT_LIFECYCLE_ADDR, value: "voice-chat:9099"}
+            - {name: REALTIME_CHAT_LIFECYCLE_SERVER_NAME, value: voice-chat.voice-prod.svc}
+            - {name: REALTIME_CHAT_LIFECYCLE_CA_FILE, value: /etc/voice/p3/trust/chat-server-ca.crt}
+            - {name: REALTIME_CHAT_LIFECYCLE_CERT_FILE, value: /etc/voice/p3/tls/tls.crt}
+            - {name: REALTIME_CHAT_LIFECYCLE_KEY_FILE, value: /etc/voice/p3/tls/tls.key}
+            - {name: REALTIME_SPACE_LIFECYCLE_GRPC_LISTEN, value: ":9091"}
+            - {name: REALTIME_SPACE_LIFECYCLE_TLS_CERT_FILE, value: /etc/voice/p3/tls/tls.crt}
+            - {name: REALTIME_SPACE_LIFECYCLE_TLS_KEY_FILE, value: /etc/voice/p3/tls/tls.key}
+            - {name: REALTIME_SPACE_LIFECYCLE_CLIENT_CA_FILE, value: /etc/voice/p3/trust/space-client-ca.crt}
+            - {name: REALTIME_SPACE_PRINCIPAL_JWKS_URL, value: "https://voice-space.voice-prod.svc:8443/.well-known/jwks.json"}
+            - {name: REALTIME_SPACE_PRINCIPAL_JWKS_CA_FILE, value: /etc/voice/p3/trust/space-jwks-ca.crt}
+            - {name: REALTIME_SPACE_PRINCIPAL_REPLAY_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: REALTIME_SPACE_PRINCIPAL_REPLAY_REDIS_PASSWORD, valueFrom: {secretKeyRef: {name: voice-p3-principal-replay, key: password}}}
             - {name: REALTIME_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
             - name: REALTIME_INSTANCE_ID
               value: realtime-1
             - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
+          volumeMounts:
+            - {name: p3-signing, mountPath: /etc/voice/p3/keys, readOnly: true}
+            - {name: p3-public, mountPath: /etc/voice/p3/public, readOnly: true}
+            - {name: p3-server, mountPath: /etc/voice/p3/tls, readOnly: true}
+            - {name: p3-trust, mountPath: /etc/voice/p3/trust, readOnly: true}
           readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12-alpine
@@ -854,6 +916,14 @@ spec:
             - {name: nats-service-creds, mountPath: /var/run/nats/creds/realtime.creds, subPath: realtime.creds, readOnly: true}
             - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
       volumes:
+        - name: p3-signing
+          secret: {secretName: voice-realtime-principal-signing, defaultMode: 0440, items: [{key: current.pem, path: current.pem}, {key: next.pem, path: next.pem}]}
+        - name: p3-public
+          configMap: {name: voice-p3-principal-public, items: [{key: realtime.json, path: realtime.json}]}
+        - name: p3-server
+          secret: {secretName: voice-realtime-p3-tls, defaultMode: 0440}
+        - name: p3-trust
+          secret: {secretName: voice-p3-principal-trust, defaultMode: 0440, items: [{key: chat-server-ca.crt, path: chat-server-ca.crt}, {key: space-client-ca.crt, path: space-client-ca.crt}, {key: space-jwks-ca.crt, path: space-jwks-ca.crt}]}
         - name: nats-leaf-config
           configMap: {name: voice-nats-leaf-config}
         - name: nats-service-creds
@@ -868,7 +938,7 @@ metadata:
   namespace: voice-prod
 spec:
   selector: {app: voice-realtime}
-  ports: [{name: http, port: 8080}]
+  ports: [{name: realtime-lifecycle, port: 9091}, {name: http, port: 8080}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -1146,3 +1216,65 @@ metadata:
 spec:
   selector: {app: voice-analytics}
   ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+
+---
+# Public documents are provisioned from the SAME issuer secret generation before
+# rollout. No issuer private key is mounted by this independent startup service.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voice-p3-principal-publisher-config
+  namespace: voice-prod
+data:
+  default.conf: |
+    server {
+      listen 8443 ssl;
+      ssl_certificate /etc/voice/tls/tls.crt;
+      ssl_certificate_key /etc/voice/tls/tls.key;
+      ssl_protocols TLSv1.2 TLSv1.3;
+      server_tokens off;
+      root /srv/jwks;
+      location = /realtime.json { limit_except GET { deny all; } try_files $uri =404; }
+      location / { return 404; }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-p3-principal-jwks
+  namespace: voice-prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-p3-principal-jwks}
+  template:
+    metadata:
+      labels: {app: voice-p3-principal-jwks}
+    spec:
+      containers:
+        - name: jwks
+          image: nginx:stable-alpine
+          ports: [{containerPort: 8443}]
+          volumeMounts:
+            - {name: public, mountPath: /srv/jwks, readOnly: true}
+            - {name: tls, mountPath: /etc/voice/tls, readOnly: true}
+            - {name: config, mountPath: /etc/nginx/conf.d, readOnly: true}
+          # TCP availability only. Chat validates HTTPS CA/SAN, exact issuer
+          # current+next keys and replay before starting its protected listener.
+          readinessProbe: {tcpSocket: {port: 8443}, periodSeconds: 5}
+      volumes:
+        - name: public
+          configMap: {name: voice-p3-principal-public, items: [{key: realtime.json, path: realtime.json}]}
+        - name: tls
+          secret: {secretName: voice-p3-principal-jwks-tls, defaultMode: 0440}
+        - name: config
+          configMap: {name: voice-p3-principal-publisher-config}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-p3-principal-jwks
+  namespace: voice-prod
+spec:
+  selector: {app: voice-p3-principal-jwks}
+  ports: [{name: https, port: 8443}]

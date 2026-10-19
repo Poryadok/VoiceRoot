@@ -12,5 +12,6 @@ type RoleGRPC struct {
 	rolev1.UnimplementedRoleServiceServer
 	Store               *store.RoleStore
 	Events              roleevents.Publisher
+	OverrideTargets     OverrideTargetValidator
 	voiceRoomGrantStore voiceRoomGrantDecisionStore
 }

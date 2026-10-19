@@ -23,9 +23,9 @@ import (
 )
 
 func TestBootstrapGrantAllowsOnlyFixedMigrationStreamUpdates(t *testing.T) {
-	for _, subject := range []string{"$JS.API.STREAM.UPDATE.chat_events", "$JS.API.STREAM.UPDATE.social_events", "$JS.API.STREAM.UPDATE.message_events", "$JS.API.STREAM.UPDATE.*", "$JS.API.STREAM.UPDATE.>"} {
+	for _, subject := range []string{"$JS.API.STREAM.UPDATE.chat_events", "$JS.API.STREAM.UPDATE.social_events", "$JS.API.STREAM.UPDATE.voice_events", "$JS.API.STREAM.UPDATE.message_events", "$JS.API.STREAM.UPDATE.*", "$JS.API.STREAM.UPDATE.>"} {
 		g := grant{Publish: []string{subject}, NoResponse: true}
-		want := subject == "$JS.API.STREAM.UPDATE.chat_events" || subject == "$JS.API.STREAM.UPDATE.social_events"
+		want := subject == "$JS.API.STREAM.UPDATE.chat_events" || subject == "$JS.API.STREAM.UPDATE.social_events" || subject == "$JS.API.STREAM.UPDATE.voice_events"
 		if got := validGrant(g, "bootstrap", true); got != want {
 			t.Errorf("bootstrap scoped update %s: got %v want %v", subject, got, want)
 		}

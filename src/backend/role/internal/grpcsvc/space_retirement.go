@@ -39,7 +39,7 @@ func retirementRequestInput(ctx context.Context, req *rolev1.RetireSpaceRequest)
 	if err != nil {
 		return in, err
 	}
-	if req.GetPurgeDecidedAt() == nil || req.GetPurgeDecidedAt().CheckValid() != nil || req.GetPurgeDecidedAt().GetNanos()%1000 != 0 {
+	if req.GetPurgeDecidedAt() == nil || len(req.GetPurgeDecidedAt().ProtoReflect().GetUnknown()) != 0 || req.GetPurgeDecidedAt().CheckValid() != nil || req.GetPurgeDecidedAt().GetNanos()%1000 != 0 {
 		return in, status.Error(codes.InvalidArgument, "purge_decided_at must be a valid microsecond timestamp")
 	}
 	manifest := req.GetManifest()

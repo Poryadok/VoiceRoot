@@ -48,9 +48,25 @@ services:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
 
   space:
+    expose: ["9094"]
     environment:
       # Disposable local/CI credential for the existing canonical resolver.
       SPACE_VOICE_S2S_TOKEN: phase0-space-voice-fixture
+      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json"}'
+      SPACE_VOICE_COMMUNICATION_GRPC_LISTEN: :9094
+      SPACE_VOICE_COMMUNICATION_REPLAY_REDIS_ADDR: redis:6379
+      SPACE_VOICE_COMMUNICATION_TLS_CERT_FILE: /run/phase0/space-lifecycle.crt
+      SPACE_VOICE_COMMUNICATION_TLS_KEY_FILE: /run/phase0/space-lifecycle.key
+      SPACE_VOICE_COMMUNICATION_CLIENT_CA_FILE: /run/phase0/ca.crt
+      SPACE_VOICE_COMMUNICATION_JWKS_CA_FILE: /run/phase0/ca.crt
+      SPACE_VOICE_COMMUNICATION_JWKS_CLIENT_CERT_FILE: /run/phase0/space-client.crt
+      SPACE_VOICE_COMMUNICATION_JWKS_CLIENT_KEY_FILE: /run/phase0/space-client.key
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-lifecycle.crt:/run/phase0/space-lifecycle.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-lifecycle.key:/run/phase0/space-lifecycle.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-client.crt:/run/phase0/space-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-client.key:/run/phase0/space-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
 
   auth:
     user: "0:0"
@@ -144,6 +160,10 @@ services:
       VOICE_ROLE_TLS_CA_FILE: /run/phase0/ca.crt
       VOICE_ROLE_CLIENT_CERT_FILE: /run/phase0/voice-client.crt
       VOICE_ROLE_CLIENT_KEY_FILE: /run/phase0/voice-client.key
+      VOICE_SPACE_COMMUNICATION_GRPC_ADDR: space:9094
+      VOICE_SPACE_COMMUNICATION_TLS_CA_FILE: /run/phase0/ca.crt
+      VOICE_SPACE_COMMUNICATION_CLIENT_CERT_FILE: /run/phase0/voice-client.crt
+      VOICE_SPACE_COMMUNICATION_CLIENT_KEY_FILE: /run/phase0/voice-client.key
       VOICE_AUTH_SESSION_FLOOR_GRPC_ADDR: auth:9092
       VOICE_AUTH_SESSION_FLOOR_TLS_CA_FILE: /run/phase0/ca.crt
       VOICE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME: auth

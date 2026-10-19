@@ -57,6 +57,26 @@ service MatchmakingService {
 
 ## Модель данных
 
+### Public game catalog ordering
+
+`ListGames` follows [BE164-PUBLIC-POPULARITY-v1](../features/game-catalog.md#public-popularity-and-paging-be164-public-popularity-v1).
+One PostgreSQL statement orders all active games by global live searching-session
+count, then descending creation time and UUID. It supplies the ordered IDs and
+page metadata from the same MVCC snapshot; `CURRENT_TIMESTAMP` is the database
+cutoff. Space rows, non-searching state and null/expired deadlines never rank.
+The implementation hashes only canonical ordered UUID bytes with a versioned
+public-domain separator; no Redis scan, private counts or snapshot cache.
+
+New bounded cursors carry a version, order fingerprint and next ordinal. A
+changed order/membership yields `games_cursor_stale`/`FailedPrecondition` with no
+page; malformed tokens yield `InvalidArgument`. Valid historical timestamp/UUID
+chains continue active-only chronological paging. Staff `ListGameRequests`,
+including its active filter, keeps its separate chronological store entry point;
+`SearchGames` is unchanged. Query cost includes the full active-game sequence
+and eligible global searching rows, rather than popularity-sorting a truncated
+chronological page. Real PostgreSQL integration records the query plan; this is
+not a retained-snapshot or stable-through-arbitrary-churn promise.
+
 ```
 games
 ├── id (UUID)

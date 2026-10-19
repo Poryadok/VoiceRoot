@@ -91,3 +91,41 @@ test("accepts Resend mail and exposes the latest message for one recipient", asy
   );
   assert.equal(missingResponse.status, 404);
 });
+
+test("mail settlement separates submission, delivered inbox and permanent bounce", async (t) => {
+  const child = spawn(process.execPath, [serverPath], {
+    env: { ...process.env, PORT: "0" }, stdio: ["ignore", "pipe", "pipe"],
+  });
+  t.after(() => child.kill());
+  const base = await waitUntilReady(child);
+  const control = (path, body) => fetch(`${base}${path}`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+  });
+  const inbox = (to) => fetch(`${base}/test/mail/inbox?to=${encodeURIComponent(to)}`);
+  for (const [to, mode, terminal] of [
+    ["delivered@voice.test", "ACCEPT_THEN_DELIVER", "delivered"],
+    ["bounced@voice.test", "ACCEPT_THEN_BOUNCE", "bounced"],
+  ]) {
+    assert.equal((await control("/test/mail/mode", { to: to.toUpperCase(), mode })).status, 200);
+    const response = await postMail(base, to, "Verification", "code 123456");
+    assert.equal(response.status, 200);
+    const { id } = await response.json();
+    assert.equal((await inbox(to)).status, 404, "capture is not inbox delivery");
+    assert.equal((await (await fetch(`${base}/test/mail/status?id=${id}`)).json()).status, "accepted");
+    // A later recipient configuration cannot rewrite an accepted submission.
+    assert.equal((await control("/test/mail/mode", { to, mode: "REJECT_AT_SUBMISSION" })).status, 200);
+    assert.equal((await control("/test/mail/settle", { id })).status, 200);
+    assert.equal((await (await fetch(`${base}/test/mail/status?id=${id}`)).json()).status, terminal);
+    assert.equal((await inbox(to)).status, terminal === "delivered" ? 200 : 404);
+    assert.equal((await control("/test/mail/settle", { id })).status, 200, "settle is idempotent");
+    assert.equal((await (await fetch(`${base}/emails/latest?to=${to}`)).json()).id, id);
+  }
+  assert.equal((await control("/test/mail/mode", { to: "reject@voice.test", mode: "REJECT_AT_SUBMISSION" })).status, 200);
+  assert.equal((await postMail(base, "reject@voice.test", "Reset", "code 654321")).status, 422);
+  assert.equal((await fetch(`${base}/emails/latest?to=reject@voice.test`)).status, 404);
+  assert.equal((await inbox("reject@voice.test")).status, 404);
+  assert.equal((await control("/test/mail/settle", { id: "missing" })).status, 404);
+  assert.equal((await control("/test/mail/mode", { to: "other@voice.test", mode: "unknown" })).status, 400);
+  const other = await postMail(base, "other@voice.test", "Other", "own code");
+  assert.equal(other.status, 200, "recipient modes do not leak");
+});

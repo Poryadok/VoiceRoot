@@ -29,13 +29,12 @@ Future<void> main() async {
   final prefs = await SharedPreferences.getInstance();
   final savedTheme = readThemePreference(prefs);
   final messageCacheStore = await openDefaultMessageCacheStore();
+  final chatDraftStorage = await HiveChatDraftStorage.open(prefs);
   runApp(
     ProviderScope(
       overrides: [
         messageCacheStoreProvider.overrideWithValue(messageCacheStore),
-        chatDraftStorageProvider.overrideWithValue(
-          SharedPreferencesChatDraftStorage(prefs),
-        ),
+        chatDraftStorageProvider.overrideWithValue(chatDraftStorage),
         authSessionStorageProvider.overrideWithValue(
           SharedPreferencesAuthSessionStorage(prefs),
         ),

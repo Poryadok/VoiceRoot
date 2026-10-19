@@ -70,6 +70,17 @@ class SpaceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getSpace, request, options: options);
   }
 
+  /// Narrow existence/lifecycle read. No ACL lookup or public Gateway route.
+  /// @voice.security=protected;callers=service:role
+  $grpc.ResponseFuture<$0.ValidateRoleOverrideTargetResponse>
+      validateRoleOverrideTarget(
+    $0.ValidateRoleOverrideTargetRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$validateRoleOverrideTarget, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.ListMySpacesResponse> listMySpaces(
     $0.ListMySpacesRequest request, {
     $grpc.CallOptions? options,
@@ -245,6 +256,16 @@ class SpaceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$listMembers, request, options: options);
   }
 
+  /// BE-234-nickname-v1: verified actor, global MEMBER_MANAGE_NICKNAMES;
+  /// local members only, Owner protected, serialized redacted audit/outbox.
+  /// @voice.security=public_gateway;callers=service:gateway
+  $grpc.ResponseFuture<$0.UpdateMemberNicknameResponse> updateMemberNickname(
+    $0.UpdateMemberNicknameRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$updateMemberNickname, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.ListBansResponse> listBans(
     $0.ListBansRequest request, {
     $grpc.CallOptions? options,
@@ -346,6 +367,29 @@ class SpaceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$appendAuditEvent, request, options: options);
   }
 
+  /// Chat-owned durable create intent; not an ordinary user tree mutation.
+  /// @voice.security=protected;callers=service:chat
+  $grpc.ResponseFuture<$0.CommitSpaceChatCreationResponse>
+      commitSpaceChatCreation(
+    $0.CommitSpaceChatCreationRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$commitSpaceChatCreation, request,
+        options: options);
+  }
+
+  /// Exact immutable create outcome; caller authentication does not replace disclosure ACLs.
+  /// Gateway uses a verified delegated-user principal and current disclosure ACL.
+  /// @voice.security=protected;callers=service:chat,service:gateway
+  $grpc.ResponseFuture<$0.GetSpaceChatCreationOutcomeResponse>
+      getSpaceChatCreationOutcome(
+    $0.GetSpaceChatCreationOutcomeRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getSpaceChatCreationOutcome, request,
+        options: options);
+  }
+
   /// S2S: privacy audience "space members" — shared membership between two profiles.
   $grpc.ResponseFuture<$0.AreCoMembersResponse> areCoMembers(
     $0.AreCoMembersRequest request, {
@@ -356,12 +400,24 @@ class SpaceServiceClient extends $grpc.Client {
 
   /// S2S: canonical owner and exact membership evidence for Voice authorization.
   /// This endpoint is restricted to the verified Voice service identity.
+  /// @voice.security=protected;callers=service:voice
   $grpc.ResponseFuture<$0.ResolveVoiceRoomAccessResponse>
       resolveVoiceRoomAccess(
     $0.ResolveVoiceRoomAccessRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$resolveVoiceRoomAccess, request,
+        options: options);
+  }
+
+  /// Fresh profile/Space timeout authority; no public or legacy transport.
+  /// @voice.security=protected;callers=service:messaging
+  $grpc.ResponseFuture<$0.ResolveMemberCommunicationStateResponse>
+      resolveMemberCommunicationState(
+    $0.ResolveMemberCommunicationStateRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$resolveMemberCommunicationState, request,
         options: options);
   }
 
@@ -422,6 +478,12 @@ class SpaceServiceClient extends $grpc.Client {
           '/voice.space.v1.SpaceService/GetSpace',
           ($0.GetSpaceRequest value) => value.writeToBuffer(),
           $0.GetSpaceResponse.fromBuffer);
+  static final _$validateRoleOverrideTarget = $grpc.ClientMethod<
+          $0.ValidateRoleOverrideTargetRequest,
+          $0.ValidateRoleOverrideTargetResponse>(
+      '/voice.space.v1.SpaceService/ValidateRoleOverrideTarget',
+      ($0.ValidateRoleOverrideTargetRequest value) => value.writeToBuffer(),
+      $0.ValidateRoleOverrideTargetResponse.fromBuffer);
   static final _$listMySpaces =
       $grpc.ClientMethod<$0.ListMySpacesRequest, $0.ListMySpacesResponse>(
           '/voice.space.v1.SpaceService/ListMySpaces',
@@ -547,6 +609,11 @@ class SpaceServiceClient extends $grpc.Client {
           '/voice.space.v1.SpaceService/ListMembers',
           ($0.ListMembersRequest value) => value.writeToBuffer(),
           $0.ListMembersResponse.fromBuffer);
+  static final _$updateMemberNickname = $grpc.ClientMethod<
+          $0.UpdateMemberNicknameRequest, $0.UpdateMemberNicknameResponse>(
+      '/voice.space.v1.SpaceService/UpdateMemberNickname',
+      ($0.UpdateMemberNicknameRequest value) => value.writeToBuffer(),
+      $0.UpdateMemberNicknameResponse.fromBuffer);
   static final _$listBans =
       $grpc.ClientMethod<$0.ListBansRequest, $0.ListBansResponse>(
           '/voice.space.v1.SpaceService/ListBans',
@@ -613,6 +680,18 @@ class SpaceServiceClient extends $grpc.Client {
       '/voice.space.v1.SpaceService/AppendAuditEvent',
       ($0.AppendAuditEventRequest value) => value.writeToBuffer(),
       $0.AppendAuditEventResponse.fromBuffer);
+  static final _$commitSpaceChatCreation = $grpc.ClientMethod<
+          $0.CommitSpaceChatCreationRequest,
+          $0.CommitSpaceChatCreationResponse>(
+      '/voice.space.v1.SpaceService/CommitSpaceChatCreation',
+      ($0.CommitSpaceChatCreationRequest value) => value.writeToBuffer(),
+      $0.CommitSpaceChatCreationResponse.fromBuffer);
+  static final _$getSpaceChatCreationOutcome = $grpc.ClientMethod<
+          $0.GetSpaceChatCreationOutcomeRequest,
+          $0.GetSpaceChatCreationOutcomeResponse>(
+      '/voice.space.v1.SpaceService/GetSpaceChatCreationOutcome',
+      ($0.GetSpaceChatCreationOutcomeRequest value) => value.writeToBuffer(),
+      $0.GetSpaceChatCreationOutcomeResponse.fromBuffer);
   static final _$areCoMembers =
       $grpc.ClientMethod<$0.AreCoMembersRequest, $0.AreCoMembersResponse>(
           '/voice.space.v1.SpaceService/AreCoMembers',
@@ -623,6 +702,13 @@ class SpaceServiceClient extends $grpc.Client {
       '/voice.space.v1.SpaceService/ResolveVoiceRoomAccess',
       ($0.ResolveVoiceRoomAccessRequest value) => value.writeToBuffer(),
       $0.ResolveVoiceRoomAccessResponse.fromBuffer);
+  static final _$resolveMemberCommunicationState = $grpc.ClientMethod<
+          $0.ResolveMemberCommunicationStateRequest,
+          $0.ResolveMemberCommunicationStateResponse>(
+      '/voice.space.v1.SpaceService/ResolveMemberCommunicationState',
+      ($0.ResolveMemberCommunicationStateRequest value) =>
+          value.writeToBuffer(),
+      $0.ResolveMemberCommunicationStateResponse.fromBuffer);
   static final _$syncSpaceProSubscription = $grpc.ClientMethod<
           $0.SyncSpaceProSubscriptionRequest,
           $0.SyncSpaceProSubscriptionResponse>(
@@ -691,6 +777,16 @@ abstract class SpaceServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.GetSpaceRequest.fromBuffer(value),
         ($0.GetSpaceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ValidateRoleOverrideTargetRequest,
+            $0.ValidateRoleOverrideTargetResponse>(
+        'ValidateRoleOverrideTarget',
+        validateRoleOverrideTarget_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ValidateRoleOverrideTargetRequest.fromBuffer(value),
+        ($0.ValidateRoleOverrideTargetResponse value) =>
+            value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.ListMySpacesRequest, $0.ListMySpacesResponse>(
             'ListMySpaces',
@@ -906,6 +1002,15 @@ abstract class SpaceServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.ListMembersRequest.fromBuffer(value),
             ($0.ListMembersResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.UpdateMemberNicknameRequest,
+            $0.UpdateMemberNicknameResponse>(
+        'UpdateMemberNickname',
+        updateMemberNickname_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.UpdateMemberNicknameRequest.fromBuffer(value),
+        ($0.UpdateMemberNicknameResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ListBansRequest, $0.ListBansResponse>(
         'ListBans',
         listBans_Pre,
@@ -1021,6 +1126,25 @@ abstract class SpaceServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.AppendAuditEventRequest.fromBuffer(value),
         ($0.AppendAuditEventResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CommitSpaceChatCreationRequest,
+            $0.CommitSpaceChatCreationResponse>(
+        'CommitSpaceChatCreation',
+        commitSpaceChatCreation_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CommitSpaceChatCreationRequest.fromBuffer(value),
+        ($0.CommitSpaceChatCreationResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetSpaceChatCreationOutcomeRequest,
+            $0.GetSpaceChatCreationOutcomeResponse>(
+        'GetSpaceChatCreationOutcome',
+        getSpaceChatCreationOutcome_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetSpaceChatCreationOutcomeRequest.fromBuffer(value),
+        ($0.GetSpaceChatCreationOutcomeResponse value) =>
+            value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.AreCoMembersRequest, $0.AreCoMembersResponse>(
             'AreCoMembers',
@@ -1039,6 +1163,16 @@ abstract class SpaceServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.ResolveVoiceRoomAccessRequest.fromBuffer(value),
         ($0.ResolveVoiceRoomAccessResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ResolveMemberCommunicationStateRequest,
+            $0.ResolveMemberCommunicationStateResponse>(
+        'ResolveMemberCommunicationState',
+        resolveMemberCommunicationState_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ResolveMemberCommunicationStateRequest.fromBuffer(value),
+        ($0.ResolveMemberCommunicationStateResponse value) =>
+            value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.SyncSpaceProSubscriptionRequest,
             $0.SyncSpaceProSubscriptionResponse>(
         'SyncSpaceProSubscription',
@@ -1109,6 +1243,16 @@ abstract class SpaceServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetSpaceResponse> getSpace(
       $grpc.ServiceCall call, $0.GetSpaceRequest request);
+
+  $async.Future<$0.ValidateRoleOverrideTargetResponse>
+      validateRoleOverrideTarget_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ValidateRoleOverrideTargetRequest> $request) async {
+    return validateRoleOverrideTarget($call, await $request);
+  }
+
+  $async.Future<$0.ValidateRoleOverrideTargetResponse>
+      validateRoleOverrideTarget(
+          $grpc.ServiceCall call, $0.ValidateRoleOverrideTargetRequest request);
 
   $async.Future<$0.ListMySpacesResponse> listMySpaces_Pre(
       $grpc.ServiceCall $call,
@@ -1326,6 +1470,15 @@ abstract class SpaceServiceBase extends $grpc.Service {
   $async.Future<$0.ListMembersResponse> listMembers(
       $grpc.ServiceCall call, $0.ListMembersRequest request);
 
+  $async.Future<$0.UpdateMemberNicknameResponse> updateMemberNickname_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.UpdateMemberNicknameRequest> $request) async {
+    return updateMemberNickname($call, await $request);
+  }
+
+  $async.Future<$0.UpdateMemberNicknameResponse> updateMemberNickname(
+      $grpc.ServiceCall call, $0.UpdateMemberNicknameRequest request);
+
   $async.Future<$0.ListBansResponse> listBans_Pre($grpc.ServiceCall $call,
       $async.Future<$0.ListBansRequest> $request) async {
     return listBans($call, await $request);
@@ -1441,6 +1594,25 @@ abstract class SpaceServiceBase extends $grpc.Service {
   $async.Future<$0.AppendAuditEventResponse> appendAuditEvent(
       $grpc.ServiceCall call, $0.AppendAuditEventRequest request);
 
+  $async.Future<$0.CommitSpaceChatCreationResponse> commitSpaceChatCreation_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.CommitSpaceChatCreationRequest> $request) async {
+    return commitSpaceChatCreation($call, await $request);
+  }
+
+  $async.Future<$0.CommitSpaceChatCreationResponse> commitSpaceChatCreation(
+      $grpc.ServiceCall call, $0.CommitSpaceChatCreationRequest request);
+
+  $async.Future<$0.GetSpaceChatCreationOutcomeResponse>
+      getSpaceChatCreationOutcome_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.GetSpaceChatCreationOutcomeRequest> $request) async {
+    return getSpaceChatCreationOutcome($call, await $request);
+  }
+
+  $async.Future<$0.GetSpaceChatCreationOutcomeResponse>
+      getSpaceChatCreationOutcome($grpc.ServiceCall call,
+          $0.GetSpaceChatCreationOutcomeRequest request);
+
   $async.Future<$0.AreCoMembersResponse> areCoMembers_Pre(
       $grpc.ServiceCall $call,
       $async.Future<$0.AreCoMembersRequest> $request) async {
@@ -1458,6 +1630,18 @@ abstract class SpaceServiceBase extends $grpc.Service {
 
   $async.Future<$0.ResolveVoiceRoomAccessResponse> resolveVoiceRoomAccess(
       $grpc.ServiceCall call, $0.ResolveVoiceRoomAccessRequest request);
+
+  $async.Future<$0.ResolveMemberCommunicationStateResponse>
+      resolveMemberCommunicationState_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.ResolveMemberCommunicationStateRequest>
+              $request) async {
+    return resolveMemberCommunicationState($call, await $request);
+  }
+
+  $async.Future<$0.ResolveMemberCommunicationStateResponse>
+      resolveMemberCommunicationState($grpc.ServiceCall call,
+          $0.ResolveMemberCommunicationStateRequest request);
 
   $async.Future<$0.SyncSpaceProSubscriptionResponse>
       syncSpaceProSubscription_Pre($grpc.ServiceCall $call,

@@ -14,6 +14,7 @@ import (
 const maxSpaceTokenTTL = 60 * time.Second
 
 type SpaceRoomGrant struct {
+	ProviderBinding string
 	AccountID       string
 	ProfileID       string
 	SpaceID         string
@@ -26,6 +27,16 @@ type SpaceRoomGrant struct {
 	CanJoin         bool
 	CanPublishAudio bool
 	CanSubscribe    bool
+}
+
+// ProviderBinding binds the endpoint and current verifier configuration without
+// persisting credentials. It is identity metadata, not retirement evidence.
+func (i *SpaceTokenIssuer) ProviderBinding() string {
+	if i == nil || i.apiKey == "" || i.secret == "" || i.url == "" {
+		return "UNKNOWN"
+	}
+	sum := sha256.Sum256([]byte(i.url + "\x00" + i.apiKey + "\x00" + i.secret))
+	return "livekit-eject-only:" + base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
 // SpaceTokenIssuer is intentionally separate from the shared issuer because
@@ -52,6 +63,19 @@ func (i *SpaceTokenIssuer) LivekitURL() string {
 }
 
 func (i *SpaceTokenIssuer) JoinToken(grant SpaceRoomGrant, now time.Time) (string, time.Time, error) {
+	if i == nil {
+		return "", time.Time{}, errors.New("space livekit token issuer not configured")
+	}
+	return i.JoinReservedToken(grant, now, now.UTC().Add(i.ttl))
+}
+
+// JoinReservedToken signs the already-authorized absolute interval. It never
+// extends a delayed reservation by calculating a new now+TTL.
+func (i *SpaceTokenIssuer) JoinReservedToken(grant SpaceRoomGrant, now, expiresAt time.Time) (string, time.Time, error) {
+	if expiresAt.Sub(now) <= 0 || expiresAt.Sub(now) > maxSpaceTokenTTL {
+		return "", time.Time{}, errors.New("invalid reserved Space grant interval")
+	}
+
 	if i == nil || i.apiKey == "" || i.secret == "" || i.ttl <= 0 || i.ttl > maxSpaceTokenTTL {
 		return "", time.Time{}, errors.New("space livekit token issuer not configured")
 	}
@@ -68,7 +92,7 @@ func (i *SpaceTokenIssuer) JoinToken(grant SpaceRoomGrant, now time.Time) (strin
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	expiresAt := now.UTC().Add(i.ttl)
+	expiresAt = expiresAt.UTC()
 	issuedAt := now.UTC().Unix()
 	claims := map[string]any{
 		"iss": i.apiKey, "sub": identity, "iat": issuedAt, "nbf": issuedAt,

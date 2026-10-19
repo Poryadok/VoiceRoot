@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -41,28 +40,6 @@ func applyModerationSchemasForMessagingTest(t *testing.T, ctx context.Context, p
 	}
 }
 
-func seedSpaceTimeout(t *testing.T, ctx context.Context, pool *pgxpool.Pool, spaceID, profileID, actor uuid.UUID, until time.Time) {
-	t.Helper()
-	_, err := pool.Exec(ctx, `
-INSERT INTO spaces (id, name, visibility, owner_profile_id, member_count)
-VALUES ($1, 'mod-space', 'private', $2, 1)
-ON CONFLICT DO NOTHING
-`, spaceID, actor)
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `
-INSERT INTO space_member_timeouts (space_id, profile_id, timed_out_until, timed_out_by_profile_id)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (space_id, profile_id) DO UPDATE SET timed_out_until = EXCLUDED.timed_out_until
-`, spaceID, profileID, until, actor)
-	require.NoError(t, err)
-}
-
-func clearSpaceTimeout(t *testing.T, ctx context.Context, pool *pgxpool.Pool, spaceID, profileID uuid.UUID) {
-	t.Helper()
-	_, err := pool.Exec(ctx, `DELETE FROM space_member_timeouts WHERE space_id = $1 AND profile_id = $2`, spaceID, profileID)
-	require.NoError(t, err)
-}
-
 // TestSpaceModeration_SendMessage_FailsWhenTimedOut documents timeout blocks messaging in space chats.
 func TestSpaceModeration_SendMessage_FailsWhenTimedOut(t *testing.T) {
 	if testing.Short() {
@@ -80,16 +57,16 @@ func TestSpaceModeration_SendMessage_FailsWhenTimedOut(t *testing.T) {
 
 	chatID := uuid.New()
 	spaceID := uuid.New()
-	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	seedGroupChat(t, ctx, pool, chatID, profA, profB)
 	_, err := pool.Exec(ctx, `UPDATE chats SET space_id = $2 WHERE id = $1`, chatID, spaceID)
 	require.NoError(t, err)
-	seedSpaceTimeout(t, ctx, pool, spaceID, profB, profA, time.Now().UTC().Add(time.Hour))
 
-	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles})
+	authority := &communicationStateStub{state: 2}
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles, CommunicationStates: authority, RolePermissions: testRolePerms{allowed: true}})
 	t.Cleanup(cleanup)
 
 	_, err = client.SendMessage(withProfileCtx(ctx, acctB, profB), &messagingv1.SendMessageRequest{
-		Chat:    chatDMRef(chatID),
+		Chat:    chatGroupRef(chatID),
 		Content: "hello after timeout",
 	})
 	require.Error(t, err)
@@ -113,24 +90,24 @@ func TestSpaceModeration_SendMessage_SucceedsAfterTimeoutRemoved(t *testing.T) {
 
 	chatID := uuid.New()
 	spaceID := uuid.New()
-	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	seedGroupChat(t, ctx, pool, chatID, profA, profB)
 	_, err := pool.Exec(ctx, `UPDATE chats SET space_id = $2 WHERE id = $1`, chatID, spaceID)
 	require.NoError(t, err)
-	seedSpaceTimeout(t, ctx, pool, spaceID, profB, profA, time.Now().UTC().Add(time.Hour))
 
-	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles})
+	authority := &communicationStateStub{state: 2}
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles, CommunicationStates: authority, RolePermissions: testRolePerms{allowed: true}})
 	t.Cleanup(cleanup)
 
 	_, err = client.SendMessage(withProfileCtx(ctx, acctB, profB), &messagingv1.SendMessageRequest{
-		Chat:    chatDMRef(chatID),
+		Chat:    chatGroupRef(chatID),
 		Content: "blocked while timed out",
 	})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 
-	clearSpaceTimeout(t, ctx, pool, spaceID, profB)
+	authority.state = 1
 
 	_, err = client.SendMessage(withProfileCtx(ctx, acctB, profB), &messagingv1.SendMessageRequest{
-		Chat:    chatDMRef(chatID),
+		Chat:    chatGroupRef(chatID),
 		Content: "restored after timeout removed",
 	})
 	require.NoError(t, err)
@@ -153,17 +130,17 @@ func TestSpaceSlowMode_SecondMessageWithinWindow_Fails(t *testing.T) {
 
 	chatID := uuid.New()
 	spaceID := uuid.New()
-	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	seedGroupChat(t, ctx, pool, chatID, profA, profB)
 	_, err := pool.Exec(ctx, `UPDATE chats SET space_id = $2 WHERE id = $1`, chatID, spaceID)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `UPDATE chats SET slow_mode_seconds = 10 WHERE id = $1`, chatID)
 	require.NoError(t, err, "chat_db migration must allow slow_mode_seconds > 0")
 
-	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles})
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles, CommunicationStates: &communicationStateStub{state: 1}, RolePermissions: testRolePerms{allowed: true}})
 	t.Cleanup(cleanup)
 
 	sendCtx := withProfileCtx(ctx, acctA, profA)
-	chatRef := chatDMRef(chatID)
+	chatRef := chatGroupRef(chatID)
 
 	_, err = client.SendMessage(sendCtx, &messagingv1.SendMessageRequest{
 		Chat:    chatRef,

@@ -81,6 +81,15 @@ func (s *RoleGRPC) updateRole(ctx context.Context, req *rolev1.UpdateRoleRequest
 	if !can {
 		return nil, status.Error(codes.PermissionDenied, "cannot edit this role")
 	}
+	if req.Position != nil {
+		can, err := s.Store.CanCreateRole(ctx, row.SpaceID, actor, req.GetPosition())
+		if err != nil {
+			return nil, ordinaryStoreError(err)
+		}
+		if !can {
+			return nil, status.Error(codes.PermissionDenied, "cannot move role at or above your hierarchy")
+		}
+	}
 	var name *string
 	if req.Name != nil {
 		n := strings.TrimSpace(req.GetName())

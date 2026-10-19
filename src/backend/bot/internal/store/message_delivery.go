@@ -34,7 +34,7 @@ func (s *BotStore) QueueMessageRecipients(ctx context.Context, chatID, messageID
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	rows, err := tx.Query(ctx, `
-SELECT b.id
+SELECT b.id,w.space_id
 FROM bots b JOIN bot_chat_whitelist w ON w.bot_id = b.id
 WHERE w.chat_id = $1 AND w.enabled AND b.status = 'live'
   AND b.actor_profile_id::text <> $2
@@ -44,31 +44,46 @@ ORDER BY b.id`, chatID, senderProfileID, DevPollingEnabled())
 	if err != nil {
 		return err
 	}
-	var botIDs []uuid.UUID
+	type candidate struct {
+		bot, space uuid.UUID
+		allowed    bool
+	}
+	var candidates []candidate
+	var spaces []uuid.UUID
 	for rows.Next() {
-		var botID uuid.UUID
-		if err := rows.Scan(&botID); err != nil {
+		var c candidate
+		if err := rows.Scan(&c.bot, &c.space); err != nil {
 			rows.Close()
 			return err
 		}
-		botIDs = append(botIDs, botID)
+		candidates = append(candidates, c)
+		spaces = append(spaces, c.space)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
 		return err
 	}
 	rows.Close()
-	for _, botID := range botIDs {
-		// Lifecycle changes lock the bot before whitelist and delivery rows. Match
-		// that order so recipient capture cannot deadlock with a reinstall/removal.
+	if err := lockMessageSpaces(ctx, tx, spaces); err != nil {
+		return err
+	}
+	for i := range candidates {
+		c := &candidates[i]
+		live, err := messageSpaceLive(ctx, tx, c.space)
+		if err != nil {
+			return err
+		}
+		if !live {
+			continue
+		}
 		var actorProfileID uuid.UUID
 		var polling bool
 		var webhookURL *string
 		var scopes string
-		err := tx.QueryRow(ctx, `
+		err = tx.QueryRow(ctx, `
 SELECT actor_profile_id, is_polling_mode, webhook_url, scopes::text
 FROM bots WHERE id = $1 AND status = 'live'
-FOR SHARE`, botID).Scan(&actorProfileID, &polling, &webhookURL, &scopes)
+FOR SHARE`, c.bot).Scan(&actorProfileID, &polling, &webhookURL, &scopes)
 		if errors.Is(err, pgx.ErrNoRows) {
 			continue
 		}
@@ -78,20 +93,32 @@ FOR SHARE`, botID).Scan(&actorProfileID, &polling, &webhookURL, &scopes)
 		if actorProfileID.String() == senderProfileID || !ScopeAllows(scopes, PrivilegedScopeReadHistory) || (polling && !DevPollingEnabled()) || (!polling && strings.TrimSpace(ptrValue(webhookURL)) == "") {
 			continue
 		}
-		var enabled bool
-		err = tx.QueryRow(ctx, `
-SELECT enabled FROM bot_chat_whitelist WHERE bot_id = $1 AND chat_id = $2
-FOR SHARE`, botID, chatID).Scan(&enabled)
-		if errors.Is(err, pgx.ErrNoRows) || (err == nil && !enabled) {
+		c.allowed = true
+	}
+	// Acquire every bot lock before any whitelist/delivery row lock.
+	for i := range candidates {
+		c := &candidates[i]
+		if !c.allowed {
 			continue
 		}
+		enabled, err := lockMessageWhitelist(ctx, tx, c.bot, chatID, c.space)
 		if err != nil {
 			return err
+		}
+		if !enabled {
+			c.allowed = false
+			continue
+		}
+	}
+	// Complete whitelist authorization before inserting any delivery rows.
+	for _, c := range candidates {
+		if !c.allowed {
+			continue
 		}
 		if _, err := tx.Exec(ctx, `
 INSERT INTO bot_message_deliveries (id, bot_id, message_id, chat_id, payload)
 VALUES (gen_random_uuid(), $1, $2, $3, $4::jsonb)
-ON CONFLICT (bot_id, message_id) DO NOTHING`, botID, messageID, chatID, string(raw)); err != nil {
+ON CONFLICT (bot_id, message_id) DO NOTHING`, c.bot, messageID, chatID, string(raw)); err != nil {
 			return err
 		}
 	}
@@ -135,17 +162,39 @@ func (s *BotStore) DeliverMessage(ctx context.Context, d *MessageDelivery, post 
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	space, err := messageWhitelistSpace(ctx, tx, d.BotID, d.ChatID)
+	if err != nil {
+		return err
+	}
+	if err = lockMessageSpaces(ctx, tx, []uuid.UUID{space}); err != nil {
+		return err
+	}
+	live := false
+	if space != uuid.Nil {
+		live, err = messageSpaceLive(ctx, tx, space)
+		if err != nil {
+			return err
+		}
+	}
 	var polling bool
 	var url *string
 	var secret string
 	var scopes string
 	err = tx.QueryRow(ctx, `
-SELECT b.is_polling_mode, b.webhook_url, b.webhook_secret, b.scopes::text
-FROM bots b JOIN bot_chat_whitelist w ON w.bot_id = b.id
-WHERE b.id = $1 AND w.chat_id = $2 AND w.enabled AND b.status = 'live'
-FOR SHARE OF b, w`, d.BotID, d.ChatID).Scan(&polling, &url, &secret, &scopes)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (!ScopeAllows(scopes, PrivilegedScopeReadHistory) || (polling && !DevPollingEnabled()) || (!polling && strings.TrimSpace(ptrValue(url)) == ""))) {
-		_, err = tx.Exec(ctx, `UPDATE bot_message_deliveries SET status = 'canceled', claimed_until = NULL WHERE id = $1`, d.ID)
+SELECT is_polling_mode, webhook_url, webhook_secret, scopes::text
+FROM bots WHERE id = $1 AND status = 'live' FOR SHARE`, d.BotID).Scan(&polling, &url, &secret, &scopes)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	authorized := err == nil && live && ScopeAllows(scopes, PrivilegedScopeReadHistory) && ((!polling && strings.TrimSpace(ptrValue(url)) != "") || (polling && DevPollingEnabled()))
+	if authorized {
+		authorized, err = lockMessageWhitelist(ctx, tx, d.BotID, d.ChatID, space)
+		if err != nil {
+			return err
+		}
+	}
+	if !authorized {
+		err = cancelMessageDelivery(ctx, tx, d.ID)
 		if err != nil {
 			return err
 		}
@@ -155,11 +204,15 @@ FOR SHARE OF b, w`, d.BotID, d.ChatID).Scan(&polling, &url, &secret, &scopes)
 		return err
 	}
 	var status string
-	err = tx.QueryRow(ctx, `SELECT status FROM bot_message_deliveries WHERE id = $1 FOR UPDATE`, d.ID).Scan(&status)
+	var raw []byte
+	err = tx.QueryRow(ctx, `SELECT status,payload FROM bot_message_deliveries WHERE id = $1 AND bot_id=$2 AND chat_id=$3 AND message_id=$4 FOR UPDATE`, d.ID, d.BotID, d.ChatID, d.MessageID).Scan(&status, &raw)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && status != "pending") {
 		return tx.Commit(ctx)
 	}
 	if err != nil {
+		return err
+	}
+	if err = json.Unmarshal(raw, &d.Payload); err != nil {
 		return err
 	}
 	if polling {
@@ -168,10 +221,10 @@ FOR SHARE OF b, w`, d.BotID, d.ChatID).Scan(&polling, &url, &secret, &scopes)
 			return err
 		}
 		_, err = tx.Exec(ctx, `
-INSERT INTO bot_event_log (id, bot_id, event_type, payload, delivery_status, interaction_token, source_message_id)
-VALUES ($1, $2, 'message', $3::jsonb, 'pending', '', $4)
+INSERT INTO bot_event_log (id, bot_id, event_type, payload, delivery_status, interaction_token, source_message_id,space_id)
+VALUES ($1, $2, 'message', $3::jsonb, 'pending', '', $4,$5)
 ON CONFLICT (bot_id, source_message_id) WHERE source_message_id IS NOT NULL DO NOTHING`,
-			uuid.New(), d.BotID, string(raw), d.MessageID)
+			uuid.New(), d.BotID, string(raw), d.MessageID, space)
 		if err != nil {
 			return err
 		}
@@ -192,12 +245,12 @@ func ptrValue(v *string) string {
 }
 
 func (s *BotStore) FailMessageDelivery(ctx context.Context, id uuid.UUID) error {
-	_, err := s.Pool.Exec(ctx, `UPDATE bot_message_deliveries SET status = 'failed', claimed_until = NULL WHERE id = $1`, id)
+	_, err := s.Pool.Exec(ctx, `UPDATE bot_message_deliveries SET status = 'failed', claimed_until = NULL WHERE id = $1 AND status='pending'`, id)
 	return err
 }
 
 func (s *BotStore) RetryMessageDelivery(ctx context.Context, id uuid.UUID, attempts int) error {
 	delay := time.Second << min(attempts-1, 6)
-	_, err := s.Pool.Exec(ctx, `UPDATE bot_message_deliveries SET claimed_until = NULL, next_attempt_at = now() + $2::interval WHERE id = $1`, id, delay.String())
+	_, err := s.Pool.Exec(ctx, `UPDATE bot_message_deliveries SET claimed_until = NULL, next_attempt_at = now() + $2::interval WHERE id = $1 AND status='pending'`, id, delay.String())
 	return err
 }

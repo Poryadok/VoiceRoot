@@ -45,15 +45,15 @@ func subscribeMatchmakingEvents(js nats.JetStreamContext, hub *wsHub, instanceID
 	return sub, nil
 }
 
-func runMatchmakingEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string, logger *slog.Logger) error {
+func runMatchmakingEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string, logger *slog.Logger, shared ...*nats.Conn) error {
 	if hub == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("matchmaking events consumer: missing hub or NATS URL")
 	}
-	nc, err := nats.Connect(natsURL, natsConnectOptions("voice-realtime-matchmaking")...)
+	nc, release, err := consumerNATSConnection(natsURL, "voice-realtime-matchmaking", shared...)
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}
-	defer func() { _ = nc.Drain() }()
+	defer release()
 
 	js, err := nc.JetStream()
 	if err != nil {

@@ -812,6 +812,10 @@ const PrivacySettings$json = {
     {'1': '_allow_forward'},
     {'1': '_show_read_receipts'},
   ],
+  '9': [
+    {'1': 13, '2': 14},
+  ],
+  '10': ['show_online_include_guests'],
 };
 
 /// Descriptor for `PrivacySettings`. Decode as a `google.protobuf.DescriptorProto`.
@@ -839,7 +843,8 @@ final $typed_data.Uint8List privacySettingsDescriptor = $convert.base64Decode(
     'cndhcmQYEyABKAhIAVIMYWxsb3dGb3J3YXJkiAEBEjEKEnNob3dfcmVhZF9yZWNlaXB0cxgUIA'
     'EoCEgCUhBzaG93UmVhZFJlY2VpcHRziAEBEkQKDnNob3dfbGFzdF9zZWVuGBUgASgLMh4udm9p'
     'Y2UudXNlci52MS5Qcml2YWN5QXVkaWVuY2VSDHNob3dMYXN0U2VlbkIOCgxfcHJlc2V0X2VudW'
-    '1CEAoOX2FsbG93X2ZvcndhcmRCFQoTX3Nob3dfcmVhZF9yZWNlaXB0cw==');
+    '1CEAoOX2FsbG93X2ZvcndhcmRCFQoTX3Nob3dfcmVhZF9yZWNlaXB0c0oECA0QDlIac2hvd19v'
+    'bmxpbmVfaW5jbHVkZV9ndWVzdHM=');
 
 @$core.Deprecated('Use updatePresenceRequestDescriptor instead')
 const UpdatePresenceRequest$json = {
@@ -1431,6 +1436,7 @@ const GetBulkPresenceResponse$json = {
     },
   ],
   '3': [GetBulkPresenceResponse_ByProfileIdEntry$json],
+  '10': ['bulk_presence_response'],
 };
 
 @$core.Deprecated('Use getBulkPresenceResponseDescriptor instead')
@@ -1455,7 +1461,8 @@ final $typed_data.Uint8List getBulkPresenceResponseDescriptor = $convert.base64D
     'ChdHZXRCdWxrUHJlc2VuY2VSZXNwb25zZRJbCg1ieV9wcm9maWxlX2lkGAEgAygLMjcudm9pY2'
     'UudXNlci52MS5HZXRCdWxrUHJlc2VuY2VSZXNwb25zZS5CeVByb2ZpbGVJZEVudHJ5UgtieVBy'
     'b2ZpbGVJZBpdChBCeVByb2ZpbGVJZEVudHJ5EhAKA2tleRgBIAEoCVIDa2V5EjMKBXZhbHVlGA'
-    'IgASgLMh0udm9pY2UudXNlci52MS5QcmVzZW5jZVN0YXR1c1IFdmFsdWU6AjgB');
+    'IgASgLMh0udm9pY2UudXNlci52MS5QcmVzZW5jZVN0YXR1c1IFdmFsdWU6AjgBUhZidWxrX3By'
+    'ZXNlbmNlX3Jlc3BvbnNl');
 
 @$core.Deprecated('Use getNotificationRoutingPresenceRequestDescriptor instead')
 const GetNotificationRoutingPresenceRequest$json = {
@@ -2364,3 +2371,59 @@ final $typed_data.Uint8List getSearchProfileCheckpointResponseDescriptor =
     $convert.base64Decode(
         'CiJHZXRTZWFyY2hQcm9maWxlQ2hlY2twb2ludFJlc3BvbnNlEiUKDmhpZ2hfd2F0ZXJtYXJrGA'
         'EgASgEUg1oaWdoV2F0ZXJtYXJr');
+
+@$core.Deprecated(
+    'Use getSpaceAdmissionProfileEligibilityRequestDescriptor instead')
+const GetSpaceAdmissionProfileEligibilityRequest$json = {
+  '1': 'GetSpaceAdmissionProfileEligibilityRequest',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'observation_binding_sha256',
+      '3': 3,
+      '4': 1,
+      '5': 12,
+      '10': 'observationBindingSha256'
+    },
+  ],
+};
+
+/// Descriptor for `GetSpaceAdmissionProfileEligibilityRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List
+    getSpaceAdmissionProfileEligibilityRequestDescriptor =
+    $convert.base64Decode(
+        'CipHZXRTcGFjZUFkbWlzc2lvblByb2ZpbGVFbGlnaWJpbGl0eVJlcXVlc3QSHQoKYWNjb3VudF'
+        '9pZBgBIAEoCVIJYWNjb3VudElkEh0KCnByb2ZpbGVfaWQYAiABKAlSCXByb2ZpbGVJZBI8Chpv'
+        'YnNlcnZhdGlvbl9iaW5kaW5nX3NoYTI1NhgDIAEoDFIYb2JzZXJ2YXRpb25CaW5kaW5nU2hhMj'
+        'U2');
+
+@$core.Deprecated(
+    'Use getSpaceAdmissionProfileEligibilityResponseDescriptor instead')
+const GetSpaceAdmissionProfileEligibilityResponse$json = {
+  '1': 'GetSpaceAdmissionProfileEligibilityResponse',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'observation_binding_sha256',
+      '3': 3,
+      '4': 1,
+      '5': 12,
+      '10': 'observationBindingSha256'
+    },
+    {'1': 'profile_revision', '3': 4, '4': 1, '5': 4, '10': 'profileRevision'},
+    {'1': 'deleted', '3': 5, '4': 1, '5': 8, '10': 'deleted'},
+    {'1': 'frozen', '3': 6, '4': 1, '5': 8, '10': 'frozen'},
+  ],
+};
+
+/// Descriptor for `GetSpaceAdmissionProfileEligibilityResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List
+    getSpaceAdmissionProfileEligibilityResponseDescriptor =
+    $convert.base64Decode(
+        'CitHZXRTcGFjZUFkbWlzc2lvblByb2ZpbGVFbGlnaWJpbGl0eVJlc3BvbnNlEh0KCmFjY291bn'
+        'RfaWQYASABKAlSCWFjY291bnRJZBIdCgpwcm9maWxlX2lkGAIgASgJUglwcm9maWxlSWQSPAoa'
+        'b2JzZXJ2YXRpb25fYmluZGluZ19zaGEyNTYYAyABKAxSGG9ic2VydmF0aW9uQmluZGluZ1NoYT'
+        'I1NhIpChBwcm9maWxlX3JldmlzaW9uGAQgASgEUg9wcm9maWxlUmV2aXNpb24SGAoHZGVsZXRl'
+        'ZBgFIAEoCFIHZGVsZXRlZBIWCgZmcm96ZW4YBiABKAhSBmZyb3plbg==');

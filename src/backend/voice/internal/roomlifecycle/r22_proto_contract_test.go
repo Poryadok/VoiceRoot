@@ -177,6 +177,12 @@ func TestR22ProtoContract_AuthorityDecisionsExposeOwnedEpochs(t *testing.T) {
 		"active":       {number: 3, kind: protoreflect.BoolKind},
 		"discoverable": {number: 4, kind: protoreflect.BoolKind},
 		"access_epoch": {number: 5, kind: protoreflect.Uint64Kind},
+		// BE-044-TIMEOUT-v1 preserves fields 1-5 and binds explicit timeout evidence.
+		"protocol_version":    {number: 6, kind: protoreflect.Uint32Kind},
+		"profile_id":          {number: 7, kind: protoreflect.StringKind},
+		"evaluated_at":        {number: 8, kind: protoreflect.MessageKind, typeName: "google.protobuf.Timestamp"},
+		"communication_state": {number: 9, kind: protoreflect.EnumKind, typeName: "voice.space.v1.MemberCommunicationState"},
+		"timed_out_until":     {number: 10, kind: protoreflect.MessageKind, typeName: "google.protobuf.Timestamp"},
 	})
 
 	roleFile := rolev1.File_voice_role_v1_role_proto

@@ -19,6 +19,9 @@ service SpaceService {
   // @voice.security=public_gateway;callers=service:gateway
   rpc DeleteSpace(DeleteSpaceRequest) returns (DeleteSpaceResponse);
   rpc GetSpace(GetSpaceRequest) returns (GetSpaceResponse);
+  // Narrow existence/lifecycle read. No ACL lookup or public Gateway route.
+  // @voice.security=protected;callers=service:role
+  rpc ValidateRoleOverrideTarget(ValidateRoleOverrideTargetRequest) returns (ValidateRoleOverrideTargetResponse);
   rpc ListMySpaces(ListMySpacesRequest) returns (ListMySpacesResponse);
   rpc SearchPublicSpaces(SearchPublicSpacesRequest) returns (SearchPublicSpacesResponse);
 
@@ -47,6 +50,10 @@ service SpaceService {
   rpc BanMember(BanMemberRequest) returns (BanMemberResponse);
   rpc UnbanMember(UnbanMemberRequest) returns (UnbanMemberResponse);
   rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
+  // BE-234-nickname-v1: verified actor, global MEMBER_MANAGE_NICKNAMES;
+  // local members only, Owner protected, serialized redacted audit/outbox.
+  // @voice.security=public_gateway;callers=service:gateway
+  rpc UpdateMemberNickname(UpdateMemberNicknameRequest) returns (UpdateMemberNicknameResponse);
   rpc ListBans(ListBansRequest) returns (ListBansResponse);
   rpc TimeoutMember(TimeoutMemberRequest) returns (TimeoutMemberResponse);
   rpc RemoveMemberTimeout(RemoveMemberTimeoutRequest) returns (RemoveMemberTimeoutResponse);
@@ -76,12 +83,25 @@ service SpaceService {
   // @voice.security=protected;callers=service:role,service:chat
   rpc AppendAuditEvent(AppendAuditEventRequest) returns (AppendAuditEventResponse);
 
+  // Chat-owned durable create intent; not an ordinary user tree mutation.
+  // @voice.security=protected;callers=service:chat
+  rpc CommitSpaceChatCreation(CommitSpaceChatCreationRequest) returns (CommitSpaceChatCreationResponse);
+  // Exact immutable create outcome; caller authentication does not replace disclosure ACLs.
+  // Gateway uses a verified delegated-user principal and current disclosure ACL.
+  // @voice.security=protected;callers=service:chat,service:gateway
+  rpc GetSpaceChatCreationOutcome(GetSpaceChatCreationOutcomeRequest) returns (GetSpaceChatCreationOutcomeResponse);
+
   // S2S: privacy audience "space members" — shared membership between two profiles.
   rpc AreCoMembers(AreCoMembersRequest) returns (AreCoMembersResponse);
 
   // S2S: canonical owner and exact membership evidence for Voice authorization.
   // This endpoint is restricted to the verified Voice service identity.
+  // @voice.security=protected;callers=service:voice
   rpc ResolveVoiceRoomAccess(ResolveVoiceRoomAccessRequest) returns (ResolveVoiceRoomAccessResponse);
+
+  // Fresh profile/Space timeout authority; no public or legacy transport.
+  // @voice.security=protected;callers=service:messaging
+  rpc ResolveMemberCommunicationState(ResolveMemberCommunicationStateRequest) returns (ResolveMemberCommunicationStateResponse);
 
   // S2S: Subscription Service syncs Space Pro entitlement cache after webhook.
   rpc SyncSpaceProSubscription(SyncSpaceProSubscriptionRequest) returns (SyncSpaceProSubscriptionResponse);
@@ -630,6 +650,37 @@ message ResolveVoiceRoomAccessResponse {
   bool active = 3;
   bool discoverable = 4;
   uint64 access_epoch = 5;
+  uint32 protocol_version = 6;
+  string profile_id = 7;
+  google.protobuf.Timestamp evaluated_at = 8;
+  MemberCommunicationState communication_state = 9;
+  google.protobuf.Timestamp timed_out_until = 10;
+}
+
+// Communication timeout is an additional deny, never membership or Role authority.
+enum MemberCommunicationState {
+  MEMBER_COMMUNICATION_STATE_UNSPECIFIED = 0;
+  MEMBER_COMMUNICATION_STATE_CLEAR = 1;
+  MEMBER_COMMUNICATION_STATE_TIMED_OUT = 2;
+}
+
+// @voice.unknown_fields=reject
+message ResolveMemberCommunicationStateRequest {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string profile_id = 3;
+}
+
+// A missing/expired timeout is CLEAR only for a live eligible current member.
+// TIMED_OUT requires until > evaluated_at; CLEAR omits timed_out_until.
+message ResolveMemberCommunicationStateResponse {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string profile_id = 3;
+  uint64 access_epoch = 4;
+  google.protobuf.Timestamp evaluated_at = 5;
+  MemberCommunicationState communication_state = 6;
+  google.protobuf.Timestamp timed_out_until = 7;
 }
 
 message SyncSpaceProSubscriptionRequest {
@@ -717,4 +768,95 @@ message GetSpaceDeletionCoordinatorStatusRequest {
 // @voice.unknown_fields=accept_preserve
 message GetSpaceDeletionCoordinatorStatusResponse {
   voice.space.v1.SpaceDeletionCoordinatorStatus status = 1;
+}
+
+// @voice.unknown_fields=reject
+message ValidateRoleOverrideTargetRequest {
+  string space_id = 1;
+  optional string voice_room_id = 2;
+}
+
+message ValidateRoleOverrideTargetResponse {}
+
+message UpdateMemberNicknameRequest {
+  string space_id = 1;
+  // Explicit target; actor is derived only from the verified principal.
+  string profile_id = 2;
+  // Required presence. Empty (after Unicode White_Space trim) clears SQL NULL.
+  // Otherwise 1..64 Unicode scalars; Cc, separators and Bidi_Control forbidden.
+  optional string nickname = 3;
+}
+
+message UpdateMemberNicknameResponse {
+  SpaceMembership space_membership = 1;
+}
+
+// Immutable initiating facts copied only from Chat's verified admission context.
+// @voice.unknown_fields=reject
+message SpaceChatCreationUser {
+  string account_id = 1;
+  int64 session_epoch = 2;
+  // Explicit regular/guest; absence is never interpreted as regular.
+  string account_type = 3;
+}
+
+// @voice.unknown_fields=reject
+message SpaceChatCreationBot {
+  string bot_id = 1;
+  string installation_id = 2;
+  string bot_scope = 3;
+}
+
+// @voice.unknown_fields=reject
+message SpaceChatCreationBinding {
+  uint32 protocol_version = 1;
+  string operation_id = 2;
+  string creator_profile_id = 3;
+  string space_id = 4;
+  string chat_id = 5;
+  voice.chat.v1.ChatType chat_type = 6;
+  string node_id = 7;
+  string audit_event_id = 8;
+  bytes create_request_sha256 = 9;
+  oneof initiator {
+    SpaceChatCreationUser user = 10;
+    SpaceChatCreationBot bot = 11;
+  }
+}
+
+enum SpaceChatCreationOutcomeState {
+  SPACE_CHAT_CREATION_OUTCOME_STATE_UNSPECIFIED = 0;
+  SPACE_CHAT_CREATION_OUTCOME_STATE_COMMITTED = 1;
+  SPACE_CHAT_CREATION_OUTCOME_STATE_ABORTED = 2;
+}
+
+// The original result remains stable after ordinary node moves/removal.
+// @voice.unknown_fields=reject
+message SpaceChatCreationOutcome {
+  SpaceChatCreationBinding binding = 1;
+  SpaceChatCreationOutcomeState state = 2;
+  SpaceTreeNode node = 3;
+  // Stable safe gRPC status number for ABORTED; zero for COMMITTED.
+  uint32 failure_code = 4;
+}
+
+// @voice.unknown_fields=reject
+message CommitSpaceChatCreationRequest {
+  SpaceChatCreationBinding binding = 1;
+}
+
+// @voice.unknown_fields=accept_preserve
+message CommitSpaceChatCreationResponse {
+  SpaceChatCreationOutcome outcome = 1;
+}
+
+// @voice.unknown_fields=reject
+message GetSpaceChatCreationOutcomeRequest {
+  string space_id = 1;
+  string operation_id = 2;
+}
+
+// @voice.unknown_fields=accept_preserve
+message GetSpaceChatCreationOutcomeResponse {
+  SpaceChatCreationOutcome outcome = 1;
 }

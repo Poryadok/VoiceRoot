@@ -118,6 +118,7 @@ public class AuthBeans {
       E2EKeyBackupRepository e2eKeyBackupRepository,
       AuthEventPublisher authEventPublisher,
       MeterRegistry meterRegistry,
+      voice.backend.auth.events.AuthObservations observations,
       AccountRestoreTokenStore restoreTokenStore,
       MailSender mailSender,
       SessionEpochFloorStore sessionEpochFloors,
@@ -153,6 +154,7 @@ public class AuthBeans {
     service.configureAccountDeletion(
         deletionOperations, deletionTokenCodec, deletionEventPublisher, deletionStarter,
         deletionFloorWorker, deletionEventWorker);
+    service.configureObservations(observations);
     RegistrationSessionEpochPreparer registrationPreparer = registrationSessionEpochPreparer.getIfAvailable();
     if (registrationPreparer != null) {
       service.configureRegistrationSessionEpochPreparer(registrationPreparer);

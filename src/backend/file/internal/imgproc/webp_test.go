@@ -3,6 +3,7 @@ package imgproc
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"image"
 	"image/color"
 	"image/png"
@@ -113,6 +114,56 @@ func TestProcessor_ProcessImage_smallImageKeepsThumbDimensions(t *testing.T) {
 
 func isWebP(data []byte) bool {
 	return len(data) >= 12 && string(data[0:4]) == "RIFF" && string(data[8:12]) == "WEBP"
+}
+
+func TestProcessor_ProcessImage_DecodableFormats(t *testing.T) {
+	// Keep JPEG as static bytes: importing image/jpeg in a test would register
+	// its decoder and hide a missing production decoder registration.
+	jpegBytes, err := base64.StdEncoding.DecodeString("/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAADAAQDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDwyiiivxw/rM//2Q==")
+	require.NoError(t, err)
+	img := image.NewRGBA(image.Rect(0, 0, 640, 480))
+	var pngBytes bytes.Buffer
+	require.NoError(t, png.Encode(&pngBytes, img))
+	webpBytes, err := encodeWebP(img, defaultFullWebPQuality)
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name        string
+		data        []byte
+		full, thumb image.Point
+	}{
+		{"JPEG", jpegBytes, image.Pt(4, 3), image.Pt(4, 3)},
+		{"PNG", pngBytes.Bytes(), image.Pt(640, 480), image.Pt(320, 240)},
+		{"WebP", webpBytes, image.Pt(640, 480), image.Pt(320, 240)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			const key = "attachments/test/input"
+			mem := &memObjectStore{objects: map[string][]byte{key: tc.data}}
+			out, err := (Processor{Reader: mem, Writer: mem, Deleter: mem}).ProcessImage(context.Background(), store.FileRow{ID: uuid.New(), R2Key: key, SizeBytes: int64(len(tc.data))})
+			require.NoError(t, err)
+			require.Equal(t, int32(tc.full.X), out.Width)
+			require.Equal(t, int32(tc.full.Y), out.Height)
+			for objectKey, dimensions := range map[string]image.Point{out.ConvertedR2Key: tc.full, out.ThumbnailR2Key: tc.thumb} {
+				require.Equal(t, "image/webp", mem.contentTypes[objectKey])
+				require.True(t, isWebP(mem.objects[objectKey]))
+				decoded, format, err := image.Decode(bytes.NewReader(mem.objects[objectKey]))
+				require.NoError(t, err)
+				require.Equal(t, "webp", format)
+				require.Equal(t, dimensions, decoded.Bounds().Size())
+			}
+		})
+	}
+}
+
+func TestProcessor_ProcessImage_MalformedInputDoesNotWrite(t *testing.T) {
+	const key = "attachments/test/broken"
+	for _, raw := range [][]byte{nil, []byte("not an image"), []byte("RIFF\x00\x00\x00\x00WEBP")} {
+		mem := &memObjectStore{objects: map[string][]byte{key: raw}}
+		_, err := (Processor{Reader: mem, Writer: mem, Deleter: mem}).ProcessImage(context.Background(), store.FileRow{ID: uuid.New(), R2Key: key, SizeBytes: int64(len(raw))})
+		require.Error(t, err)
+		require.Empty(t, mem.putKeys)
+		require.Empty(t, mem.deletedKeys)
+	}
 }
 
 func TestEncodeWebPWithinCap_AcceptsExactBoundaryAndRejectsOverflow(t *testing.T) {

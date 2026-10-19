@@ -77,6 +77,7 @@ func applyBaseMessagingMigrations(t *testing.T, ctx context.Context, pool *pgxpo
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000027_message_event_outbox.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000028_music_metadata.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000029_music_file_snapshot.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000030_send_request_receipts.up.sql")
 }
 
 // applyChatDBForBufconnChat applies chat_db schema needed when wiring real Chat gRPC
@@ -88,6 +89,7 @@ func applyChatDBForBufconnChat(t *testing.T, ctx context.Context, pool *pgxpool.
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000013_sticker_packs.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000014_managed_chats.up.sql"))
 	applySQLFile(t, ctx, pool, "src/backend/migrations/chat_db/000018_space_lifecycle.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/chat_db/000024_chat_management_permissions.up.sql")
 }
 
 func withProfileCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
@@ -185,6 +187,7 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 		PreKeyBundles:       &store.E2EPreKeyStore{Pool: pool},
 		Logger:              w.Logger,
 		ChatTypeResolver:    w.ChatTypeResolver,
+		CommunicationStates: w.CommunicationStates,
 	}
 	w.wireDeletedAccounts(t, messagingSvc)
 	messagingv1.RegisterMessagingServiceServer(srv, messagingSvc)
@@ -205,19 +208,20 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 }
 
 type messagingWire struct {
-	ChatGuard       ChatGuard
-	Moderation      *store.SQLModerationGuard
-	UserProfiles    ProfileAccountLookup
-	Blocks          AccountPairBlockChecker
-	Privacy         PrivacyChecker
-	Friends         ProfileFriendChecker
-	MessageEvents   messageevents.MessageEventsPublisher
-	Files           FileMetadataLookup
-	RolePermissions mentions.RolePermissionChecker
-	UserPresence    mentions.OnlinePresenceLookup
-	PlatformMod     PlatformModerationChecker
-	Logger          *slog.Logger
-	DeletedAccounts testDeletedAccountChecker
+	CommunicationStates CommunicationStateResolver
+	ChatGuard           ChatGuard
+	Moderation          *store.SQLModerationGuard
+	UserProfiles        ProfileAccountLookup
+	Blocks              AccountPairBlockChecker
+	Privacy             PrivacyChecker
+	Friends             ProfileFriendChecker
+	MessageEvents       messageevents.MessageEventsPublisher
+	Files               FileMetadataLookup
+	RolePermissions     mentions.RolePermissionChecker
+	UserPresence        mentions.OnlinePresenceLookup
+	PlatformMod         PlatformModerationChecker
+	Logger              *slog.Logger
+	DeletedAccounts     testDeletedAccountChecker
 	// RequireDeletedAccountsSeam is true only in P3 gate tests. Legacy fixtures
 	// receive an explicit allow checker while production wiring is introduced.
 	RequireDeletedAccountsSeam bool
@@ -385,11 +389,16 @@ func TestMessagingSendGetMarkRead(t *testing.T) {
 
 	r1 := send(profA, acctA, "hello")
 	require.NotEmpty(t, r1.GetMessage().GetId())
-	r2 := send(profA, acctA, "retry")
+	r2 := send(profA, acctA, "hello")
 	require.Equal(t, r1.GetMessage().GetId(), r2.GetMessage().GetId(), "idempotent SendMessage must return same message id")
 	require.Equal(t, "hello", r2.GetMessage().GetContent(), "idempotent retry must return original message body")
+	_, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(chatID), Content: "changed retry", ClientMessageId: &clientID,
+		AttachmentsJson: "[]", MentionsJson: "[]", MessageKind: &mk,
+	})
+	require.Equal(t, codes.AlreadyExists, status.Code(err), "a changed request cannot reuse the committed key")
 
-	_, err := client.SendMessage(withProfileCtx(ctx, acctA, profB), &messagingv1.SendMessageRequest{
+	_, err = client.SendMessage(withProfileCtx(ctx, acctA, profB), &messagingv1.SendMessageRequest{
 		Chat:            chatDMRef(chatID),
 		Content:         "from-b",
 		AttachmentsJson: "[]",
@@ -459,6 +468,7 @@ func TestMessagingGetMessages_filtersOneWayBlockedAccountInGroupHistory(t *testi
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000003_groups.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000005_thread_settings.up.sql"))
+	applySQLFile(t, ctx, pool, "src/backend/migrations/chat_db/000024_chat_management_permissions.up.sql")
 	applyBaseMessagingMigrations(t, ctx, pool)
 
 	chatID := uuid.New()
@@ -538,7 +548,9 @@ func TestMessagingGetMessages_filtersOneWayBlockedAccountInGroupHistory(t *testi
 
 	channelID := uuid.New()
 	seedChannelChat(t, ctx, pool, channelID, viewerProfile)
-	_, err = pool.Exec(ctx, `INSERT INTO chat_members (chat_id, profile_id, role) VALUES ($1, $2, 'member')`, channelID, blockedProfile)
+	// This history fixture needs an authorized official-channel author; ordinary
+	// membership alone never grants the separate post-as-chat capability.
+	_, err = pool.Exec(ctx, `INSERT INTO chat_members (chat_id, profile_id, role, post_as_chat) VALUES ($1, $2, 'member', true)`, channelID, blockedProfile)
 	require.NoError(t, err)
 	channelSenderMessage := send(chatChannelRef(channelID), blockedProfile, blockedAccount, "blocked channel message")
 	channelHistory, err := client.GetMessages(withProfileCtx(ctx, viewerAccount, viewerProfile), &messagingv1.GetMessagesRequest{

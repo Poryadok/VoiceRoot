@@ -338,6 +338,15 @@ func (s *DMStore) AddGroupMembers(ctx context.Context, chatID uuid.UUID, profile
 // admission decision, so a guest admitted before a later disable remains an
 // idempotent AddMembers target.
 func (s *DMStore) AddGroupMembersWithGuestAdmission(ctx context.Context, chatID uuid.UUID, profileIDs, guestProfileIDs []uuid.UUID) ([]uuid.UUID, error) {
+	return s.addGroupMembers(ctx, chatID, nil, profileIDs, guestProfileIDs)
+}
+
+// AddGroupMembersAs authorizes the current caller inside the roster transaction.
+func (s *DMStore) AddGroupMembersAs(ctx context.Context, chatID, actorID uuid.UUID, profileIDs, guestProfileIDs []uuid.UUID) ([]uuid.UUID, error) {
+	return s.addGroupMembers(ctx, chatID, &actorID, profileIDs, guestProfileIDs)
+}
+
+func (s *DMStore) addGroupMembers(ctx context.Context, chatID uuid.UUID, actorID *uuid.UUID, profileIDs, guestProfileIDs []uuid.UUID) ([]uuid.UUID, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("dm store: pool not configured")
 	}
@@ -380,6 +389,25 @@ func (s *DMStore) AddGroupMembersWithGuestAdmission(ctx context.Context, chatID 
 	}
 	if chatType != "group" && chatType != "channel" {
 		return nil, fmt.Errorf("add members only supported for group or channel chats")
+	}
+	if actorID != nil {
+		if err := lockOrdinaryChat(ctx, tx, chatID); err != nil {
+			return nil, err
+		}
+		var role string
+		var enabled bool
+		if err := tx.QueryRow(ctx, "SELECT role FROM chat_members WHERE chat_id=$1 AND profile_id=$2 FOR UPDATE", chatID, *actorID).Scan(&role); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, ErrNotGroupMember
+			}
+			return nil, err
+		}
+		if err := tx.QueryRow(ctx, "SELECT member_additions_enabled FROM chats WHERE id=$1", chatID).Scan(&enabled); err != nil {
+			return nil, err
+		}
+		if !standalonePermissions(role, enabled, false).CanAddMembers {
+			return nil, ErrRoleChangeForbidden
+		}
 	}
 	guestSet := make(map[uuid.UUID]struct{}, len(guestProfileIDs))
 	for _, profileID := range guestProfileIDs {
@@ -744,10 +772,18 @@ FOR UPDATE
 
 // UpdateGroupChat updates mutable group/channel fields.
 func (s *DMStore) UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL, topic *string, slowModeSeconds *int32, threadsEnabled, allowUserMainFeed, allowGuests *bool) (*ChatRow, error) {
+	return s.updateGroupChat(ctx, chatID, nil, name, avatarURL, topic, slowModeSeconds, threadsEnabled, allowUserMainFeed, allowGuests, nil)
+}
+
+func (s *DMStore) UpdateGroupChatWithPermissions(ctx context.Context, chatID, actorID uuid.UUID, name, avatarURL, topic *string, slowModeSeconds *int32, threadsEnabled, allowUserMainFeed, allowGuests, memberAdditions *bool) (*ChatRow, error) {
+	return s.updateGroupChat(ctx, chatID, &actorID, name, avatarURL, topic, slowModeSeconds, threadsEnabled, allowUserMainFeed, allowGuests, memberAdditions)
+}
+
+func (s *DMStore) updateGroupChat(ctx context.Context, chatID uuid.UUID, actorID *uuid.UUID, name, avatarURL, topic *string, slowModeSeconds *int32, threadsEnabled, allowUserMainFeed, allowGuests, memberAdditions *bool) (*ChatRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("dm store: pool not configured")
 	}
-	if name == nil && avatarURL == nil && topic == nil && slowModeSeconds == nil && threadsEnabled == nil && allowUserMainFeed == nil && allowGuests == nil {
+	if name == nil && avatarURL == nil && topic == nil && slowModeSeconds == nil && threadsEnabled == nil && allowUserMainFeed == nil && allowGuests == nil && memberAdditions == nil {
 		return s.FindChatByID(ctx, chatID)
 	}
 	sets := make([]string, 0, 8)
@@ -788,6 +824,11 @@ func (s *DMStore) UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, a
 		args = append(args, *allowGuests)
 		argN++
 	}
+	if memberAdditions != nil {
+		sets = append(sets, fmt.Sprintf("member_additions_enabled = $%d", argN))
+		args = append(args, *memberAdditions)
+		argN++
+	}
 	sets = append(sets, "updated_at = now()")
 	args = append(args, chatID)
 	q := fmt.Sprintf(`
@@ -797,7 +838,35 @@ WHERE id = $%d AND type IN ('group', 'channel') AND managed_by_application_id IS
 RETURNING id, type, space_id, name, avatar_url, topic, creator_profile_id, managed_by_application_id, managed_environment_id, slow_mode_seconds,
           last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed, e2e_enabled, allow_guests
 `, strings.Join(sets, ", "), argN)
-	return scanChatRow(s.Pool.QueryRow(ctx, q, args...))
+	if memberAdditions == nil {
+		return scanChatRow(s.Pool.QueryRow(ctx, q, args...))
+	}
+	if actorID == nil {
+		return nil, ErrRoleChangeForbidden
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err = lockOrdinaryChat(ctx, tx, chatID); err != nil {
+		return nil, err
+	}
+	roles, err := lockGroupMemberRoles(ctx, tx, chatID, *actorID)
+	if err != nil {
+		return nil, err
+	}
+	if roles[*actorID] != "owner" && roles[*actorID] != "admin" {
+		return nil, ErrRoleChangeForbidden
+	}
+	row, err := scanChatRow(tx.QueryRow(ctx, q, args...))
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return row, nil
 }
 
 func optionalTopicArg(topic *string) any {

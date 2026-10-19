@@ -547,13 +547,14 @@ const RelayNotificationRequest$json = {
     {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
     {'1': 'payload_json', '3': 2, '4': 1, '5': 9, '10': 'payloadJson'},
   ],
+  '10': ['user_id'],
 };
 
 /// Descriptor for `RelayNotificationRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List relayNotificationRequestDescriptor =
     $convert.base64Decode(
         'ChhSZWxheU5vdGlmaWNhdGlvblJlcXVlc3QSHQoKYWNjb3VudF9pZBgBIAEoCVIJYWNjb3VudE'
-        'lkEiEKDHBheWxvYWRfanNvbhgCIAEoCVILcGF5bG9hZEpzb24=');
+        'lkEiEKDHBheWxvYWRfanNvbhgCIAEoCVILcGF5bG9hZEpzb25SB3VzZXJfaWQ=');
 
 @$core.Deprecated('Use registerDeviceResponseDescriptor instead')
 const RegisterDeviceResponse$json = {

@@ -1,0 +1,121 @@
+"""Exercise the public shell CLI; fixtures never execute Go or Flutter."""
+from pathlib import Path
+import os
+import subprocess
+import tempfile
+import unittest
+
+import yaml
+
+
+ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = ROOT / 'scripts/ci/e2e-manifest.sh'
+
+
+class ManifestTest(unittest.TestCase):
+    def parse(self, text, section='smoke_gateway'):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'features.yml'
+            path.write_text(text, encoding='utf-8')
+            return subprocess.run(['bash', str(SCRIPT), str(path), section],
+                                  text=True, capture_output=True, check=False)
+
+    def test_quoted_yaml_and_comments_decode_to_exact_names(self):
+        result = self.parse('smoke_gateway:\n  - "TestFirst" # comment\n  - \'TestSecond\'\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, 'TestFirst\nTestSecond\n')
+
+    def test_flow_yaml_preserves_order(self):
+        result = self.parse('smoke_gateway: [TestSecond, TestFirst]\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, 'TestSecond\nTestFirst\n')
+
+    def test_full_gateway_scalar_is_decoded_by_same_entrypoint(self):
+        result = self.parse("full_gateway_run: 'TestCompose.*_live'\n", 'full_gateway_run')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, 'TestCompose.*_live\n')
+
+    def test_invalid_selection_never_emits_partial_stdout(self):
+        for text in [
+            'smoke_gateway: [TestFirst, 42]\n',
+            'smoke_gateway:\n  - TestFirst\n  - 42\n',
+            'smoke_gateway:\n  - TestFirst\n  - {name: TestSecond}\n',
+            'smoke_gateway: TestFirst\n',
+            'smoke_gateway: []\n',
+            'smoke_gateway: null\n',
+            'smoke_gateway: [TestFirst, TestFirst]\n',
+            'smoke_gateway: [TestFirst]\nsmoke_gateway: [TestSecond]\n',
+            'smoke_gateway:\n  - TestFirst\nsmoke_gateway:\n  - TestSecond\n',
+            'smoke_gateway: [TestFirst,\n',
+            'smoke_flutter: [test/first.dart]\n',
+            'smoke_gateway: ["TestFirst\\nTestSecond"]\n',
+        ]:
+            with self.subTest(text=text):
+                result = self.parse(text)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, '')
+
+    def test_current_catalog_sections_still_have_expected_order(self):
+        manifest = (ROOT / '.github/ci/e2e-features.yml').read_text(encoding='utf-8')
+        result = self.parse(manifest, 'a1_flutter_profile_handoff')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines(), [
+            'test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart',
+            'test/t106_account_soft_delete_e2e_live_test.dart',
+            'test/t107_folders_quick_access_e2e_live_test.dart',
+            'test/a1_pending_email_reentry_e2e_live_test.dart',
+        ])
+
+    def test_every_ci_catalog_consumer_installs_pinned_dependency(self):
+        expected = {
+            'ci.yml': ['compose-e2e', 'a1-e2e', 'a1-flutter-profile-handoff', 'a1-attachment-restart-proof'],
+            'compose-e2e-live.yml': ['compose-e2e-live'],
+        }
+        requirement = (ROOT / 'scripts/ci/requirements-e2e.txt').read_text().strip()
+        self.assertEqual(requirement, 'PyYAML==6.0.3')
+        for workflow, jobs in expected.items():
+            document = yaml.safe_load((ROOT / '.github/workflows' / workflow).read_text())
+            for job in jobs:
+                with self.subTest(workflow=workflow, job=job):
+                    steps = document['jobs'][job]['steps']
+                    installs = [i for i, step in enumerate(steps)
+                                if 'pip install -r scripts/ci/requirements-e2e.txt' in step.get('run', '')]
+                    self.assertEqual(len(installs), 1)
+                    self.assertTrue(any(step.get('uses', '').startswith('actions/setup-python@')
+                                        for step in steps[:installs[0]]))
+                    self.assertTrue(any('compose-e2e' in step.get('run', '') or
+                                        'make compose-a1' in step.get('run', '') or
+                                        'make compose-file-attachment' in step.get('run', '')
+                                        for step in steps[installs[0] + 1:]))
+
+    def test_runner_parser_failure_precedes_any_external_work(self):
+        for runner in ['compose-e2e-smoke.sh', 'compose-e2e-live.sh']:
+            with self.subTest(runner=runner), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                scripts = root / 'scripts/ci'
+                scripts.mkdir(parents=True)
+                (scripts / runner).write_text((SCRIPT.parent / runner).read_text(encoding='utf-8'), encoding='utf-8')
+                (scripts / 'e2e-manifest.sh').write_text('#!/bin/bash\nprintf "TestFirst\\n"\nexit 19\n')
+                (scripts / 'compose-fcm-diagnostic-lib.sh').write_text('')
+                (scripts / 'compose-fcm-diagnostic-lib-test.sh').write_text('exit 0\n')
+                (root / '.github/ci').mkdir(parents=True)
+                (root / '.github/ci/e2e-features.yml').write_text("full_gateway_run: 'TestFirst'\n")
+                for path in ['src/backend/gateway', 'src/backend/notification', 'src/frontend', 'bin']:
+                    (root / path).mkdir(parents=True)
+                marker = root / 'unexpected-work'
+                for command in ['go', 'flutter', 'docker', 'sudo']:
+                    path = root / 'bin' / command
+                    path.write_text(f'#!/bin/bash\nprintf work >> "{marker}"\nexit 0\n')
+                    path.chmod(0o755)
+                pkg = root / 'bin/pkg-config'
+                pkg.write_text('#!/bin/bash\nexit 0\n')
+                pkg.chmod(0o755)
+                env = dict(os.environ, PATH=str(root / 'bin') + os.pathsep + os.environ['PATH'])
+                result = subprocess.run(['bash', str(scripts / runner)], env=env,
+                                        text=True, capture_output=True, check=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(marker.exists(), result.stdout + result.stderr)
+
+
+if __name__ == '__main__':
+    unittest.main()

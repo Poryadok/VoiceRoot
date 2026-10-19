@@ -1382,6 +1382,15 @@ const ChatStreamEvent$json = {
       '9': 0,
       '10': 'chatDeleted'
     },
+    {
+      '1': 'space_member_banned',
+      '3': 25,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.SpaceMemberBanned',
+      '9': 0,
+      '10': 'spaceMemberBanned'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -1413,7 +1422,9 @@ final $typed_data.Uint8List chatStreamEventDescriptor = $convert.base64Decode(
     'cmVkGBYgASgLMh4udm9pY2UuZXZlbnRzLnYxLlNwYWNlUmVzdG9yZWRIAFINc3BhY2VSZXN0b3'
     'JlZBJBCgxjaGF0X3VwZGF0ZWQYFyABKAsyHC52b2ljZS5ldmVudHMudjEuQ2hhdFVwZGF0ZWRI'
     'AFILY2hhdFVwZGF0ZWQSQQoMY2hhdF9kZWxldGVkGBggASgLMhwudm9pY2UuZXZlbnRzLnYxLk'
-    'NoYXREZWxldGVkSABSC2NoYXREZWxldGVkQgkKB3BheWxvYWQ=');
+    'NoYXREZWxldGVkSABSC2NoYXREZWxldGVkElQKE3NwYWNlX21lbWJlcl9iYW5uZWQYGSABKAsy'
+    'Ii52b2ljZS5ldmVudHMudjEuU3BhY2VNZW1iZXJCYW5uZWRIAFIRc3BhY2VNZW1iZXJCYW5uZW'
+    'RCCQoHcGF5bG9hZA==');
 
 @$core.Deprecated('Use chatCreatedDescriptor instead')
 const ChatCreated$json = {
@@ -1558,12 +1569,14 @@ const SpaceUpdated$json = {
   '1': 'SpaceUpdated',
   '2': [
     {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'changed_fields', '3': 2, '4': 3, '5': 9, '10': 'changedFields'},
   ],
 };
 
 /// Descriptor for `SpaceUpdated`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List spaceUpdatedDescriptor = $convert
-    .base64Decode('CgxTcGFjZVVwZGF0ZWQSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQ=');
+final $typed_data.Uint8List spaceUpdatedDescriptor = $convert.base64Decode(
+    'CgxTcGFjZVVwZGF0ZWQSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQSJQoOY2hhbmdlZF9maW'
+    'VsZHMYAiADKAlSDWNoYW5nZWRGaWVsZHM=');
 
 @$core.Deprecated('Use spaceDeletedDescriptor instead')
 const SpaceDeleted$json = {
@@ -1768,6 +1781,33 @@ const VoiceStreamEvent$json = {
       '9': 0,
       '10': 'voiceMemberJoined'
     },
+    {
+      '1': 'voice_participant_joined',
+      '3': 20,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.VoiceParticipantJoined',
+      '9': 0,
+      '10': 'voiceParticipantJoined'
+    },
+    {
+      '1': 'voice_participant_left',
+      '3': 21,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.VoiceParticipantLeft',
+      '9': 0,
+      '10': 'voiceParticipantLeft'
+    },
+    {
+      '1': 'voice_roster_membership_changed',
+      '3': 22,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.VoiceRosterMembershipChanged',
+      '9': 0,
+      '10': 'voiceRosterMembershipChanged'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -1791,7 +1831,81 @@ final $typed_data.Uint8List voiceStreamEventDescriptor = $convert.base64Decode(
     'dm9pY2VTdGF0ZUNoYW5nZWQSVwoUc2NyZWVuX3NoYXJlX3N0b3BwZWQYEiABKAsyIy52b2ljZS'
     '5ldmVudHMudjEuU2NyZWVuU2hhcmVTdG9wcGVkSABSEnNjcmVlblNoYXJlU3RvcHBlZBJUChN2'
     'b2ljZV9tZW1iZXJfam9pbmVkGBMgASgLMiIudm9pY2UuZXZlbnRzLnYxLlZvaWNlTWVtYmVySm'
-    '9pbmVkSABSEXZvaWNlTWVtYmVySm9pbmVkQgkKB3BheWxvYWQ=');
+    '9pbmVkSABSEXZvaWNlTWVtYmVySm9pbmVkEmMKGHZvaWNlX3BhcnRpY2lwYW50X2pvaW5lZBgU'
+    'IAEoCzInLnZvaWNlLmV2ZW50cy52MS5Wb2ljZVBhcnRpY2lwYW50Sm9pbmVkSABSFnZvaWNlUG'
+    'FydGljaXBhbnRKb2luZWQSXQoWdm9pY2VfcGFydGljaXBhbnRfbGVmdBgVIAEoCzIlLnZvaWNl'
+    'LmV2ZW50cy52MS5Wb2ljZVBhcnRpY2lwYW50TGVmdEgAUhR2b2ljZVBhcnRpY2lwYW50TGVmdB'
+    'J2Ch92b2ljZV9yb3N0ZXJfbWVtYmVyc2hpcF9jaGFuZ2VkGBYgASgLMi0udm9pY2UuZXZlbnRz'
+    'LnYxLlZvaWNlUm9zdGVyTWVtYmVyc2hpcENoYW5nZWRIAFIcdm9pY2VSb3N0ZXJNZW1iZXJzaG'
+    'lwQ2hhbmdlZEIJCgdwYXlsb2Fk');
+
+@$core.Deprecated('Use voiceRosterMembershipChangedDescriptor instead')
+const VoiceRosterMembershipChanged$json = {
+  '1': 'VoiceRosterMembershipChanged',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'room_id', '3': 2, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'roster_version', '3': 3, '4': 1, '5': 4, '10': 'rosterVersion'},
+    {
+      '1': 'change',
+      '3': 4,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.events.v1.VoiceRosterMembershipChanged.Change',
+      '10': 'change'
+    },
+    {'1': 'profile_id', '3': 5, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+  '4': [VoiceRosterMembershipChanged_Change$json],
+};
+
+@$core.Deprecated('Use voiceRosterMembershipChangedDescriptor instead')
+const VoiceRosterMembershipChanged_Change$json = {
+  '1': 'Change',
+  '2': [
+    {'1': 'CHANGE_UNSPECIFIED', '2': 0},
+    {'1': 'CHANGE_JOINED', '2': 1},
+    {'1': 'CHANGE_LEFT', '2': 2},
+  ],
+};
+
+/// Descriptor for `VoiceRosterMembershipChanged`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List voiceRosterMembershipChangedDescriptor = $convert.base64Decode(
+    'ChxWb2ljZVJvc3Rlck1lbWJlcnNoaXBDaGFuZ2VkEikKEHByb3RvY29sX3ZlcnNpb24YASABKA'
+    '1SD3Byb3RvY29sVmVyc2lvbhIXCgdyb29tX2lkGAIgASgJUgZyb29tSWQSJQoOcm9zdGVyX3Zl'
+    'cnNpb24YAyABKARSDXJvc3RlclZlcnNpb24STAoGY2hhbmdlGAQgASgOMjQudm9pY2UuZXZlbn'
+    'RzLnYxLlZvaWNlUm9zdGVyTWVtYmVyc2hpcENoYW5nZWQuQ2hhbmdlUgZjaGFuZ2USHQoKcHJv'
+    'ZmlsZV9pZBgFIAEoCVIJcHJvZmlsZUlkIkQKBkNoYW5nZRIWChJDSEFOR0VfVU5TUEVDSUZJRU'
+    'QQABIRCg1DSEFOR0VfSk9JTkVEEAESDwoLQ0hBTkdFX0xFRlQQAg==');
+
+@$core.Deprecated('Use voiceParticipantJoinedDescriptor instead')
+const VoiceParticipantJoined$json = {
+  '1': 'VoiceParticipantJoined',
+  '2': [
+    {'1': 'room_id', '3': 1, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `VoiceParticipantJoined`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List voiceParticipantJoinedDescriptor =
+    $convert.base64Decode(
+        'ChZWb2ljZVBhcnRpY2lwYW50Sm9pbmVkEhcKB3Jvb21faWQYASABKAlSBnJvb21JZBIdCgpwcm'
+        '9maWxlX2lkGAIgASgJUglwcm9maWxlSWQ=');
+
+@$core.Deprecated('Use voiceParticipantLeftDescriptor instead')
+const VoiceParticipantLeft$json = {
+  '1': 'VoiceParticipantLeft',
+  '2': [
+    {'1': 'room_id', '3': 1, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `VoiceParticipantLeft`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List voiceParticipantLeftDescriptor = $convert.base64Decode(
+    'ChRWb2ljZVBhcnRpY2lwYW50TGVmdBIXCgdyb29tX2lkGAEgASgJUgZyb29tSWQSHQoKcHJvZm'
+    'lsZV9pZBgCIAEoCVIJcHJvZmlsZUlk');
 
 @$core.Deprecated('Use voiceMemberJoinedDescriptor instead')
 const VoiceMemberJoined$json = {
@@ -3177,13 +3291,14 @@ const RatingSubmitted$json = {
     {'1': 'rated_profile_id', '3': 3, '4': 1, '5': 9, '10': 'ratedProfileId'},
     {'1': 'stars', '3': 4, '4': 1, '5': 5, '10': 'stars'},
   ],
+  '10': ['profile_id'],
 };
 
 /// Descriptor for `RatingSubmitted`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List ratingSubmittedDescriptor = $convert.base64Decode(
     'Cg9SYXRpbmdTdWJtaXR0ZWQSGQoIbWF0Y2hfaWQYASABKAlSB21hdGNoSWQSKAoQcmF0ZXJfcH'
     'JvZmlsZV9pZBgCIAEoCVIOcmF0ZXJQcm9maWxlSWQSKAoQcmF0ZWRfcHJvZmlsZV9pZBgDIAEo'
-    'CVIOcmF0ZWRQcm9maWxlSWQSFAoFc3RhcnMYBCABKAVSBXN0YXJz');
+    'CVIOcmF0ZWRQcm9maWxlSWQSFAoFc3RhcnMYBCABKAVSBXN0YXJzUgpwcm9maWxlX2lk');
 
 @$core.Deprecated('Use playerBannedDescriptor instead')
 const PlayerBanned$json = {
@@ -3845,3 +3960,25 @@ final $typed_data.Uint8List chatDeletedDescriptor = $convert.base64Decode(
     'dGlvbklkEh4KCmdlbmVyYXRpb24YBCABKARSCmdlbmVyYXRpb24SHwoLbWFuaWZlc3RfaWQYBS'
     'ABKAlSCm1hbmlmZXN0SWQSJwoPbWFuaWZlc3Rfc2hhMjU2GAYgASgMUg5tYW5pZmVzdFNoYTI1'
     'Ng==');
+
+@$core.Deprecated('Use spaceMemberBannedDescriptor instead')
+const SpaceMemberBanned$json = {
+  '1': 'SpaceMemberBanned',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'account_id', '3': 2, '4': 1, '5': 9, '10': 'accountId'},
+    {
+      '1': 'banned_by_profile_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'bannedByProfileId'
+    },
+  ],
+};
+
+/// Descriptor for `SpaceMemberBanned`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceMemberBannedDescriptor = $convert.base64Decode(
+    'ChFTcGFjZU1lbWJlckJhbm5lZBIZCghzcGFjZV9pZBgBIAEoCVIHc3BhY2VJZBIdCgphY2NvdW'
+    '50X2lkGAIgASgJUglhY2NvdW50SWQSLwoUYmFubmVkX2J5X3Byb2ZpbGVfaWQYAyABKAlSEWJh'
+    'bm5lZEJ5UHJvZmlsZUlk');

@@ -762,12 +762,17 @@ const BanFromMMRequest$json = {
   '8': [
     {'1': '_reason'},
   ],
+  '9': [
+    {'1': 3, '2': 4},
+  ],
+  '10': ['until', 'account_id'],
 };
 
 /// Descriptor for `BanFromMMRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List banFromMMRequestDescriptor = $convert.base64Decode(
     'ChBCYW5Gcm9tTU1SZXF1ZXN0EioKEXRhcmdldF9wcm9maWxlX2lkGAEgASgJUg90YXJnZXRQcm'
-    '9maWxlSWQSGwoGcmVhc29uGAIgASgJSABSBnJlYXNvbogBAUIJCgdfcmVhc29u');
+    '9maWxlSWQSGwoGcmVhc29uGAIgASgJSABSBnJlYXNvbogBAUIJCgdfcmVhc29uSgQIAxAEUgV1'
+    'bnRpbFIKYWNjb3VudF9pZA==');
 
 @$core.Deprecated('Use unbanFromMMRequestDescriptor instead')
 const UnbanFromMMRequest$json = {
@@ -775,12 +780,13 @@ const UnbanFromMMRequest$json = {
   '2': [
     {'1': 'target_profile_id', '3': 1, '4': 1, '5': 9, '10': 'targetProfileId'},
   ],
+  '10': ['account_id'],
 };
 
 /// Descriptor for `UnbanFromMMRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List unbanFromMMRequestDescriptor = $convert.base64Decode(
     'ChJVbmJhbkZyb21NTVJlcXVlc3QSKgoRdGFyZ2V0X3Byb2ZpbGVfaWQYASABKAlSD3RhcmdldF'
-    'Byb2ZpbGVJZA==');
+    'Byb2ZpbGVJZFIKYWNjb3VudF9pZA==');
 
 @$core.Deprecated('Use getMMBanStatusRequestDescriptor instead')
 const GetMMBanStatusRequest$json = {
@@ -788,12 +794,13 @@ const GetMMBanStatusRequest$json = {
   '2': [
     {'1': 'target_profile_id', '3': 1, '4': 1, '5': 9, '10': 'targetProfileId'},
   ],
+  '10': ['account_id'],
 };
 
 /// Descriptor for `GetMMBanStatusRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List getMMBanStatusRequestDescriptor = $convert.base64Decode(
     'ChVHZXRNTUJhblN0YXR1c1JlcXVlc3QSKgoRdGFyZ2V0X3Byb2ZpbGVfaWQYASABKAlSD3Rhcm'
-    'dldFByb2ZpbGVJZA==');
+    'dldFByb2ZpbGVJZFIKYWNjb3VudF9pZA==');
 
 @$core.Deprecated('Use mMBanStatusDescriptor instead')
 const MMBanStatus$json = {

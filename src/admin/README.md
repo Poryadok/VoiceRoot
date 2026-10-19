@@ -19,6 +19,23 @@ npm run dev
 | `npm run dev` | Vite dev server |
 | `npm run build` | Production build |
 | `npm run test` | Vitest + React Testing Library |
+| `npm run test:browser` | Build actual Admin and run real Chromium staff journeys against a local HTTP fixture |
+
+Browser characterization uses Node 24 built-ins and `CHROME_BIN` (default
+`google-chrome`). Set `GITHUB_SHA` to the full source SHA and run
+`npm run test:browser`. The runner reserves a disposable loopback port, builds
+with that absolute API origin, OAuth enabled, no static staff token and client
+ID `voice-admin`, then serves the built SPA on loopback
+and validates actual OAuth S256, bearer, moderation and appeal HTTP requests.
+Trusted browser input covers anonymous entry, invalid OAuth state, login,
+Content/Spaces separation, staff assignment, denied resolution with retained
+input, destructive sanction cancel/confirm, resolution retry, appeal approval,
+and logout/direct reload. Unexpected requests or skipped assertions fail.
+JSON and PNG evidence is written to `../../tmp/admin-browser` (override with
+`ADMIN_BROWSER_OUTPUT`), including source SHA and Chromium version. The
+`Admin browser` workflow runs this suite for Admin changes. This fixture is
+browser integration evidence; it does not prove live Auth/staff permissions,
+backend sanction enforcement, staging OAuth, or final acceptance.
 
 ## Environment
 

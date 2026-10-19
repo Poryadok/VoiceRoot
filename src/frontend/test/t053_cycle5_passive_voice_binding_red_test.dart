@@ -119,6 +119,118 @@ void main() {
     }
   }
 
+  group('frozen voice conflict intent', () {
+    test(
+      'same-identity token refresh preserves the frozen destination',
+      () async {
+        final harness = _VoiceBindingHarness();
+        addTearDown(harness.dispose);
+        await harness.connectActiveA();
+        await harness.coordinator.switchTo('profile-b');
+        await entries.first.invoke(harness.call);
+        harness.auth.state = AuthState(
+          session: AuthSession(
+            accessToken: 'refreshed-b',
+            refreshToken: 'refresh-b-rotated',
+            accountId: 'account-1',
+            activeProfileId: 'profile-b',
+            expiresInSeconds: 900,
+          ),
+        );
+        harness.requestPaths.clear();
+        harness.requestAuthorizations.clear();
+
+        await harness.call.confirmLeaveCurrentVoiceAndRetry();
+
+        expect(harness.voicePaths.toList(), [
+          '/api/v1/voice/calls/room-a/end',
+          '/api/v1/voice/calls',
+        ]);
+        expect(
+          harness.requestAuthorizations,
+          everyElement('Bearer refreshed-b'),
+        );
+      },
+    );
+
+    for (final entry in entries) {
+      for (final returnToB in [false, true]) {
+        test('${entry.name} stale B dialog cannot leave A after C'
+            '${returnToB ? ' then B' : ''}', () async {
+          final harness = _VoiceBindingHarness();
+          addTearDown(harness.dispose);
+          await harness.connectActiveA();
+          await harness.coordinator.switchTo('profile-b');
+          await entry.invoke(harness.call);
+          await harness.coordinator.switchTo('profile-c');
+          if (returnToB) await harness.coordinator.switchTo('profile-b');
+          harness.requestPaths.clear();
+
+          await harness.call.confirmLeaveCurrentVoiceAndRetry();
+
+          expect(harness.voicePaths, isEmpty);
+          expect(harness.liveKit.disconnectCalls, 0);
+          expect(
+            harness.container.read(callControllerProvider).session?.roomId,
+            'room-a',
+          );
+        });
+      }
+    }
+
+    test('logout invalidates the dialog before local teardown', () async {
+      final harness = _VoiceBindingHarness();
+      addTearDown(harness.dispose);
+      await harness.connectActiveA();
+      await harness.coordinator.switchTo('profile-b');
+      await entries.first.invoke(harness.call);
+      harness.auth.state = const AuthState();
+      harness.requestPaths.clear();
+
+      await harness.call.confirmLeaveCurrentVoiceAndRetry();
+
+      expect(harness.voicePaths, isEmpty);
+      expect(harness.liveKit.disconnectCalls, 0);
+    });
+
+    test('profile switch during cleanup cannot retarget destination', () async {
+      final harness = _VoiceBindingHarness();
+      addTearDown(harness.dispose);
+      await harness.connectActiveA();
+      await harness.coordinator.switchTo('profile-b');
+      await entries.first.invoke(harness.call);
+      harness.endEntered = Completer<void>();
+      harness.endResponse = Completer<http.Response>();
+      harness.requestPaths.clear();
+      final confirmation = harness.call.confirmLeaveCurrentVoiceAndRetry();
+      await harness.endEntered!.future;
+      await harness.coordinator.switchTo('profile-c');
+      harness.endResponse!.complete(http.Response('{}', 200));
+      await confirmation;
+
+      expect(harness.voicePaths.toList(), ['/api/v1/voice/calls/room-a/end']);
+      expect(
+        harness.container.read(callControllerProvider).phase,
+        CallPhase.idle,
+      );
+    });
+
+    test('cancel followed by stale confirmation leaves A untouched', () async {
+      final harness = _VoiceBindingHarness();
+      addTearDown(harness.dispose);
+      await harness.connectActiveA();
+      await harness.coordinator.switchTo('profile-b');
+      await entries.first.invoke(harness.call);
+      harness.call.dismissVoiceConflict();
+      harness.requestPaths.clear();
+
+      await harness.call.confirmLeaveCurrentVoiceAndRetry();
+
+      expect(harness.voicePaths, isEmpty);
+      expect(harness.liveKit.disconnectCalls, 0);
+    });
+  });
+
   group('profile-bound call signaling contract', () {
     test(
       'late A or B signals cannot replace or end active A after C switch',
@@ -318,6 +430,9 @@ class _VoiceBindingHarness {
   final liveKit = _RecordingLiveKitRoom();
   final realtime = _PassiveProfileSwitchRealtimeBoundary();
   final requestPaths = <String>[];
+  final requestAuthorizations = <String?>[];
+  Completer<void>? endEntered;
+  Completer<http.Response>? endResponse;
   late final AuthController auth;
   late final ProviderContainer container;
   late final CallController call;
@@ -370,6 +485,12 @@ class _VoiceBindingHarness {
 
   Future<http.Response> _respond(http.Request request) async {
     requestPaths.add(request.url.path);
+    requestAuthorizations.add(request.headers['authorization']);
+    if (request.url.path == '/api/v1/voice/calls/room-a/end' &&
+        endResponse != null) {
+      endEntered!.complete();
+      return endResponse!.future;
+    }
     if (request.url.path == '/api/v1/auth/switch-profile') {
       final body = jsonDecode(request.body) as Map<String, dynamic>;
       final profileId = body['profile_id'] as String?;

@@ -12,6 +12,24 @@ class AppLocalizationsRu extends AppLocalizations {
   String get appTitle => 'Voice';
 
   @override
+  String get spaceLeaveTitle => 'Покинуть спейс?';
+
+  @override
+  String get spaceLeaveAction => 'Покинуть спейс';
+
+  @override
+  String get spaceLeaveMessage =>
+      'Вы потеряете доступ к спейсу и его чатам. Активное голосовое соединение в этом спейсе завершится.';
+
+  @override
+  String get spaceLeaveOwnerHint =>
+      'Перед выходом передайте владение другому участнику.';
+
+  @override
+  String get spaceLeaveUncertain =>
+      'Не удалось подтвердить выход. Обновите список спейсов перед повторной попыткой.';
+
+  @override
   String get sdkAuthorizationTitle => 'Подключить игру';
 
   @override
@@ -1957,6 +1975,14 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatGroupAddMembers => 'Добавить участников';
+
+  @override
+  String get chatGroupMemberAdditionsPermission =>
+      'Разрешить участникам добавлять людей';
+
+  @override
+  String get chatGroupPostAsChatPermission =>
+      'Разрешить публикацию от имени чата';
 
   @override
   String get chatGroupMembersLimitReached =>

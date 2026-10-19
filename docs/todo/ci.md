@@ -67,13 +67,11 @@ Latest deployment and live-browser evidence is recorded in [`a1-staging-acceptan
 
 ### Manifests & rollout
 
-- [ ] **Prod reuse staging ops scripts** — [`render-and-apply-prod.sh`](../../scripts/prod/render-and-apply-prod.sh) → `rollout-app-tier.sh`, `deploy-changed.sh`, `apply-observability.sh`, `ensure-app-secrets.sh` (алиасы `PROD_*` → `STAGING_*`).
 - [ ] **Prod placeholders** — [`deploy/prod/domains.defaults`](../../deploy/prod/domains.defaults) `*.voice.example.com`; secrets checklist только в README, не в ops TODO Critical.
 - [ ] **`rollout-user-space-tier` downtime `voice-space`** — scale 0→1 на каждый user/space deploy; альтернатива — полный `rollout-app-tier`.
 - [x] **`VOICE_IMAGE_TAG` required** — fallback `:latest` убран в apply-скриптах; локальный apply без TAG падает; документировано в [`DEPLOYMENT.md`](../DEPLOYMENT.md), [`deploy/staging/env.example`](../../deploy/staging/env.example), [`deploy/prod/env.example`](../../deploy/prod/env.example); аудит [`voice-image-tag-audit.md`](../../.github/ci/voice-image-tag-audit.md) (batch 33a).
-- [ ] **Prod smoke = alias staging** — [`smoke-prod.sh`](../../scripts/prod/smoke-prod.sh) → [`smoke-staging.sh`](../../scripts/staging/smoke-staging.sh), `STAGING_STAFF_TOKEN` из `PROD_STAFF_TOKEN`; нет отдельных prod acceptance checks.
-- [ ] **Prod deploy без selective / stack.lock** — [`prod-deploy.yml`](../../.github/workflows/prod-deploy.yml): нет `changed_services`, `needs_user_space_rollout`, artifact lock; `verify-prod-images` требует **все** образы catalog на TAG; `images-only` → `deploy-changed.sh` без `CHANGED_SERVICES` = no-op.
-- [ ] **Prod `full` mode всегда `rollout-app-tier.sh`** — нет user/space subset rollout как на staging; single-node Recreate strategy остаётся.
+- [ ] **Production smoke runtime proof** — execute the [production authentication probes](../../deploy/prod/README.md#production-smoke) and shared checks against the authorized immutable production version. Offline wrapper tests prove fail-closed status/transport handling only; valid-session ACL, media and release acceptance remain separate.
+- [ ] **Production User/Space subset runtime proof** — `full` honors explicit `needs_user_space_rollout`, with full-tier precedence/default preserved. Validate readiness and applicable images in an authorized protected production rollout; isolated dispatch checks are not deployment evidence. Single-node `Recreate` remains. — [runbook](../../deploy/prod/README.md#ci)
 
 ### Pipeline bugs
 
@@ -82,15 +80,11 @@ Latest deployment and live-browser evidence is recorded in [`a1-staging-acceptan
 ### Tech debt
 
 - [x] **Promote bootstrap** — пустой GHCR / squash-merge / force-push: `find_promote_base_sha` больше не abort'ит `changes` (`set -e`); missing manifests → rebuild. Ручной `full` / `STAGING_FORCE_FULL_ROLLOUT=true` остаётся опцией.
-- [ ] **Дедуп frontend Docker build** — отложено (admin/developer-portal: npm build + docker build).
-- [ ] **Prod reuse staging ops scripts** — [`render-and-apply-prod.sh`](../../scripts/prod/render-and-apply-prod.sh) → `rollout-app-tier.sh`, `deploy-changed.sh`, `apply-observability.sh`, `ensure-app-secrets.sh` (алиасы `PROD_*` → `STAGING_*`).
+- [x] **Дедуп frontend Docker build** — Admin/Developer Portal compile once in Docker for PR verification and selected master image publication; other admitted jobs retain the host build. Lint/test remain mandatory; standalone Docker builds and Vite arguments are unchanged. Exact-head hosted CI/image proof remains required before delivery.
 - [ ] **Prod placeholders** — [`deploy/prod/domains.defaults`](../../deploy/prod/domains.defaults) `*.voice.example.com`; secrets checklist только в README, не в ops TODO Critical.
 - [ ] **`staging-stack-lock` параллельно с auth/web/admin/portal** — lock пишется до push frontend-образов; auto-deploy ждёт эти jobs + verify — ок для happy path, не для отладки artifact mid-pipeline.
 - [ ] **`rollout-user-space-tier` downtime `voice-space`** — scale 0→1 на каждый user/space deploy; альтернатива — полный `rollout-app-tier`.
 - [x] **`VOICE_IMAGE_TAG` required** — см. Common / Manifests (batch 33a).
-- [ ] **Prod smoke = alias staging** — [`smoke-prod.sh`](../../scripts/prod/smoke-prod.sh) → [`smoke-staging.sh`](../../scripts/staging/smoke-staging.sh), `STAGING_STAFF_TOKEN` из `PROD_STAFF_TOKEN`; нет отдельных prod acceptance checks.
-- [ ] **Prod deploy без selective / stack.lock** — [`prod-deploy.yml`](../../.github/workflows/prod-deploy.yml): нет `changed_services`, `needs_user_space_rollout`, artifact lock; `verify-prod-images` требует **все** образы catalog на TAG; `images-only` → `deploy-changed.sh` без `CHANGED_SERVICES` = no-op.
-- [ ] **Prod `full` mode всегда `rollout-app-tier.sh`** — нет user/space subset rollout как на staging; single-node Recreate strategy остаётся.
 - [x] **S2S deps one-hop в `resolve-go-matrix.sh`** — direct `chat`→`file` edge selected; chat-only regression asserts the one-hop closure, without transitive `story`. Promote/build remains only direct paths + gateway ([`resolve-go-matrix.sh`](../../scripts/ci/resolve-go-matrix.sh)).
 
 
@@ -98,9 +92,9 @@ Latest deployment and live-browser evidence is recorded in [`a1-staging-acceptan
 
 ### Runtime config (magic numbers)
 
-- [ ] **BOT_WEBHOOK_* retry/backoff** — hardcoded retry/backoff webhook delivery → env.
+- [ ] **BOT_WEBHOOK_* retry/backoff** — HTTP interaction/autocomplete delivery already reads `BOT_WEBHOOK_DELIVERY_ATTEMPTS` and `BOT_WEBHOOK_RETRY_BACKOFF_MS`; retain exact-version configuration regression proof and integration review before closing. Durable outbox lease budgets are separate.
 - [ ] **NATS_* connect/reconnect** — Realtime: connect/reconnect timeouts в конфиг.
-- [ ] **pgxpool max conns** — лимиты пула Postgres → env/ConfigMap.
+- [ ] **pgxpool deployment capacity proof** — active Go service pools now consume `POSTGRES_MAX_CONNS` (default 10); Compose has per-service overrides and both ConfigMaps publish the default. Real deployed pool/replica capacity remains to be observed; see [OPERATIONS.md](../OPERATIONS.md#runtime-configuration-env).
 - [ ] **BOT_RATE_LIMIT_* / Gateway rate-limit JSON** — staging defaults в ConfigMap (сейчас только dev bypass).
 
 ### Platform sign-off
@@ -111,7 +105,7 @@ Latest deployment and live-browser evidence is recorded in [`a1-staging-acceptan
 
 - [ ] **Helm/Kustomize + GitOps** — отложено; [ADR 004](../adr/004-helm-gitops-deferred.md); ordered rollout остаётся в bash на runner.
 - [ ] **Пересмотреть цель continuous full-stack deploy** — selective deploy есть; GitOps позже.
-- [ ] **`e2e-manifest.sh` / smoke runtime** — awk-парсер YAML хрупкий; 16+ gateway + 15 flutter smoke на master — риск >15 min / flake ([`e2e-manifest.sh`](../../scripts/ci/e2e-manifest.sh), [`e2e-features.yml`](../../.github/ci/e2e-features.yml)).
+- [ ] **Qualify actual smoke duration/flake on Linux** — the shared typed YAML parser rejects malformed/partial selections and preserves catalog order; smoke/full stop before suites on parser failure. Actual Compose/Flutter runtime and flake qualification remain open; do not reduce catalog coverage to claim a timing improvement ([`e2e-manifest.sh`](../../scripts/ci/e2e-manifest.sh), [`e2e-features.yml`](../../.github/ci/e2e-features.yml)).
 
 
 **Промпт-якорь:** `CI/CD + deploy from docs/todo/ci.md` + приоритет/подсекция.

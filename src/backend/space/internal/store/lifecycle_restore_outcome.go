@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	spacev1 "voice.app/voice/space/v1"
+	"voice/backend/space/internal/entrypolicy"
 	"voice/backend/space/internal/spacecore"
 )
 
@@ -353,7 +354,7 @@ func (r *SpaceRow) ToProto() *spacev1.Space {
 		out.BannerUrl = &value
 	}
 	if r.EntryQuestionsJSON != nil {
-		out.EntryQuestionsJson = *r.EntryQuestionsJSON
+		out.EntryQuestionsJson = entrypolicy.LegacyPublicQuestions(*r.EntryQuestionsJSON)
 	}
 	if r.MMConfigJSON != nil {
 		out.MmConfigJson = *r.MMConfigJSON

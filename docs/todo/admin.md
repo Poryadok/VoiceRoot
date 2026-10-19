@@ -12,7 +12,7 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 
 
 - [ ] **[Admin] Analytics UI: search/voice dashboards deferred** — Gateway `GetDashboard` supports product/engagement/revenue/health/moderation + retention REST; Admin pages wired (batch 4). Search/voice need an accepted backend contract before UI: the current wire has no unambiguous daily-series/distribution or dashboard-filter schema, and source telemetry lacks canonical click-position, concurrency/duration and negotiated-codec facts. Do not ship proxy counters under the final metric names. Contract/RED matrix: [analytics-search-voice-dashboard-contract.md](../testing/analytics-search-voice-dashboard-contract.md). Paths: `docs/features/analytics.md`, `src/backend/analytics/internal/store/query.go`
-- Rich UX backlog (game catalog): genre/platforms presets, rank ladder templates per [game-catalog.md](../features/game-catalog.md) — structured mode/role/rank editor already shipped.
+- Rich UX backlog (game catalog): rank ladder templates per [game-catalog.md](../features/game-catalog.md). Before implementation, define the template names, ordered rank names/values and whether applying a template replaces or merges existing ranks; these are not yet specified. Genre/platform suggestions and the structured mode/role/rank editor are shipped.
 
 ### Developer Portal
 
@@ -25,7 +25,7 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 ### Admin
 
 
-- [ ] **[Admin] No admin E2E / browser tests** — `docs/TESTING.md` lists analytics live tests as backend-only; no Playwright/Cypress for Admin. Paths: `docs/TESTING.md`, `src/admin/src/test/`
+- [ ] **[Admin] Live staff browser acceptance** — deterministic Chromium coverage now exercises the built Admin OAuth/PKCE and moderation/appeal flows against a local HTTP fixture (`src/admin/browser/staff-flows.mjs`, `admin-browser.yml`). Actual Auth/staff authority, sanction enforcement and staging OAuth remain live acceptance gates; fixture success does not close them.
 - [ ] **[Admin] Staging smoke: Admin UI routes only** — batch 5 adds SPA root + `/callback` when `VOICE_ADMIN_INGRESS_HOST` set; Gateway admin moderation/analytics still via `STAGING_STAFF_TOKEN` (not Admin UI bundle). Path: `scripts/staging/smoke-staging.sh`
 
 ### Developer Portal
@@ -40,8 +40,8 @@ _(Common Developer Portal batch closed in PR #124 — registration form, bot det
 
 - [ ] **[Developer Portal] No design tokens / brand — raw CSS; admin uses `tokens.css`.** — `src/developer-portal/src/styles/global.css`, `src/admin/src/styles/tokens.css`
 - [ ] **[Developer Portal] Ad-hoc routing — `window.location.pathname === '/callback'` instead of router.** — `src/developer-portal/src/App.tsx`
-- [ ] **[Developer Portal] K8s manifest minimal — no resources/limits, single replica, HTTP-only Traefik entrypoint (same as web/admin).** — `deploy/staging/developer-portal.yaml`, `deploy/prod/developer-portal.yaml`
-- [ ] **[Developer Portal] No slug / public bot page preview — `slug` exists on Bot proto but unused in portal.** — `src/developer-portal/src/App.tsx`, `protos/voice/bot/v1/bot.proto`
+- [ ] **[Developer Portal] Deployment runtime proof** — manifests define resource budgets and bounded rolling updates (one staging / two production replicas); production already has origin TLS, staging retains the documented HTTPS-edge/HTTP-origin route. Verify real readiness-failure handling, rollout capacity and public HTTPS OAuth callback under the protected environment window; offline validation is not rollout evidence. — `deploy/staging/developer-portal.yaml`, `deploy/prod/developer-portal.yaml`, `docs/DEPLOYMENT.md`
+- [x] **[Developer Portal] Slug / public bot preview** — Fresh selected-bot details show the server-assigned read-only slug and saved public name/description/scopes/commands, with an encoded canonical public-page link. Preview clears on selection/logout; missing slug and unavailable data stay explicit. No slug-write API or live install proof is implied. — `src/developer-portal/src/PublicBotPreview.tsx`, `src/developer-portal/src/test/AppBotPreview.test.tsx`
 
 
 **Промпт-якорь:** `Admin from docs/todo/admin.md` + приоритет.

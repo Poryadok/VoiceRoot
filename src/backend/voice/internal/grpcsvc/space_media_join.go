@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -67,7 +68,18 @@ func (s *VoiceGRPC) ensureConfirmedSpaceMediaCall(ctx context.Context, call voic
 }
 
 func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Call, profileID string, access CanonicalVoiceRoomAccess, maxParticipants int, created bool) (voicestore.Call, error) {
-	if s == nil || s.Calls == nil || s.SpaceMediaAdmissions == nil || s.SpaceVoiceRoomGrants == nil || s.SessionEpochChecker == nil || !s.spaceMediaOperational() {
+	if !access.CommunicationStateResolved || access.DecisionDeadline.IsZero() {
+		return voicestore.Call{}, status.Error(codes.Unavailable, "Space communication authority incomplete")
+	}
+	if access.TimedOut {
+		return voicestore.Call{}, status.Error(codes.PermissionDenied, "member is timed out in this Space")
+	}
+	ctx, cancel := context.WithDeadline(ctx, access.DecisionDeadline)
+	defer cancel()
+	if ctx.Err() != nil {
+		return voicestore.Call{}, status.Error(codes.Unavailable, "Space admission decision expired")
+	}
+	if s == nil || s.Calls == nil || s.SpaceMediaAdmissions == nil || s.SpaceProjectionGates == nil || s.SpaceVoiceRoomGrants == nil || s.SessionEpochChecker == nil || !s.spaceMediaOperational() {
 		return voicestore.Call{}, status.Error(codes.Unavailable, "Space media admission is not ready")
 	}
 	if err := s.SpaceMediaAdmissions.CheckSchema(ctx); err != nil {
@@ -150,6 +162,8 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 		return voicestore.Call{}, status.Error(codes.Internal, "Space media identity could not be created")
 	}
 	operationID := uuid.New()
+	owner := voicestore.NewSpaceAdmissionOwnership(operationID)
+	ctx = voicestore.WithSpaceAdmissionOwnership(ctx, owner)
 	roomHead, err := s.SpaceMediaAdmissions.ClaimRoomHead(ctx, call.VoiceRoomID, call.SpaceID, call.RoomID, operationID, created)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -157,6 +171,17 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 		}
 		return voicestore.Call{}, status.Error(codes.Unavailable, "Space voice-room incarnation is not ready")
 	}
+	ownership, ok := s.SpaceMediaAdmissions.(interface {
+		HoldAdmissionOwnership(context.Context, uuid.UUID) (context.Context, func(), error)
+	})
+	if !ok {
+		return voicestore.Call{}, status.Error(codes.Unavailable, "Space admission ownership unavailable")
+	}
+	ctx, stopOwner, err := ownership.HoldAdmissionOwnership(ctx, operationID)
+	if err != nil {
+		return voicestore.Call{}, status.Error(codes.Unavailable, "Space admission ownership unavailable")
+	}
+	defer stopOwner()
 	abandonClaim := func() {
 		if created {
 			_ = s.SpaceMediaAdmissions.AbandonRoomClaim(ctx, roomHead.VoiceRoomID, roomHead.RoomGeneration, operationID)
@@ -212,7 +237,7 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 		}
 		events = append([]voicestore.SpaceMediaAdmissionEvent{{ID: callStartedID, Subject: "voice.call_started", Payload: startedEnvelope}}, events...)
 	}
-	admission := voicestore.SpaceMediaAdmission{OperationID: operationID, Generation: generation, RoomGeneration: roomHead.RoomGeneration, AccountID: parsedAccountID,
+	admission := voicestore.SpaceMediaAdmission{OperationID: operationID, Generation: generation, RoomGeneration: roomHead.RoomGeneration, LifecycleGeneration: roomHead.LifecycleGeneration, AccountID: parsedAccountID,
 		ProfileID: parsedProfileID, SpaceID: parsedSpaceID, RoomID: current.RoomID, VoiceRoomID: current.VoiceRoomID, Identity: identity,
 		CreatedRoom: created, CallStartedAt: current.StartedAt, MaxParticipants: maxParticipants,
 		SessionEpoch: issued.SessionEpoch, AccessEpoch: issued.AccessEpoch, PolicyEpoch: issued.PolicyEpoch,
@@ -226,7 +251,7 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 		// The transaction may have committed even when its acknowledgement was
 		// lost. Make the intent recoverable and release only this exact fence;
 		// never infer that a failed RPC left no durable side effect.
-		if abortErr := s.SpaceMediaAdmissions.MarkAborting(ctx, operationID, generation); abortErr != nil {
+		if abortErr := s.markSpaceAdmissionAborting(ctx, operationID, generation); abortErr != nil {
 			return voicestore.Call{}, status.Error(codes.Unavailable, "Space media admission cleanup is pending")
 		}
 		if releaseErr := s.SpaceMediaAdmissions.ReleaseFence(ctx, admission); releaseErr != nil && status.Code(releaseErr) != codes.NotFound {
@@ -239,10 +264,10 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 	}
 	latestAccess, accessErr := s.VoiceRoomAccessResolver.ResolveVoiceRoomAccess(ctx, current.SpaceID, current.VoiceRoomID, profileID)
 	latestGrants, grantErr := s.SpaceVoiceRoomGrants.ResolveVoiceRoomGrants(ctx, current.SpaceID, current.VoiceRoomID, profileID)
-	if accessErr != nil || grantErr != nil || latestAccess.SpaceID != current.SpaceID || !latestAccess.Active || !latestAccess.Member ||
+	if accessErr != nil || grantErr != nil || latestAccess.SpaceID != current.SpaceID || !latestAccess.Active || !latestAccess.Member || !latestAccess.CommunicationStateResolved || latestAccess.TimedOut ||
 		latestAccess.AccessEpoch != access.AccessEpoch || latestGrants.PolicyEpoch != grants.PolicyEpoch ||
 		!latestGrants.CanJoin || !latestGrants.CanSubscribe || latestGrants.CanPublishAudio != grants.CanPublishAudio {
-		if err := s.SpaceMediaAdmissions.MarkAborting(ctx, operationID, generation); err != nil {
+		if err := s.markSpaceAdmissionAborting(ctx, operationID, generation); err != nil {
 			return voicestore.Call{}, status.Error(codes.Unavailable, "Space media admission cleanup is pending")
 		}
 		if err := s.SpaceMediaAdmissions.ReleaseFence(ctx, admission); err != nil {
@@ -258,7 +283,7 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 		return voicestore.Call{}, status.Error(codes.PermissionDenied, "Space media authority changed; retry join")
 	}
 	if err := s.SessionEpochChecker.RequireCurrent(ctx, accountID, sessionEpoch); err != nil {
-		if abortErr := s.SpaceMediaAdmissions.MarkAborting(ctx, operationID, generation); abortErr != nil {
+		if abortErr := s.markSpaceAdmissionAborting(ctx, operationID, generation); abortErr != nil {
 			return voicestore.Call{}, status.Error(codes.Unavailable, "Space media admission cleanup is pending")
 		}
 		if abortErr := s.SpaceMediaAdmissions.ReleaseFence(ctx, admission); abortErr != nil {
@@ -275,7 +300,7 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 	latestAccessFloors, accessErr := s.Calls.RaiseSpaceMediaEpochFloor(ctx, current.SpaceID, voicestore.SpaceAccessEpoch, latestAccess.AccessEpoch)
 	latestPolicyFloors, grantErr := s.Calls.RaiseSpaceMediaEpochFloor(ctx, current.SpaceID, voicestore.RolePolicyEpoch, latestGrants.PolicyEpoch)
 	if accessErr != nil || grantErr != nil || latestAccessFloors.AccessEpoch > latestAccess.AccessEpoch || latestPolicyFloors.PolicyEpoch > latestGrants.PolicyEpoch {
-		if err := s.SpaceMediaAdmissions.MarkAborting(ctx, operationID, generation); err != nil {
+		if err := s.markSpaceAdmissionAborting(ctx, operationID, generation); err != nil {
 			return voicestore.Call{}, status.Error(codes.Unavailable, "Space media admission cleanup is pending")
 		}
 		if err := s.SpaceMediaAdmissions.ReleaseFence(ctx, admission); err != nil {
@@ -289,6 +314,13 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 	if err := s.SpaceMediaAdmissions.MarkCommitted(ctx, operationID, generation); err != nil {
 		return voicestore.Call{}, status.Error(codes.Unavailable, "Space media admission commit is pending recovery")
 	}
+	ticket, err := s.prepareSpaceProjection(ctx, current.SpaceID, operationID, generation)
+	if err != nil {
+		return voicestore.Call{}, status.Error(codes.Unavailable, "Space projection fenced")
+	}
+	current.SpaceProjectionTicket = ticket
+
+	current.SpaceLifecycleGeneration = roomHead.LifecycleGeneration
 	if created {
 		current, err = s.Calls.CreateCall(ctx, current)
 		if err != nil {
@@ -297,12 +329,12 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 	}
 	current, err = s.Calls.AdmitSpaceMediaParticipant(ctx, current.RoomID, voicestore.SpaceMediaParticipant{
 		AccountID: accountID, AdmissionOperationID: operationID.String(), ProfileID: profileID,
-		RoomGeneration: roomHead.RoomGeneration, CreatedRoom: created,
+		ProjectionTicket: ticket, LifecycleGeneration: roomHead.LifecycleGeneration, RoomGeneration: roomHead.RoomGeneration, CreatedRoom: created,
 		Identity: identity, Generation: generation, Issued: issued,
 	}, maxParticipants)
 	if err != nil {
 		if errors.Is(err, voicestore.ErrRoomFull) {
-			if abortErr := s.SpaceMediaAdmissions.MarkAborting(ctx, operationID, generation); abortErr != nil {
+			if abortErr := s.markSpaceAdmissionAborting(ctx, operationID, generation); abortErr != nil {
 				return voicestore.Call{}, status.Error(codes.Unavailable, "Space media admission cleanup is pending")
 			}
 			if releaseErr := s.SpaceMediaAdmissions.ReleaseFence(ctx, admission); releaseErr != nil {
@@ -322,6 +354,17 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 }
 
 func (s *VoiceGRPC) getSpaceMediaJoinToken(ctx context.Context, call voicestore.Call, profileID string, access CanonicalVoiceRoomAccess) (*callsv1.GetJoinTokenResponse, error) {
+	if !access.CommunicationStateResolved || access.DecisionDeadline.IsZero() {
+		return nil, status.Error(codes.Unavailable, "Space communication authority incomplete")
+	}
+	if access.TimedOut {
+		return nil, status.Error(codes.PermissionDenied, "member is timed out in this Space")
+	}
+	ctx, cancel := context.WithDeadline(ctx, access.DecisionDeadline)
+	defer cancel()
+	if ctx.Err() != nil {
+		return nil, status.Error(codes.Unavailable, "Space admission decision expired")
+	}
 	if !s.spaceMediaOperational() {
 		return nil, status.Error(codes.Unavailable, "Space media reconciliation is not ready")
 	}
@@ -434,14 +477,78 @@ func (s *VoiceGRPC) getSpaceMediaJoinToken(ctx context.Context, call voicestore.
 		return nil, status.Error(codes.Unavailable, "Auth session authority unavailable")
 	}
 	grant := livekit.SpaceRoomGrant{
-		AccountID: accountID, ProfileID: profileID, SpaceID: call.SpaceID, VoiceRoomID: call.VoiceRoomID,
+		ProviderBinding: s.SpaceTokens.ProviderBinding(),
+		AccountID:       accountID, ProfileID: profileID, SpaceID: call.SpaceID, VoiceRoomID: call.VoiceRoomID,
 		LiveKitRoomName: call.LivekitRoomName, MediaGeneration: generation,
 		SessionEpoch: issued.SessionEpoch, AccessEpoch: issued.AccessEpoch, PolicyEpoch: issued.PolicyEpoch,
 		CanJoin: issued.CanJoin, CanPublishAudio: issued.CanPublishAudio, CanSubscribe: issued.CanSubscribe,
 	}
-	jwt, expiresAt, err := s.SpaceTokens.JoinToken(grant, s.now())
+	if ctx.Err() != nil {
+		return nil, status.Error(codes.Unavailable, "Space admission decision expired")
+	}
+	reservations, ok := s.SpaceMediaAdmissions.(interface {
+		ReserveSpaceGrant(context.Context, uuid.UUID, uuid.UUID, string, livekit.SpaceRoomGrant) (time.Time, time.Time, error)
+	})
+	if !ok {
+		return nil, status.Error(codes.Unavailable, "durable Space grant authorization unavailable")
+	}
+	issuedAt, expiresAt, err := reservations.ReserveSpaceGrant(ctx, uuid.New(), operationID, generation, grant)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "Space grant authorization is pending")
+	}
+	jwt, expiresAt, err := s.SpaceTokens.JoinReservedToken(grant, issuedAt, expiresAt)
 	if err != nil {
 		return nil, status.Error(codes.FailedPrecondition, "Space media token could not be issued")
 	}
+	if ctx.Err() != nil {
+		return nil, status.Error(codes.Unavailable, "Space admission decision expired")
+	}
 	return &callsv1.GetJoinTokenResponse{Jwt: jwt, LivekitUrl: s.SpaceTokens.LivekitURL(), ExpiresAt: timestamppb.New(expiresAt)}, nil
+}
+
+func (s *VoiceGRPC) prepareSpaceProjection(ctx context.Context, space string, operation uuid.UUID, generation string) (voicestore.SpaceProjectionTicket, error) {
+	if s.SpaceProjectionGates == nil {
+		return voicestore.SpaceProjectionTicket{}, voicestore.ErrSpaceMediaStaleGrant
+	}
+	authority, ok := s.SpaceMediaAdmissions.(interface {
+		ReadSpaceLifecycle(context.Context, string) (int64, bool, error)
+		ReadAdmissionDispatch(context.Context, string) (int64, bool, error)
+		AuthorizeSpaceProjection(context.Context, uuid.UUID, string, voicestore.SpaceProjectionTicket) (voicestore.SpaceProjectionTicket, error)
+	})
+	if !ok {
+		return voicestore.SpaceProjectionTicket{}, voicestore.ErrSpaceMediaStaleGrant
+	}
+	if err := s.SpaceProjectionGates.EnsureSpaceLifecycle(ctx, space, authority.ReadSpaceLifecycle); err != nil {
+		return voicestore.SpaceProjectionTicket{}, err
+	}
+	observed, err := s.SpaceProjectionGates.ReadReadySpaceGate(ctx, space)
+	if err != nil {
+		return voicestore.SpaceProjectionTicket{}, err
+	}
+	gates, ok := s.SpaceProjectionGates.(voicestore.SpaceAdmissionProjectionGates)
+	if !ok {
+		return voicestore.SpaceProjectionTicket{}, voicestore.ErrSpaceMediaStaleGrant
+	}
+	dispatch, err := gates.EnsureAdmissionDispatch(ctx, operation.String(), authority.ReadAdmissionDispatch)
+	if err != nil {
+		return voicestore.SpaceProjectionTicket{}, err
+	}
+	observed.AdmissionIncarnation = dispatch.AdmissionIncarnation
+	observed.AdmissionOwnerEpoch = dispatch.AdmissionOwnerEpoch
+	observed.AdmissionLive = dispatch.AdmissionLive
+	return authority.AuthorizeSpaceProjection(ctx, operation, generation, observed)
+}
+
+func (s *VoiceGRPC) markSpaceAdmissionAborting(ctx context.Context, operation uuid.UUID, generation string) error {
+	if err := s.SpaceMediaAdmissions.MarkAborting(ctx, operation, generation); err != nil {
+		return err
+	}
+	fencer, ok := s.SpaceMediaAdmissions.(interface {
+		FenceAbortedAdmission(context.Context, uuid.UUID, voicestore.SpaceAdmissionProjectionGates) error
+	})
+	gates, gatesOK := s.SpaceProjectionGates.(voicestore.SpaceAdmissionProjectionGates)
+	if !ok || !gatesOK {
+		return voicestore.ErrSpaceMediaStaleGrant
+	}
+	return fencer.FenceAbortedAdmission(ctx, operation, gates)
 }

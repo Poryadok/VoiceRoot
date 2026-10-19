@@ -82,7 +82,7 @@ func TestVoiceSessionBinding_CanonicalJoinAndActiveResponse(t *testing.T) {
 	room, space, profile := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	events := &recordingEvents{}
 	svc := newTestVoiceService(time.Now(), events)
-	resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: space, Member: true, Active: true, AccessEpoch: 11}}
+	resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: space, Member: true, Active: true, AccessEpoch: 11, CommunicationStateResolved: true}}
 	configureReadySpaceMediaFixture(svc, resolver)
 	var admissions []voicestore.SpaceMediaAdmission
 	svc.SpaceMediaAdmissions = readySpaceMediaAdmission{preparedAdmissions: &admissions}

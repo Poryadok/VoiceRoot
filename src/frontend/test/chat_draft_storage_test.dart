@@ -5,6 +5,18 @@ import 'package:voice_frontend/state/chat_draft_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('immediate controller recreation restores the latest edit', () async {
+    final storage = InMemoryChatDraftStorage();
+    const key = ChatDraftKey(profileId: 'profile-a', chatId: 'chat-a');
+    final first = ChatDraftController(storage, key);
+    first.update('latest edit before navigating');
+    first.dispose();
+    final reopened = ChatDraftController(storage, key);
+    addTearDown(reopened.dispose);
+    await Future<void>.delayed(Duration.zero);
+    expect(reopened.state.valueOrNull, 'latest edit before navigating');
+  });
+
   group('InMemoryChatDraftStorage', () {
     test('keeps drafts isolated by active profile and chat', () async {
       final storage = InMemoryChatDraftStorage();

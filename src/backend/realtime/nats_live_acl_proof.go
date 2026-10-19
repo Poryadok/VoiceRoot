@@ -58,7 +58,8 @@ func runNATSLiveACLProofFromEnv() error {
 	}
 	defer leafRT.Close()
 	hubOpts := append([]nats.Option{}, connectOpts...)
-	hubOpts = append(hubOpts, nats.UserCredentials(credsFile))
+	hubErrors := make(chan error, 4)
+	hubOpts = append(hubOpts, nats.UserCredentials(credsFile), liveACLProofErrorHandler(hubErrors))
 	hubRT, err := connectLiveACLProof(hubURL, hubOpts)
 	if err != nil {
 		return liveACLFail("hub_connect_failed")
@@ -70,7 +71,19 @@ func runNATSLiveACLProofFromEnv() error {
 		return liveACLFail("proof_connect_failed")
 	}
 	defer proofNC.Close()
-	return runNATSLiveACLProof(leafRT, hubRT, proofNC, instanceID)
+	return runNATSLiveACLProof(leafRT, hubRT, proofNC, instanceID, hubErrors)
+}
+
+// Install before connecting: nats.go may invoke an asynchronous error callback
+// after Flush returns, so replacing the connection's handler during a proof
+// races with that callback. Each proof connection owns its bounded error queue.
+func liveACLProofErrorHandler(denied chan<- error) nats.Option {
+	return nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
+		select {
+		case denied <- err:
+		default:
+		}
+	})
 }
 
 func connectLiveACLProof(rawURL string, options []nats.Option) (*nats.Conn, error) {
@@ -87,8 +100,8 @@ func connectLiveACLProof(rawURL string, options []nats.Option) (*nats.Conn, erro
 	}
 }
 
-func runNATSLiveACLProof(leafRT, hubRT, proofNC *nats.Conn, instanceID string) (result error) {
-	if instanceID != "realtime-1" || leafRT == nil || hubRT == nil || proofNC == nil {
+func runNATSLiveACLProof(leafRT, hubRT, proofNC *nats.Conn, instanceID string, hubErrors <-chan error) (result error) {
+	if instanceID != "realtime-1" || leafRT == nil || hubRT == nil || proofNC == nil || hubErrors == nil {
 		return liveACLFail("invalid_config")
 	}
 	proofJS, err := proofNC.JetStream(nats.MaxWait(liveACLProofTimeout))
@@ -138,7 +151,7 @@ func runNATSLiveACLProof(leafRT, hubRT, proofNC *nats.Conn, instanceID string) (
 	if err := requireDeniedAdjacentSUB(hubRT, deliver+"_adjacent"); err != nil {
 		return err
 	}
-	if err := requireDeniedConsumerCREATE(hubRT, "$JS.API.CONSUMER.CREATE.social_events."+durable); err != nil {
+	if err := requireDeniedConsumerCREATE(hubRT, "$JS.API.CONSUMER.CREATE.social_events."+durable, hubErrors); err != nil {
 		return err
 	}
 
@@ -242,16 +255,7 @@ func requireDeniedAdjacentSUB(nc *nats.Conn, subject string) error {
 	return liveACLFail("adjacent_sub_unproven")
 }
 
-func requireDeniedConsumerCREATE(nc *nats.Conn, subject string) error {
-	previous := nc.ErrorHandler()
-	denied := make(chan error, 4)
-	nc.SetErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
-		select {
-		case denied <- err:
-		default:
-		}
-	})
-	defer nc.SetErrorHandler(previous)
+func requireDeniedConsumerCREATE(nc *nats.Conn, subject string, denied <-chan error) error {
 	reply := nc.NewInbox()
 	sub, err := nc.SubscribeSync(reply)
 	if err != nil {

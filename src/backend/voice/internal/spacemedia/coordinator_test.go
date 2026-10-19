@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"voice/backend/voice/internal/spacegatetest"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -68,6 +69,28 @@ type fakeAdmissionRecovery struct {
 	releaseFails    int
 	releaseCalls    int
 	releasedRows    []store.SpaceMediaAdmission
+}
+
+// Explicit healthy authority for memory-store coordinator unit cases. Real
+// arbitration, expiry, PostgreSQL CAS and Redis sink proof use integration tests.
+func (f *fakeAdmissionRecovery) ClaimAdmissionRecovery(_ context.Context, a store.SpaceMediaAdmission) (store.SpaceMediaAdmission, bool, error) {
+	for _, current := range f.recoveryRows {
+		if current.OperationID == a.OperationID {
+			a = current
+			break
+		}
+	}
+	a.Ownership = store.NewSpaceAdmissionOwnership(a.OperationID)
+	return a, true, nil
+}
+func (f *fakeAdmissionRecovery) HoldAdmissionOwnership(ctx context.Context, _ uuid.UUID) (context.Context, func(), error) {
+	return ctx, func() {}, nil
+}
+func (f *fakeAdmissionRecovery) ReadAdmissionDispatch(context.Context, string) (int64, bool, error) {
+	return 1, true, nil
+}
+func (f *fakeAdmissionRecovery) FenceAbortedAdmission(context.Context, uuid.UUID, store.SpaceAdmissionProjectionGates) error {
+	return nil
 }
 
 func (f *fakeAdmissionRecovery) RecoveryRows(context.Context, int) ([]store.SpaceMediaAdmission, error) {
@@ -153,12 +176,27 @@ func (f *fakeAdmissionRecovery) MarkProjectionApplied(context.Context, uuid.UUID
 	f.projected++
 	return nil
 }
-func (f *fakeAdmissionRecovery) BeginRoomLeave(context.Context, uuid.UUID, string) error { return nil }
+func (f *fakeAdmissionRecovery) BeginOwnedRoomLeave(context.Context, store.SpaceAdmissionOwnership, uuid.UUID, string) error {
+	return nil
+}
+func (f *fakeAdmissionRecovery) BeginRestrictiveRoomLeave(_ context.Context, a store.SpaceMediaAdmission) (store.SpaceAdmissionRevocation, error) {
+	return store.SpaceAdmissionRevocation{Admission: a, OwnerEpoch: 1}, nil
+}
+func (f *fakeAdmissionRecovery) CompleteRestrictiveRoomLeave(context.Context, store.SpaceAdmissionRevocation) error {
+	f.released++
+	return nil
+}
+func (f *fakeAdmissionRecovery) FenceRestrictiveRoomLeave(_ context.Context, t store.SpaceAdmissionRevocation, _ store.SpaceAdmissionProjectionGates) (store.SpaceProjectionTicket, error) {
+	return store.SpaceProjectionTicket{AdmissionIncarnation: uuid.NewString(), AdmissionOwnerEpoch: t.OwnerEpoch}, nil
+}
+func (f *fakeAdmissionRecovery) FenceOwnedRoomLeave(_ context.Context, o store.SpaceAdmissionOwnership, _ uuid.UUID, _ store.SpaceAdmissionProjectionGates) (store.SpaceProjectionTicket, error) {
+	return store.SpaceProjectionTicket{AdmissionIncarnation: uuid.NewString(), AdmissionOwnerEpoch: o.Epoch}, nil
+}
 func (f *fakeAdmissionRecovery) ConfirmRoomHeadOpen(context.Context, store.SpaceMediaAdmission) error {
 	return nil
 }
 func (f *fakeAdmissionRecovery) RecoverOrphanRoomHeads(context.Context) error { return nil }
-func (f *fakeAdmissionRecovery) CompleteRoomLeave(context.Context, store.SpaceMediaAdmission) error {
+func (f *fakeAdmissionRecovery) CompleteOwnedRoomLeave(context.Context, store.SpaceAdmissionOwnership, store.SpaceMediaAdmission) error {
 	f.released++
 	return nil
 }
@@ -193,10 +231,10 @@ func TestCoordinatorRetriesCommittedRoomFullAbortThroughRecovery(t *testing.T) {
 		require.NoError(t, err)
 	}
 	admissions := &fakeAdmissionRecovery{recoveryRows: []store.SpaceMediaAdmission{admission}, markAbortFails: 1, releaseFails: 1}
-	c := &Coordinator{
+	c := &Coordinator{ProjectionGates: spacegatetest.New(),
 		Store: calls, Calls: calls, Admissions: admissions,
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			profileID.String(): {SpaceID: spaceID.String(), Active: true, Member: true, AccessEpoch: 4},
+			profileID.String(): {SpaceID: spaceID.String(), Active: true, Member: true, AccessEpoch: 4, CommunicationStateResolved: true},
 		}},
 		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
 			profileID.String(): {PolicyEpoch: 5, CanJoin: true, CanSubscribe: true},
@@ -263,9 +301,9 @@ func TestFakeAdmissionRecoveryConfirmProjectionRequiresExactCommittedBinding(t *
 }
 
 func TestCoordinatorDrainsEveryAdmissionRecoveryPageBeforeReady(t *testing.T) {
-	row := store.SpaceMediaAdmission{State: AdmissionCommitted, ProjectionApplied: true, ParticipantState: "ACTIVE"}
+	row := store.SpaceMediaAdmission{OperationID: uuid.New(), State: AdmissionCommitted, ProjectionApplied: true, ParticipantState: "ACTIVE"}
 	admissions := &fakeAdmissionRecovery{pages: [][]store.SpaceMediaAdmission{{row}, nil}}
-	c := &Coordinator{
+	c := &Coordinator{ProjectionGates: spacegatetest.New(),
 		Store: store.NewMemoryCallStore(), Calls: store.NewMemoryCallStore(),
 		Access: fakeAccess{}, Grants: fakeGrants{}, Media: &fakeMedia{}, Admissions: admissions,
 		SessionEpochChecker: currentEpochChecker{},
@@ -286,10 +324,10 @@ func TestCoordinatorRebuildsLostCallProjectionFromDurableAdmission(t *testing.T)
 	}
 	admissions := &fakeAdmissionRecovery{projectionPages: [][]store.SpaceMediaAdmission{{row}, nil}, roomCreator: row}
 	calls := store.NewMemoryCallStore()
-	c := &Coordinator{
+	c := &Coordinator{ProjectionGates: spacegatetest.New(),
 		Store: calls, Calls: calls,
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			profileID.String(): {SpaceID: spaceID, Active: true, Member: true, AccessEpoch: 11},
+			profileID.String(): {SpaceID: spaceID, Active: true, Member: true, AccessEpoch: 11, CommunicationStateResolved: true},
 		}},
 		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
 			profileID.String(): {PolicyEpoch: 7, CanJoin: true, CanSubscribe: true},
@@ -324,8 +362,8 @@ func TestObserveIgnoresNarrowHintAndReconcilesEveryParticipant(t *testing.T) {
 	require.NoError(t, err)
 	identityB := initial.SpaceMedia[profileB].Identity
 	access := fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-		profileA: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 4},
-		profileB: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 4},
+		profileA: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 4, CommunicationStateResolved: true},
+		profileB: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 4, CommunicationStateResolved: true},
 	}}
 	grants := fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
 		profileA: {PolicyEpoch: 7, CanJoin: true, CanSubscribe: true, CanPublishAudio: true},
@@ -333,7 +371,7 @@ func TestObserveIgnoresNarrowHintAndReconcilesEveryParticipant(t *testing.T) {
 	}}
 	media := &fakeMedia{}
 	admissions := fakeRecoveryForCommittedCall(t, ctx, calls, roomID)
-	c := &Coordinator{Store: calls, Access: access, Grants: grants, Media: media, Admissions: admissions, SessionEpochChecker: currentEpochChecker{}}
+	c := &Coordinator{ProjectionGates: spacegatetest.New(), Store: calls, Access: access, Grants: grants, Media: media, Admissions: admissions, SessionEpochChecker: currentEpochChecker{}}
 
 	err = c.Observe(ctx, AuthorityNotice{SpaceID: spaceID, Kind: store.SpaceAccessEpoch, Epoch: 4, ProfileID: profileA})
 
@@ -356,10 +394,10 @@ func TestDelayedInvalidationUsesCurrentRestoredRights(t *testing.T) {
 	calls := newRoomStore(t, ctx, spaceID, roomID, voiceRoomID, profile)
 	admissions := fakeRecoveryForCommittedCall(t, ctx, calls, roomID)
 	media := &fakeMedia{}
-	c := &Coordinator{
+	c := &Coordinator{ProjectionGates: spacegatetest.New(),
 		Store: calls, Admissions: admissions,
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			profile: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 9},
+			profile: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 9, CommunicationStateResolved: true},
 		}},
 		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
 			profile: {PolicyEpoch: 12, CanJoin: true, CanSubscribe: true, CanPublishAudio: true},
@@ -383,10 +421,10 @@ func TestFailedTargetRemovalLeavesReconciliationIncomplete(t *testing.T) {
 	calls := newRoomStore(t, ctx, spaceID, roomID, voiceRoomID, profile)
 	admissions := fakeRecoveryForCommittedCall(t, ctx, calls, roomID)
 	media := &fakeMedia{err: errors.New("injected ejection failure")}
-	c := &Coordinator{
+	c := &Coordinator{ProjectionGates: spacegatetest.New(),
 		Store: calls, Admissions: admissions,
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			profile: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 2},
+			profile: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 2, CommunicationStateResolved: true},
 		}},
 		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{}},
 		Media:  media, SessionEpochChecker: currentEpochChecker{},
@@ -415,10 +453,10 @@ func TestReconcileAllOpensReadinessOnlyAfterCompletePass(t *testing.T) {
 	media := &fakeMedia{}
 	readiness := []bool{}
 	admissions := fakeRecoveryForCommittedCall(t, ctx, calls, roomID)
-	c := &Coordinator{
+	c := &Coordinator{ProjectionGates: spacegatetest.New(),
 		Store: calls, Calls: calls, Admissions: admissions, Media: media,
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			profileID: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1},
+			profileID: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1, CommunicationStateResolved: true},
 		}},
 		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
 			profileID: {PolicyEpoch: 1, CanJoin: true, CanSubscribe: true},
@@ -439,7 +477,7 @@ func TestReconcileAllOpensReadinessOnlyAfterCompletePass(t *testing.T) {
 	defer resumeAccess()
 	c.Access = fakeAccess{
 		byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			profileID: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1},
+			profileID: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1, CommunicationStateResolved: true},
 		},
 		beforeResolve: func() {
 			accessOnce.Do(func() {
@@ -464,7 +502,7 @@ func TestReconcileAllOpensReadinessOnlyAfterCompletePass(t *testing.T) {
 	readiness = nil
 	media.err = errors.New("authority-driven ejection did not complete")
 	c.Access = fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-		profileID: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 2},
+		profileID: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 2, CommunicationStateResolved: true},
 	}}
 	err := c.ReconcileAll(ctx)
 	require.Error(t, err)
@@ -480,7 +518,7 @@ func TestAbortRetryDrainsExactCommittedProjectionBeforeReleasingFence(t *testing
 	participant := call.SpaceMedia[profileID]
 	admissions := fakeRecoveryForCommittedCall(t, ctx, calls, roomID)
 	media := &fakeMedia{}
-	c := &Coordinator{Store: calls, Calls: calls, Admissions: admissions, Media: media}
+	c := &Coordinator{ProjectionGates: spacegatetest.New(), Store: calls, Calls: calls, Admissions: admissions, Media: media}
 	operationID, err := uuid.Parse(participant.AdmissionOperationID)
 	require.NoError(t, err)
 	row := store.SpaceMediaAdmission{
@@ -489,6 +527,7 @@ func TestAbortRetryDrainsExactCommittedProjectionBeforeReleasingFence(t *testing
 		VoiceRoomID: voiceRoomID, Identity: participant.Identity, State: AdmissionAborting,
 	}
 
+	ctx = store.WithSpaceAdmissionOwnership(ctx, store.NewSpaceAdmissionOwnership(row.OperationID))
 	err = c.abortAdmission(ctx, row)
 
 	require.NoError(t, err)
@@ -527,13 +566,13 @@ func TestCommittedDuplicateRoomAdmissionRecoversByAbortingHiddenLoser(t *testing
 	})
 	require.NoError(t, err)
 	access := fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-		pendingProfile: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1},
+		pendingProfile: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1, CommunicationStateResolved: true},
 	}}
 	grants := fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
 		pendingProfile: {PolicyEpoch: 1, CanJoin: true, CanSubscribe: true},
 	}}
 	admissions := fakeRecoveryForCommittedCall(t, ctx, calls, activeRoomID)
-	c := &Coordinator{Store: calls, Calls: calls, Admissions: admissions, Access: access, Grants: grants,
+	c := &Coordinator{ProjectionGates: spacegatetest.New(), Store: calls, Calls: calls, Admissions: admissions, Access: access, Grants: grants,
 		SessionEpochChecker: currentEpochChecker{}, Media: &fakeMedia{}}
 	row := store.SpaceMediaAdmission{
 		OperationID: uuid.New(), Generation: uuid.NewString(), AccountID: uuid.New(), ProfileID: uuid.MustParse(pendingProfile),
@@ -543,6 +582,7 @@ func TestCommittedDuplicateRoomAdmissionRecoversByAbortingHiddenLoser(t *testing
 		CanJoin: true, CanSubscribe: true, State: AdmissionCommitted,
 	}
 
+	ctx = store.WithSpaceAdmissionOwnership(ctx, store.NewSpaceAdmissionOwnership(row.OperationID))
 	err = c.recoverCommittedAdmission(ctx, row)
 
 	require.NoError(t, err)
@@ -581,7 +621,7 @@ func TestSpaceMediaLeaveEjectionFailureRetainsRevocationTarget(t *testing.T) {
 	require.NoError(t, err)
 	participant := call.SpaceMedia[profile]
 	media := &fakeMedia{err: errors.New("injected ejection failure")}
-	c := &Coordinator{Store: calls, Admissions: fakeRecoveryForCommittedCall(t, ctx, calls, roomID), Media: media}
+	c := &Coordinator{ProjectionGates: spacegatetest.New(), Store: calls, Admissions: fakeRecoveryForCommittedCall(t, ctx, calls, roomID), Media: media}
 
 	_, removed, err := c.RevokeSpaceMediaParticipant(ctx, call, participant)
 	require.Error(t, err)
@@ -617,7 +657,7 @@ func TestSpaceMediaLeaveWithStaleGenerationCannotEjectNewIncarnation(t *testing.
 	}, store.MaxSpaceProVoiceParticipants)
 	require.NoError(t, err)
 	media := &fakeMedia{}
-	c := &Coordinator{Store: calls, Media: media}
+	c := &Coordinator{ProjectionGates: spacegatetest.New(), Store: calls, Media: media}
 
 	_, removed, err := c.RevokeSpaceMediaParticipant(ctx, oldCall, old)
 	require.NoError(t, err)
@@ -654,4 +694,14 @@ func newRoomStore(t *testing.T, ctx context.Context, spaceID, roomID, voiceRoomI
 
 func mediaIdentity(profileID string) string {
 	return "profile:" + profileID + ":media:" + uuid.NewString()
+}
+
+func (f *fakeAdmissionRecovery) ReadSpaceLifecycle(context.Context, string) (int64, bool, error) {
+	return 0, true, nil
+}
+func (f *fakeAdmissionRecovery) AuthorizeSpaceProjection(_ context.Context, _ uuid.UUID, _ string, t store.SpaceProjectionTicket) (store.SpaceProjectionTicket, error) {
+	return t, nil
+}
+func (f *fakeAdmissionRecovery) RebuildLifecycleWatermarks(context.Context, store.SpaceProjectionGates) error {
+	return nil
 }

@@ -38,6 +38,8 @@ const (
 	RoleService_ResolveVoiceRoomGrants_FullMethodName           = "/voice.role.v1.RoleService/ResolveVoiceRoomGrants"
 	RoleService_SetDefaultJoinRole_FullMethodName               = "/voice.role.v1.RoleService/SetDefaultJoinRole"
 	RoleService_GetDefaultJoinRole_FullMethodName               = "/voice.role.v1.RoleService/GetDefaultJoinRole"
+	RoleService_EnsureDefaultMemberRole_FullMethodName          = "/voice.role.v1.RoleService/EnsureDefaultMemberRole"
+	RoleService_RemoveMemberRoles_FullMethodName                = "/voice.role.v1.RoleService/RemoveMemberRoles"
 	RoleService_BootstrapSpaceRoles_FullMethodName              = "/voice.role.v1.RoleService/BootstrapSpaceRoles"
 	RoleService_DeleteRolesCreatedByProfile_FullMethodName      = "/voice.role.v1.RoleService/DeleteRolesCreatedByProfile"
 	RoleService_GetOwnershipTransferCapabilities_FullMethodName = "/voice.role.v1.RoleService/GetOwnershipTransferCapabilities"
@@ -80,6 +82,12 @@ type RoleServiceClient interface {
 	ResolveVoiceRoomGrants(ctx context.Context, in *ResolveVoiceRoomGrantsRequest, opts ...grpc.CallOption) (*ResolveVoiceRoomGrantsResponse, error)
 	SetDefaultJoinRole(ctx context.Context, in *SetDefaultJoinRoleRequest, opts ...grpc.CallOption) (*SetDefaultJoinRoleResponse, error)
 	GetDefaultJoinRole(ctx context.Context, in *GetDefaultJoinRoleRequest, opts ...grpc.CallOption) (*GetDefaultJoinRoleResponse, error)
+	// Inert admission projection; READY never establishes Space membership.
+	// @voice.security=protected;callers=service:space
+	EnsureDefaultMemberRole(ctx context.Context, in *EnsureDefaultMemberRoleRequest, opts ...grpc.CallOption) (*EnsureDefaultMemberRoleResponse, error)
+	// Writes a generation floor even when no ordinary grants exist.
+	// @voice.security=protected;callers=service:space
+	RemoveMemberRoles(ctx context.Context, in *RemoveMemberRolesRequest, opts ...grpc.CallOption) (*RemoveMemberRolesResponse, error)
 	// Called by Space Service after CreateSpace — seeds system roles and assigns Owner.
 	BootstrapSpaceRoles(ctx context.Context, in *BootstrapSpaceRolesRequest, opts ...grpc.CallOption) (*BootstrapSpaceRolesResponse, error)
 	// BOT-B: remove custom roles created by a profile (e.g. bot actor on uninstall).
@@ -303,6 +311,26 @@ func (c *roleServiceClient) GetDefaultJoinRole(ctx context.Context, in *GetDefau
 	return out, nil
 }
 
+func (c *roleServiceClient) EnsureDefaultMemberRole(ctx context.Context, in *EnsureDefaultMemberRoleRequest, opts ...grpc.CallOption) (*EnsureDefaultMemberRoleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EnsureDefaultMemberRoleResponse)
+	err := c.cc.Invoke(ctx, RoleService_EnsureDefaultMemberRole_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *roleServiceClient) RemoveMemberRoles(ctx context.Context, in *RemoveMemberRolesRequest, opts ...grpc.CallOption) (*RemoveMemberRolesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveMemberRolesResponse)
+	err := c.cc.Invoke(ctx, RoleService_RemoveMemberRoles_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *roleServiceClient) BootstrapSpaceRoles(ctx context.Context, in *BootstrapSpaceRolesRequest, opts ...grpc.CallOption) (*BootstrapSpaceRolesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(BootstrapSpaceRolesResponse)
@@ -460,6 +488,12 @@ type RoleServiceServer interface {
 	ResolveVoiceRoomGrants(context.Context, *ResolveVoiceRoomGrantsRequest) (*ResolveVoiceRoomGrantsResponse, error)
 	SetDefaultJoinRole(context.Context, *SetDefaultJoinRoleRequest) (*SetDefaultJoinRoleResponse, error)
 	GetDefaultJoinRole(context.Context, *GetDefaultJoinRoleRequest) (*GetDefaultJoinRoleResponse, error)
+	// Inert admission projection; READY never establishes Space membership.
+	// @voice.security=protected;callers=service:space
+	EnsureDefaultMemberRole(context.Context, *EnsureDefaultMemberRoleRequest) (*EnsureDefaultMemberRoleResponse, error)
+	// Writes a generation floor even when no ordinary grants exist.
+	// @voice.security=protected;callers=service:space
+	RemoveMemberRoles(context.Context, *RemoveMemberRolesRequest) (*RemoveMemberRolesResponse, error)
 	// Called by Space Service after CreateSpace — seeds system roles and assigns Owner.
 	BootstrapSpaceRoles(context.Context, *BootstrapSpaceRolesRequest) (*BootstrapSpaceRolesResponse, error)
 	// BOT-B: remove custom roles created by a profile (e.g. bot actor on uninstall).
@@ -549,6 +583,12 @@ func (UnimplementedRoleServiceServer) SetDefaultJoinRole(context.Context, *SetDe
 }
 func (UnimplementedRoleServiceServer) GetDefaultJoinRole(context.Context, *GetDefaultJoinRoleRequest) (*GetDefaultJoinRoleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetDefaultJoinRole not implemented")
+}
+func (UnimplementedRoleServiceServer) EnsureDefaultMemberRole(context.Context, *EnsureDefaultMemberRoleRequest) (*EnsureDefaultMemberRoleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method EnsureDefaultMemberRole not implemented")
+}
+func (UnimplementedRoleServiceServer) RemoveMemberRoles(context.Context, *RemoveMemberRolesRequest) (*RemoveMemberRolesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveMemberRoles not implemented")
 }
 func (UnimplementedRoleServiceServer) BootstrapSpaceRoles(context.Context, *BootstrapSpaceRolesRequest) (*BootstrapSpaceRolesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method BootstrapSpaceRoles not implemented")
@@ -952,6 +992,42 @@ func _RoleService_GetDefaultJoinRole_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RoleService_EnsureDefaultMemberRole_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EnsureDefaultMemberRoleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoleServiceServer).EnsureDefaultMemberRole(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoleService_EnsureDefaultMemberRole_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoleServiceServer).EnsureDefaultMemberRole(ctx, req.(*EnsureDefaultMemberRoleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RoleService_RemoveMemberRoles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveMemberRolesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoleServiceServer).RemoveMemberRoles(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoleService_RemoveMemberRoles_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoleServiceServer).RemoveMemberRoles(ctx, req.(*RemoveMemberRolesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _RoleService_BootstrapSpaceRoles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(BootstrapSpaceRolesRequest)
 	if err := dec(in); err != nil {
@@ -1268,6 +1344,14 @@ var RoleService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetDefaultJoinRole",
 			Handler:    _RoleService_GetDefaultJoinRole_Handler,
+		},
+		{
+			MethodName: "EnsureDefaultMemberRole",
+			Handler:    _RoleService_EnsureDefaultMemberRole_Handler,
+		},
+		{
+			MethodName: "RemoveMemberRoles",
+			Handler:    _RoleService_RemoveMemberRoles_Handler,
 		},
 		{
 			MethodName: "BootstrapSpaceRoles",

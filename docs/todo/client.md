@@ -173,7 +173,12 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 - [ ] **[A2 Voice] Enable canonical room lifecycle after backend bindings land** — Flutter now retains the complete server-owned UUID pair `voice_room_id` / `space_id` during active-session decode and join response mapping. Missing, malformed or non-room bindings expose no new Space ID; legacy room fields remain compatible. The optional Space returned by canonical join must match its request path. This persisted locator does not grant current access. Separate `joinSpaceVoiceRoom` / `leaveSpaceVoiceRoom` client methods follow the frozen Space-scoped routes and operation ID, but are default-off and not used by the controller. Existing legacy entry and `hangUp`/failed-connect `EndCall` cleanup remain unchanged. Remaining: backend routes and operation ledger, explicit canonical session selection, room-leave cleanup with truthful failure/retry states, background/reconnect and real-media vertical proof. Never infer Space from room ID or enable the client seam from tests alone. Sources: [Voice Phase-0](../microservices/voice-service.md#phase-0-space-room-media-roster-и-lifecycle-target-не-реализовано); `src/frontend/lib/backend/voice_client.dart`; `src/frontend/lib/state/call_providers.dart`.
 - [x] **[Voice] Reconnect restores active media projection** — every accepted Realtime `hello` reconciles `GetActiveCall`; no active session clears stale LiveKit/screen UI, active session replaces it, and REST failure retains state for retry. `GetVoiceStates` is authoritative for screen sharers while LiveKit tracks gate renderability.
 - [ ] **Screen share: desktop source picker + system audio (Windows); явный simulcast 720/360/180** — [screen-share.md](../features/screen-share.md).
-- [ ] **Settings language sync** — profile.locale vs OS pref; API error codes локализация. [i18n.md](../features/i18n.md).
+- [x] **Settings language sync** — сохранение `profile.locale`, приоритет
+  текущего профиля и временный System описаны в [i18n.md](../features/i18n.md).
+  `profile_locale_settings_test.dart` проверяет save/retry, profile/session
+  switch, reload, изменение с другого устройства и OS fallback;
+  `voice_app_i18n_test.dart` и `api_error_messages_test.dart` проверяют безопасные
+  локализованные API errors. Live cross-device/backend acceptance отдельно.
 
 
 **Промпт-якорь:** `Growth/A11y from docs/todo/client.md Common Batch 5`.
@@ -190,7 +195,7 @@ Baseline (2026-06) закрыт; хвосты UX/E2E ниже. Спека: [auth
 - [x] **Convert-guest live в compose-e2e** — `TestComposeConvertGuest_live` in `.github/ci/e2e-features.yml` smoke_gateway (CI tier 2).
 - [x] **Convert-guest: negative Auth integration tests** — duplicate email, password <8, non-guest token, missing email/phone in `ConvertGuestIntegrationTest`.
 - [x] **Convert-guest: NATS `user.guest_converted`** — `TestComposeConvertGuestNATS_live` shipped (P1.1).
-- [ ] **Guest save-account reminder: server last-shown** — в спеке «локальный или серверный timestamp»; сейчас только `SharedPreferences` (кросс-устройство не синхронизируется).
+- [ ] **Guest save-account reminder: current-version acceptance** — Auth хранит `guest_reminder_last_shown_at` и атомарно резервирует показ не чаще одного раза за любые 24 часа на guest account; `SharedPreferences` служит локальным fast path. Канон включает последующие входы с того же или другого устройства ([auth-and-contacts.md](../features/auth-and-contacts.md#гостевая-учётка)). Реализация и concurrency/cadence tests уже существуют; остаётся приёмка текущей версии по `CL-026`, а не добавление второго server timestamp endpoint.
 
 
 **Промпт-якорь:** `Guest accounts UX from docs/todo/client.md Common Batch 6`.

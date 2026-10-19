@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -41,6 +42,7 @@ func TestSpacePurgeDeletesOnlySavedChatRowsAfterOwnerProofAndReplays(t *testing.
 	pool := startChatDBForStoreTest(t, ctx)
 	applyChatMigrationsForStoreTest(t, ctx, pool)
 	applyChatMigrationFile(t, ctx, pool, "000021_chat_deleted_event_outbox.up.sql")
+	applyScopeAuthorityMigration(t, ctx, pool)
 	spaceID, operationID, profileID := uuid.New(), uuid.New(), uuid.New()
 	chatID := uuid.New()
 	_, err := pool.Exec(ctx, `INSERT INTO chats(id,type,space_id,name,creator_profile_id) VALUES($1,'channel',$2,'remove-me',$3)`, chatID, spaceID, profileID)
@@ -62,6 +64,9 @@ func TestSpacePurgeDeletesOnlySavedChatRowsAfterOwnerProofAndReplays(t *testing.
 	changed.Purge.Manifest.ManifestSha256 = bytes.Repeat([]byte{0x5a}, 32)
 	require.ErrorIs(t, lifecycle.ValidateSpacePurgeRequest(ctx, changed), ErrSpaceLifecycleState)
 	require.NoError(t, lifecycle.ValidateSpacePurgeRequest(ctx, request))
+	pending, err := lifecycle.LookupSpacePurgeReceipt(ctx, request)
+	require.NoError(t, err)
+	require.Nil(t, pending, "a valid uncompleted decision still needs owner proof")
 	evidence := spacePurgeEvidenceForTest(t, purge)
 	_, err = lifecycle.PurgeSpace(ctx, changed, evidence)
 	require.Error(t, err, "invalid purge evidence must not delete Chat rows or enqueue a terminal event")
@@ -71,7 +76,53 @@ func TestSpacePurgeDeletesOnlySavedChatRowsAfterOwnerProofAndReplays(t *testing.
 	var beforePurge int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM chats WHERE id=$1`, chatID).Scan(&beforePurge))
 	require.Equal(t, 1, beforePurge)
+	var scopeRevisionBefore int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT revision FROM chat_scope_authority_heads WHERE chat_id=$1 AND present`, chatID).Scan(&scopeRevisionBefore))
 	first, err := lifecycle.PurgeSpace(ctx, request, evidence)
+	require.NoError(t, err)
+	// P3 removes the saved native resource while preserving its permanent ABA
+	// guard. The deleted resource must no longer produce current authority.
+	var scopePresent bool
+	var scopeRevisionAfter int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT present,revision FROM chat_scope_authority_heads WHERE chat_id=$1`, chatID).Scan(&scopePresent, &scopeRevisionAfter))
+	require.False(t, scopePresent)
+	require.Greater(t, scopeRevisionAfter, scopeRevisionBefore)
+	_, err = (&DMStore{Pool: pool}).GetSpaceChatScopeAuthority(ctx, chatID, spaceID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	// A new process can replay the exact committed wrapper while remote owners
+	// are absent. Preserve unknown owner response fields rather than rebuilding it.
+	restarted := &SpaceLifecycleStore{Pool: pool}
+	withUnknown := proto.Clone(first).(*chatv1.PurgeSpaceResponse)
+	withUnknown.ProtoReflect().SetUnknown([]byte{0xa0, 0x06, 0x07})
+	unknownWire, err := proto.MarshalOptions{Deterministic: true}.Marshal(withUnknown)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE chat_space_lifecycle_operations SET response_bytes=$2 WHERE space_id=$1 AND operation_kind='PURGE'`, spaceID, unknownWire)
+	require.NoError(t, err)
+	saved, err := restarted.LookupSpacePurgeReceipt(ctx, proto.Clone(request).(*chatv1.PurgeSpaceRequest))
+	require.NoError(t, err)
+	savedWire, err := proto.MarshalOptions{Deterministic: true}.Marshal(saved)
+	require.NoError(t, err)
+	require.Equal(t, unknownWire, savedWire)
+	_, err = restarted.LookupSpacePurgeReceipt(ctx, changed)
+	require.ErrorIs(t, err, ErrSpaceLifecycleConflict)
+	_, err = pool.Exec(ctx, `UPDATE chat_space_lifecycle_operations SET request_sha256=$2 WHERE space_id=$1 AND operation_kind='PURGE'`, spaceID, bytes.Repeat([]byte{0x5a}, 32))
+	require.NoError(t, err)
+	_, err = restarted.LookupSpacePurgeReceipt(ctx, request)
+	require.ErrorIs(t, err, ErrSpaceLifecycleConflict)
+	requestWire, err := proto.MarshalOptions{Deterministic: true}.Marshal(request)
+	require.NoError(t, err)
+	requestDigest := chatLifecycleDigest("voice.chat.v1.PurgeSpaceRequest", requestWire)
+	_, err = pool.Exec(ctx, `UPDATE chat_space_lifecycle_operations SET request_sha256=$2,response_bytes=$3 WHERE space_id=$1 AND operation_kind='PURGE'`, spaceID, requestDigest[:], []byte{0xff})
+	require.NoError(t, err)
+	_, err = restarted.LookupSpacePurgeReceipt(ctx, request)
+	require.ErrorIs(t, err, ErrSpaceLifecycleEvidence)
+	originalWire, err := proto.MarshalOptions{Deterministic: true}.Marshal(first)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE chat_space_lifecycle_operations SET response_bytes=$2,retain_until=clock_timestamp() WHERE space_id=$1 AND operation_kind='PURGE'`, spaceID, originalWire)
+	require.NoError(t, err)
+	_, err = restarted.LookupSpacePurgeReceipt(ctx, request)
+	require.ErrorIs(t, err, ErrSpaceLifecycleState, "expiry must not restart owner effects")
+	_, err = pool.Exec(ctx, `UPDATE chat_space_lifecycle_operations SET retain_until=completed_at+interval '30 days' WHERE space_id=$1 AND operation_kind='PURGE'`, spaceID)
 	require.NoError(t, err)
 	var eventID uuid.UUID
 	var eventBytes []byte

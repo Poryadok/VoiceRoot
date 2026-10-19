@@ -167,7 +167,7 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 		attrs = append(attrs, slog.String("space_id", created.GetSpaceId()), slog.String("owner_profile_id", created.GetOwnerProfileId()))
 	}
 	if invite := env.GetSpaceInviteCreated(); invite != nil {
-		attrs = append(attrs, slog.String("space_id", invite.GetSpaceId()), slog.String("invite_code", invite.GetInviteCode()))
+		attrs = append(attrs, slog.String("space_id", invite.GetSpaceId()))
 	}
 	natslog.LogPublish(p.Logger, subject, requestID, "space event published", attrs...)
 	return nil

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -13,14 +14,21 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	callsv1 "voice.app/voice/calls/v1"
+	"voice/backend/voice/internal/admissionlock"
 )
 
 var ErrSdkConversionFencePending = errors.New("sdk conversion fence pending")
 
 type SdkConversionFenceReservation struct {
-	Response   *callsv1.FenceSdkConversionResponse
-	SourceRoom string
-	Complete   bool
+	Response     *callsv1.FenceSdkConversionResponse
+	SourceRoom   string
+	Complete     bool
+	NativeSource *NativeOrdinaryConversionSource
+}
+
+type NativeOrdinaryConversionSource struct {
+	RoomID, RoomOperationID, AccountID, ProfileID, Generation, FenceOperationID uuid.UUID
+	MediaIdentity                                                               string
 }
 
 // ReserveSdkConversionFence persists the immutable request before media side effects.
@@ -36,7 +44,7 @@ func (s *PostgresStore) ReserveSdkConversionFence(ctx context.Context,
 		return SdkConversionFenceReservation{}, ErrInvalidRequest
 	}
 	hash := sha256.Sum256(requestBytes)
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return SdkConversionFenceReservation{}, err
 	}
@@ -44,16 +52,25 @@ func (s *PostgresStore) ReserveSdkConversionFence(ctx context.Context,
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))`, ids.operation); err != nil {
 		return SdkConversionFenceReservation{}, err
 	}
+	if err := admissionlock.Lock(ctx, tx, []admissionlock.Identity{{AccountID: ids.sourceAccount, ProfileID: ids.sourceProfile}, {AccountID: ids.targetAccount, ProfileID: ids.targetProfile}}); err != nil {
+		return SdkConversionFenceReservation{}, err
+	}
+	var sourceJSON []byte
+	var nativeSource *NativeOrdinaryConversionSource
 	var storedHash []byte
 	var state string
 	var room string
 	var response callsv1.FenceSdkConversionResponse
 	var observedAt, committedStampAt *time.Time
+	snapshotColumn := "NULL::jsonb"
+	if s.ordinaryConversions {
+		snapshotColumn = "ordinary_source_snapshot"
+	}
 	err = tx.QueryRow(ctx, `SELECT request_hash,state,COALESCE(source_room_id,''),receipt_id::text,
-		observed_ejection_at,committed_at,target_session_conflict,media_generation
+		observed_ejection_at,committed_at,target_session_conflict,media_generation,`+snapshotColumn+`
 		FROM voice_sdk_conversion_fence_receipts WHERE operation_id=$1 FOR UPDATE`, ids.operation).Scan(
 		&storedHash, &state, &room, &response.ReceiptId, &observedAt,
-		&committedStampAt, &response.TargetSessionConflict, &response.MediaGeneration)
+		&committedStampAt, &response.TargetSessionConflict, &response.MediaGeneration, &sourceJSON)
 	if err == nil {
 		if observedAt != nil {
 			response.ObservedEjectionAt = timestamppb.New(*observedAt)
@@ -64,7 +81,7 @@ func (s *PostgresStore) ReserveSdkConversionFence(ctx context.Context,
 		if !bytes.Equal(storedHash, hash[:]) {
 			return SdkConversionFenceReservation{}, ErrConflict
 		}
-		if state == "fenced" || state == "conflict" {
+		if state == "fenced" || state == "conflict" || state == "activated" {
 			response = *conversionFenceResponse(req, ids, response.ReceiptId, hash[:], state == "conflict", room,
 				response.MediaGeneration, response.ObservedEjectionAt, response.CommittedAt)
 			if commitErr := tx.Commit(ctx); commitErr != nil {
@@ -75,30 +92,65 @@ func (s *PostgresStore) ReserveSdkConversionFence(ctx context.Context,
 		if state != "pending" {
 			return SdkConversionFenceReservation{}, ErrConflict
 		}
+		if s.ordinaryConversions {
+			if len(sourceJSON) == 0 {
+				return SdkConversionFenceReservation{}, ErrConflict
+			}
+			var snap nativeConversionSnapshot
+			if err := json.Unmarshal(sourceJSON, &snap); err != nil || snap.Version != 1 {
+				return SdkConversionFenceReservation{}, ErrConflict
+			}
+			nativeSource = snap.Source
+		}
 		response = *conversionFenceResponse(req, ids, response.ReceiptId, hash[:], response.TargetSessionConflict, room, response.MediaGeneration, nil, nil)
 		if commitErr := tx.Commit(ctx); commitErr != nil {
 			return SdkConversionFenceReservation{}, commitErr
 		}
-		return SdkConversionFenceReservation{Response: &response, SourceRoom: room}, nil
+		return SdkConversionFenceReservation{Response: &response, SourceRoom: room, NativeSource: nativeSource}, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return SdkConversionFenceReservation{}, err
 	}
+	if s.ordinaryConversions {
+		// Separate READ COMMITTED statements after the identity barrier; never
+		// lock a native room or fence row in this transaction (room-first writers).
+		snap, err := snapshotNativeConversion(ctx, tx, ids, sourceRoom)
+		if err != nil {
+			return SdkConversionFenceReservation{}, err
+		}
+		targetConflict = targetConflict || snap.TargetConflict
+		sourceRoom = snap.SourceRoom
+		nativeSource = snap.Source
+		sourceJSON, err = json.Marshal(snap)
+		if err != nil {
+			return SdkConversionFenceReservation{}, err
+		}
+	}
 	receiptID := uuid.New()
 	state = "pending"
-	if _, err := tx.Exec(ctx, `INSERT INTO voice_sdk_conversion_fence_receipts(
+	if !s.ordinaryConversions {
+		if _, err := tx.Exec(ctx, `INSERT INTO voice_sdk_conversion_fence_receipts(
+operation_id,binding_id,source_account_id,source_actor_id,source_profile_id,target_account_id,target_profile_id,
+frozen_authority_epoch,freeze_receipt_id,request_hash,receipt_id,state,source_room_id,target_session_conflict,committed_at)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NULL)`, ids.operation, ids.binding, ids.sourceAccount,
+			ids.sourceActor, ids.sourceProfile, ids.targetAccount, ids.targetProfile, req.GetFrozenAuthorityEpoch(), ids.freezeReceipt, hash[:], receiptID, state, nullableRoom(sourceRoom), targetConflict); err != nil {
+			return SdkConversionFenceReservation{}, err
+		}
+	} else {
+		if _, err := tx.Exec(ctx, `INSERT INTO voice_sdk_conversion_fence_receipts(
 		operation_id,binding_id,source_account_id,source_actor_id,source_profile_id,target_account_id,target_profile_id,
-		frozen_authority_epoch,freeze_receipt_id,request_hash,receipt_id,state,source_room_id,target_session_conflict,committed_at)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NULL)`, ids.operation, ids.binding, ids.sourceAccount,
-		ids.sourceActor, ids.sourceProfile, ids.targetAccount, ids.targetProfile, req.GetFrozenAuthorityEpoch(),
-		ids.freezeReceipt, hash[:], receiptID, state, nullableRoom(sourceRoom), targetConflict); err != nil {
-		return SdkConversionFenceReservation{}, err
+		frozen_authority_epoch,freeze_receipt_id,request_hash,receipt_id,state,source_room_id,target_session_conflict,committed_at,ordinary_source_snapshot)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NULL,$15)`, ids.operation, ids.binding, ids.sourceAccount,
+			ids.sourceActor, ids.sourceProfile, ids.targetAccount, ids.targetProfile, req.GetFrozenAuthorityEpoch(),
+			ids.freezeReceipt, hash[:], receiptID, state, nullableRoom(sourceRoom), targetConflict, sourceJSON); err != nil {
+			return SdkConversionFenceReservation{}, err
+		}
 	}
 	response = *conversionFenceResponse(req, ids, receiptID.String(), hash[:], targetConflict, sourceRoom, 1, nil, nil)
 	if err := tx.Commit(ctx); err != nil {
 		return SdkConversionFenceReservation{}, err
 	}
-	return SdkConversionFenceReservation{Response: &response, SourceRoom: sourceRoom}, nil
+	return SdkConversionFenceReservation{Response: &response, SourceRoom: sourceRoom, NativeSource: nativeSource}, nil
 }
 
 // CompleteSdkConversionFence commits the owner receipt only after the source media is fenced.
@@ -234,7 +286,8 @@ func (s *PostgresStore) IsSdkConversionProfileFenced(ctx context.Context, profil
 	}
 	var fenced bool
 	err = s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM voice_sdk_conversion_fence_receipts
-		WHERE (state IN ('pending','fenced') AND (source_profile_id=$1 OR target_profile_id=$1))
+		WHERE (state IN ('pending','fenced') AND (source_profile_id=$1 OR target_profile_id=$1
+		OR target_account_id IN (SELECT account_id FROM voice_profile_account_mappings WHERE profile_id=$1)))
 		OR (state='activated' AND source_profile_id=$1))`, profile).Scan(&fenced)
 	return fenced, err
 }

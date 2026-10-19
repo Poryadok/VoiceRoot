@@ -253,11 +253,11 @@ func (s *StoryGRPC) GetStoryFeed(ctx context.Context, req *storyv1.GetStoryFeedR
 	var pageErr error
 	if s.FeedAuthors != nil {
 		authorIDs, listErr := s.FeedAuthors.ListFeedAuthorIDs(ctx, viewerID)
-		if listErr == nil {
-			page, pageErr = s.Store.ListActiveStoriesForAuthorsPaginated(ctx, authorIDs, int(limit), cursor)
+		if listErr != nil {
+			return nil, status.Error(codes.Unavailable, "story feed authors unavailable")
 		}
-	}
-	if page == nil {
+		page, pageErr = s.Store.ListActiveStoriesForAuthorsPaginated(ctx, authorIDs, int(limit), cursor)
+	} else {
 		page, pageErr = s.Store.ListActiveStoriesPaginated(ctx, int(limit), cursor)
 	}
 	if pageErr != nil {

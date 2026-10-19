@@ -42,8 +42,12 @@ type AdmissionRecoveryStore interface {
 	RecoverOrphanRoomHeads(context.Context) error
 	ConfirmProjection(context.Context, uuid.UUID, string) error
 	ConfirmRoomHeadOpen(context.Context, store.SpaceMediaAdmission) error
-	BeginRoomLeave(context.Context, uuid.UUID, string) error
-	CompleteRoomLeave(context.Context, store.SpaceMediaAdmission) error
+	BeginOwnedRoomLeave(context.Context, store.SpaceAdmissionOwnership, uuid.UUID, string) error
+	CompleteOwnedRoomLeave(context.Context, store.SpaceAdmissionOwnership, store.SpaceMediaAdmission) error
+	BeginRestrictiveRoomLeave(context.Context, store.SpaceMediaAdmission) (store.SpaceAdmissionRevocation, error)
+	CompleteRestrictiveRoomLeave(context.Context, store.SpaceAdmissionRevocation) error
+	FenceOwnedRoomLeave(context.Context, store.SpaceAdmissionOwnership, uuid.UUID, store.SpaceAdmissionProjectionGates) (store.SpaceProjectionTicket, error)
+	FenceRestrictiveRoomLeave(context.Context, store.SpaceAdmissionRevocation, store.SpaceAdmissionProjectionGates) (store.SpaceProjectionTicket, error)
 	RecoveryRows(context.Context, int) ([]store.SpaceMediaAdmission, error)
 	ProjectionRows(context.Context, uuid.UUID, int, bool) ([]store.SpaceMediaAdmission, error)
 	RoomCreator(context.Context, string, uint64) (store.SpaceMediaAdmission, error)
@@ -86,6 +90,8 @@ type AuthorityNotice struct {
 }
 
 type Coordinator struct {
+	ProjectionGates     store.SpaceProjectionGates
+	ResumeP3            func(context.Context) error
 	reconcileMu         sync.Mutex
 	ready               bool
 	Store               Store
@@ -220,30 +226,13 @@ func (c *Coordinator) reconcileAdmissions(ctx context.Context) error {
 			break
 		}
 		for _, admission := range rows {
-			if admission.State == AdmissionCommitted && admission.ProjectionApplied && admission.ParticipantState == "REVOKING" {
-				if err := c.recoverRevokingAdmission(ctx, admission); err != nil {
-					return err
-				}
-				continue
-			}
-			if admission.State == AdmissionAborting || admission.State == AdmissionPrepared || admission.State == AdmissionFenced {
-				if err := c.abortAdmission(ctx, admission); err != nil {
-					return err
-				}
-				continue
-			}
-			if admission.State != AdmissionCommitted || admission.ProjectionApplied {
-				continue
-			}
-			if err := c.recoverCommittedAdmission(ctx, admission); err != nil {
+			if err := c.reconcileOwnedAdmission(ctx, admission); err != nil {
 				return err
 			}
 		}
 	}
-	// PostgreSQL is the lifecycle source of truth. Redis call/participant
-	// projections may be lost independently, so rebuild every currently active
-	// committed admission from its immutable journal row before opening serving.
-	// Rebuild creator rows first so a lost call shell exists before joiners.
+	// Rebuild creators first, with the same durable ownership arbitration as
+	// unfinished operations. Another healthy owner can finish its own projection.
 	for _, creators := range []bool{true, false} {
 		after := uuid.Nil
 		for {
@@ -258,7 +247,7 @@ func (c *Coordinator) reconcileAdmissions(ctx context.Context) error {
 				if admission.State != AdmissionCommitted || !admission.ProjectionApplied || admission.ParticipantState != "ACTIVE" || admission.CreatedRoom != creators {
 					return ErrAdmissionConflict
 				}
-				if err := c.recoverCommittedAdmission(ctx, admission); err != nil {
+				if err := c.reconcileOwnedAdmission(ctx, admission); err != nil {
 					return err
 				}
 				after = admission.OperationID
@@ -268,6 +257,39 @@ func (c *Coordinator) reconcileAdmissions(ctx context.Context) error {
 	return nil
 }
 
+func (c *Coordinator) reconcileOwnedAdmission(ctx context.Context, candidate store.SpaceMediaAdmission) error {
+	ownership, ok := c.Admissions.(interface {
+		ClaimAdmissionRecovery(context.Context, store.SpaceMediaAdmission) (store.SpaceMediaAdmission, bool, error)
+		HoldAdmissionOwnership(context.Context, uuid.UUID) (context.Context, func(), error)
+	})
+	if !ok {
+		return ErrAdmissionUnavailable
+	}
+	admission, claimed, err := ownership.ClaimAdmissionRecovery(ctx, candidate)
+	if err != nil || !claimed {
+		return err
+	}
+	ctx = store.WithSpaceAdmissionOwnership(ctx, admission.Ownership)
+	ctx, stop, err := ownership.HoldAdmissionOwnership(ctx, admission.OperationID)
+	if err != nil {
+		return err
+	}
+	defer stop()
+	if admission.State == AdmissionCommitted && admission.ProjectionApplied && admission.ParticipantState == "REVOKING" {
+		return c.recoverRevokingAdmission(ctx, admission)
+	}
+	if admission.State == AdmissionAborting || admission.State == AdmissionPrepared || admission.State == AdmissionFenced {
+		return c.abortAdmission(ctx, admission)
+	}
+	if admission.State != AdmissionCommitted || admission.ProjectionApplied {
+		if admission.State == AdmissionCommitted && admission.ProjectionApplied && admission.ParticipantState == "ACTIVE" {
+			return c.recoverCommittedAdmission(ctx, admission)
+		}
+		return nil
+	}
+	return c.recoverCommittedAdmission(ctx, admission)
+}
+
 func (c *Coordinator) recoverRevokingAdmission(ctx context.Context, admission store.SpaceMediaAdmission) error {
 	call, err := c.Calls.GetCall(ctx, admission.RoomID)
 	if err == nil {
@@ -275,7 +297,7 @@ func (c *Coordinator) recoverRevokingAdmission(ctx context.Context, admission st
 			if participant.AdmissionOperationID != admission.OperationID.String() || participant.Generation != admission.Generation || participant.Identity != admission.Identity {
 				return ErrAdmissionConflict
 			}
-			_, completed, err := c.ejectParticipant(ctx, call, participant)
+			_, completed, err := c.ejectOwnedParticipant(ctx, admission.Ownership, call, participant)
 			if err != nil {
 				return err
 			}
@@ -287,21 +309,47 @@ func (c *Coordinator) recoverRevokingAdmission(ctx context.Context, admission st
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return err
 	}
+	gates, ok := c.ProjectionGates.(store.SpaceAdmissionProjectionGates)
+	if !ok {
+		return ErrAdmissionUnavailable
+	}
+	if err := c.Admissions.BeginOwnedRoomLeave(ctx, admission.Ownership, admission.OperationID, admission.Generation); err != nil {
+		return err
+	}
+	if _, err := c.Admissions.FenceOwnedRoomLeave(ctx, admission.Ownership, admission.OperationID, gates); err != nil {
+		return err
+	}
 	// The database may be ahead of a lost/removed Redis projection. Remove the
 	// same immutable LiveKit identity before releasing its fence or ending the
 	// room generation; a failed removal keeps readiness closed for retry.
 	if err := c.Media.RemoveParticipant(ctx, "voice-room-"+admission.VoiceRoomID, admission.Identity); err != nil {
 		return err
 	}
-	return c.Admissions.CompleteRoomLeave(ctx, admission)
+	return c.Admissions.CompleteOwnedRoomLeave(ctx, admission.Ownership, admission)
 }
 
 func (c *Coordinator) abortAdmission(ctx context.Context, admission store.SpaceMediaAdmission) error {
+	owner, ok := store.SpaceAdmissionOwnershipFromContext(ctx, admission.OperationID)
+	if !ok {
+		return ErrAdmissionConflict
+	}
+	admission.Ownership = owner
 	if admission.State != AdmissionAborting {
 		if err := c.Admissions.MarkAborting(ctx, admission.OperationID, admission.Generation); err != nil {
 			return err
 		}
 	}
+	fencer, ok := c.Admissions.(interface {
+		FenceAbortedAdmission(context.Context, uuid.UUID, store.SpaceAdmissionProjectionGates) error
+	})
+	gates, gatesOK := c.ProjectionGates.(store.SpaceAdmissionProjectionGates)
+	if !ok || !gatesOK {
+		return ErrAdmissionUnavailable
+	}
+	if err := fencer.FenceAbortedAdmission(ctx, admission.OperationID, gates); err != nil {
+		return err
+	}
+	admission.State = AdmissionAborting
 	// An ABORTING row may be a retry after the process failed partway through
 	// draining a committed projection. Re-inspect the exact operation on every
 	// retry before releasing its fence; state alone does not prove cleanup ran.
@@ -312,7 +360,7 @@ func (c *Coordinator) abortAdmission(ctx context.Context, admission store.SpaceM
 				if participant.AdmissionOperationID != admission.OperationID.String() || participant.Generation != admission.Generation || participant.Identity != admission.Identity {
 					return ErrAdmissionConflict
 				}
-				if _, completed, err := c.ejectParticipant(ctx, call, participant); err != nil || !completed {
+				if _, completed, err := c.ejectOwnedParticipant(ctx, admission.Ownership, call, participant); err != nil || !completed {
 					if err != nil {
 						return err
 					}
@@ -336,6 +384,11 @@ func (c *Coordinator) abortAdmission(ctx context.Context, admission store.SpaceM
 }
 
 func (c *Coordinator) recoverCommittedAdmission(ctx context.Context, admission store.SpaceMediaAdmission) error {
+	ticket, err := c.prepareProjection(ctx, admission)
+	if err != nil {
+		return err
+	}
+
 	if err := c.Admissions.ConfirmRoomHeadOpen(ctx, admission); err != nil {
 		return err
 	}
@@ -346,7 +399,10 @@ func (c *Coordinator) recoverCommittedAdmission(ctx context.Context, admission s
 	if err != nil && status.Code(err) != codes.NotFound {
 		return err
 	}
-	if err != nil || access.SpaceID != admission.SpaceID.String() || !access.Active || !access.Member || access.AccessEpoch != admission.AccessEpoch {
+	if err == nil && !access.CommunicationStateResolved {
+		return status.Error(codes.Unavailable, "Space communication authority incomplete")
+	}
+	if err != nil || access.SpaceID != admission.SpaceID.String() || !access.Active || !access.Member || access.TimedOut || access.AccessEpoch != admission.AccessEpoch {
 		return c.abortAdmission(ctx, admission)
 	}
 	grants, err := c.Grants.ResolveVoiceRoomGrants(ctx, admission.SpaceID.String(), admission.VoiceRoomID, admission.ProfileID.String())
@@ -375,11 +431,18 @@ func (c *Coordinator) recoverCommittedAdmission(ctx context.Context, admission s
 	}
 	call, err := c.Calls.GetCall(ctx, admission.RoomID)
 	if errors.Is(err, store.ErrNotFound) {
-		creator, creatorErr := c.Admissions.RoomCreator(ctx, admission.VoiceRoomID, admission.RoomGeneration)
-		if creatorErr != nil {
-			return creatorErr
+		// A creator may have committed before its first Redis dispatch. Its
+		// immutable journal is then its own creator witness; requiring an applied
+		// marker would make this crash boundary permanently unrecoverable.
+		creator := admission
+		if !admission.CreatedRoom {
+			var creatorErr error
+			creator, creatorErr = c.Admissions.RoomCreator(ctx, admission.VoiceRoomID, admission.RoomGeneration)
+			if creatorErr != nil {
+				return creatorErr
+			}
 		}
-		call = store.Call{RoomID: admission.RoomID, LivekitRoomName: "voice-room-" + admission.VoiceRoomID,
+		call = store.Call{SpaceProjectionTicket: ticket, RoomID: admission.RoomID, SpaceLifecycleGeneration: admission.LifecycleGeneration, LivekitRoomName: "voice-room-" + admission.VoiceRoomID,
 			VoiceRoomID: admission.VoiceRoomID, SpaceID: admission.SpaceID.String(),
 			SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM,
 			InitiatorProfileID: creator.ProfileID.String(), MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
@@ -404,7 +467,7 @@ func (c *Coordinator) recoverCommittedAdmission(ctx context.Context, admission s
 	} else {
 		if _, err := c.Calls.AdmitSpaceMediaParticipant(ctx, call.RoomID, store.SpaceMediaParticipant{
 			AccountID: admission.AccountID.String(), AdmissionOperationID: admission.OperationID.String(),
-			RoomGeneration: admission.RoomGeneration, CreatedRoom: admission.CreatedRoom,
+			ProjectionTicket: ticket, LifecycleGeneration: admission.LifecycleGeneration, RoomGeneration: admission.RoomGeneration, CreatedRoom: admission.CreatedRoom,
 			ProfileID: admission.ProfileID.String(), Identity: admission.Identity, Generation: admission.Generation,
 			Issued: store.SpaceMediaGrant{SessionEpoch: admission.SessionEpoch, AccessEpoch: admission.AccessEpoch, PolicyEpoch: admission.PolicyEpoch,
 				CanJoin: admission.CanJoin, CanPublishAudio: admission.CanPublishAudio, CanSubscribe: admission.CanSubscribe},
@@ -465,14 +528,14 @@ func (c *Coordinator) reconcileParticipant(ctx context.Context, call store.Call,
 		return accessErr
 	}
 	if accessErr == nil {
-		if access.SpaceID != call.SpaceID || access.AccessEpoch == 0 {
+		if access.SpaceID != call.SpaceID || access.AccessEpoch == 0 || !access.CommunicationStateResolved {
 			return fmt.Errorf("incomplete canonical Space voice authority")
 		}
 		if _, err := c.Store.RaiseSpaceMediaEpochFloor(ctx, call.SpaceID, store.SpaceAccessEpoch, access.AccessEpoch); err != nil {
 			return err
 		}
 	}
-	if accessErr != nil || !access.Active || !access.Member {
+	if accessErr != nil || !access.Active || !access.Member || access.TimedOut {
 		return c.eject(ctx, call, participant)
 	}
 
@@ -497,7 +560,20 @@ func (c *Coordinator) reconcileParticipant(ctx context.Context, call store.Call,
 		AccessEpoch:  access.AccessEpoch, PolicyEpoch: grants.PolicyEpoch,
 		CanJoin: grants.CanJoin, CanPublishAudio: grants.CanPublishAudio, CanSubscribe: grants.CanSubscribe,
 	}
-	_, _, err = c.Store.ReconcileSpaceMediaParticipant(ctx, call.RoomID, participant.ProfileID, participant.Identity, participant.Generation, grant)
+	projectionCtx := ctx
+	if participant.AdmissionOperationID != "" {
+		op, err := uuid.Parse(participant.AdmissionOperationID)
+		if err != nil {
+			return err
+		}
+		ticket, err := c.prepareProjection(ctx, store.SpaceMediaAdmission{OperationID: op, Generation: participant.Generation, SpaceID: uuid.MustParse(call.SpaceID)})
+		if err != nil {
+			return err
+		}
+		projectionCtx = store.WithSpaceProjectionTicket(ctx, ticket)
+	}
+
+	_, _, err = c.Store.ReconcileSpaceMediaParticipant(projectionCtx, call.RoomID, participant.ProfileID, participant.Identity, participant.Generation, grant)
 	if errors.Is(err, store.ErrSpaceMediaStaleGrant) {
 		return ErrReconciliationPending
 	}
@@ -524,16 +600,63 @@ func (c *Coordinator) RevokeSpaceMediaParticipant(ctx context.Context, call stor
 }
 
 func (c *Coordinator) ejectParticipant(ctx context.Context, call store.Call, participant store.SpaceMediaParticipant) (store.Call, bool, error) {
-	if c.Admissions == nil {
+	op, err := uuid.Parse(participant.AdmissionOperationID)
+	if err != nil || c.Admissions == nil {
 		return call, false, store.ErrInvalidState
 	}
-	operationID, opErr := uuid.Parse(participant.AdmissionOperationID)
-	if opErr != nil {
+	account, accountErr := uuid.Parse(participant.AccountID)
+	profile, profileErr := uuid.Parse(participant.ProfileID)
+	space, spaceErr := uuid.Parse(call.SpaceID)
+	if accountErr != nil || profileErr != nil || spaceErr != nil {
 		return call, false, store.ErrInvalidState
 	}
-	if err := c.Admissions.BeginRoomLeave(ctx, operationID, participant.Generation); err != nil {
+	expected := store.SpaceMediaAdmission{OperationID: op, Generation: participant.Generation, AccountID: account, ProfileID: profile, SpaceID: space, RoomID: call.RoomID, VoiceRoomID: call.VoiceRoomID, RoomGeneration: participant.RoomGeneration, Identity: participant.Identity}
+	target, err := c.Admissions.BeginRestrictiveRoomLeave(ctx, expected)
+	if err != nil {
 		return call, false, err
 	}
+	gates, ok := c.ProjectionGates.(store.SpaceAdmissionProjectionGates)
+	if !ok {
+		return call, false, ErrAdmissionUnavailable
+	}
+	ticket, err := c.Admissions.FenceRestrictiveRoomLeave(ctx, target, gates)
+	if err != nil {
+		return call, false, err
+	}
+	return c.drainParticipant(ctx, call, participant, ticket, func(ctx context.Context) error { return c.Admissions.CompleteRestrictiveRoomLeave(ctx, target) })
+}
+
+func (c *Coordinator) ejectOwnedParticipant(ctx context.Context, owner store.SpaceAdmissionOwnership, call store.Call, participant store.SpaceMediaParticipant) (store.Call, bool, error) {
+	op, err := uuid.Parse(participant.AdmissionOperationID)
+	if err != nil || c.Admissions == nil {
+		return call, false, store.ErrInvalidState
+	}
+	if err := c.Admissions.BeginOwnedRoomLeave(ctx, owner, op, participant.Generation); err != nil {
+		return call, false, err
+	}
+	gates, ok := c.ProjectionGates.(store.SpaceAdmissionProjectionGates)
+	if !ok {
+		return call, false, ErrAdmissionUnavailable
+	}
+	ticket, err := c.Admissions.FenceOwnedRoomLeave(ctx, owner, op, gates)
+	if err != nil {
+		return call, false, err
+	}
+	a := store.SpaceMediaAdmission{OperationID: op, Generation: participant.Generation, AccountID: uuid.MustParse(participant.AccountID), ProfileID: uuid.MustParse(participant.ProfileID), SpaceID: uuid.MustParse(call.SpaceID), RoomID: call.RoomID}
+	return c.drainParticipant(ctx, call, participant, ticket, func(ctx context.Context) error { return c.Admissions.CompleteOwnedRoomLeave(ctx, owner, a) })
+}
+
+func (c *Coordinator) drainParticipant(ctx context.Context, call store.Call, participant store.SpaceMediaParticipant, ticket store.SpaceProjectionTicket, complete func(context.Context) error) (store.Call, bool, error) {
+	ticket.SpaceID = call.SpaceID
+	ticket.RoomID = call.RoomID
+	ticket.VoiceRoomID = call.VoiceRoomID
+	ticket.RoomGeneration = participant.RoomGeneration
+	ticket.OperationID = participant.AdmissionOperationID
+	ticket.AdmissionGeneration = participant.Generation
+	ticket.AccountID = participant.AccountID
+	ticket.ProfileID = participant.ProfileID
+	ticket.Identity = participant.Identity
+	ctx = store.WithSpaceCleanupTarget(ctx, ticket)
 	_, matched, err := c.Store.BeginSpaceMediaRevocation(ctx, call.RoomID, participant.ProfileID, participant.Identity, participant.Generation)
 	if err != nil || !matched {
 		return call, false, err
@@ -541,20 +664,11 @@ func (c *Coordinator) ejectParticipant(ctx context.Context, call store.Call, par
 	if err := c.Media.RemoveParticipant(ctx, call.LivekitRoomName, participant.Identity); err != nil {
 		return call, false, err
 	}
-	updated, completed, err := c.Store.CompleteSpaceMediaRevocation(ctx, call.RoomID, participant.ProfileID, participant.Identity, participant.Generation)
-	if err != nil || !completed {
-		return updated, completed, err
+	updated, done, err := c.Store.CompleteSpaceMediaRevocation(ctx, call.RoomID, participant.ProfileID, participant.Identity, participant.Generation)
+	if err != nil || !done {
+		return updated, done, err
 	}
-	accountID, accountErr := uuid.Parse(participant.AccountID)
-	profileID, profileErr := uuid.Parse(participant.ProfileID)
-	spaceID, spaceErr := uuid.Parse(call.SpaceID)
-	if accountErr != nil || profileErr != nil || spaceErr != nil {
-		return updated, false, store.ErrInvalidState
-	}
-	if err := c.Admissions.CompleteRoomLeave(ctx, store.SpaceMediaAdmission{
-		OperationID: operationID, Generation: participant.Generation, AccountID: accountID,
-		ProfileID: profileID, SpaceID: spaceID, RoomID: call.RoomID,
-	}); err != nil {
+	if err := complete(ctx); err != nil {
 		return updated, false, err
 	}
 	return updated, true, nil
@@ -578,6 +692,26 @@ func (c *Coordinator) ReconcileAll(ctx context.Context) error {
 			c.setReady(false)
 		}
 	}()
+	if c.Admissions != nil {
+		if c.ProjectionGates == nil {
+			return ErrAdmissionUnavailable
+		}
+		authority, ok := c.Admissions.(interface {
+			RebuildLifecycleWatermarks(context.Context, store.SpaceProjectionGates) error
+		})
+		if !ok {
+			return ErrAdmissionUnavailable
+		}
+		if err := authority.RebuildLifecycleWatermarks(ctx, c.ProjectionGates); err != nil {
+			return err
+		}
+	}
+
+	if c.ResumeP3 != nil {
+		if err := c.ResumeP3(ctx); err != nil && c.OnError != nil {
+			c.OnError(err)
+		}
+	}
 	if err := c.reconcileAdmissions(ctx); err != nil {
 		return err
 	}
@@ -633,3 +767,36 @@ func canonicalID(value string) bool {
 }
 
 var _ MediaLifecycle = (*livekit.RoomLifecycle)(nil)
+
+func (c *Coordinator) prepareProjection(ctx context.Context, a store.SpaceMediaAdmission) (store.SpaceProjectionTicket, error) {
+	if c.ProjectionGates == nil {
+		return store.SpaceProjectionTicket{}, ErrAdmissionUnavailable
+	}
+	authority, ok := c.Admissions.(interface {
+		ReadSpaceLifecycle(context.Context, string) (int64, bool, error)
+		ReadAdmissionDispatch(context.Context, string) (int64, bool, error)
+		AuthorizeSpaceProjection(context.Context, uuid.UUID, string, store.SpaceProjectionTicket) (store.SpaceProjectionTicket, error)
+	})
+	if !ok {
+		return store.SpaceProjectionTicket{}, ErrAdmissionUnavailable
+	}
+	if err := c.ProjectionGates.EnsureSpaceLifecycle(ctx, a.SpaceID.String(), authority.ReadSpaceLifecycle); err != nil {
+		return store.SpaceProjectionTicket{}, err
+	}
+	observed, err := c.ProjectionGates.ReadReadySpaceGate(ctx, a.SpaceID.String())
+	if err != nil {
+		return store.SpaceProjectionTicket{}, err
+	}
+	gates, ok := c.ProjectionGates.(store.SpaceAdmissionProjectionGates)
+	if !ok {
+		return store.SpaceProjectionTicket{}, ErrAdmissionUnavailable
+	}
+	dispatch, err := gates.EnsureAdmissionDispatch(ctx, a.OperationID.String(), authority.ReadAdmissionDispatch)
+	if err != nil {
+		return store.SpaceProjectionTicket{}, err
+	}
+	observed.AdmissionIncarnation = dispatch.AdmissionIncarnation
+	observed.AdmissionOwnerEpoch = dispatch.AdmissionOwnerEpoch
+	observed.AdmissionLive = dispatch.AdmissionLive
+	return authority.AuthorizeSpaceProjection(ctx, a.OperationID, a.Generation, observed)
+}

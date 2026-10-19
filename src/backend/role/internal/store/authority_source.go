@@ -7,12 +7,32 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"voice/backend/pkg/authoritysource"
 	authorityv1 "voice/backend/pkg/pb/voice/authority/v1"
 	"voice/backend/role/permissions"
 )
 
 var _ authoritysource.Reader = (*RoleStore)(nil)
+
+// Migration 17 only corrects Admin data; its owner catalog is identical to 16.
+// This read selects a fixed catalog, never authorizes from an unlocked hint:
+// BeginRead repeats the exact version/dirty/catalog proof under schema locks.
+func beginRoleAuthorityRead(ctx context.Context, pool *pgxpool.Pool) (pgx.Tx, error) {
+	if pool == nil {
+		return nil, errors.New("role source pool unavailable")
+	}
+	var version int64
+	if err := pool.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil {
+		return nil, errors.New("role source schema unavailable")
+	}
+	if version != 16 && version != 17 {
+		return nil, errors.New("role source schema version unavailable")
+	}
+	catalog := roleAuthorityCatalog
+	catalog.Version = version
+	return authoritysource.BeginRead(ctx, pool, catalog)
+}
 
 // CheckAuthoritySourceSchema gates registration before the dedicated listener
 // serves. Every subsequent read repeats the guard inside its consistent cut.
@@ -22,7 +42,7 @@ func (s *RoleStore) CheckAuthoritySourceSchema(ctx context.Context) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
-	tx, err := authoritysource.BeginRead(ctx, s.Pool, roleAuthorityCatalog)
+	tx, err := beginRoleAuthorityRead(ctx, s.Pool)
 	if err != nil {
 		return err
 	}
@@ -56,7 +76,7 @@ func (s *RoleStore) beginAuthorityRead(ctx context.Context, scope *authorityv1.S
 	if s == nil || s.tx != nil {
 		return nil, errors.New("source read requires owning pool")
 	}
-	return authoritysource.BeginRead(ctx, s.Pool, roleAuthorityCatalog)
+	return beginRoleAuthorityRead(ctx, s.Pool)
 }
 
 func (s *RoleStore) ReadAuthorityRevision(ctx context.Context, scope *authorityv1.SourceScope) (uint64, error) {

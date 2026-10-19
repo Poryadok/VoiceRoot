@@ -5,6 +5,7 @@ psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}" 
 	CREATE DATABASE user_db;
 	CREATE DATABASE social_db;
 	CREATE DATABASE chat_db;
+	CREATE DATABASE realtime_db;
 	CREATE DATABASE messaging_db;
 	CREATE DATABASE file_db;
 	CREATE DATABASE space_db;

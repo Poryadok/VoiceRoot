@@ -9,13 +9,13 @@ import (
 	"voice/backend/notification/internal/push"
 )
 
-// BuildVoIPNotification maps an incoming_call payload to a VoIP APNs notification.
-func BuildVoIPNotification(bundleID, deviceToken string, in push.Payload) (*apns2.Notification, error) {
+// BuildVoIPNotification maps an incoming_call payload to an exact VoIP APNs topic.
+func BuildVoIPNotification(topic, deviceToken string, in push.Payload) (*apns2.Notification, error) {
 	if deviceToken == "" {
 		return nil, fmt.Errorf("apns voip: device token required")
 	}
-	if bundleID == "" {
-		return nil, fmt.Errorf("apns voip: bundle id required")
+	if topic == "" {
+		return nil, fmt.Errorf("apns voip: topic required")
 	}
 	p := payload.NewPayload()
 	for k, v := range in.Data {
@@ -23,7 +23,7 @@ func BuildVoIPNotification(bundleID, deviceToken string, in push.Payload) (*apns
 	}
 	return &apns2.Notification{
 		DeviceToken: deviceToken,
-		Topic:       bundleID + ".voip",
+		Topic:       topic,
 		Payload:     p,
 		PushType:    apns2.PushTypeVOIP,
 		Priority:    apns2.PriorityHigh,

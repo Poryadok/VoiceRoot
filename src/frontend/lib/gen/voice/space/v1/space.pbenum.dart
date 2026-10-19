@@ -14,6 +14,33 @@ import 'dart:core' as $core;
 
 import 'package:protobuf/protobuf.dart' as $pb;
 
+/// Communication timeout is an additional deny, never membership or Role authority.
+class MemberCommunicationState extends $pb.ProtobufEnum {
+  static const MemberCommunicationState MEMBER_COMMUNICATION_STATE_UNSPECIFIED =
+      MemberCommunicationState._(
+          0, _omitEnumNames ? '' : 'MEMBER_COMMUNICATION_STATE_UNSPECIFIED');
+  static const MemberCommunicationState MEMBER_COMMUNICATION_STATE_CLEAR =
+      MemberCommunicationState._(
+          1, _omitEnumNames ? '' : 'MEMBER_COMMUNICATION_STATE_CLEAR');
+  static const MemberCommunicationState MEMBER_COMMUNICATION_STATE_TIMED_OUT =
+      MemberCommunicationState._(
+          2, _omitEnumNames ? '' : 'MEMBER_COMMUNICATION_STATE_TIMED_OUT');
+
+  static const $core.List<MemberCommunicationState> values =
+      <MemberCommunicationState>[
+    MEMBER_COMMUNICATION_STATE_UNSPECIFIED,
+    MEMBER_COMMUNICATION_STATE_CLEAR,
+    MEMBER_COMMUNICATION_STATE_TIMED_OUT,
+  ];
+
+  static final $core.List<MemberCommunicationState?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 2);
+  static MemberCommunicationState? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const MemberCommunicationState._(super.value, super.name);
+}
+
 class SpaceDeletionPhase extends $pb.ProtobufEnum {
   static const SpaceDeletionPhase SPACE_DELETION_PHASE_UNSPECIFIED =
       SpaceDeletionPhase._(
@@ -107,6 +134,38 @@ class ParticipantOperationState extends $pb.ProtobufEnum {
       value < 0 || value >= _byValue.length ? null : _byValue[value];
 
   const ParticipantOperationState._(super.value, super.name);
+}
+
+class SpaceChatCreationOutcomeState extends $pb.ProtobufEnum {
+  static const SpaceChatCreationOutcomeState
+      SPACE_CHAT_CREATION_OUTCOME_STATE_UNSPECIFIED =
+      SpaceChatCreationOutcomeState._(
+          0,
+          _omitEnumNames
+              ? ''
+              : 'SPACE_CHAT_CREATION_OUTCOME_STATE_UNSPECIFIED');
+  static const SpaceChatCreationOutcomeState
+      SPACE_CHAT_CREATION_OUTCOME_STATE_COMMITTED =
+      SpaceChatCreationOutcomeState._(1,
+          _omitEnumNames ? '' : 'SPACE_CHAT_CREATION_OUTCOME_STATE_COMMITTED');
+  static const SpaceChatCreationOutcomeState
+      SPACE_CHAT_CREATION_OUTCOME_STATE_ABORTED =
+      SpaceChatCreationOutcomeState._(
+          2, _omitEnumNames ? '' : 'SPACE_CHAT_CREATION_OUTCOME_STATE_ABORTED');
+
+  static const $core.List<SpaceChatCreationOutcomeState> values =
+      <SpaceChatCreationOutcomeState>[
+    SPACE_CHAT_CREATION_OUTCOME_STATE_UNSPECIFIED,
+    SPACE_CHAT_CREATION_OUTCOME_STATE_COMMITTED,
+    SPACE_CHAT_CREATION_OUTCOME_STATE_ABORTED,
+  ];
+
+  static final $core.List<SpaceChatCreationOutcomeState?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 2);
+  static SpaceChatCreationOutcomeState? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const SpaceChatCreationOutcomeState._(super.value, super.name);
 }
 
 const $core.bool _omitEnumNames =

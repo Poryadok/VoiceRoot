@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+package voice.role.v1;
+
+import "voice/role/v1/member_admission.proto";
+
+option go_package = "voice.app/voice/role/v1;rolev1";
+
+// Dedicated capabilities at an exact Space-chat attachment. These decisions do
+// not grant visibility, ordinary sending or the independent invite permission.
+service RoleSpaceChatService {
+  // Protected service callers are exactly Chat, Messaging and Space. Gateway
+  // delegated users may query self; a manager target view also requires current
+  // qualified canonical Owner/Admin and ordinary roster visibility.
+  rpc GetChatPermissionState(GetChatPermissionStateRequest) returns (GetChatPermissionStateResponse);
+
+  // Gateway delegated user only. Actor comes exclusively from verified claims.
+  rpc SetSpaceChatAddMembers(SetSpaceChatAddMembersRequest) returns (SetSpaceChatAddMembersResponse);
+  rpc SetSpaceChatPostAsChatGrant(SetSpaceChatPostAsChatGrantRequest) returns (SetSpaceChatPostAsChatGrantResponse);
+}
+
+message GetChatPermissionStateRequest {
+  uint32 protocol_version = 1; // exactly 1
+  string space_id = 2;
+  string chat_id = 3;
+  string subject_profile_id = 4;
+  string operation_id = 5; // exact signed request binding; not portable authority
+}
+
+message SpaceChatMembershipGrant {
+  MembershipBinding membership_binding = 1;
+  bool explicit_post_grant = 2;
+}
+
+// Request-bound observation only. Every send, invite and destination load must
+// obtain fresh authority; a later operation must not consume this as a bearer.
+message GetChatPermissionStateResponse {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string chat_id = 3;
+  string subject_profile_id = 4;
+  string chat_scope_incarnation = 5;
+  bool can_post_as_chat = 6;
+  bool can_add_members = 7;
+  bool can_manage_permissions = 8;
+  bool member_additions_enabled = 9;
+  bool effective_explicit_post_grant = 10;
+  repeated SpaceChatMembershipGrant membership_grants = 11;
+  uint64 role_authorization_revision = 12;
+  uint64 space_authority_revision = 13;
+  uint64 chat_authority_revision = 14;
+  uint64 space_lifecycle_generation = 15;
+  uint64 ownership_generation = 16;
+  uint64 chat_lifecycle_generation = 17;
+}
+
+message SetSpaceChatAddMembersRequest {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string chat_id = 3;
+  bool enabled = 4;
+  string operation_id = 5;
+  string expected_chat_scope_incarnation = 6;
+}
+
+message SetSpaceChatPostAsChatGrantRequest {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string chat_id = 3;
+  string target_profile_id = 4;
+  bool allowed = 5;
+  string operation_id = 6;
+  string expected_chat_scope_incarnation = 7;
+  // Omitted + exactly one eligible source selects that source once. BOTH with
+  // no selector fails MEMBERSHIP_SOURCE_REQUIRED for allow AND revoke. A stale
+  // selector fails MEMBERSHIP_BINDING_CHANGED. Two sources are two operations.
+  MembershipBinding target_membership_binding = 8;
+}
+
+// Durable historical evidence, never a current membership or permission. An
+// exact completed retry returns this outcome without reapplying its mutation.
+message SpaceChatMutationOutcome {
+  uint32 protocol_version = 1;
+  string operation_id = 2;
+  string chat_scope_incarnation = 3;
+  bool applied_value = 4;
+  MembershipBinding selected_membership_binding = 5;
+  uint64 role_authorization_revision = 6;
+  bool historical = 7;
+}
+
+message SetSpaceChatAddMembersResponse {
+  SpaceChatMutationOutcome outcome = 1;
+}
+
+message SetSpaceChatPostAsChatGrantResponse {
+  SpaceChatMutationOutcome outcome = 1;
+}

@@ -137,3 +137,35 @@ func TestConfigRejectsUnsafeEndpoint(t *testing.T) {
 		require.Error(t, cfg.validate())
 	}
 }
+
+func TestListenerJWKSCAOverride(t *testing.T) {
+	const prefix = "SPACE_PRINCIPAL_"
+	t.Setenv("S2S_JWKS_CA_FILE", "shared-social-ca.pem")
+	t.Setenv("S2S_JWKS_URLS_JSON", `{"social":"https://social:8443/.well-known/jwks.json"}`)
+	_, enabled, err := LoadFromEnv("space")
+	require.NoError(t, err)
+	require.False(t, enabled, "shared trust must not activate a listener")
+	t.Setenv(prefix+"TLS_CERT_FILE", "cert.pem")
+	t.Setenv(prefix+"TLS_KEY_FILE", "key.pem")
+	t.Setenv(prefix+"REPLAY_REDIS_ADDR", "redis:6379")
+	cfg, enabled, err := LoadFromEnv("space")
+	require.NoError(t, err)
+	require.True(t, enabled)
+	require.Equal(t, "shared-social-ca.pem", cfg.JWKSCAFile)
+	t.Setenv(prefix+"JWKS_CA_FILE", "listener-ca.pem")
+	cfg, enabled, err = LoadFromEnv("space")
+	require.NoError(t, err)
+	require.True(t, enabled)
+	require.Equal(t, "listener-ca.pem", cfg.JWKSCAFile)
+	t.Setenv(prefix+"JWKS_CA_FILE", " ")
+	_, enabled, err = LoadFromEnv("space")
+	require.Error(t, err, "explicitly blank trust override must not fall back")
+	require.True(t, enabled)
+}
+
+func TestListenerJWKSCAOverrideAloneIsPartialConfiguration(t *testing.T) {
+	t.Setenv("SPACE_PRINCIPAL_JWKS_CA_FILE", "listener-ca.pem")
+	_, enabled, err := LoadFromEnv("space")
+	require.Error(t, err)
+	require.True(t, enabled, "local trust is listener-owned configuration")
+}

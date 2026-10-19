@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -30,13 +31,15 @@ func RunExpiryPurgeOnce(
 	}
 	var processed int64
 	for _, row := range rows {
-		if deleter != nil {
-			if err := r2file.DeleteKeys(ctx, deleter, FileStorageKeys(row)...); err != nil {
-				return processed, err
-			}
+		completed, err := files.DeleteLegacyFile(ctx, row.ID, &now, deleter)
+		if errors.Is(err, store.ErrFileRetained) {
+			continue
 		}
-		if err := files.MarkExpired(ctx, row.ID); err != nil {
+		if err != nil {
 			return processed, err
+		}
+		if !completed {
+			continue
 		}
 		if pub != nil {
 			var chatID *string

@@ -63,7 +63,18 @@ var _ credentials.PerRPCCredentials = verifiedVoiceCredentials{}
 func startVoiceResolverGRPCTestServer(t *testing.T, pool *pgxpool.Pool) (spacev1.SpaceServiceClient, func()) {
 	t.Helper()
 	lis := bufconn.Listen(1 << 20)
-	srv := grpc.NewServer(grpc.UnaryInterceptor(authctx.VerifiedServiceIdentityUnaryInterceptor("verified-test-voice-service")))
+	// Storage-only fixture. Real signed/mTLS/JWKS/replay enforcement is checked
+	// through socialprincipal's production communication runtime tests.
+	srv := grpc.NewServer(grpc.UnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if info.FullMethod == spacev1.SpaceService_ResolveVoiceRoomAccess_FullMethodName {
+			md, _ := metadata.FromIncomingContext(ctx)
+			if values := md.Get("authorization"); len(values) != 1 || values[0] != "Bearer verified-test-voice-service" {
+				return nil, status.Error(codes.Unauthenticated, "storage fixture requires Voice identity")
+			}
+			ctx = authctx.WithVerifiedServiceIdentity(ctx, authctx.ServiceIdentityVoice)
+		}
+		return handler(ctx, req)
+	}))
 	spacev1.RegisterSpaceServiceServer(srv, &SpaceGRPC{Store: &store.SpaceStore{Pool: pool}})
 	go func() { _ = srv.Serve(lis) }()
 	conn, err := grpc.NewClient("passthrough:///resolver-bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }), grpc.WithTransportCredentials(insecure.NewCredentials()))

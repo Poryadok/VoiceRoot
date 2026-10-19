@@ -1,6 +1,11 @@
 {
   "@@locale": "ru",
   "appTitle": "Voice",
+  "spaceLeaveTitle": "Покинуть спейс?",
+  "spaceLeaveAction": "Покинуть спейс",
+  "spaceLeaveMessage": "Вы потеряете доступ к спейсу и его чатам. Активное голосовое соединение в этом спейсе завершится.",
+  "spaceLeaveOwnerHint": "Перед выходом передайте владение другому участнику.",
+  "spaceLeaveUncertain": "Не удалось подтвердить выход. Обновите список спейсов перед повторной попыткой.",
   "sdkAuthorizationTitle": "Подключить игру",
   "sdkAuthorizationLoadError": "Не удалось загрузить сведения об авторизации.",
   "sdkAuthorizationTemporaryFailure": "Voice временно недоступен. Попробуйте подтвердить запрос ещё раз или начните подключение заново в игре.",
@@ -860,6 +865,8 @@
   "chatGroupRoleOwner": "Владелец",
   "chatGroupRoleAdmin": "Администратор",
   "chatGroupAddMembers": "Добавить участников",
+  "chatGroupMemberAdditionsPermission": "Разрешить участникам добавлять людей",
+  "chatGroupPostAsChatPermission": "Разрешить публикацию от имени чата",
   "chatGroupMembersLimitReached": "Группа заполнена (500/500). Для больших сообществ создайте спейс.",
   "chatGroupMemberYou": "{name} (вы)",
   "@chatGroupMemberYou": {

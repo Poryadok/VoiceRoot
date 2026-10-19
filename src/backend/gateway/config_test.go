@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 	voicejwt "voice/backend/pkg/jwt"
@@ -32,6 +33,50 @@ func TestGatewayConfigFromEnvBuildsRESTProxy(t *testing.T) {
 	}
 	if gotPath != "/api/v1/auth/login?device=web" {
 		t.Fatalf("proxied path = %q", gotPath)
+	}
+}
+
+func TestGatewayConfigFromEnvExcludesFederationRESTProxy(t *testing.T) {
+	for _, source := range []string{"json", "individual_env", "both"} {
+		t.Run(source, func(t *testing.T) {
+			var federationCalls atomic.Int64
+			federation := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				federationCalls.Add(1)
+				w.WriteHeader(http.StatusAccepted)
+			}))
+			t.Cleanup(federation.Close)
+			auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusAccepted)
+			}))
+			t.Cleanup(auth.Close)
+
+			urls := `{"auth":"` + auth.URL + `"}`
+			if source != "individual_env" {
+				urls = `{"auth":"` + auth.URL + `","federation":"` + federation.URL + `"}`
+			}
+			t.Setenv("GATEWAY_REST_UPSTREAMS_JSON", urls)
+			t.Setenv("GATEWAY_FEDERATION_UPSTREAM_URL", "")
+			if source != "json" {
+				t.Setenv("GATEWAY_FEDERATION_UPSTREAM_URL", federation.URL)
+			}
+
+			config := loadGatewayConfigFromEnv()
+			if _, exists := config.restUpstreams["federation"]; exists {
+				t.Fatal("Federation must not be registered as a public REST upstream")
+			}
+			h := newGateway(config)
+			if rec := performRequest(h, http.MethodPost, "/api/v1/auth/login", `{}`, nil); rec.Code != http.StatusAccepted {
+				t.Fatalf("supported Auth upstream status = %d, want %d", rec.Code, http.StatusAccepted)
+			}
+			for _, path := range []string{"/api/v1/federation", "/api/v1/federation/nodes"} {
+				if rec := performRequest(h, http.MethodGet, path, "", nil); rec.Code != http.StatusNotFound {
+					t.Fatalf("Federation path %q status = %d, want %d", path, rec.Code, http.StatusNotFound)
+				}
+			}
+			if calls := federationCalls.Load(); calls != 0 {
+				t.Fatalf("Federation upstream received %d public requests, want none", calls)
+			}
+		})
 	}
 }
 

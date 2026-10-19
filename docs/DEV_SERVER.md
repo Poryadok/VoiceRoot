@@ -229,6 +229,24 @@ python3 -m unittest discover -s scripts/ops -p 'container_storage_home_test.py'
 Это приёмка стенда, не подтверждение готовности всех продуктовых функций.
 История измерений: [ExecPlan](../.agent/execplans/dev-environment.md).
 
+## Execution and shared probes
+
+An executable-launch/firewall restriction is an environment limitation, not a
+product assertion failure. Preserve the exact blocked command and use an
+authorized executable environment or CI for missing runtime evidence; repeated
+unchanged local attempts add no proof. On Windows, resolve which `bash` would run:
+an unqualified command may select the WSL shim, including for `bash -n`. An active
+WSL/runtime prohibition applies to that invocation too; route it to the authorized
+Linux lane instead. These conditions do not prohibit unrelated static work.
+
+Reserve shared DEV probes during actual mutation/restart or a stable-version
+proof window. Release the reservation during source fixes only after checking
+that the relevant workloads remain ready and no owned operation still needs it.
+Keep source and fast tests with their author in an owned pinned environment;
+retain independent risk review rather than relaying every fixture between agents.
+Normal Kubernetes access does not grant host sudo, registry write or containerd
+socket authority. Current ownership and next actions belong in TT.
+
 ## Восстановление и ограничения
 
 Fresh bootstrap не является командой обновления существующего стенда. Он

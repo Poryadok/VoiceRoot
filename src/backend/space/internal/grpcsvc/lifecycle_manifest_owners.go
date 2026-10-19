@@ -13,6 +13,7 @@ import (
 	filev1 "voice.app/voice/file/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	notificationv1 "voice.app/voice/notification/v1"
+	realtimev1 "voice.app/voice/realtime/v1"
 	"voice/backend/pkg/principal"
 )
 
@@ -25,6 +26,7 @@ type LifecycleManifestOwners struct {
 	Messaging    messagingv1.MessagingServiceClient
 	File         filev1.FileServiceClient
 	Notification notificationv1.NotificationServiceClient
+	Realtime     realtimev1.RealtimeLifecycleServiceClient
 }
 
 func (o *LifecycleManifestOwners) ImportNotificationManifestPage(ctx context.Context, req *notificationv1.ImportSpacePurgeManifestPageRequest) (*notificationv1.ImportSpacePurgeManifestPageResponse, error) {
@@ -101,4 +103,15 @@ func (o *LifecycleManifestOwners) signed(ctx context.Context, audience, method s
 		"authorization", "Bearer "+token,
 		"x-request-id", requestID,
 	)), nil
+}
+
+func (o *LifecycleManifestOwners) ImportRealtimeManifestPage(ctx context.Context, req *realtimev1.ImportSpacePurgeManifestPageRequest) (*realtimev1.ImportSpacePurgeManifestPageResponse, error) {
+	if o == nil || o.Realtime == nil {
+		return nil, status.Error(codes.Unavailable, "Realtime lifecycle transport unavailable")
+	}
+	signed, err := o.signed(ctx, "realtime", realtimev1.RealtimeLifecycleService_ImportSpacePurgeManifestPage_FullMethodName, req, req.GetDeletionOperationId())
+	if err != nil {
+		return nil, err
+	}
+	return o.Realtime.ImportSpacePurgeManifestPage(signed, req)
 }

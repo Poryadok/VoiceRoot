@@ -16,22 +16,22 @@ export VOICE_RUN_LIVE_COMPOSE="${VOICE_RUN_LIVE_COMPOSE:-true}"
 export VOICE_API_BASE_URL="${VOICE_API_BASE_URL:-http://127.0.0.1:18080}"
 export VOICE_REPO_ROOT="${ROOT}"
 
-mapfile -t GATEWAY_TESTS < <(bash "${ROOT}/scripts/ci/e2e-manifest.sh" "${MANIFEST}" smoke_gateway)
-gateway_manifest_pid=$!
-if wait "${gateway_manifest_pid}"; then
+if gateway_test_list="$(bash "${ROOT}/scripts/ci/e2e-manifest.sh" "${MANIFEST}" smoke_gateway)"; then
+  mapfile -t GATEWAY_TESTS <<<"${gateway_test_list}"
   printf 'compose_e2e_pre_echo_stage=gateway_manifest status=completed exit=0\n'
 else
   gateway_manifest_exit=$?
   printf 'compose_e2e_pre_echo_stage=gateway_manifest status=failed exit=%d\n' "${gateway_manifest_exit}"
+  exit "${gateway_manifest_exit}"
 fi
 
-mapfile -t FLUTTER_TESTS < <(bash "${ROOT}/scripts/ci/e2e-manifest.sh" "${MANIFEST}" smoke_flutter)
-flutter_manifest_pid=$!
-if wait "${flutter_manifest_pid}"; then
+if flutter_test_list="$(bash "${ROOT}/scripts/ci/e2e-manifest.sh" "${MANIFEST}" smoke_flutter)"; then
+  mapfile -t FLUTTER_TESTS <<<"${flutter_test_list}"
   printf 'compose_e2e_pre_echo_stage=flutter_manifest status=completed exit=0\n'
 else
   flutter_manifest_exit=$?
   printf 'compose_e2e_pre_echo_stage=flutter_manifest status=failed exit=%d\n' "${flutter_manifest_exit}"
+  exit "${flutter_manifest_exit}"
 fi
 
 if ((${#GATEWAY_TESTS[@]} == 0)); then

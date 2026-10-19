@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package voice.chat.v1;
+
+import "voice/chat/v1/chat.proto";
+
+option go_package = "voice.app/voice/chat/v1;chatv1";
+
+// Narrow own-DB resource facts. This service grants no user permissions and is
+// served only on dedicated signed Role/Space mTLS listeners.
+service ChatScopeAuthorityService {
+  rpc GetSpaceChatScopeAuthority(GetSpaceChatScopeAuthorityRequest) returns (GetSpaceChatScopeAuthorityResponse);
+}
+
+message GetSpaceChatScopeAuthorityRequest {
+  uint32 protocol_version = 1;
+  string chat_id = 2;
+  string expected_space_id = 3;
+  // Fresh transport request identity; retries use fresh signed JWT/JTI.
+  string operation_id = 4;
+}
+
+message GetSpaceChatScopeAuthorityResponse {
+  uint32 protocol_version = 1;
+  string chat_id = 2;
+  string expected_space_id = 3;
+  string operation_id = 4;
+  bool exists = 5;
+  bool live = 6;
+  ChatType chat_type = 7;
+  string actual_space_id = 8;
+  string chat_scope_incarnation = 9;
+  uint64 chat_authority_revision = 10;
+  // Independent Chat-owned lifecycle fence, never a membership/Role epoch.
+  uint64 lifecycle_generation = 11;
+  ChatScopeLifecycleState lifecycle_state = 12;
+  ChatScopeManagedKind managed_kind = 13;
+}
+
+enum ChatScopeManagedKind {
+  CHAT_SCOPE_MANAGED_KIND_UNSPECIFIED = 0;
+  CHAT_SCOPE_MANAGED_KIND_ORDINARY = 1;
+  CHAT_SCOPE_MANAGED_KIND_GAME_INTEGRATION = 2;
+  CHAT_SCOPE_MANAGED_KIND_MATCH_SQUAD = 3;
+}
+
+enum ChatScopeLifecycleState {
+  CHAT_SCOPE_LIFECYCLE_STATE_UNSPECIFIED = 0;
+  CHAT_SCOPE_LIFECYCLE_STATE_LIVE = 1;
+  CHAT_SCOPE_LIFECYCLE_STATE_FROZEN = 2;
+  CHAT_SCOPE_LIFECYCLE_STATE_PURGE_DECIDED = 3;
+  CHAT_SCOPE_LIFECYCLE_STATE_PURGED = 4;
+}

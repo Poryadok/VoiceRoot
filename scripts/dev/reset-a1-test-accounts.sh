@@ -65,7 +65,7 @@ postgres_id="$("${compose[@]}" ps -q postgres 2>/dev/null || true)"
 [[ "$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.service" }}' "$postgres_id")" == "postgres" ]] || {
   echo "refusing non-postgres Compose service" >&2; exit 1;
 }
-[[ "$(docker inspect -f '{{.Config.Image}}' "$postgres_id")" == "postgres:16-alpine" ]] || {
+[[ "$(docker inspect -f '{{.Config.Image}}' "$postgres_id")" == "postgres:18-alpine" ]] || {
   echo "refusing unexpected postgres image" >&2; exit 1;
 }
 

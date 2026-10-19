@@ -227,6 +227,7 @@ message ConfirmUploadResponse {
   FileMetadata file_metadata = 1;
 }
 message GetFileURLResponse {
+  reserved "file_url_response";
   string presigned_get_url = 1;
   google.protobuf.Timestamp expires_at = 2;
 }

@@ -56,13 +56,13 @@ func (s *MatchmakingGRPC) ListGames(ctx context.Context, req *matchmakingv1.List
 	if req.GetPage() != nil {
 		cursor = req.GetPage().GetCursor()
 	}
-	res, err := s.Games.List(ctx, store.ListGamesParams{
+	res, err := s.Games.ListPublic(ctx, store.ListGamesParams{
 		Cursor:   cursor,
 		PageSize: pageSize,
 		Status:   store.StatusActive,
 	})
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "list games: %v", err)
+		return nil, publicGamesError(err)
 	}
 	return &matchmakingv1.ListGamesResponse{
 		GameList: &matchmakingv1.GameList{
@@ -70,6 +70,17 @@ func (s *MatchmakingGRPC) ListGames(ctx context.Context, req *matchmakingv1.List
 			NextCursor: res.NextCursor,
 		},
 	}, nil
+}
+
+func publicGamesError(err error) error {
+	switch {
+	case errors.Is(err, store.ErrGamesCursorInvalid):
+		return status.Error(codes.InvalidArgument, "invalid games cursor")
+	case errors.Is(err, store.ErrGamesCursorStale):
+		return status.Error(codes.FailedPrecondition, "games_cursor_stale")
+	default:
+		return status.Error(codes.Internal, "list games unavailable")
+	}
 }
 
 func (s *MatchmakingGRPC) GetGame(ctx context.Context, req *matchmakingv1.GetGameRequest) (*matchmakingv1.GetGameResponse, error) {

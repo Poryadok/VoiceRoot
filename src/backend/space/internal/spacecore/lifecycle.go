@@ -33,6 +33,7 @@ var canonicalParticipants = [...]commonv1.ParticipantId{
 	commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION,
 	commonv1.ParticipantId_PARTICIPANT_ID_BOT,
 	commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION,
+	commonv1.ParticipantId_PARTICIPANT_ID_REALTIME,
 }
 
 var participantRequestPackages = map[commonv1.ParticipantId]string{
@@ -46,6 +47,7 @@ var participantRequestPackages = map[commonv1.ParticipantId]string{
 	commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION: "voice.subscription.v1",
 	commonv1.ParticipantId_PARTICIPANT_ID_BOT:          "voice.bot.v1",
 	commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION: "voice.notification.v1",
+	commonv1.ParticipantId_PARTICIPANT_ID_REALTIME:     "voice.realtime.v1",
 }
 
 // CanonicalLifecycleParticipants returns a detached copy of the fixed P3
@@ -644,21 +646,12 @@ func validateCanonicalUUID(label, value string) error {
 }
 
 func isCanonicalParticipant(participantID commonv1.ParticipantId) bool {
-	switch participantID {
-	case commonv1.ParticipantId_PARTICIPANT_ID_ROLE,
-		commonv1.ParticipantId_PARTICIPANT_ID_CHAT,
-		commonv1.ParticipantId_PARTICIPANT_ID_MESSAGING,
-		commonv1.ParticipantId_PARTICIPANT_ID_FILE,
-		commonv1.ParticipantId_PARTICIPANT_ID_VOICE,
-		commonv1.ParticipantId_PARTICIPANT_ID_MATCHMAKING,
-		commonv1.ParticipantId_PARTICIPANT_ID_SEARCH,
-		commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION,
-		commonv1.ParticipantId_PARTICIPANT_ID_BOT,
-		commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION:
-		return true
-	default:
-		return false
+	for _, id := range canonicalParticipants {
+		if id == participantID {
+			return true
+		}
 	}
+	return false
 }
 
 // LifecycleRetention contains the database-time eligibility predicates for

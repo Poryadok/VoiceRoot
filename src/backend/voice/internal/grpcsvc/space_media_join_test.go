@@ -60,6 +60,17 @@ type readySpaceMediaAdmission struct {
 	cleanupFailuresToInject *int
 }
 
+// Explicit healthy workflow authority for memory-only handler unit fixtures.
+func (r readySpaceMediaAdmission) HoldAdmissionOwnership(ctx context.Context, _ uuid.UUID) (context.Context, func(), error) {
+	return ctx, func() {}, r.err
+}
+func (r readySpaceMediaAdmission) ReadAdmissionDispatch(context.Context, string) (int64, bool, error) {
+	return 1, true, r.err
+}
+func (r readySpaceMediaAdmission) FenceAbortedAdmission(context.Context, uuid.UUID, voicestore.SpaceAdmissionProjectionGates) error {
+	return r.err
+}
+
 type currentSessionCheckerFunc func(context.Context, string, int64) error
 
 func (f currentSessionCheckerFunc) RequireCurrent(ctx context.Context, accountID string, epoch int64) error {
@@ -67,6 +78,10 @@ func (f currentSessionCheckerFunc) RequireCurrent(ctx context.Context, accountID
 }
 
 func (r readySpaceMediaAdmission) CheckSchema(context.Context) error { return r.err }
+func (r readySpaceMediaAdmission) ReserveSpaceGrant(context.Context, uuid.UUID, uuid.UUID, string, livekit.SpaceRoomGrant) (time.Time, time.Time, error) {
+	issued := time.Unix(1700000000, 0).UTC()
+	return issued, issued.Add(time.Minute), r.err
+}
 func (r readySpaceMediaAdmission) ClaimRoomHead(_ context.Context, voiceRoomID, spaceID, roomID string, operationID uuid.UUID, allowCreate bool) (voicestore.SpaceMediaRoomHead, error) {
 	head := voicestore.SpaceMediaRoomHead{VoiceRoomID: voiceRoomID, SpaceID: spaceID, RoomID: roomID, RoomGeneration: 1, State: "OPEN", Ready: !allowCreate}
 	if allowCreate {
@@ -164,7 +179,7 @@ func (r fixtureSpaceMediaAccessResolver) ResolveVoiceRoomAccess(_ context.Contex
 		return CanonicalVoiceRoomAccess{}, status.Error(codes.NotFound, "voice room is not bound to expected Space")
 	}
 	return CanonicalVoiceRoomAccess{
-		SpaceID: spaceID, Active: active, Member: r.members[spaceID][profileID], AccessEpoch: r.accessEpoch,
+		SpaceID: spaceID, Active: active, Member: r.members[spaceID][profileID], AccessEpoch: r.accessEpoch, CommunicationStateResolved: true,
 	}, nil
 }
 
@@ -191,7 +206,7 @@ func TestGetJoinToken_SpaceIssuesShortServerBoundIncarnationIdentity(t *testing.
 	svc.SpaceMediaReady = true
 	svc.SpaceMediaAdmissions = readySpaceMediaAdmission{}
 	svc.VoiceRoomAccessResolver = &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{
-		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11,
+		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11, CommunicationStateResolved: true,
 	}}
 	svc.Roles = listenOnlyRolePermissions{RolePermissionChecker: &canonicalRolePermissions{}}
 	svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{
@@ -333,7 +348,7 @@ func TestJoinVoiceRoom_SpaceMediaAdmissionReturnsConfirmedSpaceSession(t *testin
 	svc.SpaceMediaReady = true
 	svc.SpaceMediaAdmissions = readySpaceMediaAdmission{preparedAdmissions: &preparedAdmissions}
 	svc.VoiceRoomAccessResolver = &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{
-		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11,
+		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11, CommunicationStateResolved: true,
 	}}
 	svc.Roles = &canonicalRolePermissions{}
 	svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{
@@ -466,4 +481,11 @@ func TestLeaveSpaceVoiceRoomFailsClosedWhenParticipantHasNoAdmission(t *testing.
 	current, err := calls.GetCall(t.Context(), call.RoomID)
 	require.NoError(t, err)
 	require.True(t, current.IsParticipant(profileID), "an unjournaled Space projection cannot use legacy leave mutation")
+}
+
+func (r readySpaceMediaAdmission) ReadSpaceLifecycle(context.Context, string) (int64, bool, error) {
+	return 0, true, r.err
+}
+func (r readySpaceMediaAdmission) AuthorizeSpaceProjection(_ context.Context, _ uuid.UUID, _ string, t voicestore.SpaceProjectionTicket) (voicestore.SpaceProjectionTicket, error) {
+	return t, r.err
 }

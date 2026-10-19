@@ -131,6 +131,52 @@ auto_mod_log
 
 ## Авто-модерация
 
+### Scan statistics
+
+`GetAutoModStats.messages_checked` counts durable persisted scan samples
+since the scan aggregate was introduced. Each configured `CheckMessage` evaluation
+is eligible for one sample, including allowed/blocked results and
+each retried RPC. The current request has no message ID or idempotency key, so
+this is not a unique-message count. Pattern evaluation happens before the
+existing spam-sender validation; an evaluation followed by that validation error
+is still eligible. A missing AutoMod implementation bypasses scanning and does not
+produce a sample. Historical clean scans cannot be recovered from `auto_mod_log`: the new
+aggregate starts at zero rather than importing an incomplete action-log estimate.
+
+The durable `auto_mod_scan_stats` singleton holds only `messages_checked` and
+`recorded_since`, without message content or profile/message identifiers.
+Concurrent increments are atomic. Counter storage failure emits a generic
+warning and preserves the existing moderation result/error; the aggregate can
+therefore omit evaluations under contention, cancellation, deadline pressure or
+storage/network failure, including ordinary supported low-resource operation.
+There is no promised coverage percentage, unbiased sampling, exact evaluation
+total or eventual catch-up. It is not a billing or audit ledger. A successful
+business RPC does not acknowledge metric persistence. An error/timeout can have
+an unknown commit outcome; a late committed sample remains a real evaluation.
+The business decision is computed before synchronous metric persistence. The
+metric receives a child timeout capped at 50 ms and one quarter of the remaining
+caller deadline, reserving the rest for returning the result; canceled callers
+and metric budgets below 1 ms skip persistence. Counter lock/pool/network stalls
+use a separate context after the business decision. The budget bounds intentional
+waiting, not wall-clock scheduling under arbitrary starvation; a shared database
+or pool outage can independently affect business queries. There is no background
+worker, queue or per-request goroutine. Lock contention/timeouts and skipped
+short-budget samples can undercount; no retry/backlog is fabricated.
+`moderation_automod_scan_samples_total{outcome}` exposes exactly one terminal
+outcome per eligible evaluation: `acknowledged`, `unconfirmed`,
+`skipped_canceled`, or `skipped_budget`. Every persistence error is conservatively
+unconfirmed, never classified as lost or rolled back. These finite-label,
+process-lifetime diagnostics are not a durable ledger; crashes and restarts
+limit reconciliation. No content, identity or request labels are recorded.
+Stats reads fail on missing/broken storage rather than presenting a fabricated
+zero. `blocked` retains its existing action-log aggregation and time coverage;
+it is not a ratio-compatible counterpart of this since-introduction scan count.
+
+Apply the additive migration before deploying the binary. Old binaries can run
+with the extra table but cannot populate it. Rolling back the counter migration
+deletes only this aggregate and resets its baseline if reapplied; preserve it
+for operational continuity and roll back the binary before any schema removal.
+
 ```
 message.sent event ──► CheckMessage():
   1. Spam pattern detection (repeated messages, link flooding)

@@ -140,6 +140,7 @@ public class AuthService {
         mailSender,
         sessionEpochFloors);
     copy.securityTransactions = securityTransactions;
+    copy.observations = observations;
     if (deletionOperations != null && deletionTokenCodec != null && deletionEventPublisher != null
         && deletionStarter != null && deletionFloorWorker != null && deletionEventWorker != null) {
       copy.configureAccountDeletion(
@@ -177,6 +178,32 @@ public class AuthService {
 
   public void configureSecurityTransactions(TransactionTemplate transactions) {
     this.securityTransactions = java.util.Objects.requireNonNull(transactions, "transactions");
+  }
+
+  private voice.backend.auth.events.AuthObservations observations = new voice.backend.auth.events.AuthObservations() {};
+
+  public void configureObservations(voice.backend.auth.events.AuthObservations observations) {
+    this.observations = java.util.Objects.requireNonNull(observations, "observations");
+  }
+
+  private void observeAfterCommit(Runnable observation) {
+    Runnable safe = () -> {
+      try { observation.run(); } catch (RuntimeException ignored) {
+        // An observation cannot change an already successful Auth result.
+      }
+    };
+    try {
+      if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+            new org.springframework.transaction.support.TransactionSynchronization() {
+              @Override public void afterCommit() { safe.run(); }
+            });
+      } else {
+        safe.run();
+      }
+    } catch (RuntimeException ignored) {
+      // An unavailable transaction callback drops the non-authoritative observation.
+    }
   }
 
   private <T> T securityTransaction(Supplier<T> operation) {
@@ -232,7 +259,10 @@ public class AuthService {
       throw new AuthException("registration_conflict");
     }
     touchLastOnline(account);
-    return issueSession(account, prepared, command.deviceInfoJson());
+    AuthSession session = issueSession(account, prepared, command.deviceInfoJson());
+    String method = command.guest() ? "guest" : email != null ? "email" : "phone";
+    observeAfterCommit(() -> observations.registered(account.id(), account.type(), method));
+    return session;
   }
 
   public synchronized AuthSession login(LoginCommand command) {
@@ -278,6 +308,7 @@ public class AuthService {
         return issueSessionForProfile(current, preparation.epoch(), profileId, command.deviceInfoJson());
       });
       recordAuthLoginMetric(true);
+      observeAfterCommit(() -> observations.loggedIn(observed.id(), command.deviceInfoJson()));
       return session;
     } catch (RuntimeException ex) {
       recordAuthLoginMetric(false);
@@ -385,6 +416,7 @@ public class AuthService {
       TokenClaims claims = jwtService.validate(stripBearer(command.accessToken()));
       tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
     }
+    observeAfterCommit(() -> observations.loggedOut(current.accountId(), current.deviceInfoJson()));
   }
 
   public TokenClaims validate(String accessToken) {
@@ -615,7 +647,9 @@ public class AuthService {
       PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
       accounts.setTotpEnabled(account.id(), true);
       Account fresh = accounts.findById(account.id().toString()).orElse(account);
-      return issueSession(fresh, prepared, "{}");
+      AuthSession session = issueSession(fresh, prepared, "{}");
+      if (!account.totpEnabled()) observeAfterCommit(() -> observations.twoFaEnabled(account.id()));
+      return session;
     });
   }
 
@@ -981,7 +1015,7 @@ public class AuthService {
       throw new AuthException("validation_failed");
     }
     Instant precheckNow = Instant.now(clock);
-    if (account.deletedAt().plus(ACCOUNT_RESTORE_GRACE).isBefore(precheckNow)) {
+    if (!account.deletedAt().plus(ACCOUNT_RESTORE_GRACE).isAfter(precheckNow)) {
       throw new AuthException("account_inactive");
     }
   }

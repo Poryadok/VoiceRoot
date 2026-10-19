@@ -13,8 +13,8 @@ import (
 	"voice/backend/voice/internal/livekit"
 	voicestore "voice/backend/voice/internal/store"
 
-	spacev1 "voice.app/voice/space/v1"
 	callsv1 "voice.app/voice/calls/v1"
+	spacev1 "voice.app/voice/space/v1"
 )
 
 func TestVoiceGRPC_StartStopScreenShare(t *testing.T) {
@@ -211,6 +211,9 @@ func (r *screenShareLeaveRevoker) RevokeSpaceMediaParticipant(ctx context.Contex
 		participant.Identity == "" || participant.RoomGeneration == 0 || participant.Generation == "" {
 		return voicestore.Call{}, false, status.Error(codes.FailedPrecondition, "test revoker requires the exact confirmed admission")
 	}
+	if err := r.media.admissions.BeginRoomLeave(ctx, uuid.MustParse(participant.AdmissionOperationID), participant.Generation); err != nil {
+		return call, false, err
+	}
 	_, matched, err := r.calls.BeginSpaceMediaRevocation(ctx, call.RoomID, participant.ProfileID, participant.Identity, participant.Generation)
 	if err != nil {
 		return call, false, err
@@ -228,6 +231,9 @@ func (r *screenShareLeaveRevoker) RevokeSpaceMediaParticipant(ctx context.Contex
 	if !completed {
 		return updated, false, status.Error(codes.FailedPrecondition, "test revoker could not complete the matching media participant")
 	}
+	if err := r.media.admissions.CompleteRoomLeave(ctx, voicestore.SpaceMediaAdmission{OperationID: uuid.MustParse(participant.AdmissionOperationID), Generation: participant.Generation, AccountID: uuid.MustParse(participant.AccountID), ProfileID: uuid.MustParse(participant.ProfileID), SpaceID: uuid.MustParse(call.SpaceID), RoomID: call.RoomID}); err != nil {
+		return updated, false, err
+	}
 	r.removedProfiles = append(r.removedProfiles, participant.ProfileID)
 	return updated, true, nil
 }
@@ -239,7 +245,7 @@ func TestVoiceGRPC_LeaveVoiceRoom_ClearsScreenShare(t *testing.T) {
 	spaceID, voiceRoomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	svc := newTestVoiceService(now, events)
 	configureReadySpaceMediaFixture(svc, &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{
-		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11,
+		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11, CommunicationStateResolved: true,
 	}})
 	var prepared []voicestore.SpaceMediaAdmission
 	admissions := &screenShareLeaveAdmission{readySpaceMediaAdmission: readySpaceMediaAdmission{preparedAdmissions: &prepared}}

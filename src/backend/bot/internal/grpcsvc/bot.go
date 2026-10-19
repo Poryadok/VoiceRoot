@@ -31,17 +31,18 @@ import (
 // BotGRPC implements voice.bot.v1.BotService.
 type BotGRPC struct {
 	botv1.UnimplementedBotServiceServer
-	Store           *store.BotStore
-	LifecycleStore  BotLifecycleStore
-	Hub             *dispatch.Hub
-	HTTPClient      *http.Client
-	Chat            chatv1.ChatServiceClient
-	Messaging       messagingv1.MessagingServiceClient
-	Role            rolev1.RoleServiceClient
-	User            userv1.UserServiceClient
-	Space           spacev1.SpaceServiceClient
-	Events          BotEventPublisher
-	PrincipalIssuer *principal.Issuer
+	Store                   *store.BotStore
+	LifecycleStore          BotLifecycleStore
+	Hub                     *dispatch.Hub
+	HTTPClient              *http.Client
+	Chat                    chatv1.ChatServiceClient
+	Messaging               messagingv1.MessagingServiceClient
+	Role                    rolev1.RoleServiceClient
+	User                    userv1.UserServiceClient
+	Space                   spacev1.SpaceServiceClient
+	Events                  BotEventPublisher
+	PrincipalIssuer         *principal.Issuer
+	InstallationScopeReader BotInstallationScopeReader
 }
 
 // BotEventPublisher publishes bot lifecycle events (optional NATS).
@@ -54,9 +55,10 @@ type BotEventPublisher interface {
 
 func NewBotGRPC(st *store.BotStore, hub *dispatch.Hub) *BotGRPC {
 	return &BotGRPC{
-		Store:          st,
-		LifecycleStore: st,
-		Hub:            hub,
+		Store:                   st,
+		LifecycleStore:          st,
+		InstallationScopeReader: st,
+		Hub:                     hub,
 		HTTPClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
@@ -482,6 +484,7 @@ func (s *BotGRPC) DeferResponse(ctx context.Context, req *botv1.DeferResponseReq
 
 func (s *BotGRPC) PollEvents(req *botv1.PollEventsRequest, stream botv1.BotService_PollEventsServer) error {
 	ctx := stream.Context()
+	defer releasePollingTransport(ctx)
 	botRow, err := s.botFromToken(ctx)
 	if err != nil {
 		return err
@@ -493,21 +496,18 @@ func (s *BotGRPC) PollEvents(req *botv1.PollEventsRequest, stream botv1.BotServi
 		return status.Error(codes.FailedPrecondition, "bot is not in polling mode")
 	}
 	s.touchPresence(ctx, botRow.ID)
-	ids, types, payloads, err := s.Store.ListPendingEvents(ctx, botRow.ID, 25)
+	ids, _, _, err := s.Store.ListPendingEvents(ctx, botRow.ID, 25)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
-	for i, id := range ids {
-		evt := &botv1.BotEvent{
-			EventId:     id.String(),
-			EventType:   types[i],
-			PayloadJson: payloads[i],
-			CreatedAt:   timestamppb.Now(),
-		}
-		if err := stream.Send(&botv1.PollEventsResponse{BotEvent: evt}); err != nil {
+	for _, id := range ids {
+		if err := s.Store.DeliverPollingEvent(ctx, botRow.ID, id, func(kind, payload string) error {
+			return stream.Send(&botv1.PollEventsResponse{BotEvent: &botv1.BotEvent{
+				EventId: id.String(), EventType: kind, PayloadJson: payload, CreatedAt: timestamppb.Now(),
+			}})
+		}); err != nil {
 			return err
 		}
-		_ = s.Store.MarkEventDelivered(ctx, id)
 	}
 	return nil
 }

@@ -75,6 +75,28 @@ Artifact `settings-help-browser-<run_id>` содержит head SHA (`VOICE_SOUR
 версию Chrome и шесть PNG. Это доказательство передачи ссылки браузеру;
 загрузка содержимого внешнего GitHub и привязка к deployed SHA проверяются отдельно.
 
+### Web cold startup
+
+`node --test scripts/ci/web-startup.test.mjs` проверяет ранний HTML loader,
+RU/EN, ошибки bootstrap/engine/runApp, зависший запуск и снятие loader только
+по `flutter-first-frame`. В Flutter CI после уже существующей сборки Help fixture
+`node scripts/ci/web-startup-browser.mjs src/frontend/build/help-launcher-web <output>`
+проверяет настоящий Flutter engine: main.dart.js удерживается HTTP fixture,
+видны текущий Voice icon и статус до запуска Flutter; затем первый кадр снимает
+loader. Отдельный 503 для bootstrap и доверенный pointer click проверяют reload/retry.
+Используются fresh pages, отключённый browser cache, desktop и mobile viewport.
+Для проверки полной production-сборки передайте `src/frontend/build/web` после
+`flutter build web --release --no-pub --no-web-resources-cdn`.
+
+Node.js 24, Chrome/Chromium (`CHROME_BIN`) и полный `VOICE_SOURCE_SHA` обязательны.
+Artifact содержит browser version, viewport, PNG и `voice-startup:*` performance
+marks (HTML, entrypoint, engine, run-app, first-frame). Это локальные timings с
+искусственной задержкой, не production latency и не доказательство причины
+пользовательского медленного старта. Реальные device/network и deployed asset
+delivery проверяются отдельно. Loader использует существующий `voice_sky.png`,
+system font и inline critical CSS; 90s — только recovery UI deadline, запрос
+может завершиться позднее. Ошибки не раскрывают URL или raw exception.
+
 ### Go (сервисы, Gateway, Realtime и др.)
 
 - Фреймворк: стандартный пакет **`testing`**, табличные тесты где уместно.
@@ -90,7 +112,54 @@ Artifact `settings-help-browser-<run_id>` содержит head SHA (`VOICE_SOUR
   требует real PostgreSQL 16 с zero skips; Redis 7 понадобится для deferred
   D2/D3 bridge tests, не для D1-only classifier transaction.
 
+### Voice dormant native/P3 composition
+
+`go test -race -run '^TestProduction' .` из `src/backend/voice` выполняет
+production startup factory для обычного режима без Space/NATS и для Space с
+существующими compatibility consumers. Проверяются compatibility delivery,
+pending native roster facts без lease/publish/delivered marker и EJECT_ONLY P3.
+По умолчанию используются Testcontainers. Для собственного изолированного Linux
+runner можно явно передать `VOICE_COMPOSITION_TEST_DATABASE_URL` (PostgreSQL с
+правом создавать disposable databases) и `VOICE_COMPOSITION_TEST_NATS_URL`.
+Voice fixtures создают отдельную БД на тест и применяют те же миграции/SQL;
+серверы должны принадлежать проверяющему. Этот opt-in также доступен focused
+ordinarycall/spacemedia/spacelifecycle PostgreSQL fixtures. Проверка отдельного
+child process сохранённых bytes/pending state выполняется при explicit DSN.
+NATS fixture создаёт только существующие compatibility streams/consumers;
+она не доказывает installed ACL, A3 activation, provider retirement или rollout.
+Startup fixture использует уже committed native факты; arbitration между live
+admission writer и recovery проверяется и исправляется отдельно.
+
 ### Space tree integration proof
+
+Realtime P3 has a scoped Linux-only external-PostgreSQL suite tagged
+`realtimep3integration`. Set `REALTIME_P3_TEST_DATABASE_URL` to an owned isolated
+PostgreSQL16 database and run Realtime `go test -race -tags=realtimep3integration
+-run 'Test(ProtectedRealtime|ActualHub|Committed|FreezeReceipt|ExactManifest|Restart|Unknown|Multipage|ReceiptCompaction)' . ./internal/lifecycle`.
+The same tag exposes native Chat `TestRealtimeNativeLifecycle` and Space
+`TestRealtimeParticipantEleven` store cases; these create and drop uniquely named
+databases on that owned server to apply complete native migration catalogs.
+The required suite fails when its DSN is absent rather than skipping. Containers
+need no host ports or Docker socket for this suite. Ordinary legacy short-test
+skips remain distinct from these runtime cases; never report them as PG proof.
+
+The shared local Space/Realtime JWKS exporter has a separate no-network Linux
+check. From the repository root, build `docker/social-principal` as
+`voice-jwks-bootstrap-test`, then run its Python fixture with the source mounted
+read-only (no host ports):
+
+```sh
+docker run --rm --network none --entrypoint python3 \
+  -e LOCAL_JWKS_BOOTSTRAP_TEST=1 \
+  -v "$PWD/docker/social-principal:/fixture:ro" voice-jwks-bootstrap-test \
+  /fixture/export_jwks_test.py
+```
+
+It checks both issuers reject weak or mathematically unusable private pairs
+before any public generation is written and on reuse of matching public docs.
+Valid distinct pairs and actual nondefault RSA exponents remain accepted. This
+fixture does not qualify deployed keys, network trust or lifecycle readiness.
+
 
 Для узкого exact-SHA доказательства запускается workflow
 [space-tree-proof.yml](../.github/workflows/space-tree-proof.yml). Он выполняет
@@ -113,6 +182,69 @@ verbose log хранится как workflow artifact.
 - Redis-проверки: `GATEWAY_REDIS_ADDR` включает sliding-window rate limiter и blacklist чтение; blacklist key prefix по умолчанию `jwt:blacklist:`, override — `GATEWAY_JWT_BLACKLIST_PREFIX`.
 - Edge smoke после деплоя: `/health`, `/metrics`, `/api/v1/version?platform=<known>&version=<semver>`, один public REST route, один protected REST route с JWT и `/ws` upgrade через Realtime upstream.
 
+### Public staging audio media check
+
+`TestStagingVoiceCallBidirectionalAudio_live` is a separate opt-in Linux harness
+for an authorized operator. It uses the existing synthetic PCM/RTP peers and
+requires ten nonempty advancing audio RTP packets in each direction. Signaling
+alone cannot pass it. It does not run in the ordinary staging smoke.
+
+Prepare two dedicated, verified regular accounts with an existing DM, current
+access tokens, and no active calls. Reserve both accounts exclusively for the
+check. Place this JSON outside the checkout in an owner-only (`chmod 600`) file;
+substitute actual IDs/tokens locally and never attach the file or raw credentials
+to evidence:
+
+```json
+{
+  "schema": "voice-staging-media-v1",
+  "api_origin": "https://api-staging.example.test",
+  "livekit_origin": "wss://livekit-staging.example.test",
+  "chat_id": "existing-dm-uuid",
+  "caller": {"account_id": "caller-account-uuid", "profile_id": "caller-profile-uuid", "access_token": "private-caller-token"},
+  "callee": {"account_id": "callee-account-uuid", "profile_id": "callee-profile-uuid", "access_token": "private-callee-token"}
+}
+```
+
+Use the actual configured staging origins. The API origin must exactly match
+`VOICE_STAGING_URL`; the returned Voice token URLs must both match the fixture's
+WSS origin. TLS verification stays enabled, redirects are rejected, and there
+is no localhost fallback. Before creating a call the harness checks `/users/me`
+against both account/profile pairs and refuses existing active calls. The file
+is locked for the run. The harness does not register accounts, send OTP, reset
+Redis rate limits, or change DM privacy settings.
+
+From `src/backend/gateway`, on Linux with the repository Go version and
+`libopus-dev`, `libopusfile-dev`, `libsoxr-dev`, and `pkg-config` installed:
+
+```sh
+VOICE_RUN_STAGING_MEDIA=true \
+VOICE_STAGING_URL=https://api-staging.example.test \
+VOICE_STAGING_MEDIA_FIXTURE=/absolute/private/media-fixture.json \
+CGO_ENABLED=1 go test -tags=live -run '^TestStagingVoiceCallBidirectionalAudio_live$' -count=1 -parallel=1 -timeout=3m -v .
+```
+
+The harness registers cleanup as soon as call creation returns its room ID;
+after RTP/ICE/token failures it still ends that owned call and checks both
+accounts have no active call. A process kill or uncertain HTTP call-creation
+result can prevent this cleanup: inspect the dedicated accounts' active-call
+state through the normal API before retrying. Do not blindly repeat a mutation
+or terminate an unrelated call. Record the tested source SHA, actual deployed
+commit/image, environment, both-direction RTP result and cleanup result.
+Preparing this harness is not a real staging media PASS or final acceptance.
+
+Portable fixture/preflight tests need no live credentials or native libraries:
+
+```sh
+go test staging_voice_media_fixture_test.go staging_voice_media_fixture_validation_test.go -count=1
+```
+
+The `Gateway media test build` workflow compiles the Gateway test binary on
+Linux with `CGO_ENABLED=1`, the native Opus dependencies and `-tags=live` for
+Gateway/pkg pull requests. Its `go test -c` step executes no tests or package
+initializers, needs no staging credentials, and closes only the native build
+gate. Actual media/cleanup evidence still requires the authorized live run.
+
 ### Java (Auth Service, Spring Boot)
 
 - Юнит и slice-тесты: **JUnit 5**, **Spring Boot Test** (`@WebMvcTest`, `@DataJpaTest` и т.д. по слою).
@@ -121,6 +253,13 @@ verbose log хранится как workflow artifact.
 ### Flutter (клиент)
 
 - Виджеты и логика: **`flutter test`**.
+- Presigned object-storage uploads/downloads: `flutter test
+  test/presigned_upload_test.dart` checks the native Compose-to-loopback
+  connection with its signed Host. Separately run `flutter test --platform
+  chrome test/presigned_upload_web_test.dart` to check that browsers preserve
+  the exact signed endpoint and send no Gateway bearer or custom Host. Web
+  deployments must issue a browser-reachable storage URL with the required
+  storage CORS policy; browsers cannot spoof the signed Host after a rewrite.
 - Сценарии с бэкендом: **`integration_test`**, когда API для сценария доступен (staging или локальный compose).
 - Статический анализ: **`flutter analyze`** — в CI на каждый PR; для a11y см. [features/accessibility.md](features/accessibility.md).
 
@@ -225,6 +364,15 @@ environment is rejected before any refresh request. Keep that file private
 and do not commit it. Refresh and access credentials are kept in mode-0600
 private files while issuing requests; the WebSocket client reads its bearer
 token from a private file rather than a process argument.
+
+For ad-hoc disposable QA fixtures, preserve the origin/environment binding,
+owner-only permissions, symlink rejection and duplicate-key rejection too.
+Persist the intended account identifiers and recoverable credentials privately
+before the first registration/auth request, then save each normal session stage
+atomically. This allows recovery after a parser/assertion failure without losing
+the fixture or repeatedly creating accounts against a shared-IP login limit.
+Reuse the documented normal refresh path; this advice does not authorize account
+mutation outside the selected environment or putting credentials in arguments/logs.
 
 ### LogQL (Explore или Grafana)
 
@@ -366,13 +514,31 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 4. **golangci** — только затронутые модули (`pkg` + сервисы из matrix).
 5. **Auth** — Maven test на tier 1; Docker smoke + push — tier 2 (`master`).
 6. **Flutter** — tier 1: `buf-dart-check`, analyze, test; tier 2: APK / Windows / iOS / Chrome deep-link smoke.
-7. **Admin** — tier 1: `npm ci`, **ESLint**, vitest, `tsc`/build; Docker push — tier 2 (`master`). Vitest покрывает OAuth/login, moderation, analytics pages, game catalog config editor, App shell routing smoke (`src/admin/src/test/`).
+7. **Admin** — tier 1: `npm ci`, **ESLint**, vitest, `tsc`/build; Docker push — tier 2 (`master`). Vitest покрывает OAuth/login, moderation, analytics pages, game catalog config editor, App shell routing smoke (`src/admin/src/test/`). Отдельный [Admin browser](../.github/workflows/admin-browser.yml) на изменениях Admin запускает настоящий Chromium поверх собранного SPA: OAuth S256/invalid state, staff queue/assignment, denied resolution с сохранением ввода, sanction Cancel/Confirm, retry resolve, appeal и logout/direct reload. HTTP fixture проверяет запросы и bearer, но не доказывает живые Auth/staff permissions или backend enforcement. Локальный запуск и exact-source JSON/PNG artifacts: [Admin README](../src/admin/README.md).
 8. **Developer Portal** — `npm ci`, test, build; Docker push — tier 2 (`master`).
 8. Проверка ссылок в `docs/` — [`.github/workflows/docs-link-check.yml`](../.github/workflows/docs-link-check.yml).
 
 **Деплой на staging** — job **`deploy-staging`** в [`ci.yml`](../.github/workflows/ci.yml) вызывает [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml) (`workflow_call`) после `staging-stack-lock`; ручной запуск — **Actions → Staging deploy** с обязательным git SHA. См. [DEPLOYMENT.md](DEPLOYMENT.md). Branch protection: job **`ci-gate`** + [`.github/ci/branch-protection-checklist.md`](../.github/ci/branch-protection-checklist.md).
 
 ### Compose E2E (локально и CI)
+
+- Compose bootstrap creates and migrates Realtime's owned `realtime_db` before
+  its fail-closed startup. Dirty or nonempty untracked Realtime catalogs fail
+  without `migrate force`; reconcile their migration history explicitly.
+  `python3 docker/postgres/compose-realtime-migrations_test.py` exercises fresh,
+  existing-volume, repeated, dirty and untracked paths through the shell pipeline
+  with stateful command fixtures; actual Compose startup remains a separate check.
+
+The E2E catalog CLI (`bash scripts/ci/e2e-manifest.sh MANIFEST SECTION`)
+requires Python 3 and `python3 -m pip install -r scripts/ci/requirements-e2e.txt`
+(PyYAML 6.0.3). CI installs that dependency in every catalog-consuming job.
+Selections preserve YAML list order, decode quoted/flow values, and reject
+duplicate keys/items, empty or invalid test lists before emitting names.
+`full_gateway_run` is read by the same parser as a nonempty single-line scalar.
+Smoke/full runners stop before suite execution on parser failure; no test-list
+fallback is inferred. Check with `python3 scripts/ci/e2e_manifest_test.py` and
+`bash scripts/ci/e2e-manifest_test.sh`. These offline checks do not establish
+live smoke duration, provider coverage or product acceptance.
 
 - **`make compose-migrate-all`** — golang-migrate для Go-owned БД; контейнер migrate подключается к Postgres через `host.docker.internal` (compose publish на хост). При конфликте порта **5432** на хосте задайте `POSTGRES_PORT` в `.env` и `VOICE_MIGRATE_PG_HOST` (например `host.docker.internal`) в окружении перед migrate.
 - **Smoke (tier 2 / master push):** `scripts/ci/compose-e2e-smoke.sh` — один тест на фичу продукта.
@@ -383,6 +549,21 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 - T-055 fixture readiness observes the selected fresh DM's Chat `last_message_at` projection before recording the handoff. Messaging preview visibility alone does not prove that Chat's asynchronous ordering projection has settled. The measured two-page/item/cursor/hello-order assertions remain unchanged.
 - Манифест фич: [`.github/ci/e2e-features.yml`](../.github/ci/e2e-features.yml).
 - Flutter live helper `registerUser` завершает публичный email verification flow через compose-only Resend fixture: `otp/send` → `GET /emails/latest?to=<unique-email>` → `otp/verify`. Compose публикует fixture только на loopback; изолированный runner передаёт его URL через `VOICE_AUTH_MAIL_STUB_URL`. Staging/production сохраняют стандартный endpoint `https://api.resend.com/emails`.
+
+- BE-107 transport acceptance uses the real `ResendMailSender` over HTTP to the
+  disposable fixture, with a unique recipient per case and the actual injected
+  Auth Clock. Capture is submission evidence only; the client reads OTPs from
+  the delivered-only inbox after explicit settlement. Both OTP types cover
+  delivery, synchronous rejection, accepted-then-bounced non-delivery, ordinary
+  resend recovery, and fresh independent codes just before, at and after the
+  ten-minute expiry boundary. Rejected/expired/bounced flows preserve identity,
+  password and session state; successful reset revokes refresh sessions.
+  Neither NoopMailSender nor the test profile's CapturingMailSender can satisfy
+  this transport suite. Test controls stay local to the disposable fixture;
+  there is no production clock endpoint or Auth bounce callback.
+  Run `node --test docker/verification-stub/server.test.mjs`, then from
+  `src/backend/auth` run `mvn -B -Dtest=MailTransportAcceptanceTest test`
+  with JDK 25 and Node.js 24 on PATH. The ordinary Auth CI job runs both.
 - A1 session-bound verification proof must register/convert once, obtain the
   initial code from the mail fixture, use the restricted bearer for resend/
   verify/status (without an email body field), and assert replacement-session
@@ -390,6 +571,24 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 - R22.3 D1 tests являются source-disabled storage tests, не public Voice/media
   E2E и не активируют handlers, coordinator или Redis bridge.
 - F13 analyzes every non-first parent of an ordinary integration merge as a separate source contribution, including octopus merges. Each source needs one unambiguous ancestor base; guarded source tree entries and ownership must survive the merge and final result. An octopus may not invent guarded result paths. The outer master release merge still requires the exact push-before first parent and two-parent shape. This provenance support does not authorize R22 runtime activation.
+- Native/P3 source qualification uses a separate fixed `NATIVE-P3-SOURCE-v1`
+  record and later verifier carrier; it does not replace Game/R1/R2 or the
+  Voice013 guarded-correction authority. The complete repaired projection,
+  dependency context, literal A1–A4/B1–B4 evidence matrix and source reviews must
+  qualify together. An `OPEN` clause rejects source authority even after a
+  source-closure review. The current record is an input checkpoint with that
+  matrix explicitly open; its existence is not a green F13 result.
+- The separately typed native master consumer validates the actual PR merge or
+  push event, event-before/base, exact two-parent `[base, source]` result and
+  complete source/result mode/type/OID/deletion parity. Its content baseline is
+  distinct from the actual master event base. Real producer rows retain source
+  ownership, nested bases, content history, runtime flags and intermediate
+  guarded taint; only an exact reviewed pre-H restoration can discharge that
+  intermediate obligation. Post-H content, missing/forged rows and incomplete
+  closure do not qualify. Synthetic fixture state cannot change the selected
+  production record, producer map or history ledger. Focused tests run through
+  `make ci-script-tests`; no ACTIVE A3/v6/MM/provider deployment is implied or
+  required for this dormant/restrictive source unit.
 
 ### E2E по фичам
 

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -881,6 +882,23 @@ func TestComposeFcmObserverPreservesRouteSenderArgumentsAndArchivedSuppression(t
 }
 
 func TestComposeFcmObserverActualConsumerNakRetryThenAckWithoutResponseWait(t *testing.T) {
+	const childEnv = "VOICE_TEST_FCM_RETRY_CHILD"
+	if os.Getenv(childEnv) != "1" {
+		// Capture the whole process: replacing os.Stdout races the independent
+		// collector even before the first event reaches the callback.
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestComposeFcmObserverActualConsumerNakRetryThenAckWithoutResponseWait$", "-test.v")
+		cmd.Env = append(os.Environ(), childEnv+"=1")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("private consumer subprocess failed: %v\n%s", err, output)
+		}
+		if !strings.Contains(string(output), "reason=matched") || !strings.Contains(string(output), "attempts=2") || !strings.Contains(string(output), "dispatcher_returns=1 route=ack") {
+			t.Fatal("actual consumer event did not correlate through retry to ACK")
+		}
+		return
+	}
 	server, err := natsserver.NewServer(&natsserver.Options{JetStream: true, StoreDir: t.TempDir(), Port: -1})
 	if err != nil {
 		t.Fatal("private JetStream setup failed")
@@ -942,17 +960,6 @@ func TestComposeFcmObserverActualConsumerNakRetryThenAckWithoutResponseWait(t *t
 	// event path never waits for the file or the response message ID.
 	time.Sleep(50 * time.Millisecond)
 
-	stdout, stdoutWriter, err := os.Pipe()
-	if err != nil {
-		t.Fatal("private scalar-output capture setup failed")
-	}
-	previousStdout := os.Stdout
-	os.Stdout = stdoutWriter
-	defer func() {
-		os.Stdout = previousStdout
-		_ = stdoutWriter.Close()
-		_ = stdout.Close()
-	}()
 	event := &eventsv1.MessageStreamEvent{EventId: eventID.String(), Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
 		MessageId: messageID.String(), ChatId: chatID.String(), SenderProfileId: senderID.String(),
 	}}}
@@ -995,17 +1002,6 @@ func TestComposeFcmObserverActualConsumerNakRetryThenAckWithoutResponseWait(t *t
 	// already completed its route and durable ACK.
 	writeDiagnosticControlValues(t, controlPath, messageID.String(), chatID.String(), senderID.String(), targetID.String())
 	time.Sleep(composeFcmWindow + 100*time.Millisecond)
-	if err := stdoutWriter.Close(); err != nil {
-		t.Fatal("private scalar-output capture close failed")
-	}
-	os.Stdout = previousStdout
-	output, err := io.ReadAll(stdout)
-	if err != nil {
-		t.Fatal("private scalar-output read failed")
-	}
-	if !strings.Contains(string(output), "reason=matched") || !strings.Contains(string(output), "attempts=2") || !strings.Contains(string(output), "dispatcher_returns=1 route=ack") {
-		t.Fatal("actual consumer event did not correlate through retry to ACK")
-	}
 	cancel()
 	select {
 	case <-consumerDone:

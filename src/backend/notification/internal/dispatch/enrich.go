@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,10 +34,13 @@ func EnrichDecisions(
 			continue
 		}
 		isOnline := false
-		if presenceChecker != nil && !delivery.SkipsPresenceCheck(typ) {
+		if !delivery.SkipsPresenceCheck(typ) {
+			if presenceChecker == nil {
+				return nil, fmt.Errorf("notification routing presence authority is not configured")
+			}
 			isOnline, err = presenceChecker.IsOnline(ctx, recipient)
 			if err != nil {
-				isOnline = false
+				return nil, fmt.Errorf("notification routing presence: %w", err)
 			}
 		}
 		in := delivery.DeliveryInput{

@@ -25,6 +25,657 @@ export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
 
 export 'role.pbenum.dart';
 
+class EnsureDefaultMemberRoleRequest extends $pb.GeneratedMessage {
+  factory EnsureDefaultMemberRoleRequest({
+    $core.int? protocolVersion,
+    $core.String? spaceId,
+    $core.String? profileId,
+    $fixnum.Int64? membershipGeneration,
+    $core.String? admissionOperationId,
+    $core.List<$core.int>? admissionBindingSha256,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (profileId != null) result.profileId = profileId;
+    if (membershipGeneration != null)
+      result.membershipGeneration = membershipGeneration;
+    if (admissionOperationId != null)
+      result.admissionOperationId = admissionOperationId;
+    if (admissionBindingSha256 != null)
+      result.admissionBindingSha256 = admissionBindingSha256;
+    return result;
+  }
+
+  EnsureDefaultMemberRoleRequest._();
+
+  factory EnsureDefaultMemberRoleRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory EnsureDefaultMemberRoleRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'EnsureDefaultMemberRoleRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..a<$fixnum.Int64>(
+        4, _omitFieldNames ? '' : 'membershipGeneration', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOS(5, _omitFieldNames ? '' : 'admissionOperationId')
+    ..a<$core.List<$core.int>>(
+        6, _omitFieldNames ? '' : 'admissionBindingSha256', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  EnsureDefaultMemberRoleRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  EnsureDefaultMemberRoleRequest copyWith(
+          void Function(EnsureDefaultMemberRoleRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as EnsureDefaultMemberRoleRequest))
+          as EnsureDefaultMemberRoleRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static EnsureDefaultMemberRoleRequest create() =>
+      EnsureDefaultMemberRoleRequest._();
+  @$core.override
+  EnsureDefaultMemberRoleRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static EnsureDefaultMemberRoleRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<EnsureDefaultMemberRoleRequest>(create);
+  static EnsureDefaultMemberRoleRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get spaceId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set spaceId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSpaceId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSpaceId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get membershipGeneration => $_getI64(3);
+  @$pb.TagNumber(4)
+  set membershipGeneration($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasMembershipGeneration() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearMembershipGeneration() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get admissionOperationId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set admissionOperationId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasAdmissionOperationId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearAdmissionOperationId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.List<$core.int> get admissionBindingSha256 => $_getN(5);
+  @$pb.TagNumber(6)
+  set admissionBindingSha256($core.List<$core.int> value) =>
+      $_setBytes(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasAdmissionBindingSha256() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearAdmissionBindingSha256() => $_clearField(6);
+}
+
+/// Historical projection evidence. Effective rights require a current matching
+/// published Space generation, operation and receipt digest.
+class DefaultMemberRoleReceipt extends $pb.GeneratedMessage {
+  factory DefaultMemberRoleReceipt({
+    $core.int? protocolVersion,
+    $core.String? spaceId,
+    $core.String? profileId,
+    $fixnum.Int64? membershipGeneration,
+    $core.String? admissionOperationId,
+    $core.List<$core.int>? admissionBindingSha256,
+    $core.String? roleId,
+    $core.List<$core.int>? receiptSha256,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (profileId != null) result.profileId = profileId;
+    if (membershipGeneration != null)
+      result.membershipGeneration = membershipGeneration;
+    if (admissionOperationId != null)
+      result.admissionOperationId = admissionOperationId;
+    if (admissionBindingSha256 != null)
+      result.admissionBindingSha256 = admissionBindingSha256;
+    if (roleId != null) result.roleId = roleId;
+    if (receiptSha256 != null) result.receiptSha256 = receiptSha256;
+    return result;
+  }
+
+  DefaultMemberRoleReceipt._();
+
+  factory DefaultMemberRoleReceipt.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DefaultMemberRoleReceipt.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DefaultMemberRoleReceipt',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..a<$fixnum.Int64>(
+        4, _omitFieldNames ? '' : 'membershipGeneration', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOS(5, _omitFieldNames ? '' : 'admissionOperationId')
+    ..a<$core.List<$core.int>>(
+        6, _omitFieldNames ? '' : 'admissionBindingSha256', $pb.PbFieldType.OY)
+    ..aOS(7, _omitFieldNames ? '' : 'roleId')
+    ..a<$core.List<$core.int>>(
+        8, _omitFieldNames ? '' : 'receiptSha256', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DefaultMemberRoleReceipt clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DefaultMemberRoleReceipt copyWith(
+          void Function(DefaultMemberRoleReceipt) updates) =>
+      super.copyWith((message) => updates(message as DefaultMemberRoleReceipt))
+          as DefaultMemberRoleReceipt;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DefaultMemberRoleReceipt create() => DefaultMemberRoleReceipt._();
+  @$core.override
+  DefaultMemberRoleReceipt createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DefaultMemberRoleReceipt getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<DefaultMemberRoleReceipt>(create);
+  static DefaultMemberRoleReceipt? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get spaceId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set spaceId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSpaceId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSpaceId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get membershipGeneration => $_getI64(3);
+  @$pb.TagNumber(4)
+  set membershipGeneration($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasMembershipGeneration() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearMembershipGeneration() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get admissionOperationId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set admissionOperationId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasAdmissionOperationId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearAdmissionOperationId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.List<$core.int> get admissionBindingSha256 => $_getN(5);
+  @$pb.TagNumber(6)
+  set admissionBindingSha256($core.List<$core.int> value) =>
+      $_setBytes(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasAdmissionBindingSha256() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearAdmissionBindingSha256() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get roleId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set roleId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasRoleId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearRoleId() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.List<$core.int> get receiptSha256 => $_getN(7);
+  @$pb.TagNumber(8)
+  set receiptSha256($core.List<$core.int> value) => $_setBytes(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasReceiptSha256() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearReceiptSha256() => $_clearField(8);
+}
+
+class EnsureDefaultMemberRoleResponse extends $pb.GeneratedMessage {
+  factory EnsureDefaultMemberRoleResponse({
+    DefaultMemberRoleReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  EnsureDefaultMemberRoleResponse._();
+
+  factory EnsureDefaultMemberRoleResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory EnsureDefaultMemberRoleResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'EnsureDefaultMemberRoleResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOM<DefaultMemberRoleReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: DefaultMemberRoleReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  EnsureDefaultMemberRoleResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  EnsureDefaultMemberRoleResponse copyWith(
+          void Function(EnsureDefaultMemberRoleResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as EnsureDefaultMemberRoleResponse))
+          as EnsureDefaultMemberRoleResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static EnsureDefaultMemberRoleResponse create() =>
+      EnsureDefaultMemberRoleResponse._();
+  @$core.override
+  EnsureDefaultMemberRoleResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static EnsureDefaultMemberRoleResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<EnsureDefaultMemberRoleResponse>(
+          create);
+  static EnsureDefaultMemberRoleResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  DefaultMemberRoleReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt(DefaultMemberRoleReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  DefaultMemberRoleReceipt ensureReceipt() => $_ensure(0);
+}
+
+class RemoveMemberRolesRequest extends $pb.GeneratedMessage {
+  factory RemoveMemberRolesRequest({
+    $core.int? protocolVersion,
+    $core.String? spaceId,
+    $core.String? profileId,
+    $fixnum.Int64? removalGenerationFloor,
+    $core.String? removalOperationId,
+    $core.List<$core.int>? removalBindingSha256,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (profileId != null) result.profileId = profileId;
+    if (removalGenerationFloor != null)
+      result.removalGenerationFloor = removalGenerationFloor;
+    if (removalOperationId != null)
+      result.removalOperationId = removalOperationId;
+    if (removalBindingSha256 != null)
+      result.removalBindingSha256 = removalBindingSha256;
+    return result;
+  }
+
+  RemoveMemberRolesRequest._();
+
+  factory RemoveMemberRolesRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RemoveMemberRolesRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RemoveMemberRolesRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..a<$fixnum.Int64>(
+        4, _omitFieldNames ? '' : 'removalGenerationFloor', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOS(5, _omitFieldNames ? '' : 'removalOperationId')
+    ..a<$core.List<$core.int>>(
+        6, _omitFieldNames ? '' : 'removalBindingSha256', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RemoveMemberRolesRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RemoveMemberRolesRequest copyWith(
+          void Function(RemoveMemberRolesRequest) updates) =>
+      super.copyWith((message) => updates(message as RemoveMemberRolesRequest))
+          as RemoveMemberRolesRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RemoveMemberRolesRequest create() => RemoveMemberRolesRequest._();
+  @$core.override
+  RemoveMemberRolesRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RemoveMemberRolesRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RemoveMemberRolesRequest>(create);
+  static RemoveMemberRolesRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get spaceId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set spaceId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSpaceId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSpaceId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get removalGenerationFloor => $_getI64(3);
+  @$pb.TagNumber(4)
+  set removalGenerationFloor($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasRemovalGenerationFloor() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearRemovalGenerationFloor() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get removalOperationId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set removalOperationId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasRemovalOperationId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearRemovalOperationId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.List<$core.int> get removalBindingSha256 => $_getN(5);
+  @$pb.TagNumber(6)
+  set removalBindingSha256($core.List<$core.int> value) => $_setBytes(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasRemovalBindingSha256() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearRemovalBindingSha256() => $_clearField(6);
+}
+
+class MemberRolesRemovalReceipt extends $pb.GeneratedMessage {
+  factory MemberRolesRemovalReceipt({
+    $core.int? protocolVersion,
+    $core.String? spaceId,
+    $core.String? profileId,
+    $fixnum.Int64? removalGenerationFloor,
+    $core.String? removalOperationId,
+    $core.List<$core.int>? removalBindingSha256,
+    $core.List<$core.int>? receiptSha256,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (profileId != null) result.profileId = profileId;
+    if (removalGenerationFloor != null)
+      result.removalGenerationFloor = removalGenerationFloor;
+    if (removalOperationId != null)
+      result.removalOperationId = removalOperationId;
+    if (removalBindingSha256 != null)
+      result.removalBindingSha256 = removalBindingSha256;
+    if (receiptSha256 != null) result.receiptSha256 = receiptSha256;
+    return result;
+  }
+
+  MemberRolesRemovalReceipt._();
+
+  factory MemberRolesRemovalReceipt.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory MemberRolesRemovalReceipt.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'MemberRolesRemovalReceipt',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..a<$fixnum.Int64>(
+        4, _omitFieldNames ? '' : 'removalGenerationFloor', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOS(5, _omitFieldNames ? '' : 'removalOperationId')
+    ..a<$core.List<$core.int>>(
+        6, _omitFieldNames ? '' : 'removalBindingSha256', $pb.PbFieldType.OY)
+    ..a<$core.List<$core.int>>(
+        7, _omitFieldNames ? '' : 'receiptSha256', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MemberRolesRemovalReceipt clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MemberRolesRemovalReceipt copyWith(
+          void Function(MemberRolesRemovalReceipt) updates) =>
+      super.copyWith((message) => updates(message as MemberRolesRemovalReceipt))
+          as MemberRolesRemovalReceipt;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static MemberRolesRemovalReceipt create() => MemberRolesRemovalReceipt._();
+  @$core.override
+  MemberRolesRemovalReceipt createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static MemberRolesRemovalReceipt getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<MemberRolesRemovalReceipt>(create);
+  static MemberRolesRemovalReceipt? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get spaceId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set spaceId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSpaceId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSpaceId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get removalGenerationFloor => $_getI64(3);
+  @$pb.TagNumber(4)
+  set removalGenerationFloor($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasRemovalGenerationFloor() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearRemovalGenerationFloor() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get removalOperationId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set removalOperationId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasRemovalOperationId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearRemovalOperationId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.List<$core.int> get removalBindingSha256 => $_getN(5);
+  @$pb.TagNumber(6)
+  set removalBindingSha256($core.List<$core.int> value) => $_setBytes(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasRemovalBindingSha256() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearRemovalBindingSha256() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.List<$core.int> get receiptSha256 => $_getN(6);
+  @$pb.TagNumber(7)
+  set receiptSha256($core.List<$core.int> value) => $_setBytes(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasReceiptSha256() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearReceiptSha256() => $_clearField(7);
+}
+
+class RemoveMemberRolesResponse extends $pb.GeneratedMessage {
+  factory RemoveMemberRolesResponse({
+    MemberRolesRemovalReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  RemoveMemberRolesResponse._();
+
+  factory RemoveMemberRolesResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RemoveMemberRolesResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RemoveMemberRolesResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOM<MemberRolesRemovalReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: MemberRolesRemovalReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RemoveMemberRolesResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RemoveMemberRolesResponse copyWith(
+          void Function(RemoveMemberRolesResponse) updates) =>
+      super.copyWith((message) => updates(message as RemoveMemberRolesResponse))
+          as RemoveMemberRolesResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RemoveMemberRolesResponse create() => RemoveMemberRolesResponse._();
+  @$core.override
+  RemoveMemberRolesResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RemoveMemberRolesResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RemoveMemberRolesResponse>(create);
+  static RemoveMemberRolesResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  MemberRolesRemovalReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt(MemberRolesRemovalReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  MemberRolesRemovalReceipt ensureReceipt() => $_ensure(0);
+}
+
 class BootstrapSpaceRolesRequest extends $pb.GeneratedMessage {
   factory BootstrapSpaceRolesRequest({
     $core.String? spaceId,

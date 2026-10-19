@@ -24,15 +24,26 @@ func (testLifecycleHasher) HashAccount(_ context.Context, id uuid.UUID) ([]byte,
 	return append(bytes.Repeat([]byte{0x73}, 16), id[:]...), "fixture-v1", nil
 }
 
-func TestLifecycleFinalizeDeletesLocalDataAtomicallyAndKeepsUnrelatedSpace(t *testing.T) {
+func completeLifecycleRuntimeStoreFixture(t *testing.T) *SpaceStore {
+	t.Helper()
 	st := lifecycleStoreFixture(t)
 	ctx := context.Background()
-	for _, name := range []string{"000014_ownership_outbox_delivery.up.sql", "000015_audit_ledger.up.sql", "000022_lifecycle_runtime.up.sql", "000023_lifecycle_evidence_retention.up.sql"} {
+	for _, name := range []string{"000014_ownership_outbox_delivery.up.sql", "000015_audit_ledger.up.sql", "000022_lifecycle_runtime.up.sql", "000023_lifecycle_evidence_retention.up.sql", "000025_tree_audit_actions.up.sql", "000027_audit_ingestion.up.sql", "000029_audit_receipt_minimization.up.sql"} {
 		raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/space_db", name))
 		require.NoError(t, err)
 		_, err = st.Pool.Exec(ctx, string(raw))
 		require.NoError(t, err)
 	}
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/space_db/000034_realtime_lifecycle_participant.up.sql"))
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, string(raw))
+	require.NoError(t, err)
+	return st
+}
+
+func TestLifecycleFinalizeDeletesLocalDataAtomicallyAndKeepsUnrelatedSpace(t *testing.T) {
+	st := completeLifecycleRuntimeStoreFixture(t)
+	ctx := context.Background()
 	durable, _, _, actor, spaceID, request, proof, hash := reserveLifecycleOperationFixture(t, st)
 	operationID := uuid.MustParse(request.OperationId)
 	_, err := durable.RecordLifecycleDeletionProofReceipt(ctx, actor, operationID, proof, hash)
@@ -97,7 +108,7 @@ func TestLifecycleFinalizeDeletesLocalDataAtomicallyAndKeepsUnrelatedSpace(t *te
 	require.NoError(t, st.CleanupLifecycleEvidence(ctx))
 	require.NoError(t, st.CleanupLifecycleEvidence(ctx))
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM space_lifecycle_completions WHERE space_id=$1`, spaceID).Scan(&count))
-	require.Equal(t, 10, count)
+	require.Equal(t, len(lifecycleTestParticipants), count)
 	for _, table := range []string{"space_lifecycle_operations", "space_lifecycle_participants"} {
 		require.NoError(t, st.Pool.QueryRow(ctx, "SELECT count(*) FROM "+table+" WHERE space_id=$1", spaceID).Scan(&count))
 		require.Zero(t, count, table)

@@ -1,9 +1,10 @@
-// Code generated from owning migration function bodies; DO NOT EDIT.
+// Function hashes come from owning migration bodies; retain them unchanged.
+// Exact serving version: TestUserSourceAdditive21PreservesQualifiedCatalog.
 package store
 
 import "voice/backend/pkg/authoritysource"
 
-var userAuthorityCatalog = authoritysource.Catalog{Version: 19, Tables: []string{"profiles", "user_account_lifecycle", "sdk_author_tombstones", "user_authority_revision"}, Triggers: []authoritysource.CatalogTrigger{
+var userAuthorityCatalog = authoritysource.Catalog{Version: 21, Tables: []string{"profiles", "user_account_lifecycle", "sdk_author_tombstones", "user_authority_revision"}, Triggers: []authoritysource.CatalogTrigger{
 	{Table: "profiles", Name: "profiles_sdk_eligibility_revision", Function: "bump_sdk_eligibility_revision", Type: 19},
 	{Table: "sdk_author_tombstones", Name: "sdk_author_tombstones_no_update_delete", Function: "reject_sdk_author_tombstone_mutation", Type: 27},
 	{Table: "sdk_author_tombstones", Name: "sdk_author_tombstones_no_truncate", Function: "reject_sdk_author_tombstone_mutation", Type: 34},

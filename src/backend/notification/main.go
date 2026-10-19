@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
@@ -26,7 +25,6 @@ import (
 	"voice/backend/notification/internal/fcm"
 	"voice/backend/notification/internal/gameconsent"
 	"voice/backend/notification/internal/grouping"
-	grpcsvc "voice/backend/notification/internal/grpcsvc"
 	"voice/backend/notification/internal/presence"
 	"voice/backend/notification/internal/principalgrpc"
 	"voice/backend/notification/internal/pushenrich"
@@ -36,6 +34,7 @@ import (
 	"voice/backend/pkg/analyticsevents"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	"voice/backend/pkg/postgres"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
 
@@ -48,11 +47,12 @@ const serviceName = "notification"
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
-	recordPushes := strings.EqualFold(strings.TrimSpace(os.Getenv("NOTIFICATION_RECORD_PUSHES")), "true")
-	debugRecorderEnabled, err := parseDebugHTTPEnabled(os.LookupEnv, recordPushes)
+	releaseConfig, err := loadNotificationReleaseConfig(os.LookupEnv, buildSourceSHA, os.ReadFile)
 	if err != nil {
-		log.Fatalf("notification debug recorder configuration: %v", err)
+		log.Fatalf("notification release policy configuration: %v", err)
 	}
+	recordPushes := releaseConfig.recordPushes
+	debugRecorderEnabled := releaseConfig.debugRecorderEnabled
 	gameConsentClient, gameConsentEnabled, err := gameconsent.ConfigFromEnv(os.Getenv)
 	if err != nil {
 		log.Fatalf("game notification consent configuration: %v", err)
@@ -76,6 +76,11 @@ func main() {
 		gameBlockChecker = &gameconsent.BlockChecker{Profiles: userv1.NewUserServiceClient(userConn), Blocks: socialv1.NewSocialServiceClient(socialConn)}
 	}
 	metricsReg := prometheus.NewRegistry()
+	chatAdmission, err := newChatPushAdmission(os.LookupEnv, metricsReg)
+	if err != nil {
+		log.Fatalf("notification chat push quota configuration: %v", err)
+	}
+	defer func() { _ = chatAdmission.Close() }()
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		httpAddr = v
@@ -102,7 +107,7 @@ func main() {
 	var notificationPresenceJWKS *presence.PrincipalJWKSHTTPServer
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
-		pool, err := pgxpool.New(ctx, dbURL)
+		pool, err := postgres.NewPool(ctx, dbURL)
 		cancel()
 		if err != nil {
 			log.Fatalf("postgres: %v", err)
@@ -111,12 +116,14 @@ func main() {
 
 		tokenStore := &store.DeviceTokenStore{Pool: pool}
 		settingsStore := &store.SettingsStore{Pool: pool}
-		go runNotificationLifecycleRetention(consumerCtx, settingsStore, logger)
 		policyLoader := delivery.DBPolicyLoader{Reader: store.PolicyAdapter{Store: settingsStore}}
 		fcmSender := fcm.Sender(&fcm.NoopSender{Logger: logger})
 		if cfg, ok := fcm.ConfigFromEnv(); ok {
 			httpSender, err := fcm.NewHTTPSender(cfg)
 			if err != nil {
+				if releaseConfig.policy.Profile() == "free-invite-alpha" {
+					log.Fatal("notification release FCM configuration invalid")
+				}
 				logger.Warn("FCM credentials invalid; using noop sender", slog.Any("error", err))
 			} else {
 				fcmSender = httpSender
@@ -129,7 +136,7 @@ func main() {
 		fcmSender = maybeRecordFCMSender(fcmSender, debugRecorderEnabled)
 		apnsSender := apns.Sender(&apns.NoopSender{Logger: logger})
 		voipSender := apns.VoIPSender(&apns.VoIPNoopSender{})
-		if cfg, ok := apns.ConfigFromEnv(); ok {
+		if cfg, ok := apns.ConfigFromEnv(); ok && releaseConfig.policy.Allows("mobile_push") {
 			httpSender, err := apns.NewHTTPSender(cfg)
 			if err != nil {
 				logger.Warn("APNs credentials invalid; using noop sender", slog.Any("error", err))
@@ -145,7 +152,11 @@ func main() {
 				logger.Info("APNs VoIP HTTP sender enabled", slog.Bool("production", cfg.Production))
 			}
 		}
-		pusher := &dispatch.PushDispatcher{FCM: fcmSender, APNs: apnsSender, VoIP: voipSender, LifecycleDelivery: settingsStore}
+		deliveryRuntime, err := newNotificationDeliveryRuntime(releaseConfig, tokenStore, settingsStore, fcmSender, apnsSender, voipSender)
+		if err != nil {
+			log.Fatalf("notification release delivery configuration: %v", err)
+		}
+		pusher := deliveryRuntime.Pusher
 
 		var groupingStore grouping.Store
 		if redisAddr := strings.TrimSpace(os.Getenv("NOTIFICATION_REDIS_ADDR")); redisAddr != "" {
@@ -205,6 +216,7 @@ func main() {
 		}
 
 		msgPusher := &dispatch.MessagePusher{
+			Admission:         chatAdmission,
 			LifecycleDelivery: settingsStore,
 			Tokens:            tokenStore,
 			Pusher:            pusher,
@@ -226,6 +238,20 @@ func main() {
 		emailSender := email.Sender(&email.NoopSender{Logger: logger})
 		_ = emailSender
 
+		if releaseConfig.policy.Profile() == "free-invite-alpha" {
+			instance, err := os.Hostname()
+			if err != nil {
+				log.Fatal("notification instance identity unavailable")
+			}
+			snapshot, err := deliveryRuntime.Snapshot(instance)
+			if err != nil {
+				log.Fatal("notification effective release snapshot unavailable")
+			}
+			if err := writeNotificationReleaseSnapshot(releaseConfig.snapshotPath, snapshot); err != nil {
+				log.Fatal("notification private release snapshot export failed")
+			}
+		}
+		go runNotificationLifecycleRetention(consumerCtx, settingsStore, logger)
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			consumerReadiness = newNotificationConsumerReadiness("story", "message", "matchmaking", "voice", "social", "moderation", "subscription")
 			start := func(name string, run func(context.Context) error) {
@@ -260,12 +286,7 @@ func main() {
 		ordinaryOptions := []grpc.ServerOption{grpc.ChainUnaryInterceptor(principalgrpc.OrdinaryUnaryInterceptor())}
 		ordinaryOptions = append(ordinaryOptions, sharedGRPCOptions...)
 		grpcSrv = grpc.NewServer(ordinaryOptions...)
-		notifySvc := &grpcsvc.NotificationGRPC{
-			Tokens:         tokenStore,
-			Settings:       settingsStore,
-			SpaceLifecycle: settingsStore,
-			Pusher:         pusher,
-		}
+		notifySvc := deliveryRuntime.Service
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL, "notification"); err == nil {
 				notifySvc.Analytics = pub
@@ -303,6 +324,9 @@ func main() {
 			}()
 		}
 	} else {
+		if releaseConfig.policy.Profile() == "free-invite-alpha" {
+			log.Fatal("notification alpha release requires DATABASE_URL")
+		}
 		logger.Warn("DATABASE_URL not set; gRPC disabled (health only)")
 	}
 	if notificationPresenceJWKS != nil {

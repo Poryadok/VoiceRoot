@@ -12,7 +12,15 @@ const DevHashKeyDefault = "compose-dev-analytics-hash-key"
 // RequirePersistence is true when ClickHouse and hash key must be configured (staging/prod).
 func RequirePersistence() bool {
 	v := strings.ToLower(strings.TrimSpace(os.Getenv("ANALYTICS_REQUIRE_PERSISTENCE")))
-	return v == "1" || v == "true" || v == "yes"
+	switch v {
+	case "1", "true", "yes":
+		return true
+	case "", "0", "false", "no":
+		return false
+	default:
+		log.Fatal("ANALYTICS_REQUIRE_PERSISTENCE must be true/false, 1/0 or yes/no")
+		return false
+	}
 }
 
 func ResolveHashKey(logger *slog.Logger) string {
@@ -39,7 +47,7 @@ func ResolveClickHouseDSN(logger *slog.Logger) string {
 			log.Fatal("CLICKHOUSE_DSN required when ANALYTICS_REQUIRE_PERSISTENCE=true")
 		}
 		if logger != nil {
-			logger.Warn("CLICKHOUSE_DSN not set; ingest will buffer but not persist")
+			logger.Warn("CLICKHOUSE_DSN not set; analytics ingest and query are disabled")
 		}
 	}
 	return dsn

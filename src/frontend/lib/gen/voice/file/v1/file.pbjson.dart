@@ -795,13 +795,14 @@ const GetFileURLResponse$json = {
       '10': 'expiresAt'
     },
   ],
+  '10': ['file_url_response'],
 };
 
 /// Descriptor for `GetFileURLResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List getFileURLResponseDescriptor = $convert.base64Decode(
     'ChJHZXRGaWxlVVJMUmVzcG9uc2USKgoRcHJlc2lnbmVkX2dldF91cmwYASABKAlSD3ByZXNpZ2'
     '5lZEdldFVybBI5CgpleHBpcmVzX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFt'
-    'cFIJZXhwaXJlc0F0');
+    'cFIJZXhwaXJlc0F0UhFmaWxlX3VybF9yZXNwb25zZQ==');
 
 @$core.Deprecated('Use getFileMetadataResponseDescriptor instead')
 const GetFileMetadataResponse$json = {

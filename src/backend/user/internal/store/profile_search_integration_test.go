@@ -88,3 +88,80 @@ func backfillSearchFixtures(t *testing.T, ctx context.Context, st *ProfileStore)
 		}
 	}
 }
+
+// This exercises the actual PostgreSQL predicate and ranked cursor, rather than
+// only proving that the shared normalizer produces equivalent strings.
+func TestProfileStore_SearchProfilesAfter_NormalizedLookup(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires PostgreSQL")
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	integrationtest.ApplyUserDBMigrations(t, ctx, pool, userModuleRepoRoot(t))
+	viewer := uuid.New()
+	verifiedID := uuid.New()
+	var want []uuid.UUID
+	fixtures := []struct {
+		id       uuid.UUID
+		account  uuid.UUID
+		username string
+		display  string
+		verified string
+		deleted  bool
+		match    bool
+	}{
+		{verifiedID, uuid.New(), "zzzofficial", "Fаker", "personal", false, true},
+		{uuid.New(), uuid.New(), "Faker", "Latin username", "none", false, true},
+		{uuid.New(), uuid.New(), "fаker", "Cyrillic a username", "none", false, true},
+		{uuid.New(), uuid.New(), "Ｆａｋｅｒ", "NFKC username", "none", false, true},
+		{uuid.New(), uuid.New(), "displayonly", "Ｆａｋｅｒ", "none", false, true},
+		{uuid.New(), viewer, "ownfaker", "Own account", "none", false, false},
+		{uuid.New(), uuid.New(), "deletedfaker", "Deleted profile", "none", true, false},
+		{uuid.New(), uuid.New(), "unrelated", "No matching name", "none", false, false},
+	}
+	for _, f := range fixtures {
+		_, err := pool.Exec(ctx, `INSERT INTO profiles
+			(id, account_id, username, discriminator, display_name, is_primary, verification_type, deleted_at)
+			VALUES ($1,$2,$3,'0001',$4,true,$5,CASE WHEN $6 THEN now() ELSE NULL END)`,
+			f.id, f.account, f.username, f.display, f.verified, f.deleted)
+		require.NoError(t, err)
+		if f.match {
+			want = append(want, f.id)
+		}
+	}
+	st := NewProfileStore(pool)
+	backfillSearchFixtures(t, ctx, st)
+	for _, query := range []string{"Faker", "fаker", "ＦＡＫＥＲ"} {
+		t.Run(query, func(t *testing.T) {
+			first, err := st.SearchProfilesAfter(ctx, viewer, query, nil, 1)
+			require.NoError(t, err)
+			require.Len(t, first, 1)
+			require.Equal(t, verifiedID, first[0].ID, "verification outranks alphabetical username")
+			got := []uuid.UUID{first[0].ID}
+			last := first[0]
+			for page := 0; page <= len(want); page++ {
+				rank := 1
+				if last.VerificationType != "none" {
+					rank = 0
+				}
+				encoded, err := EncodeSearchCursor(ProfileSearchCursor{
+					VerificationRank: &rank, UsernameLower: strings.ToLower(last.Username),
+					Discriminator: last.Discriminator, ID: last.ID,
+				})
+				require.NoError(t, err)
+				cursor, err := DecodeSearchCursor(encoded)
+				require.NoError(t, err)
+				rows, err := st.SearchProfilesAfter(ctx, viewer, query, cursor, 2)
+				require.NoError(t, err)
+				if len(rows) == 0 {
+					break
+				}
+				for _, row := range rows {
+					got = append(got, row.ID)
+				}
+				last = rows[len(rows)-1]
+			}
+			require.ElementsMatch(t, want, got, "all normalized matches exactly once; own, deleted and unrelated rows excluded")
+		})
+	}
+}
