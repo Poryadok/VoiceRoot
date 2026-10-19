@@ -35,6 +35,38 @@ table presence, head-local cutover ID and a fresh Creator head do not supply it.
 The protected RPC/full downstream chain remains unactivated until that producer
 and its real qualified cohort are composed.
 
+Accepted410 (BE010 c76-c79, decision SHA256
+`83baa14994d9b5f63f0ae7c24956d0a1a373360111c6735be9d590322e64c0b4`)
+requires both an enforced exact DB guard epoch and a completed full-cohort
+per-Space UNKNOWN cutover. Forward44 implements protected transaction/backend
+frames, BEFORE capture enforcement, semantic source-loss observation, dirty
+sequence and deferred completion. It includes actual OLD member/owner finite
+coverage and a common final clock after waiting SQL. Ban/unban ABA cannot be
+hidden by final witness equality. Permanent retirement is immutable. Private
+capture rows are deleted at commit or real terminal cleanup; the retained
+registry tombstone contains only Space/protocol facts.
+
+`beginNativeMembershipDBMutation` returns the DB-derived complete cohort, not
+the caller's subset. Native production writers must finalize that entire set
+and call `completeNativeMembershipDBMutation` after their last source SQL.
+`InitializeScopedNativeMembership` is a separate administrator-only full native
+source validation and UNKNOWN successor initializer. It preserves immutable
+head-local cutover IDs and ONE-source publication identity. A Space created
+under the installed guard can establish a genuinely empty baseline before its
+first source publication. Reader repair and repeated administrative recutover
+are prohibited.
+
+`RequireScopedNativeMembershipReadiness` additionally requires the producer's
+exact native catalog qualification. Its SQL gate rejects a serving login with
+owner/DDL/superuser/replication/role-escalation privileges, missing per-Space
+COMPLETE or a changed guard catalog. Tests use an actual independent login,
+not an elevated session with SET ROLE. Installation or a standalone SQL guard
+positive does not qualify the entire native provider. Current source requires
+186's exact44 catalog and production writer placements; protected serving and
+the full report chain remain unavailable until their real composition. The
+uncutover frozen/ownership-pending maintenance initializer seam is explicitly
+pending bounded410 clarification; it is not an implicit LIVE serving bypass.
+
 The continuous effective binding is distinct from the ONE-source Role/admission
 binding. BE-066 c23 selects a compact generation/episode UUID/retirement floor and
 ledger revision, exact private ordinary/community witnesses and their coverage

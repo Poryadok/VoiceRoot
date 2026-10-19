@@ -321,6 +321,39 @@ sanction or local appeal system. Existing global intake semantics are unchanged.
 
 ## Decisions
 
+### Native readiness44 continuation (320, accepted410)
+
+The bounded implementation consumes decision83baa14994d9b5f63f0ae7c24956d0a1a373360111c6735be9d590322e64c0b4
+(BE010 c76-c79). Migration44 is separately reserved by320;42/43 SQL are immutable
+dependencies owned186/69. Existing native writer/catalog files remain186-owned.
+The implementation adds only44 SQL and new readiness Go/tests, then supplies
+the immutable ABI to186 for all-writer placement/catalog integration.
+
+The DB owns transaction/backend/Space capture, dirty sequence, OLD finite
+coverage, completion and the exact guard epoch. Source guards reject old direct
+writers before overwrite; deferred checks reject missing or stale completion.
+An administrator initializes the entire actual cohort UNKNOWN atomically;
+the application cannot mint registry/completion rows or repair them in a read.
+A born-guarded empty Space may establish its first real publication as KNOWN.
+Serving must use an actual nonowner, non-DDL, non-bypass login. Elevated fixture
+success is not a serving-role proof. The existing typed native source validator
+remains authoritative; SQL does not guess opaque protobuf evidence.
+
+Execution: first demonstrate RED for actual unadapted DELETE under a real login
+on schema43; implement the source fence/deferred protocol; then exercise real
+initialization, guarded transition, ABA/late-write/savepoint/old-lease expiry,
+RR/catalog/role tampering, empty born baseline, final waits and terminal P3.
+Run actual pinned migrate4.18.1 and scoped Linux Go/race/vet using a private
+network and explicitly owned PostgreSQL data volume, no host ports. Freeze
+source/archive/proof hashes before independent review and186 intake. Preserve
+41 and previous proof bytes. Require44 integration and all production placements
+before claiming protected reader readiness or full BE066 completion.
+
+- [ ] RED: old direct writer with a genuine serving login.
+- [ ] Protected DB guard, exact catalog/role checks, initializer and Go ABI.
+- [ ] Meaningful positive/negative/race/P3 proofs and immutable packet.
+- [ ] Independent review,186 integration and explicit121 delivery acceptance.
+
 BE-066 c10 selects content-free Messaging batch viewer decisions and an independent
 positive lifecycle observer. Exact caller/data/visibility contracts are now in
 owning Messaging/Chat/Space/Role docs. Social's existing typed pair check needs a
