@@ -131,7 +131,23 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     });
   }
 
+  @Override
+  public void getSpaceSessionEpochFloor(
+      app.voice.auth.v1.GetSpaceSessionEpochFloorRequest request,
+      StreamObserver<app.voice.auth.v1.GetSpaceSessionEpochFloorResponse> responseObserver) {
+    runProof(responseObserver, () -> {
+      requireProofPrincipal("service", "space");
+      rejectUnknownFields(request);
+      return app.voice.auth.v1.GetSpaceSessionEpochFloorResponse.newBuilder()
+          .setSessionEpochFloor(readSessionEpochFloor(request.getAccountId(), true)).build();
+    });
+  }
+
   private long readSessionEpochFloor(String rawAccountId) {
+    return readSessionEpochFloor(rawAccountId, false);
+  }
+
+  private long readSessionEpochFloor(String rawAccountId, boolean rejectDeleted) {
     java.util.UUID accountId = deletionUuid(rawAccountId);
     if (accountId.getMostSignificantBits() == 0 && accountId.getLeastSignificantBits() == 0) {
       throw Status.INVALID_ARGUMENT.withDescription("account id is required").asRuntimeException();
@@ -141,6 +157,9 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     }
     var account = accountRepository.findById(accountId.toString())
         .orElseThrow(() -> Status.NOT_FOUND.withDescription("account not found").asRuntimeException());
+    if (rejectDeleted && (account.deletedAt() != null || "deleted".equals(account.status()))) {
+      throw Status.NOT_FOUND.withDescription("account not found").asRuntimeException();
+    }
     long durableEpoch = account.sessionEpoch();
     long floorEpoch = sessionEpochFloorStore.requireFloor(accountId);
     long currentEpoch = Math.max(durableEpoch, floorEpoch);

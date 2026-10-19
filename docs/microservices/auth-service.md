@@ -838,12 +838,28 @@ Redis floor as `GetVoiceSessionEpochFloor`, returns their positive maximum and
 never creates a new epoch/cache. Missing account returns `NOT_FOUND`; missing,
 invalid or unavailable authority returns `UNAVAILABLE`. Both requests reject
 unknown fields and noncanonical or zero account UUIDs before persistence reads.
-The existing dedicated session-floor listener exposes exactly these two RPCs;
+The dedicated session-floor listener exposes only its explicitly registered floor RPCs;
 ordinary and ownership/deletion proof listeners expose neither. Role must use
 its own `service:role` principal, exact full RPC/request hash/request ID and fresh
 JTI, issuer-specific HTTPS JWKS in `S2S_JWKS_URLS_JSON`, and a client certificate
 trusted by `AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE`. Voice keeps its exact
 `service:voice` endpoint and cannot call the Role method (or vice versa).
+
+`AuthService.GetSpaceSessionEpochFloor` adds a distinct Space-only method with
+`GetSpaceSessionEpochFloorRequest.account_id = 1` and response
+`session_epoch_floor = 1`. It uses the same positive durable/retained maximum,
+with canonical nonzero account UUID and unknown-field rejection. Missing or
+deleted accounts return `NOT_FOUND`; invalid/missing floor, DB/Redis failure,
+or unavailable JWKS/replay authority returns `UNAVAILABLE`. It never initializes
+or caches an epoch. Only signed `iss=space`, `sub=service:space`,
+`principal_type=service` may call the exact RPC with audience `auth`, exact
+request ID/body hash, fresh JTI and the existing mutually authenticated session
+floor transport. The dedicated floor listener exposes these three exact methods;
+ordinary and ownership/deletion listeners expose none. Gateway delegated user,
+Role, Voice and other services cannot call this method; Space cannot borrow
+Role/Voice floor methods. Existing Role/Voice caller contracts are unchanged.
+This producer is a prerequisite for native Space creator freshness, not proof
+that Gateway/Space creation has been assembled or activated.
 
 `accounts.session_epoch` — положительный монотонный durable source of truth
 Auth. Auth атомарно увеличивает его для отзыва всех сессий и никогда не

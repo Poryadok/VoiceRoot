@@ -32,11 +32,16 @@ public final class RedisPrincipalReplayGuard implements AuthPrincipalVerifier.Re
       String digest = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(jti.getBytes(StandardCharsets.UTF_8)));
       String key = "auth:principal:replay:" + issuer + ":" + digest;
       result = commands.submit(() -> redis.opsForValue().setIfAbsent(key, "1", ttl));
-      if (!Boolean.TRUE.equals(result.get(2, TimeUnit.SECONDS))) throw new IllegalArgumentException();
+      Boolean recorded = result.get(2, TimeUnit.SECONDS);
+      if (recorded == null) throw new PrincipalDependencyUnavailableException();
+      if (!recorded) throw new IllegalArgumentException();
     } catch (Exception ex) {
       if (result != null) result.cancel(true);
       if (ex instanceof InterruptedException) Thread.currentThread().interrupt();
-      throw new IllegalArgumentException("principal replay unavailable or already recorded");
+      if (ex instanceof IllegalArgumentException && !(ex instanceof PrincipalDependencyUnavailableException)) {
+        throw new IllegalArgumentException("principal replay rejected");
+      }
+      throw new PrincipalDependencyUnavailableException();
     }
   }
 
