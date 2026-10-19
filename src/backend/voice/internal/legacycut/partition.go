@@ -19,9 +19,13 @@ type PartitionRef struct {
 }
 type Obligation struct {
 	ID, Resource, Key, Path string
-	ValueHash               retirementproof.Digest
-	Retain                  bool
-	SourceBytes             []byte
+	// ParentID links retained history envelopes to their exhaustive children.
+	// CustodyOnly is structural retention/finalization, never semantic origin.
+	ParentID    string `json:",omitempty"`
+	CustodyOnly bool   `json:",omitempty"`
+	ValueHash   retirementproof.Digest
+	Retain      bool
+	SourceBytes []byte
 }
 type OwnershipAssignment struct {
 	ObligationID              string
@@ -117,7 +121,8 @@ func DeriveObligations(w retirementproof.OwnerWork) ([]Obligation, error) {
 	result := []Obligation{}
 	appendValue := func(id, resource, key, path string, value any, retain bool) {
 		raw, _ := json.Marshal(value)
-		result = append(result, Obligation{ID: id, Resource: resource, Key: key, Path: path, ValueHash: retirementproof.Hash("voice.legacy.obligation-value.v1", raw), Retain: retain, SourceBytes: raw})
+		custody := retain || path == "@physical" || strings.HasSuffix(path, "/@object") || strings.HasSuffix(path, "/@array")
+		result = append(result, Obligation{ID: id, Resource: resource, Key: key, Path: path, CustodyOnly: custody, ValueHash: retirementproof.Hash("voice.legacy.obligation-value.v1", raw), Retain: retain, SourceBytes: raw})
 	}
 	for i, t := range targets {
 		if t.Kind != "REDIS" {
@@ -155,28 +160,11 @@ func DeriveObligations(w retirementproof.OwnerWork) ([]Obligation, error) {
 			if retained {
 				appendValue(id+"/@retained", t.Endpoint.ID, e.Key, "@retained", e, true)
 				if strings.HasPrefix(local, "voice_move_operation:") {
-					var move map[string]json.RawMessage
-					if json.Unmarshal([]byte(e.Value), &move) != nil {
-						return nil, retirementproof.ErrConflict
+					history, err := deriveMoveHistory(id, t.Endpoint.ID, e.Key, []byte(e.Value))
+					if err != nil {
+						return nil, err
 					}
-					var value map[string]json.RawMessage
-					raw := move["result"]
-					if raw == nil {
-						raw = move["Result"]
-					}
-					if json.Unmarshal(raw, &value) != nil {
-						return nil, retirementproof.ErrConflict
-					}
-					for _, side := range []string{"Source", "Destination"} {
-						raw = value[side]
-						if raw == nil {
-							raw = value[strings.ToLower(side)]
-						}
-						if !json.Valid(raw) {
-							return nil, retirementproof.ErrConflict
-						}
-						appendValue(id+"/@history/"+side, t.Endpoint.ID, e.Key, "@history/"+side, json.RawMessage(raw), false)
-					}
+					result = append(result, history...)
 				}
 				continue
 			}
@@ -208,6 +196,57 @@ func DeriveObligations(w retirementproof.OwnerWork) ([]Obligation, error) {
 		}
 	}
 	return result, nil
+}
+
+// deriveMoveHistory retains each raw side and expands every captured child.
+// A mixed side cannot be assigned as one current-room semantic obligation.
+// It resolves no owners; temporal/source evidence must qualify each association.
+func deriveMoveHistory(id, resource, key string, raw []byte) ([]Obligation, error) {
+	var envelope map[string]json.RawMessage
+	if json.Unmarshal(raw, &envelope) != nil {
+		return nil, retirementproof.ErrConflict
+	}
+	if envelope["result"] != nil && envelope["Result"] != nil {
+		return nil, retirementproof.ErrConflict
+	}
+	resultRaw := envelope["result"]
+	if resultRaw == nil {
+		resultRaw = envelope["Result"]
+	}
+	var result map[string]json.RawMessage
+	if json.Unmarshal(resultRaw, &result) != nil {
+		return nil, retirementproof.ErrConflict
+	}
+	obligations := []Obligation{}
+	for _, side := range []string{"Source", "Destination"} {
+		if result[side] != nil && result[strings.ToLower(side)] != nil {
+			return nil, retirementproof.ErrConflict
+		}
+		sideRaw := result[side]
+		if sideRaw == nil {
+			sideRaw = result[strings.ToLower(side)]
+		}
+		var value any
+		decoder := json.NewDecoder(bytes.NewReader(sideRaw))
+		decoder.UseNumber()
+		if !json.Valid(sideRaw) || decoder.Decode(&value) != nil {
+			return nil, retirementproof.ErrConflict
+		}
+		path := "@history/" + side
+		parent := id + "/" + path
+		appendValue := func(oid, opath, parentID string, v any, retain, custody bool) {
+			canonical, _ := json.Marshal(v)
+			obligations = append(obligations, Obligation{ID: oid, Resource: resource, Key: key, Path: opath, ParentID: parentID, CustodyOnly: custody, ValueHash: retirementproof.Hash("voice.legacy.obligation-value.v1", canonical), Retain: retain, SourceBytes: canonical})
+		}
+		appendValue(parent, path, id+"/@retained", value, true, true)
+		if err := walkObligations(value, "", func(child string, v any) {
+			custody := strings.HasSuffix(child, "/@object") || strings.HasSuffix(child, "/@array")
+			appendValue(parent+"/json"+child, path+"/json"+child, parent, v, false, custody)
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return obligations, nil
 }
 
 func walkObligations(value any, path string, emit func(string, any)) error {
