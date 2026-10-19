@@ -100,6 +100,12 @@ ordinary native suites, race and vet; compare native event/outbox versions.
   Two intermediate failing runs corrected test fixtures (SQL JSON/column CHECK,
   then invalid aggregate); neither is classified as a product defect or PASS.
   Work remains PREPARED; acceptance changes no native/Redis effects.
+- [x] Exact-marker footprint component: RED0.056s (missing implementation) ->
+  race GREEN1.052s/test0.01, vet0, original47981 terminal0. The helper resolves
+  exact current OR retained member generation/media identity and preserves
+  unrelated participant/share evidence; wrong operation/version, contradictory
+  owner markers and unknown source fields refuse. This is not a full partition
+  planner/ACK, structural-custody claim or physical-cleanup implementation.
 
 ## Decisions
 
@@ -107,6 +113,22 @@ Retain all historical aggregate JSON and native outbox records, rather than only
 the current membership index. Ordinary provider issuance has no complete grant
 ledger; explicit unknown source markers must require protected historical
 confinement. No source cleanup means an unavailable owner receipt, never DRAINED.
+
+Normal merge638acda imports immutable legacy projection journal5fc4246 for the
+two-owner C/P/T seam. Its successorf7263c6 adds a validated ReadPartition without
+requiring the native ACK first; consume that immutable source before intake.
+Neither dependency is installed authority or independent source CLEAR.
+
+Temporal attribution question is TT c6, bounded architecture continuation307:
+an unversioned locator or markerless move snapshot cannot be assigned to the
+current native head by room/profile match. Exact-marker classification can
+proceed independently; unresolved temporal obligations remain retained and
+unavailable. Do not classify a missing native marker as a positive legacy claim.
+Decision307 is now c8 / artifact301d54a01e54c3749d085d329cada89b,
+SHA256 d5f7220d0386ada2713aa1ca54e4d5aa03dbfb4eb0286571b9ff92123f2344ed.
+Implement protected temporal resolution R before P; separate structural custody
+from semantic ownership and retain full move-side child obligations. The actual
+current locator is session:<profile>; no automatic alias for active_call exists.
 
 ## Risks and follow-ups
 
