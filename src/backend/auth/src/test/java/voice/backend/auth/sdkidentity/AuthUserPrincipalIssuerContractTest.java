@@ -42,6 +42,28 @@ class AuthUserPrincipalIssuerContractTest {
 
   @TempDir Path keys;
 
+  @Test void lifecycleUsesOnlyTwoFixedRecipientsAndTheSharedKeyset() throws Exception {
+    RSAKey current=key("current");write(current);write(key("next"));
+    AuthUserPrincipalIssuer issuer=(AuthUserPrincipalIssuer)load("current");
+    var method=AuthUserPrincipalIssuer.class.getMethod("issueAccountLifecycle",String.class,String.class,String.class);
+    String rpc="/voice.automod.v1.AccountLifecycleReceiverService/ApplyLifecycleFact";
+    for(String recipient:List.of("messaging","moderation")) {
+      SignedJWT token=SignedJWT.parse((String)method.invoke(issuer,recipient,REQUEST_ID,REQUEST_HASH));
+      assertThat(token.verify(new RSASSAVerifier(current.toPublicJWK()))).isTrue();
+      var claims=token.getJWTClaimsSet();
+      assertThat(claims.getAudience()).containsExactly(recipient);
+      assertThat(claims.getIssuer()).isEqualTo("auth");assertThat(claims.getSubject()).isEqualTo("service:auth");
+      assertThat(claims.getClaim("rpc")).isEqualTo(rpc);
+      assertThat(claims.getClaim("request_id")).isEqualTo(REQUEST_ID);
+      assertThat(claims.getClaim("request_hash")).isEqualTo(REQUEST_HASH);
+      assertThat(claims.getExpirationTime().toInstant()).isEqualTo(NOW.plusSeconds(30));
+      assertThat(claims.getClaims()).doesNotContainKeys("account_id","profile_id","session_epoch");
+    }
+    for(String invalid:List.of("","user","space","moderation "))
+      assertThatThrownBy(()->method.invoke(issuer,invalid,REQUEST_ID,REQUEST_HASH)).hasCauseInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(()->issuer.issue(rpc,REQUEST_ID,REQUEST_HASH)).isInstanceOf(IllegalArgumentException.class);
+  }
+
   @Test void moderationSnapshotUsesTheSameKeysetAndOnlyItsFixedPurpose() throws Exception {
     RSAKey current=key("current");write(current);write(key("next"));
     AuthUserPrincipalIssuer issuer=(AuthUserPrincipalIssuer)load("current");

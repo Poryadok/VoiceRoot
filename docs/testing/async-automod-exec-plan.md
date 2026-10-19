@@ -677,3 +677,14 @@ PostgreSQL race proof: two failing baseline cases (2.659 s), then three passing
 cases (4.036 s), including the concurrent first terminal and empty downgrade/up.
 Scoped go vet passed. This corrects rollback safety only, not P0-P5 activation or
 the open physical P30D criterion.
+
+Auth lifecycle delivery component: fixed shared-signer purpose test first failed
+with the missing method, then passed with exact Messaging/Moderation audiences.
+The Java codec matches the independent 120-byte Go hash and rejects malformed
+facts/receipts. Seven native PostgreSQL delivery tests passed (14.637 s, no skips),
+including a concurrent uncommitted owner transition, newer-intent preservation,
+unowned terminal/ahead response denial, terminal-ledger ACK and generation-check
+rollback. Four actual private mTLS/configuration tests passed, including anonymous
+and wrong-CA refusal before the handler. These component checks do not yet wire
+the scheduled publisher, finite catch-up, Auth own-authority bootstrap barrier or
+public issuance gate. Exact frozen-source verification follows before review.

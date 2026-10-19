@@ -122,6 +122,13 @@ public final class AuthUserPrincipalIssuer implements SdkDeviceStatusIssuer {
     return issueService("moderation",MODERATION_SNAPSHOT_RPC,requestId,requestHash);
   }
 
+  /** Private lifecycle delivery only; no arbitrary audience or RPC signing. */
+  public String issueAccountLifecycle(String recipient,String requestId,String requestHash) {
+    if (!"messaging".equals(recipient) && !"moderation".equals(recipient))
+      throw new IllegalArgumentException("invalid lifecycle recipient");
+    return issueService(recipient,"/voice.automod.v1.AccountLifecycleReceiverService/ApplyLifecycleFact",requestId,requestHash);
+  }
+
   /** Fixed admission read only; SDK credentials remain restricted to their original RPC. */
   public String issueAdmissionProfile(String requestId, String requestHash) {
     return issueService("user", "/voice.user.v1.UserService/GetSpaceAdmissionProfileEligibility", requestId, requestHash);

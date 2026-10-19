@@ -91,6 +91,27 @@ event `00000000-0000-4000-8000-000000000002`, subject
 Receipt validation is structural only: a higher revision/hash or positive fence
 must reach the sender's CURRENT owner projection/ledger comparison, not directly
 clear a delivery intent. Equal revision with changed hash is rejected.
+
+The delivery component reads a bounded union of both recipient queues outside
+network transactions. After a response it locks the actual Auth account row,
+then checks its current projection or permanent terminal ledger and deletes only
+the requested recipient/event/generation intent. A transition that wins during
+the RPC leaves its newer intent queued. An unowned terminal response or revision
+above CURRENT Auth authority is restore divergence; no synthetic revision or
+terminal fact is created. An unavailable recipient does not consume its intent
+or prevent a bounded attempt to the other recipient.
+
+`AuthLifecycleClientSettings` requires explicit `auth.automod.lifecycle.enabled`
+and complete settings for BOTH `AUTH_AUTOMOD_LIFECYCLE_MESSAGING_` and
+`AUTH_AUTOMOD_LIFECYCLE_MODERATION_`: `GRPC_ADDR`, `TLS_SERVER_NAME`,
+`TLS_CA_FILE`, `TLS_CERT_FILE`, `TLS_KEY_FILE`. Partial/orphan settings fail;
+there is no plaintext fallback. The client uses the existing Auth issuer/keyset
+with a fixed lifecycle-only method and exact recipient audience, a fresh request
+ID/body hash and a bounded two-second deadline. It refuses calls inside a local
+transaction. This component still needs the verified own-authority bootstrap
+barrier, scheduled delivery/catch-up wiring and the complete recipient/coordinator
+activation proof; its local tests do not establish P1-P5 or physical P30D.
+
 ## Space admission owner observation (SPACE-ADMISSION-IDENTITY-v1)
 
 `ObserveSpaceAdmissionSubject` is an additive read-only RPC on the existing
