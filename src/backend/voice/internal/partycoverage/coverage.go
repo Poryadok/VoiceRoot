@@ -120,7 +120,8 @@ func CheckRuntimePrivileges(ctx context.Context, tx pgx.Tx) error {
  (a.rolsuper OR a.rolcreaterole OR a.rolcreatedb OR a.rolreplication OR a.rolbypassrls OR a.rolname IN ('pg_write_server_files','pg_read_server_files','pg_execute_server_program')))
  OR EXISTS(SELECT 1 FROM pg_class c WHERE c.oid IN ('voice_party_coverage_receipts'::regclass,'voice_party_coverage_head'::regclass,'voice_party_coverage_operations'::regclass,'voice_party_coverage_steps'::regclass,
  to_regclass('voice_party_resource_components'),to_regclass('voice_party_resource_retirements'),to_regclass('voice_party_resource_component_links'),
- to_regclass('voice_native_owner_works'),to_regclass('voice_native_owner_targets'),to_regclass('voice_native_owner_acceptances'))
+ to_regclass('voice_native_owner_works'),to_regclass('voice_native_owner_targets'),to_regclass('voice_native_owner_acceptances'),
+ to_regclass('voice_identity_cut_work'))
  AND EXISTS(SELECT 1 FROM pg_roles a WHERE
  (pg_has_role(current_user,a.oid,'MEMBER') OR pg_has_role(session_user,a.oid,'MEMBER')
  OR pg_has_role((SELECT usesysid FROM pg_stat_activity WHERE pid=pg_backend_pid()),a.oid,'MEMBER')) AND

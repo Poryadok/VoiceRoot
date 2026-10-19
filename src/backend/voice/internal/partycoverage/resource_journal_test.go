@@ -116,9 +116,10 @@ func TestProtectedResourceReaderRejectsWriterAndRecoversExactBytes(t *testing.T)
 
 func TestRuntimeRejectsMaintenanceOnlyNativeOwnerJournalWrites(t *testing.T) {
 	ctx, c, schema := coverageDB(t)
-	// Privilege-contract fixtures only: actual017 schema/owner transitions belong
-	// to160. Serving must reject writes even before that source is integrated.
-	tables := []string{"voice_native_owner_works", "voice_native_owner_targets", "voice_native_owner_acceptances"}
+	// Privilege-contract fixtures only: actual017/023 owner transitions belong
+	// to160/234. Exact023 table name is pinned by immutable2e6573a7 migration.
+	// Serving must reject journal writes before those sources are integrated.
+	tables := []string{"voice_native_owner_works", "voice_native_owner_targets", "voice_native_owner_acceptances", "voice_identity_cut_work"}
 	for _, table := range tables {
 		_, err := c.Exec(ctx, "CREATE TABLE "+pgx.Identifier{table}.Sanitize()+"(fixture int)")
 		require.NoError(t, err)
@@ -148,7 +149,7 @@ func TestRuntimeRejectsMaintenanceOnlyNativeOwnerJournalWrites(t *testing.T) {
 	for _, table := range tables {
 		_, err = c.Exec(ctx, "GRANT INSERT ON "+pgx.Identifier{table}.Sanitize()+" TO "+pgx.Identifier{role}.Sanitize())
 		require.NoError(t, err)
-		require.ErrorIs(t, check(), ErrUnavailable, "serving may not mint native owner work/acceptance")
+		require.ErrorIs(t, check(), ErrUnavailable, "serving may not mint native owner work/acceptance: %s", table)
 		_, err = c.Exec(ctx, "REVOKE INSERT ON "+pgx.Identifier{table}.Sanitize()+" FROM "+pgx.Identifier{role}.Sanitize())
 		require.NoError(t, err)
 	}
