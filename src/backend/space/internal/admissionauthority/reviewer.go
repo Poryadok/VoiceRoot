@@ -46,7 +46,7 @@ type VerifiedReviewerPermission struct {
 }
 
 func reviewerRequest(request *authv1.ObserveSpaceAdmissionSubjectRequest) bool {
-	return validRequest(request) && request.SubjectRole == authv1.SpaceAdmissionSubjectRole_SPACE_ADMISSION_SUBJECT_ROLE_REVIEWER && (request.Phase == authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_APPROVE || request.Phase == authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_FIRST_PUBLISH)
+	return validRequest(request) && request.SubjectRole == authv1.SpaceAdmissionSubjectRole_SPACE_ADMISSION_SUBJECT_ROLE_REVIEWER && (request.Phase == authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_READ || request.Phase == authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_APPROVE || request.Phase == authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_FIRST_PUBLISH)
 }
 
 func (v *VerifiedReviewerPermission) StartedAt() time.Time {
@@ -67,8 +67,8 @@ func (v *VerifiedReviewerPermission) Deadline() time.Time {
 }
 
 // Check is pure and must run after final Space lock waits alongside current
-// local reviewer membership. A previous APPROVE proof cannot authorize the
-// distinct FIRST_PUBLISH context even within the same five-second interval.
+// local reviewer membership. A previous READ or APPROVE proof cannot authorize
+// FIRST_PUBLISH even within the same five-second interval.
 func (v *VerifiedReviewerPermission) Check(expected *authv1.ObserveSpaceAdmissionSubjectRequest) error {
 	if v == nil || v.clock == nil || v.subject == nil || v.requestID == uuid.Nil || !reviewerRequest(expected) || !proto.Equal(v.expected, expected) {
 		return ErrBinding
