@@ -64,7 +64,7 @@ func (s *SpaceStore) verifyMemberAdmissionReference(ctx context.Context, intent 
 	if err != nil {
 		return err
 	}
-	if version == 40 {
+	if version == 40 || version == 41 {
 		if err := s.VerifyVersionedJoinDecisionBasis(ctx, selected, *in.JoinAttempt, in.DecisionBasisSHA256, intent.PolicyVersion, in.OperationID); err != nil {
 			return err
 		}
