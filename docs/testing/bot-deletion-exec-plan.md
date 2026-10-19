@@ -233,3 +233,21 @@ read operation/revision for the same incarnation and historical adoption without
 current observation still succeed without a live datasource. This isolated
 correction excludes parallel private-receiver work and does not resolve Purge or
 the post-30-day proof gap.
+
+The private Messaging receiver now has an actual transport proof against official
+Messaging35 and Chat25 UP migrations, real Redis, inbound mTLS and protected
+HTTPS JWKS. A readonly Chat LOGIN is reopened and verified independently before
+current-source queries. Ordinary generated Messaging returned UNIMPLEMENTED in
+the causal receiver RED (12.976s); the dedicated production capability/handler
+passed the first positive (15.967s), expanded transport matrix (17.977s), and
+readonly/current-source controls (14.993s). A request held behind the actual CHAT
+advisory lock expires without effects; the same immutable body with fresh JWT
+recovers and exactly replays. Actual Chat DELETE with retained native head is
+qualified explicitly, rather than treating NotFound as completion (15.017s).
+Store regression controls passed in 19.310s. The final production receiver with
+the c64 coverage guard passed its coherent transport run in 14.581s, with scoped
+vet/build successful. An initial main build lacked the
+standard errors import; it was corrected and scoped vet/build passed.
+These signed decisions are controlled Bot assertions, not a proof of an actual
+Bot root journal or public owner admission. Producer delivery/recovery, global
+Space/Role retirement coverage and post-30-day provider gaps remain unfinished.

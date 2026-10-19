@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -607,8 +608,10 @@ func main() {
 			principalgrpc.GameIntegrationOrdinaryUnaryInterceptor(),
 		))...)
 		var chatThreadPolicy *store.SQLChatThreadPolicy
+		var botPinChatScope store.BotPinChatScopeLoader
 		if chatMetaPool != nil {
 			chatThreadPolicy = &store.SQLChatThreadPolicy{Pool: chatMetaPool}
+			botPinChatScope = chatThreadPolicy
 		} else {
 			logger.Warn("CHAT_DATABASE_URL not set; thread policy checks disabled")
 		}
@@ -633,7 +636,7 @@ func main() {
 			GameMessages:          gameMessages,
 			GameTombstones:        tombstoneProcessor,
 			Reactions:             &store.ReactionsStore{Pool: pool},
-			Pins:                  &store.PinsStore{Pool: pool},
+			Pins:                  &store.PinsStore{Pool: pool, BotPinChatScope: botPinChatScope},
 			SharedMedia:           &store.SharedMediaStore{Pool: pool},
 			ChatGuard:             chatGuard,
 			ChatTypeResolver:      chatTypeResolver,
@@ -678,6 +681,18 @@ func main() {
 			gameMessagePermitProcessor.CommunicationAdmission = messagingService.BeginCommunicationAction
 		}
 		messagingv1.RegisterMessagingServiceServer(grpcSrv, messagingService)
+		botPinCleanup, err := grpcsvc.StartBotPinCleanupServer(context.Background(), grpcsvc.BotPinCleanupConfigFromEnv(os.Getenv), messagingService.Pins)
+		if err != nil {
+			log.Fatalf("Messaging private Bot pin cleanup: %v", err)
+		}
+		if botPinCleanup != nil {
+			defer func() { _ = botPinCleanup.Close() }()
+			go func() {
+				if serveErr := <-botPinCleanup.Errors(); serveErr != nil && !errors.Is(serveErr, grpc.ErrServerStopped) {
+					logger.Error("Messaging Bot pin cleanup listener stopped", "error", serveErr)
+				}
+			}()
+		}
 		if managedChatPurge != nil && managedChatPurge.Coordinator != nil {
 			messagingService.SpaceFileProducer = &grpcsvc.SpaceFileProducerCoordinator{Store: &store.MessagesStore{Pool: pool}, Files: filev1.NewFileServiceClient(managedChatPurge.Connections[0]), Issuer: managedChatPurge.Coordinator.Issuer}
 			messagingService.AttachmentReferences = &grpcsvc.AttachmentReferenceCoordinator{Files: filev1.NewFileServiceClient(managedChatPurge.Connections[0]), Issuer: managedChatPurge.Coordinator.Issuer}
@@ -689,7 +704,9 @@ func main() {
 				ticker := time.NewTicker(time.Minute)
 				defer ticker.Stop()
 				for {
-					if err := messagingService.ReconcileLegacyFilePreviews(retentionCtx); err != nil && retentionCtx.Err() == nil { logger.Error("Messaging file preview reconciliation pass failed") }
+					if err := messagingService.ReconcileLegacyFilePreviews(retentionCtx); err != nil && retentionCtx.Err() == nil {
+						logger.Error("Messaging file preview reconciliation pass failed")
+					}
 					if err := (&store.MessagesStore{Pool: pool}).ReconcileAttachmentIntents(retentionCtx, messagingService.AttachmentReferences.Release); err != nil && retentionCtx.Err() == nil {
 						logger.Error("Messaging abandoned attachment recovery pass failed")
 					}

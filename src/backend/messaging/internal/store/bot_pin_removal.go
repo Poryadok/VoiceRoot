@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	messagingv1 "voice.app/voice/messaging/v1"
+	"voice/backend/messaging/internal/botpinprincipal"
 )
 
 var ErrBotPinRemovalBinding = errors.New("Bot pin-removal binding is invalid")
@@ -202,6 +203,18 @@ func readBotPinRemovalReceipt(ctx context.Context, q botPinReceiptQuerier, b *bo
 // ApplyBotChatPinRemoval consumes the private receiver's authenticated Bot
 // source assertion. It is not a public actor- or chat-selected mutation grant.
 func (s *PinsStore) ApplyBotChatPinRemoval(ctx context.Context, request *messagingv1.ApplyBotChatPinRemovalRequest) (*messagingv1.ApplyBotChatPinRemovalResponse, error) {
+	return s.applyBotChatPinRemoval(ctx, request, nil)
+}
+
+func (s *PinsStore) ApplyVerifiedBotChatPinRemoval(ctx context.Context, capability botpinprincipal.VerifiedCleanup) (*messagingv1.ApplyBotChatPinRemovalResponse, error) {
+	request, err := capability.Request()
+	if err != nil {
+		return nil, err
+	}
+	return s.applyBotChatPinRemoval(ctx, request, capability.Validate)
+}
+
+func (s *PinsStore) applyBotChatPinRemoval(ctx context.Context, request *messagingv1.ApplyBotChatPinRemovalRequest, authority func(*messagingv1.ApplyBotChatPinRemovalRequest) error) (*messagingv1.ApplyBotChatPinRemovalResponse, error) {
 	if s == nil || s.Pool == nil {
 		return nil, ErrStoreNotConfigured
 	}
@@ -215,8 +228,20 @@ func (s *PinsStore) ApplyBotChatPinRemoval(ctx context.Context, request *messagi
 	if proto.Unmarshal(b.body, request) != nil {
 		return nil, ErrBotPinRemovalBinding
 	}
+	check := func() error {
+		if authority != nil {
+			return authority(request)
+		}
+		return nil
+	}
+	if err = check(); err != nil {
+		return nil, err
+	}
 	prior, err := readBotPinRemovalReceipt(ctx, s.Pool, b)
 	if err == nil {
+		if err = check(); err != nil {
+			return nil, err
+		}
 		return prior, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -235,8 +260,14 @@ func (s *PinsStore) ApplyBotChatPinRemoval(ctx context.Context, request *messagi
 	if err = lockMessageMutation(ctx, tx, b.chat, nil, nil); err != nil {
 		return nil, err
 	}
+	if err = check(); err != nil {
+		return nil, err
+	}
 	prior, err = readBotPinRemovalReceipt(ctx, tx, b)
 	if err == nil {
+		if err = check(); err != nil {
+			return nil, err
+		}
 		return prior, tx.Commit(ctx)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -262,8 +293,14 @@ func (s *PinsStore) ApplyBotChatPinRemoval(ctx context.Context, request *messagi
 		if err = lockMessageMutation(ctx, tx, b.chat, &b.space, nil); err != nil {
 			return nil, err
 		}
+		if err = check(); err != nil {
+			return nil, err
+		}
 		for _, index := range uncovered {
 			if err = s.qualifyUncoveredBotPinAttachment(ctx, b, b.attachments[index]); err != nil {
+				return nil, err
+			}
+			if err = check(); err != nil {
 				return nil, err
 			}
 		}
@@ -303,6 +340,9 @@ func (s *PinsStore) ApplyBotChatPinRemoval(ctx context.Context, request *messagi
 	if bot != b.bot {
 		return nil, ErrBotPinRemovalConflict
 	}
+	if err = check(); err != nil {
+		return nil, err
+	}
 	var revision int64
 	var removedCount int64
 	if len(uncovered) > 0 {
@@ -340,6 +380,9 @@ func (s *PinsStore) ApplyBotChatPinRemoval(ctx context.Context, request *messagi
 		if _, err = tx.Exec(ctx, `INSERT INTO bot_pin_removal_attachment_coverage(attachment_id,projection_bytes,effect_target_sha256,origin_operation_id,cleanup_revision) VALUES($1,$2,$3,$4,$5)`, target.id, target.projection, target.digest[:], b.operation, revision); err != nil {
 			return nil, err
 		}
+	}
+	if err = check(); err != nil {
+		return nil, err
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, err
