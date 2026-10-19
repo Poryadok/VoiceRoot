@@ -119,7 +119,28 @@ func (s *admissionServer) GetJoinAttempt(ctx context.Context, original *spacev1.
 	if err != nil {
 		return nil, mapAdmissionError(err)
 	}
-	projected, err := projectJoinAttemptRead(view)
+	var member *store.MembershipRow
+	if view.State == "PUBLISHED" {
+		if view.PublicationID == nil {
+			return nil, status.Error(codes.Unavailable, "native admission outcome unavailable")
+		}
+		intent, err := s.store.LookupMemberAdmission(ctx, *view.PublicationID)
+		if err != nil {
+			return nil, mapAdmissionError(err)
+		}
+		if intent == nil || intent.State != "PUBLISHED" || intent.Input.OperationID != *view.PublicationID || intent.Input.SpaceID != space || intent.Input.AccountID.String() != actor.AccountID || intent.Input.ProfileID.String() != actor.ProfileID || intent.Input.JoinAttempt == nil || intent.Input.JoinAttempt.AttemptID != view.ID {
+			return nil, status.Error(codes.Unavailable, "native admission binding unavailable")
+		}
+		var saved bool
+		member, saved, err = s.store.ReadMemberAdmissionOutcome(ctx, *view.PublicationID)
+		if err != nil {
+			return nil, mapAdmissionError(err)
+		}
+		if !saved || member == nil || member.SpaceID != space || member.ProfileID.String() != actor.ProfileID {
+			return nil, status.Error(codes.Unavailable, "native admission outcome unavailable")
+		}
+	}
+	projected, err := projectJoinAttemptRead(view, member)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +150,7 @@ func (s *admissionServer) GetJoinAttempt(ctx context.Context, original *spacev1.
 	return &spacev1.GetJoinAttemptResponse{Attempt: projected}, nil
 }
 
-func projectJoinAttemptRead(v *store.JoinAttemptRead) (*spacev1.JoinAttemptView, error) {
+func projectJoinAttemptRead(v *store.JoinAttemptRead, member *store.MembershipRow) (*spacev1.JoinAttemptView, error) {
 	if v == nil {
 		return nil, status.Error(codes.Unavailable, "admission snapshot unavailable")
 	}
@@ -147,10 +168,18 @@ func projectJoinAttemptRead(v *store.JoinAttemptRead) (*spacev1.JoinAttemptView,
 		state = spacev1.JoinAdmissionState_JOIN_ADMISSION_STATE_EXPIRED
 	case "INVALIDATED":
 		state = spacev1.JoinAdmissionState_JOIN_ADMISSION_STATE_INVALIDATED
+	case "PUBLISHED":
+		if member == nil || member.SpaceID != v.SpaceID {
+			return nil, status.Error(codes.Unavailable, "native admission outcome required")
+		}
+		state = spacev1.JoinAdmissionState_JOIN_ADMISSION_STATE_ADMITTED
 	default:
 		return nil, status.Error(codes.Unavailable, "native admission outcome required")
 	}
 	r := &spacev1.JoinAdmissionResult{State: state}
+	if member != nil {
+		r.SpaceMembership = membershipRowToProto(member)
+	}
 	if v.RequestID != nil {
 		r.RequestId = v.RequestID.String()
 	} else if v.State == "PENDING" {
@@ -177,7 +206,7 @@ func mapAdmissionError(err error) error {
 	switch {
 	case errors.Is(err, store.ErrJoinReadNotFound):
 		return status.Error(codes.NotFound, "join request not found")
-	case errors.Is(err, admissionauthority.ErrIneligible), errors.Is(err, store.ErrJoinAttemptDenied):
+	case errors.Is(err, admissionauthority.ErrIneligible), errors.Is(err, store.ErrJoinAttemptDenied), errors.Is(err, store.ErrGuestsNotAllowed), errors.Is(err, store.ErrAccountBanned):
 		return status.Error(codes.PermissionDenied, "admission denied")
 	case errors.Is(err, store.ErrJoinAttemptConflict):
 		return status.Error(codes.AlreadyExists, "admission operation conflict")
