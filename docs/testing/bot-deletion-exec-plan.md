@@ -105,8 +105,12 @@ real HTTP Gateway to mTLS Bot to real Java Auth to PostgreSQL for the empty
 installation-set DeleteBot path. Current9 completes; raised20 and unavailable0
 leave the Bot live with no root decision. Replay/floor Redis is explicitly
 miniredis in this fixture. See `bot-gateway-lifecycle-interop.md` for reproducible
-commands and boundaries. Ordinary listener cutover and full remote cleanup
-remain OPEN. These component results do not qualify BE-170.
+commands and boundaries. DeleteBot now requires the exact verified delegated
+principal at its handler boundary, before owner reads or mutation; an ordinary
+raw-identity call cannot create a decision. This cut follows the actual working
+HTTP positive path and outage/stale controls. The separate install/uninstall
+cut and full remote cleanup remain OPEN. These component results do not qualify
+BE-170.
 
 ## Risks and follow-ups
 

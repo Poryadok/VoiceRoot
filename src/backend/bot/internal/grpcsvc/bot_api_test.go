@@ -95,7 +95,7 @@ func TestBotCRUD_and_webhookURL(t *testing.T) {
 	require.Equal(t, "https://example.com/hook", wh.GetUrl())
 
 	_, err = client.DeleteBot(ctx, &botv1.DeleteBotRequest{BotId: botID})
-	require.NoError(t, err)
+	require.Equal(t, codes.Unauthenticated, status.Code(err), "ordinary listener cannot initiate global deletion")
 }
 
 func TestBotUpdateScopes_rechecksAfterConcurrentRemoval(t *testing.T) {

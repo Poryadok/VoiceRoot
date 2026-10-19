@@ -51,5 +51,7 @@ HTTP204, disables the Bot, commits one complete root and retains the verified
 account/profile/session epoch in its immutable decision. These operations do
 not write the production Auth floor or identity schema.
 
-The ordinary Bot lifecycle listener cut and the full BE-170 participants,
-receipts, restart/retry, retention and purge criteria remain separate gates.
+DeleteBot requires the exact verified delegated principal at the handler,
+including calls arriving through the ordinary listener. Install/uninstall cut
+and the full BE-170 participants, receipts, restart/retry, retention and purge
+criteria remain separate gates.

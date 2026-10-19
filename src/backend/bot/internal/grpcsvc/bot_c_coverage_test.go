@@ -1838,7 +1838,7 @@ func TestDeleteBot_deniedForNonOwner(t *testing.T) {
 	otherCtx := withAccount(context.Background(), uuid.New(), uuid.New())
 	_, err = client.DeleteBot(otherCtx, &botv1.DeleteBotRequest{BotId: reg.GetBot().GetId()})
 	require.Error(t, err)
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
 }
 
 func TestGetBot_deniedForNonOwner(t *testing.T) {

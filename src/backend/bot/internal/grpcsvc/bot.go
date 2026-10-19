@@ -151,6 +151,10 @@ WHERE id = $1`, botID, row.Name, row.Description, row.AvatarURL, row.ScopesJSON)
 }
 
 func (s *BotGRPC) DeleteBot(ctx context.Context, req *botv1.DeleteBotRequest) (*botv1.DeleteBotResponse, error) {
+	identity, verifyErr := principal.RequireDelegatedUser(ctx, "bot", botv1.BotService_DeleteBot_FullMethodName, req)
+	if verifyErr != nil {
+		return nil, status.Error(codes.Unauthenticated, "verified deletion initiation required")
+	}
 	botID, err := parseUUID("bot_id", req.GetBotId())
 	if err != nil {
 		return nil, err
@@ -158,23 +162,12 @@ func (s *BotGRPC) DeleteBot(ctx context.Context, req *botv1.DeleteBotRequest) (*
 	if err := s.ensureOwner(ctx, botID); err != nil {
 		return nil, err
 	}
-	owner, _ := authctx.AccountID(ctx)
-	var deletion *store.BotDeletion
-	if verified, ok := principal.FromContext(ctx); ok {
-		identity, verifyErr := principal.RequireDelegatedUser(ctx, "bot", botv1.BotService_DeleteBot_FullMethodName, req)
-		if verifyErr != nil {
-			return nil, status.Error(codes.Unauthenticated, "verified deletion initiation required")
-		}
-		requestBytes, marshalErr := (proto.MarshalOptions{Deterministic: true}).Marshal(req)
-		if marshalErr != nil {
-			return nil, status.Error(codes.InvalidArgument, "invalid deletion request")
-		}
-		deletion, err = s.Store.BeginBotDeletionWithAdmission(ctx, botID, owner, store.DeletionAdmission{AccountID: identity.AccountID, ProfileID: identity.ProfileID, SessionEpoch: identity.SessionEpoch, AccountType: identity.AccountType, Method: verified.RPC, RequestID: verified.RequestID, RequestHash: verified.RequestHash, RequestBytes: requestBytes, ExpiresAt: verified.ExpiresAt})
-	} else {
-		// The ordinary listener remains available until the full protected HTTP
-		// path is qualified. Its final lifecycle cut is a separate rollout step.
-		deletion, err = s.Store.BeginBotDeletion(ctx, botID, owner)
+	verified, _ := principal.FromContext(ctx)
+	requestBytes, marshalErr := (proto.MarshalOptions{Deterministic: true}).Marshal(req)
+	if marshalErr != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid deletion request")
 	}
+	deletion, err := s.Store.BeginBotDeletionWithAdmission(ctx, botID, identity.AccountID, store.DeletionAdmission{AccountID: identity.AccountID, ProfileID: identity.ProfileID, SessionEpoch: identity.SessionEpoch, AccountType: identity.AccountType, Method: verified.RPC, RequestID: verified.RequestID, RequestHash: verified.RequestHash, RequestBytes: requestBytes, ExpiresAt: verified.ExpiresAt})
 	if err != nil {
 		if errors.Is(err, store.ErrDeletionOwner) {
 			return nil, status.Error(codes.PermissionDenied, "not bot owner")

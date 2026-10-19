@@ -101,6 +101,11 @@ func TestGatewayLifecycleMTLSVerifiedOwnerWithoutRawHeadersBeforeDeletion(t *tes
 	}
 	require.Equal(t, codes.Unimplemented, status.Code(streamErr), "private Gateway listener exposes only three unary lifecycle methods")
 	request := &botv1.DeleteBotRequest{BotId: bot.ID.String()}
+	_, rawErr := grpcsvc.NewBotGRPC(st, nil).DeleteBot(metadata.NewIncomingContext(ctx, metadata.Pairs("x-voice-user-id", owner.String(), "x-voice-profile-id", profile.String())), request)
+	require.Equal(t, codes.Unauthenticated, status.Code(rawErr), "ordinary/raw identity cannot initiate global deletion")
+	stillLive, err := st.GetBotByID(ctx, bot.ID)
+	require.NoError(t, err)
+	require.Equal(t, "live", stillLive.Status)
 	hash, err := principal.RequestHash(request)
 	require.NoError(t, err)
 	signed := func(account uuid.UUID, epoch int64) context.Context {

@@ -3,16 +3,17 @@ package grpcsvc_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	botv1 "voice.app/voice/bot/v1"
 	grpcsvc "voice/backend/bot/internal/grpcsvc"
 	"voice/backend/bot/internal/store"
 	"voice/backend/pkg/integrationtest"
+	"voice/backend/pkg/principal"
 )
 
 func TestDeleteBotRetainsRecoveryAndDoesNotAcknowledgeUnavailableCleanup(t *testing.T) {
@@ -38,8 +39,13 @@ func TestDeleteBotRetainsRecoveryAndDoesNotAcknowledgeUnavailableCleanup(t *test
 	other, _, err := st.CreateBot(ctx, owner, "Unrelated", "", `[]`, uuid.New())
 	require.NoError(t, err)
 	svc := grpcsvc.NewBotGRPC(st, nil)
-	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("x-voice-user-id", owner.String(), "x-voice-profile-id", installer.String()))
-	_, err = svc.DeleteBot(ctx, &botv1.DeleteBotRequest{BotId: bot.ID.String()})
+	request := &botv1.DeleteBotRequest{BotId: bot.ID.String()}
+	hash, err := principal.RequestHash(request)
+	require.NoError(t, err)
+	// This is a handler persistence component fixture. Real network verification
+	// is covered separately by the mTLS and cross-process HTTP tests.
+	ctx = principal.WithVerified(ctx, principal.Principal{Kind: "delegated_user", Issuer: "gateway", Subject: owner.String(), AccountID: owner.String(), ProfileID: installer.String(), SessionEpoch: 1, AccountType: "regular", Audience: "bot", RPC: botv1.BotService_DeleteBot_FullMethodName, RequestID: uuid.NewString(), RequestHash: hash, ExpiresAt: time.Now().Add(time.Minute)})
+	_, err = svc.DeleteBot(ctx, request)
 	require.Equal(t, codes.Unavailable, status.Code(err), "DeleteBot must not claim completed cleanup without participant acknowledgements")
 	_, err = st.GetBotByTokenHash(ctx, store.HashToken(token))
 	require.ErrorIs(t, err, store.ErrNotFound)
