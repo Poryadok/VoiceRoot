@@ -12,6 +12,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -201,12 +202,17 @@ func (f *fixtureBotCleanup) check(ctx context.Context, p fixtureBotPostcondition
 	if n == nil || n.InstallationId != p.InstallationID || n.InstallOperationId != p.InstallOperationID || n.Generation != p.Generation || req.BotId != p.BotID || req.ActorProfileId != p.ActorProfileID || req.SpaceId != p.SpaceID || req.OperationId != p.OperationID || req.DecisionId != p.DecisionID || req.Purpose != "space_uninstall" || !bytes.Equal(hash[:], storedHash) {
 		return fmt.Errorf("committed cleanup request differs from seed")
 	}
-	if receipt == nil || receipt.ReceiptId != p.ReceiptID || receipt.OperationId != p.OperationID || receipt.DecisionId != p.DecisionID || receipt.BotId != p.BotID || receipt.ActorProfileId != p.ActorProfileID || receipt.SpaceId != p.SpaceID || receipt.Participant != "role" || receipt.Outcome != "COMPLETED" || receipt.DeletedRoleCount != f.rows.DeletedRoleCount || receipt.RemovedAssignmentCount != f.rows.RemovedAssignmentCount || !bytes.Equal(receipt.RequestSha256, hash[:]) {
+	evidence, err := (proto.MarshalOptions{Deterministic: true}).Marshal(n)
+	if err != nil {
+		return err
+	}
+	evidenceHash := sha256.Sum256(evidence)
+	if receipt == nil || receipt.ProtocolVersion != 1 || receipt.Purpose != req.Purpose || receipt.EvidenceKind != "native" || !bytes.Equal(receipt.EvidenceSha256, evidenceHash[:]) || !bytes.Equal(receipt.FrozenScopeSha256, req.FrozenScopeSha256) || receipt.CompletedAt == nil || receipt.CompletedAt.CheckValid() != nil || receipt.ReceiptId != p.ReceiptID || receipt.OperationId != p.OperationID || receipt.DecisionId != p.DecisionID || receipt.BotId != p.BotID || receipt.ActorProfileId != p.ActorProfileID || receipt.SpaceId != p.SpaceID || receipt.Participant != "role" || receipt.Outcome != "COMPLETED" || receipt.DeletedRoleCount != f.rows.DeletedRoleCount || receipt.RemovedAssignmentCount != f.rows.RemovedAssignmentCount || !bytes.Equal(receipt.RequestSha256, hash[:]) {
 		return fmt.Errorf("committed cleanup receipt differs")
 	}
 	r := f.rows
 	var gone, controls, operations int
-	if err := f.pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM roles WHERE id=$1)+(SELECT count(*) FROM member_roles WHERE space_id=$2 AND (role_id=$1 OR (profile_id=$3 AND role_id=$4)))),(SELECT count(*) FROM roles WHERE id=$4 AND space_id=$2 AND created_by_profile_id=$5 AND NOT is_system)+(SELECT count(*) FROM member_roles WHERE space_id=$2 AND ((profile_id=$6 AND role_id=$4) OR (profile_id=$3 AND role_id=$7)))+(SELECT count(*) FROM member_roles m JOIN roles x ON x.id=m.role_id WHERE m.space_id=$2 AND m.profile_id=$5 AND x.is_system AND x.name='Owner'),(SELECT count(*) FROM role_bot_removal_operations WHERE bot_id=$8 AND space_id=$2 AND installation_id=$9 AND response_bytes IS NOT NULL)`, r.CreatedRoleID, p.SpaceID, p.ActorProfileID, r.ControlRoleID, f.owner, r.ControlProfileID, r.SystemRoleID, p.BotID, p.InstallationID).Scan(&gone, &controls, &operations); err != nil {
+	if err := f.pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM roles WHERE id=$1)+(SELECT count(*) FROM member_roles WHERE space_id=$2 AND (role_id=$1 OR (profile_id=$3 AND role_id=$4))),(SELECT count(*) FROM roles WHERE id=$4 AND space_id=$2 AND created_by_profile_id=$5 AND NOT is_system)+(SELECT count(*) FROM member_roles WHERE space_id=$2 AND ((profile_id=$6 AND role_id=$4) OR (profile_id=$3 AND role_id=$7)))+(SELECT count(*) FROM member_roles m JOIN roles x ON x.id=m.role_id WHERE m.space_id=$2 AND m.profile_id=$5 AND x.is_system AND x.name='Owner'),(SELECT count(*) FROM role_bot_removal_operations WHERE bot_id=$8 AND space_id=$2 AND installation_id=$9 AND response_bytes IS NOT NULL)`, r.CreatedRoleID, p.SpaceID, p.ActorProfileID, r.ControlRoleID, f.owner, r.ControlProfileID, r.SystemRoleID, p.BotID, p.InstallationID).Scan(&gone, &controls, &operations); err != nil {
 		return err
 	}
 	if gone != 0 || controls != 4 || operations != 1 {
@@ -263,6 +269,10 @@ func startFixtureBotControl(t *testing.T, ctx context.Context, client rolev1.Rol
 			if mode == "default" {
 				if _, err := os.Stat(filepath.Join(dir, "seed.ready.json")); !os.IsNotExist(err) {
 					return fmt.Errorf("default fixture unexpectedly seeded")
+				}
+				command := exec.CommandContext(ctx, "go", "run", "./testdata/native_role_probe", filepath.Join(dir, "ready.json"))
+				if err := command.Run(); err != nil {
+					return fmt.Errorf("default signed fixture probe: %w", err)
 				}
 				return nil
 			}
@@ -325,6 +335,25 @@ func TestNativeFixtureBotSeedValidation(t *testing.T) {
 	for name, change := range map[string]func(*fixtureBotSeed){"wrongSpace": func(s *fixtureBotSeed) { s.SpaceID = uuid.NewString() }, "ownerActor": func(s *fixtureBotSeed) { s.ActorProfileID = owner }, "zeroGeneration": func(s *fixtureBotSeed) { s.Generation = 0 }, "overflowGeneration": func(s *fixtureBotSeed) { s.Generation = math.MaxUint64 }, "schema": func(s *fixtureBotSeed) { s.SchemaVersion = 2 }, "zeroBot": func(s *fixtureBotSeed) { s.BotID = uuid.Nil.String() }, "noncanonicalInstallation": func(s *fixtureBotSeed) { s.InstallationID = "{" + s.InstallationID + "}" }} {
 		t.Run(name, func(t *testing.T) { bad := s; change(&bad); require.Error(t, bad.validate(s.SpaceID, owner)) })
 	}
+}
+
+func TestNativeFixtureBotHandshakeRejectsChangedTuple(t *testing.T) {
+	dir := t.TempDir()
+	s := fixtureBotSeed{1, uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), 1}
+	require.NoError(t, fixtureWriteJSON(dir, "seed.request.json", s))
+	raw, err := os.ReadFile(filepath.Join(dir, "seed.request.json"))
+	require.NoError(t, err)
+	f := fixtureBotCleanup{space: s.SpaceID, owner: uuid.NewString(), seedRaw: raw, rows: fixtureBotRows{Seed: s}}
+	require.NoError(t, f.poll(context.Background(), dir))
+	require.False(t, f.complete, "missing saved receipt cannot complete")
+	p := fixtureBotPostcondition{s, uuid.NewString(), uuid.NewString(), uuid.NewString()}
+	p.BotID = uuid.NewString()
+	require.NoError(t, fixtureWriteJSON(dir, "postcondition.request.json", p))
+	require.ErrorContains(t, f.poll(context.Background(), dir), "differs from seed")
+	require.False(t, f.complete)
+	s.ActorProfileID = uuid.NewString()
+	require.NoError(t, fixtureWriteJSON(dir, "seed.request.json", s))
+	require.ErrorContains(t, f.poll(context.Background(), dir), "seed changed")
 }
 
 func fixtureCheckControl(t *testing.T, done <-chan error) {
