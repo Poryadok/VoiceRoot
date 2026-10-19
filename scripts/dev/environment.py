@@ -175,12 +175,17 @@ def render(snapshot, node):
                     if ('value' in env and re.search(r'PASSWORD|PRIVATE_KEY|API_SECRET|ENCRYPTION_KEY|STATIC_TOKENS|HASH_KEY|API_KEY|ACCESS_KEY|TOKEN_SECRET', env['name'])
                             and not location):
                         raise ValueError('sensitive literal env forbidden: ' + env['name'])
-                memory = '1024Mi' if meta['name'] in ('voice-auth', 'voice-clickhouse') else '384Mi'
+                memory = '1024Mi' if meta['name'] == 'voice-auth' else '384Mi'
+                request_memory = '64Mi'
+                if meta['name'] == 'voice-clickhouse':
+                    memory = '2048Mi'
+                    request_memory = '256Mi'
                 if meta['name'] == 'voice-clamav':
                     memory = '1536Mi'
                 if container['name'] == 'nats-leaf':
                     memory = '128Mi'
-                container['resources'] = {'requests': {'cpu': '20m', 'memory': '64Mi'},
+                    request_memory = '64Mi'
+                container['resources'] = {'requests': {'cpu': '20m', 'memory': request_memory},
                                           'limits': {'cpu': '500m', 'memory': memory}}
             if kind != 'Job':
                 spec['replicas'] = 0
