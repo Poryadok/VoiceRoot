@@ -87,4 +87,3 @@ For a later shared-issuer fixture, optional `VOICE_BOT_CHAT_SIGNER_KEY_FILE` and
 `VOICE_BOT_CHAT_JWKS_CLIENT_CERT_FILE`, `VOICE_BOT_CHAT_JWKS_CLIENT_KEY_FILE`
 tuple is all-or-none. `VOICE_BOT_CHAT_SPACE_ID` selects the actual fixture Space.
 The external shared-issuer branch requires its own execution proof.
-
