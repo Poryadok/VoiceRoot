@@ -299,49 +299,115 @@ func TestSeparatedPostgresFencerCustody(t *testing.T) {
 		require.True(t, delegated)
 		installerSQL(`REVOKE old_writer FROM old_delegate; DROP ROLE old_delegate`)
 	})
-	t.Run("prepared transaction after precheck blocks final proof", func(t *testing.T) {
-		// A retained catalog lock lets the actual fencer finish its read-only
-		// prechecks and block at ALTER ROLE. Only this owned installer session
-		// controls the barrier; no production callback or timing sleep is used.
-		application := "custody-authid-barrier-" + suffix
-		execID, err := api.ContainerExecCreate(ctx, pg, container.ExecOptions{User: "postgres", Cmd: []string{"psql", "-X", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-c", "BEGIN; LOCK TABLE pg_authid IN SHARE MODE; SELECT pg_sleep(90)"}, Env: []string{"PGAPPNAME=" + application}, AttachStdout: true, AttachStderr: true})
-		require.NoError(t, err)
-		barrier, err := api.ContainerExecAttach(ctx, execID.ID, container.ExecAttachOptions{})
-		require.NoError(t, err)
-		defer barrier.Close()
-		adminBool := func(sql string) bool {
-			output, status := execute(pg, "postgres", []string{"psql", "-AtX", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-c", sql}, nil)
-			return status == 0 && strings.TrimSpace(output) == "t"
-		}
-		release := func() {
-			installerSQL(fmt.Sprintf("SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE application_name='%s' AND usename='postgres'", application))
-		}
-		released := false
-		defer func() {
-			if !released {
-				release()
+	for _, raced := range []string{"prepared transaction", "incoming delegation"} {
+		t.Run(raced+" after precheck blocks final proof", func(t *testing.T) {
+			if raced == "incoming delegation" {
+				installerSQL(`CREATE ROLE old_race_delegate NOLOGIN`)
 			}
-		}()
-		require.Eventually(t, func() bool {
-			return adminBool(fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE a.application_name='%s' AND l.relation='pg_authid'::regclass AND l.mode='ShareLock' AND l.granted)", application))
-		}, 5*time.Second, 50*time.Millisecond)
-		pending := startCall(false, "fence", ref.CommandID, ref.Hash)
-		require.Eventually(t, func() bool {
-			return adminBool("SELECT EXISTS(SELECT 1 FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE a.application_name='voice-party-fencer' AND a.usename='fencer_admin' AND a.query LIKE 'ALTER ROLE %' AND l.relation='pg_authid'::regclass AND NOT l.granted)")
-		}, 5*time.Second, 50*time.Millisecond)
-		_, err = old.Exec(ctx, `BEGIN; INSERT INTO native_owner_fixture VALUES(5,'raced prepared predecessor'); PREPARE TRANSACTION 'custody_raced_predecessor'`)
+			// A retained catalog lock lets the actual fencer finish its read-only
+			// prechecks and block at ALTER ROLE. Only this owned installer session
+			// controls the barrier; no production callback or timing sleep is used.
+			application := "custody-authid-barrier-" + uuid.NewString()[:8]
+			execID, err := api.ContainerExecCreate(ctx, pg, container.ExecOptions{User: "postgres", Cmd: []string{"psql", "-X", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-c", "BEGIN; LOCK TABLE pg_authid IN SHARE MODE; SELECT pg_sleep(90)"}, Env: []string{"PGAPPNAME=" + application}, AttachStdout: true, AttachStderr: true})
+			require.NoError(t, err)
+			barrier, err := api.ContainerExecAttach(ctx, execID.ID, container.ExecAttachOptions{})
+			require.NoError(t, err)
+			defer barrier.Close()
+			adminBool := func(sql string) bool {
+				output, status := execute(pg, "postgres", []string{"psql", "-AtX", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-c", sql}, nil)
+				return status == 0 && strings.TrimSpace(output) == "t"
+			}
+			release := func() {
+				installerSQL(fmt.Sprintf("SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE application_name='%s' AND usename='postgres'", application))
+			}
+			released := false
+			defer func() {
+				if !released {
+					release()
+				}
+			}()
+			require.Eventually(t, func() bool {
+				return adminBool(fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE a.application_name='%s' AND l.relation='pg_authid'::regclass AND l.mode='ShareLock' AND l.granted)", application))
+			}, 5*time.Second, 50*time.Millisecond)
+			pending := startCall(false, "fence", ref.CommandID, ref.Hash)
+			require.Eventually(t, func() bool {
+				return adminBool("SELECT EXISTS(SELECT 1 FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE a.application_name='voice-party-fencer' AND a.usename='fencer_admin' AND a.query LIKE 'ALTER ROLE %' AND l.relation='pg_authid'::regclass AND NOT l.granted)")
+			}, 5*time.Second, 50*time.Millisecond)
+			if raced == "prepared transaction" {
+				_, err = old.Exec(ctx, `BEGIN; INSERT INTO native_owner_fixture VALUES(5,'raced prepared predecessor'); PREPARE TRANSACTION 'custody_raced_predecessor'`)
+				require.NoError(t, err)
+			} else {
+				installerSQL(`SET lock_timeout='1s'; GRANT old_writer TO old_race_delegate`)
+			}
+			release()
+			released = true
+			_, status := waitCall(pending)
+			require.NotZero(t, status, "postcheck must reject authority raced after successful precheck")
+			var login bool
+			var unresolved bool
+			if raced == "prepared transaction" {
+				require.NoError(t, other.QueryRow(ctx, `SELECT rolcanlogin,EXISTS(SELECT 1 FROM pg_prepared_xacts WHERE gid='custody_raced_predecessor' AND owner='old_writer') FROM pg_roles WHERE rolname='old_writer'`).Scan(&login, &unresolved))
+			} else {
+				require.NoError(t, other.QueryRow(ctx, `SELECT rolcanlogin,EXISTS(SELECT 1 FROM pg_auth_members WHERE roleid=(SELECT oid FROM pg_roles WHERE rolname='old_writer') AND member=(SELECT oid FROM pg_roles WHERE rolname='old_race_delegate')) FROM pg_roles WHERE rolname='old_writer'`).Scan(&login, &unresolved))
+			}
+			require.False(t, login)
+			require.True(t, unresolved, "no guessed prepared-work or delegation cleanup")
+			if raced == "prepared transaction" {
+				installerSQL(`ROLLBACK PREPARED 'custody_raced_predecessor'`)
+			} else {
+				installerSQL(`REVOKE old_writer FROM old_race_delegate; DROP ROLE old_race_delegate`)
+			}
+			output, status := call(false, "fence", ref.CommandID, ref.Hash)
+			require.Zero(t, status, "%s", output)
+			installerSQL(`ALTER ROLE old_writer LOGIN`)
+			old, err = connect("old_writer", oldPassword)
+			require.NoError(t, err)
+		})
+	}
+	t.Run("completed resource fence survives failed receipt publication", func(t *testing.T) {
+		// Admit a distinct immutable command so no existing receipt can satisfy
+		// this attempt. Only the installer can change the protected store mode.
+		unpublished := command
+		unpublished.CommandID = uuid.New()
+		raw, err := json.Marshal(unpublished)
 		require.NoError(t, err)
-		release()
-		released = true
-		_, status := waitCall(pending)
-		require.NotZero(t, status, "postcheck must reject work prepared after successful precheck")
+		pendingRef := CommandRef{CommandID: unpublished.CommandID, Hash: retirementproof.Hash(CommandDomain, raw)}
+		copyFile(installer, installedPaths.Plans, unpublished.CommandID.String()+".json", raw, 0444)
+		admission := window
+		admission.AdmittedCommands = []CommandRef{ref, pendingRef}
+		raw, err = json.Marshal(admission)
+		require.NoError(t, err)
+		copyFile(installer, installedPaths.Installation, "current.json", raw, 0444)
+		defer copyFile(installer, installedPaths.Installation, "current.json", windowBytes, 0444)
+		require.NoError(t, api.ContainerStart(ctx, installer, container.StartOptions{}))
+		mode := func(permission string) {
+			output, status := execute(installer, "0:0", []string{"chmod", permission, installedPaths.Proofs}, nil)
+			require.Zero(t, status, "%s", output)
+		}
+		mode("0555")
+		defer mode("0755")
 		var login bool
-		var prepared int
-		require.NoError(t, other.QueryRow(ctx, `SELECT rolcanlogin,(SELECT count(*) FROM pg_prepared_xacts WHERE gid='custody_raced_predecessor' AND owner='old_writer') FROM pg_roles WHERE rolname='old_writer'`).Scan(&login, &prepared))
-		require.False(t, login)
-		require.Equal(t, 1, prepared, "no guessed prepared-transaction disposition")
-		installerSQL(`ROLLBACK PREPARED 'custody_raced_predecessor'`)
-		output, status := call(false, "fence", ref.CommandID, ref.Hash)
+		require.NoError(t, other.QueryRow(ctx, `SELECT rolcanlogin FROM pg_roles WHERE oid=$1::oid`, metadata.OldOID).Scan(&login))
+		require.True(t, login, "fixture must enter with an unfenced predecessor")
+		_, status := call(false, "fence", pendingRef.CommandID, pendingRef.Hash)
+		require.NotZero(t, status)
+		var established bool
+		require.NoError(t, other.QueryRow(ctx, `SELECT rolcanlogin,EXISTS(SELECT 1 FROM pg_stat_activity WHERE usesysid=$1::oid) FROM pg_roles WHERE oid=$1::oid`, metadata.OldOID).Scan(&login, &established))
+		require.False(t, login, "publication failure must not undo committed fencing")
+		require.False(t, established, "actual resource termination completed before publication failed")
+		receiptID := uuid.NewSHA1(pendingRef.CommandID, []byte(ReceiptDomain))
+		stream, _, err := api.CopyFromContainer(ctx, installer, installedPaths.Proofs+"/"+receiptID.String()+".json")
+		if stream != nil {
+			stream.Close()
+		}
+		require.True(t, client.IsErrNotFound(err), "no receipt may be minted on failed publication: %v", err)
+		mode("0755")
+		output, status := call(false, "fence", pendingRef.CommandID, pendingRef.Hash)
+		require.Zero(t, status, "%s", output)
+		var recovered FenceResult
+		require.NoError(t, json.Unmarshal([]byte(output), &recovered))
+		require.Equal(t, receiptID, recovered.Receipt.ReceiptID)
+		output, status = call(true, "read-receipt", recovered.Receipt.ReceiptID, recovered.Receipt.Hash)
 		require.Zero(t, status, "%s", output)
 		installerSQL(`ALTER ROLE old_writer LOGIN`)
 		old, err = connect("old_writer", oldPassword)

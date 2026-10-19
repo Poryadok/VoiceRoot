@@ -121,13 +121,26 @@ state, not a production hook or a timing assumption. An initial fixture closed
 the replacement client at subtest exit; that lifetime error was corrected and
 is not a product failure.
 
+The same observed catalog-lock schedule also installs an incoming delegation
+after the real fencer's prechecks. Final observation refuses proof, leaves the
+new membership intact and retains NOLOGIN. Only installer cleanup removes that
+delegation before exact-command recovery; there is no trusted-role exemption.
+
+A distinct admitted command also exercises actual receipt-store failure after
+resource completion. Its cap-drop-all root process cannot write a root-owned
+0555 proof directory. The call fails after NOLOGIN/session termination and no
+receipt file exists. Installer repair of that directory permits exact-command
+recovery and authenticated readback. This is a real publication error, not an
+assertion that an actual process crash at that later instruction was tested.
+
 These are component proofs. Fixture source/schema/writer/provider manifest
 hashes do not constitute the assembled native package or closed catalogue.
 
 ## Remaining work and honest assumptions
 
-- [ ] Complete c12 post-precheck delegation race and crash after termination
-      before evidence publication through the separated executable boundary.
+- [ ] Exercise an actual process crash after termination before evidence
+      publication; the store-error recovery and earlier real SIGKILL cases do
+      not replace this exact crash schedule.
 - [ ] Installer-enforced complete deployment/controller/credential history,
       non-restored external incarnation and all writable/promotable endpoints.
 - [ ] Bounded installer launch/response composition for fresh observations,
