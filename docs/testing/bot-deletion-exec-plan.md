@@ -112,6 +112,15 @@ HTTP positive path and outage/stale controls. The separate install/uninstall
 cut and full remote cleanup remain OPEN. These component results do not qualify
 BE-170.
 
+The Role deletion adapter validates the frozen root admission and snapshot before
+building the private typed request, preserves native/legacy/orphan evidence as
+separate arms, seals exact request bytes under the worker claim, and validates
+every receipt binding before its durable CAS. Unknown fields, wrong actor or
+request/evidence hashes, incomplete outcomes and invalid counts fail closed.
+Its focused tests cover these codec boundaries only. The periodic worker and
+actual Role/Messaging/Space participant composition remain unfinished; this
+adapter alone cannot complete a deletion operation.
+
 ## Risks and follow-ups
 
 Unknown legacy unqualified in-flight adds require explicit release reconciliation,
