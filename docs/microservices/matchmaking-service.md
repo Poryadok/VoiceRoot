@@ -551,3 +551,23 @@ outbox entries. Its explicit start belongs after the native root's complete
 admission/dependency checks. Closing a prepared or started runtime is terminal;
 it cannot be restarted to reopen processing. This lifecycle supplies no native
 installation or publisher authority of its own.
+### MM admission history and source origins
+
+Migration `000025_mm_source_origin` retains installer-issued canonical Armed
+receipt bytes, continuity records and private party origins. Receipt hashes use
+`mmadmissionwire.ArmedHash`, not the serialized JSON hash; the receipt carries a
+zero admission-receipt placeholder and `ReceiptBinding` supplies its final hash.
+The first history root is `HistoryGenesisHash(receipt, lineage)`; each successor
+root is the canonical `ContinuityHash` over the previous root and exact receipt
+pair. Head lineage/root columns can remain NULL on historical markers: this is
+unknown evidence, never automatic enrollment.
+
+Receipt and continuity tables are controller-inserted and serving-read-only;
+origins are inserted by MM in the same creation transaction as their party,
+sessions and queue intents. UPDATE, DELETE and TRUNCATE retain all three forms
+of evidence. DOWN acquires the native close gate and exclusive table locks
+before a fresh emptiness check, and refuses any begun head or retained history.
+No historical party is backfilled. Schema constraints and synthetic retention
+fixtures do not validate canonical wire contents, provenance, installation
+custody, or native readiness. The actual source-origin writer, history reader,
+candidate-v2 stamp and fixed native executable must qualify those separately.
