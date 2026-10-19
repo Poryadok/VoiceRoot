@@ -111,6 +111,9 @@ VOICE_STARTUP_PREFIXES = (
     ("Space media PostgreSQL admission schema:", "space_media_postgres_admission_schema"),
     ("Space media initial reconciliation:", "space_media_initial_reconciliation"),
     ("Space media invalidation consumer startup:", "space_media_invalidation_consumer_startup"),
+    ("P3 requires durable lifecycle-fenced Redis", "voice_p3_durable_redis_required"),
+    ("Space requires an incarnation-fenced projection store", "voice_space_incarnation_projection_required"),
+    ("P3 requires lifecycle-fenced Redis projection", "voice_p3_projection_fence_required"),
 )
 VOICE_STARTUP_DETAILS = (
     ("voice MatchSquad member TLS identity unavailable", "voice_match_squad_member_tls_identity_unavailable"),
