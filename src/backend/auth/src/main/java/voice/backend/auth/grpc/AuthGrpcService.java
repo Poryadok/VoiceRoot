@@ -79,6 +79,15 @@ import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 
 @Component
 public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
+  private voice.backend.auth.admission.AdmissionObservation admissionObservation;
+  @Autowired(required = false)
+  public void setAdmissionObservation(voice.backend.auth.admission.AdmissionObservation observation) {
+    this.admissionObservation = observation;
+  }
+  @Override public void observeSpaceAdmissionSubject(app.voice.auth.v1.ObserveSpaceAdmissionSubjectRequest request,
+      StreamObserver<app.voice.auth.v1.ObserveSpaceAdmissionSubjectResponse> observer) {
+    runProof(observer, () -> voice.backend.auth.admission.AdmissionGrpcAdapter.observe(request, admissionObservation));
+  }
   private final AuthService authService;
   private final OtpService otpService;
   private final EmailVerificationStatusService emailVerificationStatus;

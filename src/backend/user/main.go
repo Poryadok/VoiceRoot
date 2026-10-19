@@ -77,6 +77,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("user SDK conversion principal config: %v", err)
 	}
+	admissionConfig, admissionEnabled, err := socialprincipal.LoadFromEnvWithAudience("user", "auth-admission", "USER_ADMISSION_PRINCIPAL_", ":9097")
+	if err != nil {
+		log.Fatalf("user admission principal config: %v", err)
+	}
 	notificationPresenceConfig, notificationPresenceEnabled, err := socialprincipal.LoadFromEnvWithAudience("user", "notification", "USER_NOTIFICATION_PRINCIPAL_", ":9095")
 	if err != nil {
 		log.Fatalf("user Notification presence principal config: %v", err)
@@ -125,6 +129,17 @@ func main() {
 			log.Fatalf("user search projection principal: %v", err)
 		}
 		defer func() { _ = searchProjectionRuntime.Close() }()
+	}
+	var admissionRuntime *socialprincipal.Runtime
+	if admissionEnabled {
+		if strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+			log.Fatal("user admission principal requires DATABASE_URL")
+		}
+		admissionRuntime, err = socialprincipal.New(context.Background(), admissionConfig)
+		if err != nil {
+			log.Fatalf("user admission principal: %v", err)
+		}
+		defer func() { _ = admissionRuntime.Close() }()
 	}
 	var authSdkRuntime *socialprincipal.Runtime
 	if authPrincipalEnabled {
@@ -429,6 +444,22 @@ func main() {
 			go func() {
 				if err := searchProjectionServer.Serve(searchProjectionListener); err != nil {
 					log.Fatalf("user search projection principal serve: %v", err)
+				}
+			}()
+		}
+		if admissionRuntime != nil {
+			listener, err := net.Listen("tcp", admissionConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("user admission principal listen: %v", err)
+			}
+			options := append([]grpc.ServerOption{}, sharedOptions...)
+			options = append(options, admissionRuntime.ServerOptions()...)
+			server := grpc.NewServer(options...)
+			grpcsvc.RegisterAdmissionEligibilityServer(server, userSvc.Profiles)
+			defer server.Stop()
+			go func() {
+				if err := server.Serve(listener); err != nil {
+					log.Fatalf("user admission principal serve: %v", err)
 				}
 			}()
 		}
