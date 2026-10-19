@@ -75,6 +75,28 @@ Artifact `settings-help-browser-<run_id>` содержит head SHA (`VOICE_SOUR
 версию Chrome и шесть PNG. Это доказательство передачи ссылки браузеру;
 загрузка содержимого внешнего GitHub и привязка к deployed SHA проверяются отдельно.
 
+### Web cold startup
+
+`node --test scripts/ci/web-startup.test.mjs` проверяет ранний HTML loader,
+RU/EN, ошибки bootstrap/engine/runApp, зависший запуск и снятие loader только
+по `flutter-first-frame`. В Flutter CI после уже существующей сборки Help fixture
+`node scripts/ci/web-startup-browser.mjs src/frontend/build/help-launcher-web <output>`
+проверяет настоящий Flutter engine: main.dart.js удерживается HTTP fixture,
+видны текущий Voice icon и статус до запуска Flutter; затем первый кадр снимает
+loader. Отдельный 503 для bootstrap и доверенный pointer click проверяют reload/retry.
+Используются fresh pages, отключённый browser cache, desktop и mobile viewport.
+Для проверки полной production-сборки передайте `src/frontend/build/web` после
+`flutter build web --release --no-pub --no-web-resources-cdn`.
+
+Node.js 24, Chrome/Chromium (`CHROME_BIN`) и полный `VOICE_SOURCE_SHA` обязательны.
+Artifact содержит browser version, viewport, PNG и `voice-startup:*` performance
+marks (HTML, entrypoint, engine, run-app, first-frame). Это локальные timings с
+искусственной задержкой, не production latency и не доказательство причины
+пользовательского медленного старта. Реальные device/network и deployed asset
+delivery проверяются отдельно. Loader использует существующий `voice_sky.png`,
+system font и inline critical CSS; 90s — только recovery UI deadline, запрос
+может завершиться позднее. Ошибки не раскрывают URL или raw exception.
+
 ### Go (сервисы, Gateway, Realtime и др.)
 
 - Фреймворк: стандартный пакет **`testing`**, табличные тесты где уместно.
@@ -492,6 +514,13 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 **Деплой на staging** — job **`deploy-staging`** в [`ci.yml`](../.github/workflows/ci.yml) вызывает [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml) (`workflow_call`) после `staging-stack-lock`; ручной запуск — **Actions → Staging deploy** с обязательным git SHA. См. [DEPLOYMENT.md](DEPLOYMENT.md). Branch protection: job **`ci-gate`** + [`.github/ci/branch-protection-checklist.md`](../.github/ci/branch-protection-checklist.md).
 
 ### Compose E2E (локально и CI)
+
+- Compose bootstrap creates and migrates Realtime's owned `realtime_db` before
+  its fail-closed startup. Dirty or nonempty untracked Realtime catalogs fail
+  without `migrate force`; reconcile their migration history explicitly.
+  `python3 docker/postgres/compose-realtime-migrations_test.py` exercises fresh,
+  existing-volume, repeated, dirty and untracked paths through the shell pipeline
+  with stateful command fixtures; actual Compose startup remains a separate check.
 
 The E2E catalog CLI (`bash scripts/ci/e2e-manifest.sh MANIFEST SECTION`)
 requires Python 3 and `python3 -m pip install -r scripts/ci/requirements-e2e.txt`
