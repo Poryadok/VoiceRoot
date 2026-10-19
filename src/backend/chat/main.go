@@ -437,7 +437,7 @@ func main() {
 			serving.Store(true)
 			realtimeLifecycleReady = func(ctx context.Context) error {
 				if !serving.Load() {
-					return errors.New("Realtime lifecycle listener unavailable")
+					return errors.New("realtime lifecycle listener unavailable")
 				}
 				if err := runtime.Ready(ctx); err != nil {
 					return err

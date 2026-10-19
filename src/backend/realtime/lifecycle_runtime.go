@@ -130,7 +130,7 @@ type realtimeLifecycleRuntime struct {
 
 func (r *realtimeLifecycleRuntime) Ready(ctx context.Context) error {
 	if !r.serving.Load() {
-		return errors.New("Realtime lifecycle listener unavailable")
+		return errors.New("realtime lifecycle listener unavailable")
 	}
 	if err := r.store.Ready(ctx); err != nil {
 		return err
@@ -196,14 +196,14 @@ func newRealtimeLifecycleRuntime(ctx context.Context, hub *wsHub) (*realtimeLife
 	get := func(key string) string { return strings.TrimSpace(os.Getenv(key)) }
 	database := get("DATABASE_URL")
 	if database == "" {
-		return nil, errors.New("Realtime requires its own DATABASE_URL and lifecycle migration")
+		return nil, errors.New("realtime requires its own DATABASE_URL and lifecycle migration")
 	}
 	cfg, listen, configured, err := realtimeprincipal.ConfigFromEnv()
 	if err != nil {
 		return nil, err
 	}
 	if !configured {
-		return nil, errors.New("Realtime requires its protected Space lifecycle listener")
+		return nil, errors.New("realtime requires its protected Space lifecycle listener")
 	}
 	pool, err := pgxpool.New(ctx, database)
 	if err != nil {
@@ -218,11 +218,11 @@ func newRealtimeLifecycleRuntime(ctx context.Context, hub *wsHub) (*realtimeLife
 	}
 	r.store = &lifecycle.Store{Pool: pool}
 	if err = r.store.Ready(ctx); err != nil {
-		return failed(errors.New("Realtime lifecycle schema unavailable"))
+		return failed(errors.New("realtime lifecycle schema unavailable"))
 	}
 	issuer, public, err := loadRealtimePrincipalIssuerFromEnv()
 	if err == nil && issuer == nil {
-		err = errors.New("Realtime principal signing identity required")
+		err = errors.New("realtime principal signing identity required")
 	}
 	if err == nil {
 		err = matchRealtimePublishedJWKS(public, get("REALTIME_PRINCIPAL_JWKS_FILE"))
@@ -232,7 +232,7 @@ func newRealtimeLifecycleRuntime(ctx context.Context, hub *wsHub) (*realtimeLife
 	}
 	certificate, err := tls.LoadX509KeyPair(get("REALTIME_CHAT_LIFECYCLE_CERT_FILE"), get("REALTIME_CHAT_LIFECYCLE_KEY_FILE"))
 	if err != nil {
-		return failed(errors.New("Realtime Chat lifecycle client identity unavailable"))
+		return failed(errors.New("realtime Chat lifecycle client identity unavailable"))
 	}
 	rootsPEM, err := os.ReadFile(get("REALTIME_CHAT_LIFECYCLE_CA_FILE"))
 	if err != nil {
@@ -240,11 +240,11 @@ func newRealtimeLifecycleRuntime(ctx context.Context, hub *wsHub) (*realtimeLife
 	}
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(rootsPEM) {
-		return failed(errors.New("Realtime Chat lifecycle CA invalid"))
+		return failed(errors.New("realtime Chat lifecycle CA invalid"))
 	}
 	addr, serverName := get("REALTIME_CHAT_LIFECYCLE_ADDR"), get("REALTIME_CHAT_LIFECYCLE_SERVER_NAME")
 	if addr == "" || serverName == "" {
-		return failed(errors.New("Realtime protected Chat target required"))
+		return failed(errors.New("realtime protected Chat target required"))
 	}
 	r.chat, err = grpc.NewClient(addr, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: serverName, Certificates: []tls.Certificate{certificate}})))
 	if err != nil {
@@ -322,7 +322,7 @@ func matchRealtimePublishedJWKS(public principalJWKS, path string) error {
 	}
 	published, err := principal.ParseJWKS(document)
 	if err != nil || len(published) != 2 {
-		return errors.New("Realtime published current/next JWKS required")
+		return errors.New("realtime published current/next JWKS required")
 	}
 	ownedBytes, err := json.Marshal(public)
 	if err != nil {
@@ -330,12 +330,12 @@ func matchRealtimePublishedJWKS(public principalJWKS, path string) error {
 	}
 	owned, err := principal.ParseJWKS(ownedBytes)
 	if err != nil || len(owned) != 2 {
-		return errors.New("Realtime owned current/next JWKS required")
+		return errors.New("realtime owned current/next JWKS required")
 	}
 	for kid, key := range owned {
 		peer, ok := published[kid]
 		if !ok || peer.E != key.E || peer.N.Cmp(key.N) != 0 {
-			return errors.New("Realtime published JWKS differs from owned keys")
+			return errors.New("realtime published JWKS differs from owned keys")
 		}
 	}
 	return nil
