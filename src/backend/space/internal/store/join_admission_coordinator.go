@@ -62,6 +62,25 @@ func (s *SpaceStore) loadReadyJoinDecisionInput(ctx context.Context, sha []byte)
 	defer func() { cleanup, cancel := BoundedCleanupContext(ctx); defer cancel(); _ = tx.Rollback(cleanup) }()
 	local := *s
 	local.tx = tx
+	var version int16
+	// Old v1 rows predate the additive tag. The owning row, never a caller,
+	// chooses the decoder; a v2 body is never reinterpreted as v1.
+	if err = tx.QueryRow(ctx, `SELECT COALESCE((to_jsonb(space_join_operations)->>'basis_version')::smallint,1) FROM space_join_operations WHERE decision_basis_sha256=$1`, sha).Scan(&version); err != nil {
+		return MemberAdmissionInput{}, ErrJoinAttemptUnavailable
+	}
+	if version == 2 {
+		in, err := local.loadReadyLegacyJoinDecisionInput(ctx, sha)
+		if err != nil {
+			return MemberAdmissionInput{}, err
+		}
+		if err = tx.Commit(ctx); err != nil {
+			return MemberAdmissionInput{}, err
+		}
+		return in, nil
+	}
+	if version != 1 {
+		return MemberAdmissionInput{}, ErrJoinAttemptUnavailable
+	}
 	saved, err := local.loadJoinDecision(ctx, sha, false)
 	if err != nil {
 		return MemberAdmissionInput{}, err

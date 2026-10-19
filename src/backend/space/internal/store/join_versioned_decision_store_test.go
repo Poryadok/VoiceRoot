@@ -103,6 +103,8 @@ func TestJoinAttempt_LegacyApprovalRequiresOriginalLegacyParent(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT binding_sha256,submission_sha256 FROM space_join_attempts WHERE id=$1`, a.ID).Scan(&binding, &submission))
 	parent := JoinLegacyDecisionBasis{Context: JoinLegacyDecisionContext{Kind: JoinLegacyPending, OperationOrigin: JoinOperationServerNoKey, SpaceID: space.ID, AttemptID: a.ID, AttemptBindingSHA256: binding, SubmissionSHA256: submission, ActorAccountID: in.AccountID, ActorProfileID: in.ProfileID, OperationID: uuid.New(), RequestMethod: spacev1.SpaceService_JoinByInvite_FullMethodName, RequestSHA256: bytes.Repeat([]byte{1}, 32)}, ApplicantObservationSHA256: bytes.Repeat([]byte{2}, 32)}
 	parentSHA := seedLegacyJoinDecisionHistory(t, st, parent)
+	_, err = st.loadReadyJoinDecisionInput(ctx, parentSHA)
+	require.ErrorIs(t, err, ErrJoinAttemptPending, "pending legacy origin cannot supply a native publication")
 	approval := JoinAttemptApprovalInput{SpaceID: space.ID, AttemptID: a.ID, ActorAccountID: uuid.New(), ActorProfileID: owner, OperationID: uuid.New()}
 	_, err = st.ReserveJoinAttemptApproval(ctx, approval)
 	require.NoError(t, err)
@@ -120,6 +122,12 @@ func TestJoinAttempt_LegacyApprovalRequiresOriginalLegacyParent(t *testing.T) {
 	actual, err := loaded.LegacyV2()
 	require.NoError(t, err)
 	require.Equal(t, basis, actual)
+	ready, err := st.loadReadyJoinDecisionInput(ctx, sha)
+	require.NoError(t, err, "legacy approval must retain its own family during native coordination")
+	require.Equal(t, in.AccountID, ready.AccountID)
+	require.Equal(t, a.ID, ready.JoinAttempt.AttemptID)
+	require.Equal(t, sha, ready.DecisionBasisSHA256)
+	require.Equal(t, uuid.Nil, ready.OperationID)
 	ref := JoinAttemptReference{AttemptID: a.ID, EvidenceSHA256: a.EvidenceSHA256}
 	p := uuid.New()
 	verify := func() error {
@@ -131,6 +139,8 @@ func TestJoinAttempt_LegacyApprovalRequiresOriginalLegacyParent(t *testing.T) {
 	require.NoError(t, err)
 	_, err = st.LoadVersionedJoinDecisionBasis(ctx, sha)
 	require.ErrorIs(t, err, ErrJoinAttemptUnavailable)
+	_, err = st.loadReadyJoinDecisionInput(ctx, sha)
+	require.ErrorIs(t, err, ErrJoinAttemptUnavailable, "missing original parent cannot be recovered from A")
 	require.ErrorIs(t, verify(), ErrJoinAttemptUnavailable)
 	_, err = pool.Exec(ctx, `DELETE FROM space_join_operations WHERE actor_profile_id=$1 AND operation_id=$2`, parent.Context.ActorProfileID, parent.Context.OperationID)
 	require.NoError(t, err)
@@ -138,9 +148,14 @@ func TestJoinAttempt_LegacyApprovalRequiresOriginalLegacyParent(t *testing.T) {
 	_, err = pool.Exec(ctx, `UPDATE space_join_attempts SET approved_account_id=$2 WHERE id=$1`, a.ID, uuid.New())
 	require.NoError(t, err)
 	require.ErrorIs(t, verify(), ErrJoinAttemptUnavailable)
+	_, err = st.loadReadyJoinDecisionInput(ctx, sha)
+	require.ErrorIs(t, err, ErrJoinAttemptUnavailable, "another saved reviewer cannot replace the original decision")
 	_, err = pool.Exec(ctx, `UPDATE space_join_attempts SET approved_account_id=$2 WHERE id=$1`, a.ID, approval.ActorAccountID)
 	require.NoError(t, err)
 	require.NoError(t, verify())
+	ready, err = st.loadReadyJoinDecisionInput(ctx, sha)
+	require.NoError(t, err)
+	require.Equal(t, p, ready.OperationID, "original approval recovers its exact pin")
 	// A well-formed v1 pending row cannot be silently reinterpreted as v2.
 	foreignInput := JoinAttemptInput{SpaceID: space.ID, AccountID: uuid.New(), ProfileID: uuid.New()}
 	foreignA, err := st.StartJoinAttempt(ctx, foreignInput)
@@ -157,6 +172,8 @@ func TestJoinAttempt_LegacyApprovalRequiresOriginalLegacyParent(t *testing.T) {
 	require.NoError(t, err)
 	_, err = st.LoadVersionedJoinDecisionBasis(ctx, wrongSHA[:])
 	require.ErrorIs(t, err, ErrJoinAttemptUnavailable)
+	_, err = st.loadReadyJoinDecisionInput(ctx, wrongSHA[:])
+	require.ErrorIs(t, err, ErrJoinAttemptUnavailable, "v1 parent cannot be adopted by a v2 approval")
 }
 
 func applyJoinV2Migration(t *testing.T, st *SpaceStore) {
@@ -214,6 +231,12 @@ func TestJoinAttempt_VersionedHistoricalLoaderPreservesV1AndSeparatesLegacy(t *t
 	view, err := loaded.LegacyV2()
 	require.NoError(t, err)
 	require.Equal(t, basis, view)
+	ready, err := st.loadReadyJoinDecisionInput(ctx, sha[:])
+	require.NoError(t, err, "legacy auto-ready must not be passed through the v1 decoder")
+	require.Equal(t, legacyInput.AccountID, ready.AccountID)
+	require.Equal(t, legacyA.ID, ready.JoinAttempt.AttemptID)
+	require.Equal(t, sha[:], ready.DecisionBasisSHA256)
+	require.Equal(t, uuid.Nil, ready.OperationID)
 	view.Context.RequestSHA256[0] ^= 1
 	second, err := loaded.LegacyV2()
 	require.NoError(t, err)
