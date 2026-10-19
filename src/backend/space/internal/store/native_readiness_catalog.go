@@ -41,15 +41,33 @@ const nativeReadinessStructureSHA = "6b43c9f367207020eee053cd3ab6eb4e057238df4c5
 // table, column, constraint, trigger, function or private ACL change. It is not
 // a caller-selected hash or permission to reseal an arbitrary current catalog.
 func checkNativeReadinessCatalog(ctx context.Context, tx pgx.Tx) error {
+	var version int64
+	if err := tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil {
+		return ErrMemberAuthorityUnavailable
+	}
+	return checkNativeReadinessCatalogVersion(ctx, tx, version)
+}
+
+func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version int64) error {
+	structureSHA := nativeReadinessStructureSHA
+	pins := append([]nativeReadinessFunctionPin(nil), nativeReadinessFunctionPins...)
+	helperCount := 1
+	if version == 45 {
+		structureSHA = nativeReadinessStructure45SHA
+		pins = append(pins, nativeReadinessLegacySelectionPin)
+		helperCount = 2
+	} else if version != 44 {
+		return ErrMemberAuthorityUnavailable
+	}
 	var structure string
 	if err := tx.QueryRow(ctx, nativeReadinessStructureSQL).Scan(&structure); err != nil {
 		return ErrMemberAuthorityUnavailable
 	}
 	structureDigest := sha256.Sum256([]byte(structure))
-	if hex.EncodeToString(structureDigest[:]) != nativeReadinessStructureSHA {
+	if hex.EncodeToString(structureDigest[:]) != structureSHA {
 		return ErrMemberAuthorityUnavailable
 	}
-	for _, pin := range nativeReadinessFunctionPins {
+	for _, pin := range pins {
 		qualified, arguments, _ := strings.Cut(strings.TrimSuffix(pin.signature, ")"), "(")
 		schema, name, _ := strings.Cut(qualified, ".")
 		types := []string{}
@@ -96,7 +114,7 @@ func checkNativeReadinessCatalog(ctx context.Context, tx pgx.Tx) error {
    (c.relname NOT IN ('epoch','spaces','frames','profiles') OR c.relpersistence<>'p' OR c.relrowsecurity OR c.relforcerowsecurity
     OR c.relowner<>n.nspowner OR EXISTS(SELECT 1 FROM pg_policy WHERE polrelid=c.oid)
     OR EXISTS(SELECT 1 FROM pg_inherits WHERE inhrelid=c.oid OR inhparent=c.oid)
-    OR EXISTS(SELECT 1 FROM aclexplode(COALESCE(c.relacl,acldefault('r',c.relowner))) a WHERE a.grantee<>c.relowner)))`, len(nativeReadinessFunctionPins)-1).Scan(&valid); err != nil || !valid {
+    OR EXISTS(SELECT 1 FROM aclexplode(COALESCE(c.relacl,acldefault('r',c.relowner))) a WHERE a.grantee<>c.relowner)))`, len(pins)-helperCount).Scan(&valid); err != nil || !valid {
 		return ErrMemberAuthorityUnavailable
 	}
 	for _, table := range nativeMembershipGuardCoverage {
@@ -134,6 +152,14 @@ func checkNativeReadinessCatalog(ctx context.Context, tx pgx.Tx) error {
   AND t.tgname='space_join_start_selection_immutable' AND t.tgenabled='O' AND NOT t.tgdeferrable
   AND t.tgtype=19 AND t.tgfoid='public.guard_join_start_selection_immutable()'::regprocedure)`).Scan(&valid); err != nil || !valid {
 		return ErrMemberAuthorityUnavailable
+	}
+	if version == 45 {
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid='public.space_join_operations'::regclass
+ AND t.tgname='space_join_legacy_selection_immutable' AND t.tgenabled='O' AND NOT t.tgdeferrable AND NOT t.tginitdeferred
+ AND NOT t.tgisinternal AND t.tgtype=19 AND t.tgnargs=0 AND t.tgargs=''::bytea
+ AND t.tgfoid='public.guard_join_legacy_selection_immutable()'::regprocedure)`).Scan(&valid); err != nil || !valid {
+			return ErrMemberAuthorityUnavailable
+		}
 	}
 	return nil
 }

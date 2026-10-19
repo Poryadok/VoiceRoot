@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/google/uuid"
@@ -14,6 +15,14 @@ import (
 )
 
 func TestNativeReadinessActualPurgeClosesTerminalFrame(t *testing.T) {
+	testNativeReadinessActualPurgeClosesTerminalFrame(t, 44)
+}
+
+func TestNative45ActualPurgeClosesTerminalFrame(t *testing.T) {
+	testNativeReadinessActualPurgeClosesTerminalFrame(t, 45)
+}
+
+func testNativeReadinessActualPurgeClosesTerminalFrame(t *testing.T, schema int) {
 	for _, tc := range []struct {
 		name           string
 		empty, missing bool
@@ -56,7 +65,11 @@ func TestNativeReadinessActualPurgeClosesTerminalFrame(t *testing.T) {
 				_, err = db.Pool.Exec(ctx, `DELETE FROM public.space_members WHERE space_id=$1`, space)
 				require.NoError(t, err)
 			}
-			db.Run(true, "up")
+			db.Run(true, "goto", strconv.Itoa(schema))
+			if schema == 45 {
+				_, err = st.TransitionNativeMembershipCatalog45(ctx)
+				require.NoError(t, err)
+			}
 			require.NoError(t, nativeReadinessTx(ctx, db.Pool, space, func(tx pgx.Tx) error {
 				return (&SpaceStore{Pool: db.Pool, tx: tx}).InitializeScopedNativeMembership(ctx, space)
 			}), "authoritative PURGING UNKNOWN cutover is admin maintenance, not serving")
