@@ -4,6 +4,7 @@ package store
 import "voice/backend/pkg/authoritysource"
 
 var memberAuthorityFunctions = []authoritysource.CatalogFunction{
+	{Name: "space_creator_principal_replay_guard", Arguments: 0, ReturnType: "trigger", BodySHA256: "40272feb45f11dfdbce41e02165e9bebbbfde4e19ce0dba9abfb1e2d8bd77d38"},
 	{Name: "space_member_role_cleanup_guard", Arguments: 0, ReturnType: "trigger", BodySHA256: "1ea9af53c1c2026d0b4ad260b2edb9fc7b22756873250fd0f6055e40ed0c1f01"},
 	{Name: "space_membership_ownership_changed", Arguments: 0, ReturnType: "trigger", BodySHA256: "7a7fc9225f4c9e88299947c363bb60e8b282786c979b6a2221b9d72c68b12a9f"},
 	{Name: "space_membership_ownership_head_guard", Arguments: 0, ReturnType: "trigger", BodySHA256: "f422bca5669ebc2f0abdf6c69b63fcc7b3ca25cae9fce5e50ace87aebfd812ab"},

@@ -16,13 +16,16 @@ import (
 	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/pkg/principal"
 	"voice/backend/space/internal/authctx"
+	"voice/backend/space/internal/creatorauthority"
 )
 
 type Verifier struct {
-	Keys   principal.KeyResolver
-	Replay principal.ReplayGuard
-	Epoch  principal.SessionEpochChecker
-	Clock  func() time.Time
+	Keys          principal.KeyResolver
+	Replay        principal.ReplayGuard
+	Epoch         principal.SessionEpochChecker
+	Clock         func() time.Time
+	CreatorReplay principal.ReplayGuard
+	CreatorEpoch  principal.SessionEpochChecker
 }
 
 func protectedMutation(method string) bool {
@@ -31,7 +34,7 @@ func protectedMutation(method string) bool {
 
 func OrdinaryUnary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if protectedMutation(info.FullMethod) || info.FullMethod == spacev1.SpaceService_GetAuditLog_FullMethodName {
+		if protectedMutation(info.FullMethod) || info.FullMethod == spacev1.SpaceService_GetAuditLog_FullMethodName || info.FullMethod == spacev1.SpaceService_CreateSpace_FullMethodName {
 			return nil, status.Error(codes.PermissionDenied, "protected lifecycle listener required")
 		}
 		return handler(ctx, req)
@@ -45,11 +48,19 @@ func canonicalID(value string) bool {
 
 func (v Verifier) Unary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if !protectedMutation(info.FullMethod) && info.FullMethod != spacev1.SpaceService_GetSpace_FullMethodName && info.FullMethod != spacev1.SpaceService_GetAuditLog_FullMethodName {
+		creator := info.FullMethod == spacev1.SpaceService_CreateSpace_FullMethodName
+		if creator && (v.CreatorReplay == nil || v.CreatorEpoch == nil) {
+			return nil, status.Error(codes.PermissionDenied, "creator authority is not configured")
+		}
+		if !creator && !protectedMutation(info.FullMethod) && info.FullMethod != spacev1.SpaceService_GetSpace_FullMethodName && info.FullMethod != spacev1.SpaceService_GetAuditLog_FullMethodName {
 			return nil, status.Error(codes.PermissionDenied, "method is not available on lifecycle listener")
 		}
 		deny := status.Error(codes.Unauthenticated, "invalid lifecycle principal")
-		if v.Keys == nil || v.Replay == nil || v.Epoch == nil {
+		replay, epoch := v.Replay, v.Epoch
+		if creator {
+			replay, epoch = v.CreatorReplay, v.CreatorEpoch
+		}
+		if v.Keys == nil || replay == nil || epoch == nil {
 			return nil, deny
 		}
 		transport, err := principal.IncomingMetadata(ctx)
@@ -67,14 +78,27 @@ func (v Verifier) Unary() grpc.UnaryServerInterceptor {
 		if err != nil {
 			return nil, deny
 		}
-		verified, err := principal.VerifyDelegatedUser(ctx, transport.BearerToken, principal.VerifyConfig{ExpectedIssuer: "gateway", ExpectedAudience: "space", ExpectedRPC: info.FullMethod, ExpectedRequestID: transport.RequestID, ExpectedRequestHash: hash, KeyResolver: v.Keys, ReplayGuard: v.Replay, SessionEpochChecker: v.Epoch, Clock: v.Clock})
-		if errors.Is(err, ErrDependencyUnavailable) {
+		verified, err := principal.VerifyDelegatedUser(ctx, transport.BearerToken, principal.VerifyConfig{ExpectedIssuer: "gateway", ExpectedAudience: "space", ExpectedRPC: info.FullMethod, ExpectedRequestID: transport.RequestID, ExpectedRequestHash: hash, KeyResolver: v.Keys, ReplayGuard: replay, SessionEpochChecker: epoch, Clock: v.Clock})
+		if errors.Is(err, ErrDependencyUnavailable) || errors.Is(err, creatorauthority.ErrUnavailable) {
 			return nil, status.Error(codes.Unavailable, "lifecycle authentication unavailable")
 		}
 		if err != nil || !canonicalID(verified.AccountID) || !canonicalID(verified.ProfileID) {
 			return nil, deny
 		}
 		accountType := "regular" // Existing lifecycle transport compatibility.
+		if creator {
+			if verified.AccountType != "regular" {
+				return nil, deny
+			}
+			clock := v.Clock
+			if clock == nil {
+				clock = time.Now
+			}
+			if !clock().Before(verified.ExpiresAt) {
+				return nil, deny
+			}
+			ctx = context.WithValue(ctx, creatorProofKey{}, &creatorProof{actor: verified, epoch: v.CreatorEpoch, clock: clock})
+		}
 		if info.FullMethod == spacev1.SpaceService_GetSpaceChatCreationOutcome_FullMethodName {
 			if verified.AccountType != "regular" && verified.AccountType != "guest" {
 				return nil, deny

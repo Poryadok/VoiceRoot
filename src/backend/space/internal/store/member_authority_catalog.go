@@ -17,6 +17,7 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 	tables := append([]string{}, spaceAuthorityCatalog.Tables...)
 	tables = append(tables, "schema_migrations", "space_entry_policies", "space_ordinary_member_heads", "space_community_member_heads", "space_member_admission_intents", "space_native_member_publications", "space_membership_ownership_heads", "space_lifecycle_operations", "space_lifecycle_participants", "space_lifecycle_completions", "space_lifecycle_outbox", "space_permanent_purge_fences", "space_member_admission_outbox", "space_member_role_cleanup")
 	tables = append(tables, "community_bootstrap_operations")
+	tables = append(tables, "space_creator_principal_replays")
 	names := make([]string, 0, len(tables))
 	for _, table := range tables {
 		names = append(names, pgx.Identifier{"public", table}.Sanitize())
@@ -43,6 +44,8 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 		triggers = append(triggers, authoritysource.CatalogTrigger{Table: table, Name: "space_authority_revision_" + table, Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"}, authoritysource.CatalogTrigger{Table: table, Name: "space_authority_revision_" + table + "_truncate", Function: "space_authority_revision_floor_guard", Type: 34})
 	}
 	triggers = append(triggers,
+		authoritysource.CatalogTrigger{Table: "space_creator_principal_replays", Name: "creator_principal_replay_guard", Function: "space_creator_principal_replay_guard", Type: 27},
+		authoritysource.CatalogTrigger{Table: "space_creator_principal_replays", Name: "creator_principal_replay_truncate", Function: "space_creator_principal_replay_guard", Type: 34},
 		authoritysource.CatalogTrigger{Table: "space_member_role_cleanup", Name: "member_role_cleanup_guard", Function: "space_member_role_cleanup_guard", Type: 27},
 		authoritysource.CatalogTrigger{Table: "space_member_role_cleanup", Name: "member_role_cleanup_truncate", Function: "space_member_role_cleanup_guard", Type: 34},
 		authoritysource.CatalogTrigger{Table: "space_ordinary_member_heads", Name: "ordinary_member_head_guard", Function: "space_member_head_guard", Type: 27},

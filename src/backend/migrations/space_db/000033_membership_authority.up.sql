@@ -67,6 +67,14 @@ CREATE TABLE space_member_role_cleanup (
  receipt_sha256 BYTEA CHECK(receipt_sha256 IS NULL OR octet_length(receipt_sha256)=32),
  CHECK((completed_at IS NULL)=(receipt_sha256 IS NULL))
 );
+-- No actor or Space identity: global durable replay keys outlive every live
+-- credential including skew, independently from Redis continuity or restart.
+CREATE TABLE space_creator_principal_replays (
+ issuer TEXT NOT NULL CHECK(issuer='gateway'), jti UUID NOT NULL,
+ recorded_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(), expires_at TIMESTAMPTZ NOT NULL,
+ PRIMARY KEY(issuer,jti), CHECK(expires_at>recorded_at)
+);
+CREATE INDEX space_creator_principal_replay_expiry ON space_creator_principal_replays(expires_at,jti);
 CREATE TABLE space_membership_ownership_heads (
  space_id UUID PRIMARY KEY, generation BIGINT NOT NULL CHECK(generation>0),
  owner_profile_id UUID, state TEXT NOT NULL CHECK(state IN ('ACTIVE','RETIRED')),
@@ -348,6 +356,16 @@ CREATE TRIGGER member_role_cleanup_guard BEFORE UPDATE OR DELETE ON space_member
  FOR EACH ROW EXECUTE FUNCTION space_member_role_cleanup_guard();
 CREATE TRIGGER member_role_cleanup_truncate BEFORE TRUNCATE ON space_member_role_cleanup
  FOR EACH STATEMENT EXECUTE FUNCTION space_member_role_cleanup_guard();
+
+CREATE FUNCTION space_creator_principal_replay_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='DELETE' AND OLD.expires_at<clock_timestamp()-interval '5 seconds' THEN RETURN OLD; END IF;
+ RAISE EXCEPTION 'creator replay identity must survive credential lifetime and skew' USING ERRCODE='55000';
+END $$;
+CREATE TRIGGER creator_principal_replay_guard BEFORE UPDATE OR DELETE ON space_creator_principal_replays
+ FOR EACH ROW EXECUTE FUNCTION space_creator_principal_replay_guard();
+CREATE TRIGGER creator_principal_replay_truncate BEFORE TRUNCATE ON space_creator_principal_replays
+ FOR EACH STATEMENT EXECUTE FUNCTION space_creator_principal_replay_guard();
 
 -- Existing databases without the unrelated Federation-source preflight still
 -- get permanent heads. Full production migration order supplies its revision
