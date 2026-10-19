@@ -424,6 +424,8 @@ expect_regex 'deploy/staging/README.md' 'VOICE_DATABASE_URL.*voice-app-secrets|v
 printf '%s\n' '== F13/G7: source-disabled scope boundary =='
 python3 "${ROOT}/scripts/ci/f13_native_p3_source_test.py"
 python3 "${ROOT}/scripts/ci/f13_native_p3_source_history_test.py"
+python3 "${ROOT}/scripts/ci/f13_guarded_merge_test.py"
+python3 "${ROOT}/scripts/ci/f13_reviewed_test_merge_test.py"
 base_sha="${VOICE_R22_BASE_SHA:-$(git -C "${ROOT}" merge-base HEAD origin/master)}"
 # The later Game sprint authorizes the verified opt-in runtime checkpoint, not
 # arbitrary future runtime or deployment changes. Exempt only its exact paths
@@ -3434,6 +3436,29 @@ native_p3_state_fingerprint() {
   done
 }
 
+f13_reviewed_test_merge_qualified() {
+  local repo="$1" merge="$2" first="$3" source_base="$4" source="$5" path="$6" receipt target
+  [[ "${repo}" == "${ROOT}" ]] || return 1
+  target="$(git -C "${ROOT}" rev-parse HEAD)" || return 1
+  receipt="$(python3 "${ROOT}/scripts/ci/f13_reviewed_test_merge.py" \
+    --repo "${repo}" --target "${target}" --merge "${merge}" --first "${first}" \
+    --source-base "${source_base}" --source "${source}" --path "${path}" 2>/dev/null)" || return 1
+  printf '%s\n' "${receipt}" >>"${TMP_DIR}/f13-reviewed-test-merges.jsonl" || return 1
+  printf 'CI_DIAG stage=f13-reviewed-test-merge qualification=%s\n' "${receipt}" >&2
+}
+
+f13_guarded_merge_state_fingerprint() {
+  local state_file
+  for state_file in "${ROOT}/scripts/ci/f13_reviewed_test_merge.py" \
+    "${TMP_DIR}/f13-guarded-merge-history.tsv" "${TMP_DIR}/f13-reviewed-test-merges.jsonl"; do
+    if [[ -f "${state_file}" ]]; then
+      git -C "${ROOT}" hash-object -- "${state_file}" || return 1
+    else
+      printf '%s\n' absent
+    fi
+  done
+}
+
 f13_guarded_correction_qualified() {
   local repo="$1" base="$2" target="$3" path="$4" correction="$5" owner_map="$6" receipt
   f13_develop_aggregate_enabled "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_REF:-}" || return 1
@@ -3455,9 +3480,9 @@ f13_collect_develop_contributions() {
   local path source_entry result_entry target_entry blob trigger incremental_merge checkpoint_owner_commit checkpoint_owner_row
   local previous_trigger content_base nested_map nested_row nested_trigger nested_base nested_head
   local previous_source_head previous_source_entry base_entry source_lineage source_base_candidates nested_owner_commit
-  local game_snapshot_contribution_allowed merge_tree_status checkpoint_supersession_status sync_row_count guarded_correction_allowed native_supersession_status native_merge_outcome
+  local game_snapshot_contribution_allowed merge_tree_status checkpoint_supersession_status sync_row_count guarded_correction_allowed native_supersession_status native_merge_outcome ordinary_guarded_merge
   local -a commit_line
-  local -A owners=() owner_triggers=() owner_content_bases=() owner_source_heads=() owner_source_entries=() guarded_entries=() guarded_entry_commits=() checkpoint_merge_outcomes=()
+  local -A owners=() owner_triggers=() owner_content_bases=() owner_source_heads=() owner_source_entries=() guarded_entries=() guarded_entry_commits=() checkpoint_merge_outcomes=() ordinary_merge_entries=()
   : >"${output}"
   git -C "${repo}" rev-parse --verify "${base}^{commit}" >/dev/null 2>&1 || {
     f13_collect_failure "${diagnostic_file}" base_object
@@ -3597,6 +3622,7 @@ f13_collect_develop_contributions() {
         fi
       fi
       checkpoint_merge_outcomes["${path}"]=unverified
+      unset 'ordinary_merge_entries[$path]'
       if ((parent_count >= 2)) && f13_path_is_guarded "${path}"; then
         result_entry="$(git -C "${repo}" ls-tree "${commit}" -- "${path}" 2>/dev/null)" || {
           f13_collect_failure "${diagnostic_file}" merge_tree_entry
@@ -3628,10 +3654,26 @@ f13_collect_develop_contributions() {
             fi
           fi
         else
-          [[ "${source_entry}" == "${result_entry}" ]] || {
-            f13_collect_failure "${diagnostic_file}" merge_tree_mismatch
-            return 1
-          }
+          if [[ "${source_entry}" != "${result_entry}" ]]; then
+            # Ordinary guarded contributions may combine both parents. Prove
+            # the exact Git three-way result; source-only equality would reject
+            # clean disjoint edits. Conflicts/manual resolutions still refuse.
+            if f13_checkpoint_merge_tree_entry_matches "${repo}" "${source_base}" \
+              "${first_parent}" "${source_head}" "${path}" "${result_entry}"; then
+              ordinary_merge_entries["${path}"]="${result_entry}"
+            else
+              merge_tree_status=$?
+              if [[ "${merge_tree_status}" == 2 ]] &&
+                declare -F f13_reviewed_test_merge_qualified >/dev/null &&
+                f13_reviewed_test_merge_qualified "${repo}" "${commit}" "${first_parent}" \
+                  "${source_base}" "${source_head}" "${path}"; then
+                ordinary_merge_entries["${path}"]="${result_entry}"
+              else
+                f13_collect_failure "${diagnostic_file}" merge_tree_mismatch
+                return 1
+              fi
+            fi
+          fi
         fi
       fi
       if [[ "${native_p3_active:-false}" == true ]] && native_p3_path_bound "${repo}" "${path}" &&
@@ -3661,7 +3703,7 @@ f13_collect_develop_contributions() {
         continue
       fi
       if f13_path_is_guarded "${path}"; then
-        guarded_entries["${path}"]="${source_entry}"
+        guarded_entries["${path}"]="${ordinary_merge_entries[${path}]-${source_entry}}"
         guarded_entry_commits["${path}"]="${checkpoint_owner_commit}"
       fi
       blob="$(awk '{print $3}' <<<"${source_entry}")"
@@ -3698,6 +3740,22 @@ f13_collect_develop_contributions() {
       else
         nested_owner_commit="${commit}"
       fi
+      ordinary_guarded_merge=false
+      if [[ -n "${ordinary_merge_entries[${path}]+present}" ]]; then
+        ordinary_guarded_merge=true
+        # Preserve the real incoming owner/source and the earlier path row in
+        # a sidecar. The map still names the incoming delta, while its actual
+        # integration commit owns the verified combined result/content history.
+        if [[ "${repo}" == "${ROOT}" ]]; then
+          awk -F '\t' -v candidate="${path}" '$1 == candidate {print "prior\t" $0}' "${output}" \
+            >>"${TMP_DIR}/f13-guarded-merge-history.tsv" || return 1
+          printf 'merge\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "${path}" "${commit}" "${first_parent}" "${source_base}" "${source_head}" \
+            "${nested_owner_commit}" "${nested_base}" "${nested_head}" "${source_base_candidates}" \
+            "${ordinary_merge_entries[${path}]%%$'\t'*}" \
+            >>"${TMP_DIR}/f13-guarded-merge-history.tsv" || return 1
+        fi
+      fi
       native_supersession_status=1
       if [[ -n "${owners[${path}]+present}" ]] && f13_path_is_guarded "${path}"; then
         # A release PR may directly correct a guarded path imported by an
@@ -3718,6 +3776,7 @@ f13_collect_develop_contributions() {
           [[ "${previous_source_entry}" == "${base_entry}" ]] && source_lineage=true
         fi
         if [[ "${allow_direct_followup}" == true && "${is_direct}" != true ]]; then
+          [[ "${ordinary_guarded_merge}" == true ]] && incremental_merge=true
           if git -C "${repo}" merge-base --is-ancestor "${owners[${path}]}" "${source_base}" 2>/dev/null; then
             incremental_merge=true
           fi
@@ -3779,7 +3838,7 @@ f13_collect_develop_contributions() {
           return 1
         fi
         previous_trigger="${owner_triggers[${path}]:-false}"
-        [[ "${previous_trigger}" == true && ( "${source_lineage}" == true || "${guarded_correction_allowed}" == true ) ]] && trigger=true
+        [[ "${previous_trigger}" == true && ( "${source_lineage}" == true || "${guarded_correction_allowed}" == true || "${ordinary_guarded_merge}" == true ) ]] && trigger=true
         if [[ "${checkpoint_supersession_status}" == 0 ]]; then
           unset 'guarded_entries[$path]'
           unset 'guarded_entry_commits[$path]'
@@ -5612,6 +5671,8 @@ f13_run_synthetic_provenance_fixture_body() {
 }
 
 f13_run_synthetic_provenance_fixtures() {
+  local expected_guarded_merge_state
+  expected_guarded_merge_state="$(f13_guarded_merge_state_fingerprint)" || return 1
   local expected_native_state=''
   if [[ "${native_p3_active:-false}" == true ]]; then
     expected_native_state="$(native_p3_state_fingerprint)" || return 1
@@ -5694,6 +5755,11 @@ f13_run_synthetic_provenance_fixtures() {
   fi
 
   f13_run_synthetic_provenance_fixture_body
+
+  [[ "$(f13_guarded_merge_state_fingerprint)" == "${expected_guarded_merge_state}" ]] || {
+    printf '%s\n' 'F13 oracle bug: fixtures changed guarded merge authority/history' >&2
+    return 1
+  }
 
   if [[ -n "${expected_native_state}" ]]; then
     [[ "$(native_p3_state_fingerprint)" == "${expected_native_state}" ]] || {
