@@ -1,5 +1,18 @@
 # Social Service
 
+## Space-report viewer block decisions (BE-066 target)
+
+The new Messaging local-report facade uses a protected exact
+`service:messaging` registration for existing typed `IsProfilePairsBlocked`.
+Its signed request binds the viewer-to-sender direction and complete pair list;
+this consumer sends at most100 distinct sender pairs in one owner batch. Social
+keeps account/profile resolution native and returns an exact complete result
+set. Messaging rejects missing, duplicate, foreign or malformed entries and
+treats any authority failure as whole-batch UNAVAILABLE, never allow by default.
+Raw forwarded identity metadata is not this registration. Ordinary unrelated
+callers retain their existing separately qualified migration scope. No reporter,
+message content or Space roster is exposed by this new caller contract.
+
 ## Обзор
 
 Управление социальным графом: друзья, контакты, блокировки.

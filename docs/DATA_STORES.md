@@ -149,6 +149,8 @@ No cross-database FK or writable copy of Space/Role grants is introduced.
 |---------|------------|
 | `chats`, `chat_members` | Shipped — DM/group/channel, `is_archived`, `inbox_bucket` |
 | `chat_create_requests` | Migration `000022`; authenticated creator + request UUID, canonical request hash and saved create-result snapshot committed with the chat |
+| `chat_scope_authority_heads.report_attachment_generation`, `chats.report_attachment_generation` | BE-066 native migration `000026` preserves a distinct report attachment across cosmetic/type/creator changes and advances it on real Space changes or same-ID recreation. Separate owner protocol and local report activation remain open. |
+| `chat_report_attachment_retirements` | BE-066 `000026`: exact old Chat/generation/Space, positive move/delete reason, stable owner event/revision and timestamp; no FK to deleted Chat. Pending evidence has no timeout or inferred acknowledgement. Protected read/ack and account/Space cleanup must be implemented before full local-report activation; no new permanent personal-data exemption. |
 | `chat_scope_authority_heads` | Migration `000025`; permanent per-chat positive revision and attachment incarnation head, retained across delete/recreate. Source/lifecycle/managed ownership changes maintain it transactionally; no TTL, truncate, revision reset or safe DOWN. `chats.scope_incarnation` is the current native attachment UUID. |
 | `folders`, `folder_chats` | **Shipped** — migrations `000008`/`000009`; folder CRUD and membership handlers are implemented |
 | `quick_access_chats` | **Shipped** — migration `000010` (Batch 17) |
@@ -342,6 +344,19 @@ Role ownership operation receipts remain durable in `role_db` and implement
 business idempotency independently of per-attempt JWT replay rejection.
 
 ## P3 Space lifecycle storage inventory (accepted target)
+
+### Moderation local reports (BE-066 accepted target)
+
+Moderation owns separate `space_reports` and jurisdiction-bound review/work/cursor
+data in `moderation_db`; existing `reports`, sanctions, appeals, platform counts
+and exports cannot query these as platform records. Immutable Space/Chat/message
+references have no foreign-database FKs. Reporter provenance stays private;
+description, typed references, versioned assignment/terminal decision and
+timestamps follow the [local report contract](microservices/moderation-service.md#space-local-report-jurisdiction-accepted-target).
+There is no copied-message evidence archive. Positive target deletion/move
+scrubs local content; freeze and account/Space erasure cover local rows and
+derived work. Missing owner data is not deletion authority. This is target
+inventory, not a migration or runtime shipment claim.
 
 Composite Space Chat creation stores a no-domain-FK
 `space_chat_creation_fences` row separately from private protobuf outcome bytes

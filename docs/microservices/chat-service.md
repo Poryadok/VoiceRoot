@@ -1,5 +1,42 @@
 # Chat Service
 
+## Local-report attachment and viewer authority (BE-066 target)
+
+Messaging's [local-report owner facade](messaging-service.md#space-local-report-owner-decisions-be-066-accepted-target)
+requires a NEW exact signed `service:messaging` scope-authority registration and
+protected `CheckMessageReadEntitlement` route. Its body binds the expected
+Space/Chat/viewer/timestamp as appropriate; unrelated caller routing stays
+unchanged. An unmanaged entitlement=true is only absence of an additional
+managed restriction, never proof of Space membership, tree visibility or history.
+
+`scope_incarnation` also changes on type/creator/managed changes. It is an
+observation fence, never positive TARGET_MOVED authority. Native migration
+`000026_space_report_attachments` adds a separate positive
+`report_attachment_generation` to chats and the existing permanent scope head.
+It remains stable for type/creator/cosmetic/managed changes and Space freeze;
+actual Space changes advance it, and same-ID recreation advances the retained
+head generation. Migration initializes current bindings without inventing old
+exit receipts. Existing scope incarnation/revision semantics are preserved.
+
+In the same native source transaction, actual exit from a nonnull Space records
+an immutable `chat_report_attachment_retirements` receipt keyed by exact Chat and
+old generation, old Space, TARGET_MOVED/TARGET_DELETED, stable owner event UUID,
+authority revision and DB timestamp. There is no foreign key to the deleted
+Chat and no destination Space in a lifecycle response. A->B->A still retires the
+old A binding. Failure/rollback leaves no receipt; overflow aborts instead of
+resetting authority. Pending receipts cannot be deleted, overwritten or timed
+out; acknowledgement is a future authenticated Moderation minimization protocol,
+not inferred from absence or an old due time. Receipts/fences remain subject to
+account/Space cleanup and are not a new indefinite personal-data exemption.
+
+A NEW typed lifecycle read for exact `service:messaging` must expose only the
+requested old-binding disposition, with UNKNOWN for missing historical proof.
+Existing scope lookup retains its non-disclosing NotFound semantics; neither
+that lookup nor changed incarnation substitutes for this positive read.
+Protected read/ack routing and lifecycle cleanup remain explicit implementation
+gates after the native producer; native SQL proof alone does not activate them.
+DOWN refuses authority removal; deleting evidence to downgrade is forbidden.
+
 ## Standalone channel publication authority
 
 For a stored `channel` with `space_id IS NULL`, Chat owns the current
