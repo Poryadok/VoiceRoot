@@ -918,8 +918,13 @@ permanent retirement, while the semantic tuple and stable receipt remain.
 Focused real PostgreSQL, mTLS/JWKS and restart/negative checks verify this
 participant; integrated all-participant acceptance remains tracked in T40.
 
-Version 13 is reserved for `000013_game_session_grants`; its original bytes
-remain unchanged. Version 14 also handles the pre-repair local version-13 fence
+Version 13 is reserved for `000013_game_session_grants`; its original UP bytes
+remain unchanged. Its DOWN requires READ COMMITTED isolation and refuses a
+transaction that could retain a stale empty snapshot. It acquires exclusive locks on operation receipts,
+sessions and grants before checking emptiness, retaining them through DROP in
+the same migration transaction. A concurrent first writer is either observed
+after the lock wait and prevents rollback, or the bounded lock wait fails;
+saved authority and receipts must never be discarded. Version 14 also handles the pre-repair local version-13 fence
 catalog: exact legacy fences/receipts are retained and canonical grant tables
 are added. A canonical grant-only v13 receives the fence schema. A combined
 exact catalog is adopted without row changes. The upgrade requires one recorded
