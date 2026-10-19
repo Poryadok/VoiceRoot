@@ -422,6 +422,8 @@ expect_regex 'deploy/staging/README.md' '(migrat|миграц).*(before|до).*(
 expect_regex 'deploy/staging/README.md' 'VOICE_DATABASE_URL.*voice-app-secrets|voice-app-secrets.*VOICE_DATABASE_URL' F12
 
 printf '%s\n' '== F13/G7: source-disabled scope boundary =='
+python3 "${ROOT}/scripts/ci/f13_native_p3_source_test.py"
+python3 "${ROOT}/scripts/ci/f13_native_p3_source_history_test.py"
 base_sha="${VOICE_R22_BASE_SHA:-$(git -C "${ROOT}" merge-base HEAD origin/master)}"
 # The later Game sprint authorizes the verified opt-in runtime checkpoint, not
 # arbitrary future runtime or deployment changes. Exempt only its exact paths
@@ -3315,6 +3317,123 @@ f13_sync_boundary_reconciles_guarded_path() {
     "${result_entry}" == "${base_entry}" ]]
 }
 
+# Separately typed complete native source authority. These variables are
+# initialized here, never inherited as environment/caller proof. Game/R1/R2
+# and guarded-correction records retain their own fixed identities.
+native_p3_active=false
+native_p3_paths=''
+native_p3_paths_hash=''
+native_p3_binding=''
+native_p3_binding_hash=''
+native_p3_source=''
+native_p3_target=''
+native_p3_snapshot=''
+
+native_p3_path_bound() {
+  local repo="$1" path="$2"
+  [[ "${native_p3_active}" == true && "${repo}" == "${ROOT}" &&
+    -n "${native_p3_paths}" && -n "${native_p3_binding}" &&
+    "$(git -C "${ROOT}" hash-object -- "${native_p3_paths}")" == "${native_p3_paths_hash}" &&
+    "$(git -C "${ROOT}" hash-object -- "${native_p3_binding}")" == "${native_p3_binding_hash}" ]] || return 1
+  grep -Fxq -- "${path}" "${native_p3_paths}"
+}
+
+native_p3_prepare() {
+  local source target parent_line event="${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}"
+  local -a parents
+  target="$(git -C "${ROOT}" rev-parse HEAD)" || return 1
+  source="${target}"
+  if [[ "${event}" != push || "${GITHUB_REF:-}" != refs/heads/develop ]]; then
+    parent_line="$(git -C "${ROOT}" rev-list --parents -n 1 "${target}")" || return 1
+    read -r -a parents <<<"${parent_line}"
+    ((${#parents[@]} == 3)) || return 1
+    source="${parents[2]}"
+  fi
+  native_p3_paths="${TMP_DIR}/f13-native-p3-paths"
+  native_p3_binding="${TMP_DIR}/f13-native-p3-binding.json"
+  python3 "${ROOT}/scripts/ci/f13_native_p3_source.py" \
+    --repo "${ROOT}" --base "${base_sha}" --source "${source}" --target "${target}" \
+    --event "${event}" --ref="${GITHUB_REF:-}" --event-sha="${GITHUB_SHA:-}" \
+    --before="${VOICE_CI_PUSH_BEFORE_SHA:-}" --base-ref="${GITHUB_BASE_REF:-}" \
+    --output "${native_p3_binding}" >"${native_p3_paths}" || return 1
+  native_p3_paths_hash="$(git -C "${ROOT}" hash-object -- "${native_p3_paths}")" || return 1
+  native_p3_binding_hash="$(git -C "${ROOT}" hash-object -- "${native_p3_binding}")" || return 1
+  native_p3_source="${source}"
+  native_p3_target="${target}"
+  native_p3_snapshot="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["snapshot"])' "${native_p3_binding}")" || return 1
+  native_p3_active=true
+}
+
+native_p3_pre_h_owner() {
+  local repo="$1" path="$2" owner="$3"
+  native_p3_path_bound "${repo}" "${path}" &&
+    git -C "${repo}" merge-base --is-ancestor "${owner}" "${native_p3_snapshot}" 2>/dev/null
+}
+
+native_p3_duplicate_owner_qualified() {
+  local repo="$1" path="$2" prior_owner="$3" prior_source="$4" current_owner="$5"
+  local current_source="$6" integration="$7" outcome="$8" candidate
+  native_p3_path_bound "${repo}" "${path}" || return 1
+  [[ "${outcome}" == clean || "${outcome}" == guarded_conflict || "${outcome}" == direct ]] || return 1
+  for candidate in "${prior_owner}" "${prior_source}" "${current_owner}" "${current_source}" "${integration}"; do
+    [[ -n "${candidate}" ]] &&
+      git -C "${repo}" merge-base --is-ancestor "${candidate}" "${native_p3_snapshot}" 2>/dev/null || return 1
+  done
+  # Qualification retains all producer history and taint. Only an actual H
+  # entry restoration may clear the intermediate guarded-entry obligation.
+  if [[ "$(f13_git_tree_entry_record "${repo}" "${integration}" "${path}")" == \
+        "$(f13_git_tree_entry_record "${repo}" "${native_p3_snapshot}" "${path}")" ]]; then
+    return 0
+  fi
+  return 2
+}
+
+native_p3_audit_map() {
+  [[ "${native_p3_active}" == true ]] || return 0
+  local event="${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}"
+  python3 "${ROOT}/scripts/ci/f13_native_p3_source.py" \
+    --repo "${ROOT}" --base "${base_sha}" --source "${native_p3_source}" --target "${native_p3_target}" \
+    --event "${event}" --ref="${GITHUB_REF:-}" --event-sha="${GITHUB_SHA:-}" \
+    --before="${VOICE_CI_PUSH_BEFORE_SHA:-}" --base-ref="${GITHUB_BASE_REF:-}" \
+    --map "${TMP_DIR}/f13-contributions" --history "${TMP_DIR}/f13-native-p3-history.tsv" \
+    --output "${TMP_DIR}/f13-native-p3-approval.json"
+}
+
+native_p3_path_allowed_for_provenance() {
+  local repo="$1" map="$2" path="$3"
+  native_p3_path_bound "${repo}" "${path}" || return 1
+  [[ "${map}" == "${TMP_DIR}/f13-contributions" ]] || return 1
+  python3 - "${TMP_DIR}/f13-native-p3-approval.json" "${map}" "${path}" \
+    "${native_p3_binding}" "${TMP_DIR}/f13-native-p3-history.tsv" <<'PY'
+import hashlib, json, pathlib, sys
+try:
+    proof = json.loads(pathlib.Path(sys.argv[1]).read_text())
+    data = pathlib.Path(sys.argv[2]).read_bytes()
+    valid = (hashlib.sha256(data).hexdigest() == proof['map_sha256']
+        and hashlib.sha256(pathlib.Path(sys.argv[5]).read_bytes()).hexdigest() == proof['history_sha256']
+        and proof['binding'] == json.loads(pathlib.Path(sys.argv[4]).read_text())
+        and sum(line.split('\t')[0] == sys.argv[3] for line in data.decode().splitlines()) == 1
+        and proof['rows'][sys.argv[3]] in data.decode().splitlines())
+except (OSError, ValueError, KeyError):
+    valid = False
+sys.exit(0 if valid else 1)
+PY
+}
+
+native_p3_state_fingerprint() {
+  local state_file
+  printf '%s\n' "${native_p3_active}" "${native_p3_source}" "${native_p3_target}" \
+    "${native_p3_snapshot}" "${native_p3_paths_hash}" "${native_p3_binding_hash}"
+  for state_file in "${native_p3_paths}" "${native_p3_binding}" \
+    "${TMP_DIR}/f13-native-p3-history.tsv" "${TMP_DIR}/f13-native-p3-approval.json"; do
+    if [[ -f "${state_file}" ]]; then
+      git -C "${ROOT}" hash-object -- "${state_file}" || return 1
+    else
+      printf '%s\n' absent
+    fi
+  done
+}
+
 f13_guarded_correction_qualified() {
   local repo="$1" base="$2" target="$3" path="$4" correction="$5" owner_map="$6" receipt
   f13_develop_aggregate_enabled "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_REF:-}" || return 1
@@ -3336,7 +3455,7 @@ f13_collect_develop_contributions() {
   local path source_entry result_entry target_entry blob trigger incremental_merge checkpoint_owner_commit checkpoint_owner_row
   local previous_trigger content_base nested_map nested_row nested_trigger nested_base nested_head
   local previous_source_head previous_source_entry base_entry source_lineage source_base_candidates nested_owner_commit
-  local game_snapshot_contribution_allowed merge_tree_status checkpoint_supersession_status sync_row_count guarded_correction_allowed
+  local game_snapshot_contribution_allowed merge_tree_status checkpoint_supersession_status sync_row_count guarded_correction_allowed native_supersession_status native_merge_outcome
   local -a commit_line
   local -A owners=() owner_triggers=() owner_content_bases=() owner_source_heads=() owner_source_entries=() guarded_entries=() guarded_entry_commits=() checkpoint_merge_outcomes=()
   : >"${output}"
@@ -3392,8 +3511,9 @@ f13_collect_develop_contributions() {
           -n "${owner_source_heads[${path}]+present}" &&
           -n "${owner_source_entries[${path}]+present}" &&
           -n "${guarded_entry_commits[${path}]+present}" ]] || continue
-        if [[ "${game_checkpoint_aggregate_active}" == true ]] &&
-          grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}"; then
+        if { [[ "${game_checkpoint_aggregate_active}" == true ]] &&
+          grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}"; } ||
+          { [[ "${native_p3_active:-false}" == true ]] && native_p3_path_bound "${repo}" "${path}"; }; then
           continue
         fi
         if f13_sync_boundary_reconciles_guarded_path "${repo}" "${base}" "${commit}" \
@@ -3482,21 +3602,25 @@ f13_collect_develop_contributions() {
           f13_collect_failure "${diagnostic_file}" merge_tree_entry
           return 1
         }
-        if [[ "${game_checkpoint_aggregate_active}" == true ]] &&
-          grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}"; then
+        if { [[ "${game_checkpoint_aggregate_active}" == true ]] &&
+          grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}"; } ||
+          { [[ "${native_p3_active:-false}" == true ]] && native_p3_path_bound "${repo}" "${path}"; }; then
           if f13_checkpoint_merge_tree_entry_matches "${repo}" "${source_base}" \
             "${first_parent}" "${source_head}" "${path}" "${result_entry}"; then
             checkpoint_merge_outcomes["${path}"]=clean
           else
             merge_tree_status=$?
-            if [[ "${merge_tree_status}" == 2 && "${commit}" != "${game_checkpoint_aggregate_head}" ]] &&
+            if { [[ "${merge_tree_status}" == 2 && "${commit}" != "${game_checkpoint_aggregate_head}" ]] &&
               grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}" &&
               git -C "${repo}" merge-base --is-ancestor "${commit}" \
                 "${game_checkpoint_aggregate_head}" 2>/dev/null &&
               git -C "${repo}" merge-base --is-ancestor "${commit}" \
                 "${game_checkpoint_snapshot_head}" 2>/dev/null &&
               git -C "${repo}" merge-base --is-ancestor "${checkpoint_owner_commit}" \
-                "${game_checkpoint_snapshot_head}" 2>/dev/null; then
+                "${game_checkpoint_snapshot_head}" 2>/dev/null; } ||
+              { [[ "${merge_tree_status}" == 2 ]] &&
+                [[ "${native_p3_active:-false}" == true ]] && native_p3_pre_h_owner "${repo}" "${path}" "${commit}" &&
+                [[ "${native_p3_active:-false}" == true ]] && native_p3_pre_h_owner "${repo}" "${path}" "${checkpoint_owner_commit}"; }; then
               checkpoint_merge_outcomes["${path}"]=guarded_conflict
             else
               f13_collect_failure "${diagnostic_file}" merge_tree_mismatch
@@ -3509,6 +3633,11 @@ f13_collect_develop_contributions() {
             return 1
           }
         fi
+      fi
+      if [[ "${native_p3_active:-false}" == true ]] && native_p3_path_bound "${repo}" "${path}" &&
+        ! native_p3_pre_h_owner "${repo}" "${path}" "${checkpoint_owner_commit}"; then
+        f13_collect_failure "${diagnostic_file}" checkpoint_post_h_owner
+        return 1
       fi
       if [[ "${game_checkpoint_aggregate_active}" == true ]] &&
         grep -Fxq -- "${path}" "${game_checkpoint_aggregate_paths}" &&
@@ -3569,6 +3698,7 @@ f13_collect_develop_contributions() {
       else
         nested_owner_commit="${commit}"
       fi
+      native_supersession_status=1
       if [[ -n "${owners[${path}]+present}" ]] && f13_path_is_guarded "${path}"; then
         # A release PR may directly correct a guarded path imported by an
         # earlier merge, or re-import its exact descendant source in a later
@@ -3609,6 +3739,34 @@ f13_collect_develop_contributions() {
         if [[ "${allow_direct_followup}" != true && "${is_direct}" == true ]] && \
           f13_guarded_correction_qualified "${repo}" "${base}" "${target}" "${path}" "${commit}" "${output}"; then
           guarded_correction_allowed=true
+        fi
+        if [[ "${guarded_correction_allowed}" != true ]] &&
+          [[ "${native_p3_active:-false}" == true ]] && native_p3_path_bound "${repo}" "${path}"; then
+          native_merge_outcome="${checkpoint_merge_outcomes[${path}]:-unverified}"
+          [[ "${is_direct}" == true ]] && native_merge_outcome=direct
+          if native_p3_duplicate_owner_qualified "${repo}" "${path}" \
+            "${owners[${path}]}" "${previous_source_head}" "${nested_owner_commit}" \
+            "${nested_head}" "${commit}" "${native_merge_outcome}"; then
+            native_supersession_status=0
+          else
+            native_supersession_status=$?
+          fi
+          if [[ "${native_supersession_status}" == 0 || "${native_supersession_status}" == 2 ]]; then
+            guarded_correction_allowed=true
+            # This is the actual producer history, not replacement proof rows.
+            awk -F '\t' -v candidate="${path}" '$1 == candidate' "${output}" \
+              >>"${TMP_DIR}/f13-native-p3-history.tsv" || return 1
+            printf 'supersession\t%s\t%s\t%s\t%s\t%s\n' "${path}" "${commit}" \
+              "${nested_head}" "${native_merge_outcome}" "${native_supersession_status}" \
+              >>"${TMP_DIR}/f13-native-p3-history.tsv" || return 1
+            if [[ "${native_supersession_status}" == 0 ]]; then
+              source_entry="$(git -C "${repo}" ls-tree "${commit}" -- ":(literal)${path}")" || return 1
+              nested_owner_commit="${commit}"
+              nested_base="${first_parent}"
+              nested_head="${commit}"
+              unset 'guarded_entries[$path]' 'guarded_entry_commits[$path]'
+            fi
+          fi
         fi
         if [[ "${guarded_correction_allowed}" != true && \
           ( "${allow_direct_followup}" != true || \
@@ -3655,6 +3813,11 @@ f13_collect_develop_contributions() {
       owner_source_entries["${path}"]="${source_entry}"
       printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}" >>"${output}"
+      if [[ "${native_p3_active:-false}" == true ]] && native_p3_path_bound "${repo}" "${path}"; then
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+          "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}" \
+          >>"${TMP_DIR}/f13-native-p3-history.tsv" || return 1
+      fi
       if [[ "${guarded_correction_allowed}" == true ]]; then
         printf 'CI_DIAG stage=f13-guarded-correction owner_row=%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
           "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}" >&2
@@ -3686,6 +3849,13 @@ f13_collect_develop_contributions() {
       f13_collect_failure "${diagnostic_file}" target_tree_entry
       return 1
     }
+    if [[ "${native_p3_active:-false}" == true && "${target}" != "${native_p3_source}" ]] &&
+      native_p3_pre_h_owner "${repo}" "${path}" "${target}" &&
+      native_p3_pre_h_owner "${repo}" "${path}" "${guarded_entry_commits[${path}]:-}"; then
+      # Recursive historical source: retain its row/taint until the final
+      # complete source boundary and map audit require the exact H entry.
+      continue
+    fi
     # Recursive source collectors can see a valid pre-H owner before a later
     # sync merge carries the path to H. Defer only this intermediate P check;
     # retain the owner row so the aggregate A boundary must still prove H.
@@ -5062,6 +5232,13 @@ f13_develop_aggregate_enabled push refs/heads/develop || {
 }
 
 f13_master_release_pr=false
+native_p3_master_pr=false
+if native_p3_prepare; then
+  [[ "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" == pull_request ]] && native_p3_master_pr=true
+else
+  # Missing/incomplete/unreviewed native authority never changes old outcomes.
+  native_p3_active=false
+fi
 f13_master_merge_push=false
 f13_collect_status=0
 if f13_master_pr_contribution_enabled   "$ROOT" "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_BASE_REF:-}"   "${GITHUB_HEAD_REF:-}" "${GITHUB_REF:-}" "${GITHUB_SHA:-}"   "${VOICE_R22_BASE_SHA:-}" HEAD; then
@@ -5100,9 +5277,9 @@ if f13_master_merge_push_enabled \
   "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_REF:-}"; then
   f13_master_merge_push=true
 fi
-if [[ "${f13_master_release_pr}" == true || "${f13_master_merge_push}" == true ]] || \
+if [[ "${f13_master_release_pr}" == true || "${f13_master_merge_push}" == true || "${native_p3_master_pr}" == true ]] || \
   f13_develop_aggregate_enabled "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_REF:-}"; then
-  if [[ "${f13_master_release_pr}" == true || "${f13_master_merge_push}" == true ]]; then
+  if [[ "${f13_master_release_pr}" == true || "${f13_master_merge_push}" == true || "${native_p3_master_pr}" == true ]]; then
     if [[ "${f13_master_merge_push}" == true ]]; then
       f13_collect_master_push_contributions \
         "${ROOT}" "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_REF:-}" \
@@ -5135,6 +5312,10 @@ if [[ "${f13_master_release_pr}" == true || "${f13_master_merge_push}" == true ]
     printf '%s\n' 'F13: develop contribution provenance is missing or ambiguous' >&2
     exit 1
   fi
+  native_p3_audit_map || {
+    printf '%s\n' 'F13: complete native source producer map rejected' >&2
+    exit 1
+  }
   if [[ "${f13_collect_status}" == 0 && "${f13_master_release_pr}" == true ]] &&
     ! f13_migration_alias_wrapper_result_fixture "${ROOT}" "${TMP_DIR}/f13-contributions"; then
     printf '%s\n' 'F13 oracle bug: release-PR alias ledger failed wrapper/downstream provenance checks' >&2
@@ -5431,6 +5612,10 @@ f13_run_synthetic_provenance_fixture_body() {
 }
 
 f13_run_synthetic_provenance_fixtures() {
+  local expected_native_state=''
+  if [[ "${native_p3_active:-false}" == true ]]; then
+    expected_native_state="$(native_p3_state_fingerprint)" || return 1
+  fi
   local expected_snapshot_base="${game_checkpoint_snapshot_base}"
   local expected_snapshot_head="${game_checkpoint_snapshot_head}"
   local expected_snapshot_record="${game_checkpoint_snapshot_record}"
@@ -5509,6 +5694,13 @@ f13_run_synthetic_provenance_fixtures() {
   fi
 
   f13_run_synthetic_provenance_fixture_body
+
+  if [[ -n "${expected_native_state}" ]]; then
+    [[ "$(native_p3_state_fingerprint)" == "${expected_native_state}" ]] || {
+      printf '%s\n' 'F13 oracle bug: fixtures changed native source authority/history' >&2
+      return 1
+    }
+  fi
 
   [[ "${game_checkpoint_snapshot_base}" == "${expected_snapshot_base}" &&
     "${game_checkpoint_snapshot_head}" == "${expected_snapshot_head}" &&
@@ -5605,6 +5797,9 @@ f13_run_synthetic_provenance_fixtures() {
 f13_run_synthetic_provenance_fixtures
 
 while IFS= read -r file; do
+  if native_p3_path_allowed_for_provenance "${ROOT}" "${TMP_DIR}/f13-contributions" "${file}"; then
+    continue
+  fi
   if game_checkpoint_alias_path_allowed_for_provenance \
     "${ROOT}" "${TMP_DIR}/f13-contributions" "${file}"; then
     continue
