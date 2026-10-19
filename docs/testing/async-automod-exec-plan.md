@@ -23,6 +23,26 @@ results. This proves the bounded merge, not P1-P5 or full feature acceptance.
 
 ## Account-core v2 implementation checkpoint
 
+C19 transactional producer checkpoint: Auth V30 / canonical version31 capture
+every owner account creation/lifecycle update and physical removal through SQL
+triggers, with an opaque compact current projection and two durable recipient
+intents. Session-only updates do not manufacture another lifecycle event.
+Restore changes the exact revision/state/cycle atomically; rewriting an existing
+DELETED timestamp cannot extend its cycle. Positive terminal insertion removes
+the nonterminal projection and independently preserves both terminal intents.
+No account/profile/content identifier is present in the producer tables.
+
+Native PostgreSQL regression first failed on the absent producer (RED 8.444s).
+The same compiled test then passed after applying the new SQL, together with the
+existing census/store and two-connection restore-race tests: five tests, zero
+failures/errors/skips. The producer test injects a real outbox write failure and
+checks owner restore/projection rollback, exact recipient replacement, distinct
+next deletion cycle and terminal delivery surviving physical account removal.
+All 29 Flyway migrations applied; Flyway and canonical up-SQL bytes are equal.
+The guarded down migration refused to discard populated lifecycle authority,
+leaving its tables/rows intact. Actual wire delivery, recipient application,
+finite lifecycle catch-up and P1-P5 remain open; SQL intent is not a cleanup ACK.
+
 P0 composition checkpoint: main now loads one local issuer and starts its
 certificate-only JWKS and private9467 listener before database connection. The private listener
 registers only `ModerationEvidenceService` with workload mTLS, bounded replay

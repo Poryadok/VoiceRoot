@@ -39,6 +39,24 @@ delete and restore authority cannot certify their physical deadline outcome.
 The [c20 feasibility review](../testing/async-automod-identity-bridge-feasibility.md)
 does not select a new capsule/key design or classify retained v2 data anonymous.
 
+The c19 lifecycle producer uses a compact Auth-owned current projection keyed
+only by opaque moderation subject, with random event UUID, authority generation,
+positive lifecycle revision, LIVE/DELETED state and exact owner deletion cycle/
+deadline. An account-row AFTER trigger captures every committed lifecycle change,
+including direct owner SQL, in the same transaction. Two durable recipient intents
+cover Messaging and Moderation; replacement by a newer full projection is atomic.
+Exact event/revision acknowledgement clears only the matching intent. The current
+projection remains available for a finite catch-up even after delivery succeeds.
+No account/profile ID or raw public deletion event is used as lifecycle evidence.
+
+Durable terminal insertion separately creates private recipient intents and
+removes the superseded nonterminal projection. Physical account removal and
+subject mapping erasure cannot discard those terminal intents. Delivery/ACK never
+delays Auth's canonical deadline. The terminal ledger remains the permanent
+opaque authority; pending delivery is not a physical-cleanup receipt. The new
+producer schema is reserved as Flyway V30 / canonical auth_db version31; transport,
+exact recipient application and activation require the remaining vertical work.
+
 ## Обзор
 
 Сервис аутентификации и управления сессиями. Единственный сервис на Java — обусловлено зрелостью Spring Security для сложных auth-сценариев.

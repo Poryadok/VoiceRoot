@@ -16,6 +16,20 @@ expiry receipts. Moderation owns subject/source baseline, contiguous inbox curso
 keyed pattern aliases/samples, consumed-through watermark, strikes, account mute
 episode, machine sanction/event outbox and desired Auth restriction revision.
 
+Auth's c19 lifecycle producer uses `moderation_lifecycle_current`: one complete
+nonterminal projection per opaque subject, carrying protocol, random event UUID,
+authority generation, lifecycle revision/state and exact deletion cycle/deadline.
+`moderation_lifecycle_delivery` contains the two pending recipient intents.
+Account-row owner changes and projection/intents commit or roll back together;
+superseded nonterminal history is compacted into the newer complete projection.
+Current projection rows remain available for finite catch-up after ACK. Positive
+terminal ledger insertion removes them and creates independent opaque
+`moderation_terminal_delivery` intents. Those survive raw account removal and
+never delay it. Pending notification and successful transport are not local
+physical-purge receipts. No producer table carries account/profile/content IDs.
+Flyway V30 and canonical Auth version31 are reserved for this producer; recipient
+transport/application and actual activation remain separate required work.
+
 Raw cross-service UUIDs are references, never cross-database foreign keys. Pattern
 digests, not bodies/URLs, have bounded retention; source evidence expires at 30
 days, samples at most 30 days + 10 minutes, strike aliases at most 60 days from
