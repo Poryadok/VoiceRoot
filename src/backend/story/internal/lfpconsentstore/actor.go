@@ -284,6 +284,12 @@ func readActorEnvelope(ctx context.Context, tx pgx.Tx, id uuid.UUID) (lfpconsent
 	if e != nil {
 		return lfpconsent.Envelope{}, ErrUnavailable
 	}
+	// A saved consent's author subject is independent of responder, profile and
+	// object cuts. Load the ORIGINAL publication actor for every replay/delivery/
+	// ACK path; current identity/type or fresh privacy cannot substitute for it.
+	if _, e = readPublicationActor(ctx, tx, offer); e != nil {
+		return lfpconsent.Envelope{}, e
+	}
 	var actor, hash, qualified []byte
 	e = tx.QueryRow(ctx, `SELECT canonical_actor,actor_sha256,qualified_consent_sha256 FROM story_lfp_consent_actors WHERE consent_id=$1 FOR SHARE`, id).Scan(&actor, &hash, &qualified)
 	if e != nil {

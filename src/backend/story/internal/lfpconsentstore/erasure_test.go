@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"voice/backend/pkg/lfpconsent"
 	"voice/backend/pkg/storylfpadmission"
 	"voice/backend/story/internal/lfperasure"
 )
@@ -20,6 +21,48 @@ func TestMissingErasureAdmissionNeverTreatsAbsenceAsNew(t *testing.T) {
 	closed := NewBoundStore(s.Pool, storylfpadmission.NewBarrier(shared, fixtureSharedAdmission{shared}))
 	_, e = closed.PublishOffer(context.Background(), AuthorAction{OperationID: uuid.New(), StoryID: id, ProfileID: author, RequestSHA256: [32]byte{2}})
 	require.ErrorIs(t, e, ErrUnavailable, "a valid cohort is not a complete negative replay view")
+}
+
+func TestDeliveryVetoesOriginalAuthorAccountCut(t *testing.T) {
+	s, id, author := fixture(t)
+	ctx := context.Background()
+	offer, origin := actorPublication(t, s, id, author)
+	r := response(offer)
+	envelope, e := s.RecordActorResponse(ctx, r, actorResponse(r), origin, time.Now().Add(time.Minute))
+	require.NoError(t, e)
+	var material []byte
+	require.NoError(t, s.Pool.QueryRow(ctx, `SELECT canonical_actor FROM story_lfp_publication_actors a JOIN story_lfp_publications p ON p.operation_id=a.publication_operation_id WHERE p.story_id=$1 AND p.revision=$2`, id, int64(offer.Revision)).Scan(&material))
+	original, _, e := lfpconsent.DecodeActor(material)
+	require.NoError(t, e)
+	c := envelope.Consent()
+	reg := lfpconsent.Registration{OperationID: c.ConsentID, ConsentID: c.ConsentID, ConsentSHA256: envelope.ConsentSHA256(), RegistrationID: uuid.New(), Generation: 3, CapturedSearchIntentSHA256: [32]byte{5}}
+	_, rh, e := lfpconsent.EncodeRegistration(reg)
+	require.NoError(t, e)
+	bound, e := lfpconsent.HashActorBoundRegistration(rh, envelope.QualifiedSHA256())
+	require.NoError(t, e)
+	ack := ActorRegistration{Registration: reg, Origin: origin, QualifiedSHA256: envelope.QualifiedSHA256(), BoundSHA256: bound}
+	require.NoError(t, s.SaveActorRegistration(ctx, ack))
+	s.negative = &selectiveNegative{account: original.AccountID}
+	for name, call := range map[string]func() error{
+		"delivery": func() error {
+			_, e := s.ReadActorConsentForDelivery(ctx, c.ConsentID, envelope.QualifiedSHA256(), origin)
+			return e
+		},
+		"read ACK":        func() error { _, e := s.ReadActorRegistration(ctx, c.ConsentID, envelope.QualifiedSHA256()); return e },
+		"save ACK replay": func() error { return s.SaveActorRegistration(ctx, ack) },
+		"find response replay": func() error {
+			_, _, e := s.FindActorResponse(ctx, r, actorResponse(r), origin, time.Now().Add(time.Minute))
+			return e
+		},
+		"record response replay": func() error {
+			_, e := s.RecordActorResponse(ctx, r, actorResponse(r), origin, time.Now().Add(time.Minute))
+			return e
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.Error(t, call(), "saved original author account veto is independent of LiveOrUnseen offer/profile domains")
+		})
+	}
 }
 
 type selectiveNegative struct {
