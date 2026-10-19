@@ -108,6 +108,18 @@ strict proof не завершает rollout во всех окружениях;
 - В **Messaging** / **File** / **read_receipts** поле **`chat_id` всегда = `chat_db.chats.id`** для `dm` \| `group` \| `channel`.
 - **`chat_type`** в `messaging_db.messages` дублирует `chats.type` для индексов и политик; семантика ленты/тредов задаётся **настройками чата**, а не жёстко типом.
 
+File preview projection (BE-080): `messages.file_preview_bindings` is private
+owner state containing the exact destination MESSAGE reference, attachment slot,
+file/type identity and applied File snapshot revision. It never comes from client
+JSON and is absent from public DTOs and caller send fingerprints. File owns an
+independent positive `preview_metadata_revision` and complete redacted snapshots;
+Messaging retains highest revisions and terminal floors before destination
+discovery and reconciles inserts under ordered locks. Refresh changes only
+File-derived attachment fields and the ordinary message.edited outbox, preserving
+message identity, creation time, content type, unread state and Chat sort keys.
+Public URL reads still require the actual viewer and exact reference. E2E,
+URL-only records and independent Music metadata retain their existing boundaries.
+
 **Права:** standalone чат — **Chat** + настройки. Чат с `space_id` — **Space** (дерево `space_tree_nodes`), **Role** (роли участника спейса + `chat_overrides` / `voice_room_overrides`). Messaging не вводит FK на чужие БД и опирается на решение Gateway/оркестрации.
 
 ### Дерево спейса (`space_tree_nodes`)

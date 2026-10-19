@@ -161,8 +161,9 @@ WHERE id = $1
 }
 
 func (s *FilesStore) ConfirmUpload(ctx context.Context, id uuid.UUID, sha256Hash string) (FileRow, error) {
-	var row FileRow
-	err := s.Pool.QueryRow(ctx, `
+	return s.withPreviewMutation(ctx, id, func(tx pgx.Tx) (FileRow, error) {
+		var row FileRow
+		err := tx.QueryRow(ctx, `
 UPDATE files
 SET sha256_hash = $2,
     status = 'processing',
@@ -175,39 +176,41 @@ RETURNING id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_
           thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
           scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 `, id, sha256Hash).Scan(
-		&row.ID,
-		&row.UploaderProfileID,
-		&row.OriginalName,
-		&row.MimeType,
-		&row.SizeBytes,
-		&row.SHA256Hash,
-		&row.R2Key,
-		&row.Status,
-		&row.FileType,
-		&row.Width,
-		&row.Height,
-		&row.DurationSeconds,
-		&row.ThumbnailR2Key,
-		&row.ConvertedR2Key,
-		&row.ChatID,
-		&row.ChatType,
-		&row.IsE2E,
-		&row.ExpiresAt,
-		&row.ScanResult,
-		&row.CreatedAt,
-		&row.UpdatedAt,
-		&row.MusicTitle,
-		&row.MusicArtist,
-		&row.MusicAlbum,
-		&row.MusicMetadataRevision,
-		&row.UploadIntent,
-	)
-	return row, err
+			&row.ID,
+			&row.UploaderProfileID,
+			&row.OriginalName,
+			&row.MimeType,
+			&row.SizeBytes,
+			&row.SHA256Hash,
+			&row.R2Key,
+			&row.Status,
+			&row.FileType,
+			&row.Width,
+			&row.Height,
+			&row.DurationSeconds,
+			&row.ThumbnailR2Key,
+			&row.ConvertedR2Key,
+			&row.ChatID,
+			&row.ChatType,
+			&row.IsE2E,
+			&row.ExpiresAt,
+			&row.ScanResult,
+			&row.CreatedAt,
+			&row.UpdatedAt,
+			&row.MusicTitle,
+			&row.MusicArtist,
+			&row.MusicAlbum,
+			&row.MusicMetadataRevision,
+			&row.UploadIntent,
+		)
+		return row, err
+	})
 }
 
 func (s *FilesStore) ApplyImageProcessing(ctx context.Context, id uuid.UUID, convertedKey, thumbnailKey string, width, height int32) (FileRow, error) {
-	var row FileRow
-	err := s.Pool.QueryRow(ctx, `
+	return s.withPreviewMutation(ctx, id, func(tx pgx.Tx) (FileRow, error) {
+		var row FileRow
+		err := tx.QueryRow(ctx, `
 UPDATE files
 SET converted_r2_key = $2,
     thumbnail_r2_key = $3,
@@ -222,39 +225,41 @@ RETURNING id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_
           thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
           scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 `, id, convertedKey, thumbnailKey, width, height).Scan(
-		&row.ID,
-		&row.UploaderProfileID,
-		&row.OriginalName,
-		&row.MimeType,
-		&row.SizeBytes,
-		&row.SHA256Hash,
-		&row.R2Key,
-		&row.Status,
-		&row.FileType,
-		&row.Width,
-		&row.Height,
-		&row.DurationSeconds,
-		&row.ThumbnailR2Key,
-		&row.ConvertedR2Key,
-		&row.ChatID,
-		&row.ChatType,
-		&row.IsE2E,
-		&row.ExpiresAt,
-		&row.ScanResult,
-		&row.CreatedAt,
-		&row.UpdatedAt,
-		&row.MusicTitle,
-		&row.MusicArtist,
-		&row.MusicAlbum,
-		&row.MusicMetadataRevision,
-		&row.UploadIntent,
-	)
-	return row, err
+			&row.ID,
+			&row.UploaderProfileID,
+			&row.OriginalName,
+			&row.MimeType,
+			&row.SizeBytes,
+			&row.SHA256Hash,
+			&row.R2Key,
+			&row.Status,
+			&row.FileType,
+			&row.Width,
+			&row.Height,
+			&row.DurationSeconds,
+			&row.ThumbnailR2Key,
+			&row.ConvertedR2Key,
+			&row.ChatID,
+			&row.ChatType,
+			&row.IsE2E,
+			&row.ExpiresAt,
+			&row.ScanResult,
+			&row.CreatedAt,
+			&row.UpdatedAt,
+			&row.MusicTitle,
+			&row.MusicArtist,
+			&row.MusicAlbum,
+			&row.MusicMetadataRevision,
+			&row.UploadIntent,
+		)
+		return row, err
+	})
 }
 
 func (s *FilesStore) ApplyScanResult(ctx context.Context, id uuid.UUID, status, scanResult string) (FileRow, error) {
-	var row FileRow
-	err := s.Pool.QueryRow(ctx, `
+	return s.withPreviewMutation(ctx, id, func(tx pgx.Tx) (FileRow, error) {
+		var row FileRow
+		err := tx.QueryRow(ctx, `
 UPDATE files
 SET status = $2,
     scan_result = $3,
@@ -273,34 +278,35 @@ RETURNING id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_
           thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
           scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 `, id, status, scanResult).Scan(
-		&row.ID,
-		&row.UploaderProfileID,
-		&row.OriginalName,
-		&row.MimeType,
-		&row.SizeBytes,
-		&row.SHA256Hash,
-		&row.R2Key,
-		&row.Status,
-		&row.FileType,
-		&row.Width,
-		&row.Height,
-		&row.DurationSeconds,
-		&row.ThumbnailR2Key,
-		&row.ConvertedR2Key,
-		&row.ChatID,
-		&row.ChatType,
-		&row.IsE2E,
-		&row.ExpiresAt,
-		&row.ScanResult,
-		&row.CreatedAt,
-		&row.UpdatedAt,
-		&row.MusicTitle,
-		&row.MusicArtist,
-		&row.MusicAlbum,
-		&row.MusicMetadataRevision,
-		&row.UploadIntent,
-	)
-	return row, err
+			&row.ID,
+			&row.UploaderProfileID,
+			&row.OriginalName,
+			&row.MimeType,
+			&row.SizeBytes,
+			&row.SHA256Hash,
+			&row.R2Key,
+			&row.Status,
+			&row.FileType,
+			&row.Width,
+			&row.Height,
+			&row.DurationSeconds,
+			&row.ThumbnailR2Key,
+			&row.ConvertedR2Key,
+			&row.ChatID,
+			&row.ChatType,
+			&row.IsE2E,
+			&row.ExpiresAt,
+			&row.ScanResult,
+			&row.CreatedAt,
+			&row.UpdatedAt,
+			&row.MusicTitle,
+			&row.MusicArtist,
+			&row.MusicAlbum,
+			&row.MusicMetadataRevision,
+			&row.UploadIntent,
+		)
+		return row, err
+	})
 }
 
 func (s *FilesStore) GetFilesByIDs(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]FileRow, error) {

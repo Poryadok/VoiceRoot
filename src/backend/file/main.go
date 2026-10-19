@@ -195,6 +195,9 @@ func main() {
 			musicCtx, stopMusic := context.WithCancel(context.Background())
 			defer stopMusic()
 			jobs.StartMusicEventWorker(musicCtx, filesStore, musicPub, logger)
+			if os.Getenv("FILE_PREVIEW_PUBLICATION_ENABLED") == "true" {
+				jobs.StartPreviewEventWorker(musicCtx, filesStore, musicPub, logger)
+			}
 		}
 		jobs.StartExpiryWorker(context.Background(), filesStore, deleter, eventPub, logger)
 		jobs.StartReferenceGCWorker(context.Background(), filesStore, deleter, fileReferenceGCIntervalFromEnv(), logger)
