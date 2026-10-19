@@ -301,7 +301,7 @@ func resetCapturedRosterParties(ctx context.Context, tx pgx.Tx, targets map[uuid
 		if declined == "" {
 			continue
 		}
-		changed, err := recoverDeclinedMatchLocked(ctx, tx, m, proposals, sessions, declined, now)
+		changed, err := recoverDeclinedMatchLocked(ctx, tx, m, proposals, sessions, declined, now, "VOICE_ROSTER_CHANGED")
 		if err != nil {
 			return 0, err
 		}

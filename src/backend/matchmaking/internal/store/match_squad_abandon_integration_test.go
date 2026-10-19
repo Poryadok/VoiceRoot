@@ -14,6 +14,39 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 )
 
+func TestDispatchUpgradeRefusesSealedLegacyUnknownCreation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("PostgreSQL integration")
+	}
+	ctx := context.Background()
+	pool := rosterResetDB(t)
+	_, members := capturedRosterParty(t, pool, nil, 0, uuid.New())
+	s := members[0]
+	st := &MatchStore{Pool: pool}
+	proposal, err := st.CreateProposal(ctx, CreateProposalParams{GameID: s.GameID, Mode: "test", Region: "eu", Sessions: []ProposalSession{{SessionID: s.ID, ProfileID: s.ProfileID, PartyID: s.PartyID}}})
+	require.NoError(t, err)
+	// An old closed operation can contain a frozen Voice request but no Voice
+	// receipt. Historical terminal state is not evidence that no RPC happened.
+	hash := make([]byte, 32)
+	_, err = pool.Exec(ctx, `INSERT INTO matchmaking_match_squad_operations
+		(match_id,operation_id,participant_manifest_sha256,participant_manifest_bytes,state,
+		chat_operation_id,chat_request_sha256,chat_request_bytes,chat_receipt_id,chat_receipt_bytes,chat_id,
+		voice_operation_id,voice_request_sha256,voice_request_bytes)
+		VALUES($1,$2,$3,$4,'closed',$5,$3,$4,$6,$4,$7,$8,$3,$4)`,
+		proposal.Match.ID, uuid.New(), hash, []byte("historical frozen bytes"), uuid.New(), uuid.New(), uuid.New(), uuid.New())
+	require.NoError(t, err)
+	migration, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/matchmaking_db/000021_match_squad_dispatch_settlement.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(migration))
+	require.ErrorContains(t, err, "legacy dispatch obligations require reconciliation")
+	var state string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM matchmaking_match_squad_operations WHERE match_id=$1`, proposal.Match.ID).Scan(&state))
+	require.Equal(t, "closed", state, "refusal must not rewrite sealed historical evidence")
+	var columns int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM information_schema.columns WHERE table_name='matchmaking_match_squad_operations' AND column_name='dispatch_protocol_version'`).Scan(&columns))
+	require.Zero(t, columns, "failed migration must remain atomic")
+}
+
 func TestMatchSquadUnknownChatAbandonmentSharesRollbackAndFreezesObligations(t *testing.T) {
 	if testing.Short() {
 		t.Skip("PostgreSQL integration")

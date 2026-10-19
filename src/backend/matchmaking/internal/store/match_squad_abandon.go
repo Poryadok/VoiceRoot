@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 
 	"github.com/google/uuid"
@@ -23,14 +24,19 @@ func LatchMatchSquadAbandonmentTx(ctx context.Context, tx pgx.Tx, matchID uuid.U
 		return ErrMatchSquadConflict
 	}
 	var disposition, state, chat, voice string
-	err := tx.QueryRow(ctx, `SELECT provision_disposition,state,chat_dispatch_state,voice_dispatch_state
-		FROM matchmaking_match_squad_operations WHERE match_id=$1 FOR UPDATE`, matchID).Scan(&disposition, &state, &chat, &voice)
+	err := tx.QueryRow(ctx, `SELECT COALESCE(to_jsonb(o)->>'provision_disposition',''),state,
+		COALESCE(to_jsonb(o)->>'chat_dispatch_state',''),COALESCE(to_jsonb(o)->>'voice_dispatch_state','')
+		FROM matchmaking_match_squad_operations o WHERE match_id=$1 FOR UPDATE`, matchID).Scan(&disposition, &state, &chat, &voice)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// No operation exists; the abandoned match itself rejects future intent.
 		return nil
 	}
 	if err != nil {
 		return err
+	}
+	if disposition == "" || chat == "" || voice == "" {
+		// Existing unmarked intent cannot safely classify possible effects.
+		return ErrSourcePartyUnavailable
 	}
 	required := []string{}
 	var chatOp, voiceOp *uuid.UUID
@@ -120,4 +126,9 @@ func LatchMatchSquadAbandonmentTx(ctx context.Context, tx pgx.Tx, matchID uuid.U
 		}
 	}
 	return nil
+}
+
+func latchMatchAbandonmentCauseTx(ctx context.Context, tx pgx.Tx, matchID uuid.UUID, reason string) error {
+	evidence := sha256.Sum256([]byte("match-abandonment-v1:" + matchID.String() + ":" + reason))
+	return LatchMatchSquadAbandonmentTx(ctx, tx, matchID, reason, evidence)
 }
