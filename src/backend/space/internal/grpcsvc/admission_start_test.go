@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"encoding/binary"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -173,4 +175,64 @@ func TestAdmissionServer_StartAtomicSavedReplayAndCanonicalGuest(t *testing.T) {
 	require.Nil(t, pinned)
 	require.Nil(t, outcome)
 	require.Equal(t, "RESERVED", state)
+	// Another request may finish this exact operation while this caller waits
+	// for its actor/op lock. Completed replay still needs live ingress proof.
+	_, err = holder.Exec(ctx, `SELECT pg_advisory_lock(90006943)`)
+	require.NoError(t, err)
+	raceAccount, raceProfile := uuid.New(), uuid.New()
+	raceRequest := &spacev1.StartJoinAttemptRequest{Target: &spacev1.StartJoinAttemptRequest_SpaceId{SpaceId: space.String()}, OperationId: uuid.NewString()}
+	type startReply struct {
+		response *spacev1.StartJoinAttemptResponse
+		err      error
+	}
+	firstDone := make(chan startReply, 1)
+	go func() {
+		response, err := invoke(raceRequest, raceAccount, raceProfile)
+		firstDone <- startReply{response, err}
+	}()
+	require.Eventually(t, func() bool {
+		var waiting bool
+		err := holder.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND objid=90006943 AND NOT granted)`).Scan(&waiting)
+		return err == nil && waiting
+	}, 3*time.Second, 10*time.Millisecond)
+	operation := uuid.MustParse(raceRequest.OperationId)
+	keyRaw, err := json.Marshal(struct{ Actor, Operation uuid.UUID }{raceProfile, operation})
+	require.NoError(t, err)
+	opLockHash := sha256.Sum256(append([]byte("voice.space.join.public-operation-lock.v1\x00"), keyRaw...))
+	class, object := binary.BigEndian.Uint32(opLockHash[:4]), binary.BigEndian.Uint32(opLockHash[4:8])
+	middle, err := st.Pool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = middle.Rollback(ctx) }()
+	var middlePID int
+	require.NoError(t, middle.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&middlePID))
+	middleAcquired := make(chan error, 1)
+	go func() {
+		_, err := middle.Exec(ctx, `SELECT pg_advisory_xact_lock($1::integer,$2::integer)`, int32(class), int32(object))
+		middleAcquired <- err
+	}()
+	require.Eventually(t, func() bool {
+		var waiting bool
+		err := holder.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE pid=$1 AND locktype='advisory' AND NOT granted)`, middlePID).Scan(&waiting)
+		return err == nil && waiting
+	}, 3*time.Second, 10*time.Millisecond)
+	secondDone := make(chan error, 1)
+	go func() { _, err := invoke(raceRequest, raceAccount, raceProfile); secondDone <- err }()
+	require.Eventually(t, func() bool {
+		var count int
+		err := holder.QueryRow(ctx, `SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND classid::bigint=$1 AND objid::bigint=$2 AND NOT granted`, int64(class), int64(object)).Scan(&count)
+		return err == nil && count == 2
+	}, 3*time.Second, 10*time.Millisecond)
+	_, err = holder.Exec(ctx, `SELECT pg_advisory_unlock(90006943)`)
+	require.NoError(t, err)
+	require.NoError(t, <-middleAcquired)
+	first := <-firstDone
+	require.NoError(t, first.err)
+	elapsed.Store(int64(10 * time.Second))
+	require.NoError(t, middle.Commit(ctx))
+	require.Equal(t, codes.Unavailable, status.Code(<-secondDone), "completed replay cannot outlive private ingress after an operation lock wait")
+	before := calls
+	finalReplay, err := invoke(raceRequest, raceAccount, raceProfile)
+	require.NoError(t, err)
+	require.True(t, proto.Equal(first.response, finalReplay))
+	require.Equal(t, before, calls, "fresh exact replay needs no new Subject call")
 }

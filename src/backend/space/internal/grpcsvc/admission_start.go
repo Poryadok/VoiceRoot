@@ -84,7 +84,14 @@ func (s *admissionServer) StartJoinAttempt(ctx context.Context, original *spacev
 			return nil, mapAdmissionError(err)
 		}
 		if selection.Operation.State == "COMPLETED" {
-			return store.ReplayJoinStartResponse(selection)
+			response, err := store.ReplayJoinStartResponse(selection)
+			if err != nil {
+				return nil, mapAdmissionError(err)
+			}
+			if _, err = call.ActorFor(request); err != nil {
+				return nil, err
+			}
+			return response, nil
 		}
 	}
 	if s.deps.Subjects == nil {

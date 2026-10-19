@@ -181,7 +181,15 @@ func (s *SpaceStore) CommitJoinStartDecision(ctx context.Context, d *VerifiedJoi
 		if err != nil {
 			return nil, err
 		}
-		return response, tx.Commit(ctx)
+		if err = tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		// Replay owes only fresh ordinary ingress, never another Subject/Role
+		// decision. The actor/op wait and transaction completion may outlive it.
+		if _, err = p.call.ActorFor(p.request); err != nil {
+			return nil, err
+		}
+		return response, nil
 	}
 	actual, err := saved.Context.SHA256()
 	if err != nil {
