@@ -1,7 +1,7 @@
 {
   "version": "NATIVE-P3-SOURCE-v1",
   "base": "8191a36ca3bea7d053df0dd25963ca5133284b41",
-  "source": "5bf6c4857c19fba2b91fb44eb9e9bc6ae816c485",
+  "source": "e63f8436aecd080e231ce0ab58257f70c258ca8a",
   "classification": "DORMANT-A3-RESTRICTIVE-P3-SOURCE",
   "consumers": [
     "DEVELOP-SOURCE-v1",
@@ -67,7 +67,7 @@
       "after": {
         "mode": "100644",
         "type": "blob",
-        "oid": "ec3e09d628b7ca7b881b8a82f1a34004273f5171"
+        "oid": "85d86892b6511245cf8ca59ab3219ff3f7560fd0"
       }
     },
     {
@@ -4664,9 +4664,9 @@
     "src/backend/voice/pb/voice/user/v1/user.pb.go",
     "src/backend/voice/pb/voice/user/v1/user_grpc.pb.go"
   ],
-  "closure_review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c9",
+  "closure_review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c19",
   "down_review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-VOICE-NATIVE-DOWN-53f75f745237#comment-c1",
-  "source_proposal_sha256": "f1fa67facc75414b44659561459a323a97631f9b8a4b4494eae6eb0b414a5106",
+  "source_proposal_sha256": "1b2d1ebbd324d0aec0dce6d5e89be7541032bc0d008cbbf104e6ca07d02a31c8",
   "evidence": [
     {
       "name": "master-intake/h3-affected-counts.json",
@@ -4809,6 +4809,14 @@
       "sha256": "84b06193957ae3c5af79037a12eba0a67c2fe13218712030e875a5a4f6868440"
     },
     {
+      "name": "master-intake/h4-review-comment-actual.json",
+      "sha256": "6cfffbc4c20736ae147d2edfad7d6e9dd75fab5b41ae21684f1b32229cb14468"
+    },
+    {
+      "name": "master-intake/h4-space-doc-delta.patch",
+      "sha256": "e47bc80bbe3a2416ff26c1d5f02463ab0f129212ac670e684b9c5584c8686308"
+    },
+    {
       "name": "master-intake/native-b1-probe.jsonl",
       "sha256": "5474245e56f1c5b3d64f1e51f2e0f3d0962bc0dbb13c2d79003f7d24605daff3"
     },
@@ -4847,6 +4855,10 @@
     {
       "name": "master-intake/native-h3-matrix-packet.json",
       "sha256": "3ac530b7373a51217016a40d5ac33657725fd9449d9d50f1bd2ac3bac5cdef39"
+    },
+    {
+      "name": "master-intake/native-h4-doc-proposal.json",
+      "sha256": "1b2d1ebbd324d0aec0dce6d5e89be7541032bc0d008cbbf104e6ca07d02a31c8"
     },
     {
       "name": "master-intake/native_b1_qualification_probe_test.go",
@@ -4928,42 +4940,42 @@
     "A1": {
       "result": "PASS",
       "evidence": "Discriminating actual root RED and repaired current factory GREEN, not unused helper. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c9 (c10 corrects count to21 source references; no scope change). Prior seven clauses c3 and successful-empty sentinel c4 reused only for byte-identical relevant SQL/helper/writer inputs and preserved ABI."
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c19 accepts H4 doc-only projection applicability. Prior H3 c9/c10 and original literal clause proofs remain scoped only to unchanged relevant executable SQL/helper/writer/test/build inputs and preserved ABI; no new runtime/binary/fullfeature PASS."
     },
     "A2": {
       "result": "PASS",
       "evidence": "Actual factory ordinary-only and Space/NATS-enabled branches leave every A3 fact unleased/undelivered, preserve compatibility and restrictive native drain. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c9 (c10 corrects count to21 source references; no scope change). Prior seven clauses c3 and successful-empty sentinel c4 reused only for byte-identical relevant SQL/helper/writer inputs and preserved ABI."
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c19 accepts H4 doc-only projection applicability. Prior H3 c9/c10 and original literal clause proofs remain scoped only to unchanged relevant executable SQL/helper/writer/test/build inputs and preserved ABI; no new runtime/binary/fullfeature PASS."
     },
     "A3": {
       "result": "PASS",
       "evidence": "Real native ordinary/Space caller-transaction counters/frozen facts, denied/replay/rollback and actual process restart pending state. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c9 (c10 corrects count to21 source references; no scope change). Prior seven clauses c3 and successful-empty sentinel c4 reused only for byte-identical relevant SQL/helper/writer inputs and preserved ABI."
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c19 accepts H4 doc-only projection applicability. Prior H3 c9/c10 and original literal clause proofs remain scoped only to unchanged relevant executable SQL/helper/writer/test/build inputs and preserved ABI; no new runtime/binary/fullfeature PASS."
     },
     "A4": {
       "result": "PASS",
       "evidence": "EJECT_ONLY never proves retirement/fullFROZEN/LIVE; exact retained targets restart without projection Redis; credential refresh and unknown capability cannot upgrade. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c9 (c10 corrects count to21 source references; no scope change). Prior seven clauses c3 and successful-empty sentinel c4 reused only for byte-identical relevant SQL/helper/writer inputs and preserved ABI."
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c19 accepts H4 doc-only projection applicability. Prior H3 c9/c10 and original literal clause proofs remain scoped only to unchanged relevant executable SQL/helper/writer/test/build inputs and preserved ABI; no new runtime/binary/fullfeature PASS."
     },
     "B1": {
       "result": "PASS",
       "evidence": "Successful literal H53/H2 DOWN preserves separately owned schema tables/FK/index/view/JSON data and public sentinel complete snapshot; owned targets/grants absent; literal UP roundtrip preserves snapshot. Independent external driver -race PASS1/0skip1.220s, all six commands0. See native-b1-supplement.json and reviewed original empty-roundtrip matrix.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c9 (c10 corrects count to21 source references; no scope change). Prior seven clauses c3 and successful-empty sentinel c4 reused only for byte-identical relevant SQL/helper/writer inputs and preserved ABI."
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c19 accepts H4 doc-only projection applicability. Prior H3 c9/c10 and original literal clause proofs remain scoped only to unchanged relevant executable SQL/helper/writer/test/build inputs and preserved ABI; no new runtime/binary/fullfeature PASS."
     },
     "B2": {
       "result": "PASS",
       "evidence": "Every independently retained lifecycle class refuses destructive rollback with exact rows/columns retained, including grants without cleanup targets. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c9 (c10 corrects count to21 source references; no scope change). Prior seven clauses c3 and successful-empty sentinel c4 reused only for byte-identical relevant SQL/helper/writer inputs and preserved ABI."
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c19 accepts H4 doc-only projection applicability. Prior H3 c9/c10 and original literal clause proofs remain scoped only to unchanged relevant executable SQL/helper/writer/test/build inputs and preserved ABI; no new runtime/binary/fullfeature PASS."
     },
     "B3": {
       "result": "PASS",
       "evidence": "Genuine writer-win, DOWN-first exclusion, partial-DDL rollback and timeout rollback are synchronized/observed, not timing-only assumptions. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c9 (c10 corrects count to21 source references; no scope change). Prior seven clauses c3 and successful-empty sentinel c4 reused only for byte-identical relevant SQL/helper/writer inputs and preserved ABI."
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c19 accepts H4 doc-only projection applicability. Prior H3 c9/c10 and original literal clause proofs remain scoped only to unchanged relevant executable SQL/helper/writer/test/build inputs and preserved ABI; no new runtime/binary/fullfeature PASS."
     },
     "B4": {
       "result": "PASS",
       "evidence": "Voice013 retained outbox/counter refusal and no MM020 import are preserved; only early inherited-snapshot refusal was added/reviewed408. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c9 (c10 corrects count to21 source references; no scope change). Prior seven clauses c3 and successful-empty sentinel c4 reused only for byte-identical relevant SQL/helper/writer inputs and preserved ABI."
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c19 accepts H4 doc-only projection applicability. Prior H3 c9/c10 and original literal clause proofs remain scoped only to unchanged relevant executable SQL/helper/writer/test/build inputs and preserved ABI; no new runtime/binary/fullfeature PASS."
     }
   }
 }
