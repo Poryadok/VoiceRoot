@@ -13,6 +13,8 @@ the record; the environment and command line cannot supply authority.
 The first record binds the complete singleton correction: imported owner O,
 source S, direct correction C whose only parent is O, reviewed donor D, every
 mode/type/blob before and after, and the unchanged Voice013 UP prerequisite.
+The original content base and runtime trigger are pinned too; a caller cannot
+substitute a later ancestor row to hide retained content or runtime taint.
 No Matchmaking migration is included. The independent donor review explicitly
 covers the retained-counter/outbox DOWN guard; migration PostgreSQL proof is
 reused only while those exact bytes and prerequisites remain unchanged.

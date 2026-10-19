@@ -2,6 +2,8 @@
   "version": "GUARDED-CORRECTION-V1",
   "prior_owner": "2cc9482255ba18cd948aacb567f4c4bdf8976b14",
   "prior_source": "909090a34743902799306974d6f3ebabe3c02f10",
+  "content_base": "8191a36ca3bea7d053df0dd25963ca5133284b41",
+  "prior_runtime_trigger": "true",
   "correction": "5cc425b35bc71738d86261c1cf4772c7babd4519",
   "donor": "a2e3365856277c7861d7ee5897de7867fa81c50e",
   "review": "http://192.168.0.109:30990/?project=voice&task=BE012-NATIVE-PRODUCER-REVIEW#comment-c1",
