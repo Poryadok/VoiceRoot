@@ -571,3 +571,23 @@ No historical party is backfilled. Schema constraints and synthetic retention
 fixtures do not validate canonical wire contents, provenance, installation
 custody, or native readiness. The actual source-origin writer, history reader,
 candidate-v2 stamp and fixed native executable must qualify those separately.
+
+`mmadmission.ReadHistory` reads the exact ADMITTED binding and canonical history
+in one transaction. Capture requires read-only REPEATABLE READ; a READ COMMITTED
+forward check acquires the same shared gate without waiting and retains it until
+COMMIT. Writers still acquire `Acquire` first, before account or row locks. The
+reader checks canonical receipt hashes against both SQL indexes and head, each
+continuity link/root, stable lineage and scope, increasing admission generation,
+and an explicitly bounded chain of at most 128 receipts. Missing, malformed or
+unsupported history is unavailable, never a new genesis or automatic enrollment.
+`HistoryCut.Authority` is data for the root's independent descriptor/readback
+comparison, not a custody assertion.
+
+The first supported origin contract is `NATIVE_VOICE_C16_V1_ORIGIN_V1` only.
+`AllowsOrigin` checks original receipt authority across every intervening
+compatible transition. It deliberately does not authorize an arbitrary party:
+the source consumer must also bind party, operation, request, owner capture and
+private manifest to the persisted origin. LFP remains unavailable until its
+separate genuine typed source and lifecycle are implemented. Current stamp
+rotation expires old candidates while a continuous supported rollout preserves
+the immutable original source origin.
