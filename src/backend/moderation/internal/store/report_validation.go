@@ -118,6 +118,9 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 	if state == "LIVE" && accountID != uuid.Nil && (claim.TargetSubject == nil || claim.TargetSubject.AccountID != accountID) {
 		return false, ErrReportPrivacy
 	}
+	if claim.TargetSubject != nil && (state != "LIVE" || claim.TargetType != "user" || accountID == uuid.Nil || claim.TargetSubject.AccountID != accountID) {
+		return false, ErrReportPrivacy
+	}
 	if state != "LIVE" && state != "MISSING" && state != "DELETED" {
 		return false, errors.New("invalid target decision")
 	}
@@ -140,7 +143,7 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 		bindings = append(bindings, *claim.TargetSubject)
 	}
 	if len(bindings) == 2 && bindings[0].ID == bindings[1].ID {
-		if bindings[0].AccountID != bindings[1].AccountID || bindings[0].Revision != bindings[1].Revision || bindings[0].State != bindings[1].State {
+		if bindings[0].AccountID != bindings[1].AccountID || bindings[0].Revision != bindings[1].Revision || bindings[0].State != bindings[1].State || (bindings[0].PurgeAt == nil) != (bindings[1].PurgeAt == nil) || (bindings[0].PurgeAt != nil && !bindings[0].PurgeAt.Equal(*bindings[1].PurgeAt)) {
 			return false, ErrReportPrivacy
 		}
 		bindings = bindings[:1]
@@ -154,16 +157,29 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 	terminal := false
 	for _, binding := range bindings {
 		var ended bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM automod_terminal_subjects WHERE subject_id=$1) OR ($2::timestamptz IS NOT NULL AND $2<=clock_timestamp()) OR EXISTS(SELECT 1 FROM automod_subjects WHERE subject_id=$1 AND purge_at<=clock_timestamp())`, binding.ID, binding.PurgeAt).Scan(&ended); err != nil {
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM automod_terminal_subjects WHERE subject_id=$1)`, binding.ID).Scan(&ended); err != nil {
 			return false, err
 		}
 		if ended {
 			terminal = true
-			continue
 		}
-		if err = s.Subjects.BindSubjectTx(ctx, tx, binding); err != nil {
-			return false, err
+	}
+	// Inspect every permanent fence before any binding. A stale expired Auth
+	// capture is retryable, not permission to erase a newer restored identity.
+	if !terminal {
+		for _, binding := range bindings {
+			if err = s.Subjects.BindRetainedSubjectTx(ctx, tx, binding); err != nil {
+				return false, errors.Join(ErrReportPrivacy, err)
+			}
 		}
+	}
+	checkRetained := func() error {
+		for _, binding := range bindings {
+			if e := s.Subjects.RequireRetainedSubjectTx(ctx, tx, binding); e != nil {
+				return errors.Join(ErrReportPrivacy, e)
+			}
+		}
+		return nil
 	}
 	var fact ValidationFact
 	var legacy bool
@@ -202,6 +218,9 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 				return false, err
 			}
 			if err = claim.PrivacyCheck(ctx); err != nil {
+				return false, err
+			}
+			if err = checkRetained(); err != nil {
 				return false, err
 			}
 			return false, tx.Commit(ctx)
@@ -251,6 +270,16 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 	}
 	if err = claim.PrivacyCheck(ctx); err != nil {
 		return false, err
+	}
+	// Hooks and event serialization may cross a retained deadline. Recheck the
+	// authoritative database clock and exact bindings immediately before commit.
+	if err = checkRetained(); err != nil {
+		return false, err
+	}
+	if claim.TargetSubject != nil {
+		if err = s.Subjects.RequireLiveSubjectTx(ctx, tx, claim.TargetSubject.AccountID, claim.TargetSubject.ID, claim.TargetSubject.Revision); err != nil {
+			return false, errors.Join(ErrReportPrivacy, err)
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return false, err

@@ -58,6 +58,16 @@ Actual shared startup/import/recovery wiring remains a separate activation gate.
 Legacy NULL subject provenance needs owner-authorized cleanup/backfill and a
 current recovery cut before admission; existing account evidence is insufficient.
 
+After authoritative replay and terminal participant cleanup, the shared
+coordinator calls `ReportStore.RequirePrivacyRecovery(ctx)` before P5. This
+read-only check rejects unresolved legacy NULL provenance, missing/remapped or
+older local subject bindings, terminal residue and expired lifecycle deadlines.
+Both reporter and VALID User-target bindings must be coherent; an unknown PENDING
+target is allowed. Accepted reporter soft deletion before its purge deadline is
+retained. The check neither repairs rows nor synthesizes terminal state, invokes
+owner RPCs or opens a separate readiness flag. A failed check requires the
+protected authoritative owner recovery path; it is not a permanent READY waiver.
+
 ## Durable state and effects
 
 `reports.validation_state`: `PENDING`, `VALID`, `MISSING`, `DELETED`. Claims,
@@ -204,9 +214,11 @@ listener denial. There is no ordinary-client or automatic gRPC retry fallback.
 `NATS_URL` is required for enabled worker startup; transient stream/publish errors
 remain durable retries. Worker shutdown completes before its transports/pool close.
 BE-046 owns the single VALID hook; without it validation remains manual, without
-the legacy synchronous threshold engine. Migration catalog is scan000005,
-BE045000006, intake000007, report subjects000008, shared boot000009,
-BE046000010; duplicate numeric versions are invalid.
+the legacy synchronous threshold engine. Numeric ownership is scan000005,
+BE045000006, intake000007, report subjects000008, reserved shared boot000009,
+BE046000010; duplicate numeric versions are invalid. The isolated report proof
+applies the actual committed catalog; an unwritten reserved version is not a
+tested migration or an implemented startup barrier.
 
 The opt-in local/CI Compose overlay `docker-compose.report-targets.yml` extends
 the existing Phase0 fixture without replacing Gateway signing identity. Generate
@@ -236,3 +248,31 @@ verified terminal-account late-callback fence: an owner snapshot predating purge
 must not attach a newly erased account afterward. The partial raw-account link
 purge participant alone is not proof of that fence. No deployment/acceptance is
 claimed by the local proof.
+
+## Legacy privacy recovery and restore boundary
+
+Accepted BE-137 c18/c19 and c23/c24 separate recovery provenance from submission
+authority. A dedicated Moderation-only User recovery RPC may recover a retained
+historical owner, including a soft-deleted profile. Its result is
+`OWNER_RECOVERED_LEGACY`, never `VERIFIED_AT_SUBMISSION`: it does not activate an
+old report, enqueue events or make a threshold vote eligible. Missing history is
+`INCOMPLETE`; absence, an elapsed guessed deadline or an Auth lookup error is not
+an irreversible erasure fact. The ordinary raw-header owner resolver is unchanged.
+
+Report recovery mutations and their opaque journal entries share one SQL
+transaction. Entries use an existing report UUID and slot, an opaque Auth subject
+or terminal report-redaction disposition and opaque evidence references. They
+contain no profile/account identifiers, identifier hashes or report contents.
+Terminal dispositions dominate older bindings and survive raw report deletion.
+
+Ordinary `LIVE_CURRENT` startup verifies the current local storage and a finite
+local journal view; no external sink or export acknowledgment is required.
+`DECLARED_RESTORE` requires a protected offline bundle with exact store lineage,
+artifacts and independently preserved complete history through the selected final
+cut. A final source capture follows writer fencing and drain; alternatively an
+actually retained and verified native WAL/PITR history establishes that cut.
+A periodic dump, matching old stores or an artifact seal alone cannot establish
+a missing post-backup tail. Export and import produce recovery evidence, never
+readiness; the shared coordinator verifies the full required cut vector before
+opening its process-bound gate. Unresolved legacy rows keep the read-only privacy
+checker closed until authoritative recovery or exact proven redaction completes.
