@@ -215,7 +215,7 @@ func mapAdmissionError(err error) error {
 	case errors.Is(err, store.ErrJoinAttemptConflict), errors.Is(err, store.ErrEntryPolicyConflict):
 		return status.Error(codes.AlreadyExists, "admission operation conflict")
 	case errors.Is(err, store.ErrEntryPolicyVersion):
-		return status.Error(codes.Aborted, "entry policy revision conflict")
+		return status.Error(codes.FailedPrecondition, "entry policy revision conflict")
 	case errors.Is(err, admissionauthority.ErrBinding), errors.Is(err, admissionauthority.ErrUnavailable), errors.Is(err, store.ErrJoinAttemptUnavailable), errors.Is(err, store.ErrEntryPolicyUnavailable), errors.Is(err, store.ErrEffectiveEpisodeUnavailable):
 		return status.Error(codes.Unavailable, "admission authority unavailable")
 	default:

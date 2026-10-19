@@ -48,7 +48,7 @@ func (s *SpaceStore) CommitEntryPolicySet(ctx context.Context, d *VerifiedEntryP
 	if err != nil {
 		return nil, err
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}

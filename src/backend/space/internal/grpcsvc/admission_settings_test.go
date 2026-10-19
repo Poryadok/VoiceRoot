@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -187,6 +188,56 @@ func TestAdmissionSettingsOriginalSafeReplayWithoutOwnerCalls(t *testing.T) {
 	require.Equal(t, codes.Unavailable, status.Code(err))
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM space_join_operations WHERE actor_profile_id=$1 AND operation_id=$2`, profile, legacy.OperationId).Scan(&effects))
 	require.Zero(t, effects, "old receipt cannot be backfilled from today's actor")
+	require.Equal(t, 2, ownerCalls)
+	require.Equal(t, 2, permissionCalls)
+	// A database's old default isolation must not turn an exact concurrent
+	// completion into serialization failure instead of its saved safe result.
+	cfg := st.Pool.Config().Copy()
+	if cfg.ConnConfig.RuntimeParams == nil {
+		cfg.ConnConfig.RuntimeParams = map[string]string{}
+	}
+	cfg.ConnConfig.RuntimeParams["default_transaction_isolation"] = "repeatable read"
+	rrPool, e := pgxpool.NewWithConfig(ctx, cfg)
+	require.NoError(t, e)
+	t.Cleanup(rrPool.Close)
+	rrStore := &store.SpaceStore{Pool: rrPool}
+	rrAPI := NewAdmissionServer(&SpaceGRPC{Store: rrStore}, rrStore, AdmissionDependencies{})
+	raceRequest := proto.Clone(request).(*spacev1.SetEntryPolicyRequest)
+	raceRequest.OperationId = uuid.NewString()
+	_, e = invoke(raceRequest, account, func(c context.Context) (any, error) { return rrStore.PrepareEntryPolicySet(c, raceRequest) })
+	require.NoError(t, e)
+	raceAck := &spacev1.SetEntryPolicyResponse{OperationId: raceRequest.OperationId, EntryPolicyVersion: 2}
+	raceRaw, e := proto.MarshalOptions{Deterministic: true}.Marshal(raceAck)
+	require.NoError(t, e)
+	winner, e := st.Pool.Begin(ctx)
+	require.NoError(t, e)
+	defer winner.Rollback(ctx)
+	_, e = winner.Exec(ctx, `UPDATE space_join_operations SET state='COMPLETED',outcome_code=0,outcome_proto=$3 WHERE actor_profile_id=$1 AND operation_id=$2`, profile, raceRequest.OperationId, raceRaw)
+	require.NoError(t, e)
+	var winnerPID int32
+	require.NoError(t, winner.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&winnerPID))
+	type replayResult struct {
+		response any
+		err      error
+	}
+	raceDone := make(chan replayResult, 1)
+	go func() {
+		r, e := invoke(raceRequest, account, func(c context.Context) (any, error) { return rrAPI.SetEntryPolicy(c, raceRequest) })
+		raceDone <- replayResult{r, e}
+	}()
+	require.Eventually(t, func() bool {
+		var blocked bool
+		return st.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)))`, winnerPID).Scan(&blocked) == nil && blocked
+	}, 3*time.Second, 5*time.Millisecond)
+	require.NoError(t, winner.Commit(ctx))
+	var raced replayResult
+	select {
+	case raced = <-raceDone:
+	case <-time.After(3 * time.Second):
+		t.Fatal("concurrent completed replay did not resume")
+	}
+	require.NoError(t, raced.err)
+	require.True(t, proto.Equal(raceAck, raced.response.(*spacev1.SetEntryPolicyResponse)))
 	require.Equal(t, 2, ownerCalls)
 	require.Equal(t, 2, permissionCalls)
 	// A completed race still requires the original ingress to remain live after

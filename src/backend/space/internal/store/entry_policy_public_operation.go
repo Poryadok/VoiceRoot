@@ -82,7 +82,7 @@ func (s *SpaceStore) PrepareEntryPolicySet(ctx context.Context, request *spacev1
 	if s == nil || s.Pool == nil || s.tx != nil {
 		return nil, ErrEntryPolicyUnavailable
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}
