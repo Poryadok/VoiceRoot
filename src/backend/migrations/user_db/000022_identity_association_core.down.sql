@@ -2,6 +2,18 @@
 -- Retiring live evidence requires an explicit reviewed owner migration, not a
 -- generic downgrade which discards reservations or the CURRENT recovery cut.
 DO $$ BEGIN
+  -- Stabilize the entire supported owner catalog BEFORE trusting emptiness.
+  -- Keep these locks until this migration transaction finishes all DROP/ALTER
+  -- commands. A writer which already holds catalog shared locks may finish;
+  -- the checks below then observe its committed initialization and refuse.
+  -- Match the reader's catalog lock order; bounded contention aborts safely.
+  PERFORM set_config('lock_timeout','2s',true);
+  LOCK TABLE public.schema_migrations,public.profiles,public.user_account_lifecycle,
+    public.sdk_author_tombstones,public.user_authority_revision,public.identity_meta,
+    public.identity_key_versions,public.identity_profile_reservations,
+    public.identity_associations,public.association_selector_aliases,
+    public.identity_journal,public.identity_parent_fences,
+    public.identity_account_parent_aliases IN ACCESS EXCLUSIVE MODE;
   IF EXISTS(SELECT 1 FROM identity_meta WHERE history_head<>0 OR retained_floor<>0 OR keyset_revision<>0 OR guards_active OR baseline_cut<>0)
     OR EXISTS(SELECT 1 FROM identity_key_versions)
     OR EXISTS(SELECT 1 FROM identity_profile_reservations)
