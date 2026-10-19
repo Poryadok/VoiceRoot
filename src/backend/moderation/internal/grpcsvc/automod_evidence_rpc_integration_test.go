@@ -17,7 +17,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"net"
-	"path/filepath"
 	"testing"
 	"time"
 	"voice/backend/moderation/internal/automod"
@@ -41,7 +40,7 @@ func TestAutoModEvidenceRPC_CommittedOnlyAndExactReplay(t *testing.T) {
 	}
 	ctx := context.Background()
 	pool := automodAdmissionDatabase(t)
-	integrationtestApplySQL(t, ctx, pool, filepath.Join(repoRoot(t), "src/backend/migrations/moderation_db/000006_async_automod.up.sql"))
+	integrationtestApplyAutoMod(t, ctx, pool)
 	account, subject, epoch := uuid.New(), uuid.New(), uuid.New()
 	binding := &automodv1.SubjectBinding{ProtocolVersion: 1, AccountId: account.String(), SubjectId: subject.String(), LifecycleRevision: 1, State: automodv1.SubjectState_SUBJECT_STATE_LIVE}
 	key, err := rsa.GenerateKey(rand.Reader, 2048)

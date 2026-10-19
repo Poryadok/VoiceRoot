@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
-	"path/filepath"
 	"testing"
 	"time"
 	"voice/backend/moderation/internal/automod"
@@ -19,7 +18,7 @@ func TestAutoModStore_SubjectParticipantRollsBackWithAndWithoutAccountMapping(t 
 		t.Run(fmt.Sprint(mapped), func(t *testing.T) {
 			ctx := context.Background()
 			pool := automodAdmissionDatabase(t)
-			integrationtestApplySQL(t, ctx, pool, filepath.Join(repoRoot(t), "src/backend/migrations/moderation_db/000006_async_automod.up.sql"))
+			integrationtestApplyAutoMod(t, ctx, pool)
 			s := automod.NewStore(pool)
 			subject := automod.Subject{ID: uuid.New(), AccountID: uuid.New(), Epoch: uuid.New(), Revision: 1, State: "LIVE"}
 			if mapped {
@@ -66,7 +65,7 @@ func TestAutoModStore_SubjectParticipantRollsBackWithAndWithoutAccountMapping(t 
 func TestAutoModStore_ClosedBootBeforeCommitRollsBackEvidenceEffects(t *testing.T) {
 	ctx := context.Background()
 	pool := automodAdmissionDatabase(t)
-	integrationtestApplySQL(t, ctx, pool, filepath.Join(repoRoot(t), "src/backend/migrations/moderation_db/000006_async_automod.up.sql"))
+	integrationtestApplyAutoMod(t, ctx, pool)
 	s := automod.NewStore(pool)
 	subject := automod.Subject{ID: uuid.New(), AccountID: uuid.New(), Epoch: uuid.New(), Revision: 1, State: "LIVE"}
 	require.NoError(t, s.Provision(ctx, subject))

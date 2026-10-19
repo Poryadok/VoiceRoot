@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"path/filepath"
 	"testing"
 	"voice/backend/moderation/internal/automod"
 	"voice/backend/pkg/automodclient"
@@ -35,7 +34,7 @@ func TestRestrictionSync_CurrentBootAndExactAckRequired(t *testing.T) {
 	}
 	ctx := context.Background()
 	pool := automodAdmissionDatabase(t)
-	integrationtestApplySQL(t, ctx, pool, filepath.Join(repoRoot(t), "src/backend/migrations/moderation_db/000006_async_automod.up.sql"))
+	integrationtestApplyAutoMod(t, ctx, pool)
 	s := automod.NewStore(pool)
 	subject := automod.Subject{ID: uuid.New(), AccountID: uuid.New(), Epoch: uuid.New(), Revision: 1, State: "LIVE"}
 	require.NoError(t, s.Provision(ctx, subject))
@@ -71,7 +70,7 @@ func TestRestrictionSync_StaleAckPreservesNewerIntent(t *testing.T) {
 	}
 	ctx := context.Background()
 	pool := automodAdmissionDatabase(t)
-	integrationtestApplySQL(t, ctx, pool, filepath.Join(repoRoot(t), "src/backend/migrations/moderation_db/000006_async_automod.up.sql"))
+	integrationtestApplyAutoMod(t, ctx, pool)
 	s := automod.NewStore(pool)
 	subject := automod.Subject{ID: uuid.New(), AccountID: uuid.New(), Epoch: uuid.New(), Revision: 1, State: "LIVE"}
 	require.NoError(t, s.Provision(ctx, subject))
@@ -110,7 +109,7 @@ func TestRestrictionSync_AheadUsesCurrentLocalRevision(t *testing.T) {
 	}
 	ctx := context.Background()
 	pool := automodAdmissionDatabase(t)
-	integrationtestApplySQL(t, ctx, pool, filepath.Join(repoRoot(t), "src/backend/migrations/moderation_db/000006_async_automod.up.sql"))
+	integrationtestApplyAutoMod(t, ctx, pool)
 	s := automod.NewStore(pool)
 	subject := automod.Subject{ID: uuid.New(), AccountID: uuid.New(), Epoch: uuid.New(), Revision: 1, State: "LIVE"}
 	require.NoError(t, s.Provision(ctx, subject))

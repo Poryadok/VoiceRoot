@@ -270,6 +270,7 @@ func subject(b *automodv1.SubjectBinding, epoch uuid.UUID) automod.Subject {
 		result.State = "DELETED"
 		at := b.GetPurgeAt().AsTime()
 		result.PurgeAt = &at
+		result.CycleID = uuid.MustParse(b.GetDeletionCycleId())
 	}
 	return result
 }

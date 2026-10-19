@@ -44,6 +44,15 @@ func integrationtestApplySQL(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	require.NoError(t, err)
 }
 
+// Scoped automod fixtures need the forward lifecycle migration as well as the
+// original detector schema. Full catalog fixtures keep their ordinary order.
+func integrationtestApplyAutoMod(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	for _, name := range []string{"000006_async_automod.up.sql", "000009_subject_deletion_cycle.up.sql"} {
+		integrationtestApplySQL(t, ctx, pool, filepath.Join(repoRoot(t), "src/backend/migrations/moderation_db", name))
+	}
+}
+
 func startModerationPostgresPlatform(t *testing.T, _ context.Context) *pgxpool.Pool {
 	t.Helper()
 	return reportIntakePool(t)

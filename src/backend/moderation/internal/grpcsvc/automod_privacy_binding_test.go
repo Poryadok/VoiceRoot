@@ -5,7 +5,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
-	"path/filepath"
 	"testing"
 	"time"
 	"voice/backend/moderation/internal/automod"
@@ -18,11 +17,11 @@ func TestAutoModRetainedSubjectDeadlineRejectsBeforeBinding(t *testing.T) {
 	}
 	ctx := context.Background()
 	pool := automodAdmissionDatabase(t)
-	integrationtestApplySQL(t, ctx, pool, filepath.Join(repoRoot(t), "src/backend/migrations/moderation_db/000006_async_automod.up.sql"))
+	integrationtestApplyAutoMod(t, ctx, pool)
 	s := automod.NewStore(pool)
 	locks := &store.SanctionStore{Pool: pool}
 	deadline := time.Now().Add(-time.Second).Truncate(time.Microsecond)
-	binding := automod.Subject{ID: uuid.New(), AccountID: uuid.New(), Revision: 2, State: "DELETED", PurgeAt: &deadline}
+	binding := automod.Subject{ID: uuid.New(), AccountID: uuid.New(), CycleID: uuid.New(), Revision: 2, State: "DELETED", PurgeAt: &deadline}
 	err := locks.WithAccountLock(ctx, binding.AccountID, func(tx pgx.Tx) error { return s.BindRetainedSubjectTx(ctx, tx, binding) })
 	require.ErrorIs(t, err, automod.ErrSubject, "expired privacy binding must not recreate the raw account mapping or assert a permanent terminal")
 	var count int
@@ -36,12 +35,12 @@ func TestAutoModRetainedSubjectIsPrivacyOnlyAndRechecksDatabaseDeadline(t *testi
 	}
 	ctx := context.Background()
 	pool := automodAdmissionDatabase(t)
-	integrationtestApplySQL(t, ctx, pool, filepath.Join(repoRoot(t), "src/backend/migrations/moderation_db/000006_async_automod.up.sql"))
+	integrationtestApplyAutoMod(t, ctx, pool)
 	s := automod.NewStore(pool)
 	locks := &store.SanctionStore{Pool: pool}
 	var deadline time.Time
 	require.NoError(t, pool.QueryRow(ctx, `SELECT clock_timestamp()+interval '1 hour'`).Scan(&deadline))
-	binding := automod.Subject{ID: uuid.New(), AccountID: uuid.New(), Revision: 2, State: "DELETED", PurgeAt: &deadline}
+	binding := automod.Subject{ID: uuid.New(), AccountID: uuid.New(), CycleID: uuid.New(), Revision: 2, State: "DELETED", PurgeAt: &deadline}
 	require.NoError(t, locks.WithAccountLock(ctx, binding.AccountID, func(tx pgx.Tx) error {
 		if err := s.BindRetainedSubjectTx(ctx, tx, binding); err != nil {
 			return err
@@ -59,6 +58,7 @@ func TestAutoModRetainedSubjectIsPrivacyOnlyAndRechecksDatabaseDeadline(t *testi
 	live := binding
 	live.State = "LIVE"
 	live.PurgeAt = nil
+	live.CycleID = uuid.Nil
 	live.Revision++
 	require.NoError(t, s.BindSubject(ctx, live))
 	require.ErrorIs(t, locks.WithAccountLock(ctx, binding.AccountID, func(tx pgx.Tx) error { return s.BindRetainedSubjectTx(ctx, tx, binding) }), automod.ErrConflict, "older DELETED cannot replace a newer LIVE restore")

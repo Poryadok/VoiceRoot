@@ -531,3 +531,44 @@ and size/schema errors, mixed methods/stores, parent/absolute/Windows paths,
 file/directory symlinks, and immutable byte/metadata readback. Scoped `-race`
 PASS 1.190s and `go vet` PASS. This is artifact inspection proof only; no
 restore operation, current-tail proof or P5 completion is claimed.
+
+Recipient cycle binding slice (BE-045 c19, in progress): retain Auth's exact
+`deletion_cycle_id` in Moderation's subject binding, including report privacy
+projection. A DELETED binding requires a nonzero cycle and microsecond deadline;
+LIVE has neither. Equal revision requires equal state, cycle and deadline.
+Retained rechecks compare that entire tuple using fresh database time; a newer
+LIVE restore clears the previous cycle without resetting detector state.
+Migration 9 adds the nullable cycle column for existing rows without inventing
+legacy cycles; pre-activation recovery must refresh any legacy DELETED binding.
+First demonstrate the old implementation discarding a changed transported cycle
+at the same revision, then verify database binding, retained recheck and restore
+negatives in the private Linux PostgreSQL fixture. This slice does not provide
+the receiver, lifecycle publisher, boot coordinator or physical P30D proof.
+
+The bounded [whole-copy/key/owner-time review](async-automod-whole-copy-custody.md)
+(BE-045 c28-c32, Astra162) selected no candidate under the named faults. Local
+cleanup, all-copy destruction by the deadline, and restored-copy scrubbing are
+three different evidence levels. Current restic/PVC/config/dump custody and a
+paused sole owner do not supply the latter two by a readiness flag or key TTL.
+The physical P30D acceptance criterion stays open under unchanged policy; this
+does not stop the separately testable lifecycle/recipient/current-owner ACK work.
+
+Cycle slice evidence: the old binding accepted a different transported cycle
+at the same revision/deadline (Linux PostgreSQL RED 0.835s). A second negative
+showed that even a greater revision could extend the same cycle (RED 12.558s;
+that run also recorded a teardown timeout, with no database left afterward).
+Binding, provision, refresh and retained checks now preserve the exact cycle;
+the database also rejects rewriting the deadline of the same nonnull cycle.
+The final scoped PostgreSQL race run passed in 58.252s without failed/skipped
+cases; all Moderation short tests and `go vet ./...` passed. The frozen source
+tree is `57091a7e9e8ab7b9a4ac6bee73198d97fab8e214`; portable before/after,
+archive, raw JSON/log and receipt evidence is in the task checkpoint.
+
+The broader 61.117s probe remains FAIL: the existing legacy `CheckMessage`
+path still creates an offence for uncommitted text. Its regression remains a
+required vertical fix, not a cycle-test PASS. Legacy DELETED bindings without
+a cycle remain unavailable to ordinary equal-revision binding; the boot
+coordinator still needs an explicit fresh-Auth repair without deleting/recreating
+their detector stream. Receiver, producer dispatch/current-owner ACK, lifecycle
+repair and real P1-P5 activation remain open. The own Graphify AST update was
+canceled at terminal exit 1 after no progress; no AST verification is claimed.

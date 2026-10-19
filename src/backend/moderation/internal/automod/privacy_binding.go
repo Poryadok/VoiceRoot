@@ -46,7 +46,7 @@ func (s *Store) RequireRetainedSubjectTx(ctx context.Context, tx pgx.Tx, binding
 		return err
 	}
 	var retained bool
-	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM automod_subjects a WHERE a.subject_id=$1 AND a.account_id=$2 AND a.lifecycle_revision=$3 AND a.lifecycle_state=$4 AND a.purge_at IS NOT DISTINCT FROM $5::timestamptz AND (a.lifecycle_state='LIVE' AND a.purge_at IS NULL OR a.lifecycle_state='DELETED' AND a.purge_at>clock_timestamp()) AND NOT EXISTS(SELECT 1 FROM automod_terminal_subjects t WHERE t.subject_id=a.subject_id))`, binding.ID, binding.AccountID, binding.Revision, binding.State, binding.PurgeAt).Scan(&retained)
+	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM automod_subjects a WHERE a.subject_id=$1 AND a.account_id=$2 AND a.lifecycle_revision=$3 AND a.lifecycle_state=$4 AND a.purge_at IS NOT DISTINCT FROM $5::timestamptz AND a.deletion_cycle_id IS NOT DISTINCT FROM $6::uuid AND (a.lifecycle_state='LIVE' AND a.purge_at IS NULL OR a.lifecycle_state='DELETED' AND a.purge_at>clock_timestamp()) AND NOT EXISTS(SELECT 1 FROM automod_terminal_subjects t WHERE t.subject_id=a.subject_id))`, binding.ID, binding.AccountID, binding.Revision, binding.State, binding.PurgeAt, nullableCycle(binding.CycleID)).Scan(&retained)
 	if err != nil {
 		return err
 	}

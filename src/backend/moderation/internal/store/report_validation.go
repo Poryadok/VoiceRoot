@@ -148,7 +148,7 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 		bindings = append(bindings, *claim.TargetSubject)
 	}
 	if len(bindings) == 2 && bindings[0].ID == bindings[1].ID {
-		if bindings[0].AccountID != bindings[1].AccountID || bindings[0].Revision != bindings[1].Revision || bindings[0].State != bindings[1].State || (bindings[0].PurgeAt == nil) != (bindings[1].PurgeAt == nil) || (bindings[0].PurgeAt != nil && !bindings[0].PurgeAt.Equal(*bindings[1].PurgeAt)) {
+		if bindings[0].AccountID != bindings[1].AccountID || bindings[0].Revision != bindings[1].Revision || bindings[0].State != bindings[1].State || bindings[0].CycleID != bindings[1].CycleID || (bindings[0].PurgeAt == nil) != (bindings[1].PurgeAt == nil) || (bindings[0].PurgeAt != nil && !bindings[0].PurgeAt.Equal(*bindings[1].PurgeAt)) {
 			return false, ErrReportPrivacy
 		}
 		bindings = bindings[:1]

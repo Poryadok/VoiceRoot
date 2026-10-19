@@ -61,9 +61,11 @@ func (s *Store) refreshSubject(ctx context.Context, fresh Subject, check BootChe
 		if terminal {
 			return ErrPurged
 		}
-		tag, err := tx.Exec(ctx, `UPDATE automod_subjects SET lifecycle_revision=$4,lifecycle_state=$5,purge_at=$6
-   WHERE subject_id=$1 AND account_id=$2 AND source_epoch=$3 AND (lifecycle_revision<$4 OR
-     (lifecycle_revision=$4 AND lifecycle_state=$5 AND purge_at IS NOT DISTINCT FROM $6))`, fresh.ID, fresh.AccountID, fresh.Epoch, fresh.Revision, fresh.State, fresh.PurgeAt)
+		tag, err := tx.Exec(ctx, `UPDATE automod_subjects SET lifecycle_revision=$4,lifecycle_state=$5,purge_at=$6,deletion_cycle_id=$7
+   WHERE subject_id=$1 AND account_id=$2 AND source_epoch=$3
+   AND (lifecycle_state <> 'DELETED' OR $5 <> 'DELETED' OR deletion_cycle_id IS DISTINCT FROM $7 OR purge_at IS NOT DISTINCT FROM $6)
+   AND (lifecycle_revision<$4 OR
+     (lifecycle_revision=$4 AND lifecycle_state=$5 AND purge_at IS NOT DISTINCT FROM $6 AND deletion_cycle_id IS NOT DISTINCT FROM $7))`, fresh.ID, fresh.AccountID, fresh.Epoch, fresh.Revision, fresh.State, fresh.PurgeAt, nullableCycle(fresh.CycleID))
 		if err != nil {
 			return err
 		}

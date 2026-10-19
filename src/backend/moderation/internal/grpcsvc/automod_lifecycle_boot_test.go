@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"path/filepath"
 	"testing"
 	"voice/backend/moderation/internal/automod"
 )
@@ -17,7 +16,7 @@ func TestAutoModLifecycle_ClosedBootRollsBackAllPrivateMutations(t *testing.T) {
 		t.Run(operation, func(t *testing.T) {
 			ctx := context.Background()
 			pool := automodAdmissionDatabase(t)
-			integrationtestApplySQL(t, ctx, pool, filepath.Join(repoRoot(t), "src/backend/migrations/moderation_db/000006_async_automod.up.sql"))
+			integrationtestApplyAutoMod(t, ctx, pool)
 			s := automod.NewStore(pool)
 			binding := automod.Subject{ID: uuid.New(), AccountID: uuid.New(), Epoch: uuid.New(), Revision: 1, State: "LIVE"}
 			if operation == "refresh" || operation == "snapshot" {

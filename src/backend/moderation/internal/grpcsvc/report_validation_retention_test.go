@@ -30,6 +30,7 @@ func TestReportValidationRetainedDeadlineBeforeCommit(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT clock_timestamp()+interval '5 seconds'`).Scan(&deadline))
 	reporter.Revision = 2
 	reporter.State = "DELETED"
+	reporter.CycleID = uuid.New()
 	reporter.PurgeAt = &deadline
 	claim.ReporterSubject = &reporter
 	claim.PrivacyCheck = check
@@ -98,9 +99,11 @@ func TestReportValidationRestoredRevisionDominatesExpiredCapture(t *testing.T) {
 			require.NoError(t, err)
 			reporter.Revision = 2
 			reporter.State = "DELETED"
+			reporter.CycleID = uuid.New()
 			reporter.PurgeAt = &expired
 			if freshLive {
 				reporter.Revision, reporter.State, reporter.PurgeAt = 3, "LIVE", nil
+				reporter.CycleID = uuid.Nil
 			}
 			claim.ReporterSubject, claim.PrivacyCheck = &reporter, check
 			applied, err := reports.CompleteValidation(ctx, claim, "LIVE", uuid.Nil, retentionEvents(), nil)
