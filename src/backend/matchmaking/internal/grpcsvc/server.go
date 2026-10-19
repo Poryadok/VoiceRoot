@@ -14,6 +14,7 @@ import (
 	"voice/backend/matchmaking/internal/authctx"
 	"voice/backend/matchmaking/internal/config"
 	"voice/backend/matchmaking/internal/mmevents"
+	"voice/backend/matchmaking/internal/partysource"
 	"voice/backend/matchmaking/internal/queue"
 	"voice/backend/matchmaking/internal/spacelifecycle"
 	"voice/backend/matchmaking/internal/store"
@@ -42,6 +43,8 @@ type MatchmakingGRPC struct {
 	Parties                 *store.PartyStore
 	Lfp                     *store.LfpStore
 	SpaceLifecycle          *spacelifecycle.Store
+	PartySnapshots          partysource.SnapshotReader
+	freshRoutes             freshRoutePolicy
 }
 
 func (s *MatchmakingGRPC) ListGames(ctx context.Context, req *matchmakingv1.ListGamesRequest) (*matchmakingv1.ListGamesResponse, error) {

@@ -142,6 +142,18 @@ func (s *MatchStore) PrepareMatchSquadCompaction(ctx context.Context, aggregateI
 		return MatchSquadCompactionIntent{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockMatchSquadAggregatePrefixTx(ctx, tx, aggregateID); err != nil {
+		return MatchSquadCompactionIntent{}, err
+	}
+	var matchID uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT match_id FROM matchmaking_match_squad_teardowns WHERE aggregate_id=$1`, aggregateID).Scan(&matchID); err != nil {
+		return MatchSquadCompactionIntent{}, err
+	}
+	if mismatch, err := matchSquadCreationMismatchTx(ctx, tx, matchID); err != nil {
+		return MatchSquadCompactionIntent{}, err
+	} else if mismatch {
+		return MatchSquadCompactionIntent{}, ErrMatchSquadCreationMismatch
+	}
 	intent, err := scanMatchSquadCompactionIntent(tx.QueryRow(ctx, `
 		SELECT aggregate_id, provider, operation_id, not_before, request_sha256, request_bytes,
 		       receipt_id, receipt_bytes, completed_at
@@ -344,6 +356,9 @@ func (s *MatchStore) RecordMatchSquadTeardownReceipt(ctx context.Context, aggreg
 		return MatchSquadTeardownAggregate{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockMatchSquadAggregatePrefixTx(ctx, tx, aggregateID); err != nil {
+		return MatchSquadTeardownAggregate{}, err
+	}
 	item, err := scanMatchSquadTeardownAggregate(tx.QueryRow(ctx, `
 		SELECT aggregate_id, match_id, state,
 		       chat_teardown_operation_id, chat_teardown_request_sha256, chat_teardown_request_bytes,
@@ -415,6 +430,15 @@ func (s *MatchStore) RecordMatchSquadTeardownReceipt(ctx context.Context, aggreg
 		return MatchSquadTeardownAggregate{}, err
 	}
 	complete := (!item.requiresProvider("chat") || item.ChatReceiptID != nil) && (!item.requiresProvider("voice") || item.VoiceReceiptID != nil)
+	// Keep every independently validated cleanup receipt even when creation
+	// evidence is contradictory. Only aggregate completion is withheld.
+	if complete {
+		mismatch, err := matchSquadCreationMismatchTx(ctx, tx, item.MatchID)
+		if err != nil {
+			return MatchSquadTeardownAggregate{}, err
+		}
+		complete = !mismatch
+	}
 	if complete {
 		var completedAt time.Time
 		if err := tx.QueryRow(ctx, `UPDATE matchmaking_match_squad_teardowns SET state='complete', aggregate_completed_at=clock_timestamp(), updated_at=clock_timestamp() WHERE aggregate_id=$1 AND state='pending' RETURNING aggregate_completed_at`, aggregateID).Scan(&completedAt); err != nil {

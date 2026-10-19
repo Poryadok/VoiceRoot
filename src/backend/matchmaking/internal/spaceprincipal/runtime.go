@@ -429,9 +429,9 @@ func (r *Runtime) refreshLoop(ctx context.Context) {
 
 func (r *Runtime) ServerOptions() []grpc.ServerOption {
 	if r == nil {
-		return []grpc.ServerOption{grpc.ChainUnaryInterceptor(StrictUnaryInterceptor(nil))}
+		return []grpc.ServerOption{grpc.ChainUnaryInterceptor(ProtectedUnaryInterceptor(nil))}
 	}
-	return []grpc.ServerOption{grpc.Creds(r.credentials), grpc.ChainUnaryInterceptor(StrictUnaryInterceptor(r))}
+	return []grpc.ServerOption{grpc.Creds(r.credentials), grpc.ChainUnaryInterceptor(ProtectedUnaryInterceptor(r))}
 }
 
 func (r *Runtime) Close() error {
@@ -467,7 +467,7 @@ func isLifecycleMethod(method string) bool {
 
 func OrdinaryUnaryInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if isLifecycleMethod(info.FullMethod) || isCompleteMatchMethod(info.FullMethod) {
+		if isLifecycleMethod(info.FullMethod) || isCompleteMatchMethod(info.FullMethod) || info.FullMethod == matchmakingv1.MatchmakingService_StartSearch_FullMethodName {
 			return nil, status.Error(codes.Unavailable, "protected lifecycle RPC is unavailable on this listener")
 		}
 		return handler(ctx, request)

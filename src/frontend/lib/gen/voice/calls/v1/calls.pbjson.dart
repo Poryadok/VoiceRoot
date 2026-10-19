@@ -178,6 +178,23 @@ final $typed_data.Uint8List matchSquadMembershipStateDescriptor = $convert.base6
     'QkVSU0hJUF9TVEFURV9MRUFWSU5HEAQSJQohTUFUQ0hfU1FVQURfTUVNQkVSU0hJUF9TVEFURV'
     '9MRUZUEAUSKAokTUFUQ0hfU1FVQURfTUVNQkVSU0hJUF9TVEFURV9FSkVDVEVEEAY=');
 
+@$core.Deprecated('Use matchmakingPartySnapshotKindDescriptor instead')
+const MatchmakingPartySnapshotKind$json = {
+  '1': 'MatchmakingPartySnapshotKind',
+  '2': [
+    {'1': 'MATCHMAKING_PARTY_SNAPSHOT_KIND_UNSPECIFIED', '2': 0},
+    {'1': 'MATCHMAKING_PARTY_SNAPSHOT_KIND_SOLO', '2': 1},
+    {'1': 'MATCHMAKING_PARTY_SNAPSHOT_KIND_VOICE_ROSTER', '2': 2},
+  ],
+};
+
+/// Descriptor for `MatchmakingPartySnapshotKind`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List matchmakingPartySnapshotKindDescriptor = $convert.base64Decode(
+    'ChxNYXRjaG1ha2luZ1BhcnR5U25hcHNob3RLaW5kEi8KK01BVENITUFLSU5HX1BBUlRZX1NOQV'
+    'BTSE9UX0tJTkRfVU5TUEVDSUZJRUQQABIoCiRNQVRDSE1BS0lOR19QQVJUWV9TTkFQU0hPVF9L'
+    'SU5EX1NPTE8QARIwCixNQVRDSE1BS0lOR19QQVJUWV9TTkFQU0hPVF9LSU5EX1ZPSUNFX1JPU1'
+    'RFUhAC');
+
 @$core.Deprecated('Use gameSessionResourceRefDescriptor instead')
 const GameSessionResourceRef$json = {
   '1': 'GameSessionResourceRef',
@@ -2510,3 +2527,129 @@ const PurgeSpaceResponse$json = {
 final $typed_data.Uint8List purgeSpaceResponseDescriptor = $convert.base64Decode(
     'ChJQdXJnZVNwYWNlUmVzcG9uc2USPAoHcmVjZWlwdBgBIAEoCzIiLnZvaWNlLmNvbW1vbi52MS'
     '5TcGFjZVB1cmdlUmVjZWlwdFIHcmVjZWlwdA==');
+
+@$core.Deprecated('Use getMatchmakingPartySnapshotRequestDescriptor instead')
+const GetMatchmakingPartySnapshotRequest$json = {
+  '1': 'GetMatchmakingPartySnapshotRequest',
+  '2': [
+    {
+      '1': 'search_operation_id',
+      '3': 1,
+      '4': 1,
+      '5': 9,
+      '10': 'searchOperationId'
+    },
+    {
+      '1': 'initiator_account_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'initiatorAccountId'
+    },
+    {
+      '1': 'initiator_profile_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'initiatorProfileId'
+    },
+    {
+      '1': 'initiator_session_epoch',
+      '3': 4,
+      '4': 1,
+      '5': 3,
+      '10': 'initiatorSessionEpoch'
+    },
+  ],
+};
+
+/// Descriptor for `GetMatchmakingPartySnapshotRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getMatchmakingPartySnapshotRequestDescriptor =
+    $convert.base64Decode(
+        'CiJHZXRNYXRjaG1ha2luZ1BhcnR5U25hcHNob3RSZXF1ZXN0Ei4KE3NlYXJjaF9vcGVyYXRpb2'
+        '5faWQYASABKAlSEXNlYXJjaE9wZXJhdGlvbklkEjAKFGluaXRpYXRvcl9hY2NvdW50X2lkGAIg'
+        'ASgJUhJpbml0aWF0b3JBY2NvdW50SWQSMAoUaW5pdGlhdG9yX3Byb2ZpbGVfaWQYAyABKAlSEm'
+        'luaXRpYXRvclByb2ZpbGVJZBI2Chdpbml0aWF0b3Jfc2Vzc2lvbl9lcG9jaBgEIAEoA1IVaW5p'
+        'dGlhdG9yU2Vzc2lvbkVwb2No');
+
+@$core.Deprecated('Use getMatchmakingPartySnapshotResponseDescriptor instead')
+const GetMatchmakingPartySnapshotResponse$json = {
+  '1': 'GetMatchmakingPartySnapshotResponse',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {
+      '1': 'kind',
+      '3': 2,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.calls.v1.MatchmakingPartySnapshotKind',
+      '10': 'kind'
+    },
+    {'1': 'room_id', '3': 3, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'roster_version', '3': 4, '4': 1, '5': 4, '10': 'rosterVersion'},
+    {
+      '1': 'member_profile_ids',
+      '3': 5,
+      '4': 3,
+      '5': 9,
+      '10': 'memberProfileIds'
+    },
+    {
+      '1': 'member_authority_version',
+      '3': 6,
+      '4': 1,
+      '5': 13,
+      '10': 'memberAuthorityVersion'
+    },
+    {
+      '1': 'member_authorities',
+      '3': 7,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.calls.v1.MatchmakingPartyMemberAuthority',
+      '10': 'memberAuthorities'
+    },
+    {
+      '1': 'source_authority_sha256',
+      '3': 8,
+      '4': 1,
+      '5': 12,
+      '10': 'sourceAuthoritySha256'
+    },
+  ],
+};
+
+/// Descriptor for `GetMatchmakingPartySnapshotResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getMatchmakingPartySnapshotResponseDescriptor = $convert.base64Decode(
+    'CiNHZXRNYXRjaG1ha2luZ1BhcnR5U25hcHNob3RSZXNwb25zZRIpChBwcm90b2NvbF92ZXJzaW'
+    '9uGAEgASgNUg9wcm90b2NvbFZlcnNpb24SQAoEa2luZBgCIAEoDjIsLnZvaWNlLmNhbGxzLnYx'
+    'Lk1hdGNobWFraW5nUGFydHlTbmFwc2hvdEtpbmRSBGtpbmQSFwoHcm9vbV9pZBgDIAEoCVIGcm'
+    '9vbUlkEiUKDnJvc3Rlcl92ZXJzaW9uGAQgASgEUg1yb3N0ZXJWZXJzaW9uEiwKEm1lbWJlcl9w'
+    'cm9maWxlX2lkcxgFIAMoCVIQbWVtYmVyUHJvZmlsZUlkcxI4ChhtZW1iZXJfYXV0aG9yaXR5X3'
+    'ZlcnNpb24YBiABKA1SFm1lbWJlckF1dGhvcml0eVZlcnNpb24SXgoSbWVtYmVyX2F1dGhvcml0'
+    'aWVzGAcgAygLMi8udm9pY2UuY2FsbHMudjEuTWF0Y2htYWtpbmdQYXJ0eU1lbWJlckF1dGhvcm'
+    'l0eVIRbWVtYmVyQXV0aG9yaXRpZXMSNgoXc291cmNlX2F1dGhvcml0eV9zaGEyNTYYCCABKAxS'
+    'FXNvdXJjZUF1dGhvcml0eVNoYTI1Ng==');
+
+@$core.Deprecated('Use matchmakingPartyMemberAuthorityDescriptor instead')
+const MatchmakingPartyMemberAuthority$json = {
+  '1': 'MatchmakingPartyMemberAuthority',
+  '2': [
+    {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'account_id', '3': 2, '4': 1, '5': 9, '10': 'accountId'},
+    {
+      '1': 'admitted_session_epoch',
+      '3': 3,
+      '4': 1,
+      '5': 3,
+      '10': 'admittedSessionEpoch'
+    },
+  ],
+};
+
+/// Descriptor for `MatchmakingPartyMemberAuthority`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List matchmakingPartyMemberAuthorityDescriptor =
+    $convert.base64Decode(
+        'Ch9NYXRjaG1ha2luZ1BhcnR5TWVtYmVyQXV0aG9yaXR5Eh0KCnByb2ZpbGVfaWQYASABKAlSCX'
+        'Byb2ZpbGVJZBIdCgphY2NvdW50X2lkGAIgASgJUglhY2NvdW50SWQSNAoWYWRtaXR0ZWRfc2Vz'
+        'c2lvbl9lcG9jaBgDIAEoA1IUYWRtaXR0ZWRTZXNzaW9uRXBvY2g=');

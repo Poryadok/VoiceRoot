@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"voice/backend/matchmaking/internal/mmadmission"
 )
 
 const (
@@ -62,14 +63,23 @@ type CreateSessionParams struct {
 	SpaceID   *uuid.UUID
 }
 
-// Create inserts a new searching session.
+// Create inserts a pre-cut legacy session. Qualified native source creation
+// atomically writes every captured member through CreateSourceParty instead.
 func (s *SessionStore) Create(ctx context.Context, p CreateSessionParams) (SearchSession, error) {
 	if s == nil || s.Pool == nil {
 		return SearchSession{}, errors.New("session store unavailable")
 	}
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return SearchSession{}, err
+	}
+	defer tx.Rollback(ctx)
+	if err := mmadmission.Acquire(ctx, tx, nil); err != nil {
+		return SearchSession{}, err
+	}
 	id := uuid.New()
 	now := time.Now().UTC()
-	row := s.Pool.QueryRow(ctx, `
+	row := tx.QueryRow(ctx, `
 		INSERT INTO search_sessions (
 			id, profile_id, party_id, game_id, mode, criteria, status, timeout_at, space_id, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $10)
@@ -80,6 +90,9 @@ func (s *SessionStore) Create(ctx context.Context, p CreateSessionParams) (Searc
 		if isUniqueViolation(err) {
 			return SearchSession{}, ErrActiveSearchExists
 		}
+		return SearchSession{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return SearchSession{}, err
 	}
 	return sess, nil
@@ -139,13 +152,22 @@ func (s *SessionStore) Cancel(ctx context.Context, id uuid.UUID) (SearchSession,
 	return sess, err
 }
 
-// ResetToSearching clears match link and returns session to searching.
+// ResetToSearching is a pre-cut legacy recovery API. It cannot qualify a
+// captured native party or revive a session after native admission has begun.
 func (s *SessionStore) ResetToSearching(ctx context.Context, id uuid.UUID) (SearchSession, error) {
 	if s == nil || s.Pool == nil {
 		return SearchSession{}, errors.New("session store unavailable")
 	}
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return SearchSession{}, err
+	}
+	defer tx.Rollback(ctx)
+	if err := mmadmission.Acquire(ctx, tx, nil); err != nil {
+		return SearchSession{}, err
+	}
 	now := time.Now().UTC()
-	row := s.Pool.QueryRow(ctx, `
+	row := tx.QueryRow(ctx, `
 		UPDATE search_sessions
 		SET status = $2, match_id = NULL, matched_at = NULL, updated_at = $3,
 		    recovery_generation = recovery_generation + 1
@@ -156,7 +178,13 @@ func (s *SessionStore) ResetToSearching(ctx context.Context, id uuid.UUID) (Sear
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SearchSession{}, ErrSessionNotSearchable
 	}
-	return sess, err
+	if err != nil {
+		return SearchSession{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return SearchSession{}, err
+	}
+	return sess, nil
 }
 
 // ListSearchingByIDs loads searching sessions for the given IDs.
