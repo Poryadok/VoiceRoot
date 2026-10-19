@@ -63,6 +63,18 @@ func TestLifecycleFinalizeDeletesLocalDataAtomicallyAndKeepsUnrelatedSpace(t *te
 	applyMemberAuthorityIfPresent(t, st)
 	_, err = st.Pool.Exec(ctx, `CREATE TABLE schema_migrations(version bigint NOT NULL,dirty boolean NOT NULL); INSERT INTO schema_migrations VALUES(33,false)`)
 	require.NoError(t, err)
+	// Historical retired intent fixture: exercise immutable evidence deletion,
+	// not a new admission or a forged positive Role/publication observation.
+	retired := MemberAdmissionInput{OperationID: uuid.New(), SpaceID: spaceID, AccountID: uuid.New(), ProfileID: uuid.New()}
+	retiredRequest := admissionRequestHash(retired)
+	retiredBinding := bytes.Repeat([]byte{0x31}, 32)
+	_, err = st.Pool.Exec(ctx, `INSERT INTO space_ordinary_member_heads(space_id,profile_id,generation,retired_through,publication_id,state,account_id,admission_binding_sha256)
+	 VALUES($1,$2,2,2,$3,'RETIRED',$4,$5)`, spaceID, retired.ProfileID, retired.OperationID, retired.AccountID, retiredBinding)
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, `INSERT INTO space_member_admission_intents(`+memberAdmissionColumns+`) VALUES($1,$2,$3,$4,NULL,false,1,$5,$6,1,'RETIRED',NULL,NULL,NULL)`, retired.OperationID, spaceID, retired.ProfileID, retired.AccountID, retiredRequest[:], retiredBinding)
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, `DELETE FROM space_member_admission_intents WHERE operation_id=$1`, retired.OperationID)
+	require.Error(t, err, "retired private evidence still requires the actual terminal P3 cleanup")
 	_, err = st.Pool.Exec(ctx, `DELETE FROM space_ordinary_member_heads WHERE space_id=$1`, spaceID)
 	require.Error(t, err, "per-profile anti-ABA heads cannot disappear before terminal P3")
 	for _, id := range []uuid.UUID{spaceID, otherID} {

@@ -58,6 +58,15 @@ func TestMemberAdmissionPreparationIsInvisibleAndPublicationIsAtomic(t *testing.
 	require.Equal(t, "PREPARING", intent.State)
 	_, err = pool.Exec(ctx, `UPDATE space_ordinary_member_heads SET admission_binding_sha256=$3 WHERE space_id=$1 AND profile_id=$2`, space.ID, in.ProfileID, make([]byte, 32))
 	require.Error(t, err, "a prepared immutable binding cannot be replaced in place")
+	for _, mutation := range []string{
+		`account_id=gen_random_uuid()`,
+		`guest=NOT guest`,
+		`request_sha256=decode(repeat('09',32),'hex')`,
+		`generation=generation+1`,
+	} {
+		_, err = pool.Exec(ctx, `UPDATE space_member_admission_intents SET `+mutation+` WHERE operation_id=$1`, in.OperationID)
+		require.Error(t, err, "native immutable input/provenance cannot be rebound after preparation: %s", mutation)
+	}
 	member, err := st.IsSpaceMember(ctx, space.ID, in.ProfileID)
 	require.NoError(t, err)
 	require.False(t, member)

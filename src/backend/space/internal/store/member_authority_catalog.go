@@ -12,7 +12,8 @@ import (
 
 // This native contract validates its consumed facts and owner functions rather
 // than borrowing the Federation source's exact migration25 activation gate.
-// Compatible additive migrations (including participant-set34) remain usable.
+// Read compatibility is explicitly qualified for33, participant-set34 and the
+// reviewed35 private journal. Unknown future schemas require a new source proof.
 func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 	tables := append([]string{}, spaceAuthorityCatalog.Tables...)
 	tables = append(tables, "schema_migrations", "space_entry_policies", "space_ordinary_member_heads", "space_community_member_heads", "space_member_admission_intents", "space_native_member_publications", "space_membership_ownership_heads", "space_lifecycle_operations", "space_lifecycle_participants", "space_lifecycle_completions", "space_lifecycle_outbox", "space_permanent_purge_fences", "space_member_admission_outbox", "space_member_role_cleanup")
@@ -30,7 +31,7 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 		return ErrMemberAuthorityUnavailable
 	}
 	var valid bool
-	if err := tx.QueryRow(ctx, `SELECT count(*)=1 AND bool_and(version>=33 AND NOT dirty) FROM public.schema_migrations`).Scan(&valid); err != nil || !valid {
+	if err := tx.QueryRow(ctx, `SELECT count(*)=1 AND bool_and(version IN (33,34,35) AND NOT dirty) FROM public.schema_migrations`).Scan(&valid); err != nil || !valid {
 		return ErrMemberAuthorityUnavailable
 	}
 	if err := tx.QueryRow(ctx, `SELECT count(*)=$2 AND bool_and(c.relkind='r' AND c.relpersistence='p' AND NOT c.relrowsecurity AND NOT c.relforcerowsecurity
@@ -45,6 +46,8 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 		triggers = append(triggers, authoritysource.CatalogTrigger{Table: table, Name: "space_authority_revision_" + table, Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"}, authoritysource.CatalogTrigger{Table: table, Name: "space_authority_revision_" + table + "_truncate", Function: "space_authority_revision_floor_guard", Type: 34})
 	}
 	triggers = append(triggers,
+		authoritysource.CatalogTrigger{Table: "space_member_admission_intents", Name: "member_admission_intent_guard", Function: "space_member_admission_intent_guard", Type: 27},
+		authoritysource.CatalogTrigger{Table: "space_member_admission_intents", Name: "member_admission_intent_truncate", Function: "space_member_admission_intent_guard", Type: 34},
 		authoritysource.CatalogTrigger{Table: "space_native_creator_operations", Name: "native_creator_operation_guard", Function: "space_native_creator_operation_guard", Type: 31},
 		authoritysource.CatalogTrigger{Table: "space_native_creator_operations", Name: "native_creator_operation_truncate", Function: "space_native_creator_operation_guard", Type: 34},
 		authoritysource.CatalogTrigger{Table: "space_creator_principal_replays", Name: "creator_principal_replay_guard", Function: "space_creator_principal_replay_guard", Type: 27},

@@ -375,6 +375,31 @@ CREATE TRIGGER member_role_cleanup_guard BEFORE UPDATE OR DELETE ON space_member
 CREATE TRIGGER member_role_cleanup_truncate BEFORE TRUNCATE ON space_member_role_cleanup
  FOR EACH STATEMENT EXECUTE FUNCTION space_member_role_cleanup_guard();
 
+CREATE FUNCTION space_member_admission_intent_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN
+  IF space_membership_terminal_cleanup_allowed(OLD.space_id) THEN RETURN OLD; END IF;
+ ELSIF TG_OP='UPDATE' THEN
+  IF ROW(NEW.operation_id,NEW.space_id,NEW.profile_id,NEW.account_id,NEW.invite_id,NEW.guest,
+      NEW.generation,NEW.request_sha256,NEW.binding_sha256,NEW.policy_version,
+      NEW.join_attempt_id,NEW.join_attempt_evidence_sha256,NEW.decision_basis_sha256)
+   IS DISTINCT FROM ROW(OLD.operation_id,OLD.space_id,OLD.profile_id,OLD.account_id,OLD.invite_id,OLD.guest,
+      OLD.generation,OLD.request_sha256,OLD.binding_sha256,OLD.policy_version,
+      OLD.join_attempt_id,OLD.join_attempt_evidence_sha256,OLD.decision_basis_sha256) THEN
+   RAISE EXCEPTION 'member admission input and proof binding are immutable' USING ERRCODE='55000';
+  END IF;
+  IF OLD.state IN ('PUBLISHED','RETIRED') AND NEW IS DISTINCT FROM OLD THEN
+   RAISE EXCEPTION 'member admission terminal outcome is immutable' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+ END IF;
+ RAISE EXCEPTION 'member admission evidence requires terminal P3 minimization' USING ERRCODE='55000';
+END $$;
+CREATE TRIGGER member_admission_intent_guard BEFORE UPDATE OR DELETE ON space_member_admission_intents
+ FOR EACH ROW EXECUTE FUNCTION space_member_admission_intent_guard();
+CREATE TRIGGER member_admission_intent_truncate BEFORE TRUNCATE ON space_member_admission_intents
+ FOR EACH STATEMENT EXECUTE FUNCTION space_member_admission_intent_guard();
+
 CREATE FUNCTION space_creator_principal_replay_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
  IF TG_OP='DELETE' AND OLD.expires_at<clock_timestamp()-interval '5 seconds' THEN RETURN OLD; END IF;
