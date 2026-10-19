@@ -286,6 +286,12 @@ func (w *MatchSquadProviderWorker) provisionClaimedOperation(ctx context.Context
 		if response == nil || response.GetReceipt() == nil {
 			return operation, fmt.Errorf("%w: Chat create returned no receipt", errProviderContract)
 		}
+		// The outer response preserves receipt presence even when the present
+		// protobuf message itself has a zero-byte encoding.
+		responseBytes, err := deterministicBytes(response)
+		if err != nil {
+			return operation, err
+		}
 		receipt := response.GetReceipt()
 		receiptBytes, err := deterministicBytes(receipt)
 		if err != nil {
@@ -293,11 +299,11 @@ func (w *MatchSquadProviderWorker) provisionClaimedOperation(ctx context.Context
 		}
 		receiptID, err := uuid.Parse(receipt.GetReceiptId())
 		if err != nil {
-			return operation, w.recordCreationMismatch(ctx, operation, "chat", receiptBytes)
+			return operation, w.recordCreationMismatch(ctx, operation, "chat", responseBytes)
 		}
 		chatID, err := uuid.Parse(receipt.GetChatId())
 		if err != nil {
-			return operation, w.recordCreationMismatch(ctx, operation, "chat", receiptBytes)
+			return operation, w.recordCreationMismatch(ctx, operation, "chat", responseBytes)
 		}
 		voiceRequest, err := newVoiceCreateRequest(operation, receipt)
 		if err != nil {
@@ -310,7 +316,7 @@ func (w *MatchSquadProviderWorker) provisionClaimedOperation(ctx context.Context
 		recorded, recordErr := w.Store.RecordMatchSquadChatReceipt(ctx, operation.MatchID, receiptID, chatID, receiptBytes, sha256Bytes(voiceBytes), voiceBytes)
 		if recordErr != nil {
 			if errors.Is(recordErr, store.ErrMatchSquadConflict) {
-				return operation, w.recordCreationMismatch(ctx, operation, "chat", receiptBytes)
+				return operation, w.recordCreationMismatch(ctx, operation, "chat", responseBytes)
 			}
 			return operation, recordErr
 		}
@@ -345,6 +351,12 @@ func (w *MatchSquadProviderWorker) provisionClaimedOperation(ctx context.Context
 		if response == nil || response.GetReceipt() == nil {
 			return operation, fmt.Errorf("%w: Voice create returned no receipt", errProviderContract)
 		}
+		// The outer response preserves receipt presence even when the present
+		// protobuf message itself has a zero-byte encoding.
+		responseBytes, err := deterministicBytes(response)
+		if err != nil {
+			return operation, err
+		}
 		receipt := response.GetReceipt()
 		receiptBytes, err := deterministicBytes(receipt)
 		if err != nil {
@@ -352,16 +364,16 @@ func (w *MatchSquadProviderWorker) provisionClaimedOperation(ctx context.Context
 		}
 		receiptID, err := uuid.Parse(receipt.GetReceiptId())
 		if err != nil {
-			return operation, w.recordCreationMismatch(ctx, operation, "voice", receiptBytes)
+			return operation, w.recordCreationMismatch(ctx, operation, "voice", responseBytes)
 		}
 		roomID, err := uuid.Parse(receipt.GetRoomId())
 		if err != nil {
-			return operation, w.recordCreationMismatch(ctx, operation, "voice", receiptBytes)
+			return operation, w.recordCreationMismatch(ctx, operation, "voice", responseBytes)
 		}
 		recorded, recordErr := w.Store.RecordMatchSquadVoiceReceipt(ctx, operation.MatchID, receiptID, roomID, receiptBytes)
 		if recordErr != nil {
 			if errors.Is(recordErr, store.ErrMatchSquadConflict) {
-				return operation, w.recordCreationMismatch(ctx, operation, "voice", receiptBytes)
+				return operation, w.recordCreationMismatch(ctx, operation, "voice", responseBytes)
 			}
 			return operation, recordErr
 		}

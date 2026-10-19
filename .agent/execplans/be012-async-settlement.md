@@ -289,3 +289,16 @@ Source/CI remains147 until an actual accepted handoff. Independent review of thi
 new production delta, complete settlement source, full assembly, installed NATS
 rights/JWT/TLS, owning media absence, cold cut and rollout remain separate gates.
 Earlier285 CLEAR applies only to exactbee8 additive tests/proof fidelity.
+
+### Independent review299 correction: present empty receipt
+
+Reviewer299 exact287 identified P2: a nonnil empty protobuf receipt encodes to zero
+bytes, causing the len>0 evidence API to reject its positive presence. A missing
+receipt remains unknown; a present malformed receipt must be sticky. Both Create
+paths now retain canonical OUTER response bytes for contradictory receipts, so
+wire presence survives without weakening storage/schema guards. Validated receipt
+bytes remain unchanged. Real Linux PG/race Chat+Voice empty-present RED both
+failed before fix (15.427s); corrected run2top+2subPASS/0skip19.405s includes
+original nonempty contradiction regression and restart/Unavailable persistence.
+No schema or original021/023 bytes changed. Typed outcome continuation is separate
+uncommitted WIP and is not part of this correction or its acceptance.

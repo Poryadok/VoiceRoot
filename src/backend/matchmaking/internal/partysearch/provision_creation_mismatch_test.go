@@ -30,7 +30,7 @@ func TestProviderContradictoryCreationRemainsStickyAcrossRetryAndFreshCut(t *tes
 		require.NoError(t, e)
 		receipt := &chatv1.MatchSquadChatReceipt{ProtocolVersion: 1, ReceiptId: uuid.NewString(), OperationId: request.OperationId, MatchId: uuid.NewString(), ChatId: uuid.NewString(),
 			ParticipantManifestSha256: request.ParticipantManifestSha256, RequestSha256: dispatchDigest(raw), CreatedAt: timestamppb.Now()}
-		witness, e = proto.MarshalOptions{Deterministic: true}.Marshal(receipt)
+		witness, e = proto.MarshalOptions{Deterministic: true}.Marshal(&chatv1.CreateMatchSquadChatResponse{Receipt: receipt})
 		require.NoError(t, e)
 		return &chatv1.CreateMatchSquadChatResponse{Receipt: receipt}, nil
 	}}
