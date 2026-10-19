@@ -652,3 +652,28 @@ Portable receipts include these failures. This checkpoint still has no actual
 Auth lifecycle publisher/current-owner ACK, bootstrap coordinator, public P1-P5
 activation or physical P30D acceptance. The broader legacy CheckMessage failure
 above also remains open.
+
+Auth publisher next: reuse the one Auth service issuer and permit only the exact
+lifecycle RPC for recipients Messaging and Moderation. Capture a bounded batch
+of complete current/terminal intents outside network calls. Send outside every
+database transaction; after response, lock the actual current Auth account (or
+immutable positive terminal ledger), compare current generation, revision and
+canonical payload, then CAS only the requested event intent. A newer owner
+transition leaves its new intent pending. A peer ahead of CURRENT owner state,
+changed same-revision hash, or unowned terminal response is restore divergence,
+never an ACK or a reason to increment/terminalize local state. Test the fixed
+signer purpose first, then real PostgreSQL transitions during network latency,
+strict receipt negatives and actual mTLS transport. The Scheduled terminal worker
+also needs the verified own-authority bootstrap barrier before restored due work;
+its present JDBC-only activation is not a complete startup/restore solution.
+
+M6 downgrade correction: the original guard inspected machine sanctions only,
+so existing permanent terminal history and a concurrently committed first fence
+could both be discarded. The downgrade now takes ACCESS EXCLUSIVE locks on all
+owned state and sanctions in an explicit transaction before checking any history.
+Any detector, receipt, event, restriction or terminal row refuses downgrade;
+unused state may still be removed while preserving human sanctions. Actual Linux
+PostgreSQL race proof: two failing baseline cases (2.659 s), then three passing
+cases (4.036 s), including the concurrent first terminal and empty downgrade/up.
+Scoped go vet passed. This corrects rollback safety only, not P0-P5 activation or
+the open physical P30D criterion.
