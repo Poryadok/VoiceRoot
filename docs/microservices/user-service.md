@@ -24,6 +24,15 @@ Returning a key, an ACK, a count or a matching old database is insufficient.
 The current core has no accepting closure API: the verified-covered frontier
 cannot be advanced until that strict recovery verifier exists.
 
+The internal `PrepareAccountLookup` / `ReadCapturedAccountInventoryTx` seam
+enumerates only associations already captured under that exact account's User
+ACCOUNT selectors, trying every retained key version. Its finite identity cut
+and gap frontiers do not certify a complete historical roster: an uncaptured
+surviving row or lost prehistory is absent evidence. Archived and physically
+removed captured associations remain visible under their accepted retention.
+The caller publishes this minimized inventory only after its transaction commits;
+no raw UUID list, selector or new protected-service grant is returned.
+
 The accepted `SPACE-ACCOUNT-BAN-COVERAGE-v1` / canonical User association
 contract requires one User-owned `identityassociation` core for Space NOW
 capture and Role lifetime coverage. These are distinct protected adapters;
