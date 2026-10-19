@@ -1,5 +1,14 @@
 # Окружения и выкат
 
+## A4 capability evidence package
+
+The offline [capability manifest gate](../scripts/release/README.md) emits the
+source-bound UI/REST/WS negative-suite contract and rejects incomplete runner
+evidence for the free invite alpha profile. Its PASS covers package completeness
+only. Actual effective-config validation, runtime disabled guards and executed
+negative checks remain separate prerequisites; this tool changes no deployment
+admission or activation authority.
+
 ## Explicit provisional staging (implementation contract)
 
 An explicit master `workflow_dispatch` may opt into `provisional_staging=true`
