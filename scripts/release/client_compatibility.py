@@ -42,8 +42,16 @@ def validate(source):
             require_source(release["source_sha"])
             content_hash(release["artifact_sha256"])
             if platform is not None:
-                if (not isinstance(release["version"], str)
-                        or not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:[-+][0-9A-Za-z.-]+)?", release["version"])):
+                version = release["version"]
+                match = (re.fullmatch(
+                    r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+                    r"(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
+                    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?", version)
+                    if isinstance(version, str) else None)
+                # SemVer 2.0.0: leading zeroes are forbidden only in numeric
+                # prerelease identifiers, not in build metadata identifiers.
+                if match is None or any(part.isdigit() and len(part) > 1 and part[0] == "0"
+                                        for part in (match[1] or "").split(".")):
                     raise ValueError("client semantic version required")
         if (releases["previous"]["artifact_sha256"] == releases["current"]["artifact_sha256"]
                 or (platform is not None and releases["previous"]["version"] == releases["current"]["version"])):
