@@ -20,12 +20,17 @@ Apply against the matching database only; do not run one folder against another 
 
 Guest-conversion rollback `000009` takes the owning table's exclusive lock
 before checking for pending work, and retains it through the drop in one DO
-statement. Concurrent admitted `PENDING_USER`/`PENDING_EVENT` writers must commit
+statement. It first refuses isolation levels other than READ COMMITTED: an
+inherited REPEATABLE READ snapshot could hide a pending row even after the lock.
+Concurrent admitted `PENDING_USER`/`PENDING_EVENT` writers must commit
 before that check; their work refuses rollback. Empty/completed-only tables may
 still roll back. Run `python scripts/dev/auth9_rollback_test.py` from the repo
 root for the real PostgreSQL 16 two-connection regression and DOWN/UP controls.
-It requires Docker and creates only its own disposable container, with no host
-ports or shared database access.
+The regression includes an inherited empty REPEATABLE READ snapshot followed by
+a separately committed pending row. It requires Docker and creates only its
+own disposable container, with no host ports or shared database access. Set
+`AUTH9_ROLLBACK_ARTIFACT_DIR` to export source-before-run SHA256 and source bytes
+plus a JSONL trace of the executed SQL and raw SQL stdout/stderr.
 
 `auth_db` is owned by the Auth service. The same schema can be applied in **two** ways; use **exactly one** per database (mutual exclusion — do not run golang-migrate on `auth_db` and then start Auth with default Flyway on the same DB, or Flyway will try `V1` against existing tables and fail).
 

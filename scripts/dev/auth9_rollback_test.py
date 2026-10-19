@@ -5,6 +5,9 @@ Only the uniquely named disposable container created here is removed.
 """
 
 from pathlib import Path
+import hashlib
+import json
+import os
 import subprocess
 import time
 import unittest
@@ -15,6 +18,30 @@ ROOT = Path(__file__).resolve().parents[2]
 MIGRATIONS = ROOT / "src/backend/migrations/auth_db"
 UP = (MIGRATIONS / "000009_guest_conversion_operations.up.sql").read_text(encoding="utf-8")
 DOWN = (MIGRATIONS / "000009_guest_conversion_operations.down.sql").read_text(encoding="utf-8")
+ARTIFACTS = os.environ.get("AUTH9_ROLLBACK_ARTIFACT_DIR")
+
+
+def record(event, **values):
+    if ARTIFACTS:
+        if "sql" in values:
+            values["sql_sha256"] = hashlib.sha256(values["sql"].encode("utf-8")).hexdigest()
+        directory = Path(ARTIFACTS)
+        directory.mkdir(parents=True, exist_ok=True)
+        with (directory / "sql-trace.jsonl").open("a", encoding="utf-8") as trace:
+            trace.write(json.dumps({"event": event, **values}) + "\n")
+
+
+if ARTIFACTS:
+    manifest = {}
+    for path in (Path(__file__),
+                 MIGRATIONS / "000009_guest_conversion_operations.up.sql",
+                 MIGRATIONS / "000009_guest_conversion_operations.down.sql"):
+        data = path.read_bytes()
+        manifest[str(path.relative_to(ROOT))] = hashlib.sha256(data).hexdigest()
+        destination = Path(ARTIFACTS) / "source" / path.relative_to(ROOT)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(data)
+    record("source-before-run", sha256=manifest)
 
 
 class Auth9RollbackTest(unittest.TestCase):
@@ -25,6 +52,7 @@ class Auth9RollbackTest(unittest.TestCase):
             ["docker", "run", "--detach", "--network", "none", "--name", cls.container,
              "-e", "POSTGRES_HOST_AUTH_METHOD=trust", "postgres:16-alpine"],
             check=True, capture_output=True, text=True, timeout=60)
+        record("owned-container", name=cls.container, network="none", published_ports=[])
         cls.addClassCleanup(cls.remove_container)
         deadline = time.monotonic() + 40
         while time.monotonic() < deadline:
@@ -47,8 +75,13 @@ class Auth9RollbackTest(unittest.TestCase):
                 "-v", "ON_ERROR_STOP=1", "-h", "127.0.0.1", "-U", "postgres"]
 
     def sql(self, sql, *, check=True):
-        return subprocess.run(self.command(), input=sql, text=True, capture_output=True,
-                              check=check, timeout=20)
+        result = subprocess.run(self.command(), input=sql, text=True, capture_output=True,
+                                check=False, timeout=20)
+        record("sql", sql=sql, stdout=result.stdout, stderr=result.stderr,
+               exit=result.returncode)
+        if check:
+            result.check_returncode()
+        return result
 
     def setUp(self):
         self.sql("DROP TABLE IF EXISTS guest_conversion_operations;" + UP)
@@ -87,19 +120,60 @@ class Auth9RollbackTest(unittest.TestCase):
                 self.setUp()
                 self.first_writer(state)
 
+    def test_inherited_repeatable_read_snapshot_refuses_down(self):
+        for state in ("PENDING_USER", "PENDING_EVENT"):
+            with self.subTest(state=state):
+                self.setUp()
+                rollback = subprocess.Popen(
+                    self.command(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE, text=True)
+                try:
+                    snapshot_sql = ("BEGIN ISOLATION LEVEL REPEATABLE READ;"
+                                    "SET LOCAL statement_timeout='15s';"
+                                    "SELECT 'RR_SNAPSHOT|' || count(*) "
+                                    "FROM guest_conversion_operations;\n")
+                    rollback.stdin.write(snapshot_sql)
+                    rollback.stdin.flush()
+                    snapshot = rollback.stdout.readline()
+                    record("inherited-rr-snapshot", sql=snapshot_sql, stdout=snapshot)
+                    self.assertEqual(snapshot.strip(), "RR_SNAPSHOT|0")
+                    # Independent committed insert after the rollback transaction pins empty.
+                    self.sql(self.insert(state))
+                    binding_sql = ("SELECT operation_id,account_id,otp_code_id,state "
+                                   "FROM guest_conversion_operations;")
+                    admitted_binding = self.sql(binding_sql).stdout
+                    rollback.stdin.write(DOWN + "\nCOMMIT;\n")
+                    rollback.stdin.close()
+                    rollback.stdin = None
+                    stdout, stderr = rollback.communicate(timeout=20)
+                    record("inherited-rr-down", sql=DOWN + "\nCOMMIT;\n",
+                           stdout=stdout, stderr=stderr, exit=rollback.returncode)
+                    self.assertNotEqual(rollback.returncode, 0,
+                                        "old empty RR snapshot allowed DOWN after pending commit")
+                    self.assertIn("READ COMMITTED", stderr)
+                    self.assertEqual(self.sql(binding_sql).stdout, admitted_binding)
+                finally:
+                    if rollback.poll() is None:
+                        rollback.kill()
+                        rollback.communicate(timeout=10)
+
     def first_writer(self, state):
         writer = subprocess.Popen(self.command(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE, text=True)
         rollback = None
         try:
-            writer.stdin.write("BEGIN; SET LOCAL statement_timeout='15s';" + self.insert(state)
-                               + "SELECT 'WRITER_READY';\n")
+            writer_sql = ("BEGIN; SET LOCAL statement_timeout='15s';" + self.insert(state)
+                          + "SELECT 'WRITER_READY';\n")
+            writer.stdin.write(writer_sql)
             writer.stdin.flush()
-            self.assertEqual(writer.stdout.readline().strip(), "WRITER_READY")
+            writer_ready = writer.stdout.readline()
+            record("first-writer-input", sql=writer_sql, stdout=writer_ready)
+            self.assertEqual(writer_ready.strip(), "WRITER_READY")
             rollback = subprocess.Popen(self.command(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE, text=True)
-            rollback.stdin.write("SET application_name='auth9_down'; SET statement_timeout='12s';"
-                                 + DOWN + "\n")
+            rollback_sql = ("SET application_name='auth9_down'; SET statement_timeout='12s';"
+                            + DOWN + "\n")
+            rollback.stdin.write(rollback_sql)
             rollback.stdin.close()
             rollback.stdin = None
             # Observe a real relation-lock wait, not a sleep-based ordering guess.
@@ -120,9 +194,13 @@ class Auth9RollbackTest(unittest.TestCase):
             writer.stdin.write("COMMIT;\n")
             writer.stdin.close()
             writer.stdin = None
-            _, writer_error = writer.communicate(timeout=15)
+            writer_stdout, writer_error = writer.communicate(timeout=15)
+            record("first-writer-commit", sql="COMMIT;\n", stdout=writer_stdout, stderr=writer_error,
+                   exit=writer.returncode)
             self.assertEqual(writer.returncode, 0, writer_error)
-            _, rollback_error = rollback.communicate(timeout=15)
+            rollback_stdout, rollback_error = rollback.communicate(timeout=15)
+            record("first-writer-down", sql=rollback_sql, stdout=rollback_stdout,
+                   stderr=rollback_error, exit=rollback.returncode)
             self.assert_refused(subprocess.CompletedProcess([], rollback.returncode,
                                                            stderr=rollback_error), state)
         finally:
