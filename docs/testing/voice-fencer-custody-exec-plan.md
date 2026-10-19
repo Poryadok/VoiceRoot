@@ -103,6 +103,14 @@ signalling host/foreign processes. An initial fixture attempt lacked `/bin/kill`
 and failed before suspension; the final fixture uses the installed shell builtin.
 That setup failure is not a product RED result.
 
+The same stopped-backend schedule also observes committed NOLOGIN and sends
+SIGKILL to the exact fencer container created by the fixture. It verifies exit137,
+retained denial and fresh-observer refusal while the predecessor remains
+established. After installer-only resume, same-command recovery retains the
+receipt and issues a new observation. This covers an actual fencer crash after
+NOLOGIN during termination; it does not stand in for every later publication
+crash boundary.
+
 The prepared-work race uses an installer-held `pg_authid` ShareLock. The test
 observes the real fencer blocked at ALTER ROLE after its read-only prechecks,
 then the predecessor prepares a transaction. Releasing the lock allows NOLOGIN
@@ -118,8 +126,8 @@ hashes do not constitute the assembled native package or closed catalogue.
 
 ## Remaining work and honest assumptions
 
-- [ ] Complete c12 post-precheck delegation race and process-crash
-      negative matrix through the separated executable boundary.
+- [ ] Complete c12 post-precheck delegation race and crash after termination
+      before evidence publication through the separated executable boundary.
 - [ ] Installer-enforced complete deployment/controller/credential history,
       non-restored external incarnation and all writable/promotable endpoints.
 - [ ] Bounded installer launch/response composition for fresh observations,

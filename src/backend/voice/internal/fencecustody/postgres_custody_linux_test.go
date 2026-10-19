@@ -399,50 +399,72 @@ func TestSeparatedPostgresFencerCustody(t *testing.T) {
 		require.NotEqual(t, replay.Observation, recovered.Observation)
 		require.Error(t, resumed.Ping(ctx), "recovery fencing terminates the actual restored session")
 	})
-	t.Run("termination timeout retains NOLOGIN and requires fresh recovery", func(t *testing.T) {
-		installerSQL(`ALTER ROLE old_writer LOGIN`)
-		stopped, err := connect("old_writer", oldPassword)
-		require.NoError(t, err)
-		defer stopped.Close(context.Background())
-		var backendPID int
-		require.NoError(t, stopped.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&backendPID))
-		require.Positive(t, backendPID)
-		// Only the owned PostgreSQL container's exact authenticated backend is
-		// suspended. This models a real unresponsive process, not a mocked SQL
-		// return or a host signal. Installer-only authority resumes it below.
-		signal := func(name string) {
-			output, status := execute(pg, "postgres", []string{"/bin/sh", "-c", `kill "$1" "$2"`, "custody-backend-signal", name, fmt.Sprint(backendPID)}, nil)
-			require.Zero(t, status, "%s", output)
-		}
-		signal("-STOP")
-		resumed := false
-		defer func() {
-			if !resumed {
-				signal("-CONT")
+	for _, failure := range []struct {
+		name  string
+		crash bool
+	}{
+		{"termination timeout retains NOLOGIN and requires fresh recovery", false},
+		{"fencer crash after NOLOGIN retains denial and recovers exact command", true},
+	} {
+		t.Run(failure.name, func(t *testing.T) {
+			installerSQL(`ALTER ROLE old_writer LOGIN`)
+			stopped, err := connect("old_writer", oldPassword)
+			require.NoError(t, err)
+			defer stopped.Close(context.Background())
+			var backendPID int
+			require.NoError(t, stopped.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&backendPID))
+			require.Positive(t, backendPID)
+			// Only the owned PostgreSQL container's exact authenticated backend is
+			// suspended. This models a real unresponsive process, not a mocked SQL
+			// return or a host signal. Installer-only authority resumes it below.
+			signal := func(name string) {
+				output, status := execute(pg, "postgres", []string{"/bin/sh", "-c", `kill "$1" "$2"`, "custody-backend-signal", name, fmt.Sprint(backendPID)}, nil)
+				require.Zero(t, status, "%s", output)
 			}
-		}()
-		_, status := call(false, "fence", ref.CommandID, ref.Hash)
-		require.NotZero(t, status, "positive backend termination timeout must fail closed")
-		var login, established bool
-		require.NoError(t, other.QueryRow(ctx, `SELECT rolcanlogin,EXISTS(SELECT 1 FROM pg_stat_activity WHERE pid=$1 AND usesysid=$2::oid) FROM pg_roles WHERE oid=$2::oid`, backendPID, metadata.OldOID).Scan(&login, &established))
-		require.False(t, login, "NOLOGIN must remain committed after partial failure")
-		require.True(t, established, "the fixture must actually retain the stopped backend")
-		_, status = call(false, "observe", ref.CommandID, ref.Hash)
-		require.NotZero(t, status, "historical receipt cannot hide a still-established predecessor")
-		signal("-CONT")
-		resumed = true
-		require.Eventually(t, func() bool {
-			var exists bool
-			return other.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE pid=$1 AND usesysid=$2::oid)`, backendPID, metadata.OldOID).Scan(&exists) == nil && !exists
-		}, 5*time.Second, 50*time.Millisecond)
-		output, status := call(false, "fence", ref.CommandID, ref.Hash)
-		require.Zero(t, status, "%s", output)
-		var recovered FenceResult
-		require.NoError(t, json.Unmarshal([]byte(output), &recovered))
-		require.Equal(t, result.Receipt, recovered.Receipt)
-		output, status = call(true, "read-observation", recovered.Observation.ObservationID, recovered.Observation.Hash)
-		require.Zero(t, status, "%s", output)
-	})
+			signal("-STOP")
+			resumed := false
+			defer func() {
+				if !resumed {
+					signal("-CONT")
+				}
+			}()
+			var status int
+			if failure.crash {
+				running := startCall(false, "fence", ref.CommandID, ref.Hash)
+				require.Eventually(t, func() bool {
+					var login bool
+					return other.QueryRow(ctx, `SELECT rolcanlogin FROM pg_roles WHERE oid=$1::oid`, metadata.OldOID).Scan(&login) == nil && !login
+				}, 5*time.Second, 50*time.Millisecond)
+				// This is the exact container just launched by this fixture. No
+				// foreign process or host signal participates in crash injection.
+				require.NoError(t, api.ContainerKill(ctx, running, "SIGKILL"))
+				_, status = waitCall(running)
+				require.Equal(t, 137, status)
+			} else {
+				_, status = call(false, "fence", ref.CommandID, ref.Hash)
+				require.NotZero(t, status, "positive backend termination timeout must fail closed")
+			}
+			var login, established bool
+			require.NoError(t, other.QueryRow(ctx, `SELECT rolcanlogin,EXISTS(SELECT 1 FROM pg_stat_activity WHERE pid=$1 AND usesysid=$2::oid) FROM pg_roles WHERE oid=$2::oid`, backendPID, metadata.OldOID).Scan(&login, &established))
+			require.False(t, login, "NOLOGIN must remain committed after partial failure")
+			require.True(t, established, "the fixture must actually retain the stopped backend")
+			_, status = call(false, "observe", ref.CommandID, ref.Hash)
+			require.NotZero(t, status, "historical receipt cannot hide a still-established predecessor")
+			signal("-CONT")
+			resumed = true
+			require.Eventually(t, func() bool {
+				var exists bool
+				return other.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE pid=$1 AND usesysid=$2::oid)`, backendPID, metadata.OldOID).Scan(&exists) == nil && !exists
+			}, 5*time.Second, 50*time.Millisecond)
+			output, status := call(false, "fence", ref.CommandID, ref.Hash)
+			require.Zero(t, status, "%s", output)
+			var recovered FenceResult
+			require.NoError(t, json.Unmarshal([]byte(output), &recovered))
+			require.Equal(t, result.Receipt, recovered.Receipt)
+			output, status = call(true, "read-observation", recovered.Observation.ObservationID, recovered.Observation.Hash)
+			require.Zero(t, status, "%s", output)
+		})
+	}
 	t.Run("old observation after external execution rotation", func(t *testing.T) {
 		window.ExecutionID = uuid.New()
 		raw, err := json.Marshal(window)
