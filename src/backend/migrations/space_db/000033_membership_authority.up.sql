@@ -49,6 +49,13 @@ CREATE TABLE space_member_admission_intents (
  policy_version BIGINT NOT NULL CHECK(policy_version>0),
  state TEXT NOT NULL CHECK(state IN ('PREPARING','PUBLISHED','RETIRED')),
  role_id UUID, role_receipt_sha256 BYTEA, published_at TIMESTAMPTZ,
+ join_attempt_id UUID, join_attempt_evidence_sha256 BYTEA, decision_basis_sha256 BYTEA,
+ CHECK ((join_attempt_id IS NULL AND join_attempt_evidence_sha256 IS NULL AND decision_basis_sha256 IS NULL)
+   OR (join_attempt_id IS NOT NULL AND join_attempt_id<>'00000000-0000-0000-0000-000000000000'
+     AND join_attempt_evidence_sha256 IS NOT NULL AND octet_length(join_attempt_evidence_sha256)=32
+     AND decision_basis_sha256 IS NOT NULL AND octet_length(decision_basis_sha256)=32
+     AND join_attempt_evidence_sha256<>decode(repeat('00',32),'hex')
+     AND decision_basis_sha256<>decode(repeat('00',32),'hex'))),
  CHECK ((state='PUBLISHED')=(role_id IS NOT NULL AND role_receipt_sha256 IS NOT NULL AND published_at IS NOT NULL)),
  CHECK (role_receipt_sha256 IS NULL OR octet_length(role_receipt_sha256)=32)
 );

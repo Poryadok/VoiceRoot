@@ -21,6 +21,8 @@ type MemberAdmissionInput struct {
 	OperationID, SpaceID, ProfileID, AccountID uuid.UUID
 	InviteID                                   *uuid.UUID
 	Guest                                      bool
+	JoinAttempt                                *JoinAttemptReference `json:",omitempty"`
+	DecisionBasisSHA256                        []byte                `json:",omitempty"`
 }
 
 type MemberAdmissionIntent struct {
@@ -57,12 +59,18 @@ func lockMemberAdmissionOperation(ctx context.Context, tx pgx.Tx, operation uuid
 func scanMemberAdmission(row pgx.Row) (*MemberAdmissionIntent, []byte, error) {
 	i := &MemberAdmissionIntent{}
 	var request []byte
+	var attempt *uuid.UUID
+	var evidence []byte
 	err := row.Scan(&i.Input.OperationID, &i.Input.SpaceID, &i.Input.ProfileID, &i.Input.AccountID,
-		&i.Input.InviteID, &i.Input.Guest, &i.Generation, &request, &i.BindingSHA256, &i.PolicyVersion, &i.State)
+		&i.Input.InviteID, &i.Input.Guest, &i.Generation, &request, &i.BindingSHA256, &i.PolicyVersion, &i.State,
+		&attempt, &evidence, &i.Input.DecisionBasisSHA256)
+	if attempt != nil {
+		i.Input.JoinAttempt = &JoinAttemptReference{AttemptID: *attempt, EvidenceSHA256: evidence}
+	}
 	return i, request, err
 }
 
-const memberAdmissionColumns = `operation_id,space_id,profile_id,account_id,invite_id,guest,generation,request_sha256,binding_sha256,policy_version,state`
+const memberAdmissionColumns = `operation_id,space_id,profile_id,account_id,invite_id,guest,generation,request_sha256,binding_sha256,policy_version,state,join_attempt_id,join_attempt_evidence_sha256,decision_basis_sha256`
 
 func admissionRequestHash(in MemberAdmissionInput) [32]byte {
 	raw, _ := json.Marshal(in)
@@ -74,6 +82,10 @@ func admissionRequestHash(in MemberAdmissionInput) [32]byte {
 func (s *SpaceStore) PrepareMemberAdmission(ctx context.Context, in MemberAdmissionInput) (*MemberAdmissionIntent, error) {
 	if s == nil || s.Pool == nil || s.tx != nil || in.OperationID == uuid.Nil || in.SpaceID == uuid.Nil || in.ProfileID == uuid.Nil || in.AccountID == uuid.Nil || (in.InviteID != nil && *in.InviteID == uuid.Nil) {
 		return nil, ErrMemberAdmissionConflict
+	}
+	in = cloneMemberAdmissionInput(in)
+	if err := validateMemberAdmissionReference(in); err != nil {
+		return nil, err
 	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
@@ -135,8 +147,13 @@ func (s *SpaceStore) PrepareMemberAdmission(ctx context.Context, in MemberAdmiss
 	if err != nil {
 		return nil, err
 	}
+	var attempt *uuid.UUID
+	var evidence []byte
+	if in.JoinAttempt != nil {
+		attempt, evidence = &in.JoinAttempt.AttemptID, in.JoinAttempt.EvidenceSHA256
+	}
 	_, err = tx.Exec(ctx, `INSERT INTO space_member_admission_intents(`+memberAdmissionColumns+`)
-	 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'PREPARING')`, in.OperationID, in.SpaceID, in.ProfileID, in.AccountID, in.InviteID, in.Guest, intent.Generation, request[:], digest[:], policy.Version)
+	 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'PREPARING',$11,$12,$13)`, in.OperationID, in.SpaceID, in.ProfileID, in.AccountID, in.InviteID, in.Guest, intent.Generation, request[:], digest[:], policy.Version, attempt, evidence, in.DecisionBasisSHA256)
 	if err != nil {
 		return nil, err
 	}
@@ -161,9 +178,6 @@ func (s *SpaceStore) validateMemberAdmission(ctx context.Context, i *MemberAdmis
 		return err
 	} else if member {
 		return ErrAlreadySpaceMember
-	}
-	if err := s.requireNonInteractiveAdmission(ctx, in.SpaceID); err != nil {
-		return err
 	}
 	policy, err := s.GetEntryPolicy(ctx, in.SpaceID)
 	if err != nil {
@@ -204,7 +218,7 @@ func (s *SpaceStore) validateMemberAdmission(ctx context.Context, i *MemberAdmis
 	if count >= cap {
 		return ErrMemberCapReached
 	}
-	return nil
+	return s.verifyMemberAdmissionReference(ctx, i)
 }
 
 func (s *SpaceStore) invalidateMemberAdmission(ctx context.Context, i *MemberAdmissionIntent) error {
@@ -262,6 +276,12 @@ func (s *SpaceStore) PublishMemberAdmission(ctx context.Context, operation, role
 	}
 	if i.State != "PREPARING" {
 		return nil, ErrMemberAdmissionStale
+	}
+	// The historical journal and a generic callback cannot manufacture fresh
+	// applicant/original-reviewer authority. A sealed continuation API must
+	// explicitly enable this path; completed replay above stays inert.
+	if i.Input.JoinAttempt != nil {
+		return nil, ErrJoinAttemptUnavailable
 	}
 	if err = lockAndCheckOwnershipScope(ctx, tx, []uuid.UUID{i.Input.SpaceID}); err != nil {
 		return nil, err
@@ -355,5 +375,5 @@ func knownMemberAdmissionGuardDenial(err error) bool {
 }
 
 func knownMemberAdmissionDenial(err error) bool {
-	return errors.Is(err, ErrAccountBanned) || errors.Is(err, ErrAlreadySpaceMember) || errors.Is(err, ErrAdmissionRequired) || errors.Is(err, ErrEntryPolicyVersion) || errors.Is(err, ErrInviteNotFound) || errors.Is(err, ErrInviteRevoked) || errors.Is(err, ErrInviteExpired) || errors.Is(err, ErrInviteMaxUses) || errors.Is(err, ErrGuestsNotAllowed) || errors.Is(err, ErrMemberCapReached) || errors.Is(err, ErrMemberAdmissionConflict)
+	return errors.Is(err, ErrAccountBanned) || errors.Is(err, ErrAlreadySpaceMember) || errors.Is(err, ErrAdmissionRequired) || errors.Is(err, ErrEntryPolicyVersion) || errors.Is(err, ErrInviteNotFound) || errors.Is(err, ErrInviteRevoked) || errors.Is(err, ErrInviteExpired) || errors.Is(err, ErrInviteMaxUses) || errors.Is(err, ErrGuestsNotAllowed) || errors.Is(err, ErrMemberCapReached) || errors.Is(err, ErrMemberAdmissionConflict) || errors.Is(err, ErrJoinAttemptDenied)
 }
