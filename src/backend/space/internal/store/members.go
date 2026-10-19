@@ -141,7 +141,17 @@ func (s *SpaceStore) RemoveMember(ctx context.Context, spaceID, profileID uuid.U
 	}
 	if s.tx == nil {
 		return s.withOwnershipScope(ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) error {
-			return scoped.RemoveMember(ctx, spaceID, profileID)
+			capture, err := scoped.captureMemberRemovalMutation(ctx, spaceID, profileID)
+			if err != nil {
+				return err
+			}
+			if err = scoped.RemoveMember(ctx, spaceID, profileID); err != nil {
+				return err
+			}
+			if capture != nil {
+				return scoped.finishEffectiveMemberMutations(ctx, capture)
+			}
+			return nil
 		})
 	}
 	tag, err := s.db().Exec(ctx, `

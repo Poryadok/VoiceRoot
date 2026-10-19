@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/pkg/memberadmission"
 )
 
@@ -43,6 +44,11 @@ func (i *MemberAdmissionIntent) EnsureBinding() memberadmission.EnsureBinding {
 // Callers collect external authority before entering publication; network I/O
 // under this callback would violate the protocol's lock ordering.
 type MemberAdmissionFinalGuard func(context.Context, *SpaceStore, *MemberAdmissionIntent) error
+
+// MemberAdmissionPublicationHook runs only on first publication, after the
+// native outcome and interactive markers exist in the same transaction. It may
+// journal local outcomes, never perform network I/O or grant membership itself.
+type MemberAdmissionPublicationHook func(context.Context, *SpaceStore, *MemberAdmissionIntent, *MembershipRow) error
 
 var (
 	ErrMemberAdmissionConflict = errors.New("member admission binding conflict")
@@ -142,6 +148,10 @@ func (s *SpaceStore) PrepareMemberAdmission(ctx context.Context, in MemberAdmiss
 	}{request, policy.Version, policy.Policy})
 	digest := sha256.Sum256(append([]byte("voice.space.member-admission.binding.v1\x00"), binding...))
 	intent.BindingSHA256 = append([]byte(nil), digest[:]...)
+	effective, err := scoped.captureNativeEffectiveMemberMutation(ctx, in.SpaceID, []uuid.UUID{in.ProfileID})
+	if err != nil {
+		return nil, err
+	}
 	_, err = tx.Exec(ctx, `INSERT INTO space_ordinary_member_heads(space_id,profile_id,generation,publication_id,state,account_id,admission_binding_sha256)
 	 VALUES($1,$2,$3,$4,'PREPARING',$5,$6) ON CONFLICT(space_id,profile_id) DO UPDATE SET
 	 generation=EXCLUDED.generation,publication_id=EXCLUDED.publication_id,state='PREPARING',legacy=false,
@@ -159,6 +169,11 @@ func (s *SpaceStore) PrepareMemberAdmission(ctx context.Context, in MemberAdmiss
 	 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'PREPARING',$11,$12,$13)`, in.OperationID, in.SpaceID, in.ProfileID, in.AccountID, in.InviteID, in.Guest, intent.Generation, request[:], digest[:], policy.Version, attempt, evidence, in.DecisionBasisSHA256)
 	if err != nil {
 		return nil, err
+	}
+	if effective != nil {
+		if err = scoped.finishEffectiveMemberMutations(ctx, effective); err != nil {
+			return nil, err
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, err
@@ -256,10 +271,10 @@ func (s *SpaceStore) invalidateMemberAdmission(ctx context.Context, i *MemberAdm
 // retry returns its historical outcome before current membership/lifecycle checks;
 // it never executes a new final guard or recreates a later removed membership.
 func (s *SpaceStore) PublishMemberAdmission(ctx context.Context, operation, role uuid.UUID, receipt []byte, guard MemberAdmissionFinalGuard) (*MembershipRow, error) {
-	return s.publishMemberAdmission(ctx, operation, role, receipt, guard, nil)
+	return s.publishMemberAdmission(ctx, operation, role, receipt, guard, nil, nil)
 }
 
-func (s *SpaceStore) publishMemberAdmission(ctx context.Context, operation, role uuid.UUID, receipt []byte, guard MemberAdmissionFinalGuard, continuation *VerifiedAdmissionContinuation) (*MembershipRow, error) {
+func (s *SpaceStore) publishMemberAdmission(ctx context.Context, operation, role uuid.UUID, receipt []byte, guard MemberAdmissionFinalGuard, continuation *VerifiedAdmissionContinuation, publicationHook MemberAdmissionPublicationHook) (*MembershipRow, error) {
 	if s == nil || s.Pool == nil || s.tx != nil || operation == uuid.Nil || role == uuid.Nil {
 		return nil, ErrMemberAdmissionConflict
 	}
@@ -319,6 +334,10 @@ func (s *SpaceStore) publishMemberAdmission(ctx context.Context, operation, role
 	}
 	scoped := *s
 	scoped.tx = tx
+	effective, err := scoped.captureNativeEffectiveMemberMutation(ctx, i.Input.SpaceID, []uuid.UUID{i.Input.ProfileID})
+	if err != nil {
+		return nil, err
+	}
 	guest := i.Input.Guest
 	if continuation != nil {
 		if guest, err = continuation.check(i); err != nil {
@@ -339,6 +358,11 @@ func (s *SpaceStore) publishMemberAdmission(ctx context.Context, operation, role
 		}
 		if invalidateErr := scoped.invalidateMemberAdmission(ctx, i); invalidateErr != nil {
 			return nil, invalidateErr
+		}
+		if effective != nil {
+			if historyErr := scoped.finishEffectiveMemberMutations(ctx, effective); historyErr != nil {
+				return nil, historyErr
+			}
 		}
 		if continuation != nil {
 			if _, proofErr := continuation.check(i); proofErr != nil {
@@ -377,6 +401,11 @@ func (s *SpaceStore) publishMemberAdmission(ctx context.Context, operation, role
 			}
 			if err = scoped.invalidateMemberAdmission(ctx, i); err != nil {
 				return nil, err
+			}
+			if effective != nil {
+				if historyErr := scoped.finishEffectiveMemberMutations(ctx, effective); historyErr != nil {
+					return nil, historyErr
+				}
 			}
 			if continuation != nil {
 				if _, proofErr := continuation.check(i); proofErr != nil {
@@ -426,9 +455,40 @@ func (s *SpaceStore) publishMemberAdmission(ctx context.Context, operation, role
 		if err = scoped.markMemberDecisionPublished(ctx, *i.Input.JoinAttempt, i.Input.DecisionBasisSHA256, operation); err != nil {
 			return nil, err
 		}
+	}
+	if publicationHook != nil {
+		hookIntent := *i
+		hookIntent.State = "PUBLISHED"
+		hookIntent.Input = cloneMemberAdmissionInput(i.Input)
+		hookIntent.BindingSHA256 = append([]byte(nil), i.BindingSHA256...)
+		hookMember := *member
+		if member.Nickname != nil {
+			nickname := *member.Nickname
+			hookMember.Nickname = &nickname
+		}
+		if err = publicationHook(ctx, &scoped, &hookIntent, &hookMember); err != nil {
+			return nil, err
+		}
+		actual, readErr := readOrdinaryMemberAuthority(ctx, tx, i.Input.SpaceID, i.Input.ProfileID)
+		if readErr != nil {
+			return nil, readErr
+		}
+		binding := actual.GetPublishedBinding().GetOrdinary()
+		if actual.GetState() != spacev1.MemberAdmissionSourceState_MEMBER_ADMISSION_SOURCE_STATE_ACTIVE || actual.GetPublicationKind() != spacev1.MemberAdmissionPublicationKind_MEMBER_ADMISSION_PUBLICATION_KIND_ADMISSION_ROLE_READY || binding.GetMembershipGeneration() != i.Generation || binding.GetPublicationIdentity() != operation.String() || !bytes.Equal(actual.GetRoleReceiptSha256(), receipt) {
+			return nil, ErrMemberAuthorityUnavailable
+		}
+	}
+	if continuation != nil {
 		if err = scoped.checkContinuationReviewer(ctx, continuation); err != nil {
 			return nil, err
 		}
+	}
+	if effective != nil {
+		if err = scoped.finishEffectiveMemberMutations(ctx, effective); err != nil {
+			return nil, err
+		}
+	}
+	if continuation != nil {
 		if _, err = continuation.check(i); err != nil {
 			return nil, err // Includes every SQL/hook wait; whole publication rolls back.
 		}

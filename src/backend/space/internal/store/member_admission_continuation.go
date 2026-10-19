@@ -136,5 +136,5 @@ func (s *SpaceStore) checkContinuationReviewer(ctx context.Context, v *VerifiedA
 // entrypoint. The completion hook is local SQL only and runs once. Exact saved
 // publication replay bypasses fresh proof/hooks and never recreates membership.
 func (s *SpaceStore) PublishMemberAdmissionWithContinuation(ctx context.Context, operation, role uuid.UUID, receipt []byte, continuation *VerifiedAdmissionContinuation, completion MemberAdmissionFinalGuard) (*MembershipRow, error) {
-	return s.publishMemberAdmission(ctx, operation, role, receipt, completion, continuation)
+	return s.publishMemberAdmission(ctx, operation, role, receipt, completion, continuation, nil)
 }

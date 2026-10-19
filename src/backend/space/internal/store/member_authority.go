@@ -314,6 +314,10 @@ func readOrdinaryMemberAuthority(ctx context.Context, tx pgx.Tx, space, profile 
 			if err := validateCommunityRecoveryNativeProof(ctx, tx, message); err != nil {
 				return nil, err
 			}
+		case 6:
+			if err := validateBotNativeProof(ctx, tx, message); err != nil {
+				return nil, err
+			}
 		default:
 			return nil, ErrMemberAuthorityUnavailable
 		}

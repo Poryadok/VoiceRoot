@@ -13,6 +13,13 @@ import (
 // CompleteInteractiveMemberAdmission coordinates inert Role preparation and
 // fresh owner checks outside locks, then enters the sole local publisher.
 func (s *SpaceStore) CompleteInteractiveMemberAdmission(ctx context.Context, operation uuid.UUID, roles *memberadmissionrole.Client, subjects *admissionauthority.Client, reviewers *admissionauthority.ReviewerClient, completion MemberAdmissionFinalGuard) (*MembershipRow, error) {
+	return s.CompleteInteractiveMemberAdmissionWithPublicationHook(ctx, operation, roles, subjects, reviewers, completion, nil)
+}
+
+// CompleteInteractiveMemberAdmissionWithPublicationHook preserves the pre-write
+// final guard and adds a distinct local FIRST-publication journal phase. Saved
+// completed outcomes return before Role, owner calls or either callback.
+func (s *SpaceStore) CompleteInteractiveMemberAdmissionWithPublicationHook(ctx context.Context, operation uuid.UUID, roles *memberadmissionrole.Client, subjects *admissionauthority.Client, reviewers *admissionauthority.ReviewerClient, completion MemberAdmissionFinalGuard, publicationHook MemberAdmissionPublicationHook) (*MembershipRow, error) {
 	if s == nil || s.Pool == nil || s.tx != nil || operation == uuid.Nil {
 		return nil, ErrJoinAttemptUnavailable
 	}
@@ -46,7 +53,7 @@ func (s *SpaceStore) CompleteInteractiveMemberAdmission(ctx context.Context, ope
 	if err != nil {
 		return s.memberAdmissionCompletionUncertain(ctx, operation)
 	}
-	return s.PublishMemberAdmissionWithContinuation(ctx, operation, role, receipt, continuation, completion)
+	return s.publishMemberAdmission(ctx, operation, role, receipt, completion, continuation, publicationHook)
 }
 
 func (s *SpaceStore) memberAdmissionCompletionUncertain(ctx context.Context, operation uuid.UUID) (*MembershipRow, error) {

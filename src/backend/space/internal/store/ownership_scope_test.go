@@ -62,7 +62,10 @@ func newR20ScopeFixture(t *testing.T, st *SpaceStore, state string) r20ScopeFixt
 	require.NoError(t, err)
 	require.NoError(t, st.UpsertSpaceSubscription(context.Background(), f.binding.SpaceID, f.account, "active"))
 	existingBot := uuid.New()
-	require.NoError(t, st.AddBotMember(context.Background(), f.binding.SpaceID, existingBot))
+	// Explicit historical fixture seed; raw Bot APIs no longer authorize an
+	// installation or source removal on any live application path.
+	_, err = st.Pool.Exec(context.Background(), `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, f.binding.SpaceID, existingBot)
+	require.NoError(t, err)
 	f.joiner = existingBot
 
 	if state == "" {
@@ -340,6 +343,10 @@ func TestOwnershipScope_OrdinaryFixtureCallsAreValidWithoutPendingJournal(t *tes
 	for _, tc := range r20OrdinaryScopeCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newR20ScopeFixture(t, st, "")
+			if tc.name == "AddBotMember" || tc.name == "RemoveBotMember" {
+				require.ErrorIs(t, tc.call(st, f), ErrMemberAuthorityUnavailable, "raw Bot APIs remain closed even without pending ownership")
+				return
+			}
 			require.NoError(t, tc.call(st, f), "fixture must exercise a normally valid path")
 		})
 	}

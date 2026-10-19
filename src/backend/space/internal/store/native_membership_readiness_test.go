@@ -278,9 +278,9 @@ func TestNativeReadinessAdversarialTransactions(t *testing.T) {
 			return e
 		}))
 	})
-	// The protected Go reader must stay unavailable until186 qualifies the real44
-	// native catalog and integrates all writers; no fake catalog overlay is used.
-	require.Error(t, nativeReadinessTx(ctx, serving, space.ID, func(tx pgx.Tx) error {
+	// The composed native qualifier now authenticates exact44 for this real
+	// nonowner session. This proves the registry gate, not all product writers.
+	require.NoError(t, nativeReadinessTx(ctx, serving, space.ID, func(tx pgx.Tx) error {
 		return (&SpaceStore{Pool: serving, tx: tx}).RequireScopedNativeMembershipReadiness(ctx, space.ID)
 	}))
 }
