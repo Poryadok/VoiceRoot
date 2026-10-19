@@ -201,5 +201,5 @@ and returns a credential-free receipt. The serving main never invokes it.
 Canonical Compose-e2e and A1 own this setup rather than ignored tmp helpers.
 Unknown baseline, changed custody/source/serving identity or a repeated attempt
 reject before migration/installer. Three Linux tests including six changed-state
-subcases pass0.007; actual tracked fresh Docker execution is next. Full Invite,
+subcases pass0.007. Exact9f9 tracked fresh Docker installation completed: canonical migrator, separate trusted45 transition and fixed nonowner appLOGIN. Existing-project prepare, repeated install and installer invoked as serving LOGIN all refused. Actual Auth/Gateway CreateSpace returned200 (1047ms); full unchanged test failed3.250 on OwnerInvite503 under the410c26 authority HOLD. Initial runtime setup lacked the own social-principal-init image; building that existing canonical image corrected setup without changing readiness. Public receipts bind engine, fresh volume, migration SQL, migrator/installer image and actual serving image. CodeGraph remained unavailable within bounded requests; own Graphify update was canceled without any graph-freshness claim. Full Invite,
 Role core, Daily/Channel/currentCI/MASTER/acceptance remain OPEN/HOLD.
