@@ -287,3 +287,38 @@ required for this checkpoint. Next are protected handler/listener configuration,
 typed User parent consumer, and all-birth lock choreography using290's canonical
 IdentityTx API. No listener, full producer contract, source CLEAR, birth/runtime
 activation or environment acceptance follows from these preparation checks.
+
+## Parent adapter and mutual TLS preparation
+
+The parent adapter now checks verified service:user, protocol1, canonical nonnil
+UUID selectors/request ID, unknown fields, and body request ID equality with the
+verified principal metadata context before reading the owner. Native adapter3 +
+identity5 + existing interceptor11 passed19/0skip at02:53:18Z. Storage failures
+return a coarse UNAVAILABLE response without internal identity/key/database text.
+
+Separate AUTH_IDENTITY_AUTHORITY_ENABLED transport configuration rejects partial
+settings and requires TLS_CERT_FILE, TLS_KEY_FILE and TLS_CLIENT_CA_FILE under the
+same AUTH_IDENTITY_AUTHORITY_ prefix. GRPC_LISTEN defaults to :9094; an ephemeral
+port is allowed only for explicit local/test profiles, always with mTLS. Optional
+JWKS_CA_FILE supplies owner HTTPS trust. The existing S2S_JWKS_URLS_JSON supplies
+exact role/user HTTPS endpoints and the canonical S2S cache duration settings.
+Configuration4 passed/0skip at03:00:23Z after missing-class RED. TLS certificate
+content is additionally validated by the actual TLS builder before server start.
+
+Actual network-none Linux native mTLS3 passed/0skip at03:05:03Z after transport
+implementation RED. A signed User call reaches the fixture owner once; replay,
+wrong caller/raw/duplicate metadata/changed body, wrong server CA/SAN, missing
+client certificate and plaintext do not reach it. This bounded transport proof
+uses a direct RSA resolver and fixture observation: it does NOT establish HTTPS
+JWKS fetching, real PostgreSQL+transport composition, Role ObserveAccounts serving,
+keyset bootstrap, Spring production wiring, birth/runtime activation or fullQ1.
+
+Preparation43566cc source was normally SSH-published by121 at03:05:16.603UTC,
+without custody transfer. Its incremental bundle was verified and restored into
+the prior portable2f15 bare repository as restore435; the complete prerequisites
+are preserved there. Graph25293 completed106322nodes/221547edges, with the inherited
+frontend Linux header warning. Later transport changes need another AST update.
+Parent/adapter/config/TLS raw logs and XML remain outside the lease with SHA256
+manifest at tmp/swarm/rudeus172/owner-auth-parent/proof.json. Full source review,
+delivery and physical-copy acceptance remain OPEN;162 BE045 c28 NO_CANDIDATE
+does not authorize a C+P30D lease promise, invented endpoint or retimed cycles.

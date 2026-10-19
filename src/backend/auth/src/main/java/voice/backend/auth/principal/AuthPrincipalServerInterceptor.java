@@ -26,6 +26,9 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
   private final AuthPrincipalVerifier verifier;
   private final Runnable cleanup;
   private final Set<String> closedMethods;
+  static final Context.Key<String> REQUEST_ID_CONTEXT = Context.key("auth-verified-request-id");
+
+  public static String verifiedRequestId() { return REQUEST_ID_CONTEXT.get(); }
 
   public AuthPrincipalServerInterceptor(AuthPrincipalVerifier verifier) { this(verifier, () -> {}); }
   AuthPrincipalServerInterceptor(AuthPrincipalVerifier verifier, Runnable cleanup) {
@@ -102,7 +105,8 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
               : status.getCode() == Status.Code.PERMISSION_DENIED ? Status.PERMISSION_DENIED : Status.UNAUTHENTICATED);
           return;
         }
-        delegate = Contexts.interceptCall(parent.withValue(VerifiedPrincipal.CONTEXT, verified), call, headers, next);
+        delegate = Contexts.interceptCall(parent.withValue(VerifiedPrincipal.CONTEXT, verified)
+            .withValue(REQUEST_ID_CONTEXT, requestId), call, headers, next);
         delegate.onMessage(request);
         delegate.onHalfClose();
       }
