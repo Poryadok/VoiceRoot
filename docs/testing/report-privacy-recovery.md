@@ -86,6 +86,38 @@ claim that an operational restore or production deployment occurred.
 
 ## Implementation checkpoint
 
+### Exact terminal receipt repair
+
+`RepairReportTerminalReceipts` accepts a separately injected shared private-repair
+acquire function and a batch limit from 1 to 1,000. It does not use effects/P5
+admission. A candidate is an existing exact report UUID/slot with either a
+positive `USER_ERASURE_FACT` redaction or a journal subject present in the actual
+local permanent Auth terminal union. Missing owner history, generic errors,
+expired/stale DELETED observations and an Auth-terminal receipt without that
+owning terminal union cannot authorize deletion.
+
+The batch observes raw tuples and journal receipts, then locks all stored raw
+accounts in sorted order, all known subjects, all report rows, and finally their
+journal slots. It rechecks the full observed raw tuple and receipt set before
+mutation. Changed observations retry with a new complete lock set; known subject
+divergence rejects. No newly discovered account is acquired after a subject or
+report lock. An old NULL raw binding can be cleaned by its exact current receipt
+and positive terminal authority without reconstructing an account mapping.
+
+Auth terminalization is recorded atomically before the existing raw-report purge
+participant. Positive User erasure evidence retains its original fact identity
+and version. The transaction checks durable journal generation and its captured
+private-repair check before commit. Failure rolls back the complete batch. It
+does not create Auth terminal fences, guess other reports for the same profile,
+revoke sanctions or assert other participants have been scrubbed. Existing
+minimal sanction/appeal snapshot handling is preserved.
+
+`Removed` and `More` describe one bounded local observation, never a complete
+source-tail or ready certificate. The coordinator must complete actual terminal
+imports, all owning participant repairs and the final checker under its supported
+writer fence/restore mode. Nonterminal legacy provenance and missing canonical
+User facts still need their dedicated authoritative recovery path.
+
 ### Bounded journal byte format
 
 `internal/reportrecovery` defines schema 1 canonical UTF-8 JSON with one LF per
