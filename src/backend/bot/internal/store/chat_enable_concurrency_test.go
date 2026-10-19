@@ -13,9 +13,9 @@ func TestConcurrentFirstChatEnableSucceedsAfterInvisibleRecipientInsert(t *testi
 	if testing.Short() {
 		t.Skip("requires PostgreSQL")
 	}
+	st := startBotLifecycleStore(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	st := startBotLifecycleStore(t)
 	owner, space, chat := uuid.New(), uuid.New(), uuid.New()
 	bot, _, err := st.CreateBot(ctx, owner, "Concurrent Enable", "", `[]`, uuid.New())
 	require.NoError(t, err)
