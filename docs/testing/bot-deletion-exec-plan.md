@@ -100,8 +100,13 @@ admission is now included in the immutable decision: account/profile, epoch,
 account type, exact method/request ID/hash and deterministic request bytes, with
 no bearer token. Expiry is checked again after acquiring mutation locks. A real
 mTLS-to-PostgreSQL test asserts the saved binding; its old-handler control fails
-because the admission is absent. Full HTTP-to-real-Bot fixture and ordinary
-listener cutover remain OPEN. These component results do not qualify BE-170.
+because the admission is absent. The explicit cross-process fixture now proves
+real HTTP Gateway to mTLS Bot to real Java Auth to PostgreSQL for the empty
+installation-set DeleteBot path. Current9 completes; raised20 and unavailable0
+leave the Bot live with no root decision. Replay/floor Redis is explicitly
+miniredis in this fixture. See `bot-gateway-lifecycle-interop.md` for reproducible
+commands and boundaries. Ordinary listener cutover and full remote cleanup
+remain OPEN. These component results do not qualify BE-170.
 
 ## Risks and follow-ups
 
