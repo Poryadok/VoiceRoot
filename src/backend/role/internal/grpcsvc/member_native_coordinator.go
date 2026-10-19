@@ -17,6 +17,15 @@ import (
 
 var errNativeAuthorityChanged = errors.New("native Role authority changed")
 
+type nativeMemberChatScopeKey struct{}
+
+// This is only the server's copy of the already bound request selector. It is
+// not an observation or authorization and never comes from request metadata.
+type nativeMemberChatScope struct {
+	profile, chat string
+	voicePresent  bool
+}
+
 // withNativeOrdinary keeps every remote owner call outside local locks. The
 // first Role cut captures R, the second owner observation must match its exact
 // vector, and the final local cut CASes R before authorization and effects.
@@ -42,6 +51,13 @@ func withNativeOrdinary(ctx context.Context, s *RoleGRPC, space uuid.UUID, targe
 		}
 		profiles[raw] = true
 	}
+	chatScope, scopedChat := ctx.Value(nativeMemberChatScopeKey{}).(nativeMemberChatScope)
+	if scopedChat {
+		chat, err := uuid.Parse(chatScope.chat)
+		if err != nil || chat == uuid.Nil || chat.String() != chatScope.chat || !profiles[chatScope.profile] || chatScope.voicePresent {
+			return status.Error(codes.InvalidArgument, "one canonical member chat scope required")
+		}
+	}
 	// Bootstrap and trusted definition inventory have no member subject. These
 	// operations do not derive member permissions or manufacture membership.
 	if len(profiles) == 0 {
@@ -58,11 +74,22 @@ func withNativeOrdinary(ctx context.Context, s *RoleGRPC, space uuid.UUID, targe
 	bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	observe := func() ([]memberauthority.Observation, error) {
-		out := make([]memberauthority.Observation, 0, len(ids))
+		out := make([]memberauthority.Observation, 0, len(ids)+1)
 		for _, id := range ids {
 			o, err := s.MemberAuthority.ObserveMember(bounded, &spacev1.GetMemberAdmissionAuthorityRequest{ProtocolVersion: 1, SpaceId: space.String(), ProfileId: id})
 			if err != nil {
 				return nil, err
+			}
+			out = append(out, o)
+		}
+		if scopedChat {
+			chat := chatScope.chat
+			o, err := s.MemberAuthority.ObserveMember(bounded, &spacev1.GetMemberAdmissionAuthorityRequest{ProtocolVersion: 1, SpaceId: space.String(), ProfileId: chatScope.profile, ChatId: &chat})
+			if err != nil {
+				return nil, err
+			}
+			if !o.BoundToChat(chat, time.Now()) {
+				return nil, store.ErrScopeUnavailable
 			}
 			out = append(out, o)
 		}

@@ -33,6 +33,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	chatv1 "voice.app/voice/chat/v1"
 	rolev1 "voice.app/voice/role/v1"
 	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/pkg/integrationtest"
@@ -41,10 +42,12 @@ import (
 	"voice/backend/role/internal/grpcsvc"
 	"voice/backend/role/internal/memberauthority"
 	"voice/backend/role/internal/principalruntime"
+	"voice/backend/role/permissions"
 )
 
 type nativeSpaceReply struct {
 	SpaceID, Address string
+	NodeID           string
 	Binding          *memberadmission.EnsureBinding
 	Published        bool
 }
@@ -292,6 +295,49 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool) {
 	foreignMember := &rolev1.GetMemberRolesRequest{SpaceId: b.SpaceID, ProfileId: uuid.NewString()}
 	_, err = client.GetMemberRoles(delegated(rolev1.RoleService_GetMemberRoles_FullMethodName, foreignMember), foreignMember)
 	require.Equal(t, codes.PermissionDenied, status.Code(err), "target membership must also be qualified in the same Space")
+	chat := uuid.New()
+	require.NoError(t, encoder.Encode(map[string]string{"Action": "attach_chat", "ChatID": chat.String()}))
+	var attached nativeSpaceReply
+	require.NoError(t, decoder.Decode(&attached), stderr.String())
+	require.NotEmpty(t, attached.NodeID)
+	view, err := permissions.MaskFor(permissions.TextChatView)
+	require.NoError(t, err)
+	globalRequest := &rolev1.GetEffectivePermissionsRequest{SpaceId: b.SpaceID, ProfileId: b.ProfileID}
+	globalPermissions, err := client.GetEffectivePermissions(delegated(rolev1.RoleService_GetEffectivePermissions_FullMethodName, globalRequest), globalRequest)
+	require.NoError(t, err)
+	require.NotZero(t, globalPermissions.GetPermissionSet().GetEffectiveMask()&view)
+	require.NoError(t, roles.SetChatOverride(ctx, chat, uuid.MustParse(receipt.RoleId), 0, view))
+	chatRequest := proto.Clone(globalRequest).(*rolev1.GetEffectivePermissionsRequest)
+	chatRequest.Chat = &chatv1.ChatRef{Id: chat.String()}
+	chatPermissions, err := client.GetEffectivePermissions(delegated(rolev1.RoleService_GetEffectivePermissions_FullMethodName, chatRequest), chatRequest)
+	require.NoError(t, err, "actual native text-chat permission reader must collect its exact current Space-tree observation")
+	require.Equal(t, globalPermissions.GetPermissionSet().GetEffectiveMask()&^view, chatPermissions.GetPermissionSet().GetEffectiveMask())
+	for _, invalid := range []struct {
+		name   string
+		mutate func(*rolev1.GetEffectivePermissionsRequest)
+	}{
+		{"two_nodes", func(r *rolev1.GetEffectivePermissionsRequest) { room := uuid.NewString(); r.VoiceRoomId = &room }},
+		{"empty_chat", func(r *rolev1.GetEffectivePermissionsRequest) { r.Chat.Id = "" }},
+		{"signed_nested_unknown", func(r *rolev1.GetEffectivePermissionsRequest) {
+			r.Chat.ProtoReflect().SetUnknown([]byte{0x98, 0x06, 0x01})
+		}},
+	} {
+		bad := proto.Clone(chatRequest).(*rolev1.GetEffectivePermissionsRequest)
+		invalid.mutate(bad)
+		before := trackedAuthority.calls.Load()
+		_, err = client.GetEffectivePermissions(delegated(rolev1.RoleService_GetEffectivePermissions_FullMethodName, bad), bad)
+		require.Equal(t, codes.InvalidArgument, status.Code(err), invalid.name)
+		require.Equal(t, before, trackedAuthority.calls.Load(), "invalid request is rejected before owner reads: "+invalid.name)
+	}
+	missingChat := proto.Clone(chatRequest).(*rolev1.GetEffectivePermissionsRequest)
+	missingChat.Chat.Id = uuid.NewString()
+	_, err = client.GetEffectivePermissions(delegated(rolev1.RoleService_GetEffectivePermissions_FullMethodName, missingChat), missingChat)
+	require.Equal(t, codes.Unavailable, status.Code(err), "missing tree relation is unavailable, never unscoped membership authority")
+	require.NoError(t, encoder.Encode(map[string]string{"Action": "remove_chat", "NodeID": attached.NodeID}))
+	var detached nativeSpaceReply
+	require.NoError(t, decoder.Decode(&detached), stderr.String())
+	_, err = client.GetEffectivePermissions(delegated(rolev1.RoleService_GetEffectivePermissions_FullMethodName, chatRequest), chatRequest)
+	require.Equal(t, codes.Unavailable, status.Code(err), "a removed Space-tree relation cannot reuse prior scoped evidence")
 	create := &rolev1.CreateRoleRequest{SpaceId: b.SpaceID, Name: "native interactive", Position: 1, PermissionsMask: 1}
 	custom, err := client.CreateRole(delegated(rolev1.RoleService_CreateRole_FullMethodName, create), create)
 	require.NoError(t, err)

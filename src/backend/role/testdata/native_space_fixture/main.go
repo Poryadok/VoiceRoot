@@ -26,11 +26,13 @@ type setup struct {
 type reply struct {
 	SpaceID   string
 	Address   string
+	NodeID    string
 	Binding   *memberadmission.EnsureBinding
 	Published bool
 }
 type command struct {
 	Action, RoleID string
+	ChatID, NodeID string
 	Receipt        []byte
 }
 
@@ -92,6 +94,29 @@ func run() error {
 		switch next.Action {
 		case "stop":
 			return nil
+		case "attach_chat":
+			chat, err := uuid.Parse(next.ChatID)
+			if err != nil {
+				return err
+			}
+			node, err := st.UpsertTreeNode(ctx, store.UpsertTreeNodeInput{SpaceID: space.ID, ActorProfileID: init.Owner, Kind: store.TreeKindTextChat, ChatID: &chat})
+			if err != nil {
+				return err
+			}
+			if err = output.Encode(reply{NodeID: node.ID.String()}); err != nil {
+				return err
+			}
+		case "remove_chat":
+			node, err := uuid.Parse(next.NodeID)
+			if err != nil {
+				return err
+			}
+			if err = st.RemoveTreeNode(ctx, space.ID, node); err != nil {
+				return err
+			}
+			if err = output.Encode(reply{NodeID: node.String()}); err != nil {
+				return err
+			}
 		case "publish":
 			role, err := uuid.Parse(next.RoleID)
 			if err != nil {
