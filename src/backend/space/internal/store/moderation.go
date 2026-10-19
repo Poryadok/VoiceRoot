@@ -86,6 +86,14 @@ func (s *SpaceStore) BanMember(
 	if evictProfileID != nil && *evictProfileID == ownerProfile {
 		return ErrCannotBanOwner
 	}
+	var ownerAccount bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_ordinary_member_heads
+	 WHERE space_id=$1 AND profile_id=$2 AND account_id=$3)`, spaceID, ownerProfile, accountID).Scan(&ownerAccount); err != nil {
+		return err
+	}
+	if ownerAccount {
+		return ErrCannotBanOwner
+	}
 
 	if evictProfileID != nil {
 		tag, err := tx.Exec(ctx, `
@@ -120,6 +128,9 @@ ON CONFLICT (space_id, account_id) DO UPDATE SET
 	// published member row. Unban cannot revive their old Ensure receipts.
 	banScoped := *s
 	banScoped.tx = tx
+	if err = banScoped.removeKnownAccountMembers(ctx, spaceID, accountID); err != nil {
+		return err
+	}
 	if err = banScoped.retirePendingAccountAdmissions(ctx, spaceID, accountID); err != nil {
 		return err
 	}
