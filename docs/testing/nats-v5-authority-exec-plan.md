@@ -1,0 +1,105 @@
+# ExecPlan: fixed NATS participant and Auth subject authority v5
+
+## Purpose
+
+Permit the reviewed participant and Auth observation bootstrap sources only after
+the existing voice/user streams receive their exact additive subject expansion.
+Retain old messages, consumer state and historical migration authority.
+
+## Context
+
+Base: develop `8984552dd177cec85af7cd328579886a50acb619`. TT
+`CI-NATS-V5-AUTHORITY`, accepted Astra decision SWARM-DEVELOP-20261018 c15.
+Canon: voice-service participant events, auth-service observation events,
+DATA_STORES, TESTING and the preservation README. Existing root pins describe
+v4; changing their hashes alone would omit both required stream updates.
+
+## Scope
+
+Fixed whole four-template v5 source tuple, v5 planner/executor/actor/recovery,
+census proof v4 and active receipt readback. Four existing v4 consumers and auth
+enrollment remain unchanged. No installed helper, stand, credential, historical
+contract, cold-cut or journal mutation. One author owns tests and implementation;
+an independent preservation/security reviewer must approve before intake121.
+
+## Milestones
+
+- [x] Canonical root RED with production pins and historical contract.
+- [x] Fixed v5 tuple and exact 10/10, 12/10, 10/14, 12/14 planner cases.
+- [x] Version-aware actor, execution, recovery and active receipts.
+- [x] Existing focused regressions plus negative compatibility/source controls.
+- [x] Isolated pinned native NATS preservation and interruption proof.
+- [x] Canonical full preservation gate after historical synthetic fixture correction.
+- [ ] Independent review, portable bundle/restore and accepted handoff121.
+
+## Detailed Steps
+
+1. Add canonical tests using actual template bytes, existing immutable contract
+   and root/compiler/custody paths. Observe existing pin failure.
+2. Freeze named v4 schema/ID/declarations and complete old source tuple. Add
+   separately fixed four-file v5 tuple; select whole tuple, never mix per-file acceptance.
+3. Parse unique exact voice/user declarations across all relevant templates;
+   permit only complete old or target subject sets, preserve other config fields.
+4. Add only exact two UPDATE APIs to v5 throughout execution and recovery.
+   Old plans/receipts must reject those operations and v5 proof/source shapes.
+5. Run focused Python regressions. Extend isolated Linux fixture with existing
+   authenticated identity, pending voice/user consumers and byte-preserving
+   crash recovery after each update; use no Windows executable/listener.
+6. Freeze source, review, preserve portable proof and transfer only after121 ACK.
+
+## Validation
+
+Canonical pins -> root -> compile -> compiler -> custody -> serialized active
+readback -> second no-op. Test both independent mixed stream combinations,
+malformed/duplicate/overlapping declarations, mutation/TOCTOU, historical v3/v4,
+consumer/state drift and version smuggling. Native proof compares complete
+semantic census plus old /msgs/index.db and consumer o.dat records.
+
+## Progress
+
+- [x] Atomic task claim and own WT20 lease; accepted decision read.
+- [x] Meaningful Linux root pin RED; corrected four-hash compiler/custody/readback/no-op GREEN.
+- [x] Focused 150 tests passed before final source-read TOCTOU check; canonical
+  targeted cases passed afterward. Full canonical 922-test discovery exposed
+  two synthetic one-script fixture failures in the expiry boundary test:
+  it imported CURRENT schema and inadvertently selected v5. Pinning this
+  historical fixture explicitly to v4 preserves every original expiry assertion.
+- [x] Exact `ccde8d01b` Linux Go1.26.5 native fixture passed using repository
+  NATS2.12.12 digest: 45 old consumers, 9 original records, both new UPDATE
+  interruption recoveries, all six subjects, preserved pending notif_voice,
+  current-cut 16 records and repeated no-op. Eight captured changed runtime
+  files match committed Git bytes. No full native repeat needed for a test-only
+  fixture/import and documentation successor.
+- [x] Portable incremental bundle plus real bare restore compared all 15 paths.
+- [x] Exact8699d838 canonical gate: 922 preservation tests, 44 baseline tests and
+  both all-mode shell checks passed. An immutable Git archive replaced only
+  slow host-file transport; test commands/assertions/toolchain stayed canonical.
+- [x] Final bounded receipt hardening: v5 active rows require all four exact
+  script hashes/byte counts and readback UID/RV; custody checks v5 proof identity
+  before any CAS. The new two-test control produced seven failure subcases on
+  the frozen ccde8d01 receipt validators and zero on the successor. Affected
+  80-test boundary/receipt set passed with canonical private TMPDIR custody.
+  An earlier noncanonical /tmp run had custody setup errors; it is not product
+  proof. Migration/actor/recovery functions are unchanged from native PASS;
+  reuse that proof and bind this narrower validator delta to its focused checks.
+- [ ] Independent preservation/security review.
+- [ ] Accepted ant-to-ant delivery/CI handoff to121.
+
+## Decisions
+
+The v5 transition is new migration authority, not a hash refresh. Preserve
+literal historical receipt readers and unchanged auth-v4 enrollment. Root plan
+digest binds its selected schema, migration identity and complete source tuple.
+The original decision incorrectly omitted notification's already accepted
+participant subjects. CI-NATS-V5-AUTHORITY c4 supersedes that premise: preserve
+its current exact bytes as the fourth v5 source/script and require four guarded
+CAS/readbacks. The observed three-hash compiler refusal remains a negative test.
+
+## Risks And Follow-Ups
+
+High preservation/security risk. Native isolated proof is separate from hosted
+CI, installed upgrade, DEV/STAGING and appointed final acceptance. Those remain
+with their actual owners and authorization gates.
+Graphify update was bounded-canceled after no progress; final graph regeneration
+remains open. A read-only native process CWD audit found no WT20 update process
+after cancellation; foreign updates were preserved.

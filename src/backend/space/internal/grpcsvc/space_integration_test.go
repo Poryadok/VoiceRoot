@@ -242,7 +242,18 @@ func startSpaceGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...spaceSer
 	t.Helper()
 	const bufSize = 1 << 20
 	lis := bufconn.Listen(bufSize)
-	srv := grpc.NewServer()
+	// Legacy ledger fixtures explicitly inject a request-bound verified actor for
+	// the migrated audit method. This is not a production admission interceptor.
+	srv := grpc.NewServer(grpc.UnaryInterceptor(func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if info.FullMethod == spacev1.SpaceService_GetAuditLog_FullMethodName {
+			account, accountOK := authctx.AccountID(ctx)
+			profile, profileOK := authctx.ProfileID(ctx)
+			if accountOK && profileOK {
+				ctx = boundAuditFixture(ctx, account, profile, request.(*spacev1.GetAuditLogRequest))
+			}
+		}
+		return handler(ctx, request)
+	}))
 	// Legacy saga coverage opts in only inside this package; production cannot enable it.
 	svc := &SpaceGRPC{
 		allowLegacyOwnershipTransferForTest: true,

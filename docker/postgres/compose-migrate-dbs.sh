@@ -29,9 +29,9 @@ psql_db() {
   psql -v ON_ERROR_STOP=1 --dbname "$1" -tAc "$2"
 }
 
-is_voice_database() {
+is_strict_database() {
   case "$1" in
-    voice_*) return 0 ;;
+    voice_*|realtime_db) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -148,7 +148,7 @@ migrate_db() {
     dirty="$(psql_db "$db" "SELECT dirty FROM schema_migrations LIMIT 1")"
     if [ "$dirty" = "t" ]; then
       current_ver="$(psql_db "$db" "SELECT version FROM schema_migrations LIMIT 1")"
-      if is_voice_database "$db"; then
+      if is_strict_database "$db"; then
         echo "ERROR: dirty ${db} at v${current_ver}; refusing migrate force" >&2
         return 1
       fi
@@ -167,7 +167,7 @@ migrate_db() {
     return 0
   fi
 
-  if is_voice_database "$db"; then
+  if is_strict_database "$db"; then
     echo "ERROR: ${db} has tables without schema_migrations; refusing migrate force" >&2
     return 1
   fi
@@ -200,7 +200,7 @@ GO_OWNED_DBS="
   chat_db messaging_db bot_db story_db
   user_db social_db file_db space_db role_db notification_db
   matchmaking_db search_db moderation_db gateway_db subscription_db
-  voice_db game_integration_db
+  voice_db realtime_db game_integration_db
 "
 
 ensure_gameintegration_runtime_role

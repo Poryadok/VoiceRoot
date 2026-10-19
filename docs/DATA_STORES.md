@@ -16,7 +16,7 @@
 | Social Service       | `social_db`       | —                         | `friend_accept_outbox` retries accepted-friend events; `friend_request_outbox` durably publishes friend invitations |
 | Chat Service         | `chat_db`         | MatchSquad operation/receipt evidence (full request/receipt bytes retained until aggregate teardown completion can be proven); protected RPC replay guard in `chat:match-squad:principal:replay:<hex(SHA-256(issuer || NUL || JTI))>` | NATS JetStream (publish); transactional `chat.deleted` outbox |
 | Messaging Service    | `messaging_db`    | —                         | `message_event_outbox` persists enabled message events; `message_send_receipts` binds private exact immediate-send retries to their message and RPC; `messaging_music_file_snapshots` retains the latest File metadata revision and tombstone across late message inserts |
-| Realtime Service     | —                 | Pub/Sub; session-epoch floor read/check; WS connections/subscriptions are instance-local memory | NATS (не БД)          |
+| Realtime Service     | `realtime_db` (P3 metadata only; migration `000001_admission`) | Pub/Sub; session-epoch floor; protected Space principal replay; WS connections/subscriptions remain instance-local memory | NATS; no message payload or recipient history |
 | Space Service        | `space_db`        | Social principal replay; shared signed Voice/Messaging communication-decision replay | — |
 | Role Service         | `role_db`         | Shared principal replay Redis | —                                |
 | Voice Service        | `voice_db`        | active-call compatibility projection + lifecycle admission/receipt mirror; `voice_match_squad_operations` and `voice_room_instances` own MatchSquad operation/resource state | Redis call/session projection; LiveKit room `match-squad-<room UUID>` |
@@ -149,6 +149,7 @@ No cross-database FK or writable copy of Space/Role grants is introduced.
 |---------|------------|
 | `chats`, `chat_members` | Shipped — DM/group/channel, `is_archived`, `inbox_bucket` |
 | `chat_create_requests` | Migration `000022`; authenticated creator + request UUID, canonical request hash and saved create-result snapshot committed with the chat |
+| `chat_scope_authority_heads` | Migration `000025`; permanent per-chat positive revision and attachment incarnation head, retained across delete/recreate. Source/lifecycle/managed ownership changes maintain it transactionally; no TTL, truncate, revision reset or safe DOWN. `chats.scope_incarnation` is the current native attachment UUID. |
 | `folders`, `folder_chats` | **Shipped** — migrations `000008`/`000009`; folder CRUD and membership handlers are implemented |
 | `quick_access_chats` | **Shipped** — migration `000010` (Batch 17) |
 | `sticker_packs` | Catalog metadata (`is_system`, `is_premium`, `creator_profile_id`) — **0 code** |

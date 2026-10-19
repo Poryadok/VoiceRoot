@@ -2371,3 +2371,59 @@ final $typed_data.Uint8List getSearchProfileCheckpointResponseDescriptor =
     $convert.base64Decode(
         'CiJHZXRTZWFyY2hQcm9maWxlQ2hlY2twb2ludFJlc3BvbnNlEiUKDmhpZ2hfd2F0ZXJtYXJrGA'
         'EgASgEUg1oaWdoV2F0ZXJtYXJr');
+
+@$core.Deprecated(
+    'Use getSpaceAdmissionProfileEligibilityRequestDescriptor instead')
+const GetSpaceAdmissionProfileEligibilityRequest$json = {
+  '1': 'GetSpaceAdmissionProfileEligibilityRequest',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'observation_binding_sha256',
+      '3': 3,
+      '4': 1,
+      '5': 12,
+      '10': 'observationBindingSha256'
+    },
+  ],
+};
+
+/// Descriptor for `GetSpaceAdmissionProfileEligibilityRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List
+    getSpaceAdmissionProfileEligibilityRequestDescriptor =
+    $convert.base64Decode(
+        'CipHZXRTcGFjZUFkbWlzc2lvblByb2ZpbGVFbGlnaWJpbGl0eVJlcXVlc3QSHQoKYWNjb3VudF'
+        '9pZBgBIAEoCVIJYWNjb3VudElkEh0KCnByb2ZpbGVfaWQYAiABKAlSCXByb2ZpbGVJZBI8Chpv'
+        'YnNlcnZhdGlvbl9iaW5kaW5nX3NoYTI1NhgDIAEoDFIYb2JzZXJ2YXRpb25CaW5kaW5nU2hhMj'
+        'U2');
+
+@$core.Deprecated(
+    'Use getSpaceAdmissionProfileEligibilityResponseDescriptor instead')
+const GetSpaceAdmissionProfileEligibilityResponse$json = {
+  '1': 'GetSpaceAdmissionProfileEligibilityResponse',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'observation_binding_sha256',
+      '3': 3,
+      '4': 1,
+      '5': 12,
+      '10': 'observationBindingSha256'
+    },
+    {'1': 'profile_revision', '3': 4, '4': 1, '5': 4, '10': 'profileRevision'},
+    {'1': 'deleted', '3': 5, '4': 1, '5': 8, '10': 'deleted'},
+    {'1': 'frozen', '3': 6, '4': 1, '5': 8, '10': 'frozen'},
+  ],
+};
+
+/// Descriptor for `GetSpaceAdmissionProfileEligibilityResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List
+    getSpaceAdmissionProfileEligibilityResponseDescriptor =
+    $convert.base64Decode(
+        'CitHZXRTcGFjZUFkbWlzc2lvblByb2ZpbGVFbGlnaWJpbGl0eVJlc3BvbnNlEh0KCmFjY291bn'
+        'RfaWQYASABKAlSCWFjY291bnRJZBIdCgpwcm9maWxlX2lkGAIgASgJUglwcm9maWxlSWQSPAoa'
+        'b2JzZXJ2YXRpb25fYmluZGluZ19zaGEyNTYYAyABKAxSGG9ic2VydmF0aW9uQmluZGluZ1NoYT'
+        'I1NhIpChBwcm9maWxlX3JldmlzaW9uGAQgASgEUg9wcm9maWxlUmV2aXNpb24SGAoHZGVsZXRl'
+        'ZBgFIAEoCFIHZGVsZXRlZBIWCgZmcm96ZW4YBiABKAhSBmZyb3plbg==');

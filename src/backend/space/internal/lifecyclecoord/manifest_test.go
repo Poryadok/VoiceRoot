@@ -16,6 +16,7 @@ import (
 	filev1 "voice.app/voice/file/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	notificationv1 "voice.app/voice/notification/v1"
+	realtimev1 "voice.app/voice/realtime/v1"
 	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/space/internal/spacecore"
 )
@@ -111,7 +112,7 @@ func newManifestFixture(t *testing.T) (uuid.UUID, *manifestMemoryStore, *manifes
 }
 
 func TestPrepareFreezeRequiresEveryExactOwnerReceiptBeforePersistence(t *testing.T) {
-	for _, owner := range []string{"chat", "messaging", "notification", "file"} {
+	for _, owner := range []string{"chat", "messaging", "notification", "realtime", "file"} {
 		t.Run(owner, func(t *testing.T) {
 			id, store, owners := newManifestFixture(t)
 			owners.corrupt = owner
@@ -134,7 +135,7 @@ func TestPrepareFreezeImportsNotificationBeforeFileAndKeepsScheduleGeneration(t 
 	owners.calls = nil
 	result, err := coordinator.PrepareFreeze(context.Background(), id)
 	require.NoError(t, err)
-	require.Equal(t, []string{"chat", "page", "messaging", "notification", "file"}, owners.calls)
+	require.Equal(t, []string{"chat", "page", "messaging", "notification", "realtime", "file"}, owners.calls)
 	require.Equal(t, uint64(7), result.Generation())
 	require.True(t, proto.Equal(owners.manifest, result.Snapshot().Manifest))
 }
@@ -145,4 +146,9 @@ func TestPrepareFreezeWithoutDurableAuthProofNeverCallsOwners(t *testing.T) {
 	require.Error(t, err)
 	require.Empty(t, owners.calls)
 	require.Zero(t, store.freezes)
+}
+
+func (o *manifestOwnerFixture) ImportRealtimeManifestPage(_ context.Context, request *realtimev1.ImportSpacePurgeManifestPageRequest) (*realtimev1.ImportSpacePurgeManifestPageResponse, error) {
+	o.calls = append(o.calls, "realtime")
+	return &realtimev1.ImportSpacePurgeManifestPageResponse{Receipt: &realtimev1.ImportSpacePurgeManifestPageReceipt{ProtocolVersion: 1, ReceiptId: uuid.NewString(), SpaceId: request.SpaceId, DeletionOperationId: request.DeletionOperationId, Generation: request.ScheduleGeneration, Manifest: request.Page.Manifest, PageIndex: request.Page.PageIndex, AcceptedCount: uint64(len(request.Page.ItemIds)), PageSha256: request.Page.PageSha256, ManifestSealed: request.SealsManifest, RequestSha256: o.hash("realtime", request), CompletedAt: timestamppb.Now()}}, nil
 }

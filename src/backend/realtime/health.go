@@ -18,6 +18,7 @@ type healthResponse struct {
 }
 
 type readinessDeps struct {
+	Lifecycle interface{ Ready(context.Context) error }
 	Redis     *redis.Client
 	NatsURL   string
 	NATS      *nats.Conn
@@ -51,6 +52,14 @@ func readinessHandler(service string, deps readinessDeps) http.Handler {
 }
 
 func checkReadiness(ctx context.Context, deps readinessDeps) (status, reason string) {
+	if deps.Lifecycle != nil {
+		check, stop := context.WithTimeout(ctx, 2*time.Second)
+		err := deps.Lifecycle.Ready(check)
+		stop()
+		if err != nil {
+			return "degraded", "lifecycle_store_unavailable"
+		}
+	}
 	if !deps.Consumers.ready() {
 		return "degraded", "jetstream_consumers_unready"
 	}

@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "profile": "free-invite-alpha",
+  "source_sha": "REPLACE_WITH_EXACT_RELEASE_COMMIT",
+  "configuration": {
+    "environment": "production",
+    "checkout_mode": "live",
+    "development_defaults": false
+  },
+  "capabilities": {
+    "phone_auth": "disabled",
+    "paid": "disabled",
+    "mobile_push": "disabled",
+    "public_discovery": "disabled",
+    "unfinished_rich_types": "disabled",
+    "federation": "disabled"
+  },
+  "inventories": {
+    "images": ["gateway"],
+    "rollout": ["gateway"],
+    "readiness": ["gateway"],
+    "alerts": ["gateway"]
+  }
+}

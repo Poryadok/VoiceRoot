@@ -73,6 +73,7 @@ type CurrentSessionEpochChecker interface {
 type VoiceGRPC struct {
 	callsv1.UnimplementedVoiceServiceServer
 
+	SpaceProjectionGates     voicestore.SpaceProjectionGates
 	Calls                    voicestore.CallStore
 	OrdinaryCalls            *ordinarycall.Coordinator
 	ManagedGameSessionRooms  ManagedGameSessionRoomLookup

@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	callsv1 "voice.app/voice/calls/v1"
-	"voice/backend/pkg/integrationtest"
 	"voice/backend/voice/internal/gameprovision"
+	"voice/backend/voice/internal/spacegatetest"
 )
 
 func TestPostgresConversionCapturesPendingNativeSourceWithoutRedisAndReplaysImmutableBinding(t *testing.T) {
@@ -149,12 +149,12 @@ func ordinaryPostgres(t *testing.T) *pgxpool.Pool {
 	require.True(t, ok)
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
 	dir := filepath.Join(root, "src", "backend", "migrations", "voice_db")
-	pool := integrationtest.StartPostgres(t, context.Background(), "voice_ordinary", filepath.Join(dir, "000001_room_lifecycle.up.sql"))
+	pool := spacegatetest.StartPostgres(t, context.Background(), "voice_ordinary", filepath.Join(dir, "000001_room_lifecycle.up.sql"))
 	for _, migration := range []string{
 		"000002_redis_divergence", "000003_matchmaking_membership", "000004_game_session_rooms",
 		"000005_game_session_close", "000006_game_session_roster_lease", "000007_t17_sdk_conversion_fence",
 		"000008_account_voice_fence", "000009_space_lifecycle", "000010_space_media_admission",
-		"000011_match_squad_operations", "000012_ordinary_calls",
+		"000011_match_squad_operations", "000012_ordinary_calls", "000013_a3_roster_outbox",
 	} {
 		body, err := os.ReadFile(filepath.Join(dir, migration+".up.sql"))
 		require.NoError(t, err)

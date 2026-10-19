@@ -67,6 +67,10 @@ func (f currentSessionCheckerFunc) RequireCurrent(ctx context.Context, accountID
 }
 
 func (r readySpaceMediaAdmission) CheckSchema(context.Context) error { return r.err }
+func (r readySpaceMediaAdmission) ReserveSpaceGrant(context.Context, uuid.UUID, uuid.UUID, string, livekit.SpaceRoomGrant) (time.Time, time.Time, error) {
+	issued := time.Unix(1700000000, 0).UTC()
+	return issued, issued.Add(time.Minute), r.err
+}
 func (r readySpaceMediaAdmission) ClaimRoomHead(_ context.Context, voiceRoomID, spaceID, roomID string, operationID uuid.UUID, allowCreate bool) (voicestore.SpaceMediaRoomHead, error) {
 	head := voicestore.SpaceMediaRoomHead{VoiceRoomID: voiceRoomID, SpaceID: spaceID, RoomID: roomID, RoomGeneration: 1, State: "OPEN", Ready: !allowCreate}
 	if allowCreate {
@@ -466,4 +470,11 @@ func TestLeaveSpaceVoiceRoomFailsClosedWhenParticipantHasNoAdmission(t *testing.
 	current, err := calls.GetCall(t.Context(), call.RoomID)
 	require.NoError(t, err)
 	require.True(t, current.IsParticipant(profileID), "an unjournaled Space projection cannot use legacy leave mutation")
+}
+
+func (r readySpaceMediaAdmission) ReadSpaceLifecycle(context.Context, string) (int64, bool, error) {
+	return 0, true, r.err
+}
+func (r readySpaceMediaAdmission) AuthorizeSpaceProjection(_ context.Context, _ uuid.UUID, _ string, t voicestore.SpaceProjectionTicket) (voicestore.SpaceProjectionTicket, error) {
+	return t, r.err
 }

@@ -75,6 +75,28 @@ Artifact `settings-help-browser-<run_id>` содержит head SHA (`VOICE_SOUR
 версию Chrome и шесть PNG. Это доказательство передачи ссылки браузеру;
 загрузка содержимого внешнего GitHub и привязка к deployed SHA проверяются отдельно.
 
+### Web cold startup
+
+`node --test scripts/ci/web-startup.test.mjs` проверяет ранний HTML loader,
+RU/EN, ошибки bootstrap/engine/runApp, зависший запуск и снятие loader только
+по `flutter-first-frame`. В Flutter CI после уже существующей сборки Help fixture
+`node scripts/ci/web-startup-browser.mjs src/frontend/build/help-launcher-web <output>`
+проверяет настоящий Flutter engine: main.dart.js удерживается HTTP fixture,
+видны текущий Voice icon и статус до запуска Flutter; затем первый кадр снимает
+loader. Отдельный 503 для bootstrap и доверенный pointer click проверяют reload/retry.
+Используются fresh pages, отключённый browser cache, desktop и mobile viewport.
+Для проверки полной production-сборки передайте `src/frontend/build/web` после
+`flutter build web --release --no-pub --no-web-resources-cdn`.
+
+Node.js 24, Chrome/Chromium (`CHROME_BIN`) и полный `VOICE_SOURCE_SHA` обязательны.
+Artifact содержит browser version, viewport, PNG и `voice-startup:*` performance
+marks (HTML, entrypoint, engine, run-app, first-frame). Это локальные timings с
+искусственной задержкой, не production latency и не доказательство причины
+пользовательского медленного старта. Реальные device/network и deployed asset
+delivery проверяются отдельно. Loader использует существующий `voice_sky.png`,
+system font и inline critical CSS; 90s — только recovery UI deadline, запрос
+может завершиться позднее. Ошибки не раскрывают URL или raw exception.
+
 ### Go (сервисы, Gateway, Realtime и др.)
 
 - Фреймворк: стандартный пакет **`testing`**, табличные тесты где уместно.
@@ -90,7 +112,54 @@ Artifact `settings-help-browser-<run_id>` содержит head SHA (`VOICE_SOUR
   требует real PostgreSQL 16 с zero skips; Redis 7 понадобится для deferred
   D2/D3 bridge tests, не для D1-only classifier transaction.
 
+### Voice dormant native/P3 composition
+
+`go test -race -run '^TestProduction' .` из `src/backend/voice` выполняет
+production startup factory для обычного режима без Space/NATS и для Space с
+существующими compatibility consumers. Проверяются compatibility delivery,
+pending native roster facts без lease/publish/delivered marker и EJECT_ONLY P3.
+По умолчанию используются Testcontainers. Для собственного изолированного Linux
+runner можно явно передать `VOICE_COMPOSITION_TEST_DATABASE_URL` (PostgreSQL с
+правом создавать disposable databases) и `VOICE_COMPOSITION_TEST_NATS_URL`.
+Voice fixtures создают отдельную БД на тест и применяют те же миграции/SQL;
+серверы должны принадлежать проверяющему. Этот opt-in также доступен focused
+ordinarycall/spacemedia/spacelifecycle PostgreSQL fixtures. Проверка отдельного
+child process сохранённых bytes/pending state выполняется при explicit DSN.
+NATS fixture создаёт только существующие compatibility streams/consumers;
+она не доказывает installed ACL, A3 activation, provider retirement или rollout.
+Startup fixture использует уже committed native факты; arbitration между live
+admission writer и recovery проверяется и исправляется отдельно.
+
 ### Space tree integration proof
+
+Realtime P3 has a scoped Linux-only external-PostgreSQL suite tagged
+`realtimep3integration`. Set `REALTIME_P3_TEST_DATABASE_URL` to an owned isolated
+PostgreSQL16 database and run Realtime `go test -race -tags=realtimep3integration
+-run 'Test(ProtectedRealtime|ActualHub|Committed|FreezeReceipt|ExactManifest|Restart|Unknown|Multipage|ReceiptCompaction)' . ./internal/lifecycle`.
+The same tag exposes native Chat `TestRealtimeNativeLifecycle` and Space
+`TestRealtimeParticipantEleven` store cases; these create and drop uniquely named
+databases on that owned server to apply complete native migration catalogs.
+The required suite fails when its DSN is absent rather than skipping. Containers
+need no host ports or Docker socket for this suite. Ordinary legacy short-test
+skips remain distinct from these runtime cases; never report them as PG proof.
+
+The shared local Space/Realtime JWKS exporter has a separate no-network Linux
+check. From the repository root, build `docker/social-principal` as
+`voice-jwks-bootstrap-test`, then run its Python fixture with the source mounted
+read-only (no host ports):
+
+```sh
+docker run --rm --network none --entrypoint python3 \
+  -e LOCAL_JWKS_BOOTSTRAP_TEST=1 \
+  -v "$PWD/docker/social-principal:/fixture:ro" voice-jwks-bootstrap-test \
+  /fixture/export_jwks_test.py
+```
+
+It checks both issuers reject weak or mathematically unusable private pairs
+before any public generation is written and on reuse of matching public docs.
+Valid distinct pairs and actual nondefault RSA exponents remain accepted. This
+fixture does not qualify deployed keys, network trust or lifecycle readiness.
+
 
 Для узкого exact-SHA доказательства запускается workflow
 [space-tree-proof.yml](../.github/workflows/space-tree-proof.yml). Он выполняет
@@ -445,6 +514,13 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 **Деплой на staging** — job **`deploy-staging`** в [`ci.yml`](../.github/workflows/ci.yml) вызывает [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml) (`workflow_call`) после `staging-stack-lock`; ручной запуск — **Actions → Staging deploy** с обязательным git SHA. См. [DEPLOYMENT.md](DEPLOYMENT.md). Branch protection: job **`ci-gate`** + [`.github/ci/branch-protection-checklist.md`](../.github/ci/branch-protection-checklist.md).
 
 ### Compose E2E (локально и CI)
+
+- Compose bootstrap creates and migrates Realtime's owned `realtime_db` before
+  its fail-closed startup. Dirty or nonempty untracked Realtime catalogs fail
+  without `migrate force`; reconcile their migration history explicitly.
+  `python3 docker/postgres/compose-realtime-migrations_test.py` exercises fresh,
+  existing-volume, repeated, dirty and untracked paths through the shell pipeline
+  with stateful command fixtures; actual Compose startup remains a separate check.
 
 The E2E catalog CLI (`bash scripts/ci/e2e-manifest.sh MANIFEST SECTION`)
 requires Python 3 and `python3 -m pip install -r scripts/ci/requirements-e2e.txt`

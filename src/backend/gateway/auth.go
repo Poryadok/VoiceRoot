@@ -72,9 +72,32 @@ func (v chainedTokenValidator) Validate(r *http.Request) (tokenClaims, string) {
 }
 
 func (g *gateway) authenticate(r *http.Request) (tokenClaims, string) {
-	claims, code := g.tokenValidator.Validate(r)
+	validator := g.tokenValidator
+	creator := isSpaceCreateRequest(r)
+	var claims tokenClaims
+	var code string
+	if creator {
+		// Static development credentials must never mint a native creator proof.
+		// In chained mode select the real JWKS validator, never its static branch.
+		if chain, ok := validator.(chainedTokenValidator); ok {
+			validator = chain.next
+		}
+		jwks, ok := validator.(*voicejwt.Validator)
+		if !ok || !hasSingleBearerAuthorization(r) {
+			return tokenClaims{}, "invalid_token"
+		}
+		if !g.config.sessionEpochStrict {
+			return tokenClaims{}, "auth_unavailable"
+		}
+		claims, code = jwks.ValidateForDelegation(r)
+	} else {
+		claims, code = validator.Validate(r)
+	}
 	if code != "" {
 		return tokenClaims{}, code
+	}
+	if creator && (claims.JTI == "" || !canonicalLifecycleUUID(claims.UserID) || !canonicalLifecycleUUID(claims.ProfileID)) {
+		return tokenClaims{}, "invalid_token"
 	}
 	if claims.JTI != "" {
 		revoked, err := g.tokenBlacklist.IsRevoked(r.Context(), claims.JTI)

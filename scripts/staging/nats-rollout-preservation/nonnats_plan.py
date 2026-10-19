@@ -47,6 +47,13 @@ SECRET_CONTRACTS = {
         'voice-chat-match-squad-server-tls': {'tls.crt', 'tls.key'},
         'voice-voice-match-squad-server-tls': {'tls.crt', 'tls.key'},
         'voice-match-squad-replay': {'password'},
+        'voice-p3-principal-replay': {'password'},
+        'voice-p3-principal-trust': {'realtime-client-ca.crt', 'realtime-jwks-ca.crt',
+                                     'chat-server-ca.crt', 'space-client-ca.crt', 'space-jwks-ca.crt'},
+        'voice-realtime-principal-signing': {'current.pem', 'next.pem'},
+        'voice-chat-realtime-p3-tls': {'tls.crt', 'tls.key'},
+        'voice-realtime-p3-tls': {'tls.crt', 'tls.key'},
+        'voice-p3-principal-jwks-tls': {'tls.crt', 'tls.key'},
         'voice-match-squad-member-replay': {'password'},
         'voice-gameintegration-workload-credentials': {
             'GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64',

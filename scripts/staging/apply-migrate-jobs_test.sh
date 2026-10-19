@@ -50,6 +50,7 @@ require_migration_target() {
 
 require_migration_target social_db voice-migrate-social-db SOCIAL_DATABASE_URL
 require_migration_target chat_db voice-migrate-chat-db CHAT_DATABASE_URL
+require_migration_target realtime_db voice-migrate-realtime-db REALTIME_DATABASE_URL
 require_migration_target messaging_db voice-migrate-messaging-db MESSAGING_DATABASE_URL
 require_migration_target file_db voice-migrate-file-db FILE_DATABASE_URL
 require_migration_target space_db voice-migrate-space-db SPACE_DATABASE_URL

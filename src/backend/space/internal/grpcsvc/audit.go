@@ -11,8 +11,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"voice/backend/pkg/principal"
 	"voice/backend/role/permissions"
-	"voice/backend/space/internal/authctx"
 	"voice/backend/space/internal/store"
 
 	spacev1 "voice.app/voice/space/v1"
@@ -21,6 +21,10 @@ import (
 // GetAuditLog returns administrative actions visible to roles with the exact
 // SPACE_VIEW_AUDIT_LOG permission. Without Role Service, only the owner may read.
 func (s *SpaceGRPC) GetAuditLog(ctx context.Context, req *spacev1.GetAuditLogRequest) (*spacev1.GetAuditLogResponse, error) {
+	identity, err := principal.RequireDelegatedUser(ctx, "space", spacev1.SpaceService_GetAuditLog_FullMethodName, req)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "verified audit reader required")
+	}
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
 	}
@@ -28,10 +32,7 @@ func (s *SpaceGRPC) GetAuditLog(ctx context.Context, req *spacev1.GetAuditLogReq
 	if err != nil {
 		return nil, err
 	}
-	caller, ok := authctx.ProfileID(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing profile")
-	}
+	caller := identity.ProfileID
 	release, err := s.lockSpaceMutation(ctx, spaceID)
 	if err != nil {
 		return nil, err
@@ -45,7 +46,7 @@ func (s *SpaceGRPC) GetAuditLog(ctx context.Context, req *spacev1.GetAuditLogReq
 	if !member {
 		return nil, status.Error(codes.PermissionDenied, "not a space member")
 	}
-	if err := s.requireSpacePermission(ctx, spaceID, permissions.SpaceViewAuditLog); err != nil {
+	if err := s.requireSpacePermissionForProfile(ctx, spaceID, caller, permissions.SpaceViewAuditLog); err != nil {
 		return nil, err
 	}
 

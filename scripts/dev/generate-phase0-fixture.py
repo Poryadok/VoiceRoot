@@ -211,6 +211,10 @@ def generate(destination):
                     root / "tls/matchmaking-complete-grpc.key",
                     root / "tls/matchmaking-jwks.crt",
                     root / "tls/matchmaking-jwks.key",
+                    root / "tls/space-lifecycle.crt",
+                    root / "tls/space-lifecycle.key",
+                    root / "tls/space-client.crt",
+                    root / "tls/space-client.key",
                     root / "ca/ca.crt",
                 ]
                 # Permit path traversal to only the owner-only files below;

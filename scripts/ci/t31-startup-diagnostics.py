@@ -72,6 +72,8 @@ VOICE_STARTUP_PREFIXES = (
     ("voice MatchSquad member listener:", "voice_match_squad_member_listener"),
     ("voice GIS principal configuration:", "voice_gis_principal_configuration"),
     ("voice principal JWKS configuration:", "voice_principal_jwks_configuration"),
+    ("voice principal JWKS startup:", "voice_principal_jwks_startup"),
+    ("voice principal JWKS serve:", "voice_principal_jwks_serve"),
     ("voice Role grant checker configuration:", "voice_role_grant_configuration"),
     ("voice Space lifecycle principal configuration:", "voice_space_principal_configuration"),
     ("voice user-principal configuration:", "voice_user_principal_configuration"),
@@ -111,6 +113,9 @@ VOICE_STARTUP_PREFIXES = (
     ("Space media PostgreSQL admission schema:", "space_media_postgres_admission_schema"),
     ("Space media initial reconciliation:", "space_media_initial_reconciliation"),
     ("Space media invalidation consumer startup:", "space_media_invalidation_consumer_startup"),
+    ("P3 requires durable lifecycle-fenced Redis", "voice_p3_durable_redis_required"),
+    ("Space requires an incarnation-fenced projection store", "voice_space_incarnation_projection_required"),
+    ("P3 requires lifecycle-fenced Redis projection", "voice_p3_projection_fence_required"),
 )
 VOICE_STARTUP_DETAILS = (
     ("voice MatchSquad member TLS identity unavailable", "voice_match_squad_member_tls_identity_unavailable"),

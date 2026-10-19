@@ -30,6 +30,9 @@ class AuthPrincipalServerLifecycleTest {
   static final MethodDescriptor<Struct,Struct> CONSUME = method(AuthPrincipalServerInterceptor.CONSUME_RPC);
   static final MethodDescriptor<Struct,Struct> LOOKUP = method(AuthPrincipalServerInterceptor.LOOKUP_RPC);
   static final MethodDescriptor<Struct,Struct> FLOOR = method(AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC);
+  static final MethodDescriptor<Struct,Struct> SPACE_FLOOR = method(AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC);
+  static final MethodDescriptor<Struct,Struct> ROLE_FLOOR = method(AuthPrincipalServerInterceptor.ROLE_SESSION_FLOOR_RPC);
+  static final MethodDescriptor<Struct,Struct> ADMISSION = method(AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC);
   static final MethodDescriptor<Struct,Struct> LOGIN = method("/" + SERVICE + "/Login");
   final AuthGrpcService service = mock(AuthGrpcService.class);
   final AuthPrincipalVerifier verifier = mock(AuthPrincipalVerifier.class);
@@ -47,6 +50,8 @@ class AuthPrincipalServerLifecycleTest {
         .thenReturn(spacePrincipal);
     when(verifier.verify(anyString(), eq(AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC), anyString(), anyString()))
         .thenReturn(voicePrincipal);
+    when(verifier.verify(anyString(), eq(AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC), anyString(), anyString()))
+        .thenReturn(spacePrincipal);
     when(service.bindService()).thenReturn(definition(true));
   }
 
@@ -65,6 +70,9 @@ class AuthPrincipalServerLifecycleTest {
       assertStatus(legacy, ISSUE, Status.Code.UNAUTHENTICATED);
       assertStatus(legacy, LOOKUP, Status.Code.UNAUTHENTICATED);
       assertStatus(legacy, FLOOR, Status.Code.UNIMPLEMENTED);
+      assertStatus(legacy, ROLE_FLOOR, Status.Code.UNIMPLEMENTED);
+      assertStatus(legacy, SPACE_FLOOR, Status.Code.UNIMPLEMENTED);
+      assertStatus(legacy, ADMISSION, Status.Code.UNIMPLEMENTED);
       assertEquals(0, proofCalls.get());
       assertEquals(REQUEST, call(legacy, LOGIN));
       assertEquals(1, loginCalls.get());
@@ -77,12 +85,21 @@ class AuthPrincipalServerLifecycleTest {
       verify(verifier).verify("test-credential", AuthPrincipalServerInterceptor.LOOKUP_RPC,
           "lifecycle-request", AuthPrincipalServerInterceptor.requestHash(REQUEST));
       assertStatus(privateChannel, FLOOR, Status.Code.UNIMPLEMENTED);
+      assertStatus(privateChannel, ROLE_FLOOR, Status.Code.UNIMPLEMENTED);
+      assertStatus(privateChannel, SPACE_FLOOR, Status.Code.UNIMPLEMENTED);
+      assertStatus(privateChannel, ADMISSION, Status.Code.UNIMPLEMENTED);
       assertEquals(REQUEST, call(floorChannel, FLOOR));
       assertEquals(voicePrincipal, observed.get());
       assertEquals(3, proofCalls.get());
       verify(verifier).verify("test-credential", AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC,
           "lifecycle-request", AuthPrincipalServerInterceptor.requestHash(REQUEST));
+      assertEquals(REQUEST, call(floorChannel, ADMISSION));
+      assertEquals(spacePrincipal, observed.get());
+      assertEquals(4, proofCalls.get());
+      verify(verifier).verify("test-credential", AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC,
+          "lifecycle-request", AuthPrincipalServerInterceptor.requestHash(REQUEST));
       assertStatus(floorChannel, ISSUE, Status.Code.UNIMPLEMENTED);
+      assertStatus(floorChannel, LOGIN, Status.Code.UNIMPLEMENTED);
       assertStatus(privateChannel, LOGIN, Status.Code.UNIMPLEMENTED);
       for(var sourceRpc : java.util.List.of("ReadSnapshot","ReadRevision")) {
         var source = method("/voice.authority.v1.AuthoritySourceService/" + sourceRpc);
@@ -102,7 +119,7 @@ class AuthPrincipalServerLifecycleTest {
       assertStatus(privateChannel, ISSUE, Status.Code.UNAVAILABLE);
       assertStatus(privateChannel, LOOKUP, Status.Code.UNAVAILABLE);
       assertStatus(floorChannel, FLOOR, Status.Code.UNAVAILABLE);
-       assertEquals(1, loginCalls.get()); assertEquals(3, proofCalls.get());
+       assertEquals(1, loginCalls.get()); assertEquals(4, proofCalls.get());
     } finally { server.stop(); close(legacy); close(privateChannel); close(floorChannel); }
   }
 
@@ -182,6 +199,18 @@ class AuthPrincipalServerLifecycleTest {
           observer.onNext(request); observer.onCompleted();
         }))
         .addMethod(FLOOR, ServerCalls.asyncUnaryCall((request, observer) -> {
+          proofCalls.incrementAndGet(); observed.set(VerifiedPrincipal.current());
+          observer.onNext(request); observer.onCompleted();
+        }))
+        .addMethod(SPACE_FLOOR, ServerCalls.asyncUnaryCall((request, observer) -> {
+          proofCalls.incrementAndGet(); observed.set(VerifiedPrincipal.current());
+          observer.onNext(request); observer.onCompleted();
+        }))
+        .addMethod(ROLE_FLOOR, ServerCalls.asyncUnaryCall((request, observer) -> {
+          proofCalls.incrementAndGet(); observed.set(VerifiedPrincipal.current());
+          observer.onNext(request); observer.onCompleted();
+        }))
+        .addMethod(ADMISSION, ServerCalls.asyncUnaryCall((request, observer) -> {
           proofCalls.incrementAndGet(); observed.set(VerifiedPrincipal.current());
           observer.onNext(request); observer.onCompleted();
         }))

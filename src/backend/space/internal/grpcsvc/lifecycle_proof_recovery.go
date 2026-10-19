@@ -5,7 +5,6 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"time"
 	authv1 "voice.app/voice/auth/v1"
@@ -40,7 +39,8 @@ func (s *SpaceGRPC) RecoverLifecycleProof(ctx context.Context, id uuid.UUID) err
 	if err != nil {
 		return err
 	}
-	wrapped := protowire.AppendBytes(protowire.AppendTag(nil, 1, protowire.BytesType), raw)
-	_, err = s.Store.RecordLifecycleDeletionProofReceipt(ctx, uuid.MustParse(request.ProfileId), uuid.MustParse(request.OperationId), wrapped, lifecycleEvidenceHash("voice.auth.v1.ConsumeSpaceDeletionProofResponse", wrapped))
+	// Marshal already includes the response's receipt field. Persist exactly
+	// the same typed response bytes as foreground consume, without another wrapper.
+	_, err = s.Store.RecordLifecycleDeletionProofReceipt(ctx, uuid.MustParse(request.ProfileId), uuid.MustParse(request.OperationId), raw, lifecycleEvidenceHash("voice.auth.v1.ConsumeSpaceDeletionProofResponse", raw))
 	return err
 }

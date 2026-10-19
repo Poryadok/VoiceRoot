@@ -70,10 +70,10 @@ class AccountRestoreExpiryTest {
   }
 
   @Test
-  void restoreAtExactlyThirtyDaysUsesInclusiveBoundaryAndIssuesSession() {
+  void restoreStrictlyBeforeThirtyDaysIssuesSession() {
     InMemoryAccountRepository accounts = new InMemoryAccountRepository(CLOCK);
     Account account = accounts.create("boundary-restore@example.com", null, "hash", "regular");
-    accounts.markDeleted(account.id(), NOW.minus(AuthService.ACCOUNT_RESTORE_GRACE));
+    accounts.markDeleted(account.id(), NOW.minus(AuthService.ACCOUNT_RESTORE_GRACE).plusNanos(1));
     OneTimeRestoreTokenStore restoreTokens = new OneTimeRestoreTokenStore(account.id());
     RecordingRefreshTokenRepository refreshTokens = new RecordingRefreshTokenRepository();
     AuthEventPublisher events = mock();
@@ -89,6 +89,29 @@ class AccountRestoreExpiryTest {
     assertThat(refreshTokens.createCount).isEqualTo(1);
     verify(events).publishAccountRestored(account.id());
     assertThat(restoreTokens.consumeCount).isEqualTo(1);
+  }
+
+  @Test
+  void restoreAtExactlyThirtyDaysIsInactiveWithoutSessionOrRestoreEffects() {
+    InMemoryAccountRepository accounts = new InMemoryAccountRepository(CLOCK);
+    Account account = accounts.create("exact-restore@example.com", null, "hash", "regular");
+    Instant deletedAt = NOW.minus(AuthService.ACCOUNT_RESTORE_GRACE);
+    accounts.markDeleted(account.id(), deletedAt);
+    OneTimeRestoreTokenStore restoreTokens = new OneTimeRestoreTokenStore(account.id());
+    RecordingRefreshTokenRepository refreshTokens = new RecordingRefreshTokenRepository();
+    AuthEventPublisher events = mock();
+    AuthService service = service(accounts, refreshTokens, restoreTokens, events);
+
+    assertThatThrownBy(() -> service.restoreAccount("restore-token"))
+        .isInstanceOf(AuthException.class)
+        .hasMessage("account_inactive");
+
+    Account unchanged = accounts.findById(account.id().toString()).orElseThrow();
+    assertThat(unchanged.status()).isEqualTo("deleted");
+    assertThat(unchanged.deletedAt()).isEqualTo(deletedAt);
+    assertThat(refreshTokens.createCount).isZero();
+    assertThat(restoreTokens.consumeCount).isZero();
+    verifyNoInteractions(events);
   }
 
   private AuthService service(

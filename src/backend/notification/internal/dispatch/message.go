@@ -34,7 +34,10 @@ type MessagePusher struct {
 	LifecycleDelivery interface {
 		WithChatDelivery(context.Context, string, func(context.Context) error) error
 	}
-	Tokens        TokenRepository
+	Tokens    TokenRepository
+	Admission interface {
+		Admit(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (bool, error)
+	}
 	Pusher        *PushDispatcher
 	Grouping      grouping.Store
 	Presence      presence.Checker
@@ -155,6 +158,9 @@ func (p *MessagePusher) sendPush(
 		}
 		recipient, err := uuid.Parse(profileID)
 		if err != nil {
+			if p.Admission != nil && isOrdinaryChatPush(delivery.NotificationType(notificationType)) {
+				return fmt.Errorf("invalid chat push recipient")
+			}
 			continue
 		}
 		if !prepared {
@@ -190,12 +196,8 @@ func (p *MessagePusher) sendPush(
 			// Keep private message text out of shared grouping state until GIS classifies it.
 			groupingPreview = ""
 		}
-		if groupingID := pushGroupingID(in); groupingID != "" {
-			if err := grouping.ApplyToPayload(ctx, p.Grouping, recipient, groupingID, groupingPreview, &out); err != nil {
-				// Degraded: send without grouping when Redis fails.
-				out = payload
-			}
-		}
+		preparedPayload := false
+		admissionChecked, admitted := false, true
 		tokens, err := p.Tokens.ListByProfile(ctx, recipient)
 		if err != nil {
 			if observer := messageDiagnosticObserverFromContext(ctx); observer != nil {
@@ -262,11 +264,52 @@ func (p *MessagePusher) sendPush(
 				}
 			}
 			devicePayload := out
+			if p.Admission != nil && isOrdinaryChatPush(delivery.NotificationType(notificationType)) && payload.Data["chat_id"] != in.ChatID {
+				return fmt.Errorf("inconsistent chat push admission scope")
+			}
 			if gameScoped {
 				devicePayload.Title = "Game update"
 				devicePayload.Body = "A game event is waiting in Voice."
 			}
-			err := p.Pusher.Send(ctx, recipient, tok, devicePayload)
+			err := p.Pusher.PrepareAndSend(ctx, recipient, tok, devicePayload, func(guarded context.Context) (push.Payload, bool, error) {
+				if !admissionChecked {
+					if p.Admission != nil && isOrdinaryChatPush(delivery.NotificationType(notificationType)) {
+						if recipient == uuid.Nil || recipient.String() != profileID {
+							return devicePayload, false, fmt.Errorf("invalid chat push recipient")
+						}
+						chat, err := canonicalQuotaID(in.ChatID)
+						if err != nil {
+							return devicePayload, false, err
+						}
+						message, err := canonicalQuotaID(payload.Data["message_id"])
+						if err != nil {
+							return devicePayload, false, err
+						}
+						admitted, err = p.Admission.Admit(guarded, recipient, chat, message)
+						if err != nil {
+							return devicePayload, false, err
+						}
+					}
+					admissionChecked = true
+				}
+				if !admitted {
+					return devicePayload, false, nil
+				}
+				if !preparedPayload {
+					if groupingID := pushGroupingID(in); groupingID != "" {
+						if err := grouping.ApplyToPayload(guarded, p.Grouping, recipient, groupingID, groupingPreview, &out); err != nil {
+							out = payload
+						}
+					}
+					preparedPayload = true
+				}
+				devicePayload = out
+				if gameScoped {
+					devicePayload.Title = "Game update"
+					devicePayload.Body = "A game event is waiting in Voice."
+				}
+				return devicePayload, true, nil
+			})
 			if observer := messageDiagnosticObserverFromContext(ctx); observer != nil {
 				observer.DispatcherReturned(recipient, tok.PushService)
 			}
@@ -280,6 +323,23 @@ func (p *MessagePusher) sendPush(
 		}
 	}
 	return nil
+}
+
+func isOrdinaryChatPush(typ delivery.NotificationType) bool {
+	switch typ {
+	case delivery.TypeNewMessage, delivery.TypeMessageRequest, delivery.TypeReply, delivery.TypeMention:
+		return true
+	default:
+		return false
+	}
+}
+
+func canonicalQuotaID(raw string) (uuid.UUID, error) {
+	id, err := uuid.Parse(raw)
+	if err != nil || id == uuid.Nil || id.String() != raw {
+		return uuid.Nil, fmt.Errorf("invalid chat push admission identity")
+	}
+	return id, nil
 }
 
 // EnrichDecision applies presence, settings, and quiet hours to routing.

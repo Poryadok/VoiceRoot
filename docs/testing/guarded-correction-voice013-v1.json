@@ -1,0 +1,23 @@
+{
+  "version": "GUARDED-CORRECTION-V1",
+  "prior_owner": "2cc9482255ba18cd948aacb567f4c4bdf8976b14",
+  "prior_source": "909090a34743902799306974d6f3ebabe3c02f10",
+  "content_base": "8191a36ca3bea7d053df0dd25963ca5133284b41",
+  "prior_runtime_trigger": "true",
+  "correction": "5cc425b35bc71738d86261c1cf4772c7babd4519",
+  "donor": "a2e3365856277c7861d7ee5897de7867fa81c50e",
+  "review": "http://192.168.0.109:30990/?project=voice&task=BE012-NATIVE-PRODUCER-REVIEW#comment-c1",
+  "corrections": [
+    {
+      "path": "src/backend/migrations/voice_db/000013_a3_roster_outbox.down.sql",
+      "before": {"mode": "100644", "type": "blob", "oid": "29e41461f4d7bb0e6d84a1f1c64c4d6dcc8435e2"},
+      "after": {"mode": "100644", "type": "blob", "oid": "1eea4c0c91847be8bf679041f974dee9d58e4c7a"}
+    }
+  ],
+  "prerequisites": [
+    {
+      "path": "src/backend/migrations/voice_db/000013_a3_roster_outbox.up.sql",
+      "entry": {"mode": "100644", "type": "blob", "oid": "bf34f06f817b882bf977b218cc9758bccbc4ed81"}
+    }
+  ]
+}

@@ -110,7 +110,12 @@ communication resolver only). Each prefix requires `REPLAY_REDIS_ADDR`,
 `TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, `JWKS_CLIENT_CERT_FILE` and
 `JWKS_CLIENT_KEY_FILE`; `GRPC_LISTEN` and `REPLAY_REDIS_PASSWORD` are optional.
 `S2S_JWKS_URLS_JSON` supplies the exact trusted caller's HTTPS endpoint, with
-`S2S_JWKS_CA_FILE` extending server trust when necessary. Replicas use shared
+`S2S_JWKS_CA_FILE` extending server trust when necessary. A listener may instead
+set its own `<prefix>JWKS_CA_FILE`; absent retains the shared CA, while an
+explicitly blank, unreadable or invalid override fails without falling back.
+Local trust configuration alone is partial listener configuration and fails;
+shared trust settings alone enable no listener. This permits separate Social
+and Voice CAs without a combined trust bundle or sharing private keys. Replicas use shared
 replay storage; each listener authenticates its one caller and exact method.
 All-absent provider settings leave that listener disabled. Partial settings
 fail startup. The ordinary listener rejects both methods, and the legacy
@@ -773,6 +778,20 @@ permission subset и Owner lifecycle paths определены в
 `operation_id`.
 
 `GetAuditLog` читает только строки запрошенного `space_id` и возвращает все поля `AuditLogEntry`. Ошибка Role Service закрывает доступ (`UNAVAILABLE`), явный deny даёт `PERMISSION_DENIED`, malformed cursor — `INVALID_ARGUMENT`. Handler передаёт actor/action/time filters в filter-bound store query; каждый cursor связывает authenticated viewer, scope, filters и page size. Остальные writers и клиентские REST/Flutter поверхности остаются в [backend backlog](../todo/backend.md).
+
+The audit read chain consumes `pkg/principal.RequireDelegatedUser` from the
+already verified Gateway delegated context. The shared reader binds canonical
+non-nil account/profile UUIDs, positive session epoch and exact audience, RPC and
+protobuf request hash; it never derives an actor from raw identity metadata.
+For this method the protected lifecycle interceptor preserves the signed
+transport metadata without manufacturing `x-voice-*` headers. The public
+disclosure wrapper, membership checks, explicit profile permission/owner cores
+and cursor viewer all use that typed profile. The ordinary listener still
+rejects audit reads, and missing protected transport has no ordinary fallback.
+Other lifecycle methods retain their explicitly unmigrated verified-first
+projection. The current ordinary Space-to-Role decision transport is a separate
+BE-181 residual; this cutover does not claim its S2S authorization or production
+PKI rollout. See the [BE-041 execution plan](../testing/be041-verified-audit-identity-exec-plan.md).
 
 **Invite permissions:** shipped `CreateInvite`, `RevokeInvite` and `ListInvites`
 handlers use the exact `SPACE_MANAGE_INVITES` decision. An unavailable configured
@@ -1556,18 +1575,30 @@ not expand the ownership-proof implementation or reuse its tokens/receipts.
 
 ## P3 Space lifecycle coordinator (accepted target; not implemented)
 
+Full deletion activation must preflight the complete participant capability
+manifest before `SCHEDULE_PENDING` or Auth consume. Voice currently declares
+`EJECT_ONLY`; see [Voice P3](voice-service.md#p3-space-lifecycle-participant-target).
+Its restrictive native barrier/exact drain is local progress, not a completed
+freeze receipt: self-hosted original/refreshed credentials lack durable provider
+retirement proof. Keep Voice outstanding and do not start the seven-day schedule,
+restore LIVE or bypass revocation through purge. A capability downgrade preserves
+already committed restrictive intent and exact retry targets; no compensating
+LIVE or weaker success grade is authorized. A future provider path requires
+operation-bound coverage/retirement proof and qualified current/historical issuer
+coverage; a boolean setting or empty roster does not satisfy this prerequisite.
+
 Space owns the aggregate and durable participant ledger. States are `LIVE`,
 `SCHEDULE_PENDING`, `FREEZE_PENDING`, `SCHEDULED`, `RESTORE_DECIDED`,
 `PURGE_DECIDED`, `PURGING`, `PURGED`; generations are positive and monotonic.
-The release manifest fixes ten participants: Role, Chat, Messaging, File, Voice,
-Matchmaking, Search, Subscription, Bot and Notification. Service absence never
+The release manifest fixes eleven participants: Role, Chat, Messaging, File, Voice,
+Matchmaking, Search, Subscription, Bot, Notification and Realtime. Service absence never
 removes a participant: an empty result still has an immutable receipt.
 
 Before Auth consume Space commits the immutable operation binding and
 `SCHEDULE_PENDING`. After an exact receipt it enters `FREEZE_PENDING`, where
 Chat first fences and captures the immutable sorted chat manifest; Messaging
-imports it; File preliminarily fences and seals exact `SPACE`, `CHAT` and
-`MESSAGING` reference declarations/pages; then all ten participants acknowledge
+imports it; Notification and Realtime import every exact Chat page; File preliminarily fences and seals exact `SPACE`, `CHAT` and
+`MESSAGING` reference declarations/pages; then all eleven participants acknowledge
 the same root manifest. Only after the complete barrier does fresh PostgreSQL
 time under the Space lock set `SCHEDULED`, `scheduled_at` and
 `purge_after = scheduled_at + interval '7 days'`. Subphases and exact manifest
@@ -1580,7 +1611,7 @@ commits irreversible `PURGE_DECIDED`, sends that fence to all participants,
 then retries destructive work. Role retirement is first. Messaging deletes the
 saved Chat domain and obtains File release acceptance; Chat deletes its rows
 only afterward. Other participants may converge in parallel. Local `PURGED`,
-the tombstone and ready `space.deleted` outbox row commit only after all ten
+the tombstone and ready `space.deleted` outbox row commit only after all eleven
 validated completion receipts. File receipt proves durable reference/GC
 handoff, not physical R2 absence.
 
@@ -1596,7 +1627,7 @@ transaction. Concurrent participant responses cannot replace each other's
 progress. Exact receipt replay remains valid after the aggregate advances; a
 changed receipt for an already completed participant conflicts. Restore completion
 uses fresh database time under that same lock and commits `LIVE` with its stable
-`space.restored` outbox row only after the ten-participant barrier. These durable
+`space.restored` outbox row only after the eleven-participant barrier. These durable
 transitions do not themselves authenticate network callers or activate the public
 coordinator. Schedule reservation replay validates the original immutable binding
 and loads saved progress without resetting generation or repeating current-owner
@@ -1666,7 +1697,7 @@ manifest_sha256,item_count)`. Its receipt adds stable `receipt_id`, fixed
 `applied_at`. A purge request replaces desired state with `purge_decided_at`;
 its receipt accepts only `COMPLETED` and records `completed_at`. Participant IDs
 are Role=1, Chat=2, Messaging=3, File=4, Voice=5, Matchmaking=6, Search=7,
-Subscription=8, Bot=9, Notification=10; zero/unknown IDs or states are invalid.
+Subscription=8, Bot=9, Notification=10, Realtime=11; zero/unknown IDs or states are invalid.
 Role returns the stricter retirement receipt. Exact replay returns stored bytes;
 changed bytes for the same operation/generation conflict, timeouts never
 manufacture a receipt, and `CONTRACT_MISMATCH` is never auto-skipped.
@@ -1686,3 +1717,15 @@ is audited, and uses the shared `P30D` maximum restorable-backup window. Old
 versions are destroyed only after no retained row or restorable backup needs
 them. The owner-approved U5-A decision explicitly accepts this purpose-specific
 pseudonymous Space tombstone HMAC as compatible with account erasure.
+
+### Realtime participant11 admission boundary
+
+BE-REALTIME-P3-DURABLE-ADMISSION-v1 adds Realtime without renumbering IDs1–10.
+Migration `000034_realtime_lifecycle_participant` widens the durable participant
+and compact completion constraints and terminal hard-delete predicate to11.
+Ten historical completions cannot schedule, start destructive work or authorize
+local hard deletion. Realtime manifest-import receipts are not strong FROZEN
+receipts: the latter require exact sealed coverage and no unresolved durable
+admissions across process incarnations. Dead-incarnation recovery remains
+unsupported without qualified termination evidence; timeout never skips11.
+This extension neither activates public P3 nor establishes old-writer coverage.

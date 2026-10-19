@@ -82,6 +82,35 @@ name-only резервов остаются заняты текущими пол
 - Исключение: сообщения, которые **буквально отражают JWT** после интроспекции (например `TokenClaims.user_id` в Auth) — имя поля совпадает с именем claim.
 - Адресация уведомлений пользователю в продуктовом API — по **`profile_id`**, если речь не про сырой account-level relay (S2S / внутренние вызовы).
 
+### Общие типы, ссылки и идемпотентность
+
+Entity IDs остаются строковыми UUID; `account_id` и `profile_id` обозначают
+разные домены ([DATA_MODEL.md](DATA_MODEL.md)). Ссылкой владеет API её домена:
+`voice.chat.v1.ChatRef` (`id`, optional `ChatType`) остаётся в Chat и используется
+Messaging для `SendMessage`, `GetMessages`, `MarkRead` и `ForwardMessage`.
+Ссылка и заявленный тип описывают объект; они не дают membership или permission.
+
+В `common.proto` уже есть `ClientIdempotencyKey`, но наличие helper не означает
+активированную реализацию идемпотентности. Формат, namespace, retention и replay
+определяет конкретный RPC. В частности, `SendMessageRequest.client_message_id`
+остаётся optional string (tag 3), с UUID validation и namespace
+`(chat_id, verified sender_profile_id, client_message_id)` в Messaging.
+Одинаковое нормализованное тело возвращает тот же результат, конфликтующее —
+`ALREADY_EXISTS`; точные правила immediate receipts и отдельного scheduled
+lifecycle задаёт [Messaging](microservices/messaging-service.md#идемпотентность-отправки).
+Общий helper не заменяет существующие поля или их JSON/API shape.
+
+Authority берётся из проверенного signed principal/context по
+[Phase-0](ARCHITECTURE_REQUIREMENTS.md#phase-0-межсервисные-и-edge-principals-target-внедряется-по-сервисам),
+а не из raw identity metadata или произвольного actor/account/profile поля тела.
+Такие поля в существующем owner API — данные/проверяемые targets либо явно
+ограниченные delegated inputs. Комментарий о metadata в `common.proto` сам по
+себе не доказывает завершение runtime migration всех сервисов.
+
+Новый общий actor/reference тип вводится только вместе с named enabled consumer,
+owner semantics и планом совместимости. Для текущих Messaging RPC отдельный
+generic actor/ref тип не требуется; `ChatRef` не переносится в common.
+
 ### Время: `google.protobuf.Timestamp` vs Unix в S2S
 
 - **Публичные сервисы за Gateway** и общие типы — **`google.protobuf.Timestamp`** (UTC), как в [protos/voice/common/v1/common.proto](../protos/voice/common/v1/common.proto).

@@ -19,18 +19,7 @@ import (
 	"voice/backend/space/internal/spacecore"
 )
 
-var lifecycleParticipants = [...]commonv1.ParticipantId{
-	commonv1.ParticipantId_PARTICIPANT_ID_ROLE,
-	commonv1.ParticipantId_PARTICIPANT_ID_CHAT,
-	commonv1.ParticipantId_PARTICIPANT_ID_MESSAGING,
-	commonv1.ParticipantId_PARTICIPANT_ID_FILE,
-	commonv1.ParticipantId_PARTICIPANT_ID_VOICE,
-	commonv1.ParticipantId_PARTICIPANT_ID_MATCHMAKING,
-	commonv1.ParticipantId_PARTICIPANT_ID_SEARCH,
-	commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION,
-	commonv1.ParticipantId_PARTICIPANT_ID_BOT,
-	commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION,
-}
+var lifecycleParticipants = spacecore.CanonicalLifecycleParticipants()
 
 var lifecycleParticipantPackages = map[commonv1.ParticipantId]string{
 	commonv1.ParticipantId_PARTICIPANT_ID_ROLE:         "voice.role.v1",
@@ -43,6 +32,7 @@ var lifecycleParticipantPackages = map[commonv1.ParticipantId]string{
 	commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION: "voice.subscription.v1",
 	commonv1.ParticipantId_PARTICIPANT_ID_BOT:          "voice.bot.v1",
 	commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION: "voice.notification.v1",
+	commonv1.ParticipantId_PARTICIPANT_ID_REALTIME:     "voice.realtime.v1",
 }
 
 var (
@@ -934,7 +924,7 @@ func loadLifecycle(ctx context.Context, db spaceStoreDB, spaceID uuid.UUID, forU
 	}
 	if phase == spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_PURGED && (snapshot.RoleReceipt == nil || len(snapshot.PurgeReceipts) != 9) {
 		var compactValid bool
-		if err := db.QueryRow(ctx, `SELECT a.evidence_compacted AND a.local_purge_completed AND EXISTS(SELECT 1 FROM space_deletion_tombstones t WHERE t.space_id=a.space_id) AND (SELECT count(*) FROM space_lifecycle_completions c WHERE c.space_id=a.space_id AND c.deletion_operation_id=a.deletion_operation_id AND c.generation=a.generation)=10 FROM space_lifecycle_aggregates a WHERE a.space_id=$1`, spaceID).Scan(&compactValid); err != nil {
+		if err := db.QueryRow(ctx, `SELECT a.evidence_compacted AND a.local_purge_completed AND EXISTS(SELECT 1 FROM space_deletion_tombstones t WHERE t.space_id=a.space_id) AND (SELECT count(*) FROM space_lifecycle_completions c WHERE c.space_id=a.space_id AND c.deletion_operation_id=a.deletion_operation_id AND c.generation=a.generation)=11 FROM space_lifecycle_aggregates a WHERE a.space_id=$1`, spaceID).Scan(&compactValid); err != nil {
 			return nil, err
 		}
 		if !compactValid {
@@ -1307,7 +1297,7 @@ func toLifecycleHash(value []byte) [sha256.Size]byte {
 	return result
 }
 func lifecycleParticipantValid(value commonv1.ParticipantId) bool {
-	return value >= commonv1.ParticipantId_PARTICIPANT_ID_ROLE && value <= commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION
+	return value >= commonv1.ParticipantId_PARTICIPANT_ID_ROLE && value <= commonv1.ParticipantId_PARTICIPANT_ID_REALTIME
 }
 func lifecycleManifestID(value *commonv1.ManifestBinding) any {
 	if value == nil {

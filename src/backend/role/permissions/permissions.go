@@ -38,6 +38,8 @@ const (
 	TextChatSendInThreads     = "TEXT_CHAT_SEND_IN_THREADS"
 	TextChatManageThreads     = "TEXT_CHAT_MANAGE_THREADS"
 	TextChatSetSlowMode       = "TEXT_CHAT_SET_SLOW_MODE"
+	TextChatPostAsChat        = "TEXT_CHAT_POST_AS_CHAT"
+	TextChatAddMembers        = "TEXT_CHAT_ADD_MEMBERS"
 
 	ModerationTimeoutMembers = "MODERATION_TIMEOUT_MEMBERS"
 	ModerationManageReports  = "MODERATION_MANAGE_REPORTS"
@@ -111,6 +113,8 @@ var permissionBits = map[string]uint64{
 	VoicePrioritySpeaker:      1 << 40,
 	ModerationManageReports:   1 << 41,
 	SpaceApproveJoinRequests:  1 << 42,
+	TextChatPostAsChat:        1 << 43,
+	TextChatAddMembers:        1 << 44,
 }
 
 // MaskFor returns the bitmask bit for a permission name.
@@ -191,7 +195,7 @@ func memberDefaultMask() (uint64, error) {
 		TextChatSendMedia, TextChatEmbedLinks, TextChatAttachFiles, TextChatAddReactions,
 		TextChatUseExternalEmojis, TextChatReadHistory,
 		TextChatCreateInSpace, VoiceJoin, VoiceSpeak, VoiceVideo, VoiceScreenShare, VoiceUsePTT,
-		TextChatCreateThreads, TextChatSendInThreads,
+		TextChatCreateThreads, TextChatSendInThreads, TextChatAddMembers,
 	}
 	var mask uint64
 	for _, p := range parts {

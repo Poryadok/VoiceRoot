@@ -26,6 +26,7 @@ const (
 	UserService_ResolvePrimaryProfileIDs_FullMethodName            = "/voice.user.v1.UserService/ResolvePrimaryProfileIDs"
 	UserService_MarkAccountRegular_FullMethodName                  = "/voice.user.v1.UserService/MarkAccountRegular"
 	UserService_GetSdkProfileEligibility_FullMethodName            = "/voice.user.v1.UserService/GetSdkProfileEligibility"
+	UserService_GetSpaceAdmissionProfileEligibility_FullMethodName = "/voice.user.v1.UserService/GetSpaceAdmissionProfileEligibility"
 	UserService_RecordSdkAuthorTombstone_FullMethodName            = "/voice.user.v1.UserService/RecordSdkAuthorTombstone"
 	UserService_GetProfile_FullMethodName                          = "/voice.user.v1.UserService/GetProfile"
 	UserService_GetProfiles_FullMethodName                         = "/voice.user.v1.UserService/GetProfiles"
@@ -84,6 +85,9 @@ type UserServiceClient interface {
 	MarkAccountRegular(ctx context.Context, in *MarkAccountRegularRequest, opts ...grpc.CallOption) (*MarkAccountRegularResponse, error)
 	// Auth-only protected listener: exact read-only SDK target profile snapshot.
 	GetSdkProfileEligibility(ctx context.Context, in *GetSdkProfileEligibilityRequest, opts ...grpc.CallOption) (*GetSdkProfileEligibilityResponse, error)
+	// @voice.security=protected;callers=service:auth
+	// Dedicated admission listener only; no SDK consent or target conversion authority.
+	GetSpaceAdmissionProfileEligibility(ctx context.Context, in *GetSpaceAdmissionProfileEligibilityRequest, opts ...grpc.CallOption) (*GetSpaceAdmissionProfileEligibilityResponse, error)
 	// Auth-only protected listener: immutable historical SDK actor tombstone receipt.
 	RecordSdkAuthorTombstone(ctx context.Context, in *RecordSdkAuthorTombstoneRequest, opts ...grpc.CallOption) (*RecordSdkAuthorTombstoneResponse, error)
 	GetProfile(ctx context.Context, in *GetProfileRequest, opts ...grpc.CallOption) (*GetProfileResponse, error)
@@ -203,6 +207,16 @@ func (c *userServiceClient) GetSdkProfileEligibility(ctx context.Context, in *Ge
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetSdkProfileEligibilityResponse)
 	err := c.cc.Invoke(ctx, UserService_GetSdkProfileEligibility_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) GetSpaceAdmissionProfileEligibility(ctx context.Context, in *GetSpaceAdmissionProfileEligibilityRequest, opts ...grpc.CallOption) (*GetSpaceAdmissionProfileEligibilityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSpaceAdmissionProfileEligibilityResponse)
+	err := c.cc.Invoke(ctx, UserService_GetSpaceAdmissionProfileEligibility_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -553,6 +567,9 @@ type UserServiceServer interface {
 	MarkAccountRegular(context.Context, *MarkAccountRegularRequest) (*MarkAccountRegularResponse, error)
 	// Auth-only protected listener: exact read-only SDK target profile snapshot.
 	GetSdkProfileEligibility(context.Context, *GetSdkProfileEligibilityRequest) (*GetSdkProfileEligibilityResponse, error)
+	// @voice.security=protected;callers=service:auth
+	// Dedicated admission listener only; no SDK consent or target conversion authority.
+	GetSpaceAdmissionProfileEligibility(context.Context, *GetSpaceAdmissionProfileEligibilityRequest) (*GetSpaceAdmissionProfileEligibilityResponse, error)
 	// Auth-only protected listener: immutable historical SDK actor tombstone receipt.
 	RecordSdkAuthorTombstone(context.Context, *RecordSdkAuthorTombstoneRequest) (*RecordSdkAuthorTombstoneResponse, error)
 	GetProfile(context.Context, *GetProfileRequest) (*GetProfileResponse, error)
@@ -628,6 +645,9 @@ func (UnimplementedUserServiceServer) MarkAccountRegular(context.Context, *MarkA
 }
 func (UnimplementedUserServiceServer) GetSdkProfileEligibility(context.Context, *GetSdkProfileEligibilityRequest) (*GetSdkProfileEligibilityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetSdkProfileEligibility not implemented")
+}
+func (UnimplementedUserServiceServer) GetSpaceAdmissionProfileEligibility(context.Context, *GetSpaceAdmissionProfileEligibilityRequest) (*GetSpaceAdmissionProfileEligibilityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSpaceAdmissionProfileEligibility not implemented")
 }
 func (UnimplementedUserServiceServer) RecordSdkAuthorTombstone(context.Context, *RecordSdkAuthorTombstoneRequest) (*RecordSdkAuthorTombstoneResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RecordSdkAuthorTombstone not implemented")
@@ -868,6 +888,24 @@ func _UserService_GetSdkProfileEligibility_Handler(srv interface{}, ctx context.
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(UserServiceServer).GetSdkProfileEligibility(ctx, req.(*GetSdkProfileEligibilityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_GetSpaceAdmissionProfileEligibility_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSpaceAdmissionProfileEligibilityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).GetSpaceAdmissionProfileEligibility(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_GetSpaceAdmissionProfileEligibility_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).GetSpaceAdmissionProfileEligibility(ctx, req.(*GetSpaceAdmissionProfileEligibilityRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1482,6 +1520,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSdkProfileEligibility",
 			Handler:    _UserService_GetSdkProfileEligibility_Handler,
+		},
+		{
+			MethodName: "GetSpaceAdmissionProfileEligibility",
+			Handler:    _UserService_GetSpaceAdmissionProfileEligibility_Handler,
 		},
 		{
 			MethodName: "RecordSdkAuthorTombstone",

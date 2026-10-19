@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -121,7 +120,7 @@ func main() {
 		if !lifecycleEnabled || lifecyclePool == nil {
 			log.Fatal("Voice Space lifecycle principal requires VOICE_DATABASE_URL")
 		}
-		spaceLifecycleStore = spacelifecycle.NewPostgresStore(lifecyclePool)
+		spaceLifecycleStore = spacelifecycle.NewPostgresStore(lifecyclePool, spacemedia.BeginPartyRoomClose)
 		if err := spaceLifecycleStore.CheckSchema(runCtx); err != nil {
 			log.Fatalf("voice Space lifecycle database schema: %v", err)
 		}
@@ -576,63 +575,52 @@ func main() {
 	if federatedMedia != nil {
 		voiceSvc.FederatedMedia = federatedMedia
 	}
-	if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
-		if sessionEpochChecker == nil {
-			log.Fatal("Space media admission requires the current Auth session-floor checker")
-		}
-		if !callStoreDurable {
-			log.Fatal("Space media invalidation requires the durable Voice Redis call store")
-		}
-		if err := voiceSvc.SpaceMediaAdmissions.CheckSchema(runCtx); err != nil {
-			log.Fatalf("Space media PostgreSQL admission schema: %v", err)
-		}
-		if voiceRoomAccessResolver == nil || voiceRoomGrantResolver == nil {
-			log.Fatal("Space media invalidation requires Space and Role authority resolvers")
-		}
-		mediaLifecycle := livekit.NewSDKRoomLifecycle(
-			strings.TrimSpace(os.Getenv("LIVEKIT_URL")),
-			strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")),
-			strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET")),
-		)
-		spaceMediaServing := &atomic.Bool{}
-		voiceSvc.SpaceMediaServing = spaceMediaServing
-		spaceMediaCoordinator := &spacemedia.Coordinator{
-			Store: callStore, Calls: callStore, Admissions: spaceMediaAdmissions,
-			SessionEpochChecker: sessionEpochChecker,
-			Access:              voiceRoomAccessResolver, Grants: voiceRoomGrantResolver, Media: mediaLifecycle,
-			Every: spacemedia.ReconcileInterval,
-			OnError: func(err error) {
-				logger.Warn("Space media authority reconciliation failed", slog.String("error", err.Error()))
-			},
-			OnReadiness: spaceMediaServing.Store,
-		}
-		voiceSvc.SpaceMediaRevoker = spaceMediaCoordinator
-		invalidationConsumer, err := spacemedia.StartInvalidationConsumer(runCtx, natsURL, spaceMediaCoordinator, logger)
+	var mediaSessionEpochChecker spacemedia.SessionEpochChecker
+	if sessionEpochChecker != nil {
+		mediaSessionEpochChecker = sessionEpochChecker
+	}
+	// This legacy/pre-cut root serves its real public signing keys before
+	// recovery calls Space with a signed principal and a cold verifier cache.
+	// The additive native executable retains its separate protected startup gate.
+	var principalJWKSPublisher *principaljwks.Publisher
+	if principalJWKSEnabled {
+		principalJWKSPublisher, err = principaljwks.Start(principalJWKSConfig, func(handler http.Handler) http.Handler {
+			return httpserver.Wrap(handler, logger)
+		})
 		if err != nil {
-			log.Fatalf("Space media invalidation consumer startup: %v", err)
+			log.Fatalf("voice principal JWKS startup: %v", err)
 		}
-		defer func() { _ = invalidationConsumer.Close() }()
-		if err := spaceMediaCoordinator.ReconcileAll(runCtx); err != nil {
-			log.Fatalf("Space media initial reconciliation: %v", err)
-		}
-		admissionPublisher, ok := events.(spacemedia.AdmissionOutboxPublisher)
-		if !ok {
-			log.Fatal("Space media durable event publisher is not configured")
-		}
-		admissionRelay := &spacemedia.AdmissionOutboxRelay{
-			Store: spaceMediaAdmissions, Publisher: admissionPublisher,
-			OnError: func(err error) {
-				logger.Warn("Space media admission outbox delivery failed", slog.String("error", err.Error()))
-			},
-		}
+		defer func() { _ = principalJWKSPublisher.Close() }()
+		logger.Info("principal JWKS TLS listener started", slog.String("addr", principalJWKSPublisher.Addr().String()))
 		go func() {
-			if err := admissionRelay.Run(runCtx); err != nil && runCtx.Err() == nil {
-				logger.Error("Space media admission outbox relay stopped", slog.String("error", err.Error()))
+			if serveErr := <-principalJWKSPublisher.Errors(); serveErr != nil && serveErr != http.ErrServerClosed {
+				runCancel()
+				log.Fatalf("voice principal JWKS serve: %v", serveErr)
 			}
 		}()
+	}
+	closeSpaceMediaRuntime := startSpaceMediaRuntime(runCtx, voiceSvc, lifecyclePool,
+		mediaSessionEpochChecker, callStoreDurable, strings.TrimSpace(os.Getenv("NATS_URL")),
+		livekit.NewSDKRoomLifecycle(strings.TrimSpace(os.Getenv("LIVEKIT_URL")),
+			strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")), strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET"))), logger)
+	defer func() { _ = closeSpaceMediaRuntime() }()
+	// Publish P3 recovery only after every optional consumer has final bindings.
+	if configured, ok := spaceLifecycleController.(*spacelifecycle.Service); ok {
+		service := configured.RecoverySnapshot()
 		go func() {
-			if err := spaceMediaCoordinator.Run(runCtx); err != nil && runCtx.Err() == nil {
-				logger.Error("Space media authority reconciler stopped", slog.String("error", err.Error()))
+			ticker := time.NewTicker(spacemedia.ReconcileInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-runCtx.Done():
+					return
+				case <-ticker.C:
+					ctx, cancel := context.WithTimeout(runCtx, 4*time.Second)
+					if err := service.ResumePending(ctx); err != nil {
+						logger.Warn("P3 exact drain pending", slog.String("error", err.Error()))
+					}
+					cancel()
+				}
 			}
 		}()
 	}
@@ -692,26 +680,11 @@ func main() {
 		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName, lifecycleReadiness), metricsReg), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
-	var principalJWKSServer *http.Server
-	if principalJWKSEnabled {
-		mux := http.NewServeMux()
-		mux.Handle("/internal/v1/principal/jwks.json", principal.JWKSHandlerKeys([]principal.JWKSKey{
-			{KeyID: principalJWKSConfig.KeyID, PublicKey: &principalJWKSConfig.SigningKey.PublicKey},
-			{KeyID: principalJWKSConfig.NextKeyID, PublicKey: &principalJWKSConfig.NextSigningKey.PublicKey},
-		}))
-		principalJWKSServer = &http.Server{Addr: principalJWKSConfig.ListenAddr, Handler: httpserver.Wrap(mux, logger), ReadHeaderTimeout: 5 * time.Second}
-	}
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 1)
 	logger.Info("listening", slog.String("addr", addr))
 	go func() {
 		errCh <- server.ListenAndServe()
 	}()
-	if principalJWKSServer != nil {
-		go func() {
-			logger.Info("principal JWKS TLS listener started", slog.String("addr", principalJWKSServer.Addr))
-			errCh <- principalJWKSServer.ListenAndServeTLS(principalJWKSConfig.TLSCert, principalJWKSConfig.TLSKey)
-		}()
-	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -728,8 +701,8 @@ func main() {
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)
 		}
-		if principalJWKSServer != nil {
-			if err := principalJWKSServer.Shutdown(ctx); err != nil {
+		if principalJWKSPublisher != nil {
+			if err := principalJWKSPublisher.Shutdown(ctx); err != nil {
 				log.Fatal(err)
 			}
 		}

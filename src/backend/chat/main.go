@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -88,6 +89,10 @@ func main() {
 		log.Fatalf("Space lifecycle principal configuration: %v", spaceLifecycleConfigErr)
 	}
 	spacePurgeOwners := spacePurgeOwnerConfigFromEnv(os.Getenv)
+	realtimeLifecycleConfig, realtimeLifecycleListen, realtimeLifecycleConfigured, realtimeLifecycleConfigErr := gisprincipal.RealtimeLifecycleConfigFromEnv()
+	if realtimeLifecycleConfigErr != nil {
+		log.Fatalf("Realtime lifecycle principal configuration: %v", realtimeLifecycleConfigErr)
+	}
 	searchManifestConfig, searchManifestListen, searchManifestConfigured, searchManifestConfigErr := gisprincipal.SearchManifestConfigFromEnv()
 	if searchManifestConfigErr != nil {
 		log.Fatalf("Search manifest principal configuration: %v", searchManifestConfigErr)
@@ -109,12 +114,21 @@ func main() {
 	}
 
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	scopeAuthorityConfigs, scopeAuthorityErr := loadChatScopeAuthorityConfigs()
+	if scopeAuthorityErr != nil {
+		log.Fatalf("Chat scope authority config: %v", scopeAuthorityErr)
+	}
+	if len(scopeAuthorityConfigs) > 0 && dbURL == "" {
+		log.Fatal("Chat scope authority requires DATABASE_URL")
+	}
 	var grpcSrv *grpc.Server
 	var gisGRPCSrv *grpc.Server
 	var gisPrincipalRuntime *gisprincipal.Runtime
 	var spaceLifecycleGRPCSrv *grpc.Server
 	var spaceLifecyclePrincipalRuntime *gisprincipal.Runtime
 	var searchManifestGRPCSrv *grpc.Server
+	var realtimeLifecycleGRPCSrv *grpc.Server
+	var realtimeLifecycleReady func(context.Context) error
 	var matchSquadGRPCSrv *grpc.Server
 	var matchSquadPrincipalRuntime *matchsquadprincipal.Runtime
 	var accountDeletedConsumerDone <-chan error
@@ -129,6 +143,11 @@ func main() {
 			log.Fatalf("postgres: %v", err)
 		}
 		defer pool.Close()
+		scopeAuthorityCleanup, scopeErr := startChatScopeAuthorityListeners(runCtx, pool, scopeAuthorityConfigs)
+		if scopeErr != nil {
+			log.Fatalf("Chat scope authority listener: %v", scopeErr)
+		}
+		defer scopeAuthorityCleanup()
 		if targetEnabled {
 			runtime, err := roleoverrideprincipal.New(runCtx, targetConfig)
 			if err != nil {
@@ -399,6 +418,42 @@ func main() {
 				}
 			}()
 		}
+		if realtimeLifecycleConfigured {
+			const schemaCheck = `SELECT id,space_id FROM chats LIMIT 0; SELECT generation,state,deletion_operation_id FROM chat_space_lifecycle_fences LIMIT 0`
+			if _, err := pool.Exec(runCtx, schemaCheck); err != nil {
+				log.Fatalf("Realtime lifecycle native schema: %v", err)
+			}
+			runtime, runtimeErr := gisprincipal.New(runCtx, realtimeLifecycleConfig)
+			if runtimeErr != nil {
+				log.Fatalf("Realtime lifecycle principal runtime: %v", runtimeErr)
+			}
+			defer func() { _ = runtime.Close() }()
+			listener, listenErr := net.Listen("tcp", realtimeLifecycleListen)
+			if listenErr != nil {
+				log.Fatalf("Realtime lifecycle listen: %v", listenErr)
+			}
+			realtimeLifecycleGRPCSrv = grpc.NewServer(runtime.ServerOptions()...)
+			var serving atomic.Bool
+			serving.Store(true)
+			realtimeLifecycleReady = func(ctx context.Context) error {
+				if !serving.Load() {
+					return errors.New("Realtime lifecycle listener unavailable")
+				}
+				if err := runtime.Ready(ctx); err != nil {
+					return err
+				}
+				_, err := pool.Exec(ctx, schemaCheck)
+				return err
+			}
+			chatv1.RegisterChatRealtimeLifecycleServiceServer(realtimeLifecycleGRPCSrv, &grpcsvc.RealtimeLifecycleGRPC{Store: &store.SpaceLifecycleStore{Pool: pool}})
+			go func() {
+				logger.Info("Realtime lifecycle mTLS gRPC listening", slog.String("addr", realtimeLifecycleListen))
+				defer serving.Store(false)
+				if err := realtimeLifecycleGRPCSrv.Serve(listener); err != nil {
+					log.Fatalf("Realtime lifecycle serve: %v", err)
+				}
+			}()
+		}
 		if matchSquadPrincipalConfigured {
 			matchSquadPrincipalRuntime, err = matchsquadprincipal.New(runCtx, matchSquadPrincipalConfig)
 			if err != nil {
@@ -454,7 +509,7 @@ func main() {
 			}
 		}()
 	} else {
-		if gisPrincipalConfigured || spaceLifecycleConfigured || searchManifestConfigured || matchSquadPrincipalConfigured {
+		if gisPrincipalConfigured || spaceLifecycleConfigured || searchManifestConfigured || matchSquadPrincipalConfigured || realtimeLifecycleConfigured {
 			log.Fatal("protected principal listeners require DATABASE_URL")
 		}
 		logger.Warn("DATABASE_URL not set; gRPC disabled (health only)")
@@ -462,7 +517,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:    httpAddr,
-		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
+		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandlerWithRealtime(serviceName, realtimeLifecycleReady), metricsReg), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 2)
@@ -520,6 +575,9 @@ func main() {
 	waitForChatDeletedOutboxShutdown(ctx, chatDeletedOutboxDone, logger)
 	waitForAccountDeletedConsumerShutdown(ctx, accountDeletedConsumerDone, logger)
 	if shutdownServer {
+		if realtimeLifecycleGRPCSrv != nil {
+			realtimeLifecycleGRPCSrv.GracefulStop()
+		}
 		if matchSquadGRPCSrv != nil {
 			matchSquadGRPCSrv.GracefulStop()
 		}
