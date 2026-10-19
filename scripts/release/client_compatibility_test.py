@@ -91,6 +91,28 @@ class CompatibilityTests(unittest.TestCase):
             with self.subTest(mutate=mutate), self.assertRaises(ValueError):
                 gate.compile_suite(source)
 
+    def test_client_versions_follow_semver_prerelease_and_build_identifier_rules(self):
+        accepted = ("0.0.0", "1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-0",
+                    "1.0.0-01alpha", "1.0.0+001", "1.0.0+build.42",
+                    "1.1.0-rc.1+build.42", "1.0.0-x-y-z.--+build-1.00")
+        rejected = ("1.0.0-01", "1.0.0-..", "1.0.0-alpha.01", "1.0.0-",
+                    "1.0.0-alpha..1", "1.0.0-.alpha", "1.0.0-alpha.",
+                    "1.0.0+", "1.0.0+build..42", "1.0.0+build.", "1.0.0+.build",
+                    "1.0.0+build+42", "1.0.0-alpha_beta", "01.0.0", "1.00.0",
+                    "1.0.01", "1.0", "v1.0.0", "1.0.0\n", "1.0.0-١")
+        for platform in ("windows", "web"):
+            for label in ("previous", "current"):
+                for version in accepted:
+                    source = candidate()
+                    source["clients"][platform][label]["version"] = version
+                    with self.subTest(platform=platform, label=label, version=version):
+                        self.assertEqual(len(gate.compile_suite(source)["cases"]), 22)
+                for version in rejected:
+                    source = candidate()
+                    source["clients"][platform][label]["version"] = version
+                    with self.subTest(platform=platform, label=label, version=version), self.assertRaises(ValueError):
+                        gate.compile_suite(source)
+
     def test_every_case_requires_fresh_portable_content_bound_pass(self):
         source = candidate()
         self.assertEqual(gate.verify_results(source, report(source))["scope"], "offline evidence completeness only")
