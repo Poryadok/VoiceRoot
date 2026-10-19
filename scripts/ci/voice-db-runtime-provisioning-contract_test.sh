@@ -705,13 +705,22 @@ f13_checkpoint_merge_tree_entry_matches() {
   local repo="$1" expected_base="$2" first_parent="$3" source_head="$4"
   local path="$5" result_entry="$6" bases_file output_file status tree_oid expected_entry output_fd
   local conflict_path guarded_conflict=false
-  local exact_merge="${7:-}" exact_capability="${8:-}" exact_observer="${9:-}" exact_receipt
+  local exact_merge="${7:-}" exact_capability="${8:-}" exact_observer="${9:-}" exact_receipt exact_3071_capability="${10:-}"
   bases_file="${TMP_DIR}/f13-checkpoint-merge-bases"
   output_file="${TMP_DIR}/f13-checkpoint-merge-tree"
   git -C "${repo}" merge-base --all "${first_parent}" "${source_head}" \
     >"${bases_file}" 2>/dev/null || return 1
   if [[ "$(wc -l <"${bases_file}" | tr -d '[:space:]')" != 1 ||
     "$(<"${bases_file}")" != "${expected_base}" ]]; then
+    if [[ -n "${exact_3071_capability}" && "${exact_merge}" == 3071ddad390443de4119c796cdad9899ff08f7fd &&
+      "${exact_observer}" == "${repo}/scripts/ci/f13_f54_history.py" ]] &&
+      exact_receipt="$(python3 "${exact_observer}" 3071-composition "${repo}" "${exact_3071_capability}" \
+        "${exact_merge}" "${expected_base}" "${first_parent}" "${source_head}" "${path}" "${result_entry}")"; then
+      # A per-path result references the separate reviewed whole composition.
+      # Its receipt retains actual Git CONFLICT/EXIT1 and every conflict path.
+      f13_f54_trace_event composition_3071_capability "${repo}" "${exact_receipt}" || return 1
+      return 0
+    fi
     if [[ -n "${exact_merge}" && -n "${exact_capability}" &&
       "${exact_observer}" == "${repo}/scripts/ci/f13_f54_history.py" ]] &&
       exact_receipt="$(python3 "${exact_observer}" cap-composition "${repo}" "${exact_capability}" \
@@ -3275,6 +3284,7 @@ f13_f54_collect_exact_unit() {
 f13_f54_collect_exact_master_unit() {
   local repo="$1" base="$2" target="$3" output="$4" category="$5" unit="$6"
   local f13_f54_original_trace="$7" f13_f54_original_native="$8" f13_f54_current_native="$9"
+  local fixed3071_unit="${10:-}" f13_f54_3071_capability_file=''
   local f13_f54_capability_file="${TMP_DIR}/f54-exact-source-capabilities.json"
   local f13_f54_M_operation='' f13_f54_M_child_map="${TMP_DIR}/f54-actual-M-child-map"
   local f13_f54_M_span_trace="${TMP_DIR}/f54-actual-M-span.jsonl" f13_f54_M_span_map="${TMP_DIR}/f54-actual-M-span-map"
@@ -3287,6 +3297,12 @@ f13_f54_collect_exact_master_unit() {
   # only supplies finite M evidence to its genuine nested H53 source frame.
   python3 "${f13_f54_observer}" capabilities "${repo}" "${unit}" >"${f13_f54_capability_file}" || return 1
   python3 "${f13_f54_observer}" master-entry "${repo}" "${f13_f54_capability_file}" "${native_p3_binding}" >"${entry}" || return 1
+  if [[ -n "${fixed3071_unit}" ]]; then
+    f13_f54_3071_capability_file="${TMP_DIR}/fixed3071-structural-capabilities.json"
+    [[ ! -e "${f13_f54_3071_capability_file}" ]] || return 1
+    python3 "${f13_f54_observer}" 3071-capabilities "${repo}" "${fixed3071_unit}" \
+      "${native_p3_binding}" >"${f13_f54_3071_capability_file}" || return 1
+  fi
   f13_f54_trace_event master_entry "${repo}" "${entry}" || return 1
   case "${GITHUB_EVENT_NAME:-}:${GITHUB_REF:-}" in
     pull_request:refs/pull/*/merge)
@@ -3360,6 +3376,18 @@ f13_f54_execute_M_history() {
     "${TMP_DIR}/f54-actual-M-span-category"
 }
 
+f13_f54_execute_3071_history() {
+  local repo="$1" merge="$2" first="$3" source="$4" output="$5" receipt="$6" boundary
+  [[ -n "${f13_f54_3071_capability_file:-}" && -s "${receipt}" ]] || return 1
+  boundary="$(python3 "${f13_f54_observer}" 3071-boundary "${repo}" "${f13_f54_3071_capability_file}" "${merge}" "${first}" "${source}")" || return 1
+  boundary="$(python3 -c 'import json,sys;print(json.loads(sys.argv[1])["history_boundary"])' "${boundary}")" || return 1
+  f13_f54_trace_event boundary_3071_observation "${repo}" "${output}" "${boundary}" || return 1
+  # This genuine child adds evidence; it never supplies replacement outer owners.
+  # Original failure propagates unchanged. No M supersession is extended here.
+  f13_collect_develop_contributions "${repo}" "${boundary}" "${source}" \
+    "${TMP_DIR}/fixed3071-child-map" "${TMP_DIR}/fixed3071-child-category" true true
+}
+
 f13_f54_consume_M_before_mutation() {
   local repo="$1" path="$2" output="$3" incoming="$4" category="$5" transition="$6" receipt
   [[ -n "${f13_f54_M_operation:-}" && "${f13_f54_operation}" == "${f13_f54_M_operation}" ]] || return 0
@@ -3399,7 +3427,7 @@ f13_f54_prepare_M_ledger() {
 
 f13_resolve_source_base() {
   local repo="$1" first_parent="$2" source_head="$3" output_file="$4"
-  local exact_merge="${5:-}" exact_capability="${6:-}" exact_observer="${7:-}" exact_receipt
+  local exact_merge="${5:-}" exact_capability="${6:-}" exact_observer="${7:-}" exact_receipt exact_3071_capability="${8:-}"
   local bases canonical base path first_entry entry first_entry_set
   local paths="${TMP_DIR}/f13-ambiguous-base-paths-${first_parent}-${source_head}"
   bases="$(git -C "${repo}" merge-base --all "${first_parent}" "${source_head}" 2>/dev/null)" || return 1
@@ -3407,6 +3435,17 @@ f13_resolve_source_base() {
   if [[ "$(wc -l <<<"${bases}" | tr -d '[:space:]')" == 1 ]]; then
     canonical="${bases}"
   else
+    if [[ -n "${exact_3071_capability}" && "${exact_merge}" == 3071ddad390443de4119c796cdad9899ff08f7fd &&
+      "${exact_observer}" == "${repo}/scripts/ci/f13_f54_history.py" ]] &&
+      exact_receipt="$(python3 "${exact_observer}" 3071-boundary "${repo}" "${exact_3071_capability}" \
+        "${exact_merge}" "${first_parent}" "${source_head}")"; then
+      canonical="$(python3 -c 'import json,sys;print(json.loads(sys.argv[1])["history_boundary"])' "${exact_receipt}")" || return 1
+      printf '%s\n' "${canonical}" >"${output_file}" || return 1
+      printf '%s\n' "${bases}" >"${output_file}.candidates" || return 1
+      printf '%s\n' "${exact_receipt}" >"${output_file}.3071-capability" || return 1
+      f13_f54_trace_event history_3071_capability "${repo}" "${exact_3071_capability}" "${exact_receipt}" || return 1
+      return 0
+    fi
     if [[ -n "${exact_merge}" && -n "${exact_capability}" &&
       "${exact_observer}" == "${repo}/scripts/ci/f13_f54_history.py" ]] &&
       exact_receipt="$(python3 "${exact_observer}" cap-boundary "${repo}" "${exact_capability}" \
@@ -3890,7 +3929,7 @@ f13_collect_develop_contributions() {
       fi
       source_base_file="${TMP_DIR}/f13-source-base-${contribution_id}"
       f13_resolve_source_base "${repo}" "${first_parent}" "${source_head}" "${source_base_file}" \
-        "${commit}" "${f13_f54_capability_file:-}" "${f13_f54_observer:-}" || {
+        "${commit}" "${f13_f54_capability_file:-}" "${f13_f54_observer:-}" "${f13_f54_3071_capability_file:-}" || {
         if [[ -n "${f13_f54_trace_file:-}" ]]; then
           f13_f54_observe_child "${repo}" "${commit}" "${first_parent}" "${source_head}" "${output}" || return 1
         fi
@@ -3926,6 +3965,13 @@ f13_collect_develop_contributions() {
     fi
     if [[ "${is_direct}" != true && -n "${f13_f54_capability_file:-}" && -s "${source_base_file:-}.capability" ]]; then
       f13_f54_execute_M_history "${repo}" "${commit}" "${first_parent}" "${source_head}" "${output}" "${source_base_file}.capability" || return 1
+    fi
+    if [[ "${is_direct}" != true && -n "${f13_f54_3071_capability_file:-}" && -s "${source_base_file:-}.3071-capability" ]]; then
+      f13_f54_execute_3071_history "${repo}" "${commit}" "${first_parent}" "${source_head}" "${output}" "${source_base_file}.3071-capability" || return 1
+      # A successful child alone is not a complete before-mutation ledger.
+      # Until that constructor is actually observed, this author stage fails closed.
+      f13_collect_failure "${diagnostic_file}" fixed3071_complete_ledger_pending
+      return 1
     fi
 
     game_snapshot_contribution_allowed=false
@@ -3971,7 +4017,7 @@ f13_collect_develop_contributions() {
           { [[ "${native_p3_active:-false}" == true ]] && native_p3_path_bound "${repo}" "${path}"; }; then
           if f13_checkpoint_merge_tree_entry_matches "${repo}" "${source_base}" \
             "${first_parent}" "${source_head}" "${path}" "${result_entry}" \
-            "${commit}" "${f13_f54_capability_file:-}" "${f13_f54_observer:-}"; then
+            "${commit}" "${f13_f54_capability_file:-}" "${f13_f54_observer:-}" "${f13_f54_3071_capability_file:-}"; then
             checkpoint_merge_outcomes["${path}"]=clean
           else
             merge_tree_status=$?
@@ -3999,7 +4045,7 @@ f13_collect_develop_contributions() {
             # clean disjoint edits. Conflicts/manual resolutions still refuse.
             if f13_checkpoint_merge_tree_entry_matches "${repo}" "${source_base}" \
               "${first_parent}" "${source_head}" "${path}" "${result_entry}" \
-              "${commit}" "${f13_f54_capability_file:-}" "${f13_f54_observer:-}"; then
+              "${commit}" "${f13_f54_capability_file:-}" "${f13_f54_observer:-}" "${f13_f54_3071_capability_file:-}"; then
               ordinary_merge_entries["${path}"]="${result_entry}"
             else
               merge_tree_status=$?

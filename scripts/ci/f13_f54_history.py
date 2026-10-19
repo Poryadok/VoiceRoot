@@ -35,6 +35,24 @@ SPAN_NODES = ['4f5b30c27cb288b249ef5e517c79c1d766f4e6e1',SPAN_HEAD]
 ORIGINAL_TRACE_SHA = 'e2d4184b796496e5d98448c146636b779024a6315f65bc055262c1e029a18c25'
 ORIGINAL_PRODUCER_SHA = 'b09dfe5eee5cca0d760c833b8fe32f7547563558f83d235d4fa27bd899ddd7d8'
 ORIGINAL_NATIVE_SHA = '0f6b40dce786a964dd8616e12cdbf51c9c9fb2c4b255e147c9df142a53d3c294'
+J3071 = '3071ddad390443de4119c796cdad9899ff08f7fd'
+J3071_P1 = 'a45862ca7e2e885ae4e36afc758c9e9fe39ca86c'
+J3071_P2 = '140f6612e2f9df22aa9ac0c60744d5d41fe7fbcd'
+J3071_BASES = ['68927e5912ebc218050fcc9daf4b76cf4a9e3c86','e020da4b4edcded41bde9785615262beb1946ad2']
+J3071_O = '7bd7dfba7e8f85bc0572617c6ef3af4a15e59172'
+J3071_TREE = '9b60a7639f0108c61da3c7808d05e7ea1421faaa'
+J3071_PACKET_SHA = 'ef81722052fe9e969a1dbf7a9a0222928500b79f11fdf9f95eb7c2eaadf3d306'
+J3071_RULING_SHA = '5862f23d87e008b6a996a395bae28bc2ee6286cd512e827cb9099fdaedf7ec16'
+J3071_PROTOTYPE_BASE = '3411f205844642954394a494b612e7b17b73f935'
+J3071_MANUAL_REVIEW_SHA = 'd5da0faab44ab7b76f319fe23e316c57ffc4fed06d2817cb587e1b4e4517214d'
+J3071_MANUAL_PACKET_SHA = '0b1d6efdf6441ca3bece84d968d72ab464f4dba378aecbfcd370813ee3e5148f'
+J3071_AUTO_TREE = '73eb0ec068685e8f69ea1c119c4bc4754e2ff932'
+J3071_DOC = 'docs/DEPLOYMENT.md'
+J3071_DOC_OIDS = dict(O='d66b3db53db02d2df5d548ff1cca47cfb3dd80f1',bestA='d66b3db53db02d2df5d548ff1cca47cfb3dd80f1',bestB='d66b3db53db02d2df5d548ff1cca47cfb3dd80f1',
+    P1='173f87eec759f2b7228454fd8c21ed3efef4591f',P2='90b7060f52156e96e0cf4f01da0534c3b1ff336d',AUTO='ffb31b64dc889a616a90be7073fbe2cdca444cc4',J='64b197ec4e2d811fa5516ad17aa1c6523262331c')
+J3071_DOC_HASHES = dict(O='e035fe905332326f2482735af309c6d21df9a6e3606d490baf3c68283eac41ac',bestA='e035fe905332326f2482735af309c6d21df9a6e3606d490baf3c68283eac41ac',bestB='e035fe905332326f2482735af309c6d21df9a6e3606d490baf3c68283eac41ac',
+    P1='34e842635d5d743d14576cdde8fd6e9ef791527d77a1b9b8af59de255e0fc564',P2='a4c2cc6316c3b046fe03bfebcb2c9478c7d3b3dc14dca1d191756dfcedf903a7',AUTO='7d7b20429c07361d058551f4d0e1a77ff090d62fce778e3660c5116e418cd890',J='342b0f63411e327250676c20e2853455701ce3787656cdfa6e40b2394b986b53')
+J3071_INSERTIONS = [(39,2844,'4dd4d04a9699ea1ffd28b7b8e3ca471784941bcbe68c444c31ee7152f67c9793'),(39,626,'285dad0f5994b4acb2b044beff212cbc1f445f91d7c96ba41526346aa540b212')]
 UNIT_HASHES = {
     'corrected-contract-v3-PROPOSAL.json':'62a00947187fa58b2815b13877a2c15a94ecb588c8d5fc06ca46aceb1cc24dde',
     'corrected-history-composition-contract-v3-PROPOSED.md':'04ab09c4094a35e256c4cb6642f54cd24c22f58b166ad013e29f7470953ed943',
@@ -203,11 +221,14 @@ def append(path, kind, frame, operation, repo, values):
     elif kind == 'span_link':
         require(previous is None and not frame and not operation,'separate_supplemental_trace')
         payload=json.loads(values[0]);require(payload['admission'] is False,'span_not_admission')
-    elif kind == 'history_capability':
+    elif kind in ('history_capability','history_3071_capability'):
         capability,receipt=values
         payload=dict(capability=raw_binding(Path(capability).read_bytes()),receipt=json.loads(receipt),admission=False)
-    elif kind == 'composition_capability':
+    elif kind in ('composition_capability','composition_3071_capability'):
         payload=json.loads(values[0]);require(payload['admission'] is False,'composition_not_production_authority')
+    elif kind == 'boundary_3071_observation':
+        output,boundary=values
+        payload=dict(history_boundary=boundary,prefix=raw_binding(Path(output).read_bytes()),admission=False)
     elif kind == 'qualification_pending':
         name,output,incoming=values
         payload=dict(path=name,map_before=file_binding(output),after_gate_row=raw_binding(incoming),
@@ -252,6 +273,141 @@ def composition(repo, boundary, first, source, name, result):
     require(git(repo,'rev-parse',M+'^{tree}').decode().strip()==TREE,'committed_result_tree')
     return dict(type='F54_WHOLE_COMPOSITION_OBSERVATION',merge=M,parents=[P1,P2],best_bases=BASES,
         history_boundary=O,result_tree=TREE,path=name,result_entry=raw_binding(result),admission=False)
+
+
+def exact_3071_boundary(repo, merge, first, source):
+    require([merge,first,source]==[J3071,J3071_P1,J3071_P2],'fixed3071_historical_tuple')
+    require(git(repo,'rev-list','--parents','-n','1',merge).decode().split()==[J3071,J3071_P1,J3071_P2],'fixed3071_ordered_parents')
+    require(git(repo,'merge-base','--all',first,source).decode().splitlines()==J3071_BASES,'fixed3071_all_best_bases')
+    require(git(repo,'merge-base','--all',*J3071_BASES).decode().splitlines()==[J3071_O],'fixed3071_unique_older_history_boundary')
+    for ref in [*J3071_BASES,first,source]:git(repo,'merge-base','--is-ancestor',J3071_O,ref)
+    require(git(repo,'rev-parse',merge+'^{tree}').decode().strip()==J3071_TREE,'fixed3071_committed_tree_identity')
+    # Structural permission to observe history, not a selected best base,
+    # completed child, clean merge result, source or mutation qualification.
+    return dict(type='F54_FIXED3071_STRUCTURAL_BOUNDARY_PROTOTYPE',merge=merge,parents=[first,source],
+        best_bases=J3071_BASES,history_boundary=J3071_O,committed_tree=J3071_TREE,
+        history='UNOBSERVED',composition='UNQUALIFIED',admission=False)
+
+
+def validate_3071_packet(repo, directory):
+    folder=Path(directory);raw=(folder/'structural-facts-v1.json').read_bytes()
+    require(sha(raw)==J3071_PACKET_SHA,'fixed3071_complete_structural_packet_hash')
+    packet=json.loads(raw)
+    require(packet['version']=='F54-FIXED3071-STRUCTURAL-FACTS-v1' and packet['admission'] is False,'fixed3071_structural_not_authority')
+    exact_3071_boundary(repo,packet['merge'],*packet['parents'])
+    require(packet['best_bases']==J3071_BASES and packet['older_history_boundary']==J3071_O and packet['committed_tree']==J3071_TREE,'fixed3071_packet_tuple')
+    require(packet['ruling_sha256']==J3071_RULING_SHA and sha((folder/'rudeus410-3071-boundary-decision.md').read_bytes())==J3071_RULING_SHA,'fixed3071_independent_boundary_contract')
+    nodes=git(repo,'rev-list','--topo-order','--reverse',J3071,'^'+J3071_O).decode().splitlines()
+    source_nodes=git(repo,'rev-list','--topo-order','--reverse',J3071_P2,'^'+J3071_O).decode().splitlines()
+    require([v['node'] for v in packet['nodes']]==nodes and packet['source_nodes']==source_nodes,'fixed3071_complete_ordered_dag')
+    require(packet['actual_source_first_parent_operations']==git(repo,'rev-list','--first-parent','--reverse',J3071_O+'..'+J3071_P2).decode().splitlines(),'fixed3071_actual_source_traversal_inventory')
+    trees={}
+    def entries(ref):
+        if ref not in trees:
+            values=git(repo,'ls-tree','-r','-z',ref).decode().split('\0')
+            trees[ref]={v.split('\t',1)[1]:v+'\0' for v in values if v}
+        return trees[ref]
+    names=set()
+    for node in packet['nodes']:
+        parents=git(repo,'rev-list','--parents','-n','1',node['node']).decode().split()[1:]
+        require(node['ordered_parents']==parents and [e['parent'] for e in node['parent_edges']]==parents,'fixed3071_every_parent_edge')
+        require(node['source_side']==(node['node'] in source_nodes),'fixed3071_actual_source_side')
+        for edge in node['parent_edges']:
+            paths=git(repo,'diff','--name-only','--no-renames',edge['parent'],node['node']).decode().splitlines();names.update(paths)
+            require(edge['paths']==paths and edge['raw_diff']==raw_binding(git(repo,'diff','--raw','--no-abbrev','--no-renames','-z',edge['parent'],node['node'])),'fixed3071_complete_internal_deltas_not_net_only')
+            require(edge['entries']=={name:dict(before=entries(edge['parent']).get(name,''),after=entries(node['node']).get(name,'')) for name in paths},'fixed3071_internal_mode_type_oid_versions')
+    require(packet['all_internal_touched_paths']==sorted(names) and set(packet['all_internal_versions'])==names,'fixed3071_no_omitted_reverted_internal_path')
+    refs=dict(O=J3071_O,bestA=J3071_BASES[0],bestB=J3071_BASES[1],P1=J3071_P1,P2=J3071_P2,J=J3071,
+        H53=packet['original_caller']['target'],H4=json.loads(packet['original_native_binding']['raw'])['snapshot'])
+    require(packet['all_internal_versions']=={name:{label:entries(ref).get(name,'') for label,ref in refs.items()} for name in sorted(names)},'fixed3071_all_versioned_path_entries')
+    actual_sets={name:git(repo,'diff','--name-only',a,b).decode().splitlines() for name,a,b in
+        [('candidate_difference',*J3071_BASES),('history_to_source',J3071_O,J3071_P2),('first_to_result',J3071_P1,J3071),
+         ('source_to_result',J3071_P2,J3071),('older_to_result',J3071_O,J3071)]}
+    require(packet['Git_only_path_sets']==actual_sets,'fixed3071_precise_inventory_meanings')
+    require(packet['source_qualification']['status']=='UNRESOLVED' and packet['actual_history']=='UNOBSERVED' and packet['actual_rows']=='UNOBSERVED','fixed3071_no_inventory_as_source_or_raw_row_grant')
+    return packet
+
+
+def prepare_3071_capabilities(repo, directory, native_path):
+    packet=validate_3071_packet(repo,directory);target=git(repo,'rev-parse','HEAD').decode().strip()
+    allowed={'scripts/ci/f13_f54_history.py','scripts/ci/f13_f54_history_test.py','scripts/ci/voice-db-runtime-provisioning-contract_test.sh','.agent/execplans/native-p3-master-source.md'}
+    require(set(git(repo,'diff','--name-only',J3071_PROTOTYPE_BASE,target).decode().splitlines())<=allowed,'fixed3071_current_carrier_only_four_owned_paths')
+    sources=['scripts/ci/f13_f54_history.py','scripts/ci/voice-db-runtime-provisioning-contract_test.sh','scripts/ci/voice-r22-runtime-scope.sh']
+    require(all((ROOT/name).read_bytes()==git(repo,'show',target+':'+name) for name in sources),'fixed3071_actual_source_carrier')
+    native_raw=Path(native_path).read_bytes();binding=json.loads(native_raw);original=json.loads(packet['original_native_binding']['raw'])
+    require(all(binding[k]==original[k] for k in ('base','content_base','snapshot','record','record_sha256','paths')),'fixed3071_no_borrowed_new_native_authority')
+    context={k:os.environ.get(k,'') for k in ('GITHUB_EVENT_NAME','GITHUB_REF','GITHUB_SHA','VOICE_CI_PUSH_BEFORE_SHA','GITHUB_BASE_REF')}
+    spec=importlib.util.spec_from_file_location('fixed3071_native',ROOT/'scripts/ci/f13_native_p3_source.py')
+    native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
+    actual=native.qualify(repo,binding['base'],binding['source'],binding['target'],context['GITHUB_EVENT_NAME'],context['GITHUB_REF'],context['GITHUB_SHA'],context['VOICE_CI_PUSH_BEFORE_SHA'],context['GITHUB_BASE_REF'])
+    require(actual==binding and binding['target']==target,'fixed3071_actual_native_context_independently_qualified')
+    return dict(type='F54_FIXED3071_STRUCTURAL_CAPABILITIES_PROTOTYPE',directory=str(Path(directory).resolve()),packet_sha256=J3071_PACKET_SHA,
+        tuple=exact_3071_boundary(repo,J3071,J3071_P1,J3071_P2),native_path=str(native_path),native_binding=raw_binding(native_raw),context=context,
+        source_context=router_source_context(repo),caller=packet['original_caller'],git_version=git(repo,'--version').decode().strip(),
+        history='UNOBSERVED',source_qualification='UNRESOLVED',supersession='NO_NEW_AUTHORITY',admission=False)
+
+
+def verified_3071_capabilities(repo, path):
+    cap=json.loads(Path(path).read_bytes())
+    require(cap==prepare_3071_capabilities(repo,cap['directory'],cap['native_path']),'fixed3071_complete_current_capability_binding')
+    return cap
+
+
+def boundary_3071_capability(repo, path, merge, first, source):
+    boundary=exact_3071_boundary(repo,merge,first,source);cap=verified_3071_capabilities(repo,path)
+    return dict(boundary,capability_sha256=sha(canonical(cap)))
+
+
+def verify_3071_document_equation(contents):
+    require(set(contents)==set(J3071_DOC_HASHES) and all(sha(contents[k])==v for k,v in J3071_DOC_HASHES.items()),'fixed3071_exact_independently_reviewed_document_bytes')
+    old=contents['O'];require(contents['bestA']==contents['bestB']==old,'fixed3071_reviewed_document_bases')
+    insertions=[]
+    for label,(offset,size,digest) in zip(('P1','P2'),J3071_INSERTIONS):
+        addition=contents[label][offset:offset+size]
+        require(sha(addition)==digest and contents[label]==old[:offset]+addition+old[offset:],'fixed3071_exact_parent_insertion_preserved')
+        insertions.append(addition)
+    offset=J3071_INSERTIONS[0][0]
+    require(J3071_INSERTIONS[1][0]==offset and contents['J']==old[:offset]+b''.join(insertions)+old[offset:],'fixed3071_reviewed_additive_resolution_not_marker_stripping')
+    return dict(offset=offset,parent_insertions=[raw_binding(v) for v in insertions],result_sha256=sha(contents['J']))
+
+
+def manual_3071_composition(repo):
+    exact_3071_boundary(repo,J3071,J3071_P1,J3071_P2)
+    arguments=['merge-tree','--write-tree','--name-only','-z','--no-messages',J3071_P1,J3071_P2]
+    result=subprocess.run(['git','--no-replace-objects','-C',str(repo),*arguments],capture_output=True)
+    require(result.returncode==1 and result.stdout==(J3071_AUTO_TREE+'\0'+J3071_DOC+'\0').encode() and not result.stderr,'fixed3071_actual_conflict_outcome_not_clean_or_native2')
+    messages=subprocess.run(['git','--no-replace-objects','-C',str(repo),'merge-tree','--write-tree','-z',J3071_P1,J3071_P2],capture_output=True)
+    require(messages.returncode==1 and not messages.stderr and sha(messages.stdout)=='11e08612d3f266710b5390cf341bc89bffd61bff61b2f4e9a2d2331a6ae3aefc','fixed3071_actual_content_conflict_stages_and_messages')
+    changed=git(repo,'diff','--name-only',J3071_AUTO_TREE,J3071).decode().splitlines()
+    require(changed==[J3071_DOC],'fixed3071_complete_other_tree_equality_no_path_exclusion')
+    raw=git(repo,'diff','--raw','--no-abbrev','--no-renames','-z',J3071_AUTO_TREE,J3071)
+    patch=git(repo,'diff','--binary',J3071_AUTO_TREE,J3071)
+    require(sha(raw)=='9f7f1689717879d2877428fae2834a6f69385c118a9d533bbc0b8ed2a8fa0920' and sha(patch)=='78ebeaf659af962865b25a662045825e2bf9c06549fca4d64e6fc762e42358ea','fixed3071_exact_whole_tree_manual_resolution_diff')
+    refs=dict(O=J3071_O,bestA=J3071_BASES[0],bestB=J3071_BASES[1],P1=J3071_P1,P2=J3071_P2,J=J3071,AUTO=J3071_AUTO_TREE)
+    entries={label:tree_entry(repo,ref,J3071_DOC) for label,ref in refs.items()}
+    require(all(entries[label]=='100644 blob '+oid+'\t'+J3071_DOC+'\0' for label,oid in J3071_DOC_OIDS.items()),'fixed3071_all_seven_reviewed_mode_type_oid_entries')
+    contents={label:git(repo,'show',ref+':'+J3071_DOC) for label,ref in refs.items()};equation=verify_3071_document_equation(contents)
+    return dict(type='F54_FIXED3071_REVIEWED_MANUAL_WHOLE_PROTOTYPE',merge=J3071,parents=[J3071_P1,J3071_P2],
+        best_bases=J3071_BASES,history_boundary=J3071_O,auto_tree=J3071_AUTO_TREE,result_tree=J3071_TREE,
+        git_outcome='CONFLICT',merge_tree_exit=1,composition='REVIEWED_MANUAL_WHOLE',git_version=git(repo,'--version').decode().strip(),
+        arguments=arguments,stdout=raw_binding(result.stdout),stderr=raw_binding(result.stderr),messages=raw_binding(messages.stdout),
+        complete_conflict_paths=[J3071_DOC],complete_difference_paths=changed,raw_difference=raw_binding(raw),patch=raw_binding(patch),
+        document_entries=entries,reviewed_equation=equation,review_sha256=J3071_MANUAL_REVIEW_SHA,packet_sha256=J3071_MANUAL_PACKET_SHA,admission=False)
+
+
+def composition_3071_capability(repo, path, merge, boundary, first, source, name, result):
+    require([merge,boundary,first,source]==[J3071,J3071_O,J3071_P1,J3071_P2],'fixed3071_composition_tuple')
+    cap=verified_3071_capabilities(repo,path);folder=Path(cap['directory'])
+    require(sha((folder/'rudeus410-3071-manual-composition-decision.md').read_bytes())==J3071_MANUAL_REVIEW_SHA,'fixed3071_independent_manual_resolution_review')
+    packet_raw=(folder/'manual/facts.json').read_bytes();require(sha(packet_raw)==J3071_MANUAL_PACKET_SHA,'fixed3071_frozen_manual_resolution_packet')
+    packet=json.loads(packet_raw)
+    for filename,expected in packet['bindings'].items():
+        require(Path(filename).name==filename and file_binding(folder/'manual'/filename)==expected,'fixed3071_all_manual_evidence_bindings')
+    require(name in git(repo,'diff','--name-only',J3071_O,J3071_P2).decode().splitlines(),'fixed3071_actual_source_path_not_future_authority')
+    require(result==tree_entry(repo,J3071,name).rstrip('\0'),'fixed3071_exact_consumer_result_entry')
+    whole=manual_3071_composition(repo)
+    return dict(whole,capability_sha256=sha(canonical(cap)),path=name,result_entry=raw_binding(result),
+        path_composition='REVIEWED_DOCUMENT_RESOLUTION' if name==J3071_DOC else 'DETERMINISTIC_UNCONFLICTED_ENTRY_IN_REVIEWED_WHOLE')
 
 
 def load_unit(repo, directory):
@@ -975,6 +1131,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
     previous='0'*64;frames={};stack=[];operations={};attempts={};classified={};pending={};cumulative={};child_flags={};child_rows={};frame_rows={};carry={};failures=[];observed=set()
     expected_operations={};seen_operations={};visited={};committed={};maps={};children={};obligations={};native_bindings={}
     M_capabilities={};M_compositions={};M_ready={};M_consumed={};M_supersessions={};master_entry=None;master_wrapper=None
+    J_capabilities={};J_compositions={}
     def map_binding(frame):
         raw=''.join('\t'.join(parts)+'\n' for parts in maps[frame]).encode()
         return dict(bytes=len(raw),sha256=sha(raw))
@@ -996,6 +1153,9 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
         if operation in M_capabilities:
             require(children.get(operation)==[(O,P2,'true','true')],'complete_exact_M_history_child')
             require(operation in M_ready and M_consumed.get(operation,[])==value['paths'],'complete_M_ledger_consumption_before_mutation')
+        if operation in J_capabilities:
+            require(children.get(operation)==[(J3071_O,J3071_P2,'true','true')],'complete_fixed3071_real_history_child')
+            require(False,'fixed3071_complete_ledger_consumer_not_yet_observed')
     def ledger_state():
         return {f:dict(map_binding=map_binding(f),rows=['\t'.join(x) for x in maps[f]],paths={
             name:dict(aggregate=cumulative[(f,name)],evidence=obligations[(f,name)])
@@ -1087,6 +1247,16 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
             if seen:finished(frame+'/'+seen[-1][0]+'/'+str(seen[-1][1]))
             require(len(seen)<len(expected_operations[frame]) and (v['commit'],index)==expected_operations[frame][len(seen)],'ordered_actual_operation_prefix')
             seen.append((v['commit'],index));attempts[op]=v;continue
+        if kind=='history_3071_capability':
+            require(op in attempts and op not in operations and op not in J_capabilities,'fixed3071_capability_after_actual_attempt')
+            binding=v['capability'];require(binding==raw_binding(binding['raw']) and v['admission'] is False,'fixed3071_capability_raw_binding')
+            capability=json.loads(binding['raw'])
+            require(capability==prepare_3071_capabilities(repo,capability['directory'],capability['native_path']),'fixed3071_actual_complete_structural_capability')
+            actual_frame=frames[frame];scope=capability['caller']
+            require(all(actual_frame[k]==scope[k] for k in ('base','target','allow_direct_followup','partition_source_history')),'fixed3071_actual_original_false_partition_context')
+            require(op==frame+'/'+J3071+'/2' and v['receipt']==dict(capability['tuple'],capability_sha256=sha(canonical(capability))),'fixed3071_exact_boundary_receipt')
+            require(master_entry is not None,'fixed3071_only_original_master_author_entry')
+            J_capabilities[op]=capability;continue
         if kind=='history_capability':
             require(op in attempts and op not in operations and op not in M_capabilities,'history_capability_after_actual_attempt')
             binding=v['capability'];require(binding==raw_binding(binding['raw']) and v['admission'] is False,'history_capability_raw_binding')
@@ -1118,16 +1288,30 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
                 # A caller-selected scalar must never erase operation paths.
                 if op in M_capabilities:
                     require([v['commit'],v['first_parent'],v['source_head'],v['boundary'],v['candidates']]==[M,P1,P2,O,BASES],'exact_history_boundary_is_not_best_base')
+                elif op in J_capabilities:
+                    require([v['commit'],v['first_parent'],v['source_head'],v['boundary'],v['candidates']]==[J3071,J3071_P1,J3071_P2,J3071_O,J3071_BASES],'fixed3071_history_boundary_not_selected_bestbase')
                 else:require(v['candidates']==[v['boundary']],'actual_single_best_source_boundary')
             require(v['delta']==raw_binding(git(repo,'diff','--name-only',v['boundary'],v['source_head'])),'actual_operation_delta')
             for name,entry in v['entries'].items():
                 require(entry==dict(base=entry_binding(repo,v['boundary'],name),source=entry_binding(repo,v['source_head'],name),result=entry_binding(repo,v['commit'],name)),'actual_full_entries')
             require(v['paths']==v['delta']['raw'].splitlines() and set(v['entries'])==set(v['paths']),'complete_delta_entries')
             operations[v['id']]=v;observed.add(v['commit']);continue
+        if kind=='boundary_3071_observation':
+            require(op in J_capabilities and v['history_boundary']==J3071_O and v['admission'] is False,'fixed3071_boundary_observation_exact_operation')
+            require(v['prefix']==raw_binding((''.join('\t'.join(x)+'\n' for x in maps[frame])).encode()),'fixed3071_preserved_actual_outer_prefix')
+            continue
         if kind in ('boundary_observation','composition_observation','scalar_seam_observation'):
             require(v['admission'] is False,'no_production_capability')
             if kind=='scalar_seam_observation':require(v['status']==1,'scalar_only_still_rejects')
             continue
+        if kind=='composition_3071_capability':
+            require(op in J_capabilities and v['path'] in operations[op]['paths'],'fixed3071_composition_actual_path')
+            expected=manual_3071_composition(repo)
+            expected=dict(expected,capability_sha256=sha(canonical(J_capabilities[op])),path=v['path'],
+                result_entry=raw_binding(tree_entry(repo,J3071,v['path']).rstrip('\0')),
+                path_composition='REVIEWED_DOCUMENT_RESOLUTION' if v['path']==J3071_DOC else 'DETERMINISTIC_UNCONFLICTED_ENTRY_IN_REVIEWED_WHOLE')
+            require(v==expected,'fixed3071_actual_reviewed_manual_whole_not_clean_alias')
+            J_compositions.setdefault(op,{})[v['path']]=v;continue
         if kind=='composition_capability':
             require(op in M_capabilities and v['path'] in operations[op]['paths'],'exact_M_composition_path')
             expected=composition(repo,O,P1,P2,v['path'],tree_entry(repo,M,v['path']).rstrip('\0'))
@@ -1224,6 +1408,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
             require(tree_entry(repo,v['integration'],v['path'])==tree_entry(repo,b['snapshot'],v['path']),'native_receipt_actual_H_entry_restoration')
             item['rebind']=[operation['first_parent'],operation['commit']]
         elif kind=='row_before':
+            require(op not in J_capabilities,'fixed3071_unqualified_ledger_cannot_begin_mutation')
             map_before(frame,v)
             prior=row(v['prior']);incoming=row(v['incoming'])
             require(key not in pending and incoming[0]==v['path'] and incoming[2]==operations[op]['commit'],'actual_incoming_operation')
@@ -1312,6 +1497,9 @@ def main():
         if command=='cap-boundary':print(json.dumps(boundary_capability(*args)));return 0
         if command=='cap-entry':print(json.dumps(entry_capability(*args)));return 0
         if command=='cap-composition':print(json.dumps(composition_capability(*args)));return 0
+        if command=='3071-capabilities':print(json.dumps(prepare_3071_capabilities(*args)));return 0
+        if command=='3071-boundary':print(json.dumps(boundary_3071_capability(*args)));return 0
+        if command=='3071-composition':print(json.dumps(composition_3071_capability(*args)));return 0
         if command=='master-entry':print(json.dumps(prepare_master_entry(*args)));return 0
         if command=='master-result':print(json.dumps(master_wrapper_result(*args)));return 0
         if command=='M-ledger':print(json.dumps(prepare_M_ledger(*args)));return 0

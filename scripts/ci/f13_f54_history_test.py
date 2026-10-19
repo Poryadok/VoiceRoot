@@ -27,6 +27,86 @@ def module():
 
 
 class ProducerTrace(unittest.TestCase):
+    def test_private_reviewed3071_equation_keeps_both_parent_obligations(self):
+        m=module();old=b'# Base\n\nrest\n';offset=8
+        first=b'## P1\nDo not reset identity.\n\n';second=b'## P2\nRequire independent acceptance.\n\n'
+        contents=dict(O=old,bestA=old,bestB=old,P1=old[:offset]+first+old[offset:],
+            P2=old[:offset]+second+old[offset:],J=old[:offset]+first+second+old[offset:],AUTO=b'<<<<<<< private conflict\n')
+        # Fixture-only review pins. No tuple/hash override is available to the
+        # production CLI; these bytes never become actual historical evidence.
+        m.J3071_DOC_HASHES={k:m.sha(v) for k,v in contents.items()}
+        m.J3071_INSERTIONS=[(offset,len(first),m.sha(first)),(offset,len(second),m.sha(second))]
+        self.assertEqual(m.verify_3071_document_equation(contents)['result_sha256'],m.sha(contents['J']))
+        for wrong in (contents['P1'],contents['P2'],old[:offset]+second+first+old[offset:],
+                contents['J'].replace(b'Do not reset',b'Reset'),contents['J']+b'>>>>>>> marker\n'):
+            altered=dict(contents,J=wrong)
+            with self.assertRaises(m.Rejected):m.verify_3071_document_equation(altered)
+        # Even with a privately re-pinned output hash, the source-preservation
+        # equation itself must reject a plausible-looking dropped obligation.
+        altered=dict(contents,J=contents['P1']);m.J3071_DOC_HASHES['J']=m.sha(altered['J'])
+        with self.assertRaisesRegex(m.Rejected,'reviewed_additive_resolution'):m.verify_3071_document_equation(altered)
+
+    def test_fixed3071_structural_boundary_is_distinct_and_precedes_history_and_composition(self):
+        m,folder,names=self.exact_M_fixture()
+        # Private exact source fixture only: no production tuple, pin or file
+        # is changed. A boundary must not require its not-yet-observed child.
+        m.J3071,m.J3071_P1,m.J3071_P2=m.M,m.P1,m.P2
+        m.J3071_O,m.J3071_BASES,m.J3071_TREE=m.O,m.BASES,m.TREE
+        result=m.exact_3071_boundary(self.repo,m.J3071,m.J3071_P1,m.J3071_P2)
+        self.assertEqual(result['type'],'F54_FIXED3071_STRUCTURAL_BOUNDARY_PROTOTYPE')
+        self.assertEqual(result['history_boundary'],m.O)
+        self.assertFalse(result['admission'])
+        self.assertEqual(result['history'],'UNOBSERVED')
+        self.assertEqual(result['composition'],'UNQUALIFIED')
+        for merge,first,source in ((m.J3071,m.J3071_P2,m.J3071_P1),
+                (m.J3071_P1,m.J3071_P1,m.J3071_P2)):
+            with self.assertRaises(m.Rejected):m.exact_3071_boundary(self.repo,merge,first,source)
+        m.J3071_BASES=list(reversed(m.J3071_BASES))
+        with self.assertRaises(m.Rejected):m.exact_3071_boundary(self.repo,m.J3071,m.J3071_P1,m.J3071_P2)
+
+    def test_fixed3071_inventory_checks_every_internal_parent_and_version_not_only_net(self):
+        m,folder,names=self.exact_M_fixture()
+        m.J3071,m.J3071_P1,m.J3071_P2=m.M,m.P1,m.P2
+        m.J3071_O,m.J3071_BASES,m.J3071_TREE=m.O,m.BASES,m.TREE
+        rule=b'Private structural fixture contract, not production authority'
+        (folder/'rudeus410-3071-boundary-decision.md').write_bytes(rule);m.J3071_RULING_SHA=m.sha(rule)
+        nodes=git(self.repo,'rev-list','--topo-order','--reverse',m.M,'^'+m.O).splitlines()
+        sources=git(self.repo,'rev-list','--topo-order','--reverse',m.P2,'^'+m.O).splitlines()
+        edges=[];touched=set()
+        for node in nodes:
+            parents=git(self.repo,'rev-list','--parents','-n','1',node).split()[1:];sides=[]
+            for parent in parents:
+                paths=git(self.repo,'diff','--name-only','--no-renames',parent,node).splitlines();touched.update(paths)
+                sides.append(dict(parent=parent,paths=paths,raw_diff=m.raw_binding(m.git(self.repo,'diff','--raw','--no-abbrev','--no-renames','-z',parent,node)),
+                    entries={name:dict(before=m.tree_entry(self.repo,parent,name),after=m.tree_entry(self.repo,node,name)) for name in paths}))
+            edges.append(dict(node=node,ordered_parents=parents,parent_edges=sides,source_side=node in sources))
+        refs=dict(O=m.O,bestA=m.BASES[0],bestB=m.BASES[1],P1=m.P1,P2=m.P2,J=m.M,H53=m.M,H4=m.M)
+        sets={name:git(self.repo,'diff','--name-only',a,b).splitlines() for name,a,b in
+            [('candidate_difference',*m.BASES),('history_to_source',m.O,m.P2),('first_to_result',m.P1,m.M),
+             ('source_to_result',m.P2,m.M),('older_to_result',m.O,m.M)]}
+        packet=dict(version='F54-FIXED3071-STRUCTURAL-FACTS-v1',admission=False,merge=m.M,parents=[m.P1,m.P2],
+            best_bases=m.BASES,older_history_boundary=m.O,committed_tree=m.TREE,ruling_sha256=m.J3071_RULING_SHA,
+            nodes=edges,source_nodes=sources,actual_source_first_parent_operations=git(self.repo,'rev-list','--first-parent','--reverse',m.O+'..'+m.P2).splitlines(),
+            all_internal_touched_paths=sorted(touched),all_internal_versions={name:{label:m.tree_entry(self.repo,ref,name) for label,ref in refs.items()} for name in sorted(touched)},
+            original_caller=dict(target=m.M),original_native_binding=m.raw_binding(m.canonical(dict(snapshot=m.M))),
+            source_qualification=dict(status='UNRESOLVED'),actual_history='UNOBSERVED',actual_rows='UNOBSERVED',Git_only_path_sets=sets)
+        path=folder/'structural-facts-v1.json'
+        def freeze(value):
+            raw=m.canonical(value);path.write_bytes(raw);m.J3071_PACKET_SHA=m.sha(raw)
+        freeze(packet);self.assertEqual(m.validate_3071_packet(self.repo,folder),packet)
+        import copy
+        for error in ('missing-node','missing-internal-path','wrong-mode-entry','net-only-classification'):
+            altered=copy.deepcopy(packet)
+            if error=='missing-node':altered['nodes'].pop(0)
+            elif error=='missing-internal-path':next(e for n in altered['nodes'] for e in n['parent_edges'] if e['paths'])['paths'].pop()
+            elif error=='wrong-mode-entry':
+                name=next(iter(altered['all_internal_versions']));altered['all_internal_versions'][name]['P1']=altered['all_internal_versions'][name]['P1'].replace('100644','100755')
+            else:altered['source_qualification']['status']='MATCHED_EXISTING_QUALIFICATION'
+            # Re-pin only this private fixture, so refusal must check actual
+            # Git/provenance semantics rather than merely a changed file hash.
+            freeze(altered)
+            with self.assertRaises(m.Rejected):m.validate_3071_packet(self.repo,folder)
+
     def test_private_master_entry_binds_actual_B_S_T_and_original_wrapper_copy(self):
         from f13_native_p3_source_test import NativeSourceTest, native
         fixture=NativeSourceTest();fixture.setUp();self.addCleanup(fixture.doCleanups)

@@ -1,5 +1,76 @@
 # Native/P3 source qualification for master
 
+## Current e118 fixed3071 author continuation
+
+Baseline3411/H4 and its c31 bounded code/actual-prefix CLEAR are immutable;
+full F13 still failed at3071, with no completed outer wrapper or later router.
+410 decision5862f23d87e008b6a996a395bae28bc2ee6286cd512e827cb9099fdaedf7ec16
+authorizes only a separate exact3071 structural/history/composition prototype.
+The same developer owns the existing shell/helper/tests/ExecPlan;121 retains
+publication, CI and MASTER custody. No actors, product tasks or source pin
+changes. Fresh owned WT27 replaces returned WT19, which is foreign now.
+
+Risk-first actual Git2.39.5 whole-parent composition returned1, complete conflict
+set only docs/DEPLOYMENT.md, auto-tree73eb0ec068685e8f69ea1c119c4bc4754e2ff932.
+Committed tree9b60a7639f0108c61da3c7808d05e7ea1421faaa differs only at that
+path, by an additive manual resolution retaining both parent sections. This is
+COMPOSITION_HOLD under the existing CLEAN requirement; never map status1 to0.
+Frozen exact question114c277c7ac9e59da998c9de4b3956c0c5bb9a2b375b1c2945826e964fe3de44
+and facts0b1d6efdf6441ca3bece84d968d72ab464f4dba378aecbfcd370813ee3e5148f
+are with the existing bounded410 reviewer. Structural history work is separate.
+
+Successor decision d5da0faab44ab7b76f319fe23e316c57ffc4fed06d2817cb587e1b4e4517214d
+independently reviews the exact additive document resolution. The new distinct
+REVIEWED_MANUAL_WHOLE component verifies actual Git EXIT1/CONFLICT, all seven
+document entries, the exact two insertion equation and complete other-tree
+equality. Actual primitive execution succeeds without changing the clean-only
+failure or granting source/history/native/duplicate/runtime authority.
+
+Risk-first genuine required child on immutable3411/H4 is terminal: setup0,
+collector1 first_parent_range, trace427 events SHA256
+8c16448aa157f0666c9dd8cec95e90500bc1425b3b2beb26aa148923b2dea2bc.
+O7bd to P2140f allowtrue/partitiontrue reaches2cc948/2, whose genuine nested
+frame d4abb829 to909090 true/false fails the unchanged original range guard.
+The boundary is an ancestor but absent from the complete first-parent chain;
+no exact second-parent sync boundary exists. Nested flags/rows remain unknown,
+the existing13532-byte root map remains untouched, and no failure is bypassed.
+Exact factual question52414f92/factsa8c317b3 requests only the missing finite
+history disposition. The structural source now has separate explicit3071
+boundary/composition transport, real child hook, and a fail-closed pending
+ledger barrier if that child later succeeds. This is incomplete author work,
+not collection, original full-router, production R/K or CI PASS.
+
+Plan and validation:
+
+1. Freeze the complete actual3071 bounded DAG/ordered-parent/raw-delta/version
+   inventory, including internal touched/reverted paths and both parent sides.
+   Check it against Git. Labels are FACT/UNRESOLVED; no invented source grants,
+   rows or raw classifier flags. Existing177 M facts stay within their scope.
+2. Add and test a distinct fixed3071 structural boundary capability, binding
+   tuple, full base vector, older enumeration boundary, immutable inventory,
+   exact current carrier/native/context and real H53 frame ancestry. Existing M
+   capability rejects3071, new capability rejects M/third tuples; scalar rules
+   remain unchanged. Actual3411 source_base is the retained causal RED.
+3. Exercise a genuine linked older-boundary-to-P2 true/true original collector
+   child, leaving outer H53 true/false and all original gates unchanged. Bind
+   actual child frames/path/gate/classification/rows and successful dispositions;
+   any unresolved internal gate or tuple remains its real failure. No mutation
+   may depend on a boundary receipt alone.
+4. Keep distinct whole-parent composition and complete-history conservation
+   receipts before any dependent transition. Manual composition now uses only
+   the independently reviewed exact d5da successor; its real Git status is1.
+   M supersession/native71-name membership are not3071 duplicate authority.
+5. Preserve every actual source/owner/content/raw flag and cumulative OR, with
+   full pre-map/prefix and exact post-map. Reuse original native/Game/Role/Space
+   qualifications only on their exact inputs; non-native unmatched facts remain
+   unresolved. The original later policy/router order and sealed context remain.
+6. Run focused positive/negative private Linux tests for tuple/base/tree/packet/
+   source/context/coverage/OR/source-identity errors, then a new original full
+   master-wrapper proof for changed provenance. No host product tests/listeners,
+   repeated runtime/source177 audit or safety-stopped operation replay. Freeze
+   normal source/proof, submit independent review, preserve honest remaining
+   gates, return only owned resources and hand back the existing stage to121.
+
 ## Current e114 prototype author checkpoint
 
 Preserve f6df64080dcf4da3b3c066716abb0cf0c2d077e8/26701 as a genuine
