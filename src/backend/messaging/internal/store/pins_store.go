@@ -27,7 +27,8 @@ type PinRow struct {
 
 // PinsStore persists chat message pins.
 type PinsStore struct {
-	Pool *pgxpool.Pool
+	Pool            *pgxpool.Pool
+	BotPinChatScope BotPinChatScopeLoader
 }
 
 // UpsertPin pins a message; duplicate (chat, message) updates pinned_by and pinned_at.

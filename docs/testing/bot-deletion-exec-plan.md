@@ -201,3 +201,14 @@ purge evidence expires after its own 30-day window, and no qualified late compac
 proof provider currently exists. Missing evidence cannot become zero-target
 completion. No new retention clock, perpetual actor history or payload compactor
 is implemented by this metadata slice.
+
+The next Messaging batch-store slice has causal PG/race RED 3.639s: a new
+global child after completed uninstall removed a later human repin. Receiver-owned
+first-effect coverage now preserves that pin with count0/revision0, including
+without a caller hint. A mixed batch executes one DELETE/revision and retains
+direct origin links independently for old/new targets; concurrent global and
+uninstall have one effect. Four new component cases passed in 15.772s and the
+whole affected Bot-pin group in 43.845s. Current Chat source facts in these tests
+are controlled PG rows read through production SQL, not actual protected Chat
+transport. Private Messaging ingress, production datasource wiring, producer
+delivery/recovery, purge proof coverage and full BE-170 remain open.

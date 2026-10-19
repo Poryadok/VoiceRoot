@@ -33,5 +33,15 @@ CREATE TABLE bot_pin_removal_receipts (
     response_sha256 BYTEA NOT NULL CHECK (octet_length(response_sha256)=32),
     receipt_id UUID NOT NULL UNIQUE,
     completed_at TIMESTAMPTZ NOT NULL,
+    cleanup_revision BIGINT NOT NULL CHECK (cleanup_revision>=0)
+);
+
+-- First-effect coverage is retained independently of later adopting decisions.
+-- A local attachment UUID cannot be rebound to another normalized target.
+CREATE TABLE bot_pin_removal_attachment_coverage (
+    attachment_id UUID PRIMARY KEY,
+    projection_bytes BYTEA NOT NULL,
+    effect_target_sha256 BYTEA NOT NULL CHECK (octet_length(effect_target_sha256)=32),
+    origin_operation_id UUID NOT NULL REFERENCES bot_pin_removal_receipts(operation_id),
     cleanup_revision BIGINT NOT NULL CHECK (cleanup_revision>0)
 );

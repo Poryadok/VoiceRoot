@@ -66,6 +66,7 @@ type botPinRequestBinding struct {
 	requestSHA, evidenceSHA                      [32]byte
 	kind                                         string
 	operation, decision, bot, actor, space, chat uuid.UUID
+	attachments                                  []botPinAttachmentBinding
 }
 
 func botPinUUID(value string) (uuid.UUID, error) {
@@ -139,6 +140,14 @@ func bindBotPinRemovalRequest(request *messagingv1.ApplyBotChatPinRemovalRequest
 		return nil, ErrBotPinRemovalBinding
 	}
 	b.requestSHA = sha256.Sum256(b.body)
+	// Requests without lifetime identity are eligible only for exact historical
+	// replay; they cannot create a new cleanup or bridge into another operation.
+	if len(request.Attachments) > 0 {
+		b.attachments, err = bindBotPinAttachments(request)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return b, nil
 }
 
@@ -178,6 +187,9 @@ func readBotPinRemovalReceipt(ctx context.Context, q botPinReceiptQuerier, b *bo
 	if r.ProtocolVersion != 1 || r.OperationId != original.OperationId || r.DecisionId != original.DecisionId || r.Purpose != original.Purpose || r.BotId != original.BotId || r.ActorProfileId != original.ActorProfileId || r.SpaceId != original.SpaceId || r.ChatId != original.ChatId || r.EvidenceKind != b.kind || !bytes.Equal(r.EvidenceSha256, b.evidenceSHA[:]) || !bytes.Equal(r.FrozenScopeSha256, original.FrozenScopeSha256) || !bytes.Equal(r.RequestSha256, b.requestSHA[:]) || r.Participant != "messaging" || r.Outcome != "COMPLETED" || r.RemovedPinCount > math.MaxInt64 || r.CompletedAt == nil || r.CompletedAt.CheckValid() != nil || r.CompletedAt.Seconds <= 0 || len(r.CompletedAt.ProtoReflect().GetUnknown()) != 0 {
 		return nil, ErrBotPinRemovalBinding
 	}
+	if err = validateBotPinTargetReceipts(b, &decoded); err != nil {
+		return nil, err
+	}
 	return &decoded, nil
 }
 
@@ -204,6 +216,9 @@ func (s *PinsStore) ApplyBotChatPinRemoval(ctx context.Context, request *messagi
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
 	}
+	if len(b.attachments) == 0 {
+		return nil, ErrBotPinRemovalBinding
+	}
 	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
@@ -221,8 +236,31 @@ func (s *PinsStore) ApplyBotChatPinRemoval(ctx context.Context, request *messagi
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
 	}
-	if err = lockMessageMutation(ctx, tx, b.chat, &b.space, nil); err != nil {
-		return nil, err
+	targetReceipts := make([]*messagingv1.BotChatPinRemovalTargetReceipt, len(b.attachments))
+	var uncovered []int
+	for index, target := range b.attachments {
+		covered, coverageErr := readBotPinAttachmentCoverage(ctx, tx, b, target)
+		if coverageErr == nil {
+			targetReceipts[index] = covered
+			continue
+		}
+		if !missingBotPinCoverage(coverageErr) {
+			return nil, coverageErr
+		}
+		if target.attachment.CoveringOperationId != "" {
+			return nil, ErrBotPinRemovalBinding
+		}
+		uncovered = append(uncovered, index)
+	}
+	if len(uncovered) > 0 {
+		if err = lockMessageMutation(ctx, tx, b.chat, &b.space, nil); err != nil {
+			return nil, err
+		}
+		for _, index := range uncovered {
+			if err = s.qualifyUncoveredBotPinAttachment(ctx, b, b.attachments[index]); err != nil {
+				return nil, err
+			}
+		}
 	}
 	var scopeSpace *uuid.UUID
 	if request.Purpose == "space_uninstall" {
@@ -260,16 +298,24 @@ func (s *PinsStore) ApplyBotChatPinRemoval(ctx context.Context, request *messagi
 		return nil, ErrBotPinRemovalConflict
 	}
 	var revision int64
-	err = tx.QueryRow(ctx, `INSERT INTO bot_pin_removal_revisions(chat_id,actor_profile_id,revision) VALUES($1,$2,1) ON CONFLICT(chat_id,actor_profile_id) DO UPDATE SET revision=bot_pin_removal_revisions.revision+1 WHERE bot_pin_removal_revisions.revision<9223372036854775807 RETURNING revision`, b.chat, b.actor).Scan(&revision)
-	if err != nil {
-		return nil, err
-	}
-	removed, err := tx.Exec(ctx, `DELETE FROM pins p USING messages m WHERE p.message_id=m.id AND p.chat_id=$1 AND m.chat_id=$1 AND m.sender_profile_id=$2`, b.chat, b.actor)
-	if err != nil {
-		return nil, err
+	var removedCount int64
+	if len(uncovered) > 0 {
+		err = tx.QueryRow(ctx, `INSERT INTO bot_pin_removal_revisions(chat_id,actor_profile_id,revision) VALUES($1,$2,1) ON CONFLICT(chat_id,actor_profile_id) DO UPDATE SET revision=bot_pin_removal_revisions.revision+1 WHERE bot_pin_removal_revisions.revision<9223372036854775807 RETURNING revision`, b.chat, b.actor).Scan(&revision)
+		if err != nil {
+			return nil, err
+		}
+		removed, removeErr := tx.Exec(ctx, `DELETE FROM pins p USING messages m WHERE p.message_id=m.id AND p.chat_id=$1 AND m.chat_id=$1 AND m.sender_profile_id=$2`, b.chat, b.actor)
+		if removeErr != nil {
+			return nil, removeErr
+		}
+		removedCount = removed.RowsAffected()
+		for _, index := range uncovered {
+			target := b.attachments[index]
+			targetReceipts[index] = &messagingv1.BotChatPinRemovalTargetReceipt{AttachmentId: target.id.String(), EffectTargetSha256: target.digest[:], CleanupRevision: uint64(revision)}
+		}
 	}
 	receiptID, completed := uuid.New(), time.Now().UTC()
-	response := &messagingv1.ApplyBotChatPinRemovalResponse{Receipt: &messagingv1.BotChatPinRemovalReceipt{ProtocolVersion: 1, ReceiptId: receiptID.String(), OperationId: request.OperationId, DecisionId: request.DecisionId, Purpose: request.Purpose, BotId: request.BotId, ActorProfileId: request.ActorProfileId, SpaceId: request.SpaceId, EvidenceKind: b.kind, EvidenceSha256: b.evidenceSHA[:], FrozenScopeSha256: request.FrozenScopeSha256, RequestSha256: b.requestSHA[:], Participant: "messaging", Outcome: "COMPLETED", CompletedAt: timestamppb.New(completed), ChatId: request.ChatId, RemovedPinCount: uint64(removed.RowsAffected())}}
+	response := &messagingv1.ApplyBotChatPinRemovalResponse{Receipt: &messagingv1.BotChatPinRemovalReceipt{ProtocolVersion: 1, ReceiptId: receiptID.String(), OperationId: request.OperationId, DecisionId: request.DecisionId, Purpose: request.Purpose, BotId: request.BotId, ActorProfileId: request.ActorProfileId, SpaceId: request.SpaceId, EvidenceKind: b.kind, EvidenceSha256: b.evidenceSHA[:], FrozenScopeSha256: request.FrozenScopeSha256, RequestSha256: b.requestSHA[:], Participant: "messaging", Outcome: "COMPLETED", CompletedAt: timestamppb.New(completed), ChatId: request.ChatId, RemovedPinCount: uint64(removedCount), Targets: targetReceipts, ExecutionCleanupRevision: uint64(revision)}}
 	responseBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(response)
 	if err != nil {
 		return nil, err
@@ -282,6 +328,12 @@ func (s *PinsStore) ApplyBotChatPinRemoval(ctx context.Context, request *messagi
 			return nil, ErrBotPinRemovalConflict
 		}
 		return nil, err
+	}
+	for _, index := range uncovered {
+		target := b.attachments[index]
+		if _, err = tx.Exec(ctx, `INSERT INTO bot_pin_removal_attachment_coverage(attachment_id,projection_bytes,effect_target_sha256,origin_operation_id,cleanup_revision) VALUES($1,$2,$3,$4,$5)`, target.id, target.projection, target.digest[:], b.operation, revision); err != nil {
+			return nil, err
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, err

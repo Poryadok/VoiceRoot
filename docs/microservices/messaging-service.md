@@ -47,6 +47,22 @@ Space retries; only an exact Messaging-owned covering purge receipt can replace
 effects. This accepted BE170c8-c10 target needs actual receiver/journal/writer
 implementation and positive/negative tests before readiness or activation.
 
+The current BE-170 store implementation retains first-effect coverage in
+`bot_pin_removal_attachment_coverage`, binding the local lifetime UUID to exact
+normalized bytes and the originating committed response. Exact historical
+requests without lifetime fields may replay their own receipt, but cannot start
+new effects or supply cross-operation coverage. Uncovered targets require the
+independent current Chat native-head read through the existing authorized SQL
+datasource; missing/conflicting heads, incarnation changes, managed sources and
+non-LIVE lifecycle state fail before mutation. A qualified retired head supports
+a deleted chat without treating an absent row as completion.
+
+PG/race component checks cover mixed batches, no-hint discovery, reverse
+global/uninstall races, source-conflict rollback, receipt faults, actor-binding
+conflicts and official migration35 rollback. These checks use controlled Chat
+source rows read by production SQL; they do not qualify the private receiver,
+its production configuration, Bot delivery/recovery or the full public flow.
+
 ## Space communication timeout (BE-044-TIMEOUT-v1)
 
 Accepted target: apply the [Space-owned communication state](space-service.md#communication-timeout-authority-be-044-timeout-v1)

@@ -27,7 +27,9 @@ func newBotPinRemovalFixture(t *testing.T) (*PinsStore, *messagingv1.ApplyBotCha
 	seedMessage(t, ctx, pool, chat, message, actor)
 	s := &PinsStore{Pool: pool}
 	require.NoError(t, s.UpsertPin(ctx, chat, message, uuid.New()))
-	return s, botPinRemovalRequest(chat, space, actor), message
+	request := botPinRemovalRequest(chat, space, actor)
+	prepareBotPinCurrentScope(t, s, request)
+	return s, request, message
 }
 
 func TestBotPinCleanupFaultRollbackConcurrentReceiptAndConflictingAuthority(t *testing.T) {
@@ -40,7 +42,7 @@ func TestBotPinCleanupFaultRollbackConcurrentReceiptAndConflictingAuthority(t *t
 	require.NoError(t, err)
 	_, err = s.ApplyBotChatPinRemoval(ctx, request)
 	require.Error(t, err)
-	for _, table := range []string{"bot_pin_removal_decisions", "bot_pin_actor_bindings", "bot_pin_removal_revisions", "bot_pin_removal_receipts"} {
+	for _, table := range []string{"bot_pin_removal_decisions", "bot_pin_actor_bindings", "bot_pin_removal_revisions", "bot_pin_removal_receipts", "bot_pin_removal_attachment_coverage"} {
 		var count int
 		require.NoError(t, s.Pool.QueryRow(ctx, "SELECT count(*) FROM "+table).Scan(&count))
 		require.Zero(t, count, table)
@@ -194,7 +196,9 @@ func TestBotPinRemovalOfficialMigration35(t *testing.T) {
 	seedMessage(t, ctx, database.Pool, chat, message, actor)
 	s := &PinsStore{Pool: database.Pool}
 	require.NoError(t, s.UpsertPin(ctx, chat, message, uuid.New()))
-	response, err := s.ApplyBotChatPinRemoval(ctx, botPinRemovalRequest(chat, space, actor))
+	request := botPinRemovalRequest(chat, space, actor)
+	prepareBotPinCurrentScope(t, s, request)
+	response, err := s.ApplyBotChatPinRemoval(ctx, request)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, response.GetReceipt().GetRemovedPinCount())
 	database.Run(false, "goto", "34")
@@ -217,6 +221,8 @@ func TestBotPinRemovalKnownBotCannotChangeActor(t *testing.T) {
 	changed := proto.Clone(first).(*messagingv1.ApplyBotChatPinRemovalRequest)
 	changed.OperationId, changed.DecisionId = uuid.NewString(), uuid.NewString()
 	changed.ActorProfileId, changed.ChatId = actor.String(), chat.String()
+	changed.Attachments = nil
+	prepareBotPinCurrentScope(t, s, changed)
 	_, err = s.ApplyBotChatPinRemoval(ctx, changed)
 	require.ErrorIs(t, err, ErrBotPinRemovalConflict, "known Bot cannot acquire a different actor through a new decision")
 	pins, err := s.ListPins(ctx, chat)
@@ -246,6 +252,8 @@ func TestBotPinRemovalConcurrentFirstBindHasOneImmutableActor(t *testing.T) {
 	second.OperationId, second.DecisionId = uuid.NewString(), uuid.NewString()
 	chat, actor, message := uuid.New(), uuid.New(), uuid.New()
 	second.ChatId, second.ActorProfileId = chat.String(), actor.String()
+	second.Attachments = nil
+	prepareBotPinCurrentScope(t, s, second)
 	seedMessage(t, ctx, s.Pool, chat, message, actor)
 	require.NoError(t, s.UpsertPin(ctx, chat, message, uuid.New()))
 	start, results := make(chan struct{}), make(chan error, 2)
