@@ -223,3 +223,219 @@ Provider request and both resume scans now use the common authority gate at inte
 Scoped coordinator vet0 and full Linux production build0. Pre-final-timeout coordinator short230PASS/180explicitPGskip/0FAIL, historical forward short proof retained. Actual provider stores, durable provisioning claim/backoff/operator visibility, final immutable independent review, fully assembled main/cold coverage/NATS-v6 and real PG+broker commit-before-ACK/lost-ACK remain OPEN. Source/CI147 and same WT31 lease; no runtime/stage enablement claimed.
 
 Provider-attempt GREEN2PG/0skip11.161s; scoped final vet0. Host golangci terminal1: exactly the same three unused voice_roster_runtime symbols pending145 main consumer, no suppression/no lint PASS. Current AST update again bounded/no output; exact owned child21420/launcher37804 stopped after parent-chain verification, foreign graph processes untouched. Diffcheck0. No runtime readiness inferred.
+
+2026-10-19 01:10Z retry checkpoint: normal merge145 ac946 complete-roster CreateProposal as d4ea55d389d12bc87729f569e17674384903383e; no edits its proposal hunks. New Linux immutable retry-base archive is d4ea55 plus owning deltas. Durable claims serialize provisioning/compensating attempts, increment generation/attempt count, bound whole attempt55s under60s claim, retain10s independent provider calls; claims are scheduling only, never effect/absence evidence. Persisted exponential jitter uses existing1s..5m helper. Scheduling/release CAS cannot overwrite a successor claim, non-finite/private error classes rejected; concurrent8 claimants produce exactly1 winner. Claim/backoff storage stub RED3.629s -> GREEN; worker immediate second Voice RED2.310s -> GREEN2PG18.485s.
+
+No-progress counts use15min DB time; actual first dispatch/new receipt/first abandonment advances progress, retries/claims do not. Contract-status classes produce an operator-attention error with finite counts/no IDs. Progress RED6.060s -> GREEN1PG10.682s. Worker+store focused race5PG/0skip PASS13.709s including8-way claim race, affected request/missing-intent idle-backoff/eligible retry, exact ABANDONED replay and late Chat/no new Voice. Idle scans during durable backoff return0 work; once due the same authority gate still returns Unknown/no RPC. Finite error-class mismatch found by inspection then unit RED->GREEN0skip; unknown transport classes now persist as unknown rather than rejected teardown-only spelling. Final scopedvet0, production build0; exact9-file Linux/host SHA comparison0differences in settlement-retry-source-sha256. No repeat of unchanged source CLEAR. Current retry lint was bounded/no output: verified own golangci46800(parent37696 with owning log) stopped, no lint PASS; prior explicit3-unused diagnostics retained. AST bounded/nooutput own44128/33188 stopped; no AST PASS.
+
+Remaining concrete c9 risk: known contradictory creation receipts need durable per-provider CONTRACT_MISMATCH evidence and a sticky page/closure fence; the current last_error_class is retry diagnostics and must not be represented as that complete mechanism. Known provider cleanup receipts must still persist independently, while unresolved mismatch prevents aggregate/saga completion. Generic terminal statuses remain unknown, never absence. Prepare a coherent supporting function for that accepted contract, consume it in147 coordinator; no new architecture or absence oracle. Real provider delayed/concurrent replay-after-teardown/compaction, actual MM PG+NATS C4/C5, assembled startup and independent source acceptance remain OPEN. Same WT31/runner+portlessPG; no DEV/STG/GH access; source/CI147 retained.
+
+2026-10-19 01:35Z real runtime seam qualification: new additive provider tests passed actual Linux PG with race, no production provider change. Chat package reported10.844s and Voice8.804s, one test each/0skip. Both delay an original request in transport, race exact Create arrivals with real teardown, then release original after terminal state: retained receipt bytes match and no Chat members/Voice projection/media-Ensure resurrection. After valid protected synthetic compaction attestation, concurrent same-Create arrivals return tombstones without fabricated creation/absence receipt. Voice SQL ownership/receipt state is real PG with full owning migration chain; media/projection/Auth adapters remain in-process, not physical LiveKit or owning/game-drain qualification. Existing sequential native PASS was not repeated/widened.
+
+Product C4/C5 now actual PG+native pinnedNATS2.12.12 race1PASS/0skip11.496s in settlement-product-pg-ack-v4. Product MatchStore.ApplyVoiceRosterEvent blocks at an actual cancellation-outbox table lock; independent PG sees no committed inbox and broker ACKfloor0/pending1. Forced outbox CHECK failure rolls back real inbox/party/session changes and is not ACKed. Retry commits inbox+2 cancellations+generation reset; test closes actual consumer TCP after COMMIT before product ACK. Native broker retains pending; a new production Consumer binds same unchanged durable/Created/config, redelivery ACKs exact committed inbox with one row/two cancellations/unchanged generations. Original cutF1/L3/M1,targetS2 and consumed sequence/ACK are checked. Broker image immutable2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb, actualversion2.12.12; mutable2.12-alpine was2.12.15 and was not used for this proof.
+
+Preserved harness failures: first C4 compile used nonexistent SourceParty type; v2/v3 failed port-isolation guard before product test because testcontainers0.35 auto-merges image ports after HostConfigModifier. Source inspection established this behavior. v4 explicitly shares ONLY supplied owned Linux runner namespace, asserts emptyHostConfig.PortBindings and uses loopback; all fixture brokers terminated and no firewall/settings changed. No product failure inferred. Fixture uses no installed ACL qualification; accepted220/121 authority, real installation and145 assembly remain separate gates. All three affected package vets0; three new source files match Linux/host SHA exactly. C9 mismatch function BE012-CREATION-MISMATCH-EVIDENCE published AVAILABLE with exact69a2 baseline, no fake receiver or waiting. Text attachment c11 returned internal_error, not retried; immutable Git+portable TT comments preserve evidence. Source/CI147 retained.
+
+### 2026-10-19: sticky creation mismatch continuation
+
+Original author147 atomically claimed BE012-CREATION-MISMATCH-EVIDENCE e2;
+explicit acceptance c1 retains the same primary WT31 lease, no foreign handoff.
+Actual develop8afe8e90285a was read before this continuation. Searches at rev3749
+and consumer145 confirmed MM023 unreserved; 021 and 022 remain unchanged.
+
+MM023 adds per-provider first response bytes/hash/time to the immutable operation.
+The row already binds original operation/provider/frozen request. Store API checks
+the original operation ID and request digest under match -> operation locks.
+Exact witness replay is idempotent; another response cannot replace the first.
+Direct SQL cannot clear/rewrite it or newly activate/close/issue another provider.
+Generic terminal status, timeout and absent response remain uncertain, not absence
+or a positive contradictory receipt. The protected coordinator records actual
+receipt bytes on invalid ID/binding; database failures remain failures, never a
+durable-success claim. No response bytes or resource IDs enter the finite alert.
+
+Both LIVE coordinator boundaries and validated storage transitions fence forward
+dispatch/activation. An ABANDONED already-issued replay still obtains original
+receipts solely for cleanup. Each known teardown receipt commits independently;
+the last receipt leaves the aggregate pending when negative evidence exists.
+No completion event or compaction intent is then produced. A contradiction arriving
+after an ordinary closure is retained and pages without reopening the operation or
+rewriting its sealed provider set. PrepareCompaction checks even an already-frozen
+intent. Operator counts use sticky facts, not replaceable last_error_class, and
+include closed operations with late evidence. No automatic reconciliation clears
+these facts. Runtime startup requires the new schema; no activation is claimed.
+
+Real Linux PG/race evidence (all logs preserved under tmp/swarm/rudeus147-be012):
+- Initial schema/stub RED5.481s: evidence column missing; then GREEN15.342s.
+- Old coordinator production path RED3.680s: ErrConflict without sticky witness;
+  corrected common path GREEN5.531s, actual invalid Chat receipt preserved, fresh
+  source cut cannot authorize retry, restart/Unavailable cannot erase alert.
+- Old teardown implementation with new evidence schema RED14.842s: final receipt
+  transaction rolled back on completion guard. Narrow predicate correction makes
+  both receipts persist and leaves aggregate pending.
+- Final storage3 PG tests PASS40.210s/0skip: independent final cleanup, late closed
+  mismatch, unchanged ordinary valid settlement path. Evidence DOWN refusal and
+  direct SQL immutability/completion guards are exercised.
+- Four coordinator regression PG tests PASS29.467s/0skip: uncertain terminal Voice,
+  source Unknown, abandoned exact Chat replay/no new Voice, progress-clock rules.
+  Terminal status alone now correctly does not count as a sticky contradiction.
+- Empty MM023 UP/DOWN/UP real PG PASS12.041s. Scoped vet0 and full MM build0.
+- Scoped short:24 PASS/108 PG skips/0fail, explicitly not runtime PG coverage.
+- CodeGraph was consulted first; frozen index required current-source reads.
+  Graphify update bounded without output; Treehouse identified own cwd processes,
+  CIM proved15316 -> 57384 -> 50412; only verified own child/launcher stopped.
+  No AST PASS. No Windows test executable/listener/firewall changes, stands or GH.
+
+Source/CI remains147 until an actual accepted handoff. Independent review of this
+new production delta, complete settlement source, full assembly, installed NATS
+rights/JWT/TLS, owning media absence, cold cut and rollout remain separate gates.
+Earlier285 CLEAR applies only to exactbee8 additive tests/proof fidelity.
+
+### Independent review299 correction: present empty receipt
+
+Reviewer299 exact287 identified P2: a nonnil empty protobuf receipt encodes to zero
+bytes, causing the len>0 evidence API to reject its positive presence. A missing
+receipt remains unknown; a present malformed receipt must be sticky. Both Create
+paths now retain canonical OUTER response bytes for contradictory receipts, so
+wire presence survives without weakening storage/schema guards. Validated receipt
+bytes remain unchanged. Real Linux PG/race Chat+Voice empty-present RED both
+failed before fix (15.427s); corrected run2top+2subPASS/0skip19.405s includes
+original nonempty contradiction regression and restart/Unavailable persistence.
+No schema or original021/023 bytes changed. Typed outcome continuation is separate
+uncommitted WIP and is not part of this correction or its acceptance.
+
+### Typed provisioning outcomes and compatibility adapters
+
+Accepted169c9 return-semantics gap now has a coherent typed API. Store observation
+uses one SQL snapshot to classify ACTIVE, WAITING_FOR_VALIDATION,
+SETTLING_ABANDONED, COMPENSATION_PENDING, COMPENSATION_CLOSED, CONTRACT_MISMATCH.
+Only ACTIVE includes usable Chat/Voice IDs. Missing evidence schema fails closed;
+the result is an observation, never a cached dispatch authorization or an absence
+receipt. Late mismatch takes precedence even over an existing active/closed row;
+reading it does not auto-end an active winner or rewrite its native lifecycle.
+
+ProvisionWithOutcome and RunProvisioningWithOutcomesOnce retain typed results.
+Existing Provision, ProvisionAndActivate and RunProvisioningOnce remain compatible
+adapters. They preserve errors, expose IDs only for successful ACTIVE, and count
+only ACTIVE as successful provisioning. Closed compensation remains a pending/
+precondition result, never successful provisioning. Every background result keeps
+its MatchID. No RPC/proto, main, candidate or145 proposal-guard files changed.
+
+Real Linux PG/race: typed stub RED3.363s (pending instead of WAITING outcome),
+initial GREEN15.573s, expanded2testsPASS33.910s/0skip covering all6states, no IDs
+outsideACTIVE, closed compatibility result, schema absence, active-winner policy.
+Request/background regression3top+2subPASS22.916s/0skip includes Unknown and
+uncertain terminal Voice settlement plus empty-present Chat/Voice receipts. Scoped
+vet0, full MM production build0; scopedshort25PASS/112PGskip/0fail. All failed and
+passed logs retained separately. The unchanged earlier PG/C4/provider proofs are
+reused, not rerun. New main/startup/installed rights and full acceptance remain open.
+
+Graphify attempted after this source batch, bounded without output; canonical
+Treehouse cwd inventory and CIM proved own57208 -> 45228 -> 51188. Only these own
+child/launcher processes were stopped; terminal1, no AST PASS. No runtime command
+or scarce stand/GH resource held. Own portless Linux runner/PG remain checkpointed.
+Independent reviewer299 owns the prior evidence review; its exactc110 successor
+correction and this separate typed delta require their own actual scoped results.
+
+### Independent core review309 corrections
+
+Reviewer309 requested changes on exact3191 (parent async c21/c22): P1 historical
+operations retain immutable dispatch origin0 under021, but validated dispatch and
+activation required1 forever. Old writer retirement is not a completed drain of
+every LIVE operation. The unvalidated activation wrapper also conflated explicit
+upgraded0 with missing021 and could bypass fresh proof for such historical rows.
+P2 typed saga outcomes ignored permanent teardown-participant CONTRACT_MISMATCH.
+
+Keep021/022/023 and historical provenance unchanged. Validated APIs now accept
+origin0 with exactly the same fresh source/ban/candidate/locks as1, preserving the
+original possible-dispatch marker/request IDs/bytes. New intents still require
+protocol1/NOT_ISSUED via the unchanged insert trigger. Unvalidated activation is
+allowed only for the old component schema with no021 column; explicit upgraded0
+is denied. No NULL LFP adoption, source backfill or private authority fabrication.
+022's existing captures still require reset/fresh capture; this fix is no waiver.
+
+The saga outcome query now gives permanent teardown mismatch priority over both
+COMPENSATION_PENDING and SETTLING_ABANDONED, including an unknown other creation.
+Known other-provider cleanup still records its exact receipt independently while
+the aggregate remains pending and the mismatch persists.
+
+Real Linux PG/race RED2top2sub14.176s reproduced unknown historical Chat refusal,
+unvalidated historical both-known activation success, and teardown typed-state
+misclassification. First corrected GREEN7.072s. Expanded4top4subPASS14.778s/0skip
+includes both-known/unknown Voice mismatch and independent Voice cleanup plus
+existing all-member ban/fresh-cut/abandonment-wins activation regressions. An
+intermediate expanded run/vet compile failure (missing bool fixture argument) is
+preserved; only the fixture call was corrected, source assertions unchanged.
+Original no021 durable lifecycle component1PG-racePASS5.312s confirms compatibility.
+Scopedvet-v2=0/fullMMbuild=0; short27PASS/116PGskip/0fail, not runtime coverage.
+
+Historical protocol fixture removes021 only while operation inventory is empty,
+uses old intent/receipt APIs, then applies actual021 backfill with a separately
+fresh qualified private capture. It tests protocol behavior independently; it
+does not retrofit authority onto pre022 captures or certify a rollout/cold cut.
+Graphify after source batch bounded no output; Treehouse+CIM verified own38840 ->
+56392 -> 51796, own children stopped, no AST PASS. All test sessions terminal;
+same WT31 lease and own portless Linux runner/PG retained for composition.
+Independent309 successor recheck via queen is required; no old3191 CLEAR claimed.
+299's separate c110 empty-receipt correction gate remains independent.
+
+### Composition with145 qualified proposal reservation
+
+Actual local develop304b49dc read before dependency composition. Normalmerge
+145 exact90612cc42ae41d78f4d6adf1d64829ba685af5f5 produced49e7a9ee39ea3da6a4b60cd78859dfea40f21fec.
+Imported27 dependency files include145 native startup readers/descriptor and
+matcher/proposal producers; no activation inferred from that source merge.
+Own five native partysearch fixture callsites now capture a real ProposalCandidate,
+use145 genuine Revalidator.ValidateProposalCandidate private attempt, then call
+CreateValidatedProposal. No raw reservation SQL, fake Matches or NULL adoption.
+Explicit eu region matches stored fixture criteria. Legacy NULL negative retains
+the public path and still cannot invent a source capture.
+
+New isolated Linux source is immutable49e7 archive at /src/proposal-gate, plus
+only the four exact owning fixture changes. First unchanged fixture RED2.208s
+correctly hit the new native public-path guard. Adapted six-test run preserved
+5PASS/1FAIL27.413s: the existing legacy negative omitted its stored eu region.
+Only this fixture field was corrected; failed case then PASS5.014s. No failed run
+is relabelled green. Current composed own provisioning/core suite23top+13subPASS,
+0skip/0fail159.826s, including fresh proposal authority, bans/candidate/reset,
+issued replay/late receipts, both independent review corrections and typed states.
+Scopedvet0/fullMMbuild0. This is current component composition, not installed
+rights, security/TLS, full feature/CI, coldcut or rollout acceptance.
+
+Separate unchanged store-package probe did not reach a reservation assertion:
+its old shared Testcontainers StartPostgres ignores BE011_TEST_PG_DSN and expects
+a mapped5432. Two bounded startup attempts failed at123.882s. Exact JSON/stderr/
+exit retained as settlement-store-proposal-fixture-gap, never a schema/native
+source defect or a failed-reservation repro. The inspected test process exited
+naturally before targeted stop; no process was killed by a stale PID. No known
+owned transient testcontainer remains; unrelated Docker containers untouched.
+Portless owning-store fixture support and qualifying pre022 captures remain a
+separate explicit test-composition continuation, not a production guard bypass.
+
+Graphify after fixture batch bounded without output. Canonical Treehouse/CIM
+proved own54996 ->33980 ->30728; only own children stopped, no AST PASS.
+All native test/graph sessions terminal; own keeper runner+portlessPG and WT31
+lease retained. Exact299 c110 SOURCE CLEAR and309 eac SOURCE CLEAR are scoped
+prerequisites, not approval of this new dependency/fixture composition.
+
+
+## Qualified owning-store fixture continuation
+
+BE012-QUALIFIED-STORE-FIXTURES atomically claimed147 e1 on currentec6.
+Three owning integration files now external store_test, breaking the import
+cycle without exposing private attempt construction. New fixture applies exact
+001..020 plus022 for fresh private captures through CreateSourceParty; tests
+explicitly apply021 themselves. This is a protocol storage fixture, never a
+chronological pre022 production upgrade or adoption of old captures. Existing
+rollback, required-provider, receipt, reset, mismatch and guardedDOWN assertions
+remain. Seven native reservation callsites use genuine CaptureProposalCandidate,
+partysource.Revalidator and CreateValidatedProposal. Source transport verifies
+exact subject and released SQL connection; no fake proof or production change.
+
+Optional BE011_TEST_PG_DSN creates/drops private databases on existing portless
+Linux PG; CI fallback retains existing Testcontainers helper. Real PG/race RED
+reached authoritative-party guard (2.571s), unlike previous mapping-only failure.
+After qualification all15 owning tests PASS0skip/0fail37.108s, vet0. Failed
+harness and RED logs remain separate. Earlier composed23top+13sub proof reused.
+Graphify after batch bounded without output: canonical31/CIM proved own50000
+Python ->41200 launcher ->25244rtk; only verified children stopped, no ASTPASS.
+Source/CI147, no stand/GH/security/activation/acceptance inference.

@@ -1,36 +1,19 @@
-package store
+package store_test
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/json"
 	"os"
 	"path/filepath"
-	"sort"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/matchmaking/internal/store"
 )
-
-func rosterResetDB(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	ctx := context.Background()
-	pool := StartMatchmakingDBForStoreTest(t, ctx)
-	ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
-	for _, name := range []string{"000019_a3_party_search.up.sql", "000020_voice_roster_inbox.up.sql"} {
-		b, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/matchmaking_db", name))
-		require.NoError(t, err)
-		_, err = pool.Exec(ctx, string(b))
-		require.NoError(t, err)
-	}
-	return pool
-}
 
 func TestVoiceRosterInboxDowngradePreservesSettledEvidence(t *testing.T) {
 	if testing.Short() {
@@ -40,7 +23,7 @@ func TestVoiceRosterInboxDowngradePreservesSettledEvidence(t *testing.T) {
 	pool := rosterResetDB(t)
 	room, profile := uuid.New(), uuid.New()
 	capturedRosterParty(t, pool, &room, 1, profile)
-	_, err := (&MatchStore{Pool: pool}).ApplyVoiceRosterEvent(ctx, rosterBytes(t, uuid.New(), room, profile, 2, false))
+	_, err := (&store.MatchStore{Pool: pool}).ApplyVoiceRosterEvent(ctx, rosterBytes(t, uuid.New(), room, profile, 2, false))
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `UPDATE matchmaking_voice_roster_cancellation_outbox SET delivered_at=clock_timestamp()`)
 	require.NoError(t, err)
@@ -57,42 +40,6 @@ func TestVoiceRosterInboxDowngradePreservesSettledEvidence(t *testing.T) {
 	require.NoError(t, conn.QueryRow(ctx, `SELECT (SELECT count(*) FROM matchmaking_voice_roster_inbox),(SELECT count(*) FROM matchmaking_voice_roster_cancellation_outbox)`).Scan(&inbox, &outbox))
 	require.EqualValues(t, 1, inbox)
 	require.EqualValues(t, 1, outbox)
-}
-
-func capturedRosterParty(t *testing.T, pool *pgxpool.Pool, room *uuid.UUID, version int64, profiles ...uuid.UUID) (uuid.UUID, []SearchSession) {
-	t.Helper()
-	ctx := context.Background()
-	tx, err := pool.Begin(ctx)
-	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(ctx) }()
-	var game uuid.UUID
-	require.NoError(t, tx.QueryRow(ctx, `SELECT id FROM games WHERE status='active' ORDER BY id LIMIT 1`).Scan(&game))
-	ids := make([]string, len(profiles))
-	for i, p := range profiles {
-		ids[i] = p.String()
-	}
-	sort.Strings(ids)
-	manifest, err := json.Marshal(ids)
-	require.NoError(t, err)
-	hash := sha256.Sum256(manifest)
-	party, op := uuid.New(), uuid.New()
-	kind := "VOICE_ROSTER"
-	if room == nil {
-		kind = "SOLO"
-	}
-	_, err = tx.Exec(ctx, `INSERT INTO parties(id,leader_profile_id,member_profile_ids,game_id,mode,criteria,search_operation_id,search_request_sha256,initiator_account_id,initiator_session_epoch,voice_snapshot_protocol_version,voice_source_kind,voice_source_room_id,voice_source_roster_version,voice_member_manifest_sha256)
-VALUES($1,$2,$3::jsonb,$4,'test','{"region":"eu"}',$5,$6,$7,7,1,$8,$9,$10,$6)`, party, profiles[0], string(manifest), game, op, hash[:], uuid.New(), kind, room, version)
-	require.NoError(t, err)
-	sessions := make([]SearchSession, 0, len(profiles))
-	for _, profile := range profiles {
-		sess, err := scanSession(tx.QueryRow(ctx, `INSERT INTO search_sessions(id,profile_id,party_id,game_id,mode,criteria,status,timeout_at) VALUES($1,$2,$3,$4,'test','{"region":"eu"}','searching',clock_timestamp()+interval '30 minutes') RETURNING `+sessionSelectCols, uuid.New(), profile, party, game))
-		require.NoError(t, err)
-		sessions = append(sessions, sess)
-	}
-	_, err = tx.Exec(ctx, `INSERT INTO matchmaking_party_search_queue_intents(party_id,action) VALUES($1,'ENQUEUE')`, party)
-	require.NoError(t, err)
-	require.NoError(t, tx.Commit(ctx))
-	return party, sessions
 }
 
 func rosterBytes(t *testing.T, event, room, profile uuid.UUID, version uint64, joined bool) []byte {
@@ -112,7 +59,7 @@ func TestVoiceRosterInboxResetsWholeRoomPartyAndSoloExactlyOnce(t *testing.T) {
 	}
 	ctx := context.Background()
 	pool := rosterResetDB(t)
-	st := &MatchStore{Pool: pool}
+	st := &store.MatchStore{Pool: pool}
 	room, foreignRoom, newMember := uuid.New(), uuid.New(), uuid.New()
 	party, members := capturedRosterParty(t, pool, &room, 5, uuid.New(), uuid.New())
 	_, unrelated := capturedRosterParty(t, pool, &foreignRoom, 5, uuid.New())
@@ -123,14 +70,14 @@ func TestVoiceRosterInboxResetsWholeRoomPartyAndSoloExactlyOnce(t *testing.T) {
 	require.False(t, result.ContractMismatch)
 	require.Equal(t, 3, result.CancelledSessions)
 	for _, member := range append(members, soloMembers...) {
-		sess, err := (&SessionStore{Pool: pool}).Get(ctx, member.ID)
+		sess, err := (&store.SessionStore{Pool: pool}).Get(ctx, member.ID)
 		require.NoError(t, err)
-		require.Equal(t, SessionStatusCancelled, sess.Status)
+		require.Equal(t, store.SessionStatusCancelled, sess.Status)
 		require.EqualValues(t, 1, sess.RecoveryGeneration)
 	}
-	sess, err := (&SessionStore{Pool: pool}).Get(ctx, unrelated[0].ID)
+	sess, err := (&store.SessionStore{Pool: pool}).Get(ctx, unrelated[0].ID)
 	require.NoError(t, err)
-	require.Equal(t, SessionStatusSearching, sess.Status)
+	require.Equal(t, store.SessionStatusSearching, sess.Status)
 	for _, id := range []uuid.UUID{party, solo} {
 		var action string
 		var revision int64
@@ -156,16 +103,16 @@ func TestVoiceRosterInboxCancelsAcceptedPartyAndRecoversUnrelatedPendingParty(t 
 	}
 	ctx := context.Background()
 	pool := rosterResetDB(t)
-	st := &MatchStore{Pool: pool}
+	st := &store.MatchStore{Pool: pool}
 	room := uuid.New()
 	target, members := capturedRosterParty(t, pool, &room, 5, uuid.New(), uuid.New())
 	other, unrelated := capturedRosterParty(t, pool, nil, 0, uuid.New())
-	all := append(append([]SearchSession{}, members...), unrelated...)
-	params := CreateProposalParams{GameID: members[0].GameID, Mode: "test", Region: "eu"}
+	all := append(append([]store.SearchSession{}, members...), unrelated...)
+	params := store.CreateProposalParams{GameID: members[0].GameID, Mode: "test", Region: "eu"}
 	for _, sess := range all {
-		params.Sessions = append(params.Sessions, ProposalSession{SessionID: sess.ID, ProfileID: sess.ProfileID, PartyID: sess.PartyID})
+		params.Sessions = append(params.Sessions, store.ProposalSession{SessionID: sess.ID, ProfileID: sess.ProfileID, PartyID: sess.PartyID})
 	}
-	proposal, err := st.CreateProposal(ctx, params)
+	proposal, err := qualifiedProposal(t, pool, st, params)
 	require.NoError(t, err)
 	_, err = st.RecordAcceptance(ctx, proposal.Match.ID, members[0].ProfileID)
 	require.NoError(t, err)
@@ -173,13 +120,13 @@ func TestVoiceRosterInboxCancelsAcceptedPartyAndRecoversUnrelatedPendingParty(t 
 	require.NoError(t, err)
 	require.Equal(t, 2, result.CancelledSessions)
 	for _, member := range members {
-		sess, err := (&SessionStore{Pool: pool}).Get(ctx, member.ID)
+		sess, err := (&store.SessionStore{Pool: pool}).Get(ctx, member.ID)
 		require.NoError(t, err)
-		require.Equal(t, SessionStatusCancelled, sess.Status)
+		require.Equal(t, store.SessionStatusCancelled, sess.Status)
 	}
-	sess, err := (&SessionStore{Pool: pool}).Get(ctx, unrelated[0].ID)
+	sess, err := (&store.SessionStore{Pool: pool}).Get(ctx, unrelated[0].ID)
 	require.NoError(t, err)
-	require.Equal(t, SessionStatusSearching, sess.Status)
+	require.Equal(t, store.SessionStatusSearching, sess.Status)
 	require.Nil(t, sess.MatchID)
 	for _, want := range []struct {
 		id     uuid.UUID
@@ -197,7 +144,7 @@ func TestVoiceRosterInboxConflictingBytesCancelNewerCaptureAndPersistAlert(t *te
 	}
 	ctx := context.Background()
 	pool := rosterResetDB(t)
-	st := &MatchStore{Pool: pool}
+	st := &store.MatchStore{Pool: pool}
 	room, event := uuid.New(), uuid.New()
 	_, err := st.ApplyVoiceRosterEvent(ctx, rosterBytes(t, event, room, uuid.New(), 6, true))
 	require.NoError(t, err)
@@ -206,9 +153,9 @@ func TestVoiceRosterInboxConflictingBytesCancelNewerCaptureAndPersistAlert(t *te
 	require.NoError(t, err)
 	require.True(t, result.ContractMismatch)
 	require.Equal(t, 1, result.CancelledSessions)
-	sess, err := (&SessionStore{Pool: pool}).Get(ctx, members[0].ID)
+	sess, err := (&store.SessionStore{Pool: pool}).Get(ctx, members[0].ID)
 	require.NoError(t, err)
-	require.Equal(t, SessionStatusCancelled, sess.Status)
+	require.Equal(t, store.SessionStatusCancelled, sess.Status)
 	var conflicts int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_voice_roster_contract_conflicts`).Scan(&conflicts))
 	require.Equal(t, 1, conflicts)
@@ -220,23 +167,23 @@ func TestVoiceRosterChangedCandidateResetsAllPartiesAtomically(t *testing.T) {
 	}
 	ctx := context.Background()
 	pool := rosterResetDB(t)
-	st := &MatchStore{Pool: pool}
+	st := &store.MatchStore{Pool: pool}
 	a, am := capturedRosterParty(t, pool, nil, 0, uuid.New())
 	b, bm := capturedRosterParty(t, pool, nil, 0, uuid.New())
-	params := CreateProposalParams{GameID: am[0].GameID, Mode: "test", Region: "eu"}
+	params := store.CreateProposalParams{GameID: am[0].GameID, Mode: "test", Region: "eu"}
 	for _, sess := range append(am, bm...) {
-		params.Sessions = append(params.Sessions, ProposalSession{SessionID: sess.ID, ProfileID: sess.ProfileID, PartyID: sess.PartyID})
+		params.Sessions = append(params.Sessions, store.ProposalSession{SessionID: sess.ID, ProfileID: sess.ProfileID, PartyID: sess.PartyID})
 	}
-	proposal, err := st.CreateProposal(ctx, params)
+	proposal, err := qualifiedProposal(t, pool, st, params)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `ALTER TABLE matchmaking_voice_roster_cancellation_outbox ADD CONSTRAINT reject_candidate_cancel CHECK(false)`)
 	require.NoError(t, err)
 	_, err = st.ResetVoiceParties(ctx, []uuid.UUID{b, a, b})
 	require.Error(t, err, "one failed cancellation must roll back every party")
 	for _, member := range append(am, bm...) {
-		sess, err := (&SessionStore{Pool: pool}).Get(ctx, member.ID)
+		sess, err := (&store.SessionStore{Pool: pool}).Get(ctx, member.ID)
 		require.NoError(t, err)
-		require.Equal(t, SessionStatusPendingAccept, sess.Status)
+		require.Equal(t, store.SessionStatusPendingAccept, sess.Status)
 	}
 	_, err = pool.Exec(ctx, `ALTER TABLE matchmaking_voice_roster_cancellation_outbox DROP CONSTRAINT reject_candidate_cancel`)
 	require.NoError(t, err)
@@ -245,11 +192,11 @@ func TestVoiceRosterChangedCandidateResetsAllPartiesAtomically(t *testing.T) {
 	require.Equal(t, 2, result.CancelledSessions)
 	match, err := st.Get(ctx, proposal.Match.ID)
 	require.NoError(t, err)
-	require.Equal(t, MatchStatusAbandoned, match.Status)
+	require.Equal(t, store.MatchStatusAbandoned, match.Status)
 	for _, member := range append(am, bm...) {
-		sess, err := (&SessionStore{Pool: pool}).Get(ctx, member.ID)
+		sess, err := (&store.SessionStore{Pool: pool}).Get(ctx, member.ID)
 		require.NoError(t, err)
-		require.Equal(t, SessionStatusCancelled, sess.Status)
+		require.Equal(t, store.SessionStatusCancelled, sess.Status)
 	}
 	result, err = st.ResetVoiceParties(ctx, []uuid.UUID{a, b})
 	require.NoError(t, err)
@@ -262,7 +209,7 @@ func TestVoiceRosterResetOutboxFailureRollsBackInboxAndQueueIntent(t *testing.T)
 	}
 	ctx := context.Background()
 	pool := rosterResetDB(t)
-	st := &MatchStore{Pool: pool}
+	st := &store.MatchStore{Pool: pool}
 	room := uuid.New()
 	party, members := capturedRosterParty(t, pool, &room, 5, uuid.New())
 	_, err := pool.Exec(ctx, `ALTER TABLE matchmaking_voice_roster_cancellation_outbox ADD CONSTRAINT reject_fixture_event CHECK(false)`)
@@ -270,9 +217,9 @@ func TestVoiceRosterResetOutboxFailureRollsBackInboxAndQueueIntent(t *testing.T)
 	raw := rosterBytes(t, uuid.New(), room, uuid.New(), 6, false)
 	_, err = st.ApplyVoiceRosterEvent(ctx, raw)
 	require.Error(t, err)
-	sess, err := (&SessionStore{Pool: pool}).Get(ctx, members[0].ID)
+	sess, err := (&store.SessionStore{Pool: pool}).Get(ctx, members[0].ID)
 	require.NoError(t, err)
-	require.Equal(t, SessionStatusSearching, sess.Status)
+	require.Equal(t, store.SessionStatusSearching, sess.Status)
 	require.Zero(t, sess.RecoveryGeneration)
 	var count int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_voice_roster_inbox`).Scan(&count))
@@ -299,7 +246,7 @@ func TestVoiceRosterResetOutboxFailureRollsBackInboxAndQueueIntent(t *testing.T)
 	require.Equal(t, first.EventID, replay.EventID)
 	require.Equal(t, first.Payload, replay.Payload)
 	require.NotEqual(t, first.LeaseToken, replay.LeaseToken)
-	require.ErrorIs(t, st.FinishVoiceRosterCancellation(ctx, *first, true), ErrRosterCancellationLease)
+	require.ErrorIs(t, st.FinishVoiceRosterCancellation(ctx, *first, true), store.ErrRosterCancellationLease)
 	require.NoError(t, st.FinishVoiceRosterCancellation(ctx, *replay, true))
 	env := new(eventsv1.MatchmakingStreamEvent)
 	require.NoError(t, proto.Unmarshal(replay.Payload, env))
@@ -312,12 +259,12 @@ func TestVoiceRosterInboxConcurrentReplayAndOutOfOrderVersionFork(t *testing.T) 
 	}
 	ctx := context.Background()
 	pool := rosterResetDB(t)
-	st := &MatchStore{Pool: pool}
+	st := &store.MatchStore{Pool: pool}
 	room := uuid.New()
 	_, members := capturedRosterParty(t, pool, &room, 5, uuid.New(), uuid.New())
 	raw := rosterBytes(t, uuid.New(), room, uuid.New(), 7, true)
 	type outcome struct {
-		result VoiceRosterResetResult
+		result store.VoiceRosterResetResult
 		err    error
 	}
 	ready := make(chan struct{})
@@ -342,7 +289,7 @@ func TestVoiceRosterInboxConcurrentReplayAndOutOfOrderVersionFork(t *testing.T) 
 	require.NoError(t, err)
 	require.True(t, result.ContractMismatch)
 	require.Equal(t, 1, result.CancelledSessions, "a room/version fork fails closed even for a newer capture")
-	sess, err := (&SessionStore{Pool: pool}).Get(ctx, later[0].ID)
+	sess, err := (&store.SessionStore{Pool: pool}).Get(ctx, later[0].ID)
 	require.NoError(t, err)
-	require.Equal(t, SessionStatusCancelled, sess.Status)
+	require.Equal(t, store.SessionStatusCancelled, sess.Status)
 }

@@ -255,7 +255,7 @@ func (s *MatchStore) RecordMatchSquadChatReceipt(ctx context.Context, matchID, r
 			_, err = tx.Exec(ctx, `UPDATE matchmaking_match_squad_operations
 			 SET chat_receipt_id=$2,chat_receipt_bytes=$3,chat_id=$4,
 			 voice_request_sha256=$5,voice_request_bytes=$6,chat_dispatch_state='RECEIPT_KNOWN',
-			 provision_revision=provision_revision+1,updated_at=clock_timestamp()
+			 provision_revision=provision_revision+1,provision_last_progress_at=clock_timestamp(),updated_at=clock_timestamp()
 			 WHERE match_id=$1 AND chat_receipt_id IS NULL`, matchID, receiptID, receiptBytes, chatID, voiceRequestHash, voiceRequestBytes)
 		} else {
 			_, err = tx.Exec(ctx, `
@@ -346,7 +346,7 @@ func (s *MatchStore) RecordMatchSquadVoiceReceipt(ctx context.Context, matchID, 
 		if mode.dispatch {
 			_, err = tx.Exec(ctx, `UPDATE matchmaking_match_squad_operations
 			 SET voice_receipt_id=$2,voice_receipt_bytes=$3,voice_room_id=$4,voice_dispatch_state='RECEIPT_KNOWN',
-			 provision_revision=provision_revision+1,updated_at=clock_timestamp()
+			 provision_revision=provision_revision+1,provision_last_progress_at=clock_timestamp(),updated_at=clock_timestamp()
 			 WHERE match_id=$1 AND voice_receipt_id IS NULL`, matchID, receiptID, receiptBytes, roomID)
 		} else {
 			_, err = tx.Exec(ctx, `
@@ -545,12 +545,14 @@ func activateProvisionedMatchTx(ctx context.Context, tx pgx.Tx, matchID uuid.UUI
 	if err != nil {
 		return Match{}, err
 	}
-	var protocol int16
-	if err := tx.QueryRow(ctx, `SELECT COALESCE(to_jsonb(o)->>'dispatch_protocol_version','0')::smallint
+	var protocol *int16
+	if err := tx.QueryRow(ctx, `SELECT (to_jsonb(o)->>'dispatch_protocol_version')::smallint
 		FROM matchmaking_match_squad_operations o WHERE match_id=$1`, matchID).Scan(&protocol); err != nil {
 		return Match{}, err
 	}
-	if (dispatchProtocol && protocol != 1) || (!dispatchProtocol && protocol == 1) {
+	// A missing column is the old component schema. An explicit zero is an
+	// upgraded historical origin, not permission to bypass the private proof.
+	if (dispatchProtocol && (protocol == nil || (*protocol != 0 && *protocol != 1))) || (!dispatchProtocol && protocol != nil) {
 		return Match{}, ErrMatchSquadPending
 	}
 	if operation.State == "active" {

@@ -43,6 +43,11 @@ func (s *MatchStore) AuthorizeMatchSquadProviderDispatch(ctx context.Context, ca
 	}
 	var ticket MatchSquadDispatchTicket
 	err := s.withValidatedProvisionCutTx(ctx, candidate, proof, func(tx pgx.Tx) error {
+		if mismatch, err := matchSquadCreationMismatchTx(ctx, tx, candidate.MatchID); err != nil {
+			return err
+		} else if mismatch {
+			return ErrMatchSquadCreationMismatch
+		}
 		operation, err := scanMatchSquadProvisioningOperation(tx.QueryRow(ctx, `
 		 SELECT match_id,operation_id,participant_manifest_sha256,participant_manifest_bytes,state,
 		 chat_operation_id,chat_request_sha256,chat_request_bytes,chat_receipt_id,chat_receipt_bytes,chat_id,
@@ -61,7 +66,10 @@ func (s *MatchStore) AuthorizeMatchSquadProviderDispatch(ctx context.Context, ca
 			Scan(&protocol, &disposition, &dispatch, &firstID); err != nil {
 			return err
 		}
-		if operation.OperationID != operationID || protocol != 1 || disposition != "LIVE" || operation.State != "provisioning" {
+		// Zero preserves the origin of an operation classified by021's
+		// conservative historical backfill. It still needs this exact fresh
+		// source/ban/candidate transaction before any LIVE retry.
+		if operation.OperationID != operationID || (protocol != 0 && protocol != 1) || disposition != "LIVE" || operation.State != "provisioning" {
 			return ErrMatchSquadPending
 		}
 		if dispatch == "RECEIPT_KNOWN" || (provider == "voice" && (operation.ChatReceiptID == nil || len(operation.VoiceRequestHash) != 32 || len(operation.VoiceRequestBytes) == 0)) {
@@ -72,11 +80,11 @@ func (s *MatchStore) AuthorizeMatchSquadProviderDispatch(ctx context.Context, ca
 			firstID = &id
 			query := `UPDATE matchmaking_match_squad_operations SET chat_dispatch_state='MAY_HAVE_CREATED',
 			 chat_first_dispatch_id=$2,chat_first_dispatch_at=clock_timestamp(),provision_revision=provision_revision+1,
-			 updated_at=clock_timestamp() WHERE match_id=$1`
+			 provision_last_progress_at=clock_timestamp(),updated_at=clock_timestamp() WHERE match_id=$1`
 			if provider == "voice" {
 				query = `UPDATE matchmaking_match_squad_operations SET voice_dispatch_state='MAY_HAVE_CREATED',
 				 voice_first_dispatch_id=$2,voice_first_dispatch_at=clock_timestamp(),provision_revision=provision_revision+1,
-				 updated_at=clock_timestamp() WHERE match_id=$1`
+				 provision_last_progress_at=clock_timestamp(),updated_at=clock_timestamp() WHERE match_id=$1`
 			}
 			if _, err := tx.Exec(ctx, query, candidate.MatchID, id); err != nil {
 				return err
@@ -110,6 +118,11 @@ func (s *MatchStore) ActivateValidatedProvisionedMatch(ctx context.Context, cand
 	}
 	var activated Match
 	err := s.withValidatedProvisionCutTx(ctx, candidate, proof, func(tx pgx.Tx) error {
+		if mismatch, err := matchSquadCreationMismatchTx(ctx, tx, candidate.MatchID); err != nil {
+			return err
+		} else if mismatch {
+			return ErrMatchSquadCreationMismatch
+		}
 		var persistedID uuid.UUID
 		var protocol int16
 		var disposition, state, chat, voice string
@@ -118,7 +131,7 @@ func (s *MatchStore) ActivateValidatedProvisionedMatch(ctx context.Context, cand
 			Scan(&persistedID, &protocol, &disposition, &state, &chat, &voice); err != nil {
 			return err
 		}
-		if persistedID != operationID || protocol != 1 || disposition != "LIVE" || state != "provisioning" || chat != "RECEIPT_KNOWN" || voice != "RECEIPT_KNOWN" {
+		if persistedID != operationID || (protocol != 0 && protocol != 1) || disposition != "LIVE" || state != "provisioning" || chat != "RECEIPT_KNOWN" || voice != "RECEIPT_KNOWN" {
 			return ErrMatchSquadPending
 		}
 		var err error
