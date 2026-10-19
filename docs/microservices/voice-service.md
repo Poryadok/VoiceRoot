@@ -998,3 +998,19 @@ Retained owner work needs an exact qualified retirement classification before
 it can stop excluding eligibility; expiry, an empty projection or the original
 business state alone does not establish that classification. This read adapter
 does not issue coverage, qualify factories or activate the native runtime.
+
+Legacy startup checks the persisted coverage head before any optional native
+fallback, including an empty ordinary roster. A begun cut requires its separate
+native serving artifact; the legacy root also refuses the fixed native
+installation descriptor even if its database input was removed. An admitted
+pre-cut legacy installation without either input keeps its existing behavior.
+The native descriptor contract is
+`/run/voice/installation/native-serving-v1.json`, purpose `NATIVE_SERVING`,
+entrypoint `/service-native`; digests use lowercase hexadecimal SHA256 and
+factory artifacts retain their explicit hash domains and canonical bytes.
+Parsing the descriptor establishes neither installer custody nor source
+readiness. The mandatory native database opener has no disabled-success result:
+it checks the authenticated session/current/backend role identity and required
+bound ACTIVE coverage before returning a pool. The native executable/image,
+closed factory composition and installer launch admission remain separate
+required parts of the native startup implementation.
