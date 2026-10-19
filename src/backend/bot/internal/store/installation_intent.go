@@ -94,6 +94,9 @@ func (s *BotStore) PrepareInstallation(ctx context.Context, botID, spaceID, inst
 		if i.ActorProfileID != bot.ActorProfileID || i.State == "CANCELING" || (i.State == "PREPARING" && !slices.Equal(i.Chats, normalized)) {
 			return nil, ErrInstallationConflict
 		}
+		if _, err = ensureInstallationAttachments(ctx, tx, i); err != nil {
+			return nil, err
+		}
 		return i, tx.Commit(ctx)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -104,6 +107,9 @@ func (s *BotStore) PrepareInstallation(ctx context.Context, botID, spaceID, inst
 		return nil, err
 	}
 	if err = persistInitialInstallationScopes(ctx, tx, i); err != nil {
+		return nil, err
+	}
+	if _, err = ensureInstallationAttachments(ctx, tx, i); err != nil {
 		return nil, err
 	}
 	return i, tx.Commit(ctx)
@@ -157,6 +163,10 @@ func (s *BotStore) CompleteInstallation(ctx context.Context, want *InstallationI
 	if !sameInstallationIdentity(got, want) || bot.ActorProfileID != got.ActorProfileID || (got.State != "PREPARING" && got.State != "INSTALLED") {
 		return ErrInstallationConflict
 	}
+	attachmentIDs, err := ensureInstallationAttachments(ctx, tx, got)
+	if err != nil {
+		return err
+	}
 	chats = normalizedInstallationChats(chats)
 	if got.State == "PREPARING" && !slices.Equal(got.Chats, chats) {
 		return ErrInstallationConflict
@@ -193,7 +203,14 @@ func (s *BotStore) CompleteInstallation(ctx context.Context, want *InstallationI
 	if actual != got.InstallationID {
 		return ErrInstallationConflict
 	}
-	if err := replaceInstallationWhitelist(ctx, tx, got.BotID, got.SpaceID, got.InstallerProfileID, chats); err != nil {
+	var preferred map[uuid.UUID]uuid.UUID
+	if got.State == "PREPARING" {
+		preferred, err = preferredAttachmentsByChat(ctx, tx, got, attachmentIDs)
+		if err != nil {
+			return err
+		}
+	}
+	if err := replaceInstallationWhitelist(ctx, tx, got.BotID, got.SpaceID, got.InstallerProfileID, chats, scopeIDs, preferred); err != nil {
 		return err
 	}
 	if err = attachChatScopeObservations(ctx, tx, got.BotID, got.SpaceID, scopeIDs); err != nil {
@@ -207,8 +224,12 @@ func (s *BotStore) CompleteInstallation(ctx context.Context, want *InstallationI
 	return tx.Commit(ctx)
 }
 
-func replaceInstallationWhitelist(ctx context.Context, tx pgx.Tx, botID, spaceID, installer uuid.UUID, chats []uuid.UUID) error {
+func replaceInstallationWhitelist(ctx context.Context, tx pgx.Tx, botID, spaceID, installer uuid.UUID, chats []uuid.UUID, scopeIDs []uuid.UUID, preferred map[uuid.UUID]uuid.UUID) error {
 	chats = normalizedInstallationChats(chats)
+	scopes, err := chatScopeIDsByChat(ctx, tx, botID, spaceID, scopeIDs)
+	if err != nil {
+		return err
+	}
 	rows, err := tx.Query(ctx, `DELETE FROM bot_chat_whitelist WHERE bot_id=$1 AND space_id=$2 AND NOT(chat_id=ANY($3::uuid[])) RETURNING chat_id`, botID, spaceID, chats)
 	if err != nil {
 		return err
@@ -235,7 +256,7 @@ func replaceInstallationWhitelist(ctx context.Context, tx pgx.Tx, botID, spaceID
 		}
 	}
 	for _, id := range chats {
-		if _, err = tx.Exec(ctx, `INSERT INTO bot_chat_whitelist(bot_id,chat_id,space_id,enabled,added_by_profile_id) VALUES($1,$2,$3,true,$4) ON CONFLICT(bot_id,chat_id) DO UPDATE SET enabled=true,added_by_profile_id=EXCLUDED.added_by_profile_id WHERE bot_chat_whitelist.space_id=EXCLUDED.space_id`, botID, id, spaceID, installer); err != nil {
+		if err = insertWhitelistWithAttachment(ctx, tx, botID, spaceID, id, installer, scopes, preferred); err != nil {
 			return err
 		}
 	}
@@ -327,7 +348,7 @@ func (s *BotStore) CompleteInstallationCancellation(ctx context.Context, want *I
 	if got.State == "CANCELED" {
 		return tx.Commit(ctx)
 	}
-	if err := replaceInstallationWhitelist(ctx, tx, got.BotID, got.SpaceID, got.InstallerProfileID, nil); err != nil {
+	if err := replaceInstallationWhitelist(ctx, tx, got.BotID, got.SpaceID, got.InstallerProfileID, nil, nil, nil); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(ctx, `DELETE FROM bot_space_installations WHERE id=$1 AND bot_id=$2 AND space_id=$3`, got.InstallationID, got.BotID, got.SpaceID); err != nil {

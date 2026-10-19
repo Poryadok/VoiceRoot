@@ -177,3 +177,27 @@ Current service contract scopes unpin to saved current whitelist chats; historic
 all-pins coverage cannot be invented from absent data. Do not compact unfinished
 payloads or invent retention expiry. Terminal Space purge must not silently erase
 global deletion inputs or substitute for downstream completion receipts.
+
+### Attachment lifetimes and batch cleanup (c49/c50)
+
+Allocate a durable local attachment UUID before uncertain native Add; preserve it for exact retry, overlap, disable and requalification, and rotate on remove/readd. Freeze current rows plus admitted/pending obligations by attachment identity, permitting two same-chat targets. Additive Bot migration011 retains original source IDs or explicit unqualified origin and actual installation association; it cannot prove historical Space causation. Messaging35 then resolves receiver-owned coverage for the whole per-chat batch and performs at most one uncovered effect in one transaction. Critical PostgreSQL oracles cover pending/no-whitelist lifetime, stable overlap, remove/readd rotation, distinct frozen original/current obligations, legacy capture, concurrent first capture and safe DOWN. This implementation remains open; component365 public admission is separately frozen.
+
+The Bot metadata implementation has actual PG/race proof: causal missing-lifetime
+and collapsed-snapshot RED 9.618s, initial four-case GREEN 17.010s, and migration
+controls GREEN 18.989s. The final affected matrix passed in 47.471s, including the
+old lifecycle writers on schema011 and predecessor DOWN10 empty-RC/old-RR
+controls. DOWN11 waits for a real first writer and refuses its retained commit;
+an old Repeatable Read snapshot is rejected before destructive locks. Earlier
+broader regression failures from stale test migration lists are preserved and
+their two lifecycle cases passed after updating the fixture (7.674s). These
+results qualify local metadata and frozen snapshots only; Messaging batch
+coverage, protected cleanup delivery and the recovery worker remain unfinished.
+
+Purge-before-root is a separate uncovered original criterion (BE-170 c57/c58).
+Bot must capture exactly eligible retirement inputs before erasing Space-owned
+rows; historical attachments alone must not manufacture targets. Its own purge
+receipt does not prove Role or Messaging cleanup. Messaging's existing full
+purge evidence expires after its own 30-day window, and no qualified late compact
+proof provider currently exists. Missing evidence cannot become zero-target
+completion. No new retention clock, perpetual actor history or payload compactor
+is implemented by this metadata slice.

@@ -162,7 +162,11 @@ func TestChatScopeDownRejectsOldRRAndAllowsEmptyDefaultRC(t *testing.T) {
 			ctx := t.Context()
 			st := startBotStore(t)
 			if !old {
-				_, err := st.Pool.Exec(ctx, chatScopeDownSQL(t))
+				// Roll back the empty newer dependent schema first, as the
+				// official migrator does; migration10's own RC control remains.
+				_, err := st.Pool.Exec(ctx, attachmentMigrationSQL(t, "down"))
+				require.NoError(t, err)
+				_, err = st.Pool.Exec(ctx, chatScopeDownSQL(t))
 				require.NoError(t, err)
 				return
 			}

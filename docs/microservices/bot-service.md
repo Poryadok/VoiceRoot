@@ -500,3 +500,20 @@ RPC requires the same verified Gateway/fresh-floor boundary, but no production
 Gateway HTTP mapping or non-generated frontend caller currently exists. Install's
 `allowed_chats` is a separate manage-bots flow, not an owner-policy setter alias.
 Do not infer public HTTP availability from the protected RPC adapter.
+
+Each accepted local chat attachment has a durable UUID allocated before an
+uncertain native install call. Exact retries, overlapping whitelist updates and
+disable/enable retain that lifetime; removing and adding the chat again creates
+a new lifetime. This UUID identifies Bot's local attachment, not Chat's native
+incarnation or historical Space membership. Existing rows without an accepted
+original observation retain an explicitly unqualified origin; a later Chat read
+cannot retroactively qualify it.
+
+Deletion snapshots preserve the union of actual whitelist attachments and active
+installation intents by attachment UUID, including multiple lifetimes for the
+same chat. Each target retains its immutable original observation independently
+from the optional current whitelist observation. Arbitrary attachment history
+does not create new cleanup obligations. These records are recovery input, not
+participant completion receipts. Purge-before-delete coverage and the existing
+P3 evidence retention boundary remain tracked in BE-170; absence of downstream
+evidence must not be interpreted as completed cleanup.

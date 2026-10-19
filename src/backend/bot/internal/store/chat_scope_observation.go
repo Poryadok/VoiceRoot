@@ -169,103 +169,102 @@ type ChatScopeCleanupObservation struct {
 }
 
 type ChatScopeCleanupSource struct {
-	ChatID         uuid.UUID                    `json:"chat_id"`
-	InstallationID uuid.UUID                    `json:"installation_id"`
-	Original       ChatScopeCleanupObservation  `json:"original"`
-	Current        *ChatScopeCleanupObservation `json:"current,omitempty"`
+	AttachmentID        uuid.UUID                    `json:"attachment_id"`
+	ChatID              uuid.UUID                    `json:"chat_id"`
+	InstallationID      uuid.UUID                    `json:"installation_id"`
+	IntentOperationID   *uuid.UUID                   `json:"intent_operation_id,omitempty"`
+	OriginalUnqualified bool                         `json:"original_unqualified,omitempty"`
+	Original            ChatScopeCleanupObservation  `json:"original"`
+	Current             *ChatScopeCleanupObservation `json:"current,omitempty"`
 }
 
 func snapshotChatScopeSources(ctx context.Context, tx pgx.Tx, bot, space uuid.UUID) ([]ChatScopeCleanupSource, error) {
-	rows, err := tx.Query(ctx, `SELECT chat_id,(to_jsonb(w)->>'origin_scope_observation_id')::uuid,(to_jsonb(w)->>'scope_observation_id')::uuid,(to_jsonb(w)->>'source_installation_id')::uuid FROM bot_chat_whitelist w WHERE bot_id=$1 AND space_id=$2 ORDER BY chat_id FOR UPDATE`, bot, space)
+	rows, err := tx.Query(ctx, `SELECT chat_id,scope_observation_id FROM bot_chat_whitelist WHERE bot_id=$1 AND space_id=$2 ORDER BY chat_id FOR UPDATE`, bot, space)
 	if err != nil {
 		return nil, err
 	}
-	type pointers struct {
-		chat                            uuid.UUID
-		original, current, installation *uuid.UUID
-		intentOnly                      bool
+	type pointer struct {
+		chat, id uuid.UUID
+		current  *uuid.UUID
 	}
-	var pending []pointers
+	var current []pointer
 	for rows.Next() {
-		var p pointers
-		if err = rows.Scan(&p.chat, &p.original, &p.current, &p.installation); err != nil {
+		var p pointer
+		if err = rows.Scan(&p.chat, &p.current); err != nil {
 			rows.Close()
 			return nil, err
 		}
-		pending = append(pending, p)
+		current = append(current, p)
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
 		return nil, err
 	}
-	// An admitted remote Add may be uncertain before a whitelist exists; a
-	// later setter may also have removed an originally admitted chat. Freeze
-	// that accepted obligation from the retained intent in this same root TX.
-	seenChats := make(map[uuid.UUID]bool, len(pending))
-	for _, p := range pending {
-		seenChats[p.chat] = true
+	seen := map[uuid.UUID]bool{}
+	for index, p := range current {
+		id, err := ensureWhitelistAttachment(ctx, tx, bot, space, p.chat, false, true, nil, nil)
+		if err != nil {
+			return nil, err
+		}
+		if seen[id] {
+			return nil, ErrChatScopeObservation
+		}
+		seen[id] = true
+		current[index].id = id
 	}
-	var installation, operation uuid.UUID
-	var rawIDs []byte
-	err = tx.QueryRow(ctx, `SELECT installation_id,operation_id,to_jsonb(i)->'chat_scope_observation_ids' FROM bot_installation_intents i WHERE bot_id=$1 AND space_id=$2 AND state<>'CANCELED' FOR UPDATE`, bot, space).Scan(&installation, &operation, &rawIDs)
+	// Only currently frozen rows and the actual accepted uncertain intent are
+	// obligations. Unreferenced historical attachments remain evidence, not work.
+	intent, err := scanInstallationIntent(tx.QueryRow(ctx, `SELECT `+intentColumns+` FROM bot_installation_intents WHERE bot_id=$1 AND space_id=$2 AND state<>'CANCELED' FOR UPDATE`, bot, space))
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
 	}
 	if err == nil {
-		var ids []uuid.UUID
-		if len(rawIDs) > 0 && json.Unmarshal(rawIDs, &ids) != nil {
-			return nil, ErrChatScopeObservation
+		ids, err := ensureInstallationAttachments(ctx, tx, intent)
+		if err != nil {
+			return nil, err
 		}
-		seenIDs := make(map[uuid.UUID]bool, len(ids))
-		for _, id := range ids {
-			if seenIDs[id] {
-				return nil, ErrChatScopeObservation
-			}
-			seenIDs[id] = true
-			r, err := readChatScopeObservation(ctx, tx, bot, space, id)
-			if err != nil {
-				return nil, err
-			}
-			if r.intent == nil || *r.intent != operation || r.origin != "install_admission" {
-				return nil, ErrChatScopeObservation
-			}
-			if !seenChats[r.observation.chat] {
-				id, installation := id, installation
-				pending = append(pending, pointers{chat: r.observation.chat, original: &id, installation: &installation, intentOnly: true})
-				seenChats[r.observation.chat] = true
+		for index, id := range ids {
+			if !seen[id] {
+				current = append(current, pointer{chat: intent.Chats[index], id: id})
+				seen[id] = true
 			}
 		}
 	}
-	sort.Slice(pending, func(i, j int) bool { return pending[i].chat.String() < pending[j].chat.String() })
+	sort.Slice(current, func(i, j int) bool { return current[i].id.String() < current[j].id.String() })
 	var result []ChatScopeCleanupSource
-	for _, p := range pending {
-		if p.original == nil && p.current == nil && p.installation == nil {
-			continue
-		} // actual unqualified legacy row
-		if p.original == nil || (!p.intentOnly && p.current == nil) || p.installation == nil {
-			return nil, ErrChatScopeObservation
+	for _, p := range current {
+		a, err := readChatAttachment(ctx, tx, p.id, bot, space, p.chat)
+		if err != nil {
+			return nil, err
 		}
-		source := ChatScopeCleanupSource{ChatID: p.chat, InstallationID: *p.installation}
-		ids := []uuid.UUID{*p.original}
-		if p.current != nil {
-			ids = append(ids, *p.current)
+		source := ChatScopeCleanupSource{AttachmentID: p.id, ChatID: p.chat, IntentOperationID: a.intent, OriginalUnqualified: a.original == nil}
+		if a.installation != nil {
+			source.InstallationID = *a.installation
 		}
-		for index, id := range ids {
+		copyObservation := func(id uuid.UUID) (ChatScopeCleanupObservation, error) {
 			r, err := readChatScopeObservation(ctx, tx, bot, space, id)
 			if err != nil {
-				return nil, err
+				return ChatScopeCleanupObservation{}, err
 			}
 			o := r.observation
 			if o.chat != p.chat {
-				return nil, ErrChatScopeObservation
+				return ChatScopeCleanupObservation{}, ErrChatScopeObservation
 			}
-			copy := ChatScopeCleanupObservation{OperationID: id, Request: bytes.Clone(o.request), Response: bytes.Clone(o.response), RequestSHA: bytes.Clone(o.requestSHA[:]), ResponseSHA: bytes.Clone(o.responseSHA[:])}
-			if index == 0 {
-				source.Original = copy
-			} else {
-				source.Current = &copy
+			return ChatScopeCleanupObservation{OperationID: id, Request: bytes.Clone(o.request), Response: bytes.Clone(o.response), RequestSHA: bytes.Clone(o.requestSHA[:]), ResponseSHA: bytes.Clone(o.responseSHA[:])}, nil
+		}
+		if a.original != nil {
+			source.Original, err = copyObservation(*a.original)
+			if err != nil {
+				return nil, err
 			}
+		}
+		if p.current != nil {
+			observation, err := copyObservation(*p.current)
+			if err != nil {
+				return nil, err
+			}
+			source.Current = &observation
 		}
 		result = append(result, source)
 	}
@@ -387,6 +386,9 @@ func (s *BotStore) ReusableInstallationIntent(ctx context.Context, bot, space uu
 	}
 	if len(wanted) > 0 {
 		return nil, ErrChatScopeObservation
+	}
+	if _, err = ensureInstallationAttachments(ctx, tx, intent); err != nil {
+		return nil, err
 	}
 	return intent, tx.Commit(ctx)
 }

@@ -372,7 +372,7 @@ RETURNING id`,
 	if err != nil {
 		return uuid.Nil, err
 	}
-	if err = replaceInstallationWhitelist(ctx, tx, botID, spaceID, installer, chats); err != nil {
+	if err = replaceInstallationWhitelist(ctx, tx, botID, spaceID, installer, chats, scopeIDs, nil); err != nil {
 		return uuid.Nil, err
 	}
 	if err = attachChatScopeObservations(ctx, tx, botID, spaceID, scopeIDs); err != nil {
@@ -508,23 +508,24 @@ SELECT EXISTS(SELECT 1 FROM bot_chat_whitelist WHERE bot_id = $1 AND chat_id = $
 		return err
 	}
 	if whitelisted {
+		scopes, scopeErr := chatScopeIDsByChat(ctx, tx, botID, spaceID, scopeIDs)
+		if scopeErr != nil {
+			return scopeErr
+		}
+		if _, err = ensureWhitelistAttachment(ctx, tx, botID, spaceID, chatID, false, !enabled, optionalChatID(scopes, chatID), nil); err != nil {
+			return err
+		}
 		if _, err = tx.Exec(ctx, `
 UPDATE bot_chat_whitelist SET enabled = $4 WHERE bot_id = $1 AND chat_id = $2 AND space_id = $3`,
 			botID, chatID, spaceID, enabled); err != nil {
 			return err
 		}
 	} else if enabled {
-		var inserted int
-		err = tx.QueryRow(ctx, `
-INSERT INTO bot_chat_whitelist (bot_id, chat_id, space_id, enabled, added_by_profile_id)
-VALUES ($1, $2, $3, true, $4)
-ON CONFLICT (bot_id, chat_id) DO UPDATE SET enabled=true
-WHERE bot_chat_whitelist.space_id=EXCLUDED.space_id
-RETURNING 1`, botID, chatID, spaceID, installer).Scan(&inserted)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+		scopes, scopeErr := chatScopeIDsByChat(ctx, tx, botID, spaceID, scopeIDs)
+		if scopeErr != nil {
+			return scopeErr
 		}
-		if err != nil {
+		if err = insertWhitelistWithAttachment(ctx, tx, botID, spaceID, chatID, installer, scopes, nil); err != nil {
 			return err
 		}
 	}
