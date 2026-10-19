@@ -425,3 +425,35 @@ on exit; no send goroutine survives rollback or guard release. A successful
 `Send` means transport enqueue, not receiver acknowledgement: bytes from an
 already admitted send may arrive after a fence receipt. The guarantee is no new
 post-fence admission and no active application send after releasing its guard.
+
+### Protected Gateway lifecycle initiation (BE-170)
+
+`DeleteBot`, `InstallBotInSpace` and `UninstallBotFromSpace` use Gateway's existing
+`GATEWAY_BOT_ADMIN_AUDIT_*` mTLS client and exact delegated-user credentials.
+The Bot receiver uses an independently configured mTLS listener, exact Gateway
+JWKS issuer, full protobuf body/method/request binding and shared durable replay
+guard. Raw or mixed identity headers are rejected. It reads the current Auth
+session floor on every new public admission; a missing/deleted account or stale
+epoch is unauthenticated, and unavailable floor authority is retryable and cannot
+create a new owner decision. Background recovery consumes a previously committed
+decision and does not manufacture a new user credential or default Role.
+
+Receiver configuration is all-or-none:
+`BOT_GATEWAY_LIFECYCLE_GRPC_LISTEN`, `BOT_GATEWAY_LIFECYCLE_TLS_CERT_FILE`,
+`BOT_GATEWAY_LIFECYCLE_TLS_KEY_FILE`, `BOT_GATEWAY_LIFECYCLE_CLIENT_CA_FILE`,
+`BOT_GATEWAY_PRINCIPAL_JWKS_URL`, `BOT_GATEWAY_PRINCIPAL_JWKS_CA_FILE`.
+It requires the Bot signer/JWKS/replay group plus a distinct Auth client:
+`BOT_AUTH_SESSION_FLOOR_GRPC_ADDR`, `BOT_AUTH_SESSION_FLOOR_TLS_CA_FILE`,
+`BOT_AUTH_SESSION_FLOOR_TLS_SERVER_NAME`,
+`BOT_AUTH_SESSION_FLOOR_CLIENT_CERT_FILE`,
+`BOT_AUTH_SESSION_FLOOR_CLIENT_KEY_FILE`. Auth additionally verifies its configured
+Bot URI SAN on the existing protected floor listener; test fixture identities are
+not deployment defaults. This listener exposes only the three unary methods and
+denies streaming RPCs. The outbound Bot signer can run without enabling the
+separate GameEvent ingress; partial GameEvent configuration still fails closed.
+
+Implementation qualification remains tracked in BE-170: a protected component
+proof is not full Gateway cutover, native membership cleanup, or global deletion
+completion. Empty DeleteBot success requires every required participant effect's
+verified immutable completion receipt; retained installation/whitelist snapshots
+are recovery input and never restore live access to a terminal Bot.

@@ -9,6 +9,7 @@ CREATE TABLE bot_installation_intents (
     state TEXT NOT NULL CHECK (state IN ('PREPARING','INSTALLED','CANCELING','CANCELED')),
     chat_ids JSONB NOT NULL CHECK (jsonb_typeof(chat_ids) = 'array'),
     cancel_operation_id UUID UNIQUE,
+    legacy_evidence BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (bot_id, space_id, generation),

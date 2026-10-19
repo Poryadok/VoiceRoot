@@ -48,6 +48,17 @@ func TestConfigFromEnvAcceptsCompleteRuntime(t *testing.T) {
 	}
 }
 
+func TestConfigFromEnvAcceptsLifecycleSignerWithoutGameEvent(t *testing.T) {
+	values := completeConfigEnv()
+	for _, key := range []string{"GAME_INTEGRATION_PRINCIPAL_JWKS_URL", "GAME_INTEGRATION_PRINCIPAL_TLS_CERT_FILE", "GAME_INTEGRATION_PRINCIPAL_TLS_KEY_FILE", "GAME_INTEGRATION_PRINCIPAL_TLS_CA_FILE", "BOT_GAME_EVENT_GRPC_LISTEN", "BOT_GAME_EVENT_TLS_CERT_FILE", "BOT_GAME_EVENT_TLS_KEY_FILE", "BOT_GAME_EVENT_CLIENT_CA_FILE"} {
+		delete(values, key)
+	}
+	cfg, enabled, err := ConfigFromEnv(func(k string) string { return values[k] })
+	if err != nil || !enabled || cfg.BotPrivateKeyFile == "" || cfg.BotGameEventListen != "" {
+		t.Fatalf("lifecycle signer must not implicitly enable unrelated Game Event listener: enabled=%v cfg=%+v err=%v", enabled, cfg, err)
+	}
+}
+
 func TestConfigFromEnvAcceptsCompleteSpaceLifecycleSettings(t *testing.T) {
 	values := completeConfigEnv()
 	values["BOT_SPACE_LIFECYCLE_GRPC_LISTEN"] = ":9444"

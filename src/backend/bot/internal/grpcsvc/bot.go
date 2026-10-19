@@ -155,9 +155,16 @@ func (s *BotGRPC) DeleteBot(ctx context.Context, req *botv1.DeleteBotRequest) (*
 	if err := s.ensureOwner(ctx, botID); err != nil {
 		return nil, err
 	}
-	_, err = s.Store.Pool.Exec(ctx, `UPDATE bots SET status = 'disabled', updated_at = now() WHERE id = $1`, botID)
+	owner, _ := authctx.AccountID(ctx)
+	deletion, err := s.Store.BeginBotDeletion(ctx, botID, owner)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		if errors.Is(err, store.ErrDeletionOwner) {
+			return nil, status.Error(codes.PermissionDenied, "not bot owner")
+		}
+		return nil, mapStoreErr(err)
+	}
+	if deletion.State != "COMPLETE" {
+		return nil, status.Error(codes.Unavailable, "Bot access is revoked; deletion cleanup is pending, retry the same Bot")
 	}
 	return &botv1.DeleteBotResponse{}, nil
 }

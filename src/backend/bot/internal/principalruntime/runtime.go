@@ -61,21 +61,28 @@ func ConfigFromEnv(getenv func(string) string) (Config, bool, error) {
 		BotSpaceLifecycleClientCA: strings.TrimSpace(getenv("BOT_SPACE_LIFECYCLE_CLIENT_CA_FILE")),
 		SpaceJWKSURL:              strings.TrimSpace(getenv("SPACE_PRINCIPAL_JWKS_URL")),
 		SpaceJWKSCAFile:           strings.TrimSpace(getenv("SPACE_PRINCIPAL_JWKS_CA_FILE"))}
-	values := []string{cfg.GISJWKSURL, cfg.GISTLSCert, cfg.GISTLSKey, cfg.GISCAFile, cfg.ReplayRedisURL, cfg.BotPrivateKeyFile, cfg.BotKeyID, cfg.BotJWKSListen, cfg.BotTLSCert, cfg.BotTLSKey,
-		cfg.BotJWKSClientCA, cfg.BotGameEventListen, cfg.BotGameEventCert, cfg.BotGameEventKey, cfg.BotGameEventClientCA}
-	count := 0
-	for _, value := range values {
-		if value != "" {
-			count++
+	common := []string{cfg.ReplayRedisURL, cfg.BotPrivateKeyFile, cfg.BotKeyID, cfg.BotJWKSListen, cfg.BotTLSCert, cfg.BotTLSKey, cfg.BotJWKSClientCA}
+	game := []string{cfg.GISJWKSURL, cfg.GISTLSCert, cfg.GISTLSKey, cfg.GISCAFile, cfg.BotGameEventListen, cfg.BotGameEventCert, cfg.BotGameEventKey, cfg.BotGameEventClientCA}
+	countSet := func(values []string) int {
+		count := 0
+		for _, value := range values {
+			if value != "" {
+				count++
+			}
 		}
+		return count
 	}
-	if count == 0 {
+	commonCount, gameCount := countSet(common), countSet(game)
+	if commonCount == 0 && gameCount == 0 && cfg.BotSpaceLifecycleListen == "" && cfg.SpaceJWKSURL == "" {
 		return Config{}, false, nil
 	}
-	if count != len(values) {
-		return Config{}, true, errors.New("bot and GIS service-principal TLS, replay, signer, and JWKS settings must be configured together")
+	if commonCount != len(common) {
+		return Config{}, true, errors.New("bot principal TLS, replay, signer, and JWKS settings must be configured together")
 	}
-	if !strings.HasPrefix(cfg.GISJWKSURL, "https://") || !strings.HasSuffix(cfg.GISJWKSURL, "/internal/v1/principal/jwks.json") {
+	if gameCount != 0 && gameCount != len(game) {
+		return Config{}, true, errors.New("GIS and bot game-event TLS settings must be configured together")
+	}
+	if gameCount > 0 && (!strings.HasPrefix(cfg.GISJWKSURL, "https://") || !strings.HasSuffix(cfg.GISJWKSURL, "/internal/v1/principal/jwks.json")) {
 		return Config{}, true, errors.New("game integration principal JWKS URL must use the internal HTTPS endpoint")
 	}
 	spaceValues := []string{cfg.BotSpaceLifecycleListen, cfg.BotSpaceLifecycleCert, cfg.BotSpaceLifecycleKey, cfg.BotSpaceLifecycleClientCA, cfg.SpaceJWKSURL, cfg.SpaceJWKSCAFile}
@@ -97,6 +104,10 @@ func ConfigFromEnv(getenv func(string) string) (Config, bool, error) {
 	return cfg, true, nil
 }
 
+func (c Config) GameEventEnabled() bool {
+	return strings.TrimSpace(c.BotGameEventListen) != ""
+}
+
 func (c Config) SpaceLifecycleEnabled() bool {
 	return strings.TrimSpace(c.BotSpaceLifecycleListen) != ""
 }
@@ -113,51 +124,55 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	cert, err := tls.LoadX509KeyPair(cfg.GISTLSCert, cfg.GISTLSKey)
-	if err != nil {
-		return nil, fmt.Errorf("gIS principal JWKS client certificate: %w", err)
-	}
-	caPEM, err := os.ReadFile(cfg.GISCAFile)
-	if err != nil {
-		return nil, err
-	}
-	roots, err := x509.SystemCertPool()
-	if err != nil || roots == nil {
-		roots = x509.NewCertPool()
-	}
-	if !roots.AppendCertsFromPEM(caPEM) {
-		return nil, errors.New("gIS principal JWKS CA contains no certificates")
-	}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: []tls.Certificate{cert}}
-	client := &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
-		return errors.New("principal JWKS redirects are forbidden")
-	}}
-	fetch := func(ctx context.Context, issuer string) ([]byte, error) {
-		if issuer != "gameintegration" {
-			return nil, errors.New("untrusted service principal issuer")
+	var client *http.Client
+	var resolver *principal.JWKSResolver
+	if cfg.GameEventEnabled() {
+		cert, err := tls.LoadX509KeyPair(cfg.GISTLSCert, cfg.GISTLSKey)
+		if err != nil {
+			return nil, fmt.Errorf("gIS principal JWKS client certificate: %w", err)
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.GISJWKSURL, nil)
+		caPEM, err := os.ReadFile(cfg.GISCAFile)
 		if err != nil {
 			return nil, err
 		}
-		resp, err := client.Do(req)
+		roots, err := x509.SystemCertPool()
+		if err != nil || roots == nil {
+			roots = x509.NewCertPool()
+		}
+		if !roots.AppendCertsFromPEM(caPEM) {
+			return nil, errors.New("gIS principal JWKS CA contains no certificates")
+		}
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: []tls.Certificate{cert}}
+		client = &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
+			return errors.New("principal JWKS redirects are forbidden")
+		}}
+		fetch := func(ctx context.Context, issuer string) ([]byte, error) {
+			if issuer != "gameintegration" {
+				return nil, errors.New("untrusted service principal issuer")
+			}
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.GISJWKSURL, nil)
+			if err != nil {
+				return nil, err
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				return nil, err
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != http.StatusOK {
+				return nil, fmt.Errorf("gIS principal JWKS returned status %d", resp.StatusCode)
+			}
+			body, err := io.ReadAll(io.LimitReader(resp.Body, 128*1024+1))
+			if err != nil || len(body) > 128*1024 {
+				return nil, errors.New("gIS principal JWKS response is invalid")
+			}
+			return body, nil
+		}
+		resolver, err = principal.NewJWKSResolverWithConfig(principal.JWKSResolverConfig{Fetch: fetch, RefreshAfter: 20 * time.Second, HardExpiry: 60 * time.Second, UnknownKIDCooldown: 5 * time.Second})
 		if err != nil {
 			return nil, err
 		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("gIS principal JWKS returned status %d", resp.StatusCode)
-		}
-		body, err := io.ReadAll(io.LimitReader(resp.Body, 128*1024+1))
-		if err != nil || len(body) > 128*1024 {
-			return nil, errors.New("gIS principal JWKS response is invalid")
-		}
-		return body, nil
-	}
-	resolver, err := principal.NewJWKSResolverWithConfig(principal.JWKSResolverConfig{Fetch: fetch, RefreshAfter: 20 * time.Second, HardExpiry: 60 * time.Second, UnknownKIDCooldown: 5 * time.Second})
-	if err != nil {
-		return nil, err
 	}
 	redisOptions, err := redis.ParseURL(cfg.ReplayRedisURL)
 	if err != nil {

@@ -23,15 +23,16 @@ type InstallationIntent struct {
 	State                                                                           string
 	Chats                                                                           []uuid.UUID
 	CancelOperationID                                                               uuid.UUID
+	LegacyEvidence                                                                  bool
 }
 
-const intentColumns = `operation_id,bot_id,installation_id,space_id,actor_profile_id,installed_by_profile_id,generation,state,chat_ids,cancel_operation_id`
+const intentColumns = `operation_id,bot_id,installation_id,space_id,actor_profile_id,installed_by_profile_id,generation,state,chat_ids,cancel_operation_id,legacy_evidence`
 
 func scanInstallationIntent(row pgx.Row) (*InstallationIntent, error) {
 	var i InstallationIntent
 	var chats []byte
 	var cancel *uuid.UUID
-	err := row.Scan(&i.OperationID, &i.BotID, &i.InstallationID, &i.SpaceID, &i.ActorProfileID, &i.InstallerProfileID, &i.Generation, &i.State, &chats, &cancel)
+	err := row.Scan(&i.OperationID, &i.BotID, &i.InstallationID, &i.SpaceID, &i.ActorProfileID, &i.InstallerProfileID, &i.Generation, &i.State, &chats, &cancel, &i.LegacyEvidence)
 	if err != nil {
 		return nil, err
 	}
@@ -120,11 +121,12 @@ func (s *BotStore) newInstallationIntent(ctx context.Context, tx pgx.Tx, bot *Bo
 		return nil, err
 	}
 	i := &InstallationIntent{OperationID: uuid.New(), BotID: bot.ID, InstallationID: installationID, SpaceID: spaceID, ActorProfileID: bot.ActorProfileID, InstallerProfileID: installer, Generation: previous + 1, State: "PREPARING", Chats: chats}
+	i.LegacyEvidence = err == nil
 	raw, err := json.Marshal(chats)
 	if err != nil {
 		return nil, err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO bot_installation_intents (`+intentColumns+`) VALUES($1,$2,$3,$4,$5,$6,$7,'PREPARING',$8::jsonb,NULL)`, i.OperationID, i.BotID, i.InstallationID, i.SpaceID, i.ActorProfileID, i.InstallerProfileID, i.Generation, raw)
+	_, err = tx.Exec(ctx, `INSERT INTO bot_installation_intents (`+intentColumns+`) VALUES($1,$2,$3,$4,$5,$6,$7,'PREPARING',$8::jsonb,NULL,$9)`, i.OperationID, i.BotID, i.InstallationID, i.SpaceID, i.ActorProfileID, i.InstallerProfileID, i.Generation, raw, i.LegacyEvidence)
 	return i, err
 }
 
@@ -167,6 +169,8 @@ func (s *BotStore) CompleteInstallation(ctx context.Context, want *InstallationI
 	if err := replaceInstallationWhitelist(ctx, tx, got.BotID, got.SpaceID, got.InstallerProfileID, chats); err != nil {
 		return err
 	}
+	// This acknowledgement qualifies the new exact native request only. A
+	// historical legacy source remains a separate provenance/cleanup obligation.
 	if _, err = tx.Exec(ctx, `UPDATE bot_installation_intents SET state='INSTALLED',updated_at=now() WHERE installation_id=$1`, got.InstallationID); err != nil {
 		return err
 	}

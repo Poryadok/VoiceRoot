@@ -66,7 +66,7 @@ func auditInitiatingAudience(method string) string {
 		return "role"
 	case chatv1.ChatService_CreateChat_FullMethodName, chatv1.ChatService_UpdateChat_FullMethodName, chatv1.ChatService_DeleteChat_FullMethodName:
 		return "chat"
-	case botv1.BotService_InstallBotInSpace_FullMethodName, botv1.BotService_UninstallBotFromSpace_FullMethodName:
+	case botv1.BotService_InstallBotInSpace_FullMethodName, botv1.BotService_UninstallBotFromSpace_FullMethodName, botv1.BotService_DeleteBot_FullMethodName:
 		return "bot"
 	default:
 		return ""

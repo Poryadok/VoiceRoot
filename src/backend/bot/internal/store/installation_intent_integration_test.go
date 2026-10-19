@@ -112,6 +112,35 @@ func TestInstallationIntentConcurrentPrepareAndCancelBeforeComplete(t *testing.T
 	require.Zero(t, count)
 }
 
+func TestInstallationIntentPreservesUnqualifiedLegacyOriginAfterNewAddAcknowledgement(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real PostgreSQL legacy origin boundary")
+	}
+	st := startBotStore(t)
+	ctx := context.Background()
+	bot, _, err := st.CreateBot(ctx, uuid.New(), "Legacy", "", `[]`, uuid.New())
+	require.NoError(t, err)
+	space, installer := uuid.New(), uuid.New()
+	actual, err := st.InstallInSpace(ctx, bot.ID, space, installer, nil)
+	require.NoError(t, err)
+	intent, err := st.PrepareInstallation(ctx, bot.ID, space, installer, nil)
+	require.NoError(t, err)
+	require.Equal(t, actual, intent.InstallationID)
+	require.True(t, intent.LegacyEvidence)
+	// Even an exact new-native add acknowledgement says nothing about whether
+	// the historical legacy source was independently qualified/retired.
+	require.NoError(t, st.CompleteInstallation(ctx, intent, nil))
+	recovered, err := st.PrepareInstallation(ctx, bot.ID, space, installer, nil)
+	require.NoError(t, err)
+	require.True(t, recovered.LegacyEvidence, "empty Add acknowledgement cannot erase legacy provenance obligation")
+	deletion, err := st.BeginBotDeletion(ctx, bot.ID, bot.OwnerAccountID)
+	require.NoError(t, err)
+	require.Equal(t, "PENDING", deletion.State)
+	var legacy bool
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT legacy_evidence FROM bot_deletion_installations WHERE bot_id=$1`, bot.ID).Scan(&legacy))
+	require.True(t, legacy)
+}
+
 func TestInstallationIntentRejectsDisabledActorChangeAndFrozenSpace(t *testing.T) {
 	if testing.Short() {
 		t.Skip("real PostgreSQL boundary")

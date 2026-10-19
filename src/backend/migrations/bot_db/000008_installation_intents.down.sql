@@ -1,4 +1,9 @@
 BEGIN;
+DO $$ BEGIN
+    IF current_setting('transaction_isolation') <> 'read committed' THEN
+        RAISE EXCEPTION 'installation intent DOWN requires READ COMMITTED isolation';
+    END IF;
+END $$;
 -- Acquire the writer-conflicting lock before checking retained authority.
 LOCK TABLE bot_installation_intents IN ACCESS EXCLUSIVE MODE;
 DO $$ BEGIN

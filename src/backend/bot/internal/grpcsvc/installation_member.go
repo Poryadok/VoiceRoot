@@ -45,6 +45,9 @@ func (s *BotGRPC) addInstallationMember(ctx context.Context, i *store.Installati
 	}
 	defer cancel()
 	resp, err := s.InstallationSpace.AddBotMember(callCtx, req)
+	if err != nil && (status.Code(err) == codes.InvalidArgument || status.Code(err) == codes.Unauthenticated || status.Code(err) == codes.PermissionDenied || status.Code(err) == codes.FailedPrecondition || status.Code(err) == codes.AlreadyExists) {
+		return status.Error(status.Code(err), "Space rejected this exact Bot installation intent")
+	}
 	if err != nil || resp == nil {
 		return status.Error(codes.Unavailable, "Space Bot installation acknowledgement unavailable; retry the same installation")
 	}
@@ -59,6 +62,9 @@ func (s *BotGRPC) removeInstallationMember(ctx context.Context, i *store.Install
 	}
 	defer cancel()
 	resp, err := s.InstallationSpace.RemoveBotMember(callCtx, req)
+	if err != nil && (status.Code(err) == codes.InvalidArgument || status.Code(err) == codes.Unauthenticated || status.Code(err) == codes.PermissionDenied || status.Code(err) == codes.FailedPrecondition || status.Code(err) == codes.AlreadyExists) {
+		return status.Error(status.Code(err), "Space rejected this exact Bot cancellation intent")
+	}
 	if err != nil || resp == nil {
 		return status.Error(codes.Unavailable, "Space Bot cancellation acknowledgement unavailable; retry the same cancellation")
 	}

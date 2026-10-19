@@ -7,9 +7,9 @@ import (
 
 	"google.golang.org/grpc/metadata"
 
+	"google.golang.org/protobuf/encoding/protojson"
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func (t *transcoder) serveBots(w http.ResponseWriter, r *http.Request, rest string) bool {
@@ -476,10 +476,16 @@ func (t *transcoder) serveBots(w http.ResponseWriter, r *http.Request, rest stri
 	case r.Method == http.MethodDelete && strings.Contains(rest, "/spaces/") && !strings.HasSuffix(rest, "/install"):
 		parts := strings.Split(strings.Trim(rest, "/"), "/")
 		if len(parts) == 3 && parts[1] == "spaces" {
-			_, err := t.clients.bot.UninstallBotFromSpace(ctx, &botv1.UninstallBotFromSpaceRequest{
+			req := &botv1.UninstallBotFromSpaceRequest{
 				BotId:   parts[0],
 				SpaceId: parts[2],
-			})
+			}
+			protectedCtx, err := t.botLifecycleContext(r, req, botv1.BotService_UninstallBotFromSpace_FullMethodName)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			_, err = t.clients.botAuditAdmin.UninstallBotFromSpace(protectedCtx, req)
 			if err != nil {
 				writeGRPCError(w, err)
 				return true
@@ -525,7 +531,13 @@ func (t *transcoder) serveBots(w http.ResponseWriter, r *http.Request, rest stri
 		return true
 
 	case r.Method == http.MethodDelete && rest != "" && !strings.Contains(rest, "/"):
-		_, err := t.clients.bot.DeleteBot(ctx, &botv1.DeleteBotRequest{BotId: rest})
+		req := &botv1.DeleteBotRequest{BotId: rest}
+		protectedCtx, err := t.botLifecycleContext(r, req, botv1.BotService_DeleteBot_FullMethodName)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		_, err = t.clients.botAuditAdmin.DeleteBot(protectedCtx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -547,7 +559,12 @@ func (t *transcoder) serveBots(w http.ResponseWriter, r *http.Request, rest stri
 		}
 		req.BotId = botID
 		req.SpaceId = spaceID
-		resp, err := t.clients.bot.InstallBotInSpace(ctx, req)
+		protectedCtx, err := t.botLifecycleContext(r, req, botv1.BotService_InstallBotInSpace_FullMethodName)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.botAuditAdmin.InstallBotInSpace(protectedCtx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true

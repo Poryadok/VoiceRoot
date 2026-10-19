@@ -26,6 +26,7 @@ import (
 	"voice/backend/bot/internal/principalgrpc"
 	"voice/backend/bot/internal/principalruntime"
 	"voice/backend/bot/internal/ratelimit"
+	"voice/backend/bot/internal/sessionfloor"
 	"voice/backend/bot/internal/store"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
@@ -77,6 +78,7 @@ func main() {
 	var grpcSrv *grpc.Server
 	var gameEventGRPC *grpc.Server
 	var spaceLifecycleGRPC *grpc.Server
+	var gatewayLifecycleGRPC *grpc.Server
 	var botPrincipalJWKS *http.Server
 	var authorityBots gameintegrationproof.BotLookup
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
@@ -97,23 +99,56 @@ func main() {
 		authorityBots = st
 		hub := dispatch.NewHub()
 		svc := grpcsvc.NewBotGRPC(st, hub)
-		if botPrincipalRuntime != nil {
-			svc.PrincipalIssuer = botPrincipalRuntime.Issuer()
-			tlsConfig, err := botPrincipalRuntime.GameEventServerTLSConfig()
-			if err != nil {
-				log.Fatalf("Bot game-event TLS: %v", err)
+		gatewayConfig, gatewayEnabled, err := principalruntime.GatewayConfigFromEnv(os.Getenv)
+		if err != nil {
+			log.Fatalf("Bot Gateway lifecycle configuration: %v", err)
+		}
+		if gatewayEnabled {
+			floorConfig, floorEnabled, err := sessionfloor.ConfigFromEnv()
+			if err != nil || !floorEnabled || botPrincipalRuntime == nil {
+				log.Fatal("Bot Gateway lifecycle requires protected Auth floor and Bot signer configuration")
 			}
-			listener, err := net.Listen("tcp", principalConfig.BotGameEventListen)
+			floor, floorConnection, err := floorConfig.Dial(botPrincipalRuntime.Issuer())
 			if err != nil {
-				log.Fatalf("Bot game-event listen: %v", err)
+				log.Fatalf("Bot Auth session floor client: %v", err)
 			}
-			gameEventGRPC = grpc.NewServer(grpc.InTapHandle(grpcsvc.PollEventsTransportTap()), grpc.Creds(credentials.NewTLS(tlsConfig)), grpc.UnaryInterceptor(principalgrpc.GameEventUnaryInterceptor(botPrincipalRuntime)))
-			botv1.RegisterBotServiceServer(gameEventGRPC, svc)
+			defer func() { _ = floorConnection.Close() }()
+			gatewayRuntime, err := botPrincipalRuntime.NewGatewayRuntime(gatewayConfig, floor.RequireCurrent)
+			if err != nil {
+				log.Fatalf("Bot Gateway lifecycle runtime: %v", err)
+			}
+			defer gatewayRuntime.Close()
+			gatewayListener, err := net.Listen("tcp", gatewayConfig.Listen)
+			if err != nil {
+				log.Fatalf("Bot Gateway lifecycle listen: %v", err)
+			}
+			gatewayLifecycleGRPC = grpc.NewServer(grpc.Creds(credentials.NewTLS(gatewayRuntime.TLS)), grpc.UnaryInterceptor(principalgrpc.GatewayLifecycleUnaryInterceptor(gatewayRuntime.Verifier)), grpc.StreamInterceptor(principalgrpc.GatewayLifecycleStreamInterceptor()))
+			botv1.RegisterBotServiceServer(gatewayLifecycleGRPC, svc)
 			go func() {
-				if err := gameEventGRPC.Serve(listener); err != nil {
-					log.Fatalf("Bot game-event grpc serve: %v", err)
+				if err := gatewayLifecycleGRPC.Serve(gatewayListener); err != nil {
+					log.Fatalf("Bot Gateway lifecycle serve: %v", err)
 				}
 			}()
+		}
+		if botPrincipalRuntime != nil {
+			svc.PrincipalIssuer = botPrincipalRuntime.Issuer()
+			if principalConfig.GameEventEnabled() {
+				tlsConfig, err := botPrincipalRuntime.GameEventServerTLSConfig()
+				if err != nil {
+					log.Fatalf("Bot game-event TLS: %v", err)
+				}
+				listener, err := net.Listen("tcp", principalConfig.BotGameEventListen)
+				if err != nil {
+					log.Fatalf("Bot game-event listen: %v", err)
+				}
+				gameEventGRPC = grpc.NewServer(grpc.InTapHandle(grpcsvc.PollEventsTransportTap()), grpc.Creds(credentials.NewTLS(tlsConfig)), grpc.UnaryInterceptor(principalgrpc.GameEventUnaryInterceptor(botPrincipalRuntime)))
+				botv1.RegisterBotServiceServer(gameEventGRPC, svc)
+				go func() {
+					if err := gameEventGRPC.Serve(listener); err != nil {
+						log.Fatalf("Bot game-event grpc serve: %v", err)
+					}
+				}()
+			}
 			botPrincipalJWKS, err = botPrincipalRuntime.JWKSHTTPServer()
 			if err != nil {
 				log.Fatalf("Bot principal JWKS: %v", err)
@@ -123,7 +158,7 @@ func main() {
 					log.Fatalf("Bot principal JWKS serve: %v", err)
 				}
 			}()
-			logger.Info("Bot game-event mTLS listener and principal JWKS enabled", slog.String("grpc_addr", principalConfig.BotGameEventListen), slog.String("jwks_addr", principalConfig.BotJWKSListen))
+			logger.Info("Bot principal JWKS enabled", slog.String("grpc_addr", principalConfig.BotGameEventListen), slog.String("jwks_addr", principalConfig.BotJWKSListen))
 			if principalConfig.SpaceLifecycleEnabled() {
 				lifecycleTLS, err := botPrincipalRuntime.SpaceLifecycleServerTLSConfig()
 				if err != nil {
@@ -249,6 +284,9 @@ func main() {
 		}
 		if spaceLifecycleGRPC != nil {
 			spaceLifecycleGRPC.GracefulStop()
+		}
+		if gatewayLifecycleGRPC != nil {
+			gatewayLifecycleGRPC.GracefulStop()
 		}
 		if botPrincipalJWKS != nil {
 			if err := botPrincipalJWKS.Shutdown(ctx); err != nil {

@@ -1,0 +1,186 @@
+package store
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"errors"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+)
+
+var ErrDeletionClaimLost = errors.New("Bot deletion worker claim unavailable")
+var ErrDeletionPending = errors.New("Bot deletion participant effects remain pending")
+
+type BotDeletionEffect struct {
+	EffectID                   uuid.UUID
+	Target                     BotDeletionTarget
+	Kind                       string
+	ChatID                     *uuid.UUID
+	RequestBytes, ReceiptBytes []byte
+	State                      string
+}
+
+// Claims expire without losing any frozen request or received participant
+// outcome. Each new claim monotonically fences every previous worker.
+func (s *BotStore) ClaimBotDeletion(ctx context.Context, operation uuid.UUID) (*BotDeletion, error) {
+	d, err := scanBotDeletion(s.Pool.QueryRow(ctx, `UPDATE bot_deletion_operations SET state='RUNNING',claim_generation=claim_generation+1,attempts=attempts+1,claimed_until=clock_timestamp()+interval '30 seconds' WHERE operation_id=$1 AND state<>'COMPLETE' AND (claimed_until IS NULL OR claimed_until<=clock_timestamp()) AND claim_generation<9223372036854775807 AND attempts<9223372036854775807 RETURNING `+deletionColumns, operation))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrDeletionClaimLost
+	}
+	return d, err
+}
+
+func (s *BotStore) BotDeletionEffects(ctx context.Context, operation uuid.UUID) ([]BotDeletionEffect, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT e.effect_id,t.scope_bytes,t.scope_sha256,e.kind,e.chat_id,e.request_bytes,e.receipt_bytes,e.state FROM bot_deletion_installations t JOIN bot_deletion_effects e ON e.target_id=t.target_id WHERE t.operation_id=$1 ORDER BY t.space_id,e.kind,e.chat_id NULLS FIRST`, operation)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []BotDeletionEffect{}
+	for rows.Next() {
+		var effect BotDeletionEffect
+		var scope, digest []byte
+		if err = rows.Scan(&effect.EffectID, &scope, &digest, &effect.Kind, &effect.ChatID, &effect.RequestBytes, &effect.ReceiptBytes, &effect.State); err != nil {
+			return nil, err
+		}
+		actual := sha256.Sum256(scope)
+		if !bytes.Equal(actual[:], digest) {
+			return nil, ErrInstallationConflict
+		}
+		if err = json.Unmarshal(scope, &effect.Target); err != nil {
+			return nil, err
+		}
+		if effect.Target.OperationID != operation {
+			return nil, ErrInstallationConflict
+		}
+		effect.Target.ScopeBytes = scope
+		effect.Target.ScopeSHA256 = digest
+		out = append(out, effect)
+	}
+	return out, rows.Err()
+}
+
+func (s *BotStore) deletionClaimTx(ctx context.Context, claim *BotDeletion) (pgx.Tx, error) {
+	if claim == nil || claim.OperationID == uuid.Nil || claim.ClaimGeneration <= 0 {
+		return nil, ErrDeletionClaimLost
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var generation int64
+	var state string
+	err = tx.QueryRow(ctx, `SELECT claim_generation,state FROM bot_deletion_operations WHERE operation_id=$1 FOR UPDATE`, claim.OperationID).Scan(&generation, &state)
+	if err != nil || generation != claim.ClaimGeneration || state != "RUNNING" {
+		_ = tx.Rollback(context.Background())
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, err
+		}
+		return nil, ErrDeletionClaimLost
+	}
+	// Evaluate expiry after acquiring the row lock, including any lock wait.
+	var current bool
+	err = tx.QueryRow(ctx, `SELECT claimed_until>clock_timestamp() FROM bot_deletion_operations WHERE operation_id=$1`, claim.OperationID).Scan(&current)
+	if err != nil || !current {
+		_ = tx.Rollback(context.Background())
+		if err != nil {
+			return nil, err
+		}
+		return nil, ErrDeletionClaimLost
+	}
+	return tx, nil
+}
+
+func (s *BotStore) SealBotDeletionRequest(ctx context.Context, claim *BotDeletion, effect uuid.UUID, request []byte) error {
+	if len(request) == 0 || len(request) > 1024*1024 {
+		return ErrInstallationConflict
+	}
+	tx, err := s.deletionClaimTx(ctx, claim)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	var saved []byte
+	err = tx.QueryRow(ctx, `SELECT e.request_bytes FROM bot_deletion_effects e JOIN bot_deletion_installations t ON t.target_id=e.target_id WHERE e.effect_id=$1 AND t.operation_id=$2 FOR UPDATE OF e`, effect, claim.OperationID).Scan(&saved)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrInstallationConflict
+	}
+	if err != nil {
+		return err
+	}
+	if saved != nil {
+		if !bytes.Equal(saved, request) {
+			return ErrInstallationConflict
+		}
+		return tx.Commit(ctx)
+	}
+	digest := sha256.Sum256(request)
+	_, err = tx.Exec(ctx, `UPDATE bot_deletion_effects SET request_bytes=$2,request_sha256=$3 WHERE effect_id=$1`, effect, request, digest[:])
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// The caller validates the exact typed participant receipt before this durable
+// CAS. Persistence alone never establishes that a remote effect completed.
+func (s *BotStore) SaveBotDeletionReceipt(ctx context.Context, claim *BotDeletion, effect uuid.UUID, request, receipt []byte) error {
+	if len(receipt) == 0 || len(receipt) > 1024*1024 {
+		return ErrInstallationConflict
+	}
+	tx, err := s.deletionClaimTx(ctx, claim)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	var savedRequest, savedReceipt []byte
+	err = tx.QueryRow(ctx, `SELECT e.request_bytes,e.receipt_bytes FROM bot_deletion_effects e JOIN bot_deletion_installations t ON t.target_id=e.target_id WHERE e.effect_id=$1 AND t.operation_id=$2 FOR UPDATE OF e`, effect, claim.OperationID).Scan(&savedRequest, &savedReceipt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrInstallationConflict
+	}
+	if err != nil {
+		return err
+	}
+	if savedRequest == nil || !bytes.Equal(savedRequest, request) {
+		return ErrInstallationConflict
+	}
+	if savedReceipt != nil {
+		if !bytes.Equal(savedReceipt, receipt) {
+			return ErrInstallationConflict
+		}
+		return tx.Commit(ctx)
+	}
+	digest := sha256.Sum256(receipt)
+	_, err = tx.Exec(ctx, `UPDATE bot_deletion_effects SET receipt_bytes=$2,receipt_sha256=$3,state='COMPLETE' WHERE effect_id=$1`, effect, receipt, digest[:])
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (s *BotStore) CompleteBotDeletion(ctx context.Context, claim *BotDeletion) error {
+	tx, err := s.deletionClaimTx(ctx, claim)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	var pending bool
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot_deletion_effects e JOIN bot_deletion_installations t ON t.target_id=e.target_id WHERE t.operation_id=$1 AND e.state<>'COMPLETE')`, claim.OperationID).Scan(&pending)
+	if err != nil {
+		return err
+	}
+	if pending {
+		return ErrDeletionPending
+	}
+	result, err := tx.Exec(ctx, `UPDATE bot_deletion_operations SET state='COMPLETE',completed_at=clock_timestamp(),claimed_until=NULL,last_error='' WHERE operation_id=$1 AND claim_generation=$2 AND claimed_until>clock_timestamp()`, claim.OperationID, claim.ClaimGeneration)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() != 1 {
+		return ErrDeletionClaimLost
+	}
+	return tx.Commit(ctx)
+}

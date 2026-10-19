@@ -13,6 +13,7 @@ require (
 	google.golang.org/grpc v1.70.0
 	google.golang.org/protobuf v1.36.5
 	gopkg.in/yaml.v3 v3.0.1
+	voice.app/voice/auth v0.0.0
 	voice.app/voice/bot v0.0.0
 	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
@@ -118,3 +119,5 @@ replace voice.app/voice/common => ../user/pb/voice/common
 replace voice.app/voice/file => ../file/pb/voice/file
 
 replace voice.app/voice/story => ../voice/pb/voice/story
+
+replace voice.app/voice/auth => ../voice/pb/voice/auth

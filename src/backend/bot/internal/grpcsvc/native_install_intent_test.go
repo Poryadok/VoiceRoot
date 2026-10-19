@@ -248,3 +248,31 @@ func TestNativeInstallPersistsIdentityBeforeSpaceRPC(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, called)
 }
+
+func TestNativeInstallStaleReceiverOutcomeDoesNotActivate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real PostgreSQL receiver boundary")
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "bot_stale_install", "")
+	_, err := pool.Exec(ctx, migrationSQL(t))
+	require.NoError(t, err)
+	st := &store.BotStore{Pool: pool}
+	bot, _, err := st.CreateBot(ctx, uuid.New(), "Stale", "", `[]`, uuid.New())
+	require.NoError(t, err)
+	svc := grpcsvc.NewBotGRPC(st, nil)
+	svc.Role = installationPermissionClient{allowed: true}
+	svc.PrincipalIssuer = installationTestIssuer(t)
+	svc.InstallationSpace = intentObservingSpace{add: func(context.Context, *spacev1.AddBotMemberRequest) error {
+		return status.Error(codes.FailedPrecondition, "historical add is retired")
+	}}
+	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("x-voice-profile-id", uuid.NewString()))
+	_, err = svc.InstallBotInSpace(ctx, &botv1.InstallBotInSpaceRequest{BotId: bot.ID.String(), SpaceId: uuid.NewString()})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err), "preserve definitive stale outcome; never reinterpret an old receipt as current activation")
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM bot_space_installations WHERE bot_id=$1`, bot.ID).Scan(&count))
+	require.Zero(t, count)
+	var state string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM bot_installation_intents WHERE bot_id=$1`, bot.ID).Scan(&state))
+	require.Equal(t, "PREPARING", state)
+}
