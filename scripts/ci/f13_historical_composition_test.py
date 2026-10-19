@@ -122,8 +122,9 @@ class Unit:
         git(self.repo, 'commit', '--allow-empty', '-qm', message)
         return git(self.repo, 'rev-parse', 'HEAD')
 
-    def freeze(self):
+    def freeze(self, newline='\n'):
         raw = json.dumps(self.data, indent=2, ensure_ascii=False) + '\n'
+        raw = raw.replace('\n', newline)
         self.write(RECORD, raw)
         self.record = self.commit('separate immutable record')
         code = (ROOT / HELPER).read_text() if (ROOT / HELPER).exists() else '# consumer not implemented\n'
@@ -213,6 +214,17 @@ class HistoricalCompositionTests(unittest.TestCase):
             self.assertEqual((proof['merges'], proof['occurrences'], proof['artifact_bindings']), (8, 38, 243))
             self.assertFalse(proof['runtime_pass'])
             self.assertTrue(proof['retain_runtime_and_content_taint'])
+
+    def test_original_windows_proposal_and_record_raw_crlf_hashes_are_preserved(self):
+        h = self.fixture()
+        name = 'historical-composition/composition-PROPOSAL.json'
+        original = h.artifacts[name].replace(b'\n', b'\r\n')
+        h.data['proposal_sha256'] = hashlib.sha256(original).hexdigest()
+        proof = next(v for v in h.data['artifacts'] if v['name'] == name)
+        proof.update(sha256=hashlib.sha256(original).hexdigest(), bytes=len(original))
+        h.freeze(newline='\r\n')
+        r = h.run()
+        self.assertEqual(r.returncode, 0, r.stderr)
 
     def test_partial_forged_binding_mode_source_and_authority_records_reject(self):
         for case in ('partial', 'occurrence', 'binding', 'missing-binding', 'conflicts', 'current',

@@ -195,6 +195,11 @@ def load_unit(repo, target):
         for item in row['guarded_resolutions']:
             item['review'] = 'PENDING'
     proposal_raw = (json.dumps(proposal, indent=2) + '\n').encode()
+    # The original Windows author wrote both immutable JSON artifacts with
+    # CRLF. Reproduce those bytes from the pinned record's serialization;
+    # neither the recorded proposal hash nor the current record is normalized.
+    if raw.endswith(b'\r\n'):
+        proposal_raw = proposal_raw.replace(b'\n', b'\r\n')
     require(sha(proposal_raw) == r['proposal_sha256'], 'reviewed_proposal_hash')
     bind('historical-composition/composition-PROPOSAL.json', proposal_raw)
     require(checked == set(artifacts), 'complete_artifact_hash_binding')
