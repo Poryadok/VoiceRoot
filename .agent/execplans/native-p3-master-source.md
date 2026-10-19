@@ -48,6 +48,32 @@ remain explicit completion gaps until actually obtained. No stand or ports.
 
 ## Progress
 
+### Existing PR875 f54 prototype (416, supported e94)
+
+V3 corrected contract62a00947/criterion04ab09c4 and normative410a4ae57d6;
+144c102/418c23 design-only review. Currentbase d38b699; exclusive F13 shell,
+one fixed f54 observer/validator and focused tests; all existing pins unchanged.
+No production R/K authority exists. UNKNOWN rows remain UNKNOWN.
+
+- [ ] Meaningful RED using original collector/functions: scalar-only cannot pass
+  second single-base seam; valid runtime+proto/revert and same-bytes-owner fixtures.
+- [ ] Passive append-only hash-chained real frame/operation/classifier/row events,
+  before qualification/map mutation/removal, including non-guarded retained paths.
+- [ ] Separate exact historical boundary vs whole-parent composition observations;
+  bounded O..P2 partitiontrue real child execution, no production admission.
+- [ ] Validator consumes exact hashed trace, checks observed coverage/conservation;
+  all33 DAG nodes/ordered deltas get real operation/shared/base/sync disposition
+  or explicit UNREACHED failure, never guessed owner rows or forced continue.
+- [ ] New provenance-purpose baseline captures byte-exact original pre-f54 prefix;
+  observer preserves it. Any genuine new child gate failure remains FAIL/HOLD.
+- [ ] Frozen code/tests/actual trace to independent418; preserve bundle/receipts,
+  Graphify and own safe closeout; supported121 handoff, no new queue/product.
+
+Acceptance requires real complete conserved trace and unchanged downstream gates;
+a partial/failing observation is evidence only and cannot freeze approved R/K.
+Negative checks: altered/drop/reorder/duplicate frames/operations/flags/hash/parents,
+raw33history substituted as trace, third/future tuple and all existing guards.
+
 - [x] Existing stage custody accepted; exclusive WT19 lease acquired at ac7e039.
 - [x] Master route read, independent418 closure c1 and121 exclusive-write freeze confirmed.
 - [x] Focused Linux qualification9/history4/unchanged correction10 pass; history tests exposed and corrected lost runtime taint.

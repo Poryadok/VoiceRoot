@@ -709,8 +709,21 @@ f13_checkpoint_merge_tree_entry_matches() {
   output_file="${TMP_DIR}/f13-checkpoint-merge-tree"
   git -C "${repo}" merge-base --all "${first_parent}" "${source_head}" \
     >"${bases_file}" 2>/dev/null || return 1
-  [[ "$(wc -l <"${bases_file}" | tr -d '[:space:]')" == 1 &&
-    "$(<"${bases_file}")" == "${expected_base}" ]] || return 1
+  if [[ "$(wc -l <"${bases_file}" | tr -d '[:space:]')" != 1 ||
+    "$(<"${bases_file}")" != "${expected_base}" ]]; then
+    # Prototype observation is a distinct whole-composition result, NEVER an
+    # admission or a conversion of the original status1 into status2/clean.
+    if [[ -n "${f13_f54_trace_file:-}" && -n "${f13_f54_observer:-}" &&
+      "${first_parent}" == 0a0024900b5bb3ba2f6fee391615f0f4fa0864e3 &&
+      "${source_head}" == f15d718b2d20837ae5503dc049134b66592b3675 ]]; then
+      local f13_f54_composition
+      if f13_f54_composition="$(python3 "${f13_f54_observer}" composition "${repo}" \
+        "${expected_base}" "${first_parent}" "${source_head}" "${path}" "${result_entry}")"; then
+        f13_f54_trace_event composition_observation "${repo}" "${f13_f54_composition}" || return 1
+      fi
+    fi
+    return 1
+  fi
 
   if git -C "${repo}" merge-tree --write-tree --name-only -z --no-messages \
     "${first_parent}" "${source_head}" \
@@ -3175,6 +3188,32 @@ f13_path_is_guarded() {
 # use the common ancestor of all best bases, but only after proving every path
 # governed by this collector has the same complete tree entry at each best
 # base. Differences in those paths remain ambiguous and fail closed.
+f13_f54_trace_event() {
+  local kind="$1" trace_repo="$2"
+  shift 2
+  [[ -n "${f13_f54_trace_file:-}" ]] || return 0
+  python3 "${f13_f54_observer}" append "${f13_f54_trace_file}" "${kind}" \
+    "${f13_f54_frame:-}" "${f13_f54_operation:-}" "${trace_repo}" "$@"
+}
+
+f13_f54_observe_child() {
+  local repo="$1" merge="$2" first="$3" source="$4" output="$5" observation child_status=0
+  [[ -n "${f13_f54_trace_file:-}" && -n "${f13_f54_observer:-}" &&
+    "${merge}" == f54bcadab4aa19969281d7d35d76ebad91553d4d &&
+    "${first}" == 0a0024900b5bb3ba2f6fee391615f0f4fa0864e3 &&
+    "${source}" == f15d718b2d20837ae5503dc049134b66592b3675 ]] || return 0
+  observation="$(python3 "${f13_f54_observer}" boundary "${repo}" "${merge}" "${first}" "${source}")" || return 1
+  f13_f54_trace_event boundary_observation "${repo}" "${output}" \
+    4d943fac27fd247d136d84ae145440e54485d3ab || return 1
+  printf '%s\n' 'F54 prototype child begin: supplemental partitiontrue, original outer prefix ends here' >&2
+  f13_collect_develop_contributions "${repo}" 4d943fac27fd247d136d84ae145440e54485d3ab \
+    "${source}" "${TMP_DIR}/f54-observed-child-map" "${TMP_DIR}/f54-observed-child-category" true true || child_status=$?
+  # The original resolver caller still FAILS. This is supplementary real child
+  # provenance; it neither supplies the resolver output nor replaces outer rows.
+  printf 'F54 prototype child observation exit=%s boundary=%s\n' "${child_status}" "${observation}" >&2
+  return 0
+}
+
 f13_resolve_source_base() {
   local repo="$1" first_parent="$2" source_head="$3" output_file="$4"
   local bases canonical base path first_entry entry first_entry_set
@@ -3237,6 +3276,9 @@ f13_cross_scope_path_allowed() {
 # verify the merge tree retained each source path's full tree entry.
 f13_collect_failure() {
   local diagnostic_file="$1" category="$2"
+  if [[ -n "${f13_f54_trace_file:-}" ]]; then
+    f13_f54_trace_event failure "${repo:-${ROOT}}" "${category}" "${output:-}" || return 1
+  fi
   if [[ -n "${diagnostic_file}" ]]; then
     printf '%s\n' "${category}" >"${diagnostic_file}" 2>/dev/null || true
   fi
@@ -3520,6 +3562,15 @@ f13_guarded_correction_qualified() {
 }
 
 f13_collect_develop_contributions() {
+  if [[ -n "${f13_f54_trace_file:-}" && "${f13_f54_running:-false}" != true ]]; then
+    local f13_f54_parent="${f13_f54_frame:-}" f13_f54_frame='' f13_f54_operation=''
+    local f13_f54_running=true f13_f54_status=0
+    f13_f54_frame="$(f13_f54_trace_event frame_enter "$1" "${f13_f54_parent}" "$2" "$3" "${6:-false}" "${7:-false}" "$4")" || return 1
+    f13_collect_develop_contributions "$@" || f13_f54_status=$?
+    f13_f54_trace_event frame_exit "$1" "${f13_f54_status}" "$4" "${5:-}" || return 1
+    return "${f13_f54_status}"
+  fi
+  local f13_f54_running=false f13_f54_operation=''
   local repo="$1" base="$2" target="$3" output="$4" diagnostic_file="${5:-}"
   local allow_direct_followup="${6:-false}"
   local partition_source_history="${7:-false}"
@@ -3574,11 +3625,19 @@ f13_collect_develop_contributions() {
       return 1
     }
     if ((parent_count == 2)) && [[ "${commit_line[2]}" == "${base}" ]]; then
+      if [[ -n "${f13_f54_trace_file:-}" ]]; then
+        : >"${TMP_DIR}/f54-sync-empty-delta"
+        f13_f54_operation="$(f13_f54_trace_event operation_begin "${repo}" "${commit}" 2 \
+          "${commit_line[1]}" "${base}" "${base}" "${base}" sync "${TMP_DIR}/f54-sync-empty-delta")" || return 1
+      fi
       # This merge only syncs the already-owned base into the source lane.
       # Keep the novel first-parent commits from base..target, but do not
       # re-attribute base-side history as a source contribution.
       f13_validate_sync_merge_resolution "${repo}" "${commit}" "${diagnostic_file}" || return 1
       for path in "${!guarded_entries[@]}"; do
+        if [[ -n "${f13_f54_trace_file:-}" ]]; then
+          f13_f54_trace_event sync_gate_before "${repo}" "${path}" "${output}" || return 1
+        fi
         [[ -n "${owners[${path}]+present}" &&
           -n "${owner_triggers[${path}]+present}" &&
           -n "${owner_content_bases[${path}]+present}" &&
@@ -3594,6 +3653,9 @@ f13_collect_develop_contributions() {
           "${path}" "${owner_content_bases[${path}]}" "${guarded_entry_commits[${path}]}" \
           "${owner_source_heads[${path}]}" \
           "${guarded_entries[${path}]}" "${owner_source_entries[${path}]}"; then
+          if [[ -n "${f13_f54_trace_file:-}" ]]; then
+            f13_f54_trace_event disposition "${repo}" "${path}" verified_original_sync_reconciliation "${output}" || return 1
+          fi
           sync_row_count="$(awk -F '\t' -v candidate="${path}" '$1 == candidate { count++ } END { print count + 0 }' "${output}")"
           [[ "${sync_row_count}" == 1 ]] || continue
           awk -F '\t' -v candidate="${path}" '$1 != candidate' "${output}" >"${TMP_DIR}/f13-sync-map-rewrite" || {
@@ -3621,6 +3683,9 @@ f13_collect_develop_contributions() {
       source_head="${commit_line[${source_parent_index}]}"
       source_base_file="${TMP_DIR}/f13-source-base-${contribution_id}"
       f13_resolve_source_base "${repo}" "${first_parent}" "${source_head}" "${source_base_file}" || {
+        if [[ -n "${f13_f54_trace_file:-}" ]]; then
+          f13_f54_observe_child "${repo}" "${commit}" "${first_parent}" "${source_head}" "${output}" || return 1
+        fi
         printf 'CI_DIAG stage=f13-source-base repo=%s commit=%s first_parent=%s source_head=%s base=%s target=%s parent_index=%s\n' \
           "${repo}" "${commit}" "${first_parent}" "${source_head}" "${base}" "${target}" "${source_parent_index}" >&2
         f13_collect_failure "${diagnostic_file}" source_base
@@ -3643,6 +3708,11 @@ f13_collect_develop_contributions() {
       }
     fi
     delta="${TMP_DIR}/f13-source-delta-${contribution_id}"
+    if [[ -n "${f13_f54_trace_file:-}" ]]; then
+      f13_f54_operation="$(f13_f54_trace_event operation_begin "${repo}" "${commit}" "${source_parent_index}" \
+        "${first_parent}" "${source_base}" "${source_head}" "${source_base_candidates}" \
+        "${is_direct}" "${delta}")" || return 1
+    fi
 
     game_snapshot_contribution_allowed=false
     if game_checkpoint_contribution_allowed "${repo}" "${commit}" "${source_base}" "${source_head}" "${delta}"; then
@@ -3659,6 +3729,9 @@ f13_collect_develop_contributions() {
     : >"${TMP_DIR}/f13-unapproved-delta"
     while IFS= read -r path; do
       [[ -n "${path}" ]] || continue
+      if [[ -n "${f13_f54_trace_file:-}" ]]; then
+        f13_f54_trace_event path_gate_before "${repo}" "${path}" "${output}" || return 1
+      fi
       source_entry="$(git -C "${repo}" ls-tree "${source_head}" -- "${path}" 2>/dev/null)" || {
         f13_collect_failure "${diagnostic_file}" source_tree_entry
         return 1
@@ -3749,10 +3822,16 @@ f13_collect_develop_contributions() {
         # pre-H direct owner, keep processing this delta so the producer map
         # is rebound to that owner instead of retaining the temporary row.
         if [[ -z "${owners[${path}]+present}" || "${is_direct}" != true ]]; then
+          if [[ -n "${f13_f54_trace_file:-}" ]]; then
+            f13_f54_trace_event disposition "${repo}" "${path}" original_game_aggregate_path "${output}" || return 1
+          fi
           continue
         fi
       fi
       if [[ "${game_snapshot_contribution_allowed}" == true ]] && game_checkpoint_domain_path "${path}"; then
+        if [[ -n "${f13_f54_trace_file:-}" ]]; then
+          f13_f54_trace_event disposition "${repo}" "${path}" original_game_snapshot_contribution "${output}" || return 1
+        fi
         unset 'guarded_entries[$path]'
         unset 'guarded_entry_commits[$path]'
         continue
@@ -3764,6 +3843,9 @@ f13_collect_develop_contributions() {
       blob="$(awk '{print $3}' <<<"${source_entry}")"
       if game_checkpoint_path_authorized_in_delta "${path}" "${delta}" "${blob}" || \
         be255_checkpoint_path_authorized_in_delta "${path}" "${delta}" "${blob}"; then
+        if [[ -n "${f13_f54_trace_file:-}" ]]; then
+          f13_f54_trace_event disposition "${repo}" "${path}" original_checkpoint_blob_delta "${output}" || return 1
+        fi
         continue
       fi
       printf '%s\n' "${path}" >>"${TMP_DIR}/f13-unapproved-delta"
@@ -3772,6 +3854,9 @@ f13_collect_develop_contributions() {
     trigger=false
     if voice_r22_runtime_changed <"${TMP_DIR}/f13-unapproved-delta"; then
       trigger=true
+    fi
+    if [[ -n "${f13_f54_trace_file:-}" ]]; then
+      f13_f54_trace_event classification "${repo}" "${trigger}" "${TMP_DIR}/f13-unapproved-delta" || return 1
     fi
     while IFS= read -r path; do
       [[ -n "${path}" ]] || continue
@@ -3796,6 +3881,10 @@ f13_collect_develop_contributions() {
         trigger="${nested_trigger}"
       else
         nested_owner_commit="${commit}"
+      fi
+      if [[ -n "${f13_f54_trace_file:-}" ]]; then
+        f13_f54_trace_event row_before "${repo}" "${path}" "${output}" \
+          "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" || return 1
       fi
       ordinary_guarded_merge=false
       if [[ -n "${ordinary_merge_entries[${path}]+present}" ]]; then
@@ -3933,6 +4022,10 @@ f13_collect_develop_contributions() {
             nested_head="${commit}"
           fi
         fi
+        if [[ -n "${f13_f54_trace_file:-}" ]]; then
+          f13_f54_trace_event row_remove "${repo}" "${path}" \
+            "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" original_guarded_map_replacement || return 1
+        fi
         awk -F '\t' -v candidate="${path}" '$1 != candidate' "${output}" >"${TMP_DIR}/f13-map-rewrite" || {
           f13_collect_failure "${diagnostic_file}" release_pr_map_write
           return 1
@@ -3942,6 +4035,10 @@ f13_collect_develop_contributions() {
           return 1
         }
       fi
+      if [[ -n "${f13_f54_trace_file:-}" ]]; then
+        f13_f54_trace_event row_after "${repo}" "${path}" \
+          "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" original_owner_and_row_assignment || return 1
+      fi
       owners["${path}"]="${commit}"
       owner_triggers["${path}"]="${trigger}"
       owner_content_bases["${path}"]="${content_base}"
@@ -3949,6 +4046,9 @@ f13_collect_develop_contributions() {
       owner_source_entries["${path}"]="${source_entry}"
       printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}" >>"${output}"
+      if [[ -n "${f13_f54_trace_file:-}" ]]; then
+        f13_f54_trace_event row_committed "${repo}" "${path}" "${output}" || return 1
+      fi
       if [[ "${native_p3_active:-false}" == true ]] && native_p3_path_bound "${repo}" "${path}"; then
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
           "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}" \
@@ -3981,6 +4081,9 @@ f13_collect_develop_contributions() {
   # Historical source versions may be superseded by later direct commits in
   # this PR. The final owner must still retain the exact guarded tree entry.
   for path in "${!guarded_entries[@]}"; do
+    if [[ -n "${f13_f54_trace_file:-}" ]]; then
+      f13_f54_trace_event final_gate_before "${repo}" "${path}" "${output}" || return 1
+    fi
     target_entry="$(git -C "${repo}" ls-tree "${target}" -- "${path}" 2>/dev/null)" || {
       f13_collect_failure "${diagnostic_file}" target_tree_entry
       return 1
