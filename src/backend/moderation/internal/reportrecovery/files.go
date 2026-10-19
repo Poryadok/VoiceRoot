@@ -125,7 +125,7 @@ func validFileInventory(c Cut) bool {
 	}
 	total := 0
 	for i, a := range c.Artifacts {
-		if a.Kind != chunkKind(i+1) || a.Ordinal != i+1 || a.Schema != 1 || a.RecordCount != chunkRecords(c.View, i+1) || a.ByteLength <= 0 || a.ByteLength > MaxChunkBytes || !validHash(a.SHA256) {
+		if a.Kind != chunkKind(i+1) || a.Ordinal != i+1 || a.Schema != Protocol || a.RecordCount != chunkRecords(c.View, i+1) || a.ByteLength <= 0 || a.ByteLength > MaxChunkBytes || !validHash(a.SHA256) {
 			return false
 		}
 		total += a.ByteLength

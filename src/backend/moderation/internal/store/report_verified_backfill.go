@@ -244,7 +244,9 @@ func (s *ReportStore) readVerifiedJournalCandidates(ctx context.Context, limit i
 	}
 	rows, err := tx.Query(ctx, `SELECT r.id FROM reports r WHERE
  (r.reporter_provenance='VERIFIED_AT_SUBMISSION' AND NOT EXISTS(SELECT 1 FROM report_privacy_journal j WHERE j.report_id=r.id AND j.slot='REPORTER'))
- OR (r.target_type='user' AND r.validated_target_provenance='VERIFIED_AT_VALIDATION' AND NOT EXISTS(SELECT 1 FROM report_privacy_journal j WHERE j.report_id=r.id AND j.slot='USER_TARGET'))
+ OR (r.target_type='user' AND r.validation_state NOT IN ('MISSING','DELETED')
+ AND NOT EXISTS(SELECT 1 FROM report_target_rejections q WHERE q.report_id=r.id)
+ AND r.validated_target_provenance='VERIFIED_AT_VALIDATION' AND NOT EXISTS(SELECT 1 FROM report_privacy_journal j WHERE j.report_id=r.id AND j.slot='USER_TARGET'))
  ORDER BY r.id LIMIT $1`, limit+1)
 	if err != nil {
 		return uuid.Nil, nil, false, err
@@ -302,7 +304,11 @@ func (s *ReportStore) readVerifiedJournalCandidates(ctx context.Context, limit i
 				return uuid.Nil, nil, false, err
 			}
 		}
-		if raw.TargetType == "user" && raw.TargetProvenance == "VERIFIED_AT_VALIDATION" && !existing["USER_TARGET"] {
+		var rejected bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM report_target_rejections WHERE report_id=$1)`, raw.ID).Scan(&rejected); err != nil {
+			return uuid.Nil, nil, false, err
+		}
+		if raw.TargetType == "user" && raw.ValidationState != "MISSING" && raw.ValidationState != "DELETED" && !rejected && raw.TargetProvenance == "VERIFIED_AT_VALIDATION" && !existing["USER_TARGET"] {
 			if err := add("USER_TARGET", raw.TargetAccount, raw.TargetSubject, raw.TargetRevision); err != nil {
 				return uuid.Nil, nil, false, err
 			}

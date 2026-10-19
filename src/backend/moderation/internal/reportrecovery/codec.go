@@ -17,6 +17,7 @@ import (
 )
 
 const (
+	Protocol         = 2
 	RecordsPerChunk  = 8192
 	MaxChunks        = 128
 	MaxChunkBytes    = 8 << 20
@@ -28,13 +29,14 @@ const (
 var ErrInvalid = errors.New("invalid report recovery snapshot")
 
 type Record struct {
-	ReportID        uuid.UUID  `json:"report_id"`
-	Slot            string     `json:"slot"`
-	Disposition     string     `json:"disposition"`
-	SubjectID       *uuid.UUID `json:"subject_id,omitempty"`
-	EvidenceKind    string     `json:"evidence_kind"`
-	EvidenceID      uuid.UUID  `json:"evidence_id"`
-	EvidenceVersion int64      `json:"evidence_version"`
+	ReportID        uuid.UUID        `json:"report_id"`
+	Slot            string           `json:"slot"`
+	Disposition     string           `json:"disposition"`
+	SubjectID       *uuid.UUID       `json:"subject_id,omitempty"`
+	EvidenceKind    string           `json:"evidence_kind"`
+	EvidenceID      uuid.UUID        `json:"evidence_id"`
+	EvidenceVersion int64            `json:"evidence_version"`
+	Rejection       *TargetRejection `json:"-"`
 }
 
 // View identifies one finite observation. DiagnosticHighWater is not a
@@ -102,7 +104,7 @@ func Encode(view View, input []Record) ([]byte, map[string][]byte, Cut, error) {
 	total := 0
 	for ordinal := 1; ordinal <= view.ChunkCount; ordinal++ {
 		count := chunkRecords(view, ordinal)
-		b, err := canonicalLine(header{Type: "voice_report_journal_v1", View: view, Ordinal: ordinal, RecordCount: count})
+		b, err := canonicalLine(header{Type: "voice_report_journal_v2", View: view, Ordinal: ordinal, RecordCount: count})
 		if err != nil {
 			return nil, nil, Cut{}, err
 		}
@@ -119,7 +121,7 @@ func Encode(view View, input []Record) ([]byte, map[string][]byte, Cut, error) {
 			return nil, nil, Cut{}, ErrInvalid
 		}
 		kind := chunkKind(ordinal)
-		manifest.Artifacts = append(manifest.Artifacts, ChunkIdentity{Kind: kind, Schema: 1, Ordinal: ordinal, RecordCount: count, ByteLength: len(b), SHA256: hashBytes(b)})
+		manifest.Artifacts = append(manifest.Artifacts, ChunkIdentity{Kind: kind, Schema: Protocol, Ordinal: ordinal, RecordCount: count, ByteLength: len(b), SHA256: hashBytes(b)})
 		chunks[kind] = b
 	}
 	b, err := canonicalLine(manifest)
@@ -148,7 +150,7 @@ func Parse(manifestBytes []byte, chunks map[string][]byte, expected Cut) (*Snaps
 	for i, artifact := range manifest.Artifacts {
 		ordinal := i + 1
 		b, found := chunks[artifact.Kind]
-		if !found || artifact.Kind != chunkKind(ordinal) || artifact.Schema != 1 || artifact.Ordinal != ordinal || artifact.RecordCount != chunkRecords(manifest.View, ordinal) || artifact.ByteLength <= 0 || artifact.ByteLength > MaxChunkBytes || len(b) != artifact.ByteLength || !validHash(artifact.SHA256) || hashBytes(b) != artifact.SHA256 {
+		if !found || artifact.Kind != chunkKind(ordinal) || artifact.Schema != Protocol || artifact.Ordinal != ordinal || artifact.RecordCount != chunkRecords(manifest.View, ordinal) || artifact.ByteLength <= 0 || artifact.ByteLength > MaxChunkBytes || len(b) != artifact.ByteLength || !validHash(artifact.SHA256) || hashBytes(b) != artifact.SHA256 {
 			return nil, ErrInvalid
 		}
 		total += len(b)
@@ -167,7 +169,7 @@ func Parse(manifestBytes []byte, chunks map[string][]byte, expected Cut) (*Snaps
 		if err := decodeCanonical(line, &h); err != nil {
 			return nil, err
 		}
-		if h.Type != "voice_report_journal_v1" || h.View != manifest.View || h.Ordinal != artifact.Ordinal || h.RecordCount != artifact.RecordCount {
+		if h.Type != "voice_report_journal_v2" || h.View != manifest.View || h.Ordinal != artifact.Ordinal || h.RecordCount != artifact.RecordCount {
 			return nil, ErrInvalid
 		}
 		remaining = rest
@@ -211,10 +213,13 @@ func (s *Snapshot) Records() []Record {
 }
 
 func validView(v View) bool {
-	return v.Protocol == 1 && v.LogicalStore == "moderation" && v.StoreIncarnation != uuid.Nil && v.JournalGeneration != uuid.Nil && v.SnapshotID != uuid.Nil && v.OperationID != uuid.Nil && strings.HasPrefix(v.ViewID, "pgsnapshot-sha256:") && validHash(strings.TrimPrefix(v.ViewID, "pgsnapshot-sha256:")) && v.DiagnosticHighWater >= 0 && v.RecordCount >= 0 && v.RecordCount <= RecordsPerChunk*MaxChunks && v.ChunkCount == max(1, (v.RecordCount+RecordsPerChunk-1)/RecordsPerChunk)
+	return v.Protocol == Protocol && v.LogicalStore == "moderation" && v.StoreIncarnation != uuid.Nil && v.JournalGeneration != uuid.Nil && v.SnapshotID != uuid.Nil && v.OperationID != uuid.Nil && strings.HasPrefix(v.ViewID, "pgsnapshot-sha256:") && validHash(strings.TrimPrefix(v.ViewID, "pgsnapshot-sha256:")) && v.DiagnosticHighWater >= 0 && v.RecordCount >= 0 && v.RecordCount <= RecordsPerChunk*MaxChunks && v.ChunkCount == max(1, (v.RecordCount+RecordsPerChunk-1)/RecordsPerChunk)
 }
 
 func validRecord(r Record) bool {
+	if r.Rejection != nil {
+		return r.ReportID != uuid.Nil && r.Slot == "" && r.Disposition == "" && r.SubjectID == nil && r.EvidenceKind == "" && r.EvidenceID == uuid.Nil && r.EvidenceVersion == 0 && validTargetRejection(*r.Rejection)
+	}
 	if r.ReportID == uuid.Nil || r.EvidenceID == uuid.Nil || r.EvidenceVersion <= 0 || (r.SubjectID != nil && *r.SubjectID == uuid.Nil) || (r.Slot != "REPORTER" && r.Slot != "USER_TARGET") {
 		return false
 	}
@@ -231,7 +236,7 @@ func compareRecords(a, b Record) int {
 	if c := bytes.Compare(a.ReportID[:], b.ReportID[:]); c != 0 {
 		return c
 	}
-	return strings.Compare(a.Slot, b.Slot)
+	return strings.Compare(recordKey(a), recordKey(b))
 }
 
 func chunkRecords(v View, ordinal int) int {
@@ -291,6 +296,10 @@ func cloneRecords(records []Record) []Record {
 		if cloned[i].SubjectID != nil {
 			id := *cloned[i].SubjectID
 			cloned[i].SubjectID = &id
+		}
+		if cloned[i].Rejection != nil {
+			value := *cloned[i].Rejection
+			cloned[i].Rejection = &value
 		}
 	}
 	return cloned

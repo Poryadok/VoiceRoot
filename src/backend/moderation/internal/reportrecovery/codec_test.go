@@ -12,7 +12,7 @@ import (
 )
 
 func fixtureView() View {
-	return View{Protocol: 1, LogicalStore: "moderation", StoreIncarnation: uuid.MustParse("00000000-0000-4000-8000-000000000001"), JournalGeneration: uuid.MustParse("00000000-0000-4000-8000-000000000002"), SnapshotID: uuid.MustParse("00000000-0000-4000-8000-000000000003"), OperationID: uuid.MustParse("00000000-0000-4000-8000-000000000004"), ViewID: "pgsnapshot-sha256:" + strings.Repeat("a", 64), DiagnosticHighWater: 9001, RecordCount: 1, ChunkCount: 1}
+	return View{Protocol: Protocol, LogicalStore: "moderation", StoreIncarnation: uuid.MustParse("00000000-0000-4000-8000-000000000001"), JournalGeneration: uuid.MustParse("00000000-0000-4000-8000-000000000002"), SnapshotID: uuid.MustParse("00000000-0000-4000-8000-000000000003"), OperationID: uuid.MustParse("00000000-0000-4000-8000-000000000004"), ViewID: "pgsnapshot-sha256:" + strings.Repeat("a", 64), DiagnosticHighWater: 9001, RecordCount: 1, ChunkCount: 1}
 }
 
 func fixtureRecord() Record {
@@ -35,11 +35,11 @@ func digest(b []byte) string { sum := sha256.Sum256(b); return hex.EncodeToStrin
 // fixtures therefore exercise domain parsing, not merely a checksum mismatch.
 func fixture(t *testing.T, v View, rows ...[]byte) ([]byte, map[string][]byte, Cut) {
 	t.Helper()
-	b := line(t, header{Type: "voice_report_journal_v1", View: v, Ordinal: 1, RecordCount: len(rows)})
+	b := line(t, header{Type: "voice_report_journal_v2", View: v, Ordinal: 1, RecordCount: len(rows)})
 	for _, r := range rows {
 		b = append(b, r...)
 	}
-	a := ChunkIdentity{Kind: "report_journal_chunk_000001", Schema: 1, Ordinal: 1, RecordCount: len(rows), ByteLength: len(b), SHA256: digest(b)}
+	a := ChunkIdentity{Kind: "report_journal_chunk_000001", Schema: Protocol, Ordinal: 1, RecordCount: len(rows), ByteLength: len(b), SHA256: digest(b)}
 	m := line(t, Manifest{View: v, Artifacts: []ChunkIdentity{a}})
 	return m, map[string][]byte{a.Kind: b}, Cut{View: v, ManifestSHA256: digest(m), Artifacts: []ChunkIdentity{a}}
 }
@@ -109,7 +109,7 @@ func TestRejectIncoherentRecordsAndView(t *testing.T) {
 		}
 	}
 	for _, mutate := range []func(*View){
-		func(v *View) { v.Protocol = 2 }, func(v *View) { v.LogicalStore = "auth" },
+		func(v *View) { v.Protocol = 1 }, func(v *View) { v.LogicalStore = "auth" },
 		func(v *View) { v.OperationID = uuid.Nil }, func(v *View) { v.DiagnosticHighWater = -1 },
 		func(v *View) { v.RecordCount = 2 }, func(v *View) { v.ChunkCount = 2 },
 		func(v *View) { v.ViewID = "arbitrary private value" },
@@ -207,7 +207,7 @@ func TestCanonicalManifestHeaderAndGlobalOrder(t *testing.T) {
 		func(h *header) { h.RecordCount = 0 },
 	} {
 		v := fixtureView()
-		h := header{Type: "voice_report_journal_v1", View: v, Ordinal: 1, RecordCount: 1}
+		h := header{Type: "voice_report_journal_v2", View: v, Ordinal: 1, RecordCount: 1}
 		mutate(&h)
 		_, chunks, cut := fixture(t, v, line(t, fixtureRecord()))
 		kind := cut.Artifacts[0].Kind

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"reflect"
 	"sort"
 	"time"
 	"voice/backend/moderation/internal/automod"
@@ -135,12 +136,43 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 	if state == "LIVE" && ((claim.TargetType == "user" && accountID == uuid.Nil) || (claim.TargetType != "user" && accountID != uuid.Nil)) {
 		return false, errors.New("invalid target account binding")
 	}
+	observed, journal, err := s.readReportValidationObservation(ctx, claim.ReportID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return false, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err = lockReportAccounts(ctx, tx, *claim.ReporterAccountID, accountID); err != nil {
+	accounts := []uuid.UUID{*claim.ReporterAccountID, accountID}
+	for _, account := range []*uuid.UUID{observed.ReporterAccount, observed.TargetAccount} {
+		if account != nil {
+			accounts = append(accounts, *account)
+		}
+	}
+	if err = lockReportAccounts(ctx, tx, accounts...); err != nil {
+		return false, err
+	}
+	var knownSubjects []reportDispatchBinding
+	for _, subject := range []*uuid.UUID{observed.ReporterSubject, observed.TargetSubject} {
+		if subject != nil {
+			knownSubjects = append(knownSubjects, reportDispatchBinding{subject: *subject})
+		}
+	}
+	for _, record := range journal {
+		if record.SubjectID != nil {
+			knownSubjects = append(knownSubjects, reportDispatchBinding{subject: *record.SubjectID})
+		}
+	}
+	knownSubjects = append(knownSubjects, reportDispatchBinding{subject: claim.ReporterSubject.ID})
+	if claim.TargetSubject != nil {
+		knownSubjects = append(knownSubjects, reportDispatchBinding{subject: claim.TargetSubject.ID})
+	}
+	if err = lockDispatchSubjects(ctx, tx, knownSubjects); err != nil {
 		return false, err
 	}
 	bindings := []automod.Subject{*claim.ReporterSubject}
@@ -190,15 +222,62 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 	}
 	var fact ValidationFact
 	var legacy bool
-	err = tx.QueryRow(ctx, `SELECT id,reporter_profile_id,reporter_account_id,target_type,target_id,created_at,validation_publication_legacy,reporter_subject_id,reporter_subject_revision,reporter_provenance
+	var leaseUntil time.Time
+	err = tx.QueryRow(ctx, `SELECT id,reporter_profile_id,reporter_account_id,target_type,target_id,created_at,validation_publication_legacy,reporter_subject_id,reporter_subject_revision,reporter_provenance,validation_claim_until
  FROM reports WHERE id=$1 AND validation_state='PENDING' AND validation_claim=$2
- AND validation_claim_until>now() FOR UPDATE`, claim.ReportID, claim.ClaimID).Scan(
-		&fact.ReportID, &fact.ReporterProfileID, &fact.ReporterAccountID, &fact.TargetType, &fact.TargetID, &fact.CreatedAt, &legacy, &fact.ReporterSubjectID, &fact.ReporterSubjectRevision, &fact.ReporterProvenance)
+ AND validation_claim_until>clock_timestamp() FOR UPDATE`, claim.ReportID, claim.ClaimID).Scan(
+		&fact.ReportID, &fact.ReporterProfileID, &fact.ReporterAccountID, &fact.TargetType, &fact.TargetID, &fact.CreatedAt, &legacy, &fact.ReporterSubjectID, &fact.ReporterSubjectRevision, &fact.ReporterProvenance, &leaseUntil)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
+	}
+	checkLease := func() error {
+		var live bool
+		if e := tx.QueryRow(ctx, `SELECT $1::timestamptz>clock_timestamp()`, leaseUntil).Scan(&live); e != nil {
+			return e
+		}
+		if !live {
+			return ErrReportPrivacy
+		}
+		return nil
+	}
+	// The WHERE predicate can run before a row-lock wait. The acquired row
+	// therefore needs a separate current database-clock check.
+	if err = checkLease(); err != nil {
+		return false, err
+	}
+	current, err := readReportRecoveryRaw(ctx, tx, claim.ReportID, true)
+	if err != nil {
+		return false, err
+	}
+	if !reflect.DeepEqual(current, observed) {
+		return false, ErrReportPrivacy
+	}
+	currentJournal, err := readReportRecoveryJournal(ctx, tx, claim.ReportID, true)
+	if err != nil {
+		return false, err
+	}
+	if !reflect.DeepEqual(currentJournal, journal) {
+		return false, ErrReportPrivacy
+	}
+	for _, record := range currentJournal {
+		if !validReportRecoveryRecord(record) {
+			return false, ErrReportPrivacy
+		}
+		if record.Disposition == "REDACTED" {
+			return false, ErrReportPrivacy
+		}
+		if record.SubjectID != nil && *record.SubjectID != claim.ReporterSubject.ID && (claim.TargetSubject == nil || *record.SubjectID != claim.TargetSubject.ID) {
+			var ended bool
+			if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM automod_terminal_subjects WHERE subject_id=$1)`, *record.SubjectID).Scan(&ended); err != nil {
+				return false, err
+			}
+			if ended {
+				return false, ErrReportPrivacy
+			} // Owning terminal repair precedes ordinary rejection.
+		}
 	}
 	if fact.TargetType != claim.TargetType || fact.TargetID != claim.TargetID {
 		return false, errors.New("target claim mismatch")
@@ -258,9 +337,19 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 		}
 	}
 	if state != "LIVE" {
-		_, err = tx.Exec(ctx, `UPDATE reports SET validation_state=$2,status='dismissed',description=NULL,evidence='{}'::jsonb,
+		if err = requireNoReportTargetRejectionTx(ctx, tx, fact.ReportID); err != nil {
+			return false, err
+		}
+		if fact.TargetType == "user" {
+			err = recordReportTargetRejectionTx(ctx, tx, ReportTargetRejection{ReportID: fact.ReportID, Decision: state, Provenance: "OWNER_VALIDATION", SchemaVersion: 1})
+			if err == nil {
+				err = minimizeReportUserTargetTx(ctx, tx, fact.ReportID, state)
+			}
+		} else {
+			_, err = tx.Exec(ctx, `UPDATE reports SET validation_state=$2,status='dismissed',description=NULL,evidence='{}'::jsonb,
  resolution=jsonb_build_object('code',$3::text),resolved_at=now(),updated_at=now(),validation_claim=NULL,
  validation_claim_until=NULL,validation_failure_code=$3 WHERE id=$1`, fact.ReportID, state, "TARGET_"+map[string]string{"MISSING": "NOT_FOUND", "DELETED": "DELETED"}[state])
+		}
 	} else {
 		if accountID != uuid.Nil {
 			fact.TargetAccountID = &accountID
@@ -272,6 +361,11 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
  validated_target_subject_id=$3,validated_target_subject_revision=$4,validated_target_provenance=$5,validation_claim=NULL,validation_claim_until=NULL,validation_failure_code=NULL,updated_at=now() WHERE id=$1`, fact.ReportID, fact.TargetAccountID, fact.TargetSubjectID, fact.TargetSubjectRevision, map[bool]string{true: "VERIFIED_AT_VALIDATION", false: "LEGACY_UNVERIFIED"}[accountID != uuid.Nil])
 		if err == nil && accountID != uuid.Nil {
 			err = s.RecordReportRecoveryTx(ctx, tx, ReportRecoveryRecord{ReportID: fact.ReportID, Slot: "USER_TARGET", Disposition: "BOUND", SubjectID: fact.TargetSubjectID, EvidenceKind: "AUTH_SUBJECT", EvidenceID: *fact.TargetSubjectID, EvidenceVersion: 1})
+		}
+		// Finish every subject-journal write before locking the rejection family.
+		// A restored pending intake cannot reactivate against a current receipt.
+		if err == nil {
+			err = requireNoReportTargetRejectionTx(ctx, tx, fact.ReportID)
 		}
 		if err == nil && hook != nil {
 			err = hook.ReportValidated(ctx, tx, fact)
@@ -304,8 +398,28 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 			return false, errors.Join(ErrReportPrivacy, err)
 		}
 	}
+	if err = checkLease(); err != nil {
+		return false, err
+	}
 	if err = tx.Commit(ctx); err != nil {
 		return false, err
 	}
 	return true, nil
+}
+
+func (s *ReportStore) readReportValidationObservation(ctx context.Context, id uuid.UUID) (reportRecoveryRaw, []ReportRecoveryRecord, error) {
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return reportRecoveryRaw{}, nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	raw, err := readReportRecoveryRaw(ctx, tx, id, false)
+	if err != nil {
+		return raw, nil, err
+	}
+	journal, err := readReportRecoveryJournal(ctx, tx, id, false)
+	if err != nil {
+		return raw, nil, err
+	}
+	return raw, journal, tx.Commit(ctx)
 }

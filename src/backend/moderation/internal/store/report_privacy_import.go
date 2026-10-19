@@ -19,7 +19,7 @@ func (s *ReportStore) ImportReportRecoverySnapshot(ctx context.Context, snapshot
 		return ErrReportPrivacy
 	}
 	cut := snapshot.Cut()
-	if cut.View.Protocol != 1 || len(cut.Artifacts) == 0 {
+	if cut.View.Protocol != reportrecovery.Protocol || len(cut.Artifacts) == 0 {
 		return ErrReportPrivacy
 	}
 	check, err := authorize(ctx, cut)
@@ -41,7 +41,20 @@ func (s *ReportStore) ImportReportRecoverySnapshot(ctx context.Context, snapshot
 	// inventory. This phase never requests report/account/subject locks after a
 	// journal lock. Later participant cleanup follows the ordinary global order.
 	for _, record := range snapshot.Records() {
+		if record.Rejection != nil {
+			continue
+		}
 		if err := importRecoveryRecordTx(ctx, tx, record); err != nil {
+			return err
+		}
+	}
+	// Across the whole batch, every subject-journal lock precedes rejection
+	// locks. Other repair participants use the same order after report locks.
+	for _, record := range snapshot.Records() {
+		if record.Rejection == nil {
+			continue
+		}
+		if err := recordReportTargetRejectionTx(ctx, tx, ReportTargetRejection{record.ReportID, record.Rejection.Decision, record.Rejection.Provenance, record.Rejection.SchemaVersion}); err != nil {
 			return err
 		}
 	}

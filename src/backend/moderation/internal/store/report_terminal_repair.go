@@ -183,7 +183,8 @@ func (s *ReportStore) RepairReportTerminalReceipts(ctx context.Context, privateA
 }
 
 type reportRecoveryRaw struct {
-	ID, ReporterProfile, TargetID                                  uuid.UUID
+	ID, ReporterProfile                                            uuid.UUID
+	TargetID                                                       *uuid.UUID
 	TargetType                                                     string
 	ReporterAccount, ReporterSubject, TargetAccount, TargetSubject *uuid.UUID
 	ReporterRevision, TargetRevision                               *int64
@@ -200,7 +201,7 @@ func readReportRecoveryRaw(ctx context.Context, tx pgx.Tx, id uuid.UUID, locked 
 	var r reportRecoveryRaw
 	err := tx.QueryRow(ctx, query, id).Scan(&r.ID, &r.ReporterProfile, &r.TargetType, &r.TargetID, &r.ReporterAccount, &r.ReporterSubject, &r.TargetAccount, &r.TargetSubject, &r.ReporterRevision, &r.TargetRevision, &r.ReporterProvenance, &r.TargetProvenance, &r.ValidationState)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return r, ErrReportPrivacy
+		return r, errors.Join(ErrReportPrivacy, err)
 	}
 	return r, err
 }
