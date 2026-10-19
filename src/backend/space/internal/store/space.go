@@ -195,6 +195,9 @@ VALUES($1,$2,$3,$4,$5,$6,$7,$8,'pending') ON CONFLICT(operation_id) DO NOTHING`,
 		if parseErr != nil {
 			return nil, false, parseErr
 		}
+		if err := lockAndCheckOwnershipScope(ctx, tx, []uuid.UUID{id}); err != nil {
+			return nil, false, err
+		}
 		row, getErr := scanSpaceRow(tx.QueryRow(ctx, `SELECT `+spaceSelectColumns+` FROM spaces WHERE id=$1`, id))
 		if getErr != nil {
 			return nil, false, getErr
@@ -204,12 +207,19 @@ VALUES($1,$2,$3,$4,$5,$6,$7,$8,'pending') ON CONFLICT(operation_id) DO NOTHING`,
 		}
 		return row, false, nil
 	}
-	row, err := scanSpaceRow(tx.QueryRow(ctx, `INSERT INTO spaces (name,description,visibility,owner_profile_id,member_count)
-VALUES('Game community','Created through an approved Voice game integration','private',$1,1) RETURNING `+spaceSelectColumns, in.OwnerProfileID))
+	newSpace := uuid.New()
+	if err := lockAndCheckOwnershipScope(ctx, tx, []uuid.UUID{newSpace}); err != nil {
+		return nil, false, err
+	}
+	if err := checkMemberAuthorityCatalog(ctx, tx); err != nil {
+		return nil, false, err
+	}
+	row, err := scanSpaceRow(tx.QueryRow(ctx, `INSERT INTO spaces (id,name,description,visibility,owner_profile_id,member_count)
+VALUES($1,'Game community','Created through an approved Voice game integration','private',$2,1) RETURNING `+spaceSelectColumns, newSpace, in.OwnerProfileID))
 	if err != nil {
 		return nil, false, err
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, row.ID, in.OwnerProfileID); err != nil {
+	if err := publishCommunityBootstrapOwner(ctx, tx, row.ID, in, hash[:]); err != nil {
 		return nil, false, err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE community_bootstrap_operations SET status='succeeded',space_id=$2,updated_at=clock_timestamp() WHERE operation_id=$1`, in.OperationID, row.ID); err != nil {

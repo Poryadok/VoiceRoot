@@ -61,7 +61,7 @@ func setupSpaceMmPermissionFixture(t *testing.T) (
 	roleClient, roleCleanup := startSharedRoleClient(t)
 	spaceClient, spaceCleanup := startSpaceGRPCTestServer(t, pool, withRoleClient(roleClient))
 
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Matchmaking permissions"})
+	created, err := seedLegacySpaceForTest(t, spaceClient, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Matchmaking permissions"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 	invite, err := spaceClient.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID})

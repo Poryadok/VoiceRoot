@@ -48,8 +48,28 @@ services:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
 
   space:
-    expose: ["9094"]
+    expose: ["9094", "9095"]
     environment:
+      # Public creation uses signed Gateway authority and a separate mTLS
+      # receiver. Its Auth floor and Role Owner bootstrap never use ordinary
+      # listeners or raw actor metadata.
+      SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN: :9095
+      SPACE_GATEWAY_LIFECYCLE_TLS_CERT_FILE: /run/phase0/space-lifecycle.crt
+      SPACE_GATEWAY_LIFECYCLE_TLS_KEY_FILE: /run/phase0/space-lifecycle.key
+      SPACE_GATEWAY_LIFECYCLE_CLIENT_CA_FILE: /run/phase0/ca.crt
+      SPACE_GATEWAY_PRINCIPAL_JWKS_URL: https://phase0-jwks:8443/gateway/jwks.json
+      SPACE_GATEWAY_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+      SPACE_GATEWAY_PRINCIPAL_REDIS_ADDR: redis:6379
+      SPACE_AUTH_SESSION_FLOOR_GRPC_ADDR: auth:9092
+      SPACE_AUTH_SESSION_FLOOR_TLS_CA_FILE: /run/phase0/ca.crt
+      SPACE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME: auth
+      SPACE_AUTH_SESSION_FLOOR_CLIENT_CERT_FILE: /run/phase0/space-client.crt
+      SPACE_AUTH_SESSION_FLOOR_CLIENT_KEY_FILE: /run/phase0/space-client.key
+      ROLE_PRINCIPAL_GRPC_ADDR: role:9091
+      ROLE_PRINCIPAL_TLS_CA_FILE: /run/phase0/ca.crt
+      ROLE_PRINCIPAL_TLS_SERVER_NAME: role
+      SPACE_ROLE_CLIENT_CERT_FILE: /run/phase0/space-client.crt
+      SPACE_ROLE_CLIENT_KEY_FILE: /run/phase0/space-client.key
       # Disposable local/CI credential for the existing canonical resolver.
       SPACE_VOICE_S2S_TOKEN: phase0-space-voice-fixture
       S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json"}'
@@ -93,6 +113,11 @@ services:
     environment:
       GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/gateway
       GATEWAY_PRINCIPAL_ACTIVE_KID: current
+      GATEWAY_SPACE_LIFECYCLE_GRPC_ADDR: space:9095
+      GATEWAY_SPACE_LIFECYCLE_TLS_CA_FILE: /run/phase0/ca.crt
+      GATEWAY_SPACE_LIFECYCLE_TLS_SERVER_NAME: space
+      GATEWAY_SPACE_LIFECYCLE_CLIENT_CERT_FILE: /run/phase0/gateway-client.crt
+      GATEWAY_SPACE_LIFECYCLE_CLIENT_KEY_FILE: /run/phase0/gateway-client.key
       GATEWAY_VOICE_USER_GRPC_ADDR: voice:9093
       GATEWAY_VOICE_USER_TLS_CA_FILE: /run/phase0/ca.crt
       GATEWAY_VOICE_USER_TLS_SERVER_NAME: voice

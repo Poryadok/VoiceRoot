@@ -26,7 +26,7 @@ func TestListSpaceTree_Member(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "Tree"})
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{Name: "Tree"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -68,7 +68,7 @@ func TestListSpaceTree_NonMemberDenied(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Private"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Private"})
 	require.NoError(t, err)
 
 	_, err = client.ListSpaceTree(otherCtx, &spacev1.ListSpaceTreeRequest{
@@ -87,7 +87,7 @@ func TestReorderSpaceTree_Owner(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "Reorder"})
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{Name: "Reorder"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -137,7 +137,7 @@ func TestPinTreeNode_UnpinTreeNode_Owner(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "PinSpace"})
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{Name: "PinSpace"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -183,7 +183,7 @@ func TestCreateCategory_NonOwnerDenied(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Owned"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Owned"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -203,7 +203,7 @@ func TestSpaceTree_OwnerCanUpdateAndDeleteCategory(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "Category lifecycle"})
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{Name: "Category lifecycle"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -240,7 +240,7 @@ func TestSpaceTree_OwnerCanUpdateAndDeleteVoiceRoomWithTreeNode(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "Voice room lifecycle"})
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{Name: "Voice room lifecycle"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -273,7 +273,7 @@ func TestSpaceTree_OwnerCanRemoveTextNode(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "Text node lifecycle"})
+	created, err := seedLegacySpaceForTest(t, client, ctx, &spacev1.CreateSpaceRequest{Name: "Text node lifecycle"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
@@ -306,7 +306,7 @@ func TestSpaceTree_AuditWritesAreAtomicAndVisible(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Tree audit"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Tree audit"})
 	require.NoError(t, err)
 	spaceID := uuid.MustParse(created.GetSpace().GetId())
 	category, err := client.CreateCategory(ownerCtx, &spacev1.CreateCategoryRequest{
@@ -421,7 +421,7 @@ func TestSpaceTree_AuditInsertFailureRollsBackUpsert(t *testing.T) {
 	pool := disclosurePool(t)
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Audit rollback"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Audit rollback"})
 	require.NoError(t, err)
 	spaceID := uuid.MustParse(created.GetSpace().GetId())
 

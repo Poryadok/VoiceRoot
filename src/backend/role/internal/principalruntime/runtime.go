@@ -191,7 +191,7 @@ func isOwnershipMethod(method string) bool {
 }
 
 func isTrustedServiceMethod(method string) bool {
-	if method == rolev1.RoleService_CheckPermission_FullMethodName {
+	if method == rolev1.RoleService_CheckPermission_FullMethodName || method == rolev1.RoleService_BootstrapSpaceRoles_FullMethodName {
 		return true
 	}
 	if isOwnershipMethod(method) {
@@ -226,7 +226,7 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash str
 	}
 	issuer := ""
 	switch method {
-	case rolev1.RoleService_CheckPermission_FullMethodName:
+	case rolev1.RoleService_CheckPermission_FullMethodName, rolev1.RoleService_BootstrapSpaceRoles_FullMethodName:
 		issuer = "space"
 	case rolev1.RoleService_ApplyGameSessionGrants_FullMethodName, rolev1.RoleService_RevokeGameSessionGrants_FullMethodName:
 		issuer = "gameintegration"

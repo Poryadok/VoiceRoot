@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 export REAL_PYTHON3="$(command -v python3)"
 SCRIPT="${ROOT}/scripts/ci/compose-a1-multi-account-proof.sh"
-A1_TEST_REGEX='^TestCompose(A1(TwoAccountsFoundation|DailyMessagingREST|GroupReadIsolation|ChannelReadIsolation|BlockDMDenyBothDirections|SessionEpochRealtime)|ThreadsDMReply)_live$'
+A1_TEST_REGEX='^TestCompose(A1(TwoAccountsFoundation|DailyMessagingREST|GroupReadIsolation|ChannelReadIsolation|BlockDMDenyBothDirections|SessionEpochRealtime)|ThreadsDMReply|SpaceCreatorProtectedPublic)_live$'
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 assert_file() { [[ -f "$1" ]] || fail "missing file: $1"; }
@@ -194,7 +194,7 @@ TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/a1-runner-tests.XXXXXXXX")"
 trap 'rm -rf -- "$TEST_TMP"' EXIT
 assert_file "$SCRIPT"
 
-echo '== A1 regex matches exactly the seven current tests =='
+echo '== A1 regex matches exactly the eight current tests =='
 for test_name in \
   TestComposeA1TwoAccountsFoundation_live \
   TestComposeA1DailyMessagingREST_live \
@@ -202,7 +202,8 @@ for test_name in \
   TestComposeA1ChannelReadIsolation_live \
   TestComposeA1BlockDMDenyBothDirections_live \
   TestComposeA1SessionEpochRealtime_live \
-  TestComposeThreadsDMReply_live; do
+  TestComposeThreadsDMReply_live \
+  TestComposeSpaceCreatorProtectedPublic_live; do
   printf '%s\n' "$test_name" | grep -Eq -- "$A1_TEST_REGEX" || fail "regex did not match ${test_name}"
 done
 if printf '%s\n' TestComposeAuthLifecycle_live | grep -Eq -- "$A1_TEST_REGEX"; then

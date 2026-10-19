@@ -27,7 +27,7 @@ func TestGetAuditLog_FiltersCursorAndRevokedAccess(t *testing.T) {
 	roles := &auditPermissionRoleStub{allowed: true}
 	client, cleanup := startSpaceGRPCTestServer(t, pool, withRoleClient(roles))
 	t.Cleanup(cleanup)
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Filtered audit"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Filtered audit"})
 	require.NoError(t, err)
 	spaceID := uuid.MustParse(created.GetSpace().GetId())
 	from := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)

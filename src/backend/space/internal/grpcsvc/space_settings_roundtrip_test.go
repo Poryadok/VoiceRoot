@@ -22,7 +22,7 @@ func TestUpdateSpace_EntryQuestionsAndMmConfigRoundTrip(t *testing.T) {
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Settings round trip"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Settings round trip"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 	questions := `[{"id":"rank","prompt":"Your rank?","required":true}]`

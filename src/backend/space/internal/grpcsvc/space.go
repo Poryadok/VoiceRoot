@@ -16,6 +16,7 @@ import (
 	"voice/backend/pkg/guestguard"
 	"voice/backend/role/permissions"
 	"voice/backend/space/internal/authctx"
+	"voice/backend/space/internal/lifecycleprincipal"
 	"voice/backend/space/internal/store"
 
 	spacev1 "voice.app/voice/space/v1"
@@ -28,23 +29,30 @@ func (s *SpaceGRPC) CreateSpace(ctx context.Context, req *spacev1.CreateSpaceReq
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
 	}
-	caller, ok := authctx.ProfileID(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing profile")
-	}
 	name := strings.TrimSpace(req.GetName())
 	if name == "" {
 		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
 
-	row, err := s.Store.CreateSpace(ctx, caller, name, req.GetDescription(), req.GetVisibility())
+	creator, err := lifecycleprincipal.RequireCreator(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	actor, err := creator.ActorFor(req)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.creatorRoleRuntimeReady(); err != nil {
+		return nil, err
+	}
+	row, err := s.Store.CreateSpaceWithCreator(ctx, creator, req)
 	if err != nil {
 		return nil, mapSpaceStoreError(err)
 	}
-	if accountID, ok := authctx.AccountID(ctx); ok && s.SeedSpaceProActive {
+	if accountID, parseErr := uuid.Parse(actor.AccountID); parseErr == nil && s.SeedSpaceProActive {
 		_ = s.Store.UpsertSpaceSubscription(ctx, row.ID, accountID, "active")
 	}
-	if err := s.bootstrapSpaceRoles(ctx, row.ID, caller); err != nil {
+	if err := s.bootstrapCreatorRoles(ctx, row.ID, row.OwnerProfileID); err != nil {
 		return nil, mapSpaceStoreError(err)
 	}
 	if s.SpaceEvents != nil {
@@ -93,6 +101,9 @@ func (s *SpaceGRPC) CreateCommunityBootstrap(ctx context.Context, req *spacev1.C
 	if templateID != "guild-default" {
 		return nil, status.Error(codes.PermissionDenied, "community template is not supported")
 	}
+	if err := s.creatorRoleRuntimeReady(); err != nil {
+		return nil, err
+	}
 	row, created, err := s.Store.CreateCommunityBootstrapSpace(ctx, store.CommunityBootstrapSpaceInput{
 		OperationID: operationID, ApplicationID: applicationID, EnvironmentID: environmentID,
 		OwnerAccountID: ownerAccountID, OwnerProfileID: ownerProfileID, CorporationKey: corporationKey, TemplateID: templateID,
@@ -105,8 +116,14 @@ func (s *SpaceGRPC) CreateCommunityBootstrap(ctx context.Context, req *spacev1.C
 	}
 	// BootstrapSpaceRoles is an idempotent Role-owned operation. Replays repeat
 	// it so a lost response after the Space transaction can recover the owner baseline.
-	if err := s.bootstrapSpaceRoles(ctx, row.ID, ownerProfileID); err != nil {
-		return nil, status.Error(codes.Unavailable, "community owner roles are unavailable")
+	current, err := s.Store.IsCommunityBootstrapPublicationCurrent(ctx, operationID, row.ID)
+	if err != nil {
+		return nil, mapSpaceStoreError(err)
+	}
+	if current {
+		if err := s.bootstrapCreatorRoles(ctx, row.ID, ownerProfileID); err != nil {
+			return nil, status.Error(codes.Unavailable, "community owner roles are unavailable")
+		}
 	}
 	if created && s.SpaceEvents != nil {
 		if err := s.SpaceEvents.PublishSpaceCreated(ctx, row.ID.String(), row.OwnerProfileID.String()); err != nil {

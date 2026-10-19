@@ -75,11 +75,12 @@ func startVoiceResolverGRPCTestServer(t *testing.T, pool *pgxpool.Pool) (spacev1
 		}
 		return handler(ctx, req)
 	}))
-	spacev1.RegisterSpaceServiceServer(srv, &SpaceGRPC{Store: &store.SpaceStore{Pool: pool}})
+	svc := &SpaceGRPC{Store: &store.SpaceStore{Pool: pool}}
+	spacev1.RegisterSpaceServiceServer(srv, svc)
 	go func() { _ = srv.Serve(lis) }()
 	conn, err := grpc.NewClient("passthrough:///resolver-bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
-	return spacev1.NewSpaceServiceClient(conn), func() { _ = conn.Close(); srv.Stop() }
+	return &legacySpaceFixtureClient{SpaceServiceClient: spacev1.NewSpaceServiceClient(conn), fixture: svc}, func() { _ = conn.Close(); srv.Stop() }
 }
 
 func applyVoiceAccessEpochMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
@@ -119,7 +120,7 @@ func TestResolveVoiceRoomAccess_TrustedVoiceGetsCanonicalRoomAndExactMembership(
 	applyVoiceAccessEpochMigration(t, context.Background(), pool)
 	c, cleanup := startVoiceResolverGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
-	created, err := c.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Exact membership"})
+	created, err := seedLegacySpaceForTest(t, c, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Exact membership"})
 	require.NoError(t, err)
 	room, err := c.CreateVoiceRoom(ownerCtx, &spacev1.CreateVoiceRoomRequest{SpaceId: created.GetSpace().GetId(), Name: "Late member"})
 	require.NoError(t, err)
@@ -146,11 +147,11 @@ func TestResolveVoiceRoomAccess_FailClosedBoundaryAndInputErrors(t *testing.T) {
 	applyVoiceAccessEpochMigration(t, context.Background(), pool)
 	c, cleanup := startVoiceResolverGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
-	created, err := c.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Protected"})
+	created, err := seedLegacySpaceForTest(t, c, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Protected"})
 	require.NoError(t, err)
 	room, err := c.CreateVoiceRoom(ownerCtx, &spacev1.CreateVoiceRoomRequest{SpaceId: created.GetSpace().GetId(), Name: "Room"})
 	require.NoError(t, err)
-	foreign, err := c.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Foreign"})
+	foreign, err := seedLegacySpaceForTest(t, c, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Foreign"})
 	require.NoError(t, err)
 	for _, req := range []*spacev1.ResolveVoiceRoomAccessRequest{
 		{VoiceRoomId: "bad", ProfileId: uuid.NewString(), Space: &spacev1.SpaceRef{Id: created.GetSpace().GetId()}},

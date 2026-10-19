@@ -1430,6 +1430,40 @@ class ComposeTests(unittest.TestCase):
                 r"\s*\{\s*return\s+(?:403|405)\s*;\s*\}", body)
             self.assertIsNotNone(method_guard, "exact JWKS route must reject non-GET methods")
 
+    def test_media_public_creator_uses_protected_bound_transports(self):
+        space = self.media_merged["space"]["environment"]
+        gateway = self.media_merged["gateway"]["environment"]
+        self.assertEqual(gateway["GATEWAY_SPACE_LIFECYCLE_GRPC_ADDR"], "space:9095")
+        self.assertEqual(gateway["GATEWAY_SPACE_LIFECYCLE_TLS_SERVER_NAME"], "space")
+        self.assertEqual(space["SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN"], ":9095")
+        self.assertEqual(space["SPACE_GATEWAY_PRINCIPAL_JWKS_URL"],
+                         "https://phase0-jwks:8443/gateway/jwks.json")
+        self.assertEqual(space["SPACE_GATEWAY_PRINCIPAL_REDIS_ADDR"], "redis:6379")
+        self.assertEqual(space["SPACE_AUTH_SESSION_FLOOR_GRPC_ADDR"], "auth:9092")
+        self.assertEqual(space["SPACE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME"], "auth")
+        self.assertEqual(space["ROLE_PRINCIPAL_GRPC_ADDR"], "role:9091")
+        self.assertEqual(space["ROLE_PRINCIPAL_TLS_SERVER_NAME"], "role")
+        for service, key, source in (
+            ("gateway", "GATEWAY_SPACE_LIFECYCLE_TLS_CA_FILE", "ca/ca.crt"),
+            ("gateway", "GATEWAY_SPACE_LIFECYCLE_CLIENT_CERT_FILE", "tls/gateway-client.crt"),
+            ("gateway", "GATEWAY_SPACE_LIFECYCLE_CLIENT_KEY_FILE", "tls/gateway-client.key"),
+            ("space", "SPACE_GATEWAY_LIFECYCLE_TLS_CERT_FILE", "tls/space-lifecycle.crt"),
+            ("space", "SPACE_GATEWAY_LIFECYCLE_TLS_KEY_FILE", "tls/space-lifecycle.key"),
+            ("space", "SPACE_GATEWAY_LIFECYCLE_CLIENT_CA_FILE", "ca/ca.crt"),
+            ("space", "SPACE_GATEWAY_PRINCIPAL_JWKS_CA_FILE", "ca/ca.crt"),
+            ("space", "SPACE_AUTH_SESSION_FLOOR_TLS_CA_FILE", "ca/ca.crt"),
+            ("space", "SPACE_AUTH_SESSION_FLOOR_CLIENT_CERT_FILE", "tls/space-client.crt"),
+            ("space", "SPACE_AUTH_SESSION_FLOOR_CLIENT_KEY_FILE", "tls/space-client.key"),
+            ("space", "ROLE_PRINCIPAL_TLS_CA_FILE", "ca/ca.crt"),
+            ("space", "SPACE_ROLE_CLIENT_CERT_FILE", "tls/space-client.crt"),
+            ("space", "SPACE_ROLE_CLIENT_KEY_FILE", "tls/space-client.key"),
+        ):
+            target = self.media_merged[service]["environment"][key]
+            mounts = [v for v in self.media_merged[service]["volumes"] if v["target"] == target]
+            self.assertEqual(len(mounts), 1, (service, key))
+            self.assertEqual(Path(mounts[0]["source"]), self.fixture / source)
+            self.assertTrue(mounts[0]["read_only"])
+
     def test_voice_space_media_overlay_is_limited_to_existing_services_and_tls_helper(self):
         added = set(self.media_merged) - set(self.base)
         self.assertEqual(added, {PROXY, "phase0-matchmaking-jwks-readiness"})
@@ -1448,7 +1482,16 @@ class ComposeTests(unittest.TestCase):
                       "SPACE_VOICE_COMMUNICATION_REPLAY_REDIS_ADDR", "SPACE_VOICE_COMMUNICATION_TLS_CERT_FILE",
                       "SPACE_VOICE_COMMUNICATION_TLS_KEY_FILE", "SPACE_VOICE_COMMUNICATION_CLIENT_CA_FILE",
                       "SPACE_VOICE_COMMUNICATION_JWKS_CA_FILE", "SPACE_VOICE_COMMUNICATION_JWKS_CLIENT_CERT_FILE",
-                      "SPACE_VOICE_COMMUNICATION_JWKS_CLIENT_KEY_FILE"},
+                      "SPACE_VOICE_COMMUNICATION_JWKS_CLIENT_KEY_FILE",
+                      "SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN", "SPACE_GATEWAY_LIFECYCLE_TLS_CERT_FILE",
+                      "SPACE_GATEWAY_LIFECYCLE_TLS_KEY_FILE", "SPACE_GATEWAY_LIFECYCLE_CLIENT_CA_FILE",
+                      "SPACE_GATEWAY_PRINCIPAL_JWKS_URL", "SPACE_GATEWAY_PRINCIPAL_JWKS_CA_FILE",
+                      "SPACE_GATEWAY_PRINCIPAL_REDIS_ADDR", "SPACE_AUTH_SESSION_FLOOR_GRPC_ADDR",
+                      "SPACE_AUTH_SESSION_FLOOR_TLS_CA_FILE", "SPACE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME",
+                      "SPACE_AUTH_SESSION_FLOOR_CLIENT_CERT_FILE", "SPACE_AUTH_SESSION_FLOOR_CLIENT_KEY_FILE",
+                      "ROLE_PRINCIPAL_GRPC_ADDR", "ROLE_PRINCIPAL_TLS_CA_FILE",
+                      "ROLE_PRINCIPAL_TLS_SERVER_NAME", "SPACE_ROLE_CLIENT_CERT_FILE",
+                      "SPACE_ROLE_CLIENT_KEY_FILE"},
             "auth": {
                 "AUTH_PRINCIPAL_GRPC_PORT", "AUTH_SESSION_FLOOR_GRPC_PORT",
                 "AUTH_GRPC_TLS_CERT_FILE", "AUTH_GRPC_TLS_KEY_FILE",
@@ -1457,6 +1500,9 @@ class ComposeTests(unittest.TestCase):
             },
             "gateway": {
                 "GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR", "GATEWAY_PRINCIPAL_ACTIVE_KID",
+                "GATEWAY_SPACE_LIFECYCLE_GRPC_ADDR", "GATEWAY_SPACE_LIFECYCLE_TLS_CA_FILE",
+                "GATEWAY_SPACE_LIFECYCLE_TLS_SERVER_NAME", "GATEWAY_SPACE_LIFECYCLE_CLIENT_CERT_FILE",
+                "GATEWAY_SPACE_LIFECYCLE_CLIENT_KEY_FILE",
                 "GATEWAY_VOICE_USER_GRPC_ADDR", "GATEWAY_VOICE_USER_TLS_CA_FILE",
                 "GATEWAY_VOICE_USER_TLS_SERVER_NAME", "GATEWAY_VOICE_USER_CLIENT_CERT_FILE",
                 "GATEWAY_VOICE_USER_CLIENT_KEY_FILE",

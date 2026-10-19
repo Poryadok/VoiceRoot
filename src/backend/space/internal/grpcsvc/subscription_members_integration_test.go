@@ -44,7 +44,7 @@ func TestJoinByInvite_FreeTierBlocks51stMember(t *testing.T) {
 	ownerProfile := uuid.New()
 	ownerCtx := withAccountProfileCtx(ctx, ownerAccount, ownerProfile)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Free Cap"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Free Cap"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -76,7 +76,7 @@ func TestJoinByInvite_SpaceProAllows51stMember(t *testing.T) {
 	ownerProfile := uuid.New()
 	ownerCtx := withAccountProfileCtx(ctx, ownerAccount, ownerProfile)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Pro Cap"})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: "Pro Cap"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
@@ -108,7 +108,7 @@ func TestJoinByInvite_CancelledSpaceProBlocksNewJoinOverFreeCap(t *testing.T) {
 	ownerProfile := uuid.New()
 	ownerCtx := withAccountProfileCtx(ctx, ownerAccount, ownerProfile)
 
-	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: fmt.Sprintf("Post Cancel %d", freeSpaceMemberCap)})
+	created, err := seedLegacySpaceForTest(t, client, ownerCtx, &spacev1.CreateSpaceRequest{Name: fmt.Sprintf("Post Cancel %d", freeSpaceMemberCap)})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
