@@ -101,6 +101,18 @@ func TestLegacyProjectionJournalRequiresTotalPartitionAndAcceptance(t *testing.T
 	require.NoError(t, err)
 	link.PartitionRef = partition
 	source.command.Linkage = link
+	read, err := j.ReadPartition(ctx, partition)
+	require.NoError(t, err, "native intake reads validated P before any owner ACK")
+	require.Equal(t, link.LegacyWorkRef, read.LegacyWork)
+	savedVerifier := j.Owner.Verifier
+	j.Owner.Verifier = nil
+	_, err = j.ReadPartition(ctx, partition)
+	require.ErrorIs(t, err, rp.ErrUnavailable, "deserializing P is not proof-qualified intake")
+	j.Owner.Verifier = savedVerifier
+	source.omit = true
+	_, err = j.ReadPartition(ctx, partition)
+	require.ErrorIs(t, err, rp.ErrConflict, "every read rederives exhaustive ownership")
+	source.omit = false
 	_, err = j.PrepareProjection(ctx, link)
 	require.ErrorIs(t, err, rp.ErrPending)
 	require.EqualValues(t, 1, client.Exists(ctx, source.command.Step.Transitions[0].Key).Val())
