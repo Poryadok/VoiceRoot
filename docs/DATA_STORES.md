@@ -149,6 +149,7 @@ No cross-database FK or writable copy of Space/Role grants is introduced.
 |---------|------------|
 | `chats`, `chat_members` | Shipped — DM/group/channel, `is_archived`, `inbox_bucket` |
 | `chat_create_requests` | Migration `000022`; authenticated creator + request UUID, canonical request hash and saved create-result snapshot committed with the chat |
+| `space_effective_member_heads` | BE-066 forward41, after real native39: compact effective union generation/episode/floor/revision, explicit KNOWN/UNKNOWN cutoff, private exact native witnesses and saved member/owner horizon. Separate from ONE-source admission. Real native terminal P3 removes profile heads behind the permanent Space fence; late replay denies. Space/head locks precede an empty-DOWN check. Native all-writer/cutover/read-context qualification and live-account erasure remain activation gates; no anonymity or indefinite personal-data-retention exception. |
 | `chat_scope_authority_heads` | Migration `000025`; permanent per-chat positive revision and attachment incarnation head, retained across delete/recreate. Source/lifecycle/managed ownership changes maintain it transactionally; no TTL, truncate, revision reset or safe DOWN. `chats.scope_incarnation` is the current native attachment UUID. |
 | `folders`, `folder_chats` | **Shipped** — migrations `000008`/`000009`; folder CRUD and membership handlers are implemented |
 | `quick_access_chats` | **Shipped** — migration `000010` (Batch 17) |
