@@ -24,7 +24,7 @@ type Publisher struct {
 // observe Errors throughout startup as well as during normal serving.
 func Start(cfg Config, wrap func(http.Handler) http.Handler) (*Publisher, error) {
 	if cfg.SigningKey == nil || cfg.NextSigningKey == nil || cfg.KeyID == "" || cfg.NextKeyID == "" || cfg.KeyID == cfg.NextKeyID || cfg.SigningKey.PublicKey.Equal(&cfg.NextSigningKey.PublicKey) {
-		return nil, errors.New("Voice public JWKS requires distinct current and next signing keys")
+		return nil, errors.New("voice public JWKS requires distinct current and next signing keys")
 	}
 	cert, err := tls.LoadX509KeyPair(cfg.TLSCert, cfg.TLSKey)
 	if err != nil {
