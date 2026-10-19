@@ -3,7 +3,6 @@ module voice/backend/pkg
 go 1.26
 
 require (
- voice.app/voice/events v0.0.0
 	github.com/alicebob/miniredis/v2 v2.34.0
 	github.com/docker/docker v27.1.1+incompatible
 	github.com/google/uuid v1.6.0
