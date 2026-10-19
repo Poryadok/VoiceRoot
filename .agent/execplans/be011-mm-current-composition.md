@@ -138,3 +138,25 @@ No native command/image, complete factory startup, protected response receipt or
 client-to-Gateway-to-native positive is claimed complete. No MASTER-ready offer.
 Graphify update was attempted in this lease and bounded/cancelled terminal1;
 there is no successful current graph-refresh claim.
+
+### Native queue projection boundary
+
+Implemented sealed QueueProjectionCandidate with private member accounts,
+original source origin and current admission history. Fresh source validation
+and ForwardLifetime precede short RC FIRST admission, account locks, party/
+sessions/intent, fresh ban and full cut verification. No network under SQL;
+registration spans Redis plus durable acknowledgement. Unknown preserves the
+search; definitive source loss or exact account ban resets the affected party.
+RELEASE remains independent. Real PG/Redis checks cover positive enqueue,
+missing proof, source/readback Unknown, closed head, noninitiator ban, changed
+local generation after RPC, held closer before accounts, defensive copies and
+closed RELEASE. Four existing projector regressions also pass. Composed147033/
+351 worker tests4top11sub pass; actual root adapter cancellation retains its
+registration until explicit release, never an attempt deadline alone.
+
+MM026 is reserved in BE011c122 for a durable projection witness and c117 response
+receipt; it is not implemented/published yet. Native root must not use the old
+ApplyPendingRecoveryEffects network-under-row-lock callback for positive
+requeue. Implement native acknowledgement of exact whole-party projection
+evidence before starting native workers. Full fixed root, protected response
+and client-to-Gateway positive remain implementation, not completed features.

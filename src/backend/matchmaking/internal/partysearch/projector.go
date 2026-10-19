@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"voice/backend/matchmaking/internal/partysource"
 	"voice/backend/matchmaking/internal/queue"
 	"voice/backend/matchmaking/internal/store"
 )
@@ -21,8 +22,11 @@ type ProjectionQueue interface {
 }
 
 type Projector struct {
-	Store *store.PartyStore
-	Queue ProjectionQueue
+	Store           *store.PartyStore
+	Queue           ProjectionQueue
+	Validator       partysource.ProjectionValidator
+	ForwardLifetime ProjectionLifetime
+	Resetter        ProjectionResetter
 }
 
 func (p *Projector) RunOnce(ctx context.Context) (bool, error) {
@@ -37,6 +41,15 @@ func (p *Projector) RunOnce(ctx context.Context) (bool, error) {
 	}
 	cut, workErr := p.Store.ReadQueueIntent(ctx, *lease)
 	finishLease := *lease
+	if workErr == nil {
+		if cut.Enqueue && p.Store.NativeAdmission != nil {
+			var release func()
+			release, workErr = p.authorizeNativeProjection(ctx, cut)
+			if release != nil {
+				defer release()
+			}
+		}
+	}
 	if workErr == nil {
 		finishLease = cut.Lease
 	}

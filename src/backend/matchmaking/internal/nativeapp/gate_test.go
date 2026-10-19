@@ -130,3 +130,19 @@ func TestForwardGateTimedOutCloseNeverReopens(t *testing.T) {
 	release()
 	require.NoError(t, g.closeAndDrain(context.Background()))
 }
+
+func TestForwardGateCanceledAttemptRetainsRegistrationThroughDurableHandling(t *testing.T) {
+	b, s, observer := gateFixture(t)
+	g := newForwardGate(b, s, observer)
+	acquire, cancel := context.WithCancel(context.Background())
+	id := uuid.New()
+	release, err := g.EnterForward(acquire, id, [32]byte{1})
+	require.NoError(t, err)
+	cancel()
+	require.Equal(t, []w.ID{w.ID(id)}, g.inFlight(), "attempt cancellation is not a durable outcome or release")
+	drain, done := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer done()
+	require.Error(t, g.closeAndDrain(drain), "close must wait for retry/claim/receipt persistence after attempt cancellation")
+	release()
+	require.NoError(t, g.closeAndDrain(context.Background()))
+}
