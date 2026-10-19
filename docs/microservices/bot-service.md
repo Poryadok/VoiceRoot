@@ -447,7 +447,8 @@ post-fence admission and no active application send after releasing its guard.
 
 ### Protected Gateway lifecycle initiation (BE-170)
 
-`DeleteBot`, `InstallBotInSpace` and `UninstallBotFromSpace` use Gateway's existing
+`DeleteBot`, `InstallBotInSpace`, `UninstallBotFromSpace`, `SetChatWhitelist` and
+`SetBotChatEnabled` use Gateway's existing
 `GATEWAY_BOT_ADMIN_AUDIT_*` mTLS client and exact delegated-user credentials.
 The Bot receiver uses an independently configured mTLS listener, exact Gateway
 JWKS issuer, full protobuf body/method/request binding and shared durable replay
@@ -467,7 +468,7 @@ It requires the Bot signer/JWKS/replay group plus a distinct Auth client:
 `BOT_AUTH_SESSION_FLOOR_CLIENT_CERT_FILE`,
 `BOT_AUTH_SESSION_FLOOR_CLIENT_KEY_FILE`. Auth additionally verifies its configured
 Bot URI SAN on the existing protected floor listener; test fixture identities are
-not deployment defaults. This listener exposes only the three unary methods and
+not deployment defaults. This listener exposes only these five unary methods and
 denies streaming RPCs. The outbound Bot signer can run without enabling the
 separate GameEvent ingress; partial GameEvent configuration still fails closed.
 
@@ -487,3 +488,15 @@ decision is unavailable, a definitive false is denied. Missing private transport
 never falls back to ordinary `ROLE_GRPC_ADDR`. Role's actual protected listener
 must enable its finite Bot lifecycle branch and trust the configured Bot JWKS;
 private cleanup additionally needs its registered typed removal adapter.
+
+The existing `PATCH /api/v1/bots/{bot_id}/chats/{chat_id}/enabled` dispatch uses
+this protected client, binds the chat ID from the URL before signing and requires
+the current private `SPACE_MANAGE_BOTS` decision for both enable and disable.
+Enabling additionally records a fresh Chat scope observation; disabling preserves
+the accepted source. Missing private Role transport cannot authorize either.
+
+`SetChatWhitelist` retains its existing owner-only rule. Its declared protected
+RPC requires the same verified Gateway/fresh-floor boundary, but no production
+Gateway HTTP mapping or non-generated frontend caller currently exists. Install's
+`allowed_chats` is a separate manage-bots flow, not an owner-policy setter alias.
+Do not infer public HTTP availability from the protected RPC adapter.

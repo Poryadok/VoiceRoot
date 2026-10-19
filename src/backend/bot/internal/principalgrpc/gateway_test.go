@@ -8,10 +8,53 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 	botv1 "voice.app/voice/bot/v1"
+	chatv1 "voice.app/voice/chat/v1"
 	"voice/backend/pkg/principal"
 )
+
+func TestGatewayVerifierBindsExistingWhitelistAndEnableMutations(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "current", PrivateKey: key})
+	require.NoError(t, err)
+	reads := 0
+	seen := make(map[string]bool)
+	verifier := GatewayUserVerifier{Keys: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil }, Replay: func(_ context.Context, _ string, jti string, _ time.Time) error {
+		if seen[jti] {
+			return errors.New("replay")
+		}
+		seen[jti] = true
+		return nil
+	}, Epoch: func(context.Context, string, int64) error { reads++; return nil }}
+	for _, test := range []struct {
+		method  string
+		request proto.Message
+	}{
+		{botv1.BotService_SetChatWhitelist_FullMethodName, &botv1.SetChatWhitelistRequest{BotId: uuid.NewString()}},
+		{botv1.BotService_SetBotChatEnabled_FullMethodName, &botv1.SetBotChatEnabledRequest{BotId: uuid.NewString(), SpaceId: uuid.NewString(), Chat: &chatv1.ChatRef{Id: uuid.NewString()}, Enabled: true}},
+	} {
+		t.Run(test.method, func(t *testing.T) {
+			hash, err := principal.RequestHash(test.request)
+			require.NoError(t, err)
+			id := uuid.NewString()
+			token, err := issuer.IssueDelegatedUser(principal.DelegatedUserInput{Audience: "bot", RPC: test.method, RequestID: id, RequestHash: hash, AccountID: uuid.NewString(), ProfileID: uuid.NewString(), SessionEpoch: 9, AccountType: "regular", ClientExpiresAt: time.Now().Add(time.Minute)})
+			require.NoError(t, err)
+			before := reads
+			identity, err := verifier.VerifyGateway(t.Context(), token, test.method, id, hash)
+			require.NoError(t, err)
+			require.Equal(t, "delegated_user", identity.Kind)
+			require.Equal(t, before+1, reads)
+			_, err = verifier.VerifyGateway(t.Context(), token, test.method, id, hash)
+			require.Error(t, err, "credential replay is denied")
+			_, err = verifier.VerifyGateway(t.Context(), token, botv1.BotService_UpdateBot_FullMethodName, id, hash)
+			require.Error(t, err, "no generic Bot method widening")
+		})
+	}
+}
 
 func TestGatewayVerifierRequiresFreshEpochReplayAndExactLifecycleBody(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)

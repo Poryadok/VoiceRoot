@@ -16,6 +16,7 @@ import (
 	"voice/backend/bot/internal/dispatch"
 	"voice/backend/bot/internal/s2s"
 	"voice/backend/bot/internal/store"
+	"voice/backend/pkg/principal"
 
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
@@ -32,6 +33,9 @@ func chatRefIsDM(ref *chatv1.ChatRef) bool {
 }
 
 func (s *BotGRPC) InstallBotInSpace(ctx context.Context, req *botv1.InstallBotInSpaceRequest) (*botv1.InstallBotInSpaceResponse, error) {
+	if _, err := principal.RequireDelegatedUser(ctx, "bot", botv1.BotService_InstallBotInSpace_FullMethodName, req); err != nil {
+		return nil, status.Error(codes.Unauthenticated, "verified installation initiation required")
+	}
 	botID, err := parseUUID("bot_id", req.GetBotId())
 	if err != nil {
 		return nil, err
@@ -92,6 +96,9 @@ func (s *BotGRPC) InstallBotInSpace(ctx context.Context, req *botv1.InstallBotIn
 }
 
 func (s *BotGRPC) UninstallBotFromSpace(ctx context.Context, req *botv1.UninstallBotFromSpaceRequest) (*botv1.UninstallBotFromSpaceResponse, error) {
+	if _, err := principal.RequireDelegatedUser(ctx, "bot", botv1.BotService_UninstallBotFromSpace_FullMethodName, req); err != nil {
+		return nil, status.Error(codes.Unauthenticated, "verified uninstall initiation required")
+	}
 	botID, err := parseUUID("bot_id", req.GetBotId())
 	if err != nil {
 		return nil, err
@@ -308,6 +315,9 @@ func (s *BotGRPC) ListBotsInChat(ctx context.Context, req *botv1.ListBotsInChatR
 }
 
 func (s *BotGRPC) SetBotChatEnabled(ctx context.Context, req *botv1.SetBotChatEnabledRequest) (*botv1.SetBotChatEnabledResponse, error) {
+	if _, err := principal.RequireDelegatedUser(ctx, "bot", botv1.BotService_SetBotChatEnabled_FullMethodName, req); err != nil {
+		return nil, status.Error(codes.Unauthenticated, "verified chat enable initiation required")
+	}
 	botID, err := parseUUID("bot_id", req.GetBotId())
 	if err != nil {
 		return nil, err
@@ -320,8 +330,11 @@ func (s *BotGRPC) SetBotChatEnabled(ctx context.Context, req *botv1.SetBotChatEn
 	if err != nil {
 		return nil, err
 	}
-	profile, err := s.checkManageBots(ctx, spaceID)
-	if err != nil {
+	profile, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	if err := s.checkInstallationPermission(ctx, spaceID, profile); err != nil {
 		return nil, err
 	}
 	if req.GetEnabled() {

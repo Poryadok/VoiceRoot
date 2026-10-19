@@ -367,10 +367,15 @@ func (t *transcoder) serveBots(w http.ResponseWriter, r *http.Request, rest stri
 			req.BotId = parts[0]
 			if req.GetChat() == nil {
 				req.Chat = &chatv1.ChatRef{Id: parts[2]}
-			} else if req.GetChat().GetId() == "" {
+			} else {
 				req.Chat.Id = parts[2]
 			}
-			_, err := t.clients.bot.SetBotChatEnabled(ctx, req)
+			protectedCtx, err := t.botLifecycleContext(r, req, botv1.BotService_SetBotChatEnabled_FullMethodName)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			_, err = t.clients.botAuditAdmin.SetBotChatEnabled(protectedCtx, req)
 			if err != nil {
 				writeGRPCError(w, err)
 				return true

@@ -305,6 +305,7 @@ func TestServeBots_listBotsInChatRouteRegistered(t *testing.T) {
 func TestServeBots_setBotChatEnabledRouteRegistered(t *testing.T) {
 	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/bots/bot-1/chats/chat-1/enabled", http.NoBody)
+	req = withBotLifecycleTestActor(t, tc, req)
 	req.Header.Set("Authorization", "Bearer token")
 	req.Header.Set("X-Voice-User-Id", "00000000-0000-0000-0000-000000000001")
 	req.Header.Set("X-Voice-Profile-Id", "00000000-0000-0000-0000-000000000002")

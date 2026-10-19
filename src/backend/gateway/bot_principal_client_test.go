@@ -23,9 +23,10 @@ import (
 
 type verifiedBotLifecycleClient struct {
 	botv1.BotServiceClient
-	key    *rsa.PublicKey
-	calls  int
-	claims tokenClaims
+	key         *rsa.PublicKey
+	calls       int
+	claims      tokenClaims
+	enabledChat string
 }
 
 func withBotLifecycleTestActor(t *testing.T, tc *transcoder, request *http.Request) *http.Request {
@@ -74,6 +75,62 @@ func (f *verifiedBotLifecycleClient) InstallBotInSpace(ctx context.Context, r *b
 func (f *verifiedBotLifecycleClient) UninstallBotFromSpace(ctx context.Context, r *botv1.UninstallBotFromSpaceRequest, _ ...grpc.CallOption) (*botv1.UninstallBotFromSpaceResponse, error) {
 	err := f.verify(ctx, r, botv1.BotService_UninstallBotFromSpace_FullMethodName)
 	return &botv1.UninstallBotFromSpaceResponse{}, err
+}
+
+func (f *verifiedBotLifecycleClient) SetBotChatEnabled(ctx context.Context, r *botv1.SetBotChatEnabledRequest, _ ...grpc.CallOption) (*botv1.SetBotChatEnabledResponse, error) {
+	err := f.verify(ctx, r, botv1.BotService_SetBotChatEnabled_FullMethodName)
+	if err == nil {
+		f.enabledChat = r.GetChat().GetId()
+	}
+	return &botv1.SetBotChatEnabledResponse{}, err
+}
+
+type ordinaryEnableFallback struct {
+	botv1.BotServiceClient
+	calls int
+}
+
+func (f *ordinaryEnableFallback) SetBotChatEnabled(context.Context, *botv1.SetBotChatEnabledRequest, ...grpc.CallOption) (*botv1.SetBotChatEnabledResponse, error) {
+	f.calls++
+	return &botv1.SetBotChatEnabledResponse{}, nil
+}
+
+func TestServeBotEnabledUsesProtectedExactPathWithoutOrdinaryFallback(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "current", PrivateKey: key})
+	require.NoError(t, err)
+	claims := tokenClaims{UserID: uuid.NewString(), ProfileID: uuid.NewString(), SessionEpoch: 9, AccountType: "regular", ExpiresAt: time.Now().Add(time.Minute)}
+	protected := &verifiedBotLifecycleClient{key: &key.PublicKey, claims: claims}
+	ordinary := &ordinaryEnableFallback{}
+	tc := newTranscoder(&grpcClients{bot: ordinary, botAuditAdmin: protected})
+	tc.lifecycleIssuer = issuer
+	chat := uuid.NewString()
+	rest := uuid.NewString() + "/chats/" + chat + "/enabled"
+	request := func(verified bool) *http.Request {
+		r := httptest.NewRequest(http.MethodPatch, "/api/v1/bots/"+rest, strings.NewReader(`{"space_id":"`+uuid.NewString()+`","chat":{"id":"`+uuid.NewString()+`"},"enabled":true}`))
+		if verified {
+			r = r.WithContext(context.WithValue(r.Context(), verifiedUserClaimsKey{}, claims))
+		}
+		return r
+	}
+	r := request(true)
+	require.True(t, isBotLifecycleRequest(r), "existing mutation requires strict Gateway authentication")
+	response := httptest.NewRecorder()
+	require.True(t, tc.serveBots(response, r, rest))
+	require.Equal(t, http.StatusNoContent, response.Code, response.Body.String())
+	require.Zero(t, ordinary.calls)
+	require.Equal(t, 1, protected.calls)
+	require.Equal(t, chat, protected.enabledChat, "path chat ID is authoritative before signing")
+	response = httptest.NewRecorder()
+	require.True(t, tc.serveBots(response, request(false), rest))
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Zero(t, ordinary.calls)
+	tc.clients.botAuditAdmin = nil
+	response = httptest.NewRecorder()
+	require.True(t, tc.serveBots(response, request(true), rest))
+	require.Equal(t, http.StatusServiceUnavailable, response.Code)
+	require.Zero(t, ordinary.calls)
 }
 
 func TestServeBotsLifecycleUsesProtectedVerifiedActorForAllThreeRoutes(t *testing.T) {

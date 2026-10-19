@@ -17,6 +17,9 @@ func isBotLifecycleRequest(r *http.Request) bool {
 	if r.Method == http.MethodDelete {
 		return len(parts) == 4 || (len(parts) == 6 && parts[4] == "spaces")
 	}
+	if r.Method == http.MethodPatch {
+		return len(parts) == 7 && parts[4] == "chats" && parts[6] == "enabled"
+	}
 	return r.Method == http.MethodPost && len(parts) == 7 && parts[4] == "spaces" && parts[6] == "install"
 }
 

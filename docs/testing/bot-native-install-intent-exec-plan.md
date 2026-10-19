@@ -80,3 +80,27 @@ at CreateBot before lock interleaving); move the unchanged10s oracle budget
 after startup. Whole suite, race subset, vet, independent review and real186
 receiver combination remain open. No native receiver effect is proved by the
 controlled Space client used in producer component tests.
+
+### Current protected public composition
+
+The first actual owned Linux composition passed with Role fixture eef1f09,
+Space receiver8cdac6b6, Chat producerc5f1b5b and Java Auth fixtureabd6b5c3. One Bot
+signer, complete approved current/next JWKS, actual account and live UTC were
+shared across all pure Bot calls. HTTP install and the existing PATCH disable /
+enable route passed; duplicate/stale tokens were denied, actual Chat retirement
+preserved exact accepted install retry and rejected a new unknown chat. Bot PG
+persisted generation2, its original/current observations and enabled whitelist;
+Space44 checked kind6/current operation/generation2/floor1. Gateway/Bot replay
+uses explicitly scoped miniredis fixtures; Chat/Space use actual Redis.
+
+A separate causal raw-entry test failed0.037s before the ordinary install,
+uninstall, whitelist and enabled handler cuts. The corrected four-entry negative
+and missing-private-Role PG control passed5.255s. The actual public composition
+must also pass on this corrected source before review/handoff. These checks do
+not complete participant cleanup, adoption, worker recovery, retention or BE-170.
+
+The corrected-source real composition subsequently passed: Gateway HTTP4.613s,
+Bot PG35.687s, native Space44 transport/DB38.744s, Chat48.215s, Role fixture104.037s.
+Final affected Gateway component2.300s and Bot principal1.136s passed; scoped
+Bot/Gateway vet passed. The prior Gateway route unit used raw identity and was
+updated to its existing verified-user fixture; actual HTTP proof remains separate.

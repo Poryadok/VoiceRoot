@@ -29,7 +29,7 @@ func GatewayLifecycleStreamInterceptor() grpc.StreamServerInterceptor {
 }
 
 func isGatewayLifecycleMethod(method string) bool {
-	return method == botv1.BotService_DeleteBot_FullMethodName || method == botv1.BotService_InstallBotInSpace_FullMethodName || method == botv1.BotService_UninstallBotFromSpace_FullMethodName
+	return method == botv1.BotService_DeleteBot_FullMethodName || method == botv1.BotService_InstallBotInSpace_FullMethodName || method == botv1.BotService_UninstallBotFromSpace_FullMethodName || method == botv1.BotService_SetChatWhitelist_FullMethodName || method == botv1.BotService_SetBotChatEnabled_FullMethodName
 }
 
 func (v GatewayUserVerifier) VerifyGateway(ctx context.Context, token, method, requestID, hash string) (principal.Principal, error) {

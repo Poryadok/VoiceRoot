@@ -433,6 +433,9 @@ func (s *BotGRPC) GetWebhookURL(ctx context.Context, req *botv1.GetWebhookURLReq
 }
 
 func (s *BotGRPC) SetChatWhitelist(ctx context.Context, req *botv1.SetChatWhitelistRequest) (*botv1.SetChatWhitelistResponse, error) {
+	if _, err := principal.RequireDelegatedUser(ctx, "bot", botv1.BotService_SetChatWhitelist_FullMethodName, req); err != nil {
+		return nil, status.Error(codes.Unauthenticated, "verified whitelist initiation required")
+	}
 	botID, err := parseUUID("bot_id", req.GetBotId())
 	if err != nil {
 		return nil, err
