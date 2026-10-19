@@ -47,7 +47,7 @@ func (actorTestNegativeView) Check(lfperasure.References) lfperasure.Verdict {
 func (actorTestNegativeView) Release() {}
 
 func (a actorTestAdmission) Enter(context.Context) (storylfpadmission.Permit, error) {
-	return actorTestPermit{a.origin}, nil
+	return actorTestPermit(a), nil
 }
 
 // Component-only admission fixture: no installed controller/restore custody.

@@ -34,7 +34,7 @@ func (p *ActorPrivacy) CheckActorResponder(ctx context.Context, bound lfpconsent
 	return p.checkViewer(ctx, bound, actor.ProfileID, actor.AccountType == lfpconsent.Guest)
 }
 
-// Observe is not a persisted decision and has no invented actor-codec kind.
+// CheckHumanOfferViewer is not a persisted decision and has no invented actor-codec kind.
 // Its exact verifier identity still supplies an explicit human viewer type.
 func (p *ActorPrivacy) CheckHumanOfferViewer(ctx context.Context, bound lfpconsentstore.OfferContext, viewer principal.UserIdentity) error {
 	if viewer.AccountID == uuid.Nil || viewer.ProfileID == uuid.Nil || viewer.SessionEpoch <= 0 || (viewer.AccountType != "regular" && viewer.AccountType != "guest") {
