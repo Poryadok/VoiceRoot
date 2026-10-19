@@ -149,6 +149,8 @@ in its own 0700 staging directory, synchronizes them, verifies complete readback
 synchronizes the staging directory, atomically renames the complete nonempty
 directory and synchronizes the parent. It verifies an existing identical snapshot
 instead of replacing it. Changed bytes under the same snapshot UUID reject.
+An identical-output retry also synchronizes the parent before reporting success:
+the prior attempt may have renamed its directory but failed before that sync.
 An interrupted private staging directory is not a published snapshot and is not
 accepted by `ReadDirectory`; retries can publish a new complete staging set.
 Cleanup affects only the current call's own staging directory. Operational crash
