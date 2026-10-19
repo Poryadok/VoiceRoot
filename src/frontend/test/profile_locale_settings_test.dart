@@ -21,6 +21,98 @@ void main() {
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  testWidgets('reload uses the server locale instead of a lost System choice', (
+    tester,
+  ) async {
+    var serverLocale = 'en';
+    var profileReads = 0;
+    final patches = <Map<String, dynamic>>[];
+    final client = MockClient((request) async {
+      if (request.method == 'GET' &&
+          request.url.path == '/api/v1/users/profiles/prof-test') {
+        profileReads++;
+        return http.Response(
+          jsonEncode({'profile': _profile('prof-test', locale: serverLocale)}),
+          200,
+        );
+      }
+      if (request.method == 'PATCH' && request.url.path == '/api/v1/users/me') {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        patches.add(body);
+        serverLocale = body['locale'] as String;
+        return http.Response(
+          jsonEncode({'profile': _profile('prof-test', locale: serverLocale)}),
+          200,
+        );
+      }
+      return http.Response('', 404);
+    });
+
+    Future<ProviderContainer> reload() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      final container = ProviderContainer(
+        overrides: voiceAppTestOverrides(client: client),
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_settingsApp(container));
+      await tester.pumpAndSettle();
+      return container;
+    }
+
+    var container = await reload();
+    expect(container.read(appLocalePreferenceProvider), const Locale('en'));
+    await tester.ensureVisible(
+      find.byKey(AppearanceSettingsScreen.languageKey),
+    );
+    await tester.tap(find.text('Russian'));
+    await tester.pumpAndSettle();
+    expect(serverLocale, 'ru');
+    expect(patches, [containsPair('locale', 'ru')]);
+
+    container = await reload();
+    expect(container.read(appLocalePreferenceProvider), const Locale('ru'));
+    await tester.ensureVisible(
+      find.byKey(AppearanceSettingsScreen.languageKey),
+    );
+    await tester.tap(find.text('System default'));
+    await tester.pumpAndSettle();
+    expect(container.read(appLocalePreferenceProvider), isNull);
+    expect(serverLocale, 'ru');
+    expect(patches, hasLength(1));
+
+    container = await reload();
+    expect(container.read(appLocalePreferenceProvider), const Locale('ru'));
+
+    // Another device changes the persisted preference; no old local choice
+    // may override the freshly loaded profile.
+    serverLocale = 'en';
+    container = await reload();
+    expect(container.read(appLocalePreferenceProvider), const Locale('en'));
+    expect(profileReads, greaterThanOrEqualTo(4));
+    expect(patches, hasLength(1));
+  });
+
+  for (final profileStatus in [200, 503]) {
+    testWidgets(
+      'unsupported or unavailable profile uses System ($profileStatus)',
+      (tester) async {
+        final client = MockClient(
+          (request) async => http.Response(
+            jsonEncode({'profile': _profile('prof-test', locale: 'de')}),
+            profileStatus,
+          ),
+        );
+        final container = ProviderContainer(
+          overrides: voiceAppTestOverrides(client: client),
+        );
+        addTearDown(container.dispose);
+        await tester.pumpWidget(_settingsApp(container));
+        await tester.pumpAndSettle();
+        expect(container.read(appLocalePreferenceProvider), isNull);
+      },
+    );
+  }
+
   testWidgets('choosing Russian persists it to the active profile', (
     tester,
   ) async {
