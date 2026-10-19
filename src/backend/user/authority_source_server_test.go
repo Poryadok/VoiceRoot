@@ -70,6 +70,9 @@ func TestUserAuthoritySourceActualMigratorProtectedFactory(t *testing.T) {
 	state, err = authoritysource.DecodeUserState(revoked.CanonicalState)
 	require.NoError(t, err)
 	require.False(t, state.EligibleProfile(profile, account))
+	// Remove unrelated additive migrations, then exercise the actual permanent
+	// authority-fence refusal rather than merely rolling back migration21's index.
+	database.Run(true, "goto", "19")
 	database.Run(false, "down", "1")
 	_, err = client.ReadSnapshot(f.SignedContext(t, request, method, "user-source-maintenance"), request)
 	require.Equal(t, codes.Unavailable, status.Code(err))
