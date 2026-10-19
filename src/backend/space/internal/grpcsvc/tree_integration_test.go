@@ -444,16 +444,6 @@ CREATE TRIGGER fail_tree_audit_insert BEFORE INSERT ON audit_log FOR EACH ROW EX
 	require.Zero(t, outbox)
 }
 
-func applySpaceAuditLedgerMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
-	t.Helper()
-	for _, name := range []string{"000015_audit_ledger.up.sql", "000025_tree_audit_actions.up.sql"} {
-		auditMigration, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name))
-		require.NoError(t, err)
-		_, err = pool.Exec(ctx, string(auditMigration))
-		require.NoError(t, err)
-	}
-}
-
 func requireTreeAuditEntry(t *testing.T, ctx context.Context, pool *pgxpool.Pool, spaceID, actorID uuid.UUID, action, targetType string, targetID uuid.UUID, wantDetails map[string]any) {
 	t.Helper()
 	var auditID, gotSpaceID, gotActorID, gotTargetID uuid.UUID

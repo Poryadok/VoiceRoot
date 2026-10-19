@@ -81,9 +81,10 @@ func TestListSpaceTree_RequiresQualifiedCatalog(t *testing.T) {
 	for _, name := range []string{"pre24", "missing_trigger", "disabled_trigger", "changed_function", "missing_metadata", "dirty", "unknown_version", "trigger_removed_during_enrichment", "current34"} {
 		t.Run(name, func(t *testing.T) {
 			version := "000024"
-			if name == "pre24" {
+			switch name {
+			case "pre24":
 				version = "000021"
-			} else if name == "current34" {
+			case "current34":
 				version = "000034"
 			}
 			pool := disclosurePoolAt(t, version)
