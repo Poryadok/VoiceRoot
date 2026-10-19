@@ -2,6 +2,19 @@
 
 ## Account-core v2 implementation checkpoint
 
+Auth local-issuer/bootstrap checkpoint: native RED reproduced the SDK-off local
+issuer depending on a User endpoint. A complete key pair now creates exactly one
+issuer with no SDK/User client; all twelve configuration tests pass, preserving
+partial-setting failures. The same issuer signs only the fixed Moderation
+snapshot purpose through a dedicated method; eight crypto contract tests pass.
+The standalone certificate-only HTTPS publisher serves current/next public keys
+before domain readiness, without JWT/Redis/User dependence. Two actual HTTPS
+tests reject anonymous, wrong-CA and wrong-host clients and partial settings;
+two existing outbound mTLS tests also pass after the shared TLS loader refactor.
+All 24 distinct scoped tests pass with zero skips. XML evidence exported before
+removing the owned native Maven runner; no Windows listeners or stand changes.
+Actual Auth session/census and public readiness composition remains open.
+
 Auth listener checkpoint: inheriting the proof listener's server-only TLS was
 reproduced as native RED. The moderation authority is now registered solely on
 dedicated9093 with mandatory workload mTLS and request-bound principals; existing

@@ -22,6 +22,10 @@ final class AuthPrincipalJwksTls {
     String key=environment.getProperty("S2S_JWKS_CLIENT_KEY_FILE");
     String ca=environment.getProperty("S2S_JWKS_CA_FILE");
     if(certificate==null && key==null && ca==null && !required)return null;
+    return loadFiles(certificate,key,ca);
+  }
+
+  static SSLContext loadFiles(String certificate,String key,String ca) {
     try {
       Path certificatePath=boundedFile(certificate,1048576),keyPath=boundedFile(key,65536),caPath=boundedFile(ca,1048576);
       var factory=CertificateFactory.getInstance("X.509");

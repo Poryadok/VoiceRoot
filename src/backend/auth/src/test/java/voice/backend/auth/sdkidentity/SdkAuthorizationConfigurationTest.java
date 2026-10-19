@@ -145,4 +145,15 @@ class SdkAuthorizationConfigurationTest {
         + java.util.Base64.getMimeEncoder(64, new byte[] {'\n'}).encodeToString(der)
         + "\n-----END PRIVATE KEY-----\n");
   }
+
+  @Test void localIssuerStartsWithoutSdkOrUserEndpoint(@org.junit.jupiter.api.io.TempDir Path temp) throws Exception {
+    writePrivateKey(temp.resolve("current.pem"));writePrivateKey(temp.resolve("next.pem"));
+    context().withUserConfiguration(AuthUserPrincipalConfiguration.class).withPropertyValues(
+        "auth.persistence=jdbc","auth.sdk-authorization.enabled=false",
+        "AUTH_PRINCIPAL_SIGNING_KEYS_DIR="+temp,"AUTH_PRINCIPAL_ACTIVE_KID=current").run(ctx->{
+          assertThat(ctx).hasNotFailed().hasSingleBean(AuthUserPrincipalIssuer.class)
+              .doesNotHaveBean(io.grpc.ManagedChannel.class).doesNotHaveBean(SdkProfileEligibility.class)
+              .doesNotHaveBean(SdkAuthorizationService.class);
+        });
+  }
 }
