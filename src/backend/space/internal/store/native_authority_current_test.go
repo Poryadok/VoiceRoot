@@ -24,7 +24,9 @@ func TestNativeAuthorityCurrent39ReadAndPreparing(t *testing.T) {
 	owner := uuid.New()
 	space, err := st.CreateSpace(ctx, owner, "Current native authority", "", "public")
 	require.NoError(t, err)
-	database.Run(true, "up")
+	// Retain the historical exact41 qualification oracle independently of the
+	// new native42 Bot cohort, whose own positives/negatives run separately.
+	database.Run(true, "goto", "41")
 	request := &spacev1.GetMemberAdmissionAuthorityRequest{ProtocolVersion: 1, SpaceId: space.ID.String(), ProfileId: owner.String()}
 	first, err := st.ReadMemberAdmissionAuthority(ctx, request)
 	require.NoError(t, err, "actual current39 source must qualify; no historical version relabeling")
@@ -53,7 +55,7 @@ func TestNativeAuthorityCurrent39ReadAndPreparing(t *testing.T) {
 	t.Logf("canonical current11 terminal prosrc SHA256=%x", sha256.Sum256([]byte(terminalBody)))
 	cases := []struct{ name, mutate, restore string }{
 		{"dirty", `UPDATE schema_migrations SET dirty=true`, `UPDATE schema_migrations SET dirty=false`},
-		{"future", `UPDATE schema_migrations SET version=42`, `UPDATE schema_migrations SET version=41`},
+		{"future", `UPDATE schema_migrations SET version=43`, `UPDATE schema_migrations SET version=41`},
 		{"historical", `UPDATE schema_migrations SET version=34`, `UPDATE schema_migrations SET version=41`},
 		{"disabled_guard", `ALTER TABLE space_members DISABLE TRIGGER space_ordinary_publication_guard`, `ALTER TABLE space_members ENABLE TRIGGER space_ordinary_publication_guard`},
 		{"row_security", `ALTER TABLE space_ordinary_member_heads ENABLE ROW LEVEL SECURITY`, `ALTER TABLE space_ordinary_member_heads DISABLE ROW LEVEL SECURITY`},

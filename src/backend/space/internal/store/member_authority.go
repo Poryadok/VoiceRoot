@@ -58,6 +58,18 @@ func (s *SpaceStore) ReadMemberAdmissionAuthority(ctx context.Context, req *spac
 	if err = checkMemberAuthorityCatalog(ctx, tx); err != nil {
 		return nil, ErrMemberAuthorityUnavailable
 	}
+	var schema int64
+	if err = tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&schema); err != nil {
+		return nil, ErrMemberAuthorityUnavailable
+	}
+	if schema == 44 {
+		// Catalog authentication above is necessary but not per-Space cutover.
+		// The same fenced snapshot must prove COMPLETE and an actual serving
+		// LOGIN before any positive source facts leave this protected route.
+		if _, err = tx.Exec(ctx, `SELECT public.space_native_membership_require($1)`, space); err != nil {
+			return nil, ErrMemberAuthorityUnavailable
+		}
+	}
 	var sampled time.Time
 	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&sampled); err != nil {
 		return nil, ErrMemberAuthorityUnavailable
@@ -312,6 +324,10 @@ func readOrdinaryMemberAuthority(ctx context.Context, tx pgx.Tx, space, profile 
 			}
 		case 5:
 			if err := validateCommunityRecoveryNativeProof(ctx, tx, message); err != nil {
+				return nil, err
+			}
+		case 6:
+			if err := validateBotNativeProof(ctx, tx, message); err != nil {
 				return nil, err
 			}
 		default:

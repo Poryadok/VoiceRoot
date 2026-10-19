@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,11 +20,60 @@ type effectiveMemberMutation struct {
 // This transaction-local capability cannot be supplied by a caller or reused
 // with another transaction. No remote owner call belongs between these hooks.
 type effectiveMemberMutations struct {
-	tx       pgx.Tx
-	space    uuid.UUID
-	started  time.Time
-	profiles []effectiveMemberMutation
-	used     bool
+	tx         pgx.Tx
+	space      uuid.UUID
+	started    time.Time
+	profiles   []effectiveMemberMutation
+	dbMutation *nativeMembershipDBMutation
+	purpose    effectiveMutationPurpose
+	used       bool
+}
+
+type effectiveMutationPurpose uint8
+
+const (
+	effectiveMutationPositive effectiveMutationPurpose = iota
+	effectiveMutationCandidateRetirement
+)
+
+// Only the Creator's already verified, preallocated new identity enters here.
+// Unlike an existing Space mutation, no LIVE Space row can exist before this
+// capture: the protected DB frame must precede the first spaces INSERT.
+func (s *SpaceStore) captureBornCreatorEffectiveMutation(ctx context.Context, space, profile uuid.UUID) (*effectiveMemberMutations, error) {
+	if profile == uuid.Nil {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	if err := s.effectiveMutationStorageScope(ctx, space); err != nil {
+		return nil, err
+	}
+	version, err := s.memberDecisionSchema(ctx)
+	if err != nil || version != 44 {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	parts := make([]string, 0, len(nativeMembershipGuardCoverage))
+	for _, table := range nativeMembershipGuardCoverage {
+		column := "space_id"
+		if table == "spaces" {
+			column = "id"
+		}
+		parts = append(parts, "SELECT 1 FROM "+pgx.Identifier{"public", table}.Sanitize()+" WHERE "+pgx.Identifier{column}.Sanitize()+"=$1")
+	}
+	var empty bool
+	if err = s.tx.QueryRow(ctx, "SELECT NOT EXISTS("+strings.Join(parts, " UNION ALL ")+")", space).Scan(&empty); err != nil || !empty {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	token, err := s.beginNativeMembershipDBMutation(ctx, space, []uuid.UUID{profile})
+	if err != nil {
+		return nil, err
+	}
+	if len(token.profiles) != 1 || token.profiles[0] != profile {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	capture := &effectiveMemberMutations{tx: s.tx, space: space, dbMutation: token, profiles: []effectiveMemberMutation{{profile: profile, cutover: uuid.New()}}}
+	if err = s.tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&capture.started); err != nil {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	return capture, nil
 }
 
 // Pre-ledger native39/40 have no effective-history storage. Forward41 always
@@ -40,6 +90,24 @@ func (s *SpaceStore) captureNativeEffectiveMemberMutation(ctx context.Context, s
 }
 
 func (s *SpaceStore) effectiveMutationScope(ctx context.Context, space uuid.UUID) error {
+	if err := s.effectiveMutationStorageScope(ctx, space); err != nil {
+		return err
+	}
+	lifecycle, err := readMemberLifecycle(ctx, s.tx, space)
+	if err != nil || lifecycle.GetState() != spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_LIVE {
+		return ErrEffectiveEpisodeUnavailable
+	}
+	ownership, err := readMemberOwnership(ctx, s.tx, space)
+	if err != nil || ownership.GetState() != spacev1.MemberAdmissionOwnershipState_MEMBER_ADMISSION_OWNERSHIP_STATE_AVAILABLE {
+		return ErrEffectiveEpisodeUnavailable
+	}
+	return nil
+}
+
+// Storage framing is not domain authorization. Positive writers still call
+// effectiveMutationScope; the lifecycle owner uses this only after proving its
+// saved DELETE operation and all current participant evidence.
+func (s *SpaceStore) effectiveMutationStorageScope(ctx context.Context, space uuid.UUID) error {
 	if s == nil || s.Pool == nil || s.tx == nil || ctx == nil || ctx.Err() != nil || space == uuid.Nil {
 		return ErrEffectiveEpisodeUnavailable
 	}
@@ -54,18 +122,93 @@ func (s *SpaceStore) effectiveMutationScope(ctx context.Context, space uuid.UUID
 		return ErrEffectiveEpisodeUnavailable
 	}
 	var version int64
-	if err := s.tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || version != 41 {
-		return ErrEffectiveEpisodeUnavailable
-	}
-	lifecycle, err := readMemberLifecycle(ctx, s.tx, space)
-	if err != nil || lifecycle.GetState() != spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_LIVE {
-		return ErrEffectiveEpisodeUnavailable
-	}
-	ownership, err := readMemberOwnership(ctx, s.tx, space)
-	if err != nil || ownership.GetState() != spacev1.MemberAdmissionOwnershipState_MEMBER_ADMISSION_OWNERSHIP_STATE_AVAILABLE {
+	if err := s.tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || (version != 41 && version != 42 && version != 44) {
 		return ErrEffectiveEpisodeUnavailable
 	}
 	return nil
+}
+
+// captureLifecyclePurgeMutation belongs to FinalizeLifecyclePurge's owned TX.
+// It is not a positive mutation wrapper, installer fallback or caller-supplied
+// maintenance grant. The administrative UNKNOWN cutover must already commit.
+func (s *SpaceStore) captureLifecyclePurgeMutation(ctx context.Context, space uuid.UUID) (*nativeMembershipDBMutation, error) {
+	var marker, native bool
+	if s == nil || s.tx == nil {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	if err := s.tx.QueryRow(ctx, `SELECT to_regclass('public.schema_migrations') IS NOT NULL,to_regclass('public.space_ordinary_member_heads') IS NOT NULL`).Scan(&marker, &native); err != nil {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	if !marker {
+		if native {
+			return nil, ErrEffectiveEpisodeUnavailable
+		}
+		return nil, nil
+	}
+	var version int64
+	var dirty bool
+	if err := s.tx.QueryRow(ctx, `SELECT version,dirty FROM public.schema_migrations`).Scan(&version, &dirty); err != nil || dirty {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	switch version {
+	case 39, 40, 41, 42, 43:
+		return nil, nil // preserved pre-DB-frame terminal protocol
+	case 44:
+	default:
+		if version <= 34 && !native {
+			return nil, nil
+		}
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	if err := s.effectiveMutationStorageScope(ctx, space); err != nil {
+		return nil, err
+	}
+	lifecycle, err := readMemberLifecycle(ctx, s.tx, space)
+	if err != nil || lifecycle.GetState() != spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_PURGE_DECIDED {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	ownership, err := readMemberOwnership(ctx, s.tx, space)
+	if err != nil || (ownership.GetState() != spacev1.MemberAdmissionOwnershipState_MEMBER_ADMISSION_OWNERSHIP_STATE_AVAILABLE && ownership.GetState() != spacev1.MemberAdmissionOwnershipState_MEMBER_ADMISSION_OWNERSHIP_STATE_PREPARED) {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	token, err := s.beginNativeMembershipDBMutation(ctx, space, nil)
+	if err != nil {
+		return nil, err
+	}
+	var started time.Time
+	if err = s.tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&started); err != nil {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	revision, err := spaceSourceRevision(ctx, s.tx, space.String())
+	if err != nil {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	sources := make([]effectiveSources, 0, len(token.profiles))
+	for _, profile := range token.profiles {
+		source, e := s.readEffectiveMemberSources(ctx, space, profile, started)
+		if e != nil {
+			return nil, e
+		}
+		head, _, e := loadEffectiveHead(ctx, s.tx, space, profile)
+		if e != nil || !head.Sources.at(started).equal(source) {
+			return nil, ErrEffectiveEpisodeUnavailable
+		}
+		sources = append(sources, source)
+	}
+	last, err := spaceSourceRevision(ctx, s.tx, space.String())
+	if err != nil || last != revision {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	var finished time.Time
+	if err = s.tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&finished); err != nil || finished.Before(started) || !finished.Before(started.Add(5*time.Second)) {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	for _, source := range sources {
+		if !source.equal(source.at(finished)) {
+			return nil, ErrEffectiveEpisodeUnavailable
+		}
+	}
+	return token, nil
 }
 
 func (s *SpaceStore) readEffectiveMemberSources(ctx context.Context, space, profile uuid.UUID, sampled time.Time) (effectiveSources, error) {
@@ -101,7 +244,17 @@ func (s *SpaceStore) captureEffectiveMemberMutations(ctx context.Context, space 
 	if err := s.effectiveMutationScope(ctx, space); err != nil {
 		return nil, err
 	}
-	if len(profiles) == 0 {
+	return s.captureEffectiveMemberMutationFacts(ctx, space, profiles)
+}
+
+// Both callers establish their own domain scope before this private fact
+// capture. Maintenance cannot select the positive admission scope by a flag.
+func (s *SpaceStore) captureEffectiveMemberMutationFacts(ctx context.Context, space uuid.UUID, profiles []uuid.UUID) (*effectiveMemberMutations, error) {
+	version, err := s.memberDecisionSchema(ctx)
+	if err != nil {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	if len(profiles) == 0 && version != 44 {
 		return nil, ErrEffectiveEpisodeUnavailable
 	}
 	for _, p := range profiles {
@@ -111,6 +264,15 @@ func (s *SpaceStore) captureEffectiveMemberMutations(ctx context.Context, space 
 	}
 	profiles = normalizedOwnershipSpaceIDs(profiles)
 	capture := &effectiveMemberMutations{tx: s.tx, space: space}
+	if version == 44 {
+		capture.dbMutation, err = s.beginNativeMembershipDBMutation(ctx, space, profiles)
+		if err != nil {
+			return nil, err
+		}
+		// This includes unchanged owners and fanout members that were not in the
+		// caller's requested subset. Every DB witness must be finalized.
+		profiles = capture.dbMutation.profiles
+	}
 	if err := s.tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&capture.started); err != nil {
 		return nil, ErrEffectiveEpisodeUnavailable
 	}
@@ -163,8 +325,17 @@ func (s *SpaceStore) finishEffectiveMemberMutations(ctx context.Context, capture
 		return ErrEffectiveEpisodeUnavailable
 	}
 	capture.used = true
-	if err := s.effectiveMutationScope(ctx, capture.space); err != nil {
-		return err
+	var scopeErr error
+	switch capture.purpose {
+	case effectiveMutationPositive:
+		scopeErr = s.effectiveMutationScope(ctx, capture.space)
+	case effectiveMutationCandidateRetirement:
+		scopeErr = s.memberAdmissionRetirementScope(ctx, capture.space)
+	default:
+		return ErrEffectiveEpisodeUnavailable
+	}
+	if scopeErr != nil {
+		return scopeErr
 	}
 	var sampled time.Time
 	if err := s.tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&sampled); err != nil || sampled.Before(capture.started) {
@@ -203,5 +374,39 @@ func (s *SpaceStore) finishEffectiveMemberMutations(ctx context.Context, capture
 			return ErrEffectiveEpisodeUnavailable
 		}
 	}
+	if capture.dbMutation != nil {
+		return s.completeNativeMembershipDBMutation(ctx, capture.dbMutation)
+	}
 	return nil
+}
+
+// Existing pre-native fixtures/official34 retain their old storage protocol.
+// A native relation with a missing/dirty marker never falls back to that path.
+func (s *SpaceStore) captureMemberRemovalMutation(ctx context.Context, space, profile uuid.UUID) (*effectiveMemberMutations, error) {
+	return s.captureMemberMutationIfPresent(ctx, space, []uuid.UUID{profile})
+}
+
+func (s *SpaceStore) captureMemberMutationIfPresent(ctx context.Context, space uuid.UUID, profiles []uuid.UUID) (*effectiveMemberMutations, error) {
+	var marker, native bool
+	if s == nil || s.tx == nil {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	if err := s.tx.QueryRow(ctx, `SELECT to_regclass('public.schema_migrations') IS NOT NULL,to_regclass('public.space_ordinary_member_heads') IS NOT NULL`).Scan(&marker, &native); err != nil {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	if !marker {
+		if native {
+			return nil, ErrEffectiveEpisodeUnavailable
+		}
+		return nil, nil
+	}
+	var version int64
+	var dirty bool
+	if err := s.tx.QueryRow(ctx, `SELECT version,dirty FROM public.schema_migrations`).Scan(&version, &dirty); err != nil || dirty {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	if version <= 34 && !native {
+		return nil, nil
+	}
+	return s.captureNativeEffectiveMemberMutation(ctx, space, profiles)
 }
