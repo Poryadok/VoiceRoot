@@ -98,6 +98,9 @@ func validRequest(r *authv1.ObserveSpaceAdmissionSubjectRequest) bool {
 	if r == nil || len(r.ProtoReflect().GetUnknown()) != 0 || r.ProtocolVersion != 1 || !validID(r.AccountId) || !validID(r.ProfileId) || !validID(r.SpaceId) || len(r.AdmissionBindingSha256) != 32 {
 		return false
 	}
+	if r.Phase == authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_SET_ENTRY_POLICY || r.SubjectRole == authv1.SpaceAdmissionSubjectRole_SPACE_ADMISSION_SUBJECT_ROLE_SETTINGS_ACTOR {
+		return r.Phase == authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_SET_ENTRY_POLICY && r.SubjectRole == authv1.SpaceAdmissionSubjectRole_SPACE_ADMISSION_SUBJECT_ROLE_SETTINGS_ACTOR && r.InteractiveSessionEpoch != nil && r.GetInteractiveSessionEpoch() > 0 && r.GetInteractiveSessionEpoch() <= math.MaxInt64
+	}
 	if r.SubjectRole != authv1.SpaceAdmissionSubjectRole_SPACE_ADMISSION_SUBJECT_ROLE_APPLICANT && r.SubjectRole != authv1.SpaceAdmissionSubjectRole_SPACE_ADMISSION_SUBJECT_ROLE_REVIEWER {
 		return false
 	}
