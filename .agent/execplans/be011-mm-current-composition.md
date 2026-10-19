@@ -38,7 +38,7 @@ No production guard is relaxed to satisfy the test.
 - [x] Incorporate147 FIRST admission before account locks and verify its actual
   held-closer, commit and closed-settlement cases in the composed source.
 - [x] Consume359's immutable private-FD bootstrap delivery API and proof.
-- [ ] Implement the actual fixed native root, required factory/validator wiring,
+- [x] Implement the actual fixed native root, required factory/validator wiring,
   fresh external observations and workload close/drain barrier together.
 - [ ] Prove positive native serving and negative config/close/restore cases,
   complete independent current-union review, then offer finished work to121.
@@ -341,3 +341,54 @@ short invocation inherited integration DSNs and reached aggregate180s timeout;
 its logs are retained, the interrupted test passed separately, and no full PG
 suite PASS is claimed. Full native Run/cmd/image, actual factory/route contract
 validation, serving/worker lifecycle and cross-process qualification remain open.
+
+
+Next native composition: bind the closed code-owned route/factory catalogue to
+the installation descriptor before private bootstrap or public-key listener.
+The catalogue fingerprints actual linked native-only protocol versions and the
+complete generated MM method set (unsupported methods remain explicit DENY).
+These hashes only reject mismatched configuration; authenticated installation
+readback, actual factory construction/readiness and external custody remain
+independent mandatory checks. No catalogue/hash constitutes a Ready assertion.
+
+### Executable native root: owned functional proof
+
+The separate `cmd/mm-native` / `Dockerfile.native` now installs the fixed root:
+mandatory read-only descriptor and actual executable/argv check, genuine one-shot
+private FD3 delivery, restricted physical PostgreSQL identity/history, linked
+snapshot/provider/principal/JWT+mTLS broker factories, public-key-only bootstrap,
+private ARMED preparation and fresh OPEN before serving/workers. StartSearch,
+response, matcher, projector and provider forward boundaries retain explicit
+registrations; terminal settlement and durable timeout release remain independent.
+An unexpected listener failure synchronously closes admission before waking Run.
+Queued preparation failure cannot be hidden by a subsequent OPEN observation;
+the discriminating test failed before that implementation and now passes.
+
+Actual own Linux functional test launches the real static `/service-native` as
+UID65532 with FD3 from the root driver and a read-only installation-volume alias.
+The child uses a distinct restricted PostgreSQL LOGIN, real JWT/mTLS NATS2.12.15,
+real principal signature/replay/epoch verification and an explicitly local-owned
+service-principal/mTLS snapshot fixture. ARMED exposes no serving listeners;
+OPEN exposes readiness/catalogue. Protected StartSearch captures TWO members,
+the real projector enqueues both in Redis, and the actual 30s sweeper/timeout
+relay commits both terminal generations/facts and releases both physical queue
+entries/profile locks. CLOSE is observed via readiness503 while another actual
+snapshot RPC remains held; it cannot acknowledge drain until that RPC returns
+through the search commit. Catalogue remains available after closure.
+
+The exact Dockerfile also actually builds a native-only image; its extracted
+binary passes the same scenario. Missing mandatory inputs exit1. Nativeapp's
+scoped Linux race run passes21 top-level/51 subtests, with ONE explicit fixed-root
+test skip in the ordinary runner; that test runs separately in the dedicated
+root-driver container. Full-module vet exits0. Driver is race-instrumented;
+the static production child is not. No aggregate full-repository or installed
+qualification is inferred.
+
+Retained failed setup runs include the initial compiled-test working directory,
+incorrect fixture DSN, helper prematurely closing its fixture upstreams, and a
+wrong expected ordinary-listener status. They are not product REDs. The causal
+queued-critical-error RED is retained separately. Portable packet under ignored
+`tmp/swarm/rudeus145-mm-native/` binds exact source, runner bytes, actual image and
+raw logs. Full client->Gateway->native response/provisioning positive journey,
+real installed admission/upstream catalogue and current CI/MASTER acceptance
+remain OPEN; this component is not a whole BE-011 completion or merge offer.

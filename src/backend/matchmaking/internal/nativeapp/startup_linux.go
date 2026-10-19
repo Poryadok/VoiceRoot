@@ -79,7 +79,7 @@ func checkNativeExecutable(descriptor w.DescriptorV1, argv []string) error {
 // mutation. ARMED permits only this finite bootstrap; every forward action
 // still requires a new OPEN observation and its FIRST local SQL admission.
 func openClosedBootstrap(ctx context.Context, cfg nativeConfig) (*closedBootstrap, error) {
-	if ctx == nil || ctx.Err() != nil || cfg.descriptor.Validate() != nil || checkNativeExecutable(cfg.descriptor, os.Args) != nil {
+	if ctx == nil || ctx.Err() != nil || checkCodeContracts(cfg) != nil || checkNativeExecutable(cfg.descriptor, os.Args) != nil {
 		return nil, errUnavailable
 	}
 	client, err := w.LoadNativeReadbackClient(ctx, cfg.rawDescriptor, 2*time.Second)

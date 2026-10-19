@@ -723,3 +723,25 @@ owner cut; there is no anonymous/permanent-retention exception or invented TTL.
 MM027 DOWN refuses pinned RR and retained/unknown evidence under exclusive
 locks. Serving may append facts and update only delivery bookkeeping, never
 rewrite/delete their immutable identity or payload.
+# Fixed native executable
+
+`cmd/mm-native` and `Dockerfile.native` provide a separate `/service-native`
+artifact with no compatibility selector. Before domain listeners or workers it
+requires the fixed protected read-only installation descriptor, exact running
+executable/argv, private inherited FD3 launch delivery, actual restricted LOGIN
+and physical database/history binding, and all protected source/provider/broker
+profiles. Public-key-only JWKS bootstrap is allowed after these local gates to
+resolve the canonical remote-key startup cycle. ARMED permits preparation and
+private workload status only; fresh authenticated OPEN permits serving.
+
+The private workload CLOSE irreversibly stops new forward registrations and
+waits for explicit release of active requests through durable classification.
+Context cancellation alone never proves drain. Readiness observes fresh admission
+and real dependencies; a critical listener failure closes admission immediately.
+Authorized terminal/history/catalogue and already-issued settlement remain
+separate from OPEN-only forward actions. Whole-party timeout uses the persisted
+common deadline, frozen timeout facts and recoverable physical Redis RELEASE.
+
+The owned Linux driver proves this executable cycle with local fixture authority;
+it does not certify an installed controller, real Voice source catalogue or full
+Gateway/client provisioning journey. Those remain distinct release prerequisites.
