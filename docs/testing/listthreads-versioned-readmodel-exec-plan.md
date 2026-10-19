@@ -35,7 +35,7 @@ stores exact per-viewer summaries in content-addressed Messaging-owned nodes;
 activity order is `(last_reply_at DESC, parent_id DESC)` and a second parent-ID
 tree supports logarithmic replacement/removal. Updates path-copy both roots.
 The SQL adapter accepts the same pgx transaction as future journal/root writes.
-Migration `000031_thread_list_nodes` rejects in-place SQL updates; deleting nodes
+Migration `000032_thread_list_nodes` rejects in-place SQL updates; deleting nodes
 is reserved for future reachability GC. No runtime RPC or authorization path is
 enabled by this checkpoint.
 
