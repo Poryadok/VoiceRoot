@@ -21,8 +21,16 @@ func RequireSettingsPermission(ctx context.Context, req *rolev1.CheckPermissionR
 }
 
 func requireSpaceGlobalDecision(ctx context.Context, req *rolev1.CheckPermissionRequest, permission string) error {
+	return requireServiceGlobalDecision(ctx, req, permission, "space")
+}
+
+func RequireBotManagementPermission(ctx context.Context, req *rolev1.CheckPermissionRequest) error {
+	return requireServiceGlobalDecision(ctx, req, permissions.SpaceManageBots, "bot")
+}
+
+func requireServiceGlobalDecision(ctx context.Context, req *rolev1.CheckPermissionRequest, permission, issuer string) error {
 	p, ok := principal.FromContext(ctx)
-	if !ok || p.Kind != "service" || p.Issuer != "space" || p.Subject != "service:space" || p.Audience != "role" || p.RPC != rolev1.RoleService_CheckPermission_FullMethodName || p.AccountID != "" || p.ProfileID != "" || p.SessionEpoch != 0 {
+	if !ok || p.Kind != "service" || p.Issuer != issuer || p.Subject != "service:"+issuer || p.Audience != "role" || p.RPC != rolev1.RoleService_CheckPermission_FullMethodName || p.AccountID != "" || p.ProfileID != "" || p.SessionEpoch != 0 || p.AccountType != "" || p.BotID != "" || p.ActorProfileID != "" || p.InstallationID != "" || p.BotScope != "" || p.SpaceID != "" {
 		return status.Error(codes.Unauthenticated, "verified Space approval decision required")
 	}
 	id, err := uuid.Parse(p.RequestID)

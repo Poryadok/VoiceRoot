@@ -26,6 +26,13 @@ func (s *RoleGRPC) checkQualifiedSettings(ctx context.Context, req *rolev1.Check
 	return s.checkQualifiedSpaceDecision(ctx, req, permissions.SpaceManageSettings)
 }
 
+func (s *RoleGRPC) checkQualifiedBotManagement(ctx context.Context, req *rolev1.CheckPermissionRequest) (*rolev1.CheckPermissionResponse, error) {
+	if err := principalgrpc.RequireBotManagementPermission(ctx, req); err != nil {
+		return nil, err
+	}
+	return s.checkQualifiedSpaceDecision(ctx, req, permissions.SpaceManageBots)
+}
+
 func (s *RoleGRPC) checkQualifiedSpaceDecision(ctx context.Context, req *rolev1.CheckPermissionRequest, permission string) (*rolev1.CheckPermissionResponse, error) {
 	if s == nil || s.Store == nil || s.MemberAuthority == nil {
 		return nil, status.Error(codes.Unavailable, "native membership authority unavailable")

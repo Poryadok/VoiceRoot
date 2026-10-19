@@ -189,7 +189,7 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool) {
 	ownerAccount := uuid.NewString()
 	var floor atomic.Int64
 	floor.Store(7)
-	runtime, err := principalruntime.NewWithSessionEpochChecker(ctx, principalruntime.Config{ListenAddr: "127.0.0.1:0", TLSCertFile: certFile, TLSKeyFile: keyFile, ClientCAFile: clientCA, ReplayAddr: redisAddress, JWKSCAFile: certFile, JWKSURLs: map[string]string{"space": jwks.URL, "voice": jwks.URL, "gameintegration": jwks.URL, "gateway": jwks.URL}, DelegatedUserEnabled: true, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: time.Second}, func(_ context.Context, account string, epoch int64) error {
+	runtime, err := principalruntime.NewWithSessionEpochChecker(ctx, principalruntime.Config{ListenAddr: "127.0.0.1:0", TLSCertFile: certFile, TLSKeyFile: keyFile, ClientCAFile: clientCA, ReplayAddr: redisAddress, JWKSCAFile: certFile, JWKSURLs: map[string]string{"space": jwks.URL, "voice": jwks.URL, "gameintegration": jwks.URL, "gateway": jwks.URL, "bot": jwks.URL}, BotLifecycleEnabled: true, DelegatedUserEnabled: true, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: time.Second}, func(_ context.Context, account string, epoch int64) error {
 		if account != ownerAccount || epoch < floor.Load() {
 			return errors.New("stale session")
 		}
@@ -207,7 +207,7 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool) {
 	b := preparing.Binding
 	request := &rolev1.EnsureDefaultMemberRoleRequest{ProtocolVersion: b.ProtocolVersion, SpaceId: b.SpaceID, ProfileId: b.ProfileID, MembershipGeneration: b.MembershipGeneration, AdmissionOperationId: b.AdmissionOperationID, AdmissionBindingSha256: b.AdmissionBindingSHA256}
 	call := func(req *rolev1.EnsureDefaultMemberRoleRequest) (*rolev1.EnsureDefaultMemberRoleResponse, error) {
-		return client.EnsureDefaultMemberRole(sourceCallContext(t, current, "space", rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName, uuid.NewString(), req), req)
+		return client.EnsureDefaultMemberRole(nativeServiceContext(t, current, rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName, req), req)
 	}
 	response, err := call(request)
 	require.NoError(t, err, "real protected Space PREPARING must yield a committed inert Role receipt")
@@ -243,6 +243,27 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool) {
 	require.NoError(t, err, "derived Voice decision must collect actual native membership before taking the Role fence")
 	require.NotZero(t, voiceResponse.GetPolicyEpoch())
 	require.True(t, voiceResponse.GetGrants().GetCanJoin(), "published default Member's qualified Voice grant remains usable")
+	botDecision := &rolev1.CheckPermissionRequest{SpaceId: b.SpaceID, ProfileId: owner.String(), PermissionName: "SPACE_MANAGE_BOTS"}
+	botContext := nativeWorkloadContext(t, current, "bot", rolev1.RoleService_CheckPermission_FullMethodName, botDecision)
+	botResponse, err := client.CheckPermission(botContext, botDecision)
+	require.NoError(t, err, "exact Bot installation decision must use the protected qualified receiver")
+	require.True(t, botResponse.GetAllowed())
+	_, err = client.CheckPermission(botContext, botDecision)
+	require.Equal(t, codes.Unauthenticated, status.Code(err), "Bot decision transport replay must be rejected")
+	botMemberDecision := proto.Clone(botDecision).(*rolev1.CheckPermissionRequest)
+	botMemberDecision.ProfileId = b.ProfileID
+	botResponse, err = client.CheckPermission(nativeWorkloadContext(t, current, "bot", rolev1.RoleService_CheckPermission_FullMethodName, botMemberDecision), botMemberDecision)
+	require.NoError(t, err)
+	require.False(t, botResponse.GetAllowed(), "ordinary qualified Member is not a Bot administrator")
+	botScopedDecision := proto.Clone(botDecision).(*rolev1.CheckPermissionRequest)
+	room := uuid.NewString()
+	botScopedDecision.VoiceRoomId = &room
+	_, err = client.CheckPermission(nativeWorkloadContext(t, current, "bot", rolev1.RoleService_CheckPermission_FullMethodName, botScopedDecision), botScopedDecision)
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "Bot management accepts no client-selected node")
+	botWrongPurpose := proto.Clone(botDecision).(*rolev1.CheckPermissionRequest)
+	botWrongPurpose.PermissionName = "SPACE_MANAGE_SETTINGS"
+	_, err = client.CheckPermission(nativeWorkloadContext(t, current, "bot", rolev1.RoleService_CheckPermission_FullMethodName, botWrongPurpose), botWrongPurpose)
+	require.Equal(t, codes.Unauthenticated, status.Code(err), "Bot cannot borrow the Space settings purpose")
 	gateway, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "current", PrivateKey: current})
 	require.NoError(t, err)
 	delegated := func(method string, request proto.Message) context.Context {
@@ -292,7 +313,7 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool) {
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 	remove := &rolev1.RemoveMemberRolesRequest{ProtocolVersion: 1, SpaceId: b.SpaceID, ProfileId: b.ProfileID, RemovalGenerationFloor: b.MembershipGeneration, RemovalOperationId: uuid.NewString(), RemovalBindingSha256: make([]byte, 32)}
 	removeCall := func() (*rolev1.RemoveMemberRolesResponse, error) {
-		return client.RemoveMemberRoles(sourceCallContext(t, current, "space", rolev1.RoleService_RemoveMemberRoles_FullMethodName, uuid.NewString(), remove), remove)
+		return client.RemoveMemberRoles(nativeServiceContext(t, current, rolev1.RoleService_RemoveMemberRoles_FullMethodName, remove), remove)
 	}
 	removed, err := removeCall()
 	require.NoError(t, err)

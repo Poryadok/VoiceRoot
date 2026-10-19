@@ -480,6 +480,15 @@ interceptor ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md));
 
 ### Space `CheckPermission` decision contract
 
+The protected Bot installation decision is a separate exact branch: only
+`service:bot`, `SPACE_MANAGE_BOTS`, canonical Space/profile IDs and no chat/voice
+node. `ROLE_BOT_LIFECYCLE_ENABLED=true` adds only the configured `bot` HTTPS JWKS
+issuer to the closed listener trust set. Missing/partial configuration fails
+closed; the ordinary listener rejects this decision. This branch uses current
+native membership qualification, never a raw Owner/Admin label. Cleanup RPC
+activation additionally requires its durable participant adapter and fences;
+enabling the decision flag alone does not establish cleanup readiness.
+
 Space may call only `/voice.role.v1.RoleService/CheckPermission` with a signed
 service JWT whose `principal_type=service`, `iss=space`, `sub=service:space`,
 `aud=role`, and `rpc` is that exact full RPC name. The credential also requires

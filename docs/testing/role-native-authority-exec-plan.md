@@ -164,6 +164,24 @@ Native positive membership can qualify explicit grants but never a READY default
 
 ## Risks And Follow-Ups
 
+ROLE-LEGACY-SAME-CORE-v1 c55 confirms that native legacy Assign/Revoke remain
+no-effects Unavailable until the SAME durable operation core is genuinely ready.
+This is an actual delivery dependency, not a separate legacy journal permission.
+Provider213 source cb90413 and identity214 source ff5db163 are reviewed adapters;
+neither establishes current deployed capability or the stopped172 owner channel.
+
+After checkpoint5c432f6, additive Bot wire d51b65 was consumed as948796021.
+The accepted BE170 c10 service:bot CheckPermission branch is separately fixed to
+SPACE_MANAGE_BOTS with no node/mixed claims. ROLE_BOT_LIFECYCLE_ENABLED=true
+requires the exact additional bot HTTPS JWKS endpoint; default trust is unchanged.
+Actual protected RolePG/SpacePG Owner allow, Member deny, replay/node/cross-purpose
+negatives failed27.273s before implementation and passed race80.196s afterward.
+An earlier42.954s failure expired the fixture's2s Ensure call, before the Bot
+oracle; it is not the feature RED. The fixture now consistently uses the accepted
+5s calls. Runtime/principal suites passed race17.359s/1.019s plus vet.
+Cleanup ApplyBotInstallationRemoval is not enabled by this decision-only change;
+44's Role25 correction and source qualification remain separate.
+
 The complete native caller/writer/derived-reader cutover is still required.
 Public delegated transport enablement requires a real current Auth-floor client;
 accepted client tests do not establish an assembled Auth production deployment.
