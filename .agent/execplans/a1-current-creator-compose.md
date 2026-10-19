@@ -66,3 +66,10 @@ the exact expected environment keysets were extended without removing services
 or credential mount scope assertions. Snapshot initially omitted canonical
 Phase0 overlay, fixed the owned runner snapshot before behavioral RED. Own tools
 container/sourcevolume is preparation only; no app/DB listeners started yet.
+
+Existing protected publicCreator regression restored on currentGateway;
+Linux package compiles (no runtime test executed). Isolated runner contract
+passes all8cases, preserving original7 A1 checks. Real manifest contract will
+run from the portable exact Git clone with the combined source.121 supplied
+5113a511 Auth325/paid324 target; normal merge before final runtime assembly,
+retain unchanged component proof instead of repeating unrelated checks.
