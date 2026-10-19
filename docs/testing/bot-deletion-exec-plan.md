@@ -418,3 +418,20 @@ reviewed86bc Uninstall changes, this new caller and the source-owned55b provider
 test branch. The complete executed archive proves inputs; it does not request a
 whole-parent semantic audit. Actual protected ordinary Uninstall, full Role and
 public composition, Purge and the post30day evidence gap remain open.
+
+The separate ordinary-Uninstall Messaging lower handoff now also passes:
+caller10.509s/provider45.783s, no skips. Actual protected Messaging receives
+space_uninstall with exact native installation/attachment scope, commits once,
+and loses its ACK. After a human repin, a corrupt receipt is rejected and the
+worker recovers the saved exact receipt without deleting that later pin.
+Bot012 retains the typed journal; the native intent is locally CANCELED, Bot
+stays live, no global root exists, and unavailable Role keeps RETRY_WAIT.
+Initiating manager facts and native Empty are explicitly controlled here;
+this proves actual Messaging purpose-specific transport/recovery, not public
+Uninstall or actual Space cancellation. Recovery uses SAME-Pool service reset
+and manually equivalent mTLS client. Provider uses actual official Chat SQL
+head/incarnation and readonly LOGIN, real Messaging migrations/PG/Redis/JWKS.
+The first provider attempt failed before RPC because the runner flattened the
+repository layout expected by its source-owned repoRoot helper; the saved
+failure is setup evidence, not a product RED. The successful run uses the
+canonical src/backend layout and identical production source.
