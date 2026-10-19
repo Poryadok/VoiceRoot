@@ -143,20 +143,20 @@ class InstalledBotInfo {
     required this.bot,
     required this.installationId,
     required this.allowedChatIds,
-    this.online = false,
+    this.online,
   });
 
   final VoiceBotSummary bot;
   final String installationId;
   final List<String> allowedChatIds;
-  final bool online;
+  final bool? online;
 
   factory InstalledBotInfo.fromProto(bot_pb.InstalledBot installed) {
     return InstalledBotInfo(
       bot: VoiceBotSummary.fromProto(installed.bot),
       installationId: installed.installationId,
       allowedChatIds: installed.allowedChats.map((c) => c.id).toList(),
-      online: installed.online,
+      online: installed.hasOnline() ? installed.online : null,
     );
   }
 }
