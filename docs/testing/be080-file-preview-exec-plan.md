@@ -236,3 +236,21 @@ publication or claim shared-stand, all-replica rollout or public Flutter
 acceptance. The separate existing-owner intent with a vanished exact File
 reference remains denied and durable, awaiting the canonical owner repair;
 recreating another keyed operation is outside preview authority.
+
+Current composition qualified code c29b873584a01c143500de8e3a6d457c63da66fa
+is on the newer confirmed MASTER5113a511c5a13f1abe3a760a614641809ee7a76d.
+Both File/Messaging builds pass. Real Linux PG16/NATS race tests pass: File
+2 top/2sub, protected principal19top/100sub, Messaging restart1/store5,
+shared snapshot/Role4top/35sub and rollback3top/21sub; zero failures/skips.
+Both complete short suites and vet pass; their explicit integration skips
+remain short-mode limits. Canonical root lint passes Messaging/shared. File
+lint found only ST1020 on the exported worker comment; corrected the comment
+without runtime changes and reran that lint. Local Dart generation has no drift.
+Buf lint and breaking against preserved3071 pass. The current helper already
+applies File004/005: two old preview tests duplicated that setup. Actual native
+RED reproduced the duplicate table, then only redundant setup/import was removed,
+keeping all assertions and current MASTER fixture ownership. Earlier dependency
+and image-readiness setup failures are retained separately. Runtime source
+archives/manifests and comment-only final delta remain explicitly distinguished.
+Genuine378 original rollback SOURCE CLEARc3 is preserved; current composition
+review and actual121 delivery/MASTER CI are separate subsequent events.

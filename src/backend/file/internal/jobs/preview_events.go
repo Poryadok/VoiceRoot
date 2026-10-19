@@ -13,7 +13,7 @@ type previewPublisher interface {
 	PublishPreviewEvent(context.Context, []byte) error
 }
 
-// Activation is explicit: all Messaging replicas must understand preview first.
+// StartPreviewEventWorker requires explicit activation after all Messaging replicas understand preview.
 func StartPreviewEventWorker(ctx context.Context, store previewOutbox, publisher previewPublisher, logger *slog.Logger) {
 	go func() {
 		ticker := time.NewTicker(time.Second)
