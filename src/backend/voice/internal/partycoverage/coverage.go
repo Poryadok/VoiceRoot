@@ -126,6 +126,7 @@ func CheckRuntimePrivileges(ctx context.Context, tx pgx.Tx) error {
  OR pg_has_role((SELECT usesysid FROM pg_stat_activity WHERE pid=pg_backend_pid()),a.oid,'MEMBER')) AND
  (pg_has_role(a.oid,c.relowner,'MEMBER') OR has_schema_privilege(a.oid,c.relnamespace,'CREATE')
  OR has_table_privilege(a.oid,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+ OR has_any_column_privilege(a.oid,c.oid,'INSERT,UPDATE,REFERENCES')
  OR EXISTS(SELECT 1 FROM pg_proc p WHERE p.prosecdef AND has_function_privilege(a.oid,p.oid,'EXECUTE')))))`).Scan(&unsafe)
 	if err != nil || unsafe {
 		return ErrUnavailable
