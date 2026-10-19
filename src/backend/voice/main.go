@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -506,16 +505,6 @@ func main() {
 		}()
 	}
 
-	if service, ok := spaceLifecycleController.(*spacelifecycle.Service); ok {
-		fence, ok := callStore.(interface {
-			SetSpaceLifecycle(context.Context, string, int64, bool) error
-		})
-		if !ok || !callStoreDurable {
-			log.Fatal("P3 requires durable lifecycle-fenced Redis")
-		}
-		service.Effects.ProjectionFence = fence
-		service.Effects.NativeDrain = &spacemedia.Coordinator{Calls: callStore, Store: callStore, Admissions: spacemedia.NewPostgresAdmissionStore(lifecyclePool)}
-	}
 	tokenTTL := time.Hour
 	spaceMediaAdmissions := spacemedia.NewPostgresAdmissionStore(lifecyclePool)
 	federatedMedia, err := federationmedia.LoadFromEnv(os.Getenv)
@@ -586,85 +575,15 @@ func main() {
 	if federatedMedia != nil {
 		voiceSvc.FederatedMedia = federatedMedia
 	}
-	if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
-		if sessionEpochChecker == nil {
-			log.Fatal("Space media admission requires the current Auth session-floor checker")
-		}
-		if !callStoreDurable {
-			log.Fatal("Space media invalidation requires the durable Voice Redis call store")
-		}
-		if err := voiceSvc.SpaceMediaAdmissions.CheckSchema(runCtx); err != nil {
-			log.Fatalf("Space media PostgreSQL admission schema: %v", err)
-		}
-		if voiceRoomAccessResolver == nil || voiceRoomGrantResolver == nil {
-			log.Fatal("Space media invalidation requires Space and Role authority resolvers")
-		}
-		mediaLifecycle := livekit.NewSDKRoomLifecycle(
-			strings.TrimSpace(os.Getenv("LIVEKIT_URL")),
-			strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")),
-			strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET")),
-		)
-		projectionGates, ok := callStore.(voicestore.SpaceProjectionGates)
-		if !ok {
-			log.Fatal("Space requires an incarnation-fenced projection store")
-		}
-		voiceSvc.SpaceProjectionGates = projectionGates
-		spaceMediaServing := &atomic.Bool{}
-		voiceSvc.SpaceMediaServing = spaceMediaServing
-		spaceMediaCoordinator := &spacemedia.Coordinator{
-			ProjectionGates: projectionGates, Store: callStore, Calls: callStore, Admissions: spaceMediaAdmissions,
-			SessionEpochChecker: sessionEpochChecker,
-			Access:              voiceRoomAccessResolver, Grants: voiceRoomGrantResolver, Media: mediaLifecycle,
-			Every: spacemedia.ReconcileInterval,
-			OnError: func(err error) {
-				logger.Warn("Space media authority reconciliation failed", slog.String("error", err.Error()))
-			},
-			OnReadiness: spaceMediaServing.Store,
-		}
-		if service, ok := spaceLifecycleController.(*spacelifecycle.Service); ok {
-			service.Effects.NativeDrain = spaceMediaCoordinator
-			fence, ok := callStore.(interface {
-				SetSpaceLifecycle(context.Context, string, int64, bool) error
-			})
-			if !ok {
-				log.Fatal("P3 requires lifecycle-fenced Redis projection")
-			}
-			service.Effects.ProjectionFence = fence
-			// Protected P3 has one independently wired exact-drain recovery loop.
-		}
-		voiceSvc.SpaceMediaRevoker = spaceMediaCoordinator
-		invalidationConsumer, err := spacemedia.StartInvalidationConsumer(runCtx, natsURL, spaceMediaCoordinator, logger)
-		if err != nil {
-			log.Fatalf("Space media invalidation consumer startup: %v", err)
-		}
-		defer func() { _ = invalidationConsumer.Close() }()
-		if err := spaceMediaCoordinator.ReconcileAll(runCtx); err != nil {
-			log.Fatalf("Space media initial reconciliation: %v", err)
-		}
-		admissionPublisher, ok := events.(spacemedia.AdmissionOutboxPublisher)
-		if !ok {
-			log.Fatal("Space media durable event publisher is not configured")
-		}
-		admissionRelay := &spacemedia.AdmissionOutboxRelay{
-
-			Store: spaceMediaAdmissions, Publisher: admissionPublisher,
-			OnError: func(err error) {
-				logger.Warn("Space media admission outbox delivery failed", slog.String("error", err.Error()))
-			},
-		}
-		// Native A3 facts remain pending. Starting their roster relay requires a
-		// separately qualified broker/consumer package, not ordinary NATS_URL.
-		go func() {
-			if err := admissionRelay.Run(runCtx); err != nil && runCtx.Err() == nil {
-				logger.Error("Space media admission outbox relay stopped", slog.String("error", err.Error()))
-			}
-		}()
-		go func() {
-			if err := spaceMediaCoordinator.Run(runCtx); err != nil && runCtx.Err() == nil {
-				logger.Error("Space media authority reconciler stopped", slog.String("error", err.Error()))
-			}
-		}()
+	var mediaSessionEpochChecker spacemedia.SessionEpochChecker
+	if sessionEpochChecker != nil {
+		mediaSessionEpochChecker = sessionEpochChecker
 	}
+	closeSpaceMediaRuntime := startSpaceMediaRuntime(runCtx, voiceSvc, lifecyclePool,
+		mediaSessionEpochChecker, callStoreDurable, strings.TrimSpace(os.Getenv("NATS_URL")),
+		livekit.NewSDKRoomLifecycle(strings.TrimSpace(os.Getenv("LIVEKIT_URL")),
+			strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")), strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET"))), logger)
+	defer func() { _ = closeSpaceMediaRuntime() }()
 	// Publish P3 recovery only after every optional consumer has final bindings.
 	if configured, ok := spaceLifecycleController.(*spacelifecycle.Service); ok {
 		service := configured.RecoverySnapshot()

@@ -14,7 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"voice.app/voice/common/v1"
-	"voice/backend/pkg/integrationtest"
+	"voice/backend/voice/internal/spacegatetest"
 )
 
 func TestPostgresSpaceLifecyclePendingReplayRetainsBinding(t *testing.T) {
@@ -79,7 +79,7 @@ func startSpaceLifecyclePostgres(t *testing.T, ctx context.Context) *pgxpool.Poo
 	require.True(t, ok)
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
 	migrations := filepath.Join(root, "src", "backend", "migrations", "voice_db")
-	pool := integrationtest.StartPostgres(t, ctx, "voice_space_lifecycle", filepath.Join(migrations, "000001_room_lifecycle.up.sql"))
+	pool := spacegatetest.StartPostgres(t, ctx, "voice_space_lifecycle", filepath.Join(migrations, "000001_room_lifecycle.up.sql"))
 	for _, name := range []string{"000002_redis_divergence", "000003_matchmaking_membership", "000004_game_session_rooms", "000005_game_session_close", "000006_game_session_roster_lease", "000007_t17_sdk_conversion_fence", "000008_account_voice_fence", "000009_space_lifecycle", "000010_space_media_admission", "000014_space_media_p3"} {
 		body, err := os.ReadFile(filepath.Join(migrations, name+".up.sql"))
 		require.NoError(t, err)
