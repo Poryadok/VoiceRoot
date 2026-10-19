@@ -117,6 +117,14 @@ CI and product acceptance remain distinct from source/component proof.
   Linux PostgreSQL race22top/4sub0skip22.761s and vet0 cover concurrency,
   sidecar/ACK rollback, cohort rejection and credential expiry after row lock.
   Synthetic actor/admission fixtures are component evidence only.
+- [x] Correct independent review350 DOWN first-writer race. Actual PostgreSQL
+  RED reproduced evidence removal for both000006 and analogous000005. Each
+  DOWN now obtains admission-head and target relation ACCESS EXCLUSIVE locks
+  before checking retained rows, and checks/drops inside one DO transaction.
+  Non-READ-COMMITTED transactions refuse rollback rather than use an old
+  snapshot. Focused Linux race2top/4sub0skip6.100s and vet0 cover both first
+  writers, genuinely empty rollback and snapshot isolation rejection. Exact
+  successor review remains required; this is not runtime restore proof.
 - [ ] Bind saved-viewer privacy and actual protected action/wrapper composition.
   ActorBound Validate must carry the exact immutable PostgreSQL criteria text
   matching v1 criteriaSHA; MM must verify bytes/hash/shape before capture.
