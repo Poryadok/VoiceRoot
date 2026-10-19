@@ -15,6 +15,15 @@ func accessLogPath(path string) string {
 	if strings.HasPrefix(path, revocableDownloadPathPrefix) {
 		return "/api/v1/files/download/:capability"
 	}
+	if strings.HasPrefix(path, "/api/v1/invites/") {
+		label := "/api/v1/invites/:code"
+		for _, suffix := range []string{"/join-attempts", "/join"} {
+			if strings.HasSuffix(path, suffix) {
+				return label + suffix
+			}
+		}
+		return label
+	}
 	return path
 }
 

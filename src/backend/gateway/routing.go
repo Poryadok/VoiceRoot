@@ -12,7 +12,7 @@ import (
 )
 
 func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/api/v1/auth/space-deletion-proof" {
+	if r.URL.Path == "/api/v1/auth/space-deletion-proof" || isSpaceAdmissionRequest(r) {
 		w = &noStoreResponseWriter{ResponseWriter: w}
 	}
 	if blocked, updateURL := g.forceUpdateDecision(r); blocked {
@@ -121,7 +121,7 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 		traceMatchFoundTransport("rest-transcoder-unhandled")
 	}
 
-	if isSpaceCreateRequest(r) || isSpaceJoinRequest(r) {
+	if isSpaceCreateRequest(r) || isSpaceJoinRequest(r) || isSpaceAdmissionRequest(r) {
 		writeGRPCError(w, status.Error(codes.Unavailable, "Space creator transport unavailable"))
 		return
 	}

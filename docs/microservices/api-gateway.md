@@ -557,14 +557,14 @@ identity come only from the verified principal.
 
 | Method/path | RPC / ACL | Body | Success |
 |---|---|---|---|
-| `PUT S/entry-policy` | `SetEntryPolicy`; `SPACE_MANAGE_SETTINGS` | `{operation_id,expected_policy_version,policy}` complete private policy | Saved policy/version outcome; only authorized settings reads expose configured answers |
+| `PUT S/entry-policy` | `SetEntryPolicy`; `SPACE_MANAGE_SETTINGS` | `{operation_id,expected_policy_version,policy}` complete private policy | Saved safe `{operation_id,entry_policy_version}` acknowledgement; only separately authorized settings reads expose configured answers |
 | `POST S/join-attempts` | `StartJoinAttempt`; authenticated direct applicant, public Space eligibility | `{operation_id}` | `201 {attempt_id,space_id,policy_version,expires_at,requirements,captcha_challenge_context?}` |
 | `POST /api/v1/invites/{code}/join-attempts` | `StartJoinAttempt`; authenticated invite applicant, canonical invite/Space eligibility | `{operation_id}` | Same `201` safe attempt projection |
 | `GET S/join-attempts/{attempt_id}` | `GetJoinAttempt`; original authenticated account **and** profile | None | `200` safe state/outcome; foreign/missing attempt is `404` |
 | `POST S/join-attempts/{attempt_id}/submit` | `SubmitJoinAttempt`; original applicant | `{operation_id,answers:[{question_id,value}],captcha_token?}` | `200 {state:"admitted",space_membership}` after completed admission, or `202 {state:"pending",request_id}` after automatic AND passes and manual is required |
 | `GET S/join-requests` | `ListJoinRequests`; current member + `SPACE_APPROVE_JOIN_REQUESTS` | Query `limit,cursor` | `200` pending-only page; limit default 50/max 100, opaque Space/order-bound cursor, stable `created_at,id` order |
 | `GET S/join-requests/{request_id}` | `GetJoinRequest`; same review permission and membership | None | `200` authorized request detail |
-| `POST S/join-requests/{request_id}/approve` | `ApproveJoinRequest`; same review permission and membership | `{operation_id}` | Durable admission outcome after final guards; no success before completion |
+| `POST S/join-requests/{request_id}/approve` | `ApproveJoinRequest`; same review permission and membership | `{operation_id,attempt_id?}`; an ambiguous group requires its exact child attempt | Durable admission outcome after final guards; no success before completion |
 
 Request IDs and operations are UUIDs; applicant/approver selectors are not
 accepted in bodies. Requirements never expose configured answers/digests.
