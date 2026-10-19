@@ -31,7 +31,7 @@ type RoomLifecycle struct {
 	sdk RoomServiceSDK
 }
 
-// RemoveParticipant/DeleteRoom do not invalidate self-hosted refreshed bearers.
+// RetirementCapability reports that RemoveParticipant/DeleteRoom do not invalidate self-hosted refreshed bearers.
 func (a *RoomLifecycle) RetirementCapability() string {
 	if a == nil || a.sdk == nil {
 		return "UNKNOWN"
