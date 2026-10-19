@@ -50,6 +50,10 @@ func TestNativeBotPublicationOwnJournalAndLegacyIsolation(t *testing.T) {
 	legacy.InstallationID = uuid.New()
 	legacy.ProfileID = legacyProfile
 	require.ErrorIs(t, publishNativeBotInstallation(ctx, tx, legacy, request[:]), ErrMemberAuthorityUnavailable)
+	unknownCancel := legacy
+	unknownCancel.Remove = true
+	unknownCancel.OperationID = uuid.New()
+	require.ErrorIs(t, cancelNativeBotInstallation(ctx, tx, unknownCancel, request[:]), ErrMemberAuthorityUnavailable, "absent journal cannot acknowledge unknown pre-journal source cleanup")
 	var generation int64
 	require.NoError(t, tx.QueryRow(ctx, `SELECT generation FROM space_ordinary_member_heads WHERE space_id=$1 AND profile_id=$2`, space.ID, legacyProfile).Scan(&generation))
 	require.Zero(t, generation, "LEGACY0 never adopted by a fresh installation")

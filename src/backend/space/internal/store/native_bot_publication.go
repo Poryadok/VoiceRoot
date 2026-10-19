@@ -171,7 +171,7 @@ func cancelNativeBotInstallation(ctx context.Context, tx pgx.Tx, in botmembershi
 		if savedInstall != in.InstallOperationID || savedSpace != in.SpaceID || !bytes.Equal(savedRequest, requestSHA) {
 			return ErrMemberAdmissionConflict
 		}
-		return nil
+		return rejectUnknownBotCancellationSource(ctx, tx, in)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return err
@@ -212,6 +212,9 @@ func cancelNativeBotInstallation(ctx context.Context, tx pgx.Tx, in botmembershi
 			return ErrMemberAuthorityUnavailable
 		}
 	} else if errors.Is(err, pgx.ErrNoRows) {
+		if err = rejectUnknownBotCancellationSource(ctx, tx, in); err != nil {
+			return err
+		}
 		if (!headExists && in.Generation != 1) || (headExists && (headState != "CANCELED" || headFloor != headGeneration || headGeneration == math.MaxInt64 || in.Generation != headGeneration+1 || headInstall == in.InstallationID || headOperation == in.InstallOperationID)) {
 			return ErrMemberAdmissionStale
 		}
@@ -224,6 +227,30 @@ func cancelNativeBotInstallation(ctx context.Context, tx pgx.Tx, in botmembershi
 	} else {
 		return err
 	}
+	if membership == nil {
+		if err = rejectUnknownBotCancellationSource(ctx, tx, in); err != nil {
+			return err
+		}
+	}
 	_, err = tx.Exec(ctx, `INSERT INTO space_bot_installation_cancellations(operation_id,install_operation_id,space_id,request_sha256,completed_at) VALUES($1,$2,$3,$4,clock_timestamp())`, in.OperationID, in.InstallOperationID, in.SpaceID, requestSHA)
 	return err
+}
+
+// A negative installation tombstone settles only a provably absent effect. It
+// is not evidence that an existing pre-journal ordinary source was cleaned up.
+// An exact previously published journal can settle its own retired effect while
+// preserving a newer independent incarnation.
+func rejectUnknownBotCancellationSource(ctx context.Context, tx pgx.Tx, in botmembershipprincipal.InstallationBinding) error {
+	var unknown bool
+	err := tx.QueryRow(ctx, `SELECT
+	 (EXISTS(SELECT 1 FROM space_members WHERE space_id=$1 AND profile_id=$2)
+	 OR EXISTS(SELECT 1 FROM space_ordinary_member_heads WHERE space_id=$1 AND profile_id=$2 AND state IN ('ACTIVE','PREPARING')))
+	 AND NOT EXISTS(SELECT 1 FROM space_bot_installation_attempts WHERE install_operation_id=$3 AND space_id=$1 AND profile_id=$2 AND bot_id=$4 AND installation_id=$5 AND generation=$6 AND membership_generation IS NOT NULL)`, in.SpaceID, in.ProfileID, in.InstallOperationID, in.BotID, in.InstallationID, in.Generation).Scan(&unknown)
+	if err != nil {
+		return err
+	}
+	if unknown {
+		return ErrMemberAuthorityUnavailable
+	}
+	return nil
 }
