@@ -96,6 +96,13 @@ func lifecycleStoreFixture(t *testing.T) *SpaceStore {
 	ctx := context.Background()
 	pool := startSpacePostgresForStoreTest(t, ctx)
 	applySpaceMigrationForStoreTest(t, ctx, pool)
+	// Keep this focused fixture's historical layout, extending only the durable
+	// completion ledger and canonical Realtime11 constraints it now exercises.
+	// Complete runtime fixtures separately install audit/hard-delete guards.
+	for _, name := range []string{"000023_lifecycle_evidence_retention.up.sql", "000034_realtime_lifecycle_participant.up.sql"} {
+		_, err := pool.Exec(ctx, r22SpaceMigrationSQL(t, name))
+		require.NoError(t, err)
+	}
 	return &SpaceStore{Pool: pool}
 }
 

@@ -102,12 +102,15 @@ func TestLifecycleMigration_ConstrainsRawHashesParticipantsAndOutboxState(t *tes
 		{"request hash length", `UPDATE space_lifecycle_participants SET request_sha256=decode('01','hex') WHERE space_id=$1`},
 		{"receipt hash length", `UPDATE space_lifecycle_participants SET receipt_sha256=decode('01','hex') WHERE space_id=$1`},
 		{"participant zero", `UPDATE space_lifecycle_participants SET participant_id=0 WHERE space_id=$1`},
-		{"participant unknown", `UPDATE space_lifecycle_participants SET participant_id=11 WHERE space_id=$1`},
+		{"participant unknown", `UPDATE space_lifecycle_participants SET participant_id=12 WHERE space_id=$1 AND participant_id=1`},
 		{"outbox state unknown", `UPDATE space_lifecycle_outbox SET state='ACKED' WHERE space_id=$1`},
 	} {
 		t.Run(mutation.name, func(t *testing.T) {
 			_, err := st.Pool.Exec(ctx, mutation.sql, spaceID)
 			require.Error(t, err)
+			var constraint *pgconn.PgError
+			require.ErrorAs(t, err, &constraint)
+			require.Equal(t, "23514", constraint.Code, "the schema constraint must reject the invalid value")
 		})
 	}
 }
