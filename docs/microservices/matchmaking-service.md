@@ -427,3 +427,14 @@ This local grouping does not establish source authority for historical rows.
 Native proposal authorization additionally requires fresh protected source
 revalidation and the account ban guard; LFP qualification uses its separate
 consent source contract.
+
+Preproposal capture uses a distinct `ProposalCandidate`, without synthesizing
+a match ID before reservation. It fingerprints the complete private parties,
+all related session rows and canonical proposal parameters in one read-only
+repeatable-read cut, then releases the transaction before protected source RPCs.
+Its accounts come only from validated persisted private member authority.
+`ProposalValidator` yields an immediate proof for that exact local cut or the
+exact definitively changed party IDs. Any Unknown result discards a partial
+change set. Reservation must still obtain the account/party/session locks and
+repeat the fresh ban and local cut checks before writing; capture or external
+validation alone does not authorize the existing proposal creation API.
