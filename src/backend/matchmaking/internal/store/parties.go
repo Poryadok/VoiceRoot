@@ -41,7 +41,8 @@ type CreatePartyParams struct {
 	Criteria         string
 }
 
-// Create inserts a party and returns it.
+// Create inserts a pre-cut legacy party. NativeAdmission does not qualify this
+// profile-only path; native callers must use CreateSourceParty instead.
 func (s *PartyStore) Create(ctx context.Context, p CreatePartyParams) (Party, error) {
 	if s == nil || s.Pool == nil {
 		return Party{}, errors.New("party store unavailable")
@@ -63,13 +64,28 @@ func (s *PartyStore) Create(ctx context.Context, p CreatePartyParams) (Party, er
 	if err != nil {
 		return Party{}, err
 	}
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return Party{}, err
+	}
+	defer tx.Rollback(ctx)
+	if err := mmadmission.Acquire(ctx, tx, nil); err != nil {
+		return Party{}, err
+	}
 	id := uuid.New()
-	row := s.Pool.QueryRow(ctx, `
+	row := tx.QueryRow(ctx, `
 		INSERT INTO parties (id, leader_profile_id, member_profile_ids, game_id, mode, criteria)
 		VALUES ($1, $2, $3::jsonb, $4, $5, $6::jsonb)
 		RETURNING id, leader_profile_id, member_profile_ids, game_id, mode, criteria::text, created_at, disbanded_at
 	`, id, p.LeaderProfileID, string(raw), p.GameID, p.Mode, p.Criteria)
-	return scanParty(row)
+	party, err := scanParty(row)
+	if err != nil {
+		return Party{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Party{}, err
+	}
+	return party, nil
 }
 
 // Get loads a party by id.

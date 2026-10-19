@@ -513,3 +513,9 @@ custody, physical database continuity, role privileges, predecessor retirement
 or restore reconciliation. Those remain required independently, including the
 complete route/factory package and exact real installation readback. An empty
 head, matching fixture row or transport profile cannot authorize native serving.
+
+Legacy `PartyStore.Create` and `SessionStore.Create` remain pre-cut-only paths.
+They hold the local admission gate through commit with no native binding, so
+any retained CLOSED/PREPARED/ADMITTED marker refuses their inserts. A native
+binding on the party store never qualifies its profile-only legacy `Create`;
+qualified source creation uses the separate atomic captured-party API.

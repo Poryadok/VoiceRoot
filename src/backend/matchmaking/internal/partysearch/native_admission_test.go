@@ -16,6 +16,42 @@ import (
 	"voice/backend/matchmaking/internal/store"
 )
 
+func TestNativeAdmissionLegacyCreatesRefuseBegunHead(t *testing.T) {
+	ctx := context.Background()
+	pool := partyDB(t)
+	p := partyParams(t, pool)
+	legacyParty := func() error {
+		binding := admissionFixture()
+		_, err := (&store.PartyStore{Pool: pool, NativeAdmission: &binding}).Create(ctx, store.CreatePartyParams{LeaderProfileID: uuid.New(), GameID: p.GameID, Mode: p.Mode, Criteria: p.Criteria})
+		return err
+	}
+	legacySession := func() error {
+		_, err := (&store.SessionStore{Pool: pool}).Create(ctx, store.CreateSessionParams{ProfileID: uuid.New(), GameID: p.GameID, Mode: p.Mode, Criteria: p.Criteria, TimeoutAt: p.TimeoutAt})
+		return err
+	}
+	require.NoError(t, legacyParty())
+	require.NoError(t, legacySession())
+	for _, phase := range []string{"CLOSED", "PREPARED", "ADMITTED"} {
+		t.Run(phase, func(t *testing.T) {
+			_, err := pool.Exec(ctx, `DELETE FROM public.mm_native_admission_head`)
+			require.NoError(t, err)
+			if phase == "ADMITTED" {
+				insertAdmissionFixture(t, pool, admissionFixture())
+			} else {
+				_, err = pool.Exec(ctx, `INSERT INTO public.mm_native_admission_head(protocol_version,state) VALUES(1,$1)`, phase)
+				require.NoError(t, err)
+			}
+			require.ErrorIs(t, legacyParty(), mmadmission.ErrUnavailable)
+			require.ErrorIs(t, legacySession(), mmadmission.ErrUnavailable)
+			var parties, sessions int
+			require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM parties`).Scan(&parties))
+			require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM search_sessions`).Scan(&sessions))
+			require.Equal(t, 1, parties)
+			require.Equal(t, 1, sessions)
+		})
+	}
+}
+
 // This deliberately synthetic local-head fixture tests only transaction
 // serialization/equality. It is NOT an installed MM admission/custody receipt.
 func admissionFixture() mmadmission.Binding {
