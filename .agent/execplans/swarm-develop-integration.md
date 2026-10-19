@@ -567,3 +567,28 @@ Ready accepted BE195e020/219c14 and BE126a475 docs remain queued with exact
 ownership. New WIP publisher branches remain publication-only and retain their
 authors' task/CI custody. All full original TT scopes/activation/acceptance gates
 remain open where not satisfied; no foundation slice silently completes them.
+
+
+## Current MASTER continuation — 2026-10-19 08:16 UTC
+
+The later explicit user instruction supersedes the original develop-only target:
+finish existing reviewed source into MASTER through PR875, without new product
+tasks or PRs. Published source ee312e6 includes the finite reviewed historical
+composition metadata and four meaning-preserving lint fixes. Whole pkg pinned
+lint0 and57 affected race tests0skip passed; independent386 SWARMc66 CLEAR.
+
+H3 source5bf6c485 includes reviewed Story/Role reader/protected-join support.
+Independent418 closure review c9/c10 accepts89projection/461context,6570exact
+archive entries,24 fully bound generated testmains/899GoList objects, and all8
+literal dormant/restrictive A/B evidence scopes. Actual current native matrix
+8+1+30+2 PASS0skip and affected scopes are hash-bound. New source record describes
+H3 and actual c9 review; this metadata commit alone is not the later pin carrier
+and does not claim router/full F13/CI/master/deployment/provider/activation PASS.
+Old R3/H2 remains historical. A later pin-only carrier and exact review follow.
+
+416 exclusively owns existing historical composition F13 shell/new helper/tests
+from ee312e6 under supported handoff08:07;121 does not edit these paths. Its
+separate record binds all8 exact historical tuples, preserves runtime flags and
+taint, and never grants runtime PASS or a current/future path exemption. Actual
+full F13 and final exact-head required CI remain OPEN. STAGING_DEPLOY_ENABLED
+was read as false; recheck final workflow and variable before eventual merge.

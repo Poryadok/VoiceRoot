@@ -1,7 +1,7 @@
 {
   "version": "NATIVE-P3-SOURCE-v1",
   "base": "8191a36ca3bea7d053df0dd25963ca5133284b41",
-  "source": "6c117e9203c64fa3a93d4a182e36ac142b515557",
+  "source": "5bf6c4857c19fba2b91fb44eb9e9bc6ae816c485",
   "classification": "DORMANT-A3-RESTRICTIVE-P3-SOURCE",
   "consumers": [
     "DEVELOP-SOURCE-v1",
@@ -93,7 +93,7 @@
       "after": {
         "mode": "100644",
         "type": "blob",
-        "oid": "d6a817fe31aa9820e1c27e1e1491adb8ca8605dd"
+        "oid": "a54a5b1af02e8c214415400e1dac599bd787e24b"
       }
     },
     {
@@ -106,7 +106,7 @@
       "after": {
         "mode": "100644",
         "type": "blob",
-        "oid": "8bc81e2f6d400b926e14124ad22c99aca33124a1"
+        "oid": "b78e0a1ed2a2973962fff5f298e0f004a119067b"
       }
     },
     {
@@ -173,7 +173,7 @@
       "after": {
         "mode": "100644",
         "type": "blob",
-        "oid": "8bc81e2f6d400b926e14124ad22c99aca33124a1"
+        "oid": "b78e0a1ed2a2973962fff5f298e0f004a119067b"
       }
     },
     {
@@ -733,6 +733,15 @@
       }
     },
     {
+      "path": "src/backend/voice/internal/spacemedia/role_wire_compatibility_test.go",
+      "before": null,
+      "after": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "dd2051a98230a71f4e8a05bfabefb77f18e1b444"
+      }
+    },
+    {
       "path": "src/backend/voice/internal/store/call_store.go",
       "before": {
         "mode": "100644",
@@ -888,7 +897,7 @@
       "after": {
         "mode": "100644",
         "type": "blob",
-        "oid": "8bc81e2f6d400b926e14124ad22c99aca33124a1"
+        "oid": "b78e0a1ed2a2973962fff5f298e0f004a119067b"
       }
     },
     {
@@ -919,7 +928,7 @@
       "after": {
         "mode": "100644",
         "type": "blob",
-        "oid": "4c087e4a90d8070e4e380acfd8a670b7386788bd"
+        "oid": "7a3a76d7110a75e1f536aa69d53bdc9b776aaf35"
       }
     },
     {
@@ -945,7 +954,7 @@
       "after": {
         "mode": "100644",
         "type": "blob",
-        "oid": "ee9b403946df64be375d9289e17dacc8c199b40f"
+        "oid": "000138834c0de0e6d859c1d5e728287dd77df30c"
       }
     }
   ],
@@ -1635,7 +1644,7 @@
       "entry": {
         "mode": "100644",
         "type": "blob",
-        "oid": "7fde68dc8f0b454ba2a16bb47a7da6dc913b2374"
+        "oid": "17f6b7c5dae7f9e92d8f0888ce4b343e261ee2f1"
       }
     },
     {
@@ -4507,7 +4516,7 @@
       "entry": {
         "mode": "100644",
         "type": "blob",
-        "oid": "db8d89708042545148e565057283494f4ffbfe1f"
+        "oid": "8fb1b6a3988c795cee563623e0df2a010ab1bc0e"
       }
     },
     {
@@ -4524,6 +4533,54 @@
         "mode": "100644",
         "type": "blob",
         "oid": "09b47d1625b7988999a268a5bb1c5d6ec125f900"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/story/v1/lfp_actions.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "35b789b664525c92098fa376345f4a9def8873fc"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/story/v1/lfp_actions_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8a54b6cebb22b7528797d3d2a02528b63008f053"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/story/v1/lfp_actor.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f151810616924e5d87a5a5af2275e8829500239c"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/story/v1/lfp_actor_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5d926ba134192f92dc9174f1b8a3935cd57c0950"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/story/v1/lfp_consent.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c792fe03aacbf7c078d73b8fdd500d82eee38ce9"
+      }
+    },
+    {
+      "path": "src/backend/voice/pb/voice/story/v1/lfp_consent_grpc.pb.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e862db2eea48e61a18030419ff755af8d59801cb"
       }
     },
     {
@@ -4597,28 +4654,223 @@
     "src/backend/voice/pb/voice/chat/v1/chat_lifecycle.pb.go",
     "src/backend/voice/pb/voice/chat/v1/chat_lifecycle_grpc.pb.go",
     "src/backend/voice/pb/voice/common/v1/space_lifecycle.pb.go",
+    "src/backend/voice/pb/voice/space/v1/space.pb.go",
+    "src/backend/voice/pb/voice/story/v1/lfp_actions.pb.go",
+    "src/backend/voice/pb/voice/story/v1/lfp_actions_grpc.pb.go",
+    "src/backend/voice/pb/voice/story/v1/lfp_actor.pb.go",
+    "src/backend/voice/pb/voice/story/v1/lfp_actor_grpc.pb.go",
+    "src/backend/voice/pb/voice/story/v1/lfp_consent.pb.go",
+    "src/backend/voice/pb/voice/story/v1/lfp_consent_grpc.pb.go",
     "src/backend/voice/pb/voice/user/v1/user.pb.go",
     "src/backend/voice/pb/voice/user/v1/user_grpc.pb.go"
   ],
-  "closure_review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c4",
+  "closure_review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c9",
   "down_review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-VOICE-NATIVE-DOWN-53f75f745237#comment-c1",
-  "source_proposal_sha256": "0c339b49eaa953e411f1f960b6054a28ecd9680f35f2a234e6f2e7468481d835",
+  "source_proposal_sha256": "f1fa67facc75414b44659561459a323a97631f9b8a4b4494eae6eb0b414a5106",
   "evidence": [
     {
-      "name": "rudeus121-develop/batch3/native-source-53f75-closure-proof.json",
-      "sha256": "d2d1d03d7bde9583531642549168b04b7fc801d36ecd7af0adf7bb9aaa5fa028"
+      "name": "master-intake/h3-affected-counts.json",
+      "sha256": "046c698953297fd900ba892f6be9e5ffda5be6671fbbee970c6abb1af9863f4a"
     },
     {
-      "name": "rudeus121-develop/batch3/native-down-snapshot-proof.json",
-      "sha256": "a595d15486b4ea688865e5e3a3fe8e5165ad67934916e214f3915bec12fe050c"
+      "name": "master-intake/h3-affected-receipt.json",
+      "sha256": "ef54669a59fb847007a05a7b162c9f3de50f8deebb9919876b76a432859125ef"
     },
     {
-      "name": "rudeus121-develop/batch3/native-closure-matrix-receipt.json",
-      "sha256": "1b2498c90161428d2f1a6da438b790b5023dea583b9531867d6200347270d5f1"
+      "name": "master-intake/h3-archive-parity.json",
+      "sha256": "f2586a7764b0391cadeba25d5d603b9c53039f79f5a1f3cc2416d4350510279a"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-00.go",
+      "sha256": "2bc395c472ba3ad8cbaa3ea8e0208767ea24ebc5d6165539770e3a9d6b13172e"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-01.go",
+      "sha256": "907600d2a7abf4c744f19075af94d350c369fe0d83686ae601ea667d268b09c4"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-02.go",
+      "sha256": "cefcd72a3fca437b50586817edf54411668d898aa2b8192888b839062c30da76"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-03.go",
+      "sha256": "1afdd61da65b622abdff0b1c47d8021f8e00c2d5025ea5735a565e5c4688a8d8"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-04.go",
+      "sha256": "dfcddd21cccf15c3e0ed647b8e07703f4648edbeeceb963ed20b77b3f38edd0b"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-05.go",
+      "sha256": "8d14eafc173dbfde2861d2d7c4cff40cdd119f76501aa694d4b6fd7716e97176"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-06.go",
+      "sha256": "6ee4ccd85922a9f9f67ce595df8845f3603ed0617950d2be16069b4480db7a90"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-07.go",
+      "sha256": "842b159beee1dc0d42c7b7c9cb4a36d8e5cfa1ef5f8e107677a01ab88dd65afc"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-08.go",
+      "sha256": "9f9ffbedd4dc33c9f574c7182b9685788baf233593c28ec83dd94f60c5cae0e9"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-09.go",
+      "sha256": "d28a4f83624a0ea254de070dbb2d82487d0c07fcc9106e66eb3b2e456404a240"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-10.go",
+      "sha256": "e93543437987cf13ccfc605f6c475d6afb8a4c41680b64917b933a44de8f9075"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-11.go",
+      "sha256": "d3d952c5a23c58e98e65254cbae15944bfd1f3523c8182b5a236e6c8ade5ace1"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-12.go",
+      "sha256": "051fbd64fcafae6077155ddfc2d2dc862aeff86ace0c460903908a7b5f70df44"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-13.go",
+      "sha256": "f76c8e66490e1c886dc69a211edc623ca00cddd90541626baca4642307521429"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-14.go",
+      "sha256": "574d582ef8d3543b2723a0310f6484ea7eedcd534fdf976fcbae8d56195cea4b"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-15.go",
+      "sha256": "e86ef25d8a5b7bf602885380a81f5e37de829a9deb9b7f5b797714672456ec03"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-16.go",
+      "sha256": "aa948582ce476c4beeb5016963034266913cd7350c72218b358824eea8d2202c"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-17.go",
+      "sha256": "1c2a108ed818ae101b33245adf2b0df2c72fd099d7bff6597c45ea5fdc2483ac"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-18.go",
+      "sha256": "bc7e7c22035ec5f70f96d207331b249c72609ed4f1fedb532ee83cf131240de1"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-19.go",
+      "sha256": "fb9f1a76b6777d7e92fe42793d3e7b24755f541ea01f8ce755586c182d2f5e2a"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-20.go",
+      "sha256": "2bfb763c051ade4132f8a490bc3813d1b1cc4afb2187900495d67976370edaee"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-21.go",
+      "sha256": "d4ca3672429fa0ebba13a24816da4922ca09caa3ab2c121332e5e92b61d4e055"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-22.go",
+      "sha256": "f1eab1d2be50ad56b730cb2a585512de65f88e137241c1dedc9453075151eb93"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-23.go",
+      "sha256": "a3685d4d7c99267984dee792ff3da986cbfe3501a739aa08c86149ed7f3d9a93"
+    },
+    {
+      "name": "master-intake/h3-generated-testmain-proof.json",
+      "sha256": "5390c1734145ea77c38e782d731a2a25ccc1a8913789b8072d158e5ea8c76596"
+    },
+    {
+      "name": "master-intake/h3-native-factory.jsonl",
+      "sha256": "b62ef2df7c366e9e3c3815e11e2037433cc7a3c5468a3edf1941e43c9522fcf7"
+    },
+    {
+      "name": "master-intake/h3-native-matrix-receipt.json",
+      "sha256": "9a5ead25099c10b6b5bc922a8f382bca0bf13ec96d7e1e9084b7f72842fb3ff6"
+    },
+    {
+      "name": "master-intake/h3-native-ordinary.jsonl",
+      "sha256": "a82d0aa717417d47b90621f5fceebf0c6de5ca84fed28df6c695c05fe92fac2a"
+    },
+    {
+      "name": "master-intake/h3-native-p3.jsonl",
+      "sha256": "93e49fc1849a2957e2994a35f0f710efbf9469e0e778353e0d75c36dd902e680"
+    },
+    {
+      "name": "master-intake/h3-native-retirement.jsonl",
+      "sha256": "819ec51bae2127d1cd660fa9575ccedaed5ad17d93943c3c0bfb66998f0a97fb"
+    },
+    {
+      "name": "master-intake/h3-review-comments-actual.json",
+      "sha256": "9cfdd26b793c7c355ea9f40ae1e97784c9311f856c4f001d02cb05f5573fca32"
+    },
+    {
+      "name": "master-intake/h3-voice-go-list.jsonl",
+      "sha256": "84b06193957ae3c5af79037a12eba0a67c2fe13218712030e875a5a4f6868440"
+    },
+    {
+      "name": "master-intake/native-b1-probe.jsonl",
+      "sha256": "5474245e56f1c5b3d64f1e51f2e0f3d0962bc0dbb13c2d79003f7d24605daff3"
+    },
+    {
+      "name": "master-intake/native-b1-probe.tar",
+      "sha256": "8b70984de6290d2a5c9a4d42f12a21998f1d0f70ced31d43cbc79c9178940d7b"
+    },
+    {
+      "name": "master-intake/native-b1-receipt.json",
+      "sha256": "80d9dfa81c04bb56624b14de25ecc8301980f6197dd730bd353fa082a51c6ca3"
+    },
+    {
+      "name": "master-intake/native-b1-supplement.json",
+      "sha256": "752f8a6456fecec12291f983b231652262ade78c05fece94cac12fff6e45a90d"
+    },
+    {
+      "name": "master-intake/native-b3-probe.jsonl",
+      "sha256": "876e945ba10c771884fbdaeefd549202b1e9c55d74800d38aa338ce1df5a361f"
+    },
+    {
+      "name": "master-intake/native-b3-receipt.json",
+      "sha256": "4a3313e231914cb488e02e8bf329f9080906dd4e283f48349f451324648119d6"
+    },
+    {
+      "name": "master-intake/native-h2-context.diff",
+      "sha256": "c2bb735690ac638268857fe0fb8b7c1c3ce6edb89411404f493f823961a6d426"
+    },
+    {
+      "name": "master-intake/native-h2-matrix-packet.json",
+      "sha256": "9d235a5389ed0f53f43a11a079459db5f9c836fd4a87b1fd757ffdd6ed33b5df"
+    },
+    {
+      "name": "master-intake/native-h3-closure-proposal.json",
+      "sha256": "f1fa67facc75414b44659561459a323a97631f9b8a4b4494eae6eb0b414a5106"
+    },
+    {
+      "name": "master-intake/native-h3-matrix-packet.json",
+      "sha256": "3ac530b7373a51217016a40d5ac33657725fd9449d9d50f1bd2ac3bac5cdef39"
+    },
+    {
+      "name": "master-intake/native_b1_qualification_probe_test.go",
+      "sha256": "c0e9420989758bbc8ec453a5df4be5303d19e167247d5129fda965d7a35898d1"
+    },
+    {
+      "name": "master-intake/native_b3_qualification_probe_test.go",
+      "sha256": "9e70f9220e1b0caf57ab1f9184d3627a95a005024df386798f479325aaad88e2"
+    },
+    {
+      "name": "master-intake/run_h3_affected.py",
+      "sha256": "36a114d33634ae13204921b07789aa16ec8011dfd970bc6ea199e6df323ddae7"
+    },
+    {
+      "name": "master-intake/run_h3_native_matrix.py",
+      "sha256": "b7203f1a2a002493106a235af7ae51e42f5a00e411e904800f43f8af3f448858"
     },
     {
       "name": "rudeus121-develop/batch3/native-closure-factory.jsonl",
       "sha256": "1a7f18fbd2a54384f88efa2d0dc7c1196bd6773787a549dbc372b8708871d200"
+    },
+    {
+      "name": "rudeus121-develop/batch3/native-closure-matrix-receipt.json",
+      "sha256": "1b2498c90161428d2f1a6da438b790b5023dea583b9531867d6200347270d5f1"
     },
     {
       "name": "rudeus121-develop/batch3/native-closure-ordinary.jsonl",
@@ -4641,60 +4893,28 @@
       "sha256": "cd885785fb4a76444a0b86583addeffdfacdecfccb68bc3f37894f6d25d141ef"
     },
     {
-      "name": "rudeus121-develop/batch3/roster-root-red2.log",
-      "sha256": "3e59b8a8638e58c4ac95e3274f905ef97cdfafa57ee31b057c4a7ed5f455d960"
+      "name": "rudeus121-develop/batch3/native-down-snapshot-proof.json",
+      "sha256": "a595d15486b4ea688865e5e3a3fe8e5165ad67934916e214f3915bec12fe050c"
     },
     {
-      "name": "rudeus121-develop/batch3/roster-root-red2-receipt.json",
-      "sha256": "6dd1866bcf28cd4a6eab4d741328d9b44ee6100810f8333de2ca75b1b05312bc"
-    },
-    {
-      "name": "rudeus121-develop/batch3/roster-root-green.log",
-      "sha256": "25cdfe4788a6fb47ad0b2452afbb7d2e6cf969e96ef0657e7c322aeed57a6aeb"
+      "name": "rudeus121-develop/batch3/native-source-53f75-closure-proof.json",
+      "sha256": "d2d1d03d7bde9583531642549168b04b7fc801d36ecd7af0adf7bb9aaa5fa028"
     },
     {
       "name": "rudeus121-develop/batch3/roster-root-green-receipt.json",
       "sha256": "81fa8d74663af2012d299c2410e50f71c8e8b18d6959ce806214a6eb3a61ba29"
     },
     {
-      "name": "master-intake/native-b3-receipt.json",
-      "sha256": "4a3313e231914cb488e02e8bf329f9080906dd4e283f48349f451324648119d6"
+      "name": "rudeus121-develop/batch3/roster-root-green.log",
+      "sha256": "25cdfe4788a6fb47ad0b2452afbb7d2e6cf969e96ef0657e7c322aeed57a6aeb"
     },
     {
-      "name": "master-intake/native-b3-probe.jsonl",
-      "sha256": "876e945ba10c771884fbdaeefd549202b1e9c55d74800d38aa338ce1df5a361f"
+      "name": "rudeus121-develop/batch3/roster-root-red2-receipt.json",
+      "sha256": "6dd1866bcf28cd4a6eab4d741328d9b44ee6100810f8333de2ca75b1b05312bc"
     },
     {
-      "name": "master-intake/native_b3_qualification_probe_test.go",
-      "sha256": "9e70f9220e1b0caf57ab1f9184d3627a95a005024df386798f479325aaad88e2"
-    },
-    {
-      "name": "master-intake/native-h2-context.diff",
-      "sha256": "c2bb735690ac638268857fe0fb8b7c1c3ce6edb89411404f493f823961a6d426"
-    },
-    {
-      "name": "master-intake/native-h2-matrix-packet.json",
-      "sha256": "9d235a5389ed0f53f43a11a079459db5f9c836fd4a87b1fd757ffdd6ed33b5df"
-    },
-    {
-      "name": "master-intake/native-b1-supplement.json",
-      "sha256": "752f8a6456fecec12291f983b231652262ade78c05fece94cac12fff6e45a90d"
-    },
-    {
-      "name": "master-intake/native_b1_qualification_probe_test.go",
-      "sha256": "c0e9420989758bbc8ec453a5df4be5303d19e167247d5129fda965d7a35898d1"
-    },
-    {
-      "name": "master-intake/native-b1-probe.tar",
-      "sha256": "8b70984de6290d2a5c9a4d42f12a21998f1d0f70ced31d43cbc79c9178940d7b"
-    },
-    {
-      "name": "master-intake/native-b1-probe.jsonl",
-      "sha256": "5474245e56f1c5b3d64f1e51f2e0f3d0962bc0dbb13c2d79003f7d24605daff3"
-    },
-    {
-      "name": "master-intake/native-b1-receipt.json",
-      "sha256": "80d9dfa81c04bb56624b14de25ecc8301980f6197dd730bd353fa082a51c6ca3"
+      "name": "rudeus121-develop/batch3/roster-root-red2.log",
+      "sha256": "3e59b8a8638e58c4ac95e3274f905ef97cdfafa57ee31b057c4a7ed5f455d960"
     }
   ],
   "excluded_authority": [
@@ -4707,43 +4927,43 @@
   "evidence_matrix": {
     "A1": {
       "result": "PASS",
-      "evidence": "Discriminating actual root RED and repaired current factory GREEN, not unused helper. See native-h2-matrix-packet.json literal cases/hashes.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c3"
+      "evidence": "Discriminating actual root RED and repaired current factory GREEN, not unused helper. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c9 (c10 corrects count to21 source references; no scope change). Prior seven clauses c3 and successful-empty sentinel c4 reused only for byte-identical relevant SQL/helper/writer inputs and preserved ABI."
     },
     "A2": {
       "result": "PASS",
-      "evidence": "Actual factory ordinary-only and Space/NATS-enabled branches leave every A3 fact unleased/undelivered, preserve compatibility and restrictive native drain. See native-h2-matrix-packet.json literal cases/hashes.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c3"
+      "evidence": "Actual factory ordinary-only and Space/NATS-enabled branches leave every A3 fact unleased/undelivered, preserve compatibility and restrictive native drain. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c9 (c10 corrects count to21 source references; no scope change). Prior seven clauses c3 and successful-empty sentinel c4 reused only for byte-identical relevant SQL/helper/writer inputs and preserved ABI."
     },
     "A3": {
       "result": "PASS",
-      "evidence": "Real native ordinary/Space caller-transaction counters/frozen facts, denied/replay/rollback and actual process restart pending state. See native-h2-matrix-packet.json literal cases/hashes.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c3"
+      "evidence": "Real native ordinary/Space caller-transaction counters/frozen facts, denied/replay/rollback and actual process restart pending state. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c9 (c10 corrects count to21 source references; no scope change). Prior seven clauses c3 and successful-empty sentinel c4 reused only for byte-identical relevant SQL/helper/writer inputs and preserved ABI."
     },
     "A4": {
       "result": "PASS",
-      "evidence": "EJECT_ONLY never proves retirement/fullFROZEN/LIVE; exact retained targets restart without projection Redis; credential refresh and unknown capability cannot upgrade. See native-h2-matrix-packet.json literal cases/hashes.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c3"
+      "evidence": "EJECT_ONLY never proves retirement/fullFROZEN/LIVE; exact retained targets restart without projection Redis; credential refresh and unknown capability cannot upgrade. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c9 (c10 corrects count to21 source references; no scope change). Prior seven clauses c3 and successful-empty sentinel c4 reused only for byte-identical relevant SQL/helper/writer inputs and preserved ABI."
     },
     "B1": {
       "result": "PASS",
       "evidence": "Successful literal H53/H2 DOWN preserves separately owned schema tables/FK/index/view/JSON data and public sentinel complete snapshot; owned targets/grants absent; literal UP roundtrip preserves snapshot. Independent external driver -race PASS1/0skip1.220s, all six commands0. See native-b1-supplement.json and reviewed original empty-roundtrip matrix.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c4"
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c9 (c10 corrects count to21 source references; no scope change). Prior seven clauses c3 and successful-empty sentinel c4 reused only for byte-identical relevant SQL/helper/writer inputs and preserved ABI."
     },
     "B2": {
       "result": "PASS",
-      "evidence": "Every independently retained lifecycle class refuses destructive rollback with exact rows/columns retained, including grants without cleanup targets. See native-h2-matrix-packet.json literal cases/hashes.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c3"
+      "evidence": "Every independently retained lifecycle class refuses destructive rollback with exact rows/columns retained, including grants without cleanup targets. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c9 (c10 corrects count to21 source references; no scope change). Prior seven clauses c3 and successful-empty sentinel c4 reused only for byte-identical relevant SQL/helper/writer inputs and preserved ABI."
     },
     "B3": {
       "result": "PASS",
-      "evidence": "Genuine writer-win, DOWN-first exclusion, partial-DDL rollback and timeout rollback are synchronized/observed, not timing-only assumptions. See native-h2-matrix-packet.json literal cases/hashes.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c3"
+      "evidence": "Genuine writer-win, DOWN-first exclusion, partial-DDL rollback and timeout rollback are synchronized/observed, not timing-only assumptions. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c9 (c10 corrects count to21 source references; no scope change). Prior seven clauses c3 and successful-empty sentinel c4 reused only for byte-identical relevant SQL/helper/writer inputs and preserved ABI."
     },
     "B4": {
       "result": "PASS",
-      "evidence": "Voice013 retained outbox/counter refusal and no MM020 import are preserved; only early inherited-snapshot refusal was added/reviewed408. See native-h2-matrix-packet.json literal cases/hashes.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c3"
+      "evidence": "Voice013 retained outbox/counter refusal and no MM020 import are preserved; only early inherited-snapshot refusal was added/reviewed408. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c9 (c10 corrects count to21 source references; no scope change). Prior seven clauses c3 and successful-empty sentinel c4 reused only for byte-identical relevant SQL/helper/writer inputs and preserved ABI."
     }
   }
 }
