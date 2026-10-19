@@ -159,6 +159,12 @@ func sortedRosterIDs(ids map[uuid.UUID]bool) []uuid.UUID {
 // A proposal committed between discovery and the party locks causes a fresh
 // transaction; no second match is discovered while holding party/session locks.
 func resetCapturedRosterParties(ctx context.Context, tx pgx.Tx, targets map[uuid.UUID]bool) (int, error) {
+	return resetCapturedRosterPartiesChecked(ctx, tx, targets, nil, "VOICE_ROSTER_CHANGED")
+}
+
+// The optional check runs only after the complete canonical party/session lock
+// set and before any terminal mutation. It performs SQL-only validation.
+func resetCapturedRosterPartiesChecked(ctx context.Context, tx pgx.Tx, targets map[uuid.UUID]bool, check func() error, cancellationReason string) (int, error) {
 	if len(targets) == 0 {
 		return 0, nil
 	}
@@ -273,6 +279,11 @@ func resetCapturedRosterParties(ctx context.Context, tx pgx.Tx, targets map[uuid
 	if err != nil {
 		return 0, err
 	}
+	if check != nil {
+		if err = check(); err != nil {
+			return 0, err
+		}
+	}
 	var now time.Time
 	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
 		return 0, err
@@ -324,7 +335,7 @@ func resetCapturedRosterParties(ctx context.Context, tx pgx.Tx, targets map[uuid
 		if sess.Status != SessionStatusCancelled {
 			return 0, errVoiceRosterCutChanged
 		}
-		if err = appendRosterCancellation(ctx, tx, sess, now); err != nil {
+		if err = appendRosterCancellation(ctx, tx, sess, now, cancellationReason); err != nil {
 			return 0, err
 		}
 		count++
@@ -357,9 +368,9 @@ func advanceRosterQueueIntent(ctx context.Context, tx pgx.Tx, party uuid.UUID, a
 	return nil
 }
 
-func appendRosterCancellation(ctx context.Context, tx pgx.Tx, sess SearchSession, at time.Time) error {
+func appendRosterCancellation(ctx context.Context, tx pgx.Tx, sess SearchSession, at time.Time, reason string) error {
 	id := uuid.New()
-	payload, err := proto.MarshalOptions{Deterministic: true}.Marshal(&eventsv1.MatchmakingStreamEvent{EventId: id.String(), OccurredAt: timestamppb.New(at), Payload: &eventsv1.MatchmakingStreamEvent_SearchCancelled{SearchCancelled: &eventsv1.SearchCancelled{SessionId: sess.ID.String(), ProfileId: sess.ProfileID.String(), Reason: "VOICE_ROSTER_CHANGED"}}})
+	payload, err := proto.MarshalOptions{Deterministic: true}.Marshal(&eventsv1.MatchmakingStreamEvent{EventId: id.String(), OccurredAt: timestamppb.New(at), Payload: &eventsv1.MatchmakingStreamEvent_SearchCancelled{SearchCancelled: &eventsv1.SearchCancelled{SessionId: sess.ID.String(), ProfileId: sess.ProfileID.String(), Reason: reason}}})
 	if err != nil {
 		return err
 	}

@@ -34,11 +34,22 @@ func (s *MatchStore) ExpirePendingMatchAtDeadline(ctx context.Context, matchID u
 	if s == nil || s.Pool == nil {
 		return false, nil, errors.New("match store unavailable")
 	}
-	tx, err := s.Pool.Begin(ctx)
+	binding := copyNativeBinding(s.NativeAdmission)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return false, nil, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer rollbackPartySearch(tx)
+	// Expiry is a terminal writer even when reached through GetMatch. Retain
+	// FIRST admission through commit; a nil binding is only genuine pre-cut.
+	if binding == nil {
+		err = mmadmission.Acquire(ctx, tx, nil)
+	} else {
+		err = mmadmission.AcquireTerminal(ctx, tx, binding)
+	}
+	if err != nil {
+		return false, nil, err
+	}
 
 	match, err := scanMatch(tx.QueryRow(ctx, `
 		SELECT id, game_id, mode, region, participants, left_profile_ids, voice_room_id, chat_id, status, created_at, completed_at

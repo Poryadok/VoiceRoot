@@ -306,3 +306,38 @@ failure and pass with the implementation. The same final test bytes are also
 run against exact c38 predecessor production in an isolated restored fixture;
 this paired RED never changes the authored Git tree. The four affected client
 test files pass40 tests and scoped analysis without issues on Linux.
+
+### Native authorized terminal and read paths
+
+c53 preserves authorized status/history and exact cancellation, while raw
+metadata is insufficient authority at the native receiver. Add a closed
+delegated-user method union for GetMatch/GetSearchStatus/GetMatchHistory and
+CancelSearch, with a private exact-request subject using the existing live
+epoch/replay/JWKS dependencies. Transport request IDs for these existing
+read/idempotent-session methods are fresh correlation IDs, not fabricated
+StartSearch/Respond business operations. The latter keep their dedicated
+private verifiers and client-stable operation contracts.
+
+Native cancellation must terminate the complete captured party, not remove one
+member from an indivisible c16 enqueue. Use the existing atomic roster/reset
+mechanism under FIRST terminal admission, verify the requesting account/profile
+against the immutable private member tuple and retained origin after canonical
+locks, and refuse a search that has become pending/active. Terminal retry may
+acknowledge an already cancelled exact session; CLOSED admission permits cleanup
+without a positive Voice snapshot/ban grant. Keep true pre-cut scalar cancellation
+as a separate composition. No read/cleanup route can create source authority.
+
+
+Implemented terminal/read stage: private exact-request subjects, protected Gateway
+GET/DELETE routes, whole-party native cancellation with post-lock validation,
+canonical stored cancellation publisher and PrepareNative. GetMatch deadline
+expiry now acquires FIRST terminal or never-begun pre-cut admission and retains
+it through commit. Causative PG tests proved lost-binding mutation and overtaking
+a held closer before the correction; CLOSED expiry and true pre-cut reads remain
+working. Final actual Linux domain11PG/NATStop PASS0skip, security29top68sub and
+Gateway33top8sub race PASS0skip, roster7PG PASS. Correctly isolated short suite
+182top226sub PASS with261top51sub explicit skips; MM/Gateway vet0. Earlier broad
+short invocation inherited integration DSNs and reached aggregate180s timeout;
+its logs are retained, the interrupted test passed separately, and no full PG
+suite PASS is claimed. Full native Run/cmd/image, actual factory/route contract
+validation, serving/worker lifecycle and cross-process qualification remain open.

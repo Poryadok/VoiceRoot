@@ -209,6 +209,9 @@ func (s *MatchmakingGRPC) startSearch(ctx context.Context, req startSearchParams
 }
 
 func (s *MatchmakingGRPC) CancelSearch(ctx context.Context, req *matchmakingv1.CancelSearchRequest) (*matchmakingv1.CancelSearchResponse, error) {
+	if s.nativeRoutePolicy() {
+		return s.cancelNativeSearch(ctx, req)
+	}
 	profileID, ok := authctx.ProfileID(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
@@ -275,7 +278,7 @@ func (s *MatchmakingGRPC) CancelSearch(ctx context.Context, req *matchmakingv1.C
 }
 
 func (s *MatchmakingGRPC) GetSearchStatus(ctx context.Context, req *matchmakingv1.GetSearchStatusRequest) (*matchmakingv1.GetSearchStatusResponse, error) {
-	profileID, ok := authctx.ProfileID(ctx)
+	profileID, ok := s.readActorProfile(ctx, req, matchmakingv1.MatchmakingService_GetSearchStatus_FullMethodName)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}

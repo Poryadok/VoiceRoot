@@ -38,7 +38,7 @@ type SquadCleanup interface {
 }
 
 func (s *MatchmakingGRPC) GetMatch(ctx context.Context, req *matchmakingv1.GetMatchRequest) (*matchmakingv1.GetMatchResponse, error) {
-	profileID, ok := authctx.ProfileID(ctx)
+	profileID, ok := s.readActorProfile(ctx, req, matchmakingv1.MatchmakingService_GetMatch_FullMethodName)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}

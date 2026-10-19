@@ -8,7 +8,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"voice/backend/matchmaking/internal/authctx"
 	"voice/backend/matchmaking/internal/store"
 
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
@@ -16,7 +15,7 @@ import (
 
 // GetMatchHistory returns paginated match squads for the authenticated profile.
 func (s *MatchmakingGRPC) GetMatchHistory(ctx context.Context, req *matchmakingv1.GetMatchHistoryRequest) (*matchmakingv1.GetMatchHistoryResponse, error) {
-	profileID, ok := authctx.ProfileID(ctx)
+	profileID, ok := s.readActorProfile(ctx, req, matchmakingv1.MatchmakingService_GetMatchHistory_FullMethodName)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}

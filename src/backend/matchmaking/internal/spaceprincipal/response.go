@@ -42,11 +42,12 @@ func (r *Runtime) VerifyResponse(ctx context.Context, req *matchmakingv1.Respond
 // NativeOrdinaryUnaryInterceptor is only for the fixed native composition.
 // The true pre-cut ordinary responder remains an explicitly separate artifact.
 func NativeOrdinaryUnaryInterceptor() grpc.UnaryServerInterceptor {
-	other := OrdinaryUnaryInterceptor()
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if info.FullMethod == matchmakingv1.MatchmakingService_RespondToMatch_FullMethodName {
-			return nil, status.Error(codes.Unavailable, "protected response RPC unavailable on this listener")
+		switch info.FullMethod {
+		case matchmakingv1.MatchmakingService_ListGames_FullMethodName, matchmakingv1.MatchmakingService_GetGame_FullMethodName, matchmakingv1.MatchmakingService_SearchGames_FullMethodName:
+			return handler(ctx, req)
+		default:
+			return nil, status.Error(codes.Unavailable, "protected matchmaking RPC required")
 		}
-		return other(ctx, req, info, handler)
 	}
 }

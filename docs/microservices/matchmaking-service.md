@@ -686,3 +686,22 @@ The explicitly unconfigured pre-cut Gateway composition retains ordinary routes.
 Flutter retains one operation across an ambiguous action result, changes it for
 a changed decision/search intent or actor, and ignores a late result after actor
 change. This transport does not establish native installation admission.
+
+
+Native read and terminal RPCs use a closed protected delegated-user method set:
+GetMatch, GetSearchStatus, GetMatchHistory and CancelSearch. Ordinary native
+transport exposes only the public game catalogue. Read transport request IDs
+are correlation IDs; they do not replace client-owned search/response operations.
+Native cancellation verifies the immutable private member tuple and retained
+origin, takes FIRST terminal admission through commit, and cancels the whole
+captured searching party atomically with RELEASE intents and cancellation outbox.
+A pending/active match is not cancelled by this operation. Exact cancelled retries
+are read-only, and CLOSED admission preserves authorized cleanup. Deadline expiry
+triggered by GetMatch also takes FIRST terminal admission; missing native binding
+cannot choose a legacy writer after the admission head has begun.
+
+Native roster runtime preparation accepts the captured cancellation publisher.
+Manual cancellation retains its empty legacy reason; roster invalidation retains
+VOICE_ROSTER_CHANGED. Both publish the original canonical bytes and event ID,
+require broker acknowledgement and mark delivery durably. Preparation does not
+start delivery; native composition must start it only after admission qualification.

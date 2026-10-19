@@ -13,6 +13,9 @@ import (
 )
 
 func isProtectedMatchmakingRoute(r *http.Request) bool {
+	if isProtectedMatchmakingTerminalRoute(r) {
+		return true
+	}
 	if r == nil || r.Method != http.MethodPost {
 		return false
 	}
@@ -86,6 +89,9 @@ func (t *transcoder) serveMatchmakingMatches(w http.ResponseWriter, r *http.Requ
 
 	switch {
 	case r.Method == http.MethodGet && len(parts) == 1:
+		if t.protectedPublicMatchmaking() || t.clients.matchmaking == nil {
+			return t.serveProtectedMatchmakingTerminal(w, r, &matchmakingv1.GetMatchRequest{MatchId: matchID}, matchmakingv1.MatchmakingService_GetMatch_FullMethodName)
+		}
 		resp, err := t.clients.matchmaking.GetMatch(ctx, &matchmakingv1.GetMatchRequest{MatchId: matchID})
 		if err != nil {
 			writeGRPCError(w, err)
@@ -347,6 +353,9 @@ func (t *transcoder) serveMatchmakingSearch(w http.ResponseWriter, r *http.Reque
 		return true
 
 	case r.Method == http.MethodGet && rest != "" && !strings.Contains(rest, "/"):
+		if t.protectedPublicMatchmaking() || t.clients.matchmaking == nil {
+			return t.serveProtectedMatchmakingTerminal(w, r, &matchmakingv1.GetSearchStatusRequest{SessionId: rest}, matchmakingv1.MatchmakingService_GetSearchStatus_FullMethodName)
+		}
 		resp, err := t.clients.matchmaking.GetSearchStatus(ctx, &matchmakingv1.GetSearchStatusRequest{
 			SessionId: rest,
 		})
@@ -358,6 +367,9 @@ func (t *transcoder) serveMatchmakingSearch(w http.ResponseWriter, r *http.Reque
 		return true
 
 	case r.Method == http.MethodDelete && rest != "" && !strings.Contains(rest, "/"):
+		if t.protectedPublicMatchmaking() || t.clients.matchmaking == nil {
+			return t.serveProtectedMatchmakingTerminal(w, r, &matchmakingv1.CancelSearchRequest{SessionId: rest}, matchmakingv1.MatchmakingService_CancelSearch_FullMethodName)
+		}
 		_, err := t.clients.matchmaking.CancelSearch(ctx, &matchmakingv1.CancelSearchRequest{
 			SessionId: rest,
 		})
@@ -502,12 +514,19 @@ func (t *transcoder) serveMatchmakingProfile(w http.ResponseWriter, r *http.Requ
 	switch {
 	case r.Method == http.MethodGet && rest == "me/matches":
 		page := &commonv1.CursorPageRequest{}
-		_ = decodeQueryJSON(page, queryFirst(r, "page"))
+		decodeErr := decodeQueryJSON(page, queryFirst(r, "page"))
+		if decodeErr != nil && (t.protectedPublicMatchmaking() || t.clients.matchmaking == nil) {
+			writeGRPCError(w, status.Error(codes.InvalidArgument, "invalid history page"))
+			return true
+		}
 		if page.Cursor == "" {
 			page.Cursor = queryFirst(r, "cursor")
 		}
 		if page.PageSize == 0 {
 			page.PageSize = parseInt32Query(queryFirst(r, "page_size"))
+		}
+		if t.protectedPublicMatchmaking() || t.clients.matchmaking == nil {
+			return t.serveProtectedMatchmakingTerminal(w, r, &matchmakingv1.GetMatchHistoryRequest{Page: page}, matchmakingv1.MatchmakingService_GetMatchHistory_FullMethodName)
 		}
 		resp, err := t.clients.matchmaking.GetMatchHistory(ctx, &matchmakingv1.GetMatchHistoryRequest{
 			Page: page,
