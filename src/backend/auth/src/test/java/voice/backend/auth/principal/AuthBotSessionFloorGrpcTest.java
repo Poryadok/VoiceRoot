@@ -23,6 +23,38 @@ class AuthBotSessionFloorGrpcTest {
   static final GetBotSessionEpochFloorRequest REQUEST = GetBotSessionEpochFloorRequest.newBuilder()
       .setAccountId(ACCOUNT.toString()).build();
 
+  /** Bounded private-network Go-to-Java interop fixture; every key and account here is test-only. */
+  public static void main(String[] args) throws Exception {
+    if (args.length != 2) throw new IllegalArgumentException("output directory and lifetime seconds required");
+    long seconds = Long.parseLong(args[1]);
+    if (seconds < 1 || seconds > 600) throw new IllegalArgumentException("fixture lifetime must be 1..600 seconds");
+    var out = java.nio.file.Path.of(args[0]).toAbsolutePath();
+    java.nio.file.Files.createDirectories(out);
+    var control = out.resolve("retained-floor.txt");
+    java.nio.file.Files.writeString(control, "9");
+    try (var f = new Fixture(PEER, "bot", true)) {
+      when(f.floors.requireFloor(ACCOUNT)).thenAnswer(invocation ->
+          Long.parseLong(java.nio.file.Files.readString(control).strip()));
+      for (String name : List.of("server-cert.pem", "bot-cert.pem", "bot-key.pem"))
+        java.nio.file.Files.copy(resource(name).toPath(), out.resolve(name), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+      String pem = "-----BEGIN PRIVATE KEY-----\n" + Base64.getMimeEncoder(64, new byte[]{10})
+          .encodeToString(AuthPrincipalVerifierTest.KEY.getPrivate().getEncoded()) + "\n-----END PRIVATE KEY-----\n";
+      java.nio.file.Files.writeString(out.resolve("bot-signing-key.pem"), pem);
+      String ready = AuthPrincipalVerifierTest.JSON.writeValueAsString(Map.ofEntries(
+          Map.entry("port", f.server.getPort()), Map.entry("account_id", ACCOUNT.toString()),
+          Map.entry("floor", 9), Map.entry("durable_epoch", 7), Map.entry("peer_uri", PEER),
+          Map.entry("clock", AuthPrincipalVerifierTest.NOW.toString()), Map.entry("kid", "current"),
+          Map.entry("rpc", RPC), Map.entry("tls_server_name", "localhost"),
+          Map.entry("test_signing_key", out.resolve("bot-signing-key.pem").toString()),
+          Map.entry("retained_floor_control", control.toString())));
+      java.nio.file.Files.writeString(out.resolve("ready.pending"), ready);
+      java.nio.file.Files.move(out.resolve("ready.pending"), out.resolve("ready.json"),
+          java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+      System.out.println(ready);
+      new java.util.concurrent.CountDownLatch(1).await(seconds, TimeUnit.SECONDS);
+    }
+  }
+
   @Test void actualBotMutualTlsAndSignedBodyReadPositiveMaximumWithoutWrites() throws Exception {
     try (var f = new Fixture(PEER, "bot", true)) {
       assertEquals(9, f.call(REQUEST, f.claims(REQUEST)).getSessionEpochFloor());
@@ -166,6 +198,17 @@ class AuthBotSessionFloorGrpcTest {
     }
   }
 
+  @Test void freshAuthoritativeMissingKidIsInvalidBeforeAnyOwnerReads() throws Exception {
+    try (var f = new Fixture(PEER, "bot", true)) {
+      f.signingKid = "not-approved";
+      for (int attempt = 0; attempt < 2; attempt++) {
+        assertEquals(Status.Code.UNAUTHENTICATED, assertThrows(StatusRuntimeException.class,
+            () -> f.call(REQUEST, f.claims(REQUEST))).getStatus().getCode());
+      }
+      verifyNoInteractions(f.accounts, f.floors);
+    }
+  }
+
   @Test void exactGeneratedGoRequestHashVectorIsPreserved() {
     // Independently executed shared Go principal.RequestHash, BE170 consumer247.
     assertEquals("0a2430303030303030302d303030302d303030302d303030302d303030303030303030323731",
@@ -224,6 +267,7 @@ class AuthBotSessionFloorGrpcTest {
     final SessionEpochFloorStore floors = mock(SessionEpochFloorStore.class);
     final Set<String> replay = new HashSet<>();
     volatile boolean keyOutage, replayOutage;
+    String signingKid = "current";
     final Server server;
     final ManagedChannel channel;
     Fixture(String peer, String certificate, boolean tls) throws Exception {
@@ -245,7 +289,11 @@ class AuthBotSessionFloorGrpcTest {
             if (replayOutage) throw new PrincipalDependencyUnavailableException();
             if (!replay.add(issuer + ":" + jti)) throw new IllegalArgumentException();
           },
-          Clock.fixed(AuthPrincipalVerifierTest.NOW, ZoneOffset.UTC));
+          Clock.fixed(AuthPrincipalVerifierTest.NOW, ZoneOffset.UTC),
+          (issuer, kid) -> {
+            if (keyOutage) throw new PrincipalDependencyUnavailableException();
+            return resolver.resolveForBotFloor(issuer, kid);
+          });
       var interceptor = new AuthPrincipalServerInterceptor(enabled ? verifier : null, () -> {}, peer);
       var service = new AuthGrpcService(null, null);
       service.setVoiceSessionFloorSources(accounts, floors);
@@ -282,7 +330,8 @@ class AuthBotSessionFloorGrpcTest {
     GetBotSessionEpochFloorResponse call(GetBotSessionEpochFloorRequest request, Map<String,Object> claims, Metadata extra) {
       Metadata headers = new Metadata();
       headers.put(Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER),
-          "Bearer " + AuthPrincipalVerifierTest.token(claims));
+          "Bearer " + AuthPrincipalVerifierTest.token(claims, Map.of("alg", "RS256", "kid", signingKid),
+              AuthPrincipalVerifierTest.KEY.getPrivate()));
       headers.put(Metadata.Key.of("x-request-id", Metadata.ASCII_STRING_MARSHALLER), "request-1");
       headers.merge(extra);
       return AuthServiceGrpc.newBlockingStub(ClientInterceptors.intercept(channel,

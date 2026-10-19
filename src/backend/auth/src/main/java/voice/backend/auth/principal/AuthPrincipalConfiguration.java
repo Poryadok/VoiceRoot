@@ -71,7 +71,7 @@ public class AuthPrincipalConfiguration {
       closeReplay = sharedReplay::close;
     }
     return new AuthPrincipalServerInterceptor(
-        new AuthPrincipalVerifier(resolver::resolve, epochs::requireFloor, replay, clock),
+        new AuthPrincipalVerifier(resolver::resolve, epochs::requireFloor, replay, clock, resolver::resolveForBotFloor),
         () -> { closeReplay.run(); client.shutdownNow(); },
         environment.getProperty("AUTH_BOT_SESSION_FLOOR_ALLOWED_CLIENT_URI_SAN"));
   }
