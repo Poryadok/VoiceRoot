@@ -325,7 +325,7 @@ func (s *SpaceStore) RevokeExpiredCommunityRosterMemberships(ctx context.Context
 				return err
 			}
 			tag, err := scoped.db().Exec(ctx, `UPDATE community_roster_members SET revoked_at=clock_timestamp()
-			 WHERE space_id=$1 AND revoked_at IS NULL AND lease_expires_at<=clock_timestamp()`, id)
+			 WHERE space_id=$1 AND profile_id=ANY($2::uuid[]) AND revoked_at IS NULL AND lease_expires_at<=clock_timestamp()`, id, profiles)
 			if err != nil {
 				return err
 			}
