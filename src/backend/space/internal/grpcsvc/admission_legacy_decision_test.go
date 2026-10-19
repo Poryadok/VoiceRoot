@@ -195,6 +195,34 @@ func TestLegacyDecisionUsesTrueContext2AndIndependentManualGate(t *testing.T) {
 				require.Equal(t, "PENDING", record.Attempt.State)
 				require.NotNil(t, record.RequestID)
 				require.Equal(t, store.JoinLegacyPending, basis.Context.Kind)
+				var savedState string
+				var savedCode int32
+				require.NoError(t, st.Pool.QueryRow(ctx, `SELECT state,outcome_code FROM space_join_operations WHERE actor_profile_id=$1 AND operation_id=$2`, profile, op).Scan(&savedState, &savedCode))
+				require.Equal(t, "COMPLETED", savedState, "original keyed pending is a final safe legacy outcome")
+				require.EqualValues(t, 9, savedCode)
+				_, err = st.Pool.Exec(ctx, `UPDATE space_entry_policies SET version=version+1 WHERE space_id=$1`, space)
+				require.NoError(t, err)
+				retryID := uuid.NewString()
+				retryToken, e := gateway.IssueDelegatedUser(principal.DelegatedUserInput{Audience: "space", RPC: spacev1.SpaceService_JoinSpace_FullMethodName, RequestID: retryID, RequestHash: hash, AccountID: account.String(), ProfileID: profile.String(), SessionEpoch: 7, AccountType: "regular", ClientExpiresAt: now.Add(time.Minute)})
+				require.NoError(t, e)
+				retryCtx := metadata.NewIncomingContext(ctx, metadata.Pairs("authorization", "Bearer "+retryToken, "x-request-id", retryID))
+				_, e = verifier.Unary()(retryCtx, request, &grpc.UnaryServerInfo{FullMethod: spacev1.SpaceService_JoinSpace_FullMethodName}, func(callctx context.Context, _ any) (any, error) {
+					p, e := st.PrepareLegacyJoinStart(callctx, request)
+					if e != nil {
+						return nil, e
+					}
+					member, done, e := st.ReplayLegacyJoinOutcome(callctx, p)
+					require.True(t, done)
+					require.Nil(t, member)
+					return nil, e
+				})
+				require.ErrorIs(t, e, store.ErrJoinAttemptPending)
+				require.Len(t, phases, 2, "completed exact pending replay has no new Subject or Role observation")
+				_, e = st.Pool.Exec(ctx, `UPDATE spaces SET visibility='private' WHERE id=$1`, space)
+				require.NoError(t, e)
+				_, e = verifier.Unary()(retryCtx, request, &grpc.UnaryServerInfo{FullMethod: spacev1.SpaceService_JoinSpace_FullMethodName}, func(callctx context.Context, _ any) (any, error) { return st.PrepareLegacyJoinStart(callctx, request) })
+				require.ErrorIs(t, e, store.ErrJoinAttemptDenied, "a legacy key is not a current target discovery/access bypass")
+				require.Len(t, phases, 2)
 			} else {
 				require.Equal(t, "READY", record.Attempt.State)
 				require.Nil(t, record.RequestID)

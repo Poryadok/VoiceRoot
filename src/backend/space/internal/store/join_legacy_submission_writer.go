@@ -247,6 +247,16 @@ func (s *SpaceStore) CommitLegacyJoinDecision(ctx context.Context, d *VerifiedLe
 			}
 			id := group.ID
 			requestID = &id
+			// Legacy pending is a final public result for this original key,
+			// independent of any later approval/native publication operation.
+			// SpaceMembership's empty protobuf is the canonical pending body.
+			tag, err = scoped.db().Exec(ctx, `UPDATE space_join_operations SET state='COMPLETED',outcome_code=9,outcome_proto=$3 WHERE actor_profile_id=$1 AND operation_id=$2 AND state='DECIDED' AND decision_basis_sha256=$4`, in.ActorProfileID, in.OperationID, []byte{}, sha[:])
+			if err != nil {
+				return err
+			}
+			if tag.RowsAffected() != 1 {
+				return ErrJoinAttemptConflict
+			}
 		}
 		hookRan = true
 		return nil

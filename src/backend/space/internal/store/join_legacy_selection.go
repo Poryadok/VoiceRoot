@@ -41,6 +41,12 @@ func (s *SpaceStore) ReserveLegacyJoinSelection(ctx context.Context, in JoinOper
 		if !sameOptionalJoinAttempt(saved.Context.InviteID, invite) {
 			return nil, ErrJoinAttemptConflict
 		}
+		if err = lockAndCheckOwnershipScope(ctx, tx, []uuid.UUID{in.SpaceID}); err != nil {
+			return nil, err
+		}
+		if err = local.checkLegacyJoinSelectionAccess(ctx, in, invite); err != nil {
+			return nil, err
+		}
 		return saved, tx.Commit(ctx)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -49,36 +55,17 @@ func (s *SpaceStore) ReserveLegacyJoinSelection(ctx context.Context, in JoinOper
 	if err = lockAndCheckOwnershipScope(ctx, tx, []uuid.UUID{in.SpaceID}); err != nil {
 		return nil, err
 	}
+	if err = local.checkLegacyJoinSelectionAccess(ctx, in, invite); err != nil {
+		return nil, err
+	}
 	policy, err := local.GetEntryPolicy(ctx, in.SpaceID)
 	if err != nil {
 		return nil, err
 	}
 	c := JoinLegacySelectionContext{Operation: in, Origin: origin, PolicyVersion: policy.Version, PolicySHA256: joinDigest("policy", policy.Policy)}
 	if invite != nil {
-		inv, err := local.GetInviteByID(ctx, *invite)
-		if err != nil {
-			return nil, err
-		}
-		if inv == nil || inv.SpaceID != in.SpaceID {
-			return nil, ErrInviteNotFound
-		}
-		var now time.Time
-		if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-			return nil, err
-		}
-		if err = local.validateInviteForJoin(inv, now); err != nil {
-			return nil, err
-		}
 		id := *invite
 		c.InviteID = &id
-	} else {
-		var visibility string
-		if err = tx.QueryRow(ctx, `SELECT visibility FROM spaces WHERE id=$1`, in.SpaceID).Scan(&visibility); err != nil {
-			return nil, err
-		}
-		if visibility != "public" {
-			return nil, ErrJoinAttemptDenied
-		}
 	}
 	sha, err := c.SHA256()
 	if err != nil {
@@ -97,6 +84,39 @@ func (s *SpaceStore) ReserveLegacyJoinSelection(ctx context.Context, in JoinOper
 		return nil, err
 	}
 	return saved, tx.Commit(ctx)
+}
+
+// Legacy exact replay retains ordinary current access checks, unlike additive
+// START's saved safe projection. It never evaluates a new entry policy.
+func (s *SpaceStore) checkLegacyJoinSelectionAccess(ctx context.Context, in JoinOperationInput, invite *uuid.UUID) error {
+	if s == nil || s.tx == nil {
+		return ErrJoinAttemptUnavailable
+	}
+	if invite != nil {
+		inv, err := s.GetInviteByID(ctx, *invite)
+		if err != nil {
+			return err
+		}
+		if inv == nil || inv.SpaceID != in.SpaceID {
+			return ErrInviteNotFound
+		}
+		var now time.Time
+		if err = s.db().QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+			return err
+		}
+		if err = s.validateInviteForJoin(inv, now); err != nil {
+			return err
+		}
+	} else {
+		var visibility string
+		if err := s.db().QueryRow(ctx, `SELECT visibility FROM spaces WHERE id=$1`, in.SpaceID).Scan(&visibility); err != nil {
+			return err
+		}
+		if visibility != "public" {
+			return ErrJoinAttemptDenied
+		}
+	}
+	return nil
 }
 
 func (s *SpaceStore) loadLegacyJoinSelection(ctx context.Context, in JoinOperationInput, origin uint8) (*JoinLegacySelection, error) {
