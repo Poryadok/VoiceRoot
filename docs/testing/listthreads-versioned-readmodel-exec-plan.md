@@ -27,6 +27,29 @@ Replace the limit-only `ListThreads` implementation with a bounded, per-viewer M
 - [ ] Activate `ListThreads` after readiness, zero lag, invariant checks and sampled dual reads.
 - [ ] Complete unit, integration, migration and hosted CI evidence; retire the legacy list path only after activation evidence.
 
+### BE-184 persistent-index implementation checkpoint
+
+The first implementation slice is the dual immutable AVL primitive consumed by
+the BE-184 transactional viewer projector, and then BE-185's page reader. It
+stores exact per-viewer summaries in content-addressed Messaging-owned nodes;
+activity order is `(last_reply_at DESC, parent_id DESC)` and a second parent-ID
+tree supports logarithmic replacement/removal. Updates path-copy both roots.
+The SQL adapter accepts the same pgx transaction as future journal/root writes.
+Migration `000031_thread_list_nodes` rejects in-place SQL updates; deleting nodes
+is reserved for future reachability GC. No runtime RPC or authorization path is
+enabled by this checkpoint.
+
+Acceptance cases: old roots remain unchanged after upsert/delete; identical retry
+keeps the roots; randomized edits match a sorted oracle; adversarial sorted
+insertion remains balanced; each page reads at most height + page size nodes;
+100k replies remain one summary; missing/corrupt nodes fail closed; real SQL
+rejects updates and rolls back all inserted nodes with the owning transaction.
+Use owned Linux Go 1.26 + PostgreSQL 16 without exposed host ports. Ordinary TDD;
+migration/privacy/concurrency risk requires independent review. Source-revision
+APIs/outboxes, Q/J journals, durable roots/build/GC, all visibility projectors and
+complete admission remain subsequent BE-184/185 work before activation. Do not
+mark the full successor or task complete from this primitive's checks.
+
 ## Detailed Steps
 
 1. Add Messaging-owned schema, no cross-DB FK: `thread_list_viewers`, ordered `thread_list_changes`, immutable activity/id AVL nodes, `thread_list_cursor_states`, and deduplicating membership inbox. Add migrations and rollback/retention notes.
