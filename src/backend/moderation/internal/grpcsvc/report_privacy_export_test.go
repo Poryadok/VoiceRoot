@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/google/uuid"
@@ -46,6 +47,13 @@ func TestReportJournalExportFiniteCommittedObservation(t *testing.T) {
 	require.NotEqual(t, empty.Cut.View.SnapshotID, committed.Cut.View.SnapshotID)
 	require.NotEqual(t, uncommitted.Cut.View.ViewID, committed.Cut.View.ViewID)
 	require.Positive(t, committed.Cut.View.DiagnosticHighWater)
+	parent := t.TempDir()
+	require.NoError(t, os.Chmod(parent, 0700))
+	directory, err := reportrecovery.PublishDirectory(parent, committed.Manifest, committed.Chunks, committed.Cut)
+	require.NoError(t, err)
+	readback, err := reportrecovery.ReadDirectory(directory, committed.Cut)
+	require.NoError(t, err)
+	require.Equal(t, parsed.Records(), readback.Records(), "actual SQL capture publishes and verifies the exact complete bytes")
 	_, err = reports.ExportReportRecoverySnapshot(ctx, uuid.Nil, operation)
 	require.Error(t, err)
 	_, err = reports.ExportReportRecoverySnapshot(ctx, incarnation, uuid.Nil)

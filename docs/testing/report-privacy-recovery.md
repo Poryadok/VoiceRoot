@@ -132,13 +132,41 @@ Terminal union import, raw participant cleanup and the final read-only checker
 remain mandatory before readiness. Durable offline file publication and an
 actual complete restore operation are not supplied by these SQL methods.
 
+### Offline artifact command
+
+Run `cmd/report-journal-export` from the Moderation Go module in a trusted offline
+capture operation. Supply `DATABASE_URL` through the environment, and required
+`--store-incarnation`, `--operation` and `--output-parent` arguments. The timeout
+defaults to five minutes and must be between one second and thirty minutes.
+The command has no listener, no DSN command-line flag and no FINAL/ready option.
+It emits the final directory and exact `Cut` as JSON; database errors never print
+the connection string. Preserve that metadata with the independently selected
+whole recovery bundle. Its own output is not proof of current source continuity.
+
+The output parent must already be a private operator-owned directory (0700 on
+Linux) with no unrelated concurrent writer. `PublishDirectory` writes 0600 files
+in its own 0700 staging directory, synchronizes them, verifies complete readback,
+synchronizes the staging directory, atomically renames the complete nonempty
+directory and synchronizes the parent. It verifies an existing identical snapshot
+instead of replacing it. Changed bytes under the same snapshot UUID reject.
+An interrupted private staging directory is not a published snapshot and is not
+accepted by `ReadDirectory`; retries can publish a new complete staging set.
+Cleanup affects only the current call's own staging directory. Operational crash
+orphan cleanup is a separate fenced operator action, not a readiness shortcut.
+Missing, extra, corrupt or symlinked files and open permissions reject.
+
+Source tests exercise Linux filesystem synchronization/readback and an actual
+private PostgreSQL capture through file publication. A temporary filesystem
+fixture and a successful command do not demonstrate durable off-node backup,
+FINAL writer drain, other domain cuts or a real restore operation.
+
 The initial source slice implements explicit provenance, transactional opaque
 journal writes at submission/validation and terminal account/subject/late-result
 cleanup. It also implements bounded journal byte verification, finite SQL capture
 and authorized journal-only import as enabling inputs for the shared coordinator.
 
-It does **not** complete legacy owner recovery, durable offline snapshot
-publication, journal-aware boot repair/checking, the protected User recovery RPC or assembled
+It does **not** complete legacy owner recovery, journal-aware boot repair/checking,
+the protected User recovery RPC or assembled
 P0-P5 activation. Those remain required before complete BE-137 integration and
 acceptance. Publication or a scoped source review of this slice grants none of
 those runtime claims.
