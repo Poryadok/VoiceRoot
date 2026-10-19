@@ -3,14 +3,12 @@ package grpcsvc
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"voice/backend/pkg/guestguard"
 	"voice/backend/space/internal/authctx"
 	"voice/backend/space/internal/store"
 
@@ -23,62 +21,11 @@ type JoinAccountBlockChecker interface {
 }
 
 func (s *SpaceGRPC) JoinSpace(ctx context.Context, req *spacev1.JoinSpaceRequest) (*spacev1.JoinSpaceResponse, error) {
-	if s == nil || s.Store == nil {
-		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
-	}
-	spaceID, err := parseUUIDField("space_id", req.GetSpaceId())
+	member, err := s.joinLegacyAdmission(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	release, err := s.lockSpaceMutation(ctx, spaceID)
-	if err != nil {
-		return nil, err
-	}
-	defer release()
-	profileID, ok := authctx.ProfileID(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing profile")
-	}
-	accountID, ok := authctx.AccountID(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing account")
-	}
-	if guestguard.IsGuest(ctx) {
-		return nil, status.Error(codes.PermissionDenied, "guests cannot join spaces directly")
-	}
-
-	row, err := s.Store.GetSpace(ctx, spaceID)
-	if err != nil {
-		return nil, mapSpaceStoreError(err)
-	}
-	if row == nil {
-		return nil, status.Error(codes.NotFound, "space not found")
-	}
-	if strings.TrimSpace(row.Visibility) != "public" {
-		return nil, status.Error(codes.PermissionDenied, "space is not public")
-	}
-	reqType := strings.TrimSpace(row.EntryRequirement)
-	if reqType != "" && reqType != "none" {
-		return nil, status.Error(codes.FailedPrecondition, "space requires invite or approval to join")
-	}
-	if err := s.ensureJoinNotBlocked(ctx, accountID, row.OwnerProfileID); err != nil {
-		return nil, err
-	}
-
-	wasMember, err := s.Store.IsSpaceMember(ctx, spaceID, profileID)
-	if err != nil {
-		return nil, mapSpaceStoreError(err)
-	}
-
-	member, err := s.Store.JoinSpace(ctx, spaceID, profileID, accountID)
-	if err != nil {
-		return nil, mapInviteStoreErr(err)
-	}
-	protoMember, err := s.finalizeMembership(ctx, member, !wasMember)
-	if err != nil {
-		return nil, err
-	}
-	return &spacev1.JoinSpaceResponse{SpaceMembership: protoMember}, nil
+	return &spacev1.JoinSpaceResponse{SpaceMembership: member}, nil
 }
 
 func (s *SpaceGRPC) LeaveSpace(ctx context.Context, req *spacev1.LeaveSpaceRequest) (*spacev1.LeaveSpaceResponse, error) {

@@ -10,7 +10,6 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"voice/backend/pkg/guestguard"
 	"voice/backend/role/permissions"
 	"voice/backend/space/internal/authctx"
 	"voice/backend/space/internal/store"
@@ -218,66 +217,11 @@ func (s *SpaceGRPC) ListInvites(ctx context.Context, req *spacev1.ListInvitesReq
 }
 
 func (s *SpaceGRPC) JoinByInvite(ctx context.Context, req *spacev1.JoinByInviteRequest) (*spacev1.JoinByInviteResponse, error) {
-	if s == nil || s.Store == nil {
-		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
-	}
-	code := strings.TrimSpace(req.GetCode())
-	if code == "" {
-		return nil, status.Error(codes.InvalidArgument, "code is required")
-	}
-	profileID, ok := authctx.ProfileID(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing profile")
-	}
-	accountID, ok := authctx.AccountID(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing account")
-	}
-	inv, err := s.Store.GetInviteByCode(ctx, code)
-	if err != nil {
-		return nil, mapSpaceStoreError(err)
-	}
-	if inv == nil || inv.RevokedAt != nil {
-		return nil, status.Error(codes.NotFound, "invite not found")
-	}
-	release, err := s.lockSpaceMutation(ctx, inv.SpaceID)
+	member, err := s.joinLegacyAdmission(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	defer release()
-	isGuest := guestguard.IsGuest(ctx)
-	if !isGuest {
-		if inv.ExpiresAt != nil && !inv.ExpiresAt.After(time.Now().UTC()) {
-			return nil, status.Error(codes.FailedPrecondition, "invite expired")
-		}
-		if inv.MaxUses != nil && inv.UseCount >= *inv.MaxUses {
-			return nil, status.Error(codes.FailedPrecondition, "invite max uses reached")
-		}
-	}
-	if err := s.ensureJoinInvitePrivacy(ctx, profileID, inv.CreatorProfileID); err != nil {
-		return nil, err
-	}
-	if err := s.ensureJoinNotBlocked(ctx, accountID, inv.CreatorProfileID); err != nil {
-		return nil, err
-	}
-	wasMember, err := s.Store.IsSpaceMember(ctx, inv.SpaceID, profileID)
-	if err != nil {
-		return nil, mapSpaceStoreError(err)
-	}
-	var member *store.MembershipRow
-	if isGuest {
-		member, err = s.Store.JoinGuestByInvite(ctx, code, profileID, accountID)
-	} else {
-		member, err = s.Store.JoinByInvite(ctx, code, profileID, accountID)
-	}
-	if err != nil {
-		return nil, mapInviteStoreErr(err)
-	}
-	protoMember, err := s.finalizeMembership(ctx, member, !wasMember)
-	if err != nil {
-		return nil, err
-	}
-	return &spacev1.JoinByInviteResponse{SpaceMembership: protoMember}, nil
+	return &spacev1.JoinByInviteResponse{SpaceMembership: member}, nil
 }
 
 func logInviteEventFailure(err error) {
