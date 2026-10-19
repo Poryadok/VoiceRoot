@@ -2,17 +2,15 @@ package store
 
 import (
 	"context"
+	"encoding/base64"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 // ClaimCreatorPrincipalReplay is a committed, actor-free anti-replay reservation
 // before creator session checks or domain work. Ambiguous DB outcomes never
 // authorize the writer. Every Space instance shares the same permanent key.
 func (s *SpaceStore) ClaimCreatorPrincipalReplay(ctx context.Context, issuer, jti string, expiry time.Time) error {
-	id, err := uuid.Parse(jti)
-	if issuer != "gateway" || err != nil || id == uuid.Nil || id.String() != jti || expiry.IsZero() {
+	if issuer != "gateway" || !validCreatorJWTID(jti) || expiry.IsZero() {
 		return ErrMemberAdmissionConflict
 	}
 	if s == nil || s.Pool == nil || s.tx != nil {
@@ -20,7 +18,7 @@ func (s *SpaceStore) ClaimCreatorPrincipalReplay(ctx context.Context, issuer, jt
 	}
 	tag, err := s.Pool.Exec(ctx, `INSERT INTO space_creator_principal_replays(issuer,jti,expires_at)
 	 SELECT $1,$2,$3 WHERE $3>clock_timestamp() AND $3<=clock_timestamp()+interval '35 seconds'
-	 ON CONFLICT(issuer,jti) DO NOTHING`, issuer, id, expiry.UTC())
+	 ON CONFLICT(issuer,jti) DO NOTHING`, issuer, jti, expiry.UTC())
 	if err != nil {
 		return ErrMemberAuthorityUnavailable
 	}
@@ -28,6 +26,11 @@ func (s *SpaceStore) ClaimCreatorPrincipalReplay(ctx context.Context, issuer, jt
 		return ErrMemberAdmissionConflict
 	}
 	return nil
+}
+
+func validCreatorJWTID(jti string) bool {
+	raw, err := base64.RawURLEncoding.DecodeString(jti)
+	return err == nil && len(raw) == 20 && base64.RawURLEncoding.EncodeToString(raw) == jti
 }
 
 func (s *SpaceStore) CleanupCreatorPrincipalReplays(ctx context.Context, limit int) (int64, error) {

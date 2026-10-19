@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +16,14 @@ import (
 type creatorReplayAccess interface {
 	ClaimCreatorPrincipalReplay(context.Context, string, string, time.Time) error
 	CleanupCreatorPrincipalReplays(context.Context, int) (int64, error)
+}
+
+func creatorReplayJTI(t *testing.T) string {
+	t.Helper()
+	raw := make([]byte, 20)
+	_, err := rand.Read(raw)
+	require.NoError(t, err)
+	return base64.RawURLEncoding.EncodeToString(raw)
 }
 
 func TestCreatorReplayReservationSurvivesConcurrentInstancesAndRestart(t *testing.T) {
@@ -31,7 +41,7 @@ func TestCreatorReplayReservationSurvivesConcurrentInstancesAndRestart(t *testin
 	var dbNow time.Time
 	require.NoError(t, pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&dbNow))
 	expiry := dbNow.Add(30 * time.Second)
-	jti := uuid.NewString()
+	jti := creatorReplayJTI(t)
 	errors := make(chan error, 2)
 	var wg sync.WaitGroup
 	for _, instance := range []creatorReplayAccess{access, other} {
@@ -70,20 +80,21 @@ func TestCreatorReplayReservationSurvivesConcurrentInstancesAndRestart(t *testin
 	require.NoError(t, err)
 	require.Zero(t, count)
 	// Historical expired markers are a retention fixture, not new admissions.
-	_, err = pool.Exec(ctx, `INSERT INTO space_creator_principal_replays(issuer,jti,recorded_at,expires_at) VALUES('gateway',$1,clock_timestamp()-interval '1 minute',clock_timestamp()-interval '10 seconds')`, uuid.New())
+	_, err = pool.Exec(ctx, `INSERT INTO space_creator_principal_replays(issuer,jti,recorded_at,expires_at) VALUES('gateway',$1,clock_timestamp()-interval '1 minute',clock_timestamp()-interval '10 seconds')`, creatorReplayJTI(t))
 	require.NoError(t, err)
 	count, err = access.CleanupCreatorPrincipalReplays(ctx, 1)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, count)
 	require.ErrorIs(t, access.ClaimCreatorPrincipalReplay(ctx, "gateway", jti, expiry), ErrMemberAdmissionConflict, "cleanup cannot erase an unexpired reservation")
 	for _, issuer := range []string{"role", "space", ""} {
-		require.ErrorIs(t, access.ClaimCreatorPrincipalReplay(ctx, issuer, uuid.NewString(), expiry), ErrMemberAdmissionConflict)
+		require.ErrorIs(t, access.ClaimCreatorPrincipalReplay(ctx, issuer, creatorReplayJTI(t), expiry), ErrMemberAdmissionConflict)
 	}
 	require.ErrorIs(t, access.ClaimCreatorPrincipalReplay(ctx, "gateway", "not-a-jti", expiry), ErrMemberAdmissionConflict)
-	require.ErrorIs(t, access.ClaimCreatorPrincipalReplay(ctx, "gateway", uuid.NewString(), dbNow.Add(-time.Second)), ErrMemberAdmissionConflict)
-	require.ErrorIs(t, access.ClaimCreatorPrincipalReplay(ctx, "gateway", uuid.NewString(), dbNow.Add(time.Hour)), ErrMemberAdmissionConflict)
+	require.ErrorIs(t, access.ClaimCreatorPrincipalReplay(ctx, "gateway", uuid.NewString(), expiry), ErrMemberAdmissionConflict, "issuer JTI is canonical base64url20, not a UUID")
+	require.ErrorIs(t, access.ClaimCreatorPrincipalReplay(ctx, "gateway", creatorReplayJTI(t), dbNow.Add(-time.Second)), ErrMemberAdmissionConflict)
+	require.ErrorIs(t, access.ClaimCreatorPrincipalReplay(ctx, "gateway", creatorReplayJTI(t), dbNow.Add(time.Hour)), ErrMemberAdmissionConflict)
 	restartedPool.Close()
-	require.ErrorIs(t, restarted.ClaimCreatorPrincipalReplay(ctx, "gateway", uuid.NewString(), expiry), ErrMemberAuthorityUnavailable, "unknown durability cannot authorize creation")
+	require.ErrorIs(t, restarted.ClaimCreatorPrincipalReplay(ctx, "gateway", creatorReplayJTI(t), expiry), ErrMemberAuthorityUnavailable, "unknown durability cannot authorize creation")
 	var spaces int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM spaces`).Scan(&spaces))
 	require.Zero(t, spaces, "replay reservation does not create a member or Space")

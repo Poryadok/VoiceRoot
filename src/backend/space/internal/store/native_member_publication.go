@@ -28,20 +28,39 @@ func publishCommunityBootstrapOwner(ctx context.Context, tx pgx.Tx, space uuid.U
 	account := in.OwnerAccountID.String()
 	binding := &spacev1.NativeMembershipPublicationBinding{ProtocolVersion: 1, PublicationOperationId: in.OperationID.String(), SpaceId: space.String(), ProfileId: in.OwnerProfileID.String(), OrdinaryGeneration: 1,
 		Kind: spacev1.MemberAdmissionPublicationKind_MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_COMMUNITY_OWNER_CREATE, InitiatingService: "gameintegration", InitiatingAccountId: &account, InitiatingProfileId: in.OwnerProfileID.String(), RequestSha256: append([]byte(nil), requestHash...), ProducerOperationId: in.OperationID.String(), ProducerEvidenceSha256: append([]byte(nil), requestHash...), ApplicationId: proto.String(in.ApplicationID.String()), EnvironmentId: proto.String(in.EnvironmentID.String()), CorporationKey: proto.String(in.CorporationKey), PublishedAt: timestamppb.New(published)}
+	return insertNativeOrdinaryPublication(ctx, tx, binding, in.OwnerAccountID)
+}
+
+func insertNativeOrdinaryPublication(ctx context.Context, tx pgx.Tx, binding *spacev1.NativeMembershipPublicationBinding, account uuid.UUID) error {
+	if binding == nil || binding.GetOrdinaryGeneration() != 1 || (binding.GetKind() != spacev1.MemberAdmissionPublicationKind_MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_OWNER_CREATE && binding.GetKind() != spacev1.MemberAdmissionPublicationKind_MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_COMMUNITY_OWNER_CREATE) || binding.PublishedAt == nil || binding.PublishedAt.CheckValid() != nil || account == uuid.Nil {
+		return ErrMemberAdmissionConflict
+	}
+	operation, err := canonicalLifecycleUUID(binding.GetPublicationOperationId())
+	if err != nil {
+		return err
+	}
+	space, err := canonicalLifecycleUUID(binding.GetSpaceId())
+	if err != nil {
+		return err
+	}
+	profile, err := canonicalLifecycleUUID(binding.GetProfileId())
+	if err != nil {
+		return err
+	}
 	raw, err := proto.MarshalOptions{Deterministic: true}.Marshal(binding)
 	if err != nil {
 		return err
 	}
 	digest := sha256.Sum256(append([]byte(nativeMemberPublicationDomain), raw...))
 	if _, err = tx.Exec(ctx, `INSERT INTO space_native_member_publications(operation_id,space_id,profile_id,generation,kind,binding_bytes,binding_sha256,state,published_at)
-	 VALUES($1,$2,$3,1,4,$4,$5,'PUBLISHED',$6)`, in.OperationID, space, in.OwnerProfileID, raw, digest[:], published); err != nil {
+	 VALUES($1,$2,$3,1,$4,$5,$6,'PUBLISHED',$7)`, operation, space, profile, int32(binding.Kind), raw, digest[:], binding.PublishedAt.AsTime()); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(ctx, `INSERT INTO space_ordinary_member_heads(space_id,profile_id,generation,publication_id,state,account_id,publication_kind,native_publication_sha256)
-	 VALUES($1,$2,1,$3,'ACTIVE',$4,4,$5)`, space, in.OwnerProfileID, in.OperationID, in.OwnerAccountID, digest[:]); err != nil {
+	 VALUES($1,$2,1,$3,'ACTIVE',$4,$5,$6)`, space, profile, operation, account, int32(binding.Kind), digest[:]); err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO space_members(space_id,profile_id,membership_generation,admission_operation_id) VALUES($1,$2,1,$3)`, space, in.OwnerProfileID, in.OperationID)
+	_, err = tx.Exec(ctx, `INSERT INTO space_members(space_id,profile_id,membership_generation,admission_operation_id) VALUES($1,$2,1,$3)`, space, profile, operation)
 	return err
 }
 

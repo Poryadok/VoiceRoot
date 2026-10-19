@@ -67,3 +67,22 @@ func startMemberRoleRemovalDelivery(ctx context.Context, source outboxdelivery.M
 	var once sync.Once
 	return func() { once.Do(func() { cancel(); <-done }) }
 }
+
+type creatorReplayCleanupStore interface {
+	CleanupCreatorPrincipalReplays(context.Context, int) (int64, error)
+}
+type creatorReplayCleanup struct{ source creatorReplayCleanupStore }
+
+func (d *creatorReplayCleanup) DispatchOnce(ctx context.Context) error {
+	_, err := d.source.CleanupCreatorPrincipalReplays(ctx, 100)
+	return err
+}
+
+func startCreatorReplayCleanup(ctx context.Context, source creatorReplayCleanupStore, logger *slog.Logger) func() {
+	workerCtx, cancel := context.WithCancel(ctx)
+	worker := outboxdelivery.NewWorker(&creatorReplayCleanup{source: source}, time.Second, func(error) { logger.Warn("creator replay retention retry pending") })
+	done := make(chan struct{})
+	go func() { defer close(done); _ = worker.Run(workerCtx) }()
+	var once sync.Once
+	return func() { once.Do(func() { cancel(); <-done }) }
+}

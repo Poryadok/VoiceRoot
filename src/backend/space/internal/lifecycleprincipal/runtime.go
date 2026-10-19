@@ -190,6 +190,15 @@ func (r *Runtime) checkEpoch(ctx context.Context, account string, epoch int64) e
 func (r *Runtime) ServerOptions() []grpc.ServerOption {
 	return []grpc.ServerOption{grpc.Creds(r.credentials), grpc.ChainUnaryInterceptor(r.verifier.Unary())}
 }
+
+// Creator uses its separate durable replay and authoritative Auth observation.
+// Copying the verifier keeps the existing lifecycle method dependencies intact.
+func (r *Runtime) ServerOptionsWithCreator(epoch principal.SessionEpochChecker, replay principal.ReplayGuard) []grpc.ServerOption {
+	v := r.verifier
+	v.CreatorEpoch = epoch
+	v.CreatorReplay = replay
+	return []grpc.ServerOption{grpc.Creds(r.credentials), grpc.ChainUnaryInterceptor(v.Unary())}
+}
 func (r *Runtime) Close() error {
 	if r == nil {
 		return nil

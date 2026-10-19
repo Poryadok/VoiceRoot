@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"log"
 	"log/slog"
 	"net"
@@ -33,6 +34,7 @@ import (
 	"voice/backend/space/internal/auditprincipal"
 	"voice/backend/space/internal/authctx"
 	"voice/backend/space/internal/chatcreation"
+	"voice/backend/space/internal/creatorauthority"
 	grpcsvc "voice/backend/space/internal/grpcsvc"
 	"voice/backend/space/internal/lifecycleprincipal"
 	"voice/backend/space/internal/memberauthorityprincipal"
@@ -257,6 +259,8 @@ func main() {
 		if memberAuthorityEnabled {
 			stopRoleRemovalDelivery := startMemberRoleRemovalDelivery(runCtx, spaceStore, ownershipRoleClient, principalIssuer, logger)
 			defer stopRoleRemovalDelivery()
+			stopCreatorReplayCleanup := startCreatorReplayCleanup(runCtx, spaceStore, logger)
+			defer stopCreatorReplayCleanup()
 		}
 		if addr := strings.TrimSpace(os.Getenv("AUTH_PRINCIPAL_GRPC_ADDR")); addr != "" {
 			if principalIssuer == nil {
@@ -491,7 +495,22 @@ func main() {
 				log.Fatalf("Space Gateway lifecycle listen: %v", err)
 			}
 			options := append([]grpc.ServerOption{}, sharedOptions...)
-			options = append(options, publicRuntime.ServerOptions()...)
+			if memberAuthorityEnabled {
+				if ownershipAuthClient == nil || principalIssuer == nil {
+					log.Fatal("native Space creator requires protected Auth principal transport")
+				}
+				checker := &creatorauthority.Checker{Client: ownershipAuthClient, Issuer: principalIssuer}
+				replay := func(ctx context.Context, issuer, jti string, expiry time.Time) error {
+					err := spaceStore.ClaimCreatorPrincipalReplay(ctx, issuer, jti, expiry)
+					if errors.Is(err, store.ErrMemberAuthorityUnavailable) {
+						return lifecycleprincipal.ErrDependencyUnavailable
+					}
+					return err
+				}
+				options = append(options, publicRuntime.ServerOptionsWithCreator(checker.CheckEpoch, replay)...)
+			} else {
+				options = append(options, publicRuntime.ServerOptions()...)
+			}
 			publicServer = grpc.NewServer(options...)
 			spacev1.RegisterSpaceServiceServer(publicServer, &grpcsvc.PublicLifecycleSpace{SpaceGRPC: spaceSvc, Composite: compositeService})
 			go func() {

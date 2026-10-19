@@ -301,11 +301,17 @@ func readOrdinaryMemberAuthority(ctx context.Context, tx pgx.Tx, space, profile 
 		}
 		// Native producer paths are activated individually with their own durable
 		// witness. Unimplemented creator/recovery/Bot evidence is not a proof.
-		if kind != 4 {
+		switch kind {
+		case 3:
+			if err := validateCreatorNativeProof(ctx, tx, message); err != nil {
+				return nil, err
+			}
+		case 4:
+			if err := validateCommunityBootstrapNativeProof(ctx, tx, message); err != nil {
+				return nil, err
+			}
+		default:
 			return nil, ErrMemberAuthorityUnavailable
-		}
-		if err := validateCommunityBootstrapNativeProof(ctx, tx, message); err != nil {
-			return nil, err
 		}
 		if !message.PublishedAt.AsTime().Equal(nativePublishedAt) {
 			return nil, ErrMemberAuthorityUnavailable

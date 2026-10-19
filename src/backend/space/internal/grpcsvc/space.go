@@ -16,6 +16,7 @@ import (
 	"voice/backend/pkg/guestguard"
 	"voice/backend/role/permissions"
 	"voice/backend/space/internal/authctx"
+	"voice/backend/space/internal/lifecycleprincipal"
 	"voice/backend/space/internal/store"
 
 	spacev1 "voice.app/voice/space/v1"
@@ -28,23 +29,27 @@ func (s *SpaceGRPC) CreateSpace(ctx context.Context, req *spacev1.CreateSpaceReq
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
 	}
-	caller, ok := authctx.ProfileID(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing profile")
-	}
 	name := strings.TrimSpace(req.GetName())
 	if name == "" {
 		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
 
-	row, err := s.Store.CreateSpace(ctx, caller, name, req.GetDescription(), req.GetVisibility())
+	creator, err := lifecycleprincipal.RequireCreator(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	actor, err := creator.ActorFor(req)
+	if err != nil {
+		return nil, err
+	}
+	row, err := s.Store.CreateSpaceWithCreator(ctx, creator, req)
 	if err != nil {
 		return nil, mapSpaceStoreError(err)
 	}
-	if accountID, ok := authctx.AccountID(ctx); ok && s.SeedSpaceProActive {
+	if accountID, parseErr := uuid.Parse(actor.AccountID); parseErr == nil && s.SeedSpaceProActive {
 		_ = s.Store.UpsertSpaceSubscription(ctx, row.ID, accountID, "active")
 	}
-	if err := s.bootstrapSpaceRoles(ctx, row.ID, caller); err != nil {
+	if err := s.bootstrapSpaceRoles(ctx, row.ID, row.OwnerProfileID); err != nil {
 		return nil, mapSpaceStoreError(err)
 	}
 	if s.SpaceEvents != nil {

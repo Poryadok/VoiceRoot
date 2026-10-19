@@ -70,11 +70,21 @@ CREATE TABLE space_member_role_cleanup (
 -- No actor or Space identity: global durable replay keys outlive every live
 -- credential including skew, independently from Redis continuity or restart.
 CREATE TABLE space_creator_principal_replays (
- issuer TEXT NOT NULL CHECK(issuer='gateway'), jti UUID NOT NULL,
+ issuer TEXT NOT NULL CHECK(issuer='gateway'), jti TEXT NOT NULL CHECK(jti ~ '^[A-Za-z0-9_-]{27}$'),
  recorded_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(), expires_at TIMESTAMPTZ NOT NULL,
  PRIMARY KEY(issuer,jti), CHECK(expires_at>recorded_at)
 );
 CREATE INDEX space_creator_principal_replay_expiry ON space_creator_principal_replays(expires_at,jti);
+CREATE TABLE space_native_creator_operations (
+ operation_id UUID PRIMARY KEY, space_id UUID NOT NULL UNIQUE,
+ account_id UUID NOT NULL, profile_id UUID NOT NULL, session_epoch BIGINT NOT NULL CHECK(session_epoch>0),
+ request_id UUID NOT NULL UNIQUE, jti TEXT NOT NULL UNIQUE CHECK(jti ~ '^[A-Za-z0-9_-]{27}$'),
+ request_sha256 BYTEA NOT NULL CHECK(octet_length(request_sha256)=32),
+ credential_issued_at TIMESTAMPTZ NOT NULL, credential_expires_at TIMESTAMPTZ NOT NULL,
+ published_at TIMESTAMPTZ NOT NULL,
+ CHECK(credential_expires_at>credential_issued_at AND credential_expires_at<=credential_issued_at+interval '30 seconds'),
+ CHECK(published_at<credential_expires_at AND published_at>=credential_issued_at-interval '5 seconds')
+);
 CREATE TABLE space_membership_ownership_heads (
  space_id UUID PRIMARY KEY, generation BIGINT NOT NULL CHECK(generation>0),
  owner_profile_id UUID, state TEXT NOT NULL CHECK(state IN ('ACTIVE','RETIRED')),
@@ -292,6 +302,7 @@ BEGIN
  DELETE FROM space_member_role_cleanup WHERE space_id=OLD.id;
  DELETE FROM space_member_admission_intents WHERE space_id=OLD.id;
  DELETE FROM space_native_member_publications WHERE space_id=OLD.id;
+ DELETE FROM space_native_creator_operations WHERE space_id=OLD.id;
  DELETE FROM space_ordinary_member_heads WHERE space_id=OLD.id;
  DELETE FROM space_community_member_heads WHERE space_id=OLD.id;
  -- The ownership trigger already erased owner_profile_id. Its separate
@@ -367,12 +378,31 @@ CREATE TRIGGER creator_principal_replay_guard BEFORE UPDATE OR DELETE ON space_c
 CREATE TRIGGER creator_principal_replay_truncate BEFORE TRUNCATE ON space_creator_principal_replays
  FOR EACH STATEMENT EXECUTE FUNCTION space_creator_principal_replay_guard();
 
+CREATE FUNCTION space_native_creator_operation_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='INSERT' THEN
+  IF NOT EXISTS(SELECT 1 FROM space_creator_principal_replays p WHERE p.issuer='gateway' AND p.jti=NEW.jti
+    AND p.expires_at=NEW.credential_expires_at AND p.recorded_at<=NEW.published_at)
+   OR NEW.credential_expires_at<=clock_timestamp() THEN
+   RAISE EXCEPTION 'native creator requires its durable admitted credential' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+ ELSIF TG_OP='DELETE' THEN
+  IF space_membership_terminal_cleanup_allowed(OLD.space_id) THEN RETURN OLD; END IF;
+ END IF;
+ RAISE EXCEPTION 'native creator evidence is immutable until terminal P3 minimization' USING ERRCODE='55000';
+END $$;
+CREATE TRIGGER native_creator_operation_guard BEFORE INSERT OR UPDATE OR DELETE ON space_native_creator_operations
+ FOR EACH ROW EXECUTE FUNCTION space_native_creator_operation_guard();
+CREATE TRIGGER native_creator_operation_truncate BEFORE TRUNCATE ON space_native_creator_operations
+ FOR EACH STATEMENT EXECUTE FUNCTION space_native_creator_operation_guard();
+
 -- Existing databases without the unrelated Federation-source preflight still
 -- get permanent heads. Full production migration order supplies its revision
 -- function; new inputs participate in exactly that same monotonic Space clock.
 DO $$ DECLARE name TEXT; BEGIN
  IF to_regprocedure('space_authority_revision_changed()') IS NOT NULL THEN
-  FOREACH name IN ARRAY ARRAY['space_ordinary_member_heads','space_community_member_heads','space_entry_policies','space_member_admission_intents','space_membership_ownership_heads','space_native_member_publications','space_lifecycle_operations','space_lifecycle_participants','space_lifecycle_completions','space_lifecycle_outbox','space_permanent_purge_fences','community_bootstrap_operations'] LOOP
+  FOREACH name IN ARRAY ARRAY['space_ordinary_member_heads','space_community_member_heads','space_entry_policies','space_member_admission_intents','space_membership_ownership_heads','space_native_member_publications','space_lifecycle_operations','space_lifecycle_participants','space_lifecycle_completions','space_lifecycle_outbox','space_permanent_purge_fences','community_bootstrap_operations','space_native_creator_operations'] LOOP
    EXECUTE format('CREATE TRIGGER %I AFTER INSERT OR UPDATE OR DELETE ON %I FOR EACH ROW EXECUTE FUNCTION space_authority_revision_changed(''space_id'')','space_authority_revision_'||name,name);
    EXECUTE format('CREATE TRIGGER %I BEFORE TRUNCATE ON %I FOR EACH STATEMENT EXECUTE FUNCTION space_authority_revision_floor_guard()','space_authority_revision_'||name||'_truncate',name);
   END LOOP;
