@@ -33,8 +33,34 @@ func (s *BotStore) ClaimBotDeletion(ctx context.Context, operation uuid.UUID) (*
 	return d, err
 }
 
+// ClaimNextBotDeletion atomically takes one due root without waiting for a peer
+// worker's row lock. Expired claims retain the original child bytes and receipts.
+func (s *BotStore) ClaimNextBotDeletion(ctx context.Context) (*BotDeletion, error) {
+	d, err := scanBotDeletion(s.Pool.QueryRow(ctx, `UPDATE bot_deletion_operations SET state='RUNNING',claim_generation=claim_generation+1,attempts=attempts+1,claimed_until=clock_timestamp()+interval '30 seconds' WHERE operation_id=(SELECT operation_id FROM bot_deletion_operations WHERE state<>'COMPLETE' AND next_attempt_at<=clock_timestamp() AND (claimed_until IS NULL OR claimed_until<=clock_timestamp()) AND claim_generation<9223372036854775807 AND attempts<9223372036854775807 ORDER BY next_attempt_at,operation_id FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING `+deletionColumns))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrDeletionClaimLost
+	}
+	return d, err
+}
+
+func (s *BotStore) RetryBotDeletion(ctx context.Context, claim *BotDeletion) error {
+	tx, err := s.deletionClaimTx(ctx, claim)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	result, err := tx.Exec(ctx, `UPDATE bot_deletion_operations SET state='RETRY_WAIT',claimed_until=NULL,next_attempt_at=clock_timestamp()+interval '2 seconds',last_error='participant cleanup pending' WHERE operation_id=$1 AND claim_generation=$2 AND claimed_until>clock_timestamp()`, claim.OperationID, claim.ClaimGeneration)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() != 1 {
+		return ErrDeletionClaimLost
+	}
+	return tx.Commit(ctx)
+}
+
 func (s *BotStore) BotDeletionEffects(ctx context.Context, operation uuid.UUID) ([]BotDeletionEffect, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT e.effect_id,t.scope_bytes,t.scope_sha256,e.kind,e.chat_id,e.request_bytes,e.receipt_bytes,e.state FROM bot_deletion_installations t JOIN bot_deletion_effects e ON e.target_id=t.target_id WHERE t.operation_id=$1 ORDER BY t.space_id,e.kind,e.chat_id NULLS FIRST`, operation)
+	rows, err := s.Pool.Query(ctx, `SELECT e.effect_id,t.scope_bytes,t.scope_sha256,e.kind,e.chat_id,e.request_bytes,e.request_sha256,e.receipt_bytes,e.receipt_sha256,e.state FROM bot_deletion_installations t JOIN bot_deletion_effects e ON e.target_id=t.target_id WHERE t.operation_id=$1 ORDER BY t.space_id,e.kind,e.chat_id NULLS FIRST`, operation)
 	if err != nil {
 		return nil, err
 	}
@@ -42,9 +68,21 @@ func (s *BotStore) BotDeletionEffects(ctx context.Context, operation uuid.UUID) 
 	out := []BotDeletionEffect{}
 	for rows.Next() {
 		var effect BotDeletionEffect
-		var scope, digest []byte
-		if err = rows.Scan(&effect.EffectID, &scope, &digest, &effect.Kind, &effect.ChatID, &effect.RequestBytes, &effect.ReceiptBytes, &effect.State); err != nil {
+		var scope, digest, requestDigest, receiptDigest []byte
+		if err = rows.Scan(&effect.EffectID, &scope, &digest, &effect.Kind, &effect.ChatID, &effect.RequestBytes, &requestDigest, &effect.ReceiptBytes, &receiptDigest, &effect.State); err != nil {
 			return nil, err
+		}
+		for _, retained := range []struct{ body, digest []byte }{{effect.RequestBytes, requestDigest}, {effect.ReceiptBytes, receiptDigest}} {
+			if retained.body == nil && retained.digest == nil {
+				continue
+			}
+			sum := sha256.Sum256(retained.body)
+			if len(retained.body) == 0 || !bytes.Equal(sum[:], retained.digest) {
+				return nil, ErrInstallationConflict
+			}
+		}
+		if (effect.State == "COMPLETE") != (effect.ReceiptBytes != nil) || (effect.ReceiptBytes != nil && effect.RequestBytes == nil) {
+			return nil, ErrInstallationConflict
 		}
 		actual := sha256.Sum256(scope)
 		if !bytes.Equal(actual[:], digest) {

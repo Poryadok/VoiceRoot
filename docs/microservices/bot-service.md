@@ -532,5 +532,8 @@ The dedicated client requires all five settings
 `BOT_MESSAGING_CLEANUP_TLS_SERVER_NAME`, `BOT_MESSAGING_CLEANUP_TLS_CERT_FILE`,
 and `BOT_MESSAGING_CLEANUP_TLS_KEY_FILE`, plus the existing Bot service issuer.
 Missing configuration does not fall back to the ordinary Messaging connection.
-Production worker/uninstall orchestration and P3/post-retention proof coverage
-remain unfinished; the implemented lower consumer does not imply full readiness.
+The recovery worker claims due roots, validates retained byte hashes and typed
+completed children, and retries independently recoverable Role/Messaging work.
+It leaves the root pending while any participant is unavailable. Global Space
+terminal-fence delivery, uninstall orchestration and P3/post-retention proof
+coverage remain unfinished; this does not imply full readiness.

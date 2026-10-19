@@ -211,6 +211,7 @@ func main() {
 		startDeferredTTLSweeper(svc, logger)
 		slashWorkerCtx, stopSlashWorker := context.WithCancel(context.Background())
 		defer stopSlashWorker()
+		go svc.RunBotDeletionRecovery(slashWorkerCtx)
 		for i := 0; i < 4; i++ {
 			go svc.RunSlashOutbox(slashWorkerCtx)
 		}

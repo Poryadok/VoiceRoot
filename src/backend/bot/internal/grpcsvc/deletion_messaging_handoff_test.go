@@ -124,7 +124,7 @@ func TestMessagingDeletionActualParticipantLostACKRecovery(t *testing.T) {
 	frozen := append([]byte(nil), effect.RequestBytes...)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "repin.request"), []byte("repin"), 0600))
 	require.Eventually(t, func() bool { _, err := os.Stat(filepath.Join(dir, "repin.ready")); return err == nil }, 3*time.Second, 10*time.Millisecond)
-	// A fresh process/service with the persisted child source rejects a corrupt
+	// A fresh service on the same Pool with the persisted child source rejects a corrupt
 	// completed response before saving it, then recovers the real exact receipt.
 	restarted := &BotGRPC{Store: &store.BotStore{Pool: database.Pool}, PrincipalIssuer: issuer, CleanupMessaging: messagingLostACKClient{MessagingServiceClient: actual, corrupt: true}}
 	err = restarted.applyMessagingDeletion(ctx, claim, effect)
@@ -133,7 +133,16 @@ func TestMessagingDeletionActualParticipantLostACKRecovery(t *testing.T) {
 	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT count(*) FROM bot_deletion_effects WHERE effect_id=$1 AND receipt_bytes IS NOT NULL`, effect.EffectID).Scan(&receipts))
 	require.Zero(t, receipts)
 	restarted.CleanupMessaging = actual
-	require.NoError(t, restarted.applyMessagingDeletion(ctx, claim, effect))
+	require.NoError(t, st.RetryBotDeletion(ctx, claim))
+	var worked bool
+	require.Eventually(t, func() bool {
+		var workerErr error
+		worked, workerErr = restarted.ProcessNextBotDeletion(ctx)
+		if worked {
+			require.Equal(t, codes.Unavailable, status.Code(workerErr), "Messaging may complete while unconfigured Role remains pending")
+		}
+		return worked
+	}, 5*time.Second, 20*time.Millisecond)
 	final, err := st.BotDeletionEffects(ctx, root.OperationID)
 	require.NoError(t, err)
 	for _, candidate := range final {
@@ -143,7 +152,9 @@ func TestMessagingDeletionActualParticipantLostACKRecovery(t *testing.T) {
 			require.NotEmpty(t, candidate.ReceiptBytes)
 		}
 	}
-	require.ErrorIs(t, st.CompleteBotDeletion(ctx, claim), store.ErrDeletionPending, "Messaging completion cannot settle pending Role/Space work")
+	var rootState string
+	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT state FROM bot_deletion_operations WHERE operation_id=$1`, root.OperationID).Scan(&rootState))
+	require.Equal(t, "RETRY_WAIT", rootState, "Messaging completion cannot settle pending Role/Space work")
 	complete, err := json.Marshal(struct{ OperationID string }{effect.EffectID.String()})
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "complete.json"), complete, 0600))

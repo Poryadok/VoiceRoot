@@ -271,3 +271,21 @@ the Chat point-in-time observation are controlled fixture inputs here; earlier
 public Gateway admission and Chat transport proofs retain their separate scope.
 This does not complete the production recovery worker, uninstall batching,
 global Space retirement, P3 coverage or late proof-provider criteria.
+
+The production recovery worker now atomically claims a due root with SKIP LOCKED,
+retains a monotone 30-second claim generation and runs a bounded 25-second pass.
+Failed work releases only its still-live generation into a two-second retry wait;
+it never clears frozen requests/receipts or a successor's claim. Stored effect
+request and receipt bytes are checked against their retained SHA before recovery,
+and completed Role/Messaging outcomes are revalidated as typed receipts before
+being skipped. Actual PG corruption of either byte column reproduced acceptance
+on e200 (RED 8.580s); the final digest/claim/stale-release group passed in 14.530s.
+
+The actual producer/participant handoff was then executed through
+ProcessNextBotDeletion: after lost ACK and rejected bad receipt, the next due
+claim replayed the exact Messaging child and saved its original receipt while
+preserving a later human repin (caller 7.726s/provider 47.048s). Missing Role and
+global Space cleanup retained RETRY_WAIT rather than whole-root completion.
+Recovery reinstantiates BotGRPC/BotStore on the same live Pool; it is not an OS
+process restart. Native402e Empty ACK cannot settle SPACE_CLEANUP: c69/c70 require
+the separately implemented target terminal fence and typed completion result.
