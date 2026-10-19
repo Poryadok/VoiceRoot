@@ -109,6 +109,75 @@ class ProducerTrace(unittest.TestCase):
         path=out/'normalized-raw-false.jsonl';m.write_events(path,changed)
         with self.assertRaises(m.Rejected):m.validate_trace(self.repo,path,hashlib.sha256(path.read_bytes()).hexdigest())
 
+    def forged_trace(self, m, out, events, name):
+        # Replay forged map bindings too: the negative must reach semantic
+        # identity checks rather than fail on a stale transport checksum.
+        maps={}
+        for e in events:
+            kind=e['kind'];v=e['payload'];frame=e['frame']
+            if kind=='frame_enter':maps[frame]=[]
+            if frame not in maps:continue
+            def binding():return m.raw_binding(''.join(x+'\n' for x in maps[frame]))
+            if 'map_before' in v:
+                v['map_before']={k:binding()[k] for k in ('bytes','sha256')}
+                if 'prior_rows' in v:
+                    prior=[m.raw_binding(x) for x in maps[frame] if x.split('\t')[0]==v['path']]
+                    v['prior_rows']=prior;v['prior']=prior[-1] if prior else None
+            if kind=='row_remove':maps[frame]=[x for x in maps[frame] if x.split('\t')[0]!=v['path']]
+            if kind=='row_committed':
+                maps[frame].append(v['row']['raw'])
+                v['retained_rows']=[m.raw_binding(x) for x in maps[frame] if x.split('\t')[0]==v['path']]
+                v['map_after']={k:binding()[k] for k in ('bytes','sha256')}
+            if kind=='frame_exit':v['final_map']={k:binding()[k] for k in ('bytes','sha256')}
+        path=out/name;m.write_events(path,events)
+        return path,hashlib.sha256(path.read_bytes()).hexdigest()
+
+    def test_direct_boundary_head_cannot_erase_actual_operation_paths(self):
+        self.write('one.md','actual source\n');self.commit('one actual source operation')
+        p,out=self.collect();self.assertEqual(p.returncode,0,p.stderr)
+        m=module();events=[json.loads(v) for v in (out/'trace.jsonl').read_bytes().splitlines()]
+        operation=next(e for e in events if e['kind']=='operation_begin')
+        operation['payload'].update(boundary=operation['payload']['source_head'],delta=m.raw_binding(''),paths=[],entries={})
+        events=[e for e in events if not e['payload'].get('path')]
+        next(e for e in events if e['kind']=='classification')['payload']['unapproved_delta']=m.raw_binding('')
+        path,digest=self.forged_trace(m,out,events,'boundary-head-empty.jsonl')
+        with self.assertRaisesRegex(m.Rejected,'actual_direct_source_boundary'):
+            m.validate_trace(self.repo,path,digest)
+
+    def test_reduction_cannot_forge_owner_path_parent_source_or_candidates(self):
+        self.hidden_runtime();p,out=self.collect();self.assertEqual(p.returncode,0,p.stderr)
+        m=module();original=[json.loads(v) for v in (out/'trace.jsonl').read_bytes().splitlines()]
+        target=next(e for e in original if e['kind']=='row_remove')
+        for index in (0,2,3,4,5,7):
+            with self.subTest(field=index):
+                events=json.loads(json.dumps(original))
+                for e in events:
+                    if e['operation']==target['operation'] and e['payload'].get('path')==target['payload']['path'] and e['kind'] in ('row_remove','row_after','row_committed'):
+                        parts=e['payload']['row']['raw'].split('\t');parts[index]='forged.md' if index==0 else '0'*40
+                        e['payload']['row']=m.raw_binding('\t'.join(parts))
+                path,digest=self.forged_trace(m,out,events,'reduction-field-'+str(index)+'.jsonl')
+                with self.assertRaisesRegex(m.Rejected,'actual_reduction_row_identity'):
+                    m.validate_trace(self.repo,path,digest)
+
+    def test_actual_attempt_frame_classification_and_candidates_are_bound(self):
+        self.write('one.md','actual source\n');self.commit('one actual source operation')
+        p,out=self.collect();self.assertEqual(p.returncode,0,p.stderr)
+        m=module();original=[json.loads(v) for v in (out/'trace.jsonl').read_bytes().splitlines()]
+        for change in ('candidates','begin_classification','attempt_classification','attempt_frame','frame_identity'):
+            with self.subTest(change=change):
+                events=json.loads(json.dumps(original))
+                begin=next(e for e in events if e['kind']=='operation_begin')
+                attempt=next(e for e in events if e['kind']=='operation_attempt')
+                if change=='candidates':begin['payload']['candidates']=['0'*40]
+                elif change=='begin_classification':begin['payload']['classification']='merge'
+                elif change=='attempt_classification':attempt['payload']['classification']='merge'
+                elif change=='attempt_frame':
+                    attempt['operation']='wrong/'+attempt['payload']['commit']+'/1'
+                    attempt['payload']['id']=attempt['operation']
+                else:next(e for e in events if e['kind']=='frame_enter')['frame']='wrong'
+                path,digest=self.forged_trace(m,out,events,change+'.jsonl')
+                with self.assertRaises(m.Rejected):m.validate_trace(self.repo,path,digest)
+
     def bound_span_fixture(self, hidden_runtime=False):
         self.write('README','first lane\n');first_lane=self.commit('first lane')
         git(self.repo,'checkout','-qb','span',self.base)

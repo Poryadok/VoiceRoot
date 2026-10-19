@@ -3996,6 +3996,12 @@ f13_collect_develop_contributions() {
               "${nested_head}" "${native_merge_outcome}" "${native_supersession_status}" \
               >>"${TMP_DIR}/f13-native-p3-history.tsv" || return 1
             if [[ "${native_supersession_status}" == 0 ]]; then
+              if [[ -n "${f13_f54_trace_file:-}" ]]; then
+                f13_f54_trace_event native_rebind_gate "${repo}" "${path}" \
+                  "${native_supersession_status}" "${owners[${path}]}" "${previous_source_head}" \
+                  "${nested_owner_commit}" "${nested_head}" "${commit}" "${native_merge_outcome}" \
+                  "${native_p3_binding}" || return 1
+              fi
               source_entry="$(git -C "${repo}" ls-tree "${commit}" -- ":(literal)${path}")" || return 1
               nested_owner_commit="${commit}"
               nested_base="${first_parent}"

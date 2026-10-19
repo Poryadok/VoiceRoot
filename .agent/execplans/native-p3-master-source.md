@@ -120,3 +120,12 @@ Later exact frozen source/current trace/independent review remain required.
 - [x] Successful empty DOWN/UP unrelated-schema/data sentinel supplement PASS1/0skip1.220s;418 c4 accepts B1 and resolves full eight-clause scope. This is finite dormant/restrictive source evidence, not activation/provider/stand authority.
 - [x] New immutable R3 ba8b63851eaf61876a1a87d32c163adddfc1b779 descends reviewed H2 and binds all eight reviewed clauses and hashed original/supplemental evidence.
 - [ ] Later K rebinds only fixed H/R/hash pins; independent exact carrier review and actual original-B0/master B/S/T F13 remain required before qualification/CI/merge claims.
+
+
+### 2026-10-19: reviewer c26 identity correction
+
+Frozen 25278c71 and its observation packet remain immutable. Independent review found two validator-only identity gaps: a caller-selected direct boundary could erase an operation, and a reduced row could forge immutable identity fields after rehashing all maps. Private Linux negatives reproduce both, including all six owner/path/parent/source/candidate mutations. The successor binds attempts to their actual frame, classification, Git parents and candidates, requires direct first-parent and sync frame boundaries, and refuses scalar multibase admission. Reductions now retain every original identity field except the separately checked flag. No production gates or pins changed.
+
+The old actual main contains legitimate native source rebinds without independently verifiable gate-result receipts in this trace schema. They are not retroactively fabricated or silently exempted: the stricter validator keeps these as HOLD. The old main/span observations remain factual evidence; the old complete validator qualification claim is not retained. Original M, production R/K, runtime and admission remain HOLD.
+
+The same current author stage now observes native status-zero source restoration synchronously at the genuine gate result, before source/map mutation. Its receipt binds actual prior/nested/current arguments, raw native binding and event context. Validation independently requalifies that unchanged fixed native record against actual current Git B/S/T, checks every original gate ancestry/H-entry condition and permits only the exact first-parent/integration source rebind. No receipt is backfilled into old traces; a fresh original caller trace is required because the changed observer seam creates new provenance. All other reduction identity transformations remain rejected.

@@ -7,7 +7,9 @@ Neither history-boundary nor composition observation grants admission.
 import argparse
 import base64
 import hashlib
+import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -159,6 +161,13 @@ def append(path, kind, frame, operation, repo, values):
         payload = dict(trigger=trigger, unapproved_delta=raw_binding(Path(delta).read_bytes()), classifier=classifier_binding())
     elif kind == 'sync_gate_passed':
         payload=dict(gate='f13_validate_sync_merge_resolution',classifier=classifier_binding())
+    elif kind == 'native_rebind_gate':
+        name,status,prior_owner,prior_source,current_owner,current_source,integration,outcome,binding=values
+        payload=dict(path=name,status=int(status),gate='native_p3_duplicate_owner_qualified',
+            prior_owner=prior_owner,prior_source=prior_source,current_owner=current_owner,
+            current_source=current_source,integration=integration,outcome=outcome,
+            binding=raw_binding(Path(binding).read_bytes()),classifier=classifier_binding(),
+            context={key:os.environ.get(key,'') for key in ('GITHUB_EVENT_NAME','GITHUB_REF','GITHUB_SHA','VOICE_CI_PUSH_BEFORE_SHA','GITHUB_BASE_REF')})
     elif kind in ('row_before','path_gate_before','final_gate_before','sync_gate_before'):
         name, output, *incoming = values
         matches=[v for v in Path(output).read_text().splitlines() if v.split('\t')[0] == name]
@@ -437,7 +446,7 @@ def validate_trace(repo, path, expected_sha, complete=False):
     raw=Path(path).read_bytes();require(sha(raw)==expected_sha,'trace_raw_hash')
     events=[json.loads(v) for v in raw.splitlines()];require(events,'nonempty_producer_trace')
     previous='0'*64;frames={};stack=[];operations={};attempts={};classified={};pending={};cumulative={};child_flags={};child_rows={};frame_rows={};carry={};failures=[];observed=set()
-    expected_operations={};seen_operations={};visited={};committed={};maps={};children={};obligations={}
+    expected_operations={};seen_operations={};visited={};committed={};maps={};children={};obligations={};native_bindings={}
     def map_binding(frame):
         raw=''.join('\t'.join(parts)+'\n' for parts in maps[frame]).encode()
         return dict(bytes=len(raw),sha256=sha(raw))
@@ -467,7 +476,7 @@ def validate_trace(repo, path, expected_sha, complete=False):
             require(v['supplemental_classifier']==classifier_binding(),'supplemental_collector_context')
             continue
         if kind=='frame_enter':
-            identity=v['id'];require(identity not in frames and v['parent']==(stack[-1] if stack else None),'frame_parent_and_order')
+            identity=v['id'];require(frame==identity and identity not in frames and v['parent']==(stack[-1] if stack else None),'frame_parent_and_order')
             require((not v['parent'] and v['parent_operation'] is None) or v['parent_operation'] in attempts,'actual_parent_operation_reference')
             actual=git(repo,'rev-list','--first-parent','--reverse',v['base']+'..'+v['target']).decode().splitlines()
             require(v['first_parent_operations']==actual,'actual_frame_operations');frames[identity]=v;stack.append(identity)
@@ -500,6 +509,9 @@ def validate_trace(repo, path, expected_sha, complete=False):
             parents=git(repo,'rev-list','--parents','-n','1',v['commit']).decode().split()[1:]
             require(v['ordered_parents']==parents and v['first_parent']==parents[0],'actual_attempt_parents')
             index=v['parent_index'];require(type(index) is int and 1<=index<=len(parents),'actual_attempt_index')
+            require(op==frame+'/'+v['commit']+'/'+str(index),'actual_attempt_frame_identity')
+            expected_class='direct' if len(parents)==1 else 'sync' if len(parents)==2 and parents[1]==frames[frame]['base'] else 'merge'
+            require(v['classification']==expected_class,'actual_attempt_classification')
             require(v['source_head']==(v['commit'] if len(parents)==1 else parents[index-1]),'actual_attempt_source')
             require(v['candidates']==git(repo,'merge-base','--all',v['first_parent'],v['source_head']).decode().splitlines(),'actual_attempt_bases')
             seen=seen_operations[frame]
@@ -513,6 +525,15 @@ def validate_trace(repo, path, expected_sha, complete=False):
             require(v['ordered_parents']==parents and v['first_parent']==parents[0],'actual_ordered_parents')
             index=v['parent_index'];require(type(index) is int and 1<=index<=len(parents),'parent_index')
             require((len(parents)==1 and index==1 and v['source_head']==v['commit']) or (len(parents)>1 and index>=2 and v['source_head']==parents[index-1]),'actual_source_parent')
+            require(v['classification']==attempts[op]['classification'] and v['candidates']==attempts[op]['candidates'],'actual_attempt_classification_and_candidates')
+            if v['classification']=='direct':
+                require(v['boundary']==v['first_parent'],'actual_direct_source_boundary')
+            elif v['classification']=='sync':
+                require(v['boundary']==v['source_head']==frames[frame]['base'],'actual_sync_source_boundary')
+            else:
+                # Multibase admission is a distinct, unfinished capability.
+                # A caller-selected scalar must never erase operation paths.
+                require(v['candidates']==[v['boundary']],'actual_single_best_source_boundary')
             require(v['delta']==raw_binding(git(repo,'diff','--name-only',v['boundary'],v['source_head'])),'actual_operation_delta')
             for name,entry in v['entries'].items():
                 require(entry==dict(base=entry_binding(repo,v['boundary'],name),source=entry_binding(repo,v['source_head'],name),result=entry_binding(repo,v['commit'],name)),'actual_full_entries')
@@ -545,7 +566,29 @@ def validate_trace(repo, path, expected_sha, complete=False):
             continue
         require(op in classified,'classification_before_row')
         key=(frame,v['path'])
-        if kind=='row_before':
+        if kind=='native_rebind_gate':
+            require(key in pending and pending[key]['op']==op and not pending[key]['removed'] and 'rebind' not in pending[key],'native_gate_before_exact_mutation')
+            item=pending[key];prior=item['prior'];incoming=item['incoming'];operation=operations[op]
+            require(prior is not None and v['gate']=='native_p3_duplicate_owner_qualified' and v['status']==0 and v['classifier']==classifier_binding(),'actual_native_restoration_gate')
+            nested=child_rows.get((op,v['path']),incoming)
+            require([v['prior_owner'],v['prior_source'],v['current_owner'],v['current_source'],v['integration']]==[prior[2],prior[5],nested[2],incoming[5],operation['commit']],'actual_native_gate_owner_source_arguments')
+            require(v['outcome'] in ('clean','guarded_conflict','direct') and (v['outcome']=='direct')==(operation['classification']=='direct'),'actual_native_gate_outcome')
+            binding=v['binding'];require(binding==raw_binding(binding['raw']),'native_binding_raw_hash')
+            context=v['context'];cache=sha(canonical(dict(binding=binding,context=context)))
+            if cache not in native_bindings:
+                spec=importlib.util.spec_from_file_location('f54_native_rebind',ROOT/'scripts/ci/f13_native_p3_source.py')
+                native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
+                b=json.loads(binding['raw'])
+                require(b['target']==git(repo,'rev-parse','HEAD').decode().strip(),'native_receipt_actual_current_target')
+                actual=native.qualify(repo,b['base'],b['source'],b['target'],context['GITHUB_EVENT_NAME'],context['GITHUB_REF'],context['GITHUB_SHA'],context['VOICE_CI_PUSH_BEFORE_SHA'],context['GITHUB_BASE_REF'])
+                require(actual==b,'native_receipt_independently_qualified_binding');native_bindings[cache]=actual
+            b=native_bindings[cache]
+            require(v['path'] in b['paths'],'native_receipt_exact_bound_path')
+            for candidate in (v['prior_owner'],v['prior_source'],v['current_owner'],v['current_source'],v['integration']):
+                require(subprocess.run(['git','--no-replace-objects','-C',str(repo),'merge-base','--is-ancestor',candidate,b['snapshot']],capture_output=True).returncode==0,'native_receipt_source_ancestry')
+            require(tree_entry(repo,v['integration'],v['path'])==tree_entry(repo,b['snapshot'],v['path']),'native_receipt_actual_H_entry_restoration')
+            item['rebind']=[operation['first_parent'],operation['commit']]
+        elif kind=='row_before':
             map_before(frame,v)
             prior=row(v['prior']);incoming=row(v['incoming'])
             require(key not in pending and incoming[0]==v['path'] and incoming[2]==operations[op]['commit'],'actual_incoming_operation')
@@ -566,6 +609,8 @@ def validate_trace(repo, path, expected_sha, complete=False):
         elif kind in ('row_after','row_remove'):
             require(key in pending and pending[key]['op']==op,'pre_mutation_prior_reference')
             parts=row(v['row']);require(parts[6]==pending[key]['incoming'][6],'original_content_base')
+            incoming=pending[key]['incoming']
+            require(all(parts[i]==incoming[i] for i in (0,2,3,6,7)) and parts[4:6]==pending[key].get('rebind',incoming[4:6]),'actual_reduction_row_identity')
             if kind=='row_remove':
                 require(pending[key]['prior'] is not None and not pending[key]['removed'],'actual_single_reduction')
                 pending[key]['removed']=True;maps[frame]=[x for x in maps[frame] if x[0]!=v['path']]
