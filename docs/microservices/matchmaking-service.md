@@ -442,6 +442,19 @@ proposals and next session generations. The public legacy `CreateProposal`
 refuses typed source parties; missing or mismatched immediate proof cannot
 select that path. Its schema-independent authority-field check preserves the
 actual pre-native migrations 001–018 path without treating historical rows as
-Voice/LFP source authority. Worker/native startup integration must still call
-fresh capture and protected validation at each reservation boundary; capture
-or external validation alone does not create a match.
+Voice/LFP source authority.
+
+When configured with `ProposalValidator`, the matcher Worker captures and
+validates a new candidate on each queue pass before calling the locked API.
+Unknown, malformed change sets and local changes after the source RPC leave
+parties searching and create no match. Definitive source changes reset only
+the affected captured whole parties. A typed local account ban is intersected
+with their verified private member tuples and resets only those parties;
+generic denial errors never authorize cancellation. The durable RELEASE intent
+removes the affected sessions from Redis without removing unrelated parties.
+Errors returned to the Worker logger contain no private source/account data.
+
+An absent validator retains only the public pre-cut legacy reservation path,
+whose storage guard refuses typed sources. Native startup must install the
+actual protected validator and qualify the complete source package; this Worker
+component does not install that authority or qualify LFP historical rows.

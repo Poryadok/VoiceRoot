@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"voice/backend/matchmaking/internal/config"
+	"voice/backend/matchmaking/internal/partysource"
 	"voice/backend/matchmaking/internal/queue"
 	"voice/backend/matchmaking/internal/store"
 )
@@ -33,13 +34,14 @@ type PeerBanChecker interface {
 
 // Worker polls queues and creates match proposals.
 type Worker struct {
-	Queue    *queue.RedisQueue
-	Sessions *store.SessionStore
-	Matches  *store.MatchStore
-	Games    *store.GameStore
-	Bans     PeerBanChecker
-	Events   EventPublisher
-	Logger   *slog.Logger
+	ProposalValidator partysource.ProposalValidator
+	Queue             *queue.RedisQueue
+	Sessions          *store.SessionStore
+	Matches           *store.MatchStore
+	Games             *store.GameStore
+	Bans              PeerBanChecker
+	Events            EventPublisher
+	Logger            *slog.Logger
 }
 
 // RunOnce attempts to form matches for all active games (global + space-scoped queues).
@@ -164,7 +166,7 @@ func (w *Worker) tryMatchQueue(ctx context.Context, spaceID *uuid.UUID, gameID u
 		profileIDs[k] = sess.ProfileID
 	}
 
-	result, err := w.Matches.CreateProposal(ctx, store.CreateProposalParams{
+	result, err := w.reserveGroup(ctx, store.CreateProposalParams{
 		GameID:   gameID,
 		Mode:     mode.Name,
 		Region:   region,
