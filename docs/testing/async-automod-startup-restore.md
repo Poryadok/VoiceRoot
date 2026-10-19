@@ -1,5 +1,39 @@
 BE-045 c12: startup and restore contract, v1
 
+The [c19 lifecycle/partition correction](async-automod-unknown-deadline.md)
+supersedes any inference that an elapsed stale DELETED timer or read-only RR
+row is permanent terminal authority. Auth first settles due work through a
+finite DB cut under current account-row locks/fresh DB time; skipped/overflowed
+work cannot claim completeness. It then seals only its durable terminal ledger.
+Terminal seal protocol2 uses `voice.automod.terminal-ledger.v2` plus NUL and the
+existing uint64-count/UUID-byte framing; high-water must equal ledger item count.
+The two-UUID vector is
+`a9a0ec3fc5e87c551a11f7533f3c8eecade74bfaa63e030350b0d16471197c25`.
+Unactivated prototype union/version1 seals are rejected, with no silent upgrade
+of hypothetical live receipts. Account census retains its separate protocol1
+domain and nonterminal fresh-check semantics.
+
+P4 producer implementation: private `ListModerationAccountCensus` permits only
+`service:moderation`. Messaging retains only its subject and terminal reads;
+it cannot enumerate accounts or reconcile restrictions. The Auth-owned finite
+repeatable-read view contains at most 10,000 sorted account bindings with
+lifecycle revision, current epoch and Auth restriction state, including retained
+DELETED accounts and excluding terminal/due bindings. Overflow fails rather than
+truncating a `complete` response. Every binding still needs fresh authority and
+the local generation/transaction checks before use.
+
+Its protocol-1 seal frames domain `voice.automod.account-census.v1` plus NUL,
+unsigned big-endian 64-bit item count and, for each deterministic protobuf
+response, unsigned big-endian 32-bit byte length followed by those exact bytes.
+The seal binds the Auth authority generation, fresh snapshot UUID, finite DB
+cut, item count and terminal high-water. The terminal high-water is independent
+of the retained account count. No password, profile, content or credential is
+returned. The Java/Go vector is one 86-byte response (account
+`00000000-0000-4000-8000-000000000001`, subject
+`80000000-0000-4000-8000-000000000002`, lifecycle3, LIVE, epoch7):
+`2e75915e1a536d1db68e0e35f601528e79b9829aab8b0cc61ad1eea30d872571`.
+This seal proves finite-view integrity; it cannot certify restore currentness.
+
 The [c23/c24 recovery implementation contract](async-automod-recovery.md)
 distinguishes `LIVE_CURRENT` from `DECLARED_RESTORE`: ordinary current live DB
 restart has no remote sink/export prerequisite; declared or uncertain restore
@@ -8,19 +42,18 @@ offline bundle. Counts/hashes alone do not prove a current tail. A local ready
 bit or absent/malformed restore material cannot select live mode.
 
 Implemented terminal-view framing checkpoint: `ListTerminalModerationSubjects`
-returns a `ModerationAuthoritySnapshotSeal` with protocol1, persisted Auth
-authority generation, fresh snapshot UUID, repeatable-read DB cut, permanent
-terminal high-water, exact union count, canonical SHA-256 and complete flag.
-The union includes both durable terminal subjects and accounts already due at
-the captured cut. It is bounded to 50,000 subjects; overflow is unavailable,
-never truncated success. Canonical hash input is UTF-8
-`voice.automod.terminal-union.v1` + NUL, big-endian uint64 item count and each
-16-byte UUID in ascending canonical UUID-string order. Both runtimes share a
-fixed test vector. Consumers reject missing/unknown metadata, duplicate or
-unsorted IDs, count/hash mismatch and a high-water greater than the union.
-The Auth terminal ledger is append-only and generation/progress cannot reset.
-These checks identify one finite view; independent restore history/current-tail
-verification and the actual bootstrap coordinator remain required and open.
+first settles at most 50,000 due bindings through a fixed DB cut under account
+row locks. A restore holding that lock must finish before Auth decides whether
+the current binding is terminal. Overflow or lock timeout returns unavailable;
+neither is a complete snapshot. A separate repeatable-read transaction then
+seals only the append-only durable terminal ledger, bounded to 50,000 subjects.
+The protocol2 seal binds authority generation, fresh snapshot UUID, DB cut,
+exact ledger count, equal terminal high-water and canonical SHA-256. Its hash
+framing and Java/Go vector are specified above. Consumers reject version1,
+missing/unknown metadata, duplicate or unsorted IDs and count/hash/high-water
+mismatch. Generation/progress cannot reset. These checks identify one finite
+view; independent restore-history verification and the actual bootstrap
+coordinator remain required and open.
 
 Later c17 refinement: [account-core and Space erasure](async-automod-space-erasure.md)
 requires minimized v2 bytes/hash from insertion and separate erasable local

@@ -20,6 +20,11 @@ type authFixture struct {
 	resolve    func(context.Context, *automodv1.ResolveModerationSubjectRequest) (*automodv1.ResolveModerationSubjectResponse, error)
 	reconciled *automodv1.ReconcileModerationRestrictionResponse
 	terminal   *automodv1.ListTerminalModerationSubjectsResponse
+	census     *automodv1.ListModerationAccountCensusResponse
+}
+
+func (f authFixture) ListModerationAccountCensus(context.Context, *automodv1.ListModerationAccountCensusRequest, ...grpc.CallOption) (*automodv1.ListModerationAccountCensusResponse, error) {
+	return f.census, nil
 }
 
 func (f authFixture) ResolveModerationSubject(ctx context.Context, r *automodv1.ResolveModerationSubjectRequest, _ ...grpc.CallOption) (*automodv1.ResolveModerationSubjectResponse, error) {

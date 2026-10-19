@@ -3,10 +3,11 @@
 ## Moderation subject and restriction authority (BE-045)
 
 Private `voice.automod.v1.AuthModerationAuthorityService` owns
-`ResolveModerationSubject`, `ListTerminalModerationSubjects` and
-`ReconcileModerationRestriction`. Messaging and Moderation alone may resolve a
+`ResolveModerationSubject`, `ListTerminalModerationSubjects`,
+`ListModerationAccountCensus` and `ReconcileModerationRestriction`.
+Messaging and Moderation alone may resolve a
 subject or obtain the complete opaque terminal snapshot. Only Moderation may
-reconcile a restriction. All methods require mTLS and fresh Phase-0 service
+enumerate the finite account census or reconcile a restriction. All methods require mTLS and fresh Phase-0 service
 credentials bound to audience `auth`, exact RPC/request bytes/request ID, expiry
 and replay. They are absent from the legacy Auth listener.
 
@@ -24,6 +25,19 @@ an empty new projection must never reactivate it.
 All Moderation manual/automatic writers join this fenced path before activation.
 The legacy raw-header `SetAccountStatus` route cannot remain an alternate writer.
 See [the complete privacy/migration/restore contract](../testing/async-automod-exec-plan.md).
+
+Terminal snapshots first settle due work under current account-row locks and
+fresh DB time, serialized with restore, then seal only the durable terminal
+ledger (protocol2). A stale DELETED observation is not a permanent fence.
+The separate bounded census is nonterminal authority and needs fresh checks
+before use; neither seal proves restore currentness.
+The [c19 lifecycle and partition boundary](../testing/async-automod-unknown-deadline.md)
+requires transactional lifecycle delivery and positive winning terminal facts.
+Those producer/catch-up and recipient integrations remain implementation work.
+Canonical physical deadlines do not move, but a complete partition hiding both
+delete and restore authority cannot certify their physical deadline outcome.
+The [c20 feasibility review](../testing/async-automod-identity-bridge-feasibility.md)
+does not select a new capsule/key design or classify retained v2 data anonymous.
 
 ## Обзор
 

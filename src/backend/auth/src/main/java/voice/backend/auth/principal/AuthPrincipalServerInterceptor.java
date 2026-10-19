@@ -22,7 +22,8 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
   public static final String MODERATION_SUBJECT_RPC = "/voice.automod.v1.AuthModerationAuthorityService/ResolveModerationSubject";
   public static final String MODERATION_TERMINAL_RPC = "/voice.automod.v1.AuthModerationAuthorityService/ListTerminalModerationSubjects";
   public static final String MODERATION_RECONCILE_RPC = "/voice.automod.v1.AuthModerationAuthorityService/ReconcileModerationRestriction";
-  public static final Set<String> MODERATION_RPCS = Set.of(MODERATION_SUBJECT_RPC, MODERATION_TERMINAL_RPC, MODERATION_RECONCILE_RPC);
+  public static final String MODERATION_CENSUS_RPC = "/voice.automod.v1.AuthModerationAuthorityService/ListModerationAccountCensus";
+  public static final Set<String> MODERATION_RPCS = Set.of(MODERATION_SUBJECT_RPC, MODERATION_TERMINAL_RPC, MODERATION_RECONCILE_RPC, MODERATION_CENSUS_RPC);
   private static final Set<String> RAW = Set.of("x-profile-id", "x-account-id", "x-user-id", "x-actor-id", "x-internal-caller");
   private final AuthPrincipalVerifier verifier;
   private final Runnable cleanup;

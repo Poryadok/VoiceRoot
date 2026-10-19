@@ -14,10 +14,19 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 class AuthModerationStoreIntegrationTest {
+  @Test void accountCensusDigestMatchesTheIndependentlyFramedGoVector() {
+    var account=app.voice.automod.v1.ResolveModerationSubjectResponse.newBuilder().setSessionEpoch(7)
+        .setSubject(app.voice.automod.v1.SubjectBinding.newBuilder().setProtocolVersion(1)
+            .setAccountId("00000000-0000-4000-8000-000000000001").setSubjectId("80000000-0000-4000-8000-000000000002")
+            .setLifecycleRevision(3).setState(SubjectState.SUBJECT_STATE_LIVE)).build();
+    assertThat(account.toByteArray()).hasSize(86);
+    assertThat(java.util.HexFormat.of().formatHex(AuthModerationStore.accountCensusDigest(java.util.List.of(account))))
+        .isEqualTo("2e75915e1a536d1db68e0e35f601528e79b9829aab8b0cc61ad1eea30d872571");
+  }
   @Test void terminalDigestMatchesThePrivateGoProtocolVector() {
     assertThat(java.util.HexFormat.of().formatHex(AuthModerationStore.terminalDigest(java.util.List.of(
         "00000000-0000-4000-8000-000000000001","80000000-0000-4000-8000-000000000002"))))
-        .isEqualTo("9fe34b5c58763df7b7fe4c98abd940a60b1cea25844aed41478de05cef88a4ac");
+        .isEqualTo("a9a0ec3fc5e87c551a11f7533f3c8eecade74bfaa63e030350b0d16471197c25");
   }
   @Test void acknowledgementCapturesAcceptedPayloadAndLifecycleInOneTransaction() {
     String external=System.getenv("AUTH_AUTOMOD_TEST_JDBC_URL");
@@ -70,7 +79,7 @@ class AuthModerationStoreIntegrationTest {
       assertThat(jdbc.queryForObject("SELECT count(*) FROM moderation_terminal_subjects WHERE subject_id=?",Integer.class,overdueSubject)).isEqualTo(1);
       var snapshot=store.terminalSnapshot();
       assertThat(snapshot.getComplete()).isTrue();
-      assertThat(snapshot.getSeal().getProtocolVersion()).isEqualTo(1);
+      assertThat(snapshot.getSeal().getProtocolVersion()).isEqualTo(2);
       assertThat(snapshot.getSeal().getComplete()).isTrue();
       assertThat(snapshot.getSeal().getItemCount()).isEqualTo(2);
       assertThat(snapshot.getSeal().getTerminalHighWater()).isEqualTo(2);
@@ -90,10 +99,31 @@ class AuthModerationStoreIntegrationTest {
       var unionSnapshot=store.terminalSnapshot();
       assertThat(unionSnapshot.getSubjectIdsList()).contains(pendingSubject.toString());
       assertThat(unionSnapshot.getSeal().getItemCount()).isEqualTo(3);
-      assertThat(unionSnapshot.getSeal().getTerminalHighWater()).isEqualTo(2);
+      assertThat(unionSnapshot.getSeal().getTerminalHighWater()).isEqualTo(3);
       store.purgeDue();
       assertThat(store.terminalSnapshot().getSeal().getCanonicalSha256()).isEqualTo(unionSnapshot.getSeal().getCanonicalSha256());
       assertThat(store.terminalSnapshot().getSeal().getTerminalHighWater()).isEqualTo(3);
+      UUID live=UUID.randomUUID(),retained=UUID.randomUUID(),due=UUID.randomUUID(),terminal=UUID.randomUUID();
+      for(UUID id:java.util.List.of(live,retained,due,terminal))jdbc.update("INSERT INTO accounts(id,password_hash,type,status) VALUES (?,'fixture','regular','active')",id);
+      UUID terminalSubject=UUID.fromString(store.resolve(terminal,null).getSubject().getSubjectId());
+      jdbc.update("UPDATE accounts SET deleted_at=clock_timestamp()-interval '1 day' WHERE id=?",retained);
+      jdbc.update("UPDATE accounts SET deleted_at=clock_timestamp()-interval '31 days' WHERE id=?",due);
+      jdbc.update("INSERT INTO moderation_terminal_subjects(subject_id) VALUES (?)",terminalSubject);
+      var census=store.accountCensus();
+      assertThat(census.getComplete()).isTrue();assertThat(census.getSeal().getComplete()).isTrue();
+      assertThat(census.getAccountsList()).extracting(item->item.getSubject().getAccountId())
+          .containsExactlyElementsOf(java.util.stream.Stream.of(live.toString(),retained.toString()).sorted().toList());
+      assertThat(census.getSeal().getItemCount()).isEqualTo(2);
+      assertThat(census.getSeal().getTerminalHighWater()).isEqualTo(4);
+      assertThat(census.getSeal().getCanonicalSha256().toByteArray()).isEqualTo(AuthModerationStore.accountCensusDigest(census.getAccountsList()));
+      var retainedBinding=census.getAccountsList().stream().filter(item->item.getSubject().getAccountId().equals(retained.toString())).findFirst().orElseThrow();
+      assertThat(retainedBinding.getSubject().getState()).isEqualTo(SubjectState.SUBJECT_STATE_DELETED);
+      assertThat(retainedBinding.getAuthRestricted()).isTrue();assertThat(retainedBinding.getSubject().hasPurgeAt()).isTrue();
+      assertThat(retainedBinding.getSessionEpoch()).isPositive();
+      assertThat(store.accountCensus().getSeal().getSnapshotId()).isNotEqualTo(census.getSeal().getSnapshotId());
+      jdbc.update("INSERT INTO accounts(id,password_hash,type,status) SELECT gen_random_uuid(),'fixture','regular','active' FROM generate_series(1,10000)");
+      assertThatThrownBy(store::accountCensus).isInstanceOf(io.grpc.StatusRuntimeException.class)
+          .satisfies(error->assertThat(((io.grpc.StatusRuntimeException)error).getStatus().getCode()).isEqualTo(io.grpc.Status.Code.RESOURCE_EXHAUSTED));
     } finally {
       if(pg!=null)pg.close();
     }

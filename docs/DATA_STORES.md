@@ -22,9 +22,19 @@ days, samples at most 30 days + 10 minutes, strike aliases at most 60 days from
 the last hit, applied receipts at most 30 days from application. Logical windows
 never depend on GC. At the authoritative account purge deadline, participants
 erase raw links, payload hashes/digests, pending retries and personal details
-regardless of missing ACKs/gaps; retain only permanent opaque terminal fences and
+without waiting for evidence ACKs/gaps once the winning owner terminal decision
+is established; retain only permanent opaque terminal fences and
 minimal nonpersonal existing-case snapshots. Backup restore imports the protected
 terminal snapshot before serving. Full boundary/rotation rules are in the plan.
+
+The [explicit c19 failure-model correction](testing/async-automod-unknown-deadline.md)
+preserves that deadline and all retention numbers. An unknown Auth deletion or
+an unseen valid restore during a total authority partition cannot be resolved
+by a local timer without erasing an indistinguishable live account. A stale
+DELETED schedule is not permanent terminal authority. Such a missed physical
+deadline is an operational failure, not an allowed retention extension or a
+physical-erasure PASS. Offline containment/restore scrubbing does not
+retroactively establish physical deletion at the original deadline.
 
 The separate Messaging-local message/chat coverage bridge is temporary and
 erasable. Exact Space FROZEN acknowledgement removes its manifest links; purge

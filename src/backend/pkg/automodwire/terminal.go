@@ -10,7 +10,7 @@ import (
 )
 
 const MaxTerminalSubjects = 50000
-const terminalDomain = "voice.automod.terminal-union.v1\x00"
+const terminalDomain = "voice.automod.terminal-ledger.v2\x00"
 
 // TerminalDigest hashes a sorted complete UUID set with explicit framing. It
 // does not certify independently recovered authority; the protected Auth owner
@@ -43,7 +43,7 @@ func ValidateTerminalSnapshot(snapshot *automodv1.ListTerminalModerationSubjects
 		return ErrCore
 	}
 	seal := snapshot.GetSeal()
-	if seal == nil || seal.GetProtocolVersion() != 1 || !seal.GetComplete() || !canonicalUUID(seal.GetAuthorityGeneration()) || !canonicalUUID(seal.GetSnapshotId()) || seal.GetCut() == nil || seal.GetCut().CheckValid() != nil || seal.GetCut().GetNanos()%1000 != 0 || seal.GetItemCount() != uint64(len(snapshot.GetSubjectIds())) || seal.GetTerminalHighWater() > seal.GetItemCount() {
+	if seal == nil || seal.GetProtocolVersion() != 2 || !seal.GetComplete() || !canonicalUUID(seal.GetAuthorityGeneration()) || !canonicalUUID(seal.GetSnapshotId()) || seal.GetCut() == nil || seal.GetCut().CheckValid() != nil || seal.GetCut().GetNanos()%1000 != 0 || seal.GetItemCount() != uint64(len(snapshot.GetSubjectIds())) || seal.GetTerminalHighWater() != seal.GetItemCount() {
 		return ErrCore
 	}
 	digest, err := TerminalDigest(snapshot.GetSubjectIds())

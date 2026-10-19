@@ -12,6 +12,16 @@ Account terminal purge dominates. This never retains Space-target reports or
 their attached evidence, exposes digest data as appeal content, or adds a P3
 coordinator participant. Unsupported identity-bearing v1 data keeps gates closed.
 
+The [c19 lifecycle correction](../testing/async-automod-unknown-deadline.md)
+requires positive Auth-owned terminal authority before permanent account purge.
+An old DELETED deadline cannot defeat an unseen winning restore. Unknown/due
+authority closes affected operations; it never grants a retention extension,
+resets a live detector or proves physical erasure. Under a total partition that
+hides deletion/restore through the deadline, the physical outcome remains an
+explicit acceptance limitation. The [c20 review](../testing/async-automod-identity-bridge-feasibility.md)
+confirms that deleting one identity bridge cannot anonymize the current v2
+cores, inbox, sanction/event joins and content aliases. No such reset is selected.
+
 Система модерации: жалобы, автоматическая модерация, санкции, апелляции.
 
 **Язык**: Go

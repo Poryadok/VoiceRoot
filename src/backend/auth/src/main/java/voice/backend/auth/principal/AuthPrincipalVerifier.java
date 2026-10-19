@@ -113,7 +113,8 @@ public final class AuthPrincipalVerifier {
     allowed = allowed || (AuthPrincipalServerInterceptor.MODERATION_RPCS.contains(rpc)
         && principal.kind().equals(VerifiedPrincipal.SERVICE)
         && (principal.issuer().equals("moderation") ||
-            principal.issuer().equals("messaging") && !AuthPrincipalServerInterceptor.MODERATION_RECONCILE_RPC.equals(rpc)));
+            principal.issuer().equals("messaging") && Set.of(AuthPrincipalServerInterceptor.MODERATION_SUBJECT_RPC,
+                AuthPrincipalServerInterceptor.MODERATION_TERMINAL_RPC).contains(rpc)));
     if (!allowed) throw Status.PERMISSION_DENIED.withDescription("principal caller not permitted").asRuntimeException();
     try {
       if (!expires.isAfter(clock.instant())) throw invalid();

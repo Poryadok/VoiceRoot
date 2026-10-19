@@ -17,14 +17,14 @@ func TestTerminalSealCanonicalSetAndFiniteCompleteness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if hex.EncodeToString(hash[:]) != "9fe34b5c58763df7b7fe4c98abd940a60b1cea25844aed41478de05cef88a4ac" {
+	if hex.EncodeToString(hash[:]) != "a9a0ec3fc5e87c551a11f7533f3c8eecade74bfaa63e030350b0d16471197c25" {
 		t.Fatal("cross-language terminal hash contract changed")
 	}
-	snapshot := &automodv1.ListTerminalModerationSubjectsResponse{Complete: true, SubjectIds: ids, Seal: &automodv1.ModerationAuthoritySnapshotSeal{ProtocolVersion: 1, AuthorityGeneration: uuid.NewString(), SnapshotId: uuid.NewString(), Cut: timestamppb.New(time.Unix(1000, 0)), TerminalHighWater: 1, ItemCount: 2, CanonicalSha256: hash[:], Complete: true}}
+	snapshot := &automodv1.ListTerminalModerationSubjectsResponse{Complete: true, SubjectIds: ids, Seal: &automodv1.ModerationAuthoritySnapshotSeal{ProtocolVersion: 2, AuthorityGeneration: uuid.NewString(), SnapshotId: uuid.NewString(), Cut: timestamppb.New(time.Unix(1000, 0)), TerminalHighWater: 2, ItemCount: 2, CanonicalSha256: hash[:], Complete: true}}
 	if err := ValidateTerminalSnapshot(snapshot); err != nil {
 		t.Fatal(err)
 	}
-	for _, defect := range []string{"missing", "incomplete", "count", "highwater", "hash", "order", "duplicate", "generation", "unknown"} {
+	for _, defect := range []string{"missing", "incomplete", "count", "highwater", "legacy-union", "behind-water", "hash", "order", "duplicate", "generation", "unknown"} {
 		t.Run(defect, func(t *testing.T) {
 			bad := proto.Clone(snapshot).(*automodv1.ListTerminalModerationSubjectsResponse)
 			switch defect {
@@ -36,6 +36,10 @@ func TestTerminalSealCanonicalSetAndFiniteCompleteness(t *testing.T) {
 				bad.Seal.ItemCount = 1
 			case "highwater":
 				bad.Seal.TerminalHighWater = 3
+			case "legacy-union":
+				bad.Seal.ProtocolVersion = 1
+			case "behind-water":
+				bad.Seal.TerminalHighWater = 1
 			case "hash":
 				bad.Seal.CanonicalSha256[0] ^= 1
 			case "order":

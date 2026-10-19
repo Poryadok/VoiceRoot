@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	AuthModerationAuthorityService_ResolveModerationSubject_FullMethodName       = "/voice.automod.v1.AuthModerationAuthorityService/ResolveModerationSubject"
 	AuthModerationAuthorityService_ListTerminalModerationSubjects_FullMethodName = "/voice.automod.v1.AuthModerationAuthorityService/ListTerminalModerationSubjects"
+	AuthModerationAuthorityService_ListModerationAccountCensus_FullMethodName    = "/voice.automod.v1.AuthModerationAuthorityService/ListModerationAccountCensus"
 	AuthModerationAuthorityService_ReconcileModerationRestriction_FullMethodName = "/voice.automod.v1.AuthModerationAuthorityService/ReconcileModerationRestriction"
 )
 
@@ -34,6 +35,8 @@ type AuthModerationAuthorityServiceClient interface {
 	ResolveModerationSubject(ctx context.Context, in *ResolveModerationSubjectRequest, opts ...grpc.CallOption) (*ResolveModerationSubjectResponse, error)
 	// @voice.security=protected;callers=service:messaging,service:moderation
 	ListTerminalModerationSubjects(ctx context.Context, in *ListTerminalModerationSubjectsRequest, opts ...grpc.CallOption) (*ListTerminalModerationSubjectsResponse, error)
+	// @voice.security=protected;callers=service:moderation
+	ListModerationAccountCensus(ctx context.Context, in *ListModerationAccountCensusRequest, opts ...grpc.CallOption) (*ListModerationAccountCensusResponse, error)
 	// @voice.security=protected;callers=service:moderation
 	ReconcileModerationRestriction(ctx context.Context, in *ReconcileModerationRestrictionRequest, opts ...grpc.CallOption) (*ReconcileModerationRestrictionResponse, error)
 }
@@ -66,6 +69,16 @@ func (c *authModerationAuthorityServiceClient) ListTerminalModerationSubjects(ct
 	return out, nil
 }
 
+func (c *authModerationAuthorityServiceClient) ListModerationAccountCensus(ctx context.Context, in *ListModerationAccountCensusRequest, opts ...grpc.CallOption) (*ListModerationAccountCensusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListModerationAccountCensusResponse)
+	err := c.cc.Invoke(ctx, AuthModerationAuthorityService_ListModerationAccountCensus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *authModerationAuthorityServiceClient) ReconcileModerationRestriction(ctx context.Context, in *ReconcileModerationRestrictionRequest, opts ...grpc.CallOption) (*ReconcileModerationRestrictionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ReconcileModerationRestrictionResponse)
@@ -87,6 +100,8 @@ type AuthModerationAuthorityServiceServer interface {
 	// @voice.security=protected;callers=service:messaging,service:moderation
 	ListTerminalModerationSubjects(context.Context, *ListTerminalModerationSubjectsRequest) (*ListTerminalModerationSubjectsResponse, error)
 	// @voice.security=protected;callers=service:moderation
+	ListModerationAccountCensus(context.Context, *ListModerationAccountCensusRequest) (*ListModerationAccountCensusResponse, error)
+	// @voice.security=protected;callers=service:moderation
 	ReconcileModerationRestriction(context.Context, *ReconcileModerationRestrictionRequest) (*ReconcileModerationRestrictionResponse, error)
 	mustEmbedUnimplementedAuthModerationAuthorityServiceServer()
 }
@@ -103,6 +118,9 @@ func (UnimplementedAuthModerationAuthorityServiceServer) ResolveModerationSubjec
 }
 func (UnimplementedAuthModerationAuthorityServiceServer) ListTerminalModerationSubjects(context.Context, *ListTerminalModerationSubjectsRequest) (*ListTerminalModerationSubjectsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTerminalModerationSubjects not implemented")
+}
+func (UnimplementedAuthModerationAuthorityServiceServer) ListModerationAccountCensus(context.Context, *ListModerationAccountCensusRequest) (*ListModerationAccountCensusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListModerationAccountCensus not implemented")
 }
 func (UnimplementedAuthModerationAuthorityServiceServer) ReconcileModerationRestriction(context.Context, *ReconcileModerationRestrictionRequest) (*ReconcileModerationRestrictionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReconcileModerationRestriction not implemented")
@@ -165,6 +183,24 @@ func _AuthModerationAuthorityService_ListTerminalModerationSubjects_Handler(srv 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthModerationAuthorityService_ListModerationAccountCensus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListModerationAccountCensusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthModerationAuthorityServiceServer).ListModerationAccountCensus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthModerationAuthorityService_ListModerationAccountCensus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthModerationAuthorityServiceServer).ListModerationAccountCensus(ctx, req.(*ListModerationAccountCensusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AuthModerationAuthorityService_ReconcileModerationRestriction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ReconcileModerationRestrictionRequest)
 	if err := dec(in); err != nil {
@@ -197,6 +233,10 @@ var AuthModerationAuthorityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListTerminalModerationSubjects",
 			Handler:    _AuthModerationAuthorityService_ListTerminalModerationSubjects_Handler,
+		},
+		{
+			MethodName: "ListModerationAccountCensus",
+			Handler:    _AuthModerationAuthorityService_ListModerationAccountCensus_Handler,
 		},
 		{
 			MethodName: "ReconcileModerationRestriction",

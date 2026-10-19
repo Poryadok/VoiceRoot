@@ -2,6 +2,13 @@
 
 Canonical implementation input: BE-137 c23/c24, refining c18/c19; BE-045 c13 remains authoritative.
 
+The later [BE-045 c19 correction](async-automod-unknown-deadline.md) requires
+owner-locked terminalization and a ledger-only terminal seal. Restoring an old
+DELETED timer is not independently current positive terminal authority.
+[BE-045 c20](async-automod-identity-bridge-feasibility.md) selects no anonymous
+capsule/relink redesign. The stated arbitrary-total-partition physical-deadline
+limitation is separate from restore integrity and is not a retention extension.
+
 Source decision: [c23](http://192.168.0.109:30990/?project=voice&task=BE-137#comment-c23), [c24](http://192.168.0.109:30990/?project=voice&task=BE-137#comment-c24).
 
 Implementation boundary: `moderation/internal/recoverybundle.Inspect` reads a

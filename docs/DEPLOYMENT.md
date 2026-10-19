@@ -1477,3 +1477,14 @@ a source epoch/cursor or manufacture a newer restriction revision to override it
 
 These requirements describe source implementation and future authorized runtime
 verification; they are not evidence that a deployment or restore has run.
+
+The [c19 lifecycle/partition correction](testing/async-automod-unknown-deadline.md)
+additionally requires positive Auth-owned terminal facts and transactional
+lifecycle catch-up. Old DELETED timers cannot authorize irreversible purge when
+a winning restore may be unseen. Complete loss of all lifecycle authority
+through the canonical deadline leaves an explicit physical-erasure acceptance
+limitation for this architecture. Neither unready services nor late cleanup
+certify an on-time physical outcome; no ACK, outage or lease extends retention.
+The [c20 identity-bridge review](testing/async-automod-identity-bridge-feasibility.md)
+selects no alternative capsule/key infrastructure and grants no anonymous-data
+exception. Preserve this limitation in runtime acceptance and rollout evidence.
