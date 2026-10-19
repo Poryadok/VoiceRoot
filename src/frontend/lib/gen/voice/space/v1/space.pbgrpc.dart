@@ -283,6 +283,14 @@ class SpaceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$approveJoinRequest, request, options: options);
   }
 
+  /// Exact protected settings operation. The response is a saved safe acknowledgement.
+  $grpc.ResponseFuture<$1.SetEntryPolicyResponse> setEntryPolicy(
+    $1.SetEntryPolicyRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$setEntryPolicy, request, options: options);
+  }
+
   $grpc.ResponseFuture<$1.LeaveSpaceResponse> leaveSpace(
     $1.LeaveSpaceRequest request, {
     $grpc.CallOptions? options,
@@ -682,6 +690,11 @@ class SpaceServiceClient extends $grpc.Client {
       '/voice.space.v1.SpaceService/ApproveJoinRequest',
       ($1.ApproveJoinRequestRequest value) => value.writeToBuffer(),
       $1.ApproveJoinRequestResponse.fromBuffer);
+  static final _$setEntryPolicy =
+      $grpc.ClientMethod<$1.SetEntryPolicyRequest, $1.SetEntryPolicyResponse>(
+          '/voice.space.v1.SpaceService/SetEntryPolicy',
+          ($1.SetEntryPolicyRequest value) => value.writeToBuffer(),
+          $1.SetEntryPolicyResponse.fromBuffer);
   static final _$leaveSpace =
       $grpc.ClientMethod<$1.LeaveSpaceRequest, $1.LeaveSpaceResponse>(
           '/voice.space.v1.SpaceService/LeaveSpace',
@@ -1125,6 +1138,15 @@ abstract class SpaceServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $1.ApproveJoinRequestRequest.fromBuffer(value),
         ($1.ApproveJoinRequestResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.SetEntryPolicyRequest,
+            $1.SetEntryPolicyResponse>(
+        'SetEntryPolicy',
+        setEntryPolicy_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $1.SetEntryPolicyRequest.fromBuffer(value),
+        ($1.SetEntryPolicyResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$1.LeaveSpaceRequest, $1.LeaveSpaceResponse>(
         'LeaveSpace',
         leaveSpace_Pre,
@@ -1655,6 +1677,15 @@ abstract class SpaceServiceBase extends $grpc.Service {
 
   $async.Future<$1.ApproveJoinRequestResponse> approveJoinRequest(
       $grpc.ServiceCall call, $1.ApproveJoinRequestRequest request);
+
+  $async.Future<$1.SetEntryPolicyResponse> setEntryPolicy_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$1.SetEntryPolicyRequest> $request) async {
+    return setEntryPolicy($call, await $request);
+  }
+
+  $async.Future<$1.SetEntryPolicyResponse> setEntryPolicy(
+      $grpc.ServiceCall call, $1.SetEntryPolicyRequest request);
 
   $async.Future<$1.LeaveSpaceResponse> leaveSpace_Pre($grpc.ServiceCall $call,
       $async.Future<$1.LeaveSpaceRequest> $request) async {

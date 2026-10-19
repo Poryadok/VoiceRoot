@@ -11483,6 +11483,174 @@ class ApproveJoinRequestResponse extends $pb.GeneratedMessage {
   JoinAdmissionResult ensureResult() => $_ensure(0);
 }
 
+/// Complete strict schema1 JSON. Configured answers are never returned by this RPC.
+/// @voice.unknown_fields=reject
+class SetEntryPolicyRequest extends $pb.GeneratedMessage {
+  factory SetEntryPolicyRequest({
+    $core.String? spaceId,
+    $core.String? operationId,
+    $fixnum.Int64? expectedPolicyVersion,
+    $core.List<$core.int>? privatePolicyJson,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (operationId != null) result.operationId = operationId;
+    if (expectedPolicyVersion != null)
+      result.expectedPolicyVersion = expectedPolicyVersion;
+    if (privatePolicyJson != null) result.privatePolicyJson = privatePolicyJson;
+    return result;
+  }
+
+  SetEntryPolicyRequest._();
+
+  factory SetEntryPolicyRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SetEntryPolicyRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SetEntryPolicyRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..a<$fixnum.Int64>(
+        3, _omitFieldNames ? '' : 'expectedPolicyVersion', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$core.List<$core.int>>(
+        4, _omitFieldNames ? '' : 'privatePolicyJson', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetEntryPolicyRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetEntryPolicyRequest copyWith(
+          void Function(SetEntryPolicyRequest) updates) =>
+      super.copyWith((message) => updates(message as SetEntryPolicyRequest))
+          as SetEntryPolicyRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SetEntryPolicyRequest create() => SetEntryPolicyRequest._();
+  @$core.override
+  SetEntryPolicyRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SetEntryPolicyRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SetEntryPolicyRequest>(create);
+  static SetEntryPolicyRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $fixnum.Int64 get expectedPolicyVersion => $_getI64(2);
+  @$pb.TagNumber(3)
+  set expectedPolicyVersion($fixnum.Int64 value) => $_setInt64(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasExpectedPolicyVersion() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearExpectedPolicyVersion() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.List<$core.int> get privatePolicyJson => $_getN(3);
+  @$pb.TagNumber(4)
+  set privatePolicyJson($core.List<$core.int> value) => $_setBytes(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasPrivatePolicyJson() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearPrivatePolicyJson() => $_clearField(4);
+}
+
+/// @voice.unknown_fields=accept_preserve
+class SetEntryPolicyResponse extends $pb.GeneratedMessage {
+  factory SetEntryPolicyResponse({
+    $core.String? operationId,
+    $fixnum.Int64? entryPolicyVersion,
+  }) {
+    final result = create();
+    if (operationId != null) result.operationId = operationId;
+    if (entryPolicyVersion != null)
+      result.entryPolicyVersion = entryPolicyVersion;
+    return result;
+  }
+
+  SetEntryPolicyResponse._();
+
+  factory SetEntryPolicyResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SetEntryPolicyResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SetEntryPolicyResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'operationId')
+    ..a<$fixnum.Int64>(
+        2, _omitFieldNames ? '' : 'entryPolicyVersion', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetEntryPolicyResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetEntryPolicyResponse copyWith(
+          void Function(SetEntryPolicyResponse) updates) =>
+      super.copyWith((message) => updates(message as SetEntryPolicyResponse))
+          as SetEntryPolicyResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SetEntryPolicyResponse create() => SetEntryPolicyResponse._();
+  @$core.override
+  SetEntryPolicyResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SetEntryPolicyResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SetEntryPolicyResponse>(create);
+  static SetEntryPolicyResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get operationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set operationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOperationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOperationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $fixnum.Int64 get entryPolicyVersion => $_getI64(1);
+  @$pb.TagNumber(2)
+  set entryPolicyVersion($fixnum.Int64 value) => $_setInt64(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasEntryPolicyVersion() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearEntryPolicyVersion() => $_clearField(2);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

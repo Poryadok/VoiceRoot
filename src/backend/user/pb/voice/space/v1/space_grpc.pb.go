@@ -52,6 +52,7 @@ const (
 	SpaceService_ListJoinRequests_FullMethodName                  = "/voice.space.v1.SpaceService/ListJoinRequests"
 	SpaceService_GetJoinRequest_FullMethodName                    = "/voice.space.v1.SpaceService/GetJoinRequest"
 	SpaceService_ApproveJoinRequest_FullMethodName                = "/voice.space.v1.SpaceService/ApproveJoinRequest"
+	SpaceService_SetEntryPolicy_FullMethodName                    = "/voice.space.v1.SpaceService/SetEntryPolicy"
 	SpaceService_LeaveSpace_FullMethodName                        = "/voice.space.v1.SpaceService/LeaveSpace"
 	SpaceService_KickMember_FullMethodName                        = "/voice.space.v1.SpaceService/KickMember"
 	SpaceService_BanMember_FullMethodName                         = "/voice.space.v1.SpaceService/BanMember"
@@ -134,6 +135,8 @@ type SpaceServiceClient interface {
 	GetJoinRequest(ctx context.Context, in *GetJoinRequestRequest, opts ...grpc.CallOption) (*GetJoinRequestResponse, error)
 	// @voice.security=public_gateway;callers=service:gateway
 	ApproveJoinRequest(ctx context.Context, in *ApproveJoinRequestRequest, opts ...grpc.CallOption) (*ApproveJoinRequestResponse, error)
+	// Exact protected settings operation. The response is a saved safe acknowledgement.
+	SetEntryPolicy(ctx context.Context, in *SetEntryPolicyRequest, opts ...grpc.CallOption) (*SetEntryPolicyResponse, error)
 	LeaveSpace(ctx context.Context, in *LeaveSpaceRequest, opts ...grpc.CallOption) (*LeaveSpaceResponse, error)
 	KickMember(ctx context.Context, in *KickMemberRequest, opts ...grpc.CallOption) (*KickMemberResponse, error)
 	BanMember(ctx context.Context, in *BanMemberRequest, opts ...grpc.CallOption) (*BanMemberResponse, error)
@@ -528,6 +531,16 @@ func (c *spaceServiceClient) ApproveJoinRequest(ctx context.Context, in *Approve
 	return out, nil
 }
 
+func (c *spaceServiceClient) SetEntryPolicy(ctx context.Context, in *SetEntryPolicyRequest, opts ...grpc.CallOption) (*SetEntryPolicyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetEntryPolicyResponse)
+	err := c.cc.Invoke(ctx, SpaceService_SetEntryPolicy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *spaceServiceClient) LeaveSpace(ctx context.Context, in *LeaveSpaceRequest, opts ...grpc.CallOption) (*LeaveSpaceResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(LeaveSpaceResponse)
@@ -851,6 +864,8 @@ type SpaceServiceServer interface {
 	GetJoinRequest(context.Context, *GetJoinRequestRequest) (*GetJoinRequestResponse, error)
 	// @voice.security=public_gateway;callers=service:gateway
 	ApproveJoinRequest(context.Context, *ApproveJoinRequestRequest) (*ApproveJoinRequestResponse, error)
+	// Exact protected settings operation. The response is a saved safe acknowledgement.
+	SetEntryPolicy(context.Context, *SetEntryPolicyRequest) (*SetEntryPolicyResponse, error)
 	LeaveSpace(context.Context, *LeaveSpaceRequest) (*LeaveSpaceResponse, error)
 	KickMember(context.Context, *KickMemberRequest) (*KickMemberResponse, error)
 	BanMember(context.Context, *BanMemberRequest) (*BanMemberResponse, error)
@@ -1013,6 +1028,9 @@ func (UnimplementedSpaceServiceServer) GetJoinRequest(context.Context, *GetJoinR
 }
 func (UnimplementedSpaceServiceServer) ApproveJoinRequest(context.Context, *ApproveJoinRequestRequest) (*ApproveJoinRequestResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ApproveJoinRequest not implemented")
+}
+func (UnimplementedSpaceServiceServer) SetEntryPolicy(context.Context, *SetEntryPolicyRequest) (*SetEntryPolicyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetEntryPolicy not implemented")
 }
 func (UnimplementedSpaceServiceServer) LeaveSpace(context.Context, *LeaveSpaceRequest) (*LeaveSpaceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LeaveSpace not implemented")
@@ -1710,6 +1728,24 @@ func _SpaceService_ApproveJoinRequest_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SpaceService_SetEntryPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetEntryPolicyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).SetEntryPolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_SetEntryPolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).SetEntryPolicy(ctx, req.(*SetEntryPolicyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SpaceService_LeaveSpace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(LeaveSpaceRequest)
 	if err := dec(in); err != nil {
@@ -2334,6 +2370,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ApproveJoinRequest",
 			Handler:    _SpaceService_ApproveJoinRequest_Handler,
+		},
+		{
+			MethodName: "SetEntryPolicy",
+			Handler:    _SpaceService_SetEntryPolicy_Handler,
 		},
 		{
 			MethodName: "LeaveSpace",

@@ -63,6 +63,8 @@ service SpaceService {
   rpc GetJoinRequest(GetJoinRequestRequest) returns (GetJoinRequestResponse);
   // @voice.security=public_gateway;callers=service:gateway
   rpc ApproveJoinRequest(ApproveJoinRequestRequest) returns (ApproveJoinRequestResponse);
+  // Exact protected settings operation. The response is a saved safe acknowledgement.
+  rpc SetEntryPolicy(SetEntryPolicyRequest) returns (SetEntryPolicyResponse);
   rpc LeaveSpace(LeaveSpaceRequest) returns (LeaveSpaceResponse);
   rpc KickMember(KickMemberRequest) returns (KickMemberResponse);
   rpc BanMember(BanMemberRequest) returns (BanMemberResponse);
@@ -1043,4 +1045,19 @@ message ApproveJoinRequestRequest {
 // @voice.unknown_fields=accept_preserve
 message ApproveJoinRequestResponse {
   JoinAdmissionResult result = 1;
+}
+
+// Complete strict schema1 JSON. Configured answers are never returned by this RPC.
+// @voice.unknown_fields=reject
+message SetEntryPolicyRequest {
+  string space_id = 1;
+  string operation_id = 2;
+  uint64 expected_policy_version = 3;
+  bytes private_policy_json = 4;
+}
+
+// @voice.unknown_fields=accept_preserve
+message SetEntryPolicyResponse {
+  string operation_id = 1;
+  uint64 entry_policy_version = 2;
 }

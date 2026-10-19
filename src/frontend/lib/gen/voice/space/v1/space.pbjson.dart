@@ -3716,3 +3716,53 @@ final $typed_data.Uint8List approveJoinRequestResponseDescriptor =
     $convert.base64Decode(
         'ChpBcHByb3ZlSm9pblJlcXVlc3RSZXNwb25zZRI7CgZyZXN1bHQYASABKAsyIy52b2ljZS5zcG'
         'FjZS52MS5Kb2luQWRtaXNzaW9uUmVzdWx0UgZyZXN1bHQ=');
+
+@$core.Deprecated('Use setEntryPolicyRequestDescriptor instead')
+const SetEntryPolicyRequest$json = {
+  '1': 'SetEntryPolicyRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'expected_policy_version',
+      '3': 3,
+      '4': 1,
+      '5': 4,
+      '10': 'expectedPolicyVersion'
+    },
+    {
+      '1': 'private_policy_json',
+      '3': 4,
+      '4': 1,
+      '5': 12,
+      '10': 'privatePolicyJson'
+    },
+  ],
+};
+
+/// Descriptor for `SetEntryPolicyRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setEntryPolicyRequestDescriptor = $convert.base64Decode(
+    'ChVTZXRFbnRyeVBvbGljeVJlcXVlc3QSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQSIQoMb3'
+    'BlcmF0aW9uX2lkGAIgASgJUgtvcGVyYXRpb25JZBI2ChdleHBlY3RlZF9wb2xpY3lfdmVyc2lv'
+    'bhgDIAEoBFIVZXhwZWN0ZWRQb2xpY3lWZXJzaW9uEi4KE3ByaXZhdGVfcG9saWN5X2pzb24YBC'
+    'ABKAxSEXByaXZhdGVQb2xpY3lKc29u');
+
+@$core.Deprecated('Use setEntryPolicyResponseDescriptor instead')
+const SetEntryPolicyResponse$json = {
+  '1': 'SetEntryPolicyResponse',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'entry_policy_version',
+      '3': 2,
+      '4': 1,
+      '5': 4,
+      '10': 'entryPolicyVersion'
+    },
+  ],
+};
+
+/// Descriptor for `SetEntryPolicyResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setEntryPolicyResponseDescriptor = $convert.base64Decode(
+    'ChZTZXRFbnRyeVBvbGljeVJlc3BvbnNlEiEKDG9wZXJhdGlvbl9pZBgBIAEoCVILb3BlcmF0aW'
+    '9uSWQSMAoUZW50cnlfcG9saWN5X3ZlcnNpb24YAiABKARSEmVudHJ5UG9saWN5VmVyc2lvbg==');
