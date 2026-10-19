@@ -181,6 +181,10 @@ func TestReportPermissionsRole25Space44(t *testing.T) {
 	runNativeMemberProtocol(t, false, "25", "44", "reports")
 }
 
+func TestExportedSpace44DSNReopensNonowner(t *testing.T) {
+	runNativeMemberProtocol(t, false, "25", "44", "dsn_roundtrip")
+}
+
 // This is the deliberately still-red full interactive cutover oracle. The
 // receipt producer's passing test must not be relabeled as this completion.
 func TestNativeAssignmentNeedsQualifiedOperationPublication(t *testing.T) {
@@ -298,6 +302,18 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 		require.EqualValues(t, 44, preparing.SchemaVersion)
 		require.True(t, strings.HasPrefix(preparing.ServingLogin, "role_fixture_"))
 		require.Equal(t, !unknownRegistry, preparing.RegistryPresent, "actual admin API, not a serving read, owns cutover")
+		if len(versions) > 2 && versions[2] == "dsn_roundtrip" {
+			reopened, err := pgxpool.New(ctx, preparing.ServingDSN)
+			require.True(t, err == nil, "exported application connection must parse without exposing credentials")
+			t.Cleanup(reopened.Close)
+			var actual, database string
+			var superuser bool
+			err = reopened.QueryRow(ctx, "SELECT session_user,current_database(),(SELECT rolsuper FROM pg_roles WHERE rolname=session_user)").Scan(&actual, &database, &superuser)
+			require.True(t, err == nil, "exported application connection must authenticate")
+			require.True(t, actual == preparing.ServingLogin, "exported DSN must reopen the verified nonowner LOGIN, never original administrator")
+			require.True(t, database == preparing.DatabaseName, "exported connection must retain actual database")
+			require.False(t, superuser, "exported application must not have administrative identity")
+		}
 	}
 	spaceConn, err := grpc.NewClient(preparing.Address, grpc.WithTransportCredentials(transport))
 	require.NoError(t, err)
