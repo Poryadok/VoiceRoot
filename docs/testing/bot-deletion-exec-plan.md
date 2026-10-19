@@ -121,6 +121,24 @@ Its focused tests cover these codec boundaries only. The periodic worker and
 actual Role/Messaging/Space participant composition remain unfinished; this
 adapter alone cannot complete a deletion operation.
 
+Messaging35 now has real PostgreSQL component evidence for exact sender/chat
+pin removal, atomic decision/revision/receipt rollback, concurrent exact replay,
+changed authority rejection, stale pre-cleanup Pin fencing without an outbox
+event, and fresh authorized human repin preservation. The causal old-writer RED
+actually committed pin=1/outbox=1 after cleanup. A digest-consistent corrupted
+cached receipt with PENDING outcome also produced a real RED; replay now checks
+all semantic receipt fields, not only its digest. Official full migrations UP35,
+retained DOWN rejection with an actual first cleanup writer, old RR rejection
+and empty default-RC DOWN are separate controls. This store component is not the
+protected receiver or authoritative Chat-scope check; both remain required.
+
+BE170c29/c30 adds a bounded Bot-only Chat scope observation using the existing
+Chat-owned permanent head. Exact file custody is recorded in c31/c32 before
+writes. No Chat DDL or stopped migration operation is involved. Bot whitelist
+admission and Messaging cleanup must consume the actual current/retired source
+with saved original evidence; missing Chat is not successful cleanup. This
+observation is not a cross-service lease and introduces no public reparent API.
+
 ## Risks and follow-ups
 
 Unknown legacy unqualified in-flight adds require explicit release reconciliation,

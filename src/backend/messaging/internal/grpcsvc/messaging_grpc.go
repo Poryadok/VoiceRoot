@@ -2055,6 +2055,17 @@ func (s *MessagingGRPC) mutatePin(ctx context.Context, chatRef *chatv1.ChatRef, 
 	if err != nil {
 		return err
 	}
+	// Capture the message sender's cleanup revision before external admission
+	// checks. Keep observation errors private until the existing membership and
+	// message checks finish, so an unauthorized caller learns no message state.
+	var observationErr error
+	if pin {
+		var observation store.PinCleanupObservation
+		observation, observationErr = s.Pins.ObservePinCleanupRevision(ctx, chatID, messageID)
+		if observationErr == nil {
+			ctx = store.WithPinCleanupObservation(ctx, observation)
+		}
+	}
 	if s.ChatGuard != nil {
 		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
 			if errors.Is(err, store.ErrNotChatMember) {
@@ -2082,6 +2093,9 @@ func (s *MessagingGRPC) mutatePin(ctx context.Context, chatRef *chatv1.ChatRef, 
 		return status.Error(codes.NotFound, "message not found")
 	}
 	if pin {
+		if observationErr != nil {
+			return status.Error(codes.Unavailable, "pin request must be retried")
+		}
 		if err := s.requireMessageReadEntitlement(ctx, chatID, profileID, msg.CreatedAt); err != nil {
 			return err
 		}
@@ -2104,6 +2118,9 @@ func (s *MessagingGRPC) mutatePin(ctx context.Context, chatRef *chatv1.ChatRef, 
 		return status.Error(codes.Internal, err.Error())
 	}
 	if err := s.Pins.MutatePinWithOutbox(ctx, chatID, spaceID, messageID, profileID, pin, event); err != nil {
+		if errors.Is(err, store.ErrPinCleanupStale) {
+			return status.Error(codes.Aborted, "pin request must be retried")
+		}
 		if errors.Is(err, store.ErrPinLimitReached) {
 			return status.Error(codes.ResourceExhausted, "pin limit reached")
 		}
