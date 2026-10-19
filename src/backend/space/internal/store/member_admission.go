@@ -373,6 +373,9 @@ func (s *SpaceStore) publishMemberAdmissionWithInitiatingCall(ctx context.Contex
 				return nil, historyErr
 			}
 		}
+		if flushErr := scoped.flushMemberAdmissionDeferredChecks(ctx, effective); flushErr != nil {
+			return nil, flushErr
+		}
 		if continuation != nil {
 			if _, proofErr := continuation.check(i); proofErr != nil {
 				return nil, proofErr
@@ -420,6 +423,9 @@ func (s *SpaceStore) publishMemberAdmissionWithInitiatingCall(ctx context.Contex
 				if historyErr := scoped.finishEffectiveMemberMutations(ctx, effective); historyErr != nil {
 					return nil, historyErr
 				}
+			}
+			if err = scoped.flushMemberAdmissionDeferredChecks(ctx, effective); err != nil {
+				return nil, err
 			}
 			if continuation != nil {
 				if _, proofErr := continuation.check(i); proofErr != nil {
@@ -475,6 +481,16 @@ func (s *SpaceStore) publishMemberAdmissionWithInitiatingCall(ctx context.Contex
 			return nil, err
 		}
 	}
+	// A FIRST bookkeeping hook can require actual local readiness. Its own
+	// native source/history changes must therefore already have a completed DB
+	// frame. Deferred guards still revalidate after all later SQL at the flush.
+	historyFinished := false
+	if publicationHook != nil && effective != nil && effective.dbMutation != nil {
+		if err = scoped.finishEffectiveMemberMutations(ctx, effective); err != nil {
+			return nil, err
+		}
+		historyFinished = true
+	}
 	if publicationHook != nil {
 		hookIntent := *i
 		hookIntent.State = "PUBLISHED"
@@ -502,10 +518,13 @@ func (s *SpaceStore) publishMemberAdmissionWithInitiatingCall(ctx context.Contex
 			return nil, err
 		}
 	}
-	if effective != nil {
+	if effective != nil && !historyFinished {
 		if err = scoped.finishEffectiveMemberMutations(ctx, effective); err != nil {
 			return nil, err
 		}
+	}
+	if err = scoped.flushMemberAdmissionDeferredChecks(ctx, effective); err != nil {
+		return nil, err
 	}
 	if continuation != nil {
 		if _, err = continuation.check(i); err != nil {
