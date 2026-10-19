@@ -28,7 +28,7 @@ retirement upgrade. Existing whole-realm/authority qualification remains open.
 
 ## Milestones
 
-- [ ] Capture and immutable journal prepare/replay, including historical members,
+- [x] Capture and immutable journal prepare/replay, including historical members,
   admissions, effects, outbox and unknown issuance markers.
 - [ ] Trusted proof acceptance with retained resolution bytes and exact recheck.
 - [ ] Native close/abort and qualified effect completion, exact projection cleanup,
@@ -77,8 +77,19 @@ ordinary native suites, race and vet; compare native event/outbox versions.
   real PostgreSQL transaction and existing ownership/conversion/outbox cases.
   Subsequent vet PASS: original runner89045 terminal0, container7a52ce2213a3
   exited0; immutable c93eedc1 overlay over a clean full backend snapshot.
-- [ ] New capture/close/outbox rollback test and migration025 drafted; capture
-  implementation intentionally not yet present and no journal PASS claimed.
+- [x] Capture/close and authoritative reader implemented with migration025;
+  actual PG capture RED 4.965s -> GREEN 9.167s, followed by vet0.
+- [x] Unsupported historical JSON discrimination RED 5.978s -> GREEN 5.357s;
+  orphan/stale membership-index discrimination RED 28.349s -> GREEN 20.115s.
+  Reader rederives all UNKNOWN markers; prepare refuses stale index evidence
+  before native synchronization can overwrite it.
+- [x] Final exact capture/migration PG-race PASS 9.325s (test8.27s), vet0;
+  runner19464 terminal0. Overlay8878dbff260c858e875e11280cf8dc954b4ff75f435e83fe33fedaf9c26db847,
+  all3928 backend file identities/SHA checked before execution, inventory
+  2a6d8aa265c797b7c5b8fdda512a07363e9dfbc8f3519dacb1ae178f75a94183.
+  Empty025 DOWN/UP succeeds; populated DOWN refuses and preserves exact work
+  and target rows. Authority is explicitly a component fixture, not installed
+  maintenance qualification. No Redis writes or final receipts implemented.
 
 ## Decisions
 
