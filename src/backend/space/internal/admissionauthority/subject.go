@@ -47,10 +47,46 @@ type SubjectIdentity struct {
 // It proves one current owner observation, not membership, reviewer ACL,
 // immutable profile lifetime, or a native publication continuation.
 type VerifiedSubject struct {
-	request  *authv1.ObserveSpaceAdmissionSubjectRequest
-	identity SubjectIdentity
-	started  time.Time
-	clock    func() time.Time
+	request                       *authv1.ObserveSpaceAdmissionSubjectRequest
+	identity                      SubjectIdentity
+	requestID                     uuid.UUID
+	requestSHA256, responseSHA256 [32]byte
+	started                       time.Time
+	clock                         func() time.Time
+}
+
+// SubjectTranscript is diagnostic historical evidence, never a replayable
+// eligibility permit. All fields are copies derived from an actual checked RPC.
+type SubjectTranscript struct {
+	RequestID                                        uuid.UUID
+	RPC                                              string
+	RequestSHA256, ResponseSHA256, ObservationSHA256 [32]byte
+	Identity                                         SubjectIdentity
+}
+
+// StartedAt and Deadline are local monotonic instants for this process only.
+// Persisting either does not preserve authority across restart.
+func (v *VerifiedSubject) StartedAt() time.Time {
+	if v == nil {
+		return time.Time{}
+	}
+	return v.started
+}
+
+func (v *VerifiedSubject) Transcript(expected *authv1.ObserveSpaceAdmissionSubjectRequest) (SubjectTranscript, error) {
+	identity, err := v.Check(expected)
+	if err != nil {
+		return SubjectTranscript{}, err
+	}
+	if v.requestID == uuid.Nil {
+		return SubjectTranscript{}, ErrBinding
+	}
+	// The domain fixes service:space -> Auth.ObserveSpaceAdmissionSubject v1.
+	framed := []byte("voice.space.admission-subject-observation.v1\x00")
+	framed = append(framed, v.requestID[:]...)
+	framed = append(framed, v.requestSHA256[:]...)
+	framed = append(framed, v.responseSHA256[:]...)
+	return SubjectTranscript{RequestID: v.requestID, RPC: authv1.AuthService_ObserveSpaceAdmissionSubject_FullMethodName, RequestSHA256: v.requestSHA256, ResponseSHA256: v.responseSHA256, ObservationSHA256: sha256.Sum256(framed), Identity: identity}, nil
 }
 
 func validID(raw string) bool {
@@ -156,7 +192,11 @@ func (c *Client) Observe(ctx context.Context, request *authv1.ObserveSpaceAdmiss
 	if request.InteractiveSessionEpoch != nil && request.GetInteractiveSessionEpoch() < response.SessionEpochFloor {
 		return nil, ErrUnavailable
 	}
-	verified := &VerifiedSubject{request: request, identity: SubjectIdentity{AccountID: uuid.MustParse(response.AccountId), ProfileID: uuid.MustParse(response.ProfileId), AccountType: response.AccountType, AccountSecurityRevision: response.AccountSecurityRevision, SessionEpochFloor: response.SessionEpochFloor, ProfileRevision: response.ProfileRevision}, started: started, clock: clock}
+	responseRaw, err := proto.MarshalOptions{Deterministic: true}.Marshal(response)
+	if err != nil {
+		return nil, ErrUnavailable
+	}
+	verified := &VerifiedSubject{request: request, identity: SubjectIdentity{AccountID: uuid.MustParse(response.AccountId), ProfileID: uuid.MustParse(response.ProfileId), AccountType: response.AccountType, AccountSecurityRevision: response.AccountSecurityRevision, SessionEpochFloor: response.SessionEpochFloor, ProfileRevision: response.ProfileRevision}, requestID: uuid.MustParse(id), requestSHA256: expectedEcho, responseSHA256: sha256.Sum256(responseRaw), started: started, clock: clock}
 	if _, err = verified.Check(request); err != nil {
 		return nil, err
 	}
