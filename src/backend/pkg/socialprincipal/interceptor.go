@@ -19,6 +19,8 @@ import (
 
 func Method(target string) string {
 	switch target {
+	case "space-account-capture":
+		return "/voice.user.v1.UserService/CaptureSpaceMemberAccountBindings"
 	case "auth-admission":
 		return "/voice.user.v1.UserService/GetSpaceAdmissionProfileEligibility"
 	case "user":
@@ -48,6 +50,8 @@ func Method(target string) string {
 // whole service merely because it has a verified Social principal.
 func AllowsMethod(target, method string) bool {
 	switch target {
+	case "space-account-capture":
+		return method == Method(target)
 	case "auth-admission":
 		return method == Method(target)
 	case "space-voice-communication", "space-messaging-communication":
@@ -293,6 +297,9 @@ func RequireSocialForMethod(ctx context.Context, target, method string, req prot
 }
 
 func expectedIssuer(target string) string {
+	if target == "space-account-capture" {
+		return "space"
+	}
 	if target == "auth-admission" {
 		return "auth"
 	}
@@ -323,7 +330,7 @@ func expectedIssuer(target string) string {
 // RequiresMutualTLS preserves legacy listener settings while requiring both
 // transport identities for newly migrated protected authority capabilities.
 func RequiresMutualTLS(capability string) bool {
-	return capability == "auth-admission" || capability == "messaging" || capability == "space-voice-communication" || capability == "space-messaging-communication"
+	return capability == "space-account-capture" || capability == "auth-admission" || capability == "messaging" || capability == "space-voice-communication" || capability == "space-messaging-communication"
 }
 
 // CheckDomain preserves separately migrated ordinary callers while enforcing

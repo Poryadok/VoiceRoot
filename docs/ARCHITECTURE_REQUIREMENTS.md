@@ -448,6 +448,14 @@ maximum restorable-backup age `P30D`, fails closed and audits rotation/
 destruction. A version is destroyed only after no retained row and no restorable
 backup needs it; permanent Subscription fences keep old versions until reviewed
 re-HMAC migration. Raw UUID is never a fallback.
+The canonical User identity-association/nonreuse purpose has its own User-only
+versioned HMAC family and domain `voice.user.identity-association.v1`, distinct
+from Auth, Space, Subscription, Analytics, Role, SDK and moderation keys. Its
+internal Space NOW and Role history adapters consume the same owner facts
+without sharing external method grants. Required reservation lookup keys cannot
+be dropped while their permanent used-profile HMACs still enforce nonreuse;
+no rotation interval or raw-ID fallback is introduced by this purpose.
+
 # Object storage deployment boundary
 
 The File and User services use an S3-compatible endpoint configured by secret

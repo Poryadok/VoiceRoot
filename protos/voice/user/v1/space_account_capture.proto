@@ -1,0 +1,132 @@
+syntax = "proto3";
+
+package voice.user.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "voice.app/voice/user/v1;userv1";
+option java_multiple_files = true;
+option java_package = "app.voice.user.v1";
+
+// Private association evidence, never a current eligibility or admission grant.
+enum SpaceAccountCapturePurpose {
+  SPACE_ACCOUNT_CAPTURE_PURPOSE_UNSPECIFIED = 0;
+  SPACE_ACCOUNT_CAPTURE_PURPOSE_LEGACY_QUALIFICATION = 1;
+  SPACE_ACCOUNT_CAPTURE_PURPOSE_BAN_PREFLIGHT = 2;
+  SPACE_ACCOUNT_CAPTURE_PURPOSE_COMMUNITY_PUBLICATION = 3;
+}
+
+message SpaceOrdinaryPublicationIdentity {
+  uint64 generation = 1; // Zero is the accepted LEGACY generation.
+  string publication_id = 2;
+}
+
+message SpaceCommunityPublicationIdentity {
+  uint64 owner_generation = 1;
+  uint64 member_generation = 2;
+  string episode_id = 3;
+}
+
+message SpaceProspectiveCommunityIdentity {
+  string operation_id = 1;
+  uint64 owner_generation = 2;
+  uint64 source_revision = 3;
+}
+
+message SpaceAccountCaptureEntry {
+  string profile_id = 1;
+  oneof source {
+    SpaceOrdinaryPublicationIdentity ordinary = 2;
+    SpaceCommunityPublicationIdentity community = 3;
+    SpaceProspectiveCommunityIdentity prospective_community = 4;
+  }
+  // Both absent, or both present. They never select a different association.
+  string expected_association_id = 5;
+  uint64 expected_association_revision = 6;
+}
+
+message SpaceAccountCaptureCohort {
+  // Sorted lexicographically by deterministic protobuf bytes; no duplicate
+  // (profile_id, source tuple), even with different expected associations.
+  repeated SpaceAccountCaptureEntry entries = 1;
+}
+
+message CaptureSpaceMemberAccountBindingsRequest {
+  uint32 protocol = 1;
+  string operation_id = 2;
+  SpaceAccountCapturePurpose purpose = 3;
+  string space_id = 4;
+  // SHA256("voice.space.account-binding.v1" + NUL + deterministic cohort bytes).
+  bytes cohort_digest = 5;
+  // The complete immutable manifest, never an implicit first page. A request
+  // exceeding transport limits fails; no truncated response is a capture.
+  SpaceAccountCaptureCohort cohort = 6;
+}
+
+enum SpaceAccountCaptureOutcome {
+  SPACE_ACCOUNT_CAPTURE_OUTCOME_UNSPECIFIED = 0;
+  SPACE_ACCOUNT_CAPTURE_OUTCOME_ASSOCIATED = 1;
+  SPACE_ACCOUNT_CAPTURE_OUTCOME_TERMINAL_PROFILE = 2;
+  SPACE_ACCOUNT_CAPTURE_OUTCOME_INCOMPLETE = 3;
+}
+
+enum SpaceAccountCaptureOrigin {
+  SPACE_ACCOUNT_CAPTURE_ORIGIN_UNSPECIFIED = 0;
+  SPACE_ACCOUNT_CAPTURE_ORIGIN_EXISTING_CURRENT_ROW = 1;
+  SPACE_ACCOUNT_CAPTURE_ORIGIN_OWNER_HISTORY = 2;
+}
+
+// Immutable canonical association provenance; parent enrichment never rewrites it.
+enum SpaceAccountAssociationOrigin {
+  SPACE_ACCOUNT_ASSOCIATION_ORIGIN_UNSPECIFIED = 0;
+  SPACE_ACCOUNT_ASSOCIATION_ORIGIN_BIRTH = 1;
+  SPACE_ACCOUNT_ASSOCIATION_ORIGIN_RETAINED_NOW = 2;
+  SPACE_ACCOUNT_ASSOCIATION_ORIGIN_VERIFIED_HISTORY = 3;
+}
+
+// A minimized committed User identity stream, independent of raw-source clock A.
+message SpaceAccountIdentityCut {
+  string owner = 1; // Exactly user.
+  string stream = 2; // Exactly identity-association.
+  string history_generation = 3;
+  uint64 through_revision = 4; // H, never owner_source_revision A.
+  uint64 keyset_revision = 5;
+  bytes digest = 6;
+  uint64 retained_floor = 7;
+}
+
+message SpaceAccountCaptureResult {
+  SpaceAccountCaptureEntry entry = 1;
+  SpaceAccountCaptureOutcome outcome = 2;
+  string account_id = 3;
+  string association_id = 4;
+  uint64 association_revision = 5;
+  uint64 profile_revision = 6;
+  bool deleted = 7;
+  bool frozen = 8;
+  SpaceAccountCaptureOrigin origin = 9;
+  string owner_receipt_id = 10;
+  bytes owner_receipt_digest = 11;
+  // Positive terminal evidence is independent of restorable deleted/frozen.
+  string terminal_operation_id = 12;
+  uint64 terminal_revision = 13;
+  string terminal_receipt_id = 14;
+  bytes terminal_receipt_digest = 15;
+  google.protobuf.Timestamp capture_cut = 16;
+  SpaceAccountAssociationOrigin association_origin = 17;
+  bool account_inactive = 18;
+}
+
+message CaptureSpaceMemberAccountBindingsResponse {
+  uint32 protocol = 1;
+  string operation_id = 2;
+  SpaceAccountCapturePurpose purpose = 3;
+  string space_id = 4;
+  bytes cohort_digest = 5;
+  bytes request_digest = 6;
+  uint64 owner_source_revision = 7; // User19 raw-source statement revision A.
+  // Exactly one result for every manifest entry, in the same canonical order.
+  repeated SpaceAccountCaptureResult results = 8;
+  string user_source_generation = 9;
+  SpaceAccountIdentityCut identity_cut = 10;
+}

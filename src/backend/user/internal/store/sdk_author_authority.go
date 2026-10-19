@@ -105,7 +105,7 @@ func joinSdkAuthorRollbackError(primaryErr, rollbackErr error) error {
 }
 
 func (s *ProfileStore) RecordSdkAuthorTombstone(ctx context.Context, in SdkAuthorTombstoneInput) (result SdkAuthorTombstone, returnErr error) {
-	tx, err := s.Pool().Begin(ctx)
+	tx, err := s.beginIdentityMutationTx(ctx)
 	if err != nil {
 		return SdkAuthorTombstone{}, err
 	}

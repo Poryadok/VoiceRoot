@@ -23,7 +23,7 @@ func (s *ProfileStore) BackfillSearchKeys(ctx context.Context, batchSize int) (S
 	if batchSize <= 0 {
 		return SearchKeyBackfillResult{}, fmt.Errorf("batch size must be positive")
 	}
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.beginIdentityMutationTx(ctx)
 	if err != nil {
 		return SearchKeyBackfillResult{}, err
 	}
