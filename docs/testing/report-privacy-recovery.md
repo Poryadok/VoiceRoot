@@ -111,12 +111,34 @@ return copies. There is no ready flag, final-source assertion or external sink
 in this codec. The actual repeatable-read export, durable file publication,
 verified restore import and journal-aware cleanup/checker remain separate work.
 
+### SQL capture and import boundary
+
+`ReportStore.ExportReportRecoverySnapshot` reads journal generation, the hashed
+PostgreSQL snapshot view, diagnostic high-water/count and ordered records in one
+read-only `REPEATABLE READ` transaction. It returns only complete bounded codec
+bytes after commit. Store incarnation and capture operation come from the trusted
+offline caller; passing IDs does not prove a final drain or restore continuity.
+An uncommitted report mutation cannot appear in this observation.
+
+`ImportReportRecoverySnapshot` requires a parsed immutable snapshot and a nonnil
+`ReportRecoveryAuthorize` callback. The shared coordinator must authorize the
+exact cut and return a captured private-repair boot/generation check. The check
+runs before the transaction and immediately before commit. This is distinct from
+effects/P5 authorization. The complete opaque journal union commits atomically,
+never regresses a redacted slot and rejects conflicting known subjects. It takes
+only canonical journal locks, never report/account locks after them. It neither
+restores raw payload/mappings nor fabricates owning Auth terminal fences.
+Terminal union import, raw participant cleanup and the final read-only checker
+remain mandatory before readiness. Durable offline file publication and an
+actual complete restore operation are not supplied by these SQL methods.
+
 The initial source slice implements explicit provenance, transactional opaque
 journal writes at submission/validation and terminal account/subject/late-result
-cleanup. It is an enabling input for BE046 and the shared coordinator.
+cleanup. It also implements bounded journal byte verification, finite SQL capture
+and authorized journal-only import as enabling inputs for the shared coordinator.
 
-It does **not** complete legacy owner recovery, finite snapshot export/import,
-journal-aware boot repair/checking, the protected User recovery RPC or assembled
+It does **not** complete legacy owner recovery, durable offline snapshot
+publication, journal-aware boot repair/checking, the protected User recovery RPC or assembled
 P0-P5 activation. Those remain required before complete BE-137 integration and
 acceptance. Publication or a scoped source review of this slice grants none of
 those runtime claims.
