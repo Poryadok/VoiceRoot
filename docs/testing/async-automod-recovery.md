@@ -4,6 +4,26 @@ Canonical implementation input: BE-137 c23/c24, refining c18/c19; BE-045 c13 rem
 
 Source decision: [c23](http://192.168.0.109:30990/?project=voice&task=BE-137#comment-c23), [c24](http://192.168.0.109:30990/?project=voice&task=BE-137#comment-c24).
 
+Implementation boundary: `moderation/internal/recoverybundle.Inspect` reads a
+read-only protected directory containing `manifest.json` and exactly its listed
+regular files. Protocol 1 binds the independently supplied operation UUID,
+environment, deployment generation, recovery method, store incarnations and
+required artifact kinds. Each artifact identifies kind/store/path, exact length
+and lowercase SHA-256, schema version 1, journal generation UUID, diagnostic
+record count and opaque finite cut. Limits are 2 MiB manifest, 128 artifacts,
+16 MiB per artifact, 64 MiB total and 512 directory entries. Larger recoveries
+must be split into an explicitly supported bounded format before use; no
+truncation is accepted. Duplicate/unknown JSON fields, extra files, symlinks,
+path escape, mixed identities and unsupported metadata are rejected. Returned
+bytes and metadata are copied; later file replacement cannot change the
+inspected inputs. Record contents/count semantics and native domain lineage are
+validated by the later domain verifier, not inferred from inventory metadata.
+
+`Inspected` is deliberately not a verified recovery cut or a boot receipt.
+It cannot prove quiescence, currentness, native replay or successful privacy
+participants. The actual trusted operation adapter and coordinator must still
+complete V2–V6. Neither recovery method name alone establishes its evidence.
+
 BE-137 c21 bounded frontier decision, supplement/correction to c18-c19; BE045 c13 remains authoritative. Actor Рудеус-163, architecture/security reviewer, Astra/high focused continuation. Consumers144/156, User seam172, observer183, integrator121. No source/CI/stand/lease custody.
 
 SOURCE AND CORRECTION

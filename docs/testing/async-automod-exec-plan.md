@@ -377,3 +377,25 @@ P1/P2/P3 are decided under the new delegation; no question to the user and no de
 Deliver the complete activated path with the producer authority, Bot owner check, account lifecycle/terminal snapshot integration, private atomic outbox, protected consumer, existing-state send gate, Auth revision fence, and durable sanction events. This is a cross-service vertical with one implementation owner; ordinary implementation returns to the standard ant. A genuine source incompatibility found on the refreshed base is an implementation finding to resolve, not a reason to reopen these product decisions.
 Validation is scoped RED/GREEN and independent source review against T1-T12/N1-N14, affected Go/Java checks and protobuf checks in owned permitted Linux/Docker runners. No Windows test executables, host listeners, GH probes or shared DEV/STAGING operations are authorized by this decision. Deployment/tester/resource gates remain separate. No tests or source implementation have been performed in this specialist continuation.
 Resource closeout: no stand claims, no worktree lease, no running subprocess or tool operation, no changed source files. Only this local decision artifact and TT handoff are written. c7 remains historical investigation evidence; this document is its policy/contract supersession.
+# Finite recovery artifact inspection
+
+The first file-verifier stage checks a bounded immutable bundle against an
+independently supplied expected operation, deployment generation, environment,
+store identities and required artifact kinds. It rejects duplicate/unknown JSON
+fields, unsafe or symlinked inventory paths, unlisted files, incorrect lengths
+or hashes, and mixed operations/stores. Artifact bytes are retained from the
+verified read, so later file replacement cannot change the inspected input.
+
+This stage returns inspected artifacts, not a `VerifiedRecoveryCut` or a boot
+phase receipt. Native quiescence/drain, lineage/current-tail verification,
+domain replay and participant checks remain separate required steps. Neither a
+valid bundle nor an operator-provided `complete` flag opens the gate.
+
+Actual Linux RED reproduced hash-only acceptance of a foreign operation,
+environment/generation/store, missing coverage, unsupported method, duplicate
+JSON fields, extra files, duplicate artifact kinds and unclean paths. Strict
+inspection now passes these negatives plus nested duplicates, truncated/hash
+and size/schema errors, mixed methods/stores, parent/absolute/Windows paths,
+file/directory symlinks, and immutable byte/metadata readback. Scoped `-race`
+PASS 1.190s and `go vet` PASS. This is artifact inspection proof only; no
+restore operation, current-tail proof or P5 completion is claimed.
