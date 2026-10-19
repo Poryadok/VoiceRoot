@@ -364,3 +364,20 @@ identify affected parties from their verified private member tuples. Account
 identifiers must not enter public errors, events, responses or log fields.
 The query runs as a fresh READ COMMITTED statement after account and inner
 transition locks; unavailable authority supplies no cancellation evidence.
+
+The durable party queue projector leases revisioned PostgreSQL intents and
+copies an entire eligible captured party to Redis in one atomic recovery
+operation. Redis remains a recoverable projection rather than party authority.
+Retries after a lost acknowledgement preserve session identities and recovery
+generations. A release wins over an enqueue of the same generation; a late
+worker cannot acknowledge a replaced intent or clear a successor lease.
+
+Before acknowledging a successful Redis operation, the projector locks the
+party, its sessions and the intent, then reads a fresh PostgreSQL statement to
+compare the complete captured projection cut. A session transition that did
+not increment the intent revision still invalidates that acknowledgement.
+Invalid or disbanded parties release every retained session using its exact
+generation; cleanup does not require retaining private member authority.
+The component currently accepts qualified native source captures. LFP consent
+requires its separate typed receipt adapter, and runtime startup remains part
+of the complete source activation package.
