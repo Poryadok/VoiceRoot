@@ -10,6 +10,8 @@ RUN mvn -B \
     dependency:go-offline
 COPY protos /protos
 COPY src/backend/auth/src ./src
+ARG VOICE_SOURCE_SHA
+RUN printf '%s' "$VOICE_SOURCE_SHA" > src/main/resources/voice-build-source.sha
 RUN mvn -B package -DskipTests
 
 FROM eclipse-temurin:25-jre

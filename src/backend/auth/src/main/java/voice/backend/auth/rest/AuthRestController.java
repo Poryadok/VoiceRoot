@@ -364,6 +364,7 @@ public class AuthRestController {
   @ExceptionHandler(AuthException.class)
   public ResponseEntity<Map<String, String>> authError(AuthException ex) {
     HttpStatus status = switch (ex.getMessage()) {
+        case "capability_unavailable" -> HttpStatus.PRECONDITION_FAILED;
       case "validation_failed", "registration_conflict" -> HttpStatus.BAD_REQUEST;
       case "linked_account_profile_conflict", "guest_reminder_already_shown", "totp_already_enabled" -> HttpStatus.CONFLICT;
       case "otp_rate_limited" -> HttpStatus.TOO_MANY_REQUESTS;

@@ -242,6 +242,7 @@ services:
       context: .
       dockerfile: src/backend/auth/Dockerfile
     environment:
+      VOICE_RELEASE_PROFILE: development
       LOG_LEVEL: debug
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth_db
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-voice}
