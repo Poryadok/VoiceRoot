@@ -125,10 +125,20 @@ CI and product acceptance remain distinct from source/component proof.
   snapshot. Focused Linux race2top/4sub0skip6.100s and vet0 cover both first
   writers, genuinely empty rollback and snapshot isolation rejection. Exact
   successor review remains required; this is not runtime restore proof.
-- [ ] Bind saved-viewer privacy and actual protected action/wrapper composition.
-  ActorBound Validate must carry the exact immutable PostgreSQL criteria text
-  matching v1 criteriaSHA; MM must verify bytes/hash/shape before capture.
-  No public-listing fallback or generic map re-encoding is an authority source.
+- [x] Implement ActorBound Validate component and original-viewer privacy
+  adapter. Exact signed service request + actual authenticated peer authority,
+  original actor/current immutable audience read, fresh floor/privacy and final
+  SQL recheck are mandatory. Add required canonical_criteria_json field6 to the
+  response; exact PostgreSQL bytes must match unchanged v1 criteriaSHA, with
+  client hash/shape checks before MM capture. No public-listing fallback.
+  Actual Linux mTLS + PostgreSQL tests cover both guest and regular viewers;
+  supplied admission/peer/floor fixtures do not prove installed authority.
+- [x] Add protected HumanVerifier data capture with explicit authenticated type
+  and original operation/body projection. Genuine RED reproduced a live epoch
+  callback outliving credential expiry; expiry now rechecks after dependencies.
+- [ ] Complete ActorBound RegistryProducer, delegated Story action handlers,
+  Gateway routes and actual protected root/controller/retention composition.
+  Original bare-v1 components cannot qualify the actor-bound path.
 
 ## Decisions
 

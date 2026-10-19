@@ -447,15 +447,22 @@ const ValidateActorBoundLfpConsentOfferResponse$json = {
       '6': '.voice.story.v1.LfpConsentOrigin',
       '10': 'origin'
     },
+    {
+      '1': 'canonical_criteria_json',
+      '3': 6,
+      '4': 1,
+      '5': 12,
+      '10': 'canonicalCriteriaJson'
+    },
   ],
 };
 
 /// Descriptor for `ValidateActorBoundLfpConsentOfferResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List
-    validateActorBoundLfpConsentOfferResponseDescriptor = $convert.base64Decode(
-        'CilWYWxpZGF0ZUFjdG9yQm91bmRMZnBDb25zZW50T2ZmZXJSZXNwb25zZRIpChBwcm90b2NvbF'
-        '92ZXJzaW9uGAEgASgEUg9wcm90b2NvbFZlcnNpb24SRQoFb2ZmZXIYAiABKAsyLy52b2ljZS5z'
-        'dG9yeS52MS5WYWxpZGF0ZUxmcENvbnNlbnRPZmZlclJlc3BvbnNlUgVvZmZlchI4ChhxdWFsaW'
-        'ZpZWRfY29uc2VudF9zaGEyNTYYAyABKAxSFnF1YWxpZmllZENvbnNlbnRTaGEyNTYSIQoMYWN0'
-        'b3Jfc2hhMjU2GAQgASgMUgthY3RvclNoYTI1NhI4CgZvcmlnaW4YBSABKAsyIC52b2ljZS5zdG'
-        '9yeS52MS5MZnBDb25zZW50T3JpZ2luUgZvcmlnaW4=');
+final $typed_data.Uint8List validateActorBoundLfpConsentOfferResponseDescriptor = $convert.base64Decode(
+    'CilWYWxpZGF0ZUFjdG9yQm91bmRMZnBDb25zZW50T2ZmZXJSZXNwb25zZRIpChBwcm90b2NvbF'
+    '92ZXJzaW9uGAEgASgEUg9wcm90b2NvbFZlcnNpb24SRQoFb2ZmZXIYAiABKAsyLy52b2ljZS5z'
+    'dG9yeS52MS5WYWxpZGF0ZUxmcENvbnNlbnRPZmZlclJlc3BvbnNlUgVvZmZlchI4ChhxdWFsaW'
+    'ZpZWRfY29uc2VudF9zaGEyNTYYAyABKAxSFnF1YWxpZmllZENvbnNlbnRTaGEyNTYSIQoMYWN0'
+    'b3Jfc2hhMjU2GAQgASgMUgthY3RvclNoYTI1NhI4CgZvcmlnaW4YBSABKAsyIC52b2ljZS5zdG'
+    '9yeS52MS5MZnBDb25zZW50T3JpZ2luUgZvcmlnaW4SNgoXY2Fub25pY2FsX2NyaXRlcmlhX2pz'
+    'b24YBiABKAxSFWNhbm9uaWNhbENyaXRlcmlhSnNvbg==');

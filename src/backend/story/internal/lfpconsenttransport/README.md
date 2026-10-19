@@ -16,13 +16,31 @@ hash and exact consent binding before saving the immutable acknowledgement in
 Story. No network calls run under journal SQL locks. Public receipt/account/
 epoch data is not returned by these components.
 
+Those original bare-v1 components remain unqualified for the actor-bound path.
+`ActorOfferServer` implements ONLY the new ActorBound Validate method, loading
+the original immutable actor + current bound audience in one admitted SQL
+transaction. It checks the complete v1/Q/actor/origin tuple, evaluates fresh
+privacy outside SQL locks, and repeats the admitted state check. Its response
+requires exact immutable PostgreSQL criteria bytes matching v1 criteriaSHA;
+MM must check bytes/hash/criteria shape before capture. A public listing or a
+generic Go JSON re-encoding cannot substitute for those bytes.
+
+`ActorPrivacy` supplies current ShowStoriesAudience + privacy.Matcher checks
+using the explicit SAVED human guest/regular actor for both floor and immutable
+Story audience. Unknown type, malformed audience and missing needed authority
+fail closed; service guestguard defaults/current-ID type lookups are unused.
+`HumanVerifier` checks actual incoming TLS + signed exact delegated Gateway
+request, replay and live epoch. It rechecks credential expiry after dependencies
+and derives original actor operation/body/type only from the verified request.
+Its credential expiry is an in-flight bound, never delayed persisted authority.
+
+Actual Linux PostgreSQL and mTLS gRPC component tests cover guest AND regular
+validation, fresh privacy deny/outage, final audience changes, expiry, exact
+signed-body tampering, replay and absence of bare-v1 fallback. Admission/peer
+authority and privacy remote responses remain synthetic component fixtures.
 There is no production listener registration, credential loader, replay store,
-controller factory, peer trust adapter or responder eligibility implementation
-here. Tests use actual RSA verification and synthetic TLS/cohort/dependency
-fixtures; they do not prove a TLS handshake or installed authority. In particular,
-guest/account-type provenance and its later fresh visibility context require the
-accepted producer c12 continuation before the eligibility adapter can qualify
-any real flow. Empty type or an account/profile/epoch tuple cannot imply regular.
+controller factory or installed peer trust adapter here. Real controller,
+retirement, retention and activation remain separate prerequisites.
 
 The additive private action protobuf defines stable publication/response
 operations and an exact profile-scoped offer view. Its presence does not implement

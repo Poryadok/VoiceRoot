@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"voice/backend/pkg/lfpconsent"
 	"voice/backend/pkg/storylfpadmission"
 )
 
@@ -24,6 +25,50 @@ func (c OfferContext) Offer() Offer         { return c.offer }
 func (c OfferContext) CriteriaJSON() string { return c.criteriaJSON }
 func (c OfferContext) Visibility() string   { return c.visibility }
 func (c OfferContext) AudienceJSON() string { return c.audienceJSON }
+
+// ReadActorConsentContext loads the original viewer and immutable audience in
+// one admitted transaction. Callers perform remote privacy reads without SQL
+// locks, then repeat this exact current-state check before returning validation.
+func (s *Store) ReadActorConsentContext(ctx context.Context, id uuid.UUID, qualified [32]byte, expected storylfpadmission.Origin) (lfpconsent.Envelope, OfferContext, error) {
+	empty := func(e error) (lfpconsent.Envelope, OfferContext, error) {
+		return lfpconsent.Envelope{}, OfferContext{}, e
+	}
+	if id == uuid.Nil || qualified == [32]byte{} || !expected.Valid() {
+		return empty(ErrUnavailable)
+	}
+	tx, o, release, e := s.begin(ctx)
+	if e != nil {
+		return empty(e)
+	}
+	defer release()
+	defer func() { _ = tx.Rollback(ctx) }()
+	if !sameOrigin(o, expected) {
+		return empty(ErrStale)
+	}
+	envelope, e := readActorEnvelope(ctx, tx, id)
+	if e != nil {
+		return empty(e)
+	}
+	if envelope.Origin() != expected {
+		return empty(ErrStale)
+	}
+	if envelope.QualifiedSHA256() != qualified {
+		return empty(ErrConflict)
+	}
+	c := envelope.Consent()
+	bound, e := readCurrentOfferContext(ctx, tx, c.StoryID, o)
+	if e != nil {
+		return empty(e)
+	}
+	current := bound.Offer()
+	if current.Incarnation != c.StoryIncarnation || current.Revision != c.OfferRevision || current.AuthorProfileID != c.AuthorProfileID || current.CriteriaSHA256 != c.CriteriaSHA256 || current.PayloadSHA256 != c.OfferPayloadSHA256 || current.ExpiresAtUnixMillis != c.OfferExpiresAtUnixMillis {
+		return empty(ErrStale)
+	}
+	if e = tx.Commit(ctx); e != nil {
+		return empty(ErrUnavailable)
+	}
+	return envelope, bound, nil
+}
 
 func (s *Store) ReadActorOfferContext(ctx context.Context, id uuid.UUID, expected storylfpadmission.Origin) (OfferContext, error) {
 	tx, o, release, e := s.begin(ctx)

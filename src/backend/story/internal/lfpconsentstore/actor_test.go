@@ -2,6 +2,7 @@ package lfpconsentstore
 
 import (
 	"context"
+	"crypto/sha256"
 	"os"
 	"path/filepath"
 	"sync"
@@ -123,6 +124,29 @@ func TestActorOfferContextBindsOriginalAudienceSnapshot(t *testing.T) {
 	require.NoError(t, e)
 	require.Equal(t, bound.Visibility(), again.Visibility())
 	require.Equal(t, bound.Offer(), again.Offer())
+}
+
+func TestActorConsentContextBindsCurrentOfferAndOriginalViewer(t *testing.T) {
+	s, id, author := fixture(t)
+	o, origin := actorPublication(t, s, id, author)
+	r := response(o)
+	ctx := context.Background()
+	envelope, e := s.RecordActorResponse(ctx, r, actorResponse(r), origin, time.Now().Add(time.Minute))
+	require.NoError(t, e)
+	loaded, bound, e := s.ReadActorConsentContext(ctx, envelope.Consent().ConsentID, envelope.QualifiedSHA256(), origin)
+	require.NoError(t, e)
+	require.Equal(t, envelope.Actor(), loaded.Actor())
+	require.Equal(t, lfpconsent.Guest, loaded.Actor().AccountType)
+	require.Equal(t, o, bound.Offer())
+	require.Equal(t, o.CriteriaSHA256, sha256.Sum256([]byte(bound.CriteriaJSON())))
+	wrong := envelope.QualifiedSHA256()
+	wrong[0]++
+	_, _, e = s.ReadActorConsentContext(ctx, envelope.Consent().ConsentID, wrong, origin)
+	require.ErrorIs(t, e, ErrConflict)
+	_, e = s.Pool.Exec(ctx, "UPDATE stories SET visibility='friends' WHERE id=$1", id)
+	require.NoError(t, e)
+	_, _, e = s.ReadActorConsentContext(ctx, envelope.Consent().ConsentID, envelope.QualifiedSHA256(), origin)
+	require.ErrorIs(t, e, ErrStale)
 }
 
 func TestActorJournalFailureRollsBackAllNewEvidence(t *testing.T) {

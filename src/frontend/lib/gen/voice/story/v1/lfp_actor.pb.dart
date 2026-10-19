@@ -1081,6 +1081,7 @@ class ValidateActorBoundLfpConsentOfferResponse extends $pb.GeneratedMessage {
     $core.List<$core.int>? qualifiedConsentSha256,
     $core.List<$core.int>? actorSha256,
     LfpConsentOrigin? origin,
+    $core.List<$core.int>? canonicalCriteriaJson,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -1089,6 +1090,8 @@ class ValidateActorBoundLfpConsentOfferResponse extends $pb.GeneratedMessage {
       result.qualifiedConsentSha256 = qualifiedConsentSha256;
     if (actorSha256 != null) result.actorSha256 = actorSha256;
     if (origin != null) result.origin = origin;
+    if (canonicalCriteriaJson != null)
+      result.canonicalCriteriaJson = canonicalCriteriaJson;
     return result;
   }
 
@@ -1117,6 +1120,8 @@ class ValidateActorBoundLfpConsentOfferResponse extends $pb.GeneratedMessage {
         4, _omitFieldNames ? '' : 'actorSha256', $pb.PbFieldType.OY)
     ..aOM<LfpConsentOrigin>(5, _omitFieldNames ? '' : 'origin',
         subBuilder: LfpConsentOrigin.create)
+    ..a<$core.List<$core.int>>(
+        6, _omitFieldNames ? '' : 'canonicalCriteriaJson', $pb.PbFieldType.OY)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1191,6 +1196,19 @@ class ValidateActorBoundLfpConsentOfferResponse extends $pb.GeneratedMessage {
   void clearOrigin() => $_clearField(5);
   @$pb.TagNumber(5)
   LfpConsentOrigin ensureOrigin() => $_ensure(4);
+
+  /// REQUIRED exact immutable PostgreSQL lfp_criteria::text bytes. SHA256 must
+  /// equal the v1 receipt criteria_sha256; parse/validate its shape before MM
+  /// capture. A public projection or generic JSON re-encoding is not equivalent.
+  @$pb.TagNumber(6)
+  $core.List<$core.int> get canonicalCriteriaJson => $_getN(5);
+  @$pb.TagNumber(6)
+  set canonicalCriteriaJson($core.List<$core.int> value) =>
+      $_setBytes(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasCanonicalCriteriaJson() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearCanonicalCriteriaJson() => $_clearField(6);
 }
 
 const $core.bool _omitFieldNames =

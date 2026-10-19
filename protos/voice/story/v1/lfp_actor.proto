@@ -121,4 +121,8 @@ message ValidateActorBoundLfpConsentOfferResponse {
   bytes qualified_consent_sha256 = 3;
   bytes actor_sha256 = 4;
   LfpConsentOrigin origin = 5;
+  // REQUIRED exact immutable PostgreSQL lfp_criteria::text bytes. SHA256 must
+  // equal the v1 receipt criteria_sha256; parse/validate its shape before MM
+  // capture. A public projection or generic JSON re-encoding is not equivalent.
+  bytes canonical_criteria_json = 6;
 }

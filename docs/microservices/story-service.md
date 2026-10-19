@@ -72,9 +72,16 @@ existing guest DM/Chat/Space restrictions remain separate. Additive migration
 with their original records. Legacy rows cannot be enriched. Its immutable
 publication snapshot retains exact PostgreSQL criteria text and audience under
 the existing offer state hash; fresh privacy must evaluate that snapshot rather
-than an unrelated mutable row during A->B->A changes. Wrapper runtime and actual
-authenticated capture remain implementation prerequisites. Codec/Store inputs
-are data, not proof that a protected Gateway verification occurred.
+than an unrelated mutable row during A->B->A changes. The ActorBound Validate
+component checks the exact original actor/current offer, fresh privacy through
+an explicit saved viewer and final SQL state. Its required response field6
+canonical_criteria_json contains exact immutable PostgreSQL criteria text whose
+SHA256 is already committed by the v1 receipt. MM must check bytes/hash/shape;
+neither public listings nor JSON map re-encoding can substitute for it.
+HumanVerifier captures exact delegated Gateway actor/type/operation/body and
+rechecks expiry after live dependencies. Actual protected action/registry root
+composition remains an implementation prerequisite. Codec/Store inputs are
+data, not proof that a protected Gateway verification occurred.
 `BE011-STORY-LFP-RESTORE-CONTROLLER` owns the still-absent deployment controller,
 full replica/transaction drain, external state and credential/route custody;
 consumers are Story291 and MM145. Unknown authority leaves qualification closed.
