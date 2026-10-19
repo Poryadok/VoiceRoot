@@ -294,3 +294,15 @@ fixture failure; the canonical prefetch script seeded the hash-pinned Linux
 asset, after which causative tests failed for absent operation fields and passed
 with the implementation. Full cross-process mTLS/native-root/external admission
 qualification is still required; unit transports are not installed authority.
+
+Review309 found the queue screen compared only the current actor tuple, so an
+A->B->A or logout->same actor transition could accept an older response and
+reuse its unresolved action. The screen now listens to auth context changes,
+advances an explicit generation, invalidates its pending operation/local session
+and ignores older completions without changing a newer request's busy flag.
+Token-only refresh for the same account/profile/type preserves the action.
+Actual held-response and ambiguous-retry ABA/logout tests reproduce the old
+failure and pass with the implementation. The same final test bytes are also
+run against exact c38 predecessor production in an isolated restored fixture;
+this paired RED never changes the authored Git tree. The four affected client
+test files pass40 tests and scoped analysis without issues on Linux.

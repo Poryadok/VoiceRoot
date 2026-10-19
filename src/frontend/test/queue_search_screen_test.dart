@@ -56,66 +56,86 @@ CatalogGame _valorantGame() {
 }
 
 void main() {
-  testWidgets('late search response cannot promote the prior actor session', (
-    tester,
-  ) async {
-    final game = _valorantGame();
-    final started = Completer<void>();
-    final response = Completer<http.Response>();
-    final client = MockClient((r) async {
-      if (r.method == 'POST' && r.url.path == '/api/v1/matchmaking/search') {
-        started.complete();
-        return response.future;
-      }
-      return http.Response('{}', 404);
-    });
-    final container = ProviderContainer(
-      overrides: voiceAppTestOverrides(client: client),
+  for (final transition in ['other', 'aba', 'logout']) {
+    testWidgets(
+      'late search response cannot promote the prior actor session $transition',
+      (tester) async {
+        final game = _valorantGame();
+        final started = Completer<void>();
+        final response = Completer<http.Response>();
+        final client = MockClient((r) async {
+          if (r.method == 'POST' &&
+              r.url.path == '/api/v1/matchmaking/search') {
+            started.complete();
+            return response.future;
+          }
+          return http.Response('{}', 404);
+        });
+        final container = ProviderContainer(
+          overrides: voiceAppTestOverrides(client: client),
+        );
+        addTearDown(container.dispose);
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              theme: voiceTestTheme(),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: QueueSearchScreen(
+                game: game,
+                mode: game.config.modes.first,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(QueueSearchScreen.startButtonKey));
+        await tester.pump();
+        expect(started.isCompleted, isTrue);
+        final original = container.read(authControllerProvider).session!;
+        if (transition == 'logout') {
+          container.read(authControllerProvider.notifier).state =
+              const AuthState();
+        } else {
+          container
+              .read(authControllerProvider.notifier)
+              .state = const AuthState(
+            session: AuthSession(
+              accessToken: 'new',
+              refreshToken: 'new',
+              accountId: 'new-account',
+              activeProfileId: 'new-profile',
+              expiresInSeconds: 900,
+            ),
+          );
+        }
+        if (transition != 'other') {
+          container.read(authControllerProvider.notifier).state = AuthState(
+            session: original,
+          );
+        }
+        response.complete(
+          http.Response(
+            jsonEncode({
+              'searchSession': {
+                'id': 'old-session',
+                'profileId': 'prof-test',
+                'gameId': game.id,
+                'mode': game.config.modes.first.name,
+                'criteriaJson': '{}',
+                'status': 'searching',
+              },
+            }),
+            200,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(container.read(activeSearchSessionProvider), isNull);
+        expect(find.byKey(QueueSearchScreen.searchingStateKey), findsNothing);
+      },
     );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-          theme: voiceTestTheme(),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: QueueSearchScreen(game: game, mode: game.config.modes.first),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(QueueSearchScreen.startButtonKey));
-    await tester.pump();
-    expect(started.isCompleted, isTrue);
-    container.read(authControllerProvider.notifier).state = const AuthState(
-      session: AuthSession(
-        accessToken: 'new',
-        refreshToken: 'new',
-        accountId: 'new-account',
-        activeProfileId: 'new-profile',
-        expiresInSeconds: 900,
-      ),
-    );
-    response.complete(
-      http.Response(
-        jsonEncode({
-          'searchSession': {
-            'id': 'old-session',
-            'profileId': 'prof-test',
-            'gameId': game.id,
-            'mode': game.config.modes.first.name,
-            'criteriaJson': '{}',
-            'status': 'searching',
-          },
-        }),
-        200,
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(container.read(activeSearchSessionProvider), isNull);
-    expect(find.byKey(QueueSearchScreen.searchingStateKey), findsNothing);
-  });
+  }
 
   testWidgets(
     'ambiguous search retry retains intent and edited criteria changes it',
@@ -164,6 +184,56 @@ void main() {
       await tester.pumpAndSettle();
       expect(operations, hasLength(3));
       expect(operations[2], isNot(operations[0]));
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(QueueSearchScreen)),
+      );
+      final original = container.read(authControllerProvider).session!;
+      container.read(authControllerProvider.notifier).state = AuthState(
+        session: AuthSession(
+          accessToken: 'refreshed-token',
+          refreshToken: 'refreshed-token',
+          accountId: original.accountId,
+          activeProfileId: original.activeProfileId,
+          expiresInSeconds: 900,
+          accountType: original.accountType,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(QueueSearchScreen.startButtonKey));
+      await tester.pumpAndSettle();
+      expect(operations, hasLength(4));
+      expect(
+        operations[3],
+        operations[2],
+        reason: 'ordinary token refresh retains the unresolved action',
+      );
+      for (final transition in ['aba', 'logout']) {
+        if (transition == 'logout') {
+          container.read(authControllerProvider.notifier).state =
+              const AuthState();
+        } else {
+          container
+              .read(authControllerProvider.notifier)
+              .state = const AuthState(
+            session: AuthSession(
+              accessToken: 'other',
+              refreshToken: 'other',
+              accountId: 'other',
+              activeProfileId: 'other',
+              expiresInSeconds: 900,
+            ),
+          );
+        }
+        container.read(authControllerProvider.notifier).state = AuthState(
+          session: original,
+        );
+        await tester.pumpAndSettle();
+        final prior = operations.last;
+        await tester.tap(find.byKey(QueueSearchScreen.startButtonKey));
+        await tester.pumpAndSettle();
+        expect(operations.last, isNot(prior), reason: transition);
+      }
+      expect(operations, hasLength(6));
     },
   );
 

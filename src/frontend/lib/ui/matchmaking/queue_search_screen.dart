@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:uuid/uuid.dart';
 
 import '../../backend/matchmaking_client.dart';
+import '../../backend/auth_session.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/matchmaking_providers.dart';
@@ -51,10 +52,29 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
   var _prefilledFromProfile = false;
   String? _searchIntentKey;
   String? _searchOperationId;
+  var _authGeneration = 0;
+  late final ProviderSubscription<AuthState> _authSubscription;
 
   @override
   void initState() {
     super.initState();
+    _authSubscription = ref.listenManual<AuthState>(authControllerProvider, (
+      previous,
+      next,
+    ) {
+      if (_sameSearchActor(previous?.session, next.session)) return;
+      _authGeneration++;
+      _searchIntentKey = null;
+      _searchOperationId = null;
+      if (mounted) {
+        setState(() {
+          _session = null;
+          _busy = false;
+          _error = null;
+        });
+        ref.read(activeSearchSessionProvider.notifier).state = null;
+      }
+    });
     final regions = widget.game.config.regions;
     if (regions.isNotEmpty) _region = regions.first;
     if (widget.mode.roles.isNotEmpty) _role = widget.mode.roles.first.name;
@@ -66,6 +86,19 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _tryPrefillFromProfile(),
     );
+  }
+
+  bool _sameSearchActor(AuthSession? a, AuthSession? b) {
+    if (a == null || b == null) return a == b;
+    return a.accountId == b.accountId &&
+        a.activeProfileId == b.activeProfileId &&
+        a.accountType == b.accountType;
+  }
+
+  @override
+  void dispose() {
+    _authSubscription.close();
+    super.dispose();
   }
 
   void _tryPrefillFromProfile() {
@@ -296,6 +329,7 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
     final token = actor?.accessToken;
     if (token == null || token.isEmpty) return;
     if (_busy) return;
+    final authGeneration = _authGeneration;
     final criteria = _buildCriteria();
     final intentKey = jsonEncode([
       actor!.accountId,
@@ -335,6 +369,9 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
       );
     }
     if (!mounted) return;
+    // A round trip A->B->A still invalidates the old action. Do not clear the
+    // busy flag of a newer request that started after that context change.
+    if (authGeneration != _authGeneration) return;
     final currentActor = ref.read(authControllerProvider).session;
     if (currentActor == null ||
         currentActor.accountId != actor.accountId ||
