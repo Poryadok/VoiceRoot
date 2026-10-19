@@ -203,6 +203,9 @@ func (s *RoleStore) ApplyBotInstallationRemoval(ctx context.Context, req *rolev1
 	var response *rolev1.ApplyBotInstallationRemovalResponse
 	blocked := false
 	err = s.withLockedTransaction(ctx, b.operation, []uuid.UUID{b.space}, func(scoped *RoleStore) error {
+		if err := scoped.checkBotRemovalCatalog(ctx); err != nil {
+			return err
+		}
 		if err := scoped.lockBotRemovalBinding(ctx, b.bot, b.actor); err != nil {
 			return err
 		}
