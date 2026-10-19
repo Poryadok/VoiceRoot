@@ -20,12 +20,14 @@ import (
 )
 
 type Verifier struct {
-	Keys          principal.KeyResolver
-	Replay        principal.ReplayGuard
-	Epoch         principal.SessionEpochChecker
-	Clock         func() time.Time
-	CreatorReplay principal.ReplayGuard
-	CreatorEpoch  principal.SessionEpochChecker
+	Keys            principal.KeyResolver
+	Replay          principal.ReplayGuard
+	Epoch           principal.SessionEpochChecker
+	Clock           func() time.Time
+	CreatorReplay   principal.ReplayGuard
+	CreatorEpoch    principal.SessionEpochChecker
+	AdmissionReplay principal.ReplayGuard
+	AdmissionEpoch  principal.SessionEpochChecker
 }
 
 func protectedMutation(method string) bool {
@@ -34,7 +36,7 @@ func protectedMutation(method string) bool {
 
 func OrdinaryUnary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if protectedMutation(info.FullMethod) || info.FullMethod == spacev1.SpaceService_GetAuditLog_FullMethodName || info.FullMethod == spacev1.SpaceService_CreateSpace_FullMethodName {
+		if admissionMethod(info.FullMethod) || protectedMutation(info.FullMethod) || info.FullMethod == spacev1.SpaceService_GetAuditLog_FullMethodName || info.FullMethod == spacev1.SpaceService_CreateSpace_FullMethodName {
 			return nil, status.Error(codes.PermissionDenied, "protected lifecycle listener required")
 		}
 		return handler(ctx, req)
@@ -48,6 +50,9 @@ func canonicalID(value string) bool {
 
 func (v Verifier) Unary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if admissionMethod(info.FullMethod) {
+			return v.verifyAdmissionCall(ctx, req, info, handler)
+		}
 		creator := info.FullMethod == spacev1.SpaceService_CreateSpace_FullMethodName
 		if creator && (v.CreatorReplay == nil || v.CreatorEpoch == nil) {
 			return nil, status.Error(codes.PermissionDenied, "creator authority is not configured")
