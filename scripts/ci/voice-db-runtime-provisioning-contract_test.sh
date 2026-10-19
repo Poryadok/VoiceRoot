@@ -3197,7 +3197,7 @@ f13_f54_trace_event() {
 }
 
 f13_f54_observe_child() {
-  local repo="$1" merge="$2" first="$3" source="$4" output="$5" observation child_status=0
+  local repo="$1" merge="$2" first="$3" source="$4" output="$5" observation child_status=0 scalar_status=0 scalar_entry
   [[ -n "${f13_f54_trace_file:-}" && -n "${f13_f54_observer:-}" &&
     "${merge}" == f54bcadab4aa19969281d7d35d76ebad91553d4d &&
     "${first}" == 0a0024900b5bb3ba2f6fee391615f0f4fa0864e3 &&
@@ -3205,6 +3205,11 @@ f13_f54_observe_child() {
   observation="$(python3 "${f13_f54_observer}" boundary "${repo}" "${merge}" "${first}" "${source}")" || return 1
   f13_f54_trace_event boundary_observation "${repo}" "${output}" \
     4d943fac27fd247d136d84ae145440e54485d3ab || return 1
+  scalar_entry="$(git -C "${repo}" ls-tree "${merge}" -- protos/voice/auth/v1/auth.proto)" || return 1
+  f13_checkpoint_merge_tree_entry_matches "${repo}" 4d943fac27fd247d136d84ae145440e54485d3ab \
+    "${first}" "${source}" protos/voice/auth/v1/auth.proto "${scalar_entry}" || scalar_status=$?
+  f13_f54_trace_event scalar_seam_observation "${repo}" "${scalar_status}" || return 1
+  [[ "${scalar_status}" == 1 ]] || return 1
   printf '%s\n' 'F54 prototype child begin: supplemental partitiontrue, original outer prefix ends here' >&2
   f13_collect_develop_contributions "${repo}" 4d943fac27fd247d136d84ae145440e54485d3ab \
     "${source}" "${TMP_DIR}/f54-observed-child-map" "${TMP_DIR}/f54-observed-child-category" true true || child_status=$?

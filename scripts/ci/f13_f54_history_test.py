@@ -79,6 +79,11 @@ class ProducerTrace(unittest.TestCase):
         net = git(self.repo, 'diff', '--name-only', self.base, self.head).splitlines()
         self.assertEqual(net, [PROTO])
 
+    def test_passive_observer_does_not_add_stdout_to_original_producer(self):
+        self.hidden_runtime();p,_=self.collect()
+        self.assertEqual(p.returncode,0,p.stderr)
+        self.assertEqual(p.stdout,'','observer must not change original emitted prefix')
+
     def test_rehashed_drop_reorder_forgery_and_raw_dag_do_not_substitute_trace(self):
         self.hidden_runtime(); p, out = self.collect(); self.assertEqual(p.returncode, 0, p.stderr)
         m = module(); original = [json.loads(v) for v in (out/'trace.jsonl').read_text().splitlines()]

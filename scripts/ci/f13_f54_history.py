@@ -176,6 +176,8 @@ def append(path, kind, frame, operation, repo, values):
         payload=dict(history_boundary=boundary,prefix=raw_binding(data),prefix_copy=str(saved),admission=False)
     elif kind == 'composition_observation':
         payload=json.loads(values[0]);require(payload['admission'] is False,'observation_not_authority')
+    elif kind == 'scalar_seam_observation':
+        payload=dict(status=int(values[0]),original_gate='single_best_base_required',admission=False)
     else: raise Rejected('unknown_event_kind')
     e=dict(schema=SCHEMA,sequence=sequence,previous=previous['digest'] if previous else '0'*64,
         kind=kind,frame=identity if kind=='frame_enter' else frame or None,
@@ -324,7 +326,10 @@ def validate_trace(repo, path, expected_sha, complete=False):
                 require(entry==dict(base=entry_binding(repo,v['boundary'],name),source=entry_binding(repo,v['source_head'],name),result=entry_binding(repo,v['commit'],name)),'actual_full_entries')
             require(v['paths']==v['delta']['raw'].splitlines() and set(v['entries'])==set(v['paths']),'complete_delta_entries')
             operations[v['id']]=v;observed.add(v['commit']);continue
-        if kind in ('boundary_observation','composition_observation'):require(v['admission'] is False,'no_production_capability');continue
+        if kind in ('boundary_observation','composition_observation','scalar_seam_observation'):
+            require(v['admission'] is False,'no_production_capability')
+            if kind=='scalar_seam_observation':require(v['status']==1,'scalar_only_still_rejects')
+            continue
         if kind=='failure': failures.append(dict(frame=frame,category=v['category']));continue
         if kind=='final_gate_before': continue
         require(op in operations,'referenced_real_operation')
@@ -375,7 +380,10 @@ def main():
     try:
         command,*args=sys.argv[1:]
         if command=='append':
-            path,kind,frame,op,repo,*values=args;print(append(path,kind,frame,op,repo,values));return 0
+            path,kind,frame,op,repo,*values=args
+            identity=append(path,kind,frame,op,repo,values)
+            if identity:print(identity)
+            return 0
         if command=='boundary':print(json.dumps(exact_boundary(*args)));return 0
         if command=='composition':print(json.dumps(composition(*args)));return 0
         if command=='unit':print(json.dumps(load_unit(*args)));return 0
