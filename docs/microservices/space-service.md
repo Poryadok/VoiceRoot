@@ -110,7 +110,12 @@ communication resolver only). Each prefix requires `REPLAY_REDIS_ADDR`,
 `TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, `JWKS_CLIENT_CERT_FILE` and
 `JWKS_CLIENT_KEY_FILE`; `GRPC_LISTEN` and `REPLAY_REDIS_PASSWORD` are optional.
 `S2S_JWKS_URLS_JSON` supplies the exact trusted caller's HTTPS endpoint, with
-`S2S_JWKS_CA_FILE` extending server trust when necessary. Replicas use shared
+`S2S_JWKS_CA_FILE` extending server trust when necessary. A listener may instead
+set its own `<prefix>JWKS_CA_FILE`; absent retains the shared CA, while an
+explicitly blank, unreadable or invalid override fails without falling back.
+Local trust configuration alone is partial listener configuration and fails;
+shared trust settings alone enable no listener. This permits separate Social
+and Voice CAs without a combined trust bundle or sharing private keys. Replicas use shared
 replay storage; each listener authenticates its one caller and exact method.
 All-absent provider settings leave that listener disabled. Partial settings
 fail startup. The ordinary listener rejects both methods, and the legacy
