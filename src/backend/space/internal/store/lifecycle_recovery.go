@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"math"
 	"time"
 
@@ -72,11 +73,41 @@ func (s *SpaceStore) DeferLifecycleAttempt(ctx context.Context, id uuid.UUID) er
 	if s == nil || s.Pool == nil || id == uuid.Nil {
 		return ErrLifecycleEvidenceInvalid
 	}
-	_, err := s.Pool.Exec(ctx, `UPDATE space_lifecycle_aggregates SET
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return err
+	}
+	defer rollbackLifecycleTx(ctx, tx)
+	if err := lockLifecycleSpace(ctx, tx, id); err != nil {
+		return err
+	}
+	aggregate, err := loadLifecycle(ctx, tx, id, true)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if aggregate.Phase() == spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_LIVE || aggregate.Phase() == spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_PURGED {
+		return tx.Commit(ctx)
+	}
+	scoped := *s
+	scoped.tx = tx
+	capture, err := scoped.captureLifecycleMaintenanceMutation(ctx, id)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `UPDATE space_lifecycle_aggregates SET
   next_attempt_at=clock_timestamp()+make_interval(secs=>LEAST(300.0,power(2.0,LEAST(retry_attempt,9))*(1.0+random()*0.2))),
   retry_attempt=LEAST(retry_attempt+1,1000000),last_failure_at=clock_timestamp()
   WHERE space_id=$1 AND phase NOT IN ('LIVE','PURGED')`, id)
-	return err
+	if err != nil {
+		return err
+	}
+	if err := scoped.finishLifecycleMaintenanceMutation(ctx, capture); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // LifecycleProofLookup reconstructs only digest-bound receipt lookup inputs.

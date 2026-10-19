@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"time"
 	"voice/backend/space/internal/spacecore"
 )
@@ -26,13 +27,41 @@ func (s *SpaceStore) MarkLifecycleEventDelivered(ctx context.Context, record spa
 	}
 	raw := marshalLifecycleOutbox(record)
 	hash := lifecycleHash("voice.space.store.v1.LifecycleOutboxRecord", raw)
+	spaceID, err := canonicalLifecycleUUID(record.SpaceID)
+	if err != nil {
+		return err
+	}
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return err
+	}
+	defer rollbackLifecycleTx(ctx, tx)
+	if err := lockLifecycleSpace(ctx, tx, spaceID); err != nil {
+		return err
+	}
+	var state string
+	if err = tx.QueryRow(ctx, `SELECT state FROM space_lifecycle_outbox WHERE event_id=$1 AND event_bytes=$2 AND event_sha256=$3 FOR UPDATE`, uuid.MustParse(record.EventID), raw, hash[:]).Scan(&state); err != nil {
+		return err
+	}
+	if state == "DELIVERED" {
+		return tx.Commit(ctx)
+	}
+	scoped := *s
+	scoped.tx = tx
+	capture, err := scoped.captureLifecycleMaintenanceMutation(ctx, spaceID)
+	if err != nil {
+		return err
+	}
 	var saved []byte
-	err := s.Pool.QueryRow(ctx, `UPDATE space_lifecycle_outbox SET state='DELIVERED',delivered_at=COALESCE(delivered_at,clock_timestamp()) WHERE event_id=$1 AND state IN ('READY','DELIVERED') AND event_bytes=$2 AND event_sha256=$3 RETURNING event_bytes`, uuid.MustParse(record.EventID), raw, hash[:]).Scan(&saved)
+	err = tx.QueryRow(ctx, `UPDATE space_lifecycle_outbox SET state='DELIVERED',delivered_at=COALESCE(delivered_at,clock_timestamp()) WHERE event_id=$1 AND state IN ('READY','DELIVERED') AND event_bytes=$2 AND event_sha256=$3 RETURNING event_bytes`, uuid.MustParse(record.EventID), raw, hash[:]).Scan(&saved)
 	if err != nil {
 		return err
 	}
 	if !bytes.Equal(saved, raw) {
 		return ErrLifecycleConflict
 	}
-	return nil
+	if err := scoped.finishLifecycleMaintenanceMutation(ctx, capture); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }

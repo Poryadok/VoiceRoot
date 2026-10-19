@@ -181,10 +181,25 @@ func (s *SpaceStore) CompleteLifecycleRestore(ctx context.Context, spaceID uuid.
 		if err != nil {
 			return false, err
 		}
+		if completed {
+			return false, persistLifecycleRestoreOutcome(ctx, tx, aggregate.Snapshot(), false)
+		}
+		scoped := *s
+		scoped.tx = tx
+		capture, err := scoped.captureLifecycleMaintenanceMutation(ctx, spaceID)
+		if err != nil {
+			return false, err
+		}
 		if err := persistLifecycleRestoreOutcome(ctx, tx, aggregate.Snapshot(), !completed); err != nil {
 			return false, err
 		}
-		return !completed, nil
+		if err := persistLifecycleSnapshot(ctx, tx, aggregate.Snapshot()); err != nil {
+			return false, err
+		}
+		if err := scoped.finishLifecycleMaintenanceMutation(ctx, capture); err != nil {
+			return false, err
+		}
+		return false, nil // Outcome and snapshot already share the completed frame.
 	})
 	if err != nil {
 		return nil, spacecore.LifecycleOutboxRecord{}, err

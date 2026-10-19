@@ -31,7 +31,7 @@ func (s *SpaceStore) ReserveLifecycleRestore(ctx context.Context, accountID, act
 	if err != nil {
 		return nil, err
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}
@@ -86,8 +86,17 @@ func (s *SpaceStore) ReserveLifecycleRestore(ctx context.Context, accountID, act
 	if err != nil {
 		return nil, err
 	}
+	scoped := *s
+	scoped.tx = tx
+	capture, err := scoped.captureLifecycleMaintenanceMutation(ctx, binding.spaceID)
+	if err != nil {
+		return nil, err
+	}
 	if phase == spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_PURGE_DECIDED {
 		if err := persistLifecycleSnapshot(ctx, tx, aggregate.Snapshot()); err != nil {
+			return nil, err
+		}
+		if err := scoped.finishLifecycleMaintenanceMutation(ctx, capture); err != nil {
 			return nil, err
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -114,6 +123,9 @@ func (s *SpaceStore) ReserveLifecycleRestore(ctx context.Context, accountID, act
 		return nil, ErrLifecycleConflict
 	}
 	if err := persistLifecycleSnapshot(ctx, tx, aggregate.Snapshot()); err != nil {
+		return nil, err
+	}
+	if err := scoped.finishLifecycleMaintenanceMutation(ctx, capture); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
