@@ -84,6 +84,10 @@ func TestNativeBotGlobal46ProtectedTransport(t *testing.T) {
 	require.NoError(t, os.WriteFile(clientCertFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientCert.Certificate[0]}), 0600))
 	require.NoError(t, os.WriteFile(clientKeyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: clientKey}), 0600))
 	cfg := botmembershipprincipal.Config{ListenAddr: "127.0.0.1:0", CertFile: certFile, KeyFile: keyFile, ClientCAFile: caFile, ReplayAddr: redisAddr, JWKSCAFile: caFile, JWKSClientCertFile: clientCertFile, JWKSClientKeyFile: clientKeyFile, JWKSURLs: map[string]string{"bot": jwks.URL + "/bot"}, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: 5 * time.Second}
+	nativeBotExternalJWKS(t, &cfg)
+	if os.Getenv("VOICE_BOT_GLOBAL46_HANDOFF_DIR") != "" {
+		cfg.ListenAddr = "0.0.0.0:0"
+	}
 	start := func() (*botmembershipprincipal.Runtime, *grpc.Server, net.Listener, spacev1.SpaceServiceClient) {
 		runtime, err := botmembershipprincipal.New(ctx, cfg)
 		require.NoError(t, err)
@@ -103,6 +107,9 @@ func TestNativeBotGlobal46ProtectedTransport(t *testing.T) {
 		return runtime, server, listener, spacev1.NewSpaceServiceClient(connection)
 	}
 	runtime, server, listener, client := start()
+	if nativeBotGlobal46Handoff(t, ctx, db.Pool, listener, client, key, caFile, clientCertFile, clientKeyFile, first.ID, other.ID) {
+		return
+	}
 	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "bot", KeyID: "current", PrivateKey: key})
 	require.NoError(t, err)
 	sign := func(r proto.Message, method, operation string) context.Context {
