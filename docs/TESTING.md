@@ -75,6 +75,28 @@ Artifact `settings-help-browser-<run_id>` содержит head SHA (`VOICE_SOUR
 версию Chrome и шесть PNG. Это доказательство передачи ссылки браузеру;
 загрузка содержимого внешнего GitHub и привязка к deployed SHA проверяются отдельно.
 
+### Web cold startup
+
+`node --test scripts/ci/web-startup.test.mjs` проверяет ранний HTML loader,
+RU/EN, ошибки bootstrap/engine/runApp, зависший запуск и снятие loader только
+по `flutter-first-frame`. В Flutter CI после уже существующей сборки Help fixture
+`node scripts/ci/web-startup-browser.mjs src/frontend/build/help-launcher-web <output>`
+проверяет настоящий Flutter engine: main.dart.js удерживается HTTP fixture,
+видны текущий Voice icon и статус до запуска Flutter; затем первый кадр снимает
+loader. Отдельный 503 для bootstrap и доверенный pointer click проверяют reload/retry.
+Используются fresh pages, отключённый browser cache, desktop и mobile viewport.
+Для проверки полной production-сборки передайте `src/frontend/build/web` после
+`flutter build web --release --no-pub --no-web-resources-cdn`.
+
+Node.js 24, Chrome/Chromium (`CHROME_BIN`) и полный `VOICE_SOURCE_SHA` обязательны.
+Artifact содержит browser version, viewport, PNG и `voice-startup:*` performance
+marks (HTML, entrypoint, engine, run-app, first-frame). Это локальные timings с
+искусственной задержкой, не production latency и не доказательство причины
+пользовательского медленного старта. Реальные device/network и deployed asset
+delivery проверяются отдельно. Loader использует существующий `voice_sky.png`,
+system font и inline critical CSS; 90s — только recovery UI deadline, запрос
+может завершиться позднее. Ошибки не раскрывают URL или raw exception.
+
 ### Go (сервисы, Gateway, Realtime и др.)
 
 - Фреймворк: стандартный пакет **`testing`**, табличные тесты где уместно.
