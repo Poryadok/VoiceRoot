@@ -19,19 +19,26 @@ import (
 )
 
 type Verifier struct {
-	Keys   principal.KeyResolver
-	Replay principal.ReplayGuard
-	Epoch  principal.SessionEpochChecker
-	Clock  func() time.Time
+	Keys            principal.KeyResolver
+	Replay          principal.ReplayGuard
+	Epoch           principal.SessionEpochChecker
+	Clock           func() time.Time
+	CreatorEpoch    principal.SessionEpochChecker
+	CreatorReplay   principal.ReplayGuard
+	AdmissionEpoch  principal.SessionEpochChecker
+	AdmissionReplay principal.ReplayGuard
 }
 
 func protectedMutation(method string) bool {
+	if method == spacev1.SpaceService_CreateSpace_FullMethodName {
+		return true
+	}
 	return method == spacev1.SpaceService_DeleteSpace_FullMethodName || method == spacev1.SpaceService_RestoreSpace_FullMethodName || method == spacev1.SpaceService_GetSpaceDeletionCoordinatorStatus_FullMethodName || method == spacev1.SpaceService_UpdateMemberNickname_FullMethodName || method == spacev1.SpaceService_GetSpaceChatCreationOutcome_FullMethodName
 }
 
 func OrdinaryUnary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if protectedMutation(info.FullMethod) || info.FullMethod == spacev1.SpaceService_GetAuditLog_FullMethodName {
+		if protectedMutation(info.FullMethod) || admissionMethod(info.FullMethod) || info.FullMethod == spacev1.SpaceService_GetAuditLog_FullMethodName {
 			return nil, status.Error(codes.PermissionDenied, "protected lifecycle listener required")
 		}
 		return handler(ctx, req)
@@ -45,6 +52,12 @@ func canonicalID(value string) bool {
 
 func (v Verifier) Unary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if admissionMethod(info.FullMethod) {
+			return v.verifyAdmissionCall(ctx, req, info, handler)
+		}
+		if info.FullMethod == spacev1.SpaceService_CreateSpace_FullMethodName {
+			return v.verifyCreatorCall(ctx, req, info, handler)
+		}
 		if !protectedMutation(info.FullMethod) && info.FullMethod != spacev1.SpaceService_GetSpace_FullMethodName && info.FullMethod != spacev1.SpaceService_GetAuditLog_FullMethodName {
 			return nil, status.Error(codes.PermissionDenied, "method is not available on lifecycle listener")
 		}
