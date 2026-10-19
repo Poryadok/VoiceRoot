@@ -22,7 +22,7 @@ func TestInstallBotInSpaceRequiresChatSourceBeforeDurableIntent(t *testing.T) {
 	if testing.Short() {
 		t.Skip("real Bot PostgreSQL admission")
 	}
-	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{role: &fakeRoleClient{}, space: &fakeSpaceClient{}})
+	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{role: &fakeRoleClient{}, space: &fakeSpaceClient{}, noScopeAuthority: true})
 	defer cleanup()
 	ctx := withAccount(context.Background(), uuid.New(), uuid.New())
 	registered, err := client.RegisterBot(ctx, &botv1.RegisterBotRequest{Name: "Scope gate", ScopesJson: `["TEXT_CHAT_SEND_MESSAGES"]`})

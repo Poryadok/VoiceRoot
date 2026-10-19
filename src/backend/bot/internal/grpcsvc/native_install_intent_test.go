@@ -63,15 +63,15 @@ func TestNativeInstallRequiresCurrentManageBotsAdmission(t *testing.T) {
 	svc.PrincipalIssuer = installationTestIssuer(t)
 	calls := 0
 	svc.InstallationSpace = intentObservingSpace{add: func(context.Context, *spacev1.AddBotMemberRequest) error { calls++; return nil }}
-	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("x-voice-profile-id", uuid.NewString()))
+	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("x-voice-user-id", bot.OwnerAccountID.String(), "x-voice-profile-id", uuid.NewString()))
 	req := &botv1.InstallBotInSpaceRequest{BotId: bot.ID.String(), SpaceId: uuid.NewString()}
-	_, err = svc.InstallBotInSpace(ctx, req)
+	_, err = svc.InstallBotInSpace(verifiedMutationActor(t, ctx, req, botv1.BotService_InstallBotInSpace_FullMethodName), req)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 	svc.InstallationRole = installationPermissionClient{allowed: false}
-	_, err = svc.InstallBotInSpace(ctx, req)
+	_, err = svc.InstallBotInSpace(verifiedMutationActor(t, ctx, req, botv1.BotService_InstallBotInSpace_FullMethodName), req)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	svc.InstallationRole = installationPermissionClient{allowed: true, err: errors.New("authority unavailable")}
-	_, err = svc.InstallBotInSpace(ctx, req)
+	_, err = svc.InstallBotInSpace(verifiedMutationActor(t, ctx, req, botv1.BotService_InstallBotInSpace_FullMethodName), req)
 	require.Equal(t, codes.Unavailable, status.Code(err))
 	require.Zero(t, calls)
 	var count int
@@ -187,25 +187,25 @@ func TestNativeInstallLostAcknowledgementsRecoverSignedExactIntent(t *testing.T)
 	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("x-voice-user-id", owner.String(), "x-voice-profile-id", installer.String()))
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "old-user-token", "x-voice-profile-id", installer.String()))
 	req := &botv1.InstallBotInSpaceRequest{BotId: bot.ID.String(), SpaceId: space.String()}
-	_, err = newService().InstallBotInSpace(ctx, req)
+	_, err = newService().InstallBotInSpace(verifiedMutationActor(t, ctx, req, botv1.BotService_InstallBotInSpace_FullMethodName), req)
 	require.Equal(t, codes.Unavailable, status.Code(err))
 	var state string
 	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM bot_installation_intents WHERE bot_id=$1`, bot.ID).Scan(&state))
 	require.Equal(t, "PREPARING", state)
-	response, err := newService().InstallBotInSpace(ctx, req)
+	response, err := newService().InstallBotInSpace(verifiedMutationActor(t, ctx, req, botv1.BotService_InstallBotInSpace_FullMethodName), req)
 	require.NoError(t, err)
 	require.Equal(t, add.GetInstallationIntent().GetInstallationId(), response.GetInstallationId())
-	duplicate, err := newService().InstallBotInSpace(ctx, req)
+	duplicate, err := newService().InstallBotInSpace(verifiedMutationActor(t, ctx, req, botv1.BotService_InstallBotInSpace_FullMethodName), req)
 	require.NoError(t, err)
 	require.Equal(t, response.GetInstallationId(), duplicate.GetInstallationId())
 	uninstall := &botv1.UninstallBotFromSpaceRequest{BotId: bot.ID.String(), SpaceId: space.String()}
-	_, err = newService().UninstallBotFromSpace(ctx, uninstall)
+	_, err = newService().UninstallBotFromSpace(verifiedMutationActor(t, ctx, uninstall, botv1.BotService_UninstallBotFromSpace_FullMethodName), uninstall)
 	require.Equal(t, codes.Unavailable, status.Code(err))
-	_, err = newService().InstallBotInSpace(ctx, req)
+	_, err = newService().InstallBotInSpace(verifiedMutationActor(t, ctx, req, botv1.BotService_InstallBotInSpace_FullMethodName), req)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
-	_, err = newService().UninstallBotFromSpace(ctx, uninstall)
+	_, err = newService().UninstallBotFromSpace(verifiedMutationActor(t, ctx, uninstall, botv1.BotService_UninstallBotFromSpace_FullMethodName), uninstall)
 	require.NoError(t, err)
-	_, err = newService().UninstallBotFromSpace(ctx, uninstall)
+	_, err = newService().UninstallBotFromSpace(verifiedMutationActor(t, ctx, uninstall, botv1.BotService_UninstallBotFromSpace_FullMethodName), uninstall)
 	require.NoError(t, err)
 	require.Equal(t, 3, addCalls)
 	require.Equal(t, 2, removeCalls)
@@ -244,7 +244,8 @@ func TestNativeInstallPersistsIdentityBeforeSpaceRPC(t *testing.T) {
 		return nil
 	}}
 	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("x-voice-user-id", owner.String(), "x-voice-profile-id", installer.String()))
-	_, err = svc.InstallBotInSpace(ctx, &botv1.InstallBotInSpaceRequest{BotId: bot.ID.String(), SpaceId: space.String()})
+	request := &botv1.InstallBotInSpaceRequest{BotId: bot.ID.String(), SpaceId: space.String()}
+	_, err = svc.InstallBotInSpace(verifiedMutationActor(t, ctx, request, botv1.BotService_InstallBotInSpace_FullMethodName), request)
 	require.NoError(t, err)
 	require.True(t, called)
 }
@@ -266,8 +267,9 @@ func TestNativeInstallStaleReceiverOutcomeDoesNotActivate(t *testing.T) {
 	svc.InstallationSpace = intentObservingSpace{add: func(context.Context, *spacev1.AddBotMemberRequest) error {
 		return status.Error(codes.FailedPrecondition, "historical add is retired")
 	}}
-	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("x-voice-profile-id", uuid.NewString()))
-	_, err = svc.InstallBotInSpace(ctx, &botv1.InstallBotInSpaceRequest{BotId: bot.ID.String(), SpaceId: uuid.NewString()})
+	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("x-voice-user-id", bot.OwnerAccountID.String(), "x-voice-profile-id", uuid.NewString()))
+	request := &botv1.InstallBotInSpaceRequest{BotId: bot.ID.String(), SpaceId: uuid.NewString()}
+	_, err = svc.InstallBotInSpace(verifiedMutationActor(t, ctx, request, botv1.BotService_InstallBotInSpace_FullMethodName), request)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err), "preserve definitive stale outcome; never reinterpret an old receipt as current activation")
 	var count int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM bot_space_installations WHERE bot_id=$1`, bot.ID).Scan(&count))

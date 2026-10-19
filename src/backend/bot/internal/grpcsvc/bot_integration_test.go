@@ -55,6 +55,7 @@ func startBotGRPC(t *testing.T, installationAdmission ...bool) (botv1.BotService
 	st := &store.BotStore{Pool: pool}
 	hub := dispatch.NewHub()
 	svc := grpcsvc.NewBotGRPC(st, hub)
+	svc.ChatScope = mutationFixtureChatScope{}
 	if len(installationAdmission) > 0 && installationAdmission[0] {
 		svc.InstallationRole = installationPermissionClient{allowed: true}
 	}
@@ -63,11 +64,13 @@ func startBotGRPC(t *testing.T, installationAdmission ...bool) (botv1.BotService
 	svc.Chat = allowMembershipClient{}
 
 	lis := bufconn.Listen(1024 * 1024)
-	s := grpc.NewServer()
+	verifiedServer, verifiedClient := mutationFixtureTransport(t)
+	s := grpc.NewServer(verifiedServer)
 	botv1.RegisterBotServiceServer(s, svc)
 	go func() { _ = s.Serve(lis) }()
 
 	conn, err := grpc.NewClient("passthrough:///bufnet",
+		verifiedClient,
 		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)

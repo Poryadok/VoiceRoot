@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -14,6 +15,10 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	botv1 "voice.app/voice/bot/v1"
+	chatv1 "voice.app/voice/chat/v1"
 	voicejwt "voice/backend/pkg/jwt"
 	"voice/backend/pkg/principal"
 )
@@ -26,15 +31,16 @@ func TestBotNativeInstallActualHTTPToAllProtectedSources(t *testing.T) {
 		t.Skip("explicit private native public fixture only")
 	}
 	var ready struct {
-		Address string `json:"address"`
-		Bot     string `json:"bot_id"`
-		Account string `json:"account_id"`
-		Profile string `json:"profile_id"`
-		Space   string `json:"space_id"`
-		Chat    string `json:"chat_id"`
-		ChatDir string `json:"chat_fixture_dir"`
-		Key     string `json:"key_file"`
-		Cert    string `json:"cert_file"`
+		Address  string `json:"address"`
+		Bot      string `json:"bot_id"`
+		OtherBot string `json:"other_bot_id"`
+		Account  string `json:"account_id"`
+		Profile  string `json:"profile_id"`
+		Space    string `json:"space_id"`
+		Chat     string `json:"chat_id"`
+		ChatDir  string `json:"chat_fixture_dir"`
+		Key      string `json:"key_file"`
+		Cert     string `json:"cert_file"`
 	}
 	require.Eventually(t, func() bool {
 		raw, err := os.ReadFile(filepath.Join(dir, "ready.json"))
@@ -113,6 +119,24 @@ func TestBotNativeInstallActualHTTPToAllProtectedSources(t *testing.T) {
 		require.NoError(t, response.Body.Close())
 		require.Equal(t, http.StatusNoContent, response.StatusCode, string(raw))
 	}
+	// This is the declared RPC adapter, not an invented HTTP route. Controlled
+	// Gateway verified claims use the same actual actor/account just accepted by
+	// HTTP above; the receiver still performs real mTLS/JWKS/fresh Java floor and
+	// owner checks. The actor's manage-bots authority does not confer ownership.
+	setter := &botv1.SetChatWhitelistRequest{BotId: ready.Bot, AllowedChats: []*chatv1.ChatRef{{Id: ready.Chat}}}
+	_, err = clients.botAuditAdmin.SetChatWhitelist(context.Background(), setter)
+	require.Equal(t, codes.Unauthenticated, status.Code(err), "actual protected RPC rejects absent delegated credential")
+	setActor := httptest.NewRequest(http.MethodPost, "/", nil)
+	setActor = setActor.WithContext(context.WithValue(setActor.Context(), verifiedUserClaimsKey{}, tokenClaims{UserID: ready.Account, ProfileID: ready.Profile, SessionEpoch: 9, AccountType: "regular", ExpiresAt: time.Now().Add(time.Minute)}))
+	setCtx, err := cfg.transcoder.botLifecycleContext(setActor, setter, botv1.BotService_SetChatWhitelist_FullMethodName)
+	require.NoError(t, err)
+	_, err = clients.botAuditAdmin.SetChatWhitelist(setCtx, setter)
+	require.NoError(t, err, "owner-only setter reaches actual protected receiver and durable Chat source")
+	notOwned := &botv1.SetChatWhitelistRequest{BotId: ready.OtherBot, AllowedChats: setter.AllowedChats}
+	setCtx, err = cfg.transcoder.botLifecycleContext(setActor, notOwned, botv1.BotService_SetChatWhitelist_FullMethodName)
+	require.NoError(t, err)
+	_, err = clients.botAuditAdmin.SetChatWhitelist(setCtx, notOwned)
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "a current Space manager cannot set another owner's whitelist")
 	require.NoError(t, os.WriteFile(filepath.Join(ready.ChatDir, "retire-chat"), []byte("retire actual Chat after accepted install"), 0600))
 	require.Eventually(t, func() bool { _, err := os.Stat(filepath.Join(ready.ChatDir, "retired-chat")); return err == nil }, 8*time.Second, 30*time.Millisecond)
 	code, body = request(token, ready.Chat, false)

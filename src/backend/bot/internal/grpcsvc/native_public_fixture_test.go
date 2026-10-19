@@ -131,6 +131,8 @@ func TestBotNativePublicInstallFixture(t *testing.T) {
 	st := &store.BotStore{Pool: pool}
 	bot, _, err := st.CreateBot(ctx, uuid.MustParse(role.Owner), "Actual HTTP native Bot", "", `[]`, uuid.MustParse(space.Profile))
 	require.NoError(t, err)
+	other, _, err := st.CreateBot(ctx, uuid.New(), "Other owner policy", "", `[]`, uuid.New())
+	require.NoError(t, err)
 	// The Gateway has its own test key and mTLS identity. All pure Bot calls,
 	// including Auth floor, use ONE actual Runtime issuer below.
 	gatewayKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -176,7 +178,7 @@ func TestBotNativePublicInstallFixture(t *testing.T) {
 	botv1.RegisterBotServiceServer(server, service)
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(func() { server.Stop(); _ = listener.Close() })
-	body, err := json.Marshal(map[string]any{"address": listener.Addr().String(), "bot_id": bot.ID, "account_id": role.Owner, "profile_id": role.Profile, "space_id": role.Space, "chat_id": chat.Chat, "chat_fixture_dir": chatDir, "key_file": gatewayKeyFile, "cert_file": certFile})
+	body, err := json.Marshal(map[string]any{"address": listener.Addr().String(), "bot_id": bot.ID, "other_bot_id": other.ID, "account_id": role.Owner, "profile_id": role.Profile, "space_id": role.Space, "chat_id": chat.Chat, "chat_fixture_dir": chatDir, "key_file": gatewayKeyFile, "cert_file": certFile})
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "ready.json"), body, 0600))
 	t.Cleanup(func() { _ = os.Remove(filepath.Join(dir, "ready.json")); _ = os.Remove(gatewayKeyFile) })
@@ -188,7 +190,7 @@ func TestBotNativePublicInstallFixture(t *testing.T) {
 	require.Equal(t, "INSTALLED", intent.State)
 	var observations, installed int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM bot_chat_scope_observations WHERE bot_id=$1`, bot.ID).Scan(&observations))
-	require.Equal(t, 2, observations, "install and re-enable qualify independently; exact install retry retains its original source")
+	require.Equal(t, 3, observations, "install, re-enable and owner setter qualify independently; exact install retry retains its original source")
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM bot_chat_whitelist WHERE bot_id=$1 AND enabled`, bot.ID).Scan(&installed))
 	require.Equal(t, 1, installed)
 	complete, err := json.Marshal(map[string]any{"install_operation_id": intent.OperationID, "generation": 2})

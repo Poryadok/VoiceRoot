@@ -185,13 +185,14 @@ func (f *fakeChatClient) createIDs() []string {
 }
 
 type botCDeps struct {
-	user         *fakeUserClient
-	msg          messagingv1.MessagingServiceServer
-	chat         *fakeChatClient
-	scope        chatv1.ChatScopeAuthorityServiceClient
-	role         rolev1.RoleServiceServer
-	space        *fakeSpaceClient
-	noChatClient bool
+	user             *fakeUserClient
+	msg              messagingv1.MessagingServiceServer
+	chat             *fakeChatClient
+	scope            chatv1.ChatScopeAuthorityServiceClient
+	role             rolev1.RoleServiceServer
+	space            *fakeSpaceClient
+	noChatClient     bool
+	noScopeAuthority bool
 }
 
 func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceClient, *store.BotStore, *dispatch.Hub, func()) {
@@ -205,11 +206,16 @@ func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceCli
 	st := &store.BotStore{Pool: pool}
 	hub := dispatch.NewHub()
 	svc := grpcsvc.NewBotGRPC(st, hub)
+	if deps == nil || !deps.noScopeAuthority {
+		svc.ChatScope = mutationFixtureChatScope{}
+	}
 	if deps == nil || !deps.noChatClient {
 		svc.Chat = allowMembershipClient{}
 	}
 	if deps != nil {
-		svc.ChatScope = deps.scope
+		if deps.scope != nil {
+			svc.ChatScope = deps.scope
+		}
 		if deps.user != nil {
 			ul := bufconn.Listen(1024)
 			us := grpc.NewServer()
@@ -280,11 +286,13 @@ func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceCli
 	}
 
 	lis := bufconn.Listen(1024 * 1024)
-	s := grpc.NewServer()
+	verifiedServer, verifiedClient := mutationFixtureTransport(t)
+	s := grpc.NewServer(verifiedServer)
 	botv1.RegisterBotServiceServer(s, svc)
 	go func() { _ = s.Serve(lis) }()
 
 	conn, err := grpc.NewClient("passthrough:///bufnet",
+		verifiedClient,
 		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)

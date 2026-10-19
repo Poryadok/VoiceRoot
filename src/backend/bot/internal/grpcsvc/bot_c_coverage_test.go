@@ -712,7 +712,7 @@ func TestSetBotChatEnabled_notFoundForUnknownBot(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	client, _, cleanup := startBotGRPC(t)
+	client, _, cleanup := startBotGRPC(t, true)
 	defer cleanup()
 	ctx := withAccount(context.Background(), uuid.New(), uuid.New())
 	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL

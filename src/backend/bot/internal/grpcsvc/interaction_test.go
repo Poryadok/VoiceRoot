@@ -113,11 +113,13 @@ func startBotGRPCWithDeps(t *testing.T, user *fakeUserClient, msg messagingv1.Me
 	}
 
 	lis := bufconn.Listen(1024 * 1024)
-	s := grpc.NewServer()
+	verifiedServer, verifiedClient := mutationFixtureTransport(t)
+	s := grpc.NewServer(verifiedServer)
 	botv1.RegisterBotServiceServer(s, svc)
 	go func() { _ = s.Serve(lis) }()
 
 	conn, err := grpc.NewClient("passthrough:///bufnet",
+		verifiedClient,
 		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)

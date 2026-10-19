@@ -104,3 +104,32 @@ Bot PG35.687s, native Space44 transport/DB38.744s, Chat48.215s, Role fixture104.
 Final affected Gateway component2.300s and Bot principal1.136s passed; scoped
 Bot/Gateway vet passed. The prior Gateway route unit used raw identity and was
 updated to its existing verified-user fixture; actual HTTP proof remains separate.
+
+### Review correction: preserve semantic tests after the ordinary cut
+
+Review82 found that older behavior fixtures still supplied raw actor metadata,
+so their new Unauthenticated result prevented current permission/source/recovery
+assertions from executing. Keep all production gates and the raw-deny oracle.
+The component client now signs each exact request and the component receiver
+verifies its method/body/account/profile before invoking the handler. Floor and
+replay callbacks remain explicitly controlled in these bufconn tests. Direct
+native tests use the same signed per-request verification. These fixtures are
+separate from actual mTLS/Java-floor public composition proof.
+
+Fourteen original cases passed on the first corrected actor fixture; seven
+exposed missing private Role/Chat test dependencies and retained their failures.
+Explicit controlled dependencies then made those seven and two missing-Chat /
+exact-original-retry controls pass in a fresh nine-test race run200.486s. The
+14 unaffected case results are reused, not presented as one fresh all-21 run.
+The missing Chat authority case explicitly omits its provider; current permission
+denial and lost-ACK/restart/retry assertions remain intact. Attachment011/store
+WIP is excluded from these execution archives and this correction.
+
+The same real composition then passed with direct declared Set RPC controls:
+owner success and durable third Chat observation, absent delegated credential
+Unauthenticated, and PermissionDenied for the same current Space manager setting
+another owner's Bot. Gateway signs through the production caller with controlled
+verified claims for this direct RPC; the actual mTLS receiver, JWKS, Java current
+floor and local owner decision execute. This does not introduce an HTTP mapping.
+Gateway2.672s/Bot10.861s passed. Two preceding setup readiness failures occurred
+before the Set RPC; their logs remain preserved and are not successful evidence.
