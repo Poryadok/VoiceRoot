@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/pkg/memberadmission"
 )
 
@@ -17,13 +18,11 @@ type admissionCandidateAccess interface {
 
 func TestMemberAdmissionNoRowRemovalAndAccountAliasBanFenceReady(t *testing.T) {
 	ctx := context.Background()
-	pool := startSpacePostgresForStoreTest(t, ctx)
-	applySpaceMigrationForStoreTest(t, ctx, pool)
-	st := &SpaceStore{Pool: pool}
-	owner := uuid.New()
-	space, err := st.CreateSpace(ctx, owner, "Pending administrative removal", "", "public")
+	st := nativeCreatorFixture(t)
+	create, _, owner := signedNativeCreator(t, st, &spacev1.CreateSpaceRequest{Name: "Pending administrative removal", Visibility: "public"})
+	space, err := create()
 	require.NoError(t, err)
-	applyMemberAuthorityIfPresent(t, st)
+	pool := st.Pool
 	for _, action := range []string{"leave", "kick"} {
 		in := MemberAdmissionInput{OperationID: uuid.New(), SpaceID: space.ID, ProfileID: uuid.New(), AccountID: uuid.New()}
 		i, err := st.PrepareMemberAdmission(ctx, in)

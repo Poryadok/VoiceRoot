@@ -86,16 +86,14 @@ func (s *SpaceStore) BanMember(
 	if evictProfileID != nil && *evictProfileID == ownerProfile {
 		return ErrCannotBanOwner
 	}
-	var ownerAccount bool
-	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_ordinary_member_heads
-	 WHERE space_id=$1 AND profile_id=$2 AND account_id=$3)`, spaceID, ownerProfile, accountID).Scan(&ownerAccount); err != nil {
+	banScoped := *s
+	banScoped.tx = tx
+	native, err := banScoped.checkKnownNativeBanCoverage(ctx, spaceID, accountID, ownerProfile, evictProfileID)
+	if err != nil {
 		return err
 	}
-	if ownerAccount {
-		return ErrCannotBanOwner
-	}
 
-	if evictProfileID != nil {
+	if evictProfileID != nil && !native {
 		tag, err := tx.Exec(ctx, `
 DELETE FROM space_members WHERE space_id = $1 AND profile_id = $2
 `, spaceID, *evictProfileID)
@@ -126,13 +124,22 @@ ON CONFLICT (space_id, account_id) DO UPDATE SET
 
 	// Ban every pending alias of this account, including attempts without a
 	// published member row. Unban cannot revive their old Ensure receipts.
-	banScoped := *s
-	banScoped.tx = tx
-	if err = banScoped.removeKnownAccountMembers(ctx, spaceID, accountID); err != nil {
+	if native {
+		if err = banScoped.removeKnownAccountMembers(ctx, spaceID, accountID); err != nil {
+			return err
+		}
+		if err = banScoped.retirePendingAccountAdmissions(ctx, spaceID, accountID); err != nil {
+			return err
+		}
+	}
+	var attempts bool
+	if err = tx.QueryRow(ctx, `SELECT to_regclass('public.space_join_attempts') IS NOT NULL`).Scan(&attempts); err != nil {
 		return err
 	}
-	if err = banScoped.retirePendingAccountAdmissions(ctx, spaceID, accountID); err != nil {
-		return err
+	if attempts {
+		if err = banScoped.InvalidateJoinAttemptsForAccount(ctx, spaceID, accountID); err != nil {
+			return err // Unknown CLAIMED outcome rolls back ban and native losses.
+		}
 	}
 
 	_, err = tx.Exec(ctx, `
