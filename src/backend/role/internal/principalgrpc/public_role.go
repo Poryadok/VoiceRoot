@@ -6,6 +6,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	rolev1 "voice.app/voice/role/v1"
 	"voice/backend/pkg/principal"
 )
@@ -34,7 +35,7 @@ func RequirePublicRole(ctx context.Context, request proto.Message, method string
 	if !ok {
 		return status.Error(codes.Unauthenticated, "verified Role principal required")
 	}
-	if !IsDelegatedRoleMethod(method) || request == nil || !request.ProtoReflect().IsValid() || len(request.ProtoReflect().GetUnknown()) != 0 {
+	if !IsDelegatedRoleMethod(method) || request == nil || !request.ProtoReflect().IsValid() || unknownRoleRequest(request.ProtoReflect(), 0) {
 		return status.Error(codes.InvalidArgument, "invalid Role request")
 	}
 	hash, err := principal.RequestHash(request)
@@ -48,6 +49,33 @@ func RequirePublicRole(ctx context.Context, request proto.Message, method string
 		return status.Error(codes.PermissionDenied, "Gateway delegated Role actor required")
 	}
 	return nil
+}
+
+// A valid transport signature binds unknown bytes too. It does not grant the
+// receiver authority to interpret an unknown nested request schema.
+func unknownRoleRequest(message protoreflect.Message, depth int) bool {
+	if !message.IsValid() || depth > 64 || len(message.GetUnknown()) != 0 {
+		return true
+	}
+	unknown := false
+	message.Range(func(field protoreflect.FieldDescriptor, value protoreflect.Value) bool {
+		switch {
+		case field.IsMap() && field.MapValue().Message() != nil:
+			value.Map().Range(func(_ protoreflect.MapKey, entry protoreflect.Value) bool {
+				unknown = unknownRoleRequest(entry.Message(), depth+1)
+				return !unknown
+			})
+		case field.IsList() && field.Message() != nil:
+			list := value.List()
+			for i := 0; i < list.Len() && !unknown; i++ {
+				unknown = unknownRoleRequest(list.Get(i).Message(), depth+1)
+			}
+		case !field.IsMap() && !field.IsList() && field.Message() != nil:
+			unknown = unknownRoleRequest(value.Message(), depth+1)
+		}
+		return !unknown
+	})
+	return unknown
 }
 func publicRoleUUID(value string) bool {
 	id, err := uuid.Parse(value)
