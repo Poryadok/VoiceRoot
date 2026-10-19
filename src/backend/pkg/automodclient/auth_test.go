@@ -19,13 +19,27 @@ import (
 type authFixture struct {
 	resolve    func(context.Context, *automodv1.ResolveModerationSubjectRequest) (*automodv1.ResolveModerationSubjectResponse, error)
 	reconciled *automodv1.ReconcileModerationRestrictionResponse
+	terminal   *automodv1.ListTerminalModerationSubjectsResponse
 }
 
 func (f authFixture) ResolveModerationSubject(ctx context.Context, r *automodv1.ResolveModerationSubjectRequest, _ ...grpc.CallOption) (*automodv1.ResolveModerationSubjectResponse, error) {
 	return f.resolve(ctx, r)
 }
 func (f authFixture) ListTerminalModerationSubjects(context.Context, *automodv1.ListTerminalModerationSubjectsRequest, ...grpc.CallOption) (*automodv1.ListTerminalModerationSubjectsResponse, error) {
+	if f.terminal != nil {
+		return f.terminal, nil
+	}
 	return &automodv1.ListTerminalModerationSubjectsResponse{Complete: false}, nil
+}
+
+func TestAuthClientRejectsUnsealedCompleteTerminalSnapshot(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "moderation", KeyID: "current", PrivateKey: key})
+	require.NoError(t, err)
+	client := &AuthClient{Issuer: issuer, Client: authFixture{terminal: &automodv1.ListTerminalModerationSubjectsResponse{Complete: true, SubjectIds: []string{uuid.NewString()}}}}
+	_, err = client.TerminalSubjects(context.Background())
+	require.Error(t, err, "complete bool alone cannot certify the finite terminal cut")
 }
 func (f authFixture) ReconcileModerationRestriction(context.Context, *automodv1.ReconcileModerationRestrictionRequest, ...grpc.CallOption) (*automodv1.ReconcileModerationRestrictionResponse, error) {
 	if f.reconciled != nil {

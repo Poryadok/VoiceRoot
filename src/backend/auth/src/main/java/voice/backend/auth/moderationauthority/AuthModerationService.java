@@ -17,7 +17,7 @@ public final class AuthModerationService extends AuthModerationAuthorityServiceG
     respond(observer,()->{require(Set.of("messaging","moderation"));return store.resolve(uuid(request.getAccountId()),request.hasSubjectId()?uuid(request.getSubjectId()):null);});
   }
   @Override public void listTerminalModerationSubjects(ListTerminalModerationSubjectsRequest request,StreamObserver<ListTerminalModerationSubjectsResponse> observer){
-    respond(observer,()->{require(Set.of("messaging","moderation"));return store.terminalSnapshot();});
+    respond(observer,()->{require(Set.of("messaging","moderation"));if(!request.getUnknownFields().asMap().isEmpty())throw Status.INVALID_ARGUMENT.asRuntimeException();return store.terminalSnapshot();});
   }
   @Override public void reconcileModerationRestriction(ReconcileModerationRestrictionRequest request,StreamObserver<ReconcileModerationRestrictionResponse> observer){
     respond(observer,()->{require(Set.of("moderation"));if(request.getProtocolVersion()!=1)throw Status.INVALID_ARGUMENT.asRuntimeException();return store.reconcile(uuid(request.getAccountId()),uuid(request.getSubjectId()),request.getRevision(),request.getModerationBanned());});

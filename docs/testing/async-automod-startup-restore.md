@@ -1,5 +1,20 @@
 BE-045 c12: startup and restore contract, v1
 
+Implemented terminal-view framing checkpoint: `ListTerminalModerationSubjects`
+returns a `ModerationAuthoritySnapshotSeal` with protocol1, persisted Auth
+authority generation, fresh snapshot UUID, repeatable-read DB cut, permanent
+terminal high-water, exact union count, canonical SHA-256 and complete flag.
+The union includes both durable terminal subjects and accounts already due at
+the captured cut. It is bounded to 50,000 subjects; overflow is unavailable,
+never truncated success. Canonical hash input is UTF-8
+`voice.automod.terminal-union.v1` + NUL, big-endian uint64 item count and each
+16-byte UUID in ascending canonical UUID-string order. Both runtimes share a
+fixed test vector. Consumers reject missing/unknown metadata, duplicate or
+unsorted IDs, count/hash mismatch and a high-water greater than the union.
+The Auth terminal ledger is append-only and generation/progress cannot reset.
+These checks identify one finite view; independent restore history/current-tail
+verification and the actual bootstrap coordinator remain required and open.
+
 Later c17 refinement: [account-core and Space erasure](async-automod-space-erasure.md)
 requires minimized v2 bytes/hash from insertion and separate erasable local
 coverage links. Before restored origin links or product effects are accessible,

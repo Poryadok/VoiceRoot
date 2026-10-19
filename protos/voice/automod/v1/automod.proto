@@ -63,9 +63,22 @@ message ResolveModerationSubjectResponse {
   uint64 session_epoch = 3;
 }
 message ListTerminalModerationSubjectsRequest {}
+// One finite protected view, not agreement between independently old backups.
+// Auth's own trusted live/recovery authority must be established first.
+message ModerationAuthoritySnapshotSeal {
+  uint32 protocol_version = 1;
+  string authority_generation = 2;
+  string snapshot_id = 3;
+  google.protobuf.Timestamp cut = 4;
+  uint64 terminal_high_water = 5;
+  uint64 item_count = 6;
+  bytes canonical_sha256 = 7;
+  bool complete = 8;
+}
 message ListTerminalModerationSubjectsResponse {
   repeated string subject_ids = 1;
   bool complete = 2;
+  ModerationAuthoritySnapshotSeal seal = 3;
 }
 
 message ReconcileModerationRestrictionRequest {

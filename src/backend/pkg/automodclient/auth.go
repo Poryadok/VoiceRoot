@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"voice/backend/pkg/automodwire"
 	automodv1 "voice/backend/pkg/pb/voice/automod/v1"
 	"voice/backend/pkg/principal"
 )
@@ -106,6 +107,20 @@ func ValidSubject(binding *automodv1.SubjectBinding, account, expected uuid.UUID
 	}
 }
 func (c *AuthClient) TerminalSubjects(ctx context.Context) ([]uuid.UUID, error) {
+	response, err := c.TerminalSnapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]uuid.UUID, len(response.GetSubjectIds()))
+	for index, raw := range response.GetSubjectIds() {
+		result[index] = uuid.MustParse(raw)
+	}
+	return result, nil
+}
+
+// TerminalSnapshot preserves the exact seal for the current-boot import receipt.
+// Do not replace it with a bare complete bool or a truncated list of subjects.
+func (c *AuthClient) TerminalSnapshot(ctx context.Context) (*automodv1.ListTerminalModerationSubjectsResponse, error) {
 	request := &automodv1.ListTerminalModerationSubjectsRequest{}
 	signed, err := c.signed(ctx, request, automodv1.AuthModerationAuthorityService_ListTerminalModerationSubjects_FullMethodName)
 	if err != nil {
@@ -115,20 +130,10 @@ func (c *AuthClient) TerminalSubjects(ctx context.Context) ([]uuid.UUID, error) 
 	if err != nil {
 		return nil, err
 	}
-	if response == nil || !response.GetComplete() {
+	if automodwire.ValidateTerminalSnapshot(response) != nil {
 		return nil, unavailable()
 	}
-	result := make([]uuid.UUID, 0, len(response.GetSubjectIds()))
-	seen := map[uuid.UUID]bool{}
-	for _, raw := range response.GetSubjectIds() {
-		id, err := uuid.Parse(raw)
-		if err != nil || id == uuid.Nil || id.String() != raw || seen[id] {
-			return nil, unavailable()
-		}
-		seen[id] = true
-		result = append(result, id)
-	}
-	return result, nil
+	return response, nil
 }
 func (c *AuthClient) Reconcile(ctx context.Context, account, subject uuid.UUID, revision uint64, banned bool) (*automodv1.ReconcileModerationRestrictionResponse, error) {
 	if account == uuid.Nil || subject == uuid.Nil || revision == 0 || revision > math.MaxInt64 {

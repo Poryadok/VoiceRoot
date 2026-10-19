@@ -4,17 +4,26 @@ import app.voice.automod.v1.*;
 import com.google.protobuf.Timestamp;
 import io.grpc.Status;
 import java.time.Instant;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /** Auth-owned live account/opaque subject projection; never a User profile lookup. */
 public final class AuthModerationStore {
   private final NamedParameterJdbcTemplate jdbc;
   private final TransactionTemplate transactions;
+  private final TransactionTemplate snapshots;
   public AuthModerationStore(NamedParameterJdbcTemplate jdbc, PlatformTransactionManager manager) {
     this.jdbc=Objects.requireNonNull(jdbc);this.transactions=new TransactionTemplate(manager);
+    this.snapshots=new TransactionTemplate(manager);
+    this.snapshots.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
+    this.snapshots.setReadOnly(true);
   }
   public ResolveModerationSubjectResponse resolve(UUID account,UUID expectedSubject) {
     var rows=jdbc.query("""
@@ -40,12 +49,32 @@ public final class AuthModerationStore {
     return rows.getFirst();
   }
   public ListTerminalModerationSubjectsResponse terminalSnapshot() {
-    var subjects=jdbc.query("""
-        SELECT subject_id FROM moderation_terminal_subjects
-        UNION SELECT moderation_subject_id FROM accounts WHERE moderation_subject_id IS NOT NULL AND moderation_purge_at <= clock_timestamp()
-        ORDER BY subject_id
-        """,Map.of(),(rs,row)->rs.getObject(1,UUID.class).toString());
-    return ListTerminalModerationSubjectsResponse.newBuilder().addAllSubjectIds(subjects).setComplete(true).build();
+    return snapshots.execute(transaction->{
+      Instant cut=Objects.requireNonNull(jdbc.queryForObject("SELECT clock_timestamp()",Map.of(),java.sql.Timestamp.class)).toInstant();
+      var authority=Objects.requireNonNull(jdbc.queryForObject("SELECT generation,terminal_high_water FROM moderation_authority_generation WHERE singleton",Map.of(),
+          (rs,row)->new Authority(rs.getObject(1,UUID.class),rs.getLong(2))));
+      var subjects=jdbc.query("""
+          SELECT subject_id FROM moderation_terminal_subjects
+          UNION SELECT moderation_subject_id FROM accounts WHERE moderation_subject_id IS NOT NULL AND moderation_purge_at <= :cut
+          ORDER BY subject_id LIMIT 50001
+          """,Map.of("cut",java.sql.Timestamp.from(cut)),(rs,row)->rs.getObject(1,UUID.class).toString());
+      if(subjects.size()>50000 || authority.highWater()>subjects.size())throw Status.RESOURCE_EXHAUSTED.withDescription("complete terminal authority view unavailable").asRuntimeException();
+      var seal=ModerationAuthoritySnapshotSeal.newBuilder().setProtocolVersion(1)
+          .setAuthorityGeneration(authority.generation().toString()).setSnapshotId(UUID.randomUUID().toString())
+          .setCut(timestamp(cut)).setTerminalHighWater(authority.highWater()).setItemCount(subjects.size())
+          .setCanonicalSha256(com.google.protobuf.ByteString.copyFrom(terminalDigest(subjects))).setComplete(true);
+      return ListTerminalModerationSubjectsResponse.newBuilder().addAllSubjectIds(subjects).setComplete(true).setSeal(seal).build();
+    });
+  }
+  private record Authority(UUID generation,long highWater) {}
+  static byte[] terminalDigest(List<String> subjects) {
+    try {
+      var digest=MessageDigest.getInstance("SHA-256");
+      digest.update("voice.automod.terminal-union.v1\u0000".getBytes(StandardCharsets.UTF_8));
+      digest.update(ByteBuffer.allocate(Long.BYTES).putLong(subjects.size()).array());
+      for(String raw:subjects){UUID id=UUID.fromString(raw);digest.update(ByteBuffer.allocate(16).putLong(id.getMostSignificantBits()).putLong(id.getLeastSignificantBits()).array());}
+      return digest.digest();
+    }catch(NoSuchAlgorithmException ex){throw new IllegalStateException("SHA-256 unavailable",ex);}
   }
   public ReconcileModerationRestrictionResponse reconcile(UUID account,UUID subject,long revision,boolean banned) {
     if(revision<=0)throw Status.INVALID_ARGUMENT.withDescription("positive moderation revision required").asRuntimeException();

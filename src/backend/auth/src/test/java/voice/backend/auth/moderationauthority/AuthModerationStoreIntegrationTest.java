@@ -14,6 +14,11 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 class AuthModerationStoreIntegrationTest {
+  @Test void terminalDigestMatchesThePrivateGoProtocolVector() {
+    assertThat(java.util.HexFormat.of().formatHex(AuthModerationStore.terminalDigest(java.util.List.of(
+        "00000000-0000-4000-8000-000000000001","80000000-0000-4000-8000-000000000002"))))
+        .isEqualTo("9fe34b5c58763df7b7fe4c98abd940a60b1cea25844aed41478de05cef88a4ac");
+  }
   @Test void acknowledgementCapturesAcceptedPayloadAndLifecycleInOneTransaction() {
     String external=System.getenv("AUTH_AUTOMOD_TEST_JDBC_URL");
     PostgreSQLContainer<?> pg=null;
@@ -63,6 +68,32 @@ class AuthModerationStoreIntegrationTest {
       assertThatThrownBy(()->store.reconcile(overdue,overdueSubject,1,false)).isInstanceOf(RuntimeException.class);
       store.purgeDue();
       assertThat(jdbc.queryForObject("SELECT count(*) FROM moderation_terminal_subjects WHERE subject_id=?",Integer.class,overdueSubject)).isEqualTo(1);
+      var snapshot=store.terminalSnapshot();
+      assertThat(snapshot.getComplete()).isTrue();
+      assertThat(snapshot.getSeal().getProtocolVersion()).isEqualTo(1);
+      assertThat(snapshot.getSeal().getComplete()).isTrue();
+      assertThat(snapshot.getSeal().getItemCount()).isEqualTo(2);
+      assertThat(snapshot.getSeal().getTerminalHighWater()).isEqualTo(2);
+      assertThat(snapshot.getSubjectIdsList()).containsExactlyElementsOf(java.util.stream.Stream.of(subject.toString(),overdueSubject.toString()).sorted().toList());
+      assertThat(snapshot.getSeal().getCanonicalSha256().toByteArray()).isEqualTo(AuthModerationStore.terminalDigest(snapshot.getSubjectIdsList()));
+      var repeatSnapshot=store.terminalSnapshot();
+      assertThat(repeatSnapshot.getSeal().getAuthorityGeneration()).isEqualTo(snapshot.getSeal().getAuthorityGeneration());
+      assertThat(repeatSnapshot.getSeal().getSnapshotId()).isNotEqualTo(snapshot.getSeal().getSnapshotId());
+      assertThat(repeatSnapshot.getSeal().getCanonicalSha256()).isEqualTo(snapshot.getSeal().getCanonicalSha256());
+      assertThatThrownBy(()->jdbc.update("DELETE FROM moderation_terminal_subjects WHERE subject_id=?",subject)).isInstanceOf(RuntimeException.class);
+      assertThatThrownBy(()->jdbc.update("UPDATE moderation_authority_generation SET terminal_high_water=0")).isInstanceOf(RuntimeException.class);
+      assertThatThrownBy(()->jdbc.update("UPDATE moderation_authority_generation SET generation=?",UUID.randomUUID())).isInstanceOf(RuntimeException.class);
+      UUID pending=UUID.randomUUID();
+      jdbc.update("INSERT INTO accounts(id,password_hash,type,status) VALUES (?,'fixture','regular','active')",pending);
+      UUID pendingSubject=UUID.fromString(store.resolve(pending,null).getSubject().getSubjectId());
+      jdbc.update("UPDATE accounts SET deleted_at=clock_timestamp()-interval '31 days' WHERE id=?",pending);
+      var unionSnapshot=store.terminalSnapshot();
+      assertThat(unionSnapshot.getSubjectIdsList()).contains(pendingSubject.toString());
+      assertThat(unionSnapshot.getSeal().getItemCount()).isEqualTo(3);
+      assertThat(unionSnapshot.getSeal().getTerminalHighWater()).isEqualTo(2);
+      store.purgeDue();
+      assertThat(store.terminalSnapshot().getSeal().getCanonicalSha256()).isEqualTo(unionSnapshot.getSeal().getCanonicalSha256());
+      assertThat(store.terminalSnapshot().getSeal().getTerminalHighWater()).isEqualTo(3);
     } finally {
       if(pg!=null)pg.close();
     }

@@ -2,6 +2,20 @@
 
 ## Account-core v2 implementation checkpoint
 
+Terminal-seal checkpoint: the old client accepting `complete=true` without a
+seal was reproduced as RED against the immutable pre-change client. Strict Go
+client/codec race tests pass (1.626s/1.191s). Auth now produces one bounded
+repeatable-read terminal union with persisted generation/high-water/count/hash;
+Java native PostgreSQL18 proof passes two tests, zero failures/skips (20.395s),
+applying the branch's 28 Flyway migrations through V29. V28 belongs to the
+separate Role owner-channel author and must be assembled before deployment;
+this disposable database was never a shared environment. Canonical counterpart
+is auth_db000030. Native source first exposed the assembled report-target proto
+include omission in Auth POM; adding both User and common report_target files
+restored compilation. This is scoped proof, not full restore/census/readiness.
+The first concurrent-source Go attempt was a build setup failure and is not RED;
+the actual baseline RED was obtained only after that process had terminated.
+
 The c17 origin-identifier leak was reproduced against the unactivated v1
 producer. New inserts now create a domain-hashed immutable account-only v2 core
 and a separate local `automod_message_coverage` bridge. Core delivery does not
