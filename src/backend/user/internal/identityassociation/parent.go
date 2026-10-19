@@ -50,9 +50,6 @@ type ParentObservation struct {
 	Disposition            ParentDisposition
 	CycleID                uuid.UUID
 	EraseAt                time.Time
-	TerminalOperationID    uuid.UUID
-	TerminalRevision       uint64
-	TerminalReceiptDigest  [32]byte
 	ObservedAt, ValidUntil time.Time
 	Cut                    ParentCut
 }
@@ -110,14 +107,13 @@ func validParentObservation(p ParentObservation, account uuid.UUID, now time.Tim
 	if p.Eligibility != ParentEligible && p.Eligibility != ParentIneligible {
 		return false
 	}
-	noTerminal := p.TerminalOperationID == uuid.Nil && p.TerminalRevision == 0 && p.TerminalReceiptDigest == ([32]byte{})
 	switch p.State {
 	case ParentActive:
-		return p.Disposition == ParentNotIrreversible && p.CycleID == uuid.Nil && p.EraseAt.IsZero() && noTerminal
+		return p.Disposition == ParentNotIrreversible && p.CycleID == uuid.Nil && p.EraseAt.IsZero()
 	case ParentRecoverable:
-		return p.Disposition == ParentNotIrreversible && p.CycleID != uuid.Nil && !p.EraseAt.IsZero() && noTerminal
+		return p.Disposition == ParentNotIrreversible && p.CycleID != uuid.Nil && !p.EraseAt.IsZero()
 	case ParentTerminal:
-		return p.Disposition == ParentIrreversible && p.Eligibility == ParentIneligible && p.TerminalOperationID != uuid.Nil && p.TerminalRevision > 0 && p.TerminalRevision <= math.MaxInt64 && p.TerminalReceiptDigest != ([32]byte{}) && ((p.CycleID == uuid.Nil) == p.EraseAt.IsZero())
+		return p.Disposition == ParentIrreversible && p.Eligibility == ParentIneligible && p.CycleID != uuid.Nil && !p.EraseAt.IsZero() && !p.EraseAt.After(p.ObservedAt)
 	}
 	return false
 }

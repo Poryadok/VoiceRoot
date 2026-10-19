@@ -56,3 +56,15 @@ func TestSealedParentProofRequiresExactCompleteFreshOwnerFact(t *testing.T) {
 	}
 	require.False(t, (VerifiedParentProof{}).validForBirth(time.Now()))
 }
+
+func TestCanonicalTerminalParentUsesActualCycleAndCut(t *testing.T) {
+	account := uuid.New()
+	fact := parentForTest(account)
+	fact.State, fact.Eligibility, fact.Disposition = ParentTerminal, ParentIneligible, ParentIrreversible
+	fact.CycleID, fact.EraseAt = uuid.New(), fact.ObservedAt
+	require.True(t, validParentObservation(fact, account, time.Now()))
+	fact.EraseAt = fact.ObservedAt.Add(time.Nanosecond)
+	require.False(t, validParentObservation(fact, account, time.Now()))
+	fact.EraseAt, fact.CycleID = time.Time{}, uuid.Nil
+	require.False(t, validParentObservation(fact, account, time.Now()))
+}
