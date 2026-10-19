@@ -266,6 +266,33 @@ func TestSeparatedPostgresFencerCustody(t *testing.T) {
 			copyFile(installer, installedPaths.Installation, "current.json", windowBytes, 0444)
 		})
 	}
+	installerSQL := func(sql string) {
+		output, status := execute(pg, "postgres", []string{"psql", "-X", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-c", sql}, nil)
+		require.Zero(t, status, "%s", output)
+	}
+	t.Run("prepared predecessor transaction blocks fencing without guessing its outcome", func(t *testing.T) {
+		_, err := old.Exec(ctx, `BEGIN; INSERT INTO native_owner_fixture VALUES(4,'prepared predecessor'); PREPARE TRANSACTION 'custody_predecessor'`)
+		require.NoError(t, err)
+		_, status := call(false, "fence", ref.CommandID, ref.Hash)
+		require.NotZero(t, status)
+		var login bool
+		require.NoError(t, old.QueryRow(ctx, `SELECT rolcanlogin FROM pg_roles WHERE rolname=current_user`).Scan(&login))
+		require.True(t, login)
+		var prepared int
+		require.NoError(t, old.QueryRow(ctx, `SELECT count(*) FROM pg_prepared_xacts WHERE gid='custody_predecessor' AND owner=current_user`).Scan(&prepared))
+		require.Equal(t, 1, prepared, "fencer must retain unresolved prepared work")
+		installerSQL(`ROLLBACK PREPARED 'custody_predecessor'`)
+	})
+	t.Run("incoming delegation blocks fencing without revoking authority implicitly", func(t *testing.T) {
+		installerSQL(`CREATE ROLE old_delegate NOLOGIN; GRANT old_writer TO old_delegate`)
+		_, status := call(false, "fence", ref.CommandID, ref.Hash)
+		require.NotZero(t, status)
+		var login, delegated bool
+		require.NoError(t, old.QueryRow(ctx, `SELECT rolcanlogin,EXISTS(SELECT 1 FROM pg_auth_members WHERE roleid=(SELECT oid FROM pg_roles WHERE rolname='old_writer')) FROM pg_roles WHERE rolname=current_user`).Scan(&login, &delegated))
+		require.True(t, login)
+		require.True(t, delegated)
+		installerSQL(`REVOKE old_writer FROM old_delegate; DROP ROLE old_delegate`)
+	})
 	paused, err := old.Begin(ctx)
 	require.NoError(t, err)
 	_, err = paused.Exec(ctx, `INSERT INTO native_owner_fixture VALUES(2,'paused predecessor')`)
@@ -300,6 +327,24 @@ func TestSeparatedPostgresFencerCustody(t *testing.T) {
 	require.NotEqual(t, result.Observation.ObservationID, replay.Observation.ObservationID)
 	output, status = call(true, "read-observation", replay.Observation.ObservationID, replay.Observation.Hash)
 	require.Zero(t, status, "%s", output)
+	t.Run("re-enabled predecessor cannot reuse historical proof as fresh observation", func(t *testing.T) {
+		installerSQL(`ALTER ROLE old_writer LOGIN`)
+		resumed, err := connect("old_writer", oldPassword)
+		require.NoError(t, err, "fixture administrator actually restored predecessor login")
+		defer resumed.Close(context.Background())
+		_, status := call(false, "observe", ref.CommandID, ref.Hash)
+		require.NotZero(t, status, "fresh resource observer must reject the re-enabled role")
+		var login bool
+		require.NoError(t, resumed.QueryRow(ctx, `SELECT rolcanlogin FROM pg_roles WHERE rolname=current_user`).Scan(&login))
+		require.True(t, login, "observation alone must not mutate credentials")
+		output, status := call(false, "fence", ref.CommandID, ref.Hash)
+		require.Zero(t, status, "%s", output)
+		var recovered FenceResult
+		require.NoError(t, json.Unmarshal([]byte(output), &recovered))
+		require.Equal(t, result.Receipt, recovered.Receipt)
+		require.NotEqual(t, replay.Observation, recovered.Observation)
+		require.Error(t, resumed.Ping(ctx), "recovery fencing terminates the actual restored session")
+	})
 	t.Run("old observation after external execution rotation", func(t *testing.T) {
 		window.ExecutionID = uuid.New()
 		raw, err := json.Marshal(window)

@@ -84,13 +84,22 @@ execution rotation. Sanitized canonical component bytes and exact compiled
 source/artifact hashes are retained in the ignored evidence directory. No media
 protocol test was rerun for this custody change.
 
+The separated executable also refuses an actual predecessor prepared
+transaction without committing or rolling it back, and refuses an incoming
+role delegation without changing LOGIN or revoking membership. Only the
+installer fixture resolves those blockers. After the installer deliberately
+re-enables the predecessor, fresh observation fails without mutating it;
+explicit fencing then terminates the restored session and retains the stable
+receipt with a new observation. Historical readback alone cannot prove this
+current resource condition.
+
 These are component proofs. Fixture source/schema/writer/provider manifest
 hashes do not constitute the assembled native package or closed catalogue.
 
 ## Remaining work and honest assumptions
 
-- [ ] Complete c12 prepared/delegation/post-precheck race, partial crash,
-      termination failure and re-enabled-credential negative matrix through the
+- [ ] Complete c12 post-precheck race, partial crash and termination-failure
+      negative matrix through the
       separated executable boundary.
 - [ ] Installer-enforced complete deployment/controller/credential history,
       non-restored external incarnation and all writable/promotable endpoints.
