@@ -544,3 +544,14 @@ an unregistered RPC, not a claim about prior cryptographic enforcement.
 Original ordinary pin cleanup remains on the same finite dedicated listener;
 its affected transport regression must stay green. Space relay, native drain,
 qualified local journal adoption and independent global terminal work remain.
+
+The coverage receiver distinguishes trusted JWKS/Redis dependency failures
+from invalid credentials. Actual production-cache hard expiry followed by
+HTTPS 503/malformed JWKS, and stopped real Redis, return Unavailable before
+the held SQL source can be entered. Unknown kid and replay remain
+Unauthenticated; fresh approved JWKS recovers. Existing pin cleanup retains
+its prior error mapping. The causal missing-classification RED was 75.639s;
+the corrected real dependency matrix passed in 87.156s, using the production
+61-second cache expiry without a substituted clock or resolver. Runtime
+compatibility, scoped vet and Messaging build also pass. This is a receiver
+availability proof, not qualified Bot P3 adoption or full cleanup completion.

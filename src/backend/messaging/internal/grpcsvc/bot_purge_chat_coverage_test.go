@@ -10,16 +10,20 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -69,9 +73,19 @@ func TestBotPurgeChatCoverageActualProtectedManifestRead(t *testing.T) {
 	next, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	jwks := integrationtest.SourceJWKSDocument(t, key, next)
+	var jwksMode, jwksRequests atomic.Int32
 	https := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/.well-known/principal-jwks.json" {
 			http.NotFound(w, r)
+			return
+		}
+		jwksRequests.Add(1)
+		if jwksMode.Load() == 1 {
+			http.Error(w, "test provider unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if jwksMode.Load() == 2 {
+			_, _ = w.Write([]byte(`{"keys":[{"kid":"broken"}]}`))
 			return
 		}
 		_, _ = w.Write(jwks)
@@ -83,7 +97,8 @@ func TestBotPurgeChatCoverageActualProtectedManifestRead(t *testing.T) {
 	serverFile, serverKey := writeGISMappingClientCert(t, serverCert)
 	caFile := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(caFile, caPEM, 0600))
-	runtime, err := StartBotPinCleanupServer(ctx, BotPinCleanupConfig{ListenAddr: "127.0.0.1:0", TLSCertFile: serverFile, TLSKeyFile: serverKey, ClientCAFile: caFile, JWKSURL: strings.Replace(https.URL, "127.0.0.1", "localhost", 1) + "/.well-known/principal-jwks.json", JWKSCAFile: caFile, JWKSClientCertFile: cert, JWKSClientKeyFile: keyFile, ReplayRedisURL: botPinRealReplayURL(t)}, pins)
+	replayURL, replayServer := botCoverageReplayServer(t)
+	runtime, err := StartBotPinCleanupServer(ctx, BotPinCleanupConfig{ListenAddr: "127.0.0.1:0", TLSCertFile: serverFile, TLSKeyFile: serverKey, ClientCAFile: caFile, JWKSURL: strings.Replace(https.URL, "127.0.0.1", "localhost", 1) + "/.well-known/principal-jwks.json", JWKSCAFile: caFile, JWKSClientCertFile: cert, JWKSClientKeyFile: keyFile, ReplayRedisURL: replayURL}, pins)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, runtime.Close()) })
 	conn, err := grpc.NewClient(runtime.Address(), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, ServerName: "localhost", RootCAs: roots, Certificates: []tls.Certificate{botCert}})))
@@ -216,6 +231,66 @@ func TestBotPurgeChatCoverageActualProtectedManifestRead(t *testing.T) {
 	var receipts int
 	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT count(*) FROM bot_pin_removal_receipts`).Scan(&receipts))
 	require.Zero(t, receipts, "coverage reads never create a cleanup receipt or pin effect")
+	t.Run("dependency outages are retryable before SQL", func(t *testing.T) {
+		unknown, e := principal.NewIssuer(principal.IssuerConfig{Issuer: "bot", KeyID: "unpublished", PrivateKey: key})
+		require.NoError(t, e)
+		hash, e := principal.RequestHash(request)
+		require.NoError(t, e)
+		token, e := unknown.IssueService(principal.ServiceInput{Audience: "messaging", RPC: messagingv1.MessagingService_GetBotPurgeChatCoverage_FullMethodName, RequestID: request.RequestId, RequestHash: hash})
+		require.NoError(t, e)
+		_, e = client.GetBotPurgeChatCoverage(metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token, "x-request-id", request.RequestId), request)
+		require.Equal(t, codes.Unauthenticated, status.Code(e), "complete approved JWKS missing kid is invalid proof, not outage")
+		jwksMode.Store(1)
+		t.Log("wait for actual production JWKS cache hard expiry; no test clock or resolver override")
+		time.Sleep(61 * time.Second)
+		assertUnavailableBeforeSQL := func() {
+			holder, e := db.Pool.Begin(ctx)
+			require.NoError(t, e)
+			defer holder.Rollback(context.Background())
+			_, e = holder.Exec(ctx, `LOCK TABLE messaging_space_lifecycle_fences IN ACCESS EXCLUSIVE MODE`)
+			require.NoError(t, e)
+			proof, cancel := context.WithTimeout(sign(request, messagingv1.MessagingService_GetBotPurgeChatCoverage_FullMethodName), 5*time.Second)
+			defer cancel()
+			_, e = client.GetBotPurgeChatCoverage(proof, request)
+			require.Equal(t, codes.Unavailable, status.Code(e), "dependency error must be retryable before a locked SQL source can be entered")
+		}
+		before := jwksRequests.Load()
+		assertUnavailableBeforeSQL()
+		require.Greater(t, jwksRequests.Load(), before, "503 was fetched after real hard expiry")
+		time.Sleep(5100 * time.Millisecond)
+		jwksMode.Store(2)
+		before = jwksRequests.Load()
+		assertUnavailableBeforeSQL()
+		require.Greater(t, jwksRequests.Load(), before, "malformed trusted key set was actually fetched")
+		time.Sleep(5100 * time.Millisecond)
+		jwksMode.Store(0)
+		_, e = client.GetBotPurgeChatCoverage(sign(request, messagingv1.MessagingService_GetBotPurgeChatCoverage_FullMethodName), request)
+		require.NoError(t, e, "fresh approved snapshot recovers the same read")
+		require.NoError(t, replayServer.Stop(ctx, nil))
+		assertUnavailableBeforeSQL()
+		old := &messagingv1.ApplyBotChatPinRemovalRequest{OperationId: uuid.NewString()}
+		_, e = client.ApplyBotChatPinRemoval(signedBotPinContext(t, ctx, issuer, old, messagingv1.MessagingService_ApplyBotChatPinRemoval_FullMethodName), old)
+		require.Equal(t, codes.Unauthenticated, status.Code(e), "old cleanup transport error domain remains unchanged")
+	})
+}
+
+func botCoverageReplayServer(t *testing.T) (string, testcontainers.Container) {
+	t.Helper()
+	ctx := t.Context()
+	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{ContainerRequest: testcontainers.ContainerRequest{Image: "redis:7-alpine", ExposedPorts: []string{"6379/tcp"}, WaitingFor: wait.ForListeningPort("6379/tcp")}, Started: true})
+	if c != nil {
+		t.Cleanup(func() {
+			cleanup, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			require.NoError(t, c.Terminate(cleanup))
+		})
+	}
+	require.NoError(t, err)
+	host, err := c.Host(ctx)
+	require.NoError(t, err)
+	port, err := c.MappedPort(ctx, "6379/tcp")
+	require.NoError(t, err)
+	return "redis://" + net.JoinHostPort(host, port.Port()) + "/0", c
 }
 
 // Test-only re-signing proves the receiver rejects correctly signed mixed

@@ -987,6 +987,12 @@ method/audience, canonical read request ID/full body hash and fresh replay-safe
 JWT. A private owned capability is checked again after SQL waits. Ordinary
 Messaging/Gateway contexts cannot authorize this read. Existing cleanup
 configuration and its required current-Chat datasource remain fail-closed.
+For this new read method only, actual trusted JWKS transport/status/malformed
+snapshot failures and replay Redis I/O failure return retryable `Unavailable`
+before data access. Invalid proof, a fresh complete key set missing its `kid`,
+and replayed JTI remain `Unauthenticated`. Existing cleanup method error codes
+are unchanged; a last-good JWKS set remains usable only within its existing
+hard expiry, without extending that clock.
 
 The response echoes the exact Space/deletion-operation/purge-generation and
 ManifestBinding and reports source schedule generation plus one membership

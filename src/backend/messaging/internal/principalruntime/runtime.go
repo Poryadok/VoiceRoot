@@ -67,25 +67,36 @@ func NewForIssuer(ctx context.Context, config Config, expectedIssuer string) (*R
 	client := &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
 		return errors.New("service principal JWKS redirects are forbidden")
 	}}
+	dependencyFailure := func(err error) error {
+		if expectedIssuer == "bot" {
+			return &botPurgeDependencyFailure{cause: err}
+		}
+		return err
+	}
 	fetch := func(ctx context.Context, issuer string) ([]byte, error) {
 		if issuer != expectedIssuer {
 			return nil, errors.New("untrusted service principal issuer")
 		}
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, config.JWKSURL, nil)
 		if err != nil {
-			return nil, err
+			return nil, dependencyFailure(err)
 		}
 		response, err := client.Do(request)
 		if err != nil {
-			return nil, err
+			return nil, dependencyFailure(err)
 		}
 		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("service JWKS returned status %d", response.StatusCode)
+			return nil, dependencyFailure(fmt.Errorf("service JWKS returned status %d", response.StatusCode))
 		}
 		body, err := io.ReadAll(io.LimitReader(response.Body, 128*1024+1))
 		if err != nil || len(body) > 128*1024 {
-			return nil, errors.New("service JWKS response is invalid")
+			return nil, dependencyFailure(errors.New("service JWKS response is invalid"))
+		}
+		if expectedIssuer == "bot" {
+			if _, err := principal.ParseJWKS(body); err != nil {
+				return nil, dependencyFailure(err)
+			}
 		}
 		return body, nil
 	}
@@ -166,7 +177,11 @@ func (r *Runtime) recordReplay(ctx context.Context, issuer, jwtID string, expire
 		return errors.New("service principal replay detected")
 	}
 	if err != nil || result != "OK" {
-		return errors.New("service principal replay storage unavailable")
+		failure := errors.New("service principal replay storage unavailable")
+		if r.issuer == "bot" {
+			return &botPurgeDependencyFailure{cause: failure}
+		}
+		return failure
 	}
 	return nil
 }

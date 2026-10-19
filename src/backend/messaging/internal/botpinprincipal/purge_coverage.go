@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	messagingv1 "voice.app/voice/messaging/v1"
+	"voice/backend/messaging/internal/principalruntime"
 	"voice/backend/pkg/principal"
 )
 
@@ -103,6 +104,9 @@ func coverageUnary(ctx context.Context, request any, info *grpc.UnaryServerInfo,
 	}
 	proof, err := verifier.Verify(ctx, transport.BearerToken, info.FullMethod, transport.RequestID, hash)
 	if err != nil {
+		if principalruntime.IsBotPurgeDependencyUnavailable(err) {
+			return nil, status.Error(codes.Unavailable, "Bot purge coverage authentication dependency unavailable")
+		}
 		return nil, status.Error(codes.Unauthenticated, "invalid Bot purge coverage principal")
 	}
 	v := VerifiedPurgeCoverage{body: raw, proof: proof}
