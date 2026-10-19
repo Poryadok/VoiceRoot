@@ -544,3 +544,10 @@ unreadable presence check refuses legacy bootstrap. With a database configured,
 it checks the admission head before its JWKS bootstrap: every begun state refuses
 legacy serving. An absent table or never-begun empty head retains pre-cut behavior
 only; this check cannot prove external artifact or credential admission.
+
+Roster runtime preparation binds and validates the already provisioned durable
+without fetching, acknowledging, resetting sessions or dispatching cancellation
+outbox entries. Its explicit start belongs after the native root's complete
+admission/dependency checks. Closing a prepared or started runtime is terminal;
+it cannot be restarted to reopen processing. This lifecycle supplies no native
+installation or publisher authority of its own.
