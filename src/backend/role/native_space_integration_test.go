@@ -188,12 +188,14 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	require.NoError(t, err)
 	botSigningKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
+	botNextKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
 	jwk := func(kid string, key *rsa.PrivateKey) map[string]string {
 		return map[string]string{"kid": kid, "kty": "RSA", "use": "sig", "alg": "RS256", "n": base64.RawURLEncoding.EncodeToString(key.N.Bytes()), "e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.E)).Bytes())}
 	}
 	jwks := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/bot" {
-			require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{jwk("current", botSigningKey)}}))
+			require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{jwk("current", botSigningKey), jwk("next", botNextKey)}}))
 			return
 		}
 		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{jwk("current", current), jwk("next", next)}}))
