@@ -25,6 +25,16 @@ ListMembers page100 and unmanaged Chat entitlement are not substitutes for this
 producer. No foreign database reads, raw viewer identity metadata or public
 caller registration is introduced by this target contract.
 
+The owner-local `ReadSpaceReportReadContext` source stage reads real qualified41
+native witnesses and the exact effective head under a fenced READ COMMITTED
+transaction, checking revision and final DB time after SQL waits. It returns
+positioning facts, not a permission or completed all-writer cutover capability.
+Missing/stale heads never repair themselves. Protected serving additionally
+requires the native guard-epoch/completed per-Space cutover producer; current
+table presence, head-local cutover ID and a fresh Creator head do not supply it.
+The protected RPC/full downstream chain remains unactivated until that producer
+and its real qualified cohort are composed.
+
 The continuous effective binding is distinct from the ONE-source Role/admission
 binding. BE-066 c23 selects a compact generation/episode UUID/retirement floor and
 ledger revision, exact private ordinary/community witnesses and their coverage

@@ -2,6 +2,46 @@
 
 ## Resumed current-cohort implementation
 
+### Qualified native41 consumer continuation
+
+Development union31cfbd9 normally composes prior587d, current MASTER candidate
+e378709d and actual native producer eb035ee5/catalog qualifier dc49c008.
+Owner186 retains native capture/finalize and every writer placement; only real
+Creator placement is wired. Owner320 adds the effective-history reader and
+protected Space/Messaging consumer without changing those producer files.
+
+- [x] Real signed Creator41 plus native tree node yields exact current episode,
+  known boundary and tree/revision positioning evidence.
+- [x] Missing active ledger, inherited RR, stale source, expired finite support,
+  freeze and foreign tree relation deny or fail unavailable without read repair.
+- [x] Read genuine native sources under same-backend RC Space fence; verify the
+  final DB clock after head SQL waits and reread the authority revision.
+- [ ] Bind protected Messaging-only ingress/consumer and real327 composition,
+  with actual producer readiness gate, positive/negative/race proof and review.
+
+The node ID plus durable authority revision is current tree evidence, never a
+positive deletion/move event. No RPC spans the Space transaction fence. The
+producer currently has no global completed-cutover/readiness predicate: table
+presence and private head cutover ID cannot activate the protected route or
+claim all-writer coverage. Missing legacy history stays UNKNOWN.
+
+Reader source proof: three top-level tests and one actual head-row wait subtest,
+Linux PostgreSQL16/Go1.26.5 race PASS0FAIL0SKIP65.709s, store vet0. Actual Gateway
+RSA Creator verification uses the existing controlled Auth epoch observation,
+not a full Java Auth/Role assembly. Community positive uses the genuine native
+capture/ApplyCommunityRoster/finish ABI in one transaction; it does not claim
+the production roster writer is already wired. Its real unhooked renewal changes
+the native lease while leaving the ledger unchanged: the reader returns
+UNAVAILABLE and performs no repair. Strict DB-time expiry then denies. Actual
+schedule reservation, foreign Space/profile, missing legacy head and inherited
+RR also reject. A held ledger row for5.05s proves the final DB clock follows
+the SQL wait. Source archive0d32fef53548dfbf5e5992b1a49046ced5fa57d59834ae22ab5b3ecd2a1342fd
+and raw logs/fixture-only DSN+actual migratev4.18.1 provisioning overlays are
+preserved separately. Canonical Testcontainers startup is outside this proof.
+Existing readiness continuation410 owns the bounded contract; native owner186
+must supply its real guard-epoch/completed per-Space cutover producer before
+protected serving. No RPC registration or full local-report activation is claimed.
+
 The user explicitly resumed finishing existing work after the stop. The target
 is candidate `78bc80b975bc7df00c8e8902ce58186b0a4e29f7`, with canonical eleven
 P3 participants and Space source595 qualification preserved. Own reviewed
