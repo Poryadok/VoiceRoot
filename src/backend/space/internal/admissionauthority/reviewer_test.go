@@ -30,7 +30,7 @@ func TestReviewerPermissionExactProtectedDecisionAndEarliestOwnerBudget(t *testi
 	require.NoError(t, err)
 	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "space", KeyID: "current", PrivateKey: key})
 	require.NoError(t, err)
-	for _, phase := range []authv1.SpaceAdmissionPhase{authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_APPROVE, authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_FIRST_PUBLISH} {
+	for _, phase := range []authv1.SpaceAdmissionPhase{authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_READ, authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_APPROVE, authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_FIRST_PUBLISH} {
 		for _, name := range []string{"valid", "denied", "unknown response", "nil response", "unavailable", "service denied", "request mutated", "two seconds"} {
 			t.Run(phase.String()+"/"+name, func(t *testing.T) {
 				now := time.Now()
@@ -94,7 +94,7 @@ func TestReviewerPermissionExactProtectedDecisionAndEarliestOwnerBudget(t *testi
 					changed := proto.Clone(expected).(*authv1.ObserveSpaceAdmissionSubjectRequest)
 					changed.AdmissionBindingSha256[0] = 1
 					require.ErrorIs(t, proof.Check(changed), ErrBinding)
-					if phase == authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_APPROVE {
+					if phase != authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_FIRST_PUBLISH {
 						changed = proto.Clone(expected).(*authv1.ObserveSpaceAdmissionSubjectRequest)
 						changed.Phase = authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_FIRST_PUBLISH
 						changed.InteractiveSessionEpoch = nil
@@ -115,4 +115,10 @@ func TestReviewerPermissionExactProtectedDecisionAndEarliestOwnerBudget(t *testi
 	require.ErrorIs(t, (&VerifiedReviewerPermission{}).Check(subjectRequest()), ErrBinding)
 	_, err = (&ReviewerClient{}).Observe(context.Background(), nil, subjectRequest())
 	require.ErrorIs(t, err, ErrBinding)
+	read := subjectRequest()
+	read.Phase = authv1.SpaceAdmissionPhase_SPACE_ADMISSION_PHASE_READ
+	read.SubjectRole = authv1.SpaceAdmissionSubjectRole_SPACE_ADMISSION_SUBJECT_ROLE_REVIEWER
+	read.InteractiveSessionEpoch = nil
+	_, err = (&ReviewerClient{}).Observe(context.Background(), nil, read)
+	require.ErrorIs(t, err, ErrBinding, "reviewer READ requires the live caller epoch")
 }
