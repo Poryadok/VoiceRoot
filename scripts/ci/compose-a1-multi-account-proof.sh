@@ -83,6 +83,7 @@ state_dir="$(cd "$state_dir" && pwd -P)"
 compose_env="${state_dir}/compose-empty.env"
 phase0_fixture_dir="${state_dir}/phase0-fixture"
 compose_started=false
+bootstrap_prepare_started=false
 
 cleanup() {
   local status=$?
@@ -92,6 +93,10 @@ cleanup() {
   fi
   if [[ "$compose_down_succeeded" == "false" ]]; then
     echo "Compose cleanup failed; disposable fixture retained at $state_dir" >&2
+  elif [[ "$bootstrap_prepare_started" == "true" && "$compose_started" == "false" ]]; then
+    # Preparation may have reserved a volume before failing. No project-wide
+    # deletion is authorized; retain nonce/state evidence for explicit recovery.
+    echo "Bootstrap ownership was not acquired; no Compose cleanup; evidence retained at $state_dir" >&2
   elif [[ "${VOICE_A1_MULTI_ACCOUNT_CLEANUP:-false}" == "true" || "$compose_started" == "false" ]]; then
     case "$state_dir" in
       "$tmp_parent"/voice-a1-multi-account-proof.*)
@@ -185,13 +190,15 @@ wait_gateway() {
 
 echo "A1 multi-account proof project=${project} gateway=${VOICE_API_BASE_URL}"
 compose config --quiet
-compose_started=true
 native_compose=(docker compose --env-file "$compose_env" --project-name "$project"
   --project-directory "$ROOT" -f "$COMPOSE_FILE_PATH"
   -f "${ROOT}/docker-compose.voice-space-media.yml" --profile app)
+bootstrap_prepare_started=true
 python3 "${ROOT}/scripts/ci/space-native-ci-bootstrap.py" prepare \
   --state "${state_dir}/native-installation.json" --env-file "$compose_env" \
   --compose "${native_compose[@]}"
+# Only successful fresh preparation authorizes project-wide cleanup.
+compose_started=true
 python3 "${ROOT}/scripts/ci/space-native-ci-bootstrap.py" install \
   --state "${state_dir}/native-installation.json" --compose "${native_compose[@]}"
 compose up -d --build
