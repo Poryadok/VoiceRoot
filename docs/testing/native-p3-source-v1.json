@@ -4627,5 +4627,47 @@
     "MM020",
     "provider registration or installed rights",
     "unrelated BE041/product changes"
-  ]
+  ],
+  "evidence_matrix": {
+    "A1": {
+      "result": "OPEN",
+      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+    },
+    "A2": {
+      "result": "OPEN",
+      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+    },
+    "A3": {
+      "result": "OPEN",
+      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+    },
+    "A4": {
+      "result": "OPEN",
+      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+    },
+    "B1": {
+      "result": "OPEN",
+      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+    },
+    "B2": {
+      "result": "OPEN",
+      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+    },
+    "B3": {
+      "result": "OPEN",
+      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+    },
+    "B4": {
+      "result": "OPEN",
+      "evidence": "Existing proof inventory requires literal source-bound coverage mapping; aggregate scope is not full matrix proof.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=MASTER-NATIVE-P3-ROUTE-53f75f745237"
+    }
+  }
 }
