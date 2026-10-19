@@ -69,6 +69,15 @@ func (s *Sweeper) runOnce(ctx context.Context, native bool) error {
 		return err
 	}
 	for _, sess := range expired {
+		if native {
+			if s.Matches == nil {
+				return store.ErrSourcePartyUnavailable
+			}
+			if _, err := s.Matches.ExpireNativeSearchingParty(ctx, sess.ID); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := s.cleanupQueue(ctx, sess); err != nil {
 			if s.Logger != nil {
 				s.Logger.Warn("expire queue cleanup failed",

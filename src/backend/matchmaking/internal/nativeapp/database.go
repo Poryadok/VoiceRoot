@@ -68,6 +68,9 @@ func checkRuntimePrivileges(ctx context.Context, tx pgx.Tx) error {
  OR has_any_column_privilege(r.oid,'public.mm_native_party_origins','UPDATE,REFERENCES')
  OR has_table_privilege(r.oid,'public.matchmaking_match_response_receipts','UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
  OR has_any_column_privilege(r.oid,'public.matchmaking_match_response_receipts','UPDATE,REFERENCES')
+ OR has_table_privilege(r.oid,'public.matchmaking_native_timeout_outbox','UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+ OR EXISTS (SELECT 1 FROM (VALUES ('event_id'),('party_id'),('search_session_id'),('profile_id'),('terminal_generation'),('occurred_at'),('payload')) frozen(name)
+  WHERE has_column_privilege(r.oid,'public.matchmaking_native_timeout_outbox',frozen.name,'UPDATE,REFERENCES'))
  )) OR EXISTS(SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relrowsecurity)`).Scan(&denied)
 	if err != nil || denied {
 		return errUnavailable

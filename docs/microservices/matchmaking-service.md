@@ -705,3 +705,21 @@ Manual cancellation retains its empty legacy reason; roster invalidation retains
 VOICE_ROSTER_CHANGED. Both publish the original canonical bytes and event ID,
 require broker acknowledgement and mark delivery durably. Preparation does not
 start delivery; native composition must start it only after admission qualification.
+
+
+Native searching timeout expires one complete captured party at its common
+persisted deadline. A scanner row is only a candidate: FIRST terminal admission,
+party/session/intent locks, exact member/origin checks and the database clock
+after lock waits authorize the transition. Pending matches, mixed/null deadlines
+and incomplete identities are refused. CLOSED permits this exact cleanup.
+All sessions become timeout with one generation advance, the party closes and
+one RELEASE revision plus per-member frozen MatchTimeout envelopes commit
+atomically. Cancellation keeps its separate state and event oneof. Redis cleanup
+uses the normal terminal projector; MM027 timeout delivery has leased CAS and
+reuses original bytes/event IDs after PubAck/SQL ACK loss. Delivery is at least
+once; a broker deduplication window is not a universal exactly-once guarantee.
+The timeout facts remain linked personal evidence under the independent final
+owner cut; there is no anonymous/permanent-retention exception or invented TTL.
+MM027 DOWN refuses pinned RR and retained/unknown evidence under exclusive
+locks. Serving may append facts and update only delivery bookkeeping, never
+rewrite/delete their immutable identity or payload.
