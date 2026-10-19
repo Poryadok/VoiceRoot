@@ -13,9 +13,9 @@ import subprocess
 import sys
 
 PINNED_BASE = "8191a36ca3bea7d053df0dd25963ca5133284b41"
-PINNED_SOURCE = "5bf6c4857c19fba2b91fb44eb9e9bc6ae816c485"
-PINNED_RECORD_COMMIT = "ab98f78239b1777a45b65f8755b5f6f3ac579094"
-PINNED_RECORD_SHA256 = "55eed972bedaf87515a7a05657d97c357790db0fe54c311ef3896cc30589a417"
+PINNED_SOURCE = "e63f8436aecd080e231ce0ab58257f70c258ca8a"
+PINNED_RECORD_COMMIT = "a64ab8bdc611f647d9e2c741be939afd30843e5a"
+PINNED_RECORD_SHA256 = "d14418d61a9e927637fba5a93ded6695940c6a7a98046e7d98bed200c122f67c"
 RECORD_PATH = "docs/testing/native-p3-source-v1.json"
 VERIFIER_PATH = "scripts/ci/f13_native_p3_source.py"
 SHELL_PATH = "scripts/ci/voice-db-runtime-provisioning-contract_test.sh"
