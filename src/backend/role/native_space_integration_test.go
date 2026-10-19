@@ -553,8 +553,8 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	if len(versions) > 2 && versions[2] == "reports" {
 		decision := &rolev1.CheckPermissionRequest{SpaceId: b.SpaceID, ProfileId: b.ProfileID, PermissionName: "TEXT_CHAT_VIEW", Chat: &chatv1.ChatRef{Id: chat.String(), Type: chatv1.ChatType_CHAT_TYPE_GROUP.Enum()}}
 		result, err := client.CheckPermission(nativeWorkloadContext(t, current, "messaging", rolev1.RoleService_CheckPermission_FullMethodName, decision), decision)
-		require.NoError(t, err)
-		require.False(t, result.GetAllowed(), "fresh report read respects removal floor without resurrecting old membership")
+		require.Equal(t, codes.Unavailable, status.Code(err), "stale still-published Space binding below the Role floor is unavailable authority, not a current no-deny view")
+		require.Nil(t, result, "fresh report read cannot resurrect removed membership")
 	}
 	replay, err = call(request)
 	require.NoError(t, err)
