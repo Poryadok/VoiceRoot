@@ -181,6 +181,22 @@ bound command/projection authority from260, not this plan. Historical SDK bindin
 and post-ACTIVE continuity from307c14 also lack installed composition. Source
 planning is not a substitute for those prerequisites or full feature completion.
 
+Migration correction (TTc21):272's owned-game Voice000026 reservation/source
+predated this stage. The initial voice026 substring query missed Voice000026;
+develop alone excluded unmerged producers. Preserve fc29 as historical source
+and its disposable-PG proof, not an integrated/applied migration. All localrefs
+added-migration history now confirms both026 paths and no027. TT000027 hits
+only unrelated Auth/Space DBs, voice027 is empty. A normal successor moves our
+unshipped SQL files to000027 and updates test paths, preserving every SQL byte
+and public API; no applied history or peer026 file is rewritten. Fresh private
+PG-race path verification PASS2.406s/test1.32, original runner terminal0.
+Exact UP SHA d72f2d61ca3930f1bad0ea7767af637c08e938c023e024c195375cda81d612a4
+and DOWN SHA10f8e0636d9d954967defd91dc8f34579501ead1a6488eafb39a82390bf2d48b
+match fc29 byte-for-byte; implementation is unchanged, only migration paths/test
+literals move. Cached obsolete026 source files were compared with027 and removed
+inside the owned runner before full3955-file inventory0c86c870f234f99a858a48211c25a196a1305b66c82adafa8e98c58ba9576392.
+Existing fc29 short30PASS15SKIP/vet0 remains attributed; no redundant full suite.
+
 Retain all historical aggregate JSON and native outbox records, rather than only
 the current membership index. Ordinary provider issuance has no complete grant
 ledger; explicit unknown source markers must require protected historical

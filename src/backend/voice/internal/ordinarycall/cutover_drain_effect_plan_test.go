@@ -26,9 +26,9 @@ func TestOrdinaryEffectPlanRetainsExactRevisionsWithoutCompletingEffects(t *test
 		require.NoError(t, e)
 	}
 	apply("000025_ordinary_cutover_drain.up.sql")
-	apply("000026_ordinary_cutover_effect_plans.up.sql")
-	apply("000026_ordinary_cutover_effect_plans.down.sql")
-	apply("000026_ordinary_cutover_effect_plans.up.sql")
+	apply("000027_ordinary_cutover_effect_plans.up.sql")
+	apply("000027_ordinary_cutover_effect_plans.down.sql")
+	apply("000027_ordinary_cutover_effect_plans.up.sql")
 	store := NewPostgresStore(pool, storageTestEncoder)
 	media, projection := &mediaFake{}, &projectionFake{}
 	coordinator := &Coordinator{Journal: store, Media: media, Projection: projection, Now: func() time.Time { return testNow }}
@@ -121,7 +121,7 @@ func TestOrdinaryEffectPlanRetainsExactRevisionsWithoutCompletingEffects(t *test
 	require.Error(t, err)
 	_, err = pool.Exec(ctx, `DELETE FROM voice_ordinary_cutover_effect_plans WHERE work_id=$1`, work.WorkID)
 	require.Error(t, err)
-	down, e := os.ReadFile(filepath.Join(dir, "000026_ordinary_cutover_effect_plans.down.sql"))
+	down, e := os.ReadFile(filepath.Join(dir, "000027_ordinary_cutover_effect_plans.down.sql"))
 	require.NoError(t, e)
 	conn, e := pool.Acquire(ctx)
 	require.NoError(t, e)
