@@ -120,6 +120,16 @@ strict proof не завершает rollout во всех окружениях;
 
 ---
 
+## Space manual review grouping
+
+Space owns the distinct parent review UUID Q in `space_join_request_groups`.
+Its immutable cohort is Space/account/profile/policy-version/policy-digest;
+`space_join_request_attempts` associates each exact invite-bound A with one Q.
+`space_join_request_selections` pins Q/A to the existing actor/operation journal
+and full public request hash. Q carries no invitation, proof, approval or target
+grant. These private journals are personal data; their source-catalog and
+identity-erasure qualification remains an explicit activation prerequisite.
+
 ## Space moderator mute ownership (BE-273 accepted target)
 
 Voice owns durable moderation state keyed by canonical

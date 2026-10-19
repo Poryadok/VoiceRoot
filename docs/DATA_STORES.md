@@ -341,6 +341,17 @@ Unavailable storage fails closed; it is not replaced by a process-local cache.
 Role ownership operation receipts remain durable in `role_db` and implement
 business idempotency independently of per-attempt JWT replay rejection.
 
+## Space manual review private journals
+
+Migration32 adds `space_join_request_groups`, `space_join_request_attempts` and
+`space_join_request_selections` in `space_db`. They preserve parent Q, exact A
+association and immutable approval-operation selection; attempts/submissions and
+public operations remain in migrations35/36. Migration32 has no forward foreign
+keys to those later tables; inserts validate their actual rows at runtime.
+Updates/truncation are forbidden, and deletion requires the existing terminal
+Space P3 guard. Downgrade refuses nonempty journals. No migration-history repair,
+source-catalog bypass or identity-erasure readiness is implied by this schema.
+
 ## P3 Space lifecycle storage inventory (accepted target)
 
 Composite Space Chat creation stores a no-domain-FK
