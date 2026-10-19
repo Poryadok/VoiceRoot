@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -38,6 +39,16 @@ import (
 	"voice/backend/space/internal/spacecore"
 	"voice/backend/space/internal/store"
 )
+
+type botPurgeObservedStore struct {
+	*store.SpaceStore
+	reads atomic.Int32
+}
+
+func (s *botPurgeObservedStore) GetBotPurgeHandoff(ctx context.Context, space, op uuid.UUID, generation uint64, manifest *commonv1.ManifestBinding) (*store.BotPurgeHandoff, error) {
+	s.reads.Add(1)
+	return s.SpaceStore.GetBotPurgeHandoff(ctx, space, op, generation, manifest)
+}
 
 func TestBotPurgeHandoffProtectedActual47Ledger(t *testing.T) {
 	if testing.Short() {
@@ -124,7 +135,12 @@ func TestBotPurgeHandoffProtectedActual47Ledger(t *testing.T) {
 		}
 		keys = append(keys, map[string]string{"kty": "RSA", "kid": kid, "alg": "RS256", "use": "sig", "n": base64.RawURLEncoding.EncodeToString(k.N.Bytes()), "e": "AQAB"})
 	}
+	var jwksUnavailable atomic.Bool
 	jwks := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if jwksUnavailable.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"keys": keys})
 	}))
 	identity, err := tls.LoadX509KeyPair(certFile, keyFile)
@@ -143,14 +159,15 @@ func TestBotPurgeHandoffProtectedActual47Ledger(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(clientCertFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientCert.Certificate[0]}), 0600))
 	require.NoError(t, os.WriteFile(clientKeyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: clientKey}), 0600))
-	runtime, err := botmembershipprincipal.New(ctx, botmembershipprincipal.Config{ListenAddr: "127.0.0.1:0", CertFile: certFile, KeyFile: keyFile, ClientCAFile: caFile, ReplayAddr: redisAddr, JWKSCAFile: caFile, JWKSClientCertFile: clientCertFile, JWKSClientKeyFile: clientKeyFile, JWKSURLs: map[string]string{"bot": jwks.URL}, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: 5 * time.Second})
+	runtime, err := botmembershipprincipal.New(ctx, botmembershipprincipal.Config{ListenAddr: "127.0.0.1:0", CertFile: certFile, KeyFile: keyFile, ClientCAFile: caFile, ReplayAddr: redisAddr, JWKSCAFile: caFile, JWKSClientCertFile: clientCertFile, JWKSClientKeyFile: clientKeyFile, JWKSURLs: map[string]string{"bot": jwks.URL}, RefreshAfter: 100 * time.Millisecond, HardExpiry: 200 * time.Millisecond, UnknownKIDCooldown: 50 * time.Millisecond})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, runtime.Close()) })
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = listener.Close() })
 	server := grpc.NewServer(runtime.ServerOptions()...)
-	RegisterBotMembershipServer(server, &BotMembershipGRPC{Store: serving})
+	observed := &botPurgeObservedStore{SpaceStore: serving}
+	RegisterBotMembershipServer(server, &BotMembershipGRPC{Store: observed})
 	t.Cleanup(server.Stop)
 	go func() { _ = server.Serve(listener) }()
 	connect := func(certs []tls.Certificate) spacev1.SpaceServiceClient {
@@ -208,4 +225,34 @@ func TestBotPurgeHandoffProtectedActual47Ledger(t *testing.T) {
 	var unchanged bool
 	require.NoError(t, admin.Pool.QueryRow(ctx, `SELECT phase='PURGING' AND NOT local_purge_completed AND NOT EXISTS(SELECT 1 FROM public.space_lifecycle_participants WHERE space_id=$1 AND participant_id=$2 AND request_kind='PURGE' AND progress='COMPLETE') FROM public.space_lifecycle_aggregates WHERE space_id=$1`, space.ID, int16(commonv1.ParticipantId_PARTICIPANT_ID_BOT)).Scan(&unchanged))
 	require.True(t, unchanged)
+	t.Run("trusted JWKS outage is retryable before Store", func(t *testing.T) {
+		before := observed.reads.Load()
+		jwksUnavailable.Store(true)
+		defer jwksUnavailable.Store(false)
+		time.Sleep(250 * time.Millisecond)
+		_, err := call(client, sign(r, spacev1.SpaceService_GetBotPurgeHandoff_FullMethodName), r)
+		require.Equal(t, codes.Unavailable, status.Code(err))
+		require.Equal(t, before, observed.reads.Load())
+	})
+	t.Run("unknown KID remains authentication failure", func(t *testing.T) {
+		time.Sleep(60 * time.Millisecond)
+		before := observed.reads.Load()
+		unknown, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "bot", KeyID: "unknown", PrivateKey: key})
+		require.NoError(t, err)
+		h, err := principal.RequestHash(r)
+		require.NoError(t, err)
+		token, err := unknown.IssueService(principal.ServiceInput{Audience: "space", RPC: spacev1.SpaceService_GetBotPurgeHandoff_FullMethodName, RequestID: r.RequestId, RequestHash: h})
+		require.NoError(t, err)
+		_, err = call(client, metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token, "x-request-id", r.RequestId)), r)
+		require.Equal(t, codes.Unauthenticated, status.Code(err))
+		require.Equal(t, before, observed.reads.Load())
+	})
+	t.Run("real Redis outage is retryable before Store", func(t *testing.T) {
+		time.Sleep(60 * time.Millisecond)
+		before := observed.reads.Load()
+		require.NoError(t, redis.Stop(ctx, nil))
+		_, err := call(client, sign(r, spacev1.SpaceService_GetBotPurgeHandoff_FullMethodName), r)
+		require.Equal(t, codes.Unavailable, status.Code(err))
+		require.Equal(t, before, observed.reads.Load())
+	})
 }

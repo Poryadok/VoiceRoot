@@ -71,24 +71,24 @@ func New(ctx context.Context, c Config) (*Runtime, error) {
 			}
 			response, err := client.Do(req)
 			if err != nil {
-				return nil, err
+				return nil, &dependencyUnavailable{cause: err}
 			}
 			defer func() { _ = response.Body.Close() }()
 			if response.StatusCode != http.StatusOK {
-				return nil, errors.New("botmembership JWKS unavailable")
+				return nil, &dependencyUnavailable{cause: errors.New("botmembership JWKS unavailable")}
 			}
 			document, err := io.ReadAll(io.LimitReader(response.Body, 65537))
 			if err != nil || len(document) > 65536 {
-				return nil, errors.New("invalid botmembership JWKS document")
+				return nil, &dependencyUnavailable{cause: errors.New("invalid botmembership JWKS document")}
 			}
 			keys, err := principal.ParseJWKS(document)
 			if err != nil || len(keys) != 2 {
-				return nil, errors.New("botmembership JWKS requires current and next keys")
+				return nil, &dependencyUnavailable{cause: errors.New("botmembership JWKS requires current and next keys")}
 			}
 			var modulus string
 			for _, key := range keys {
 				if key.N.BitLen() < 2048 || key.N.String() == modulus {
-					return nil, errors.New("botmembership JWKS keys must be distinct RSA-2048 or stronger")
+					return nil, &dependencyUnavailable{cause: errors.New("botmembership JWKS keys must be distinct RSA-2048 or stronger")}
 				}
 				modulus = key.N.String()
 			}
@@ -132,7 +132,7 @@ func (r *Runtime) recordReplay(ctx context.Context, issuer, jti string, expires 
 	defer cancel()
 	accepted, err := r.redis.SetNX(ctx, "principal:space:bot-membership:"+issuer+":"+jti, "1", ttl+5*time.Second).Result()
 	if err != nil {
-		return errors.New("botmembership replay dependency unavailable")
+		return &dependencyUnavailable{cause: errors.New("botmembership replay dependency unavailable")}
 	}
 	if !accepted {
 		return errors.New("botmembership credential replay")

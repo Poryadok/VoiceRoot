@@ -2,6 +2,7 @@ package botmembershipprincipal
 
 import (
 	"context"
+	"errors"
 	"math"
 	"time"
 
@@ -58,7 +59,7 @@ func (v Verifier) verifyPurgeHandoff(ctx context.Context, value any, handler grp
 	}
 	deny := status.Error(codes.Unauthenticated, "invalid Bot purge handoff principal")
 	if v.Keys == nil || v.Replay == nil {
-		return nil, deny
+		return nil, status.Error(codes.Unavailable, "Bot purge handoff verification unavailable")
 	}
 	transport, err := principal.IncomingMetadata(ctx)
 	if err != nil || transport.RequestID != binding.RequestID.String() {
@@ -74,6 +75,10 @@ func (v Verifier) verifyPurgeHandoff(ctx context.Context, value any, handler grp
 	}
 	actor, err := principal.VerifyService(ctx, transport.BearerToken, principal.VerifyConfig{ExpectedIssuer: "bot", ExpectedAudience: "space", ExpectedRPC: spacev1.SpaceService_GetBotPurgeHandoff_FullMethodName, ExpectedRequestID: transport.RequestID, ExpectedRequestHash: hash, KeyResolver: v.Keys, ReplayGuard: v.Replay, Clock: clock})
 	if err != nil {
+		var unavailable *dependencyUnavailable
+		if errors.As(err, &unavailable) {
+			return nil, status.Error(codes.Unavailable, "Bot purge handoff verification unavailable")
+		}
 		return nil, deny
 	}
 	proof := &VerifiedPurgeHandoff{actor: actor, binding: binding, clock: clock}
