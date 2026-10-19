@@ -78,6 +78,9 @@ unchanged35/36 producer proof rather than rerunning unrelated infrastructure.
 Migration32 must apply before35/36: no forward foreign keys. Runtime store
 queries fail closed until those real ledgers exist. Down refuses admitted group
 evidence; normal erasure follows the current canonical terminal Space P3 guard.
+DOWN requires READ COMMITTED: locking alone cannot refresh an inherited
+Repeatable Read/Serializable snapshot. A current-authority refusal precedes the
+locks; after lock acquisition, fresh RC statements check admitted rows.
 
 ## Progress
 
@@ -108,6 +111,12 @@ made discoverable as a supported TT function after immutable source/proof.
   inside the same fenced transaction, not by creating duplicate attempt tables.
 - Exact public request hash binds Q and optionalA; the selection journal also
   stores those explicit values to detect internal adapter mismatches.
+- Reviewer144 found a concrete downgrade snapshot gap in eaff19a. A real old-RR
+  empty snapshot followed by concurrent first Q/A commit and DOWN reproduced
+  the unsafe success (RED13.601s). The successor explicitly requires RC; bounded
+  correction tests passed with race (two top-level/two subtests,13.845s, zero
+  skips), including empty/populated RC controls; store vet exited0. Recheck
+  remains in the same independent review function, not a new review.
 
 ## Risks And Follow-Ups
 
