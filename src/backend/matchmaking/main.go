@@ -34,7 +34,6 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
-	"voice/backend/pkg/postgres"
 	voiceprom "voice/backend/pkg/promhttp"
 	pkgruntimeconfig "voice/backend/pkg/runtimeconfig"
 
@@ -66,6 +65,14 @@ func main() {
 	startupCtx, cancelStartup := context.WithCancel(shutdownCtx)
 	defer cancelStartup()
 	logger := httpserver.NewLogger(serviceName)
+	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	pool, err := prepareLegacyDatabase(startupCtx, dbURL)
+	if err != nil {
+		log.Fatal("Matchmaking legacy admission unavailable")
+	}
+	if pool != nil {
+		defer pool.Close()
+	}
 	principalConfig, principalEnabled, err := spaceprincipal.LoadFromEnv()
 	if err != nil {
 		log.Fatalf("Matchmaking Space principal config: %v", err)
@@ -111,19 +118,10 @@ func main() {
 		grpcListen = v
 	}
 
-	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	var grpcSrv *grpc.Server
 	var lifecycleSrv *grpc.Server
 	var redisQueue *queue.RedisQueue
 	if dbURL != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), pkgruntimeconfig.PostgresConnectTimeoutFromEnv())
-		pool, err := postgres.NewPool(ctx, dbURL)
-		cancel()
-		if err != nil {
-			log.Fatalf("postgres: %v", err)
-		}
-		defer pool.Close()
-
 		gameStore := &store.GameStore{Pool: pool}
 		profileStore := &store.ProfileGamesStore{Pool: pool}
 		sessionStore := &store.SessionStore{Pool: pool}

@@ -532,3 +532,10 @@ They hold the local admission gate through commit with no native binding, so
 any retained CLOSED/PREPARED/ADMITTED marker refuses their inserts. A native
 binding on the party store never qualifies its profile-only legacy `Create`;
 qualified source creation uses the separate atomic captured-party API.
+
+The compatibility executable checks the fixed native descriptor path before
+opening listeners, even when `DATABASE_URL` is absent. A present descriptor or an
+unreadable presence check refuses legacy bootstrap. With a database configured,
+it checks the admission head before its JWKS bootstrap: every begun state refuses
+legacy serving. An absent table or never-begun empty head retains pre-cut behavior
+only; this check cannot prove external artifact or credential admission.
