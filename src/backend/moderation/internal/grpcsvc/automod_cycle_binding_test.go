@@ -86,3 +86,64 @@ func mustReadCycleDown(t *testing.T) string {
 	require.NoError(t, err)
 	return string(data)
 }
+
+func TestAutoModCycleDownPreservesConcurrentFirstCycle(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires disposable PostgreSQL")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool := automodAdmissionDatabase(t)
+	integrationtestApplyAutoMod(t, ctx, pool)
+	subject, cycle := uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `INSERT INTO automod_subjects(subject_id,account_id,lifecycle_revision,lifecycle_state) VALUES($1,$2,1,'LIVE')`, subject, uuid.New())
+	require.NoError(t, err)
+	writer, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = writer.Rollback(context.Background()) }()
+	_, err = writer.Exec(ctx, `UPDATE automod_subjects SET lifecycle_state='DELETED',lifecycle_revision=2,purge_at=clock_timestamp()+interval '1 hour',deletion_cycle_id=$2 WHERE subject_id=$1`, subject, cycle)
+	require.NoError(t, err)
+	down, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer down.Release()
+	defer func() { _, _ = down.Exec(context.Background(), "ROLLBACK") }()
+	var pid int32
+	require.NoError(t, down.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&pid))
+	result := make(chan error, 1)
+	downSQL := mustReadCycleDown(t)
+	go func() {
+		_, downErr := down.Exec(ctx, downSQL)
+		result <- downErr
+	}()
+	// With the old guard, DROP waits only after the stale emptiness check.
+	// The corrected transaction waits before that check, then sees the commit.
+	require.Eventually(t, func() bool {
+		var waiting bool
+		err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE pid=$1 AND wait_event_type='Lock')`, pid).Scan(&waiting)
+		return err == nil && waiting
+	}, 10*time.Second, 10*time.Millisecond)
+	require.NoError(t, writer.Commit(ctx))
+	require.ErrorContains(t, <-result, "cannot discard current deletion cycle authority")
+	_, err = down.Exec(ctx, "ROLLBACK")
+	require.NoError(t, err)
+	var preserved uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `SELECT deletion_cycle_id FROM automod_subjects WHERE subject_id=$1`, subject).Scan(&preserved))
+	require.Equal(t, cycle, preserved)
+	var guarded bool
+	require.NoError(t, pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid='automod_subjects'::regclass AND tgname='automod_cycle_deadline_guard')`).Scan(&guarded))
+	require.True(t, guarded)
+}
+
+func TestAutoModCycleDownAllowsEmptyAuthority(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires disposable PostgreSQL")
+	}
+	ctx := context.Background()
+	pool := automodAdmissionDatabase(t)
+	integrationtestApplyAutoMod(t, ctx, pool)
+	_, err := pool.Exec(ctx, mustReadCycleDown(t))
+	require.NoError(t, err)
+	var present bool
+	require.NoError(t, pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='automod_subjects' AND column_name='deletion_cycle_id')`).Scan(&present))
+	require.False(t, present)
+}

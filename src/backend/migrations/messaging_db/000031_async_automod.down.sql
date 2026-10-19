@@ -1,3 +1,8 @@
+BEGIN;
+-- Stop new message-trigger work before locking the history-bearing tables.
+-- Keep every history probe and destructive statement in this transaction.
+LOCK TABLE messages, automod_producer_state, automod_source_subjects,
+  automod_terminal_subjects, automod_hmac_keys IN ACCESS EXCLUSIVE MODE;
 DO $$ BEGIN
   IF EXISTS(SELECT 1 FROM automod_producer_state WHERE active) OR
      EXISTS(SELECT 1 FROM automod_source_subjects) OR EXISTS(SELECT 1 FROM automod_terminal_subjects) OR
@@ -16,3 +21,4 @@ DROP FUNCTION automod_hmac_key_identity_guard();
 DROP TRIGGER automod_producer_state_guard ON automod_producer_state;
 DROP FUNCTION automod_producer_state_guard();
 DROP TABLE automod_producer_state;
+COMMIT;

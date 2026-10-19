@@ -597,3 +597,17 @@ Independent cycle review identified a separate migration-9 DOWN race: the
 emptiness check must exclude concurrent writers through the destructive DDL.
 Keep the existing source review open and fix that guard with a two-connection
 negative before claiming the cycle slice clear.
+
+Rollback-guard correction: independent reviews 160 and 323 exposed the same
+check/write race in Moderation migration 9 and Messaging migration 31. Both DOWN
+scripts now explicitly begin a transaction and take writer-excluding table locks
+before checking retained authority. Messaging locks message-trigger admission
+before its history tables. Locks remain held through the destructive DDL. The
+two-connection regressions hold an uncommitted first cycle/key while DOWN starts,
+observe the actual PostgreSQL lock wait, then commit the writer. The old scripts
+returned success and discarded that commit (RED 0.895s and 3.336s). Corrected
+scripts refuse rollback and preserve the committed value plus guard triggers;
+empty-authority rollback remains valid. Scoped Linux PostgreSQL race results:
+Moderation three cases PASS 2.366s, Messaging two cases PASS 4.571s, no skips.
+Independent exact-delta rechecks are still required; this does not clear the
+whole vertical or the physical-deadline criterion.
