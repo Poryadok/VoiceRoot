@@ -193,6 +193,17 @@ func (s *SpaceStore) ApplyCommunityRoster(ctx context.Context, in CommunityRoste
 	}
 	// Retain continuously eligible rows so their durable membership episode is
 	// preserved. A deleted/readded row represents a real source discontinuity.
+	scoped := *s
+	scoped.tx = tx
+	var owner uuid.UUID
+	if err = tx.QueryRow(ctx, `SELECT owner_profile_id FROM spaces WHERE id=$1`, in.SpaceID).Scan(&owner); err != nil {
+		return CommunityRosterReceipt{}, err
+	}
+	affectedProfiles := append(append([]uuid.UUID{owner}, previous...), profiles...)
+	capture, err := scoped.captureMemberMutationIfPresent(ctx, in.SpaceID, affectedProfiles)
+	if err != nil {
+		return CommunityRosterReceipt{}, err
+	}
 	if _, err = tx.Exec(ctx, `DELETE FROM community_roster_members WHERE space_id=$1 AND NOT(profile_id=ANY($2::uuid[]))`, in.SpaceID, profiles); err != nil {
 		return CommunityRosterReceipt{}, err
 	}
@@ -224,18 +235,35 @@ func (s *SpaceStore) ApplyCommunityRoster(ctx context.Context, in CommunityRoste
 		in.CorporationKey, generation, in.SourceRevision, in.SnapshotSHA256, requestHash[:], receiptID, len(profiles), profiles, removed); err != nil {
 		return CommunityRosterReceipt{}, err
 	}
-	// The receipt INSERT can wait after every source write. Sample one final
-	// database time before committing any source/head/count/operation changes.
+	if capture != nil {
+		if err = scoped.finishEffectiveMemberMutations(ctx, capture); err != nil {
+			return CommunityRosterReceipt{}, err
+		}
+	}
+	// Receipt and history completion SQL can both wait. Check the actual owner
+	// lease after all those writes before acknowledging a current projection.
 	var current bool
+	var finished time.Time
 	if err = tx.QueryRow(ctx, `WITH sampled AS MATERIALIZED (SELECT clock_timestamp() AS observed_at)
-	 SELECT EXISTS(SELECT 1 FROM community_owner_authority a CROSS JOIN sampled
+	 SELECT sampled.observed_at,EXISTS(SELECT 1 FROM community_owner_authority a CROSS JOIN sampled
 	 WHERE a.space_id=$1 AND a.owner_generation=$2 AND a.status='active'
 	 AND a.roster_source_revision=$3 AND a.roster_sha256=$4
-	 AND a.roster_lease_expires_at>sampled.observed_at)`, in.SpaceID, generation, in.SourceRevision, in.SnapshotSHA256).Scan(&current); err != nil {
+	 AND a.roster_lease_expires_at>sampled.observed_at) FROM sampled`, in.SpaceID, generation, in.SourceRevision, in.SnapshotSHA256).Scan(&finished, &current); err != nil {
 		return CommunityRosterReceipt{}, err
 	}
 	if !current {
 		return CommunityRosterReceipt{}, ErrCommunityRosterConflict
+	}
+	if capture != nil {
+		if finished.Before(capture.started) || !finished.Before(capture.started.Add(5*time.Second)) {
+			return CommunityRosterReceipt{}, ErrEffectiveEpisodeUnavailable
+		}
+		for _, item := range capture.profiles {
+			_, survives := newSet[item.profile]
+			if survives && item.before.Ordinary == "" && item.before.Community != "" && !finished.Before(item.before.CommunityUntil) {
+				return CommunityRosterReceipt{}, ErrEffectiveEpisodeUnavailable
+			}
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return CommunityRosterReceipt{}, err
@@ -273,10 +301,39 @@ func (s *SpaceStore) RevokeExpiredCommunityRosterMemberships(ctx context.Context
 	var affected int64
 	for _, id := range spaces {
 		err := s.withOwnershipScope(ctx, []uuid.UUID{id}, func(scoped *SpaceStore) error {
+			rows, err := scoped.db().Query(ctx, `SELECT profile_id FROM community_roster_members
+			 WHERE space_id=$1 AND revoked_at IS NULL AND lease_expires_at<=clock_timestamp() ORDER BY profile_id`, id)
+			if err != nil {
+				return err
+			}
+			var profiles []uuid.UUID
+			for rows.Next() {
+				var profile uuid.UUID
+				if err = rows.Scan(&profile); err != nil {
+					rows.Close()
+					return err
+				}
+				profiles = append(profiles, profile)
+			}
+			err = rows.Err()
+			rows.Close()
+			if err != nil || len(profiles) == 0 {
+				return err
+			}
+			capture, err := scoped.captureMemberMutationIfPresent(ctx, id, profiles)
+			if err != nil {
+				return err
+			}
 			tag, err := scoped.db().Exec(ctx, `UPDATE community_roster_members SET revoked_at=clock_timestamp()
 			 WHERE space_id=$1 AND revoked_at IS NULL AND lease_expires_at<=clock_timestamp()`, id)
-			if err != nil || tag.RowsAffected() == 0 {
+			if err != nil {
 				return err
+			}
+			if tag.RowsAffected() == 0 {
+				if capture != nil {
+					return scoped.finishEffectiveMemberMutations(ctx, capture)
+				}
+				return nil
 			}
 			_, err = scoped.db().Exec(ctx, `UPDATE spaces s SET member_count=(SELECT count(*)::int FROM (
 		SELECT profile_id FROM space_members WHERE space_id=s.id
@@ -284,10 +341,16 @@ func (s *SpaceStore) RevokeExpiredCommunityRosterMemberships(ctx context.Context
 		ON a.space_id=m.space_id AND a.owner_generation=m.owner_generation AND a.status='active'
 		WHERE m.space_id=s.id AND m.revoked_at IS NULL AND m.lease_expires_at>clock_timestamp() AND a.roster_lease_expires_at>clock_timestamp()
 	) active_members),updated_at=clock_timestamp() WHERE s.id=$1`, id)
-			if err == nil {
-				affected++
+			if err != nil {
+				return err
 			}
-			return err
+			if capture != nil {
+				if err = scoped.finishEffectiveMemberMutations(ctx, capture); err != nil {
+					return err
+				}
+			}
+			affected++
+			return nil
 		})
 		if errors.Is(err, ErrOwnershipFrozen) || errors.Is(err, ErrLifecycleFrozen) {
 			// Lease-filtered reads already deny expired access. Frozen source

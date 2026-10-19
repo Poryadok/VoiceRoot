@@ -18,9 +18,12 @@ func TestCommunityRosterProjectionIsGenerationAndLeaseFenced(t *testing.T) {
 	applySpaceMigrationForStoreTest(t, ctx, pool)
 	st := &SpaceStore{Pool: pool}
 	applicationID, environmentID, ownerAccountID, ownerProfileID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	space, _, err := st.CreateCommunityBootstrapSpace(ctx, CommunityBootstrapSpaceInput{OperationID: uuid.New(), ApplicationID: applicationID,
-		EnvironmentID: environmentID, OwnerAccountID: ownerAccountID, OwnerProfileID: ownerProfileID,
-		CorporationKey: "corp-test", TemplateID: "guild-default"})
+	// Historical pre-native projection fixture. Current GIS publication and44
+	// guarded roster writers have separate real-migrator acceptance tests.
+	space, err := st.CreateSpace(ctx, ownerProfileID, "Legacy community roster", "", "private")
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO community_owner_authority(space_id,application_id,environment_id,corporation_key,owner_account_id,owner_profile_id,owner_generation,status)
+	 VALUES($1,$2,$3,'corp-test',$4,$5,1,'active')`, space.ID, applicationID, environmentID, ownerAccountID, ownerProfileID)
 	require.NoError(t, err)
 	one, two, manual := uuid.New(), uuid.New(), uuid.New()
 	_, err = pool.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, space.ID, manual)

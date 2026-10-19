@@ -109,7 +109,9 @@ func TestNativeCommunityRosterRechecksLeaseAfterFinalSQLWait(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	database := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/space_db"))
-	database.Run(true, "up")
+	// Preserve the original39 final-lease oracle, independently of44's strict
+	// capture deadline and current GIS writer deployment qualification.
+	database.Run(true, "goto", "39")
 	st := &SpaceStore{Pool: database.Pool}
 	app, environment := uuid.New(), uuid.New()
 	space, _, err := st.CreateCommunityBootstrapSpace(ctx, CommunityBootstrapSpaceInput{OperationID: uuid.New(), ApplicationID: app, EnvironmentID: environment,

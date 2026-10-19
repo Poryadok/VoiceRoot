@@ -383,6 +383,10 @@ func (s *SpaceStore) finishEffectiveMemberMutations(ctx context.Context, capture
 // Existing pre-native fixtures/official34 retain their old storage protocol.
 // A native relation with a missing/dirty marker never falls back to that path.
 func (s *SpaceStore) captureMemberRemovalMutation(ctx context.Context, space, profile uuid.UUID) (*effectiveMemberMutations, error) {
+	return s.captureMemberMutationIfPresent(ctx, space, []uuid.UUID{profile})
+}
+
+func (s *SpaceStore) captureMemberMutationIfPresent(ctx context.Context, space uuid.UUID, profiles []uuid.UUID) (*effectiveMemberMutations, error) {
 	var marker, native bool
 	if s == nil || s.tx == nil {
 		return nil, ErrEffectiveEpisodeUnavailable
@@ -404,5 +408,5 @@ func (s *SpaceStore) captureMemberRemovalMutation(ctx context.Context, space, pr
 	if version <= 34 && !native {
 		return nil, nil
 	}
-	return s.captureNativeEffectiveMemberMutation(ctx, space, []uuid.UUID{profile})
+	return s.captureNativeEffectiveMemberMutation(ctx, space, profiles)
 }
