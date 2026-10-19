@@ -65,6 +65,15 @@ later runs: its old manifest artifact hash does not bind the current log bytes.
 New portable evidence records the appended log separately and preserves the
 original source archive and immutable driver-final test result.
 
+The independent correction recheck144 is SOURCE CLEAR exact776add1180 in the
+same review function, not full-task acceptance. The separate development DDL
+cohort now imports unchanged admission35/36/37 from owner69 pin352e4103 and40
+from f0ee7b1a, alongside native39 from d432 and effective41. Actual fresh pinned
+migrator Up41, empty Down40, replay and retained Down refusal pass with the
+eight-test/twenty-subtest matrix (race21.484s). These are storage development
+dependencies; admission public runtime and native all-writer publication/read
+qualification remain open. No old unpublished migration is renumbered in place.
+
 ## Purpose
 
 A member can explicitly complain about a readable Space message to that Space's
