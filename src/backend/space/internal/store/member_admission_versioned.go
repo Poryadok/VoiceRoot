@@ -10,7 +10,7 @@ import (
 
 func (s *SpaceStore) memberDecisionSchema(ctx context.Context) (int64, error) {
 	var version int64
-	if err := s.db().QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || (version != 39 && version != 40 && version != 41 && version != 42) {
+	if err := s.db().QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || (version != 39 && version != 40 && version != 41 && version != 42 && version != 44) {
 		return 0, ErrJoinAttemptUnavailable
 	}
 	return version, nil
