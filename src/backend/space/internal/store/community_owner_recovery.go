@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 
 	"github.com/google/uuid"
@@ -69,12 +70,13 @@ func validateCommunityOwnerRecovery(in CommunityOwnerRecoveryInput) error {
 // ReserveCommunityOwnerRecovery freezes the Space authority at the exact
 // generation before Role V2 calls. Exact retries resume the durable operation.
 func (s *SpaceStore) ReserveCommunityOwnerRecovery(ctx context.Context, in CommunityOwnerRecoveryInput) (CommunityOwnerRecoveryOperation, bool, error) {
-	if s == nil || s.Pool == nil {
+	if s == nil || s.Pool == nil || s.tx != nil {
 		return CommunityOwnerRecoveryOperation{}, false, errors.New("space store: pool not configured")
 	}
 	if err := validateCommunityOwnerRecovery(in); err != nil {
 		return CommunityOwnerRecoveryOperation{}, false, err
 	}
+	in.EvidenceSHA256 = append([]byte(nil), in.EvidenceSHA256...)
 	hash, err := communityOwnerRecoveryHash(in)
 	if err != nil {
 		return CommunityOwnerRecoveryOperation{}, false, err
@@ -97,7 +99,7 @@ func (s *SpaceStore) ReserveCommunityOwnerRecovery(ctx context.Context, in Commu
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return CommunityOwnerRecoveryOperation{}, false, err
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return CommunityOwnerRecoveryOperation{}, false, err
 	}
@@ -127,6 +129,12 @@ func (s *SpaceStore) ReserveCommunityOwnerRecovery(ctx context.Context, in Commu
 	if status != "active" || generation != in.ExpectedGeneration || accountID != in.PreviousOwnerAccountID || profileID != in.PreviousOwnerProfileID {
 		return CommunityOwnerRecoveryOperation{}, false, ErrCommunityOwnerRecoveryConflict
 	}
+	scoped := *s
+	scoped.tx = tx
+	capture, err := scoped.captureCommunityRecoveryMutation(ctx, in, effectiveMutationCommunityRecoveryReservation)
+	if err != nil {
+		return CommunityOwnerRecoveryOperation{}, false, fmt.Errorf("community recovery reservation capture: %w", err)
+	}
 	_, err = tx.Exec(ctx, `INSERT INTO community_owner_recovery_operations(operation_id,space_id,application_id,environment_id,corporation_key,previous_owner_account_id,previous_owner_profile_id,replacement_account_id,replacement_profile_id,expected_generation,reason_code,evidence_sha256,request_hash,status)
 		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'pending') ON CONFLICT(operation_id) DO NOTHING`, in.OperationID, in.SpaceID, in.ApplicationID, in.EnvironmentID, in.CorporationKey, in.PreviousOwnerAccountID, in.PreviousOwnerProfileID, in.ReplacementAccountID, in.ReplacementProfileID, in.ExpectedGeneration, in.ReasonCode, in.EvidenceSHA256, hash[:])
 	if err != nil {
@@ -145,6 +153,17 @@ func (s *SpaceStore) ReserveCommunityOwnerRecovery(ctx context.Context, in Commu
 	if _, err = tx.Exec(ctx, `UPDATE community_owner_authority SET status='recovery_pending',updated_at=clock_timestamp() WHERE space_id=$1 AND owner_generation=$2 AND status='active'`, in.SpaceID, in.ExpectedGeneration); err != nil {
 		return CommunityOwnerRecoveryOperation{}, false, err
 	}
+	if err = scoped.retireCommunityRecoverySources(ctx, in); err != nil {
+		return CommunityOwnerRecoveryOperation{}, false, err
+	}
+	if err = scoped.refreshEffectiveMemberCount(ctx, in.SpaceID); err != nil {
+		return CommunityOwnerRecoveryOperation{}, false, err
+	}
+	if capture != nil {
+		if err = scoped.finishEffectiveMemberMutations(ctx, capture); err != nil {
+			return CommunityOwnerRecoveryOperation{}, false, fmt.Errorf("community recovery reservation finalize: %w", err)
+		}
+	}
 	if err = tx.Commit(ctx); err != nil {
 		return CommunityOwnerRecoveryOperation{}, false, err
 	}
@@ -152,12 +171,14 @@ func (s *SpaceStore) ReserveCommunityOwnerRecovery(ctx context.Context, in Commu
 }
 
 func (s *SpaceStore) CompleteCommunityOwnerRecovery(ctx context.Context, in CommunityOwnerRecoveryInput, roleReceipt []byte) (CommunityOwnerRecoveryOperation, error) {
-	if s == nil || s.Pool == nil {
+	if s == nil || s.Pool == nil || s.tx != nil {
 		return CommunityOwnerRecoveryOperation{}, errors.New("space store: pool not configured")
 	}
 	if err := validateCommunityOwnerRecovery(in); err != nil {
 		return CommunityOwnerRecoveryOperation{}, err
 	}
+	in.EvidenceSHA256 = append([]byte(nil), in.EvidenceSHA256...)
+	roleReceipt = append([]byte(nil), roleReceipt...)
 	if err := validateCommunityRecoveryReceipt(in, roleReceipt); err != nil {
 		return CommunityOwnerRecoveryOperation{}, ErrCommunityOwnerRecoveryConflict
 	}
@@ -165,7 +186,7 @@ func (s *SpaceStore) CompleteCommunityOwnerRecovery(ctx context.Context, in Comm
 	if err != nil {
 		return CommunityOwnerRecoveryOperation{}, err
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return CommunityOwnerRecoveryOperation{}, err
 	}
@@ -199,14 +220,15 @@ func (s *SpaceStore) CompleteCommunityOwnerRecovery(ctx context.Context, in Comm
 	if op.Status != "pending" || status != "recovery_pending" || generation != in.ExpectedGeneration || accountID != in.PreviousOwnerAccountID || profileID != in.PreviousOwnerProfileID {
 		return CommunityOwnerRecoveryOperation{}, ErrCommunityOwnerRecoveryConflict
 	}
-	inserted, err := publishCommunityRecoveryOwner(ctx, tx, in, roleReceipt)
+	scoped := *s
+	scoped.tx = tx
+	capture, err := scoped.captureCommunityRecoveryMutation(ctx, in, effectiveMutationCommunityRecoveryCompletion)
+	if err != nil {
+		return CommunityOwnerRecoveryOperation{}, fmt.Errorf("community recovery completion capture: %w", err)
+	}
+	_, err = publishCommunityRecoveryOwner(ctx, tx, in, roleReceipt)
 	if err != nil {
 		return CommunityOwnerRecoveryOperation{}, err
-	}
-	if inserted {
-		if _, err := tx.Exec(ctx, `UPDATE spaces SET member_count=member_count+1 WHERE id=$1`, in.SpaceID); err != nil {
-			return CommunityOwnerRecoveryOperation{}, err
-		}
 	}
 	if _, err := tx.Exec(ctx, `UPDATE spaces SET owner_profile_id=$2,updated_at=clock_timestamp() WHERE id=$1 AND owner_profile_id=$3`, in.SpaceID, in.ReplacementProfileID, in.PreviousOwnerProfileID); err != nil {
 		return CommunityOwnerRecoveryOperation{}, err
@@ -223,6 +245,14 @@ func (s *SpaceStore) CompleteCommunityOwnerRecovery(ctx context.Context, in Comm
 	op, err = loadCommunityOwnerRecovery(ctx, tx, in.OperationID, false)
 	if err != nil {
 		return CommunityOwnerRecoveryOperation{}, err
+	}
+	if err = scoped.refreshEffectiveMemberCount(ctx, in.SpaceID); err != nil {
+		return CommunityOwnerRecoveryOperation{}, err
+	}
+	if capture != nil {
+		if err = scoped.finishEffectiveMemberMutations(ctx, capture); err != nil {
+			return CommunityOwnerRecoveryOperation{}, fmt.Errorf("community recovery completion finalize: %w", err)
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return CommunityOwnerRecoveryOperation{}, err
