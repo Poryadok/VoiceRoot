@@ -139,3 +139,22 @@ Existing persisted rows require explicit fenced migration reconciliation; never
 invent live-owner proof for historic rows or mix old unfenced writers. Redis
 snapshot rollback/multi-primary fencing remains the existing infrastructure
 boundary. Source CLEAR and component tests do not prove provider/DEV/STG acceptance.
+
+## Integration follow-up: Voice15 rollback retention
+
+The reviewed runtime was composed at `dd37c623`: full Realtime short/race,
+Voice production-factory PG/Redis/NATS and Voice short/static/build checks pass.
+A separate integration audit found that migration15 DOWN could probe an empty
+ownership table while a first INSERT was uncommitted, then drop the table after
+waiting for that writer to commit. The deterministic two-connection PostgreSQL
+regression failed against the old SQL: DOWN returned success and removed the
+committed ownership row. The empty DOWN/UP control passed.
+
+DOWN now takes an ACCESS EXCLUSIVE table lock before its retention probe, with
+the check and DROP in one explicit transaction. The regression observes the real
+lock wait, commits the writer, then requires refusal and exact row preservation;
+both it and empty DOWN/UP pass with race enabled. Affected vet and pinned lint
+pass. The existing populated-refusal/startup fixture is checked separately for
+connection rollback compatibility. UP and all runtime authority bytes remain
+unchanged. Exact successor review is required before develop intake; no provider,
+installed writer-fencing or acceptance qualification follows from this fix.
