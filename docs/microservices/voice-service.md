@@ -986,3 +986,15 @@ operation, resource, and digest fences remain; matching compact-command replay
 returns the exact stored receipt, while old create/teardown replay gets a
 terminal precondition instead of recreating or fabricating historic receipts.
 The migration refuses DOWN while any operation or permanent fence remains.
+
+The native matchmaking source reads coverage, ordinary and Space owner cuts,
+current shared memberships, account fences and related retained work in the
+same read-only repeatable-read transaction. Its fingerprint includes the full
+native witnesses and all coverage identity fields. Creation manifests do not
+establish current membership. Unknown legacy identity, conflicting locators,
+unbound fences and unresolved foreign effects make the cut unavailable;
+PREPARED and departing members do not require an active eligibility fence.
+Retained owner work needs an exact qualified retirement classification before
+it can stop excluding eligibility; expiry, an empty projection or the original
+business state alone does not establish that classification. This read adapter
+does not issue coverage, qualify factories or activate the native runtime.
