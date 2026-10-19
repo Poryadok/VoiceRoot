@@ -667,7 +667,6 @@ and Voice IDs denied while history remains.
 
 
 - [ ] **[Notification] Email (Resend) channel missing — spec lists auth-only email via Resend; zero code in Notification (Auth also has `otp_codes` DDL but no Resend sender).** — `docs/microservices/notification-service.md`, `src/backend/notification/` (no email package), `src/backend/auth/src/main/resources/db/migration/V1__auth_schema.sql`
-- [ ] **[Notification] Redis rate limiting not implemented — spec mentions rate limiting; Redis used only for grouping.** — `docs/microservices/notification-service.md`, `src/backend/notification/internal/grouping/store.go`, `main.go`
 - [ ] **[Notification] Analytics telemetry incomplete — only `analytics.notification.push_sent` on gRPC `SendNotification`; NATS-driven pushes don’t publish; no `push_delivered` / `push_clicked`.** — `src/backend/notification/internal/grpcsvc/server.go`, `docs/microservices/notification-service.md`
 - [ ] **[Notification] Verify deployed VoIP topic and device delivery.** — Sender uses complete `APNS_VOIP_TOPIC` verbatim (fallback: `APNS_BUNDLE_ID` + `.voip`); configured-topic regression covers the former double-suffix defect. Configured APNs/device delivery proof remains open.
 - [ ] **[Notification] APNs E2E proves registration only, not delivery — unlike FCM compose test with `RecordSender` + debug endpoint.** — `src/frontend/test/apns_e2e_live_test.dart`, `src/frontend/test/fcm_delivery_e2e_live_test.dart`, `src/backend/notification/debug_http.go`

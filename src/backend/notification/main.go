@@ -76,6 +76,11 @@ func main() {
 		gameBlockChecker = &gameconsent.BlockChecker{Profiles: userv1.NewUserServiceClient(userConn), Blocks: socialv1.NewSocialServiceClient(socialConn)}
 	}
 	metricsReg := prometheus.NewRegistry()
+	chatAdmission, err := newChatPushAdmission(os.LookupEnv, metricsReg)
+	if err != nil {
+		log.Fatalf("notification chat push quota configuration: %v", err)
+	}
+	defer func() { _ = chatAdmission.Close() }()
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		httpAddr = v
@@ -211,6 +216,7 @@ func main() {
 		}
 
 		msgPusher := &dispatch.MessagePusher{
+			Admission:         chatAdmission,
 			LifecycleDelivery: settingsStore,
 			Tokens:            tokenStore,
 			Pusher:            pusher,
