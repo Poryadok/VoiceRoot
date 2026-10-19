@@ -421,11 +421,26 @@ message TransferOwnershipRequest {
 message AddBotMemberRequest {
   string space_id = 1;
   string profile_id = 2;
+  BotInstallationIntent installation_intent = 3;
 }
 
 message RemoveBotMemberRequest {
   string space_id = 1;
   string profile_id = 2;
+  BotInstallationIntent installation_intent = 3;
+  // Original add operation, retained when the cancellation has its own key.
+  string install_operation_id = 4;
+}
+
+// Bot-owned durable identity, verified only under the Bot service principal.
+// Generation is distinct from Space's ordinary membership generation.
+message BotInstallationIntent {
+  string operation_id = 1;
+  string bot_id = 2;
+  string installation_id = 3;
+  string space_id = 4;
+  string actor_profile_id = 5;
+  uint64 generation = 6;
 }
 
 message ListTemplatesRequest {}
