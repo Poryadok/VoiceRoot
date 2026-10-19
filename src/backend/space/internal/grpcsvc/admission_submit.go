@@ -169,9 +169,9 @@ func (s *admissionServer) resumeJoinSubmission(ctx context.Context, request *spa
 	if err != nil {
 		return nil, mapAdmissionError(err)
 	}
-	_, err = s.store.CompleteInteractiveMemberAdmission(ctx, intent.Input.OperationID, s.deps.Roles, s.deps.Subjects, s.deps.Reviewers, func(ctx context.Context, local *store.SpaceStore, native *store.MemberAdmissionIntent) error {
+	_, err = s.store.CompleteInteractiveMemberAdmissionWithPublicationCall(ctx, intent.Input.OperationID, s.deps.Roles, s.deps.Subjects, s.deps.Reviewers, nil, func(ctx context.Context, local *store.SpaceStore, native *store.MemberAdmissionIntent, _ *store.MembershipRow) error {
 		return local.MarkJoinSubmissionPublishedOutcome(ctx, request, native)
-	})
+	}, call, request)
 	if err != nil {
 		return nil, mapAdmissionError(err)
 	}
