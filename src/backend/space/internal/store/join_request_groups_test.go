@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -364,4 +365,25 @@ func TestJoinRequestGroupForgedPurgeSettingCannotEraseLiveAssociation(t *testing
 		require.Equal(t, "55000", refusal.Code, "actual terminal authority, not a session setting or missing function, denies erasure")
 		require.NoError(t, tx.Rollback(f.ctx))
 	}
+}
+
+func TestJoinRequestGroupDowngradeRejectsOldRepeatableReadSnapshot(t *testing.T) {
+	f := newJoinGroupFixture(t)
+	tx, err := f.store.Pool.BeginTx(f.ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
+	require.NoError(t, err)
+	defer tx.Rollback(f.ctx)
+	var before int
+	require.NoError(t, tx.QueryRow(f.ctx, `SELECT count(*) FROM space_join_request_groups`).Scan(&before))
+	require.Zero(t, before, "pin a real empty snapshot before the concurrent first group commits")
+	a, q := f.child(t)
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/space_db/000032_join_request_groups.down.sql"))
+	require.NoError(t, err)
+	_, err = tx.Exec(f.ctx, string(raw))
+	var refusal *pgconn.PgError
+	require.ErrorAs(t, err, &refusal, "LOCK must not let a stale RR snapshot erase committed Q/A evidence")
+	require.Equal(t, "55000", refusal.Code)
+	require.NoError(t, tx.Rollback(f.ctx))
+	got, err := f.store.LookupJoinRequestGroupForAttempt(f.ctx, f.space, a.ID)
+	require.NoError(t, err)
+	require.Equal(t, q.ID, got.ID)
 }

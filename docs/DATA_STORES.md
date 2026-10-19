@@ -349,7 +349,8 @@ association and immutable approval-operation selection; attempts/submissions and
 public operations remain in migrations35/36. Migration32 has no forward foreign
 keys to those later tables; inserts validate their actual rows at runtime.
 Updates/truncation are forbidden, and deletion requires the existing terminal
-Space P3 guard. Downgrade refuses nonempty journals. No migration-history repair,
+Space P3 guard. Downgrade requires READ COMMITTED and refuses nonempty journals
+after locking them; inherited snapshot isolation is rejected. No migration-history repair,
 source-catalog bypass or identity-erasure readiness is implied by this schema.
 
 ## P3 Space lifecycle storage inventory (accepted target)
