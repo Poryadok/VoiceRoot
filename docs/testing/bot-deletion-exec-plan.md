@@ -435,3 +435,19 @@ The first provider attempt failed before RPC because the runner flattened the
 repository layout expected by its source-owned repoRoot helper; the saved
 failure is setup evidence, not a product RED. The successful run uses the
 canonical src/backend layout and identical production source.
+
+Actual ordinary-Uninstall Role lower handoff also passes: caller8.815s and
+source-owned eef1f09 Role25/Space44 provider124.599s, no skips, scoped vet0.
+The production signed current manageBots decision succeeds before the lower
+initiating facts are committed. The actual Role cleanup receiver commits an
+exact native space_uninstall receipt; lost ACK and a corrupted global_delete
+purpose leave the Bot child pending. Fresh-JWT/exact-byte worker replay then
+completes Bot012, keeps Bot live/no global root and permits a new installation.
+The native cancellation remains an explicit controlled Empty seam and owner
+facts are not public Gateway/Auth proof. This fixture has no Bot-created Role
+definitions/assignments, so the genuine count0 receipt proves protected
+transport and journal recovery, not nonzero Role deletion effects. Those store
+effects retain their separately reviewed proof. Provider serving source remains
+qualified Space44; no Role current46 or complete public composition is inferred.
+Recovery is SAME-Pool service reset/manual equivalent mTLS. Provider stop-file
+teardown completed, removed credentials and left the private engine empty.
