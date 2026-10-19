@@ -21,6 +21,22 @@ final account reread. Existing eligibility revision triggers remain authoritativ
 for relevant owner/deleted/frozen changes. Deployment/assembled admission and
 acceptance require their separate version-bound proof.
 
+## Owning authority source catalog
+
+The authority source serves only exact clean `user_db` version **21**. Migrations
+20 (`profile_last_seen`) and 21 (pending organization-challenge cleanup and its
+unique index) preserve the source's four relations, columns, constraints,
+indexes, eleven triggers and five function bodies. The real pinned migrator
+qualification compares their DDL before/after 19→21 and verifies the unchanged
+authority revision and profile tuple. Runtime source queries and function hashes
+remain unchanged; dirty, older and unknown versions still fail closed.
+
+Migration19's permanent authority floors and inactive fences remain forward-only.
+The maintenance oracle returns through the unrelated additive migrations to19,
+then proves that its DOWN is refused and retained fences survive. This exact21
+qualification grants no future schema version, identity-association activation or
+cross-service/runtime acceptance.
+
 ## Обзор
 
 Управление профилями пользователей, настройками, приватностью и онлайн-статусом.
