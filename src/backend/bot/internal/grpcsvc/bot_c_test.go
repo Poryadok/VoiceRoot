@@ -206,6 +206,8 @@ func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceCli
 	st := &store.BotStore{Pool: pool}
 	hub := dispatch.NewHub()
 	svc := grpcsvc.NewBotGRPC(st, hub)
+	svc.CleanupRole = fixtureUninstallRoleClient{}
+	svc.CleanupMessaging = fixtureUninstallMessagingClient{}
 	if deps == nil || !deps.noScopeAuthority {
 		svc.ChatScope = mutationFixtureChatScope{}
 	}
@@ -239,6 +241,7 @@ func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceCli
 			)
 			require.NoError(t, err)
 			svc.Messaging = messagingv1.NewMessagingServiceClient(mconn)
+			svc.CleanupMessaging = svc.Messaging
 		}
 		if deps.chat != nil {
 			cl := bufconn.Listen(1024)
@@ -264,6 +267,7 @@ func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceCli
 			require.NoError(t, err)
 			svc.Role = rolev1.NewRoleServiceClient(rconn)
 			svc.InstallationRole = svc.Role
+			svc.CleanupRole = svc.Role
 		}
 		if deps.space != nil {
 			sl := bufconn.Listen(1024)
@@ -305,6 +309,7 @@ func setupBotCCommandBot(
 	client botv1.BotServiceClient,
 	st *store.BotStore,
 	scopesJSON string,
+	native ...bool,
 ) (context.Context, string, string, uuid.UUID, uuid.UUID) {
 	t.Helper()
 	ctx := withAccount(context.Background(), uuid.New(), uuid.New())
@@ -326,7 +331,11 @@ func setupBotCCommandBot(
 	chatID := uuid.New()
 	botUUID, err := uuid.Parse(botID)
 	require.NoError(t, err)
-	_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
+	if len(native) > 0 && native[0] {
+		_, err = client.InstallBotInSpace(ctx, &botv1.InstallBotInSpaceRequest{BotId: botID, SpaceId: spaceID.String(), AllowedChats: []*chatv1.ChatRef{{Id: chatID.String()}}})
+	} else {
+		_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
+	}
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 	return ctx, botID, botToken, chatID, spaceID

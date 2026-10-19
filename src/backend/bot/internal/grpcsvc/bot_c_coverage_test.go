@@ -698,7 +698,7 @@ func TestUninstallBotFromSpace_removesSpaceMember(t *testing.T) {
 	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{role: roleFake, space: spaceFake})
 	defer cleanup()
 
-	ctx, botID, _, _, spaceID := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
+	ctx, botID, _, _, spaceID := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`, true)
 
 	_, err := client.UninstallBotFromSpace(ctx, &botv1.UninstallBotFromSpaceRequest{
 		BotId:   botID,

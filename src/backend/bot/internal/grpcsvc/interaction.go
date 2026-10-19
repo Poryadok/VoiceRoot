@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"voice/backend/bot/internal/authctx"
 	"voice/backend/bot/internal/dispatch"
@@ -96,7 +98,8 @@ func (s *BotGRPC) InstallBotInSpace(ctx context.Context, req *botv1.InstallBotIn
 }
 
 func (s *BotGRPC) UninstallBotFromSpace(ctx context.Context, req *botv1.UninstallBotFromSpaceRequest) (*botv1.UninstallBotFromSpaceResponse, error) {
-	if _, err := principal.RequireDelegatedUser(ctx, "bot", botv1.BotService_UninstallBotFromSpace_FullMethodName, req); err != nil {
+	identity, err := principal.RequireDelegatedUser(ctx, "bot", botv1.BotService_UninstallBotFromSpace_FullMethodName, req)
+	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "verified uninstall initiation required")
 	}
 	botID, err := parseUUID("bot_id", req.GetBotId())
@@ -114,56 +117,40 @@ func (s *BotGRPC) UninstallBotFromSpace(ctx context.Context, req *botv1.Uninstal
 	if err := s.checkInstallationPermission(ctx, spaceID, profile); err != nil {
 		return nil, err
 	}
-	botRow, err := s.Store.GetBotByID(ctx, botID)
-	if err != nil {
-		return nil, mapStoreErr(err)
-	}
 	if s.InstallationSpace == nil || s.PrincipalIssuer == nil {
 		return nil, status.Error(codes.FailedPrecondition, "protected Bot installation client is not configured")
 	}
-	intent, err := s.Store.BeginInstallationCancellation(ctx, botID, spaceID, profile)
+	verified, _ := principal.FromContext(ctx)
+	body, err := (proto.MarshalOptions{Deterministic: true}).Marshal(req)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid uninstall request")
+	}
+	intent, err := s.Store.BeginInstallationCancellationWithAdmission(ctx, botID, spaceID, profile, store.DeletionAdmission{AccountID: identity.AccountID, ProfileID: identity.ProfileID, SessionEpoch: identity.SessionEpoch, AccountType: identity.AccountType, Method: verified.RPC, RequestID: verified.RequestID, RequestHash: verified.RequestHash, RequestBytes: body, ExpiresAt: verified.ExpiresAt})
 	if err != nil {
 		return nil, mapStoreErr(err)
 	}
 	if intent == nil || intent.State == "CANCELED" {
 		return &botv1.UninstallBotFromSpaceResponse{}, nil
 	}
-	if err := s.removeInstallationMember(ctx, intent); err != nil {
-		return nil, err
-	}
-	chatIDs := intent.Chats
-	s2sCtx := s2s.ForwardIncomingMetadata(ctx)
-	if s.Role != nil {
-		_, _ = s.Role.DeleteRolesCreatedByProfile(s2sCtx, &rolev1.DeleteRolesCreatedByProfileRequest{
-			SpaceId:            spaceID.String(),
-			CreatedByProfileId: botRow.ActorProfileID.String(),
-		})
-		memberRoles, merr := s.Role.GetMemberRoles(s2sCtx, &rolev1.GetMemberRolesRequest{
-			SpaceId:   spaceID.String(),
-			ProfileId: botRow.ActorProfileID.String(),
-		})
-		if merr == nil {
-			for _, role := range memberRoles.GetRoleList().GetRoles() {
-				_, _ = s.Role.RevokeRole(s2sCtx, &rolev1.RevokeRoleRequest{
-					SpaceId:   spaceID.String(),
-					ProfileId: botRow.ActorProfileID.String(),
-					RoleId:    role.GetId(),
-				})
-			}
-		}
-	}
-	if s.Messaging != nil && len(chatIDs) > 0 {
-		ids := make([]string, 0, len(chatIDs))
-		for _, cid := range chatIDs {
-			ids = append(ids, cid.String())
-		}
-		_, _ = s.Messaging.UnpinMessagesBySenderInChats(s2sCtx, &messagingv1.UnpinMessagesBySenderInChatsRequest{
-			SenderProfileId: botRow.ActorProfileID.String(),
-			ChatIds:         ids,
-		})
-	}
-	if err := s.Store.CompleteInstallationCancellation(ctx, intent); err != nil {
+	op, err := s.Store.UninstallCleanup(ctx, intent.InstallationID)
+	if err != nil {
 		return nil, mapStoreErr(err)
+	}
+	if op.State == "COMPLETE" {
+		return &botv1.UninstallBotFromSpaceResponse{}, nil
+	}
+	claim, err := s.Store.ClaimUninstallCleanup(ctx, op.OperationID)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "uninstall cleanup is already being recovered")
+	}
+	err = s.processDeletionClaim(ctx, claim)
+	if err != nil {
+		retryCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if retryErr := s.Store.RetryBotDeletion(retryCtx, claim); retryErr != nil {
+			return nil, mapStoreErr(retryErr)
+		}
+		return nil, status.Error(codes.Unavailable, "native cancellation and installation cleanup remain recoverable")
 	}
 	return &botv1.UninstallBotFromSpaceResponse{}, nil
 }

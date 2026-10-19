@@ -20,6 +20,8 @@ import (
 type uninstallRoleSpy struct {
 	fakeRoleClient
 	deleteRolesCalls int
+	rawDeleteCalls   int
+	rawGetCalls      int
 	lastSpaceID      string
 	lastProfileID    string
 }
@@ -40,11 +42,13 @@ func (f *uninstallRoleSpy) invokeDeleteRolesCreatedByProfile(
 }
 
 func (f *uninstallRoleSpy) DeleteRolesCreatedByProfile(ctx context.Context, req *rolev1.DeleteRolesCreatedByProfileRequest) (*rolev1.DeleteRolesCreatedByProfileResponse, error) {
+	f.rawDeleteCalls++
 	_ = f.invokeDeleteRolesCreatedByProfile(ctx, req)
 	return &rolev1.DeleteRolesCreatedByProfileResponse{}, nil
 }
 
 func (f *uninstallRoleSpy) GetMemberRoles(_ context.Context, _ *rolev1.GetMemberRolesRequest) (*rolev1.GetMemberRolesResponse, error) {
+	f.rawGetCalls++
 	return &rolev1.GetMemberRolesResponse{RoleList: &rolev1.RoleList{}}, nil
 }
 
@@ -52,6 +56,7 @@ func (f *uninstallRoleSpy) GetMemberRoles(_ context.Context, _ *rolev1.GetMember
 type uninstallMsgSpy struct {
 	*fakeMessagingClient
 	unpinCalls      int
+	rawUnpinCalls   int
 	lastSenderID    string
 	lastChatIDs     []string
 	sentMessageIDs  []string
@@ -87,6 +92,7 @@ func (f *uninstallMsgSpy) invokeUnpinMessagesBySenderInChats(
 }
 
 func (f *uninstallMsgSpy) UnpinMessagesBySenderInChats(ctx context.Context, req *messagingv1.UnpinMessagesBySenderInChatsRequest) (*messagingv1.UnpinMessagesBySenderInChatsResponse, error) {
+	f.rawUnpinCalls++
 	_ = f.invokeUnpinMessagesBySenderInChats(ctx, req)
 	return &messagingv1.UnpinMessagesBySenderInChatsResponse{}, nil
 }
@@ -122,7 +128,7 @@ func TestUninstallBotFromSpace_invokesRoleDeleteAndMessagingUnpin(t *testing.T) 
 	})
 	defer cleanup()
 
-	ctx, botID, _, chatID, spaceID := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
+	ctx, botID, _, chatID, spaceID := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`, true)
 	botRow, err := st.GetBotByID(ctx, uuid.MustParse(botID))
 	require.NoError(t, err)
 	actorProfileID := botRow.ActorProfileID.String()
@@ -143,14 +149,32 @@ func TestUninstallBotFromSpace_invokesRoleDeleteAndMessagingUnpin(t *testing.T) 
 	require.NoError(t, err)
 
 	require.Equal(t, 1, roleSpy.deleteRolesCalls,
-		"UninstallBotFromSpace must call Role.DeleteRolesCreatedByProfile (BOT-B)")
+		"UninstallBotFromSpace must request typed Role cleanup (BOT-B)")
 	require.Equal(t, spaceID.String(), roleSpy.lastSpaceID)
 	require.Equal(t, actorProfileID, roleSpy.lastProfileID)
 
 	require.Equal(t, 1, msgSpy.unpinCalls,
-		"UninstallBotFromSpace must call Messaging.UnpinMessagesBySenderInChats (BOT-B)")
+		"UninstallBotFromSpace must request typed Messaging sender-pin cleanup (BOT-B)")
 	require.Equal(t, actorProfileID, msgSpy.lastSenderID)
 	require.Contains(t, msgSpy.lastChatIDs, chatID.String())
+	require.Zero(t, roleSpy.rawDeleteCalls)
+	require.Zero(t, roleSpy.rawGetCalls)
+	require.Zero(t, msgSpy.rawUnpinCalls)
 	require.NotEmpty(t, msgSpy.preservedBodies,
 		"uninstall cleanup must not delete message bodies (BOT-B)")
+}
+
+// Typed adapters supersede raw helpers while retaining the original exact
+// Space/actor/chat and sent-message-preservation assertions.
+func (f *uninstallRoleSpy) ApplyBotInstallationRemoval(_ context.Context, q *rolev1.ApplyBotInstallationRemovalRequest) (*rolev1.ApplyBotInstallationRemovalResponse, error) {
+	f.deleteRolesCalls++
+	f.lastSpaceID = q.SpaceId
+	f.lastProfileID = q.ActorProfileId
+	return fixtureUninstallRoleReceipt(q)
+}
+func (f *uninstallMsgSpy) ApplyBotChatPinRemoval(_ context.Context, q *messagingv1.ApplyBotChatPinRemovalRequest) (*messagingv1.ApplyBotChatPinRemovalResponse, error) {
+	f.unpinCalls++
+	f.lastSenderID = q.ActorProfileId
+	f.lastChatIDs = append(f.lastChatIDs, q.ChatId)
+	return fixtureUninstallMessagingReceipt(q)
 }

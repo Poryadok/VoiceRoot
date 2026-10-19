@@ -17,6 +17,9 @@ import (
 )
 
 func buildSpaceDeletionRequest(claim *store.BotDeletion, effect store.BotDeletionEffect) (*spacev1.ApplyBotInstallationRemovalRequest, error) {
+	if cleanupPurpose(claim) != "global_delete" {
+		return nil, errDeletionEvidence
+	}
 	if effect.Kind != "SPACE_CLEANUP" || effect.ChatID != nil || effect.Target.CancelOperationID == uuid.Nil {
 		return nil, errDeletionEvidence
 	}

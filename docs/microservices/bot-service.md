@@ -26,7 +26,14 @@ response leaves the same operation recoverable on request retry after restart.
 
 Cancellation persists a distinct operation UUID and the original install
 operation UUID before the protected remove call. CANCELING disables local use
-and blocks reinstall; acknowledged cancellation becomes CANCELED. A reinstall
+and blocks reinstall. Public uninstall also freezes its own per-installation
+`space_uninstall` initiating decision, target and Role/Messaging obligations in
+the same transaction. The native Empty acknowledgement is stored explicitly as
+a Bot-local transport observation; it is not a Space receipt or global terminal
+fence. Required typed participant receipts settle the remaining cleanup before
+local cancellation becomes CANCELED. Pending work is recovered by the bounded
+claim worker without the initiating bearer token; exact accepted bytes remain
+stable and delivery credentials are refreshed. A reinstall
 uses a new installation UUID and increasing Bot generation. An old internal
 cancellation replay cannot erase that new installation. The public uninstall
 request still addresses Bot/Space, so a new public call after reinstall targets
@@ -207,9 +214,10 @@ service BotService {
 ### Install / uninstall
 
 - **Install** (`InstallBotInSpace`): `SPACE_MANAGE_BOTS` через Role `CheckPermission`; `Space.AddBotMember` для `actor_profile_id`; whitelist чатов; `acknowledge_privileged_scopes` обязателен при privileged scopes.
-- **Uninstall** (`UninstallBotFromSpace`): снимает whitelist/installation, `Space.RemoveBotMember`; **S2S cleanup** — см. [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md):
-  - Role: `DeleteRolesCreatedByProfile` (роли с `created_by_profile_id = actor_profile_id`), затем `GetMemberRoles` + `RevokeRole` для назначенных ролей бота
-  - Messaging: `UnpinMessagesBySenderInChats` по whitelisted `chat_id` и `sender_profile_id = actor_profile_id`
+- **Uninstall** (`UninstallBotFromSpace`): снимает whitelist/installation, protected native `Space.RemoveBotMember`; **S2S cleanup** — см. [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md):
+  - Role: private `ApplyBotInstallationRemoval` с `purpose=space_uninstall` удаляет допустимые созданные роли и назначения этого Bot actor; системные/Owner роли не обходятся.
+  - Messaging: private `ApplyBotChatPinRemoval` с тем же purpose снимает pins отправителя по сохранённому batch whitelisted attachments; сообщения сохраняются.
+  - Обычные Role/Messaging helpers не являются fallback. Ошибка/configuration gap сохраняет отдельный pending journal; текущая реализация отвечает `Unavailable` и допускает recovery. Это не переносит DeleteBot-only правило полного Empty completion на контракт native cancellation ACK.
 - **ListInstalledBots**: `InstalledBot.online` из `bot_presence` (тот же порог, что для slash `online`).
 - `ListInstalledBots.allowed_chats` получает текущий group/channel type через
   Chat `GetChat` с исходным caller context. Тип принимается только для точного
@@ -519,7 +527,7 @@ P3 evidence retention boundary remain tracked in BE-170; absence of downstream
 evidence must not be interpreted as completed cleanup.
 ### Private Messaging cleanup caller
 
-Global deletion freezes the eligible per-chat attachment batch in its Bot root
+Global deletion or ordinary uninstall freezes the eligible per-chat attachment batch in its own Bot root
 snapshot. Messaging child request bytes are sealed before transport and reused
 exactly after uncertainty; only the signed service credential/JTI is refreshed.
 Bot validates the typed participant receipt, every attachment target and digest,
@@ -535,5 +543,5 @@ Missing configuration does not fall back to the ordinary Messaging connection.
 The recovery worker claims due roots, validates retained byte hashes and typed
 completed children, and retries independently recoverable Role/Messaging work.
 It leaves the root pending while any participant is unavailable. Global Space
-terminal-fence delivery, uninstall orchestration and P3/post-retention proof
+terminal-fence delivery, actual multi-service uninstall composition and P3/post-retention proof
 coverage remain unfinished; this does not imply full readiness.

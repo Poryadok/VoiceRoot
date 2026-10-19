@@ -29,6 +29,8 @@ type DeletionAdmission struct {
 }
 
 type BotDeletion struct {
+	// Purpose is selected by the journal reader; empty preserves global callers.
+	Purpose         string
 	OperationID     uuid.UUID
 	BotID           uuid.UUID
 	OwnerAccountID  uuid.UUID
@@ -263,6 +265,10 @@ func (s *BotStore) snapshotDeletionTarget(ctx context.Context, tx pgx.Tx, op *Bo
 }
 
 func saveDeletionTarget(ctx context.Context, tx pgx.Tx, t *BotDeletionTarget) error {
+	return saveLifecycleTarget(ctx, tx, t, "global_delete")
+}
+
+func saveLifecycleTarget(ctx context.Context, tx pgx.Tx, t *BotDeletionTarget, purpose string) error {
 	chats, err := json.Marshal(t.Chats)
 	if err != nil {
 		return err
@@ -274,17 +280,17 @@ func saveDeletionTarget(ctx context.Context, tx pgx.Tx, t *BotDeletionTarget) er
 	if t.InstallOperationID != uuid.Nil {
 		installOperation = &t.InstallOperationID
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO bot_deletion_installations(target_id,operation_id,bot_id,space_id,actor_profile_id,installation_id,install_operation_id,bot_generation,cancel_operation_id,chat_ids,legacy_evidence,scope_bytes,scope_sha256) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13)`, t.TargetID, t.OperationID, t.BotID, t.SpaceID, t.ActorProfileID, installation, installOperation, t.BotGeneration, t.CancelOperationID, chats, t.LegacyEvidence, t.ScopeBytes, t.ScopeSHA256)
+	_, err = tx.Exec(ctx, lifecycleQuery(&BotDeletion{Purpose: purpose}, `INSERT INTO bot_deletion_installations(target_id,operation_id,bot_id,space_id,actor_profile_id,installation_id,install_operation_id,bot_generation,cancel_operation_id,chat_ids,legacy_evidence,scope_bytes,scope_sha256) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13)`), t.TargetID, t.OperationID, t.BotID, t.SpaceID, t.ActorProfileID, installation, installOperation, t.BotGeneration, t.CancelOperationID, chats, t.LegacyEvidence, t.ScopeBytes, t.ScopeSHA256)
 	if err != nil {
 		return err
 	}
 	for _, kind := range []string{"SPACE_CLEANUP", "ROLE_REMOVE"} {
-		if _, err = tx.Exec(ctx, `INSERT INTO bot_deletion_effects(effect_id,target_id,kind) VALUES($1,$2,$3)`, uuid.New(), t.TargetID, kind); err != nil {
+		if _, err = tx.Exec(ctx, lifecycleQuery(&BotDeletion{Purpose: purpose}, `INSERT INTO bot_deletion_effects(effect_id,target_id,kind) VALUES($1,$2,$3)`), uuid.New(), t.TargetID, kind); err != nil {
 			return err
 		}
 	}
 	for _, chat := range t.Chats {
-		if _, err = tx.Exec(ctx, `INSERT INTO bot_deletion_effects(effect_id,target_id,kind,chat_id) VALUES($1,$2,'MESSAGING_UNPIN',$3)`, uuid.New(), t.TargetID, chat); err != nil {
+		if _, err = tx.Exec(ctx, lifecycleQuery(&BotDeletion{Purpose: purpose}, `INSERT INTO bot_deletion_effects(effect_id,target_id,kind,chat_id) VALUES($1,$2,'MESSAGING_UNPIN',$3)`), uuid.New(), t.TargetID, chat); err != nil {
 			return err
 		}
 	}

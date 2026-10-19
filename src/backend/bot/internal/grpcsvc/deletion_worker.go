@@ -22,6 +22,9 @@ func validateCompletedDeletionEffect(claim *store.BotDeletion, effect store.BotD
 	var request proto.Message
 	switch effect.Kind {
 	case "SPACE_CLEANUP":
+		if cleanupPurpose(claim) == "space_uninstall" {
+			return validateCompletedNativeCancellation(claim, effect)
+		}
 		if len(effect.ReceiptBytes) == 0 {
 			return store.ErrDeletionPending
 		}
@@ -66,7 +69,7 @@ func validateCompletedDeletionEffect(claim *store.BotDeletion, effect store.BotD
 }
 
 func (s *BotGRPC) processDeletionClaim(ctx context.Context, claim *store.BotDeletion) error {
-	effects, err := s.Store.BotDeletionEffects(ctx, claim.OperationID)
+	effects, err := s.Store.LifecycleEffects(ctx, claim)
 	if err != nil {
 		return err
 	}
@@ -83,7 +86,11 @@ func (s *BotGRPC) processDeletionClaim(ctx context.Context, claim *store.BotDele
 		}
 		switch effect.Kind {
 		case "SPACE_CLEANUP":
-			err = s.applySpaceDeletion(ctx, claim, effect)
+			if cleanupPurpose(claim) == "space_uninstall" {
+				err = s.applyNativeCancellation(ctx, claim, effect)
+			} else {
+				err = s.applySpaceDeletion(ctx, claim, effect)
+			}
 		case "ROLE_REMOVE":
 			err = s.applyRoleDeletion(ctx, claim, effect)
 		case "MESSAGING_UNPIN":
@@ -111,6 +118,9 @@ func (s *BotGRPC) ProcessNextBotDeletion(ctx context.Context) (bool, error) {
 		return false, status.Error(codes.Unavailable, "Bot deletion store unavailable")
 	}
 	claim, err := s.Store.ClaimNextBotDeletion(ctx)
+	if errors.Is(err, store.ErrDeletionClaimLost) {
+		claim, err = s.Store.ClaimNextUninstallCleanup(ctx)
+	}
 	if errors.Is(err, store.ErrDeletionClaimLost) {
 		return false, nil
 	}

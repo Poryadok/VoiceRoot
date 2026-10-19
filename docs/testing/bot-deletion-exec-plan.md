@@ -31,6 +31,26 @@ Bot/Gateway/Messaging integration remains under247's original task custody.
 
 ## Milestones
 
+Uninstall continuation: its existing required Role/Messaging cleanup uses a
+separate per-installation `space_uninstall` decision and frozen target journal.
+Migration012 is reserved by247 after all-ref and TT rev7873 collision checks.
+Reuse the typed codecs and bounded claim recovery without issuing a global Bot
+terminal fence. Native Empty cancellation is a local transport observation only.
+Keep unfinished targets durable until their own receipts exist; no ordinary Role
+or Messaging helper fallback. The initial4.689s response-code oracle is invalid:
+the explicit all-participant Empty rule belongs to DeleteBot. The corrected
+4.892s PG oracle instead fails on two forbidden ordinary Role calls. Public
+Uninstall response semantics are not strengthened by that test.
+
+Implementation steps: atomically bind verified initiating request, current
+manage-bots decision and frozen source to cancellation; independently seal and
+validate participant receipts; reclaim pending work after service recreation;
+complete local cancellation only after those required obligations are settled.
+Run actual PG failure/retry/duplicate/isolation checks with explicitly controlled
+Role/Space fixtures before real protected participant composition. Retained
+uninstall inputs remain discoverable to global deletion. No compactor or late-P3
+proof provider is introduced.
+
 - [x] Real PostgreSQL RED: DeleteBot must not report completion while required
       remote cleanup is unavailable, including an installation still PREPARING.
 - [x] Persist owner-bound global operation and all installation/whitelist
@@ -318,3 +338,30 @@ unavailable; the protected mTLS constructor sets an explicit CleanupSpace alias
 and never uses the ordinary Space client. Component/negative/constructor checks
 and vet/build pass. Actual protected native46 receiver composition is not yet
 executed, so this producer remains an unfinished runtime integration slice.
+
+Uninstall now has separate migration012 journals, a persisted verified manager
+decision and frozen attachment source in the cancellation transaction. A failed
+snapshot rolls cancellation back before remote effects; concurrent admission
+joins one installation operation. Existing claim fencing, exact request sealing,
+typed Role/Messaging validation and startup recovery apply in this separate
+namespace. Its native Empty result has an explicitly local observation envelope
+with genuinely empty response bytes and cannot build or satisfy global Space
+terminal authority. Ordinary helper calls have been removed from this path.
+Controlled Role lost-ACK recovery rejects a changed-purpose response, retains
+the original decision/request, settles local cancellation, preserves another
+Space and permits a new installation. This reinstantiates services on the same
+Pool; it does not prove an OS restart or real Role/Space transport. Existing
+uninstall semantic tests now use explicit native admission and typed controlled
+participants, preserving whitelist/membership/message-body assertions. The first
+expanded run failed four old raw/legacy fixtures; those failures remain saved.
+Actual multi-service uninstall composition, native46 global completion, Purge and
+post-retention proof remain separate unfinished acceptance work.
+
+Final coherent affected PG/race run: store62.513s, grpc39.697s,
+24 top-level/72 total test passes, one explicit pre-existing optional Messaging
+handoff skip (no provider configured). It includes DOWN012 old-RR rejection,
+empty default-RC rollback, observed first-writer lock wait/preserved row, and
+the historical DOWN008 empty control after official reverse-order DOWN012.
+Bot short checks:220 total test passes/231 explicit integration skips; scoped
+vet and full Bot build pass. These are component boundaries, not multi-service
+Uninstall acceptance or full BE-170 readiness.

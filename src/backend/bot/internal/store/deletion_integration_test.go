@@ -67,6 +67,14 @@ func TestBotLifecycleDownAcceptsEmptyDefaultReadCommitted(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			st := startBotStore(t)
 			_, file, _, _ := runtime.Caller(0)
+			if name == "000008_installation_intents.down.sql" {
+				// Current012 references installation intents. Roll it back in the
+				// official reverse order before isolating the historical008 control.
+				later, err := os.ReadFile(filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db", "000012_uninstall_cleanup.down.sql"))
+				require.NoError(t, err)
+				_, err = st.Pool.Exec(t.Context(), string(later))
+				require.NoError(t, err)
+			}
 			down, err := os.ReadFile(filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db", name))
 			require.NoError(t, err)
 			_, err = st.Pool.Exec(t.Context(), string(down))

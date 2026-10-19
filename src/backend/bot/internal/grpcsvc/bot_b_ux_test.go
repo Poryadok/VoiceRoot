@@ -79,7 +79,6 @@ func TestUninstallFromSpace_clearsWhitelist(t *testing.T) {
 	client, st, cleanup := startBotGRPC(t, true)
 	defer cleanup()
 	ctx := withAccount(context.Background(), uuid.New(), uuid.New())
-	profile, _ := authProfile(ctx)
 
 	reg, err := client.RegisterBot(ctx, &botv1.RegisterBotRequest{
 		Name: "UninstallBot", ScopesJson: `["TEXT_CHAT_SEND_MESSAGES"]`,
@@ -90,7 +89,7 @@ func TestUninstallFromSpace_clearsWhitelist(t *testing.T) {
 	spaceID := uuid.New()
 	chatID := uuid.New()
 	botUUID, _ := uuid.Parse(botID)
-	_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
+	_, err = client.InstallBotInSpace(ctx, &botv1.InstallBotInSpaceRequest{BotId: botID, SpaceId: spaceID.String(), AllowedChats: []*chatv1.ChatRef{{Id: chatID.String()}}})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 

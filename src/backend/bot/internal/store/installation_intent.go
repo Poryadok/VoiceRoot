@@ -264,6 +264,14 @@ func replaceInstallationWhitelist(ctx context.Context, tx pgx.Tx, botID, spaceID
 }
 
 func (s *BotStore) BeginInstallationCancellation(ctx context.Context, botID, spaceID, installer uuid.UUID) (*InstallationIntent, error) {
+	return s.beginInstallationCancellation(ctx, botID, spaceID, installer, nil)
+}
+
+func (s *BotStore) BeginInstallationCancellationWithAdmission(ctx context.Context, botID, spaceID, installer uuid.UUID, admission DeletionAdmission) (*InstallationIntent, error) {
+	return s.beginInstallationCancellation(ctx, botID, spaceID, installer, &admission)
+}
+
+func (s *BotStore) beginInstallationCancellation(ctx context.Context, botID, spaceID, installer uuid.UUID, admission *DeletionAdmission) (*InstallationIntent, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -290,6 +298,11 @@ func (s *BotStore) BeginInstallationCancellation(ctx context.Context, botID, spa
 		return nil, err
 	}
 	if i.State == "CANCELED" || i.State == "CANCELING" {
+		if i.State == "CANCELING" && admission != nil {
+			if err = s.ensureUninstallCleanupTx(ctx, tx, i, *admission); err != nil {
+				return nil, err
+			}
+		}
 		return i, tx.Commit(ctx)
 	}
 	rows, err := tx.Query(ctx, `SELECT chat_id FROM bot_chat_whitelist WHERE bot_id=$1 AND space_id=$2 ORDER BY chat_id`, botID, spaceID)
@@ -323,6 +336,11 @@ func (s *BotStore) BeginInstallationCancellation(ctx context.Context, botID, spa
 	if _, err = tx.Exec(ctx, `UPDATE bot_chat_whitelist SET enabled=false WHERE bot_id=$1 AND space_id=$2`, botID, spaceID); err != nil {
 		return nil, err
 	}
+	if admission != nil {
+		if err = s.ensureUninstallCleanupTx(ctx, tx, i, *admission); err != nil {
+			return nil, err
+		}
+	}
 	return i, tx.Commit(ctx)
 }
 
@@ -338,6 +356,13 @@ func (s *BotStore) CompleteInstallationCancellation(ctx context.Context, want *I
 	if _, err = s.lockInstallation(ctx, tx, want.BotID, want.SpaceID, false); err != nil {
 		return err
 	}
+	if err = s.completeInstallationCancellationTx(ctx, tx, want); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (s *BotStore) completeInstallationCancellationTx(ctx context.Context, tx pgx.Tx, want *InstallationIntent) error {
 	got, err := scanInstallationIntent(tx.QueryRow(ctx, `SELECT `+intentColumns+` FROM bot_installation_intents WHERE installation_id=$1 FOR UPDATE`, want.InstallationID))
 	if err != nil {
 		return err
@@ -346,7 +371,7 @@ func (s *BotStore) CompleteInstallationCancellation(ctx context.Context, want *I
 		return ErrInstallationConflict
 	}
 	if got.State == "CANCELED" {
-		return tx.Commit(ctx)
+		return nil
 	}
 	if err := replaceInstallationWhitelist(ctx, tx, got.BotID, got.SpaceID, got.InstallerProfileID, nil, nil, nil); err != nil {
 		return err
@@ -357,5 +382,5 @@ func (s *BotStore) CompleteInstallationCancellation(ctx context.Context, want *I
 	if _, err = tx.Exec(ctx, `UPDATE bot_installation_intents SET state='CANCELED',updated_at=now() WHERE installation_id=$1`, got.InstallationID); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return nil
 }

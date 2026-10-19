@@ -28,10 +28,20 @@ func deletionUUID(value string) bool {
 	return err == nil && id != uuid.Nil && id.String() == value
 }
 
+func cleanupPurpose(op *store.BotDeletion) string {
+	if op != nil && op.Purpose == "space_uninstall" {
+		return "space_uninstall"
+	}
+	return "global_delete"
+}
+
 // Recovery authority is the exact committed decision, not a still-live user
 // bearer token. Expired admission timestamps therefore remain historical data.
 func validateDeletionSource(op *store.BotDeletion, effect store.BotDeletionEffect) error {
 	if op == nil || op.OperationID == uuid.Nil || op.BotID == uuid.Nil || op.OwnerAccountID == uuid.Nil || op.ActorProfileID == uuid.Nil || op.State != "RUNNING" || op.ClaimGeneration <= 0 || effect.EffectID == uuid.Nil {
+		return errDeletionEvidence
+	}
+	if op.Purpose != "" && op.Purpose != "global_delete" && op.Purpose != "space_uninstall" {
 		return errDeletionEvidence
 	}
 	decisionSHA := sha256.Sum256(op.DecisionBytes)
@@ -49,21 +59,34 @@ func validateDeletionSource(op *store.BotDeletion, effect store.BotDeletionEffec
 		return errDeletionEvidence
 	}
 	var trailing any
-	if decoder.Decode(&trailing) != io.EOF || decision.OperationID != op.OperationID || decision.BotID != op.BotID || decision.OwnerAccountID != op.OwnerAccountID || decision.ActorProfileID != op.ActorProfileID || decision.Purpose != "global_delete" || decision.Admission == nil {
+	if decoder.Decode(&trailing) != io.EOF || decision.OperationID != op.OperationID || decision.BotID != op.BotID || decision.OwnerAccountID != op.OwnerAccountID || decision.ActorProfileID != op.ActorProfileID || decision.Purpose != cleanupPurpose(op) || decision.Admission == nil {
 		return errDeletionEvidence
 	}
 	a := decision.Admission
-	if a.AccountID != op.OwnerAccountID || a.ProfileID == uuid.Nil || a.SessionEpoch <= 0 || !deletionUUID(a.RequestID) || a.Method != botv1.BotService_DeleteBot_FullMethodName || a.ExpiresAt.IsZero() || (a.AccountType != "regular" && a.AccountType != "guest" && a.AccountType != "sdk-account") {
+	if a.AccountID != op.OwnerAccountID || a.ProfileID == uuid.Nil || a.SessionEpoch <= 0 || !deletionUUID(a.RequestID) || (cleanupPurpose(op) == "global_delete" && a.Method != botv1.BotService_DeleteBot_FullMethodName || cleanupPurpose(op) == "space_uninstall" && a.Method != botv1.BotService_UninstallBotFromSpace_FullMethodName) || a.ExpiresAt.IsZero() || (a.AccountType != "regular" && a.AccountType != "guest" && a.AccountType != "sdk-account") {
 		return errDeletionEvidence
 	}
-	var original botv1.DeleteBotRequest
-	if proto.Unmarshal(a.RequestBytes, &original) != nil || len(original.ProtoReflect().GetUnknown()) != 0 || original.GetBotId() != op.BotID.String() {
+	var original proto.Message = new(botv1.DeleteBotRequest)
+	if cleanupPurpose(op) == "space_uninstall" {
+		original = new(botv1.UninstallBotFromSpaceRequest)
+	}
+	if proto.Unmarshal(a.RequestBytes, original) != nil || len(original.ProtoReflect().GetUnknown()) != 0 {
 		return errDeletionEvidence
 	}
-	hash, err := principal.RequestHash(&original)
-	canonical, marshalErr := (proto.MarshalOptions{Deterministic: true}).Marshal(&original)
+	hash, err := principal.RequestHash(original)
+	canonical, marshalErr := (proto.MarshalOptions{Deterministic: true}).Marshal(original)
 	if err != nil || marshalErr != nil || hash != a.RequestHash || !bytes.Equal(canonical, a.RequestBytes) {
 		return errDeletionEvidence
+	}
+	switch q := original.(type) {
+	case *botv1.DeleteBotRequest:
+		if q.BotId != op.BotID.String() {
+			return errDeletionEvidence
+		}
+	case *botv1.UninstallBotFromSpaceRequest:
+		if q.BotId != op.BotID.String() || q.SpaceId != effect.Target.SpaceID.String() {
+			return errDeletionEvidence
+		}
 	}
 	t := effect.Target
 	scopeSHA := sha256.Sum256(t.ScopeBytes)
@@ -82,7 +105,7 @@ func buildRoleDeletionRequest(op *store.BotDeletion, effect store.BotDeletionEff
 		return nil, errDeletionEvidence
 	}
 	t := effect.Target
-	r := &rolev1.ApplyBotInstallationRemovalRequest{ProtocolVersion: 1, OperationId: effect.EffectID.String(), DecisionId: op.OperationID.String(), DecisionSha256: append([]byte(nil), op.DecisionSHA256...), Purpose: "global_delete", BotId: op.BotID.String(), ActorProfileId: op.ActorProfileID.String(), SpaceId: t.SpaceID.String(), FrozenScopeSha256: append([]byte(nil), t.ScopeSHA256...)}
+	r := &rolev1.ApplyBotInstallationRemovalRequest{ProtocolVersion: 1, OperationId: effect.EffectID.String(), DecisionId: op.OperationID.String(), DecisionSha256: append([]byte(nil), op.DecisionSHA256...), Purpose: cleanupPurpose(op), BotId: op.BotID.String(), ActorProfileId: op.ActorProfileID.String(), SpaceId: t.SpaceID.String(), FrozenScopeSha256: append([]byte(nil), t.ScopeSHA256...)}
 	switch {
 	case !t.LegacyEvidence:
 		if t.InstallationID == uuid.Nil || t.InstallOperationID == uuid.Nil || t.BotGeneration <= 0 {
@@ -92,6 +115,9 @@ func buildRoleDeletionRequest(op *store.BotDeletion, effect store.BotDeletionEff
 	case t.InstallationID != uuid.Nil:
 		r.Evidence = &rolev1.ApplyBotInstallationRemovalRequest_LegacyInstallation{LegacyInstallation: &rolev1.BotRemovalLegacyInstallationEvidence{InstallationId: t.InstallationID.String(), SnapshotId: t.TargetID.String(), SnapshotSha256: append([]byte(nil), t.ScopeSHA256...)}}
 	default:
+		if cleanupPurpose(op) == "space_uninstall" {
+			return nil, errDeletionEvidence
+		}
 		if t.InstallOperationID != uuid.Nil || t.BotGeneration != 0 || len(t.Chats) == 0 {
 			return nil, errDeletionEvidence
 		}

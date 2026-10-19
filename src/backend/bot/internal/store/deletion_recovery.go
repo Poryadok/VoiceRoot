@@ -49,7 +49,7 @@ func (s *BotStore) RetryBotDeletion(ctx context.Context, claim *BotDeletion) err
 		return err
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
-	result, err := tx.Exec(ctx, `UPDATE bot_deletion_operations SET state='RETRY_WAIT',claimed_until=NULL,next_attempt_at=clock_timestamp()+interval '2 seconds',last_error='participant cleanup pending' WHERE operation_id=$1 AND claim_generation=$2 AND claimed_until>clock_timestamp()`, claim.OperationID, claim.ClaimGeneration)
+	result, err := tx.Exec(ctx, lifecycleQuery(claim, `UPDATE bot_deletion_operations SET state='RETRY_WAIT',claimed_until=NULL,next_attempt_at=clock_timestamp()+interval '2 seconds',last_error='participant cleanup pending' WHERE operation_id=$1 AND claim_generation=$2 AND claimed_until>clock_timestamp()`), claim.OperationID, claim.ClaimGeneration)
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,15 @@ func (s *BotStore) RetryBotDeletion(ctx context.Context, claim *BotDeletion) err
 }
 
 func (s *BotStore) BotDeletionEffects(ctx context.Context, operation uuid.UUID) ([]BotDeletionEffect, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT e.effect_id,t.scope_bytes,t.scope_sha256,e.kind,e.chat_id,e.request_bytes,e.request_sha256,e.receipt_bytes,e.receipt_sha256,e.state FROM bot_deletion_installations t JOIN bot_deletion_effects e ON e.target_id=t.target_id WHERE t.operation_id=$1 ORDER BY t.space_id,e.kind,e.chat_id NULLS FIRST`, operation)
+	return s.lifecycleEffects(ctx, nil, operation)
+}
+
+func (s *BotStore) LifecycleEffects(ctx context.Context, claim *BotDeletion) ([]BotDeletionEffect, error) {
+	return s.lifecycleEffects(ctx, claim, claim.OperationID)
+}
+
+func (s *BotStore) lifecycleEffects(ctx context.Context, claim *BotDeletion, operation uuid.UUID) ([]BotDeletionEffect, error) {
+	rows, err := s.Pool.Query(ctx, lifecycleQuery(claim, `SELECT e.effect_id,t.scope_bytes,t.scope_sha256,e.kind,e.chat_id,e.request_bytes,e.request_sha256,e.receipt_bytes,e.receipt_sha256,e.state FROM bot_deletion_installations t JOIN bot_deletion_effects e ON e.target_id=t.target_id WHERE t.operation_id=$1 ORDER BY t.space_id,e.kind,e.chat_id NULLS FIRST`), operation)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +119,7 @@ func (s *BotStore) deletionClaimTx(ctx context.Context, claim *BotDeletion) (pgx
 	}
 	var generation int64
 	var state string
-	err = tx.QueryRow(ctx, `SELECT claim_generation,state FROM bot_deletion_operations WHERE operation_id=$1 FOR UPDATE`, claim.OperationID).Scan(&generation, &state)
+	err = tx.QueryRow(ctx, lifecycleQuery(claim, `SELECT claim_generation,state FROM bot_deletion_operations WHERE operation_id=$1 FOR UPDATE`), claim.OperationID).Scan(&generation, &state)
 	if err != nil || generation != claim.ClaimGeneration || state != "RUNNING" {
 		_ = tx.Rollback(context.Background())
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -121,7 +129,7 @@ func (s *BotStore) deletionClaimTx(ctx context.Context, claim *BotDeletion) (pgx
 	}
 	// Evaluate expiry after acquiring the row lock, including any lock wait.
 	var current bool
-	err = tx.QueryRow(ctx, `SELECT claimed_until>clock_timestamp() FROM bot_deletion_operations WHERE operation_id=$1`, claim.OperationID).Scan(&current)
+	err = tx.QueryRow(ctx, lifecycleQuery(claim, `SELECT claimed_until>clock_timestamp() FROM bot_deletion_operations WHERE operation_id=$1`), claim.OperationID).Scan(&current)
 	if err != nil || !current {
 		_ = tx.Rollback(context.Background())
 		if err != nil {
@@ -142,7 +150,7 @@ func (s *BotStore) SealBotDeletionRequest(ctx context.Context, claim *BotDeletio
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	var saved []byte
-	err = tx.QueryRow(ctx, `SELECT e.request_bytes FROM bot_deletion_effects e JOIN bot_deletion_installations t ON t.target_id=e.target_id WHERE e.effect_id=$1 AND t.operation_id=$2 FOR UPDATE OF e`, effect, claim.OperationID).Scan(&saved)
+	err = tx.QueryRow(ctx, lifecycleQuery(claim, `SELECT e.request_bytes FROM bot_deletion_effects e JOIN bot_deletion_installations t ON t.target_id=e.target_id WHERE e.effect_id=$1 AND t.operation_id=$2 FOR UPDATE OF e`), effect, claim.OperationID).Scan(&saved)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrInstallationConflict
 	}
@@ -156,7 +164,7 @@ func (s *BotStore) SealBotDeletionRequest(ctx context.Context, claim *BotDeletio
 		return tx.Commit(ctx)
 	}
 	digest := sha256.Sum256(request)
-	_, err = tx.Exec(ctx, `UPDATE bot_deletion_effects SET request_bytes=$2,request_sha256=$3 WHERE effect_id=$1`, effect, request, digest[:])
+	_, err = tx.Exec(ctx, lifecycleQuery(claim, `UPDATE bot_deletion_effects SET request_bytes=$2,request_sha256=$3 WHERE effect_id=$1`), effect, request, digest[:])
 	if err != nil {
 		return err
 	}
@@ -175,7 +183,7 @@ func (s *BotStore) SaveBotDeletionReceipt(ctx context.Context, claim *BotDeletio
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	var savedRequest, savedReceipt []byte
-	err = tx.QueryRow(ctx, `SELECT e.request_bytes,e.receipt_bytes FROM bot_deletion_effects e JOIN bot_deletion_installations t ON t.target_id=e.target_id WHERE e.effect_id=$1 AND t.operation_id=$2 FOR UPDATE OF e`, effect, claim.OperationID).Scan(&savedRequest, &savedReceipt)
+	err = tx.QueryRow(ctx, lifecycleQuery(claim, `SELECT e.request_bytes,e.receipt_bytes FROM bot_deletion_effects e JOIN bot_deletion_installations t ON t.target_id=e.target_id WHERE e.effect_id=$1 AND t.operation_id=$2 FOR UPDATE OF e`), effect, claim.OperationID).Scan(&savedRequest, &savedReceipt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrInstallationConflict
 	}
@@ -192,7 +200,7 @@ func (s *BotStore) SaveBotDeletionReceipt(ctx context.Context, claim *BotDeletio
 		return tx.Commit(ctx)
 	}
 	digest := sha256.Sum256(receipt)
-	_, err = tx.Exec(ctx, `UPDATE bot_deletion_effects SET receipt_bytes=$2,receipt_sha256=$3,state='COMPLETE' WHERE effect_id=$1`, effect, receipt, digest[:])
+	_, err = tx.Exec(ctx, lifecycleQuery(claim, `UPDATE bot_deletion_effects SET receipt_bytes=$2,receipt_sha256=$3,state='COMPLETE' WHERE effect_id=$1`), effect, receipt, digest[:])
 	if err != nil {
 		return err
 	}
@@ -200,20 +208,23 @@ func (s *BotStore) SaveBotDeletionReceipt(ctx context.Context, claim *BotDeletio
 }
 
 func (s *BotStore) CompleteBotDeletion(ctx context.Context, claim *BotDeletion) error {
+	if claim != nil && claim.Purpose == "space_uninstall" {
+		return s.completeUninstallCleanup(ctx, claim)
+	}
 	tx, err := s.deletionClaimTx(ctx, claim)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	var pending bool
-	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot_deletion_effects e JOIN bot_deletion_installations t ON t.target_id=e.target_id WHERE t.operation_id=$1 AND e.state<>'COMPLETE')`, claim.OperationID).Scan(&pending)
+	err = tx.QueryRow(ctx, lifecycleQuery(claim, `SELECT EXISTS(SELECT 1 FROM bot_deletion_effects e JOIN bot_deletion_installations t ON t.target_id=e.target_id WHERE t.operation_id=$1 AND e.state<>'COMPLETE')`), claim.OperationID).Scan(&pending)
 	if err != nil {
 		return err
 	}
 	if pending {
 		return ErrDeletionPending
 	}
-	result, err := tx.Exec(ctx, `UPDATE bot_deletion_operations SET state='COMPLETE',completed_at=clock_timestamp(),claimed_until=NULL,last_error='' WHERE operation_id=$1 AND claim_generation=$2 AND claimed_until>clock_timestamp()`, claim.OperationID, claim.ClaimGeneration)
+	result, err := tx.Exec(ctx, lifecycleQuery(claim, `UPDATE bot_deletion_operations SET state='COMPLETE',completed_at=clock_timestamp(),claimed_until=NULL,last_error='' WHERE operation_id=$1 AND claim_generation=$2 AND claimed_until>clock_timestamp()`), claim.OperationID, claim.ClaimGeneration)
 	if err != nil {
 		return err
 	}
