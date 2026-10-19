@@ -63,7 +63,7 @@ func (c lifecycleClientConfig) dial() (*grpc.ClientConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return grpc.NewClient(grpcclient.DialTarget(c.address), grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+	return grpc.NewClient(grpcclient.DialTarget(c.address), grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)), grpc.WithDisableRetry())
 }
 
 func (t *transcoder) lifecycleContext(r *http.Request, req proto.Message, method, requestID string) (context.Context, error) {
