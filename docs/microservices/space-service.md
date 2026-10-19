@@ -51,6 +51,33 @@ composition does not activate native all-writer capture/finalization or protecte
 ingress; actual native provider/cutover/catalog and account-erasure composition
 remain required. Head minimization alone is not global physical-erasure proof.
 
+### Fixed native catalog transition 44 to 45
+
+The native serving gate qualifies exact schemas and a persisted enforcement
+seal; a numerically newer migration never implies readiness. Migration45 adds
+only the immutable legacy Join selection context and its fixed helper. Applying
+it invalidates the retained44 seal, so serving reads and writes remain
+UNAVAILABLE until the trusted installer completes the qualified transition.
+
+For a known trusted44 installation, retain the actual target identity, original
+installation/custody evidence and exact migration execution record. Apply the
+unchanged migration45, then invoke the owner-only
+`TransitionNativeMembershipCatalog45` through a separate maintenance connection.
+The method owns an explicit READ COMMITTED transaction, drains writers with the
+catalog/source locks, authenticates the complete45 shape and guards, reconstructs
+the exact44 closure excluding only the authenticated new45 helper, and CASes
+the retained seal. It preserves the enforcement epoch, per-Space COMPLETE state,
+head-local cutover IDs, generations and KNOWN/UNKNOWN history. Matching retries
+return an unchanged receipt. Retain its actual database/installer/transaction
+identity, migration SHA and old/new seal hashes with deployment evidence.
+
+This transition assumes a trusted installer and DDL-incapable serving LOGINs.
+Current snapshots do not attest absence of arbitrary earlier privileged DDL.
+Unknown baseline provenance, a known disabled-guard interval or an untrusted
+restore remains a deployment HOLD; do not self-reseal or recut existing history.
+Readers never invoke this maintenance method. Qualification of this transition
+does not activate remaining unadapted writers or the full public admission flow.
+
 ## Composite Chat creation (accepted implementation contract)
 
 `CommitSpaceChatCreation` admits only a freshly authenticated `service:chat`

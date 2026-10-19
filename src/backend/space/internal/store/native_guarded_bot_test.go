@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -20,6 +21,14 @@ import (
 )
 
 func TestNativeBot44VerifiedServingPublicationCancelAndExpiry(t *testing.T) {
+	testNativeBotVerifiedServingPublicationCancelAndExpiry(t, 44)
+}
+
+func TestNativeBot45VerifiedServingPublicationCancelAndExpiry(t *testing.T) {
+	testNativeBotVerifiedServingPublicationCancelAndExpiry(t, 45)
+}
+
+func testNativeBotVerifiedServingPublicationCancelAndExpiry(t *testing.T, schema int) {
 	if testing.Short() {
 		t.Skip("requires real PostgreSQL signed Bot native store")
 	}
@@ -29,12 +38,16 @@ func TestNativeBot44VerifiedServingPublicationCancelAndExpiry(t *testing.T) {
 	st := &SpaceStore{Pool: db.Pool}
 	space, err := st.CreateSpace(ctx, uuid.New(), "Signed native Bot", "", "public")
 	require.NoError(t, err)
-	db.Run(true, "up")
+	db.Run(true, "goto", strconv.Itoa(schema))
+	if schema == 45 {
+		_, err = st.TransitionNativeMembershipCatalog45(ctx)
+		require.NoError(t, err)
+	}
 	require.NoError(t, st.InitializeNativeMembership(ctx, space.ID))
 	st = &SpaceStore{Pool: nativeReadinessLogin(t, ctx, db.Pool)}
 	decisionSchema, decisionErr := st.memberDecisionSchema(ctx)
 	require.NoError(t, decisionErr, "qualified44 must select the explicit versioned decision family")
-	require.EqualValues(t, 44, decisionSchema)
+	require.EqualValues(t, schema, decisionSchema)
 	require.ErrorIs(t, st.AddBotMember(ctx, space.ID, uuid.New()), ErrMemberAuthorityUnavailable, "raw Bot insertion has no installation authority")
 	require.ErrorIs(t, st.RemoveBotMember(ctx, space.ID, space.OwnerProfileID), ErrMemberAuthorityUnavailable, "raw removal cannot retire a legacy source")
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
