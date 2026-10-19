@@ -7,9 +7,9 @@ import re
 import subprocess
 import sys
 
-PINNED_RECORD_COMMIT = "89d846ed6bee73fd21a6a0218b2041a2cf1f89c5"
-PINNED_RECORD_SHA256 = "ba422695f9bfaea8257504fcb5bb64527c5e0af25aa7a4c2cf3a881f51eaacbd"
-PINNED_SOURCE = "2ce88a9892989686cd4fd5734e8b414a3c914564"
+PINNED_RECORD_COMMIT = "ce229477510f96c9ac66f2bb5bec69ac1b020430"
+PINNED_RECORD_SHA256 = "6f38cba80dd377ef4ca88387641a8f30a45f9181d90379c68f5b65f2f8975be7"
+PINNED_SOURCE = "e5ece697cefc00c708635539efb3d9e6c629517e"
 PINNED_BASE = "698d4f064f032ea74abf3ede2017100b26c8ee69"
 RECORD_PATH = "docs/testing/role-checkpermission-historical-source-v1.json"
 VERIFIER_PATH = "scripts/ci/f13_role_conditional.py"
