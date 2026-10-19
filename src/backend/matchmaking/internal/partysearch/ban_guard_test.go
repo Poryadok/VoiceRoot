@@ -2,6 +2,8 @@ package partysearch
 
 import (
 	"context"
+	"errors"
+	"sort"
 	"testing"
 	"time"
 
@@ -134,4 +136,33 @@ func TestPlatformSanctionWritersWaitForGuardTransaction(t *testing.T) {
 		_, err = pool.Exec(ctx, `UPDATE mm_platform_bans SET expires_at=clock_timestamp()-interval '1 second' WHERE account_id=$1`, account)
 		require.NoError(t, err)
 	}
+}
+
+func TestPlatformBanGuardReturnsExactPrivateDeniedAccountsWithoutDisclosure(t *testing.T) {
+	pool := partyDB(t)
+	ctx := context.Background()
+	bans := &store.BanStore{Pool: pool}
+	a, b, allowed, outside := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	for _, account := range []uuid.UUID{a, b, outside} {
+		require.NoError(t, bans.InsertPlatformMMBan(ctx, store.InsertPlatformMMBanParams{AccountID: account, BannedByProfileID: uuid.New()}))
+	}
+	tx, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	guard, err := store.AcquirePlatformBanGuard(ctx, tx, []uuid.UUID{allowed, b, a, a})
+	require.NoError(t, err)
+	err = guard.Check(ctx)
+	require.ErrorIs(t, err, store.ErrPlatformBanDenied)
+	var denied *store.PlatformBanDenial
+	require.True(t, errors.As(err, &denied), "known denial must expose private exact evidence to its owning coordinator")
+	expected := []uuid.UUID{a, b}
+	sort.Slice(expected, func(i, j int) bool { return expected[i].String() < expected[j].String() })
+	require.Equal(t, expected, denied.Accounts())
+	copyAccounts := denied.Accounts()
+	copyAccounts[0] = uuid.Nil
+	require.Equal(t, expected, denied.Accounts())
+	for _, account := range []uuid.UUID{a, b, allowed, outside} {
+		require.NotContains(t, err.Error(), account.String())
+	}
+	require.Equal(t, "party matchmaking unavailable", err.Error())
 }

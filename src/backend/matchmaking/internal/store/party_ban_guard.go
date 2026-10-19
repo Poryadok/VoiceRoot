@@ -16,6 +16,19 @@ var (
 	ErrPlatformBanUnavailable = errors.New("platform ban authority unavailable")
 )
 
+// PlatformBanDenial carries private local evidence for whole-party reset. Its
+// accounts must never enter public errors, responses, events or log fields.
+type PlatformBanDenial struct{ accounts []uuid.UUID }
+
+func (d *PlatformBanDenial) Error() string        { return ErrPlatformBanDenied.Error() }
+func (d *PlatformBanDenial) Is(target error) bool { return target == ErrPlatformBanDenied }
+func (d *PlatformBanDenial) Accounts() []uuid.UUID {
+	if d == nil {
+		return nil
+	}
+	return append([]uuid.UUID(nil), d.accounts...)
+}
+
 // PlatformBanGuard retains the account locks until the caller completes its transaction.
 type PlatformBanGuard struct {
 	tx       pgx.Tx
@@ -38,16 +51,27 @@ func (g *PlatformBanGuard) Check(ctx context.Context) error {
 	}
 	// This must be a separate READ COMMITTED statement after acquiring every
 	// account lock. A CTE containing locks and this read shares a stale snapshot.
-	var banned bool
-	if err := g.tx.QueryRow(ctx, `SELECT EXISTS (
-		SELECT 1 FROM mm_platform_bans
+	rows, err := g.tx.Query(ctx, `SELECT DISTINCT account_id FROM mm_platform_bans
 		WHERE account_id = ANY($1::uuid[]) AND revoked_at IS NULL
 		AND (expires_at IS NULL OR expires_at > clock_timestamp())
-	)`, g.accounts).Scan(&banned); err != nil {
+		ORDER BY account_id`, g.accounts)
+	if err != nil {
 		return ErrPlatformBanUnavailable
 	}
-	if banned {
-		return ErrPlatformBanDenied
+	defer rows.Close()
+	var denied []uuid.UUID
+	for rows.Next() {
+		var account uuid.UUID
+		if err := rows.Scan(&account); err != nil {
+			return ErrPlatformBanUnavailable
+		}
+		denied = append(denied, account)
+	}
+	if rows.Err() != nil {
+		return ErrPlatformBanUnavailable
+	}
+	if len(denied) > 0 {
+		return &PlatformBanDenial{accounts: denied}
 	}
 	return nil
 }

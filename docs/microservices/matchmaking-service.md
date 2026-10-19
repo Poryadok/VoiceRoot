@@ -356,3 +356,11 @@ capped backoff. Matchmaking does not open ordinary health or gRPC listeners
 until each configured key set is valid. Invalid TLS trust, redirects, permanent
 HTTP errors, malformed key sets, and invalid configuration remain startup
 errors; cancellation stops the wait.
+
+The private party platform-ban guard returns `PlatformBanDenial` for a known
+active ban. Its neutral error text remains `party matchmaking unavailable`;
+the defensive `Accounts()` accessor is local evidence for the coordinator to
+identify affected parties from their verified private member tuples. Account
+identifiers must not enter public errors, events, responses or log fields.
+The query runs as a fresh READ COMMITTED statement after account and inner
+transition locks; unavailable authority supplies no cancellation evidence.
