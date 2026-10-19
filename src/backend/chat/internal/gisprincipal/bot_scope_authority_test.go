@@ -74,6 +74,11 @@ func TestBotScopeAuthorityRealNativeTLSJWKSRedisAndRetiredHead(t *testing.T) {
 	}
 	native := &store.DMStore{Pool: pool}
 	space := uuid.New()
+	if raw := os.Getenv("VOICE_BOT_CHAT_SPACE_ID"); raw != "" {
+		space, err = uuid.Parse(raw)
+		require.NoError(t, err)
+		require.NotEqual(t, uuid.Nil, space)
+	}
 	row, err := native.CreateSpaceChannelChat(ctx, uuid.New(), space, "Bot native scope", nil)
 	require.NoError(t, err)
 	redis, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{ContainerRequest: testcontainers.ContainerRequest{Image: "redis:7.4-alpine", ExposedPorts: []string{"6379/tcp"}, WaitingFor: wait.ForListeningPort("6379/tcp")}, Started: true})
@@ -83,7 +88,7 @@ func TestBotScopeAuthorityRealNativeTLSJWKSRedisAndRetiredHead(t *testing.T) {
 	require.NoError(t, err)
 	ca, clients := newManifestTestCA(t, 247301), newManifestTestCA(t, 247302)
 	serverCert, certPath, keyPath := ca.leaf(t, 247303, x509.ExtKeyUsageServerAuth)
-	clientCert, _, _ := clients.leaf(t, 247304, x509.ExtKeyUsageClientAuth)
+	clientCert, clientCertPath, clientKeyPath := clients.leaf(t, 247304, x509.ExtKeyUsageClientAuth)
 	roots := x509.NewCertPool()
 	require.True(t, roots.AppendCertsFromPEM(ca.pem))
 	caPath, clientCAPath := filepath.Join(t.TempDir(), "ca.pem"), filepath.Join(t.TempDir(), "client-ca.pem")
@@ -91,10 +96,17 @@ func TestBotScopeAuthorityRealNativeTLSJWKSRedisAndRetiredHead(t *testing.T) {
 	require.NoError(t, os.WriteFile(clientCAPath, clients.pem, 0600))
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
+	keyID := "current"
+	if path := os.Getenv("VOICE_BOT_CHAT_SIGNER_KEY_FILE"); path != "" {
+		key, err = principal.LoadRSAPrivateKeyFile(path)
+		require.NoError(t, err)
+		keyID = os.Getenv("VOICE_BOT_CHAT_SIGNER_KEY_ID")
+		require.NotEmpty(t, keyID)
+	}
 	next, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	keys := []map[string]string{}
-	for kid, key := range map[string]*rsa.PrivateKey{"current": key, "next": next} {
+	for kid, key := range map[string]*rsa.PrivateKey{keyID: key, "next": next} {
 		keys = append(keys, map[string]string{"kty": "RSA", "kid": kid, "use": "sig", "alg": "RS256", "n": base64.RawURLEncoding.EncodeToString(key.N.Bytes()), "e": "AQAB"})
 	}
 	jwks := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -103,7 +115,9 @@ func TestBotScopeAuthorityRealNativeTLSJWKSRedisAndRetiredHead(t *testing.T) {
 	jwks.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{serverCert}}
 	jwks.StartTLS()
 	defer jwks.Close()
-	runtime, err := New(ctx, Config{Issuer: "bot", Audience: Audience, AllowedMethods: []string{BotScopeAuthorityMethod}, TLSCertFile: certPath, TLSKeyFile: keyPath, ClientCAFile: clientCAPath, JWKSURL: jwks.URL, JWKSCAFile: caPath, ReplayAddr: redisAddress})
+	cfg := Config{Issuer: "bot", Audience: Audience, AllowedMethods: []string{BotScopeAuthorityMethod}, TLSCertFile: certPath, TLSKeyFile: keyPath, ClientCAFile: clientCAPath, JWKSURL: jwks.URL, JWKSCAFile: caPath, ReplayAddr: redisAddress}
+	configureBotChatFixtureJWKS(t, &cfg)
+	runtime, err := New(ctx, cfg)
 	require.NoError(t, err)
 	defer runtime.Close()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -118,7 +132,7 @@ func TestBotScopeAuthorityRealNativeTLSJWKSRedisAndRetiredHead(t *testing.T) {
 	client := chatv1.NewChatScopeAuthorityServiceClient(conn)
 	req := &chatv1.GetBotChatScopeAuthorityRequest{ProtocolVersion: 1, ChatId: row.ID.String(), ExpectedSpaceId: space.String(), OperationId: uuid.NewString()}
 	sign := func(issuer, audience, method string) string {
-		signer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: issuer, KeyID: "current", PrivateKey: key})
+		signer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: issuer, KeyID: keyID, PrivateKey: key})
 		require.NoError(t, err)
 		hash, err := principal.RequestHash(req)
 		require.NoError(t, err)
@@ -143,6 +157,9 @@ func TestBotScopeAuthorityRealNativeTLSJWKSRedisAndRetiredHead(t *testing.T) {
 	require.Equal(t, req.OperationId, response.Scope.OperationId)
 	_, err = call(token)
 	require.Equal(t, codes.Unauthenticated, status.Code(err), "real Redis rejects credential replay")
+	if runBotChatSourceHandoff(t, ctx, pool, botChatSourceHandoff{Address: listener.Addr().String(), Space: space, Chat: row.ID, CA: caPath, ClientCert: clientCertPath, ClientKey: clientKeyPath, Signer: key, KeyID: keyID, Incarnation: response.Scope.ChatScopeIncarnation, Revision: response.Scope.ChatAuthorityRevision}) {
+		return
+	}
 	for _, issuer := range []string{"role", "space", "gateway", "gameintegration"} {
 		_, err = call(sign(issuer, "chat", BotScopeAuthorityMethod))
 		require.Equal(t, codes.Unauthenticated, status.Code(err), issuer)
