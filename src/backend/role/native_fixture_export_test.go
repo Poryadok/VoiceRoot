@@ -16,11 +16,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"voice/backend/role/testdata/nativefixture"
 )
 
-func holdPortableNativeFixture(t *testing.T, ctx context.Context, manifest nativefixture.Manifest, ca, clientCert, clientKey []byte, botKey *rsa.PrivateKey) {
+func holdPortableNativeFixture(t *testing.T, ctx context.Context, manifest nativefixture.Manifest, ca, clientCert, clientKey []byte, botKey *rsa.PrivateKey, pool *pgxpool.Pool) {
 	t.Helper()
 	dir := os.Getenv("ROLE_NATIVE_FIXTURE_EXPORT_DIR")
 	if dir == "" {
@@ -54,10 +55,21 @@ func holdPortableNativeFixture(t *testing.T, ctx context.Context, manifest nativ
 	require.NoError(t, err)
 	files := map[string][]byte{manifest.TLSCAFile: ca, manifest.TLSClientCertFile: clientCert, manifest.TLSClientKeyFile: clientKey, manifest.BotSignerKeyFile: pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: botDER})}
 	ready := filepath.Join(dir, "ready.json")
+	var cleanup *fixtureBotCleanup
+	if mode := os.Getenv("ROLE_NATIVE_FIXTURE_BOT_CLEANUP"); mode != "" {
+		require.Equal(t, "1", mode, "explicit fixture cleanup opt-in required")
+		cleanup = &fixtureBotCleanup{pool: pool, space: manifest.SpaceID, owner: manifest.OwnerProfileID}
+	}
 	defer func() {
 		_ = os.Remove(ready)
 		for path := range files {
 			_ = os.Remove(path)
+		}
+		if cleanup != nil {
+			for _, name := range []string{"seed.request.json", "seed.ready.json", "postcondition.request.json", "postcondition.ready.json"} {
+				_ = os.Remove(filepath.Join(dir, name))
+				_ = os.Remove(filepath.Join(dir, name+".tmp"))
+			}
 		}
 	}()
 	for path, data := range files {
@@ -79,8 +91,14 @@ func holdPortableNativeFixture(t *testing.T, ctx context.Context, manifest nativ
 		case <-timeout.C:
 			t.Fatal("portable fixture bounded lifetime expired before consumer stop")
 		case <-ticker.C:
+			if cleanup != nil {
+				require.NoError(t, cleanup.poll(ctx, dir))
+			}
 			_, err := os.Stat(manifest.StopFile)
 			if err == nil {
+				if cleanup != nil {
+					require.True(t, cleanup.complete, "opt-in stop requires committed nonzero postcondition")
+				}
 				return
 			}
 			require.True(t, os.IsNotExist(err), "cannot observe owned consumer stop file")
