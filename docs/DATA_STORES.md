@@ -343,6 +343,19 @@ business idempotency independently of per-attempt JWT replay rejection.
 
 ## P3 Space lifecycle storage inventory (accepted target)
 
+### Moderation local reports (BE-066 accepted target)
+
+Moderation owns separate `space_reports` and jurisdiction-bound review/work/cursor
+data in `moderation_db`; existing `reports`, sanctions, appeals, platform counts
+and exports cannot query these as platform records. Immutable Space/Chat/message
+references have no foreign-database FKs. Reporter provenance stays private;
+description, typed references, versioned assignment/terminal decision and
+timestamps follow the [local report contract](microservices/moderation-service.md#space-local-report-jurisdiction-accepted-target).
+There is no copied-message evidence archive. Positive target deletion/move
+scrubs local content; freeze and account/Space erasure cover local rows and
+derived work. Missing owner data is not deletion authority. This is target
+inventory, not a migration or runtime shipment claim.
+
 Composite Space Chat creation stores a no-domain-FK
 `space_chat_creation_fences` row separately from private protobuf outcome bytes
 in `space_chat_creation_evidence`. The former permanently reserves operation,
