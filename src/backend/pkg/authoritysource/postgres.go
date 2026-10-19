@@ -48,20 +48,25 @@ func BeginRead(ctx context.Context, pool *pgxpool.Pool, catalog Catalog) (pgx.Tx
 			RollbackRead(ctx, tx)
 		}
 	}()
-	if err = ValidateTx(ctx, tx, catalog); err != nil {
+	if err = CheckCatalog(ctx, tx, catalog); err != nil {
 		return nil, err
 	}
 	failed = false
 	return tx, nil
 }
 
-// ValidateTx checks the owner catalog inside a caller-owned transaction.
-// It neither commits nor rolls back that transaction.
+// CheckCatalog validates the same fixed owner contract inside an existing
+// native transaction. Callers must already hold their complete domain fence.
 func ValidateTx(ctx context.Context, tx pgx.Tx, catalog Catalog) error {
+	return CheckCatalog(ctx, tx, catalog)
+}
+
+func CheckCatalog(ctx context.Context, tx pgx.Tx, catalog Catalog) error {
 	if tx == nil || catalog.Version <= 0 || len(catalog.Tables) == 0 {
 		return errors.New("owner catalog unavailable")
 	}
-	if _, err := tx.Exec(ctx, `SET LOCAL row_security=off; SET LOCAL search_path=public,pg_catalog`); err != nil {
+	var err error
+	if _, err = tx.Exec(ctx, `SET LOCAL row_security=off; SET LOCAL search_path=public,pg_catalog`); err != nil {
 		return err
 	}
 	names := make([]string, 0, len(catalog.Tables)+1)
@@ -69,19 +74,19 @@ func ValidateTx(ctx context.Context, tx pgx.Tx, catalog Catalog) error {
 	for _, name := range catalog.Tables {
 		names = append(names, pgx.Identifier{"public", name}.Sanitize())
 	}
-	if _, err := tx.Exec(ctx, "LOCK TABLE "+strings.Join(names, ",")+" IN ACCESS SHARE MODE"); err != nil {
+	if _, err = tx.Exec(ctx, "LOCK TABLE "+strings.Join(names, ",")+" IN ACCESS SHARE MODE"); err != nil {
 		return err
 	}
 	var valid bool
-	if err := tx.QueryRow(ctx, `SELECT count(*)=1 AND bool_and(version=$1 AND NOT dirty) FROM public.schema_migrations`, catalog.Version).Scan(&valid); err != nil || !valid {
+	if err = tx.QueryRow(ctx, `SELECT count(*)=1 AND bool_and(version=$1 AND NOT dirty) FROM public.schema_migrations`, catalog.Version).Scan(&valid); err != nil || !valid {
 		return errors.New("owner schema version unavailable")
 	}
 	tables := append([]string{"schema_migrations"}, catalog.Tables...)
-	if err := tx.QueryRow(ctx, `SELECT count(*)=$2 AND bool_and(c.relkind='r' AND c.relpersistence='p' AND NOT c.relrowsecurity AND NOT c.relforcerowsecurity
+	if err = tx.QueryRow(ctx, `SELECT count(*)=$2 AND bool_and(c.relkind='r' AND c.relpersistence='p' AND NOT c.relrowsecurity AND NOT c.relforcerowsecurity
   AND NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid=c.oid)
   AND NOT EXISTS(SELECT 1 FROM pg_rewrite WHERE ev_class=c.oid)
   AND NOT EXISTS(SELECT 1 FROM pg_inherits WHERE inhrelid=c.oid OR inhparent=c.oid))
-	  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1)`, tables, len(tables)).Scan(&valid); err != nil || !valid {
+  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1)`, tables, len(tables)).Scan(&valid); err != nil || !valid {
 		return errors.New("owner source relation unavailable")
 	}
 	for _, trigger := range catalog.Triggers {
@@ -89,7 +94,7 @@ func ValidateTx(ctx context.Context, tx pgx.Tx, catalog Catalog) error {
 		if trigger.Argument != "" {
 			arguments = []byte(trigger.Argument + "\x00")
 		}
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid
    JOIN pg_namespace n ON n.oid=p.pronamespace WHERE t.tgrelid=to_regclass($1) AND t.tgname=$2 AND NOT t.tgisinternal
    AND t.tgenabled='O' AND t.tgtype=$3 AND n.nspname='public' AND p.proname=$4 AND t.tgargs=$5)`,
 			"public."+trigger.Table, trigger.Name, trigger.Type, trigger.Function, arguments).Scan(&valid); err != nil || !valid {
@@ -98,9 +103,9 @@ func ValidateTx(ctx context.Context, tx pgx.Tx, catalog Catalog) error {
 	}
 	for _, function := range catalog.Functions {
 		var body string
-		if err := tx.QueryRow(ctx, `SELECT p.prosrc FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+		if err = tx.QueryRow(ctx, `SELECT p.prosrc FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
    JOIN pg_language l ON l.oid=p.prolang WHERE n.nspname='public' AND p.proname=$1 AND p.pronargs=$2
-	   AND NOT p.prosecdef AND p.provolatile='v' AND l.lanname='plpgsql' AND p.prorettype=to_regtype($3)`, function.Name, function.Arguments, function.ReturnType).Scan(&body); err != nil {
+   AND NOT p.prosecdef AND p.provolatile='v' AND l.lanname='plpgsql' AND p.prorettype=to_regtype($3)`, function.Name, function.Arguments, function.ReturnType).Scan(&body); err != nil {
 			return errors.New("owner source function unavailable")
 		}
 		hash := sha256.Sum256([]byte(body))
