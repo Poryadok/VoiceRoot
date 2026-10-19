@@ -15,6 +15,43 @@ import 'dart:convert' as $convert;
 import 'dart:core' as $core;
 import 'dart:typed_data' as $typed_data;
 
+@$core.Deprecated('Use spaceReportAttachmentDispositionDescriptor instead')
+const SpaceReportAttachmentDisposition$json = {
+  '1': 'SpaceReportAttachmentDisposition',
+  '2': [
+    {'1': 'SPACE_REPORT_ATTACHMENT_DISPOSITION_UNSPECIFIED', '2': 0},
+    {'1': 'SPACE_REPORT_ATTACHMENT_DISPOSITION_UNKNOWN', '2': 1},
+    {'1': 'SPACE_REPORT_ATTACHMENT_DISPOSITION_UNCHANGED', '2': 2},
+    {'1': 'SPACE_REPORT_ATTACHMENT_DISPOSITION_RETIRED', '2': 3},
+  ],
+};
+
+/// Descriptor for `SpaceReportAttachmentDisposition`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List spaceReportAttachmentDispositionDescriptor = $convert.base64Decode(
+    'CiBTcGFjZVJlcG9ydEF0dGFjaG1lbnREaXNwb3NpdGlvbhIzCi9TUEFDRV9SRVBPUlRfQVRUQU'
+    'NITUVOVF9ESVNQT1NJVElPTl9VTlNQRUNJRklFRBAAEi8KK1NQQUNFX1JFUE9SVF9BVFRBQ0hN'
+    'RU5UX0RJU1BPU0lUSU9OX1VOS05PV04QARIxCi1TUEFDRV9SRVBPUlRfQVRUQUNITUVOVF9ESV'
+    'NQT1NJVElPTl9VTkNIQU5HRUQQAhIvCitTUEFDRV9SRVBPUlRfQVRUQUNITUVOVF9ESVNQT1NJ'
+    'VElPTl9SRVRJUkVEEAM=');
+
+@$core.Deprecated('Use spaceReportAttachmentRetirementReasonDescriptor instead')
+const SpaceReportAttachmentRetirementReason$json = {
+  '1': 'SpaceReportAttachmentRetirementReason',
+  '2': [
+    {'1': 'SPACE_REPORT_ATTACHMENT_RETIREMENT_REASON_UNSPECIFIED', '2': 0},
+    {'1': 'SPACE_REPORT_ATTACHMENT_RETIREMENT_REASON_TARGET_DELETED', '2': 1},
+    {'1': 'SPACE_REPORT_ATTACHMENT_RETIREMENT_REASON_TARGET_MOVED', '2': 2},
+  ],
+};
+
+/// Descriptor for `SpaceReportAttachmentRetirementReason`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List spaceReportAttachmentRetirementReasonDescriptor =
+    $convert.base64Decode(
+        'CiVTcGFjZVJlcG9ydEF0dGFjaG1lbnRSZXRpcmVtZW50UmVhc29uEjkKNVNQQUNFX1JFUE9SVF'
+        '9BVFRBQ0hNRU5UX1JFVElSRU1FTlRfUkVBU09OX1VOU1BFQ0lGSUVEEAASPAo4U1BBQ0VfUkVQ'
+        'T1JUX0FUVEFDSE1FTlRfUkVUSVJFTUVOVF9SRUFTT05fVEFSR0VUX0RFTEVURUQQARI6CjZTUE'
+        'FDRV9SRVBPUlRfQVRUQUNITUVOVF9SRVRJUkVNRU5UX1JFQVNPTl9UQVJHRVRfTU9WRUQQAg==');
+
 @$core.Deprecated('Use chatScopeManagedKindDescriptor instead')
 const ChatScopeManagedKind$json = {
   '1': 'ChatScopeManagedKind',
@@ -128,6 +165,13 @@ const GetSpaceChatScopeAuthorityResponse$json = {
       '6': '.voice.chat.v1.ChatScopeManagedKind',
       '10': 'managedKind'
     },
+    {
+      '1': 'report_attachment_generation',
+      '3': 14,
+      '4': 1,
+      '5': 4,
+      '10': 'reportAttachmentGeneration'
+    },
   ],
 };
 
@@ -144,4 +188,79 @@ final $typed_data.Uint8List getSpaceChatScopeAuthorityResponseDescriptor = $conv
     'X2dlbmVyYXRpb24YCyABKARSE2xpZmVjeWNsZUdlbmVyYXRpb24STwoPbGlmZWN5Y2xlX3N0YX'
     'RlGAwgASgOMiYudm9pY2UuY2hhdC52MS5DaGF0U2NvcGVMaWZlY3ljbGVTdGF0ZVIObGlmZWN5'
     'Y2xlU3RhdGUSRgoMbWFuYWdlZF9raW5kGA0gASgOMiMudm9pY2UuY2hhdC52MS5DaGF0U2NvcG'
-    'VNYW5hZ2VkS2luZFILbWFuYWdlZEtpbmQ=');
+    'VNYW5hZ2VkS2luZFILbWFuYWdlZEtpbmQSQAoccmVwb3J0X2F0dGFjaG1lbnRfZ2VuZXJhdGlv'
+    'bhgOIAEoBFIacmVwb3J0QXR0YWNobWVudEdlbmVyYXRpb24=');
+
+@$core.Deprecated('Use readSpaceReportAttachmentRequestDescriptor instead')
+const ReadSpaceReportAttachmentRequest$json = {
+  '1': 'ReadSpaceReportAttachmentRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'chat_id', '3': 3, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'expected_space_id', '3': 4, '4': 1, '5': 9, '10': 'expectedSpaceId'},
+    {
+      '1': 'saved_attachment_generation',
+      '3': 5,
+      '4': 1,
+      '5': 4,
+      '10': 'savedAttachmentGeneration'
+    },
+  ],
+};
+
+/// Descriptor for `ReadSpaceReportAttachmentRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List readSpaceReportAttachmentRequestDescriptor = $convert.base64Decode(
+    'CiBSZWFkU3BhY2VSZXBvcnRBdHRhY2htZW50UmVxdWVzdBIpChBwcm90b2NvbF92ZXJzaW9uGA'
+    'EgASgNUg9wcm90b2NvbFZlcnNpb24SIQoMb3BlcmF0aW9uX2lkGAIgASgJUgtvcGVyYXRpb25J'
+    'ZBIXCgdjaGF0X2lkGAMgASgJUgZjaGF0SWQSKgoRZXhwZWN0ZWRfc3BhY2VfaWQYBCABKAlSD2'
+    'V4cGVjdGVkU3BhY2VJZBI+ChtzYXZlZF9hdHRhY2htZW50X2dlbmVyYXRpb24YBSABKARSGXNh'
+    'dmVkQXR0YWNobWVudEdlbmVyYXRpb24=');
+
+@$core.Deprecated('Use readSpaceReportAttachmentResponseDescriptor instead')
+const ReadSpaceReportAttachmentResponse$json = {
+  '1': 'ReadSpaceReportAttachmentResponse',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'chat_id', '3': 3, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'expected_space_id', '3': 4, '4': 1, '5': 9, '10': 'expectedSpaceId'},
+    {
+      '1': 'saved_attachment_generation',
+      '3': 5,
+      '4': 1,
+      '5': 4,
+      '10': 'savedAttachmentGeneration'
+    },
+    {
+      '1': 'disposition',
+      '3': 6,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.chat.v1.SpaceReportAttachmentDisposition',
+      '10': 'disposition'
+    },
+    {
+      '1': 'reason',
+      '3': 7,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.chat.v1.SpaceReportAttachmentRetirementReason',
+      '10': 'reason'
+    },
+    {'1': 'owner_event_id', '3': 8, '4': 1, '5': 9, '10': 'ownerEventId'},
+    {'1': 'owner_revision', '3': 9, '4': 1, '5': 4, '10': 'ownerRevision'},
+  ],
+};
+
+/// Descriptor for `ReadSpaceReportAttachmentResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List readSpaceReportAttachmentResponseDescriptor = $convert.base64Decode(
+    'CiFSZWFkU3BhY2VSZXBvcnRBdHRhY2htZW50UmVzcG9uc2USKQoQcHJvdG9jb2xfdmVyc2lvbh'
+    'gBIAEoDVIPcHJvdG9jb2xWZXJzaW9uEiEKDG9wZXJhdGlvbl9pZBgCIAEoCVILb3BlcmF0aW9u'
+    'SWQSFwoHY2hhdF9pZBgDIAEoCVIGY2hhdElkEioKEWV4cGVjdGVkX3NwYWNlX2lkGAQgASgJUg'
+    '9leHBlY3RlZFNwYWNlSWQSPgobc2F2ZWRfYXR0YWNobWVudF9nZW5lcmF0aW9uGAUgASgEUhlz'
+    'YXZlZEF0dGFjaG1lbnRHZW5lcmF0aW9uElEKC2Rpc3Bvc2l0aW9uGAYgASgOMi8udm9pY2UuY2'
+    'hhdC52MS5TcGFjZVJlcG9ydEF0dGFjaG1lbnREaXNwb3NpdGlvblILZGlzcG9zaXRpb24STAoG'
+    'cmVhc29uGAcgASgOMjQudm9pY2UuY2hhdC52MS5TcGFjZVJlcG9ydEF0dGFjaG1lbnRSZXRpcm'
+    'VtZW50UmVhc29uUgZyZWFzb24SJAoOb3duZXJfZXZlbnRfaWQYCCABKAlSDG93bmVyRXZlbnRJ'
+    'ZBIlCg5vd25lcl9yZXZpc2lvbhgJIAEoBFINb3duZXJSZXZpc2lvbg==');

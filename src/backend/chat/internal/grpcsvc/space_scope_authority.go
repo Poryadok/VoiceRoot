@@ -26,7 +26,7 @@ func (s *SpaceChatScopeAuthorityGRPC) GetSpaceChatScopeAuthority(ctx context.Con
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "verified Chat scope principal required")
 	}
-	if p.Kind != "service" || (p.Issuer != "role" && p.Issuer != "space") || p.Subject != "service:"+p.Issuer || p.AccountID != "" || p.ProfileID != "" || p.SessionEpoch != 0 {
+	if p.Kind != "service" || (p.Issuer != "role" && p.Issuer != "space" && p.Issuer != "messaging") || p.Subject != "service:"+p.Issuer || p.AccountID != "" || p.ProfileID != "" || p.SessionEpoch != 0 {
 		return nil, status.Error(codes.PermissionDenied, "Chat scope service principal required")
 	}
 	if req == nil || len(req.ProtoReflect().GetUnknown()) != 0 || req.ProtocolVersion != 1 {

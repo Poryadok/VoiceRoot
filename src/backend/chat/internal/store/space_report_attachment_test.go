@@ -9,9 +9,20 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 	chatv1 "voice.app/voice/chat/v1"
 )
+
+func applyReportAttachmentMigration(t *testing.T, ctx context.Context, pool interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+}) {
+	t.Helper()
+	body, err := os.ReadFile(filepath.Join(chatRepoRoot(t), "src/backend/migrations/chat_db/000026_space_report_attachments.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(body))
+	require.NoError(t, err)
+}
 
 func TestSpaceReportAttachmentNativeProducer(t *testing.T) {
 	if testing.Short() {
@@ -66,11 +77,33 @@ func TestSpaceReportAttachmentNativeProducer(t *testing.T) {
 	require.NoError(t, err)
 	beforeMove, err := (&DMStore{Pool: pool}).GetSpaceChatScopeAuthority(ctx, concurrent.ID, spaceA)
 	require.NoError(t, err)
+	require.Equal(t, uint64(1), beforeMove.ReportAttachmentGeneration)
+	observe := func(chat, space uuid.UUID, saved uint64, disposition chatv1.SpaceReportAttachmentDisposition) *chatv1.ReadSpaceReportAttachmentResponse {
+		result, e := (&DMStore{Pool: pool}).ReadSpaceReportAttachment(ctx, chat, space, saved)
+		require.NoError(t, e)
+		require.Equal(t, disposition, result.Disposition)
+		require.Equal(t, space.String(), result.ExpectedSpaceId)
+		require.Equal(t, saved, result.SavedAttachmentGeneration)
+		if disposition != chatv1.SpaceReportAttachmentDisposition_SPACE_REPORT_ATTACHMENT_DISPOSITION_RETIRED {
+			require.Empty(t, result.OwnerEventId)
+			require.Zero(t, result.OwnerRevision)
+			require.Zero(t, result.Reason)
+		}
+		return result
+	}
+	unknown := chatv1.SpaceReportAttachmentDisposition_SPACE_REPORT_ATTACHMENT_DISPOSITION_UNKNOWN
+	unchanged := chatv1.SpaceReportAttachmentDisposition_SPACE_REPORT_ATTACHMENT_DISPOSITION_UNCHANGED
+	retired := chatv1.SpaceReportAttachmentDisposition_SPACE_REPORT_ATTACHMENT_DISPOSITION_RETIRED
+	observe(uuid.New(), spaceA, 1, unknown)
+	observe(concurrent.ID, spaceA, 2, unknown)
+	observe(concurrent.ID, uuid.New(), 1, unknown)
+	observe(concurrent.ID, spaceA, 1, unchanged)
 	tx, err := pool.Begin(ctx)
 	require.NoError(t, err)
 	defer tx.Rollback(ctx)
 	_, err = tx.Exec(ctx, `UPDATE chats SET space_id=$2 WHERE id=$1`, concurrent.ID, spaceB)
 	require.NoError(t, err)
+	observe(concurrent.ID, spaceA, 1, unchanged) // Complete committed old snapshot, no read lock over the writer.
 	finished := make(chan error, 1)
 	go func() {
 		_, e := pool.Exec(ctx, `UPDATE chats SET type='group' WHERE id=$1 /*report-attachment-writer-barrier*/`, concurrent.ID)
@@ -99,6 +132,12 @@ func TestSpaceReportAttachmentNativeProducer(t *testing.T) {
 	require.True(t, afterMove.Live)
 	require.Equal(t, chatv1.ChatType_CHAT_TYPE_GROUP, afterMove.ChatType)
 	require.Equal(t, beforeMove.ChatAuthorityRevision+2, afterMove.ChatAuthorityRevision)
+	require.Equal(t, uint64(2), afterMove.ReportAttachmentGeneration)
+	oldReceipt := observe(concurrent.ID, spaceA, 1, retired)
+	require.Equal(t, chatv1.SpaceReportAttachmentRetirementReason_SPACE_REPORT_ATTACHMENT_RETIREMENT_REASON_TARGET_MOVED, oldReceipt.Reason)
+	require.NotEmpty(t, oldReceipt.OwnerEventId)
+	observe(concurrent.ID, spaceB, 1, unknown)
+	observe(concurrent.ID, spaceB, 2, unchanged)
 	_, err = (&SpaceLifecycleStore{Pool: pool}).PrepareSpaceDeletionManifest(ctx, &chatv1.PrepareSpaceDeletionManifestRequest{
 		ProtocolVersion: 1, SpaceId: spaceB.String(), DeletionOperationId: uuid.NewString(), ScheduleGeneration: 1,
 	})
@@ -113,4 +152,21 @@ func TestSpaceReportAttachmentNativeProducer(t *testing.T) {
 	require.Equal(t, int64(2), generation, "freeze cannot retire the report binding")
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM chat_report_attachment_retirements WHERE chat_id=$1`, concurrent.ID).Scan(&history))
 	require.Equal(t, 1, history, "lifecycle observation is not positive target retirement")
+	observe(concurrent.ID, spaceB, 2, unchanged) // Freeze is not a positive exit.
+	// Return to A cannot resurrect A's saved first attachment.
+	aba, err := (&DMStore{Pool: pool}).CreateSpaceChannelChat(ctx, uuid.New(), spaceA, "Observed ABA", nil)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE chats SET space_id=$2 WHERE id=$1`, aba.ID, uuid.New())
+	require.NoError(t, err)
+	first := observe(aba.ID, spaceA, 1, retired)
+	_, err = pool.Exec(ctx, `UPDATE chats SET space_id=$2 WHERE id=$1`, aba.ID, spaceA)
+	require.NoError(t, err)
+	again := observe(aba.ID, spaceA, 1, retired)
+	require.Equal(t, first.OwnerEventId, again.OwnerEventId)
+	observe(aba.ID, spaceA, 3, unchanged)
+	_, err = pool.Exec(ctx, `DELETE FROM chats WHERE id=$1`, aba.ID)
+	require.NoError(t, err)
+	deleted := observe(aba.ID, spaceA, 3, retired)
+	require.Equal(t, chatv1.SpaceReportAttachmentRetirementReason_SPACE_REPORT_ATTACHMENT_RETIREMENT_REASON_TARGET_DELETED, deleted.Reason)
+	observe(aba.ID, spaceA, 4, unknown)
 }

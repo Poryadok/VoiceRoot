@@ -134,6 +134,7 @@ class GetSpaceChatScopeAuthorityResponse extends $pb.GeneratedMessage {
     $fixnum.Int64? lifecycleGeneration,
     ChatScopeLifecycleState? lifecycleState,
     ChatScopeManagedKind? managedKind,
+    $fixnum.Int64? reportAttachmentGeneration,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -152,6 +153,8 @@ class GetSpaceChatScopeAuthorityResponse extends $pb.GeneratedMessage {
       result.lifecycleGeneration = lifecycleGeneration;
     if (lifecycleState != null) result.lifecycleState = lifecycleState;
     if (managedKind != null) result.managedKind = managedKind;
+    if (reportAttachmentGeneration != null)
+      result.reportAttachmentGeneration = reportAttachmentGeneration;
     return result;
   }
 
@@ -190,6 +193,9 @@ class GetSpaceChatScopeAuthorityResponse extends $pb.GeneratedMessage {
         enumValues: ChatScopeLifecycleState.values)
     ..aE<ChatScopeManagedKind>(13, _omitFieldNames ? '' : 'managedKind',
         enumValues: ChatScopeManagedKind.values)
+    ..a<$fixnum.Int64>(14, _omitFieldNames ? '' : 'reportAttachmentGeneration',
+        $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -332,6 +338,295 @@ class GetSpaceChatScopeAuthorityResponse extends $pb.GeneratedMessage {
   $core.bool hasManagedKind() => $_has(12);
   @$pb.TagNumber(13)
   void clearManagedKind() => $_clearField(13);
+
+  /// Separate native Space attachment epoch. Type/creator changes do not retire it.
+  @$pb.TagNumber(14)
+  $fixnum.Int64 get reportAttachmentGeneration => $_getI64(13);
+  @$pb.TagNumber(14)
+  set reportAttachmentGeneration($fixnum.Int64 value) => $_setInt64(13, value);
+  @$pb.TagNumber(14)
+  $core.bool hasReportAttachmentGeneration() => $_has(13);
+  @$pb.TagNumber(14)
+  void clearReportAttachmentGeneration() => $_clearField(14);
+}
+
+class ReadSpaceReportAttachmentRequest extends $pb.GeneratedMessage {
+  factory ReadSpaceReportAttachmentRequest({
+    $core.int? protocolVersion,
+    $core.String? operationId,
+    $core.String? chatId,
+    $core.String? expectedSpaceId,
+    $fixnum.Int64? savedAttachmentGeneration,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (operationId != null) result.operationId = operationId;
+    if (chatId != null) result.chatId = chatId;
+    if (expectedSpaceId != null) result.expectedSpaceId = expectedSpaceId;
+    if (savedAttachmentGeneration != null)
+      result.savedAttachmentGeneration = savedAttachmentGeneration;
+    return result;
+  }
+
+  ReadSpaceReportAttachmentRequest._();
+
+  factory ReadSpaceReportAttachmentRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ReadSpaceReportAttachmentRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ReadSpaceReportAttachmentRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..aOS(3, _omitFieldNames ? '' : 'chatId')
+    ..aOS(4, _omitFieldNames ? '' : 'expectedSpaceId')
+    ..a<$fixnum.Int64>(5, _omitFieldNames ? '' : 'savedAttachmentGeneration',
+        $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReadSpaceReportAttachmentRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReadSpaceReportAttachmentRequest copyWith(
+          void Function(ReadSpaceReportAttachmentRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as ReadSpaceReportAttachmentRequest))
+          as ReadSpaceReportAttachmentRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ReadSpaceReportAttachmentRequest create() =>
+      ReadSpaceReportAttachmentRequest._();
+  @$core.override
+  ReadSpaceReportAttachmentRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ReadSpaceReportAttachmentRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ReadSpaceReportAttachmentRequest>(
+          create);
+  static ReadSpaceReportAttachmentRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get chatId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set chatId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasChatId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearChatId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get expectedSpaceId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set expectedSpaceId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasExpectedSpaceId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearExpectedSpaceId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $fixnum.Int64 get savedAttachmentGeneration => $_getI64(4);
+  @$pb.TagNumber(5)
+  set savedAttachmentGeneration($fixnum.Int64 value) => $_setInt64(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasSavedAttachmentGeneration() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearSavedAttachmentGeneration() => $_clearField(5);
+}
+
+class ReadSpaceReportAttachmentResponse extends $pb.GeneratedMessage {
+  factory ReadSpaceReportAttachmentResponse({
+    $core.int? protocolVersion,
+    $core.String? operationId,
+    $core.String? chatId,
+    $core.String? expectedSpaceId,
+    $fixnum.Int64? savedAttachmentGeneration,
+    SpaceReportAttachmentDisposition? disposition,
+    SpaceReportAttachmentRetirementReason? reason,
+    $core.String? ownerEventId,
+    $fixnum.Int64? ownerRevision,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (operationId != null) result.operationId = operationId;
+    if (chatId != null) result.chatId = chatId;
+    if (expectedSpaceId != null) result.expectedSpaceId = expectedSpaceId;
+    if (savedAttachmentGeneration != null)
+      result.savedAttachmentGeneration = savedAttachmentGeneration;
+    if (disposition != null) result.disposition = disposition;
+    if (reason != null) result.reason = reason;
+    if (ownerEventId != null) result.ownerEventId = ownerEventId;
+    if (ownerRevision != null) result.ownerRevision = ownerRevision;
+    return result;
+  }
+
+  ReadSpaceReportAttachmentResponse._();
+
+  factory ReadSpaceReportAttachmentResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ReadSpaceReportAttachmentResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ReadSpaceReportAttachmentResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..aOS(3, _omitFieldNames ? '' : 'chatId')
+    ..aOS(4, _omitFieldNames ? '' : 'expectedSpaceId')
+    ..a<$fixnum.Int64>(5, _omitFieldNames ? '' : 'savedAttachmentGeneration',
+        $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aE<SpaceReportAttachmentDisposition>(
+        6, _omitFieldNames ? '' : 'disposition',
+        enumValues: SpaceReportAttachmentDisposition.values)
+    ..aE<SpaceReportAttachmentRetirementReason>(
+        7, _omitFieldNames ? '' : 'reason',
+        enumValues: SpaceReportAttachmentRetirementReason.values)
+    ..aOS(8, _omitFieldNames ? '' : 'ownerEventId')
+    ..a<$fixnum.Int64>(
+        9, _omitFieldNames ? '' : 'ownerRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReadSpaceReportAttachmentResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReadSpaceReportAttachmentResponse copyWith(
+          void Function(ReadSpaceReportAttachmentResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ReadSpaceReportAttachmentResponse))
+          as ReadSpaceReportAttachmentResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ReadSpaceReportAttachmentResponse create() =>
+      ReadSpaceReportAttachmentResponse._();
+  @$core.override
+  ReadSpaceReportAttachmentResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ReadSpaceReportAttachmentResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ReadSpaceReportAttachmentResponse>(
+          create);
+  static ReadSpaceReportAttachmentResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get chatId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set chatId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasChatId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearChatId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get expectedSpaceId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set expectedSpaceId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasExpectedSpaceId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearExpectedSpaceId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $fixnum.Int64 get savedAttachmentGeneration => $_getI64(4);
+  @$pb.TagNumber(5)
+  set savedAttachmentGeneration($fixnum.Int64 value) => $_setInt64(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasSavedAttachmentGeneration() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearSavedAttachmentGeneration() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  SpaceReportAttachmentDisposition get disposition => $_getN(5);
+  @$pb.TagNumber(6)
+  set disposition(SpaceReportAttachmentDisposition value) =>
+      $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasDisposition() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearDisposition() => $_clearField(6);
+
+  /// Present only for RETIRED. Never contains the destination Space or a viewer.
+  @$pb.TagNumber(7)
+  SpaceReportAttachmentRetirementReason get reason => $_getN(6);
+  @$pb.TagNumber(7)
+  set reason(SpaceReportAttachmentRetirementReason value) =>
+      $_setField(7, value);
+  @$pb.TagNumber(7)
+  $core.bool hasReason() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearReason() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.String get ownerEventId => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set ownerEventId($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasOwnerEventId() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearOwnerEventId() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $fixnum.Int64 get ownerRevision => $_getI64(8);
+  @$pb.TagNumber(9)
+  set ownerRevision($fixnum.Int64 value) => $_setInt64(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasOwnerRevision() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearOwnerRevision() => $_clearField(9);
 }
 
 const $core.bool _omitFieldNames =

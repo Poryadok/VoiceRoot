@@ -149,8 +149,32 @@ sanction or local appeal system. Existing global intake semantics are unchanged.
   real Linux PostgreSQL `-race` 4top PASS/0FAIL/0SKIP36.857s, scoped vet0 and
   runner exit0. The three older tests retain their declared schema25 fixtures;
   the new producer test supplies the explicit schema26 reader integration.
-- [ ] Obtain independent exact migration/rollback/source review before intake;
-  implement remaining protected chain and local scenario. No feature PASS yet.
+- [x] Independent original contract SOURCE CLEAR144 in BE-066 c19; exact768
+  native producer/327 delta SOURCE CLEAR364 in c20 and existing attachment review
+  c2. Both are scoped; neither certifies the following new transport source.
+- [x] Acquire NEW own WT31 lease `68f528c4680a7ba0fc23d0fd1f86c857`, holder
+  `rudeus-320-be066-protected-chat`, from current develop
+  `e77469b8b0da38c5cc3bde986c02f4e1aca54fb1`; normal merge reviewed768.
+  Add protected Messaging-only exact saved binding observation and current scope
+  attachment generation. Unknown/foreign/missing history never proves deletion.
+- [x] Exact-source archive
+  `41165b011b7f4598a733c5104dffc9827685546d313f2c1f990e27100d3df893`:
+  real private PostgreSQL16 + Linux Go1.26.5 `-race`, eight top-level tests
+  PASS/0FAIL/0SKIP across store/handler/protected TLS packages; main compiles
+  with no matching tests. Scoped vet0/runner0. Same published fixture-only DSN
+  overlay qualification applies, not canonical Testcontainers startup. Tests
+  cover unknown/foreign binding, MVCC during an uncommitted move, A-B-A,
+  deletion, freeze-not-retirement, exact hash/caller and TLS/JTI replay.
+  Final config includes all three dedicated callers and confines observation to
+  Messaging. Full proto lint/format and wire compatibility against a descriptor
+  built from exact develop e774 pass; earlier scoped Git/image path invocations
+  selected no files and are not credited. Go mirrors and Dart are regenerated.
+  Graphify update was bounded-cancelled after verified own process chain; no
+  graph freshness PASS.
+- [ ] Independent review of this new transport scope; implement remaining
+  protected chain and local scenario without waiting for that review.
+  The current reader now requires schema26; the two prior25 reader tests have
+  explicit26 fixtures, while backfill assertions still begin at25. No feature PASS.
 
 ## Decisions
 

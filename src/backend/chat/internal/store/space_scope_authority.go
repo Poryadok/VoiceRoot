@@ -16,25 +16,26 @@ func (s *DMStore) GetSpaceChatScopeAuthority(ctx context.Context, chatID, spaceI
 		return nil, errors.New("chat scope authority unavailable")
 	}
 	var incarnation, headIncarnation uuid.UUID
-	var revision, generation int64
+	var revision, generation, attachmentGeneration, headAttachmentGeneration int64
 	var kind, state string
 	var present, gis, squad bool
 	err := s.Pool.QueryRow(ctx, `SELECT c.type,c.scope_incarnation,h.scope_incarnation,h.revision,h.present,
         COALESCE(f.generation,0),COALESCE(f.state,'LIVE'),c.managed_by_application_id IS NOT NULL,
-        EXISTS(SELECT 1 FROM chat_match_squad_operations m WHERE m.chat_id=c.id)
+        EXISTS(SELECT 1 FROM chat_match_squad_operations m WHERE m.chat_id=c.id),c.report_attachment_generation,h.report_attachment_generation
         FROM chats c LEFT JOIN chat_scope_authority_heads h ON h.chat_id=c.id AND h.space_id=c.space_id
         LEFT JOIN chat_space_lifecycle_fences f ON f.space_id=c.space_id
-        WHERE c.id=$1 AND c.space_id=$2`, chatID, spaceID).Scan(&kind, &incarnation, &headIncarnation, &revision, &present, &generation, &state, &gis, &squad)
+        WHERE c.id=$1 AND c.space_id=$2`, chatID, spaceID).Scan(&kind, &incarnation, &headIncarnation, &revision, &present, &generation, &state, &gis, &squad, &attachmentGeneration, &headAttachmentGeneration)
 	if err != nil {
 		return nil, err
 	}
-	if incarnation == uuid.Nil || incarnation != headIncarnation || revision <= 0 || !present || generation < 0 {
+	if incarnation == uuid.Nil || incarnation != headIncarnation || revision <= 0 || !present || generation < 0 || attachmentGeneration <= 0 || attachmentGeneration != headAttachmentGeneration {
 		return nil, errors.New("chat scope authority inconsistent")
 	}
 	response := &chatv1.GetSpaceChatScopeAuthorityResponse{
 		ProtocolVersion: 1, ChatId: chatID.String(), ExpectedSpaceId: spaceID.String(), ActualSpaceId: spaceID.String(),
 		Exists: true, ChatScopeIncarnation: incarnation.String(), ChatAuthorityRevision: uint64(revision),
 		LifecycleGeneration: uint64(generation), ManagedKind: chatv1.ChatScopeManagedKind_CHAT_SCOPE_MANAGED_KIND_ORDINARY,
+		ReportAttachmentGeneration: uint64(attachmentGeneration),
 	}
 	switch kind {
 	case "group":

@@ -21,7 +21,7 @@ import 'chat_scope_authority.pb.dart' as $0;
 export 'chat_scope_authority.pb.dart';
 
 /// Narrow own-DB resource facts. This service grants no user permissions and is
-/// served only on dedicated signed Role/Space mTLS listeners.
+/// served only on dedicated signed per-caller mTLS listeners.
 @$pb.GrpcServiceName('voice.chat.v1.ChatScopeAuthorityService')
 class ChatScopeAuthorityServiceClient extends $grpc.Client {
   /// The hostname for this service.
@@ -44,6 +44,16 @@ class ChatScopeAuthorityServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// Messaging only. Saved binding observation grants no viewer permission.
+  $grpc.ResponseFuture<$0.ReadSpaceReportAttachmentResponse>
+      readSpaceReportAttachment(
+    $0.ReadSpaceReportAttachmentRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$readSpaceReportAttachment, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$getSpaceChatScopeAuthority = $grpc.ClientMethod<
@@ -52,6 +62,12 @@ class ChatScopeAuthorityServiceClient extends $grpc.Client {
       '/voice.chat.v1.ChatScopeAuthorityService/GetSpaceChatScopeAuthority',
       ($0.GetSpaceChatScopeAuthorityRequest value) => value.writeToBuffer(),
       $0.GetSpaceChatScopeAuthorityResponse.fromBuffer);
+  static final _$readSpaceReportAttachment = $grpc.ClientMethod<
+          $0.ReadSpaceReportAttachmentRequest,
+          $0.ReadSpaceReportAttachmentResponse>(
+      '/voice.chat.v1.ChatScopeAuthorityService/ReadSpaceReportAttachment',
+      ($0.ReadSpaceReportAttachmentRequest value) => value.writeToBuffer(),
+      $0.ReadSpaceReportAttachmentResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.chat.v1.ChatScopeAuthorityService')
@@ -69,6 +85,15 @@ abstract class ChatScopeAuthorityServiceBase extends $grpc.Service {
             $0.GetSpaceChatScopeAuthorityRequest.fromBuffer(value),
         ($0.GetSpaceChatScopeAuthorityResponse value) =>
             value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ReadSpaceReportAttachmentRequest,
+            $0.ReadSpaceReportAttachmentResponse>(
+        'ReadSpaceReportAttachment',
+        readSpaceReportAttachment_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ReadSpaceReportAttachmentRequest.fromBuffer(value),
+        ($0.ReadSpaceReportAttachmentResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.GetSpaceChatScopeAuthorityResponse>
@@ -80,4 +105,13 @@ abstract class ChatScopeAuthorityServiceBase extends $grpc.Service {
   $async.Future<$0.GetSpaceChatScopeAuthorityResponse>
       getSpaceChatScopeAuthority(
           $grpc.ServiceCall call, $0.GetSpaceChatScopeAuthorityRequest request);
+
+  $async.Future<$0.ReadSpaceReportAttachmentResponse>
+      readSpaceReportAttachment_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ReadSpaceReportAttachmentRequest> $request) async {
+    return readSpaceReportAttachment($call, await $request);
+  }
+
+  $async.Future<$0.ReadSpaceReportAttachmentResponse> readSpaceReportAttachment(
+      $grpc.ServiceCall call, $0.ReadSpaceReportAttachmentRequest request);
 }

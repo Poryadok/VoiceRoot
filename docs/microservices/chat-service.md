@@ -3,8 +3,8 @@
 ## Local-report attachment and viewer authority (BE-066 target)
 
 Messaging's [local-report owner facade](messaging-service.md#space-local-report-owner-decisions-be-066-accepted-target)
-requires a NEW exact signed `service:messaging` scope-authority registration and
-protected `CheckMessageReadEntitlement` route. Its body binds the expected
+uses an exact signed `service:messaging` scope-authority registration and still
+requires a NEW protected `CheckMessageReadEntitlement` route. Its body binds the expected
 Space/Chat/viewer/timestamp as appropriate; unrelated caller routing stays
 unchanged. An unmanaged entitlement=true is only absence of an additional
 managed restriction, never proof of Space membership, tree visibility or history.
@@ -29,12 +29,19 @@ out; acknowledgement is a future authenticated Moderation minimization protocol,
 not inferred from absence or an old due time. Receipts/fences remain subject to
 account/Space cleanup and are not a new indefinite personal-data exemption.
 
-A NEW typed lifecycle read for exact `service:messaging` must expose only the
-requested old-binding disposition, with UNKNOWN for missing historical proof.
+`ChatScopeAuthorityService.ReadSpaceReportAttachment` is the typed lifecycle
+read for exact `service:messaging`. Protocol1 binds operation UUID, Chat UUID,
+expected Space UUID and positive saved attachment generation (signed bigint
+range). One native statement returns only that echoed binding and UNKNOWN,
+UNCHANGED or RETIRED. RETIRED alone carries the exact immutable reason, event
+UUID and positive owner revision. Missing history, foreign Space/generation and
+an absent Chat without a matching receipt return UNKNOWN, never deletion.
+UNCHANGED proves only the native attachment still exists: a frozen scope still
+requires separate viewer/lifecycle denial. Type/creator changes are not moves.
 Existing scope lookup retains its non-disclosing NotFound semantics; neither
 that lookup nor changed incarnation substitutes for this positive read.
-Protected read/ack routing and lifecycle cleanup remain explicit implementation
-gates after the native producer; native SQL proof alone does not activate them.
+Protected acknowledgement, Messaging's complete owner facade and lifecycle
+cleanup remain explicit implementation gates; this read alone does not activate them.
 DOWN refuses authority removal; deleting evidence to downgrade is forbidden.
 
 ## Standalone channel publication authority
@@ -92,11 +99,13 @@ BE-131 work; this codec contract does not activate its transport.
 ### Native Space-chat scope authority
 
 `ChatScopeAuthorityService.GetSpaceChatScopeAuthority` is a narrow own-`chat_db`
-read for signed `service:role` and `service:space`. Its request binds protocol
+read for signed `service:role`, `service:space` and `service:messaging`. Its request binds protocol
 version 1, canonical `chat_id`, `expected_space_id` and `operation_id`. A known
 matching group/channel returns only echoed scope, existence/liveness, stored
 type/Space, UUID attachment incarnation, positive monotonic Chat authority
-revision, independent lifecycle generation/state and managed kind. It returns
+revision, independent lifecycle generation/state, managed kind and separate
+positive `report_attachment_generation` from migration26. Serving this version
+requires schema26; a missing/inconsistent authority fails closed. It returns
 no content, title, membership or Role decision and calls no other service.
 Missing and cross-Space requests use the same NotFound outcome; unavailable or
 inconsistent source state never becomes a permissive default. Consumers accept
@@ -119,15 +128,16 @@ the MatchSquad operation insert covers managed-kind ownership. No read lock is
 held across network I/O. Space owns its tree relation separately: this Chat
 snapshot does not replace the exact Space-tree authority observation.
 
-Role and Space each use a dedicated listener configured by
-`CHAT_SCOPE_ROLE_*` or `CHAT_SCOPE_SPACE_*`: `GRPC_LISTEN`, `TLS_CERT_FILE`,
+Role, Space and Messaging each use a dedicated listener configured by
+`CHAT_SCOPE_ROLE_*`, `CHAT_SCOPE_SPACE_*` or `CHAT_SCOPE_MESSAGING_*`: `GRPC_LISTEN`, `TLS_CERT_FILE`,
 `TLS_KEY_FILE`, `CLIENT_CA_FILE`, `JWKS_URL`, `JWKS_CA_FILE`,
 `REPLAY_REDIS_ADDR` and optional `REPLAY_REDIS_PASSWORD` plus paired
 `JWKS_CLIENT_CERT_FILE`/`JWKS_CLIENT_KEY_FILE`. Partial configuration fails
 startup. The listener verifies mTLS and exact issuer, subject, Chat audience,
 full RPC, request ID, complete protobuf hash and fresh JTI through the existing
-principal verifier/replay store. Ordinary and other protected Chat listeners
-do not register this service. Federation-only authority remains unchanged.
+principal verifier/replay store. Only the Messaging listener admits
+`ReadSpaceReportAttachment`; Role/Space allow only scope reads. Ordinary and
+other protected Chat listeners do not register this service. Federation-only authority remains unchanged.
 Serving this producer is not activation of the downstream permission/admission
 vertical or permission to deploy.
 
