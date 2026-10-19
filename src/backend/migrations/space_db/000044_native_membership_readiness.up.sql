@@ -28,7 +28,11 @@ CREATE TABLE native_membership_guard.spaces (
  space_id uuid PRIMARY KEY, epoch uuid NOT NULL,
  cutover_id uuid NOT NULL, revision bigint NOT NULL CHECK(revision>0),
  state text NOT NULL CHECK(state IN ('COMPLETE','TERMINAL')),
- source_revision bigint NOT NULL, evaluated_at timestamptz NOT NULL
+ source_revision bigint NOT NULL, evaluated_at timestamptz NOT NULL,
+ terminal_xid bigint,terminal_token_sha256 bytea,
+ CHECK((terminal_xid IS NULL)=(terminal_token_sha256 IS NULL)),
+ CHECK(terminal_token_sha256 IS NULL OR octet_length(terminal_token_sha256)=32),
+ CHECK(state='TERMINAL' OR terminal_xid IS NULL)
 );
 CREATE TABLE native_membership_guard.frames (
  xid bigint NOT NULL,space_id uuid NOT NULL,pid integer NOT NULL,
@@ -437,15 +441,37 @@ REVOKE ALL ON FUNCTION public.space_native_membership_initialize(uuid) FROM PUBL
 
 CREATE FUNCTION native_membership_guard.terminal_cleanup() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
  SET search_path=pg_catalog,public,native_membership_guard,pg_temp AS $$
+DECLARE captured_token uuid;
 BEGIN
  IF NOT public.space_membership_terminal_cleanup_allowed(OLD.id) THEN RAISE EXCEPTION 'guard cleanup requires native/current11 terminal P3' USING ERRCODE='55000'; END IF;
+ SELECT token INTO captured_token FROM native_membership_guard.frames
+ WHERE space_id=OLD.id AND xid=txid_current() AND pid=pg_backend_pid() AND mode='MUTATION' FOR UPDATE;
  DELETE FROM native_membership_guard.frames WHERE space_id=OLD.id;
- INSERT INTO native_membership_guard.spaces VALUES(OLD.id,'94db7e08-e958-44fa-94b2-988410ab0044',gen_random_uuid(),1,'TERMINAL',0,clock_timestamp())
- ON CONFLICT(space_id) DO UPDATE SET state='TERMINAL',revision=native_membership_guard.spaces.revision+1,evaluated_at=clock_timestamp();
+ INSERT INTO native_membership_guard.spaces(space_id,epoch,cutover_id,revision,state,source_revision,evaluated_at,terminal_xid,terminal_token_sha256)
+ VALUES(OLD.id,'94db7e08-e958-44fa-94b2-988410ab0044',gen_random_uuid(),1,'TERMINAL',0,clock_timestamp(),
+ CASE WHEN captured_token IS NOT NULL THEN txid_current() END,CASE WHEN captured_token IS NOT NULL THEN sha256(uuid_send(captured_token)) END)
+ ON CONFLICT(space_id) DO UPDATE SET state='TERMINAL',revision=native_membership_guard.spaces.revision+1,evaluated_at=clock_timestamp(),
+  terminal_xid=EXCLUDED.terminal_xid,terminal_token_sha256=EXCLUDED.terminal_token_sha256;
  RETURN OLD;
 END $$;
 CREATE TRIGGER zzzzz_native_membership_guard_terminal AFTER DELETE ON public.spaces
  FOR EACH ROW EXECUTE FUNCTION native_membership_guard.terminal_cleanup();
+
+CREATE FUNCTION public.space_native_membership_complete_purge(s uuid,token_id uuid) RETURNS void LANGUAGE plpgsql SECURITY DEFINER
+ SET search_path=pg_catalog,public,native_membership_guard,pg_temp AS $$
+BEGIN
+ PERFORM native_membership_guard.scope(s);
+ IF NOT public.space_membership_terminal_cleanup_allowed(s)
+ OR NOT EXISTS(SELECT 1 FROM native_membership_guard.spaces WHERE space_id=s AND state='TERMINAL'
+  AND epoch='94db7e08-e958-44fa-94b2-988410ab0044' AND terminal_xid=txid_current() AND terminal_token_sha256=sha256(uuid_send(token_id)))
+ OR EXISTS(SELECT 1 FROM native_membership_guard.frames WHERE space_id=s)
+ OR EXISTS(SELECT 1 FROM native_membership_guard.profiles WHERE space_id=s)
+ OR EXISTS(SELECT 1 FROM public.space_effective_member_heads WHERE space_id=s)
+ OR EXISTS(SELECT 1 FROM public.space_ordinary_member_heads WHERE space_id=s)
+ OR EXISTS(SELECT 1 FROM public.space_community_member_heads WHERE space_id=s) THEN
+  RAISE EXCEPTION 'membership terminal disposition lacks exact same-transaction native P3 receipt' USING ERRCODE='55000';
+ END IF;
+END $$;
 
 -- Protected helpers have no direct application entry points.
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA native_membership_guard FROM PUBLIC;

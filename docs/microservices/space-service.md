@@ -64,8 +64,20 @@ not an elevated session with SET ROLE. Installation or a standalone SQL guard
 positive does not qualify the entire native provider. Current source requires
 186's exact44 catalog and production writer placements; protected serving and
 the full report chain remain unavailable until their real composition. The
-uncutover frozen/ownership-pending maintenance initializer seam is explicitly
-pending bounded410 clarification; it is not an implicit LIVE serving bypass.
+administrative initializer follows410 maintenance decision
+`1d5ea8e9ced79bf9279c3f8a8dfabc129bc1f579369fba4992fd02ffc6604488`
+(BE010 c89-c92): coherent FROZEN/PREPARED and preterminal PURGE_DECIDED/PURGING
+may first initialize UNKNOWN before a permanent fence. Validate actual typed
+sources independently of serving availability; do not collapse them to NONE.
+Commit the administrative transaction before a separate native negative/P3
+transaction. Empty derived cohorts require no fabricated profile. Interactive
+serving remains LIVE plus AVAILABLE; malformed/retired/missing facts refuse.
+The real native P3 transaction opens capture before its first permanent-fence
+SQL. After actual current-eleven-participant/native terminal cleanup, it uses
+`completeNativeMembershipDBPurge` to verify a same-transaction Space/token-bound
+terminal receipt and erased private frames/cohort/heads. A missing normal frame
+is not successful completion. This placement belongs to186's existing lifecycle
+transaction owner; no outer ambient transaction or caller cleanup flag is valid.
 
 The continuous effective binding is distinct from the ONE-source Role/admission
 binding. BE-066 c23 selects a compact generation/episode UUID/retirement floor and

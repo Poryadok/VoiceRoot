@@ -30,5 +30,6 @@ DROP FUNCTION public.space_native_membership_profiles(uuid,uuid);
 DROP FUNCTION public.space_native_membership_complete(uuid,uuid);
 DROP FUNCTION public.space_native_membership_require(uuid);
 DROP FUNCTION public.space_native_membership_initialize(uuid);
+DROP FUNCTION public.space_native_membership_complete_purge(uuid,uuid);
 DROP SCHEMA native_membership_guard CASCADE;
 COMMIT;

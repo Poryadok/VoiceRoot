@@ -329,6 +329,15 @@ dependencies owned186/69. Existing native writer/catalog files remain186-owned.
 The implementation adds only44 SQL and new readiness Go/tests, then supplies
 the immutable ABI to186 for all-writer placement/catalog integration.
 
+410 maintenance clarification (BE010 c89-c92), SHA256
+1d5ea8e9ced79bf9279c3f8a8dfabc129bc1f579369fba4992fd02ffc6604488,
+permits a first administrative UNKNOWN initialization of coherent non-serving
+FROZEN/PREPARED/preterminal states with an existing Space and no permanent fence.
+Typed ordinary/community source facts remain distinct from serving eligibility.
+Commit that administrative transaction first, then use186's actual negative/P3
+transaction. Do not invent a maintenance permission callback, reader repair,
+ambient lifecycle transaction, dummy profile or native terminal predicate.
+
 The DB owns transaction/backend/Space capture, dirty sequence, OLD finite
 coverage, completion and the exact guard epoch. Source guards reject old direct
 writers before overwrite; deferred checks reject missing or stale completion.
@@ -349,9 +358,23 @@ source/archive/proof hashes before independent review and186 intake. Preserve
 41 and previous proof bytes. Require44 integration and all production placements
 before claiming protected reader readiness or full BE066 completion.
 
-- [ ] RED: old direct writer with a genuine serving login.
-- [ ] Protected DB guard, exact catalog/role checks, initializer and Go ABI.
-- [ ] Meaningful positive/negative/race/P3 proofs and immutable packet.
+- [x] RED: actual old DELETE committed through an independent LOGIN on43.
+- [x] Protected DB guard, catalog/role checks, full-cohort initializer and Go ABI;
+  native full-catalog qualification and all production placements remain186.
+- [x] Scoped real PG/race:7 top-level +16 subtests PASS62.554s, vet0. Actual
+  native retirement/engine/CAS, signed Creator UNKNOWN successor, FROZEN and
+  coherent PREPARED initialization, real empty cohort, nonowner/DDL/replication
+  and TEMP-shadow checks, ABA, late mutation/savepoint/IMMEDIATE, OLD finite
+  bridge expiry after sealed renewal, actual old-writer install drain, pinned
+  old RR empty snapshot followed by committed first writer, empty DOWN control
+  and retained DOWN refusal. The public native catalog is not mocked: current
+  composition remains unavailable until186's qualifier. The source-only admin
+  initializer is tested independently with actual native facts. A pre-native
+  pending ownership journal correctly remains unproved;39 never invented its
+  missing ownership head. Source P3 disposition is implemented with an exact
+  same-transaction Space/token receipt; real terminal positive/eleven-participant
+  placement proof remains186's actual lifecycle integration, not this result.
+- [ ] Immutable packet and actual native/P3 composition proof.
 - [ ] Independent review,186 integration and explicit121 delivery acceptance.
 
 BE-066 c10 selects content-free Messaging batch viewer decisions and an independent

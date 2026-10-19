@@ -20,8 +20,11 @@ type nativeMembershipDBMutation struct {
 }
 
 func (s *SpaceStore) beginNativeMembershipDBMutation(ctx context.Context, space uuid.UUID, profiles []uuid.UUID) (*nativeMembershipDBMutation, error) {
-	if s == nil || s.tx == nil || ctx == nil || ctx.Err() != nil || space == uuid.Nil || len(profiles) == 0 {
+	if s == nil || s.tx == nil || ctx == nil || ctx.Err() != nil || space == uuid.Nil {
 		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	if profiles == nil {
+		profiles = []uuid.UUID{}
 	}
 	capture := &nativeMembershipDBMutation{tx: s.tx, space: space}
 	if err := s.tx.QueryRow(ctx, `SELECT public.space_native_membership_begin($1,$2)`, space, profiles).Scan(&capture.token); err != nil || capture.token == uuid.Nil {
@@ -59,6 +62,20 @@ func (s *SpaceStore) completeNativeMembershipDBMutation(ctx context.Context, cap
 	return nil
 }
 
+// Terminal cleanup is an explicit alternative disposition, never a missing
+// normal-frame error to ignore. The database binds the actual cleanup receipt
+// to this transaction, Space and its DB-minted token behind real native P3.
+func (s *SpaceStore) completeNativeMembershipDBPurge(ctx context.Context, capture *nativeMembershipDBMutation) error {
+	if s == nil || s.tx == nil || capture == nil || capture.used || capture.tx != s.tx || ctx == nil || ctx.Err() != nil {
+		return ErrEffectiveEpisodeUnavailable
+	}
+	capture.used = true
+	if _, err := s.tx.Exec(ctx, `SELECT public.space_native_membership_complete_purge($1,$2)`, capture.space, capture.token); err != nil {
+		return ErrEffectiveEpisodeUnavailable
+	}
+	return nil
+}
+
 // RequireScopedNativeMembershipReadiness performs no RPC, repair or cutover.
 // Native catalog44 qualification and all production placements are a separate
 // producer-owned integration requirement; schema version alone never suffices.
@@ -85,17 +102,41 @@ func (s *SpaceStore) InitializeScopedNativeMembership(ctx context.Context, space
 	if err := checkMemberAuthorityCatalog(ctx, s.tx); err != nil {
 		return ErrEffectiveEpisodeUnavailable
 	}
+	return s.initializeNativeMembershipCutover(ctx, space)
+}
+
+// This private administrative source/transition stage requires the public
+// entrypoint's qualified native catalog. It remains separately testable against
+// actual native sources while the owner assembles that catalog; no fake source
+// or readiness callback is accepted.
+func (s *SpaceStore) initializeNativeMembershipCutover(ctx context.Context, space uuid.UUID) error {
+	if s == nil || s.tx == nil || ctx == nil || ctx.Err() != nil || space == uuid.Nil {
+		return ErrEffectiveEpisodeUnavailable
+	}
 	// scope verifies RC, the actual backend fence and exact installed guard before
 	// any native evidence is sampled. Its helper is administrator-only.
 	if _, err := s.tx.Exec(ctx, `SELECT native_membership_guard.scope($1)`, space); err != nil {
 		return ErrEffectiveEpisodeUnavailable
 	}
 	lifecycle, err := readMemberLifecycle(ctx, s.tx, space)
-	if err != nil || lifecycle.GetState() != spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_LIVE {
+	if err != nil || lifecycle == nil {
+		return ErrEffectiveEpisodeUnavailable
+	}
+	switch lifecycle.GetState() {
+	case spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_LIVE,
+		spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_FROZEN,
+		spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_PURGE_DECIDED:
+	default:
 		return ErrEffectiveEpisodeUnavailable
 	}
 	ownership, err := readMemberOwnership(ctx, s.tx, space)
-	if err != nil || ownership.GetState() != spacev1.MemberAdmissionOwnershipState_MEMBER_ADMISSION_OWNERSHIP_STATE_AVAILABLE {
+	if err != nil || ownership == nil {
+		return ErrEffectiveEpisodeUnavailable
+	}
+	switch ownership.GetState() {
+	case spacev1.MemberAdmissionOwnershipState_MEMBER_ADMISSION_OWNERSHIP_STATE_AVAILABLE,
+		spacev1.MemberAdmissionOwnershipState_MEMBER_ADMISSION_OWNERSHIP_STATE_PREPARED:
+	default:
 		return ErrEffectiveEpisodeUnavailable
 	}
 	revision, err := spaceSourceRevision(ctx, s.tx, space.String())
