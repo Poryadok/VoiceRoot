@@ -20,6 +20,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import voice.backend.auth.repository.AccountRepository;
+import voice.backend.auth.repository.GuestConversionAdvanceResult;
+import voice.backend.auth.repository.GuestConversionOperation;
 import voice.backend.auth.repository.GuestConversionOperationRepository;
 import voice.backend.auth.repository.GuestConversionState;
 import voice.backend.auth.security.BCryptPasswordHasher;
@@ -137,6 +139,7 @@ class ConvertGuestIntegrationTest {
 
   @Test
   void convertGuestMovesFromDurablePendingUserToPendingEventOnlyAfterRecoveryTick() throws Exception {
+    GuestConversionOperation foreignPendingEvent = createForeignPendingEvent();
     JsonNode guest =
         session(
             postJson(
@@ -200,6 +203,12 @@ class ConvertGuestIntegrationTest {
         .andExpect(jsonPath("$.session.account_id", is(guestAccountId)))
         .andExpect(jsonPath("$.session.account_type", is("guest")));
 
+    GuestConversionOperation pendingUser =
+        operations.findByAccountId(UUID.fromString(guestAccountId)).orElseThrow();
+    assertThat(pendingUser.accountId()).isEqualTo(UUID.fromString(guestAccountId));
+    assertThat(pendingUser.state()).isEqualTo(GuestConversionState.PENDING_USER);
+    assertThat(pendingUser.authPromotedAt()).isNull();
+
     pendingUserRecovery.tick();
 
     mockMvc
@@ -212,14 +221,15 @@ class ConvertGuestIntegrationTest {
         .andExpect(jsonPath("$.session.account_id", is(guestAccountId)))
         .andExpect(jsonPath("$.session.account_type", is("regular")));
 
-    Instant now = Instant.now(clock);
-    assertThat(operations.leaseDue(1, now, now.plus(Duration.ofMinutes(1))))
-        .singleElement()
-        .satisfies(
-            operation -> {
-              assertThat(operation.accountId()).isEqualTo(UUID.fromString(guestAccountId));
-              assertThat(operation.state()).isEqualTo(GuestConversionState.PENDING_EVENT);
-            });
+    GuestConversionOperation pendingEvent =
+        operations.findByAccountId(UUID.fromString(guestAccountId)).orElseThrow();
+    assertThat(pendingEvent.operationId()).isEqualTo(pendingUser.operationId());
+    assertThat(pendingEvent.accountId()).isEqualTo(UUID.fromString(guestAccountId));
+    assertThat(pendingEvent.state()).isEqualTo(GuestConversionState.PENDING_EVENT);
+    assertThat(pendingEvent.authPromotedAt()).isNotNull();
+    assertThat(pendingEvent.lockedUntil()).isNull();
+    assertThat(operations.findByAccountId(foreignPendingEvent.accountId()))
+        .contains(foreignPendingEvent);
   }
 
   @Test
@@ -303,6 +313,28 @@ class ConvertGuestIntegrationTest {
             .getResponse()
             .getContentAsString();
     return objectMapper.readTree(response);
+  }
+
+  private GuestConversionOperation createForeignPendingEvent() {
+    Instant earlier = Instant.now(clock).minus(Duration.ofMinutes(1));
+    UUID foreignAccountId = UUID.randomUUID();
+    operations.createOrResume(foreignAccountId, UUID.randomUUID(), earlier);
+    GuestConversionOperation leased =
+        operations
+            .leaseDueForAccount(
+                GuestConversionState.PENDING_USER,
+                foreignAccountId,
+                earlier,
+                earlier.plus(Duration.ofMinutes(1)))
+            .orElseThrow();
+    assertThat(
+            operations.advance(
+                leased.operationId(), GuestConversionState.PENDING_USER, leased.lockedUntil(), earlier))
+        .isEqualTo(GuestConversionAdvanceResult.APPLIED);
+    GuestConversionOperation pendingEvent = operations.findByAccountId(foreignAccountId).orElseThrow();
+    assertThat(pendingEvent.state()).isEqualTo(GuestConversionState.PENDING_EVENT);
+    assertThat(pendingEvent.lockedUntil()).isNull();
+    return pendingEvent;
   }
 
   private static JsonNode session(JsonNode envelope) {
