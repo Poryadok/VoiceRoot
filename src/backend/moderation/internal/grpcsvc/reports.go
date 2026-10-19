@@ -2,9 +2,8 @@ package grpcsvc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"math"
-	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -15,6 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/moderation/internal/store"
+	"voice/backend/pkg/principal"
 
 	moderationv1 "voice.app/voice/moderation/v1"
 )
@@ -40,7 +40,7 @@ func (s *ModerationGRPC) CreateReport(ctx context.Context, req *moderationv1.Cre
 		return nil, status.Error(codes.FailedPrecondition, "report store is not configured")
 	}
 
-	reporterProfileID, err := profileIDFromMetadata(ctx)
+	reporterProfileID, reporterAccountID, err := verifiedReportIdentity(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -86,30 +86,46 @@ func (s *ModerationGRPC) CreateReport(ctx context.Context, req *moderationv1.Cre
 	if evidenceJSON == "" {
 		evidenceJSON = "{}"
 	}
+	if !json.Valid([]byte(evidenceJSON)) {
+		return nil, status.Error(codes.InvalidArgument, "invalid evidence_json")
+	}
 
-	row, err := s.Reports.InsertReport(ctx, reporterProfileID, targetType, targetID, category, description, evidenceJSON)
+	check, err := store.AcquireReportPrivacy(ctx, s.ReportPrivacy)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, status.Error(codes.Unavailable, "report intake unavailable")
+	}
+	subject, epoch, err := store.ResolveReportSubject(ctx, s.ReportAuthority, reporterAccountID, uuid.Nil)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "report intake unavailable")
+	}
+	p, _ := principal.FromContext(ctx)
+	if subject.State != "LIVE" || epoch != uint64(p.SessionEpoch) {
+		return nil, status.Error(codes.Unauthenticated, "current reporter required")
+	}
+	row, err := s.Reports.InsertSubjectReport(ctx, reporterProfileID, subject, check, targetType, targetID, category, description, evidenceJSON)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "report intake unavailable")
 	}
 
-	if targetType == "user" {
-		if err := s.maybeAutoShadowBan(ctx, targetID); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-
-	if s.Analytics != nil {
-		_ = s.Analytics.Publish(ctx, "analytics.moderation.report_created", "moderation", "report_created", map[string]any{
-			"target_type": targetType, "category": category,
-		})
-	}
-	if s.DomainEvents != nil {
-		_ = s.DomainEvents.PublishReportCreated(ctx, row.ID.String(), reporterProfileID.String())
-	}
-
+	// The committed receipt is independent of target validation and worker
+	// progress. Never reread the row here or publish target-dependent effects.
 	return &moderationv1.CreateReportResponse{
-		Report: reportRowToProto(row),
+		Report: &moderationv1.Report{Id: row.ID.String()},
 	}, nil
+}
+
+func verifiedReportIdentity(ctx context.Context, req *moderationv1.CreateReportRequest) (uuid.UUID, uuid.UUID, error) {
+	p, ok := principal.FromContext(ctx)
+	hash, err := principal.RequestHash(req)
+	if !ok || err != nil || p.Kind != "delegated_user" || p.Issuer != "gateway" || p.Audience != "moderation" || p.RPC != moderationv1.ModerationService_CreateReport_FullMethodName || p.RequestHash != hash || p.RequestID == "" || p.Subject != p.AccountID || p.SessionEpoch <= 0 {
+		return uuid.Nil, uuid.Nil, status.Error(codes.Unauthenticated, "verified report principal required")
+	}
+	profile, profileErr := uuid.Parse(p.ProfileID)
+	account, accountErr := uuid.Parse(p.AccountID)
+	if profileErr != nil || accountErr != nil || profile == uuid.Nil || account == uuid.Nil {
+		return uuid.Nil, uuid.Nil, status.Error(codes.Unauthenticated, "invalid verified reporter")
+	}
+	return profile, account, nil
 }
 
 func (s *ModerationGRPC) ListReports(ctx context.Context, req *moderationv1.ListReportsRequest) (*moderationv1.ListReportsResponse, error) {
@@ -201,11 +217,13 @@ func reportRowToProto(row *store.ReportRow) *moderationv1.Report {
 		Id:                row.ID.String(),
 		ReporterProfileId: row.ReporterProfileID.String(),
 		TargetType:        row.TargetType,
-		TargetId:          row.TargetID.String(),
 		Category:          row.Category,
 		EvidenceJson:      row.EvidenceJSON,
 		Status:            row.Status,
 		CreatedAt:         timestamppb.New(row.CreatedAt.UTC()),
+	}
+	if row.TargetID != nil {
+		out.TargetId = row.TargetID.String()
 	}
 	if row.Description != nil {
 		out.Description = row.Description
@@ -289,64 +307,6 @@ func (s *ModerationGRPC) ResolveReport(ctx context.Context, req *moderationv1.Re
 		_ = s.AuditLog.InsertAudit(ctx, modProfile, "report_resolved", "report", reportID, details)
 	}
 	return &moderationv1.ResolveReportResponse{Report: reportRowToProto(row)}, nil
-}
-
-func (s *ModerationGRPC) reportThreshold() int {
-	audience := s.PlatformAudienceSize
-	if audience <= 0 {
-		audience = 1000
-	}
-	threshold := int(math.Ceil(0.01 * float64(audience)))
-	if threshold < 10 {
-		threshold = 10
-	}
-	return threshold
-}
-
-func (s *ModerationGRPC) maybeAutoShadowBan(ctx context.Context, targetProfileID uuid.UUID) error {
-	count, err := s.Reports.CountReports24h(ctx, targetProfileID)
-	if err != nil {
-		return err
-	}
-	threshold := s.reportThreshold()
-	if count < threshold {
-		return nil
-	}
-	targetAccountID := targetProfileID
-	if s.Users != nil {
-		resolved, err := s.Users.AccountIDForProfile(ctx, targetProfileID)
-		if err != nil {
-			return err
-		}
-		if resolved != uuid.Nil {
-			targetAccountID = resolved
-		}
-	}
-	if s.Sanctions != nil {
-		banned, err := s.Sanctions.IsShadowBanned(ctx, targetAccountID)
-		if err != nil {
-			return err
-		}
-		if banned {
-			return nil
-		}
-	}
-	details := `{"window":"24h","count":` + strconv.Itoa(count) + `,"threshold":` + strconv.Itoa(threshold) + `,"audience_source":"env"}`
-	if err := s.Reports.InsertAutoModLog(ctx, targetProfileID, "report_threshold", "shadow_ban", details); err != nil {
-		return err
-	}
-	if s.Sanctions == nil {
-		return nil
-	}
-	reason := "auto shadow ban: report threshold exceeded"
-	row, err := s.Sanctions.InsertSanction(ctx, targetAccountID, "shadow_ban", reason, nil, autoModIssuerProfileID(), nil)
-	if err != nil {
-		return err
-	}
-	if s.DomainEvents != nil {
-		_ = s.DomainEvents.PublishSanctionApplied(ctx, row.ID.String(), targetAccountID.String(), "shadow_ban")
-	}
-	return nil
 }
 
 // autoModIssuerProfileID is the well-known automod actor for system sanctions.

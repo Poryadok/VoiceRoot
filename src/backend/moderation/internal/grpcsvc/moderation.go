@@ -14,12 +14,14 @@ import (
 // ModerationGRPC implements ModerationService.
 type ModerationGRPC struct {
 	moderationv1.UnimplementedModerationServiceServer
-	Reports     *store.ReportStore
-	Sanctions   *store.SanctionStore
-	Appeals     *store.AppealStore
-	AuditLog    *store.AuditLogStore
-	AutoMod     *store.AutoModStore
-	ScanMetrics *ScanMetrics
+	Reports         *store.ReportStore
+	ReportAuthority store.ReportSubjectResolver
+	ReportPrivacy   store.ReportPrivacyAcquire
+	Sanctions       *store.SanctionStore
+	Appeals         *store.AppealStore
+	AuditLog        *store.AuditLogStore
+	AutoMod         *store.AutoModStore
+	ScanMetrics     *ScanMetrics
 	// A nil recorder uses AutoMod.RecordScan; the seam controls only instrumentation.
 	scanRecorder         func(context.Context) error
 	PlatformAudienceSize int64

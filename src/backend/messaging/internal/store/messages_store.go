@@ -28,6 +28,7 @@ type MessageRow struct {
 	ForwardCommentary      *MessageRow             `json:",omitempty"`
 	AdmissionRequestHash   string                  `json:"-"`
 	AdmissionRequestRPC    string                  `json:"-"`
+	AutoModAdmission       *AutoModAdmission       `json:"-"`
 	MusicBinding           *MusicAttachmentBinding `json:"-"`
 	ID                     uuid.UUID
 	ChatID                 uuid.UUID
@@ -62,7 +63,8 @@ type MessageRow struct {
 }
 
 type MessagesStore struct {
-	Pool *pgxpool.Pool
+	Pool    *pgxpool.Pool
+	AutoMod *AutoModProducer
 }
 
 var ErrGameEventMessageConflict = errors.New("game event message idempotency conflict")
@@ -174,6 +176,9 @@ FROM messages WHERE chat_id=$1 AND sender_profile_id=$2 AND client_message_id=$3
 		}
 	}
 	if err := recordExactSendReceipt(ctx, tx, row); err != nil {
+		return nil, false, false, err
+	}
+	if err := s.appendAutoModEvidenceTx(ctx, tx, row); err != nil {
 		return nil, false, false, err
 	}
 	if outboxEvent != nil {
@@ -446,8 +451,30 @@ func (s *MessagesStore) InsertMessage(ctx context.Context, row MessageRow) (*Mes
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("messages store: pool not configured")
 	}
-	saved, err := insertMessageDB(ctx, s.Pool, row)
+	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if err = lockMessageMutation(ctx, tx, row.ChatID, nil, &row.ID); err != nil {
+		return nil, err
+	}
+	if err = validateForwardCommentary(row); err != nil {
+		return nil, err
+	}
+	if err = insertForwardCommentaryDB(ctx, tx, row); err != nil {
+		return nil, err
+	}
+	saved, inserted, err := insertMessageDBResult(ctx, tx, row)
+	if err != nil {
+		return nil, err
+	}
+	if inserted {
+		if err = s.appendAutoModEvidenceTx(ctx, tx, row); err != nil {
+			return nil, err
+		}
+	}
+	if err = tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 	return s.GetMessageByID(ctx, saved.ID)
@@ -459,16 +486,21 @@ type messageInsertDB interface {
 }
 
 func insertMessageDB(ctx context.Context, db messageInsertDB, row MessageRow) (*MessageRow, error) {
+	saved, _, err := insertMessageDBResult(ctx, db, row)
+	return saved, err
+}
+
+func insertMessageDBResult(ctx context.Context, db messageInsertDB, row MessageRow) (*MessageRow, bool, error) {
 	if row.ClientMessageID != nil && row.AdmissionRequestHash != "" {
 		if _, ok := db.(pgx.Tx); !ok {
-			return nil, errors.New("exact send receipt requires an atomic message transaction")
+			return nil, false, errors.New("exact send receipt requires an atomic message transaction")
 		}
 	}
 	if !json.Valid([]byte(row.AttachmentsJSON)) {
-		return nil, errors.New("attachments_json must be valid JSON")
+		return nil, false, errors.New("attachments_json must be valid JSON")
 	}
 	if !json.Valid([]byte(row.MentionsJSON)) {
-		return nil, errors.New("mentions_json must be valid JSON")
+		return nil, false, errors.New("mentions_json must be valid JSON")
 	}
 
 	var clientAny any
@@ -505,7 +537,7 @@ func insertMessageDB(ctx context.Context, db messageInsertDB, row MessageRow) (*
 	if row.MusicBinding != nil {
 		b := row.MusicBinding
 		if row.IsE2E || contentType != "music" || b.FileID == uuid.Nil || b.SourceChatID == uuid.Nil || b.Revision == 0 || b.Revision > uint64(1<<63-1) {
-			return nil, errors.New("invalid private music binding")
+			return nil, false, errors.New("invalid private music binding")
 		}
 		musicFile, musicChat, musicRevision = b.FileID, b.SourceChatID, int64(b.Revision)
 	}
@@ -531,25 +563,27 @@ ON CONFLICT (chat_id, sender_profile_id, client_message_id)
 		musicFile, musicChat, musicRevision,
 	)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if ct.RowsAffected() == 0 {
 		if row.ClientMessageID == nil {
-			return nil, errors.New("messages store: insert produced no row")
+			return nil, false, errors.New("messages store: insert produced no row")
 		}
 		if err := checkExactSendReceipt(ctx, db, row); err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		return scanMessageRow(db.QueryRow(ctx, messageSelectSQL+`
+		saved, err := scanMessageRow(db.QueryRow(ctx, messageSelectSQL+`
 FROM messages
 WHERE chat_id = $1 AND sender_profile_id = $2 AND client_message_id = $3
 LIMIT 1
 `, row.ChatID, row.SenderProfileID, *row.ClientMessageID))
+		return saved, false, err
 	}
 	if err := recordExactSendReceipt(ctx, db, row); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return scanMessageRow(db.QueryRow(ctx, messageSelectSQL+` FROM messages WHERE id=$1`, row.ID))
+	saved, err := scanMessageRow(db.QueryRow(ctx, messageSelectSQL+` FROM messages WHERE id=$1`, row.ID))
+	return saved, true, err
 }
 
 // GetExactSendReceipt returns a persisted result without producing any effect.

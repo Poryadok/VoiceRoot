@@ -110,8 +110,8 @@ public final class AuthAuthorityReader implements AutoCloseable {
     String lock="LOCK TABLE public."+history;
     for(String table:AuthSourceCatalog.TABLES) lock+=",public."+table;
     execute(connection,lock+" IN ACCESS SHARE MODE",deadline);
-    String historyCheck=flyway?"SELECT CASE WHEN count(*)=26 AND bool_and(success) AND count(DISTINCT version)=26 AND min(version::int)=1 AND max(version::int)=26 THEN 1 ELSE 0 END FROM public.flyway_schema_history WHERE version IS NOT NULL"
-        :"SELECT CASE WHEN count(*)=1 AND bool_and(version=27 AND NOT dirty) THEN 1 ELSE 0 END FROM public.schema_migrations";
+    String historyCheck=flyway?"SELECT CASE WHEN count(*)=27 AND bool_and(success) AND count(DISTINCT version)=27 AND min(version::int)=1 AND max(version::int)=27 THEN 1 ELSE 0 END FROM public.flyway_schema_history WHERE version IS NOT NULL"
+        :"SELECT CASE WHEN count(*)=1 AND bool_and(version=28 AND NOT dirty) THEN 1 ELSE 0 END FROM public.schema_migrations";
     if(number(connection,historyCheck,deadline)!=1) throw unavailable();
     var tables=new ArrayList<>(AuthSourceCatalog.TABLES);tables.add(history);
     try(var query=statement(connection,"SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY(?) AND c.relkind='r' AND c.relpersistence='p' AND NOT c.relrowsecurity AND NOT c.relforcerowsecurity AND NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid=c.oid) AND NOT EXISTS(SELECT 1 FROM pg_rewrite WHERE ev_class=c.oid) AND NOT EXISTS(SELECT 1 FROM pg_inherits WHERE inhrelid=c.oid OR inhparent=c.oid)",deadline)) {

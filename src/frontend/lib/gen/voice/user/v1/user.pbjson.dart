@@ -15,6 +15,26 @@ import 'dart:convert' as $convert;
 import 'dart:core' as $core;
 import 'dart:typed_data' as $typed_data;
 
+@$core.Deprecated('Use reportThresholdContextStateDescriptor instead')
+const ReportThresholdContextState$json = {
+  '1': 'ReportThresholdContextState',
+  '2': [
+    {'1': 'REPORT_THRESHOLD_CONTEXT_STATE_UNSPECIFIED', '2': 0},
+    {'1': 'REPORT_THRESHOLD_CONTEXT_STATE_LIVE', '2': 1},
+    {'1': 'REPORT_THRESHOLD_CONTEXT_STATE_MISSING', '2': 2},
+    {'1': 'REPORT_THRESHOLD_CONTEXT_STATE_DELETED', '2': 3},
+    {'1': 'REPORT_THRESHOLD_CONTEXT_STATE_EMPTY_AUDIENCE', '2': 4},
+  ],
+};
+
+/// Descriptor for `ReportThresholdContextState`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List reportThresholdContextStateDescriptor = $convert.base64Decode(
+    'ChtSZXBvcnRUaHJlc2hvbGRDb250ZXh0U3RhdGUSLgoqUkVQT1JUX1RIUkVTSE9MRF9DT05URV'
+    'hUX1NUQVRFX1VOU1BFQ0lGSUVEEAASJwojUkVQT1JUX1RIUkVTSE9MRF9DT05URVhUX1NUQVRF'
+    'X0xJVkUQARIqCiZSRVBPUlRfVEhSRVNIT0xEX0NPTlRFWFRfU1RBVEVfTUlTU0lORxACEioKJl'
+    'JFUE9SVF9USFJFU0hPTERfQ09OVEVYVF9TVEFURV9ERUxFVEVEEAMSMQotUkVQT1JUX1RIUkVT'
+    'SE9MRF9DT05URVhUX1NUQVRFX0VNUFRZX0FVRElFTkNFEAQ=');
+
 @$core.Deprecated('Use presenceOnlineStatusDescriptor instead')
 const PresenceOnlineStatus$json = {
   '1': 'PresenceOnlineStatus',
@@ -67,6 +87,113 @@ final $typed_data.Uint8List scheduledMessageDispatchModeDescriptor = $convert.ba
     'BBVENIX01PREVfVU5TUEVDSUZJRUQQABImCiJTQ0hFRFVMRURfTUVTU0FHRV9ESVNQQVRDSF9N'
     'T0RFX0FUEAESLworU0NIRURVTEVEX01FU1NBR0VfRElTUEFUQ0hfTU9ERV9XSEVOX09OTElORR'
     'AC');
+
+@$core.Deprecated('Use resolveReportThresholdContextRequestDescriptor instead')
+const ResolveReportThresholdContextRequest$json = {
+  '1': 'ResolveReportThresholdContextRequest',
+  '2': [
+    {'1': 'evaluation_id', '3': 1, '4': 1, '5': 9, '10': 'evaluationId'},
+    {'1': 'target_profile_id', '3': 2, '4': 1, '5': 9, '10': 'targetProfileId'},
+    {
+      '1': 'expected_target_account_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'expectedTargetAccountId',
+      '17': true
+    },
+    {
+      '1': 'expected_profile_revision',
+      '3': 4,
+      '4': 1,
+      '5': 4,
+      '9': 1,
+      '10': 'expectedProfileRevision',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_expected_target_account_id'},
+    {'1': '_expected_profile_revision'},
+  ],
+};
+
+/// Descriptor for `ResolveReportThresholdContextRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List resolveReportThresholdContextRequestDescriptor = $convert.base64Decode(
+    'CiRSZXNvbHZlUmVwb3J0VGhyZXNob2xkQ29udGV4dFJlcXVlc3QSIwoNZXZhbHVhdGlvbl9pZB'
+    'gBIAEoCVIMZXZhbHVhdGlvbklkEioKEXRhcmdldF9wcm9maWxlX2lkGAIgASgJUg90YXJnZXRQ'
+    'cm9maWxlSWQSQAoaZXhwZWN0ZWRfdGFyZ2V0X2FjY291bnRfaWQYAyABKAlIAFIXZXhwZWN0ZW'
+    'RUYXJnZXRBY2NvdW50SWSIAQESPwoZZXhwZWN0ZWRfcHJvZmlsZV9yZXZpc2lvbhgEIAEoBEgB'
+    'UhdleHBlY3RlZFByb2ZpbGVSZXZpc2lvbogBAUIdChtfZXhwZWN0ZWRfdGFyZ2V0X2FjY291bn'
+    'RfaWRCHAoaX2V4cGVjdGVkX3Byb2ZpbGVfcmV2aXNpb24=');
+
+@$core.Deprecated('Use resolveReportThresholdContextResponseDescriptor instead')
+const ResolveReportThresholdContextResponse$json = {
+  '1': 'ResolveReportThresholdContextResponse',
+  '2': [
+    {
+      '1': 'state',
+      '3': 1,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.user.v1.ReportThresholdContextState',
+      '10': 'state'
+    },
+    {'1': 'target_profile_id', '3': 2, '4': 1, '5': 9, '10': 'targetProfileId'},
+    {'1': 'target_account_id', '3': 3, '4': 1, '5': 9, '10': 'targetAccountId'},
+    {'1': 'profile_revision', '3': 4, '4': 1, '5': 4, '10': 'profileRevision'},
+    {'1': 'metric_version', '3': 5, '4': 1, '5': 9, '10': 'metricVersion'},
+    {
+      '1': 'audience_accounts',
+      '3': 6,
+      '4': 1,
+      '5': 3,
+      '10': 'audienceAccounts'
+    },
+    {
+      '1': 'observation_started_at',
+      '3': 7,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'observationStartedAt'
+    },
+    {
+      '1': 'observation_completed_at',
+      '3': 8,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'observationCompletedAt'
+    },
+    {
+      '1': 'expires_at',
+      '3': 9,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'expiresAt'
+    },
+    {'1': 'snapshot_id', '3': 10, '4': 1, '5': 9, '10': 'snapshotId'},
+    {'1': 'evaluation_id', '3': 11, '4': 1, '5': 9, '10': 'evaluationId'},
+  ],
+};
+
+/// Descriptor for `ResolveReportThresholdContextResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List resolveReportThresholdContextResponseDescriptor = $convert.base64Decode(
+    'CiVSZXNvbHZlUmVwb3J0VGhyZXNob2xkQ29udGV4dFJlc3BvbnNlEkAKBXN0YXRlGAEgASgOMi'
+    'oudm9pY2UudXNlci52MS5SZXBvcnRUaHJlc2hvbGRDb250ZXh0U3RhdGVSBXN0YXRlEioKEXRh'
+    'cmdldF9wcm9maWxlX2lkGAIgASgJUg90YXJnZXRQcm9maWxlSWQSKgoRdGFyZ2V0X2FjY291bn'
+    'RfaWQYAyABKAlSD3RhcmdldEFjY291bnRJZBIpChBwcm9maWxlX3JldmlzaW9uGAQgASgEUg9w'
+    'cm9maWxlUmV2aXNpb24SJQoObWV0cmljX3ZlcnNpb24YBSABKAlSDW1ldHJpY1ZlcnNpb24SKw'
+    'oRYXVkaWVuY2VfYWNjb3VudHMYBiABKANSEGF1ZGllbmNlQWNjb3VudHMSUAoWb2JzZXJ2YXRp'
+    'b25fc3RhcnRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSFG9ic2Vydm'
+    'F0aW9uU3RhcnRlZEF0ElQKGG9ic2VydmF0aW9uX2NvbXBsZXRlZF9hdBgIIAEoCzIaLmdvb2ds'
+    'ZS5wcm90b2J1Zi5UaW1lc3RhbXBSFm9ic2VydmF0aW9uQ29tcGxldGVkQXQSOQoKZXhwaXJlc1'
+    '9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCWV4cGlyZXNBdBIfCgtzbmFw'
+    'c2hvdF9pZBgKIAEoCVIKc25hcHNob3RJZBIjCg1ldmFsdWF0aW9uX2lkGAsgASgJUgxldmFsdW'
+    'F0aW9uSWQ=');
 
 @$core.Deprecated('Use ensurePrimaryProfileRequestDescriptor instead')
 const EnsurePrimaryProfileRequest$json = {

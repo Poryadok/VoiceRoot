@@ -1,5 +1,35 @@
 # Auth Service
 
+## Private moderation authority (BE-045)
+
+`voice.automod.v1.AuthModerationAuthorityService` is registered only on the
+dedicated `AUTH_AUTOMOD_GRPC_PORT` (default 9093), separate from legacy, proof
+and session-floor listeners. It requires request-bound principal verification,
+the existing `AUTH_GRPC_TLS_CERT_FILE`/`AUTH_GRPC_TLS_KEY_FILE` server pair and
+`AUTH_AUTOMOD_TLS_CLIENT_CA_FILE`. There is no local plaintext or server-only
+TLS fallback. Port collisions and partial trust settings fail before binding.
+Messaging/Moderation caller grants remain method-specific; Role/User gain none.
+The private readiness-independent Service route is
+`voice-auth-authority:9093`; deployment must provision its matching TLS SAN and
+dedicated private Service before activation.
+
+Auth's existing `AUTH_PRINCIPAL_SIGNING_KEYS_DIR`/`AUTH_PRINCIPAL_ACTIVE_KID`
+load one local issuer even when SDK authorization is off. User eligibility
+channel/client creation still follows its SDK flag; partial User configuration
+still fails. The same issuer has a fixed Moderation snapshot signing method,
+without a caller-selected audience/RPC. Its independent private HTTPS publisher
+uses `AUTH_PRINCIPAL_JWKS_PORT` (8443), optional
+`AUTH_PRINCIPAL_JWKS_LISTEN_HOST`, the existing server certificate/key and
+mandatory `AUTH_PRINCIPAL_JWKS_CLIENT_CA_FILE`. It serves only
+`/internal/principals/jwks`, with workload certificate authentication and no
+JWT/Redis/peer-domain dependency. Canonical route:
+`https://voice-auth-authority:8443/internal/principals/jwks`.
+
+Terminal snapshots carry a finite count/hash/cut/generation seal. This detects
+incomplete/mixed views, not a jointly rolled-back Auth/Moderation history.
+See [startup/restore](../../../docs/testing/async-automod-startup-restore.md) and
+the [protected offline recovery boundary](../../../docs/testing/async-automod-recovery.md).
+
 Java/Spring Boot service: register, login, refresh (rotation), logout, JWT validation, JWKS.
 
 ## Ports

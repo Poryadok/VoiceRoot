@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"google.golang.org/grpc"
+	"voice/backend/pkg/reporttargetprincipal"
 
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
@@ -86,8 +87,14 @@ func main() {
 		svc.Audience = friendChecker
 		svc.FeedAuthors = friendChecker
 		fileDeleter := clients.WireGRPC(logger, svc)
-		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
+		grpcSrv = grpc.NewServer(append(grpcmw.ServerOptions(logger), grpc.ChainUnaryInterceptor(reporttargetprincipal.OrdinaryUnaryInterceptor("story")))...)
 		storyv1.RegisterStoryServiceServer(grpcSrv, svc)
+		stopReportTargets, err := reporttargetprincipal.Start(context.Background(), "story", func(server grpc.ServiceRegistrar) { grpcsvc.RegisterReportTargetServer(server, svc) }, func(err error) { log.Fatalf("report target listener: %v", err) })
+		if err != nil {
+			log.Fatalf("report target startup: %v", err)
+		}
+		defer stopReportTargets()
+
 		go func() {
 			if err := grpcSrv.Serve(lis); err != nil {
 				log.Fatalf("grpc serve: %v", err)

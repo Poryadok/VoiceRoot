@@ -4,6 +4,7 @@ package voice.story.v1;
 
 import "google/protobuf/timestamp.proto";
 import "voice/common/v1/common.proto";
+import "voice/story/v1/report_target.proto";
 
 option go_package = "voice.app/voice/story/v1;storyv1";
 
@@ -26,6 +27,8 @@ enum StoryAudience {
 
 // Stories and highlights. HTTP: /api/v1/stories/**.
 service StoryService {
+  // Protected service:moderation only; no viewer/content authority.
+  rpc ResolveReportTarget(ResolveReportTargetRequest) returns (ResolveReportTargetResponse);
   rpc CreateStory(CreateStoryRequest) returns (CreateStoryResponse);
   rpc DeleteStory(DeleteStoryRequest) returns (DeleteStoryResponse);
   rpc GetStory(GetStoryRequest) returns (GetStoryResponse);

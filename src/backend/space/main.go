@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"voice/backend/pkg/reporttargetprincipal"
 
 	"voice/backend/pkg/authoritysource"
 	"voice/backend/pkg/grpcclient"
@@ -186,6 +187,7 @@ func main() {
 			targetServer := grpc.NewServer(runtime.ServerOptions()...)
 			defer targetServer.Stop()
 			spacev1.RegisterSpaceServiceServer(targetServer, &grpcsvc.SpaceGRPC{Store: spaceStore})
+
 			go func() {
 				if err := targetServer.Serve(listener); err != nil {
 					log.Fatalf("Role target serve: %v", err)
@@ -281,6 +283,7 @@ func main() {
 			}()
 		}
 		grpcOptions := append([]grpc.ServerOption{}, sharedOptions...)
+		grpcOptions = append(grpcOptions, grpc.ChainUnaryInterceptor(reporttargetprincipal.OrdinaryUnaryInterceptor("space")))
 		grpcOptions = append(grpcOptions, grpc.ChainUnaryInterceptor(roleoverrideprincipal.OrdinaryUnaryInterceptor("space")))
 		grpcOptions = append(grpcOptions, grpc.ChainUnaryInterceptor(
 			chatcreation.OrdinaryUnary(),
@@ -389,6 +392,11 @@ func main() {
 			defer deletionRuntime.Stop()
 		}
 		spacev1.RegisterSpaceServiceServer(grpcSrv, spaceSvc)
+		stopReportTargets, err := reporttargetprincipal.Start(context.Background(), "space", func(server grpc.ServiceRegistrar) { grpcsvc.RegisterReportTargetServer(server, spaceSvc) }, func(err error) { log.Fatalf("report target listener: %v", err) })
+		if err != nil {
+			log.Fatalf("report target startup: %v", err)
+		}
+		defer stopReportTargets()
 		botComposite, botCompositeConnection, err := newBotCompositeTransport(principalIssuer)
 		if err != nil {
 			log.Fatalf("Space Bot composite transport: %v", err)

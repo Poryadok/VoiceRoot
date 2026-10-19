@@ -10,6 +10,7 @@ public final class AuthPrincipalServices {
 
   public static ServerServiceDefinition legacyService(ServerServiceDefinition all) {
     Set<String> protectedDeletion = Set.of(
+        "voice.auth.v1.AuthService/ClassifyReportAudienceAccounts",
         AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC.substring(1),
         AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC.substring(1),
         AuthPrincipalServerInterceptor.ROLE_SESSION_FLOOR_RPC.substring(1),

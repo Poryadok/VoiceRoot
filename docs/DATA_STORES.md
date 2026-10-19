@@ -1,5 +1,79 @@
 # Хранилища данных по микросервисам
 
+## BE-045 private moderation storage contract
+
+Accepted target, implementation tracked in the
+[ExecPlan](testing/async-automod-exec-plan.md): Auth owns immutable private subject,
+lifecycle/deletion revision and terminal fences plus the revisioned moderation
+restriction projection. `moderation_authority_generation` identifies the sealed
+finite terminal view and its append-only high-water. It is opaque authority
+metadata, not an independent proof that a restored database is current. Terminal
+snapshot count/hash/cut framing is in the [startup contract](testing/async-automod-startup-restore.md).
+Bot owns owner-account/actor/installation correspondence
+and positive ownership revision. Messaging owns versioned account-scoped HMAC
+keys, subject/source counter, immutable account-only v2 core outbox and content-free
+expiry receipts. Moderation owns subject/source baseline, contiguous inbox cursor,
+keyed pattern aliases/samples, consumed-through watermark, strikes, account mute
+episode, machine sanction/event outbox and desired Auth restriction revision.
+
+Auth's c19 lifecycle producer uses `moderation_lifecycle_current`: one complete
+nonterminal projection per opaque subject, carrying protocol, random event UUID,
+authority generation, lifecycle revision/state and exact deletion cycle/deadline.
+`moderation_lifecycle_delivery` contains the two pending recipient intents.
+Account-row owner changes and projection/intents commit or roll back together;
+superseded nonterminal history is compacted into the newer complete projection.
+Current projection rows remain available for finite catch-up after ACK. Positive
+terminal ledger insertion removes them and creates independent opaque
+`moderation_terminal_delivery` intents. Those survive raw account removal and
+never delay it. Pending notification and successful transport are not local
+physical-purge receipts. No producer table carries account/profile/content IDs.
+Flyway V30 and canonical Auth version31 are reserved for this producer; recipient
+transport/application and actual activation remain separate required work.
+
+Moderation migration 13 adds `automod_lifecycle_authority`, installed only after
+the owning coordinator verifies Auth generation and continuity, and
+`automod_lifecycle_current`, a complete opaque per-subject fact plus canonical
+hash. No raw account/profile/origin identifier is stored there. Unknown-subject
+facts fence delayed stale bindings; both binding and current-fact projections
+preserve exact deletion cycles and immutable same-cycle deadlines. Positive
+terminal application removes the current fact in the same transaction as all
+purge participants and the permanent opaque fence, including absent mappings.
+The private receiver uses captured P2 checks and returns only committed receipts;
+a due DELETED fact remains nonterminal. The receipt hash is not proof that Auth
+has accepted it or that a restored store is current. Authority installation
+cannot change an existing generation through ordinary RPC replay. Actual
+coordinator, delivery/current-owner ACK and P1-P5 activation remain open.
+
+Raw cross-service UUIDs are references, never cross-database foreign keys. Pattern
+digests, not bodies/URLs, have bounded retention; source evidence expires at 30
+days, samples at most 30 days + 10 minutes, strike aliases at most 60 days from
+the last hit, applied receipts at most 30 days from application. Logical windows
+never depend on GC. At the authoritative account purge deadline, participants
+erase raw links, payload hashes/digests, pending retries and personal details
+without waiting for evidence ACKs/gaps once the winning owner terminal decision
+is established; retain only permanent opaque terminal fences and
+minimal nonpersonal existing-case snapshots. Backup restore imports the protected
+terminal snapshot before serving. Full boundary/rotation rules are in the plan.
+
+The [explicit c19 failure-model correction](testing/async-automod-unknown-deadline.md)
+preserves that deadline and all retention numbers. An unknown Auth deletion or
+an unseen valid restore during a total authority partition cannot be resolved
+by a local timer without erasing an indistinguishable live account. A stale
+DELETED schedule is not permanent terminal authority. Such a missed physical
+deadline is an operational failure, not an allowed retention extension or a
+physical-erasure PASS. Offline containment/restore scrubbing does not
+retroactively establish physical deletion at the original deadline.
+
+The separate Messaging-local message/chat coverage bridge is temporary and
+erasable. Exact Space FROZEN acknowledgement removes its manifest links; purge
+completion proves zero links, including orphaned primary/companion rows. A worker
+never joins this bridge. Origin deletion leaves the account-purpose PERSONAL
+core/hash and bounded samples/strikes eligible under c9; it does not impersonate
+account erasure or early source-age expiry. The core/hash contains no origin
+identifiers or full-envelope fingerprint. Restored origin links must be erased
+under authoritative Space/managed-chat fences before access/effects; no old
+bridge is rebuilt on product restore. See [the explicit c17 contract](testing/async-automod-space-erasure.md).
+
 Сводка по [MICROSERVICES.md](MICROSERVICES.md) и файлам `docs/microservices/*.md`. Принцип: **database per service** — каждая строка PostgreSQL — отдельная логическая БД (отдельная схема миграций у владельца). Общие правила идентификаторов, ссылок и полей: [DATA_MODEL.md](DATA_MODEL.md). Объём первой волны PostgreSQL по фичам: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md).
 
 **Не БД, но нужны в инфраструктуре:** NATS (шина событий, в локальном Compose — сервис **`nats`** с JetStream, см. [`docker-compose.yml`](../docker-compose.yml) и [DEPLOYMENT.md](DEPLOYMENT.md)), LiveKit (SFU для голоса/видео), объектное хранилище R2. Для локального dev их перечисляют в compose отдельно от Postgres/Redis/ClickHouse.
@@ -448,3 +522,11 @@ message is terminated/moved to DLQ with an alert, never ACKed as successfully
 applied. Billing/provider records keep their separate legal retention only in
 the pseudonymized/minimized form allowed by the account-deletion contract; that
 policy overrides generic `P400D` raw-payload retention.
+
+### Moderation report recovery journal
+
+The accepted report recovery contract adds a no-FK opaque report-slot journal and
+explicit legacy provenance in Moderation migration11. Local transactional history
+is authoritative for current live storage; declared restores require separately
+verified complete recovery material. No per-record remote ACK is a live startup
+prerequisite. See [report privacy recovery](testing/report-privacy-recovery.md).

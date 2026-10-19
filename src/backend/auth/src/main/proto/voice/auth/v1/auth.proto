@@ -10,6 +10,9 @@ option java_package = "app.voice.auth.v1";
 
 // Auth Service — registration, sessions, JWT, 2FA (Java). HTTP prefix: /api/v1/auth/** → Gateway.
 service AuthService {
+  // @voice.security=protected;callers=service:user
+  // Dedicated report audience listener; never available on ordinary Auth gRPC.
+  rpc ClassifyReportAudienceAccounts(ClassifyReportAudienceAccountsRequest) returns (ClassifyReportAudienceAccountsResponse);
   // Protected Gateway delegated-user issue and Space-only atomic consume.
   rpc IssueOwnershipTransferProof(IssueOwnershipTransferProofRequest) returns (IssueOwnershipTransferProofResponse);
   rpc ConsumeOwnershipTransferProof(ConsumeOwnershipTransferProofRequest) returns (ConsumeOwnershipTransferProofResponse);
@@ -72,6 +75,34 @@ service AuthService {
 
   // @voice.security=protected;callers=service:space
   rpc AcknowledgeSpaceDeletionProofReceipt(voice.auth.v1.AcknowledgeSpaceDeletionProofReceiptRequest) returns (voice.auth.v1.AcknowledgeSpaceDeletionProofReceiptResponse);
+}
+
+// A complete classification of at most 1000 distinct canonical account UUIDs.
+// Missing IDs are explicit MISSING records; omission never authorizes LIVE.
+message ClassifyReportAudienceAccountsRequest {
+  string evaluation_id = 1;
+  repeated string account_ids = 2;
+}
+
+enum ReportAudienceAccountState {
+  REPORT_AUDIENCE_ACCOUNT_STATE_UNSPECIFIED = 0;
+  REPORT_AUDIENCE_ACCOUNT_STATE_LIVE = 1;
+  REPORT_AUDIENCE_ACCOUNT_STATE_DELETED = 2;
+  REPORT_AUDIENCE_ACCOUNT_STATE_MISSING = 3;
+}
+
+message ReportAudienceAccount {
+  string account_id = 1;
+  ReportAudienceAccountState state = 2;
+}
+
+message ClassifyReportAudienceAccountsResponse {
+  string evaluation_id = 1;
+  repeated ReportAudienceAccount accounts = 2;
+  google.protobuf.Timestamp observation_started_at = 3;
+  google.protobuf.Timestamp observation_completed_at = 4;
+  string snapshot_id = 5;
+  google.protobuf.Timestamp expires_at = 6;
 }
 
 message RegisterRequest {

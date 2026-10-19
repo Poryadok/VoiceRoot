@@ -32,7 +32,12 @@ func (t *transcoder) serveModerationReports(w http.ResponseWriter, r *http.Reque
 		if strings.EqualFold(strings.TrimSpace(req.GetCategory()), "mm_toxic") {
 			req.Category = "cheating"
 		}
-		resp, err := t.clients.moderation.CreateReport(ctx, req)
+		protectedCtx, err := t.reportIntakeContext(r, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.reportIntake.CreateReport(protectedCtx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true

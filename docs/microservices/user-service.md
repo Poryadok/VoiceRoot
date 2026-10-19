@@ -55,6 +55,31 @@ Account/session state remains Auth-owned.
 
 ## Поиск профилей vs Search Service
 
+### Accepted BE-046 report-threshold context
+
+Protected `ResolveReportThresholdContext` is an exact `service:moderation`
+surface, absent from ordinary User gRPC and Gateway. It binds the deterministic
+request containing evaluation/profile and optional expected account/revision.
+User reads its own consistent target binding and distinct nondeleted-profile
+account candidates, then requests complete positive Auth classifications in
+batches of at most 1000. Guests/frozen profiles remain candidates; no User
+lookup treats a missing Auth response as live. No account/viewer list leaves
+User in the response.
+
+`POTENTIAL_PUBLIC_PROFILE_ACCOUNTS_V1` excludes the target's whole account,
+Auth-deleted/purged/missing accounts and accounts without a nondeleted User
+profile. Personal blocks, presence and suspensions do not reduce this potential
+metric or alter public profile privacy. User rechecks target binding/revision
+after classification. The response contains exact profile/account/revision,
+state, metric/count, bounded observation times/expiry and opaque snapshot ID.
+It is invalid after 30 seconds from its first observation. Moderation performs
+its own separately authorized subject/lifecycle lookup before action.
+
+Unknown, partial, inconsistent, stale or incomplete scans are unavailable,
+never zero or a last-good/environment fallback. Authoritative zero is explicitly
+manual-only. See the [accepted plan](../testing/report-threshold-exec-plan.md)
+for the complete activation and verification contract; runtime is not yet claimed.
+
 | Канал | RPC | Когда |
 |-------|-----|--------|
 | **User Service** | `SearchProfiles` | [friends.md](../features/friends.md): подбор по нику/отображаемому имени из канонических данных профиля; учёт приватности и блокировок (совместно с Social при необходимости). |
@@ -471,3 +496,20 @@ Auth publish access to the exact `user.account_deleted` subject and User only
 subscribe/consumer access; the staging and production User migration job has
 applied `000017_account_lifecycle_search_tombstone`; then deploy a canary before
 enabling the consumer. No Compose manifest enables this consumer in PR A.
+
+
+### Protected global report target decision (BE-137)
+
+`ResolveReportTarget` is an additive private RPC on the existing service.
+It accepts `report_id` plus the owner's typed target ID, and returns only
+`common.ReportTargetState` (LIVE/MISSING/DELETED), with no public REST mapping.
+Issuer `moderation`, subject `service:moderation`, exact audience `user`,
+method, deterministic request hash and fresh request ID are mandatory. The
+dedicated mTLS/JWKS/shared-replay listener and domain recheck both enforce this
+authority; ordinary listeners deny it. No reporter identity is forwarded.
+
+User reads the profile row and durable `ACCOUNT_INACTIVE` overlay, then checks its existing synchronous Auth deletion authority before certifying LIVE. An unavailable Auth authority remains unavailable; freezing/suspension alone is not deletion. Only LIVE returns the authoritative account ID.
+
+Configuration and the finite protected transport/SQL/runtime proof route are in
+[report intake contract](../testing/report-intake-contract.md). This decision is
+an admission snapshot; it grants no later content/action permission.

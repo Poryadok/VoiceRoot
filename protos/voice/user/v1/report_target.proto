@@ -1,0 +1,16 @@
+syntax = "proto3";
+package voice.user.v1;
+
+import "voice/common/v1/report_target.proto";
+
+option go_package = "voice.app/voice/user/v1;userv1";
+option java_multiple_files = true;
+option java_package = "app.voice.user.v1";
+message ResolveReportTargetRequest {
+  string report_id = 1;
+  string profile_id = 2;
+}
+message ResolveReportTargetResponse {
+  voice.common.v1.ReportTargetState state = 1;
+  string account_id = 2; // User LIVE only; authoritative internal mapping.
+}

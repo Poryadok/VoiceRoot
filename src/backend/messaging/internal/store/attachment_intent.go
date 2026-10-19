@@ -200,12 +200,17 @@ func (s *MessagesStore) InsertMessageWithReferencesAndOutbox(ctx context.Context
 	if err := insertForwardCommentaryDB(ctx, commit, row); err != nil {
 		return nil, err
 	}
-	saved, err := insertMessageDB(ctx, commit, row)
+	saved, inserted, err := insertMessageDBResult(ctx, commit, row)
 	if err != nil {
 		return nil, err
 	}
 	if saved.ID != savedID {
 		return nil, ErrAttachmentIntentConflict
+	}
+	if inserted {
+		if err := s.appendAutoModEvidenceTx(ctx, commit, row); err != nil {
+			return nil, err
+		}
 	}
 	for _, event := range events {
 		if !compoundEventMatches(row, event) {

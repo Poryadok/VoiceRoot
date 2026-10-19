@@ -1303,7 +1303,7 @@ spec:
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: MODERATION_DATABASE_URL}}}
             - {name: MODERATION_GRPC_LISTEN, value: ":9090"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
-          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
           image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf", "-a", "127.0.0.1", "-m", "8222"]

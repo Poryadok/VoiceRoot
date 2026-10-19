@@ -7,11 +7,14 @@ import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
 import "voice/common/v1/space_lifecycle.proto";
 import "voice/file/v1/file.proto";
+import "voice/space/v1/report_target.proto";
 
 option go_package = "voice.app/voice/space/v1;spacev1";
 
 // Spaces, tree, invites. HTTP: /api/v1/spaces/**.
 service SpaceService {
+  // Protected service:moderation only; no viewer/content authority.
+  rpc ResolveReportTarget(ResolveReportTargetRequest) returns (ResolveReportTargetResponse);
   rpc CreateSpace(CreateSpaceRequest) returns (CreateSpaceResponse);
   rpc UpdateSpace(UpdateSpaceRequest) returns (UpdateSpaceResponse);
   // Space-level matchmaking settings (mm_config jsonb; roadmap П.1).

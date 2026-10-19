@@ -8,17 +8,23 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	automodv1 "voice/backend/pkg/pb/voice/automod/v1"
 	"voice/backend/pkg/principal"
 )
 
 func Method(target string) string {
 	switch target {
+	case "automod-evidence":
+		return automodv1.ModerationEvidenceService_ProvisionSubject_FullMethodName
+	case "moderation-report-threshold":
+		return "/voice.user.v1.UserService/ResolveReportThresholdContext"
 	case "auth-admission":
 		return "/voice.user.v1.UserService/GetSpaceAdmissionProfileEligibility"
 	case "user":
@@ -48,7 +54,13 @@ func Method(target string) string {
 // whole service merely because it has a verified Social principal.
 func AllowsMethod(target, method string) bool {
 	switch target {
-	case "auth-admission":
+	case "automod-evidence":
+		return method == automodv1.ModerationEvidenceService_ProvisionSubject_FullMethodName ||
+			method == automodv1.ModerationEvidenceService_IngestCommittedMessageEvidence_FullMethodName ||
+			method == automodv1.ModerationEvidenceService_GetAccountSendRestriction_FullMethodName ||
+			method == automodv1.ModerationEvidenceService_GetEffectiveRestrictionSnapshot_FullMethodName ||
+			method == automodv1.AccountLifecycleReceiverService_ApplyLifecycleFact_FullMethodName
+	case "moderation-report-threshold", "auth-admission":
 		return method == Method(target)
 	case "space-voice-communication", "space-messaging-communication":
 		return method == Method(target)
@@ -211,7 +223,9 @@ func StrictUnaryInterceptor(verifier PrincipalVerifier) grpc.UnaryServerIntercep
 			}
 			return nil, status.Error(codes.Unauthenticated, "invalid principal")
 		}
-		if !AllowsMethod(typedCapability(verifier, verified.Audience), info.FullMethod) || verified.Kind != "service" || verified.Issuer != expectedIssuer(typedCapability(verifier, verified.Audience)) || verified.Subject != "service:"+expectedIssuer(typedCapability(verifier, verified.Audience)) {
+		capability := typedCapability(verifier, verified.Audience)
+		caller := expectedCaller(capability, info.FullMethod)
+		if !AllowsMethod(capability, info.FullMethod) || verified.Kind != "service" || verified.Issuer != caller || verified.Subject != "service:"+caller {
 			return nil, status.Error(codes.PermissionDenied, "Social principal required")
 		}
 		return handler(principal.WithVerified(ctx, verified), req)
@@ -268,6 +282,21 @@ func RequireMessagingPresence(ctx context.Context, method string, req proto.Mess
 	return nil
 }
 
+// RequireAutoModEvidence repeats the private caller/method/body binding at the
+// domain boundary before any inbox, lifecycle or sanction state is accessed.
+func RequireAutoModEvidence(ctx context.Context, method string, req proto.Message) error {
+	verified, ok := principal.FromContext(ctx)
+	if !ok {
+		return status.Error(codes.Unauthenticated, "verified automod authority required")
+	}
+	caller := expectedCaller("automod-evidence", method)
+	hash, err := principal.RequestHash(req)
+	if err != nil || !AllowsMethod("automod-evidence", method) || verified.Kind != "service" || verified.Issuer != caller || verified.Subject != "service:"+caller || verified.Audience != "moderation" || verified.RPC != method || verified.RequestHash != hash || verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 || !verified.ExpiresAt.After(time.Now()) || ctx.Err() != nil {
+		return status.Error(codes.Unauthenticated, "invalid automod authority binding")
+	}
+	return nil
+}
+
 // RequireSocial is the domain defense for a protected listener. Its context
 // value is server-owned and its request binding is checked again before storage.
 func RequireSocial(ctx context.Context, target string, req proto.Message) error {
@@ -293,6 +322,12 @@ func RequireSocialForMethod(ctx context.Context, target, method string, req prot
 }
 
 func expectedIssuer(target string) string {
+	if target == "automod-evidence" {
+		return "messaging"
+	}
+	if target == "moderation-report-threshold" {
+		return "moderation"
+	}
 	if target == "auth-admission" {
 		return "auth"
 	}
@@ -320,10 +355,23 @@ func expectedIssuer(target string) string {
 	return "social"
 }
 
+func expectedCaller(capability, method string) string {
+	if capability == "automod-evidence" && (method == automodv1.ModerationEvidenceService_GetEffectiveRestrictionSnapshot_FullMethodName || method == automodv1.AccountLifecycleReceiverService_ApplyLifecycleFact_FullMethodName) {
+		return "auth"
+	}
+	return expectedIssuer(capability)
+}
+func requiredIssuers(capability string) []string {
+	if capability == "automod-evidence" {
+		return []string{"messaging", "auth"}
+	}
+	return []string{expectedIssuer(capability)}
+}
+
 // RequiresMutualTLS preserves legacy listener settings while requiring both
 // transport identities for newly migrated protected authority capabilities.
 func RequiresMutualTLS(capability string) bool {
-	return capability == "auth-admission" || capability == "messaging" || capability == "space-voice-communication" || capability == "space-messaging-communication"
+	return capability == "auth-admission" || capability == "messaging" || capability == "space-voice-communication" || capability == "space-messaging-communication" || capability == "automod-evidence" || capability == "moderation-report-threshold"
 }
 
 // CheckDomain preserves separately migrated ordinary callers while enforcing

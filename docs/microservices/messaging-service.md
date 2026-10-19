@@ -1,5 +1,52 @@
 # Messaging Service
 
+## Private committed-message spam evidence (BE-045)
+
+Every enabled successful insertion, including forward commentary, attachments,
+ghost-only messages and Bot/game output, allocates one account sequence and
+private immutable account-only v2 core in the message transaction. Exact idempotency
+replay allocates none and returns the saved owner/result before fresh authority
+lookups. Chat/Space locks precede the account counter lock. Source time is
+monotonic database time at that lock, never a client timestamp.
+
+Ordinary ingress requires a verified Gateway delegated-user identity; Bot ingress
+requires its verified actor plus protected Bot-owned moderation-owner resolution.
+Fresh Auth subject/lifecycle and Moderation existing-state admission deny new
+muted/banned/deleted-owner sends before commit. Failed admissions create no count.
+The private dispatcher calls `voice.automod.v1.ModerationEvidenceService` with
+fresh request-bound credentials and mTLS. Public `message.sent`, logs and analytics
+gain no account/digest/plaintext fields. Moderation gains no arbitrary GetMessage.
+The core/hash contains no message/chat/profile/Bot/installation/client-operation
+identifiers or full-envelope commitment. Full owner/actor/operation binding is
+still mandatory before insertion; only producer kind/numeric ownership revision
+may accompany the captured account subject in the core.
+
+The separate local message/chat coverage bridge is erased for the exact Space
+manifest during FROZEN acknowledgement and checked absent at local purge,
+including links whose primary/companion rows are already gone. Ordinary physical
+deletion and managed-chat purge remove scoped bridge links without deleting the
+core or advancing its sequence. Product restore never reconstructs old links;
+private dispatch never reads them. Mod outage/ACK cannot extend linkage retention.
+See the explicit [c17 classification and race/restore contract](../testing/async-automod-space-erasure.md).
+
+Messaging alone owns versioned HMAC keys and the versioned length-framed
+ToLower/TrimSpace text projection (main text, then authored forward commentary).
+Count mixed http/https schemes together; empty text and authoritative E2E mode
+produce metadata-only eligibility. Rotation emits aliases once in one event.
+Expired evidence is erased using a separate immutable terminal-expiry receipt;
+local account purge does not wait for delivery. Startup/backup restore requires
+the complete protected Auth terminal-subject snapshot before serving/replay.
+See [the accepted contract and execution plan](../testing/async-automod-exec-plan.md).
+
+Account cleanup follows [c19 positive terminal authority and exact lifecycle
+cycles](../testing/async-automod-unknown-deadline.md), not a stale recipient timer.
+No ACK or outage extends the canonical physical deadline. Complete loss of all
+owner authority through an unknown deletion or winning restore is an explicit
+physical-deadline acceptance limitation; closing admission alone is not erasure.
+The [c20 review](../testing/async-automod-identity-bridge-feasibility.md) preserves
+the v2 PERSONAL classification: removing one association does not anonymize
+account-bearing immutable cores/receipts, joins or globally keyed aliases.
+
 ## Space communication timeout (BE-044-TIMEOUT-v1)
 
 Accepted target: apply the [Space-owned communication state](space-service.md#communication-timeout-authority-be-044-timeout-v1)
@@ -980,3 +1027,26 @@ The child uses the existing T33 `PurgeManagedChatContent` protocol:
 its service-principal request binding. The P3 adapter verifies that digest;
 it does not replace the saved child evidence with the parent's message-name
 domain. The Space participant request/receipt remains domain-separated P3.
+
+Producer/outbox startup follows the [automod restore barriers](../testing/async-automod-startup-restore.md).
+Local issuer publication is independent of send readiness. Before new sends or
+pending effect delivery, import complete authoritative terminal fences and verify
+source epoch/cursor against Moderation's bound provisioning ACK. A remote cursor
+ahead of local committed state closes admission for recovery; no baseline/epoch
+reset or HMAC key retirement can bypass it. Existing exact committed replay may
+return its saved result during bootstrap without creating new evidence.
+### Protected global report target decision (BE-137)
+
+`ResolveReportTarget` is an additive private RPC on the existing service.
+It accepts `report_id` plus the owner's typed target ID, and returns only
+`common.ReportTargetState` (LIVE/MISSING/DELETED), with no public REST mapping.
+Issuer `moderation`, subject `service:moderation`, exact audience `messaging`,
+method, deterministic request hash and fresh request ID are mandatory. The
+dedicated mTLS/JWKS/shared-replay listener and domain recheck both enforce this
+authority; ordinary listeners deny it. No reporter identity is forwarded.
+
+Messaging checks owner message existence and `deleted_at`. Privacy, membership, blocks, ghost visibility and FOR_ME hiding do not narrow global ID-only intake. It returns no chat/account/content fields.
+
+Configuration and the finite protected transport/SQL/runtime proof route are in
+[report intake contract](../testing/report-intake-contract.md). This decision is
+an admission snapshot; it grants no later content/action permission.

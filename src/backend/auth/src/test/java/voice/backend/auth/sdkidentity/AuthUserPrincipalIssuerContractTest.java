@@ -42,6 +42,25 @@ class AuthUserPrincipalIssuerContractTest {
 
   @TempDir Path keys;
 
+  @Test void moderationSnapshotUsesTheSameKeysetAndOnlyItsFixedPurpose() throws Exception {
+    RSAKey current=key("current");write(current);write(key("next"));
+    AuthUserPrincipalIssuer issuer=(AuthUserPrincipalIssuer)load("current");
+    SignedJWT token=SignedJWT.parse(issuer.issueModerationSnapshot(REQUEST_ID,REQUEST_HASH));
+    assertThat(token.verify(new RSASSAVerifier(current.toPublicJWK()))).isTrue();
+    var claims=token.getJWTClaimsSet();
+    assertThat(claims.getAudience()).containsExactly("moderation");
+    assertThat(claims.getIssuer()).isEqualTo("auth");
+    assertThat(claims.getSubject()).isEqualTo("service:auth");
+    assertThat(claims.getClaim("rpc")).isEqualTo("/voice.automod.v1.ModerationEvidenceService/GetEffectiveRestrictionSnapshot");
+    assertThat(claims.getClaim("request_id")).isEqualTo(REQUEST_ID);
+    assertThat(claims.getClaim("request_hash")).isEqualTo(REQUEST_HASH);
+    assertThat(claims.getExpirationTime().toInstant()).isEqualTo(NOW.plusSeconds(30));
+    assertThat(claims.getClaims()).doesNotContainKeys("account_id","profile_id","session_epoch");
+    assertThatThrownBy(()->issuer.issue("/voice.automod.v1.ModerationEvidenceService/GetEffectiveRestrictionSnapshot",REQUEST_ID,REQUEST_HASH)).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(()->issuer.issueModerationSnapshot("request-1",REQUEST_HASH)).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(()->issuer.issueModerationSnapshot(REQUEST_ID,"sha256:bad")).isInstanceOf(IllegalArgumentException.class);
+  }
+
   @Test
   void signsOnlyTheRequestBoundAuthServicePrincipalWithThirtySecondMaximumLifetime() throws Exception {
     RSAKey current = key("current");

@@ -15,6 +15,45 @@ import 'dart:core' as $core;
 import 'package:protobuf/protobuf.dart' as $pb;
 
 /// Canonical values for presence status strings (UpdatePresenceRequest, PresenceStatus).
+class ReportThresholdContextState extends $pb.ProtobufEnum {
+  static const ReportThresholdContextState
+      REPORT_THRESHOLD_CONTEXT_STATE_UNSPECIFIED =
+      ReportThresholdContextState._(0,
+          _omitEnumNames ? '' : 'REPORT_THRESHOLD_CONTEXT_STATE_UNSPECIFIED');
+  static const ReportThresholdContextState REPORT_THRESHOLD_CONTEXT_STATE_LIVE =
+      ReportThresholdContextState._(
+          1, _omitEnumNames ? '' : 'REPORT_THRESHOLD_CONTEXT_STATE_LIVE');
+  static const ReportThresholdContextState
+      REPORT_THRESHOLD_CONTEXT_STATE_MISSING = ReportThresholdContextState._(
+          2, _omitEnumNames ? '' : 'REPORT_THRESHOLD_CONTEXT_STATE_MISSING');
+  static const ReportThresholdContextState
+      REPORT_THRESHOLD_CONTEXT_STATE_DELETED = ReportThresholdContextState._(
+          3, _omitEnumNames ? '' : 'REPORT_THRESHOLD_CONTEXT_STATE_DELETED');
+  static const ReportThresholdContextState
+      REPORT_THRESHOLD_CONTEXT_STATE_EMPTY_AUDIENCE =
+      ReportThresholdContextState._(
+          4,
+          _omitEnumNames
+              ? ''
+              : 'REPORT_THRESHOLD_CONTEXT_STATE_EMPTY_AUDIENCE');
+
+  static const $core.List<ReportThresholdContextState> values =
+      <ReportThresholdContextState>[
+    REPORT_THRESHOLD_CONTEXT_STATE_UNSPECIFIED,
+    REPORT_THRESHOLD_CONTEXT_STATE_LIVE,
+    REPORT_THRESHOLD_CONTEXT_STATE_MISSING,
+    REPORT_THRESHOLD_CONTEXT_STATE_DELETED,
+    REPORT_THRESHOLD_CONTEXT_STATE_EMPTY_AUDIENCE,
+  ];
+
+  static final $core.List<ReportThresholdContextState?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 4);
+  static ReportThresholdContextState? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const ReportThresholdContextState._(super.value, super.name);
+}
+
 class PresenceOnlineStatus extends $pb.ProtobufEnum {
   static const PresenceOnlineStatus PRESENCE_ONLINE_STATUS_UNSPECIFIED =
       PresenceOnlineStatus._(

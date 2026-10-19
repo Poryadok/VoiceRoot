@@ -14,6 +14,36 @@ import 'dart:core' as $core;
 
 import 'package:protobuf/protobuf.dart' as $pb;
 
+class ReportAudienceAccountState extends $pb.ProtobufEnum {
+  static const ReportAudienceAccountState
+      REPORT_AUDIENCE_ACCOUNT_STATE_UNSPECIFIED = ReportAudienceAccountState._(
+          0, _omitEnumNames ? '' : 'REPORT_AUDIENCE_ACCOUNT_STATE_UNSPECIFIED');
+  static const ReportAudienceAccountState REPORT_AUDIENCE_ACCOUNT_STATE_LIVE =
+      ReportAudienceAccountState._(
+          1, _omitEnumNames ? '' : 'REPORT_AUDIENCE_ACCOUNT_STATE_LIVE');
+  static const ReportAudienceAccountState
+      REPORT_AUDIENCE_ACCOUNT_STATE_DELETED = ReportAudienceAccountState._(
+          2, _omitEnumNames ? '' : 'REPORT_AUDIENCE_ACCOUNT_STATE_DELETED');
+  static const ReportAudienceAccountState
+      REPORT_AUDIENCE_ACCOUNT_STATE_MISSING = ReportAudienceAccountState._(
+          3, _omitEnumNames ? '' : 'REPORT_AUDIENCE_ACCOUNT_STATE_MISSING');
+
+  static const $core.List<ReportAudienceAccountState> values =
+      <ReportAudienceAccountState>[
+    REPORT_AUDIENCE_ACCOUNT_STATE_UNSPECIFIED,
+    REPORT_AUDIENCE_ACCOUNT_STATE_LIVE,
+    REPORT_AUDIENCE_ACCOUNT_STATE_DELETED,
+    REPORT_AUDIENCE_ACCOUNT_STATE_MISSING,
+  ];
+
+  static final $core.List<ReportAudienceAccountState?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 3);
+  static ReportAudienceAccountState? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const ReportAudienceAccountState._(super.value, super.name);
+}
+
 /// Canonical values for VerifyOTPRequest.otp_type (string).
 class OtpType extends $pb.ProtobufEnum {
   static const OtpType OTP_TYPE_UNSPECIFIED =

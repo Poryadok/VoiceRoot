@@ -2,16 +2,42 @@
 
 ## Обзор
 
+The [BE-045 c17 account-core classification](../testing/async-automod-space-erasure.md)
+keeps bounded account-purpose PERSONAL samples/strikes eligible after the origin
+Space is deleted. The private v2 core and its equality hash contain no origin
+message/chat/profile/Bot/installation/operation identifiers. Space deletion does
+not reset a pattern, create early expiry, remove ordered positions or confer
+spam immunity; delayed still-admissible cores may sanction the captured account.
+Account terminal purge dominates. This never retains Space-target reports or
+their attached evidence, exposes digest data as appeal content, or adds a P3
+coordinator participant. Unsupported identity-bearing v1 data keeps gates closed.
+
+The [c19 lifecycle correction](../testing/async-automod-unknown-deadline.md)
+requires positive Auth-owned terminal authority before permanent account purge.
+An old DELETED deadline cannot defeat an unseen winning restore. Unknown/due
+authority closes affected operations; it never grants a retention extension,
+resets a live detector or proves physical erasure. Under a total partition that
+hides deletion/restore through the deadline, the physical outcome remains an
+explicit acceptance limitation. The [c20 review](../testing/async-automod-identity-bridge-feasibility.md)
+confirms that deleting one identity bridge cannot anonymize the current v2
+cores, inbox, sanction/event joins and content aliases. No such reset is selected.
+
 Система модерации: жалобы, автоматическая модерация, санкции, апелляции.
 
 **Язык**: Go
 **БД**: PostgreSQL `moderation_db`
 
+BE-137 global intake follows the accepted [opaque report contract](../testing/report-intake-contract.md):
+Gateway-derived verified reporter, durable receipt-only `202`, asynchronous
+owner decisions, validation-gated staff/count/actions and transactional outbox.
+The implementation must carry new intake state and historical publication
+provenance together; owner absence is not a public rejection or report oracle.
+
 ## Ответственность
 
 - Жалобы на пользователей, сообщения, пространства
 - Категории: spam, harassment, offensive, fake, cheating, other
-- Авто-блокировка: 1% или 10+ жалоб за 24 часа → shadow ban
+- Авто-блокировка: `max(10, ceil(N/100))` distinct qualifying reporter accounts за 24 часа → shadow ban; accepted authority contract below
 - Pattern spam detection → auto-mute
 - Shadow ban (пользователь не знает о бане)
 - Очередь ручной модерации
@@ -78,8 +104,15 @@ service ModerationService {
 reports
 ├── id (UUID)
 ├── reporter_profile_id
+├── reporter_account_id (nullable; verified submission identity, NULL for legacy)
 ├── target_type (user | message | space | story)
-├── target_id (UUID)
+├── target_id (UUID; NULL only for minimized MISSING/DELETED User intake)
+├── validated_target_account_id (nullable; User LIVE mapping only)
+├── validation_state (PENDING | VALID | MISSING | DELETED)
+├── validation_publication_legacy (boolean; historical events must not replay)
+├── validation_attempts / validation_next_at
+├── validation_claim / validation_claim_until (durable validation lease)
+├── validation_failure_code (sanitized dependency/disposition code)
 ├── category (spam | harassment | offensive | fake | cheating | other)
 ├── description (text, nullable)
 ├── evidence (jsonb — screenshots, message_ids)
@@ -180,15 +213,30 @@ for operational continuity and roll back the binary before any schema removal.
 ```
 message.sent event ──► CheckMessage():
   1. Spam pattern detection (repeated messages, link flooding)
-  2. Если trigger → auto-mute (5 мин первый раз, экспоненциально)
+  2. Если trigger → account mute на 1 час; второй независимый hit того же паттерна за 30 дней → perm_ban
 
 report.created event ──► Check thresholds:
   1. Count reports on target in 24h
-  2. Если ≥10 или ≥1% от активных пользователей → shadow_ban
+  2. Если count ≥ max(10, ceil(authoritative target audience / 100)) → shadow_ban
   3. Добавить в очередь ручной модерации
 ```
 
 ## Публикуемые события (→ NATS)
+
+The accepted BE-046 target is the
+[authoritative report-threshold vertical](../testing/report-threshold-exec-plan.md).
+Only exact user-profile cases are automatic; no profile-as-account UUID
+fallback or environment denominator is authority. Count distinct verified
+submission accounts from VALID unresolved reports with compatible target
+binding and original server time. User supplies a complete fresh potential
+public-profile account denominator; Moderation separately resolves the BE-045
+subject/lifecycle, then rechecks under the common account lock. Unknown authority
+preserves accepted/manual reports and persistent retry, without a sanction.
+
+One logical active account case, machine-issued shadow sanction, log, evidence
+associations and immutable event outbox commit atomically. Review closure writes
+an account cutoff against immediate replay; shadow ban does not mutate Auth
+account status. This is an accepted target, not an assertion of shipped runtime.
 
 Доменный поток JetStream: **`moderation.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
 
@@ -210,6 +258,28 @@ report.created event ──► Check thresholds:
 - **Notification Service** — (через NATS) уведомление о санкции
 - **Federation Service** — (через NATS) дефедерация при нарушениях
 
+### Private committed-message moderation contract (BE-045)
+
+`voice.automod.v1.ModerationEvidenceService` has protected unary methods
+`ProvisionSubject`, `IngestCommittedMessageEvidence`, `GetAccountSendRestriction`
+and `GetEffectiveRestrictionSnapshot`. Only `service:messaging` may provision,
+ingest or read send restrictions; only `service:auth` may read the effective-ban
+snapshot. Fresh Phase-0 credentials bind exact RPC/request bytes/request ID,
+audience `moderation`, short expiry and replay state; mTLS protects the listener.
+Legacy listeners/headers do not grant access. Evidence carries immutable subject,
+account/source epoch/sequence/source time, event/message/chat/profile identities,
+eligibility and keyed aliases/link count; no raw text or URLs.
+
+Provisioning establishes a verified Auth subject and zero-sequence baseline.
+Ingestion cannot infer a baseline from its first event. One account advisory
+transaction serializes ordered inbox/cursor, samples, consumed-through sequence,
+strikes, effective mute/post-mute state, machine `perm_ban`, log, immutable domain
+event and Auth restriction intent. Duplicate delivery never extends a mute.
+Machine issuer is `service:moderation/automod`, with no fabricated human profile.
+Manual sanctions, revocation, appeals and expiry use this same restriction journal.
+`CheckMessage` becomes read-only existing-state admission, never pattern counting.
+See [the complete contract, retention rules and T1-T12](../testing/async-automod-exec-plan.md).
+
 ## P3 Space deletion classification (accepted target)
 
 Moderation is not a purge-completion participant. At Space purge, `pending` and
@@ -227,3 +297,68 @@ product/Moderation decision declares that snapshot sufficient for every active
 appeal; no hidden `RETAIN_UNTIL_POLICY` exception or staff evidence archive is
 created in P3.
 
+Startup/restore uses the [P0-P5 barriers](../testing/async-automod-startup-restore.md):
+local issuer/private listeners start before public readiness; a complete sealed
+Auth terminal snapshot is imported as a monotonic union and every terminal purge
+participant finishes before restored evidence, restriction or domain-event
+dispatch. Only private restriction repair runs in the intermediate phase. Normal
+consumer/manual/appeal/expiry/publication paths open after this boot's finite
+reconciliation cut. An old in-flight reply is distinguished from actual local
+history loss by comparing CURRENT local revision; neither acknowledges the old
+request or justifies incrementing a restored stale snapshot.
+
+The one Moderation signer loads `MODERATION_PRINCIPAL_SIGNING_KEYS_DIR` and
+`MODERATION_PRINCIPAL_ACTIVE_KID`. All report/evidence/Auth clients receive that
+same issuer instance. Its certificate-only mTLS JWKS route is
+`https://voice-moderation-authority:8443/internal/principals/jwks`, with
+`MODERATION_PRINCIPAL_JWKS_LISTEN` defaulting to `:8443`. The shared publisher uses
+`MODERATION_PRINCIPAL_TLS_CERT_FILE`, `MODERATION_PRINCIPAL_TLS_KEY_FILE` and
+`MODERATION_PRINCIPAL_TLS_CLIENT_CA_FILE`; it starts independently of public
+readiness and serves only the current/next public keys. It never requires the
+JWT, session floor or reciprocal domain RPC which its keys bootstrap.
+
+The shared `automod.BootGate` starts closed for each fresh boot UUID. The owning
+bootstrap coordinator advances ordered `BootReceipt` records P0-P5 only after
+verifying the actual corresponding local/network/durable evidence; a receipt
+reference is not that verification. `AcquirePrivateRepair` opens after complete
+terminal import, while `AcquireEffects` opens only after finite reconciliation.
+Captured checks bind the boot/generation and are rechecked before domain commit
+or dispatch. Closing a gate permanently invalidates its old checks; recovery
+creates a new gate and repeats every phase. Report intake/validation/publication
+receive that same gate through `ReportPrivacyAcquire`, with nil closed. Gate
+unit/RPC tests do not prove sealed snapshots, readiness routing or recovery cuts.
+
+The same P0 private listener registers
+`AccountLifecycleReceiverService.ApplyLifecycleFact` for `service:auth` only,
+with exact recipient audience/method/body binding and mandatory mTLS. It is
+discoverable before public readiness but applies nothing before P2 and locally
+verified generation installation. A complete opaque fact can arrive before its
+raw binding; it then prevents a delayed lower-revision binding. A fresh higher
+binding may precede its push, but the receiver cannot acknowledge a fabricated
+newer canonical hash. LIVE restore preserves source epoch/cursor/detector state;
+due DELETED never means PURGED. Positive terminal application and every purge
+participant commit together before a receipt is returned. Duplicate terminal
+delivery repeats idempotent cleanup, including restored residual projections.
+The actual bootstrap coordinator and Auth current-owner ACK remain required;
+route/store tests do not establish full activation or physical P30D completion.
+
+
+### Legacy report privacy recovery
+
+Privacy ownership recovered after submission is manual-only provenance and grants
+no threshold vote, report activation or new sanction authority. Journal and report
+mutations are atomic; terminal receipts survive payload deletion. The separate
+protected User recovery RPC never widens the ordinary owner resolver. Follow the
+[accepted contract and finite matrix](../testing/report-privacy-recovery.md);
+actual shared P0-P5/main and declared-restore evidence remain activation gates.
+
+User MISSING/DELETED minimization uses a separate no-FK
+`report_target_rejections` receipt keyed by the existing report UUID, with typed
+decision/provenance and record version. It contains no target/account/subject or
+payload digest and cannot authorize identity-terminal cleanup. The dismissed row
+keeps reporter semantics while its target UUID, target ownership tuple and body
+are cleared. Protocol/schema 2 recovery artifacts cover this family together
+with the existing subject-privacy journal; a current rejection receipt can
+minimize the same restored intake, never reopen a VALID report or blacklist a
+target ID. The private repair/checker and retention rules are in the linked
+contract.

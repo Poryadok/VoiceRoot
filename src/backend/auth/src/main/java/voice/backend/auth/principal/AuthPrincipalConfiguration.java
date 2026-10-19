@@ -35,7 +35,8 @@ public class AuthPrincipalConfiguration {
     }
     String raw = environment.getProperty("S2S_JWKS_URLS_JSON");
     if (raw == null) {
-      for (String property : Set.of("S2S_JWKS_REFRESH_AFTER", "S2S_JWKS_HARD_EXPIRY", "S2S_UNKNOWN_KID_COOLDOWN")) {
+      for (String property : Set.of("S2S_JWKS_REFRESH_AFTER", "S2S_JWKS_HARD_EXPIRY", "S2S_UNKNOWN_KID_COOLDOWN",
+          "S2S_JWKS_CA_FILE", "S2S_JWKS_CLIENT_CERT_FILE", "S2S_JWKS_CLIENT_KEY_FILE")) {
         if (environment.containsProperty(property)) throw new IllegalArgumentException("incomplete principal configuration");
       }
       return new AuthPrincipalServerInterceptor(null);
@@ -46,8 +47,7 @@ public class AuthPrincipalConfiguration {
     Duration cooldown = duration(environment, "S2S_UNKNOWN_KID_COOLDOWN", Duration.ofSeconds(5));
     if (hard.compareTo(refresh) < 0 || epochs == null) throw new IllegalArgumentException("invalid principal dependencies/cache policy");
     Clock clock = Clock.systemUTC();
-    HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2))
-        .followRedirects(HttpClient.Redirect.NEVER).build();
+    HttpClient client = httpClient(environment, endpoints.containsKey("messaging") || endpoints.containsKey("moderation"));
     var resolver = new AuthPrincipalJwksResolver(issuer -> fetch(client, endpoints.get(issuer)),
         clock, refresh, hard, cooldown);
     AuthPrincipalVerifier.ReplayGuard replay;
@@ -73,6 +73,23 @@ public class AuthPrincipalConfiguration {
     return new AuthPrincipalServerInterceptor(
         new AuthPrincipalVerifier(resolver::resolve, epochs::requireFloor, replay, clock),
         () -> { closeReplay.run(); client.shutdownNow(); });
+  }
+
+  static HttpClient httpClient(Environment environment) {
+    return httpClient(environment,false);
+  }
+
+  private static HttpClient httpClient(Environment environment,boolean required) {
+    var builder=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2))
+        .followRedirects(HttpClient.Redirect.NEVER);
+    var context=AuthPrincipalJwksTls.load(environment,required);
+    if(context!=null) {
+      var policy=context.getDefaultSSLParameters();
+      policy.setEndpointIdentificationAlgorithm("HTTPS");
+      policy.setProtocols(new String[]{"TLSv1.3","TLSv1.2"});
+      builder.sslContext(context).sslParameters(policy);
+    }
+    return builder.build();
   }
 
   private static Map<String, URI> endpoints(String raw) {

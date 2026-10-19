@@ -1,5 +1,96 @@
 # Auth Service
 
+## Moderation subject and restriction authority (BE-045)
+
+Private `voice.automod.v1.AuthModerationAuthorityService` owns
+`ResolveModerationSubject`, `ListTerminalModerationSubjects`,
+`ListModerationAccountCensus` and `ReconcileModerationRestriction`.
+Messaging and Moderation alone may resolve a
+subject or obtain the complete opaque terminal snapshot. Only Moderation may
+enumerate the finite account census or reconcile a restriction. All methods require mTLS and fresh Phase-0 service
+credentials bound to audience `auth`, exact RPC/request bytes/request ID, expiry
+and replay. They are absent from the legacy Auth listener.
+
+Auth assigns one random immutable private moderation subject per account lifetime.
+Resolution returns the exact account/subject binding, positive lifecycle revision,
+deletion cycle/deadline and terminal state. At purge the mapping is erased; the
+opaque terminal subject remains permanent. Reconciliation carries exact subject,
+account, positive moderation revision and `moderation_banned`. Lower revision is
+a no-op, equal revision/equal bytes an idempotent receipt, equal revision/different
+bytes a conflict. Deleted/purged state and Auth-owned restrictions dominate clears.
+Restore preserves effective moderation restrictions. Unknown preexisting suspended
+state becomes an independent legacy restriction until authorized reconciliation;
+an empty new projection must never reactivate it.
+
+All Moderation manual/automatic writers join this fenced path before activation.
+The legacy raw-header `SetAccountStatus` route cannot remain an alternate writer.
+See [the complete privacy/migration/restore contract](../testing/async-automod-exec-plan.md).
+
+Terminal snapshots first settle due work under current account-row locks and
+fresh DB time, serialized with restore, then seal only the durable terminal
+ledger (protocol2). A stale DELETED observation is not a permanent fence.
+The separate bounded census is nonterminal authority and needs fresh checks
+before use; neither seal proves restore currentness.
+The [c19 lifecycle and partition boundary](../testing/async-automod-unknown-deadline.md)
+requires transactional lifecycle delivery and positive winning terminal facts.
+Those producer/catch-up and recipient integrations remain implementation work.
+Canonical physical deadlines do not move, but a complete partition hiding both
+delete and restore authority cannot certify their physical deadline outcome.
+The [c20 feasibility review](../testing/async-automod-identity-bridge-feasibility.md)
+does not select a new capsule/key design or classify retained v2 data anonymous.
+
+The c19 lifecycle producer uses a compact Auth-owned current projection keyed
+only by opaque moderation subject, with random event UUID, authority generation,
+positive lifecycle revision, LIVE/DELETED state and exact owner deletion cycle/
+deadline. An account-row AFTER trigger captures every committed lifecycle change,
+including direct owner SQL, in the same transaction. Two durable recipient intents
+cover Messaging and Moderation; replacement by a newer full projection is atomic.
+Exact event/revision acknowledgement clears only the matching intent. The current
+projection remains available for a finite catch-up even after delivery succeeds.
+No account/profile ID or raw public deletion event is used as lifecycle evidence.
+
+Durable terminal insertion separately creates private recipient intents and
+removes the superseded nonterminal projection. Physical account removal and
+subject mapping erasure cannot discard those terminal intents. Delivery/ACK never
+delays Auth's canonical deadline. The terminal ledger remains the permanent
+opaque authority; pending delivery is not a physical-cleanup receipt. The new
+producer schema is reserved as Flyway V30 / canonical auth_db version31; transport,
+exact recipient application and activation require the remaining vertical work.
+
+The selected private delivery seam is
+`voice.automod.v1.AccountLifecycleReceiverService/ApplyLifecycleFact`, registered
+on each recipient's protected listener and callable only by `service:auth`.
+Audience remains the exact recipient (`messaging` or `moderation`). The protocol1
+fact carries generation/event/subject UUIDs, LIVE/DELETED owner revision and exact
+cycle/deadline, or a positive PURGED fact from the durable owner ledger. PURGED
+does not invent a lifecycle revision/cycle after raw mapping removal. No account
+ID, content, public event envelope or origin-derived hash appears in the fact.
+
+The typed receipt binds the requested event, subject and generation. For a
+nonterminal current projection it includes its revision and canonical fact hash;
+a terminal receipt asserts the recipient's permanent positive fence. Auth
+compares the response to its current owner projection/ledger before removing a
+matching intent. An intervening newer owner event remains queued; a recipient
+ahead of the current owner requires restore-divergence handling. A terminal
+receipt cannot establish Auth terminality when its own positive ledger is absent.
+Neither an elapsed DELETED timer nor an RPC error is a terminal receipt. Peer
+calls run outside owner account transactions. This wire seam is an implementation
+target; SQL producer proof alone does not claim its delivery or activation.
+
+Canonical lifecycle fact hashing uses UTF-8 `voice.automod.lifecycle.v1` plus
+NUL followed by deterministic protobuf fact bytes. Unknown/nested fields and
+duplicate/noncanonical encoded representations are rejected; fact size is at
+most 1,024 bytes. A due DELETED tuple remains representable as nonterminal.
+LIVE requires a positive signed-range revision and absent cycle/deadline;
+DELETED requires the exact UUID cycle and DB-microsecond timestamp; PURGED has
+zero revision and absent erased cycle/deadline. The independently hand-framed
+120-byte LIVE vector has generation `00000000-0000-4000-8000-000000000001`,
+event `00000000-0000-4000-8000-000000000002`, subject
+`80000000-0000-4000-8000-000000000003`, revision7 and SHA-256
+`53043311ff246eba73d39ef71db56fba6a1d299e7fae115fb9ccfcec8190655a`.
+Receipt validation is structural only: a higher revision/hash or positive fence
+must reach the sender's CURRENT owner projection/ledger comparison, not directly
+clear a delivery intent. Equal revision with changed hash is rejected.
 ## Space admission owner observation (SPACE-ADMISSION-IDENTITY-v1)
 
 `ObserveSpaceAdmissionSubject` is an additive read-only RPC on the existing
@@ -807,6 +898,30 @@ their own evidence.
 
 ## Зависимости
 
+### Accepted BE-046 report-audience classification
+
+`AuthService.ClassifyReportAudienceAccounts` is a dedicated protected
+`service:user` method, not an ordinary Auth/Gateway surface or an extension of
+the negative-only `FilterDeletedAccountIDs` trust path. It binds an evaluation
+UUID and at most 1000 unique canonical nonnil account UUIDs to the exact
+Phase-0 RPC/body/request ID. mTLS, HTTPS JWKS and shared replay protection apply;
+raw metadata, delegated users and other service issuers are rejected before
+store access.
+
+Auth returns exactly one LIVE/DELETED/MISSING disposition for every requested
+ID plus bounded observation metadata and opaque snapshot ID. LIVE means an
+existing nondeleted account for this potential-audience metric; suspension,
+guest state and presence do not remove it. No omitted ID is implicitly live,
+no subject IDs/content are returned, and inconsistent store state fails closed.
+User must classify every candidate batch within the complete 30-second
+observation window or report unavailable. Auth remains the sole account owner;
+User never reads `auth_db`.
+
+This surface does not change moderation subjects, restrictions or Auth status.
+The [BE-046 plan](../testing/report-threshold-exec-plan.md) preserves BE-045's
+separate subject/lifecycle authority and all ordinary authentication behavior.
+The contract is accepted; producer/runtime activation and proof remain open.
+
 ### Linked provider verification
 
 `linked_identities` хранит единственную account/provider identity вместе с owning
@@ -964,3 +1079,20 @@ verified `service:space` principal. Issue resolves its actor only from the
 request. Deployments must provide the dedicated `ReceiptErasureKeyring` before
 account erasure can pseudonymize or recover receipts; an absent or missing
 retained key fails closed.
+
+Startup and declared restore follow [P0-P5](../testing/async-automod-startup-restore.md):
+serve local mTLS JWKS/private authority independently of public readiness, prove
+local terminal authority, then reconcile a finite existing-subject cut before
+opening session issuance/refresh. Each later session admission refreshes protected
+Moderation restriction state and rechecks local lifecycle/revision before commit.
+Private reciprocal calls run outside account DB locks. A restored old database
+requires independently recovered erasure/history material; `complete=true` alone
+cannot certify it. Exact projection acknowledgements bind request IDs, revision
+and desired state/hash; a remote-ahead hint is compared to current local authority.
+
+The principal JWKS HTTP client uses `S2S_JWKS_CA_FILE` and the paired workload
+`S2S_JWKS_CLIENT_CERT_FILE` / `S2S_JWKS_CLIENT_KEY_FILE` (PEM certificate chain
+and unencrypted PKCS#8 private key). Any partial bundle fails startup. Configuring
+Messaging or Moderation principal issuers requires this complete bundle. The
+client retains HTTPS hostname verification, bounded time/body and no redirects;
+certificate-only issuer bootstrap sends no JWT and makes no account/peer RPC.

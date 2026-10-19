@@ -110,7 +110,7 @@ SET status = $2,
     resolution = COALESCE($4::jsonb, resolution),
     resolved_at = CASE WHEN $5 THEN now() ELSE resolved_at END,
     updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND validation_state = 'VALID'
 RETURNING id, reporter_profile_id, target_type, target_id, category, description,
           evidence::text, status, assigned_to, resolved_at, resolution::text, created_at`,
 		reportID, status, assignedAny, resolutionAny, setResolved,
@@ -246,7 +246,7 @@ func (s *ReportStore) ListReportsFilteredPage(ctx context.Context, statusFilter,
 SELECT id, reporter_profile_id, target_type, target_id, category, description,
        evidence::text, status, assigned_to, resolved_at, resolution::text, created_at
 FROM reports
-WHERE ($1 = '' OR status = $1)` + queueSQL + cursorSQL + `
+WHERE validation_state = 'VALID' AND ($1 = '' OR status = $1)` + queueSQL + cursorSQL + `
 ORDER BY ` + priorityExpr + `, created_at DESC, id DESC
 LIMIT $` + strconv.Itoa(argN)
 

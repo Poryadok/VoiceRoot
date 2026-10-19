@@ -272,6 +272,15 @@ Prepare/decision/Finalize-or-Abort path reaches one matching terminal outcome.
 
 ### P3 convergent lifecycle contract (accepted target)
 
+The private [BE-045 c17 account-core contract](../testing/async-automod-space-erasure.md)
+adds Messaging-local early minimization: FROZEN acknowledgement erases the exact
+manifest's automod message/chat coverage bridge, and local purge proves zero
+remaining links even when product rows are already absent. Product restore never
+rebuilds old bridge rows. Origin-free account-purpose PERSONAL cores/samples stay
+eligible within their existing c9 bounds; account terminal purge dominates.
+There is no new coordinator RPC/participant, Mod ACK dependency, extra tombstone,
+or retention of Space-target reports/attached evidence.
+
 Scheduling moves `LIVE -> SCHEDULE_PENDING -> FREEZE_PENDING -> SCHEDULED`.
 `scheduled_at` and `purge_after = scheduled_at + 7 days` are committed only
 after Role, Chat, Messaging, File, Voice, Matchmaking, Search, Subscription, Bot

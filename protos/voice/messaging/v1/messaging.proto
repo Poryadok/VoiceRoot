@@ -7,6 +7,7 @@ import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
 import "voice/common/v1/space_lifecycle.proto";
 import "voice/gameintegration/v1/game_event.proto";
+import "voice/messaging/v1/report_target.proto";
 
 option go_package = "voice.app/voice/messaging/v1;messagingv1";
 
@@ -31,6 +32,8 @@ enum DeleteScope {
 // Retry with the same key MUST NOT create a second row; response is gRPC OK with the same Message
 // body as the first successful attempt. Details: docs/microservices/messaging-service.md.
 service MessagingService {
+  // Protected service:moderation only; no viewer/content authority.
+  rpc ResolveReportTarget(ResolveReportTargetRequest) returns (ResolveReportTargetResponse);
   // @voice.security=protected;callers=service:bot
   rpc SendGameEventMessage(SendGameEventMessageRequest) returns (SendGameEventMessageResponse);
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);

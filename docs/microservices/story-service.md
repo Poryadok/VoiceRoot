@@ -238,3 +238,20 @@ key for at least 30 seconds after its last signature. Roll pods when changing
 mounted signing keys: the signer loads them at startup. Rollback may disable
 media admission by removing the complete Story signing/client configuration;
 never restore raw metadata validation.
+
+
+### Protected global report target decision (BE-137)
+
+`ResolveReportTarget` is an additive private RPC on the existing service.
+It accepts `report_id` plus the owner's typed target ID, and returns only
+`common.ReportTargetState` (LIVE/MISSING/DELETED), with no public REST mapping.
+Issuer `moderation`, subject `service:moderation`, exact audience `story`,
+method, deterministic request hash and fresh request ID are mandatory. The
+dedicated mTLS/JWKS/shared-replay listener and domain recheck both enforce this
+authority; ordinary listeners deny it. No reporter identity is forwarded.
+
+Story checks owner existence and `deleted_at`. Retained expired, archived, hidden and Highlight stories remain LIVE until logical deletion. It performs no views, archive extension or media lookup.
+
+Configuration and the finite protected transport/SQL/runtime proof route are in
+[report intake contract](../testing/report-intake-contract.md). This decision is
+an admission snapshot; it grants no later content/action permission.

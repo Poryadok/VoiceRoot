@@ -19,6 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	UserService_ResolveReportTarget_FullMethodName                 = "/voice.user.v1.UserService/ResolveReportTarget"
+	UserService_ResolveReportThresholdContext_FullMethodName       = "/voice.user.v1.UserService/ResolveReportThresholdContext"
 	UserService_EnsurePrimaryProfile_FullMethodName                = "/voice.user.v1.UserService/EnsurePrimaryProfile"
 	UserService_ListProfileIDsForAccount_FullMethodName            = "/voice.user.v1.UserService/ListProfileIDsForAccount"
 	UserService_ResolveAccountIDForProfile_FullMethodName          = "/voice.user.v1.UserService/ResolveAccountIDForProfile"
@@ -67,6 +69,11 @@ const (
 //
 // User Service — profiles, privacy, presence. HTTP: /api/v1/users/**.
 type UserServiceClient interface {
+	// Protected service:moderation only; no viewer/content authority.
+	ResolveReportTarget(ctx context.Context, in *ResolveReportTargetRequest, opts ...grpc.CallOption) (*ResolveReportTargetResponse, error)
+	// @voice.security=protected;callers=service:moderation
+	// Dedicated listener; complete potential audience, never a public existence oracle.
+	ResolveReportThresholdContext(ctx context.Context, in *ResolveReportThresholdContextRequest, opts ...grpc.CallOption) (*ResolveReportThresholdContextResponse, error)
 	// S2S bootstrap from Auth: ensure one primary profile per account before JWT is issued.
 	// Target: called only from trusted Auth; not exposed via public Gateway REST in v1 DM scope.
 	EnsurePrimaryProfile(ctx context.Context, in *EnsurePrimaryProfileRequest, opts ...grpc.CallOption) (*EnsurePrimaryProfileResponse, error)
@@ -141,6 +148,26 @@ type userServiceClient struct {
 
 func NewUserServiceClient(cc grpc.ClientConnInterface) UserServiceClient {
 	return &userServiceClient{cc}
+}
+
+func (c *userServiceClient) ResolveReportTarget(ctx context.Context, in *ResolveReportTargetRequest, opts ...grpc.CallOption) (*ResolveReportTargetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveReportTargetResponse)
+	err := c.cc.Invoke(ctx, UserService_ResolveReportTarget_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) ResolveReportThresholdContext(ctx context.Context, in *ResolveReportThresholdContextRequest, opts ...grpc.CallOption) (*ResolveReportThresholdContextResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveReportThresholdContextResponse)
+	err := c.cc.Invoke(ctx, UserService_ResolveReportThresholdContext_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *userServiceClient) EnsurePrimaryProfile(ctx context.Context, in *EnsurePrimaryProfileRequest, opts ...grpc.CallOption) (*EnsurePrimaryProfileResponse, error) {
@@ -549,6 +576,11 @@ func (c *userServiceClient) GetSearchProfileCheckpoint(ctx context.Context, in *
 //
 // User Service — profiles, privacy, presence. HTTP: /api/v1/users/**.
 type UserServiceServer interface {
+	// Protected service:moderation only; no viewer/content authority.
+	ResolveReportTarget(context.Context, *ResolveReportTargetRequest) (*ResolveReportTargetResponse, error)
+	// @voice.security=protected;callers=service:moderation
+	// Dedicated listener; complete potential audience, never a public existence oracle.
+	ResolveReportThresholdContext(context.Context, *ResolveReportThresholdContextRequest) (*ResolveReportThresholdContextResponse, error)
 	// S2S bootstrap from Auth: ensure one primary profile per account before JWT is issued.
 	// Target: called only from trusted Auth; not exposed via public Gateway REST in v1 DM scope.
 	EnsurePrimaryProfile(context.Context, *EnsurePrimaryProfileRequest) (*EnsurePrimaryProfileResponse, error)
@@ -625,6 +657,12 @@ type UserServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedUserServiceServer struct{}
 
+func (UnimplementedUserServiceServer) ResolveReportTarget(context.Context, *ResolveReportTargetRequest) (*ResolveReportTargetResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveReportTarget not implemented")
+}
+func (UnimplementedUserServiceServer) ResolveReportThresholdContext(context.Context, *ResolveReportThresholdContextRequest) (*ResolveReportThresholdContextResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveReportThresholdContext not implemented")
+}
 func (UnimplementedUserServiceServer) EnsurePrimaryProfile(context.Context, *EnsurePrimaryProfileRequest) (*EnsurePrimaryProfileResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method EnsurePrimaryProfile not implemented")
 }
@@ -764,6 +802,42 @@ func RegisterUserServiceServer(s grpc.ServiceRegistrar, srv UserServiceServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&UserService_ServiceDesc, srv)
+}
+
+func _UserService_ResolveReportTarget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveReportTargetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).ResolveReportTarget(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_ResolveReportTarget_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).ResolveReportTarget(ctx, req.(*ResolveReportTargetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_ResolveReportThresholdContext_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveReportThresholdContextRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).ResolveReportThresholdContext(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_ResolveReportThresholdContext_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).ResolveReportThresholdContext(ctx, req.(*ResolveReportThresholdContextRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _UserService_EnsurePrimaryProfile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -1493,6 +1567,14 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "voice.user.v1.UserService",
 	HandlerType: (*UserServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ResolveReportTarget",
+			Handler:    _UserService_ResolveReportTarget_Handler,
+		},
+		{
+			MethodName: "ResolveReportThresholdContext",
+			Handler:    _UserService_ResolveReportThresholdContext_Handler,
+		},
 		{
 			MethodName: "EnsurePrimaryProfile",
 			Handler:    _UserService_EnsurePrimaryProfile_Handler,

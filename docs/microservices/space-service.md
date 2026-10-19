@@ -1515,6 +1515,22 @@ versions are destroyed only after no retained row or restorable backup needs
 them. The owner-approved U5-A decision explicitly accepts this purpose-specific
 pseudonymous Space tombstone HMAC as compatible with account erasure.
 
+
+### Protected global report target decision (BE-137)
+
+`ResolveReportTarget` is an additive private RPC on the existing service.
+It accepts `report_id` plus the owner's typed target ID, and returns only
+`common.ReportTargetState` (LIVE/MISSING/DELETED), with no public REST mapping.
+Issuer `moderation`, subject `service:moderation`, exact audience `space`,
+method, deterministic request hash and fresh request ID are mandatory. The
+dedicated mTLS/JWKS/shared-replay listener and domain recheck both enforce this
+authority; ordinary listeners deny it. No reporter identity is forwarded.
+
+Space holds its existing lifecycle advisory fence for the read. Permanent purge fences and PURGED are DELETED; coherent SCHEDULED/PURGE_DECIDED/PURGING deletion dates also mean DELETED. Ownership transitions, schedule/freeze/restore uncertainty and unknown/inconsistent lifecycle evidence remain unavailable. LIVE/absent decisions never consult membership or content ACL.
+
+Configuration and the finite protected transport/SQL/runtime proof route are in
+[report intake contract](../testing/report-intake-contract.md). This decision is
+an admission snapshot; it grants no later content/action permission.
 ### Realtime participant11 admission boundary
 
 BE-REALTIME-P3-DURABLE-ADMISSION-v1 adds Realtime without renumbering IDs1–10.

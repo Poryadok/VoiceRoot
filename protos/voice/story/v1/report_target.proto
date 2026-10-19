@@ -1,0 +1,13 @@
+syntax = "proto3";
+package voice.story.v1;
+
+import "voice/common/v1/report_target.proto";
+
+option go_package = "voice.app/voice/story/v1;storyv1";
+message ResolveReportTargetRequest {
+  string report_id = 1;
+  string story_id = 2;
+}
+message ResolveReportTargetResponse {
+  voice.common.v1.ReportTargetState state = 1;
+}
