@@ -269,6 +269,63 @@ func valueOrEmpty(value *string) string {
 	return *value
 }
 
+func TestPendingInstallationDeletionFreezesAcceptedOriginalChatSource(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real Bot PostgreSQL pending installation snapshot")
+	}
+	ctx := t.Context()
+	st := startBotStore(t)
+	bot, _, err := st.CreateBot(ctx, uuid.New(), "Pending original source", "", `[]`, uuid.New())
+	require.NoError(t, err)
+	type expected struct {
+		intent   *store.InstallationIntent
+		request  *chatv1.GetBotChatScopeAuthorityRequest
+		response *chatv1.GetBotChatScopeAuthorityResponse
+		chat     uuid.UUID
+	}
+	var cases []expected
+	for _, removed := range []bool{false, true} {
+		space, chat, installer := uuid.New(), uuid.New(), uuid.New()
+		observation, request, response := chatScopeObservationFixture(t, space, chat)
+		qualified := store.WithChatScopeObservations(ctx, []store.ChatScopeObservation{observation})
+		intent, err := st.PrepareInstallation(qualified, bot.ID, space, installer, []uuid.UUID{chat})
+		require.NoError(t, err)
+		if removed {
+			require.NoError(t, st.CompleteInstallation(qualified, intent, []uuid.UUID{chat}))
+			_, err = st.InstallInSpace(ctx, bot.ID, space, installer, nil)
+			require.NoError(t, err)
+		}
+		cases = append(cases, expected{intent: intent, request: request, response: response, chat: chat})
+	}
+	operation, err := st.BeginBotDeletion(ctx, bot.ID, bot.OwnerAccountID)
+	require.NoError(t, err)
+	for _, want := range cases {
+		var raw []byte
+		require.NoError(t, st.Pool.QueryRow(ctx, `SELECT scope_bytes FROM bot_deletion_installations WHERE operation_id=$1 AND space_id=$2`, operation.OperationID, want.intent.SpaceID).Scan(&raw))
+		var frozen store.BotDeletionTarget
+		require.NoError(t, json.Unmarshal(raw, &frozen))
+		require.Len(t, frozen.ChatSources, 1, "accepted PREPARING source must be recoverable from immutable root without joining its live intent")
+		require.Equal(t, want.intent.InstallationID, frozen.ChatSources[0].InstallationID)
+		require.Equal(t, want.chat, frozen.ChatSources[0].ChatID)
+		require.Equal(t, uuid.MustParse(want.request.OperationId), frozen.ChatSources[0].Original.OperationID)
+		require.Nil(t, frozen.ChatSources[0].Current, "no invented current whitelist observation")
+		requestBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(want.request)
+		require.NoError(t, err)
+		responseBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(want.response)
+		require.NoError(t, err)
+		require.Equal(t, requestBytes, frozen.ChatSources[0].Original.Request)
+		require.Equal(t, responseBytes, frozen.ChatSources[0].Original.Response)
+		requestSHA, responseSHA := sha256.Sum256(requestBytes), sha256.Sum256(responseBytes)
+		require.Equal(t, requestSHA[:], frozen.ChatSources[0].Original.RequestSHA)
+		require.Equal(t, responseSHA[:], frozen.ChatSources[0].Original.ResponseSHA)
+		_, err = st.Pool.Exec(ctx, `UPDATE bot_chat_scope_observations SET response_bytes='corrupt later live source'::bytea WHERE observation_id=$1`, uuid.MustParse(want.request.OperationId))
+		require.NoError(t, err)
+		var again []byte
+		require.NoError(t, st.Pool.QueryRow(ctx, `SELECT scope_bytes FROM bot_deletion_installations WHERE operation_id=$1 AND space_id=$2`, operation.OperationID, want.intent.SpaceID).Scan(&again))
+		require.Equal(t, raw, again, "frozen obligation never joins later observation state")
+	}
+}
+
 func TestChatObservationCannotBeRelabeledForReinstallation(t *testing.T) {
 	if testing.Short() {
 		t.Skip("real Bot PostgreSQL source lineage")

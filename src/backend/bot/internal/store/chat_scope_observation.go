@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"sort"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -168,10 +169,10 @@ type ChatScopeCleanupObservation struct {
 }
 
 type ChatScopeCleanupSource struct {
-	ChatID         uuid.UUID                   `json:"chat_id"`
-	InstallationID uuid.UUID                   `json:"installation_id"`
-	Original       ChatScopeCleanupObservation `json:"original"`
-	Current        ChatScopeCleanupObservation `json:"current"`
+	ChatID         uuid.UUID                    `json:"chat_id"`
+	InstallationID uuid.UUID                    `json:"installation_id"`
+	Original       ChatScopeCleanupObservation  `json:"original"`
+	Current        *ChatScopeCleanupObservation `json:"current,omitempty"`
 }
 
 func snapshotChatScopeSources(ctx context.Context, tx pgx.Tx, bot, space uuid.UUID) ([]ChatScopeCleanupSource, error) {
@@ -182,6 +183,7 @@ func snapshotChatScopeSources(ctx context.Context, tx pgx.Tx, bot, space uuid.UU
 	type pointers struct {
 		chat                            uuid.UUID
 		original, current, installation *uuid.UUID
+		intentOnly                      bool
 	}
 	var pending []pointers
 	for rows.Next() {
@@ -197,16 +199,59 @@ func snapshotChatScopeSources(ctx context.Context, tx pgx.Tx, bot, space uuid.UU
 	if err != nil {
 		return nil, err
 	}
+	// An admitted remote Add may be uncertain before a whitelist exists; a
+	// later setter may also have removed an originally admitted chat. Freeze
+	// that accepted obligation from the retained intent in this same root TX.
+	seenChats := make(map[uuid.UUID]bool, len(pending))
+	for _, p := range pending {
+		seenChats[p.chat] = true
+	}
+	var installation, operation uuid.UUID
+	var rawIDs []byte
+	err = tx.QueryRow(ctx, `SELECT installation_id,operation_id,to_jsonb(i)->'chat_scope_observation_ids' FROM bot_installation_intents i WHERE bot_id=$1 AND space_id=$2 AND state<>'CANCELED' FOR UPDATE`, bot, space).Scan(&installation, &operation, &rawIDs)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+	if err == nil {
+		var ids []uuid.UUID
+		if len(rawIDs) > 0 && json.Unmarshal(rawIDs, &ids) != nil {
+			return nil, ErrChatScopeObservation
+		}
+		seenIDs := make(map[uuid.UUID]bool, len(ids))
+		for _, id := range ids {
+			if seenIDs[id] {
+				return nil, ErrChatScopeObservation
+			}
+			seenIDs[id] = true
+			r, err := readChatScopeObservation(ctx, tx, bot, space, id)
+			if err != nil {
+				return nil, err
+			}
+			if r.intent == nil || *r.intent != operation || r.origin != "install_admission" {
+				return nil, ErrChatScopeObservation
+			}
+			if !seenChats[r.observation.chat] {
+				id, installation := id, installation
+				pending = append(pending, pointers{chat: r.observation.chat, original: &id, installation: &installation, intentOnly: true})
+				seenChats[r.observation.chat] = true
+			}
+		}
+	}
+	sort.Slice(pending, func(i, j int) bool { return pending[i].chat.String() < pending[j].chat.String() })
 	var result []ChatScopeCleanupSource
 	for _, p := range pending {
 		if p.original == nil && p.current == nil && p.installation == nil {
 			continue
 		} // actual unqualified legacy row
-		if p.original == nil || p.current == nil || p.installation == nil {
+		if p.original == nil || (!p.intentOnly && p.current == nil) || p.installation == nil {
 			return nil, ErrChatScopeObservation
 		}
 		source := ChatScopeCleanupSource{ChatID: p.chat, InstallationID: *p.installation}
-		for index, id := range []uuid.UUID{*p.original, *p.current} {
+		ids := []uuid.UUID{*p.original}
+		if p.current != nil {
+			ids = append(ids, *p.current)
+		}
+		for index, id := range ids {
 			r, err := readChatScopeObservation(ctx, tx, bot, space, id)
 			if err != nil {
 				return nil, err
@@ -219,7 +264,7 @@ func snapshotChatScopeSources(ctx context.Context, tx pgx.Tx, bot, space uuid.UU
 			if index == 0 {
 				source.Original = copy
 			} else {
-				source.Current = copy
+				source.Current = &copy
 			}
 		}
 		result = append(result, source)

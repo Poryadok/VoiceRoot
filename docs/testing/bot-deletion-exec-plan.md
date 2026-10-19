@@ -159,6 +159,12 @@ global deletion snapshot freezes both observations before deleting local rows.
 Real missing-origin and missing-snapshot REDs distinguish these guarantees.
 Migration10 has first-writer DOWN, old-RR and empty default-RC controls.
 
+Review82 found that a PREPARING installation has accepted source bytes but no
+whitelist row yet. The root snapshot now also freezes intent-owned original
+observations for pending and removed-whitelist targets; absent current whitelist
+evidence remains absent. A causal PG RED and mixed pending/installed-then-removed
+control assert exact source bytes/hashes and independence from later source rows.
+
 This component does not yet qualify public install/whitelist/enable initiation
 or cross-process Chat consumption. The existing whitelist owner path and enable
 permission path still need their verified Gateway/Bot initiation cut after an
