@@ -8,6 +8,40 @@
 **Фреймворк**: Spring Boot 3.5, Spring Security 6
 **БД**: PostgreSQL `auth_db`
 
+## Owner-authorized identity lifecycle (accepted target; implementation in progress)
+
+Private `voice.identityerasure.v1` capabilities separate Role account observations
+from User-only parent-handle resolution. They require dedicated protected
+listeners and exact workload-principal method/caller bindings; ordinary Auth,
+Moderation, admission, SDK and Search authority does not grant these methods.
+User receives a distinct opaque Auth lifetime handle and authenticated lifecycle
+fact, never a Moderation subject or permission to invoke Role-only methods.
+
+The irreversible account boundary is the immutable stored deletion cycle's
+`deleted_at + P30D`. Fresh database time is checked after the exact account lock;
+equality is due. Timely restore cancels that cycle, while terminal state dominates
+older backups and cannot be restored. Repeated deletion cannot extend a cycle.
+Raw due deletion first preserves the minimized terminal fact and requires no
+remote key call, consumer acknowledgement or new raw-data retention window.
+
+Auth keeps a dedicated versioned account-selector key family and minimized
+committed owner journal. Keys stay inside Auth; all required historical lookup
+versions remain available. Journal cuts bind lifecycle revision, eligibility,
+cycle/deadline and selector/keyset commitments. Missing identity/history/keys is
+INCOMPLETE, never inferred terminal. A local journal hash or an authentic old
+snapshot does not prove independent CURRENT recovery. Restore binds the accepted
+Auth/User/Role/Space vector and its actual recovery target/generation.
+
+User's canonical association/nonreuse core has its own key family and records
+profile history. Every new birth requires verified nonnull Auth parent authority;
+retained-row NOW baseline with missing parent cannot certify Role history.
+Auth↔User preflight runs outside security transactions and callback-needed
+process locks; final session/OAuth signing uses the prepared profile locally.
+See [primary-profile-bootstrap.md](primary-profile-bootstrap.md) and the
+[owner-channel ExecPlan](../testing/role-identity-owner-channel-exec-plan.md).
+Native catalog/birth tests are intermediate proof; protected full producer,
+consumer activation, CURRENT restore and deployment are not yet established.
+
 ## Ответственность
 
 - Регистрация (email, телефон, гостевой аккаунт)

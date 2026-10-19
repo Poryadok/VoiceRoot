@@ -58,3 +58,38 @@
 `ResolvePrimaryProfileIDs`, `SwitchProfile`, `SetVerification`, `ClearVerification` и
 `MarkAccountRegular`; прямой SQL или второй datasource в Auth не допускаются. Воспроизводимые
 критерии стыка Auth ↔ User — [EXEC_PLAN.md](../EXEC_PLAN.md).
+
+## Owner parent proof and lock ordering (accepted target)
+
+The canonical User association/nonreuse core commits the profile reservation,
+immutable owner association, verified opaque Auth parent handle, onboarding and
+Search projection in the SAME User transaction for every new primary, secondary,
+guest or missing-primary repair birth. Parent authority and local selector
+material are prepared BEFORE User opens that transaction. The transaction
+rechecks proof expiry, exact raw identity binding, keyset and local terminal
+fences. Missing proof denies a new birth; it never adopts a new row as a legacy
+NOW baseline. Existing retained-row NOW capture may have an unresolved parent,
+but that does not prove complete historical Role coverage.
+
+Auth must release account SQL locks and callback-needed process monitors before
+calling User. ConvertGuest validates in a short first phase, preflights the
+actual guest primary outside locks, then rechecks current token/epoch/security,
+guest state and command bindings in its final locked mutation/session phase.
+Verified-email issuance and verify2FA use the same outside-lock preflight and
+final local security recheck. Enrollment-only enable2FA is unchanged. Failed final
+issuance does not delete an idempotently created User primary or its association.
+
+OAuth first validates the peeked code and original account epoch in a short
+phase WITHOUT floor preparation or code consumption. User preflight occurs
+outside Auth locks and must return the exact selected profile. The final account
+lock rechecks original origin/security and proof validity, then preserves the
+existing floor preparation → atomic exact-code consume → full client/redirect/
+PKCE/expiry revalidation → local signing order. A lost race or expiry denies;
+consumed codes are never restored. Legacy refresh keeps its existing consumed
+credential semantics and does not inherit OAuth's pre-consume retry behavior.
+
+No Auth↔User distributed transaction or zero in-flight deletion guarantee is
+claimed. Positive terminal fences and subsequent fresh eligibility remain
+authoritative. The accepted contract and real SQL/callback/restore oracles are
+tracked in the [owner-channel ExecPlan](../testing/role-identity-owner-channel-exec-plan.md);
+full all-birth/transport integration and activation remain in progress.

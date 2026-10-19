@@ -219,6 +219,7 @@
                 <include>voice/chat/v1/chat.proto</include>
                 <include>voice/user/v1/user.proto</include>
                 <include>voice/authority/v1/authority.proto</include>
+                <include>voice/identityerasure/v1/identity_erasure.proto</include>
               </includes>
             </configuration>
           </execution>
