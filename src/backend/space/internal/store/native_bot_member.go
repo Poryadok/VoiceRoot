@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/binary"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/protobuf/proto"
@@ -50,10 +49,31 @@ func (s *SpaceStore) mutateBotInstallation(ctx context.Context, proof *botmember
 	defer rollbackLifecycleTx(ctx, tx)
 	// Operation identities are global, including cross-Space conflicts. Acquire
 	// them before the Space fence so opposite cancel/add calls cannot deadlock.
-	for _, operation := range normalizedOwnershipSpaceIDs([]uuid.UUID{in.OperationID, in.InstallOperationID}) {
-		digest := sha256.Sum256(append([]byte("voice.space.bot-installation-operation.v1\x00"), operation[:]...))
-		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, int64(binary.BigEndian.Uint64(digest[:8]))); err != nil {
+	if err = lockBotInstallationOperations(ctx, tx, []uuid.UUID{in.OperationID, in.InstallOperationID}); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `LOCK TABLE public.schema_migrations IN ACCESS SHARE MODE`); err != nil {
+		return ErrMemberAuthorityUnavailable
+	}
+	var beforeSpaceVersion int64
+	if err = tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&beforeSpaceVersion); err != nil {
+		return ErrMemberAuthorityUnavailable
+	}
+	if beforeSpaceVersion == 46 {
+		if err = checkMemberAuthorityCatalog(ctx, tx); err != nil {
 			return err
+		}
+		var terminal bool
+		if err = tx.QueryRow(ctx, `SELECT public.space_bot_native_terminal($1)`, in.BotID).Scan(&terminal); err != nil {
+			return ErrMemberAuthorityUnavailable
+		}
+		if terminal && !remove {
+			return ErrMemberAdmissionStale
+		}
+		if !remove {
+			if err = checkRetainedNativeBotActor(ctx, tx, in.BotID, in.ProfileID); err != nil {
+				return err
+			}
 		}
 	}
 	if err = lockAndCheckOwnershipScope(ctx, tx, []uuid.UUID{in.SpaceID}); err != nil {
@@ -63,13 +83,22 @@ func (s *SpaceStore) mutateBotInstallation(ctx context.Context, proof *botmember
 		return err
 	}
 	var version int64
-	if err = tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || (version != 42 && version != 44 && version != 45) {
+	if err = tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || (version != 42 && version != 44 && version != 45 && version != 46) {
 		return ErrMemberAuthorityUnavailable
 	}
 	scoped := *s
 	scoped.tx = tx
 	if err = scoped.effectiveMutationScope(ctx, in.SpaceID); err != nil {
 		return err
+	}
+	if version == 46 && !remove {
+		var global []byte
+		if err = tx.QueryRow(ctx, `SELECT public.space_bot_global_removal_saved($1,$2)`, in.OperationID, in.SpaceID).Scan(&global); err != nil {
+			return ErrMemberAuthorityUnavailable
+		}
+		if global != nil {
+			return ErrMemberAdmissionConflict
+		}
 	}
 	if _, err = proof.Check(request); err != nil {
 		return err
@@ -97,7 +126,7 @@ func (s *SpaceStore) mutateBotInstallation(ctx context.Context, proof *botmember
 	// Guarded44 journals and cancellation tombstones are native source state
 	// even when no current membership is removed. Complete the full DB cohort
 	// for those writes too; the domain primitive still rejects unknown sources.
-	if mutatesSource || version == 44 || version == 45 {
+	if mutatesSource || version == 44 || version == 45 || version == 46 {
 		capture, err = scoped.captureNativeEffectiveMemberMutation(ctx, in.SpaceID, []uuid.UUID{in.ProfileID})
 		if err != nil {
 			return err
@@ -118,6 +147,11 @@ func (s *SpaceStore) mutateBotInstallation(ctx context.Context, proof *botmember
 	}
 	if capture != nil {
 		if err = scoped.finishEffectiveMemberMutations(ctx, capture); err != nil {
+			return err
+		}
+	}
+	if version == 46 {
+		if err = scoped.flushMemberAdmissionDeferredChecks(ctx, capture); err != nil {
 			return err
 		}
 	}

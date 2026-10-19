@@ -21,6 +21,36 @@ type BotMembershipGRPC struct {
 	Store BotMembershipStore
 }
 
+type BotGlobalRemovalStore interface {
+	ApplyBotInstallationRemoval(context.Context, *botmembershipprincipal.VerifiedGlobalRemoval, *spacev1.ApplyBotInstallationRemovalRequest) (*spacev1.BotInstallationRemovalReceipt, error)
+}
+
+func (s *SpaceGRPC) ApplyBotInstallationRemoval(context.Context, *spacev1.ApplyBotInstallationRemovalRequest) (*spacev1.ApplyBotInstallationRemovalResponse, error) {
+	return nil, status.Error(codes.PermissionDenied, "protected Bot membership listener required")
+}
+
+func (s *BotMembershipGRPC) ApplyBotInstallationRemoval(ctx context.Context, request *spacev1.ApplyBotInstallationRemovalRequest) (*spacev1.ApplyBotInstallationRemovalResponse, error) {
+	proof, err := botmembershipprincipal.RequireGlobalRemoval(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	if s == nil || s.Store == nil {
+		return nil, status.Error(codes.Unavailable, "native global Bot removal unavailable")
+	}
+	store, ok := s.Store.(BotGlobalRemovalStore)
+	if !ok {
+		return nil, status.Error(codes.Unavailable, "native global Bot removal unavailable")
+	}
+	receipt, err := store.ApplyBotInstallationRemoval(ctx, proof, request)
+	if err != nil {
+		return nil, mapBotMembershipError(err)
+	}
+	if receipt == nil {
+		return nil, status.Error(codes.Unavailable, "native global Bot removal unavailable")
+	}
+	return &spacev1.ApplyBotInstallationRemovalResponse{Receipt: receipt}, nil
+}
+
 func (s *BotMembershipGRPC) AddBotMember(ctx context.Context, request *spacev1.AddBotMemberRequest) (*spacev1.AddBotMemberResponse, error) {
 	proof, err := botmembershipprincipal.RequireAdd(ctx, request)
 	if err != nil {
@@ -64,7 +94,7 @@ func RegisterBotMembershipServer(server grpc.ServiceRegistrar, service *BotMembe
 	desc.Methods = nil
 	desc.Streams = nil
 	for _, method := range spacev1.SpaceService_ServiceDesc.Methods {
-		if method.MethodName == "AddBotMember" || method.MethodName == "RemoveBotMember" {
+		if method.MethodName == "AddBotMember" || method.MethodName == "RemoveBotMember" || method.MethodName == "ApplyBotInstallationRemoval" {
 			desc.Methods = append(desc.Methods, method)
 		}
 	}

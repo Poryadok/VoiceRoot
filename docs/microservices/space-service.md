@@ -86,6 +86,59 @@ restore remains a deployment HOLD; do not self-reseal or recut existing history.
 Readers never invoke this maintenance method. Qualification of this transition
 does not activate remaining unadapted writers or the full public admission flow.
 
+### Native Bot global removal and fixed schema46 transition
+
+The private `ApplyBotInstallationRemoval` receiver settles the exact native
+installation cancellation from a persisted Bot `global_delete` decision. Only
+the separately verified pure `service:bot` capability admits this method on the
+protected Bot listener. The credential binds the entire request, child operation
+ID and exact RPC; mTLS, rotating HTTPS JWKS and shared replay storage are required.
+Human identity claims and ordinary listeners cannot supply this capability.
+
+Space atomically cancels the exact journal-owned installation, records a
+Bot-wide terminal fence and saves the immutable typed receipt. Its evidence SHA
+is over the deterministic full nested cancellation; its request SHA covers the
+full outer request. The returned receipt explicitly attests
+`global_native_adds_fenced=true`. Exact retries return that saved receipt after
+the serving LOGIN, completed Space cutover and original request binding are
+checked. A prior local cancellation can be adopted without repeating its effects.
+An ordinary `RemoveBotMember` empty acknowledgement alone cannot complete this
+global cleanup obligation.
+
+The terminal predicate is checked before every native Add, including historical
+positive replay, a new installation/generation and another Space. Sorted operation
+locks precede the shared Bot terminal lock and Space fence. Database registration
+and native publication guards use that same Bot lock. Conflicting retained Bot
+actor mappings fail closed. Legacy0 or unrelated sources cannot be adopted or
+removed through an invented native installation tuple.
+
+Forward migration46 adds three private tables: minimized `bot_terminals`,
+per-Space exact `bot_removal_receipts`, and the immutable
+`catalog46_transition` receipt. The permanent Bot marker contains Bot/root IDs,
+root SHA and an opaque actor-binding digest, with no raw profile/account/Space ID.
+Per-Space receipts retain the exact native request/result and can be removed only
+behind the existing native/current-eleven-participant Space terminal predicate.
+This is not a physical-erasure or legacy-cleanup completion claim.
+
+Applying46 leaves the retained44/45 seal unchanged and serving unavailable.
+For a trusted, continuously guarded installation, a separate installer invokes
+`TransitionNativeMembershipCatalog46`. The method owns READ COMMITTED, drains
+writers, verifies the closed PostgreSQL16/18 schema46 structure and function,
+trigger and ACL pins, reconstructs the exact retained44/45 projection excluding
+only authenticated46 objects, and CASes the seal with an immutable transition
+receipt. It preserves the enforcement epoch, Space cutovers, source bindings and
+history. Unknown helpers/indexes, dirty/future versions, disabled guards and
+untrusted baseline provenance remain unavailable. Serving LOGINs cannot run this
+transition, and readers/main startup never invoke it automatically.
+
+Migration46 DOWN rejects retained terminal, result or activation evidence. Its
+pre-lock READ COMMITTED guard prevents stale REPEATABLE READ emptiness from
+discarding a first concurrent writer. Published44/45 migrations and receipts are
+unchanged. This native receiver does not establish full DeleteBot completion:
+legacy UNKNOWN obligations, post-retention erasure, remaining lifecycle writer
+placements and the complete public cross-service workflow require their own
+actual evidence.
+
 ## Composite Chat creation (accepted implementation contract)
 
 `CommitSpaceChatCreation` admits only a freshly authenticated `service:chat`

@@ -59,11 +59,17 @@ func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version 
 	}
 	pins := append([]nativeReadinessFunctionPin(nil), nativeReadinessFunctionPins...)
 	helperCount := 1
-	if version == 45 {
+	privateTables := []string{"epoch", "spaces", "frames", "profiles"}
+	if version == 45 || version == 46 {
 		pins = append(pins, nativeReadinessLegacySelectionPin)
 		helperCount = 2
 	} else if version != 44 {
 		return ErrMemberAuthorityUnavailable
+	}
+	if version == 46 {
+		pins = append(pins, nativeReadinessGlobalRemovalPins...)
+		helperCount += 3 // Three exact public Bot wrappers; five new private functions.
+		privateTables = append(privateTables, "bot_terminals", "bot_removal_receipts", "catalog46_transition")
 	}
 	var structure string
 	if err := tx.QueryRow(ctx, nativeReadinessStructureSQL).Scan(&structure); err != nil {
@@ -112,15 +118,15 @@ func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version 
  (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
   WHERE n.nspname='native_membership_guard' OR (n.nspname='public' AND p.proname LIKE 'space_native_membership_%'))=$1
  AND (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-  WHERE n.nspname='native_membership_guard' AND c.relkind='r')=4
+  WHERE n.nspname='native_membership_guard' AND c.relkind='r')=$2
  AND NOT EXISTS(SELECT 1 FROM pg_namespace n,LATERAL aclexplode(COALESCE(n.nspacl,acldefault('n',n.nspowner))) a
   WHERE n.nspname='native_membership_guard' AND a.grantee<>n.nspowner)
  AND NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
   WHERE n.nspname='native_membership_guard' AND c.relkind='r' AND
-   (c.relname NOT IN ('epoch','spaces','frames','profiles') OR c.relpersistence<>'p' OR c.relrowsecurity OR c.relforcerowsecurity
+   (NOT(c.relname=ANY($3::text[])) OR c.relpersistence<>'p' OR c.relrowsecurity OR c.relforcerowsecurity
     OR c.relowner<>n.nspowner OR EXISTS(SELECT 1 FROM pg_policy WHERE polrelid=c.oid)
     OR EXISTS(SELECT 1 FROM pg_inherits WHERE inhrelid=c.oid OR inhparent=c.oid)
-    OR EXISTS(SELECT 1 FROM aclexplode(COALESCE(c.relacl,acldefault('r',c.relowner))) a WHERE a.grantee<>c.relowner)))`, len(pins)-helperCount).Scan(&valid); err != nil || !valid {
+    OR EXISTS(SELECT 1 FROM aclexplode(COALESCE(c.relacl,acldefault('r',c.relowner))) a WHERE a.grantee<>c.relowner)))`, len(pins)-helperCount, len(privateTables), privateTables).Scan(&valid); err != nil || !valid {
 		return ErrMemberAuthorityUnavailable
 	}
 	coverageChecks := &pgx.Batch{}
@@ -168,13 +174,16 @@ func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version 
   AND t.tgtype=19 AND t.tgfoid='public.guard_join_start_selection_immutable()'::regprocedure)`).Scan(&valid); err != nil || !valid {
 		return ErrMemberAuthorityUnavailable
 	}
-	if version == 45 {
+	if version == 45 || version == 46 {
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid='public.space_join_operations'::regclass
  AND t.tgname='space_join_legacy_selection_immutable' AND t.tgenabled='O' AND NOT t.tgdeferrable AND NOT t.tginitdeferred
  AND NOT t.tgisinternal AND t.tgtype=19 AND t.tgnargs=0 AND t.tgargs=''::bytea
  AND t.tgfoid='public.guard_join_legacy_selection_immutable()'::regprocedure)`).Scan(&valid); err != nil || !valid {
 			return ErrMemberAuthorityUnavailable
 		}
+	}
+	if version == 46 {
+		return checkNativeGlobalRemoval46Triggers(ctx, tx)
 	}
 	return nil
 }
