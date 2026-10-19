@@ -90,6 +90,21 @@ CI and product acceptance remain distinct from source/component proof.
   assumption releases it. Actual old execution/database-session retirement is
   required to replace that runtime. Added canceled admission-head rollback and
   confirmed ordinary rejection rollback oracles; independent recheck remains.
+- [x] P1 successor `c58d3d71b3c0d42338016a12127f19fa8a1ea09e`
+  independently SOURCE CLEAR147, parent c11. Exact archive race12top/2sub0skip
+  11.879s and vet0; first exact run interrupted by own runner sleep expiry,
+  preserved separately without PASS credit.
+- [x] Implement component private Offer validation and Registry producer with
+  exact Read-before-Register recovery, mandatory actual peer authority and
+  pre-network same-cohort durable receipt loading. Fresh Story visibility is a
+  mandatory bound dependency; no production adapter exists. Linux race14 Store
+  tests/2sub0skip10.957s and transport2top/13sub0skip1.261s, vet0.
+- [x] Add actor-neutral private action protobuf: stable publication/response IDs,
+  exact offer view, no public account/epoch/receipt bytes. Buf lint, Go/Dart
+  generation succeeded; delegated action handlers remain to implement.
+- [ ] Resolve c12 actor/account-type sideproof with Astra301 before implementing
+  real eligibility. Canon permits contextual guest flows and separate guest
+  privacy; regular-only is not an assumed replacement. No current-ID inference.
 
 ## Decisions
 
