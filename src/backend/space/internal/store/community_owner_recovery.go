@@ -6,9 +6,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"math"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"google.golang.org/protobuf/proto"
+	rolev1 "voice.app/voice/role/v1"
 )
 
 var ErrCommunityOwnerRecoveryConflict = errors.New("community owner recovery conflicts")
@@ -57,7 +60,7 @@ func communityOwnerRecoveryHash(in CommunityOwnerRecoveryInput) ([32]byte, error
 }
 
 func validateCommunityOwnerRecovery(in CommunityOwnerRecoveryInput) error {
-	if in.OperationID == uuid.Nil || in.ApplicationID == uuid.Nil || in.EnvironmentID == uuid.Nil || in.SpaceID == uuid.Nil || in.PreviousOwnerAccountID == uuid.Nil || in.PreviousOwnerProfileID == uuid.Nil || in.ReplacementAccountID == uuid.Nil || in.ReplacementProfileID == uuid.Nil || in.PreviousOwnerAccountID == in.ReplacementAccountID || in.PreviousOwnerProfileID == in.ReplacementProfileID || in.ExpectedGeneration <= 0 || in.CorporationKey == "" || len(in.CorporationKey) > 256 || len(in.EvidenceSHA256) != sha256.Size || (in.ReasonCode != "owner_lost" && in.ReasonCode != "corporation_dissolved") {
+	if in.OperationID == uuid.Nil || in.ApplicationID == uuid.Nil || in.EnvironmentID == uuid.Nil || in.SpaceID == uuid.Nil || in.PreviousOwnerAccountID == uuid.Nil || in.PreviousOwnerProfileID == uuid.Nil || in.ReplacementAccountID == uuid.Nil || in.ReplacementProfileID == uuid.Nil || in.PreviousOwnerAccountID == in.ReplacementAccountID || in.PreviousOwnerProfileID == in.ReplacementProfileID || in.ExpectedGeneration <= 0 || in.ExpectedGeneration == math.MaxInt64 || in.CorporationKey == "" || len(in.CorporationKey) > 256 || len(in.EvidenceSHA256) != sha256.Size || (in.ReasonCode != "owner_lost" && in.ReasonCode != "corporation_dissolved") {
 		return ErrCommunityOwnerRecoveryConflict
 	}
 	return nil
@@ -99,6 +102,9 @@ func (s *SpaceStore) ReserveCommunityOwnerRecovery(ctx context.Context, in Commu
 		return CommunityOwnerRecoveryOperation{}, false, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = lockAndCheckOwnershipScope(ctx, tx, []uuid.UUID{in.SpaceID}); err != nil {
+		return CommunityOwnerRecoveryOperation{}, false, err
+	}
 	var accountID, profileID uuid.UUID
 	var generation int64
 	var status string
@@ -152,7 +158,7 @@ func (s *SpaceStore) CompleteCommunityOwnerRecovery(ctx context.Context, in Comm
 	if err := validateCommunityOwnerRecovery(in); err != nil {
 		return CommunityOwnerRecoveryOperation{}, err
 	}
-	if len(roleReceipt) == 0 {
+	if err := validateCommunityRecoveryReceipt(in, roleReceipt); err != nil {
 		return CommunityOwnerRecoveryOperation{}, ErrCommunityOwnerRecoveryConflict
 	}
 	hash, err := communityOwnerRecoveryHash(in)
@@ -164,6 +170,9 @@ func (s *SpaceStore) CompleteCommunityOwnerRecovery(ctx context.Context, in Comm
 		return CommunityOwnerRecoveryOperation{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = lockAndCheckOwnershipScope(ctx, tx, []uuid.UUID{in.SpaceID}); err != nil {
+		return CommunityOwnerRecoveryOperation{}, err
+	}
 	var accountID, profileID uuid.UUID
 	var generation int64
 	var status string
@@ -190,11 +199,11 @@ func (s *SpaceStore) CompleteCommunityOwnerRecovery(ctx context.Context, in Comm
 	if op.Status != "pending" || status != "recovery_pending" || generation != in.ExpectedGeneration || accountID != in.PreviousOwnerAccountID || profileID != in.PreviousOwnerProfileID {
 		return CommunityOwnerRecoveryOperation{}, ErrCommunityOwnerRecoveryConflict
 	}
-	member, err := tx.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, in.SpaceID, in.ReplacementProfileID)
+	inserted, err := publishCommunityRecoveryOwner(ctx, tx, in, roleReceipt)
 	if err != nil {
 		return CommunityOwnerRecoveryOperation{}, err
 	}
-	if member.RowsAffected() > 0 {
+	if inserted {
 		if _, err := tx.Exec(ctx, `UPDATE spaces SET member_count=member_count+1 WHERE id=$1`, in.SpaceID); err != nil {
 			return CommunityOwnerRecoveryOperation{}, err
 		}
@@ -219,6 +228,19 @@ func (s *SpaceStore) CompleteCommunityOwnerRecovery(ctx context.Context, in Comm
 		return CommunityOwnerRecoveryOperation{}, err
 	}
 	return op, nil
+}
+
+func validateCommunityRecoveryReceipt(in CommunityOwnerRecoveryInput, raw []byte) error {
+	receipt := &rolev1.OwnershipTransferReceipt{}
+	if len(raw) == 0 || proto.Unmarshal(raw, receipt) != nil {
+		return ErrCommunityOwnerRecoveryConflict
+	}
+	expected := &rolev1.OwnershipTransferReceipt{Intent: &rolev1.OwnershipTransferIntent{ProtocolVersion: 2, SpaceId: in.SpaceID.String(), OperationId: in.OperationID.String(), OldOwnerProfileId: in.PreviousOwnerProfileID.String(), NewOwnerProfileId: in.ReplacementProfileID.String()}, State: rolev1.OwnershipTransferState_OWNERSHIP_TRANSFER_STATE_FINALIZED, CurrentOwnerProfileId: in.ReplacementProfileID.String()}
+	canonical, err := proto.MarshalOptions{Deterministic: true}.Marshal(expected)
+	if err != nil || !proto.Equal(receipt, expected) || !equalBytes(raw, canonical) {
+		return ErrCommunityOwnerRecoveryConflict
+	}
+	return nil
 }
 
 func loadCommunityOwnerRecovery(ctx context.Context, tx pgx.Tx, id uuid.UUID, forUpdate bool) (CommunityOwnerRecoveryOperation, error) {
