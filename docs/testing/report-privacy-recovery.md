@@ -315,6 +315,55 @@ deletion claim.
 The J1–J14 matrix in BE-137 c52 governs the new behavior; earlier slice proofs do
 not certify these new nullability or artifact changes.
 
+### Rejection downgrade concurrency correction
+
+The independent 52c review found that an empty preflight before `ALTER`/`DROP`
+does not protect a receipt-only writer committing while DOWN waits for a report
+table lock. The receipt has deliberately no report FK, so an empty `reports`
+table is not an empty replay inventory. DOWN must acquire write-excluding locks
+on `reports` and then `report_target_rejections` before checking either retained
+representation, and keep check plus DDL in one atomic block. A preexisting
+repeatable-read snapshot cannot establish current emptiness and must be refused.
+
+The corrective sequence is: add a real two-connection PostgreSQL regression that
+observes the DOWN backend's lock wait, commit an orphan receipt, release the
+blocker and require refusal with the receipt retained; prove an old-snapshot
+refusal and an empty-expand DOWN/UP positive; then minimally correct migration12
+and rerun these cases under Linux `-race`. Existing report cycle/rejection/journal
+checks on the combined current-develop/receiver13 source qualify compatibility
+separately. No public intake, retention authority or other migration changes are
+part of this correction. Source and delivery remain with BE-137's author; the
+existing reviewer rechecks the exact successor rather than repeating broad scope.
+
+Executed against actual local develop `e77469b8` normally merged with receiver
+`5508d415` (combined source `a9910300`): the original migration produced both
+discriminating failures in Linux PostgreSQL16 (`-race`, 27.686s), returning
+success after a late receipt commit and through an old repeatable-read snapshot.
+The atomic lock-before-check correction passes all three cases, including empty
+DOWN/UP, in 39.139s with zero skips. The complete unique migration1..13 catalog
+is applied by each fixture. These are scoped migration checks, not production
+rollout, external authority or full privacy-lifecycle acceptance.
+
+The same concrete preflight-before-DDL risk also exists in BE-137-owned
+migrations7 (late intake),8 (late subject provenance) and11 (orphan journal
+receipt). Their correction is a separate successor to migration12's fix.
+Regression fixtures apply actual catalog prefixes1..7,1..8,1..11: later schema
+dependencies must not accidentally make an unsafe historical DOWN return an
+unrelated error. Each case observes a real DDL lock wait, commits the qualifying
+writer, then requires rollback refusal and retained evidence. Each also covers
+an old repeatable-read inventory and a genuinely empty DOWN/UP. After meaningful
+RED, the minimal correction uses atomic lock-before-check DDL and current
+read-committed inventory. Shared migrations6/9/10/13 remain outside this scope.
+All six historical negative cases genuinely returned success before correction
+(13.150s, three concurrent writers plus three old snapshots); all three empty
+DOWN/UP positives passed. The corrected migration7/8/11 cases plus the unchanged
+migration12 behavior pass together under Linux PostgreSQL16 `-race`: six top-level
+tests/nine subcases, zero skips, 17.289s. An initial fixture used a new writer
+connection queued behind pending exclusive DDL and timed out, with a test-cleanup
+connection-release race; it is retained as a fixture failure, not credited as
+semantic RED. The corrected fixture writes from the already-held transaction
+and always joins its asynchronous DOWN before releasing that connection.
+
 It does **not** complete legacy owner recovery or authoritative boot repair,
 the protected User recovery RPC or assembled
 P0-P5 activation. Those remain required before complete BE-137 integration and

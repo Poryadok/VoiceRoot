@@ -1,14 +1,17 @@
 -- Do not discard admitted new work, unknown legacy work, or publication evidence.
 DO $$ BEGIN
+    IF current_setting('transaction_isolation') <> 'read committed' THEN
+        RAISE EXCEPTION 'report intake downgrade requires read committed';
+    END IF;
+    LOCK TABLE reports IN ACCESS EXCLUSIVE MODE;
+    LOCK TABLE report_intake_outbox IN ACCESS EXCLUSIVE MODE;
     IF EXISTS (SELECT 1 FROM reports WHERE NOT validation_publication_legacy OR validation_state = 'PENDING')
        OR EXISTS (SELECT 1 FROM report_intake_outbox) THEN
         RAISE EXCEPTION 'report intake evidence prevents rollback';
     END IF;
-END $$;
-
-DROP TABLE report_intake_outbox;
-DROP INDEX reports_validation_ready_idx;
-ALTER TABLE reports
+    DROP TABLE report_intake_outbox;
+    DROP INDEX reports_validation_ready_idx;
+    ALTER TABLE reports
     DROP COLUMN reporter_account_id,
     DROP COLUMN validated_target_account_id,
     DROP CONSTRAINT reports_validation_state_check,
@@ -19,3 +22,4 @@ ALTER TABLE reports
     DROP COLUMN validation_claim,
     DROP COLUMN validation_claim_until,
     DROP COLUMN validation_failure_code;
+END $$;
