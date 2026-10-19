@@ -99,7 +99,7 @@ func (s *SpaceStore) markMemberDecisionPublished(ctx context.Context, ref JoinAt
 	if err != nil {
 		return err
 	}
-	if version == 40 || version == 41 || version == 42 {
+	if version == 40 || version == 41 || version == 42 || version == 44 || version == 45 {
 		return s.MarkVersionedJoinDecisionBasisPublished(ctx, ref, sha, publication)
 	}
 	return s.MarkJoinDecisionBasisPublished(ctx, ref, sha, publication)
