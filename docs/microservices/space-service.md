@@ -86,6 +86,23 @@ restore remains a deployment HOLD; do not self-reseal or recut existing history.
 Readers never invoke this maintenance method. Qualification of this transition
 does not activate remaining unadapted writers or the full public admission flow.
 
+Disposable Compose CI establishes a separate known fresh baseline with
+`scripts/ci/space-native-ci-bootstrap.py prepare` **before** its first database
+startup. It refuses existing project containers, networks or PostgreSQL volumes,
+creates the owned volume with an installation nonce, and records the engine,
+volume creation and exact migration inputs in a private state file. `install`
+checks that custody/source has not changed, runs the canonical migration image,
+then invokes the separate `/native-membership-installer` executable with owner
+credentials. That executable calls the same qualified transition above and
+provisions a fixed DDL-incapable, nonowner `voice_space_ci_app` LOGIN. Its password
+is private CI state; the serving process receives only its `SPACE_DATABASE_URL`.
+The public receipt contains target/migration/image identities, not credentials.
+
+This is a one-shot fresh CI installation route, not recovery for an existing
+database, an attestation of prior privileged DDL, or serving startup auto-repair.
+The `compose-e2e` job and A1 runner execute it themselves. Full scenario tests and
+all-writer/Role qualification remain independent required gates.
+
 ## Composite Chat creation (accepted implementation contract)
 
 `CommitSpaceChatCreation` admits only a freshly authenticated `service:chat`

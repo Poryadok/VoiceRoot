@@ -170,3 +170,36 @@ Creator and new admission factory tests PASS race1.191, vet/build0. An initial
 green attempt had invalid non-UUID test account; corrected the fixture to a
 canonical UUID without changing production validation. This component result
 does not close native catalog, actual Role8aa/OwnerACL or public journey gates.
+
+## Canonical PG18 continuation and tracked CI installation
+
+Fresh lease19/e8185dced3ecf01557fdc952baed5d48; previous31 safely returned.
+SC423 producer4617 consumed alone as9b2f1bce atop072. Actual fresh PG18.6
+canonical migration45, separate trusted Transition45 and true nonowner LOGIN
+closed the observed catalog refusal. Actual Auth register/OTP -> Gateway ->
+protected Creator -> nativeBORN -> Role bootstrap and Owner invite ACL plus five
+negative subcases PASS4.355 on9b, with its pre8aa Role source. This is a scoped
+observation, not qualification of the later Role cohort or unchanged CI.
+
+Normal Role8aa development union eecf47a preserves six conflict decisions: two
+Role interceptor/runtime files equal8aa; own plan and three Space SDK files equal
+9b. Its Role21/25 migration upgrade succeeds. Mechanical missing AuthSDK Docker
+COPY caused real packaging RED and was fixed as41d226d. Actual new-cohort
+BootstrapSpaceRoles is OK16ms and POSTspaces200, but Owner Invite fails5031.852
+because ordinary Role CheckPermission lacks the verified native principal.
+410 A1c23-c26 ruled exact HOLD: qualified underlying Role core/current identity
+assembly AND an exact Invite sender/receiver are prerequisites. The15-path8aa
+query SOURCE CLEAR does not qualify this126-path union. No Invite-only adapter,
+validator, alternative provider or stopped core172 continuation is authorized.
+No Role rollback, owner bypass or changed ACL expectation will be used.
+
+Independent original503 repair remains executable: tracked fresh CI bootstrap.
+Before the first PostgreSQL startup it must refuse prior project/volume/network,
+reserve a new nonce-labelled volume and bind engine+source. A separate installer
+calls the existing trusted45 transition, provisions a nonowner fixed appLOGIN,
+and returns a credential-free receipt. The serving main never invokes it.
+Canonical Compose-e2e and A1 own this setup rather than ignored tmp helpers.
+Unknown baseline, changed custody/source/serving identity or a repeated attempt
+reject before migration/installer. Three Linux tests including six changed-state
+subcases pass0.007; actual tracked fresh Docker execution is next. Full Invite,
+Role core, Daily/Channel/currentCI/MASTER/acceptance remain OPEN/HOLD.

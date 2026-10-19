@@ -1930,6 +1930,7 @@ jobs:
       contents: read
       packages: read
     env:
+      COMPOSE_PROJECT_NAME: voice-ci-${{ github.run_id }}-${{ github.run_attempt }}
       VOICE_MINIO_IMAGE: ghcr.io/poryadok/voiceroot/minio:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:ab7687bc47a84c3aec0d9706dabd47b4719b081683cde745f8a1b84c6c7681e0
       VOICE_MINIO_MC_IMAGE: ghcr.io/poryadok/voiceroot/minio-mc:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:66a55c322fed37a3fefa0b815d195b01e7903d1bbffccd80d5a8af3cedf343f2
     steps:
@@ -1958,12 +1959,20 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Verify effective Compose MinIO images
         run: bash scripts/ci/verify-compose-minio-images.sh
+      - name: Reserve fresh native membership installation
+        run: |
+          python scripts/ci/space-native-ci-bootstrap.py prepare \
+            --state "$RUNNER_TEMP/space-native-installation.json" --env-file .env \
+            --compose docker compose
       - name: Start compose infra
         run: docker compose up -d --wait postgres redis nats
       - name: Wait for postgres
         run: bash scripts/ci/wait-postgres-steady.sh "$GITHUB_WORKSPACE"
-      - name: Migrate Go-owned databases
-        run: make compose-migrate-all
+      - name: Migrate and qualify fresh native membership installation
+        run: |
+          python scripts/ci/space-native-ci-bootstrap.py install \
+            --state "$RUNNER_TEMP/space-native-installation.json" \
+            --compose docker compose
       - name: Generate disposable media principal and TLS fixture
         env:
           PHASE0_MATCHSQUAD_FIXTURE_UID: "65532"

@@ -88,7 +88,7 @@ cleanup() {
   local status=$?
   local compose_down_succeeded=true
   if [[ "${VOICE_A1_MULTI_ACCOUNT_CLEANUP:-false}" == "true" && "$compose_started" == "true" ]]; then
-    compose down --remove-orphans || compose_down_succeeded=false
+    compose down -v --remove-orphans || compose_down_succeeded=false
   fi
   if [[ "$compose_down_succeeded" == "false" ]]; then
     echo "Compose cleanup failed; disposable fixture retained at $state_dir" >&2
@@ -186,6 +186,14 @@ wait_gateway() {
 echo "A1 multi-account proof project=${project} gateway=${VOICE_API_BASE_URL}"
 compose config --quiet
 compose_started=true
+native_compose=(docker compose --env-file "$compose_env" --project-name "$project"
+  --project-directory "$ROOT" -f "$COMPOSE_FILE_PATH"
+  -f "${ROOT}/docker-compose.voice-space-media.yml" --profile app)
+python3 "${ROOT}/scripts/ci/space-native-ci-bootstrap.py" prepare \
+  --state "${state_dir}/native-installation.json" --env-file "$compose_env" \
+  --compose "${native_compose[@]}"
+python3 "${ROOT}/scripts/ci/space-native-ci-bootstrap.py" install \
+  --state "${state_dir}/native-installation.json" --compose "${native_compose[@]}"
 compose up -d --build
 wait_healthy gateway
 wait_healthy file

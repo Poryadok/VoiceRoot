@@ -49,12 +49,14 @@ COPY space ./space
 COPY realtime/pb/voice/realtime ./realtime/pb/voice/realtime
 WORKDIR /src/space
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked --mount=type=cache,target=/root/.cache/go-build,id=voice-gobuild,sharing=locked CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .
+RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked --mount=type=cache,target=/root/.cache/go-build,id=voice-gobuild,sharing=locked CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/native-membership-installer ./cmd/native-membership-installer
 
 FROM alpine:3.20
 RUN adduser -D -H -u 65532 nonroot
 USER nonroot:nonroot
 WORKDIR /
 COPY --from=build /out/service /service
+COPY --from=build /out/native-membership-installer /native-membership-installer
 EXPOSE 8080 9090
 ENV LISTEN_ADDR=:8080
 ENV SPACE_GRPC_LISTEN=:9090

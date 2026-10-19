@@ -1215,7 +1215,7 @@ services:
       dockerfile: space/Dockerfile
     environment:
       LOG_LEVEL: debug
-      DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/space_db?sslmode=disable
+      DATABASE_URL: ${SPACE_DATABASE_URL:-postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/space_db?sslmode=disable}
       POSTGRES_MAX_CONNS: ${SPACE_POSTGRES_MAX_CONNS:-10}
       SPACE_GRPC_LISTEN: :9090
       SPACE_PRINCIPAL_GRPC_LISTEN: :9091
