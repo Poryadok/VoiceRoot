@@ -164,6 +164,17 @@ func withNativeOrdinary(ctx context.Context, s *RoleGRPC, space uuid.UUID, targe
 		if errors.Is(err, errNativeAuthorityChanged) {
 			continue
 		}
+		// A scoped chat request is a read. Its Store is nested in this owning
+		// transaction, so Store-level checks precede this outer COMMIT. Recheck
+		// the same immutable vector after it completes; never use this rule to
+		// reinterpret a successfully committed mutation as a failed mutation.
+		if err == nil && scopedChat {
+			for _, o := range second {
+				if !o.Available(time.Now()) {
+					return store.ErrScopeUnavailable
+				}
+			}
+		}
 		return err
 	}
 	return status.Error(codes.Unavailable, "native Role authority changed during bounded decision")

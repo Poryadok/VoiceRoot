@@ -215,3 +215,7 @@ accepted client tests do not establish an assembled Auth production deployment.
 Space all-writer closure, source2 projection, consumer acceptance and combined
 runtime/CI remain open until their actual evidence exists. No whole-task CLEAR,
 activation, final acceptance or delivery custody is inferred from these tests.
+
+Chat review82 c64 found that nested Store freshness checks precede the owning coordinator COMMIT. Exact signed interceptor-to-handler regression delays only after successful final COMMIT while the original observation was fresh; old code returned success (RED31.614s). The chat read path now rechecks the original vector after that COMMIT, without changing mutation outcomes. Native21 RolePG/SpacePG/race37.658s, scoped vet and build passed. The listener fixture explicitly targets21; this is not future25 qualification.
+
+Reviewed44 Role25 source8f9+99 was imported as328314057+16145fa56. Dedicated cleanup now validates exact native21 dependencies plus all four Bot tables/five immutable guards and fixed function body inside its operation/Space transaction before binding or receipt writes. Dirty-schema/disabled-Bot-guard/disabled-contribution-clock tests failed11.947s on the imported adapter and passed with its existing suite race60.606s plus vet/build. This cleanup catalog does not advertise native member/source2 serving at25, activate Bot actors, or open the private RPC by itself.
