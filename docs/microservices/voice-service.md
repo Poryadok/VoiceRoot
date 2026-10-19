@@ -896,6 +896,14 @@ Voice process instances stateless — масштабируются горизо�
 
 ## P3 Space lifecycle participant (target)
 
+The native A3 roster outbox relay is dormant in production composition. Native
+transactions still save their frozen facts and counters, but ordinary Voice,
+Space media and `NATS_URL` configuration do not lease, publish or mark these facts
+delivered. Existing participant/admission compatibility delivery is unchanged.
+A3 relay activation requires a separately qualified canonical broker authority,
+scoped publisher rights and durable consumer/inbox/source-coverage package; a v5
+readiness result or PubAck alone does not authorize that composition change.
+
 Voice adds a durable PostgreSQL lifecycle fence/operation receipt even though
 its media projection is primarily Redis. `FROZEN` atomically fences admission,
 actively ejects every Space session and revokes outstanding grants; ordinary
