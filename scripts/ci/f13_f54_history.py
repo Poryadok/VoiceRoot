@@ -62,6 +62,14 @@ J3071_RANGE = dict(integration='2cc9482255ba18cd948aacb567f4c4bdf8976b14',first=
     side_nodes=['447d77729c904943800f78b78937f46ab67739cd','ff35cc20928280ac88e1dbf6f013a8d99839afdf',
         '9dde1dedbfbc32d283056583de6c138ca241a56f','ae815afbea96f4da9006bb1d3b5c46f1408c637d',
         'a3502b516fa4cf109fec2d53c16db420700122a3','a80f649cbe0a03671c25531ace4ac1bd6bf54756'])
+F_CORRECTED_UNIT_SHA = 'dc4a28dc896a6bc1da54fcc01aceba94eaa63fd4b1b1eb175eeb9dc8cb9c31a3'
+F_CORRECTED_TUPLE = dict(merge='fa1528a7c232a644218edf49811e2bb2e373105f',
+    first='40afa80e6d1ca7faebf528b7cb78f32cdf707e5d',source='a80f649cbe0a03671c25531ace4ac1bd6bf54756',
+    base='c08cf1ed3a18e54e86541c54fa731fc9b24e1a8c',automatic_tree='ab7a4a4d4ed4cbf9663b4a752b95c9aeb21eac3f',
+    result_tree='454e4a883b40a6cf1f59e4cfc1d7b0d95ac916ed',correction='909090a34743902799306974d6f3ebabe3c02f10',
+    current='1c47dce37a88c2539c8dabb074d9eda46fb84999',source_ancestor='5bf6c4857c19fba2b91fb44eb9e9bc6ae816c485')
+F_CORRECTED_REPAIR_PATHS = ['src/backend/voice/main.go','src/backend/voice/internal/spacelifecycle/service.go',
+    'src/backend/voice/internal/spacelifecycle/effects.go','src/backend/voice/internal/spacelifecycle/recovery_publication_test.go']
 UNIT_HASHES = {
     'corrected-contract-v3-PROPOSAL.json':'62a00947187fa58b2815b13877a2c15a94ecb588c8d5fc06ca46aceb1cc24dde',
     'corrected-history-composition-contract-v3-PROPOSED.md':'04ab09c4094a35e256c4cb6642f54cd24c22f58b166ad013e29f7470953ed943',
@@ -234,7 +242,7 @@ def append(path, kind, frame, operation, repo, values):
     elif kind in ('history_capability','history_3071_capability'):
         capability,receipt=values
         payload=dict(capability=raw_binding(Path(capability).read_bytes()),receipt=json.loads(receipt),admission=False)
-    elif kind in ('composition_capability','composition_3071_capability','range_3071_branch'):
+    elif kind in ('composition_capability','composition_3071_capability','corrected_F_composition','range_3071_branch'):
         payload=json.loads(Path(values[0]).read_bytes() if kind=='range_3071_branch' else values[0])
         require(payload['admission'] is False,'composition_not_production_authority')
     elif kind == 'boundary_3071_observation':
@@ -574,6 +582,93 @@ def composition_3071_capability(repo, path, merge, boundary, first, source, name
     whole=manual_3071_composition(repo)
     return dict(whole,capability_sha256=sha(canonical(cap)),path=name,result_entry=raw_binding(result),
         path_composition='REVIEWED_DOCUMENT_RESOLUTION' if name==J3071_DOC else 'DETERMINISTIC_UNCONFLICTED_ENTRY_IN_REVIEWED_WHOLE')
+
+
+def corrected_F_whole(repo, unit_path, target):
+    """Fixed source composition with required current repair; never bug-free F.
+
+    This reuses the complete historical-composition/current-correction pattern
+    in the explicit author entrypoint. No production R/K or runtime grant.
+    """
+    raw=Path(unit_path).read_bytes();require(sha(raw)==F_CORRECTED_UNIT_SHA,'corrected_F_fixed_unit_hash')
+    u=json.loads(raw);f=F_CORRECTED_TUPLE
+    require(set(u)=={'type','merge','parents','best_bases','automatic_tree','result_tree','conflicts','manual_paths','entries',
+        'required_current_correction','qualified_current','current_bindings','repair_bindings','historical_gap','source_condition','evidence',
+        'producer_only','runtime_pass','activation_authority','current_or_future_path_authority'},'corrected_F_unit_shape')
+    require(u['type']=='F13_FIXED_HISTORICAL_COMPOSITION_WITH_REQUIRED_CURRENT_CORRECTION'
+        and u['producer_only'] is True and all(u[k] is False for k in ('runtime_pass','activation_authority','current_or_future_path_authority')),'corrected_F_source_only')
+    require([u['merge'],u['parents'],u['best_bases'],u['automatic_tree'],u['result_tree'],u['required_current_correction'],u['qualified_current']]
+        ==[f['merge'],[f['first'],f['source']],[f['base']],f['automatic_tree'],f['result_tree'],f['correction'],f['current']],'corrected_F_literal_tuple')
+    require(u['historical_gap'] and u['source_condition'] and len(u['evidence'])==4
+        and all(re.fullmatch('[0-9a-f]{64}',x) for x in u['evidence'].values()),'corrected_F_preserved_gap_and_evidence')
+    require(git(repo,'rev-list','--parents','-n','1',f['merge']).decode().split()==[f['merge'],f['first'],f['source']],'corrected_F_actual_parents')
+    require(git(repo,'merge-base','--all',f['first'],f['source']).decode().splitlines()==[f['base']],'corrected_F_actual_unique_base')
+    require(git(repo,'rev-parse',f['merge']+'^{tree}').decode().strip()==f['result_tree'],'corrected_F_actual_result_tree')
+    for older,newer in ((f['merge'],f['correction']),(f['correction'],f['source_ancestor']),
+        (f['source_ancestor'],f['current']),(f['source_ancestor'],target)):
+        git(repo,'merge-base','--is-ancestor',older,newer)
+    mt=subprocess.run(['git','--no-replace-objects','-C',str(repo),'merge-tree','--write-tree','--name-only','-z','--no-messages',f['first'],f['source']],capture_output=True)
+    parts=mt.stdout.split(b'\0')
+    require(mt.returncode==1 and not mt.stderr and parts[0].decode()==f['automatic_tree'] and parts[-1]==b''
+        and [v.decode() for v in parts[1:-1]]==u['conflicts'] and len(u['conflicts'])==2,'corrected_F_actual_conflict_not_clean_alias')
+    names=git(repo,'diff','--name-only',f['automatic_tree'],f['merge']).decode().splitlines()
+    require(names==u['manual_paths'] and len(names)==33 and names==sorted(set(names))
+        and set(u['entries'])==set(names),'corrected_F_complete33_not_selected_path')
+    refs=dict(base=f['base'],first=f['first'],source=f['source'],automatic=f['automatic_tree'],historical=f['merge'])
+    for name in names:
+        require(u['entries'][name]=={label:tree_entry(repo,ref,name) for label,ref in refs.items()},'corrected_F_every_parent_auto_manual_entry')
+    require(set(u['repair_bindings'])==set(F_CORRECTED_REPAIR_PATHS),'corrected_F_complete_repair_surface')
+    for name,entries in u['repair_bindings'].items():
+        require(entries==dict(correction=tree_entry(repo,f['correction'],name),candidate=tree_entry(repo,f['current'],name)),
+            'corrected_F_real_correction_entries')
+    required=set(names)|set(F_CORRECTED_REPAIR_PATHS)
+    require(set(u['current_bindings'])==required,'corrected_F_complete_current_bindings')
+    for name,expected in u['current_bindings'].items():
+        # Absence is an explicit versioned entry, never an omitted binding.
+        # The historical retired test remains in all33 source/history entries;
+        # every startup-repair file must instead remain present and exact.
+        require(isinstance(expected,str) and (not expected or expected.startswith('100644 blob '))
+            and (name not in F_CORRECTED_REPAIR_PATHS or bool(expected)) and expected==tree_entry(repo,f['current'],name)
+            and expected==tree_entry(repo,target,name),'corrected_F_required_current_repair_not_regressed')
+    return dict(type='F54_CORRECTED_HISTORICAL_WHOLE_PROTOTYPE',merge=f['merge'],parents=u['parents'],best_bases=u['best_bases'],
+        automatic_tree=f['automatic_tree'],result_tree=f['result_tree'],merge_tree_exit=1,git_outcome='CONFLICT',
+        complete_conflict_paths=u['conflicts'],complete_manual_paths=names,unit_sha256=sha(raw),
+        raw_difference=file_digest(git(repo,'diff','--raw','--no-abbrev','--no-renames','-z',f['automatic_tree'],f['merge'])),
+        patch=file_digest(git(repo,'diff','--binary',f['automatic_tree'],f['merge'])),
+        required_current_correction=f['correction'],qualified_comparison_source=f['current'],current_target=target,
+        historical_gap=u['historical_gap'],current_bindings=u['current_bindings'],evidence=u['evidence'],
+        retain_runtime_and_content_taint=True,runtime_pass=False,activation_authority=False,current_or_future_path_authority=False,admission=False)
+
+
+def file_digest(raw):
+    return dict(bytes=len(raw),sha256=sha(raw))
+
+
+def prepare_corrected_F_capability(repo, unit_path):
+    target=git(repo,'rev-parse','HEAD').decode().strip();whole=corrected_F_whole(repo,unit_path,target)
+    require(Path(repo).resolve()==ROOT.resolve(),'corrected_F_actual_root')
+    require(all((ROOT/n).read_bytes()==git(repo,'show',target+':'+n) for n in
+        ('scripts/ci/f13_f54_history.py','scripts/ci/voice-db-runtime-provisioning-contract_test.sh','scripts/ci/voice-r22-runtime-scope.sh')),'corrected_F_executed_carrier')
+    context={k:os.environ.get(k,'') for k in ('GITHUB_EVENT_NAME','GITHUB_REF','GITHUB_SHA','GITHUB_BASE_REF','VOICE_CI_PUSH_BEFORE_SHA')}
+    require(context['GITHUB_SHA']==target and ((context['GITHUB_EVENT_NAME']=='pull_request'
+        and context['GITHUB_REF'].startswith('refs/pull/') and context['GITHUB_BASE_REF']=='master')
+        or (context['GITHUB_EVENT_NAME']=='push' and context['GITHUB_REF']=='refs/heads/master')),'corrected_F_actual_master_event_context')
+    return dict(type='F54_CORRECTED_HISTORICAL_CAPABILITY_PROTOTYPE',unit_path=str(Path(unit_path).resolve()),
+        unit_sha256=F_CORRECTED_UNIT_SHA,whole=whole,source_context=router_source_context(repo),context=context,admission=False)
+
+
+def corrected_F_composition(repo, capability_path, merge, boundary, first, source, name, result):
+    return corrected_F_receipt(repo,json.loads(Path(capability_path).read_bytes()),merge,boundary,first,source,name,result)
+
+
+def corrected_F_receipt(repo, cap, merge, boundary, first, source, name, result):
+    f=F_CORRECTED_TUPLE
+    require(cap==prepare_corrected_F_capability(repo,cap['unit_path']),'corrected_F_complete_current_capability')
+    require([merge,boundary,first,source]==[f['merge'],f['base'],f['first'],f['source']],'corrected_F_actual_call')
+    require(name in git(repo,'diff','--name-only',f['base'],f['source']).decode().splitlines(),'corrected_F_actual_source_path_not_future')
+    require(result==tree_entry(repo,f['merge'],name).rstrip('\0'),'corrected_F_actual_result_entry')
+    return dict(cap['whole'],path=name,result_entry=raw_binding(result),capability=cap,
+        capability_sha256=sha(canonical(cap)),composition='HISTORICAL_SOURCE_WITH_REQUIRED_CURRENT_CORRECTION')
 
 
 def load_unit(repo, directory):
@@ -1297,7 +1392,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
     previous='0'*64;frames={};stack=[];operations={};attempts={};classified={};pending={};cumulative={};child_flags={};child_rows={};frame_rows={};carry={};failures=[];observed=set()
     expected_operations={};seen_operations={};visited={};committed={};maps={};children={};obligations={};native_bindings={}
     M_capabilities={};M_compositions={};M_ready={};M_consumed={};M_supersessions={};master_entry=None;master_wrapper=None
-    J_capabilities={};J_compositions={};range_branches={};frame_results={};I_ready={};I_consumed={}
+    J_capabilities={};J_compositions={};F_compositions={};range_branches={};frame_results={};I_ready={};I_consumed={}
     def map_binding(frame):
         raw=''.join('\t'.join(parts)+'\n' for parts in maps[frame]).encode()
         return dict(bytes=len(raw),sha256=sha(raw))
@@ -1533,6 +1628,14 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             require(v['admission'] is False,'no_production_capability')
             if kind=='scalar_seam_observation':require(v['status']==1,'scalar_only_still_rejects')
             continue
+        if kind=='corrected_F_composition':
+            require(op in operations and operations[op]['commit']==F_CORRECTED_TUPLE['merge']
+                and v['path'] in operations[op]['paths'],'corrected_F_actual_operation_path')
+            actual=operations[op]
+            expected=corrected_F_receipt(repo,v['capability'],actual['commit'],actual['boundary'],actual['first_parent'],
+                actual['source_head'],v['path'],tree_entry(repo,actual['commit'],v['path']).rstrip('\0'))
+            require(v==expected,'corrected_F_complete_whole_and_required_current_repair')
+            F_compositions.setdefault(op,{})[v['path']]=v;continue
         if kind=='composition_3071_capability':
             require(op in J_capabilities and v['path'] in operations[op]['paths'],'fixed3071_composition_actual_path')
             expected=manual_3071_composition(repo)
@@ -1556,6 +1659,8 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             require(operations[op]['classification']=='sync' and v['gate']=='f13_validate_sync_merge_resolution' and v['classifier']==classifier_binding(),'actual_sync_gate_identity')
             sync_gates.add(op);continue
         if kind=='classification':
+            if operations[op]['commit']==F_CORRECTED_TUPLE['merge']:
+                require(F_compositions.get(op),'corrected_F_whole_consumed_before_classification')
             require(op not in classified and v['classifier']==classifier_binding(),'original_classifier_identity')
             require(v['trigger']==classify(v['unapproved_delta']['raw'].splitlines()),'actual_raw_classifier_flag')
             require(v['unapproved_delta']==raw_binding(v['unapproved_delta']['raw']),'actual_delta_bytes')
@@ -1741,6 +1846,8 @@ def main():
         if command=='cap-boundary':print(json.dumps(boundary_capability(*args)));return 0
         if command=='cap-entry':print(json.dumps(entry_capability(*args)));return 0
         if command=='cap-composition':print(json.dumps(composition_capability(*args)));return 0
+        if command=='corrected-F-capability':print(json.dumps(prepare_corrected_F_capability(*args)));return 0
+        if command=='corrected-F-composition':print(json.dumps(corrected_F_composition(*args)));return 0
         if command=='3071-capabilities':print(json.dumps(prepare_3071_capabilities(*args)));return 0
         if command=='3071-boundary':print(json.dumps(boundary_3071_capability(*args)));return 0
         if command=='3071-composition':print(json.dumps(composition_3071_capability(*args)));return 0

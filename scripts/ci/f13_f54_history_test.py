@@ -27,6 +27,136 @@ def module():
 
 
 class ProducerTrace(unittest.TestCase):
+    def test_corrected_historical_manual_unit_requires_complete_source_and_current_repair(self):
+        # Private real-Git specification at the failing per-entry seam. A
+        # corrected target is not a claim that its historical source was safe.
+        # No production record, runtime result or manufactured owner row exists.
+        names=sorted([RUNTIME]+['src/backend/voice/internal/spacemedia/private_admission'+str(i)+'.go' for i in range(2)]+
+                     ['docs/private-f-manual/source'+str(i)+'.md' for i in range(30)])
+        # Keep explicit conflict names independent of lexicographic positions.
+        conflicts=[n for n in names if 'private_admission' in n]
+        service='src/backend/voice/internal/spacelifecycle/service.go'
+        effects='src/backend/voice/internal/spacelifecycle/effects.go'
+        regression='src/backend/voice/internal/spacelifecycle/recovery_publication_test.go'
+        repair_paths=[RUNTIME,service,effects,regression]
+        self.write(service,'historical mutable publication\n');self.write(effects,'effect interface bindings\n')
+        def text(name,left='base-left',right='base-right',manual=False):
+            middle='\n'.join('stable '+str(i) for i in range(20))
+            return left+'\n'+middle+'\n'+right+'\n'+('reviewed manual contribution\n' if manual else '')
+        for name in names:self.write(name,text(name))
+        base=self.commit('private full33 boundary')
+        for name in names:self.write(name,text(name,left='first contribution'))
+        for name in conflicts:self.write(name,text(name,left='first contribution',right='first conflict obligation'))
+        first=self.commit('private first contributions')
+        git(self.repo,'checkout','-qb','corrected-source',base)
+        for name in names:self.write(name,text(name,right='incoming contribution'))
+        source=self.commit('private incoming contributions')
+        git(self.repo,'checkout','-q',first)
+        merge=subprocess.run(['git','-C',str(self.repo),'merge','--no-ff','--no-commit',source],capture_output=True,text=True)
+        self.assertEqual(merge.returncode,1,merge.stderr)
+        for name in names:
+            raw=text(name,left='first contribution',right='incoming contribution',manual=True)
+            if name in conflicts:raw+='first conflict obligation\n'
+            if name==RUNTIME:raw+='KNOWN_STARTUP_PUBLICATION_DEFECT\n'
+            self.write(name,raw)
+        historical=self.commit('private reviewed manual33 with known historical defect')
+        mt=subprocess.run(['git','-C',str(self.repo),'merge-tree','--write-tree','--name-only','-z','--no-messages',first,source],capture_output=True)
+        self.assertEqual(mt.returncode,1,mt.stderr)
+        parts=mt.stdout.split(b'\0');automatic=parts[0].decode()
+        self.assertEqual(sorted(x.decode() for x in parts[1:-1]),conflicts)
+        self.assertEqual(git(self.repo,'diff','--name-only',automatic,historical).splitlines(),names)
+        self.write(RUNTIME,(self.repo/RUNTIME).read_text().replace('KNOWN_STARTUP_PUBLICATION_DEFECT','CURRENT_REVIEWED_STARTUP_REPAIR'))
+        self.write(service,'current immutable snapshot\n');self.write(regression,'current publication regression\n')
+        retired=next(n for n in names if n.startswith('docs/'))
+        (self.repo/retired).unlink()
+        correction=self.commit('private required current correction')
+        for name in names:
+            if name==retired:
+                self.assertEqual(git(self.repo,'ls-tree',correction,'--',name),'')
+                # Retirement is explicit, while the old contributions remain
+                # in historical Git and the source qualification unit.
+                current=git(self.repo,'show',historical+':'+name)
+            else:current=git(self.repo,'show',correction+':'+name)
+            self.assertIn('first contribution',current);self.assertIn('incoming contribution',current)
+            self.assertIn('reviewed manual contribution',current)
+        self.assertNotIn('KNOWN_STARTUP_PUBLICATION_DEFECT',git(self.repo,'show',correction+':'+RUNTIME))
+        # This private accepted-source/current-correction contract is supplied
+        # separately from native/M/J authority. The later implementation must
+        # validate its whole unit and negatives, not merely select this path.
+        m=module();m.ROOT=self.repo
+        whole_entries={n:{k:git(self.repo,'ls-tree',rev,'--',n)+'\0' for k,rev in
+            [('base',base),('first',first),('source',source),('automatic',automatic),('historical',historical)]} for n in names}
+        # Convert stripped newline records to the canonical single NUL record.
+        current_bindings={n:(raw+'\0' if raw else '') for n in sorted(set(names+repair_paths))
+            for raw in [git(self.repo,'ls-tree',correction,'--',n)]}
+        unit=dict(type='F13_FIXED_HISTORICAL_COMPOSITION_WITH_REQUIRED_CURRENT_CORRECTION',
+            merge=historical,parents=[first,source],best_bases=[base],automatic_tree=automatic,
+            result_tree=git(self.repo,'rev-parse',historical+'^{tree}'),conflicts=conflicts,manual_paths=names,
+            entries=whole_entries,required_current_correction=correction,qualified_current=correction,
+            current_bindings=current_bindings,repair_bindings={n:dict(correction=current_bindings[n],candidate=current_bindings[n]) for n in repair_paths},
+            historical_gap='KNOWN_STARTUP_PUBLICATION_DEFECT',source_condition='Retained contributions and mandatory current repair',
+            evidence={str(i):hashlib.sha256(('private evidence '+str(i)).encode()).hexdigest() for i in range(4)},
+            producer_only=True,runtime_pass=False,activation_authority=False,current_or_future_path_authority=False)
+        unit_file=self.folder/'private-source-unit.json';unit_file.write_text(json.dumps(unit))
+        m.F_CORRECTED_UNIT_SHA=m.sha(unit_file.read_bytes());m.F_CORRECTED_REPAIR_PATHS=repair_paths
+        m.F_CORRECTED_TUPLE=dict(merge=historical,first=first,source=source,base=base,automatic_tree=automatic,
+            result_tree=unit['result_tree'],correction=correction,current=correction,source_ancestor=correction)
+        helper=self.repo/'scripts/ci/f13_f54_history.py'
+        lines=HELPER.read_text().splitlines(keepends=True);bindings={n:getattr(m,n) for n in
+            ('F_CORRECTED_UNIT_SHA','F_CORRECTED_TUPLE','F_CORRECTED_REPAIR_PATHS')}
+        for node in sorted([n for n in ast.parse(''.join(lines)).body if isinstance(n,ast.Assign)
+                and isinstance(n.targets[0],ast.Name) and n.targets[0].id in bindings],key=lambda n:n.lineno,reverse=True):
+            name=node.targets[0].id;lines[node.lineno-1:node.end_lineno]=[name+' = '+repr(bindings[name])+'\n']
+        helper.write_text(''.join(lines))
+        shell=self.repo/'scripts/ci/voice-db-runtime-provisioning-contract_test.sh'
+        shell.write_text(SHELL.read_text().replace('fa1528a7c232a644218edf49811e2bb2e373105f',historical))
+        target=self.commit('private immutable corrected-history carrier')
+        context=dict(GITHUB_EVENT_NAME='pull_request',GITHUB_REF='refs/pull/875/merge',GITHUB_SHA=target,GITHUB_BASE_REF='master')
+        capability=self.folder/'private-corrected-history-capability.json'
+        with patch.dict(m.os.environ,context):capability.write_text(json.dumps(m.prepare_corrected_F_capability(self.repo,unit_file)))
+        result_entry=git(self.repo,'ls-tree',historical,'--',RUNTIME)
+        args=[self.repo,base,first,source,RUNTIME,result_entry,historical,'',helper,'',capability]
+        program='set -eu\n'+definitions().replace('fa1528a7c232a644218edf49811e2bb2e373105f',historical)+'\nTMP_DIR='+shlex.quote(str(self.folder))+'\n'
+        with patch.dict(m.os.environ,context):
+            result=subprocess.run(['bash','-c',program+'f13_checkpoint_merge_tree_entry_matches '+
+                ' '.join(shlex.quote(str(value)) for value in args)+'\n'],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,'A complete manual source with mandatory retained current repair is rejected: '+result.stderr)
+            proof=m.corrected_F_composition(self.repo,capability,historical,base,first,source,RUNTIME,result_entry)
+            self.assertEqual(proof['merge_tree_exit'],1);self.assertEqual(proof['complete_manual_paths'],names)
+            self.assertIn('KNOWN_STARTUP_PUBLICATION_DEFECT',proof['historical_gap'])
+            self.assertFalse(proof['runtime_pass']);self.assertTrue(proof['retain_runtime_and_content_taint'])
+            original=unit_file.read_bytes()
+            import copy
+            for error in ('partial','parent','base','tree','auto','mode','entry','current','forged-absence',
+                    'missing-repair','repair-absence','correction','conflict','runtime','activation','future','gap'):
+                altered=copy.deepcopy(unit)
+                if error=='partial':altered['manual_paths'].pop()
+                elif error=='parent':altered['parents'].reverse()
+                elif error=='base':altered['best_bases']=[first]
+                elif error=='tree':altered['result_tree']='0'*40
+                elif error=='auto':altered['automatic_tree']='0'*40
+                elif error=='mode':altered['entries'][RUNTIME]['historical']=altered['entries'][RUNTIME]['historical'].replace('100644','100755')
+                elif error=='entry':altered['entries'][names[0]]['first']=altered['entries'][names[0]]['source']
+                elif error=='current':altered['current_bindings'].pop(names[0])
+                elif error=='forged-absence':altered['current_bindings'][RUNTIME]=''
+                elif error=='missing-repair':altered['repair_bindings'].pop(service)
+                elif error=='repair-absence':altered['current_bindings'][service]=''
+                elif error=='correction':altered['required_current_correction']=historical
+                elif error=='conflict':altered['conflicts'].pop()
+                elif error=='gap':altered['historical_gap']=''
+                else:altered[dict(runtime='runtime_pass',activation='activation_authority',future='current_or_future_path_authority')[error]]=True
+                unit_file.write_text(json.dumps(altered));m.F_CORRECTED_UNIT_SHA=m.sha(unit_file.read_bytes())
+                with self.subTest(error=error),self.assertRaises(m.Rejected):m.corrected_F_whole(self.repo,unit_file,target)
+            unit_file.write_bytes(original);m.F_CORRECTED_UNIT_SHA=m.sha(original)
+            for bad_args in ((historical,first,source,RUNTIME,result_entry),(base,source,first,RUNTIME,result_entry),
+                (base,first,source,RUNTIME+'.future',result_entry),(base,first,source,RUNTIME,result_entry.replace('100644','100755'))):
+                with self.assertRaises(m.Rejected):m.corrected_F_composition(self.repo,capability,historical,*bad_args)
+            with patch.dict(m.os.environ,{'GITHUB_BASE_REF':'develop'}),self.assertRaises(m.Rejected):
+                m.corrected_F_composition(self.repo,capability,historical,base,first,source,RUNTIME,result_entry)
+            self.write(RUNTIME,'regressed current startup binding\n');regressed=self.commit('private current regression')
+            with self.assertRaises(m.Rejected):m.corrected_F_whole(self.repo,unit_file,regressed)
+            with self.assertRaises(m.Rejected):m.corrected_F_whole(self.repo,unit_file,historical)
+
     def test_large_range_receipts_use_exact_file_transport_not_argv(self):
         # Transport only: the collector stub grants no range/source authority.
         # The real caller used to expand this complete origin into one argv.

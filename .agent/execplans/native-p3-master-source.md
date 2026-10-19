@@ -1,5 +1,51 @@
 # Native/P3 source qualification for master
 
+## Current e122 canonical corrected-history applicability
+
+Owner416 accepted dispatch d645c88e (8675B) and canonical findings53165337
+(10893B); supported e122/readback precedes fresh WT19 lease69e7bcda223cc785b17d75990923ce59.
+Immutable author base7e/H4 is distinct from current applicability target1c47.
+Canonical BE265104-114 already records the F startup defect and normal909
+snapshot/deferred-start correction. Historical source need not be defect-free;
+every actual F33 manual contribution/owner/content/runtime OR must still survive,
+and current required correction must be exact, reviewed and context-bound.
+
+First RED specification uses real private Git parents, two conflicts, all33
+manual paths and a later retained startup repair at the existing native-bound
+merge-entry seam. Before any gate behavior change, freeze actual F33/current909
+bindings and prove this corrected-history positive rejects at the structural
+seam. No production source qualification or native/M/J authority is asserted.
+
+Acceptance/negative checklist: preserve all33 entries/parent contributions;
+require current correction descendant and exact bindings; reject unchanged bad
+target, missing/regressed/wrong correction, dropped manual edit/foreign owner,
+wrong parents/base/conflicts/context, partial unit, lost owner/content/OR,
+substituted H4/native authority and path/activation expansion. Reuse existing
+Role conditional and guarded direct-correction semantics, never their tuples.
+Exclusive four existing files only; product code is read-only. Any other CI
+helper/record scope must be enumerated before editing. Private Linux focused
+RED/GREEN and affected tests, then frozen exact418 review; actual whole wrapper,
+ledger/router/RK/currentCI remain required. Do not rerun cancelled75361 or touch
+d0bd/stops145/172/191/230/372. No new task/actor/product/runtime permission.
+
+Focused real-Git RED0.943s rejects the corrected-history positive at the exact
+entry helper, not setup. Successor source-only fixed-F composition keeps Git
+EXIT1/two conflicts, complete33 parent/AUTO/F entries, required909 correction,
+exact current34 bindings and all four repair files. Canonical1c is a byte
+comparison source only; current native authority remains the unchanged H4
+record of this author context. No old source is relabelled defect-free.
+The first actual-unit execution correctly exposed an over-restrictive current
+presence requirement: the old space_lifecycle_test.go is explicitly absent at
+both pinned1c and7e. Its key/history must remain, but exact pinned absence is
+valid for that non-repair entry. Required repair files must remain present.
+Private explicit-retirement/forged-absence negatives and actual fixed-unit
+recheck0 preserve that distinction. The first failure stays in its raw log.
+Existing F54/guarded/conditional-Role/historical-composition coverage41 PASS
+170.634s before the local absence correction; focused corrected-history cases
+and actual fixed-source unit pass after it. No observer75361 reuse or new
+runtime/producer PASS is claimed. New real original-wrapper/trace and frozen
+independent418 review remain necessary before any R/laterK/current CI claim.
+
 ## Current e118 fixed3071 author continuation
 
 Baseline3411/H4 and its c31 bounded code/actual-prefix CLEAR are immutable;

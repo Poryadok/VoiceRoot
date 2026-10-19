@@ -706,6 +706,7 @@ f13_checkpoint_merge_tree_entry_matches() {
   local path="$5" result_entry="$6" bases_file output_file status tree_oid expected_entry output_fd
   local conflict_path guarded_conflict=false
   local exact_merge="${7:-}" exact_capability="${8:-}" exact_observer="${9:-}" exact_receipt exact_3071_capability="${10:-}"
+  local corrected_F_capability="${11:-}"
   bases_file="${TMP_DIR}/f13-checkpoint-merge-bases"
   output_file="${TMP_DIR}/f13-checkpoint-merge-tree"
   git -C "${repo}" merge-base --all "${first_parent}" "${source_head}" \
@@ -769,6 +770,18 @@ f13_checkpoint_merge_tree_entry_matches() {
     [[ "${conflict_path}" != "${path}" ]] || guarded_conflict=true
   done
   exec {output_fd}<&-
+  if [[ -n "${corrected_F_capability}" && "${exact_merge}" == fa1528a7c232a644218edf49811e2bb2e373105f &&
+    "${exact_observer}" == "${repo}/scripts/ci/f13_f54_history.py" ]] &&
+    exact_receipt="$(python3 "${exact_observer}" corrected-F-composition "${repo}" "${corrected_F_capability}" \
+      "${exact_merge}" "${expected_base}" "${first_parent}" "${source_head}" "${path}" "${result_entry}")"; then
+    # Qualified historical composition retains Git's original EXIT1/conflicts,
+    # all33 manual entries and the known defect plus mandatory current repair.
+    # No source/owner/raw runtime flag or ordinary native policy is rewritten.
+    if [[ -n "${f13_f54_trace_file:-}" ]]; then
+      f13_f54_trace_event corrected_F_composition "${repo}" "${exact_receipt}" || return 1
+    fi
+    return 0
+  fi
   if [[ "${guarded_conflict}" == true ]]; then
     # A parsed, path-specific conflict is distinct from a failed or malformed
     # merge-tree computation. The collector may defer only this known result
@@ -3289,6 +3302,7 @@ f13_f54_collect_exact_master_unit() {
   local repo="$1" base="$2" target="$3" output="$4" category="$5" unit="$6"
   local f13_f54_original_trace="$7" f13_f54_original_native="$8" f13_f54_current_native="$9"
   local fixed3071_unit="${10:-}" f13_f54_3071_capability_file=''
+  local f13_f54_F_capability_file=''
   local f13_f54_I_operation='' f13_f54_I_ledger="${TMP_DIR}/fixed3071-I-ledger.json" f13_f54_I_ledger_sha=''
   local f13_f54_capability_file="${TMP_DIR}/f54-exact-source-capabilities.json"
   local f13_f54_M_operation='' f13_f54_M_child_map="${TMP_DIR}/f54-actual-M-child-map"
@@ -3307,6 +3321,12 @@ f13_f54_collect_exact_master_unit() {
     [[ ! -e "${f13_f54_3071_capability_file}" ]] || return 1
     python3 "${f13_f54_observer}" 3071-capabilities "${repo}" "${fixed3071_unit}" \
       "${native_p3_binding}" >"${f13_f54_3071_capability_file}" || return 1
+    if [[ -f "${fixed3071_unit}/corrected-F/source-unit.json" ]]; then
+      f13_f54_F_capability_file="${TMP_DIR}/corrected-F-capability.json"
+      [[ ! -e "${f13_f54_F_capability_file}" ]] || return 1
+      python3 "${f13_f54_observer}" corrected-F-capability "${repo}" \
+        "${fixed3071_unit}/corrected-F/source-unit.json" >"${f13_f54_F_capability_file}" || return 1
+    fi
   fi
   f13_f54_trace_event master_entry "${repo}" "${entry}" || return 1
   case "${GITHUB_EVENT_NAME:-}:${GITHUB_REF:-}" in
@@ -4079,7 +4099,7 @@ f13_collect_develop_contributions() {
           { [[ "${native_p3_active:-false}" == true ]] && native_p3_path_bound "${repo}" "${path}"; }; then
           if f13_checkpoint_merge_tree_entry_matches "${repo}" "${source_base}" \
             "${first_parent}" "${source_head}" "${path}" "${result_entry}" \
-            "${commit}" "${f13_f54_capability_file:-}" "${f13_f54_observer:-}" "${f13_f54_3071_capability_file:-}"; then
+            "${commit}" "${f13_f54_capability_file:-}" "${f13_f54_observer:-}" "${f13_f54_3071_capability_file:-}" "${f13_f54_F_capability_file:-}"; then
             checkpoint_merge_outcomes["${path}"]=clean
           else
             merge_tree_status=$?
@@ -4107,7 +4127,7 @@ f13_collect_develop_contributions() {
             # clean disjoint edits. Conflicts/manual resolutions still refuse.
             if f13_checkpoint_merge_tree_entry_matches "${repo}" "${source_base}" \
               "${first_parent}" "${source_head}" "${path}" "${result_entry}" \
-              "${commit}" "${f13_f54_capability_file:-}" "${f13_f54_observer:-}" "${f13_f54_3071_capability_file:-}"; then
+              "${commit}" "${f13_f54_capability_file:-}" "${f13_f54_observer:-}" "${f13_f54_3071_capability_file:-}" "${f13_f54_F_capability_file:-}"; then
               ordinary_merge_entries["${path}"]="${result_entry}"
             else
               merge_tree_status=$?
