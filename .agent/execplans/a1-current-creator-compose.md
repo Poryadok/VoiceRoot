@@ -73,3 +73,16 @@ passes all8cases, preserving original7 A1 checks. Real manifest contract will
 run from the portable exact Git clone with the combined source.121 supplied
 5113a511 Auth325/paid324 target; normal merge before final runtime assembly,
 retain unchanged component proof instead of repeating unrelated checks.
+
+Current50071 portable fullbundle62372550bytes SHA256
+2c7fbb1b95b988758845be86c433aa5b71301241cf290577d680be3ecfe9b299
+verified and restored as realLinux Gitclone; full e2e-manifest contract passed.
+Fresh canonicalfixture generated after creating its required parent directory;
+earlier setup failure did not reach any behavior assertion.
+
+Consumed only nativeDTO4d141c36, admissionwire bad630 and helper eecb4e05 via
+ordinary cherry-picks, explicitly excluding native39 activation until complete
+writer cohort. Shared admission dispatch actualRED0.088 (regular/guest denied,
+ordinary bypass) became full LP race2.431/checker1.148/vetPASS. Creator-only and
+Admission-only dependency guards remain independent.186/69 exact helper API
+and dispatch ownership agreement used; no native Store implementation copied.
