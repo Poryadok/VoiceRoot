@@ -41,6 +41,10 @@ type Response struct {
 // It never relabels old rows. New operations advance revision even for A->A;
 // exact action replay returns only its immutable original publication.
 func (s *Store) PublishOffer(ctx context.Context, a AuthorAction) (Offer, error) {
+	return s.publishOffer(ctx, a, nil)
+}
+
+func (s *Store) publishOffer(ctx context.Context, a AuthorAction, capture *actorCapture) (Offer, error) {
 	if a.OperationID == uuid.Nil || a.StoryID == uuid.Nil || a.ProfileID == uuid.Nil || a.RequestSHA256 == [32]byte{} {
 		return Offer{}, ErrUnavailable
 	}
@@ -50,6 +54,9 @@ func (s *Store) PublishOffer(ctx context.Context, a AuthorAction) (Offer, error)
 	}
 	defer release()
 	defer func() { _ = tx.Rollback(ctx) }()
+	if capture != nil && !sameOrigin(o, capture.expected) {
+		return Offer{}, ErrStale
+	}
 	_, e = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "story-lfp-publication:"+a.OperationID.String())
 	if e != nil {
 		return Offer{}, ErrUnavailable
@@ -68,6 +75,18 @@ func (s *Store) PublishOffer(ctx context.Context, a AuthorAction) (Offer, error)
 		}
 		if saved.provenance != o {
 			return Offer{}, ErrStale
+		}
+		if capture != nil {
+			old, e := readPublicationActor(ctx, tx, saved)
+			if e != nil {
+				return Offer{}, e
+			}
+			if old.AccountID != capture.actor.AccountID || old.ProfileID != capture.actor.ProfileID {
+				return Offer{}, ErrConflict
+			}
+			if e = capture.current(ctx, tx); e != nil {
+				return Offer{}, e
+			}
 		}
 		if e = tx.Commit(ctx); e != nil {
 			return Offer{}, ErrUnavailable
@@ -99,6 +118,11 @@ func (s *Store) PublishOffer(ctx context.Context, a AuthorAction) (Offer, error)
 		state.Revision = latest.Revision + 1
 	}
 	state.PayloadSHA256 = payloadHash(state)
+	if capture != nil {
+		if e = capture.current(ctx, tx); e != nil {
+			return Offer{}, e
+		}
+	}
 	_, e = tx.Exec(ctx, `INSERT INTO story_lfp_offers(story_id,incarnation,revision,author_profile_id,criteria_sha256,payload_sha256,state_sha256,expires_at_millis,environment_id,installation_id,authority_incarnation,database_binding_sha256) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, state.StoryID, state.Incarnation, int64(state.Revision), state.AuthorProfileID, state.CriteriaSHA256[:], state.PayloadSHA256[:], state.StateSHA256[:], state.ExpiresAtUnixMillis, o.environment, o.installation, o.incarnation, o.database[:])
 	if e != nil {
 		return Offer{}, ErrUnavailable
@@ -110,6 +134,16 @@ func (s *Store) PublishOffer(ctx context.Context, a AuthorAction) (Offer, error)
 	_, e = tx.Exec(ctx, `INSERT INTO story_lfp_publications(operation_id,story_id,incarnation,revision,author_profile_id,request_sha256) VALUES($1,$2,$3,$4,$5,$6)`, a.OperationID, state.StoryID, state.Incarnation, int64(state.Revision), a.ProfileID, a.RequestSHA256[:])
 	if e != nil {
 		return Offer{}, ErrUnavailable
+	}
+	if capture != nil {
+		snapshot, err := captureOfferState(ctx, tx, state)
+		if err != nil {
+			return Offer{}, err
+		}
+		_, e = tx.Exec(ctx, `INSERT INTO story_lfp_publication_actors(publication_operation_id,canonical_actor,actor_sha256,canonical_offer_state) VALUES($1,$2,$3,$4)`, a.OperationID, capture.canonical, capture.hash[:], snapshot)
+		if e != nil {
+			return Offer{}, ErrUnavailable
+		}
 	}
 	if e = tx.Commit(ctx); e != nil {
 		return Offer{}, ErrUnavailable
@@ -146,6 +180,10 @@ func (s *Store) ObserveOffer(ctx context.Context, id uuid.UUID) (Offer, error) {
 }
 
 func (s *Store) RecordResponse(ctx context.Context, r Response) (lfpconsent.Consent, []byte, [32]byte, error) {
+	return s.recordResponse(ctx, r, nil)
+}
+
+func (s *Store) recordResponse(ctx context.Context, r Response, capture *actorCapture) (lfpconsent.Consent, []byte, [32]byte, error) {
 	empty := func(e error) (lfpconsent.Consent, []byte, [32]byte, error) {
 		return lfpconsent.Consent{}, nil, [32]byte{}, e
 	}
@@ -158,6 +196,9 @@ func (s *Store) RecordResponse(ctx context.Context, r Response) (lfpconsent.Cons
 	}
 	defer release()
 	defer func() { _ = tx.Rollback(ctx) }()
+	if capture != nil && !sameOrigin(o, capture.expected) {
+		return empty(ErrStale)
+	}
 	_, e = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "story-lfp-response:"+r.OperationID.String())
 	if e != nil {
 		return empty(ErrUnavailable)
@@ -169,6 +210,14 @@ func (s *Store) RecordResponse(ctx context.Context, r Response) (lfpconsent.Cons
 		}
 		if !matches(c, r) {
 			return empty(ErrConflict)
+		}
+		if capture != nil {
+			if _, e = readActorEnvelope(ctx, tx, c.ConsentID); e != nil {
+				return empty(e)
+			}
+			if e = capture.current(ctx, tx); e != nil {
+				return empty(e)
+			}
 		}
 		if e = tx.Commit(ctx); e != nil {
 			return empty(ErrUnavailable)
@@ -186,8 +235,13 @@ func (s *Store) RecordResponse(ctx context.Context, r Response) (lfpconsent.Cons
 	if e != nil {
 		return empty(ErrUnavailable)
 	}
-	if current != r.Offer || current.provenance != o || current.StateSHA256 != state.StateSHA256 || current.AuthorProfileID == r.ProfileID {
+	if !sameOfferView(current, r.Offer) || current.provenance != o || current.StateSHA256 != state.StateSHA256 || current.AuthorProfileID == r.ProfileID {
 		return empty(ErrStale)
+	}
+	if capture != nil {
+		if _, e = readPublicationActor(ctx, tx, current); e != nil {
+			return empty(e)
+		}
 	}
 	var now time.Time
 	if e = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); e != nil {
@@ -195,6 +249,9 @@ func (s *Store) RecordResponse(ctx context.Context, r Response) (lfpconsent.Cons
 	}
 	if now.UnixMilli() >= current.ExpiresAtUnixMillis {
 		return empty(ErrStale)
+	}
+	if capture != nil && !capture.expiry.After(now) {
+		return empty(ErrUnavailable)
 	}
 	c = lfpconsent.Consent{ConsentID: uuid.New(), ResponseOperationID: r.OperationID, StoryID: current.StoryID, StoryIncarnation: current.Incarnation, OfferRevision: current.Revision, AuthorProfileID: current.AuthorProfileID, ResponderAccountID: r.AccountID, ResponderProfileID: r.ProfileID, ResponderSessionEpoch: r.SessionEpoch, ResponseType: r.Type, CriteriaSHA256: current.CriteriaSHA256, OfferPayloadSHA256: current.PayloadSHA256, CreatedAtUnixMillis: now.UnixMilli(), OfferExpiresAtUnixMillis: current.ExpiresAtUnixMillis, PrincipalRequestSHA256: r.RequestSHA256}
 	b, h, e := lfpconsent.Encode(c)
@@ -205,6 +262,21 @@ func (s *Store) RecordResponse(ctx context.Context, r Response) (lfpconsent.Cons
 	if e != nil {
 		return empty(ErrUnavailable)
 	}
+	if capture != nil {
+		origin, e := sharedOrigin(o)
+		if e != nil {
+			return empty(ErrUnavailable)
+		}
+		envelope, e := lfpconsent.NewEnvelope(b, capture.canonical, origin)
+		if e != nil {
+			return empty(ErrUnavailable)
+		}
+		qualified := envelope.QualifiedSHA256()
+		_, e = tx.Exec(ctx, `INSERT INTO story_lfp_consent_actors(consent_id,canonical_actor,actor_sha256,qualified_consent_sha256) VALUES($1,$2,$3,$4)`, c.ConsentID, capture.canonical, capture.hash[:], qualified[:])
+		if e != nil {
+			return empty(ErrUnavailable)
+		}
+	}
 	if e = tx.Commit(ctx); e != nil {
 		return empty(ErrUnavailable)
 	}
@@ -212,7 +284,11 @@ func (s *Store) RecordResponse(ctx context.Context, r Response) (lfpconsent.Cons
 }
 
 func matches(c lfpconsent.Consent, r Response) bool {
-	return c.ResponseOperationID == r.OperationID && c.ResponderAccountID == r.AccountID && c.ResponderProfileID == r.ProfileID && c.StoryID == r.Offer.StoryID && c.StoryIncarnation == r.Offer.Incarnation && c.OfferRevision == r.Offer.Revision && c.AuthorProfileID == r.Offer.AuthorProfileID && c.CriteriaSHA256 == r.Offer.CriteriaSHA256 && c.OfferPayloadSHA256 == r.Offer.PayloadSHA256 && c.ResponseType == r.Type && c.PrincipalRequestSHA256 == r.RequestSHA256
+	return c.ResponseOperationID == r.OperationID && c.ResponderAccountID == r.AccountID && c.ResponderProfileID == r.ProfileID && c.StoryID == r.Offer.StoryID && c.StoryIncarnation == r.Offer.Incarnation && c.OfferRevision == r.Offer.Revision && c.AuthorProfileID == r.Offer.AuthorProfileID && c.CriteriaSHA256 == r.Offer.CriteriaSHA256 && c.OfferPayloadSHA256 == r.Offer.PayloadSHA256 && c.OfferExpiresAtUnixMillis == r.Offer.ExpiresAtUnixMillis && c.ResponseType == r.Type && c.PrincipalRequestSHA256 == r.RequestSHA256
+}
+
+func sameOfferView(a, b Offer) bool {
+	return a.StoryID == b.StoryID && a.Incarnation == b.Incarnation && a.AuthorProfileID == b.AuthorProfileID && a.Revision == b.Revision && a.CriteriaSHA256 == b.CriteriaSHA256 && a.PayloadSHA256 == b.PayloadSHA256 && a.ExpiresAtUnixMillis == b.ExpiresAtUnixMillis
 }
 
 func lockStory(ctx context.Context, tx pgx.Tx, id uuid.UUID) (Offer, error) {
@@ -237,7 +313,7 @@ func lockStory(ctx context.Context, tx pgx.Tx, id uuid.UUID) (Offer, error) {
 	}
 	o.CriteriaSHA256 = sha256.Sum256([]byte(criteria))
 	o.ExpiresAtUnixMillis = expires.UnixMilli()
-	b, e := json.Marshal([]string{o.StoryID.String(), o.AuthorProfileID.String(), criteria, visibility, audience, expires.UTC().Format(time.RFC3339Nano), created.UTC().Format(time.RFC3339Nano)})
+	b, e := canonicalStoryState(o.StoryID, o.AuthorProfileID, criteria, visibility, audience, expires, created)
 	if e != nil {
 		return Offer{}, ErrUnavailable
 	}

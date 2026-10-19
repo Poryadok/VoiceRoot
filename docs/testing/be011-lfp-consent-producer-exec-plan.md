@@ -109,9 +109,18 @@ CI and product acceptance remain distinct from source/component proof.
   source domains and NEW ActorBound wrapper methods. Independent literal Python
   goldens, strict codec negatives and generated parity cover both human types;
   v1 bytes/domains/goldens remain unchanged. Codec construction is data only.
-- [ ] Implement additive migration000006 (reserved c15 after actual catalog and
-  fresh search), atomic immutable actor sidecars/qualified ACK, saved-viewer
-  privacy and actual protected action/wrapper composition. No legacy enrichment.
+- [x] Implement additive migration000006 (reserved c15 after actual catalog and
+  fresh search), atomic immutable publication/responder actor sidecars and
+  qualified ACK. Original guest/type/epoch survives exact replay; legacy rows
+  cannot be enriched. Immutable audience/criteria context uses the existing
+  offer state hash, preventing mutable audience A->B->A substitution. Actual
+  Linux PostgreSQL race22top/4sub0skip22.761s and vet0 cover concurrency,
+  sidecar/ACK rollback, cohort rejection and credential expiry after row lock.
+  Synthetic actor/admission fixtures are component evidence only.
+- [ ] Bind saved-viewer privacy and actual protected action/wrapper composition.
+  ActorBound Validate must carry the exact immutable PostgreSQL criteria text
+  matching v1 criteriaSHA; MM must verify bytes/hash/shape before capture.
+  No public-listing fallback or generic map re-encoding is an authority source.
 
 ## Decisions
 

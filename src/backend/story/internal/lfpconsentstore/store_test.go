@@ -43,7 +43,7 @@ func fixture(t *testing.T) (*Store, uuid.UUID, uuid.UUID) {
 		}
 		admin.Close()
 	})
-	for _, name := range []string{"000001_init.up.sql", "000002_visibility_audience.up.sql", "000003_hidden_from_feed.up.sql", "000004_archive_purge_outbox.up.sql", "000005_lfp_consent_journal.up.sql"} {
+	for _, name := range []string{"000001_init.up.sql", "000002_visibility_audience.up.sql", "000003_hidden_from_feed.up.sql", "000004_archive_purge_outbox.up.sql", "000005_lfp_consent_journal.up.sql", "000006_lfp_actor_provenance.up.sql"} {
 		b, e := os.ReadFile(filepath.Join("..", "..", "..", "migrations", "story_db", name))
 		if os.IsNotExist(e) && name == "000005_lfp_consent_journal.up.sql" {
 			continue

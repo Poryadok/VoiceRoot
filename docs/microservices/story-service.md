@@ -67,8 +67,14 @@ cannot qualify this path; no fallback or current-caller enrichment is allowed.
 Fresh service validation must load the saved original viewer type and pass it
 explicitly to current privacy rules. It cannot obtain regular by defaulting a
 service context, ID or epoch floor. Guest and regular LFP paths are supported;
-existing guest DM/Chat/Space restrictions remain separate. Actual actor sidecar
-persistence and wrapper runtime are implementation prerequisites.
+existing guest DM/Chat/Space restrictions remain separate. Additive migration
+000006 stores immutable author/responder sidecars and qualified ACK atomically
+with their original records. Legacy rows cannot be enriched. Its immutable
+publication snapshot retains exact PostgreSQL criteria text and audience under
+the existing offer state hash; fresh privacy must evaluate that snapshot rather
+than an unrelated mutable row during A->B->A changes. Wrapper runtime and actual
+authenticated capture remain implementation prerequisites. Codec/Store inputs
+are data, not proof that a protected Gateway verification occurred.
 `BE011-STORY-LFP-RESTORE-CONTROLLER` owns the still-absent deployment controller,
 full replica/transaction drain, external state and credential/route custody;
 consumers are Story291 and MM145. Unknown authority leaves qualification closed.
