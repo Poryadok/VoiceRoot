@@ -113,16 +113,25 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 			authoritysource.CatalogTrigger{Table: "space_bot_installation_cancellations", Name: "bot_installation_cancellation_truncate", Function: "space_bot_installation_cancellation_guard", Type: 34},
 			authoritysource.CatalogTrigger{Table: "spaces", Name: "zzzz_space_bot_installation_terminal_cleanup", Function: "space_bot_installation_terminal_cleanup", Type: 9})
 	}
+	triggerChecks := &pgx.Batch{}
 	for _, trigger := range triggers {
 		arguments := []byte{}
 		if trigger.Argument != "" {
 			arguments = []byte(trigger.Argument + "\x00")
 		}
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace n ON n.oid=p.pronamespace
+		triggerChecks.Queue(`SELECT EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace n ON n.oid=p.pronamespace
 	 WHERE t.tgrelid=to_regclass($1) AND t.tgname=$2 AND NOT t.tgisinternal AND t.tgenabled='O' AND NOT t.tgdeferrable AND NOT t.tginitdeferred AND t.tgtype=$3
-	 AND n.nspname='public' AND p.proname=$4 AND p.pronargs=0 AND p.prorettype='trigger'::regtype AND t.tgargs=$5)`, "public."+trigger.Table, trigger.Name, trigger.Type, trigger.Function, arguments).Scan(&valid); err != nil || !valid {
+	 AND n.nspname='public' AND p.proname=$4 AND p.pronargs=0 AND p.prorettype='trigger'::regtype AND t.tgargs=$5)`, "public."+trigger.Table, trigger.Name, trigger.Type, trigger.Function, arguments)
+	}
+	triggerRows := tx.SendBatch(ctx, triggerChecks)
+	for range triggers {
+		if err := triggerRows.QueryRow().Scan(&valid); err != nil || !valid {
+			_ = triggerRows.Close()
 			return ErrMemberAuthorityUnavailable
 		}
+	}
+	if err := triggerRows.Close(); err != nil {
+		return ErrMemberAuthorityUnavailable
 	}
 	functions := append([]authoritysource.CatalogFunction{}, spaceAuthorityCatalog.Functions...)
 	functions = append(functions, memberAuthorityFunctions...)

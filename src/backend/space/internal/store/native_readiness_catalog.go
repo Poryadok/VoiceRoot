@@ -123,6 +123,7 @@ func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version 
     OR EXISTS(SELECT 1 FROM aclexplode(COALESCE(c.relacl,acldefault('r',c.relowner))) a WHERE a.grantee<>c.relowner)))`, len(pins)-helperCount).Scan(&valid); err != nil || !valid {
 		return ErrMemberAuthorityUnavailable
 	}
+	coverageChecks := &pgx.Batch{}
 	for _, table := range nativeMembershipGuardCoverage {
 		argument := "space_id"
 		if table == "spaces" {
@@ -137,13 +138,21 @@ func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version 
 			{"a000_native_membership_no_truncate", "source_before", 34, []byte{}},
 			{"zzzzzz_native_membership_observe", "source_after", 29, []byte(argument + "\x00")},
 		} {
-			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace n ON n.oid=p.pronamespace
+			coverageChecks.Queue(`SELECT EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace n ON n.oid=p.pronamespace
  WHERE t.tgrelid=to_regclass($1) AND t.tgname=$2 AND t.tgtype=$3 AND t.tgargs=$4
  AND t.tgenabled='A' AND NOT t.tgisinternal AND NOT t.tgdeferrable AND NOT t.tginitdeferred
- AND n.nspname='native_membership_guard' AND p.proname=$5 AND p.pronargs=0 AND p.prorettype='trigger'::regtype)`, "public."+table, trigger.name, trigger.kind, trigger.args, trigger.function).Scan(&valid); err != nil || !valid {
-				return ErrMemberAuthorityUnavailable
-			}
+	 AND n.nspname='native_membership_guard' AND p.proname=$5 AND p.pronargs=0 AND p.prorettype='trigger'::regtype)`, "public."+table, trigger.name, trigger.kind, trigger.args, trigger.function)
 		}
+	}
+	coverageRows := tx.SendBatch(ctx, coverageChecks)
+	for range len(nativeMembershipGuardCoverage) * 3 {
+		if err := coverageRows.QueryRow().Scan(&valid); err != nil || !valid {
+			_ = coverageRows.Close()
+			return ErrMemberAuthorityUnavailable
+		}
+	}
+	if err := coverageRows.Close(); err != nil {
+		return ErrMemberAuthorityUnavailable
 	}
 	if err := tx.QueryRow(ctx, `SELECT
  EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace

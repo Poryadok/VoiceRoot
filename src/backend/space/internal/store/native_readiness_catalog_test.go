@@ -23,7 +23,7 @@ func TestNativeReadinessQualified44ServingCatalog(t *testing.T) {
 	require.NoError(t, err)
 	_, err = db.Pool.Exec(ctx, `INSERT INTO public.space_members(space_id,profile_id) VALUES($1,$2)`, space, profile)
 	require.NoError(t, err)
-	db.Run(true, "up")
+	db.Run(true, "goto", "44")
 	serving := nativeReadinessLogin(t, ctx, db.Pool)
 	require.NoError(t, nativeReadinessTx(ctx, db.Pool, space, func(tx pgx.Tx) error {
 		_, e := tx.Exec(ctx, `SELECT public.space_native_membership_initialize($1)`, space)
