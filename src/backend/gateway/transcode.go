@@ -288,7 +288,7 @@ func (c *grpcClients) waitForRequiredUserReady(ctx context.Context) error {
 		if c.storyConsentConn != nil {
 			c.storyConsentConn.Connect()
 			if err := grpcclient.WaitForReady(ctx, c.storyConsentConn); err != nil {
-				return fmt.Errorf("Story consent readiness: %w", err)
+				return fmt.Errorf("story consent readiness: %w", err)
 			}
 		}
 		if err := c.waitAuditInitiatingReady(ctx); err != nil {

@@ -30,7 +30,7 @@ func storyConsentClientConfigFromEnv() (lifecycleClientConfig, bool, error) {
 	}
 	for _, value := range []string{c.address, c.ca, c.serverName, c.cert, c.key} {
 		if value == "" || value != strings.TrimSpace(value) {
-			return c, true, errors.New("Gateway Story consent TLS configuration is incomplete")
+			return c, true, errors.New("gateway Story consent TLS configuration is incomplete")
 		}
 	}
 	if _, e := c.tlsConfig(); e != nil {
