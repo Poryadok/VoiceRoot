@@ -152,13 +152,22 @@ func (s *SessionStore) Cancel(ctx context.Context, id uuid.UUID) (SearchSession,
 	return sess, err
 }
 
-// ResetToSearching clears match link and returns session to searching.
+// ResetToSearching is a pre-cut legacy recovery API. It cannot qualify a
+// captured native party or revive a session after native admission has begun.
 func (s *SessionStore) ResetToSearching(ctx context.Context, id uuid.UUID) (SearchSession, error) {
 	if s == nil || s.Pool == nil {
 		return SearchSession{}, errors.New("session store unavailable")
 	}
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return SearchSession{}, err
+	}
+	defer tx.Rollback(ctx)
+	if err := mmadmission.Acquire(ctx, tx, nil); err != nil {
+		return SearchSession{}, err
+	}
 	now := time.Now().UTC()
-	row := s.Pool.QueryRow(ctx, `
+	row := tx.QueryRow(ctx, `
 		UPDATE search_sessions
 		SET status = $2, match_id = NULL, matched_at = NULL, updated_at = $3,
 		    recovery_generation = recovery_generation + 1
@@ -169,7 +178,13 @@ func (s *SessionStore) ResetToSearching(ctx context.Context, id uuid.UUID) (Sear
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SearchSession{}, ErrSessionNotSearchable
 	}
-	return sess, err
+	if err != nil {
+		return SearchSession{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return SearchSession{}, err
+	}
+	return sess, nil
 }
 
 // ListSearchingByIDs loads searching sessions for the given IDs.

@@ -54,6 +54,37 @@ func TestNativeAdmissionLegacyCreatesRefuseBegunHead(t *testing.T) {
 
 // This deliberately synthetic local-head fixture tests only transaction
 // serialization/equality. It is NOT an installed MM admission/custody receipt.
+func TestNativeAdmissionLegacyResetCannotReviveAfterClose(t *testing.T) {
+	ctx := context.Background()
+	pool := partyDB(t)
+	p := partyParams(t, pool)
+	sessions := &store.SessionStore{Pool: pool}
+	created, err := sessions.Create(ctx, store.CreateSessionParams{ProfileID: uuid.New(), GameID: p.GameID, Mode: p.Mode, Criteria: p.Criteria, TimeoutAt: p.TimeoutAt})
+	require.NoError(t, err)
+	pending := func() {
+		_, err := pool.Exec(ctx, `UPDATE search_sessions SET status='pending_accept',matched_at=clock_timestamp() WHERE id=$1`, created.ID)
+		require.NoError(t, err)
+	}
+	pending()
+	reset, err := sessions.ResetToSearching(ctx, created.ID)
+	require.NoError(t, err, "actual pre-cut legacy recovery remains available")
+	require.Equal(t, store.SessionStatusSearching, reset.Status)
+	require.Equal(t, created.RecoveryGeneration+1, reset.RecoveryGeneration)
+	pending()
+	_, err = pool.Exec(ctx, `INSERT INTO public.mm_native_admission_head(protocol_version,state) VALUES(1,'CLOSED')`)
+	require.NoError(t, err)
+	_, err = sessions.ResetToSearching(ctx, created.ID)
+	require.ErrorIs(t, err, mmadmission.ErrUnavailable)
+	retained, err := sessions.Get(ctx, created.ID)
+	require.NoError(t, err)
+	require.Equal(t, store.SessionStatusPendingAccept, retained.Status)
+	require.Equal(t, reset.RecoveryGeneration, retained.RecoveryGeneration)
+	terminal, err := sessions.ExpirePendingAccept(ctx, created.ID)
+	require.NoError(t, err, "closed fresh admission must not strand terminal cleanup")
+	require.Equal(t, store.SessionStatusCancelled, terminal.Status)
+	require.Equal(t, retained.RecoveryGeneration+1, terminal.RecoveryGeneration)
+}
+
 func TestNativeAdmissionDownRetainsMarkerCommittedWhileWaiting(t *testing.T) {
 	ctx := context.Background()
 	pool := partyDB(t)

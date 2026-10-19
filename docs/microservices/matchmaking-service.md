@@ -533,6 +533,11 @@ any retained CLOSED/PREPARED/ADMITTED marker refuses their inserts. A native
 binding on the party store never qualifies its profile-only legacy `Create`;
 qualified source creation uses the separate atomic captured-party API.
 
+The legacy `SessionStore.ResetToSearching` API likewise requires never-begun
+admission and holds the gate through its recovery-generation commit. It cannot
+revive an old session after local close. Terminal cancellation and expiry keep
+their independent cleanup scope while fresh admission is closed.
+
 The compatibility executable checks the fixed native descriptor path before
 opening listeners, even when `DATABASE_URL` is absent. A present descriptor or an
 unreadable presence check refuses legacy bootstrap. With a database configured,
