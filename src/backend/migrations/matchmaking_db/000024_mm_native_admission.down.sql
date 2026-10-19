@@ -1,4 +1,12 @@
 BEGIN;
+-- Refuse an inherited pinned snapshot BEFORE waiting for either lock. An
+-- exclusive table lock cannot refresh a REPEATABLE READ emptiness check.
+DO $$
+BEGIN
+    IF current_setting('transaction_isolation')<>'read committed' THEN
+        RAISE EXCEPTION 'MM native rollback requires fresh read committed checks';
+    END IF;
+END $$;
 -- Same gate-first order as internal/mmadmission. This key is the signed
 -- big-endian first 64 bits of SHA256("voice.mm.native-admission.gate.v1\0").
 SELECT pg_catalog.pg_advisory_xact_lock(2060719636617962328);
