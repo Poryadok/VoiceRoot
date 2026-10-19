@@ -15,6 +15,7 @@ import (
 	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/pkg/principal"
 	"voice/backend/space/internal/admissionauthority"
+	"voice/backend/space/internal/entrypolicy"
 	"voice/backend/space/internal/lifecycleprincipal"
 	"voice/backend/space/internal/memberadmissionrole"
 	"voice/backend/space/internal/store"
@@ -204,6 +205,8 @@ func mapAdmissionError(err error) error {
 		return err
 	}
 	switch {
+	case errors.Is(err, entrypolicy.ErrInvalid):
+		return status.Error(codes.InvalidArgument, "invalid admission submission")
 	case errors.Is(err, store.ErrJoinReadNotFound):
 		return status.Error(codes.NotFound, "join request not found")
 	case errors.Is(err, admissionauthority.ErrIneligible), errors.Is(err, store.ErrJoinAttemptDenied), errors.Is(err, store.ErrGuestsNotAllowed), errors.Is(err, store.ErrAccountBanned):
