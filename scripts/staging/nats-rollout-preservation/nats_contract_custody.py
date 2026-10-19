@@ -5,7 +5,7 @@ untouched. An interrupted CAS is recognized only with its owned annotation.
 """
 import copy,hashlib,re
 from controller import Blocked
-from nats_contract_plan import declarations_for,SCHEMA,V5_SOURCE_HASHES,V5_SCRIPT_HASHES,ContractError,digest
+from nats_contract_plan import declarations_for,SCHEMA,V5_SOURCE_HASHES,V5_SCRIPT_HASHES,V6_SCHEMA,V6_SOURCE_HASHES,V6_SCRIPT_HASHES,ContractError,digest
 
 ANNOTATION='voice-nats-preservation/contract-operation'
 def _validated_target_pairs(plan):
@@ -28,15 +28,22 @@ def advance(kube,state,stage,journal,*,mutation_guard=None):
     contract=state['contract'];wanted=state['nats_target_scripts']
     target_pairs=_validated_target_pairs(state.get('nats_contract'))
     v5=state['nats_contract']['schema']==SCHEMA
-    if v5:
+    v6=state['nats_contract']['schema']==V6_SCHEMA
+    if v5 or v6:
         from nats_active_contract import _proof_matches
         if not _proof_matches(migration.get('proof'),state['nats_contract']['migration_id']):
             raise Blocked('nats_contract_custody_before_proof')
-    if v5 and (state['nats_contract'].get('sources')!=V5_SOURCE_HASHES or set(wanted)!=set(V5_SCRIPT_HASHES)
+    if v6:
+        proof=migration['proof'];cut=state.get('nats_deliver_all_cut')
+        if (cut!=proof['deliver_all_cut'] or cut['bindings']['plan_sha256']!=digest(state['nats_contract'])
+            or cut['bindings']['operation']!=state['operation']):raise Blocked('nats_contract_custody_before_proof')
+    sources=V6_SOURCE_HASHES if v6 else V5_SOURCE_HASHES
+    scripts=V6_SCRIPT_HASHES if v6 else V5_SCRIPT_HASHES
+    if (v5 or v6) and (state['nats_contract'].get('sources')!=sources or set(wanted)!=set(scripts)
         or any(not isinstance(wanted[part],dict) or wanted[part].get('sha256')!=sha
-            or hashlib.sha256(wanted[part].get('script','').encode()).hexdigest()!=sha for part,sha in V5_SCRIPT_HASHES.items())):
+            or hashlib.sha256(wanted[part].get('script','').encode()).hexdigest()!=sha for part,sha in scripts.items())):
         raise Blocked('nats_contract_script_unbound')
-    allowed=tuple(V5_SCRIPT_HASHES) if v5 else ('realtime','analytics-chat','search')
+    allowed=tuple(scripts) if v5 or v6 else ('realtime','analytics-chat','search')
     if any(part not in allowed for part in wanted):raise Blocked('nats_contract_script_unbound')
     existing_pairs=contract.get('consumer_pairs')
     if (not isinstance(existing_pairs,list) or any(not isinstance(pair,list) or len(pair)!=2
