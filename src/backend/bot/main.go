@@ -193,6 +193,13 @@ func main() {
 		if installationRoleConn != nil {
 			defer func() { _ = installationRoleConn.Close() }()
 		}
+		cleanupMessagingConn, err := wireCleanupMessaging(svc, os.Getenv)
+		if err != nil {
+			log.Fatalf("Bot protected Messaging cleanup client: %v", err)
+		}
+		if cleanupMessagingConn != nil {
+			defer func() { _ = cleanupMessagingConn.Close() }()
+		}
 		chatScopeConn, err := wireChatScope(svc, os.Getenv)
 		if err != nil {
 			log.Fatalf("Bot protected Chat scope client: %v", err)

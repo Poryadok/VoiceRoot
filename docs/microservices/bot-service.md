@@ -517,3 +517,20 @@ does not create new cleanup obligations. These records are recovery input, not
 participant completion receipts. Purge-before-delete coverage and the existing
 P3 evidence retention boundary remain tracked in BE-170; absence of downstream
 evidence must not be interpreted as completed cleanup.
+### Private Messaging cleanup caller
+
+Global deletion freezes the eligible per-chat attachment batch in its Bot root
+snapshot. Messaging child request bytes are sealed before transport and reused
+exactly after uncertainty; only the signed service credential/JTI is refreshed.
+Bot validates the typed participant receipt, every attachment target and digest,
+execution revision, direct covering fields and full request/evidence binding
+before recording that child as completed. A participant ACK cannot settle other
+pending children or the whole root.
+
+The dedicated client requires all five settings
+`BOT_MESSAGING_CLEANUP_GRPC_ADDR`, `BOT_MESSAGING_CLEANUP_TLS_CA_FILE`,
+`BOT_MESSAGING_CLEANUP_TLS_SERVER_NAME`, `BOT_MESSAGING_CLEANUP_TLS_CERT_FILE`,
+and `BOT_MESSAGING_CLEANUP_TLS_KEY_FILE`, plus the existing Bot service issuer.
+Missing configuration does not fall back to the ordinary Messaging connection.
+Production worker/uninstall orchestration and P3/post-retention proof coverage
+remain unfinished; the implemented lower consumer does not imply full readiness.

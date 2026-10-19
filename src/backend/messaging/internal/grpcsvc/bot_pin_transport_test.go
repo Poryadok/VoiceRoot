@@ -163,6 +163,9 @@ func TestBotPinCleanupProtectedTransportWithOfficialChatSource(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, runtime)
 	t.Cleanup(func() { require.NoError(t, runtime.Close()) })
+	if botPinProducerHandoff(t, runtime, pins, request, key, botCert, caFile, message) {
+		return // the cross-process producer branch has its own DB assertions
+	}
 	connection, err := grpc.NewClient(runtime.Address(), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, ServerName: "localhost", RootCAs: roots, Certificates: []tls.Certificate{botCert}})))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = connection.Close() })

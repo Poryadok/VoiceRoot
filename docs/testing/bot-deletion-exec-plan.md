@@ -251,3 +251,23 @@ standard errors import; it was corrected and scoped vet/build passed.
 These signed decisions are controlled Bot assertions, not a proof of an actual
 Bot root journal or public owner admission. Producer delivery/recovery, global
 Space/Role retirement coverage and post-30-day provider gaps remain unfinished.
+
+The Bot Messaging consumer now constructs one attachment batch from the frozen
+root only, verifies retained Chat request/response hashes and actual installation
+association, and seals deterministic child bytes before issuing a fresh service
+credential. Its validator binds every response target/digest/revision/covering
+tuple, participant, request and evidence hash before the durable receipt CAS.
+The separate mTLS client has five all-or-none BOT_MESSAGING_CLEANUP settings and
+never substitutes the ordinary Messaging client.
+
+An actual cross-process source fixture passed with official Bot001-011,
+Messaging35 and Chat25, real Redis and protected mTLS/HTTPS-JWKS. The participant
+committed before an intentionally lost ACK; Bot retained PENDING plus exact
+request bytes. After a human repin, a restarted service rejected a corrupted
+target digest, then accepted the original real receipt under a fresh JTI without
+repeating effects (caller 5.756s, provider 27.106s). Role and Space effects stayed
+pending, so full root completion was explicitly refused. Owner admission and
+the Chat point-in-time observation are controlled fixture inputs here; earlier
+public Gateway admission and Chat transport proofs retain their separate scope.
+This does not complete the production recovery worker, uninstall batching,
+global Space retirement, P3 coverage or late proof-provider criteria.
