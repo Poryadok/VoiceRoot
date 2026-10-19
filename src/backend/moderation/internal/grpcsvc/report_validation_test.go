@@ -155,6 +155,8 @@ func TestReportAccountPurgeParticipant(t *testing.T) {
 	sanctions := &store.SanctionStore{Pool: pool}
 	sanction, err := sanctions.InsertSanction(ctx, targetAccount, "shadow_ban", "private report reason", &row.ID, uuid.New(), nil)
 	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO automod_terminal_subjects(subject_id) VALUES($1)`, *claim.ReporterSubjectID)
+	require.NoError(t, err) // Explicit verified terminal-authority fixture.
 	tx, err := pool.Begin(ctx)
 	require.NoError(t, err)
 	require.NoError(t, reports.PurgeReportAccountLinksTx(ctx, tx, account))
@@ -284,11 +286,8 @@ func TestReportIntakeMigrationLegacyProvenance(t *testing.T) {
 	require.Error(t, err, "unverified historical work must survive rollback attempts")
 	reports := newReportFixtureStore(pool)
 	claim, err := reports.ClaimValidation(ctx)
-	require.NoError(t, err)
-	require.Equal(t, pending, claim.ReportID)
-	applied, err := reports.CompleteValidation(ctx, claim, "LIVE", uuid.Nil, nil, nil)
-	require.ErrorIs(t, err, store.ErrReportPrivacy)
-	require.False(t, applied)
+	require.ErrorIs(t, err, pgx.ErrNoRows, "c18 privacy recovery does not promote old pending history")
+	require.Nil(t, claim)
 	var count int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT COUNT(*) FROM report_intake_outbox`).Scan(&count))
 	require.Zero(t, count, "revalidated history must not replay already published report-created events")

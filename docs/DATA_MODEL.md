@@ -351,3 +351,10 @@ association. They never fabricate a staff/profile identity. See the owning
 [execution contract](testing/async-automod-exec-plan.md) and
 [startup/restore barriers](testing/async-automod-startup-restore.md) for retention,
 terminal import, finite reconciliation and cross-service authority requirements.
+
+### Report legacy privacy provenance
+
+Report submission and privacy ownership are distinct facts. Recovered legacy
+ownership never becomes verified submission or validation eligibility. Opaque
+report-slot recovery dispositions survive raw report deletion. See the accepted
+[report privacy recovery contract](testing/report-privacy-recovery.md).

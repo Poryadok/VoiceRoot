@@ -89,7 +89,7 @@ func TestReportPrivacyRecoveryValidatedTargetAndMissingMapping(t *testing.T) {
 	require.ErrorIs(t, reports.RequirePrivacyRecovery(ctx), store.ErrReportPrivacy, "validated target terminal residue closes recovery")
 	_, err = pool.Exec(ctx, `DELETE FROM automod_terminal_subjects WHERE subject_id=$1`, target.ID)
 	require.NoError(t, err) // Isolated fixture reset, never a recovery operation.
-	_, err = pool.Exec(ctx, `UPDATE reports SET validated_target_account_id=NULL,validated_target_subject_id=NULL,validated_target_subject_revision=NULL WHERE id=$1`, row.ID)
+	_, err = pool.Exec(ctx, `UPDATE reports SET validated_target_account_id=NULL,validated_target_subject_id=NULL,validated_target_subject_revision=NULL,validated_target_provenance='LEGACY_UNVERIFIED' WHERE id=$1`, row.ID)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `UPDATE reports SET validation_state='VALID' WHERE id=$1`, row.ID)
 	require.NoError(t, err)
