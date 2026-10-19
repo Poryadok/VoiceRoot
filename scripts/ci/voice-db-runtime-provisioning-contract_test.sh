@@ -428,6 +428,7 @@ python3 "${ROOT}/scripts/ci/f13_guarded_merge_test.py"
 python3 "${ROOT}/scripts/ci/f13_reviewed_test_merge_test.py"
 python3 "${ROOT}/scripts/ci/f13_historical_composition_test.py"
 python3 "${ROOT}/scripts/ci/f13_role_conditional_test.py"
+python3 "${ROOT}/scripts/ci/f13_space_audit_test.py"
 base_sha="${VOICE_R22_BASE_SHA:-$(git -C "${ROOT}" merge-base HEAD origin/master)}"
 # The later Game sprint authorizes the verified opt-in runtime checkpoint, not
 # arbitrary future runtime or deployment changes. Exempt only its exact paths
@@ -3476,12 +3477,28 @@ f13_role_conditional_qualified() {
   printf 'CI_DIAG stage=f13-role-conditional qualification=%s\n' "${receipt}" >&2
 }
 
+f13_space_audit_qualified() {
+  local repo="$1" map="$2" path="$3" incoming_row="$4" prior_row receipt target
+  [[ "${repo}" == "${ROOT}" ]] || return 1
+  [[ "$(awk -F '\t' -v p="${path}" '$1 == p { n++ } END { print n+0 }' "${map}")" == 1 ]] || return 1
+  prior_row="$(awk -F '\t' -v p="${path}" '$1 == p { print $0 }' "${map}")" || return 1
+  target="$(git -C "${ROOT}" rev-parse HEAD)" || return 1
+  receipt="$(python3 "${ROOT}/scripts/ci/f13_space_audit.py" --repo "${repo}" --target "${target}" \
+    --prior-row="${prior_row}" --incoming-row="${incoming_row}" 2>/dev/null)" || return 1
+  printf 'prior\t%s\nincoming\t%s\n' "${prior_row}" "${incoming_row}" \
+    >>"${TMP_DIR}/f13-space-audit-history.tsv" || return 1
+  printf '%s\n' "${receipt}" >>"${TMP_DIR}/f13-space-audit.jsonl" || return 1
+  printf 'CI_DIAG stage=f13-space-audit qualification=%s\n' "${receipt}" >&2
+}
+
 f13_guarded_merge_state_fingerprint() {
   local state_file
   for state_file in "${ROOT}/scripts/ci/f13_reviewed_test_merge.py" \
     "${ROOT}/scripts/ci/f13_historical_composition.py" "${TMP_DIR}/f13-historical-composition.jsonl" \
     "${ROOT}/scripts/ci/f13_role_conditional.py" "${TMP_DIR}/f13-role-conditional-history.tsv" \
     "${TMP_DIR}/f13-role-conditional.jsonl" \
+    "${ROOT}/scripts/ci/f13_space_audit.py" "${TMP_DIR}/f13-space-audit-history.tsv" \
+    "${TMP_DIR}/f13-space-audit.jsonl" \
     "${TMP_DIR}/f13-guarded-merge-history.tsv" "${TMP_DIR}/f13-reviewed-test-merges.jsonl"; do
     if [[ -f "${state_file}" ]]; then
       git -C "${ROOT}" hash-object -- "${state_file}" || return 1
@@ -3512,7 +3529,7 @@ f13_collect_develop_contributions() {
   local path source_entry result_entry target_entry blob trigger incremental_merge checkpoint_owner_commit checkpoint_owner_row
   local previous_trigger content_base nested_map nested_row nested_trigger nested_base nested_head
   local previous_source_head previous_source_entry base_entry source_lineage source_base_candidates nested_owner_commit
-  local game_snapshot_contribution_allowed merge_tree_status checkpoint_supersession_status sync_row_count guarded_correction_allowed native_supersession_status native_merge_outcome ordinary_guarded_merge role_duplicate_allowed role_incoming_row
+  local game_snapshot_contribution_allowed merge_tree_status checkpoint_supersession_status sync_row_count guarded_correction_allowed native_supersession_status native_merge_outcome ordinary_guarded_merge role_duplicate_allowed role_incoming_row space_audit_allowed
   local -a commit_line
   local -A owners=() owner_triggers=() owner_content_bases=() owner_source_heads=() owner_source_entries=() guarded_entries=() guarded_entry_commits=() checkpoint_merge_outcomes=() ordinary_merge_entries=()
   : >"${output}"
@@ -3604,6 +3621,8 @@ f13_collect_develop_contributions() {
       source_head="${commit_line[${source_parent_index}]}"
       source_base_file="${TMP_DIR}/f13-source-base-${contribution_id}"
       f13_resolve_source_base "${repo}" "${first_parent}" "${source_head}" "${source_base_file}" || {
+        printf 'CI_DIAG stage=f13-source-base repo=%s commit=%s first_parent=%s source_head=%s base=%s target=%s parent_index=%s\n' \
+          "${repo}" "${commit}" "${first_parent}" "${source_head}" "${base}" "${target}" "${source_parent_index}" >&2
         f13_collect_failure "${diagnostic_file}" source_base
         return 1
       }
@@ -3766,6 +3785,7 @@ f13_collect_develop_contributions() {
       source_lineage=false
       guarded_correction_allowed=false
       role_duplicate_allowed=false
+      space_audit_allowed=false
       if [[ -n "${nested_map}" ]]; then
         nested_row="$(awk -F '\t' -v candidate="${path}" '$1 == candidate { row = $0 } END { print row }' "${nested_map}")"
         [[ -n "${nested_row}" ]] || {
@@ -3874,7 +3894,17 @@ f13_collect_develop_contributions() {
             role_duplicate_allowed=true
           fi
         fi
-        if [[ "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && \
+        if [[ "${allow_direct_followup}" == true && "${is_direct}" != true &&
+          "${incremental_merge}" != true && "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true ]] &&
+          declare -F f13_space_audit_qualified >/dev/null; then
+          role_incoming_row="$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' \
+            "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" \
+            "${nested_head}" "${content_base}" "${source_base_candidates}")" || return 1
+          if f13_space_audit_qualified "${repo}" "${output}" "${path}" "${role_incoming_row}"; then
+            space_audit_allowed=true
+          fi
+        fi
+        if [[ "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && "${space_audit_allowed}" != true && \
           ( "${allow_direct_followup}" != true || \
           ( "${is_direct}" != true && "${incremental_merge}" != true ) ) ]]; then
           f13_emit_guarded_failure_diagnostic duplicate_guarded_owner "${path}" \
@@ -3885,7 +3915,7 @@ f13_collect_develop_contributions() {
           return 1
         fi
         previous_trigger="${owner_triggers[${path}]:-false}"
-        [[ "${previous_trigger}" == true && ( "${source_lineage}" == true || "${guarded_correction_allowed}" == true || "${ordinary_guarded_merge}" == true || "${role_duplicate_allowed}" == true ) ]] && trigger=true
+        [[ "${previous_trigger}" == true && ( "${source_lineage}" == true || "${guarded_correction_allowed}" == true || "${ordinary_guarded_merge}" == true || "${role_duplicate_allowed}" == true || "${space_audit_allowed}" == true ) ]] && trigger=true
         if [[ "${checkpoint_supersession_status}" == 0 ]]; then
           unset 'guarded_entries[$path]'
           unset 'guarded_entry_commits[$path]'
