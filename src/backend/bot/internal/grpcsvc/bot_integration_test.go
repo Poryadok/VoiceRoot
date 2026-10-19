@@ -56,7 +56,7 @@ func startBotGRPC(t *testing.T, installationAdmission ...bool) (botv1.BotService
 	hub := dispatch.NewHub()
 	svc := grpcsvc.NewBotGRPC(st, hub)
 	if len(installationAdmission) > 0 && installationAdmission[0] {
-		svc.Role = installationPermissionClient{allowed: true}
+		svc.InstallationRole = installationPermissionClient{allowed: true}
 	}
 	svc.PrincipalIssuer = installationTestIssuer(t)
 	svc.InstallationSpace = intentObservingSpace{}

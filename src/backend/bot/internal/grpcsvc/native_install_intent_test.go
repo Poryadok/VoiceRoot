@@ -67,10 +67,10 @@ func TestNativeInstallRequiresCurrentManageBotsAdmission(t *testing.T) {
 	req := &botv1.InstallBotInSpaceRequest{BotId: bot.ID.String(), SpaceId: uuid.NewString()}
 	_, err = svc.InstallBotInSpace(ctx, req)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
-	svc.Role = installationPermissionClient{allowed: false}
+	svc.InstallationRole = installationPermissionClient{allowed: false}
 	_, err = svc.InstallBotInSpace(ctx, req)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
-	svc.Role = installationPermissionClient{allowed: true, err: errors.New("authority unavailable")}
+	svc.InstallationRole = installationPermissionClient{allowed: true, err: errors.New("authority unavailable")}
 	_, err = svc.InstallBotInSpace(ctx, req)
 	require.Equal(t, codes.Unavailable, status.Code(err))
 	require.Zero(t, calls)
@@ -179,7 +179,7 @@ func TestNativeInstallLostAcknowledgementsRecoverSignedExactIntent(t *testing.T)
 	}}
 	newService := func() *grpcsvc.BotGRPC {
 		s := grpcsvc.NewBotGRPC(&store.BotStore{Pool: pool}, nil)
-		s.Role = installationPermissionClient{allowed: true}
+		s.InstallationRole = installationPermissionClient{allowed: true}
 		s.PrincipalIssuer = issuer
 		s.InstallationSpace = client
 		return s
@@ -225,7 +225,7 @@ func TestNativeInstallPersistsIdentityBeforeSpaceRPC(t *testing.T) {
 	bot, _, err := st.CreateBot(ctx, owner, "IntentBot", "", `["TEXT_CHAT_SEND_MESSAGES"]`, actor)
 	require.NoError(t, err)
 	svc := grpcsvc.NewBotGRPC(st, nil)
-	svc.Role = installationPermissionClient{allowed: true}
+	svc.InstallationRole = installationPermissionClient{allowed: true}
 	svc.PrincipalIssuer = installationTestIssuer(t)
 	called := false
 	svc.InstallationSpace = intentObservingSpace{add: func(_ context.Context, req *spacev1.AddBotMemberRequest) error {
@@ -261,7 +261,7 @@ func TestNativeInstallStaleReceiverOutcomeDoesNotActivate(t *testing.T) {
 	bot, _, err := st.CreateBot(ctx, uuid.New(), "Stale", "", `[]`, uuid.New())
 	require.NoError(t, err)
 	svc := grpcsvc.NewBotGRPC(st, nil)
-	svc.Role = installationPermissionClient{allowed: true}
+	svc.InstallationRole = installationPermissionClient{allowed: true}
 	svc.PrincipalIssuer = installationTestIssuer(t)
 	svc.InstallationSpace = intentObservingSpace{add: func(context.Context, *spacev1.AddBotMemberRequest) error {
 		return status.Error(codes.FailedPrecondition, "historical add is retired")

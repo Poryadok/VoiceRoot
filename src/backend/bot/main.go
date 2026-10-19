@@ -186,6 +186,13 @@ func main() {
 		if installationConn != nil {
 			defer func() { _ = installationConn.Close() }()
 		}
+		installationRoleConn, err := wireInstallationRole(svc, os.Getenv)
+		if err != nil {
+			log.Fatalf("Bot protected Role installation client: %v", err)
+		}
+		if installationRoleConn != nil {
+			defer func() { _ = installationRoleConn.Close() }()
+		}
 		svc.RehydrateDeferred(context.Background())
 		startDeferredTTLSweeper(svc, logger)
 		slashWorkerCtx, stopSlashWorker := context.WithCancel(context.Background())

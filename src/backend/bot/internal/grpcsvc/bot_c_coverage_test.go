@@ -2058,6 +2058,7 @@ func wireBotCServiceRole(t *testing.T, svc *grpcsvc.BotGRPC, role rolev1.RoleSer
 	)
 	require.NoError(t, err)
 	svc.Role = rolev1.NewRoleServiceClient(rconn)
+	svc.InstallationRole = svc.Role
 }
 
 func TestCreateBotRole_requiresSpaceManageRolesScope(t *testing.T) {

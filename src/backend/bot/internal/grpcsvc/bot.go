@@ -43,6 +43,8 @@ type BotGRPC struct {
 	// InstallationSpace is the dedicated protected mTLS membership client.
 	// It never falls back to the legacy Space client used by ordinary reads.
 	InstallationSpace       spacev1.SpaceServiceClient
+	InstallationRole        rolev1.RoleServiceClient
+	CleanupRole             rolev1.RoleServiceClient
 	Events                  BotEventPublisher
 	PrincipalIssuer         *principal.Issuer
 	InstallationScopeReader BotInstallationScopeReader

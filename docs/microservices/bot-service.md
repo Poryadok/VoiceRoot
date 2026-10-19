@@ -457,3 +457,14 @@ proof is not full Gateway cutover, native membership cleanup, or global deletion
 completion. Empty DeleteBot success requires every required participant effect's
 verified immutable completion receipt; retained installation/whitelist snapshots
 are recovery input and never restore live access to a terminal Bot.
+
+New public install/cancel permission decisions use the separate
+`BOT_ROLE_INSTALLATION_GRPC_ADDR`, `BOT_ROLE_INSTALLATION_TLS_CA_FILE`,
+`BOT_ROLE_INSTALLATION_TLS_SERVER_NAME`, `BOT_ROLE_INSTALLATION_TLS_CERT_FILE`,
+`BOT_ROLE_INSTALLATION_TLS_KEY_FILE` group. It signs only the exact protected Role
+`CheckPermission` request for the verified profile, Space and
+`SPACE_MANAGE_BOTS`; it forwards no initiating identity metadata. A nil/failed
+decision is unavailable, a definitive false is denied. Missing private transport
+never falls back to ordinary `ROLE_GRPC_ADDR`. Role's actual protected listener
+must enable its finite Bot lifecycle branch and trust the configured Bot JWKS;
+private cleanup additionally needs its registered typed removal adapter.

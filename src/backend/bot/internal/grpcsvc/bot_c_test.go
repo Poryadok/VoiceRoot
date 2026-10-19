@@ -255,6 +255,7 @@ func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceCli
 			)
 			require.NoError(t, err)
 			svc.Role = rolev1.NewRoleServiceClient(rconn)
+			svc.InstallationRole = svc.Role
 		}
 		if deps.space != nil {
 			sl := bufconn.Listen(1024)

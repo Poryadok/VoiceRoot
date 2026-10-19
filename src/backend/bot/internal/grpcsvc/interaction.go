@@ -44,21 +44,8 @@ func (s *BotGRPC) InstallBotInSpace(ctx context.Context, req *botv1.InstallBotIn
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
-	if s.Role == nil {
-		return nil, status.Error(codes.FailedPrecondition, "Bot installation permission authority is not configured")
-	}
-	{
-		resp, err := s.Role.CheckPermission(ctx, &rolev1.CheckPermissionRequest{
-			SpaceId:        spaceID.String(),
-			ProfileId:      profile.String(),
-			PermissionName: "SPACE_MANAGE_BOTS",
-		})
-		if err != nil {
-			return nil, status.Error(codes.Unavailable, "Bot installation permission authority unavailable")
-		}
-		if !resp.GetAllowed() {
-			return nil, status.Error(codes.PermissionDenied, "SPACE_MANAGE_BOTS required")
-		}
+	if err := s.checkInstallationPermission(ctx, spaceID, profile); err != nil {
+		return nil, err
 	}
 	chats := make([]uuid.UUID, 0, len(req.GetAllowedChats()))
 	for _, ref := range req.GetAllowedChats() {
@@ -107,21 +94,8 @@ func (s *BotGRPC) UninstallBotFromSpace(ctx context.Context, req *botv1.Uninstal
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
-	if s.Role == nil {
-		return nil, status.Error(codes.FailedPrecondition, "Bot installation permission authority is not configured")
-	}
-	{
-		resp, err := s.Role.CheckPermission(ctx, &rolev1.CheckPermissionRequest{
-			SpaceId:        spaceID.String(),
-			ProfileId:      profile.String(),
-			PermissionName: "SPACE_MANAGE_BOTS",
-		})
-		if err != nil {
-			return nil, status.Error(codes.Unavailable, "Bot installation permission authority unavailable")
-		}
-		if !resp.GetAllowed() {
-			return nil, status.Error(codes.PermissionDenied, "SPACE_MANAGE_BOTS required")
-		}
+	if err := s.checkInstallationPermission(ctx, spaceID, profile); err != nil {
+		return nil, err
 	}
 	botRow, err := s.Store.GetBotByID(ctx, botID)
 	if err != nil {
