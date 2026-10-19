@@ -221,3 +221,15 @@ decodes its own canonical body before building attachment descriptors. Both
 mutations leave the original stale source rejected with zero effects and no
 panic (PG/race GREEN 9.316s). This correction does not qualify private ingress or
 the unfinished producer/worker/Purge work.
+
+BE-170 c64 clarifies that an explicitly supplied current observation must name
+the receiver-owned first effect's effective incarnation (saved current source,
+otherwise qualified original source). Projection identity remains unchanged;
+different incarnation is a coverage conflict, never an uncovered fallback.
+Actual PostgreSQL tests on immutable1547 plus one test overlay reproduced both
+covered-only and mixed-batch acceptance (RED 8.052s). The correction rejects both
+with no pin, revision, receipt or decision effects (GREEN 8.369s), while a new
+read operation/revision for the same incarnation and historical adoption without
+current observation still succeed without a live datasource. This isolated
+correction excludes parallel private-receiver work and does not resolve Purge or
+the post-30-day proof gap.

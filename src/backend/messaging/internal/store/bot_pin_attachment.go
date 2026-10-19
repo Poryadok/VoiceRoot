@@ -239,6 +239,25 @@ func readBotPinAttachmentCoverage(ctx context.Context, tx pgx.Tx, b *botPinReque
 	if !found {
 		return nil, ErrBotPinRemovalBinding
 	}
+	// Projection identity deliberately excludes point-in-time current reads.
+	// An explicit read must still name the first effect's actual incarnation;
+	// a different incarnation is a conflict, never an uncovered target fallback.
+	var origin *messagingv1.BotRemovalChatScopeObservation
+	for _, saved := range bound.attachments {
+		if saved.id == target.id {
+			origin = saved.attachment.CurrentScope
+			if origin == nil {
+				origin = saved.attachment.GetOriginalScope()
+			}
+			break
+		}
+	}
+	if origin == nil || origin.Response == nil || origin.Response.Scope == nil {
+		return nil, ErrBotPinRemovalBinding
+	}
+	if current := target.attachment.CurrentScope; current != nil && current.Response.Scope.ChatScopeIncarnation != origin.Response.Scope.ChatScopeIncarnation {
+		return nil, ErrBotPinRemovalConflict
+	}
 	raw, err := (proto.MarshalOptions{Deterministic: true}).Marshal(response)
 	if err != nil {
 		return nil, err
