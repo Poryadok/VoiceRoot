@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"math/big"
@@ -23,6 +24,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/proto"
 	botv1 "voice.app/voice/bot/v1"
 	"voice/backend/bot/internal/grpcsvc"
 	"voice/backend/bot/internal/principalgrpc"
@@ -145,4 +147,20 @@ func TestGatewayLifecycleMTLSVerifiedOwnerWithoutRawHeadersBeforeDeletion(t *tes
 	disabled, err := st.GetBotByID(ctx, bot.ID)
 	require.NoError(t, err)
 	require.Equal(t, "disabled", disabled.Status)
+	var decision []byte
+	require.NoError(t, pool.QueryRow(ctx, `SELECT decision_bytes FROM bot_deletion_operations WHERE bot_id=$1`, bot.ID).Scan(&decision))
+	var saved struct{ Admission *store.DeletionAdmission }
+	require.NoError(t, json.Unmarshal(decision, &saved))
+	require.NotNil(t, saved.Admission, "recovery must retain the actual verified initiating authority")
+	require.Equal(t, owner, saved.Admission.AccountID)
+	require.Equal(t, profile, saved.Admission.ProfileID)
+	require.EqualValues(t, 9, saved.Admission.SessionEpoch)
+	require.Equal(t, "regular", saved.Admission.AccountType)
+	require.Equal(t, botv1.BotService_DeleteBot_FullMethodName, saved.Admission.Method)
+	require.Equal(t, hash, saved.Admission.RequestHash)
+	acceptedMD, _ := metadata.FromOutgoingContext(accepted)
+	require.Equal(t, acceptedMD.Get("x-request-id")[0], saved.Admission.RequestID)
+	var frozen botv1.DeleteBotRequest
+	require.NoError(t, proto.Unmarshal(saved.Admission.RequestBytes, &frozen))
+	require.True(t, proto.Equal(request, &frozen))
 }

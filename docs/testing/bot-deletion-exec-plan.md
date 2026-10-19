@@ -93,9 +93,15 @@ Streams are denied. Raw and mixed identity headers, stale epochs, replay and
 foreign owners are negative cases. Actual Go-to-Java mTLS reads cover current9,
 raised20 and unavailable0 test sources. Actual Auth outage before Bot admission
 leaves the Bot live and creates no decision. Gateway's three producer routes
-now use the existing protected audit transport; full HTTP-to-real-Bot fixture,
-ordinary-listener cutover and binding the verified admission into the persisted
-deletion decision remain OPEN. These component results do not qualify BE-170.
+now use the existing protected audit transport. The strict HTTP selector rejects
+static development credentials for all three routes; real JWT/JWKS and Redis
+floor component tests also cover protected-only dispatch. Verified DeleteBot
+admission is now included in the immutable decision: account/profile, epoch,
+account type, exact method/request ID/hash and deterministic request bytes, with
+no bearer token. Expiry is checked again after acquiring mutation locks. A real
+mTLS-to-PostgreSQL test asserts the saved binding; its old-handler control fails
+because the admission is absent. Full HTTP-to-real-Bot fixture and ordinary
+listener cutover remain OPEN. These component results do not qualify BE-170.
 
 ## Risks and follow-ups
 

@@ -6,12 +6,27 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
 var ErrDeletionOwner = errors.New("Bot deletion owner does not match")
+
+// DeletionAdmission contains only verified request-bound identity, never a
+// bearer credential. Its bytes become part of the immutable owner decision.
+type DeletionAdmission struct {
+	AccountID    uuid.UUID
+	ProfileID    uuid.UUID
+	SessionEpoch int64
+	AccountType  string
+	Method       string
+	RequestID    string
+	RequestHash  string
+	RequestBytes []byte
+	ExpiresAt    time.Time
+}
 
 type BotDeletion struct {
 	OperationID     uuid.UUID
@@ -72,6 +87,17 @@ func deletionSpaces(ctx context.Context, q deletionQuerier, bot uuid.UUID) ([]uu
 }
 
 func (s *BotStore) BeginBotDeletion(ctx context.Context, botID, owner uuid.UUID) (*BotDeletion, error) {
+	return s.beginBotDeletion(ctx, botID, owner, nil)
+}
+
+func (s *BotStore) BeginBotDeletionWithAdmission(ctx context.Context, botID, owner uuid.UUID, admission DeletionAdmission) (*BotDeletion, error) {
+	if admission.AccountID != owner || admission.ProfileID == uuid.Nil || admission.SessionEpoch <= 0 || admission.AccountType == "" || admission.Method != "/voice.bot.v1.BotService/DeleteBot" || admission.RequestID == "" || len(admission.RequestBytes) == 0 || admission.RequestHash == "" {
+		return nil, ErrDeletionOwner
+	}
+	return s.beginBotDeletion(ctx, botID, owner, &admission)
+}
+
+func (s *BotStore) beginBotDeletion(ctx context.Context, botID, owner uuid.UUID, admission *DeletionAdmission) (*BotDeletion, error) {
 	if botID == uuid.Nil || owner == uuid.Nil {
 		return nil, ErrDeletionOwner
 	}
@@ -83,14 +109,14 @@ func (s *BotStore) BeginBotDeletion(ctx context.Context, botID, owner uuid.UUID)
 		if err != nil {
 			return nil, err
 		}
-		result, restart, err := s.beginBotDeletionAttempt(ctx, botID, owner, spaces)
+		result, restart, err := s.beginBotDeletionAttempt(ctx, botID, owner, spaces, admission)
 		if err != nil || !restart {
 			return result, err
 		}
 	}
 }
 
-func (s *BotStore) beginBotDeletionAttempt(ctx context.Context, botID, owner uuid.UUID, spaces []uuid.UUID) (*BotDeletion, bool, error) {
+func (s *BotStore) beginBotDeletionAttempt(ctx context.Context, botID, owner uuid.UUID, spaces []uuid.UUID, admission *DeletionAdmission) (*BotDeletion, bool, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return nil, false, err
@@ -124,13 +150,17 @@ func (s *BotStore) beginBotDeletionAttempt(ctx context.Context, botID, owner uui
 	if !slices.Equal(spaces, actual) {
 		return nil, true, nil
 	}
+	if admission != nil && (!time.Now().Before(admission.ExpiresAt) || ctx.Err() != nil) {
+		return nil, false, ErrDeletionOwner
+	}
 	op := &BotDeletion{OperationID: uuid.New(), BotID: botID, OwnerAccountID: owner, ActorProfileID: bot.ActorProfileID, State: "PENDING"}
 	// The service signs this persisted owner decision later. It contains no user
 	// bearer token, and is never reconstructed from mutable/deleted source rows.
 	decision := struct {
 		OperationID, BotID, OwnerAccountID, ActorProfileID uuid.UUID
 		Purpose                                            string
-	}{op.OperationID, botID, owner, bot.ActorProfileID, "global_delete"}
+		Admission                                          *DeletionAdmission `json:",omitempty"`
+	}{op.OperationID, botID, owner, bot.ActorProfileID, "global_delete", admission}
 	op.DecisionBytes, err = json.Marshal(decision)
 	if err != nil {
 		return nil, false, err

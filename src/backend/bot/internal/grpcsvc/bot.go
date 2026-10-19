@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/bot/internal/authctx"
@@ -158,7 +159,22 @@ func (s *BotGRPC) DeleteBot(ctx context.Context, req *botv1.DeleteBotRequest) (*
 		return nil, err
 	}
 	owner, _ := authctx.AccountID(ctx)
-	deletion, err := s.Store.BeginBotDeletion(ctx, botID, owner)
+	var deletion *store.BotDeletion
+	if verified, ok := principal.FromContext(ctx); ok {
+		identity, verifyErr := principal.RequireDelegatedUser(ctx, "bot", botv1.BotService_DeleteBot_FullMethodName, req)
+		if verifyErr != nil {
+			return nil, status.Error(codes.Unauthenticated, "verified deletion initiation required")
+		}
+		requestBytes, marshalErr := (proto.MarshalOptions{Deterministic: true}).Marshal(req)
+		if marshalErr != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid deletion request")
+		}
+		deletion, err = s.Store.BeginBotDeletionWithAdmission(ctx, botID, owner, store.DeletionAdmission{AccountID: identity.AccountID, ProfileID: identity.ProfileID, SessionEpoch: identity.SessionEpoch, AccountType: identity.AccountType, Method: verified.RPC, RequestID: verified.RequestID, RequestHash: verified.RequestHash, RequestBytes: requestBytes, ExpiresAt: verified.ExpiresAt})
+	} else {
+		// The ordinary listener remains available until the full protected HTTP
+		// path is qualified. Its final lifecycle cut is a separate rollout step.
+		deletion, err = s.Store.BeginBotDeletion(ctx, botID, owner)
+	}
 	if err != nil {
 		if errors.Is(err, store.ErrDeletionOwner) {
 			return nil, status.Error(codes.PermissionDenied, "not bot owner")
