@@ -21,12 +21,22 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/httpserver"
 	voiceprom "voice/backend/pkg/promhttp"
+	"voice/backend/pkg/releasepolicy"
 	"voice/backend/pkg/runtimeconfig"
 )
 
 const serviceName = "realtime"
 
+var buildSourceSHA string
+
 func main() {
+	releaseRuntime, releaseErr := releasepolicy.LoadOwnerRuntime(os.LookupEnv, buildSourceSHA, os.ReadFile)
+	if releaseErr != nil {
+		log.Fatalf("realtime release policy: %v", releaseErr)
+	}
+	if releaseRuntime.Policy().Profile() == releasepolicy.Alpha && (os.Getenv("REALTIME_NATS_LIVE_ACL_PROOF") == "true" || os.Getenv("REALTIME_NATS_FRIEND_REQUEST_PREFLIGHT") == "true") {
+		log.Fatal("realtime alpha rejects diagnostic execution mode")
+	}
 	if os.Getenv("REALTIME_NATS_LIVE_ACL_PROOF") == "true" {
 		os.Exit(runNATSLiveACLProofMain())
 	}
@@ -72,6 +82,13 @@ func main() {
 	friendLister := dialFriendLister()
 
 	hub := newWSHub()
+	hub.releasePolicy = releaseRuntime.Policy()
+	if hub.releasePolicy.Profile() == releasepolicy.Alpha && presenceUpdater == nil {
+		log.Fatal("realtime alpha requires authoritative User presence updater")
+	}
+	if err := writeRealtimeReleaseSnapshot(releaseRuntime, hub, presenceUpdater, config); err != nil {
+		log.Fatalf("realtime release snapshot: %v", err)
+	}
 	hub.setPresenceViewer(presenceViewer)
 	hub.deliveryAckReader = dialDeliveryAckMessageReader()
 	subscriptionChecker := dialChatSubscriptionChecker(hub)

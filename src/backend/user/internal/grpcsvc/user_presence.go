@@ -46,6 +46,9 @@ func (s *UserGRPC) UpdatePresence(ctx context.Context, req *userv1.UpdatePresenc
 		CallInfoJSON:         req.GetCallInfoJson(),
 		Now:                  time.Now().UTC(),
 	}
+	if req.CustomStatus != nil && *req.CustomStatus != "" && s.ReleasePolicy != nil && !s.ReleasePolicy.Allows("paid") {
+		return nil, status.Error(codes.FailedPrecondition, "capability_unavailable")
+	}
 	if req.CustomStatus != nil && *req.CustomStatus != "" && authctx.SubscriptionTier(ctx) != "premium" {
 		return nil, status.Error(codes.FailedPrecondition, "custom status requires premium subscription")
 	}
