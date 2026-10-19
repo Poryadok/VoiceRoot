@@ -253,6 +253,13 @@ gate. Actual media/cleanup evidence still requires the authorized live run.
 ### Flutter (клиент)
 
 - Виджеты и логика: **`flutter test`**.
+- Presigned object-storage uploads/downloads: `flutter test
+  test/presigned_upload_test.dart` checks the native Compose-to-loopback
+  connection with its signed Host. Separately run `flutter test --platform
+  chrome test/presigned_upload_web_test.dart` to check that browsers preserve
+  the exact signed endpoint and send no Gateway bearer or custom Host. Web
+  deployments must issue a browser-reachable storage URL with the required
+  storage CORS policy; browsers cannot spoof the signed Host after a rewrite.
 - Сценарии с бэкендом: **`integration_test`**, когда API для сценария доступен (staging или локальный compose).
 - Статический анализ: **`flutter analyze`** — в CI на каждый PR; для a11y см. [features/accessibility.md](features/accessibility.md).
 
@@ -564,6 +571,24 @@ live smoke duration, provider coverage or product acceptance.
 - R22.3 D1 tests являются source-disabled storage tests, не public Voice/media
   E2E и не активируют handlers, coordinator или Redis bridge.
 - F13 analyzes every non-first parent of an ordinary integration merge as a separate source contribution, including octopus merges. Each source needs one unambiguous ancestor base; guarded source tree entries and ownership must survive the merge and final result. An octopus may not invent guarded result paths. The outer master release merge still requires the exact push-before first parent and two-parent shape. This provenance support does not authorize R22 runtime activation.
+- Native/P3 source qualification uses a separate fixed `NATIVE-P3-SOURCE-v1`
+  record and later verifier carrier; it does not replace Game/R1/R2 or the
+  Voice013 guarded-correction authority. The complete repaired projection,
+  dependency context, literal A1–A4/B1–B4 evidence matrix and source reviews must
+  qualify together. An `OPEN` clause rejects source authority even after a
+  source-closure review. The current record is an input checkpoint with that
+  matrix explicitly open; its existence is not a green F13 result.
+- The separately typed native master consumer validates the actual PR merge or
+  push event, event-before/base, exact two-parent `[base, source]` result and
+  complete source/result mode/type/OID/deletion parity. Its content baseline is
+  distinct from the actual master event base. Real producer rows retain source
+  ownership, nested bases, content history, runtime flags and intermediate
+  guarded taint; only an exact reviewed pre-H restoration can discharge that
+  intermediate obligation. Post-H content, missing/forged rows and incomplete
+  closure do not qualify. Synthetic fixture state cannot change the selected
+  production record, producer map or history ledger. Focused tests run through
+  `make ci-script-tests`; no ACTIVE A3/v6/MM/provider deployment is implied or
+  required for this dormant/restrictive source unit.
 
 ### E2E по фичам
 

@@ -1,5 +1,100 @@
 # Story Service
 
+## Private qualified LFP consent (accepted implementation contract)
+
+The qualified pair JOIN/INVITE source is defined by BE-011 c23
+`BE011-LFP-CONSENT-SOURCE-v1`. The private wire is
+[`lfp_consent.proto`](../../protos/voice/story/v1/lfp_consent.proto), with a strict
+canonical codec in `src/backend/pkg/lfpconsent`. Protocol1 UUIDs are nonzero
+16-byte values, digests exactly32 bytes, and all material fields required.
+Consent SHA256 uses `voice.story.lfp-consent-receipt.v1` plus one NUL byte and
+the exact deterministic `LfpConsentMaterial` bytes. Unknown, duplicate,
+reordered, overlong, truncated or semantically invalid material denies.
+
+Story must capture account/profile/positive epoch from the exact verified
+delegated Gateway responder action, persist immutable offer incarnation,
+revision, criteria/offer digest and exact operation consent before delivery.
+No raw profile header or public event creates this authority. The private
+`LfpConsentRegistryService` is implemented by Matchmaking and accepts only
+protected exact `service:story` requests. Register and readback bind the same
+registration operation, consent and hash; the original MM registration ID,
+generation and captured-search-intent hash must never change on retry.
+`LfpConsentRegistration.registration_sha256` hashes deterministic fields1–7,
+omitting field8, under `voice.mm.lfp-consent-registration.v1` plus one NUL.
+Explicit NONE is part of MM's exact captured witness, never an absent digest.
+
+The private `LfpConsentOfferService` is implemented by Story and accepts only
+protected exact `service:matchmaking`. It validates the exact saved receipt and
+current Story offer, including visibility, expiry/retraction and unchanged
+incarnation/revision/digests. Success echoes the complete exact binding and
+expiry; it is a bounded fresh observation, not a permanent permit. Outage is
+unavailable, never allow. MM still owns current Auth-floor/all-account checks,
+atomic acceptance and all member/session replacement.
+
+Public `story.lfp_response` remains profile-only discovery. Historical requests
+cannot be promoted by a current owner lookup or guessed epoch. Pair INVITE
+preserves responder leadership, pair JOIN author leadership; unsupported group
+contexts fail explicitly without dropping peers. Natural Story expiry after
+consumption does not invalidate MM's already accepted immutable source.
+Wire/codec presence alone does not install this protected runtime or journal;
+the [producer execution plan](../testing/be011-lfp-consent-producer-exec-plan.md)
+tracks their implementation and verification. Existing activation gates remain.
+
+The component journal in `internal/lfpconsentstore` uses Story migration000005.
+Each explicit authenticated author publication creates an immutable revision;
+observing an existing Story never adopts it automatically. Response-operation
+replay returns the original consent and epoch, and registration readback retains
+MM's original captured intent. Canonical bytes must match every relational
+selector and immutable offer before any readback can qualify.
+
+Accepted restore-cohort contract (producer c7) requires immutable environment,
+installation, external incarnation and admitted Story database binding alongside
+the unchanged v1 material. `pkg/storylfpadmission.Barrier` is the shared local
+ABI: the bound journal obtains admission before SQL and releases after commit or
+rollback. Its local shared admission-head lock supplements that external permit.
+Neither database marker nor constructing an Origin establishes admission.
+Only confirmed transaction completion releases its permit. An ambiguous BEGIN,
+COMMIT or ROLLBACK retains restrictive admission: pgx's closed transaction or
+asynchronous connection close is not database-session quiescence. No local timeout
+or reopen releases this uncertainty; the actual controller must retire the old
+runtime and its database sessions before admitting replacement execution.
+Producer c14 additionally requires immutable explicit HUMAN guest/regular actor
+provenance, captured by the protected Gateway verifier and persisted alongside
+consent/offer/cohort. The additive `lfp_actor.proto` ActorBound wrappers and
+`pkg/lfpconsent/ACTOR_PROTOCOL.md` pin the sidecar/envelope/ACK domains while
+retaining original v1 bytes. Bare v1 registration/validation endpoints or old ACKs
+cannot qualify this path; no fallback or current-caller enrichment is allowed.
+Fresh service validation must load the saved original viewer type and pass it
+explicitly to current privacy rules. It cannot obtain regular by defaulting a
+service context, ID or epoch floor. Guest and regular LFP paths are supported;
+existing guest DM/Chat/Space restrictions remain separate. Additive migration
+000006 stores immutable author/responder sidecars and qualified ACK atomically
+with their original records. Legacy rows cannot be enriched. Its immutable
+publication snapshot retains exact PostgreSQL criteria text and audience under
+the existing offer state hash; fresh privacy must evaluate that snapshot rather
+than an unrelated mutable row during A->B->A changes. The ActorBound Validate
+component checks the exact original actor/current offer, fresh privacy through
+an explicit saved viewer and final SQL state. Its required response field6
+canonical_criteria_json contains exact immutable PostgreSQL criteria text whose
+SHA256 is already committed by the v1 receipt. MM must check bytes/hash/shape;
+neither public listings nor JSON map re-encoding can substitute for it.
+HumanVerifier captures exact delegated Gateway actor/type/operation/body and
+rechecks expiry after live dependencies. Protected ActionServer and the new
+ActorBound RegistryProducer preserve exact original replay, verify full
+qualified ACK and require durable local capture before public success. They do
+not install a listener or actual authority. Additive Gateway consent routes use
+a dedicated mTLS client and real JWKS/blacklist/strict-floor human delegation;
+legacy profile-only discovery never supplies qualified evidence. Actual
+protected root/controller/DB-session/peer and retention composition remain
+implementation prerequisites. Codec/Store inputs are
+data, not proof that a protected Gateway verification occurred.
+`BE011-STORY-LFP-RESTORE-CONTROLLER` owns the still-absent deployment controller,
+full replica/transaction drain, external state and credential/route custody;
+consumers are Story291 and MM145. Unknown authority leaves qualification closed.
+The journal is a component, with no production authority or protected transport
+installed. Personal journal data remains subject to account erasure/retention;
+that composition and runtime activation remain open.
+
 ## Обзор
 
 Сторис: 24-часовой контент, архив, хайлайты, интеграция с матчмейкингом ("ищу пати").
@@ -238,3 +333,20 @@ key for at least 30 seconds after its last signature. Roll pods when changing
 mounted signing keys: the signer loads them at startup. Rollback may disable
 media admission by removing the complete Story signing/client configuration;
 never restore raw metadata validation.
+
+### Private LFP account-erasure qualification
+
+Accepted `StoryLfpErasure-v1` (producer c40, artifact SHA256
+`9061a5d658ae93fabd16e20c14e462a746dbd889a0dfaad2359cf408366ab8c0`)
+requires a distinct authenticated terminal account-lifecycle decision after the
+30-day recovery window. `user.account_deleted`, inactivity, epoch floors and
+archive/media purge do not authorize journal erasure. Every consent, actor,
+offer snapshot, operation and ACK/hash is personal data, with no exemption.
+
+`internal/lfperasure` supplies closed typed boundaries only. Actual owner,
+historical scope, complete current snapshot/seal and approved finite negative
+memory/storage custody are absent. Restored qualified routes/outgoing retries
+require reconciliation and current negative subject/object/operation/cohort
+admission. Terminal-erased must differ from ordinary MM NotFound; absent history
+cannot authorize fresh Register. Local SQL scrub, physical copies and installed
+admission need separate proofs. See the [producer ExecPlan](../testing/be011-lfp-consent-producer-exec-plan.md).

@@ -121,8 +121,12 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 		traceMatchFoundTransport("rest-transcoder-unhandled")
 	}
 
-	if isSpaceCreateRequest(r) {
+	if isSpaceCreateRequest(r) || isSpaceJoinRequest(r) {
 		writeGRPCError(w, status.Error(codes.Unavailable, "Space creator transport unavailable"))
+		return
+	}
+	if isStoryConsentRequest(r) {
+		writeGRPCError(w, status.Error(codes.Unavailable, "Story consent transport unavailable"))
 		return
 	}
 	upstream, ok := g.config.restUpstreams[namespace]

@@ -60,13 +60,9 @@ func (t *transcoder) serveSpaces(w http.ResponseWriter, r *http.Request, rest st
 	default:
 		if strings.Contains(rest, "/") {
 			if strings.HasSuffix(rest, "/join") && r.Method == http.MethodPost {
-				spaceID := strings.TrimSuffix(rest, "/join")
-				resp, err := t.clients.space.JoinSpace(ctx, &spacev1.JoinSpaceRequest{SpaceId: spaceID})
-				if err != nil {
-					writeGRPCError(w, err)
-					return true
-				}
-				writeProtoJSON(w, http.StatusOK, resp)
+				// Valid joins are handled before the ordinary Space client gate.
+				// A malformed nested path must not reach its legacy join handler.
+				http.NotFound(w, r)
 				return true
 			}
 			if strings.HasSuffix(rest, "/leave") && r.Method == http.MethodPost {

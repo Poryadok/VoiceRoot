@@ -1,4 +1,11 @@
 BEGIN;
+
+DO $$ BEGIN
+    IF current_setting('transaction_isolation') <> 'read committed' THEN
+        RAISE EXCEPTION 'Voice admission ownership DOWN requires READ COMMITTED'
+            USING ERRCODE = '55000';
+    END IF;
+END $$;
 -- Serialize the retention probe with every owner writer. A first owner may
 -- still be uncommitted when DOWN starts; wait for it before checking retention.
 LOCK TABLE voice_space_media_admission_owners IN ACCESS EXCLUSIVE MODE;

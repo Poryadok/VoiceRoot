@@ -1,4 +1,9 @@
 BEGIN;
+DO $$ BEGIN
+  IF current_setting('transaction_isolation') <> 'read committed' THEN
+    RAISE EXCEPTION 'automod downgrade requires READ COMMITTED';
+  END IF;
+END $$;
 -- Stop new message-trigger work before locking the history-bearing tables.
 -- Keep every history probe and destructive statement in this transaction.
 LOCK TABLE messages, automod_producer_state, automod_source_subjects,

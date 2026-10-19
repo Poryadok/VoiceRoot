@@ -63,6 +63,7 @@ func TestComposeFileAttachmentRestartProof_live(t *testing.T) {
 type composeFileAttachmentRestartState struct {
 	ChatID               string `json:"chat_id"`
 	FileID               string `json:"file_id"`
+	SingletonFileID      string `json:"singleton_file_id"`
 	MessageID            string `json:"message_id"`
 	RecipientAccessToken string `json:"recipient_access_token"`
 	UploaderAccessToken  string `json:"uploader_access_token"`
@@ -98,6 +99,10 @@ func prepareComposeFileAttachmentRestartProof(t *testing.T, client *http.Client,
 	attachments, err := json.Marshal([]map[string]string{{"file_id": fileID, "type": fileType}})
 	require.NoError(t, err)
 	messageID := sendComposeMessageWithAttachmentsJSON(t, client, base, sessA.AccessToken, chatID, string(attachments))
+	// A distinct, unattached upload exercises zero-reference terminal deletion
+	// after restart without attempting to revoke a surviving message reference.
+	singletonID, _ := composeUploadTextFile(t, objectClient, base, sessA.AccessToken, chatID, "restart-singleton.txt", []byte("unattached-restart-proof: distinct singleton bytes\n"))
+	require.NotEqual(t, fileID, singletonID)
 
 	// File ACL remains fail-closed even before the restart proof resumes.
 	status, _ := composeGetFileURL(t, client, base, stranger.AccessToken, fileID)
@@ -119,6 +124,7 @@ func prepareComposeFileAttachmentRestartProof(t *testing.T, client *http.Client,
 	state := composeFileAttachmentRestartState{
 		ChatID:               chatID,
 		FileID:               fileID,
+		SingletonFileID:      singletonID,
 		MessageID:            messageID,
 		RecipientAccessToken: sessB.AccessToken,
 		UploaderAccessToken:  sessA.AccessToken,
@@ -143,6 +149,8 @@ func verifyComposeFileAttachmentRestartProof(t *testing.T, client *http.Client, 
 	require.NoError(t, json.Unmarshal(encoded, &state))
 	require.NotEmpty(t, state.ChatID)
 	require.NotEmpty(t, state.FileID)
+	require.NotEmpty(t, state.SingletonFileID)
+	require.NotEqual(t, state.FileID, state.SingletonFileID)
 	require.NotEmpty(t, state.MessageID)
 	require.NotEmpty(t, state.RecipientAccessToken)
 	require.NotEmpty(t, state.UploaderAccessToken)
@@ -172,15 +180,34 @@ func verifyComposeFileAttachmentRestartProof(t *testing.T, client *http.Client, 
 	require.Equal(t, state.SHA256, hex.EncodeToString(sum[:]), "download must retain original SHA-256")
 	require.Equal(t, state.Content, string(downloaded), "download must retain exact deterministic bytes")
 
-	// Delete is terminal: the message retains its historical attachment ID, but
-	// no profile can mint fresh metadata or download access from it.
-	require.Equal(t, http.StatusNoContent,
-		composeDeleteFileStatus(t, client, base, state.UploaderAccessToken, state.FileID))
-	composeRequireAttachmentInCursorHistory(t, client, base, state.RecipientAccessToken, state.ChatID, state.MessageID, state.FileID)
+	// A live message reference remains authoritative across File restart. Legacy
+	// uploader deletion must not invalidate the recipient's attachment.
 	require.Equal(t, http.StatusPreconditionFailed,
+		composeDeleteFileStatus(t, client, base, state.UploaderAccessToken, state.FileID),
+		"surviving message reference must prevent legacy uploader deletion")
+	composeRequireAttachmentInCursorHistory(t, client, base, state.RecipientAccessToken, state.ChatID, state.MessageID, state.FileID)
+	require.Equal(t, http.StatusOK,
 		composeGetFileMetadataStatus(t, client, base, state.RecipientAccessToken, state.FileID))
-	status, _ = composeGetFileURL(t, client, base, state.RecipientAccessToken, state.FileID)
-	require.Equal(t, http.StatusPreconditionFailed, status, "deleted attachment must not receive a fresh URL")
+	status, retainedURL := composeGetFileURL(t, client, base, state.RecipientAccessToken, state.FileID)
+	require.Equal(t, http.StatusOK, status, "retained attachment must still receive a fresh URL")
+	retained, err := composeRestartProofDownloadClient().Get(retainedURL)
+	require.NoError(t, err)
+	defer retained.Body.Close()
+	retainedBytes, err := io.ReadAll(retained.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, retained.StatusCode)
+	require.Equal(t, "no-store", retained.Header.Get("Cache-Control"))
+	require.Equal(t, downloaded, retainedBytes, "denied deletion must retain exact attachment bytes")
+
+	// Zero-reference singleton deletion is still terminal after restart.
+	require.Equal(t, http.StatusOK,
+		composeGetFileMetadataStatus(t, client, base, state.UploaderAccessToken, state.SingletonFileID))
+	require.Equal(t, http.StatusNoContent,
+		composeDeleteFileStatus(t, client, base, state.UploaderAccessToken, state.SingletonFileID))
+	require.Equal(t, http.StatusPreconditionFailed,
+		composeGetFileMetadataStatus(t, client, base, state.UploaderAccessToken, state.SingletonFileID))
+	status, _ = composeGetFileURL(t, client, base, state.UploaderAccessToken, state.SingletonFileID)
+	require.Equal(t, http.StatusPreconditionFailed, status, "deleted singleton must not receive a fresh URL")
 }
 
 func writeComposeFileAttachmentRestartState(t *testing.T, statePath string, encoded []byte) {

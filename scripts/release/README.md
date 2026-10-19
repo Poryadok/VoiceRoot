@@ -73,3 +73,70 @@ Regression tests run in `make ci-script-tests`, or directly:
 ```bash
 python3 -m unittest discover -s scripts/release -p capability_manifest_test.py
 ```
+
+## A4 client compatibility package
+
+`client_compatibility.py` compiles the PLAN A4/A5/G1 matrix and checks offline
+evidence completeness. The operator supplies exact observed tuples and immutable
+previous/current artifacts. This repository does not yet declare qualified
+Windows/browser support. No sample tuple or unit-test fixture constitutes support.
+
+The manifest has exactly these fields:
+
+- `schema_version`: integer `1`; `source_sha`: exact current release commit;
+  `matrix_version`: explicit revision; `regression_sampling_policy`: nonempty
+  documented policy for **extended regression only**.
+- `backends`: `previous` and `current`, each with `source_sha` and nonzero
+  `artifact_sha256` of the complete immutable backend package. Current source
+  must equal the release source. Retain the package's service-image inventory.
+- `clients`: `windows` and `web`, each with `previous` and `current` records
+  containing semantic `version`, exact `source_sha`, and `artifact_sha256` of
+  the immutable installer/Web asset package. Versions and artifact hashes must
+  differ between previous/current. Preserve the actual signed feed/asset manifest
+  and build provenance alongside the package.
+- `tuples`: nonempty Windows **and** Web arrays represented as one list. Each
+  entry has unique `id` (lowercase letters/digits/hyphens), `platform`, `os`,
+  exact `os_version`/build and `arch`. Windows `os` is `Windows`; Web entries
+  also require `browser` and numeric exact `browser_version` (no channel aliases,
+  ranges or wildcards). Duplicate tuple identities are rejected.
+
+```bash
+python3 scripts/release/client_compatibility.py matrix.json \
+  --expected-source-sha "$RELEASE_SOURCE_SHA" > compatibility-suite.json
+```
+
+Every tuple gets all four previous/current client/backend smoke combinations.
+Each Windows combination also gets `version`, `forced_update`, `update_url`.
+Runner assertions follow [updates.md](../../docs/features/updates.md): normal,
+optional-update and below-minimum behavior; `/version` remains reachable; other
+API requests are denied with426 when outdated; exact update URL reaches the
+client's manifest handoff. Windows UI blocking/deferral and actual update behavior
+must appear in portable runtime evidence. Web smoke checks real old/current
+assets and API compatibility, including cache transition, rather than inventing
+desktop `/version` UI (the Web exception in updates.md remains applicable).
+
+Every tuple also gets a **sequence**: update previous client to current against
+current backend, retain client/session, roll backend back to previous, then prove
+the updated client still works. A standalone current/previous request does not
+prove this rollback case. Each runner's raw report must identify observed OS,
+arch, browser/build, client artifact, effective backend package, steps, assertions
+and failures. No runner execution or observation truth is attested by this tool.
+
+Pass actual observations via `--results actual.json`. Report fields are integer
+`schema_version:1`, exact `source_sha`, generated `manifest_sha256`, and
+`observations`. Each observation has exactly `case_id`, `result:"PASS"`, a
+portable credential-free `https://` or `artifact://` `evidence_uri` without query
+or fragment, and nonzero `evidence_sha256` of its raw evidence. All cases must be
+present exactly once. Input duplicate keys, unknown fields, stale material,
+FAIL/SKIP, missing tuples and incomplete case sets reject. Evidence hashes are
+declared content identities; the protected caller independently retrieves and
+verifies evidence and provenance. Never derive expected source from the candidate.
+
+Exit0/resultPASS means **offline evidence completeness only**. Actual per-tuple
+smoke, trusted install/update, protected environment custody, current CI,
+independent review and appointed acceptance are separate required evidence.
+Tests use synthetic versions/hashes and run in `make ci-script-tests` or:
+
+```bash
+python3 -m unittest discover -s scripts/release -p client_compatibility_test.py
+```

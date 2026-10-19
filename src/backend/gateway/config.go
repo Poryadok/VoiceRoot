@@ -47,6 +47,9 @@ func loadGatewayConfigFromEnvChecked() (gatewayConfig, error) {
 	if _, _, err := spaceLifecycleClientConfigFromEnv(); err != nil {
 		return gatewayConfig{}, err
 	}
+	if _, _, err := storyConsentClientConfigFromEnv(); err != nil {
+		return gatewayConfig{}, err
+	}
 	if _, _, err := matchSquadMemberClientConfigFromEnv(); err != nil {
 		return gatewayConfig{}, err
 	}
@@ -68,7 +71,7 @@ func loadGatewayConfigFromEnvChecked() (gatewayConfig, error) {
 	}
 	config.principalIssuer = issuer
 	config.principalJWKS = jwks
-	if config.transcoder != nil && (config.transcoder.clients.spaceLifecycle != nil || config.transcoder.clients.voiceUser != nil || len(config.transcoder.clients.auditInitiatingTransports) != 0) {
+	if config.transcoder != nil && (config.transcoder.clients.spaceLifecycle != nil || config.transcoder.clients.voiceUser != nil || config.transcoder.clients.storyConsent != nil || len(config.transcoder.clients.auditInitiatingTransports) != 0) {
 		if issuer == nil || !strict {
 			return gatewayConfig{}, errors.New("delegated transport requires Gateway signing keys and strict session epochs")
 		}

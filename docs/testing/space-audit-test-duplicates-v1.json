@@ -1,0 +1,258 @@
+{
+  "version": "MASTER-SPACE-AUDIT-TEST-DUPLICATES-v1",
+  "status": "SOURCE_CONSUMPTION_CONTRACT_CLEAR",
+  "source": "8fc9e542acd8039a356c4149ccd0fd4a16f79564",
+  "base": "698d4f064f032ea74abf3ede2017100b26c8ee69",
+  "cases": [
+    {
+      "path": "src/backend/space/internal/grpcsvc/audit_ingestion_test.go",
+      "merge": "c98b95a3f6417b4cf8779bfff062783ef13ca878",
+      "parents": [
+        "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+        "566ec5041050d71a7feeeecbf0bd0e0811238f14"
+      ],
+      "best_bases": [
+        "2f0d5eaafb9ac046e6adda643809a569901f49d7"
+      ],
+      "actual_prior_row": [
+        "src/backend/space/internal/grpcsvc/audit_ingestion_test.go",
+        "true",
+        "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+        "eaf51ba199af1bedf976291303bcc9c611331d16",
+        "698d4f064f032ea74abf3ede2017100b26c8ee69",
+        "47784a68f3ae2276ab34b9b23f3f1974b1b1ee3d",
+        "eaf51ba199af1bedf976291303bcc9c611331d16",
+        "698d4f064f032ea74abf3ede2017100b26c8ee69"
+      ],
+      "actual_incoming_row": [
+        "src/backend/space/internal/grpcsvc/audit_ingestion_test.go",
+        "false",
+        "c98b95a3f6417b4cf8779bfff062783ef13ca878",
+        "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+        "2f0d5eaafb9ac046e6adda643809a569901f49d7",
+        "566ec5041050d71a7feeeecbf0bd0e0811238f14",
+        "eaf51ba199af1bedf976291303bcc9c611331d16",
+        "2f0d5eaafb9ac046e6adda643809a569901f49d7"
+      ],
+      "entries": {
+        "base": {
+          "revision": "2f0d5eaafb9ac046e6adda643809a569901f49d7",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "8ba66b7654e1f76fbe126720d63cf5741677ed36"
+          },
+          "sha256": "f30e74cbf0e0635fc9b181761bbcf59b4214bbb17bc0365087bf3a794b10514c",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__base",
+          "bytes": 8043
+        },
+        "first": {
+          "revision": "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "8ba66b7654e1f76fbe126720d63cf5741677ed36"
+          },
+          "sha256": "f30e74cbf0e0635fc9b181761bbcf59b4214bbb17bc0365087bf3a794b10514c",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__first",
+          "bytes": 8043
+        },
+        "incoming": {
+          "revision": "566ec5041050d71a7feeeecbf0bd0e0811238f14",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "3e431846918af270c3a5eae2e56aef170c14dfcb"
+          },
+          "sha256": "0e77141229b01ed6bb6075285a18d60553289309595b52165f40cf58273b60b0",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__incoming",
+          "bytes": 8132
+        },
+        "result": {
+          "revision": "c98b95a3f6417b4cf8779bfff062783ef13ca878",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "3e431846918af270c3a5eae2e56aef170c14dfcb"
+          },
+          "sha256": "0e77141229b01ed6bb6075285a18d60553289309595b52165f40cf58273b60b0",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__result",
+          "bytes": 8132
+        },
+        "prior_owner": {
+          "revision": "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "8ba66b7654e1f76fbe126720d63cf5741677ed36"
+          },
+          "sha256": "f30e74cbf0e0635fc9b181761bbcf59b4214bbb17bc0365087bf3a794b10514c",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__prior_owner",
+          "bytes": 8043
+        },
+        "prior_source": {
+          "revision": "47784a68f3ae2276ab34b9b23f3f1974b1b1ee3d",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "8ba66b7654e1f76fbe126720d63cf5741677ed36"
+          },
+          "sha256": "f30e74cbf0e0635fc9b181761bbcf59b4214bbb17bc0365087bf3a794b10514c",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__prior_source",
+          "bytes": 8043
+        },
+        "current": {
+          "revision": "8fc9e542acd8039a356c4149ccd0fd4a16f79564",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "3e431846918af270c3a5eae2e56aef170c14dfcb"
+          },
+          "sha256": "0e77141229b01ed6bb6075285a18d60553289309595b52165f40cf58273b60b0",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__current",
+          "bytes": 8132
+        }
+      }
+    },
+    {
+      "path": "src/backend/space/internal/store/audit_ingestion_test.go",
+      "merge": "c98b95a3f6417b4cf8779bfff062783ef13ca878",
+      "parents": [
+        "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+        "566ec5041050d71a7feeeecbf0bd0e0811238f14"
+      ],
+      "best_bases": [
+        "2f0d5eaafb9ac046e6adda643809a569901f49d7"
+      ],
+      "actual_prior_row": [
+        "src/backend/space/internal/store/audit_ingestion_test.go",
+        "true",
+        "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+        "eaf51ba199af1bedf976291303bcc9c611331d16",
+        "698d4f064f032ea74abf3ede2017100b26c8ee69",
+        "47784a68f3ae2276ab34b9b23f3f1974b1b1ee3d",
+        "eaf51ba199af1bedf976291303bcc9c611331d16",
+        "698d4f064f032ea74abf3ede2017100b26c8ee69"
+      ],
+      "actual_incoming_row": [
+        "src/backend/space/internal/store/audit_ingestion_test.go",
+        "true",
+        "c98b95a3f6417b4cf8779bfff062783ef13ca878",
+        "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+        "2f0d5eaafb9ac046e6adda643809a569901f49d7",
+        "566ec5041050d71a7feeeecbf0bd0e0811238f14",
+        "eaf51ba199af1bedf976291303bcc9c611331d16",
+        "2f0d5eaafb9ac046e6adda643809a569901f49d7"
+      ],
+      "entries": {
+        "base": {
+          "revision": "2f0d5eaafb9ac046e6adda643809a569901f49d7",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "b2ef7aa139c0e7cff6a5549098ecf5b646211074"
+          },
+          "sha256": "6ce203e86f51e5506b7887a4e150a49a8e72d31fa3183b01a34ea01c3bfb08e8",
+          "artifact": "src__backend__space__internal__store__audit_ingestion_test.go__base",
+          "bytes": 13874
+        },
+        "first": {
+          "revision": "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "b2ef7aa139c0e7cff6a5549098ecf5b646211074"
+          },
+          "sha256": "6ce203e86f51e5506b7887a4e150a49a8e72d31fa3183b01a34ea01c3bfb08e8",
+          "artifact": "src__backend__space__internal__store__audit_ingestion_test.go__first",
+          "bytes": 13874
+        },
+        "incoming": {
+          "revision": "566ec5041050d71a7feeeecbf0bd0e0811238f14",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "d69e8a6e161b04d448044cca763e01c3752021d6"
+          },
+          "sha256": "81d43821bf35e16d5ecf10cfab7bcfb44cf7b0d9c3f76bbc836ba1fb409f086e",
+          "artifact": "src__backend__space__internal__store__audit_ingestion_test.go__incoming",
+          "bytes": 14493
+        },
+        "result": {
+          "revision": "c98b95a3f6417b4cf8779bfff062783ef13ca878",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "d69e8a6e161b04d448044cca763e01c3752021d6"
+          },
+          "sha256": "81d43821bf35e16d5ecf10cfab7bcfb44cf7b0d9c3f76bbc836ba1fb409f086e",
+          "artifact": "src__backend__space__internal__store__audit_ingestion_test.go__result",
+          "bytes": 14493
+        },
+        "prior_owner": {
+          "revision": "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "b2ef7aa139c0e7cff6a5549098ecf5b646211074"
+          },
+          "sha256": "6ce203e86f51e5506b7887a4e150a49a8e72d31fa3183b01a34ea01c3bfb08e8",
+          "artifact": "src__backend__space__internal__store__audit_ingestion_test.go__prior_owner",
+          "bytes": 13874
+        },
+        "prior_source": {
+          "revision": "47784a68f3ae2276ab34b9b23f3f1974b1b1ee3d",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "b2ef7aa139c0e7cff6a5549098ecf5b646211074"
+          },
+          "sha256": "6ce203e86f51e5506b7887a4e150a49a8e72d31fa3183b01a34ea01c3bfb08e8",
+          "artifact": "src__backend__space__internal__store__audit_ingestion_test.go__prior_source",
+          "bytes": 13874
+        },
+        "current": {
+          "revision": "8fc9e542acd8039a356c4149ccd0fd4a16f79564",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "d69e8a6e161b04d448044cca763e01c3752021d6"
+          },
+          "sha256": "81d43821bf35e16d5ecf10cfab7bcfb44cf7b0d9c3f76bbc836ba1fb409f086e",
+          "artifact": "src__backend__space__internal__store__audit_ingestion_test.go__current",
+          "bytes": 14493
+        }
+      }
+    }
+  ],
+  "criterion": "Only these two exact historical test-file tuples after independent whole-source review. Preserve every actual prior and incoming owner/source/content row and OR both runtime flags before normal map replacement. No generic identical-blob grant, runtime PASS, current/future path or activation authority. Current two test bindings and fixed record/rawhash must be verified.",
+  "runtime_pass": false,
+  "generic_path_authority": false,
+  "activation_authority": false,
+  "inventory_limitation": "Actual diagnostic traversal recorded3duplicates including known Role doc-rebind; stopped later source_base. Not exhaustive totalremaining inventory. Original fixed shell/helper files unchanged; separate diagnostic copy only; conservative runtime taint forced and no PASS.",
+  "artifacts": {
+    "remaining-duplicate-tuples.tsv": {
+      "sha256": "06758b8f7e3c661469e31922416aceda45bdba7f79ed7172215fc4064a707173",
+      "bytes": 1471
+    },
+    "remaining-duplicate-prior-rows.tsv": {
+      "sha256": "c8c0571e53d83e15743bcfef07d5d22e2c4fa9c93235c20a0a08944432839ccd",
+      "bytes": 924
+    },
+    "remaining-duplicate-diagnostic.log": {
+      "sha256": "bbcc8f2a1d842e01a7bb17eeb8af85ccc4fb1134ecb5df84272df7971485e4df",
+      "bytes": 42203
+    },
+    "remaining-duplicate-instrumentation.json": {
+      "sha256": "956b13a9a893649fd72cc2410f273de485cc9dd6c6c669e84a4a5ab2e7d4c54d",
+      "bytes": 584
+    },
+    "remaining-duplicate-receipt.json": {
+      "sha256": "10db3bf363fc562b98f64dc134add4e0cfd3849104303c289c6808b56914ee2e",
+      "bytes": 774
+    }
+  },
+  "review": "http://192.168.0.109:30990/?project=voice&task=SWARM-DEVELOP-20261018#comment-c76",
+  "proposal_sha256": "534c164f4f6ac015b869cccb31c9ebe03885dee8ee45918ac9a08e9f7d4b4f0c",
+  "carrier_status": "Metadata only; requires later immutable pin independent carrier review and actual unmodified fullF13/currentCI; no PASS."
+}

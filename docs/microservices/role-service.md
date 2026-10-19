@@ -1,5 +1,19 @@
 # Role Service
 
+### Owning source catalog qualification
+
+The existing fixed RoleState v1 mask projection serves exact clean16/17 and
+independently qualified clean20. Intermediate18/19, dirty and unknown versions
+remain unavailable. Migration17 restores Admin manage-role bit2;19 adds bit42;
+20 adds the explicit built-in43/44 deltas. Actual16→20 qualification seeds
+built-ins/custom roles and overrides, checks all eight row invalidations and
+unchanged SDK revision, and compares the executed snapshot fold with native
+GetEffectiveMask. The original source DDL/function hashes remain unchanged;
+catalog20 additionally guards both new SpaceChat clock inputs and four triggers.
+This projection does not represent the separate binding-aware SpaceChat policy
+decision or activate admission RPCs. EnsureDefaultMemberRole/RemoveMemberRoles
+remain unimplemented; ordinary network calls and the protected allowlist deny.
+
 ### Admission readiness target (ADMISSION-ROLE-READINESS-v1)
 
 Accepted BE-010 c12/c13 separates the ordinary membership incarnation from an
@@ -630,6 +644,53 @@ reconciliation succeeds. Optional room/profile IDs are hints; they do not
 replace the full current-authority scan. Existing Role subjects and their
 payloads are unchanged.
 
+### Ordinary notification wire (ROLE-ORDINARY-WIRE-v1)
+
+Ordinary notifications use nine additive `RoleStreamEvent` arms. The exact
+subject must match the selected arm; a subject cannot supply a missing action.
+`RoleMutation` contains `space_id=1`, `role_id=2`, `profile_id=3`, `name=4`,
+`chat_id=5`, `voice_room_id=6`, and repeated `changed_fields=7`.
+
+| Subject | Arm | Number |
+|---|---|---:|
+| `role.created` | `role_created` | 13 |
+| `role.updated` | `role_updated` | 14 |
+| `role.deleted` | `role_deleted` | 15 |
+| `role.assigned` | `role_assigned` | 16 |
+| `role.revoked` | `role_revoked` | 17 |
+| `role.chat_override_set` | `role_chat_override_set` | 18 |
+| `role.chat_override_removed` | `role_chat_override_removed` | 19 |
+| `role.voice_override_set` | `role_voice_override_set` | 20 |
+| `role.voice_override_removed` | `role_voice_override_removed` | 21 |
+
+The generic arms 10/11 remain unspecified legacy schemas: never infer a
+snapshot, delta or action from their `role_ids` or NATS subject. Policy arm12
+and its Voice outbox/reconciliation contract remain separate. Ordinary events
+are notifications, not commands to alter authorization or replace a role set.
+
+Deploy dual readers in Realtime and Analytics before any binary ordinary writer.
+The current ordinary writer remains flat JSON in the reader release. Historical
+flat JSON preserves its missing-field and unknown-property tolerance, while
+arrays, null and envelope-shaped JSON are not ordinary flat records. New binary
+requires action data, a valid event UUID/time and matching subject/arm. Unknown
+protobuf fields on a recognized arm are compatible; unsupported/malformed events
+produce no ordinary effect. The binary writer must forward `changed_fields`;
+missing legacy lists mean unspecified changes, not an empty authoritative set.
+
+Realtime keeps exactly the existing six fields plus `subject` in `role_update`.
+Only assigned/revoked target a profile; only chat override events target a chat.
+The other five actions have no recipient index and never broadcast, including
+when a payload contains an unrelated `chat_id`. `changed_fields` stays in NATS.
+Analytics keeps existing action names, hashes profiles and stores only Space/Role
+properties; typed source UUID/time pass through its actual Runner. Legacy
+identity remains the stream/sequence fallback. ACK follows persistence.
+
+Keep dual readers while JSON can be retained, replayed or restored. Producer
+rollback to JSON is compatible with dual readers; JSON-only reader rollback is
+unsafe after any binary is retained, even after producer rollback. Do not purge
+or recreate streams/durables to enable the migration. Source checks do not prove
+actual serving-reader upgrade or authorize binary cutover/deployment.
+
 ## Публикуемые события (→ NATS)
 
 ## Зависимости
@@ -918,8 +979,13 @@ permanent retirement, while the semantic tuple and stable receipt remain.
 Focused real PostgreSQL, mTLS/JWKS and restart/negative checks verify this
 participant; integrated all-participant acceptance remains tracked in T40.
 
-Version 13 is reserved for `000013_game_session_grants`; its original bytes
-remain unchanged. Version 14 also handles the pre-repair local version-13 fence
+Version 13 is reserved for `000013_game_session_grants`; its original UP bytes
+remain unchanged. Its DOWN requires READ COMMITTED isolation and refuses a
+transaction that could retain a stale empty snapshot. It acquires exclusive locks on operation receipts,
+sessions and grants before checking emptiness, retaining them through DROP in
+the same migration transaction. A concurrent first writer is either observed
+after the lock wait and prevents rollback, or the bounded lock wait fails;
+saved authority and receipts must never be discarded. Version 14 also handles the pre-repair local version-13 fence
 catalog: exact legacy fences/receipts are retained and canonical grant tables
 are added. A canonical grant-only v13 receives the fence schema. A combined
 exact catalog is adopted without row changes. The upgrade requires one recorded

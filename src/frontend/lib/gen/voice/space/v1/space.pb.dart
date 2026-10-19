@@ -2666,9 +2666,11 @@ class InviteList extends $pb.GeneratedMessage {
 class JoinByInviteRequest extends $pb.GeneratedMessage {
   factory JoinByInviteRequest({
     $core.String? code,
+    $core.String? operationId,
   }) {
     final result = create();
     if (code != null) result.code = code;
+    if (operationId != null) result.operationId = operationId;
     return result;
   }
 
@@ -2686,6 +2688,7 @@ class JoinByInviteRequest extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'code')
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2715,6 +2718,15 @@ class JoinByInviteRequest extends $pb.GeneratedMessage {
   $core.bool hasCode() => $_has(0);
   @$pb.TagNumber(1)
   void clearCode() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
 }
 
 class SpaceMembership extends $pb.GeneratedMessage {
@@ -2819,9 +2831,11 @@ class SpaceMembership extends $pb.GeneratedMessage {
 class JoinSpaceRequest extends $pb.GeneratedMessage {
   factory JoinSpaceRequest({
     $core.String? spaceId,
+    $core.String? operationId,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
+    if (operationId != null) result.operationId = operationId;
     return result;
   }
 
@@ -2839,6 +2853,7 @@ class JoinSpaceRequest extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2868,6 +2883,15 @@ class JoinSpaceRequest extends $pb.GeneratedMessage {
   $core.bool hasSpaceId() => $_has(0);
   @$pb.TagNumber(1)
   void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
 }
 
 class LeaveSpaceRequest extends $pb.GeneratedMessage {

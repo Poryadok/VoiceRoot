@@ -22,8 +22,7 @@ func TestListSpaceTree_Member(t *testing.T) {
 		t.Skip()
 	}
 	_, _, ctx := profileFixture(t)
-	pool := startSpacePostgresForTest(t, context.Background())
-	applySpaceMigration(t, context.Background(), pool)
+	pool := disclosurePool(t)
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
@@ -65,8 +64,7 @@ func TestListSpaceTree_NonMemberDenied(t *testing.T) {
 	}
 	_, _, ownerCtx := profileFixture(t)
 	_, _, otherCtx := profileFixture(t)
-	pool := startSpacePostgresForTest(t, context.Background())
-	applySpaceMigration(t, context.Background(), pool)
+	pool := disclosurePool(t)
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
@@ -85,8 +83,7 @@ func TestReorderSpaceTree_Owner(t *testing.T) {
 		t.Skip()
 	}
 	_, _, ctx := profileFixture(t)
-	pool := startSpacePostgresForTest(t, context.Background())
-	applySpaceMigration(t, context.Background(), pool)
+	pool := disclosurePool(t)
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
@@ -136,8 +133,7 @@ func TestPinTreeNode_UnpinTreeNode_Owner(t *testing.T) {
 		t.Skip()
 	}
 	_, _, ctx := profileFixture(t)
-	pool := startSpacePostgresForTest(t, context.Background())
-	applySpaceMigration(t, context.Background(), pool)
+	pool := disclosurePool(t)
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
@@ -183,8 +179,7 @@ func TestCreateCategory_NonOwnerDenied(t *testing.T) {
 	}
 	_, _, ownerCtx := profileFixture(t)
 	_, _, otherCtx := profileFixture(t)
-	pool := startSpacePostgresForTest(t, context.Background())
-	applySpaceMigration(t, context.Background(), pool)
+	pool := disclosurePool(t)
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
@@ -204,8 +199,7 @@ func TestSpaceTree_OwnerCanUpdateAndDeleteCategory(t *testing.T) {
 		t.Skip()
 	}
 	_, _, ctx := profileFixture(t)
-	pool := startSpacePostgresForTest(t, context.Background())
-	applySpaceMigration(t, context.Background(), pool)
+	pool := disclosurePool(t)
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
@@ -242,8 +236,7 @@ func TestSpaceTree_OwnerCanUpdateAndDeleteVoiceRoomWithTreeNode(t *testing.T) {
 		t.Skip()
 	}
 	_, _, ctx := profileFixture(t)
-	pool := startSpacePostgresForTest(t, context.Background())
-	applySpaceMigration(t, context.Background(), pool)
+	pool := disclosurePool(t)
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
@@ -276,8 +269,7 @@ func TestSpaceTree_OwnerCanRemoveTextNode(t *testing.T) {
 		t.Skip()
 	}
 	_, _, ctx := profileFixture(t)
-	pool := startSpacePostgresForTest(t, context.Background())
-	applySpaceMigration(t, context.Background(), pool)
+	pool := disclosurePool(t)
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
@@ -310,9 +302,7 @@ func TestSpaceTree_AuditWritesAreAtomicAndVisible(t *testing.T) {
 	owner, _, ownerCtx := profileFixture(t)
 	_, _, otherCtx := profileFixture(t)
 	ctx := context.Background()
-	pool := startSpacePostgresForTest(t, ctx)
-	applySpaceMigration(t, ctx, pool)
-	applySpaceAuditLedgerMigration(t, ctx, pool)
+	pool := disclosurePool(t)
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
@@ -428,9 +418,7 @@ func TestSpaceTree_AuditInsertFailureRollsBackUpsert(t *testing.T) {
 	}
 	_, _, ownerCtx := profileFixture(t)
 	ctx := context.Background()
-	pool := startSpacePostgresForTest(t, ctx)
-	applySpaceMigration(t, ctx, pool)
-	applySpaceAuditLedgerMigration(t, ctx, pool)
+	pool := disclosurePool(t)
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Audit rollback"})
@@ -454,16 +442,6 @@ CREATE TRIGGER fail_tree_audit_insert BEFORE INSERT ON audit_log FOR EACH ROW EX
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM audit_outbox WHERE space_id=$1`, spaceID).Scan(&outbox))
 	require.Zero(t, audits)
 	require.Zero(t, outbox)
-}
-
-func applySpaceAuditLedgerMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
-	t.Helper()
-	for _, name := range []string{"000015_audit_ledger.up.sql", "000025_tree_audit_actions.up.sql"} {
-		auditMigration, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name))
-		require.NoError(t, err)
-		_, err = pool.Exec(ctx, string(auditMigration))
-		require.NoError(t, err)
-	}
 }
 
 func requireTreeAuditEntry(t *testing.T, ctx context.Context, pool *pgxpool.Pool, spaceID, actorID uuid.UUID, action, targetType string, targetID uuid.UUID, wantDetails map[string]any) {

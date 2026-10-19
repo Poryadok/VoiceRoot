@@ -5912,6 +5912,18 @@ abstract class AppLocalizations {
   /// **'Add friend'**
   String get matchHistoryAddFriend;
 
+  /// No description provided for @matchHistoryFindPlayers.
+  ///
+  /// In en, this message translates to:
+  /// **'Find players'**
+  String get matchHistoryFindPlayers;
+
+  /// No description provided for @matchHistoryRatePlayer.
+  ///
+  /// In en, this message translates to:
+  /// **'Rate'**
+  String get matchHistoryRatePlayer;
+
   /// No description provided for @e2eEnableTitle.
   ///
   /// In en, this message translates to:

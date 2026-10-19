@@ -13,17 +13,21 @@ per-chat history, and downloads with its original SHA-256.
 - Existing proof: `src/backend/gateway/compose_file_attachment_restart_live_test.go`
   and `scripts/ci/compose-file-attachment-restart-proof.sh`.
 - Contract boundary: File has terminal `DeleteFile`; it has no `RestoreFile` RPC.
-  A1 proves authorized terminal deletion, access denial, and retained message
-  history; a re-upload receives a new ID. Account restore and backup restore
-  are A4/G1 scope.
+  The persistence-backed legacy deletion authority in `file-service.md`
+  rejects deletion while any live reference or usable alias survives, including
+  when protected-reference feature flags are disabled. The restart proof checks
+  this denial and continued message attachment access, then separately proves
+  authorized terminal deletion of a distinct zero-reference singleton. A
+  re-upload receives a new ID. Account restore and backup restore are A4/G1 scope.
 - Runtime constraint: Windows local Compose/localhost execution is prohibited;
   runtime proof is GitHub-hosted CI on the PR exact head.
 
 ## Scope
 
 - In: prove File-only restart against durable DB/blob stores, same-ID fresh URL
-  and SHA-256 download, unauthorized/authorized terminal delete, post-delete
-  metadata/URL denial, and retained message attachment history.
+  and SHA-256 download, unauthorized delete denial, referenced uploader delete
+  denial with retained history/metadata/download bytes, and zero-reference
+  singleton terminal delete with post-delete metadata/URL denial.
 - Out: File resurrection/RestoreFile, A4 account restore, backup restore,
   retention/GC redesign, or local runtime execution.
 - Decision: the release-smoke shorthand “delete/restore” is corrected for A1:
@@ -73,6 +77,11 @@ per-chat history, and downloads with its original SHA-256.
   supplied; `DeleteFile` has no inverse RPC.
 - Preserve the existing two-phase external runner: the Go test is HTTP-only and
   the runner, not the test, restarts services.
+- The referenced attachment's former expected `204` conflicted with the later
+  BE-264 persistence-backed reference authority. A `412` plus unchanged readable
+  bytes proves retention; the separate singleton proves terminal deletion. This
+  fixture correction does not prove removal of a message's attachment reference,
+  message deletion/restore, final reference cleanup, or A4/G1 restore acceptance.
 
 ## Risks And Follow-Ups
 
@@ -80,3 +89,5 @@ per-chat history, and downloads with its original SHA-256.
   is permitted for this Windows task.
 - If a file-restore flow is required, it needs a documented contract and should
   be a separately authorized cross-service slice.
+- Message attachment removal/delete/restore and final reference cleanup remain
+  separate product qualification paths; a singleton deletion cannot close them.

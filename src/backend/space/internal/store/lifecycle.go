@@ -922,7 +922,7 @@ func loadLifecycle(ctx context.Context, db spaceStoreDB, spaceID uuid.UUID, forU
 	if err := loadLifecycleParticipants(ctx, db, &snapshot, spaceID, operationID); err != nil {
 		return nil, err
 	}
-	if phase == spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_PURGED && (snapshot.RoleReceipt == nil || len(snapshot.PurgeReceipts) != 9) {
+	if phase == spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_PURGED && (snapshot.RoleReceipt == nil || len(snapshot.PurgeReceipts) != len(lifecycleParticipants)-1) {
 		var compactValid bool
 		if err := db.QueryRow(ctx, `SELECT a.evidence_compacted AND a.local_purge_completed AND EXISTS(SELECT 1 FROM space_deletion_tombstones t WHERE t.space_id=a.space_id) AND (SELECT count(*) FROM space_lifecycle_completions c WHERE c.space_id=a.space_id AND c.deletion_operation_id=a.deletion_operation_id AND c.generation=a.generation)=11 FROM space_lifecycle_aggregates a WHERE a.space_id=$1`, spaceID).Scan(&compactValid); err != nil {
 			return nil, err

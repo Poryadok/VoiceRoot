@@ -3279,6 +3279,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get matchHistoryAddFriend => 'Add friend';
 
   @override
+  String get matchHistoryFindPlayers => 'Найти игроков';
+
+  @override
+  String get matchHistoryRatePlayer => 'Оценить';
+
+  @override
   String get e2eEnableTitle => 'Включить сквозное шифрование';
 
   @override

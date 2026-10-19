@@ -37,3 +37,18 @@ var roleAuthorityCatalog = authoritysource.Catalog{
 		{Name: "role_sdk_authority_floor_guard", Arguments: 0, ReturnType: "trigger", BodySHA256: "9a8f5f22fef761b6d6a318f08cd758556ef74fccb2ebfb08ca22dc7ecaa6df58"},
 		{Name: "role_sdk_authority_changed", Arguments: 0, ReturnType: "trigger", BodySHA256: "5506ca2bf08faa9c260fad3eff5d24e481b2eec3066fb8089d695b8341156383"},
 	}}
+
+// Exact20 adds two inputs to the existing monotonic clock. Its fixed RoleState
+// projection is qualified against the native mask fold, not SpaceChat decisions.
+var roleAuthorityCatalog20 = func() authoritysource.Catalog {
+	catalog := roleAuthorityCatalog
+	catalog.Version = 20
+	catalog.Tables = append(append([]string(nil), catalog.Tables...), "role_space_chat_grants", "role_space_chat_policies")
+	catalog.Triggers = append(append([]authoritysource.CatalogTrigger(nil), catalog.Triggers...),
+		authoritysource.CatalogTrigger{Table: "role_space_chat_grants", Name: "role_authority_revision_space_chat_grants", Function: "role_authority_revision_changed", Type: 29, Argument: "space_id"},
+		authoritysource.CatalogTrigger{Table: "role_space_chat_grants", Name: "role_authority_revision_space_chat_grants_no_truncate", Function: "role_authority_revision_floor_guard", Type: 34},
+		authoritysource.CatalogTrigger{Table: "role_space_chat_policies", Name: "role_authority_revision_space_chat_policies", Function: "role_authority_revision_changed", Type: 29, Argument: "space_id"},
+		authoritysource.CatalogTrigger{Table: "role_space_chat_policies", Name: "role_authority_revision_space_chat_policies_no_truncate", Function: "role_authority_revision_floor_guard", Type: 34},
+	)
+	return catalog
+}()

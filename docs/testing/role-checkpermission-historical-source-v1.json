@@ -1,0 +1,246 @@
+{
+  "version": "MASTER-ROLE-CHECKPERMISSION-HISTORICAL-CONSUMPTION-v1",
+  "status": "SOURCE_CONSUMPTION_CONTRACT_CLEAR",
+  "classification": "ONE_HISTORICAL_SOURCE_DUPLICATE_WITH_REQUIRED_CURRENT_CORRECTION",
+  "source": "e5ece697cefc00c708635539efb3d9e6c629517e",
+  "base": "698d4f064f032ea74abf3ede2017100b26c8ee69",
+  "path": "src/backend/role/internal/principalruntime/runtime.go",
+  "historical_tuple": {
+    "merge": "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+    "parents": [
+      "eaf51ba199af1bedf976291303bcc9c611331d16",
+      "47784a68f3ae2276ab34b9b23f3f1974b1b1ee3d"
+    ],
+    "best_bases": [
+      "698d4f064f032ea74abf3ede2017100b26c8ee69"
+    ],
+    "previous_owner": "e963849df092f28ca0d4a79de04ba5abe609cf38",
+    "previous_owner_parents": [
+      "a635c0ad19a233f9bd934dca57943bc6363a6da3",
+      "0c94544318f0057feee3e180d93d7cab103edf7b"
+    ],
+    "previous_source": "0c94544318f0057feee3e180d93d7cab103edf7b",
+    "previous_source_base": "9c59b3d753d1594e205f3c61b8592f3b5fa3d60d",
+    "entries": {
+      "base": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d48c5319fc9e1b8a83477350ff3185c167807eee"
+      },
+      "first": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1a0a7bbdf5fc8ca0cd990a1fd98908e1e35a8786"
+      },
+      "incoming": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1a0a7bbdf5fc8ca0cd990a1fd98908e1e35a8786"
+      },
+      "result": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1a0a7bbdf5fc8ca0cd990a1fd98908e1e35a8786"
+      },
+      "previous_owner": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1a0a7bbdf5fc8ca0cd990a1fd98908e1e35a8786"
+      },
+      "previous_source": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1a0a7bbdf5fc8ca0cd990a1fd98908e1e35a8786"
+      }
+    }
+  },
+  "actual_prior_row": [
+    "src/backend/role/internal/principalruntime/runtime.go",
+    "false",
+    "e963849df092f28ca0d4a79de04ba5abe609cf38",
+    "a635c0ad19a233f9bd934dca57943bc6363a6da3",
+    "9c59b3d753d1594e205f3c61b8592f3b5fa3d60d",
+    "0c94544318f0057feee3e180d93d7cab103edf7b",
+    "a635c0ad19a233f9bd934dca57943bc6363a6da3",
+    "9c59b3d753d1594e205f3c61b8592f3b5fa3d60d"
+  ],
+  "incoming_metadata_at_failure": {
+    "owner": "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+    "parent": "eaf51ba199af1bedf976291303bcc9c611331d16",
+    "source_base": "698d4f064f032ea74abf3ede2017100b26c8ee69",
+    "source_head": "47784a68f3ae2276ab34b9b23f3f1974b1b1ee3d",
+    "content_base": "a635c0ad19a233f9bd934dca57943bc6363a6da3",
+    "best_bases": [
+      "698d4f064f032ea74abf3ede2017100b26c8ee69"
+    ]
+  },
+  "producer_contract": [
+    "Only the exact historical duplicate caller may consume this record after actual immutable record commit/rawhash pin; never infer generic identical-blob or independent-source lineage.",
+    "Preserve exact original prior row and append real new source/owner/content row plus both runtime-required flags in an auditable sidecar before normal map replacement. Never fabricate source/owner, erase history, lower a trigger or remove taint.",
+    "Current target must descend from the pinned qualified descendant of original source2ce and equal every required current source entry below. The historical nickname-wrapper defect is not silently forgiven; the actual current protected listener correction and its tests are a mandatory bound precondition.",
+    "Keep all fixed native/Game/test-only Role/historical-composition authorities separate. This grants no current/future path, endpoint, stand or activation authority and no blanket runtime PASS.",
+    "The actual combined full producer must emit/verify both retained rows and pass existing independent-duplicate negatives, actual PR/push and required CI; this metadata alone is not a producer PASS."
+  ],
+  "required_current_source": [
+    {
+      "path": "docs/microservices/role-service.md",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2a76645fd5e55f220bfa6cf683237f14fee0d758"
+      },
+      "sha256": "9a96f83544726068591bb5e122521ce8030d27b566fc1ceebf354ebc59ef0e67"
+    },
+    {
+      "path": "src/backend/role/go.mod",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5bfdf899c774ff1ae5bba3b5b64be8f4f36ad294"
+      },
+      "sha256": "3fe6ab19962958c6a82c87de222f46f7ffbb5a629909751fbd388a276363e281"
+    },
+    {
+      "path": "src/backend/role/go.sum",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "081b3dcbdfd4fcdf0b75cee76b29311fe1089cc5"
+      },
+      "sha256": "b167c9a3864b104dbefba58dc58262db27e09b0f069b65a2c2e39867ab97340f"
+    },
+    {
+      "path": "src/backend/role/internal/grpcsvc/ordinary_scope.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a105dde579079eecbd025b117b6c74826de1c774"
+      },
+      "sha256": "ed3c91e24f946b26872ae2918f0612222ecb4ba7c41d9bc1d456a5eacf4f1aa4"
+    },
+    {
+      "path": "src/backend/role/internal/principalgrpc/creation_decision.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7de92b3770cc40711ed3f4d2fc88dbbfb0b4336c"
+      },
+      "sha256": "08893cded8630f95a718db0b50552fc9171b73bb4d0c750c414b5b7f76c0f3ae"
+    },
+    {
+      "path": "src/backend/role/internal/principalgrpc/interceptor.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "205127fcb6fdf046add7e7447091ca046b1794bc"
+      },
+      "sha256": "451c0b48f486aedcab11d56ccaeda45d2d4a97d3bdf078e23da1769bee6d9cc1"
+    },
+    {
+      "path": "src/backend/role/internal/principalgrpc/nickname.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b34d569abe94ecdf0cb45f84400514e317df1d3f"
+      },
+      "sha256": "36e01213bc080a5a22236e96791cd7fe0b199754b5d8e92487529f027c2ffadd"
+    },
+    {
+      "path": "src/backend/role/internal/principalruntime/creation_listener_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9d9d17e337e3bf24e875ef6c4b032b50519345d9"
+      },
+      "sha256": "5068d3d27023785e6445da743c0af927c98fcad6011e334a566308a1e28dc630"
+    },
+    {
+      "path": "src/backend/role/internal/principalruntime/listener.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5ee133bf6246ab5112207b38dbdf0471387bc3f3"
+      },
+      "sha256": "569562be3098eee63e68e12948e5cf9fb1ebc3eb7866d9ff660f49e48d658488"
+    },
+    {
+      "path": "src/backend/role/internal/principalruntime/nickname_listener_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6318edbc4de71859a2f51bdc2074d0a401f659f3"
+      },
+      "sha256": "f1e75c64202d944b336f9381a7e1e8952e29836540e23418d407dd0ce03e9a84"
+    },
+    {
+      "path": "src/backend/role/internal/principalruntime/runtime.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1a0a7bbdf5fc8ca0cd990a1fd98908e1e35a8786"
+      },
+      "sha256": "60c8120638bd6590a52551996134bf07b4680f66b97ab8fd52865d03dbb99847"
+    }
+  ],
+  "historical_runtime_gap": "Old9dc composition unconditionally rechecked nickname after accepted creation;144c69 HOLD. Original author/runtime evidence and taint stay historical. No executed historical cross-merge success is invented.",
+  "current_correction": {
+    "commit": "e5ece697cefc00c708635539efb3d9e6c629517e",
+    "source_review": "http://192.168.0.109:30990/?project=voice&task=SWARM-DEVELOP-20261018#comment-c70",
+    "criterion": "Remove only redundant post-Strict nickname-only wrapper; existing Strict exact creation/nickname branches and all signed/TLS/body/JTI/ordinary route guards retained. Current source is the reviewed descendant with only additive Role catalog20 qualification documentation among these11bound paths; original correction2ce is mandatory ancestor and all10code/module bindings remain byte-identical.",
+    "proof": "role-creation-correction-proof.json",
+    "proof_sha256": "71123a7b85faa460ce87848f0df582da3d4a4dafe90d032d9e217cc22662b706",
+    "scope": "Actual fresh private TLS/JWKS/RSA/Redis creation11events and210affectedevents PASS0skip, vet/lint/gofmt0. Component proof only.",
+    "original_correction_commit": "2ce88a9892989686cd4fd5734e8b414a3c914564",
+    "qualified_descendant_review": "http://192.168.0.109:30990/?project=voice&task=SWARM-DEVELOP-20261018#comment-c74"
+  },
+  "review": "http://192.168.0.109:30990/?project=voice&task=SWARM-DEVELOP-20261018#comment-c75",
+  "runtime_pass": false,
+  "generic_identical_blob_authority": false,
+  "current_or_future_path_authority": false,
+  "activation_authority": false,
+  "artifacts": [
+    {
+      "name": "role-principal-duplicate/source-PROPOSAL.json",
+      "sha256": "423b731e3144adcbc63a41d11cac9c053f9df415bef39f970787b3cf5c64ade4",
+      "bytes": 7960
+    },
+    {
+      "name": "role-creation-correction-proof.json",
+      "sha256": "71123a7b85faa460ce87848f0df582da3d4a4dafe90d032d9e217cc22662b706",
+      "bytes": 4391
+    },
+    {
+      "name": "role-duplicate-exact-frame.trace",
+      "sha256": "581648fca0817c55e44d78614b7176f60922bb9c69342cfd1a00d18d3bad414c",
+      "bytes": 12552
+    },
+    {
+      "name": "role-duplicate-exact-frame.json",
+      "sha256": "e6cb8fd68e6aeb8d41ed461a336d7b4d38994358c08d11e71579311b84849172",
+      "bytes": 2714
+    },
+    {
+      "name": "role-duplicate-actual-trace-receipt.json",
+      "sha256": "10670ac15de29a8a7833d39f56901c7f615f16d7991540a403e067003144d11e",
+      "bytes": 208
+    },
+    {
+      "name": "role-duplicate-trace-runner-receipt.json",
+      "sha256": "c658b21fd6ec5d4ea9a6bb0f33b05daa70e2f223dee6fe3bd8c9b4808b078d6a",
+      "bytes": 369
+    },
+    {
+      "name": "role-duplicate-trace.log",
+      "sha256": "e4f9e7e087ab73db0e027913b8cff3ee4231b22de5649ab2af732efe5115d155",
+      "bytes": 13807
+    },
+    {
+      "name": "role-duplicate-actual-trace.gz",
+      "sha256": "a5cccfcdccca3bea2377d03de0b560bfcf89b0e100e9fe91677705b3c506f7c0",
+      "bytes": 932981
+    }
+  ],
+  "proposal_sha256": "893ecc95b8db74922279af140ae92ee67acc2696860353f89f3386a393e47c1b",
+  "prior_row_evidence_kind": "Exact eight arguments observed at the original real producer printf in contiguous hash-bound actual bash trace; the standalone temporary TSV was cleaned and is not claimed retained. Consumer must compare its actual prior row against these values and preserve it, never synthesize a replacement row.",
+  "carrier_status": "Metadata only. Requires separate later immutable-commit/rawhash consumer, independent code review, actual original/conditional-negative/PR-push/full CI proof. No runtime or master merge PASS."
+}

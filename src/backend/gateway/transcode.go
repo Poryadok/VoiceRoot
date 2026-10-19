@@ -67,6 +67,9 @@ type grpcClients struct {
 	subscription              subscriptionv1.SubscriptionServiceClient
 	bot                       botv1.BotServiceClient
 	story                     storyv1.StoryServiceClient
+	storyConsent              storyv1.LfpConsentActionServiceClient
+	storyConsentConn          *grpc.ClientConn
+	storyConsentErr           error
 	search                    searchv1.SearchServiceClient
 	auth                      authv1.AuthServiceClient
 	analytics                 analyticsv1.AnalyticsQueryServiceClient
@@ -95,6 +98,17 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 	}
 
 	clients := &grpcClients{}
+	if cfg, enabled, err := storyConsentClientConfigFromEnv(); err != nil {
+		clients.storyConsentErr = err
+	} else if enabled {
+		conn, err := cfg.dial()
+		clients.storyConsentErr = err
+		if err == nil {
+			clients.connections = append(clients.connections, conn)
+			clients.storyConsentConn = conn
+			clients.storyConsent = storyv1.NewLfpConsentActionServiceClient(conn)
+		}
+	}
 	clients.configureAuditInitiatingTransports()
 	if cfg, enabled, err := spaceLifecycleClientConfigFromEnv(); err != nil {
 		clients.spaceLifecycleErr = err
@@ -256,7 +270,7 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 	} else if conn != nil {
 		clients.analytics = analyticsv1.NewAnalyticsQueryServiceClient(conn)
 	}
-	if len(clients.auditInitiatingTransports) == 0 && clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.voiceUser == nil && clients.file == nil && clients.space == nil && clients.spaceLifecycle == nil && clients.matchSquadMember == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil && clients.matchmakingComplete == nil && clients.search == nil && clients.moderation == nil && clients.subscription == nil && clients.bot == nil && clients.story == nil && clients.analytics == nil {
+	if len(clients.auditInitiatingTransports) == 0 && clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.voiceUser == nil && clients.file == nil && clients.space == nil && clients.spaceLifecycle == nil && clients.matchSquadMember == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil && clients.matchmakingComplete == nil && clients.search == nil && clients.moderation == nil && clients.subscription == nil && clients.bot == nil && clients.story == nil && clients.storyConsent == nil && clients.storyConsentErr == nil && clients.analytics == nil {
 		return nil
 	}
 	return clients
@@ -268,6 +282,15 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 // first profile request.
 func (c *grpcClients) waitForRequiredUserReady(ctx context.Context) error {
 	if c != nil {
+		if c.storyConsentErr != nil {
+			return c.storyConsentErr
+		}
+		if c.storyConsentConn != nil {
+			c.storyConsentConn.Connect()
+			if err := grpcclient.WaitForReady(ctx, c.storyConsentConn); err != nil {
+				return fmt.Errorf("story consent readiness: %w", err)
+			}
+		}
 		if err := c.waitAuditInitiatingReady(ctx); err != nil {
 			return err
 		}
@@ -400,6 +423,10 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		}
 		return t.serveFiles(w, r, rest)
 	case "spaces":
+		if isSpaceJoinRequest(r) {
+			t.serveSpaceJoin(w, r)
+			return true
+		}
 		if isSpaceCreateRequest(r) {
 			t.serveSpaceCreate(w, r)
 			return true
@@ -419,6 +446,10 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		}
 		return t.serveSpaces(w, r, rest)
 	case "invites":
+		if isSpaceJoinRequest(r) {
+			t.serveSpaceJoin(w, r)
+			return true
+		}
 		if t.clients.space == nil {
 			return false
 		}
@@ -459,9 +490,6 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		}
 		return t.serveBots(w, r, rest)
 	case "stories":
-		if t.clients.story == nil {
-			return false
-		}
 		return t.serveStories(w, r, rest)
 	case "links":
 		return t.serveLinks(w, r, rest)

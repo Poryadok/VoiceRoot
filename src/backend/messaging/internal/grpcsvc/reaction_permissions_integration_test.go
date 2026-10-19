@@ -67,7 +67,7 @@ func TestMessagingReactionPermission(t *testing.T) {
 					require.Equal(t, permissions.TextChatAddReactions, permission)
 				}
 			}
-			wire := messagingWire{}
+			wire := messagingWire{CommunicationStates: &communicationStateStub{state: 1}}
 			if tc.role != nil {
 				wire.RolePermissions = tc.role
 			}

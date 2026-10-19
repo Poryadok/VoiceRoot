@@ -35,6 +35,21 @@ cannot qualify as alpha. Other owners and actual UI/REST/WS proof remain open.
 - Routing для федеративных нод (node → master → FCM/APNs)
 - iOS PushKit + CallKit интеграция для входящих звонков
 
+## Transient JetStream retry
+
+Message, matchmaking, voice, Story, social and moderation consumers use
+broker-managed delayed NAK after a handler/dependency failure: one second,
+doubling with the broker delivery count, capped at five minutes. Missing or
+unavailable delivery metadata uses one second. The callback does not sleep;
+retry scheduling never ACKs or terminates a failed event or imposes an attempt
+limit. If the delayed NAK itself fails, the existing broker AckWait governs
+redelivery; there is no immediate-NAK fallback. Success ACKs normally.
+
+This is the BE-276 transient-retry slice. Durable poison quarantine, DLQ and
+alerts remain open; malformed-event termination is unchanged. The separate
+subscription consumer and lifecycle-specific retry contracts are not covered.
+Validation: [Notification NATS retry ExecPlan](../testing/notification-nats-retry-exec-plan.md).
+
 ## API (gRPC)
 
 ```protobuf

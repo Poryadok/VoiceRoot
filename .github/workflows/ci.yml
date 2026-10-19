@@ -324,6 +324,14 @@ jobs:
           flutter pub get
           flutter analyze --no-fatal-infos
           flutter test --reporter expanded --concurrency=1
+      - name: Retain MatchHistory golden diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: match-history-golden-failure-${{ github.run_id }}
+          path: src/frontend/test/failures/*match_history_*.png
+          if-no-files-found: warn
+          retention-days: 7
       - name: Set up Node for Music decoder browser check
         uses: actions/setup-node@v4
         with:

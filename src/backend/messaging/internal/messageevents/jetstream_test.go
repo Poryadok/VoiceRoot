@@ -303,6 +303,8 @@ func TestJetStreamPublisher_PublishPinEvents(t *testing.T) {
 	subUnpin, err := nc.SubscribeSync(subjectMessageUnpinned)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = subUnpin.Unsubscribe() })
+	// Core subscriptions must reach the server before the separate publisher sends.
+	require.NoError(t, nc.FlushTimeout(3*time.Second))
 
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)

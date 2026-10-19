@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,6 +53,36 @@ func TestSpaceAuthoritySourceActualMigratorProtectedFactory(t *testing.T) {
 	require.Nil(t, runtime)
 	_, err = database.Pool.Exec(ctx, `UPDATE schema_migrations SET dirty=false`)
 	require.NoError(t, err)
+	for _, version := range []int64{33, 35} {
+		_, err = database.Pool.Exec(ctx, `UPDATE schema_migrations SET version=$1`, version)
+		require.NoError(t, err)
+		server, runtime, err = newSpaceAuthorityServer(ctx, nil, f.Config, reader)
+		require.Error(t, err, "unqualified or future version cannot start the protected reader")
+		require.Nil(t, server)
+		require.Nil(t, runtime)
+	}
+	_, err = database.Pool.Exec(ctx, `UPDATE schema_migrations SET version=34`)
+	require.NoError(t, err)
+	_, err = database.Pool.Exec(ctx, `ALTER TABLE space_members DISABLE TRIGGER space_authority_revision_space_members`)
+	require.NoError(t, err)
+	server, runtime, err = newSpaceAuthorityServer(ctx, nil, f.Config, reader)
+	require.Error(t, err, "a recognized marker cannot hide missing revision coverage")
+	require.Nil(t, server)
+	require.Nil(t, runtime)
+	_, err = database.Pool.Exec(ctx, `ALTER TABLE space_members ENABLE TRIGGER space_authority_revision_space_members`)
+	require.NoError(t, err)
+	var originalFunction string
+	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT pg_get_functiondef('space_authority_revision_changed()'::regprocedure)`).Scan(&originalFunction))
+	changedFunction := strings.Replace(originalFunction, "BEGIN", "BEGIN\n -- changed source body", 1)
+	require.NotEqual(t, originalFunction, changedFunction)
+	_, err = database.Pool.Exec(ctx, changedFunction)
+	require.NoError(t, err)
+	server, runtime, err = newSpaceAuthorityServer(ctx, nil, f.Config, reader)
+	require.Error(t, err, "a recognized marker cannot hide a changed function body")
+	require.Nil(t, server)
+	require.Nil(t, runtime)
+	_, err = database.Pool.Exec(ctx, originalFunction)
+	require.NoError(t, err)
 	server, runtime, err = newSpaceAuthorityServer(ctx, nil, f.Config, reader)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, runtime.Close()) })
@@ -75,6 +106,17 @@ func TestSpaceAuthoritySourceActualMigratorProtectedFactory(t *testing.T) {
 	require.True(t, state.MemberAt(member.String(), time.Now().UnixMilli()))
 	_, err = client.ReadSnapshot(callCtx, request)
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	for _, update := range []string{
+		`UPDATE schema_migrations SET version=35`,
+		`UPDATE schema_migrations SET version=34,dirty=true`,
+	} {
+		_, err = database.Pool.Exec(ctx, update)
+		require.NoError(t, err)
+		_, err = client.ReadSnapshot(f.SignedContext(t, request, method, uuid.NewString()), request)
+		require.Equal(t, codes.Unavailable, status.Code(err), "startup preflight cannot authorize later unqualified reads")
+	}
+	_, err = database.Pool.Exec(ctx, `UPDATE schema_migrations SET version=34,dirty=false`)
+	require.NoError(t, err)
 	_, err = database.Pool.Exec(ctx, `DELETE FROM space_members WHERE space_id=$1 AND profile_id=$2`, space.ID, member)
 	require.NoError(t, err)
 	removed, err := client.ReadSnapshot(f.SignedContext(t, request, method, "space-source-removal"), request)

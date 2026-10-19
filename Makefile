@@ -311,6 +311,7 @@ image-catalog-drift-check:
 
 ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test voice-db-runtime-provisioning-contract-test a4-disposable-recovery-harness-test phase0-fixture-test staging-observability-test nats-leaf-topology-invariants-test staging-source-acquisition-workflow-test nats-rollout-preservation-test matchmaking-source-authority-test complete-match-pki-test
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p capability_manifest_test.py
+	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p client_compatibility_test.py
 	python3 "$(ROOT)/src/frontend/docker/version_web_assets_test.py"
 	python3 "$(ROOT)/scripts/prod/verify_prod_images_test.py"
 	python3 "$(ROOT)/docker/postgres/compose-realtime-migrations_test.py"
@@ -410,6 +411,7 @@ voice-db-runtime-provisioning-contract-test:
 .PHONY: a4-disposable-recovery-harness-test
 a4-disposable-recovery-harness-test:
 	$(BASH) "$(ROOT)/scripts/ci/a4-disposable-recovery-harness_test.sh"
+	python3 "$(ROOT)/scripts/dev/full_profile_restore_test.py"
 
 .PHONY: phase0-fixture-test
 phase0-fixture-test:

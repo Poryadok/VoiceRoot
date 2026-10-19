@@ -667,6 +667,87 @@ const RoleStreamEvent$json = {
       '9': 0,
       '10': 'voiceRoomPolicyInvalidated'
     },
+    {
+      '1': 'role_created',
+      '3': 13,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.RoleMutation',
+      '9': 0,
+      '10': 'roleCreated'
+    },
+    {
+      '1': 'role_updated',
+      '3': 14,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.RoleMutation',
+      '9': 0,
+      '10': 'roleUpdated'
+    },
+    {
+      '1': 'role_deleted',
+      '3': 15,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.RoleMutation',
+      '9': 0,
+      '10': 'roleDeleted'
+    },
+    {
+      '1': 'role_assigned',
+      '3': 16,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.RoleMutation',
+      '9': 0,
+      '10': 'roleAssigned'
+    },
+    {
+      '1': 'role_revoked',
+      '3': 17,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.RoleMutation',
+      '9': 0,
+      '10': 'roleRevoked'
+    },
+    {
+      '1': 'role_chat_override_set',
+      '3': 18,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.RoleMutation',
+      '9': 0,
+      '10': 'roleChatOverrideSet'
+    },
+    {
+      '1': 'role_chat_override_removed',
+      '3': 19,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.RoleMutation',
+      '9': 0,
+      '10': 'roleChatOverrideRemoved'
+    },
+    {
+      '1': 'role_voice_override_set',
+      '3': 20,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.RoleMutation',
+      '9': 0,
+      '10': 'roleVoiceOverrideSet'
+    },
+    {
+      '1': 'role_voice_override_removed',
+      '3': 21,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.RoleMutation',
+      '9': 0,
+      '10': 'roleVoiceOverrideRemoved'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -682,7 +763,20 @@ final $typed_data.Uint8List roleStreamEventDescriptor = $convert.base64Decode(
     'X2NoYW5nZWQYCyABKAsyJi52b2ljZS5ldmVudHMudjEuUm9sZURlZmluaXRpb25DaGFuZ2VkSA'
     'BSFXJvbGVEZWZpbml0aW9uQ2hhbmdlZBJwCh12b2ljZV9yb29tX3BvbGljeV9pbnZhbGlkYXRl'
     'ZBgMIAEoCzIrLnZvaWNlLmV2ZW50cy52MS5Wb2ljZVJvb21Qb2xpY3lJbnZhbGlkYXRlZEgAUh'
-    'p2b2ljZVJvb21Qb2xpY3lJbnZhbGlkYXRlZEIJCgdwYXlsb2Fk');
+    'p2b2ljZVJvb21Qb2xpY3lJbnZhbGlkYXRlZBJCCgxyb2xlX2NyZWF0ZWQYDSABKAsyHS52b2lj'
+    'ZS5ldmVudHMudjEuUm9sZU11dGF0aW9uSABSC3JvbGVDcmVhdGVkEkIKDHJvbGVfdXBkYXRlZB'
+    'gOIAEoCzIdLnZvaWNlLmV2ZW50cy52MS5Sb2xlTXV0YXRpb25IAFILcm9sZVVwZGF0ZWQSQgoM'
+    'cm9sZV9kZWxldGVkGA8gASgLMh0udm9pY2UuZXZlbnRzLnYxLlJvbGVNdXRhdGlvbkgAUgtyb2'
+    'xlRGVsZXRlZBJECg1yb2xlX2Fzc2lnbmVkGBAgASgLMh0udm9pY2UuZXZlbnRzLnYxLlJvbGVN'
+    'dXRhdGlvbkgAUgxyb2xlQXNzaWduZWQSQgoMcm9sZV9yZXZva2VkGBEgASgLMh0udm9pY2UuZX'
+    'ZlbnRzLnYxLlJvbGVNdXRhdGlvbkgAUgtyb2xlUmV2b2tlZBJUChZyb2xlX2NoYXRfb3ZlcnJp'
+    'ZGVfc2V0GBIgASgLMh0udm9pY2UuZXZlbnRzLnYxLlJvbGVNdXRhdGlvbkgAUhNyb2xlQ2hhdE'
+    '92ZXJyaWRlU2V0ElwKGnJvbGVfY2hhdF9vdmVycmlkZV9yZW1vdmVkGBMgASgLMh0udm9pY2Uu'
+    'ZXZlbnRzLnYxLlJvbGVNdXRhdGlvbkgAUhdyb2xlQ2hhdE92ZXJyaWRlUmVtb3ZlZBJWChdyb2'
+    'xlX3ZvaWNlX292ZXJyaWRlX3NldBgUIAEoCzIdLnZvaWNlLmV2ZW50cy52MS5Sb2xlTXV0YXRp'
+    'b25IAFIUcm9sZVZvaWNlT3ZlcnJpZGVTZXQSXgobcm9sZV92b2ljZV9vdmVycmlkZV9yZW1vdm'
+    'VkGBUgASgLMh0udm9pY2UuZXZlbnRzLnYxLlJvbGVNdXRhdGlvbkgAUhhyb2xlVm9pY2VPdmVy'
+    'cmlkZVJlbW92ZWRCCQoHcGF5bG9hZA==');
 
 @$core.Deprecated('Use roleAssignmentChangedDescriptor instead')
 const RoleAssignmentChanged$json = {
@@ -3982,3 +4076,24 @@ final $typed_data.Uint8List spaceMemberBannedDescriptor = $convert.base64Decode(
     'ChFTcGFjZU1lbWJlckJhbm5lZBIZCghzcGFjZV9pZBgBIAEoCVIHc3BhY2VJZBIdCgphY2NvdW'
     '50X2lkGAIgASgJUglhY2NvdW50SWQSLwoUYmFubmVkX2J5X3Byb2ZpbGVfaWQYAyABKAlSEWJh'
     'bm5lZEJ5UHJvZmlsZUlk');
+
+@$core.Deprecated('Use roleMutationDescriptor instead')
+const RoleMutation$json = {
+  '1': 'RoleMutation',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'role_id', '3': 2, '4': 1, '5': 9, '10': 'roleId'},
+    {'1': 'profile_id', '3': 3, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'name', '3': 4, '4': 1, '5': 9, '10': 'name'},
+    {'1': 'chat_id', '3': 5, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'voice_room_id', '3': 6, '4': 1, '5': 9, '10': 'voiceRoomId'},
+    {'1': 'changed_fields', '3': 7, '4': 3, '5': 9, '10': 'changedFields'},
+  ],
+};
+
+/// Descriptor for `RoleMutation`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List roleMutationDescriptor = $convert.base64Decode(
+    'CgxSb2xlTXV0YXRpb24SGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQSFwoHcm9sZV9pZBgCIA'
+    'EoCVIGcm9sZUlkEh0KCnByb2ZpbGVfaWQYAyABKAlSCXByb2ZpbGVJZBISCgRuYW1lGAQgASgJ'
+    'UgRuYW1lEhcKB2NoYXRfaWQYBSABKAlSBmNoYXRJZBIiCg12b2ljZV9yb29tX2lkGAYgASgJUg'
+    't2b2ljZVJvb21JZBIlCg5jaGFuZ2VkX2ZpZWxkcxgHIAMoCVINY2hhbmdlZEZpZWxkcw==');
