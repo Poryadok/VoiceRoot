@@ -34,11 +34,13 @@ public final class AdmissionGrpcAdapter {
       case SPACE_ADMISSION_PHASE_SUBMIT -> AdmissionObservation.Phase.SUBMIT;
       case SPACE_ADMISSION_PHASE_APPROVE -> AdmissionObservation.Phase.APPROVE;
       case SPACE_ADMISSION_PHASE_FIRST_PUBLISH -> AdmissionObservation.Phase.FIRST_PUBLISH;
+      case SPACE_ADMISSION_PHASE_SET_ENTRY_POLICY -> AdmissionObservation.Phase.SET_ENTRY_POLICY;
       default -> throw invalid();
     };
     AdmissionObservation.Role role = switch (req.getSubjectRole()) {
       case SPACE_ADMISSION_SUBJECT_ROLE_APPLICANT -> AdmissionObservation.Role.APPLICANT;
       case SPACE_ADMISSION_SUBJECT_ROLE_REVIEWER -> AdmissionObservation.Role.REVIEWER;
+      case SPACE_ADMISSION_SUBJECT_ROLE_SETTINGS_ACTOR -> AdmissionObservation.Role.SETTINGS_ACTOR;
       default -> throw invalid();
     };
     if (service == null) throw Status.UNAVAILABLE.withDescription("admission authority unavailable").asRuntimeException();

@@ -55,8 +55,9 @@ class AuthAdmissionGrpcTest {
   class Fixture implements AutoCloseable {
     final AuthPrincipalVerifierTest signed=new AuthPrincipalVerifierTest();
     final Server server;final ManagedChannel channel;
-    Fixture() throws Exception {
-      var domain=new AdmissionObservation(id->{reads.incrementAndGet();return new AdmissionObservation.Account(account,"guest",true,3,7,8);},
+    Fixture() throws Exception { this("guest"); }
+    Fixture(String accountType) throws Exception {
+      var domain=new AdmissionObservation(id->{reads.incrementAndGet();return new AdmissionObservation.Account(account,accountType,true,3,7,8);},
           r->new AdmissionObservation.Profile(account,profile,r.requestHash(),4,false,false));
       var service=new AuthGrpcService(null,null);service.setAdmissionObservation(domain);
       var builder=NettyServerBuilder.forPort(0);
