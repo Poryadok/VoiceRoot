@@ -120,6 +120,21 @@ final $typed_data.Uint8List joinAdmissionStateDescriptor = $convert.base64Decode
     'QVRFX0ZBSUxFRBAFEiAKHEpPSU5fQURNSVNTSU9OX1NUQVRFX0VYUElSRUQQBhIkCiBKT0lOX0'
     'FETUlTU0lPTl9TVEFURV9JTlZBTElEQVRFRBAH');
 
+@$core.Deprecated('Use botGlobalTerminalOutcomeDescriptor instead')
+const BotGlobalTerminalOutcome$json = {
+  '1': 'BotGlobalTerminalOutcome',
+  '2': [
+    {'1': 'BOT_GLOBAL_TERMINAL_OUTCOME_UNSPECIFIED', '2': 0},
+    {'1': 'BOT_GLOBAL_TERMINAL_OUTCOME_GLOBAL_NATIVE_ADDS_FENCED', '2': 1},
+  ],
+};
+
+/// Descriptor for `BotGlobalTerminalOutcome`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List botGlobalTerminalOutcomeDescriptor = $convert.base64Decode(
+    'ChhCb3RHbG9iYWxUZXJtaW5hbE91dGNvbWUSKwonQk9UX0dMT0JBTF9URVJNSU5BTF9PVVRDT0'
+    '1FX1VOU1BFQ0lGSUVEEAASOQo1Qk9UX0dMT0JBTF9URVJNSU5BTF9PVVRDT01FX0dMT0JBTF9O'
+    'QVRJVkVfQUREU19GRU5DRUQQAQ==');
+
 @$core.Deprecated('Use getBotPurgeHandoffRequestDescriptor instead')
 const GetBotPurgeHandoffRequest$json = {
   '1': 'GetBotPurgeHandoffRequest',
@@ -4080,3 +4095,77 @@ final $typed_data.Uint8List applyBotInstallationRemovalResponseDescriptor =
     $convert.base64Decode(
         'CiNBcHBseUJvdEluc3RhbGxhdGlvblJlbW92YWxSZXNwb25zZRJHCgdyZWNlaXB0GAEgASgLMi'
         '0udm9pY2Uuc3BhY2UudjEuQm90SW5zdGFsbGF0aW9uUmVtb3ZhbFJlY2VpcHRSB3JlY2VpcHQ=');
+
+@$core.Deprecated('Use registerBotGlobalTerminalRequestDescriptor instead')
+const RegisterBotGlobalTerminalRequest$json = {
+  '1': 'RegisterBotGlobalTerminalRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'bot_id', '3': 2, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'decision_id', '3': 3, '4': 1, '5': 9, '10': 'decisionId'},
+  ],
+};
+
+/// Descriptor for `RegisterBotGlobalTerminalRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List registerBotGlobalTerminalRequestDescriptor =
+    $convert.base64Decode(
+        'CiBSZWdpc3RlckJvdEdsb2JhbFRlcm1pbmFsUmVxdWVzdBIpChBwcm90b2NvbF92ZXJzaW9uGA'
+        'EgASgNUg9wcm90b2NvbFZlcnNpb24SFQoGYm90X2lkGAIgASgJUgVib3RJZBIfCgtkZWNpc2lv'
+        'bl9pZBgDIAEoCVIKZGVjaXNpb25JZA==');
+
+@$core.Deprecated('Use botGlobalTerminalReceiptDescriptor instead')
+const BotGlobalTerminalReceipt$json = {
+  '1': 'BotGlobalTerminalReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'bot_id', '3': 2, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'decision_id', '3': 3, '4': 1, '5': 9, '10': 'decisionId'},
+    {'1': 'receipt_id', '3': 4, '4': 1, '5': 9, '10': 'receiptId'},
+    {
+      '1': 'registered_at',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'registeredAt'
+    },
+    {
+      '1': 'outcome',
+      '3': 6,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.space.v1.BotGlobalTerminalOutcome',
+      '10': 'outcome'
+    },
+  ],
+};
+
+/// Descriptor for `BotGlobalTerminalReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botGlobalTerminalReceiptDescriptor = $convert.base64Decode(
+    'ChhCb3RHbG9iYWxUZXJtaW5hbFJlY2VpcHQSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDVIPcH'
+    'JvdG9jb2xWZXJzaW9uEhUKBmJvdF9pZBgCIAEoCVIFYm90SWQSHwoLZGVjaXNpb25faWQYAyAB'
+    'KAlSCmRlY2lzaW9uSWQSHQoKcmVjZWlwdF9pZBgEIAEoCVIJcmVjZWlwdElkEj8KDXJlZ2lzdG'
+    'VyZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUgxyZWdpc3RlcmVkQXQS'
+    'QgoHb3V0Y29tZRgGIAEoDjIoLnZvaWNlLnNwYWNlLnYxLkJvdEdsb2JhbFRlcm1pbmFsT3V0Y2'
+    '9tZVIHb3V0Y29tZQ==');
+
+@$core.Deprecated('Use registerBotGlobalTerminalResponseDescriptor instead')
+const RegisterBotGlobalTerminalResponse$json = {
+  '1': 'RegisterBotGlobalTerminalResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.BotGlobalTerminalReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `RegisterBotGlobalTerminalResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List registerBotGlobalTerminalResponseDescriptor =
+    $convert.base64Decode(
+        'CiFSZWdpc3RlckJvdEdsb2JhbFRlcm1pbmFsUmVzcG9uc2USQgoHcmVjZWlwdBgBIAEoCzIoLn'
+        'ZvaWNlLnNwYWNlLnYxLkJvdEdsb2JhbFRlcm1pbmFsUmVjZWlwdFIHcmVjZWlwdA==');

@@ -82,6 +82,7 @@ const (
 	SpaceService_GetSpaceDeletionCoordinatorStatus_FullMethodName = "/voice.space.v1.SpaceService/GetSpaceDeletionCoordinatorStatus"
 	SpaceService_ApplyBotInstallationRemoval_FullMethodName       = "/voice.space.v1.SpaceService/ApplyBotInstallationRemoval"
 	SpaceService_GetBotPurgeHandoff_FullMethodName                = "/voice.space.v1.SpaceService/GetBotPurgeHandoff"
+	SpaceService_RegisterBotGlobalTerminal_FullMethodName         = "/voice.space.v1.SpaceService/RegisterBotGlobalTerminal"
 )
 
 // SpaceServiceClient is the client API for SpaceService service.
@@ -200,6 +201,9 @@ type SpaceServiceClient interface {
 	// Relay only the exact accepted producer-owned Role/Messaging P3 evidence.
 	// @voice.security=protected;callers=service:bot
 	GetBotPurgeHandoff(ctx context.Context, in *GetBotPurgeHandoffRequest, opts ...grpc.CallOption) (*GetBotPurgeHandoffResponse, error)
+	// Minimal all-Add fence from Bot's committed verified-owner global root.
+	// @voice.security=protected;callers=service:bot
+	RegisterBotGlobalTerminal(ctx context.Context, in *RegisterBotGlobalTerminalRequest, opts ...grpc.CallOption) (*RegisterBotGlobalTerminalResponse, error)
 }
 
 type spaceServiceClient struct {
@@ -840,6 +844,16 @@ func (c *spaceServiceClient) GetBotPurgeHandoff(ctx context.Context, in *GetBotP
 	return out, nil
 }
 
+func (c *spaceServiceClient) RegisterBotGlobalTerminal(ctx context.Context, in *RegisterBotGlobalTerminalRequest, opts ...grpc.CallOption) (*RegisterBotGlobalTerminalResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegisterBotGlobalTerminalResponse)
+	err := c.cc.Invoke(ctx, SpaceService_RegisterBotGlobalTerminal_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SpaceServiceServer is the server API for SpaceService service.
 // All implementations must embed UnimplementedSpaceServiceServer
 // for forward compatibility.
@@ -956,6 +970,9 @@ type SpaceServiceServer interface {
 	// Relay only the exact accepted producer-owned Role/Messaging P3 evidence.
 	// @voice.security=protected;callers=service:bot
 	GetBotPurgeHandoff(context.Context, *GetBotPurgeHandoffRequest) (*GetBotPurgeHandoffResponse, error)
+	// Minimal all-Add fence from Bot's committed verified-owner global root.
+	// @voice.security=protected;callers=service:bot
+	RegisterBotGlobalTerminal(context.Context, *RegisterBotGlobalTerminalRequest) (*RegisterBotGlobalTerminalResponse, error)
 	mustEmbedUnimplementedSpaceServiceServer()
 }
 
@@ -1154,6 +1171,9 @@ func (UnimplementedSpaceServiceServer) ApplyBotInstallationRemoval(context.Conte
 }
 func (UnimplementedSpaceServiceServer) GetBotPurgeHandoff(context.Context, *GetBotPurgeHandoffRequest) (*GetBotPurgeHandoffResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBotPurgeHandoff not implemented")
+}
+func (UnimplementedSpaceServiceServer) RegisterBotGlobalTerminal(context.Context, *RegisterBotGlobalTerminalRequest) (*RegisterBotGlobalTerminalResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegisterBotGlobalTerminal not implemented")
 }
 func (UnimplementedSpaceServiceServer) mustEmbedUnimplementedSpaceServiceServer() {}
 func (UnimplementedSpaceServiceServer) testEmbeddedByValue()                      {}
@@ -2310,6 +2330,24 @@ func _SpaceService_GetBotPurgeHandoff_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SpaceService_RegisterBotGlobalTerminal_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterBotGlobalTerminalRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).RegisterBotGlobalTerminal(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_RegisterBotGlobalTerminal_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).RegisterBotGlobalTerminal(ctx, req.(*RegisterBotGlobalTerminalRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SpaceService_ServiceDesc is the grpc.ServiceDesc for SpaceService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2568,6 +2606,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetBotPurgeHandoff",
 			Handler:    _SpaceService_GetBotPurgeHandoff_Handler,
+		},
+		{
+			MethodName: "RegisterBotGlobalTerminal",
+			Handler:    _SpaceService_RegisterBotGlobalTerminal_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

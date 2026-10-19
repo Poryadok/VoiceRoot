@@ -555,3 +555,15 @@ the corrected real dependency matrix passed in 87.156s, using the production
 61-second cache expiry without a substituted clock or resolver. Runtime
 compatibility, scoped vet and Messaging build also pass. This is a receiver
 availability proof, not qualified Bot P3 adoption or full cleanup completion.
+
+BE-170 c95/c96 allocates a separate minimal RegisterBotGlobalTerminal wire:
+protocol, Bot UUID and committed server decision UUID only. The decision is
+also the signed request identity. Its receiver-owned receipt binds those IDs,
+receipt UUID, original registration time and GLOBAL_NATIVE_ADDS_FENCED outcome.
+It supplies only the all-Add terminal fence; every per-Space cleanup obligation
+remains independent. The global reducer must require this obligation even
+when no Space target exists. No actor, Space, owner credential, root hash,
+source counts or new erasure authority enters this wire. Receiver/catalog,
+producer/reducer and actual zero-target/replay/concurrent Add proofs remain
+separate implementation requirements. Existing known46 projection cannot
+authorize legacy personal-data erasure; its actual trigger gap stays open.
