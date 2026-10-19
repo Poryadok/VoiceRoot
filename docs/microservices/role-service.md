@@ -467,6 +467,15 @@ interceptor ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md));
 
 ### Moderation local-report decision contract (accepted target)
 
+For the same BE-066 chain, a new protected Messaging decision route allows
+only exact signed `service:messaging` `CheckPermission` for `TEXT_CHAT_VIEW` and
+`TEXT_CHAT_READ_HISTORY`, with authoritative Space/ChatRef, verified viewer as
+subject data, absence of voice-room scope and complete deterministic request
+binding. These decisions grant no message body access on their own; native
+Space history/membership and Messaging/Social visibility remain required.
+This narrow route does not make existing unrelated Messaging permission calls
+globally strict or authorize fallback to their raw metadata adapters.
+
 Only `/voice.role.v1.RoleService/CheckPermission` may accept
 `principal_type=service`, `iss=moderation`, `sub=service:moderation`, `aud=role`
 for the separate [local report jurisdiction](moderation-service.md#space-local-report-jurisdiction-accepted-target).

@@ -38,7 +38,9 @@ sanction or local appeal system. Existing global intake semantics are unchanged.
 ## Milestones
 
 - [x] Record the bounded product choice in owning feature/service/data docs.
-- [ ] Resolve exact protected target-owner protocol from current implementations.
+- [x] Resolve exact protected target-owner protocol from current implementations:
+  Astra327 BE-066 c10, attachment `ab60c723ae5e48ba7359686a21ac44b1`, SHA256
+  `6421823c604bd6fb82629e4cf68df57475b96bb2840e7c643dac18f8daf6f2ce`.
 - [ ] Add local DTO/RPC/generated contracts, independent persistence and guarded
   rollback. One owner reserves the next actual Moderation migration number.
 - [ ] Execute meaningful negative RED, then implement protected ingress,
@@ -116,9 +118,67 @@ sanction or local appeal system. Existing global intake semantics are unchanged.
 - [x] Record bounded protected owner-chain question in TT BE-066 c6; queen
   acknowledged its specialist queue. Consumer remains the real implementation
   owner320; no owner API or runtime capability is invented while unresolved.
-- [ ] Resolve owner protocol and continue implementation; no runtime PASS yet.
+- [x] Consume327 c10 and canonize owning Messaging/Chat/Space/Social/Role target
+  contracts and the finite page algorithm. These are explicitly new producers.
+- [x] Reacquire actual WT44 under NEW lease
+  `c6c9648f3aafc3102737c090b70e0f16`, holder `rudeus-320-be066-resume`, branch
+  `codex/be066-owner-chain` from current develop
+  `c850c2e4d56b2130cf739dbcddde8faf6d72a663`; normal merge preserves own fcfdd docs.
+- [x] Reserve Chat26 in TT c11 after fresh scoped search; add native separate
+  generation and exact positive retirement receipts in existing source TX.
+- [x] Real disposable Linux PostgreSQL canonical schema25 regression failed
+  `REPORT_ATTACHMENT_MISSING`; schema1..26 passes core+overflow SQL assertions
+  including ABA, delete/recreate, type/creator not move and rollback. Initial
+  freeze fixture missed required source-manifest fields and was corrected; that
+  setup failure is not hidden as product RED. No runtime handler/feature PASS.
+- [x] Canonical Go assertions with backfill/guarded DOWN and actual two-writer
+  barrier plus three existing25 regressions: Linux Go1.26.5/real PostgreSQL16,
+  `-race`, 4top PASS/0FAIL/0SKIP, package event25.648s. Exact source archive
+  `fef19c13d9d1de6dd774d8bc02a11366b2f4433baba53af877888947840e3d2f`.
+  Private fixture-only DSN overlay is published separately; test assertions and
+  product SQL are unchanged. It does not certify canonical Testcontainers
+  startup. Earlier private DinD image-copy preparation was bounded-cancelled
+  before tests (partial copy, no engine-outage inference). First DSN overlay
+  missed shared PostgresImage constant: build failed before tests, then corrected;
+  raw setup-failure logs remain distinct from the actual passing runtime.
+- [ ] Obtain independent exact migration/rollback/source review before intake;
+  implement remaining protected chain and local scenario. No feature PASS yet.
 
 ## Decisions
+
+BE-066 c10 selects content-free Messaging batch viewer decisions and an independent
+positive lifecycle observer. Exact caller/data/visibility contracts are now in
+owning Messaging/Chat/Space/Role docs. Social's existing typed pair check needs a
+new protected Messaging registration (max100 distinct sender pairs in this
+consumer), with exact complete result validation; metadata forwarding is not an
+accepted adapter. No new RPC or protected producer is assumed present.
+
+Finite list contract: default50/max100 public items, immutable descending
+(created_at,id), private upper watermark and opaque authenticated or server-held
+cursor bound to jurisdiction/Space/actor-session/filter/order/last EMITTED tuple/
+expiry. Fetch at most1000 private ID/binding/version candidates plus overflow
+sentinel under exact Space/filter/watermark before payload access. Overflow is
+generic UNAVAILABLE with no page/count/new token. For <=1000 candidates complete
+<=10 owner batches of100, current Role per distinct canonical ChatRef (<=1000)
+and per-message ACL under one deadline and <=16 concurrent downstream calls.
+Any authority error fails the whole page. Only after the complete authorized set
+is known apply public LIMIT+1 and version/fence-checked payload projection.
+Changed row/fence is UNAVAILABLE. Next cursor exists only for an additional
+authorized row and uses last emitted tuple, never hidden scan position; no total,
+skipped count, hidden node or empty continuation pages. Every page reauthorizes;
+new rows above watermark wait for refresh. This explicit bounded availability
+does not guarantee success for arbitrarily large queues or constant-time secrecy.
+
+Positive retirement must distinguish actual Space exit/deletion from Chat's
+ordinary type/creator incarnation changes. Chat26 supplies native separate
+generation plus immutable exact old-binding receipt. Messaging message
+incarnation/tombstone and protected lifecycle read/ack remain separate new
+producer work. Moderation serializes create/assign/resolve/cleanup on the same
+target fence and row order, records retired-binding fence and scrubs open/closed
+description, evidence and user-authored decision notes atomically. Current reads
+deny delayed cleanup; per-report reconciliation catches delayed events and
+pre-event insertion races. UNKNOWN/absence/viewer deny never scrubs. No receipt
+is a new indefinite account-erasure exception.
 
 Select earlier c5 A-E defaults under explicit autonomous delegation. This keeps
 v1 within the requested separate local jurisdiction without adding privileged
