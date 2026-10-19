@@ -98,6 +98,9 @@ func (s *PostgresStore) CheckSchema(ctx context.Context) error {
 	}
 	var ready bool
 	err := s.pool.QueryRow(ctx, `SELECT to_regclass('voice_ordinary_rooms') IS NOT NULL
+AND to_regclass('voice_ordinary_cutover_works') IS NOT NULL
+AND to_regclass('voice_ordinary_cutover_targets') IS NOT NULL
+AND to_regclass('voice_ordinary_cutover_acceptances') IS NOT NULL
 AND to_regclass('voice_ordinary_outbox') IS NOT NULL
 AND to_regclass('voice_roster_outbox') IS NOT NULL
 AND to_regclass('voice_ordinary_memberships') IS NOT NULL
@@ -184,6 +187,17 @@ func (s *PostgresStore) Mutate(ctx context.Context, roomID uuid.UUID, change fun
 		return nil, err
 	}
 	defer rollback(tx)
+	var body []byte
+	if err := tx.QueryRow(ctx, `SELECT document FROM voice_ordinary_rooms WHERE room_id=$1 FOR UPDATE`, roomID).Scan(&body); err != nil {
+		return nil, mapStoreError(err)
+	}
+	before, err := decodeRoom(body, roomID)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkCutoverExecution(ctx, tx, before); err != nil {
+		return nil, err
+	}
 	room, err := s.mutateTx(ctx, tx, roomID, change)
 	if err != nil {
 		return nil, err
@@ -335,7 +349,23 @@ AND voice_account_voice_fences.reservation_expires_at<=clock_timestamp()`, membe
 }
 
 func (s *PostgresStore) MarkProjected(ctx context.Context, roomID uuid.UUID, version uint64) error {
-	tag, err := s.pool.Exec(ctx, `UPDATE voice_ordinary_rooms SET projection_version=$2
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer rollback(tx)
+	var body []byte
+	if err = tx.QueryRow(ctx, `SELECT document FROM voice_ordinary_rooms WHERE room_id=$1 FOR UPDATE`, roomID).Scan(&body); err != nil {
+		return mapStoreError(err)
+	}
+	room, err := decodeRoom(body, roomID)
+	if err != nil {
+		return err
+	}
+	if err = checkCutoverExecution(ctx, tx, room); err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, `UPDATE voice_ordinary_rooms SET projection_version=$2
 WHERE room_id=$1 AND version=$2`, roomID, version)
 	if err != nil {
 		return err
@@ -343,7 +373,7 @@ WHERE room_id=$1 AND version=$2`, roomID, version)
 	if tag.RowsAffected() != 1 {
 		return ErrConflict
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func (s *PostgresStore) ClaimOutbox(ctx context.Context, leaseFor time.Duration) (*OutboxItem, error) {

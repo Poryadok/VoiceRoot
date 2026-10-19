@@ -26,6 +26,11 @@ outboxes unchanged. Do not edit 145 party_cut/main/snapshot, 191 issuer/leaf,
 Space owner files or MM settlement. No flags, deployed capability or generic
 retirement upgrade. Existing whole-realm/authority qualification remains open.
 
+307 c14 authorizes the subsequent execution-exclusion seam: bounded native
+Mutate/MarkProjected locking, Coordinator dispatch/projection checks and the
+direct grpcsvc ordinary projection adapter.145 confirmed no competing writer;
+PartyEligibilityLoss signature and semantics stay unchanged.
+
 ## Milestones
 
 - [x] Capture and immutable journal prepare/replay, including historical members,
@@ -122,6 +127,33 @@ Before qualified terminal effects, resolve the recovery resource-binding seam:
 ClaimRecovery currently schedules CLOSED rows and Reconcile repeatedly closes
 their retained room name. Whole-old-realm retirement must not become a fictional
 SDK-delete observation or direct recovery against a replacement realm.
+
+This seam is resolved by307 c14, artifactd22e441b27ca4a08359bf3e1a69bd47b,
+SHA25614e8a1d9ea0c7dc221506a9a24349afccbe64ef03623d165065830d33804a82d.
+Implement its fifteen oracles proportionately across coherent stages. The first
+stage uses exact validated immutable025 work as CUTOVER_OWNED exclusion: generic
+Mutate and MarkProjected check under native room lock; mandatory Journal checks
+guard Coordinator dispatch and direct projection paths. Ordinary025 schema is
+required; a missing protected table is unavailable, never no-work permission.
+This gate does not supply LIVE_BOUND historical SDK routing, resource continuity,
+typed effect resolution, late-ACK observation, accepted R/P or terminal receipts.
+No COMPLETE state may bypass the gate until a qualified continuity reader exists.
+
+Actual private-network PostgreSQL RED0.540s/test0.42 observed the unguarded generic
+callback succeeding after capture. Initial login-shell Go lookup failure was
+infrastructure, not RED. Intermediate GREEN0.516s failed only the test oracle's
+nondurable Load.TransactionTime comparison; persisted document bytes now form
+the unchanged-state oracle. The next run0.741s passed all three stale-dispatch
+schedules but exposed pgx deferred Rows.Err escaping typed Unavailable; corrected.
+Final private PG-race GREEN1.923s/test0.85 including three subtests, subsequent
+ordinarycall/grpcsvc short-race and vet PASS, original75005 terminal0. Overlay
+b2b5c82701e58a9f0e27c9830ef0b42a10f547d87e54a06c07d5c403f761a280
+and full3951-file Linux preflight inventory22828343aae793fdf954ae7ef7e1c76ac4edb35fc4ae8356735652ae27d3197b.
+The final manifest derives from a previously complete inventory plus verified
+old/new full overlays; unexplained disappearance refuses. The original repeated
+baseline reader62860 stalled, verified own4928 was stopped, no producer PASS.
+No host ports or Docker socket in this runner. No SDK/projection IO in excluded
+paths, original Applied/effect facts and native document bytes remain unchanged.
 
 Retain all historical aggregate JSON and native outbox records, rather than only
 the current membership index. Ordinary provider issuance has no complete grant

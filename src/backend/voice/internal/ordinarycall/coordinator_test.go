@@ -19,6 +19,8 @@ type memoryJournal struct {
 	rooms map[uuid.UUID][]byte
 }
 
+func (*memoryJournal) CheckExecution(context.Context, uuid.UUID, uuid.UUID) error { return nil }
+
 func (s *memoryJournal) Create(_ context.Context, r *Room) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

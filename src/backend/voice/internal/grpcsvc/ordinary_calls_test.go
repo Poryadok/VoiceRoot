@@ -66,6 +66,9 @@ func (j *ordinaryHandlerJournal) Mutate(_ context.Context, id uuid.UUID, change 
 	return r, nil
 }
 func (*ordinaryHandlerJournal) MarkProjected(context.Context, uuid.UUID, uint64) error { return nil }
+func (*ordinaryHandlerJournal) CheckExecution(context.Context, uuid.UUID, uuid.UUID) error {
+	return nil
+}
 
 func (j *ordinaryHandlerJournal) FindForProfile(_ context.Context, profile uuid.UUID) (*ordinarycall.Room, error) {
 	j.mu.Lock()

@@ -9,6 +9,7 @@ import (
 )
 
 type Journal interface {
+	CheckExecution(context.Context, uuid.UUID, uuid.UUID) error
 	Create(context.Context, *Room) error
 	Load(context.Context, uuid.UUID) (*Room, error)
 	Mutate(context.Context, uuid.UUID, func(*Room) error) (*Room, error)
@@ -71,6 +72,9 @@ func (c *Coordinator) Start(ctx context.Context, intent CreateIntent, check func
 		return nil, err
 	}
 	if err = c.Journal.Create(ctx, r); err != nil {
+		return nil, err
+	}
+	if err = c.Journal.CheckExecution(ctx, r.Intent.RoomID, r.Intent.OperationID); err != nil {
 		return nil, err
 	}
 	effectCtx, cancel := context.WithTimeout(ctx, c.timeout())
@@ -153,6 +157,9 @@ func (c *Coordinator) Change(ctx context.Context, roomID uuid.UUID, change func(
 }
 
 func (c *Coordinator) project(ctx context.Context, r *Room) error {
+	if err := c.Journal.CheckExecution(ctx, r.Intent.RoomID, r.Intent.OperationID); err != nil {
+		return err
+	}
 	if err := c.Projection.Apply(ctx, r); err != nil {
 		return err
 	}
@@ -168,6 +175,9 @@ func (c *Coordinator) Reconcile(ctx context.Context, roomID uuid.UUID) error {
 	}
 	r, err := c.Journal.Load(ctx, roomID)
 	if err != nil {
+		return err
+	}
+	if err = c.Journal.CheckExecution(ctx, r.Intent.RoomID, r.Intent.OperationID); err != nil {
 		return err
 	}
 	if r.Stage == StagePreparing {
@@ -212,6 +222,9 @@ func (c *Coordinator) Reconcile(ctx context.Context, roomID uuid.UUID) error {
 		}
 	}
 	if closeEffect, ok := r.PendingClose(); ok {
+		if err = c.Journal.CheckExecution(ctx, r.Intent.RoomID, r.Intent.OperationID); err != nil {
+			return err
+		}
 		effectCtx, cancel := context.WithTimeout(ctx, c.timeout())
 		err = c.Media.CloseRoom(effectCtx, r.LiveKitRoomName)
 		cancel()
@@ -223,6 +236,9 @@ func (c *Coordinator) Reconcile(ctx context.Context, roomID uuid.UUID) error {
 			return err
 		}
 	} else if r.Stage == StageClosed {
+		if err = c.Journal.CheckExecution(ctx, r.Intent.RoomID, r.Intent.OperationID); err != nil {
+			return err
+		}
 		// Permanent tombstones continue reconciling exact retired names: an
 		// old bearer or delayed SDK create may reappear after confirmed deletion.
 		effectCtx, cancel := context.WithTimeout(ctx, c.timeout())
@@ -235,6 +251,9 @@ func (c *Coordinator) Reconcile(ctx context.Context, roomID uuid.UUID) error {
 		for _, effect := range r.Effects {
 			if effect.Applied || effect.Kind != EffectRemoveMember {
 				continue
+			}
+			if err = c.Journal.CheckExecution(ctx, r.Intent.RoomID, r.Intent.OperationID); err != nil {
+				return err
 			}
 			effectCtx, cancel := context.WithTimeout(ctx, c.timeout())
 			err = c.Media.RemoveParticipant(effectCtx, r.LiveKitRoomName, effect.Participant)
@@ -261,6 +280,9 @@ func (c *Coordinator) Reconcile(ctx context.Context, roomID uuid.UUID) error {
 }
 
 func (c *Coordinator) reconcileMediaIdentities(ctx context.Context, observed *Room) error {
+	if err := c.Journal.CheckExecution(ctx, observed.Intent.RoomID, observed.Intent.OperationID); err != nil {
+		return err
+	}
 	effectCtx, cancel := context.WithTimeout(ctx, c.timeout())
 	identities, err := c.Media.ListParticipantIdentities(effectCtx, observed.LiveKitRoomName)
 	cancel()
@@ -285,6 +307,9 @@ func (c *Coordinator) reconcileMediaIdentities(ctx context.Context, observed *Ro
 		}
 		if allowed {
 			continue
+		}
+		if err = c.Journal.CheckExecution(ctx, current.Intent.RoomID, current.Intent.OperationID); err != nil {
+			return err
 		}
 		effectCtx, cancel := context.WithTimeout(ctx, c.timeout())
 		err = c.Media.RemoveParticipant(effectCtx, current.LiveKitRoomName, identity)

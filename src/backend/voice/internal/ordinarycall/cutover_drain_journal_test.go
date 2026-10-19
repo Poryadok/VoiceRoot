@@ -37,8 +37,6 @@ func TestOrdinaryCutoverPrepareSealsHistoryAndClosesAtomically(t *testing.T) {
 	path := filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "voice_db", "000025_ordinary_cutover_drain.up.sql")
 	ddl, err := os.ReadFile(path)
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(ddl))
-	require.NoError(t, err)
 	down, err := os.ReadFile(filepath.Join(filepath.Dir(path), "000025_ordinary_cutover_drain.down.sql"))
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(down))

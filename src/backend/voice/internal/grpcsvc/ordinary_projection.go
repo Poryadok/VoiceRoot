@@ -22,6 +22,9 @@ func (p *ordinaryProjection) Apply(ctx context.Context, room *ordinarycall.Room)
 	if p == nil || p.Calls == nil || p.Journal == nil || room == nil {
 		return ordinarycall.ErrUnavailable
 	}
+	if err := p.Journal.CheckExecution(ctx, room.Intent.RoomID, room.Intent.OperationID); err != nil {
+		return err
+	}
 	call, err := ordinaryCallProjection(room)
 	if err != nil {
 		return err
@@ -33,6 +36,9 @@ func (p *ordinaryProjection) Apply(ctx context.Context, room *ordinarycall.Room)
 		}
 		prior, err := p.Journal.Load(ctx, id)
 		if err != nil {
+			return err
+		}
+		if err := p.Journal.CheckExecution(ctx, prior.Intent.RoomID, prior.Intent.OperationID); err != nil {
 			return err
 		}
 		if prior.Stage != ordinarycall.StageClosed || prior.HasPendingClose() {

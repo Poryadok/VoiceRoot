@@ -106,8 +106,7 @@ func TestOrdinaryCutoverProofAcceptanceReobservesAndBindsNative(t *testing.T) {
 	require.True(t, ok)
 	ddl, err := os.ReadFile(filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "voice_db", "000025_ordinary_cutover_drain.up.sql"))
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(ddl))
-	require.NoError(t, err)
+	require.NotEmpty(t, ddl, "ordinary fixture installs this migration")
 	store := NewPostgresStore(pool, storageTestEncoder)
 	c := &Coordinator{Journal: store, Media: &mediaFake{}, Projection: &projectionFake{}, Now: func() time.Time { return testNow }}
 	pending, _, _ := pendingGroup(t)
