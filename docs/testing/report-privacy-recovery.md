@@ -86,6 +86,31 @@ claim that an operational restore or production deployment occurred.
 
 ## Implementation checkpoint
 
+### Bounded journal byte format
+
+`internal/reportrecovery` defines schema 1 canonical UTF-8 JSON with one LF per
+line. A canonical JSON manifest names every artifact; chunks contain one header
+followed by canonical record lines, ordered by report UUID and slot. Each
+`report_journal_chunk_000001` (and subsequent ordinal) is independently named in
+the trusted complete inventory. Header, manifest and expected cut must agree on
+the operation, store incarnation, journal generation, snapshot and bounded view.
+The expected cut includes the manifest SHA-256 and each chunk's exact byte count,
+record count and SHA-256. These identities prove bytes, not source currency.
+
+The finite limits are 8,192 records per chunk, 128 chunks, 8 MiB per chunk,
+64 MiB for the complete domain snapshot including its manifest, 64 KiB for the
+manifest and 1,024 bytes per header/record line. The shared bundle's own total
+limit still applies across domains. Capacity exhaustion returns an error before
+publication; it never truncates the journal. Empty journals have one header-only
+chunk. Diagnostic high-water values may have gaps and do not prove completeness.
+
+Unknown/duplicate JSON fields, alternate encodings, missing/extra/mixed chunks,
+duplicate report slots (including conflicting subjects), noncanonical order,
+invalid evidence tuples and changed expected identities reject. Parsed accessors
+return copies. There is no ready flag, final-source assertion or external sink
+in this codec. The actual repeatable-read export, durable file publication,
+verified restore import and journal-aware cleanup/checker remain separate work.
+
 The initial source slice implements explicit provenance, transactional opaque
 journal writes at submission/validation and terminal account/subject/late-result
 cleanup. It is an enabling input for BE046 and the shared coordinator.
