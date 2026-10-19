@@ -25,6 +25,8 @@ type ValidationFact struct {
 	ReporterSubjectRevision *int64
 	TargetSubjectID         *uuid.UUID
 	TargetSubjectRevision   *int64
+	ReporterProvenance      string
+	TargetProvenance        string
 }
 
 // ReportValidatedHook may enqueue independent threshold work in this transaction.
@@ -52,7 +54,7 @@ func (s *ReportStore) ClaimValidation(ctx context.Context) (*ValidationClaim, er
 	claim := &ValidationClaim{ClaimID: uuid.New()}
 	err := s.Pool.QueryRow(ctx, `
 WITH ready AS (
- SELECT id FROM reports WHERE validation_state='PENDING'
+ SELECT id FROM reports WHERE validation_state='PENDING' AND reporter_provenance='VERIFIED_AT_SUBMISSION'
  AND validation_next_at<=now() AND (validation_claim_until IS NULL OR validation_claim_until<=now())
  ORDER BY validation_next_at,created_at,id FOR UPDATE SKIP LOCKED LIMIT 1
 )
@@ -60,9 +62,9 @@ UPDATE reports r SET validation_claim=$1,validation_claim_until=now()+interval '
  validation_attempts=CASE WHEN validation_attempts<2147483647 THEN validation_attempts+1 ELSE validation_attempts END
 FROM ready WHERE r.id=ready.id
 RETURNING r.id,r.reporter_profile_id,r.reporter_account_id,r.target_type,r.target_id,
- r.created_at,r.validation_attempts,r.validation_publication_legacy,r.category,r.reporter_subject_id,r.reporter_subject_revision`, claim.ClaimID).Scan(
+ r.created_at,r.validation_attempts,r.validation_publication_legacy,r.category,r.reporter_subject_id,r.reporter_subject_revision,r.reporter_provenance`, claim.ClaimID).Scan(
 		&claim.ReportID, &claim.ReporterProfileID, &claim.ReporterAccountID, &claim.TargetType, &claim.TargetID,
-		&claim.CreatedAt, &claim.Attempts, &claim.LegacyPublication, &claim.Category, &claim.ReporterSubjectID, &claim.ReporterSubjectRevision)
+		&claim.CreatedAt, &claim.Attempts, &claim.LegacyPublication, &claim.Category, &claim.ReporterSubjectID, &claim.ReporterSubjectRevision, &claim.ReporterProvenance)
 	if err != nil {
 		return nil, err
 	}
@@ -107,6 +109,9 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 		return false, errors.New("missing validation claim")
 	}
 	if s.Subjects == nil || claim.PrivacyCheck == nil {
+		return false, ErrReportPrivacy
+	}
+	if claim.ReporterProvenance != "VERIFIED_AT_SUBMISSION" {
 		return false, ErrReportPrivacy
 	}
 	if err := claim.PrivacyCheck(ctx); err != nil {
@@ -155,6 +160,7 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 		}
 	}
 	terminal := false
+	var terminalBindings []automod.Subject
 	for _, binding := range bindings {
 		var ended bool
 		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM automod_terminal_subjects WHERE subject_id=$1)`, binding.ID).Scan(&ended); err != nil {
@@ -162,6 +168,7 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 		}
 		if ended {
 			terminal = true
+			terminalBindings = append(terminalBindings, binding)
 		}
 	}
 	// Inspect every permanent fence before any binding. A stale expired Auth
@@ -183,10 +190,10 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 	}
 	var fact ValidationFact
 	var legacy bool
-	err = tx.QueryRow(ctx, `SELECT id,reporter_profile_id,reporter_account_id,target_type,target_id,created_at,validation_publication_legacy,reporter_subject_id,reporter_subject_revision
+	err = tx.QueryRow(ctx, `SELECT id,reporter_profile_id,reporter_account_id,target_type,target_id,created_at,validation_publication_legacy,reporter_subject_id,reporter_subject_revision,reporter_provenance
  FROM reports WHERE id=$1 AND validation_state='PENDING' AND validation_claim=$2
  AND validation_claim_until>now() FOR UPDATE`, claim.ReportID, claim.ClaimID).Scan(
-		&fact.ReportID, &fact.ReporterProfileID, &fact.ReporterAccountID, &fact.TargetType, &fact.TargetID, &fact.CreatedAt, &legacy, &fact.ReporterSubjectID, &fact.ReporterSubjectRevision)
+		&fact.ReportID, &fact.ReporterProfileID, &fact.ReporterAccountID, &fact.TargetType, &fact.TargetID, &fact.CreatedAt, &legacy, &fact.ReporterSubjectID, &fact.ReporterSubjectRevision, &fact.ReporterProvenance)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
@@ -196,13 +203,25 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 	if fact.TargetType != claim.TargetType || fact.TargetID != claim.TargetID {
 		return false, errors.New("target claim mismatch")
 	}
-	if fact.ReporterAccountID == nil || fact.ReporterSubjectID == nil || fact.ReporterSubjectRevision == nil || *fact.ReporterAccountID != *claim.ReporterAccountID || *fact.ReporterSubjectID != *claim.ReporterSubjectID || *fact.ReporterSubjectRevision != *claim.ReporterSubjectRevision {
+	if fact.ReporterProvenance != "VERIFIED_AT_SUBMISSION" || fact.ReporterAccountID == nil || fact.ReporterSubjectID == nil || fact.ReporterSubjectRevision == nil || *fact.ReporterAccountID != *claim.ReporterAccountID || *fact.ReporterSubjectID != *claim.ReporterSubjectID || *fact.ReporterSubjectRevision != *claim.ReporterSubjectRevision {
 		return false, ErrReportPrivacy
 	}
 	if terminal {
 		// The target account column may still be NULL: the verified late result is
 		// sufficient to scrub this pending row, never to recreate a terminal link.
-		if _, err = tx.Exec(ctx, `DELETE FROM reports WHERE id=$1`, fact.ReportID); err != nil {
+		for _, binding := range terminalBindings {
+			if binding.ID == claim.ReporterSubject.ID {
+				if err = s.recordTerminalReportSlotTx(ctx, tx, fact.ReportID, "REPORTER", binding.ID); err != nil {
+					return false, err
+				}
+			}
+			if claim.TargetSubject != nil && binding.ID == claim.TargetSubject.ID {
+				if err = s.recordTerminalReportSlotTx(ctx, tx, fact.ReportID, "USER_TARGET", binding.ID); err != nil {
+					return false, err
+				}
+			}
+		}
+		if err = finishReportPurgeTx(ctx, tx, []uuid.UUID{fact.ReportID}); err != nil {
 			return false, err
 		}
 		if err = claim.PrivacyCheck(ctx); err != nil {
@@ -247,9 +266,13 @@ func (s *ReportStore) CompleteValidation(ctx context.Context, claim *ValidationC
 			fact.TargetAccountID = &accountID
 			fact.TargetSubjectID = &claim.TargetSubject.ID
 			fact.TargetSubjectRevision = &claim.TargetSubject.Revision
+			fact.TargetProvenance = "VERIFIED_AT_VALIDATION"
 		}
 		_, err = tx.Exec(ctx, `UPDATE reports SET validation_state='VALID',validated_target_account_id=$2,
- validated_target_subject_id=$3,validated_target_subject_revision=$4,validation_claim=NULL,validation_claim_until=NULL,validation_failure_code=NULL,updated_at=now() WHERE id=$1`, fact.ReportID, fact.TargetAccountID, fact.TargetSubjectID, fact.TargetSubjectRevision)
+ validated_target_subject_id=$3,validated_target_subject_revision=$4,validated_target_provenance=$5,validation_claim=NULL,validation_claim_until=NULL,validation_failure_code=NULL,updated_at=now() WHERE id=$1`, fact.ReportID, fact.TargetAccountID, fact.TargetSubjectID, fact.TargetSubjectRevision, map[bool]string{true: "VERIFIED_AT_VALIDATION", false: "LEGACY_UNVERIFIED"}[accountID != uuid.Nil])
+		if err == nil && accountID != uuid.Nil {
+			err = s.RecordReportRecoveryTx(ctx, tx, ReportRecoveryRecord{ReportID: fact.ReportID, Slot: "USER_TARGET", Disposition: "BOUND", SubjectID: fact.TargetSubjectID, EvidenceKind: "AUTH_SUBJECT", EvidenceID: *fact.TargetSubjectID, EvidenceVersion: 1})
+		}
 		if err == nil && hook != nil {
 			err = hook.ReportValidated(ctx, tx, fact)
 		}

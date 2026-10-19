@@ -304,3 +304,12 @@ creates a new gate and repeats every phase. Report intake/validation/publication
 receive that same gate through `ReportPrivacyAcquire`, with nil closed. Gate
 unit/RPC tests do not prove sealed snapshots, readiness routing or recovery cuts.
 
+
+### Legacy report privacy recovery
+
+Privacy ownership recovered after submission is manual-only provenance and grants
+no threshold vote, report activation or new sanction authority. Journal and report
+mutations are atomic; terminal receipts survive payload deletion. The separate
+protected User recovery RPC never widens the ordinary owner resolver. Follow the
+[accepted contract and finite matrix](../testing/report-privacy-recovery.md);
+actual shared P0-P5/main and declared-restore evidence remain activation gates.

@@ -141,9 +141,12 @@ func (s *ReportStore) InsertSubjectReport(ctx context.Context, reporterProfile u
 		return nil, err
 	}
 	row := &ReportRow{}
-	err = tx.QueryRow(ctx, `INSERT INTO reports(reporter_profile_id,reporter_account_id,reporter_subject_id,reporter_subject_revision,target_type,target_id,category,description,evidence)
- VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb) RETURNING id,reporter_profile_id,target_type,target_id,category,description,evidence::text,status,assigned_to,resolved_at,resolution::text,created_at`, reporterProfile, subject.AccountID, subject.ID, subject.Revision, targetType, targetID, category, description, evidence).Scan(&row.ID, &row.ReporterProfileID, &row.TargetType, &row.TargetID, &row.Category, &row.Description, &row.EvidenceJSON, &row.Status, &row.AssignedToProfile, &row.ResolvedAt, &row.ResolutionJSON, &row.CreatedAt)
+	err = tx.QueryRow(ctx, `INSERT INTO reports(reporter_profile_id,reporter_account_id,reporter_subject_id,reporter_subject_revision,target_type,target_id,category,description,evidence,reporter_provenance)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,'VERIFIED_AT_SUBMISSION') RETURNING id,reporter_profile_id,target_type,target_id,category,description,evidence::text,status,assigned_to,resolved_at,resolution::text,created_at`, reporterProfile, subject.AccountID, subject.ID, subject.Revision, targetType, targetID, category, description, evidence).Scan(&row.ID, &row.ReporterProfileID, &row.TargetType, &row.TargetID, &row.Category, &row.Description, &row.EvidenceJSON, &row.Status, &row.AssignedToProfile, &row.ResolvedAt, &row.ResolutionJSON, &row.CreatedAt)
 	if err != nil {
+		return nil, err
+	}
+	if err = s.RecordReportRecoveryTx(ctx, tx, ReportRecoveryRecord{ReportID: row.ID, Slot: "REPORTER", Disposition: "BOUND", SubjectID: &subject.ID, EvidenceKind: "AUTH_SUBJECT", EvidenceID: subject.ID, EvidenceVersion: 1}); err != nil {
 		return nil, err
 	}
 	if err = check(ctx); err != nil {

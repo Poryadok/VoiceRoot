@@ -483,3 +483,11 @@ message is terminated/moved to DLQ with an alert, never ACKed as successfully
 applied. Billing/provider records keep their separate legal retention only in
 the pseudonymized/minimized form allowed by the account-deletion contract; that
 policy overrides generic `P400D` raw-payload retention.
+
+### Moderation report recovery journal
+
+The accepted report recovery contract adds a no-FK opaque report-slot journal and
+explicit legacy provenance in Moderation migration11. Local transactional history
+is authoritative for current live storage; declared restores require separately
+verified complete recovery material. No per-record remote ACK is a live startup
+prerequisite. See [report privacy recovery](testing/report-privacy-recovery.md).
