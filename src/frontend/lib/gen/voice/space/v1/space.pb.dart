@@ -15,12 +15,12 @@ import 'dart:core' as $core;
 import 'package:fixnum/fixnum.dart' as $fixnum;
 import 'package:protobuf/protobuf.dart' as $pb;
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart'
-    as $1;
+    as $2;
 
-import '../../chat/v1/chat.pb.dart' as $3;
-import '../../common/v1/common.pb.dart' as $2;
-import '../../common/v1/space_lifecycle.pb.dart' as $4;
-import '../../file/v1/file.pb.dart' as $5;
+import '../../chat/v1/chat.pb.dart' as $4;
+import '../../common/v1/common.pb.dart' as $3;
+import '../../common/v1/space_lifecycle.pb.dart' as $5;
+import '../../file/v1/file.pb.dart' as $6;
 import 'space.pbenum.dart';
 
 export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
@@ -42,10 +42,10 @@ class Space extends $pb.GeneratedMessage {
     $core.String? entryRequirement,
     $core.String? entryQuestionsJson,
     $core.String? mmConfigJson,
-    $1.Timestamp? createdAt,
-    $1.Timestamp? updatedAt,
-    $1.Timestamp? deletionScheduledAt,
-    $1.Timestamp? purgeAfter,
+    $2.Timestamp? createdAt,
+    $2.Timestamp? updatedAt,
+    $2.Timestamp? deletionScheduledAt,
+    $2.Timestamp? purgeAfter,
     $core.bool? allowGuests,
   }) {
     final result = create();
@@ -98,14 +98,14 @@ class Space extends $pb.GeneratedMessage {
     ..aOS(11, _omitFieldNames ? '' : 'entryRequirement')
     ..aOS(12, _omitFieldNames ? '' : 'entryQuestionsJson')
     ..aOS(13, _omitFieldNames ? '' : 'mmConfigJson')
-    ..aOM<$1.Timestamp>(14, _omitFieldNames ? '' : 'createdAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(15, _omitFieldNames ? '' : 'updatedAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(16, _omitFieldNames ? '' : 'deletionScheduledAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(17, _omitFieldNames ? '' : 'purgeAfter',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(14, _omitFieldNames ? '' : 'createdAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(15, _omitFieldNames ? '' : 'updatedAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(16, _omitFieldNames ? '' : 'deletionScheduledAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(17, _omitFieldNames ? '' : 'purgeAfter',
+        subBuilder: $2.Timestamp.create)
     ..aOB(18, _omitFieldNames ? '' : 'allowGuests')
     ..hasRequiredFields = false;
 
@@ -245,48 +245,48 @@ class Space extends $pb.GeneratedMessage {
   void clearMmConfigJson() => $_clearField(13);
 
   @$pb.TagNumber(14)
-  $1.Timestamp get createdAt => $_getN(13);
+  $2.Timestamp get createdAt => $_getN(13);
   @$pb.TagNumber(14)
-  set createdAt($1.Timestamp value) => $_setField(14, value);
+  set createdAt($2.Timestamp value) => $_setField(14, value);
   @$pb.TagNumber(14)
   $core.bool hasCreatedAt() => $_has(13);
   @$pb.TagNumber(14)
   void clearCreatedAt() => $_clearField(14);
   @$pb.TagNumber(14)
-  $1.Timestamp ensureCreatedAt() => $_ensure(13);
+  $2.Timestamp ensureCreatedAt() => $_ensure(13);
 
   @$pb.TagNumber(15)
-  $1.Timestamp get updatedAt => $_getN(14);
+  $2.Timestamp get updatedAt => $_getN(14);
   @$pb.TagNumber(15)
-  set updatedAt($1.Timestamp value) => $_setField(15, value);
+  set updatedAt($2.Timestamp value) => $_setField(15, value);
   @$pb.TagNumber(15)
   $core.bool hasUpdatedAt() => $_has(14);
   @$pb.TagNumber(15)
   void clearUpdatedAt() => $_clearField(15);
   @$pb.TagNumber(15)
-  $1.Timestamp ensureUpdatedAt() => $_ensure(14);
+  $2.Timestamp ensureUpdatedAt() => $_ensure(14);
 
   @$pb.TagNumber(16)
-  $1.Timestamp get deletionScheduledAt => $_getN(15);
+  $2.Timestamp get deletionScheduledAt => $_getN(15);
   @$pb.TagNumber(16)
-  set deletionScheduledAt($1.Timestamp value) => $_setField(16, value);
+  set deletionScheduledAt($2.Timestamp value) => $_setField(16, value);
   @$pb.TagNumber(16)
   $core.bool hasDeletionScheduledAt() => $_has(15);
   @$pb.TagNumber(16)
   void clearDeletionScheduledAt() => $_clearField(16);
   @$pb.TagNumber(16)
-  $1.Timestamp ensureDeletionScheduledAt() => $_ensure(15);
+  $2.Timestamp ensureDeletionScheduledAt() => $_ensure(15);
 
   @$pb.TagNumber(17)
-  $1.Timestamp get purgeAfter => $_getN(16);
+  $2.Timestamp get purgeAfter => $_getN(16);
   @$pb.TagNumber(17)
-  set purgeAfter($1.Timestamp value) => $_setField(17, value);
+  set purgeAfter($2.Timestamp value) => $_setField(17, value);
   @$pb.TagNumber(17)
   $core.bool hasPurgeAfter() => $_has(16);
   @$pb.TagNumber(17)
   void clearPurgeAfter() => $_clearField(17);
   @$pb.TagNumber(17)
-  $1.Timestamp ensurePurgeAfter() => $_ensure(16);
+  $2.Timestamp ensurePurgeAfter() => $_ensure(16);
 
   /// Guest admission is explicit and defaults to false.
   @$pb.TagNumber(18)
@@ -814,7 +814,7 @@ class GetSpaceRequest extends $pb.GeneratedMessage {
 
 class ListMySpacesRequest extends $pb.GeneratedMessage {
   factory ListMySpacesRequest({
-    $2.CursorPageRequest? page,
+    $3.CursorPageRequest? page,
   }) {
     final result = create();
     if (page != null) result.page = page;
@@ -834,8 +834,8 @@ class ListMySpacesRequest extends $pb.GeneratedMessage {
       _omitMessageNames ? '' : 'ListMySpacesRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
       createEmptyInstance: create)
-    ..aOM<$2.CursorPageRequest>(1, _omitFieldNames ? '' : 'page',
-        subBuilder: $2.CursorPageRequest.create)
+    ..aOM<$3.CursorPageRequest>(1, _omitFieldNames ? '' : 'page',
+        subBuilder: $3.CursorPageRequest.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -858,15 +858,15 @@ class ListMySpacesRequest extends $pb.GeneratedMessage {
   static ListMySpacesRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
-  $2.CursorPageRequest get page => $_getN(0);
+  $3.CursorPageRequest get page => $_getN(0);
   @$pb.TagNumber(1)
-  set page($2.CursorPageRequest value) => $_setField(1, value);
+  set page($3.CursorPageRequest value) => $_setField(1, value);
   @$pb.TagNumber(1)
   $core.bool hasPage() => $_has(0);
   @$pb.TagNumber(1)
   void clearPage() => $_clearField(1);
   @$pb.TagNumber(1)
-  $2.CursorPageRequest ensurePage() => $_ensure(0);
+  $3.CursorPageRequest ensurePage() => $_ensure(0);
 }
 
 class SpaceList extends $pb.GeneratedMessage {
@@ -931,7 +931,7 @@ class SpaceList extends $pb.GeneratedMessage {
 class SearchPublicSpacesRequest extends $pb.GeneratedMessage {
   factory SearchPublicSpacesRequest({
     $core.String? query,
-    $2.CursorPageRequest? page,
+    $3.CursorPageRequest? page,
   }) {
     final result = create();
     if (query != null) result.query = query;
@@ -953,8 +953,8 @@ class SearchPublicSpacesRequest extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'query')
-    ..aOM<$2.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
-        subBuilder: $2.CursorPageRequest.create)
+    ..aOM<$3.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
+        subBuilder: $3.CursorPageRequest.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -987,15 +987,15 @@ class SearchPublicSpacesRequest extends $pb.GeneratedMessage {
   void clearQuery() => $_clearField(1);
 
   @$pb.TagNumber(2)
-  $2.CursorPageRequest get page => $_getN(1);
+  $3.CursorPageRequest get page => $_getN(1);
   @$pb.TagNumber(2)
-  set page($2.CursorPageRequest value) => $_setField(2, value);
+  set page($3.CursorPageRequest value) => $_setField(2, value);
   @$pb.TagNumber(2)
   $core.bool hasPage() => $_has(1);
   @$pb.TagNumber(2)
   void clearPage() => $_clearField(2);
   @$pb.TagNumber(2)
-  $2.CursorPageRequest ensurePage() => $_ensure(1);
+  $3.CursorPageRequest ensurePage() => $_ensure(1);
 }
 
 class VoiceRoom extends $pb.GeneratedMessage {
@@ -1003,7 +1003,7 @@ class VoiceRoom extends $pb.GeneratedMessage {
     $core.String? id,
     $core.String? spaceId,
     $core.String? name,
-    $1.Timestamp? createdAt,
+    $2.Timestamp? createdAt,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -1029,8 +1029,8 @@ class VoiceRoom extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'id')
     ..aOS(2, _omitFieldNames ? '' : 'spaceId')
     ..aOS(3, _omitFieldNames ? '' : 'name')
-    ..aOM<$1.Timestamp>(4, _omitFieldNames ? '' : 'createdAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(4, _omitFieldNames ? '' : 'createdAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1079,15 +1079,15 @@ class VoiceRoom extends $pb.GeneratedMessage {
   void clearName() => $_clearField(3);
 
   @$pb.TagNumber(4)
-  $1.Timestamp get createdAt => $_getN(3);
+  $2.Timestamp get createdAt => $_getN(3);
   @$pb.TagNumber(4)
-  set createdAt($1.Timestamp value) => $_setField(4, value);
+  set createdAt($2.Timestamp value) => $_setField(4, value);
   @$pb.TagNumber(4)
   $core.bool hasCreatedAt() => $_has(3);
   @$pb.TagNumber(4)
   void clearCreatedAt() => $_clearField(4);
   @$pb.TagNumber(4)
-  $1.Timestamp ensureCreatedAt() => $_ensure(3);
+  $2.Timestamp ensureCreatedAt() => $_ensure(3);
 }
 
 class CreateVoiceRoomRequest extends $pb.GeneratedMessage {
@@ -1285,7 +1285,7 @@ class SpaceTreeNode extends $pb.GeneratedMessage {
     $core.String? spaceId,
     $core.String? categoryId,
     $core.String? kind,
-    $3.ChatRef? linkedChat,
+    $4.ChatRef? linkedChat,
     $core.String? voiceRoomId,
     $core.int? sortOrder,
     $core.bool? isSystem,
@@ -1325,8 +1325,8 @@ class SpaceTreeNode extends $pb.GeneratedMessage {
     ..aOS(2, _omitFieldNames ? '' : 'spaceId')
     ..aOS(3, _omitFieldNames ? '' : 'categoryId')
     ..aOS(4, _omitFieldNames ? '' : 'kind')
-    ..aOM<$3.ChatRef>(5, _omitFieldNames ? '' : 'linkedChat',
-        subBuilder: $3.ChatRef.create)
+    ..aOM<$4.ChatRef>(5, _omitFieldNames ? '' : 'linkedChat',
+        subBuilder: $4.ChatRef.create)
     ..aOS(6, _omitFieldNames ? '' : 'voiceRoomId')
     ..aI(7, _omitFieldNames ? '' : 'sortOrder')
     ..aOB(8, _omitFieldNames ? '' : 'isSystem')
@@ -1391,15 +1391,15 @@ class SpaceTreeNode extends $pb.GeneratedMessage {
   void clearKind() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $3.ChatRef get linkedChat => $_getN(4);
+  $4.ChatRef get linkedChat => $_getN(4);
   @$pb.TagNumber(5)
-  set linkedChat($3.ChatRef value) => $_setField(5, value);
+  set linkedChat($4.ChatRef value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasLinkedChat() => $_has(4);
   @$pb.TagNumber(5)
   void clearLinkedChat() => $_clearField(5);
   @$pb.TagNumber(5)
-  $3.ChatRef ensureLinkedChat() => $_ensure(4);
+  $4.ChatRef ensureLinkedChat() => $_ensure(4);
 
   @$pb.TagNumber(6)
   $core.String get voiceRoomId => $_getSZ(5);
@@ -1594,7 +1594,7 @@ class UpsertTreeNodeRequest extends $pb.GeneratedMessage {
     $core.String? nodeId,
     $core.String? categoryId,
     $core.String? kind,
-    $3.ChatRef? linkedChat,
+    $4.ChatRef? linkedChat,
     $core.String? voiceRoomId,
     $core.int? sortOrder,
     $core.bool? isSystem,
@@ -1628,8 +1628,8 @@ class UpsertTreeNodeRequest extends $pb.GeneratedMessage {
     ..aOS(2, _omitFieldNames ? '' : 'nodeId')
     ..aOS(3, _omitFieldNames ? '' : 'categoryId')
     ..aOS(4, _omitFieldNames ? '' : 'kind')
-    ..aOM<$3.ChatRef>(5, _omitFieldNames ? '' : 'linkedChat',
-        subBuilder: $3.ChatRef.create)
+    ..aOM<$4.ChatRef>(5, _omitFieldNames ? '' : 'linkedChat',
+        subBuilder: $4.ChatRef.create)
     ..aOS(6, _omitFieldNames ? '' : 'voiceRoomId')
     ..aI(7, _omitFieldNames ? '' : 'sortOrder')
     ..aOB(8, _omitFieldNames ? '' : 'isSystem')
@@ -1692,15 +1692,15 @@ class UpsertTreeNodeRequest extends $pb.GeneratedMessage {
   void clearKind() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $3.ChatRef get linkedChat => $_getN(4);
+  $4.ChatRef get linkedChat => $_getN(4);
   @$pb.TagNumber(5)
-  set linkedChat($3.ChatRef value) => $_setField(5, value);
+  set linkedChat($4.ChatRef value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasLinkedChat() => $_has(4);
   @$pb.TagNumber(5)
   void clearLinkedChat() => $_clearField(5);
   @$pb.TagNumber(5)
-  $3.ChatRef ensureLinkedChat() => $_ensure(4);
+  $4.ChatRef ensureLinkedChat() => $_ensure(4);
 
   @$pb.TagNumber(6)
   $core.String get voiceRoomId => $_getSZ(5);
@@ -2222,9 +2222,9 @@ class Invite extends $pb.GeneratedMessage {
     $core.String? creatorProfileId,
     $core.int? maxUses,
     $core.int? useCount,
-    $1.Timestamp? expiresAt,
-    $1.Timestamp? createdAt,
-    $1.Timestamp? revokedAt,
+    $2.Timestamp? expiresAt,
+    $2.Timestamp? createdAt,
+    $2.Timestamp? revokedAt,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -2258,12 +2258,12 @@ class Invite extends $pb.GeneratedMessage {
     ..aOS(4, _omitFieldNames ? '' : 'creatorProfileId')
     ..aI(5, _omitFieldNames ? '' : 'maxUses')
     ..aI(6, _omitFieldNames ? '' : 'useCount')
-    ..aOM<$1.Timestamp>(7, _omitFieldNames ? '' : 'expiresAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(8, _omitFieldNames ? '' : 'createdAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(9, _omitFieldNames ? '' : 'revokedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(7, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(8, _omitFieldNames ? '' : 'createdAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(9, _omitFieldNames ? '' : 'revokedAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2339,44 +2339,44 @@ class Invite extends $pb.GeneratedMessage {
   void clearUseCount() => $_clearField(6);
 
   @$pb.TagNumber(7)
-  $1.Timestamp get expiresAt => $_getN(6);
+  $2.Timestamp get expiresAt => $_getN(6);
   @$pb.TagNumber(7)
-  set expiresAt($1.Timestamp value) => $_setField(7, value);
+  set expiresAt($2.Timestamp value) => $_setField(7, value);
   @$pb.TagNumber(7)
   $core.bool hasExpiresAt() => $_has(6);
   @$pb.TagNumber(7)
   void clearExpiresAt() => $_clearField(7);
   @$pb.TagNumber(7)
-  $1.Timestamp ensureExpiresAt() => $_ensure(6);
+  $2.Timestamp ensureExpiresAt() => $_ensure(6);
 
   @$pb.TagNumber(8)
-  $1.Timestamp get createdAt => $_getN(7);
+  $2.Timestamp get createdAt => $_getN(7);
   @$pb.TagNumber(8)
-  set createdAt($1.Timestamp value) => $_setField(8, value);
+  set createdAt($2.Timestamp value) => $_setField(8, value);
   @$pb.TagNumber(8)
   $core.bool hasCreatedAt() => $_has(7);
   @$pb.TagNumber(8)
   void clearCreatedAt() => $_clearField(8);
   @$pb.TagNumber(8)
-  $1.Timestamp ensureCreatedAt() => $_ensure(7);
+  $2.Timestamp ensureCreatedAt() => $_ensure(7);
 
   @$pb.TagNumber(9)
-  $1.Timestamp get revokedAt => $_getN(8);
+  $2.Timestamp get revokedAt => $_getN(8);
   @$pb.TagNumber(9)
-  set revokedAt($1.Timestamp value) => $_setField(9, value);
+  set revokedAt($2.Timestamp value) => $_setField(9, value);
   @$pb.TagNumber(9)
   $core.bool hasRevokedAt() => $_has(8);
   @$pb.TagNumber(9)
   void clearRevokedAt() => $_clearField(9);
   @$pb.TagNumber(9)
-  $1.Timestamp ensureRevokedAt() => $_ensure(8);
+  $2.Timestamp ensureRevokedAt() => $_ensure(8);
 }
 
 class CreateInviteRequest extends $pb.GeneratedMessage {
   factory CreateInviteRequest({
     $core.String? spaceId,
     $core.int? maxUses,
-    $1.Timestamp? expiresAt,
+    $2.Timestamp? expiresAt,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
@@ -2400,8 +2400,8 @@ class CreateInviteRequest extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
     ..aI(2, _omitFieldNames ? '' : 'maxUses')
-    ..aOM<$1.Timestamp>(3, _omitFieldNames ? '' : 'expiresAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(3, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2442,15 +2442,15 @@ class CreateInviteRequest extends $pb.GeneratedMessage {
   void clearMaxUses() => $_clearField(2);
 
   @$pb.TagNumber(3)
-  $1.Timestamp get expiresAt => $_getN(2);
+  $2.Timestamp get expiresAt => $_getN(2);
   @$pb.TagNumber(3)
-  set expiresAt($1.Timestamp value) => $_setField(3, value);
+  set expiresAt($2.Timestamp value) => $_setField(3, value);
   @$pb.TagNumber(3)
   $core.bool hasExpiresAt() => $_has(2);
   @$pb.TagNumber(3)
   void clearExpiresAt() => $_clearField(3);
   @$pb.TagNumber(3)
-  $1.Timestamp ensureExpiresAt() => $_ensure(2);
+  $2.Timestamp ensureExpiresAt() => $_ensure(2);
 }
 
 class RevokeInviteRequest extends $pb.GeneratedMessage {
@@ -2733,7 +2733,7 @@ class SpaceMembership extends $pb.GeneratedMessage {
   factory SpaceMembership({
     $core.String? spaceId,
     $core.String? profileId,
-    $1.Timestamp? joinedAt,
+    $2.Timestamp? joinedAt,
     $core.String? nickname,
     $core.Iterable<$core.String>? roleNames,
   }) {
@@ -2761,8 +2761,8 @@ class SpaceMembership extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
     ..aOS(2, _omitFieldNames ? '' : 'profileId')
-    ..aOM<$1.Timestamp>(3, _omitFieldNames ? '' : 'joinedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(3, _omitFieldNames ? '' : 'joinedAt',
+        subBuilder: $2.Timestamp.create)
     ..aOS(4, _omitFieldNames ? '' : 'nickname')
     ..pPS(5, _omitFieldNames ? '' : 'roleNames')
     ..hasRequiredFields = false;
@@ -2805,15 +2805,15 @@ class SpaceMembership extends $pb.GeneratedMessage {
   void clearProfileId() => $_clearField(2);
 
   @$pb.TagNumber(3)
-  $1.Timestamp get joinedAt => $_getN(2);
+  $2.Timestamp get joinedAt => $_getN(2);
   @$pb.TagNumber(3)
-  set joinedAt($1.Timestamp value) => $_setField(3, value);
+  set joinedAt($2.Timestamp value) => $_setField(3, value);
   @$pb.TagNumber(3)
   $core.bool hasJoinedAt() => $_has(2);
   @$pb.TagNumber(3)
   void clearJoinedAt() => $_clearField(3);
   @$pb.TagNumber(3)
-  $1.Timestamp ensureJoinedAt() => $_ensure(2);
+  $2.Timestamp ensureJoinedAt() => $_ensure(2);
 
   @$pb.TagNumber(4)
   $core.String get nickname => $_getSZ(3);
@@ -3173,7 +3173,7 @@ class UnbanMemberRequest extends $pb.GeneratedMessage {
 class ListMembersRequest extends $pb.GeneratedMessage {
   factory ListMembersRequest({
     $core.String? spaceId,
-    $2.CursorPageRequest? page,
+    $3.CursorPageRequest? page,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
@@ -3195,8 +3195,8 @@ class ListMembersRequest extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
-    ..aOM<$2.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
-        subBuilder: $2.CursorPageRequest.create)
+    ..aOM<$3.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
+        subBuilder: $3.CursorPageRequest.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3228,15 +3228,15 @@ class ListMembersRequest extends $pb.GeneratedMessage {
   void clearSpaceId() => $_clearField(1);
 
   @$pb.TagNumber(2)
-  $2.CursorPageRequest get page => $_getN(1);
+  $3.CursorPageRequest get page => $_getN(1);
   @$pb.TagNumber(2)
-  set page($2.CursorPageRequest value) => $_setField(2, value);
+  set page($3.CursorPageRequest value) => $_setField(2, value);
   @$pb.TagNumber(2)
   $core.bool hasPage() => $_has(1);
   @$pb.TagNumber(2)
   void clearPage() => $_clearField(2);
   @$pb.TagNumber(2)
-  $2.CursorPageRequest ensurePage() => $_ensure(1);
+  $3.CursorPageRequest ensurePage() => $_ensure(1);
 }
 
 class SpaceMemberList extends $pb.GeneratedMessage {
@@ -3408,7 +3408,7 @@ class SpaceBan extends $pb.GeneratedMessage {
     $core.String? accountId,
     $core.String? bannedByProfileId,
     $core.String? reason,
-    $1.Timestamp? bannedAt,
+    $2.Timestamp? bannedAt,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
@@ -3436,8 +3436,8 @@ class SpaceBan extends $pb.GeneratedMessage {
     ..aOS(2, _omitFieldNames ? '' : 'accountId')
     ..aOS(3, _omitFieldNames ? '' : 'bannedByProfileId')
     ..aOS(4, _omitFieldNames ? '' : 'reason')
-    ..aOM<$1.Timestamp>(5, _omitFieldNames ? '' : 'bannedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(5, _omitFieldNames ? '' : 'bannedAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3495,15 +3495,15 @@ class SpaceBan extends $pb.GeneratedMessage {
   void clearReason() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $1.Timestamp get bannedAt => $_getN(4);
+  $2.Timestamp get bannedAt => $_getN(4);
   @$pb.TagNumber(5)
-  set bannedAt($1.Timestamp value) => $_setField(5, value);
+  set bannedAt($2.Timestamp value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasBannedAt() => $_has(4);
   @$pb.TagNumber(5)
   void clearBannedAt() => $_clearField(5);
   @$pb.TagNumber(5)
-  $1.Timestamp ensureBannedAt() => $_ensure(4);
+  $2.Timestamp ensureBannedAt() => $_ensure(4);
 }
 
 class TimeoutMemberRequest extends $pb.GeneratedMessage {
@@ -4109,7 +4109,7 @@ class ApplyCommunityRosterRequest extends $pb.GeneratedMessage {
     $fixnum.Int64? sourceRevision,
     $core.List<$core.int>? snapshotSha256,
     $core.Iterable<$core.String>? profileIds,
-    $1.Timestamp? leaseExpiresAt,
+    $2.Timestamp? leaseExpiresAt,
   }) {
     final result = create();
     if (operationId != null) result.operationId = operationId;
@@ -4148,8 +4148,8 @@ class ApplyCommunityRosterRequest extends $pb.GeneratedMessage {
     ..a<$core.List<$core.int>>(
         8, _omitFieldNames ? '' : 'snapshotSha256', $pb.PbFieldType.OY)
     ..pPS(9, _omitFieldNames ? '' : 'profileIds')
-    ..aOM<$1.Timestamp>(10, _omitFieldNames ? '' : 'leaseExpiresAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(10, _omitFieldNames ? '' : 'leaseExpiresAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4250,15 +4250,15 @@ class ApplyCommunityRosterRequest extends $pb.GeneratedMessage {
   $pb.PbList<$core.String> get profileIds => $_getList(8);
 
   @$pb.TagNumber(10)
-  $1.Timestamp get leaseExpiresAt => $_getN(9);
+  $2.Timestamp get leaseExpiresAt => $_getN(9);
   @$pb.TagNumber(10)
-  set leaseExpiresAt($1.Timestamp value) => $_setField(10, value);
+  set leaseExpiresAt($2.Timestamp value) => $_setField(10, value);
   @$pb.TagNumber(10)
   $core.bool hasLeaseExpiresAt() => $_has(9);
   @$pb.TagNumber(10)
   void clearLeaseExpiresAt() => $_clearField(10);
   @$pb.TagNumber(10)
-  $1.Timestamp ensureLeaseExpiresAt() => $_ensure(9);
+  $2.Timestamp ensureLeaseExpiresAt() => $_ensure(9);
 }
 
 class ApplyCommunityRosterResponse extends $pb.GeneratedMessage {
@@ -4745,11 +4745,11 @@ class RecoverCommunityOwnerRequest extends $pb.GeneratedMessage {
 class GetAuditLogRequest extends $pb.GeneratedMessage {
   factory GetAuditLogRequest({
     $core.String? spaceId,
-    $2.CursorPageRequest? page,
+    $3.CursorPageRequest? page,
     $core.String? actorProfileId,
     $core.String? action,
-    $1.Timestamp? from,
-    $1.Timestamp? to,
+    $2.Timestamp? from,
+    $2.Timestamp? to,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
@@ -4775,14 +4775,14 @@ class GetAuditLogRequest extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
-    ..aOM<$2.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
-        subBuilder: $2.CursorPageRequest.create)
+    ..aOM<$3.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
+        subBuilder: $3.CursorPageRequest.create)
     ..aOS(3, _omitFieldNames ? '' : 'actorProfileId')
     ..aOS(4, _omitFieldNames ? '' : 'action')
-    ..aOM<$1.Timestamp>(5, _omitFieldNames ? '' : 'from',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(6, _omitFieldNames ? '' : 'to',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(5, _omitFieldNames ? '' : 'from',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(6, _omitFieldNames ? '' : 'to',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4814,15 +4814,15 @@ class GetAuditLogRequest extends $pb.GeneratedMessage {
   void clearSpaceId() => $_clearField(1);
 
   @$pb.TagNumber(2)
-  $2.CursorPageRequest get page => $_getN(1);
+  $3.CursorPageRequest get page => $_getN(1);
   @$pb.TagNumber(2)
-  set page($2.CursorPageRequest value) => $_setField(2, value);
+  set page($3.CursorPageRequest value) => $_setField(2, value);
   @$pb.TagNumber(2)
   $core.bool hasPage() => $_has(1);
   @$pb.TagNumber(2)
   void clearPage() => $_clearField(2);
   @$pb.TagNumber(2)
-  $2.CursorPageRequest ensurePage() => $_ensure(1);
+  $3.CursorPageRequest ensurePage() => $_ensure(1);
 
   @$pb.TagNumber(3)
   $core.String get actorProfileId => $_getSZ(2);
@@ -4843,26 +4843,26 @@ class GetAuditLogRequest extends $pb.GeneratedMessage {
   void clearAction() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $1.Timestamp get from => $_getN(4);
+  $2.Timestamp get from => $_getN(4);
   @$pb.TagNumber(5)
-  set from($1.Timestamp value) => $_setField(5, value);
+  set from($2.Timestamp value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasFrom() => $_has(4);
   @$pb.TagNumber(5)
   void clearFrom() => $_clearField(5);
   @$pb.TagNumber(5)
-  $1.Timestamp ensureFrom() => $_ensure(4);
+  $2.Timestamp ensureFrom() => $_ensure(4);
 
   @$pb.TagNumber(6)
-  $1.Timestamp get to => $_getN(5);
+  $2.Timestamp get to => $_getN(5);
   @$pb.TagNumber(6)
-  set to($1.Timestamp value) => $_setField(6, value);
+  set to($2.Timestamp value) => $_setField(6, value);
   @$pb.TagNumber(6)
   $core.bool hasTo() => $_has(5);
   @$pb.TagNumber(6)
   void clearTo() => $_clearField(6);
   @$pb.TagNumber(6)
-  $1.Timestamp ensureTo() => $_ensure(5);
+  $2.Timestamp ensureTo() => $_ensure(5);
 }
 
 class AuditLogList extends $pb.GeneratedMessage {
@@ -4935,7 +4935,7 @@ class AuditLogEntry extends $pb.GeneratedMessage {
     $core.String? targetType,
     $core.String? targetId,
     $core.String? detailsJson,
-    $1.Timestamp? createdAt,
+    $2.Timestamp? createdAt,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -4969,8 +4969,8 @@ class AuditLogEntry extends $pb.GeneratedMessage {
     ..aOS(5, _omitFieldNames ? '' : 'targetType')
     ..aOS(6, _omitFieldNames ? '' : 'targetId')
     ..aOS(7, _omitFieldNames ? '' : 'detailsJson')
-    ..aOM<$1.Timestamp>(8, _omitFieldNames ? '' : 'createdAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(8, _omitFieldNames ? '' : 'createdAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -5056,15 +5056,15 @@ class AuditLogEntry extends $pb.GeneratedMessage {
   void clearDetailsJson() => $_clearField(7);
 
   @$pb.TagNumber(8)
-  $1.Timestamp get createdAt => $_getN(7);
+  $2.Timestamp get createdAt => $_getN(7);
   @$pb.TagNumber(8)
-  set createdAt($1.Timestamp value) => $_setField(8, value);
+  set createdAt($2.Timestamp value) => $_setField(8, value);
   @$pb.TagNumber(8)
   $core.bool hasCreatedAt() => $_has(7);
   @$pb.TagNumber(8)
   void clearCreatedAt() => $_clearField(8);
   @$pb.TagNumber(8)
-  $1.Timestamp ensureCreatedAt() => $_ensure(7);
+  $2.Timestamp ensureCreatedAt() => $_ensure(7);
 }
 
 /// @voice.unknown_fields=reject
@@ -5077,7 +5077,7 @@ class AppendAuditEventRequest extends $pb.GeneratedMessage {
     $core.String? targetType,
     $core.String? targetId,
     $core.String? detailsJson,
-    $1.Timestamp? occurredAt,
+    $2.Timestamp? occurredAt,
   }) {
     final result = create();
     if (auditEventId != null) result.auditEventId = auditEventId;
@@ -5111,8 +5111,8 @@ class AppendAuditEventRequest extends $pb.GeneratedMessage {
     ..aOS(5, _omitFieldNames ? '' : 'targetType')
     ..aOS(6, _omitFieldNames ? '' : 'targetId')
     ..aOS(7, _omitFieldNames ? '' : 'detailsJson')
-    ..aOM<$1.Timestamp>(8, _omitFieldNames ? '' : 'occurredAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(8, _omitFieldNames ? '' : 'occurredAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -5199,15 +5199,15 @@ class AppendAuditEventRequest extends $pb.GeneratedMessage {
   void clearDetailsJson() => $_clearField(7);
 
   @$pb.TagNumber(8)
-  $1.Timestamp get occurredAt => $_getN(7);
+  $2.Timestamp get occurredAt => $_getN(7);
   @$pb.TagNumber(8)
-  set occurredAt($1.Timestamp value) => $_setField(8, value);
+  set occurredAt($2.Timestamp value) => $_setField(8, value);
   @$pb.TagNumber(8)
   $core.bool hasOccurredAt() => $_has(7);
   @$pb.TagNumber(8)
   void clearOccurredAt() => $_clearField(8);
   @$pb.TagNumber(8)
-  $1.Timestamp ensureOccurredAt() => $_ensure(7);
+  $2.Timestamp ensureOccurredAt() => $_ensure(7);
 }
 
 /// @voice.unknown_fields=accept_preserve
@@ -7588,9 +7588,9 @@ class ResolveVoiceRoomAccessResponse extends $pb.GeneratedMessage {
     $fixnum.Int64? accessEpoch,
     $core.int? protocolVersion,
     $core.String? profileId,
-    $1.Timestamp? evaluatedAt,
+    $2.Timestamp? evaluatedAt,
     MemberCommunicationState? communicationState,
-    $1.Timestamp? timedOutUntil,
+    $2.Timestamp? timedOutUntil,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
@@ -7630,13 +7630,13 @@ class ResolveVoiceRoomAccessResponse extends $pb.GeneratedMessage {
     ..aI(6, _omitFieldNames ? '' : 'protocolVersion',
         fieldType: $pb.PbFieldType.OU3)
     ..aOS(7, _omitFieldNames ? '' : 'profileId')
-    ..aOM<$1.Timestamp>(8, _omitFieldNames ? '' : 'evaluatedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(8, _omitFieldNames ? '' : 'evaluatedAt',
+        subBuilder: $2.Timestamp.create)
     ..aE<MemberCommunicationState>(
         9, _omitFieldNames ? '' : 'communicationState',
         enumValues: MemberCommunicationState.values)
-    ..aOM<$1.Timestamp>(10, _omitFieldNames ? '' : 'timedOutUntil',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(10, _omitFieldNames ? '' : 'timedOutUntil',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -7725,15 +7725,15 @@ class ResolveVoiceRoomAccessResponse extends $pb.GeneratedMessage {
   void clearProfileId() => $_clearField(7);
 
   @$pb.TagNumber(8)
-  $1.Timestamp get evaluatedAt => $_getN(7);
+  $2.Timestamp get evaluatedAt => $_getN(7);
   @$pb.TagNumber(8)
-  set evaluatedAt($1.Timestamp value) => $_setField(8, value);
+  set evaluatedAt($2.Timestamp value) => $_setField(8, value);
   @$pb.TagNumber(8)
   $core.bool hasEvaluatedAt() => $_has(7);
   @$pb.TagNumber(8)
   void clearEvaluatedAt() => $_clearField(8);
   @$pb.TagNumber(8)
-  $1.Timestamp ensureEvaluatedAt() => $_ensure(7);
+  $2.Timestamp ensureEvaluatedAt() => $_ensure(7);
 
   @$pb.TagNumber(9)
   MemberCommunicationState get communicationState => $_getN(8);
@@ -7746,15 +7746,15 @@ class ResolveVoiceRoomAccessResponse extends $pb.GeneratedMessage {
   void clearCommunicationState() => $_clearField(9);
 
   @$pb.TagNumber(10)
-  $1.Timestamp get timedOutUntil => $_getN(9);
+  $2.Timestamp get timedOutUntil => $_getN(9);
   @$pb.TagNumber(10)
-  set timedOutUntil($1.Timestamp value) => $_setField(10, value);
+  set timedOutUntil($2.Timestamp value) => $_setField(10, value);
   @$pb.TagNumber(10)
   $core.bool hasTimedOutUntil() => $_has(9);
   @$pb.TagNumber(10)
   void clearTimedOutUntil() => $_clearField(10);
   @$pb.TagNumber(10)
-  $1.Timestamp ensureTimedOutUntil() => $_ensure(9);
+  $2.Timestamp ensureTimedOutUntil() => $_ensure(9);
 }
 
 /// @voice.unknown_fields=reject
@@ -7850,9 +7850,9 @@ class ResolveMemberCommunicationStateResponse extends $pb.GeneratedMessage {
     $core.String? spaceId,
     $core.String? profileId,
     $fixnum.Int64? accessEpoch,
-    $1.Timestamp? evaluatedAt,
+    $2.Timestamp? evaluatedAt,
     MemberCommunicationState? communicationState,
-    $1.Timestamp? timedOutUntil,
+    $2.Timestamp? timedOutUntil,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -7887,13 +7887,13 @@ class ResolveMemberCommunicationStateResponse extends $pb.GeneratedMessage {
     ..a<$fixnum.Int64>(
         4, _omitFieldNames ? '' : 'accessEpoch', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
-    ..aOM<$1.Timestamp>(5, _omitFieldNames ? '' : 'evaluatedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(5, _omitFieldNames ? '' : 'evaluatedAt',
+        subBuilder: $2.Timestamp.create)
     ..aE<MemberCommunicationState>(
         6, _omitFieldNames ? '' : 'communicationState',
         enumValues: MemberCommunicationState.values)
-    ..aOM<$1.Timestamp>(7, _omitFieldNames ? '' : 'timedOutUntil',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(7, _omitFieldNames ? '' : 'timedOutUntil',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -7956,15 +7956,15 @@ class ResolveMemberCommunicationStateResponse extends $pb.GeneratedMessage {
   void clearAccessEpoch() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $1.Timestamp get evaluatedAt => $_getN(4);
+  $2.Timestamp get evaluatedAt => $_getN(4);
   @$pb.TagNumber(5)
-  set evaluatedAt($1.Timestamp value) => $_setField(5, value);
+  set evaluatedAt($2.Timestamp value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasEvaluatedAt() => $_has(4);
   @$pb.TagNumber(5)
   void clearEvaluatedAt() => $_clearField(5);
   @$pb.TagNumber(5)
-  $1.Timestamp ensureEvaluatedAt() => $_ensure(4);
+  $2.Timestamp ensureEvaluatedAt() => $_ensure(4);
 
   @$pb.TagNumber(6)
   MemberCommunicationState get communicationState => $_getN(5);
@@ -7977,15 +7977,15 @@ class ResolveMemberCommunicationStateResponse extends $pb.GeneratedMessage {
   void clearCommunicationState() => $_clearField(6);
 
   @$pb.TagNumber(7)
-  $1.Timestamp get timedOutUntil => $_getN(6);
+  $2.Timestamp get timedOutUntil => $_getN(6);
   @$pb.TagNumber(7)
-  set timedOutUntil($1.Timestamp value) => $_setField(7, value);
+  set timedOutUntil($2.Timestamp value) => $_setField(7, value);
   @$pb.TagNumber(7)
   $core.bool hasTimedOutUntil() => $_has(6);
   @$pb.TagNumber(7)
   void clearTimedOutUntil() => $_clearField(7);
   @$pb.TagNumber(7)
-  $1.Timestamp ensureTimedOutUntil() => $_ensure(6);
+  $2.Timestamp ensureTimedOutUntil() => $_ensure(6);
 }
 
 class SyncSpaceProSubscriptionRequest extends $pb.GeneratedMessage {
@@ -8246,8 +8246,8 @@ class SpaceDeletionManifestSet extends $pb.GeneratedMessage {
     $core.String? spaceId,
     $core.String? deletionOperationId,
     $fixnum.Int64? scheduleGeneration,
-    $4.ManifestBinding? chatManifest,
-    $core.Iterable<$5.FileReferenceProducerDeclaration>? fileProducers,
+    $5.ManifestBinding? chatManifest,
+    $core.Iterable<$6.FileReferenceProducerDeclaration>? fileProducers,
     $core.List<$core.int>? rootSha256,
   }) {
     final result = create();
@@ -8283,11 +8283,11 @@ class SpaceDeletionManifestSet extends $pb.GeneratedMessage {
     ..a<$fixnum.Int64>(
         4, _omitFieldNames ? '' : 'scheduleGeneration', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
-    ..aOM<$4.ManifestBinding>(5, _omitFieldNames ? '' : 'chatManifest',
-        subBuilder: $4.ManifestBinding.create)
-    ..pPM<$5.FileReferenceProducerDeclaration>(
+    ..aOM<$5.ManifestBinding>(5, _omitFieldNames ? '' : 'chatManifest',
+        subBuilder: $5.ManifestBinding.create)
+    ..pPM<$6.FileReferenceProducerDeclaration>(
         6, _omitFieldNames ? '' : 'fileProducers',
-        subBuilder: $5.FileReferenceProducerDeclaration.create)
+        subBuilder: $6.FileReferenceProducerDeclaration.create)
     ..a<$core.List<$core.int>>(
         7, _omitFieldNames ? '' : 'rootSha256', $pb.PbFieldType.OY)
     ..hasRequiredFields = false;
@@ -8349,18 +8349,18 @@ class SpaceDeletionManifestSet extends $pb.GeneratedMessage {
   void clearScheduleGeneration() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $4.ManifestBinding get chatManifest => $_getN(4);
+  $5.ManifestBinding get chatManifest => $_getN(4);
   @$pb.TagNumber(5)
-  set chatManifest($4.ManifestBinding value) => $_setField(5, value);
+  set chatManifest($5.ManifestBinding value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasChatManifest() => $_has(4);
   @$pb.TagNumber(5)
   void clearChatManifest() => $_clearField(5);
   @$pb.TagNumber(5)
-  $4.ManifestBinding ensureChatManifest() => $_ensure(4);
+  $5.ManifestBinding ensureChatManifest() => $_ensure(4);
 
   @$pb.TagNumber(6)
-  $pb.PbList<$5.FileReferenceProducerDeclaration> get fileProducers =>
+  $pb.PbList<$6.FileReferenceProducerDeclaration> get fileProducers =>
       $_getList(5);
 
   @$pb.TagNumber(7)
@@ -8376,11 +8376,11 @@ class SpaceDeletionManifestSet extends $pb.GeneratedMessage {
 /// @voice.unknown_fields=accept_preserve
 class ParticipantCoordinatorStatus extends $pb.GeneratedMessage {
   factory ParticipantCoordinatorStatus({
-    $4.ParticipantId? participantId,
+    $5.ParticipantId? participantId,
     ParticipantOperationState? state,
     $core.List<$core.int>? requestSha256,
     $core.List<$core.int>? receiptSha256,
-    $1.Timestamp? updatedAt,
+    $2.Timestamp? updatedAt,
   }) {
     final result = create();
     if (participantId != null) result.participantId = participantId;
@@ -8404,16 +8404,16 @@ class ParticipantCoordinatorStatus extends $pb.GeneratedMessage {
       _omitMessageNames ? '' : 'ParticipantCoordinatorStatus',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
       createEmptyInstance: create)
-    ..aE<$4.ParticipantId>(1, _omitFieldNames ? '' : 'participantId',
-        enumValues: $4.ParticipantId.values)
+    ..aE<$5.ParticipantId>(1, _omitFieldNames ? '' : 'participantId',
+        enumValues: $5.ParticipantId.values)
     ..aE<ParticipantOperationState>(2, _omitFieldNames ? '' : 'state',
         enumValues: ParticipantOperationState.values)
     ..a<$core.List<$core.int>>(
         3, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
     ..a<$core.List<$core.int>>(
         4, _omitFieldNames ? '' : 'receiptSha256', $pb.PbFieldType.OY)
-    ..aOM<$1.Timestamp>(5, _omitFieldNames ? '' : 'updatedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(5, _omitFieldNames ? '' : 'updatedAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -8439,9 +8439,9 @@ class ParticipantCoordinatorStatus extends $pb.GeneratedMessage {
   static ParticipantCoordinatorStatus? _defaultInstance;
 
   @$pb.TagNumber(1)
-  $4.ParticipantId get participantId => $_getN(0);
+  $5.ParticipantId get participantId => $_getN(0);
   @$pb.TagNumber(1)
-  set participantId($4.ParticipantId value) => $_setField(1, value);
+  set participantId($5.ParticipantId value) => $_setField(1, value);
   @$pb.TagNumber(1)
   $core.bool hasParticipantId() => $_has(0);
   @$pb.TagNumber(1)
@@ -8475,15 +8475,15 @@ class ParticipantCoordinatorStatus extends $pb.GeneratedMessage {
   void clearReceiptSha256() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $1.Timestamp get updatedAt => $_getN(4);
+  $2.Timestamp get updatedAt => $_getN(4);
   @$pb.TagNumber(5)
-  set updatedAt($1.Timestamp value) => $_setField(5, value);
+  set updatedAt($2.Timestamp value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasUpdatedAt() => $_has(4);
   @$pb.TagNumber(5)
   void clearUpdatedAt() => $_clearField(5);
   @$pb.TagNumber(5)
-  $1.Timestamp ensureUpdatedAt() => $_ensure(4);
+  $2.Timestamp ensureUpdatedAt() => $_ensure(4);
 }
 
 /// @voice.unknown_fields=accept_preserve
@@ -8494,11 +8494,11 @@ class SpaceDeletionCoordinatorStatus extends $pb.GeneratedMessage {
     $core.String? deletionOperationId,
     $fixnum.Int64? generation,
     SpaceDeletionPhase? phase,
-    $4.ManifestBinding? manifest,
+    $5.ManifestBinding? manifest,
     $core.Iterable<ParticipantCoordinatorStatus>? participants,
-    $1.Timestamp? scheduledAt,
-    $1.Timestamp? purgeAfter,
-    $1.Timestamp? purgedAt,
+    $2.Timestamp? scheduledAt,
+    $2.Timestamp? purgeAfter,
+    $2.Timestamp? purgedAt,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -8537,17 +8537,17 @@ class SpaceDeletionCoordinatorStatus extends $pb.GeneratedMessage {
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..aE<SpaceDeletionPhase>(5, _omitFieldNames ? '' : 'phase',
         enumValues: SpaceDeletionPhase.values)
-    ..aOM<$4.ManifestBinding>(6, _omitFieldNames ? '' : 'manifest',
-        subBuilder: $4.ManifestBinding.create)
+    ..aOM<$5.ManifestBinding>(6, _omitFieldNames ? '' : 'manifest',
+        subBuilder: $5.ManifestBinding.create)
     ..pPM<ParticipantCoordinatorStatus>(
         7, _omitFieldNames ? '' : 'participants',
         subBuilder: ParticipantCoordinatorStatus.create)
-    ..aOM<$1.Timestamp>(8, _omitFieldNames ? '' : 'scheduledAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(9, _omitFieldNames ? '' : 'purgeAfter',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(10, _omitFieldNames ? '' : 'purgedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(8, _omitFieldNames ? '' : 'scheduledAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(9, _omitFieldNames ? '' : 'purgeAfter',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(10, _omitFieldNames ? '' : 'purgedAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -8618,51 +8618,51 @@ class SpaceDeletionCoordinatorStatus extends $pb.GeneratedMessage {
   void clearPhase() => $_clearField(5);
 
   @$pb.TagNumber(6)
-  $4.ManifestBinding get manifest => $_getN(5);
+  $5.ManifestBinding get manifest => $_getN(5);
   @$pb.TagNumber(6)
-  set manifest($4.ManifestBinding value) => $_setField(6, value);
+  set manifest($5.ManifestBinding value) => $_setField(6, value);
   @$pb.TagNumber(6)
   $core.bool hasManifest() => $_has(5);
   @$pb.TagNumber(6)
   void clearManifest() => $_clearField(6);
   @$pb.TagNumber(6)
-  $4.ManifestBinding ensureManifest() => $_ensure(5);
+  $5.ManifestBinding ensureManifest() => $_ensure(5);
 
   @$pb.TagNumber(7)
   $pb.PbList<ParticipantCoordinatorStatus> get participants => $_getList(6);
 
   @$pb.TagNumber(8)
-  $1.Timestamp get scheduledAt => $_getN(7);
+  $2.Timestamp get scheduledAt => $_getN(7);
   @$pb.TagNumber(8)
-  set scheduledAt($1.Timestamp value) => $_setField(8, value);
+  set scheduledAt($2.Timestamp value) => $_setField(8, value);
   @$pb.TagNumber(8)
   $core.bool hasScheduledAt() => $_has(7);
   @$pb.TagNumber(8)
   void clearScheduledAt() => $_clearField(8);
   @$pb.TagNumber(8)
-  $1.Timestamp ensureScheduledAt() => $_ensure(7);
+  $2.Timestamp ensureScheduledAt() => $_ensure(7);
 
   @$pb.TagNumber(9)
-  $1.Timestamp get purgeAfter => $_getN(8);
+  $2.Timestamp get purgeAfter => $_getN(8);
   @$pb.TagNumber(9)
-  set purgeAfter($1.Timestamp value) => $_setField(9, value);
+  set purgeAfter($2.Timestamp value) => $_setField(9, value);
   @$pb.TagNumber(9)
   $core.bool hasPurgeAfter() => $_has(8);
   @$pb.TagNumber(9)
   void clearPurgeAfter() => $_clearField(9);
   @$pb.TagNumber(9)
-  $1.Timestamp ensurePurgeAfter() => $_ensure(8);
+  $2.Timestamp ensurePurgeAfter() => $_ensure(8);
 
   @$pb.TagNumber(10)
-  $1.Timestamp get purgedAt => $_getN(9);
+  $2.Timestamp get purgedAt => $_getN(9);
   @$pb.TagNumber(10)
-  set purgedAt($1.Timestamp value) => $_setField(10, value);
+  set purgedAt($2.Timestamp value) => $_setField(10, value);
   @$pb.TagNumber(10)
   $core.bool hasPurgedAt() => $_has(9);
   @$pb.TagNumber(10)
   void clearPurgedAt() => $_clearField(10);
   @$pb.TagNumber(10)
-  $1.Timestamp ensurePurgedAt() => $_ensure(9);
+  $2.Timestamp ensurePurgedAt() => $_ensure(9);
 }
 
 /// @voice.unknown_fields=reject
@@ -9244,7 +9244,7 @@ class SpaceChatCreationBinding extends $pb.GeneratedMessage {
     $core.String? creatorProfileId,
     $core.String? spaceId,
     $core.String? chatId,
-    $3.ChatType? chatType,
+    $4.ChatType? chatType,
     $core.String? nodeId,
     $core.String? auditEventId,
     $core.List<$core.int>? createRequestSha256,
@@ -9293,8 +9293,8 @@ class SpaceChatCreationBinding extends $pb.GeneratedMessage {
     ..aOS(3, _omitFieldNames ? '' : 'creatorProfileId')
     ..aOS(4, _omitFieldNames ? '' : 'spaceId')
     ..aOS(5, _omitFieldNames ? '' : 'chatId')
-    ..aE<$3.ChatType>(6, _omitFieldNames ? '' : 'chatType',
-        enumValues: $3.ChatType.values)
+    ..aE<$4.ChatType>(6, _omitFieldNames ? '' : 'chatType',
+        enumValues: $4.ChatType.values)
     ..aOS(7, _omitFieldNames ? '' : 'nodeId')
     ..aOS(8, _omitFieldNames ? '' : 'auditEventId')
     ..a<$core.List<$core.int>>(
@@ -9379,9 +9379,9 @@ class SpaceChatCreationBinding extends $pb.GeneratedMessage {
   void clearChatId() => $_clearField(5);
 
   @$pb.TagNumber(6)
-  $3.ChatType get chatType => $_getN(5);
+  $4.ChatType get chatType => $_getN(5);
   @$pb.TagNumber(6)
-  set chatType($3.ChatType value) => $_setField(6, value);
+  set chatType($4.ChatType value) => $_setField(6, value);
   @$pb.TagNumber(6)
   $core.bool hasChatType() => $_has(5);
   @$pb.TagNumber(6)
