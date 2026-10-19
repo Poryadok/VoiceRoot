@@ -22,7 +22,7 @@ func (r *Runtime) ServerOptions() []grpc.ServerOption {
 				}
 				return r.authoritySourceInterceptor(ctx, req, info, handler)
 			}
-			if !isTrustedServiceMethod(info.FullMethod) {
+			if !isTrustedServiceMethod(info.FullMethod) && !principalgrpc.IsSpaceRoleRead(info.FullMethod) && !(r.delegatedUserEnabled && principalgrpc.IsDelegatedRoleMethod(info.FullMethod)) {
 				return nil, status.Error(codes.PermissionDenied, "method unavailable on trusted-service listener")
 			}
 			return principalgrpc.StrictUnaryInterceptor(r)(ctx, req, info, handler)

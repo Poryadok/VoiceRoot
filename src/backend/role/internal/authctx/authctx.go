@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/metadata"
+	"voice/backend/pkg/principal"
 )
 
 const (
@@ -14,6 +15,13 @@ const (
 
 // ProfileID returns the caller profile UUID from gRPC metadata.
 func ProfileID(ctx context.Context) (uuid.UUID, bool) {
+	if p, verified := principal.FromContext(ctx); verified {
+		if p.Kind != "delegated_user" || p.Issuer != "gateway" {
+			return uuid.Nil, false
+		}
+		id, err := uuid.Parse(p.ProfileID)
+		return id, err == nil && id != uuid.Nil && id.String() == p.ProfileID
+	}
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return uuid.Nil, false

@@ -27,19 +27,19 @@ func (s *RoleGRPC) preflightOverrideTarget(ctx context.Context, rawSpace, rawRol
 		}
 		return uuid.Nil, uuid.Nil, err
 	}
-	_, err = ordinarySpaceRPC(ctx, s, rawSpace, func(scoped *RoleGRPC) (struct{}, error) {
-		actor, ok := authctx.ProfileID(ctx)
+	_, err = ordinarySpaceRPC(ctx, s, rawSpace, func(callCtx context.Context, scoped *RoleGRPC) (struct{}, error) {
+		actor, ok := authctx.ProfileID(callCtx)
 		if !ok {
 			return struct{}{}, status.Error(codes.Unauthenticated, "missing profile")
 		}
-		if err := scoped.requireManageRoles(ctx, spaceID, actor); err != nil {
+		if err := scoped.requireManageRoles(callCtx, spaceID, actor); err != nil {
 			return struct{}{}, err
 		}
 		roleID, err := parseUUIDField("role_id", rawRole)
 		if err != nil {
 			return struct{}{}, err
 		}
-		row, err := scoped.Store.GetRoleByIDInSpace(ctx, spaceID, roleID)
+		row, err := scoped.Store.GetRoleByIDInSpace(callCtx, spaceID, roleID)
 		if err != nil {
 			return struct{}{}, ordinaryStoreError(err)
 		}
