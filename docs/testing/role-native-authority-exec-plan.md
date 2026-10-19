@@ -294,3 +294,33 @@ same-runner artifact isolation oracle failed5.400s against the old script's
 missing per-invocation output, then the oracle plus actual historical39 full
 positive passed race47.367s and tag-aware vet0. Original clean44 authorization
 proofs remain scoped; this correction does not claim generic core readiness.
+
+2026-10-19 existing BE-066 query producer composition (IMPL-BE066-EFFECTIVE-
+EPISODE-v1 c29/c30):320 owns four additive report_permission helper/test files,
+imported exact8560d3a as25c12fff9.183 owns existing runtime/config/interceptor
+and dispatch plus affected real-native integration. Accepted source is fcfdd
+Role caller contract and327 BE-066 c10 step4; no new product/authority choice.
+Optional ROLE_REPORT_PERMISSION_ENABLED admits only Messaging VIEW/HISTORY and
+Moderation MANAGE_REPORTS through the existing protected mTLS listener. The
+handler revalidates full signed request and uses the existing native member/chat
+coordinator, Role revision/qualified fold and post-owning-COMMIT expiry guard.
+No new Auth/provider/core mutation implementation or stopped172 operation.
+
+Critical real Role25+Space44 signed Messaging VIEW RED26.953s was
+Unauthenticated at the old runtime. Actual first three-purpose positive then
+passed53.900s. Expanded actual matrix includes independent VIEW/HISTORY masks,
+ordinary Member moderation deny, exact scoped absence, recursive unknown/body
+binding, replay, ordinary listener denial and late owning-COMMIT expiry followed
+by a fresh positive. Runtime TLS/hostname/client certificate and caller-purpose
+negative tests also run. First expanded run failed after the deliberate expiry
+test on the later existing Gateway read; retained as FAIL, not expected deny.
+The deliberate-delay pool is now closed on helper exit and a fresh positive is
+asserted explicitly; expanded complete native cohort passed race80.085s.
+Final frozen-source validation includes the additional post-removal-floor query.
+
+Role decides permissions only. Messaging327 still independently owns current
+content/history-entry/managed interval/block visibility and its actual facade;
+Moderation supplies a verified local actor/assignee. Native44 all-writer/45,
+same-core Assign198c55/current/provider/identity172 and complete public report
+activation remain open. Existing Bot/Space grants are unchanged. Independent
+source review and named consumer intake follow frozen proof, not a ready claim.

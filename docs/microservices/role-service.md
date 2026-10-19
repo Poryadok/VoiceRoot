@@ -522,6 +522,41 @@ below; documenting the target caller does not activate the current listener or
 make unrelated callers globally strict. New caller routing needs negative
 principal/request-binding tests and actual protected-listener qualification.
 
+### BE-066 protected report permission queries
+
+The dedicated Role principal listener supports the accepted BE-066 read chain
+when `ROLE_REPORT_PERMISSION_ENABLED=true`. Its exact HTTPS JWKS endpoint set
+then additionally requires `messaging` and `moderation`; an extra caller or
+partial set fails startup. It uses the existing `ROLE_PRINCIPAL_*` mTLS and
+Redis replay configuration. Disabled remains closed to these issuers.
+
+Only `CheckPermission` is admitted: signed `service:messaging` may request
+`TEXT_CHAT_VIEW` or `TEXT_CHAT_READ_HISTORY`, and signed `service:moderation`
+may request `MODERATION_MANAGE_REPORTS`. Bind the exact canonical Space and
+decision-subject profile, authoritative group/channel `ChatRef` including its
+explicit type, and absence of a voice-room selector. Standard issuer/subject,
+audience `role`, exact RPC, deterministic full protobuf hash, canonical request
+UUID, JTI, complete JWKS rotation set and TTL at most30 seconds apply. Reject
+unknown authority fields, duplicate/raw identity metadata and user/Bot actor
+claims. A service subject profile is decision data supplied by the verified
+consumer after its own ingress verification, not caller identity metadata.
+
+The handler requires the current native qualified catalog and real membership
+observer. It uses the shared exact-member/chat two-stage owner vector and Role
+revision fence, qualified roles and overrides, including the original-vector
+expiry check after the owning read-only COMMIT. Missing/expired/inconsistent
+authority is Unavailable; it never falls back to a legacy/raw role fold.
+The ordinary listener denies these queries. Existing Space/Bot routes and
+generic Role mutation authority are not enlarged.
+
+A Role allow is only a current permission decision. Messaging must separately
+prove current content visibility, managed intervals, blocks and the authoritative
+entry boundary when READ_HISTORY denies; Moderation must separately prove
+content visibility and its local actor/assignee authority. No result grants a
+message body, global staff privilege, sanction, deletion or mutation capability.
+These rules implement the accepted BE-066 c10 owner protocol; this component
+does not claim the complete report facade or all-writer activation is ready.
+
 ### Space `CheckPermission` decision contract
 
 The protected Bot installation decision is a separate exact branch: only

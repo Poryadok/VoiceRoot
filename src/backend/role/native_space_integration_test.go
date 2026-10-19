@@ -177,6 +177,10 @@ func TestMemberAdmissionRole25Space44ProtectedReceipt(t *testing.T) {
 	runNativeMemberProtocol(t, false, "25", "44")
 }
 
+func TestReportPermissionsRole25Space44(t *testing.T) {
+	runNativeMemberProtocol(t, false, "25", "44", "reports")
+}
+
 // This is the deliberately still-red full interactive cutover oracle. The
 // receipt producer's passing test must not be relabeled as this completion.
 func TestNativeAssignmentNeedsQualifiedOperationPublication(t *testing.T) {
@@ -306,7 +310,13 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	ownerAccount := uuid.NewString()
 	var floor atomic.Int64
 	floor.Store(7)
-	runtime, err := principalruntime.NewWithSessionEpochChecker(ctx, principalruntime.Config{ListenAddr: "127.0.0.1:0", TLSCertFile: certFile, TLSKeyFile: keyFile, ClientCAFile: clientCA, ReplayAddr: redisAddress, JWKSCAFile: certFile, JWKSURLs: map[string]string{"space": jwks.URL, "voice": jwks.URL, "gameintegration": jwks.URL, "gateway": jwks.URL, "bot": jwks.URL + "/bot"}, BotLifecycleEnabled: true, DelegatedUserEnabled: true, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: time.Second}, func(_ context.Context, observedAccount string, epoch int64) error {
+	runtimeConfig := principalruntime.Config{ListenAddr: "127.0.0.1:0", TLSCertFile: certFile, TLSKeyFile: keyFile, ClientCAFile: clientCA, ReplayAddr: redisAddress, JWKSCAFile: certFile, JWKSURLs: map[string]string{"space": jwks.URL, "voice": jwks.URL, "gameintegration": jwks.URL, "gateway": jwks.URL, "bot": jwks.URL + "/bot"}, BotLifecycleEnabled: true, DelegatedUserEnabled: true, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: time.Second}
+	if len(versions) > 2 && versions[2] == "reports" {
+		runtimeConfig.ReportPermissionEnabled = true
+		runtimeConfig.JWKSURLs["messaging"] = jwks.URL
+		runtimeConfig.JWKSURLs["moderation"] = jwks.URL
+	}
+	runtime, err := principalruntime.NewWithSessionEpochChecker(ctx, runtimeConfig, func(_ context.Context, observedAccount string, epoch int64) error {
 		if (observedAccount != ownerAccount && observedAccount != account.String()) || epoch < floor.Load() {
 			return errors.New("stale session")
 		}
@@ -425,6 +435,10 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	var attached nativeSpaceReply
 	require.NoError(t, decoder.Decode(&attached), stderr.String())
 	require.NotEmpty(t, attached.NodeID)
+	if len(versions) > 2 && versions[2] == "reports" {
+		exerciseNativeReportPermissions(t, client, current, space, owner, profile, chat, roles, uuid.MustParse(receipt.RoleId))
+		exerciseNativeReportExpiry(t, ctx, runtime, trackedAuthority, current, roles, space, profile, chat)
+	}
 	view, err := permissions.MaskFor(permissions.TextChatView)
 	require.NoError(t, err)
 	globalRequest := &rolev1.GetEffectivePermissionsRequest{SpaceId: b.SpaceID, ProfileId: b.ProfileID}
@@ -536,6 +550,12 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	qualified, err = roles.GetQualifiedMemberRoles(observedCtx, space, profile)
 	require.NoError(t, err)
 	require.Empty(t, qualified, "independent local ordinary floor defeats a still-published old Space binding")
+	if len(versions) > 2 && versions[2] == "reports" {
+		decision := &rolev1.CheckPermissionRequest{SpaceId: b.SpaceID, ProfileId: b.ProfileID, PermissionName: "TEXT_CHAT_VIEW", Chat: &chatv1.ChatRef{Id: chat.String(), Type: chatv1.ChatType_CHAT_TYPE_GROUP.Enum()}}
+		result, err := client.CheckPermission(nativeWorkloadContext(t, current, "messaging", rolev1.RoleService_CheckPermission_FullMethodName, decision), decision)
+		require.NoError(t, err)
+		require.False(t, result.GetAllowed(), "fresh report read respects removal floor without resurrecting old membership")
+	}
 	replay, err = call(request)
 	require.NoError(t, err)
 	require.Equal(t, receipt, replay.Receipt)

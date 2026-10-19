@@ -79,7 +79,9 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 		}
 		if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
 			var decisionErr error
-			if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceManageBots {
+			if req, ok := message.(*rolev1.CheckPermissionRequest); ok && isReportPermission(req.GetPermissionName()) {
+				decisionErr = RequireReportPermission(principal.WithVerified(ctx, verified), req)
+			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceManageBots {
 				decisionErr = RequireBotManagementPermission(principal.WithVerified(ctx, verified), req)
 			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceApproveJoinRequests {
 				decisionErr = RequireJoinApprovalPermission(principal.WithVerified(ctx, verified), req)
@@ -129,6 +131,9 @@ func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 		}
 
 		if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
+			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && isReportPermission(req.GetPermissionName()) {
+				return nil, status.Error(codes.PermissionDenied, "protected report permission listener required")
+			}
 			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && (req.GetPermissionName() == permissions.SpaceApproveJoinRequests || req.GetPermissionName() == permissions.SpaceManageSettings || req.GetPermissionName() == permissions.SpaceManageBots) {
 				return nil, status.Error(codes.PermissionDenied, "protected approval decision listener required")
 			}
@@ -169,4 +174,9 @@ func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 func bootstrapUUID(raw string) bool {
 	id, err := uuid.Parse(raw)
 	return err == nil && id != uuid.Nil && id.String() == raw
+}
+
+func isReportPermission(name string) bool {
+	_, ok := ReportPermissionIssuer(name)
+	return ok
 }
