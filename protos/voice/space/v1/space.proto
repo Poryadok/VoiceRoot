@@ -49,6 +49,20 @@ service SpaceService {
   rpc JoinByInvite(JoinByInviteRequest) returns (JoinByInviteResponse);
 
   rpc JoinSpace(JoinSpaceRequest) returns (JoinSpaceResponse);
+  // Exact authenticated applicant; no ambient proof or latest-attempt lookup.
+  // @voice.security=public_gateway;callers=service:gateway
+  rpc StartJoinAttempt(StartJoinAttemptRequest) returns (StartJoinAttemptResponse);
+  // @voice.security=public_gateway;callers=service:gateway
+  rpc GetJoinAttempt(GetJoinAttemptRequest) returns (GetJoinAttemptResponse);
+  // @voice.security=public_gateway;callers=service:gateway
+  rpc SubmitJoinAttempt(SubmitJoinAttemptRequest) returns (SubmitJoinAttemptResponse);
+  // Current member plus SPACE_APPROVE_JOIN_REQUESTS; not invite/settings ACL.
+  // @voice.security=public_gateway;callers=service:gateway
+  rpc ListJoinRequests(ListJoinRequestsRequest) returns (ListJoinRequestsResponse);
+  // @voice.security=public_gateway;callers=service:gateway
+  rpc GetJoinRequest(GetJoinRequestRequest) returns (GetJoinRequestResponse);
+  // @voice.security=public_gateway;callers=service:gateway
+  rpc ApproveJoinRequest(ApproveJoinRequestRequest) returns (ApproveJoinRequestResponse);
   rpc LeaveSpace(LeaveSpaceRequest) returns (LeaveSpaceResponse);
   rpc KickMember(KickMemberRequest) returns (KickMemberResponse);
   rpc BanMember(BanMemberRequest) returns (BanMemberResponse);
@@ -865,4 +879,153 @@ message GetSpaceChatCreationOutcomeRequest {
 // @voice.unknown_fields=accept_preserve
 message GetSpaceChatCreationOutcomeResponse {
   SpaceChatCreationOutcome outcome = 1;
+}
+
+// Safe requirements exclude configured answers and all private proof digests.
+message JoinQuestion {
+  string question_id = 1;
+  string prompt = 2;
+}
+
+message JoinRequirements {
+  bool require_phone = 1;
+  bool require_captcha = 2;
+  repeated JoinQuestion questions = 3;
+  bool require_manual_approval = 4;
+}
+
+// @voice.unknown_fields=reject
+message JoinAnswer {
+  string question_id = 1;
+  string value = 2;
+}
+
+enum JoinAdmissionState {
+  JOIN_ADMISSION_STATE_UNSPECIFIED = 0;
+  JOIN_ADMISSION_STATE_COLLECTING = 1;
+  JOIN_ADMISSION_STATE_PENDING = 2;
+  JOIN_ADMISSION_STATE_PROCESSING = 3;
+  JOIN_ADMISSION_STATE_ADMITTED = 4;
+  JOIN_ADMISSION_STATE_FAILED = 5;
+  JOIN_ADMISSION_STATE_EXPIRED = 6;
+  JOIN_ADMISSION_STATE_INVALIDATED = 7;
+}
+
+// @voice.unknown_fields=accept_preserve
+message JoinAdmissionResult {
+  JoinAdmissionState state = 1;
+  string request_id = 2;
+  // Present only for an exact saved completed native admission outcome.
+  SpaceMembership space_membership = 3;
+}
+
+// Original authenticated account AND profile only; foreign/missing is NOT_FOUND.
+// @voice.unknown_fields=accept_preserve
+message JoinAttemptView {
+  string attempt_id = 1;
+  string space_id = 2;
+  int64 policy_version = 3;
+  // Collection deadline, never a pending-review TTL.
+  google.protobuf.Timestamp expires_at = 4;
+  JoinRequirements requirements = 5;
+  JoinAdmissionResult result = 6;
+  repeated JoinAnswer submitted_answers = 7;
+  // Unavailable providers never synthesize a challenge or a successful pass.
+  optional string captcha_challenge_context = 8;
+}
+
+// @voice.unknown_fields=reject
+message StartJoinAttemptRequest {
+  oneof target {
+    string space_id = 1;
+    string invite_code = 3;
+  }
+  string operation_id = 2;
+}
+
+// @voice.unknown_fields=accept_preserve
+message StartJoinAttemptResponse {
+  JoinAttemptView attempt = 1;
+}
+
+// @voice.unknown_fields=reject
+message GetJoinAttemptRequest {
+  string space_id = 1;
+  string attempt_id = 2;
+}
+
+// @voice.unknown_fields=accept_preserve
+message GetJoinAttemptResponse {
+  JoinAttemptView attempt = 1;
+}
+
+// @voice.unknown_fields=reject
+message SubmitJoinAttemptRequest {
+  string space_id = 1;
+  string attempt_id = 2;
+  string operation_id = 3;
+  repeated JoinAnswer answers = 4;
+  // Transport only. Never persist or return the raw provider token.
+  optional string captcha_token = 5;
+}
+
+// @voice.unknown_fields=accept_preserve
+message SubmitJoinAttemptResponse {
+  JoinAdmissionResult result = 1;
+}
+
+message JoinRequestSummary {
+  string request_id = 1;
+  string space_id = 2;
+  string applicant_profile_id = 3;
+  google.protobuf.Timestamp created_at = 4;
+  uint32 attempt_count = 5;
+}
+
+// Authorized reviewer projection; answers are not human screening criteria.
+message JoinRequestAttempt {
+  string attempt_id = 1;
+  int64 policy_version = 2;
+  JoinRequirements requirements = 3;
+  repeated JoinAnswer submitted_answers = 4;
+}
+
+// @voice.unknown_fields=reject
+message ListJoinRequestsRequest {
+  string space_id = 1;
+  // Zero selects 50; maximum 100. Cursor binds Space and created_at/id order.
+  uint32 limit = 2;
+  string cursor = 3;
+}
+
+// @voice.unknown_fields=accept_preserve
+message ListJoinRequestsResponse {
+  repeated JoinRequestSummary requests = 1;
+  string next_cursor = 2;
+}
+
+// @voice.unknown_fields=reject
+message GetJoinRequestRequest {
+  string space_id = 1;
+  string request_id = 2;
+}
+
+// @voice.unknown_fields=accept_preserve
+message GetJoinRequestResponse {
+  JoinRequestSummary request = 1;
+  repeated JoinRequestAttempt attempts = 2;
+}
+
+// @voice.unknown_fields=reject
+message ApproveJoinRequestRequest {
+  string space_id = 1;
+  string request_id = 2;
+  string operation_id = 3;
+  // Required for an ambiguous group; an omitted selector never means latest.
+  optional string attempt_id = 4;
+}
+
+// @voice.unknown_fields=accept_preserve
+message ApproveJoinRequestResponse {
+  JoinAdmissionResult result = 1;
 }

@@ -233,6 +233,56 @@ class SpaceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$joinSpace, request, options: options);
   }
 
+  /// Exact authenticated applicant; no ambient proof or latest-attempt lookup.
+  /// @voice.security=public_gateway;callers=service:gateway
+  $grpc.ResponseFuture<$1.StartJoinAttemptResponse> startJoinAttempt(
+    $1.StartJoinAttemptRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$startJoinAttempt, request, options: options);
+  }
+
+  /// @voice.security=public_gateway;callers=service:gateway
+  $grpc.ResponseFuture<$1.GetJoinAttemptResponse> getJoinAttempt(
+    $1.GetJoinAttemptRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getJoinAttempt, request, options: options);
+  }
+
+  /// @voice.security=public_gateway;callers=service:gateway
+  $grpc.ResponseFuture<$1.SubmitJoinAttemptResponse> submitJoinAttempt(
+    $1.SubmitJoinAttemptRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$submitJoinAttempt, request, options: options);
+  }
+
+  /// Current member plus SPACE_APPROVE_JOIN_REQUESTS; not invite/settings ACL.
+  /// @voice.security=public_gateway;callers=service:gateway
+  $grpc.ResponseFuture<$1.ListJoinRequestsResponse> listJoinRequests(
+    $1.ListJoinRequestsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$listJoinRequests, request, options: options);
+  }
+
+  /// @voice.security=public_gateway;callers=service:gateway
+  $grpc.ResponseFuture<$1.GetJoinRequestResponse> getJoinRequest(
+    $1.GetJoinRequestRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getJoinRequest, request, options: options);
+  }
+
+  /// @voice.security=public_gateway;callers=service:gateway
+  $grpc.ResponseFuture<$1.ApproveJoinRequestResponse> approveJoinRequest(
+    $1.ApproveJoinRequestRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$approveJoinRequest, request, options: options);
+  }
+
   $grpc.ResponseFuture<$1.LeaveSpaceResponse> leaveSpace(
     $1.LeaveSpaceRequest request, {
     $grpc.CallOptions? options,
@@ -602,6 +652,36 @@ class SpaceServiceClient extends $grpc.Client {
           '/voice.space.v1.SpaceService/JoinSpace',
           ($1.JoinSpaceRequest value) => value.writeToBuffer(),
           $1.JoinSpaceResponse.fromBuffer);
+  static final _$startJoinAttempt = $grpc.ClientMethod<
+          $1.StartJoinAttemptRequest, $1.StartJoinAttemptResponse>(
+      '/voice.space.v1.SpaceService/StartJoinAttempt',
+      ($1.StartJoinAttemptRequest value) => value.writeToBuffer(),
+      $1.StartJoinAttemptResponse.fromBuffer);
+  static final _$getJoinAttempt =
+      $grpc.ClientMethod<$1.GetJoinAttemptRequest, $1.GetJoinAttemptResponse>(
+          '/voice.space.v1.SpaceService/GetJoinAttempt',
+          ($1.GetJoinAttemptRequest value) => value.writeToBuffer(),
+          $1.GetJoinAttemptResponse.fromBuffer);
+  static final _$submitJoinAttempt = $grpc.ClientMethod<
+          $1.SubmitJoinAttemptRequest, $1.SubmitJoinAttemptResponse>(
+      '/voice.space.v1.SpaceService/SubmitJoinAttempt',
+      ($1.SubmitJoinAttemptRequest value) => value.writeToBuffer(),
+      $1.SubmitJoinAttemptResponse.fromBuffer);
+  static final _$listJoinRequests = $grpc.ClientMethod<
+          $1.ListJoinRequestsRequest, $1.ListJoinRequestsResponse>(
+      '/voice.space.v1.SpaceService/ListJoinRequests',
+      ($1.ListJoinRequestsRequest value) => value.writeToBuffer(),
+      $1.ListJoinRequestsResponse.fromBuffer);
+  static final _$getJoinRequest =
+      $grpc.ClientMethod<$1.GetJoinRequestRequest, $1.GetJoinRequestResponse>(
+          '/voice.space.v1.SpaceService/GetJoinRequest',
+          ($1.GetJoinRequestRequest value) => value.writeToBuffer(),
+          $1.GetJoinRequestResponse.fromBuffer);
+  static final _$approveJoinRequest = $grpc.ClientMethod<
+          $1.ApproveJoinRequestRequest, $1.ApproveJoinRequestResponse>(
+      '/voice.space.v1.SpaceService/ApproveJoinRequest',
+      ($1.ApproveJoinRequestRequest value) => value.writeToBuffer(),
+      $1.ApproveJoinRequestResponse.fromBuffer);
   static final _$leaveSpace =
       $grpc.ClientMethod<$1.LeaveSpaceRequest, $1.LeaveSpaceResponse>(
           '/voice.space.v1.SpaceService/LeaveSpace',
@@ -991,6 +1071,60 @@ abstract class SpaceServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $1.JoinSpaceRequest.fromBuffer(value),
         ($1.JoinSpaceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.StartJoinAttemptRequest,
+            $1.StartJoinAttemptResponse>(
+        'StartJoinAttempt',
+        startJoinAttempt_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $1.StartJoinAttemptRequest.fromBuffer(value),
+        ($1.StartJoinAttemptResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.GetJoinAttemptRequest,
+            $1.GetJoinAttemptResponse>(
+        'GetJoinAttempt',
+        getJoinAttempt_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $1.GetJoinAttemptRequest.fromBuffer(value),
+        ($1.GetJoinAttemptResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.SubmitJoinAttemptRequest,
+            $1.SubmitJoinAttemptResponse>(
+        'SubmitJoinAttempt',
+        submitJoinAttempt_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $1.SubmitJoinAttemptRequest.fromBuffer(value),
+        ($1.SubmitJoinAttemptResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.ListJoinRequestsRequest,
+            $1.ListJoinRequestsResponse>(
+        'ListJoinRequests',
+        listJoinRequests_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $1.ListJoinRequestsRequest.fromBuffer(value),
+        ($1.ListJoinRequestsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.GetJoinRequestRequest,
+            $1.GetJoinRequestResponse>(
+        'GetJoinRequest',
+        getJoinRequest_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $1.GetJoinRequestRequest.fromBuffer(value),
+        ($1.GetJoinRequestResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.ApproveJoinRequestRequest,
+            $1.ApproveJoinRequestResponse>(
+        'ApproveJoinRequest',
+        approveJoinRequest_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $1.ApproveJoinRequestRequest.fromBuffer(value),
+        ($1.ApproveJoinRequestResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$1.LeaveSpaceRequest, $1.LeaveSpaceResponse>(
         'LeaveSpace',
         leaveSpace_Pre,
@@ -1467,6 +1601,60 @@ abstract class SpaceServiceBase extends $grpc.Service {
 
   $async.Future<$1.JoinSpaceResponse> joinSpace(
       $grpc.ServiceCall call, $1.JoinSpaceRequest request);
+
+  $async.Future<$1.StartJoinAttemptResponse> startJoinAttempt_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$1.StartJoinAttemptRequest> $request) async {
+    return startJoinAttempt($call, await $request);
+  }
+
+  $async.Future<$1.StartJoinAttemptResponse> startJoinAttempt(
+      $grpc.ServiceCall call, $1.StartJoinAttemptRequest request);
+
+  $async.Future<$1.GetJoinAttemptResponse> getJoinAttempt_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$1.GetJoinAttemptRequest> $request) async {
+    return getJoinAttempt($call, await $request);
+  }
+
+  $async.Future<$1.GetJoinAttemptResponse> getJoinAttempt(
+      $grpc.ServiceCall call, $1.GetJoinAttemptRequest request);
+
+  $async.Future<$1.SubmitJoinAttemptResponse> submitJoinAttempt_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$1.SubmitJoinAttemptRequest> $request) async {
+    return submitJoinAttempt($call, await $request);
+  }
+
+  $async.Future<$1.SubmitJoinAttemptResponse> submitJoinAttempt(
+      $grpc.ServiceCall call, $1.SubmitJoinAttemptRequest request);
+
+  $async.Future<$1.ListJoinRequestsResponse> listJoinRequests_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$1.ListJoinRequestsRequest> $request) async {
+    return listJoinRequests($call, await $request);
+  }
+
+  $async.Future<$1.ListJoinRequestsResponse> listJoinRequests(
+      $grpc.ServiceCall call, $1.ListJoinRequestsRequest request);
+
+  $async.Future<$1.GetJoinRequestResponse> getJoinRequest_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$1.GetJoinRequestRequest> $request) async {
+    return getJoinRequest($call, await $request);
+  }
+
+  $async.Future<$1.GetJoinRequestResponse> getJoinRequest(
+      $grpc.ServiceCall call, $1.GetJoinRequestRequest request);
+
+  $async.Future<$1.ApproveJoinRequestResponse> approveJoinRequest_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$1.ApproveJoinRequestRequest> $request) async {
+    return approveJoinRequest($call, await $request);
+  }
+
+  $async.Future<$1.ApproveJoinRequestResponse> approveJoinRequest(
+      $grpc.ServiceCall call, $1.ApproveJoinRequestRequest request);
 
   $async.Future<$1.LeaveSpaceResponse> leaveSpace_Pre($grpc.ServiceCall $call,
       $async.Future<$1.LeaveSpaceRequest> $request) async {
