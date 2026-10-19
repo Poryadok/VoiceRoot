@@ -791,6 +791,8 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/notification_db?sslmode=disable
       POSTGRES_MAX_CONNS: ${NOTIFICATION_POSTGRES_MAX_CONNS:-10}
       NOTIFICATION_GRPC_LISTEN: :9090
+      # Explicit disposable development mode; this fixture cannot qualify as alpha.
+      VOICE_RELEASE_PROFILE: development
       NOTIFICATION_REDIS_ADDR: redis:6379
       NOTIFICATION_RECORD_PUSHES: "true"
       NOTIFICATION_DEBUG_HTTP_ENABLED: "true"

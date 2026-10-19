@@ -1,0 +1,29 @@
+{
+  "schema_version": 2,
+  "profile": "free-invite-alpha",
+  "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "capabilities": {
+    "phone_auth": "disabled",
+    "paid": "disabled",
+    "mobile_push": "disabled",
+    "public_discovery": "disabled",
+    "unfinished_rich_types": "disabled",
+    "federation": "disabled"
+  },
+  "rich_intents": {
+    "text": "qualified",
+    "photo": "qualified",
+    "video": "qualified",
+    "document": "qualified",
+    "music": "qualified",
+    "voice": "disabled",
+    "sticker": "disabled",
+    "gif": "disabled",
+    "article": "disabled",
+    "location": "disabled",
+    "video_note": "disabled",
+    "send_silent": "disabled",
+    "schedule": "disabled",
+    "when_online": "disabled"
+  }
+}

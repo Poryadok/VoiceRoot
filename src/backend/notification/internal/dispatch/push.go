@@ -10,14 +10,17 @@ import (
 	"voice/backend/notification/internal/fcm"
 	"voice/backend/notification/internal/push"
 	"voice/backend/notification/internal/store"
+	"voice/backend/pkg/releasepolicy"
 )
 
 // PushDispatcher routes push delivery to FCM, APNs, or VoIP APNs based on device token metadata.
 type PushDispatcher struct {
-	FCM               fcm.Sender
-	APNs              apns.Sender
-	VoIP              apns.VoIPSender
-	LifecycleDelivery interface {
+	ReleasePolicy          *releasepolicy.Policy
+	OnCapabilitySuppressed func(context.Context)
+	FCM                    fcm.Sender
+	APNs                   apns.Sender
+	VoIP                   apns.VoIPSender
+	LifecycleDelivery      interface {
 		WithChatDelivery(context.Context, string, func(context.Context) error) error
 		WithSpaceDelivery(context.Context, string, func(context.Context) error) error
 	}
@@ -45,6 +48,18 @@ func (d *PushDispatcher) Send(ctx context.Context, profileID uuid.UUID, token st
 }
 
 func (d *PushDispatcher) send(ctx context.Context, profileID uuid.UUID, token store.DeviceToken, payload push.Payload) error {
+	if d.ReleasePolicy != nil && d.ReleasePolicy.Profile() == releasepolicy.Alpha {
+		mobile, err := push.MobileTarget(token.Platform, token.PushService)
+		if err != nil {
+			return err
+		}
+		if mobile && !d.ReleasePolicy.Allows(releasepolicy.MobilePush) {
+			if d.OnCapabilitySuppressed != nil {
+				d.OnCapabilitySuppressed(ctx)
+			}
+			return nil
+		}
+	}
 	fcmPayload := fcm.PushPayload(payload)
 	switch token.PushService {
 	case "apns":
