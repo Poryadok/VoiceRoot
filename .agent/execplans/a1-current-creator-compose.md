@@ -144,3 +144,29 @@ floor/client, not a Creator-only type capability; AdmissionReplay must call
 ClaimAdmissionPrincipalReplay with unavailable mapping, no Creatorfallback.
 Native45 transition remains trustedinstaller-only, never main/reader auto-reseal.
 Auth identity/provider/172 stopped operation is never substituted.
+
+Actual canonical Voice/Chat/Matchmaking startup resolved the initial Gateway
+MatchSquad member-readiness setup failure. Real register/OTP/accounts succeeded;
+POST /api/v1/spaces reached protected Space CreateSpace and returned503
+membership authority unavailable (public test3.101s, Space RPC524ms). No public
+Creator positive is claimed. Own canonical PostgreSQL18.6 is clean migration45,
+but serving voice is superuser and retained44 seal differs from current catalog.
+The separate trusted installer API also refused: exact structure qualifier at
+native_readiness_catalog.go68 expects PostgreSQL16 shape68d06f...946a while
+actual canonical18 shape is6aa303...fa5e, including34 NOT NULL constraint rows.
+Temporary error-site annotations were restored byte-exact, production images
+unchanged. Native owner186 accepted this bounded PG18 qualification producer gap;
+no observed hash adoption, downgrade, guard relaxation or manual seal update.
+Host packet tmp/swarm/rudeus342-creator45 contains structure/source86hashmanifest,
+canonical migrator log, installer diagnostic and real HTTP failure. Native45
+transition must precede true nonowner appLOGIN startup after its producer fix.
+
+Independent ready runtime seam: configured public dependencies left admission
+floor/replay nil (meaningful RED0.047). Explicit gateway dependency assembly now
+calls the actual Space Authfloor checker and ClaimAdmissionPrincipalReplay,
+mapping only authority unavailability and preserving nonce conflicts. Creator
+callbacks remain separate. Missing dependencies disable admission. Existing
+Creator and new admission factory tests PASS race1.191, vet/build0. An initial
+green attempt had invalid non-UUID test account; corrected the fixture to a
+canonical UUID without changing production validation. This component result
+does not close native catalog, actual Role8aa/OwnerACL or public journey gates.

@@ -18,6 +18,36 @@ type creatorReplayStore interface {
 	ClaimCreatorPrincipalReplay(context.Context, string, string, time.Time) error
 }
 
+type gatewayReplayStore interface {
+	creatorReplayStore
+	ClaimAdmissionPrincipalReplay(context.Context, string, string, time.Time) error
+}
+
+func gatewayMembershipDependencies(replays gatewayReplayStore, auth creatorauthority.Client, issuer *principal.Issuer) lifecycleprincipal.MembershipDependencies {
+	deps := creatorMembershipDependencies(replays, auth, issuer)
+	if replays == nil || auth == nil || issuer == nil {
+		return deps
+	}
+	// Admission permits signed regular and guest principals. This checker is
+	// session-floor-only; no Creator account-type capability crosses purposes.
+	checker := &creatorauthority.Checker{Client: auth, Issuer: issuer}
+	deps.AdmissionEpoch = func(ctx context.Context, account string, epoch int64) error {
+		err := checker.CheckEpoch(ctx, account, epoch)
+		if errors.Is(err, creatorauthority.ErrUnavailable) {
+			return lifecycleprincipal.ErrDependencyUnavailable
+		}
+		return err
+	}
+	deps.AdmissionReplay = func(ctx context.Context, issuer, jti string, expiry time.Time) error {
+		err := replays.ClaimAdmissionPrincipalReplay(ctx, issuer, jti, expiry)
+		if errors.Is(err, store.ErrMemberAuthorityUnavailable) {
+			return lifecycleprincipal.ErrDependencyUnavailable
+		}
+		return err
+	}
+	return deps
+}
+
 // Creator readiness belongs to its own public receiver dependencies, not the
 // independent Role-only member-authority listener or its cleanup worker.
 func creatorMembershipDependencies(replays creatorReplayStore, auth creatorauthority.Client, issuer *principal.Issuer) lifecycleprincipal.MembershipDependencies {

@@ -18,6 +18,7 @@ import (
 	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/pkg/principal"
 	"voice/backend/space/internal/lifecycleprincipal"
+	"voice/backend/space/internal/store"
 )
 
 type creatorFloorRPC func(context.Context, *authv1.GetSpaceSessionEpochFloorRequest) (*authv1.GetSpaceSessionEpochFloorResponse, error)
@@ -30,6 +31,97 @@ type creatorReplayFunc func(context.Context, string, string, time.Time) error
 
 func (f creatorReplayFunc) ClaimCreatorPrincipalReplay(ctx context.Context, issuer, jti string, expiry time.Time) error {
 	return f(ctx, issuer, jti, expiry)
+}
+
+type admissionRuntimeReplay struct {
+	creatorCalls   int
+	admissionCalls int
+	err            error
+}
+
+func (r *admissionRuntimeReplay) ClaimCreatorPrincipalReplay(context.Context, string, string, time.Time) error {
+	r.creatorCalls++
+	return errors.New("Creator callback must not serve admission")
+}
+
+func (r *admissionRuntimeReplay) ClaimAdmissionPrincipalReplay(context.Context, string, string, time.Time) error {
+	r.admissionCalls++
+	return r.err
+}
+
+func TestGatewayAdmissionRuntimeUsesExplicitFloorAndReplay(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "space", KeyID: "current", PrivateKey: key})
+	require.NoError(t, err)
+	conflict := errors.New("nonce already committed")
+	for _, mode := range []string{"current", "revoked", "floor unavailable", "replay unavailable", "replayed", "missing Auth", "missing issuer", "missing replay"} {
+		t.Run(mode, func(t *testing.T) {
+			floorCalls := 0
+			var floor creatorFloorRPC = func(ctx context.Context, req *authv1.GetSpaceSessionEpochFloorRequest) (*authv1.GetSpaceSessionEpochFloorResponse, error) {
+				floorCalls++
+				require.Equal(t, "00000000-0000-0000-0000-000000000342", req.AccountId)
+				md, _ := metadata.FromOutgoingContext(ctx)
+				require.NotEmpty(t, md.Get("authorization"))
+				if mode == "floor unavailable" {
+					return nil, errors.New("offline")
+				}
+				value := int64(7)
+				if mode == "revoked" {
+					value = 8
+				}
+				return &authv1.GetSpaceSessionEpochFloorResponse{SessionEpochFloor: value}, nil
+			}
+			r := &admissionRuntimeReplay{}
+			if mode == "replay unavailable" {
+				r.err = store.ErrMemberAuthorityUnavailable
+			}
+			if mode == "replayed" {
+				r.err = conflict
+			}
+			var replay gatewayReplayStore = r
+			var auth interface {
+				GetSpaceSessionEpochFloor(context.Context, *authv1.GetSpaceSessionEpochFloorRequest, ...grpc.CallOption) (*authv1.GetSpaceSessionEpochFloorResponse, error)
+			} = floor
+			selectedIssuer := issuer
+			if mode == "missing Auth" {
+				auth = nil
+			}
+			if mode == "missing issuer" {
+				selectedIssuer = nil
+			}
+			if mode == "missing replay" {
+				replay = nil
+			}
+			deps := gatewayMembershipDependencies(replay, auth, selectedIssuer)
+			if mode == "missing Auth" || mode == "missing issuer" || mode == "missing replay" {
+				require.Nil(t, deps.AdmissionEpoch)
+				require.Nil(t, deps.AdmissionReplay)
+				return
+			}
+			require.NotNil(t, deps.AdmissionEpoch, "configured public listener must admit through actual Auth floor")
+			require.NotNil(t, deps.AdmissionReplay, "admission must use its explicit durable entrypoint")
+			epochErr := deps.AdmissionEpoch(context.Background(), "00000000-0000-0000-0000-000000000342", 7)
+			if mode == "floor unavailable" {
+				require.ErrorIs(t, epochErr, lifecycleprincipal.ErrDependencyUnavailable)
+			} else if mode == "revoked" {
+				require.Error(t, epochErr)
+			} else {
+				require.NoError(t, epochErr)
+			}
+			require.Equal(t, 1, floorCalls)
+			replayErr := deps.AdmissionReplay(context.Background(), "gateway", "nonce", time.Now().Add(20*time.Second))
+			if mode == "replay unavailable" {
+				require.ErrorIs(t, replayErr, lifecycleprincipal.ErrDependencyUnavailable)
+			} else if mode == "replayed" {
+				require.ErrorIs(t, replayErr, conflict)
+			} else {
+				require.NoError(t, replayErr)
+			}
+			require.Equal(t, 1, r.admissionCalls)
+			require.Zero(t, r.creatorCalls)
+		})
+	}
 }
 
 func TestCreatorRuntimeIndependentOfRoleReaderAndMapsUnknownFloor(t *testing.T) {

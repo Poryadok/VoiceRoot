@@ -484,7 +484,7 @@ func main() {
 				log.Fatalf("Space Gateway lifecycle listen: %v", err)
 			}
 			options := append([]grpc.ServerOption{}, sharedOptions...)
-			options = append(options, publicRuntime.ServerOptionsWithMembership(creatorMembershipDependencies(spaceStore, creatorAuthClient, principalIssuer))...)
+			options = append(options, publicRuntime.ServerOptionsWithMembership(gatewayMembershipDependencies(spaceStore, creatorAuthClient, principalIssuer))...)
 			publicServer = grpc.NewServer(options...)
 			spacev1.RegisterSpaceServiceServer(publicServer, &grpcsvc.PublicLifecycleSpace{SpaceGRPC: spaceSvc, Composite: compositeService})
 			go func() {
