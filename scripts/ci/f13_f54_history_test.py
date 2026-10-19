@@ -55,17 +55,36 @@ class ProducerTrace(unittest.TestCase):
         rows=['\t'.join([n,'true' if n==retired else 'false',first,base,base,first,base,base]) for n in covered+[retired]]
         m.F_DELETION_ROW_SHA=m.sha(rows[-1].encode());actual=('\n'.join(rows)+'\n').encode()
         cap=dict(unit_path='private-value-fixture',whole=dict(complete_manual_paths=names),source_context=dict(private_fixture=True),context={})
-        values=dict(re.findall(r"(?m)^(accepted_[a-z_]+|game_checkpoint_snapshot_[a-z_]+)='([0-9a-f]{40})'$",SHELL.read_text()),
+        values=dict(re.findall(r"(?m)^(accepted_[a-z0-9_]+|game_checkpoint_snapshot_[a-z_]+)='([0-9a-f]{40})'$",SHELL.read_text()),
             ROOT=str(self.repo.resolve()),TMP_DIR=str(self.folder),game_checkpoint_enabled='false',game_checkpoint_aggregate_active='false',
             game_checkpoint_aggregate_paths='',game_checkpoint_aggregate_base='',game_checkpoint_aggregate_head='',native_p3_active='false')
         context=dict(source_context=cap['source_context'],values=values,event={},files={},snapshots={})
+        # Isolate the authority-derivation boundary from the real-Git residual
+        # constructor fixture. Production must derive this expectation itself;
+        # a supplied snapshot/hash is not the independent expectation.
+        native_paths=str(self.folder/'native-paths');game_tree=str(self.folder/'game-checkpoint-tree')
+        paths_raw=('\n'.join(new)+'\n').encode();tree_raw=m.git(self.repo,'ls-tree','-r',first)
+        def blob_hash(raw):return hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+        context['values'].update(native_p3_paths=native_paths,native_p3_paths_hash=blob_hash(paths_raw))
+        for name,raw in ((native_paths,paths_raw),(game_tree,tree_raw)):
+            context['files'][name]=m.file_digest(raw);context['snapshots'][name]=m.raw_binding(raw)
+        authority=dict(values=copy.deepcopy(context['values']),files=copy.deepcopy(context['snapshots']))
         frame=dict(id='private-same-state',base=base,target=result,allow_direct_followup='true',partition_source_history='false')
-        with patch.object(m,'prepare_corrected_F_capability',return_value=cap):
+        with patch.object(m,'prepare_corrected_F_capability',return_value=cap),\
+                patch.object(m,'manual_authority_expected',return_value=authority,create=True):
             spec=m.manual_F_spec(self.repo,cap,frame,actual,context)
             self.assertEqual(spec['paths'],names);self.assertEqual(spec['result_parent_edge']['base'],first)
             self.assertEqual(spec['original_merge_bases'],[base]);self.assertNotEqual(first,base)
             for name in new:self.assertEqual(spec['dispositions'][name]['type'],'NEW_RESULT_PARENT_ROW')
             self.assertEqual(spec['dispositions'][retired]['prior_rows'],[m.raw_binding(rows[-1])])
+            for forged in ('native-empty-with-updatedhash','Game-resultblob-with-updatedhash'):
+                changed=copy.deepcopy(context)
+                name=native_paths if forged.startswith('native') else game_tree
+                raw=b'' if forged.startswith('native') else m.git(self.repo,'ls-tree','-r',result)
+                changed['snapshots'][name]=m.raw_binding(raw);changed['files'][name]=m.file_digest(raw)
+                if forged.startswith('native'):changed['values']['native_p3_paths_hash']=blob_hash(raw)
+                with self.subTest(authority_forgery=forged),self.assertRaises(m.Rejected):
+                    m.manual_F_spec(self.repo,cap,frame,actual,changed)
             # Re-execute the real original predicates with private Git inputs;
             # no predicate is replaced by a fake accepting implementation.
             for name in (new[0],covered[0]):

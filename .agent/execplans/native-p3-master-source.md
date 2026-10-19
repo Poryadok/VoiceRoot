@@ -430,3 +430,19 @@ script file. Original native/Game filters are replayed with captured source
 context and authority-file snapshots, not fake accepting functions. This is
 still fixture evidence: full actual F classifier/rows remain UNKNOWN until
 the changed-source original wrapper executes. Preserve all earlier receipts.
+
+418c38 identifies P1: supplied self-consistent native pathlist/hash and Game
+tree snapshots could bypass membership or shrink classifier input. Two causal
+assertion REDs on exact5b helper are preserved (`6974879e...`). The correction
+independently derives native binding/membership/hashes/flags through the pinned
+native verifier, Game/BE255 trees through Git, Game aggregate membership/flags
+through its original whole-unit predicate, and requires complete snapshots.
+Real pinned5b B/S/T read-only authority proof passes with seven forged-input
+rejections (`actual2`, log `e702b4a8...`); this is not producer observation.
+Its first attempt failed on missing digit-bearing source constant names
+(`b4f8a1b9...`); those names are now bound too, not omitted. Full authority
+snapshots remain once per operation; each path retains an exact operation/spec
+reference. Frozen5b affected46 tests/syntax and AST passed before correction.
+Original5b wrapper65645 remains a separate immutable execution, never fixed
+source PASS. Current source still requires frozen corrective review and actual
+successor execution; J/full collection/router/RK/CI/MASTER remain HOLD.

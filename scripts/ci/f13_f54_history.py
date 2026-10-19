@@ -724,6 +724,71 @@ F_MANUAL_NEW_PATHS = [
     'src/backend/voice/internal/store/space_gate_incarnation_test.go']
 
 
+def manual_authority_expected(repo, context):
+    # Every authority bit/file below is reconstructed from actual immutable
+    # source/Git/record inputs. Supplied snapshots are comparison candidates.
+    event=context['event'];target=git(repo,'rev-parse','HEAD').decode().strip()
+    parents=git(repo,'rev-list','--parents','-n','1',target).decode().split()
+    require(len(parents)==3 and all(event.get(k,'')==os.environ.get(k,'') for k in event), 'manual_F_authority_actual_master_event')
+    base,source=parents[1:];temporary=context['values']['TMP_DIR']
+    require(event['GITHUB_SHA']==target and context['values']['ROOT']==str(Path(repo).resolve()), 'manual_F_authority_actual_root_target')
+    native_spec=importlib.util.spec_from_file_location('manual_F_native_authority',ROOT/'scripts/ci/f13_native_p3_source.py')
+    native=importlib.util.module_from_spec(native_spec);native_spec.loader.exec_module(native)
+    binding=native.qualify(repo,base,source,target,event['GITHUB_EVENT_NAME'],event['GITHUB_REF'],event['GITHUB_SHA'],
+        event.get('VOICE_CI_PUSH_BEFORE_SHA',''),event.get('GITHUB_BASE_REF',''))
+    native_raw=(json.dumps(binding,sort_keys=True)+'\n').encode()
+    paths_raw=('\n'.join(binding['paths'])+'\n').encode()
+    blob=lambda raw:hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+    require(git(repo,'rev-parse','--show-object-format').decode().strip()=='sha1', 'manual_F_authority_actual_object_format')
+    shell=(ROOT/'scripts/ci/voice-db-runtime-provisioning-contract_test.sh').read_text()
+    fixed=dict(re.findall(r"(?m)^(accepted_[a-z0-9_]+|game_checkpoint_snapshot_[a-z_]+)='([0-9a-f]{40})'$",shell))
+    ancestor=lambda a,b:subprocess.run(['git','--no-replace-objects','-C',str(repo),'merge-base','--is-ancestor',a,b],capture_output=True).returncode==0
+    enabled='true' if ancestor(fixed['accepted_game_checkpoint'],target) else 'false'
+    manifest=subprocess.run(['git','--no-replace-objects','-C',str(repo),'cat-file','-e',base+':protos/voice/r23_contract_manifest.json'],capture_output=True).returncode==0
+    values=dict(fixed,ROOT=str(Path(repo).resolve()),base_sha=base,game_checkpoint_enabled=enabled,
+        native_p3_active='true',native_p3_paths=temporary+'/f13-native-p3-paths',native_p3_paths_hash=blob(paths_raw),
+        native_p3_binding=temporary+'/f13-native-p3-binding.json',native_p3_binding_hash=blob(native_raw),
+        native_p3_source=source,native_p3_target=target,native_p3_snapshot=binding['snapshot'],
+        r23_allowlist_enabled='true' if ancestor(fixed['accepted_r23_base'],base) and not manifest else 'false')
+    files={values['native_p3_paths']:raw_binding(paths_raw),values['native_p3_binding']:raw_binding(native_raw),
+        temporary+'/game-checkpoint-tree':raw_binding(git(repo,'ls-tree','-r',fixed['accepted_game_checkpoint'])),
+        temporary+'/be255-checkpoint-tree':raw_binding(git(repo,'ls-tree','-r',fixed['accepted_be255_checkpoint']))}
+    # Reconstruct the exact original root wrapper's Game aggregate decision,
+    # including its complete output, rather than replaying supplied membership.
+    with tempfile.TemporaryDirectory(prefix='f54-manual-authority-') as folder:
+        work=Path(folder);delta=work/'source-delta';delta.write_bytes(git(repo,'diff','--name-only','--no-renames',base,source))
+        approved=work/'paths';approved.write_bytes(b'')
+        variables=dict(fixed,ROOT=str(Path(repo).resolve()),TMP_DIR=str(work),game_checkpoint_enabled=enabled,
+            game_checkpoint_aggregate_active='false',game_checkpoint_aggregate_base='',game_checkpoint_aggregate_head='',
+            game_checkpoint_aggregate_target='',game_checkpoint_aggregate_paths='',game_checkpoint_aggregate_record='',
+            game_checkpoint_aggregate_map='',game_checkpoint_aggregate_alias_map='',F54_BASE=base,F54_SOURCE=source,
+            F54_TARGET=target,F54_DELTA=str(delta),F54_PATHS=str(approved))
+        script='set -euo pipefail\n'+original_policy_functions(shell)+'\n'
+        script+='while (( $# )); do printf -v "$1" "%s" "$2"; shift 2; done\n'
+        script+='status=0; game_checkpoint_aggregate_authorized "$ROOT" "$F54_BASE" "$F54_SOURCE" "$F54_TARGET" "$F54_DELTA" "$F54_PATHS" || status=$?\nprintf "%s\\n" "$status"\n'
+        executable=work/'original-game-authority.sh';executable.write_text(script)
+        result=subprocess.run(['bash',str(executable)]+sum(([k,v] for k,v in variables.items()),[]),capture_output=True)
+        require(result.returncode==0 and result.stdout.strip() in (b'0',b'1'), 'manual_F_original_Game_authority_derivation')
+        active=result.stdout.strip()==b'0';approved_raw=approved.read_bytes()
+    output=temporary+'/f13-contributions'
+    values.update(game_checkpoint_aggregate_active='true' if active else 'false',
+        game_checkpoint_aggregate_base=base if active else '',game_checkpoint_aggregate_head=source if active else '',
+        game_checkpoint_aggregate_target=target if active else '',game_checkpoint_aggregate_record=fixed['game_checkpoint_snapshot_record'] if active else '',
+        game_checkpoint_aggregate_paths=output+'.game-snapshot-paths' if active else '',game_checkpoint_aggregate_map='',
+        game_checkpoint_aggregate_alias_map=output+'.game-snapshot-alias-approvals')
+    if active:files[output+'.game-snapshot-paths']=raw_binding(approved_raw)
+    for suffix in ('.game-snapshot-approvals','.game-snapshot-alias-approvals'):files[output+suffix]=raw_binding(b'')
+    return dict(values=values,files=files)
+
+
+def validate_manual_authority(context, expected):
+    require(set(context['snapshots'])=={name for name,value in context['files'].items() if value is not None}, 'manual_F_complete_authority_snapshots')
+    require(all(context['values'].get(name)==value for name,value in expected['values'].items()), 'manual_F_source_derived_authority_flags_membership_hashes')
+    for name,value in expected['files'].items():
+        require(context['snapshots'].get(name)==value and context['files'].get(name)==file_digest(value['raw'].encode()),
+            'manual_F_immutable_authority_input_not_self_consistent_supplied_hash:'+name)
+
+
 def manual_F_spec(repo, capability, frame_context, actual_map, gate_context):
     """Real result-parent edge; diagnostic AUTO is never a commit ancestor."""
     f=F_CORRECTED_TUPLE
@@ -735,8 +800,9 @@ def manual_F_spec(repo, capability, frame_context, actual_map, gate_context):
     for name,value in gate_context['snapshots'].items():
         require(value==raw_binding(value['raw']) and gate_context['files'][name].get('sha256')==value['sha256'], 'manual_F_original_gate_file_snapshots')
     source=(ROOT/'scripts/ci/voice-db-runtime-provisioning-contract_test.sh').read_text()
-    fixed=dict(re.findall(r"(?m)^(accepted_[a-z_]+|game_checkpoint_snapshot_[a-z_]+)='([0-9a-f]{40})'$",source))
+    fixed=dict(re.findall(r"(?m)^(accepted_[a-z0-9_]+|game_checkpoint_snapshot_[a-z_]+)='([0-9a-f]{40})'$",source))
     require(all(gate_context['values'].get(k)==v for k,v in fixed.items()), 'manual_F_gate_fixed_source_constants')
+    validate_manual_authority(gate_context,manual_authority_expected(repo,gate_context))
     rows=actual_map.decode().splitlines();names=capability['whole']['complete_manual_paths'];dispositions={}
     require(names==git(repo,'diff','--name-only',f['automatic_tree'],f['merge']).decode().splitlines()
         and len(names)==33, 'manual_F_indivisible_full_residual')
@@ -777,6 +843,15 @@ def prepare_manual_F(repo, capability_path, trace_path, map_path, context_path):
 def manual_operations(ledger):
     return [dict(frame=frame,operation=op,receipt=value) for frame,item in ledger.items()
         for op,value in item.get('manual_result_operations',{}).items()]
+
+
+def manual_result_reference(operation, spec):
+    # The complete independently reconstructed spec is stored once in the
+    # operation receipt. Every path retains an exact shared reference, not a
+    # duplicated megabyte of authority snapshots or a standalone boolean.
+    return dict(operation=operation,type=spec['type'],spec_sha256=sha(canonical(spec)),
+        result_parent_edge=spec['result_parent_edge'],original_merge_bases=spec['original_merge_bases'],
+        complete_delta_sha256=spec['delta']['sha256'])
 
 
 def manual_operations_in_prefix(ledger, trace, prefix):
@@ -2009,7 +2084,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
                 and name not in manual_associations.setdefault(op,{}), 'manual_F_exact_disjoint_retained_association')
             prior=[raw_binding('\t'.join(x)) for x in maps[frame] if x[0]==name]
             require(prior==spec['dispositions'][name]['prior_rows'], 'manual_F_prior_rows_byte_exact_no_rowdrop')
-            evidence=dict(operation=op,manual_result_spec=spec,classification=classified[op],prior_rows=prior,
+            evidence=dict(operation=op,manual_result_reference=manual_result_reference(op,spec),classification=classified[op],prior_rows=prior,
                 disposition=v['disposition'],gate=manual_gates[op][name])
             obligations.setdefault((frame,name),[]).append(evidence)
             cumulative[(frame,name)]=cumulative.get((frame,name),False) or classified[op]['trigger']=='true'
@@ -2233,7 +2308,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             cumulative[key]=cumulative.get(key,False) or any(p[1]=='true' for p in previous_rows) or incoming[1]=='true' or classified[op]['trigger']=='true' or child_flags.get((op,v['path']),False)
             if op in I_ready:cumulative[key]|=I_ready[op]['required_qualification'][v['path']]['aggregate']
             obligations.setdefault(key,[]).append(dict(operation=op,classification=classified[op],prior_rows=v['prior_rows'],incoming=v['incoming'],child_aggregate=child_flags.get((op,v['path']),False),
-                **(dict(manual_result_spec=manual_specs[op],gate=manual_gates[op][v['path']]) if op in manual_specs else {})))
+                **(dict(manual_result_reference=manual_result_reference(op,manual_specs[op]),gate=manual_gates[op][v['path']]) if op in manual_specs else {})))
         elif kind in ('row_after','row_remove'):
             require(key in pending and pending[key]['op']==op,'pre_mutation_prior_reference')
             parts=row(v['row']);require(parts[6]==pending[key]['incoming'][6],'original_content_base')
