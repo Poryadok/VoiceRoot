@@ -62,7 +62,7 @@ func TestSpaceModeration_SendMessage_FailsWhenTimedOut(t *testing.T) {
 	require.NoError(t, err)
 
 	authority := &communicationStateStub{state: 2}
-	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles, CommunicationStates: authority})
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles, CommunicationStates: authority, RolePermissions: testRolePerms{allowed: true}})
 	t.Cleanup(cleanup)
 
 	_, err = client.SendMessage(withProfileCtx(ctx, acctB, profB), &messagingv1.SendMessageRequest{
@@ -95,7 +95,7 @@ func TestSpaceModeration_SendMessage_SucceedsAfterTimeoutRemoved(t *testing.T) {
 	require.NoError(t, err)
 
 	authority := &communicationStateStub{state: 2}
-	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles, CommunicationStates: authority})
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles, CommunicationStates: authority, RolePermissions: testRolePerms{allowed: true}})
 	t.Cleanup(cleanup)
 
 	_, err = client.SendMessage(withProfileCtx(ctx, acctB, profB), &messagingv1.SendMessageRequest{
@@ -136,7 +136,7 @@ func TestSpaceSlowMode_SecondMessageWithinWindow_Fails(t *testing.T) {
 	_, err = pool.Exec(ctx, `UPDATE chats SET slow_mode_seconds = 10 WHERE id = $1`, chatID)
 	require.NoError(t, err, "chat_db migration must allow slow_mode_seconds > 0")
 
-	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles, CommunicationStates: &communicationStateStub{state: 1}})
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles, CommunicationStates: &communicationStateStub{state: 1}, RolePermissions: testRolePerms{allowed: true}})
 	t.Cleanup(cleanup)
 
 	sendCtx := withProfileCtx(ctx, acctA, profA)

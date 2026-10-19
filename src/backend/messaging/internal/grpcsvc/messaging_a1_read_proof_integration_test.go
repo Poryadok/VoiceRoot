@@ -301,6 +301,7 @@ func applyA1ReadProofMigrations(t *testing.T, ctx context.Context, pool *pgxpool
 	t.Helper()
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000003_groups.up.sql"))
+	applySQLFile(t, ctx, pool, "src/backend/migrations/chat_db/000024_chat_management_permissions.up.sql")
 	applyBaseMessagingMigrations(t, ctx, pool)
 }
 

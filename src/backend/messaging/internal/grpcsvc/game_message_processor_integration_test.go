@@ -205,6 +205,7 @@ func TestGameMessageProcessorFailsClosedForMissingT16BindingAndFileProof(t *test
 	processor.AuthKeys = testGameAuthKeys{keys: map[string]*rsa.PublicKey{"auth-current": authPublic}, at: now}
 	processor.Permits = &testGamePermitIssuer{key: attachmentPrivate, keyID: "auth-current", profileID: profile, now: now}
 	processor.Bindings = allowGameBinding{profile: profile}
+	processor.CommunicationAdmission = standaloneGameCommunicationAdmission
 	_, err = processor.ProcessGameMessage(ctx, attachmentJWS, attachmentAuthority)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "file attachment provenance")
