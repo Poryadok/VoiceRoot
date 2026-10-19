@@ -1,7 +1,7 @@
 {
   "version": "NATIVE-P3-SOURCE-v1",
   "base": "8191a36ca3bea7d053df0dd25963ca5133284b41",
-  "source": "e63f8436aecd080e231ce0ab58257f70c258ca8a",
+  "source": "fd43a284a6ad312cb7443e1368286002c494fd5f",
   "classification": "DORMANT-A3-RESTRICTIVE-P3-SOURCE",
   "consumers": [
     "DEVELOP-SOURCE-v1",
@@ -54,7 +54,7 @@
       "after": {
         "mode": "100644",
         "type": "blob",
-        "oid": "2823cfa8f904846c26f9572fbc01d5e19850291d"
+        "oid": "818dda2b5c1adf74a97a59f72b0b0bc3136be076"
       }
     },
     {
@@ -93,7 +93,7 @@
       "after": {
         "mode": "100644",
         "type": "blob",
-        "oid": "a54a5b1af02e8c214415400e1dac599bd787e24b"
+        "oid": "5d2b0ee3cb2ed8641732f9abd1695654224c1933"
       }
     },
     {
@@ -106,7 +106,7 @@
       "after": {
         "mode": "100644",
         "type": "blob",
-        "oid": "b78e0a1ed2a2973962fff5f298e0f004a119067b"
+        "oid": "f96ceb897e0c371615817b060c241bcdc45ae020"
       }
     },
     {
@@ -173,7 +173,7 @@
       "after": {
         "mode": "100644",
         "type": "blob",
-        "oid": "b78e0a1ed2a2973962fff5f298e0f004a119067b"
+        "oid": "f96ceb897e0c371615817b060c241bcdc45ae020"
       }
     },
     {
@@ -897,7 +897,7 @@
       "after": {
         "mode": "100644",
         "type": "blob",
-        "oid": "b78e0a1ed2a2973962fff5f298e0f004a119067b"
+        "oid": "f96ceb897e0c371615817b060c241bcdc45ae020"
       }
     },
     {
@@ -928,7 +928,7 @@
       "after": {
         "mode": "100644",
         "type": "blob",
-        "oid": "7a3a76d7110a75e1f536aa69d53bdc9b776aaf35"
+        "oid": "5c2ca4aff3986654d76d4076524ae7cf0b63502e"
       }
     },
     {
@@ -954,7 +954,7 @@
       "after": {
         "mode": "100644",
         "type": "blob",
-        "oid": "000138834c0de0e6d859c1d5e728287dd77df30c"
+        "oid": "3d9e358afabe97d1f18611dde5b9a50680d9d363"
       }
     }
   ],
@@ -1036,7 +1036,7 @@
       "entry": {
         "mode": "100644",
         "type": "blob",
-        "oid": "e07dddd5fe58d62fc3da2365c5447ca1e1100120"
+        "oid": "f0970ed76c483760ef662a2d66982d4353a0081b"
       }
     },
     {
@@ -1053,6 +1053,14 @@
         "mode": "100644",
         "type": "blob",
         "oid": "ab515e1aaf4317fd301b6087d128d7a854720b5a"
+      }
+    },
+    {
+      "path": "protos/voice/file/v1/file.proto",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "208544c12ee2573866224de0f7167eb476a302fa"
       }
     },
     {
@@ -1276,7 +1284,7 @@
       "entry": {
         "mode": "100644",
         "type": "blob",
-        "oid": "8cc884d2216172250f65224150d8f4055bed3e96"
+        "oid": "d2eccf8c88c66aa43ef3f2d5ddca51f9511ff9fc"
       }
     },
     {
@@ -1284,7 +1292,7 @@
       "entry": {
         "mode": "100644",
         "type": "blob",
-        "oid": "57a78c7e3394c1f7fac48a634f44798abecd9ba6"
+        "oid": "6a0fd05560c0d9af72e5ea4eae2ed3dc37c2a4b6"
       }
     },
     {
@@ -1292,7 +1300,7 @@
       "entry": {
         "mode": "100644",
         "type": "blob",
-        "oid": "08d2e33f83d9dbdb3cb945ab01c85ab9efce446e"
+        "oid": "569b8b5ac9f12e6e3d94f0cfe05116feecfcb1b6"
       }
     },
     {
@@ -1853,6 +1861,14 @@
         "mode": "100644",
         "type": "blob",
         "oid": "6e580910aa9cfe1db4a3d748663c7115a5ba1ce0"
+      }
+    },
+    {
+      "path": "src/backend/pkg/integrationtest/preview_rollback_test.go",
+      "entry": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "56dfb6d7fa47183813b7b1afc7ca489eb7624b93"
       }
     },
     {
@@ -4260,7 +4276,7 @@
       "entry": {
         "mode": "100644",
         "type": "blob",
-        "oid": "57a78c7e3394c1f7fac48a634f44798abecd9ba6"
+        "oid": "6a0fd05560c0d9af72e5ea4eae2ed3dc37c2a4b6"
       }
     },
     {
@@ -4268,7 +4284,7 @@
       "entry": {
         "mode": "100644",
         "type": "blob",
-        "oid": "08d2e33f83d9dbdb3cb945ab01c85ab9efce446e"
+        "oid": "569b8b5ac9f12e6e3d94f0cfe05116feecfcb1b6"
       }
     },
     {
@@ -4654,6 +4670,8 @@
     "src/backend/voice/pb/voice/chat/v1/chat_lifecycle.pb.go",
     "src/backend/voice/pb/voice/chat/v1/chat_lifecycle_grpc.pb.go",
     "src/backend/voice/pb/voice/common/v1/space_lifecycle.pb.go",
+    "src/backend/voice/pb/voice/file/v1/file.pb.go",
+    "src/backend/voice/pb/voice/file/v1/file_grpc.pb.go",
     "src/backend/voice/pb/voice/space/v1/space.pb.go",
     "src/backend/voice/pb/voice/story/v1/lfp_actions.pb.go",
     "src/backend/voice/pb/voice/story/v1/lfp_actions_grpc.pb.go",
@@ -4664,10 +4682,22 @@
     "src/backend/voice/pb/voice/user/v1/user.pb.go",
     "src/backend/voice/pb/voice/user/v1/user_grpc.pb.go"
   ],
-  "closure_review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c19",
+  "closure_review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c24",
   "down_review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-VOICE-NATIVE-DOWN-53f75f745237#comment-c1",
-  "source_proposal_sha256": "1b2d1ebbd324d0aec0dce6d5e89be7541032bc0d008cbbf104e6ca07d02a31c8",
+  "source_proposal_sha256": "d0d33af5132217abe17845d4c6622e656e112251582bb5393d549cee15d74ea8",
   "evidence": [
+    {
+      "name": "master-intake/be080-current-intake.json",
+      "sha256": "bfedb81ff82b1817f17bcd3fd621ab5cd02ffedc278620915b757e27e2e31e3d"
+    },
+    {
+      "name": "master-intake/be080-historical-intersection-purpose.json",
+      "sha256": "92732fa117ea5329d7f87aa657bd3f0f29a72b8d1d786639565cf8605e017f44"
+    },
+    {
+      "name": "master-intake/capture_h5_generated_inputs.py",
+      "sha256": "0dfff7da0a2fb2d435a1d832ea898b611204b99d2b927495c60778b6736ecfdb"
+    },
     {
       "name": "master-intake/h3-affected-counts.json",
       "sha256": "046c698953297fd900ba892f6be9e5ffda5be6671fbbee970c6abb1af9863f4a"
@@ -4817,6 +4847,146 @@
       "sha256": "e47bc80bbe3a2416ff26c1d5f02463ab0f129212ac670e684b9c5584c8686308"
     },
     {
+      "name": "master-intake/h5-archive-parity.json",
+      "sha256": "68f8a22088f9c9d27c8f00a57b0d337cb553c0f48340abb1a5c1a9891529fae3"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-00.go",
+      "sha256": "2bc395c472ba3ad8cbaa3ea8e0208767ea24ebc5d6165539770e3a9d6b13172e"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-01.go",
+      "sha256": "907600d2a7abf4c744f19075af94d350c369fe0d83686ae601ea667d268b09c4"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-02.go",
+      "sha256": "cefcd72a3fca437b50586817edf54411668d898aa2b8192888b839062c30da76"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-03.go",
+      "sha256": "1afdd61da65b622abdff0b1c47d8021f8e00c2d5025ea5735a565e5c4688a8d8"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-04.go",
+      "sha256": "dfcddd21cccf15c3e0ed647b8e07703f4648edbeeceb963ed20b77b3f38edd0b"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-05.go",
+      "sha256": "8d14eafc173dbfde2861d2d7c4cff40cdd119f76501aa694d4b6fd7716e97176"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-06.go",
+      "sha256": "6ee4ccd85922a9f9f67ce595df8845f3603ed0617950d2be16069b4480db7a90"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-07.go",
+      "sha256": "842b159beee1dc0d42c7b7c9cb4a36d8e5cfa1ef5f8e107677a01ab88dd65afc"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-08.go",
+      "sha256": "9f9ffbedd4dc33c9f574c7182b9685788baf233593c28ec83dd94f60c5cae0e9"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-09.go",
+      "sha256": "d28a4f83624a0ea254de070dbb2d82487d0c07fcc9106e66eb3b2e456404a240"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-10.go",
+      "sha256": "e93543437987cf13ccfc605f6c475d6afb8a4c41680b64917b933a44de8f9075"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-11.go",
+      "sha256": "d3d952c5a23c58e98e65254cbae15944bfd1f3523c8182b5a236e6c8ade5ace1"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-12.go",
+      "sha256": "051fbd64fcafae6077155ddfc2d2dc862aeff86ace0c460903908a7b5f70df44"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-13.go",
+      "sha256": "f76c8e66490e1c886dc69a211edc623ca00cddd90541626baca4642307521429"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-14.go",
+      "sha256": "574d582ef8d3543b2723a0310f6484ea7eedcd534fdf976fcbae8d56195cea4b"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-15.go",
+      "sha256": "e86ef25d8a5b7bf602885380a81f5e37de829a9deb9b7f5b797714672456ec03"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-16.go",
+      "sha256": "aa948582ce476c4beeb5016963034266913cd7350c72218b358824eea8d2202c"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-17.go",
+      "sha256": "1c2a108ed818ae101b33245adf2b0df2c72fd099d7bff6597c45ea5fdc2483ac"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-18.go",
+      "sha256": "bc7e7c22035ec5f70f96d207331b249c72609ed4f1fedb532ee83cf131240de1"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-19.go",
+      "sha256": "fb9f1a76b6777d7e92fe42793d3e7b24755f541ea01f8ce755586c182d2f5e2a"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-20.go",
+      "sha256": "2bfb763c051ade4132f8a490bc3813d1b1cc4afb2187900495d67976370edaee"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-21.go",
+      "sha256": "d4ca3672429fa0ebba13a24816da4922ca09caa3ab2c121332e5e92b61d4e055"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-22.go",
+      "sha256": "f1eab1d2be50ad56b730cb2a585512de65f88e137241c1dedc9453075151eb93"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-23.go",
+      "sha256": "a3685d4d7c99267984dee792ff3da986cbfe3501a739aa08c86149ed7f3d9a93"
+    },
+    {
+      "name": "master-intake/h5-generated-testmain-proof.json",
+      "sha256": "1c89f3adc89c7c3187e407300a116964dc2495db2fc4e8205702c97721a7cd14"
+    },
+    {
+      "name": "master-intake/h5-native-factory.jsonl",
+      "sha256": "ab830c924051e69392ee21300c85cc6511e5bee6d2665582faa985ab5d7ebdbb"
+    },
+    {
+      "name": "master-intake/h5-native-matrix-receipt.json",
+      "sha256": "5df6504646d4063577507d1e6470d020259ca7ba7a79d56db4d810c8318f2520"
+    },
+    {
+      "name": "master-intake/h5-native-matrix.log",
+      "sha256": "018370c98bd62e7d0581ab57cc8ba64307d4fcd484c7a10bdfefe3283529ed51"
+    },
+    {
+      "name": "master-intake/h5-native-ordinary.jsonl",
+      "sha256": "c5cc6d8b6f4229ea1e5ed974c894a67cc74fbe992ec5b17c1718af51cfe2a141"
+    },
+    {
+      "name": "master-intake/h5-native-p3.jsonl",
+      "sha256": "76ec2d148becb830f2118adf666e7b91260461ba64e3d00d2c1a56db4fda56ca"
+    },
+    {
+      "name": "master-intake/h5-native-retirement.jsonl",
+      "sha256": "4806dc5fede861bdc7ca383d050f9230d452adacc6be748c8057fe579a3d96a0"
+    },
+    {
+      "name": "master-intake/h5-review-comment-actual.json",
+      "sha256": "f1c4797520afd932814dc4eb1c27259050682dfa8ec898bf82f03dfdc842cabc"
+    },
+    {
+      "name": "master-intake/h5-voice-go-list.jsonl",
+      "sha256": "bcd7d34d965bf7d5f34e8d54b3ffa68bddbd3219e8ffcd3447edd7b457a1d2ca"
+    },
+    {
+      "name": "master-intake/h5-voice-go-list.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
       "name": "master-intake/native-b1-probe.jsonl",
       "sha256": "5474245e56f1c5b3d64f1e51f2e0f3d0962bc0dbb13c2d79003f7d24605daff3"
     },
@@ -4861,6 +5031,10 @@
       "sha256": "1b2d1ebbd324d0aec0dce6d5e89be7541032bc0d008cbbf104e6ca07d02a31c8"
     },
     {
+      "name": "master-intake/native-h5-closure-proposal.json",
+      "sha256": "d0d33af5132217abe17845d4c6622e656e112251582bb5393d549cee15d74ea8"
+    },
+    {
       "name": "master-intake/native_b1_qualification_probe_test.go",
       "sha256": "c0e9420989758bbc8ec453a5df4be5303d19e167247d5129fda965d7a35898d1"
     },
@@ -4869,12 +5043,20 @@
       "sha256": "9e70f9220e1b0caf57ab1f9184d3627a95a005024df386798f479325aaad88e2"
     },
     {
+      "name": "master-intake/prepare_h5_closure.py",
+      "sha256": "c51138324f13e36005b8eee795b985409e123aa51a5b2d3114798d49adffb10e"
+    },
+    {
       "name": "master-intake/run_h3_affected.py",
       "sha256": "36a114d33634ae13204921b07789aa16ec8011dfd970bc6ea199e6df323ddae7"
     },
     {
       "name": "master-intake/run_h3_native_matrix.py",
       "sha256": "b7203f1a2a002493106a235af7ae51e42f5a00e411e904800f43f8af3f448858"
+    },
+    {
+      "name": "master-intake/run_h5_native_matrix.py",
+      "sha256": "f13f8feb6dc608d6d57d12f848826664777ac5c5f970d4cc69ee4cf25c1be230"
     },
     {
       "name": "rudeus121-develop/batch3/native-closure-factory.jsonl",
@@ -4939,43 +5121,43 @@
   "evidence_matrix": {
     "A1": {
       "result": "PASS",
-      "evidence": "Discriminating actual root RED and repaired current factory GREEN, not unused helper. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c19 accepts H4 doc-only projection applicability. Prior H3 c9/c10 and original literal clause proofs remain scoped only to unchanged relevant executable SQL/helper/writer/test/build inputs and preserved ABI; no new runtime/binary/fullfeature PASS."
+      "evidence": "Discriminating actual root RED and repaired current factory GREEN, not unused helper. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c24 accepts complete H5 closure and scoped 8AB applicability. Existing root RED/B1 success-sentinel/B3 synchronized rollback proofs retained only for unchanged exact SQL/helpers/writers and preserved ABI, not wholebinary equivalence. Current fd43 native 8+1+30+2 PASS0skip separately hash-bound; no fullfeature/currentCI/activation grant."
     },
     "A2": {
       "result": "PASS",
-      "evidence": "Actual factory ordinary-only and Space/NATS-enabled branches leave every A3 fact unleased/undelivered, preserve compatibility and restrictive native drain. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c19 accepts H4 doc-only projection applicability. Prior H3 c9/c10 and original literal clause proofs remain scoped only to unchanged relevant executable SQL/helper/writer/test/build inputs and preserved ABI; no new runtime/binary/fullfeature PASS."
+      "evidence": "Actual factory ordinary-only and Space/NATS-enabled branches leave every A3 fact unleased/undelivered, preserve compatibility and restrictive native drain. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c24 accepts complete H5 closure and scoped 8AB applicability. Existing root RED/B1 success-sentinel/B3 synchronized rollback proofs retained only for unchanged exact SQL/helpers/writers and preserved ABI, not wholebinary equivalence. Current fd43 native 8+1+30+2 PASS0skip separately hash-bound; no fullfeature/currentCI/activation grant."
     },
     "A3": {
       "result": "PASS",
-      "evidence": "Real native ordinary/Space caller-transaction counters/frozen facts, denied/replay/rollback and actual process restart pending state. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c19 accepts H4 doc-only projection applicability. Prior H3 c9/c10 and original literal clause proofs remain scoped only to unchanged relevant executable SQL/helper/writer/test/build inputs and preserved ABI; no new runtime/binary/fullfeature PASS."
+      "evidence": "Real native ordinary/Space caller-transaction counters/frozen facts, denied/replay/rollback and actual process restart pending state. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c24 accepts complete H5 closure and scoped 8AB applicability. Existing root RED/B1 success-sentinel/B3 synchronized rollback proofs retained only for unchanged exact SQL/helpers/writers and preserved ABI, not wholebinary equivalence. Current fd43 native 8+1+30+2 PASS0skip separately hash-bound; no fullfeature/currentCI/activation grant."
     },
     "A4": {
       "result": "PASS",
-      "evidence": "EJECT_ONLY never proves retirement/fullFROZEN/LIVE; exact retained targets restart without projection Redis; credential refresh and unknown capability cannot upgrade. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c19 accepts H4 doc-only projection applicability. Prior H3 c9/c10 and original literal clause proofs remain scoped only to unchanged relevant executable SQL/helper/writer/test/build inputs and preserved ABI; no new runtime/binary/fullfeature PASS."
+      "evidence": "EJECT_ONLY never proves retirement/fullFROZEN/LIVE; exact retained targets restart without projection Redis; credential refresh and unknown capability cannot upgrade. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c24 accepts complete H5 closure and scoped 8AB applicability. Existing root RED/B1 success-sentinel/B3 synchronized rollback proofs retained only for unchanged exact SQL/helpers/writers and preserved ABI, not wholebinary equivalence. Current fd43 native 8+1+30+2 PASS0skip separately hash-bound; no fullfeature/currentCI/activation grant."
     },
     "B1": {
       "result": "PASS",
-      "evidence": "Successful literal H53/H2 DOWN preserves separately owned schema tables/FK/index/view/JSON data and public sentinel complete snapshot; owned targets/grants absent; literal UP roundtrip preserves snapshot. Independent external driver -race PASS1/0skip1.220s, all six commands0. See native-b1-supplement.json and reviewed original empty-roundtrip matrix.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c19 accepts H4 doc-only projection applicability. Prior H3 c9/c10 and original literal clause proofs remain scoped only to unchanged relevant executable SQL/helper/writer/test/build inputs and preserved ABI; no new runtime/binary/fullfeature PASS."
+      "evidence": "Successful literal H53/H2 DOWN preserves separately owned schema tables/FK/index/view/JSON data and public sentinel complete snapshot; owned targets/grants absent; literal UP roundtrip preserves snapshot. Independent external driver -race PASS1/0skip1.220s, all six commands0. See native-b1-supplement.json and reviewed original empty-roundtrip matrix. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c24 accepts complete H5 closure and scoped 8AB applicability. Existing root RED/B1 success-sentinel/B3 synchronized rollback proofs retained only for unchanged exact SQL/helpers/writers and preserved ABI, not wholebinary equivalence. Current fd43 native 8+1+30+2 PASS0skip separately hash-bound; no fullfeature/currentCI/activation grant."
     },
     "B2": {
       "result": "PASS",
-      "evidence": "Every independently retained lifecycle class refuses destructive rollback with exact rows/columns retained, including grants without cleanup targets. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c19 accepts H4 doc-only projection applicability. Prior H3 c9/c10 and original literal clause proofs remain scoped only to unchanged relevant executable SQL/helper/writer/test/build inputs and preserved ABI; no new runtime/binary/fullfeature PASS."
+      "evidence": "Every independently retained lifecycle class refuses destructive rollback with exact rows/columns retained, including grants without cleanup targets. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c24 accepts complete H5 closure and scoped 8AB applicability. Existing root RED/B1 success-sentinel/B3 synchronized rollback proofs retained only for unchanged exact SQL/helpers/writers and preserved ABI, not wholebinary equivalence. Current fd43 native 8+1+30+2 PASS0skip separately hash-bound; no fullfeature/currentCI/activation grant."
     },
     "B3": {
       "result": "PASS",
-      "evidence": "Genuine writer-win, DOWN-first exclusion, partial-DDL rollback and timeout rollback are synchronized/observed, not timing-only assumptions. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c19 accepts H4 doc-only projection applicability. Prior H3 c9/c10 and original literal clause proofs remain scoped only to unchanged relevant executable SQL/helper/writer/test/build inputs and preserved ABI; no new runtime/binary/fullfeature PASS."
+      "evidence": "Genuine writer-win, DOWN-first exclusion, partial-DDL rollback and timeout rollback are synchronized/observed, not timing-only assumptions. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c24 accepts complete H5 closure and scoped 8AB applicability. Existing root RED/B1 success-sentinel/B3 synchronized rollback proofs retained only for unchanged exact SQL/helpers/writers and preserved ABI, not wholebinary equivalence. Current fd43 native 8+1+30+2 PASS0skip separately hash-bound; no fullfeature/currentCI/activation grant."
     },
     "B4": {
       "result": "PASS",
-      "evidence": "Voice013 retained outbox/counter refusal and no MM020 import are preserved; only early inherited-snapshot refusal was added/reviewed408. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence.",
-      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c19 accepts H4 doc-only projection applicability. Prior H3 c9/c10 and original literal clause proofs remain scoped only to unchanged relevant executable SQL/helper/writer/test/build inputs and preserved ABI; no new runtime/binary/fullfeature PASS."
+      "evidence": "Voice013 retained outbox/counter refusal and no MM020 import are preserved; only early inherited-snapshot refusal was added/reviewed408. See native-h3-matrix-packet.json current literal mapping and actual native matrix8+1+30+2 PASS0skip. Historical RED/supplements are separately hash-bound; no blanket old-binary equivalence. H5 current matrix: h5-native-matrix-receipt.json and native-h5-closure-proposal.json bind actual current compiled inputs and 8/1/30/2 no-skip results. Historical literal inputs and prior gaps retain their exact boundaries.",
+      "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c24 accepts complete H5 closure and scoped 8AB applicability. Existing root RED/B1 success-sentinel/B3 synchronized rollback proofs retained only for unchanged exact SQL/helpers/writers and preserved ABI, not wholebinary equivalence. Current fd43 native 8+1+30+2 PASS0skip separately hash-bound; no fullfeature/currentCI/activation grant."
     }
   }
 }
