@@ -7,7 +7,14 @@ reservations. Full association cleanup removes account/profile/parent/journal
 linkage when all allowed dependent recovery conditions permit; reservation rows
 retain no account join. Secrets are not SQL data. Every required retained lookup
 key must remain available; missing keyset/reservation tail is unavailable, never
-an empty registry or proof of unused identity. See [User association/capture](microservices/user-service.md#canonical-identity-association-and-space-capture).
+an empty registry or proof of unused identity. Due raw cleanup still proceeds
+under exact positive Auth authority without those keys. Its identity-free gap
+and monotone issued/verified-covered frontiers remain in the same owner journal
+and must be inherited by successor generations/restores of this UUID namespace.
+No raw identity/hash, selector, parent/association or request commitment is stored
+in a gap. Returning keys or resetting metadata cannot close it; independent
+complete coverage must be verified before new births resume.
+See [User association/capture](microservices/user-service.md#canonical-identity-association-and-space-capture).
 
 Сводка по [MICROSERVICES.md](MICROSERVICES.md) и файлам `docs/microservices/*.md`. Принцип: **database per service** — каждая строка PostgreSQL — отдельная логическая БД (отдельная схема миграций у владельца). Общие правила идентификаторов, ссылок и полей: [DATA_MODEL.md](DATA_MODEL.md). Объём первой волны PostgreSQL по фичам: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md).
 

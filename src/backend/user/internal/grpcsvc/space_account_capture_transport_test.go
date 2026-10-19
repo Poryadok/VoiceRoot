@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -32,14 +33,14 @@ import (
 	"voice/backend/pkg/spaceaccountcapture"
 )
 
-// This is transport authority proof against real TLS/JWKS/Redis. The empty
-// cohort authority is a fixture; it is not a PostgreSQL association producer.
+// The base matrix exercises real TLS/JWKS/Redis with a fixture authority. The
+// canonical-SQL child additionally uses the actual PostgreSQL producer.
 func TestSpaceCaptureNativeProtectedTransport(t *testing.T) {
 	replayAddr := os.Getenv("USER_ASSOCIATION_TEST_REDIS")
 	if replayAddr == "" {
 		t.Skip("set USER_ASSOCIATION_TEST_REDIS to owned real Redis")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	certPath := filepath.Join(repoRoot(t), "src/backend/auth/src/test/resources/principal-tls/server-cert.pem")
 	keyPath := filepath.Join(repoRoot(t), "src/backend/auth/src/test/resources/principal-tls/server-key.pem")
@@ -66,8 +67,12 @@ func TestSpaceCaptureNativeProtectedTransport(t *testing.T) {
 		JWKSClientCertFile: certPath, JWKSClientKeyFile: keyPath, ClientCAFile: certPath, ClientCAs: roots, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: time.Second,
 		ReplayAddr: replayAddr, TLSCertFile: certPath, TLSKeyFile: keyPath, ListenAddr: ":0"}
 	var calls atomic.Int32
-	authority := captureAuthorityFunc(func(_ context.Context, r *userv1.CaptureSpaceMemberAccountBindingsRequest) (*userv1.CaptureSpaceMemberAccountBindingsResponse, error) {
+	var canonical atomic.Pointer[CanonicalSpaceAccountCaptureAuthority]
+	authority := captureAuthorityFunc(func(callCtx context.Context, r *userv1.CaptureSpaceMemberAccountBindingsRequest) (*userv1.CaptureSpaceMemberAccountBindingsResponse, error) {
 		calls.Add(1)
+		if producer := canonical.Load(); producer != nil {
+			return producer.CaptureSpaceMemberAccountBindings(callCtx, r)
+		}
 		return &userv1.CaptureSpaceMemberAccountBindingsResponse{Protocol: r.Protocol, OperationId: r.OperationId, Purpose: r.Purpose, SpaceId: r.SpaceId, CohortDigest: r.CohortDigest, RequestDigest: spaceaccountcapture.RequestDigest(r), OwnerSourceRevision: 17, UserSourceGeneration: "11111111-1111-4111-8111-111111111111", IdentityCut: captureTestIdentityCut()}, nil
 	})
 	start := func() (userv1.UserServiceClient, func()) {
@@ -80,7 +85,10 @@ func TestSpaceCaptureNativeProtectedTransport(t *testing.T) {
 		conn, err := grpc.NewClient("passthrough:///capture", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return listener.Dial() }),
 			grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: "localhost", Certificates: []tls.Certificate{cert}})))
 		require.NoError(t, err)
-		return userv1.NewUserServiceClient(conn), func() { _ = conn.Close(); server.Stop(); _ = listener.Close(); require.NoError(t, runtime.Close()) }
+		var closeOnce sync.Once
+		return userv1.NewUserServiceClient(conn), func() {
+			closeOnce.Do(func() { _ = conn.Close(); server.Stop(); _ = listener.Close(); require.NoError(t, runtime.Close()) })
+		}
 	}
 	r := captureTestRequest()
 	tokenContext := func(issuerName, audience, method string) context.Context {
@@ -95,6 +103,7 @@ func TestSpaceCaptureNativeProtectedTransport(t *testing.T) {
 	}
 	method := userv1.UserService_CaptureSpaceMemberAccountBindings_FullMethodName
 	client, closeFirst := start()
+	defer closeFirst()
 	_, err = client.CaptureSpaceMemberAccountBindings(metadata.NewOutgoingContext(ctx, metadata.Pairs("x-voice-internal-caller", "space")), r)
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 	for _, issuer := range []string{"auth", "role", "gateway", "moderation"} {
@@ -128,4 +137,30 @@ func TestSpaceCaptureNativeProtectedTransport(t *testing.T) {
 	_, err = client.CaptureSpaceMemberAccountBindings(tokenContext("space", "user", method), r)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, calls.Load())
+	t.Run("canonical-SQL-full-cohort", func(t *testing.T) {
+		db, _, _, producer := nativeCaptureAuthority(t, 301)
+		canonical.Store(producer)
+		r = nativeCaptureRequest(t, db.Profiles)
+		credential := tokenContext("space", "user", method)
+		callCtx, cancelCall := context.WithTimeout(credential, 2*time.Second)
+		response, callErr := client.CaptureSpaceMemberAccountBindings(callCtx, r)
+		cancelCall()
+		require.NoError(t, callErr)
+		require.NoError(t, spaceaccountcapture.ValidateResponse(r, response))
+		require.Len(t, response.Results, 301)
+		for _, result := range response.Results {
+			require.Equal(t, userv1.SpaceAccountCaptureOutcome_SPACE_ACCOUNT_CAPTURE_OUTCOME_ASSOCIATED, result.Outcome)
+			require.Equal(t, db.Accounts[uuid.MustParse(result.Entry.ProfileId)].String(), result.AccountId)
+		}
+		closeSecond()
+		client, closeThird := start()
+		defer closeThird()
+		_, callErr = client.CaptureSpaceMemberAccountBindings(credential, r)
+		require.Equal(t, codes.Unauthenticated, status.Code(callErr), "SQL capture credential remains consumed after listener restart")
+		callCtx, cancelCall = context.WithTimeout(tokenContext("space", "user", method), 2*time.Second)
+		retry, callErr := client.CaptureSpaceMemberAccountBindings(callCtx, r)
+		cancelCall()
+		require.NoError(t, callErr)
+		require.True(t, proto.Equal(response, retry), "fresh authenticated retry returns stable complete SQL facts")
+	})
 }

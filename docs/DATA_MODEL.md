@@ -10,6 +10,11 @@ and profile identity cannot be reassigned or reused through delete/reinsert.
 `RETAINED_NOW` with unresolved parent proves present retained ownership, not
 birth provenance or complete historical inventory. New births require the
 verified Auth lifetime parent; attachment never rewrites captured provenance.
+An authorized due raw deletion without proven spent-ID coverage atomically
+issues an identity-free unresolved journal gap. Monotone issued and independently
+verified-covered frontiers govern all new births in the same UUID namespace;
+generation/key changes cannot reset missing coverage. The gap has no identity,
+identity hash, selector, parent or association link and is not a terminal fact.
 See [User association/capture](microservices/user-service.md#canonical-identity-association-and-space-capture).
 
 Договорённости для описания таблиц и связей по сервисам: секция «Модель данных» в [docs/microservices/](microservices/) и миграции рядом с кодом сервиса ([OPERATIONS.md](OPERATIONS.md)). Инвентарь БД: [DATA_STORES.md](DATA_STORES.md).

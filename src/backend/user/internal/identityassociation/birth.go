@@ -128,7 +128,7 @@ func (s *Store) CreateBirthTx(ctx context.Context, tx *IdentityTx, p PreparedSel
 	var now time.Time
 	var active bool
 	var next uint64
-	if err := tx.SQL().QueryRow(ctx, `SELECT clock_timestamp(),guards_active,history_head+1 FROM identity_meta WHERE singleton`).Scan(&now, &active, &next); err != nil {
+	if err := tx.SQL().QueryRow(ctx, `SELECT clock_timestamp(),guards_active AND unresolved_erase_issued=unresolved_erase_covered,history_head+1 FROM identity_meta WHERE singleton`).Scan(&now, &active, &next); err != nil {
 		return Fact{}, err
 	}
 	if !active || !proof.validForBirth(now) || proof.observation.AccountID != p.accountID {

@@ -24,9 +24,15 @@ func (s *Store) checkPreparation(ctx context.Context, tx *IdentityTx, p Prepared
 }
 
 func (s *Store) readFact(ctx context.Context, tx *IdentityTx, association uuid.UUID) (Fact, error) {
+	return scanFact(tx.SQL().QueryRow(ctx, `SELECT `+factColumns+` FROM identity_associations WHERE association_id=$1`, association), tx.generation)
+}
+
+const factColumns = `association_id,association_revision,capture_revision,capture_origin,captured_at,receipt_id,receipt_digest,COALESCE(parent_handle,''),COALESCE(parent_lifecycle_revision,0),COALESCE(parent_state,''),profile_revision,deleted,frozen,account_inactive,terminal_fact`
+
+func scanFact(row interface{ Scan(...any) error }, generation uuid.UUID) (Fact, error) {
 	var f Fact
 	var digest, terminalJSON []byte
-	err := tx.SQL().QueryRow(ctx, `SELECT association_id,association_revision,capture_revision,capture_origin,captured_at,receipt_id,receipt_digest,COALESCE(parent_handle,''),COALESCE(parent_lifecycle_revision,0),COALESCE(parent_state,''),profile_revision,deleted,frozen,account_inactive,terminal_fact FROM identity_associations WHERE association_id=$1`, association).Scan(&f.AssociationID, &f.Revision, &f.CaptureRevision, &f.Origin, &f.CapturedAt, &f.ReceiptID, &digest, &f.ParentHandle, &f.ParentRevision, &f.ParentState, &f.ProfileRevision, &f.Deleted, &f.Frozen, &f.AccountInactive, &terminalJSON)
+	err := row.Scan(&f.AssociationID, &f.Revision, &f.CaptureRevision, &f.Origin, &f.CapturedAt, &f.ReceiptID, &digest, &f.ParentHandle, &f.ParentRevision, &f.ParentState, &f.ProfileRevision, &f.Deleted, &f.Frozen, &f.AccountInactive, &terminalJSON)
 	if err != nil {
 		return Fact{}, err
 	}
@@ -36,7 +42,7 @@ func (s *Store) readFact(ctx context.Context, tx *IdentityTx, association uuid.U
 	copy(f.ReceiptDigest[:], digest)
 	if len(terminalJSON) > 0 {
 		var record terminalRecord
-		if json.Unmarshal(terminalJSON, &record) != nil || !record.valid(f.AssociationID, tx.generation, f.Revision) {
+		if json.Unmarshal(terminalJSON, &record) != nil || !record.valid(f.AssociationID, generation, f.Revision) {
 			return Fact{}, ErrIncomplete
 		}
 		f.Terminal = &record.Evidence

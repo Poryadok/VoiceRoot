@@ -2,6 +2,28 @@
 
 ## Canonical identity association and Space capture
 
+Due raw erasure is independent of User selector-key availability. The cleanup
+helper consumes a sealed positive Auth terminal proof, locks the exact retained
+profile under `I`, and rechecks its raw account binding and fresh database time.
+Its exact transaction-local preparation is consumed once by the actual DELETE;
+preparation alone creates no permanent erasure fact. Missing spent-ID coverage
+causes that DELETE to append an identity-free `UNRESOLVED_RAW_ERASURE` journal
+event atomically with a monotone issued-gap frontier. The event contains no raw
+identity, identity hash, selector, parent/association link or proof commitment.
+It is neither a terminal-profile receipt nor historical ownership evidence.
+
+Every new profile birth in the same UUID namespace is unavailable while an
+issued gap lacks independently verified coverage. Random UUID generation, key
+rotation, history-generation replacement and an old backup cannot clear this
+obligation. Existing retained NOW facts still require their original complete
+keys and canonical guards; the gap alone does not invalidate those exact facts.
+Raw due cleanup continues while births are closed. Closure requires independently
+complete canonical reservations/history, or a lawful historical inventory with
+complete mutation coverage, verified against the exact lineage and gap frontier.
+Returning a key, an ACK, a count or a matching old database is insufficient.
+The current core has no accepting closure API: the verified-covered frontier
+cannot be advanced until that strict recovery verifier exists.
+
 The accepted `SPACE-ACCOUNT-BAN-COVERAGE-v1` / canonical User association
 contract requires one User-owned `identityassociation` core for Space NOW
 capture and Role lifetime coverage. These are distinct protected adapters;
