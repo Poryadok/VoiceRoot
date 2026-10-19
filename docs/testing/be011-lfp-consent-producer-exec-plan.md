@@ -180,6 +180,45 @@ Missing authority never means clean installation or an open qualified path.
 
 ## Risks And Follow-Ups
 
+### Accepted Story LFP erasure boundary
+
+Producer c40 accepts `StoryLfpErasure-v1` (384), artifact SHA256
+`9061a5d658ae93fabd16e20c14e462a746dbd889a0dfaad2359cf408366ab8c0`,
+under169 source,301L13 personal-data minimization and306 restore authority.
+`internal/lfperasure` defines authenticated final-cut, current negative-view and
+restore snapshot/seal adapter boundaries. No adapter is installed. Nil, unknown,
+partial or foreign facts fail closed; RECOVERABLE, CANCELED, elapsed30days,
+revoked epoch and `user.account_deleted` never grant irreversible deletion.
+Final due time must be checked after actual SQL lock waits.
+
+- [x] Define immutable transient final cut, canonical complete historical scope,
+  distinct erased/unknown/live-or-unseen results and missing-provider closure.
+- [ ] Reserve next migration; atomically inventory qualified actor insertion.
+  Add exclusive mutation gate before operation/Story locks shared by readers,
+  replay, delivery, ACK and final validation; uncertain SQL completion retains
+  restrictive permits. No network under SQL locks.
+- [ ] Scrub complete selected offer/consent dependency closures in FK order:
+  boundACK, baseACK, consentActor, consent, publicationActor, publication,
+  selected current head, offer; include structured audience references, base-only
+  rows and private inventory/retry copies. Never rewind a head, rewrite immutable
+  evidence, delete unrelated counterpart data or ordinary media.
+- [ ] Require current negative subject/object/operation/cohort coverage before
+  absence-as-new or MM NotFound permits Register. Terminal-erased stays distinct.
+  Snapshot reconciliation and CURRENT seal precede restored qualified routes and
+  outgoing retries; old backups remain quarantined.
+- [ ] Actual authorized owners supply Story-purpose terminal lifecycle and
+  historical User scope, complete authenticated snapshot/seal, finite approved
+  negative-memory disposal or complete issuance/copy retirement, and physical
+  DB/WAL/replica/backup/export evidence. These premises remain ABSENT; no permanent
+  hash/HMAC, guessed TTL, cohort rotation or borrowed A7/172 authority shortcut.
+
+SQL deletion proves local rows only. Physical completion and deadline evidence
+remain separate. Lost MM receipt cannot delay local privacy erasure;145 separately
+consumes the same actual identity cut for registry/accepted-source settlement.
+Natural Story expiry/Story-only restore stays distinct. Full E01-E12 source/PG/
+transport/restore/physical oracles remain in the accepted artifact; component
+fixtures never imply installed authority or an unrun oracle PASS.
+
 High risk: signed identity, privacy, immutable replay and two-database ambiguous
 acknowledgement. Mandatory independent review. Pair support does not implement
 N-member consent; unsupported groups deny without dropping peers. Story restore

@@ -333,3 +333,20 @@ key for at least 30 seconds after its last signature. Roll pods when changing
 mounted signing keys: the signer loads them at startup. Rollback may disable
 media admission by removing the complete Story signing/client configuration;
 never restore raw metadata validation.
+
+### Private LFP account-erasure qualification
+
+Accepted `StoryLfpErasure-v1` (producer c40, artifact SHA256
+`9061a5d658ae93fabd16e20c14e462a746dbd889a0dfaad2359cf408366ab8c0`)
+requires a distinct authenticated terminal account-lifecycle decision after the
+30-day recovery window. `user.account_deleted`, inactivity, epoch floors and
+archive/media purge do not authorize journal erasure. Every consent, actor,
+offer snapshot, operation and ACK/hash is personal data, with no exemption.
+
+`internal/lfperasure` supplies closed typed boundaries only. Actual owner,
+historical scope, complete current snapshot/seal and approved finite negative
+memory/storage custody are absent. Restored qualified routes/outgoing retries
+require reconciliation and current negative subject/object/operation/cohort
+admission. Terminal-erased must differ from ordinary MM NotFound; absent history
+cannot authorize fresh Register. Local SQL scrub, physical copies and installed
+admission need separate proofs. See the [producer ExecPlan](../testing/be011-lfp-consent-producer-exec-plan.md).
