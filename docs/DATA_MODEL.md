@@ -1,5 +1,17 @@
 # Модель данных — общие правила
 
+User owns the single canonical profile/account lifetime association. Its
+versioned HMAC selectors use `voice.user.identity-association.v1`, NUL,
+`ACCOUNT` or `PROFILE`, NUL, and the exact 16 UUID bytes. No other service gets
+these keys/selectors. Raw retained profile rows keep their ordinary IDs;
+permanent used-profile reservations contain only key version and profile HMAC,
+without account, parent, association, request/cohort or Space linkage. Account
+and profile identity cannot be reassigned or reused through delete/reinsert.
+`RETAINED_NOW` with unresolved parent proves present retained ownership, not
+birth provenance or complete historical inventory. New births require the
+verified Auth lifetime parent; attachment never rewrites captured provenance.
+See [User association/capture](microservices/user-service.md#canonical-identity-association-and-space-capture).
+
 Договорённости для описания таблиц и связей по сервисам: секция «Модель данных» в [docs/microservices/](microservices/) и миграции рядом с кодом сервиса ([OPERATIONS.md](OPERATIONS.md)). Инвентарь БД: [DATA_STORES.md](DATA_STORES.md).
 
 **Скоуп первой итерации схем** (какие сервисы и сущности входят до полного каталога таблиц): [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md).

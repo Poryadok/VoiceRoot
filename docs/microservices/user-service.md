@@ -1,5 +1,66 @@
 # User Service
 
+## Canonical identity association and Space capture
+
+The accepted `SPACE-ACCOUNT-BAN-COVERAGE-v1` / canonical User association
+contract requires one User-owned `identityassociation` core for Space NOW
+capture and Role lifetime coverage. These are distinct protected adapters;
+current-pair admission and SDK tombstones cannot supply lifetime evidence.
+The additive Space RPC `CaptureSpaceMemberAccountBindings` accepts only exact
+request-bound `service:space`, audience `user`, on its separate mutual-TLS
+listener with JWKS and shared replay verification. Ordinary User/Gateway/Role/
+Auth-admission callers have no capture authority. Each call has at most two
+seconds. No public route or general ownership enumeration is introduced.
+
+Protocol 1 binds an immutable operation, purpose, Space and complete sorted
+cohort of exact ordinary, community or prospective GIS publication tuples.
+`cohort_digest` is SHA-256 of `voice.space.account-binding.v1`, NUL and the
+deterministic `SpaceAccountCaptureCohort` protobuf. Sorting compares deterministic
+entry bytes; duplicate profile/source tuples are invalid even if expectations
+differ. The response echoes the request/cohort and deterministic request digest
+and contains every entry exactly once in canonical order. A transport limit
+fails the whole call; neither a first-100 subset nor an omitted profile is proof
+of absence. `ASSOCIATED`, positive `TERMINAL_PROFILE` and `INCOMPLETE` remain
+distinct; archive, soft deletion, freeze and a missing row are not terminal.
+Unknown history has no fabricated owner receipt or capture timestamp. The
+response separately binds User19 raw-source statement revision `A` and its
+`user_source_generation`, plus the minimized `identity-association` stream
+generation, committed through `H`, digest, keyset revision and retained floor.
+`A`, `H`, profile/Search revision and association revision are independent clocks;
+an association revision cannot exceed its returned identity cut. Immutable
+association provenance `BIRTH`, `RETAINED_NOW` or `VERIFIED_HISTORY` is separate
+from the current observation's flags and current-row/history source.
+
+The canonical core stores User-purpose HMAC selectors, opaque association and
+parent lineage, finite committed journal/cut and independent minimal used-profile
+reservations. It never creates a permanent raw account/profile registry. A
+guarded retained row, including archived/frozen, can be captured as `RETAINED_NOW`
+with a nullable Auth parent. This proves its actual retained ownership only;
+Role parent/history coverage remains incomplete, and lost prehistory is not
+invented. New births after cutover require a verified nonnull Auth parent before
+User locks, then association, reservation, raw profile, onboarding and Search
+commit together. Immutable DB guards reject id/account changes and old insertion
+paths; the trusted registrar binds sealed prepared selectors to the exact row
+and transaction. All-birth integration must be installed before advertising
+future nonreuse. No network/key-provider calls occur under SQL mutation locks.
+Every mixed writer enters READ COMMITTED and takes the dedicated identity
+singleton mutex `I` before profile, lifecycle, verification, Search allocator or
+backfill checkpoint locks. It rereads authoritative state in a separate command
+after acquiring `I`; old repeatable-read snapshots are not CURRENT capture.
+Defensive statement gates take `I` with `NOWAIT` so an unsupported legacy writer
+cannot wait backwards while holding a profile lock. Committed journal `H` and
+the existing exact-plus-one User19 statement counter `A` retain separate meanings.
+
+Durable association receipts bind minimized owner facts, never a permanent full
+Space request/cohort archive. Operational reply data is cleaned independently of
+ACK, and erased ownership cannot be replayed as an old raw response. Association
+GC waits for all legitimate dependent recovery/cleanup obligations, while raw
+cleanup is not delayed. It leaves only profile-use HMAC reservations without an
+account/association join; retained lookup keys remain required for nonreuse.
+Baseline, birth-guard activation, Auth-parent coverage and historical coverage
+are separate facts. Wire/helper tests alone certify none of these activation
+or complete account-ban conditions.
+
 ## Space admission profile eligibility (SPACE-ADMISSION-IDENTITY-v1)
 
 `GetSpaceAdmissionProfileEligibility` is a separate Auth-only current-pair
