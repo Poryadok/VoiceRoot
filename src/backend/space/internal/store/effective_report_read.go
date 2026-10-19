@@ -12,6 +12,27 @@ import (
 
 var ErrSpaceReportReadDenied = errors.New("space report read context denied")
 
+// ReadProtectedSpaceReportReadContext is the local protected producer; request
+// authorization and Role/content decisions remain outside the SQL snapshot.
+func (s *SpaceStore) ReadProtectedSpaceReportReadContext(ctx context.Context, space, profile, chat uuid.UUID) (*SpaceReportReadContext, error) {
+	if s == nil || s.Pool == nil || s.tx != nil || ctx == nil || ctx.Err() != nil || space == uuid.Nil || profile == uuid.Nil || chat == uuid.Nil {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	cut, err := withOwnershipScopeValue(s, ctx, []uuid.UUID{space}, func(scoped *SpaceStore) (*SpaceReportReadContext, error) {
+		if err := scoped.RequireScopedNativeMembershipReadiness(ctx, space); err != nil {
+			return nil, ErrEffectiveEpisodeUnavailable
+		}
+		return scoped.readSpaceReportReadContext(ctx, space, profile, chat)
+	})
+	if errors.Is(err, ErrSpaceReportReadDenied) {
+		return nil, ErrSpaceReportReadDenied
+	}
+	if err != nil {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	return cut, nil
+}
+
 // SpaceReportReadContext contains current owner-local positioning facts, not a
 // permission or completed all-writer cutover capability. Protected serving must
 // additionally require the genuine native readiness producer before disclosure.

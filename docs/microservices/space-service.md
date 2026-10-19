@@ -35,6 +35,19 @@ table presence, head-local cutover ID and a fresh Creator head do not supply it.
 The protected RPC/full downstream chain remains unactivated until that producer
 and its real qualified cohort are composed.
 
+The local `ReadProtectedSpaceReportReadContext` producer now composes the real
+native44 `RequireScopedNativeMembershipReadiness` with those positioning facts
+in the SAME fenced READ COMMITTED transaction. A genuine serving LOGIN needs
+the exact catalog and per-Space COMPLETE registry before any facts are returned;
+installer privileges, a fresh Creator head or schema44 alone do not suffice.
+It then validates actual native witnesses, exact tree attachment, episode and
+final DB clock, retaining UNKNOWN history without reader repair. Native producer
+pin d410305b and its independent SOURCE CLEAR423 qualify this exact44 local
+composition; they do not qualify45 or other unfinished writer routes. This is
+not request authentication, Role/content authorization or an exposed RPC. The
+earlier facts-only tests retain explicit schema41 fixtures; new protected
+consumer tests run the actual44 cohort and current eleven-participant P3.
+
 Accepted410 (BE010 c76-c79, decision SHA256
 `83baa14994d9b5f63f0ae7c24956d0a1a373360111c6735be9d590322e64c0b4`)
 requires both an enforced exact DB guard epoch and a completed full-cohort

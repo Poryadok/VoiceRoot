@@ -16,7 +16,7 @@ import (
 func TestEffectiveReportReadUsesRealCreatorEpisode(t *testing.T) {
 	ctx := context.Background()
 	db := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/space_db"))
-	db.Run(true, "up")
+	db.Run(true, "goto", "41")
 	st := &SpaceStore{Pool: db.Pool}
 	create, account, viewer := signedNativeCreatorCurrent(t, st, &spacev1.CreateSpaceRequest{Name: "Protected history", Visibility: "private"})
 	space, err := create()
@@ -106,7 +106,7 @@ func TestEffectiveReportReadUsesRealCreatorEpisode(t *testing.T) {
 func TestEffectiveReportReadUsesRealFiniteCommunityPublication(t *testing.T) {
 	ctx := context.Background()
 	db := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/space_db"))
-	db.Run(true, "up")
+	db.Run(true, "goto", "41")
 	st := &SpaceStore{Pool: db.Pool}
 	app, environment, viewer, chat := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	space, _, err := st.CreateCommunityBootstrapSpace(ctx, CommunityBootstrapSpaceInput{OperationID: uuid.New(), ApplicationID: app, EnvironmentID: environment, OwnerAccountID: uuid.New(), OwnerProfileID: uuid.New(), CorporationKey: "report-context", TemplateID: "guild-default"})
@@ -165,7 +165,7 @@ func TestEffectiveReportReadDoesNotInventLegacyCutover(t *testing.T) {
 	require.NoError(t, err)
 	_, err = st.UpsertTreeNode(ctx, UpsertTreeNodeInput{SpaceID: space.ID, Kind: TreeKindTextChat, ChatID: &chat})
 	require.NoError(t, err)
-	db.Run(true, "up")
+	db.Run(true, "goto", "41")
 	_, err = st.ReadSpaceReportReadContext(ctx, space.ID, viewer, chat)
 	require.ErrorIs(t, err, ErrEffectiveEpisodeUnavailable)
 	var count int

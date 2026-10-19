@@ -321,6 +321,51 @@ sanction or local appeal system. Existing global intake semantics are unchanged.
 
 ## Decisions
 
+### Protected native44 reader composition (320)
+
+The actual supplier is186 immutable d410305b2e74993966e07aca5a486c16766d9e9a,
+packet2a9317e50dfde0870f7cbab94070801af2b201733caadddc056d8c8662fbe5ab,
+now independently SOURCE CLEAR423 (native c101). Normal source assembly99ddd6ca
+preserves own4d7 and all exact native producer files; the add/add test conflict
+selects the exact d410 consumer adaptation.45 remains unqualified.
+
+Add a protected local producer `ReadProtectedSpaceReportReadContext`, retaining
+the earlier explicitly owner-local positioning-facts method for its own scope.
+The protected producer must invoke the actual native readiness method and read
+native source/head/tree/final clock on the SAME fenced RC transaction. No RPC,
+fake callback or transaction handover belongs inside it. It returns positioning
+and known/unknown history facts; Role and content authorization remain downstream.
+
+RED: a genuine signed Creator at41 produces a valid KNOWN head and exact tree;
+after44 installation it has no completed registry. The old facts helper can read
+it, while the protected producer must refuse. Then actual admin initialization
+on44 changes it to UNKNOWN and a genuine nonowner LOGIN must read the exact
+native binding and tree. Cover wrong Space/profile/tree, RR/elevated session,
+catalog/registry errors and a late row wait. Exercise this consumer after actual
+native current11 P3; reuse producer proof rather than rerunning unchanged tests.
+Own files: existing effective_report_read.go, new protected_report_read_test.go
+and these owning docs only.186 retains every native/catalog/writer file. Scope
+completion is source/runtime evidence for the protected local producer, followed
+by exact independent review; protected RPC/full327 and acceptance remain open.
+
+Actual Linux PostgreSQL16/Go1.26.5 proof: the clean44/nonowner test has valid real
+Creator41 KNOWN head/tree facts but no COMPLETE; the ungated delegate incorrectly
+returns them (RED9.241s). Calling the genuine native gate inside the SAME
+transaction passes the positive UNKNOWN transition (GREEN8.292s). The final
+five top-level/two subtest matrix passes with race51.450s, no FAIL/SKIP; store
+vet0. It includes wrong profile/tree/Space, elevated session, ambient RR,
+an observed head-row lock held5.05s followed by unavailable/no history repair,
+and actual current11 P3 followed by terminal denial plus an unaffected live
+control. Earlier lifecycle preparation runs before44 because unfinished native
+writer placements are not silently credited. Legacy facts tests explicitly pin
+their original41 cohort; new serving tests use actual44. Provisioning-only
+private DSN/migrate4.18.1 overlays preserve product code and assertions, without
+claiming Testcontainers startup or full Auth/Role. The first archive launch had
+a dependency-order uncertainty and is preserved but not credited as RED; the
+qualified repeated RED verifies version44/dirtyfalse explicitly. One subsequent
+P3 fixture tried to create its tree after schedule freeze and failed correctly;
+moving that setup before reservation fixes the fixture without product changes.
+
 ### Native readiness44 continuation (320, accepted410)
 
 The bounded implementation consumes decision83baa14994d9b5f63f0ae7c24956d0a1a373360111c6735be9d590322e64c0b4
