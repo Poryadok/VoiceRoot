@@ -19,6 +19,87 @@ import 'support/auth_test_overrides.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  for (final stars in [1, 2]) {
+    for (final confirm in [true, false]) {
+      testWidgets(
+        'history $stars-star ban confirmation $confirm prompts once',
+        (tester) async {
+          final requests = <http.Request>[];
+          final observer = _BanDialogObserver();
+          await _pumpBanHistory(tester, requests, observer);
+          await tester.tap(find.byKey(MatchHistoryScreen.rateKey('teammate')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(MatchRatingOverlay.starButtonKey(stars)));
+          await tester.tap(find.byKey(MatchRatingOverlay.submitButtonKey));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(observer.dialogs, 1);
+          final l10n = AppLocalizations.of(
+            tester.element(find.byType(AlertDialog)),
+          )!;
+          await tester.tap(
+            find.text(
+              confirm ? l10n.matchRatingBanConfirm : l10n.matchRatingBanCancel,
+            ),
+          );
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(
+            observer.dialogs,
+            1,
+            reason: 'the overlay already obtained the decision',
+          );
+          expect(find.byType(AlertDialog), findsNothing);
+          final bans = requests
+              .where((r) => r.url.path == '/api/v1/matchmaking/bans')
+              .toList();
+          expect(bans, hasLength(confirm ? 1 : 0));
+          final votes = requests
+              .where((r) => r.url.path.endsWith('/rate'))
+              .toList();
+          expect(votes, hasLength(1));
+          expect(jsonDecode(votes.single.body), containsPair('stars', stars));
+          if (confirm) {
+            expect(bans.single.method, 'POST');
+            expect(bans.single.headers['Authorization'], 'Bearer test-access');
+            expect(
+              jsonDecode(bans.single.body),
+              containsPair('targetProfileId', 'teammate'),
+            );
+          }
+        },
+      );
+    }
+  }
+
+  for (final confirm in [true, false]) {
+    testWidgets('history direct ban confirmation $confirm prompts once', (
+      tester,
+    ) async {
+      final requests = <http.Request>[];
+      final observer = _BanDialogObserver();
+      await _pumpBanHistory(tester, requests, observer);
+      await tester.tap(find.byKey(MatchHistoryScreen.banKey('teammate')));
+      await tester.pumpAndSettle();
+      expect(observer.dialogs, 1);
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(AlertDialog)),
+      )!;
+      await tester.tap(
+        find.text(
+          confirm ? l10n.matchRatingBanConfirm : l10n.matchRatingBanCancel,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(observer.dialogs, 1);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(
+        requests.where((r) => r.url.path == '/api/v1/matchmaking/bans'),
+        hasLength(confirm ? 1 : 0),
+      );
+    });
+  }
+
   for (final language in ['en', 'ru']) {
     for (final statusCode in [500, 503]) {
       testWidgets(
@@ -954,6 +1035,88 @@ bool _primaryFocusWithin(WidgetTester tester, Finder ancestor) {
     return true;
   });
   return found;
+}
+
+class _BanDialogObserver extends NavigatorObserver {
+  int dialogs = 0;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (route is DialogRoute) dialogs++;
+    super.didPush(route, previousRoute);
+  }
+}
+
+Future<void> _pumpBanHistory(
+  WidgetTester tester,
+  List<http.Request> requests,
+  NavigatorObserver observer,
+) async {
+  final client = MockClient((request) async {
+    if (request.url.path == '/api/v1/matchmaking/profile/me/matches') {
+      return http.Response(
+        jsonEncode({
+          'matchList': {
+            'matches': [
+              {
+                'id': 'completed-match',
+                'gameId': 'game-1',
+                'mode': 'Duo',
+                'region': 'eu',
+                'status': 'completed',
+                'profileIds': ['prof-test', 'teammate'],
+              },
+            ],
+            'nextCursor': '',
+          },
+        }),
+        200,
+      );
+    }
+    if (request.url.path == '/api/v1/matchmaking/games') {
+      return http.Response(
+        jsonEncode({
+          'gameList': {'games': [], 'nextCursor': ''},
+        }),
+        200,
+      );
+    }
+    if (request.url.path.startsWith('/api/v1/users/profiles/')) {
+      return http.Response(
+        jsonEncode({
+          'profile': {
+            'id': request.url.path.split('/').last,
+            'displayName': 'Teammate',
+          },
+        }),
+        200,
+      );
+    }
+    if (request.url.path.endsWith('/rate') ||
+        request.url.path == '/api/v1/matchmaking/bans') {
+      requests.add(request);
+      return http.Response('{}', 200);
+    }
+    return http.Response('{}', 404);
+  });
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: voiceAppTestOverrides(client: client),
+      child: MaterialApp(
+        theme: voiceTestTheme(),
+        locale: const Locale('en'),
+        navigatorObservers: [observer],
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const MatchHistoryScreen(),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.byKey(MatchHistoryScreen.matchTileKey('completed-match')),
+  );
+  await tester.pumpAndSettle();
 }
 
 Future<void> _loadMatchHistoryCaptureFonts() async {

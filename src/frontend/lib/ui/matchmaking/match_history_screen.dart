@@ -146,7 +146,11 @@ class _MatchHistoryScreenState extends ConsumerState<MatchHistoryScreen> {
       ),
     );
     if (confirmed != true || !mounted) return false;
+    return _submitParticipantBan(profileId);
+  }
 
+  Future<bool> _submitParticipantBan(String profileId) async {
+    final l10n = AppLocalizations.of(context)!;
     final auth = ref.read(authControllerProvider);
     final token = auth.session?.accessToken;
     if (token == null) return false;
@@ -201,8 +205,7 @@ class _MatchHistoryScreenState extends ConsumerState<MatchHistoryScreen> {
           }
           return true;
         },
-        onBan: (bannedProfileId) =>
-            _banParticipant(bannedProfileId, displayName),
+        onBan: _submitParticipantBan,
         onSkipAll: () => Navigator.of(sheetContext).pop(),
         onDone: () => Navigator.of(sheetContext).pop(),
       ),
