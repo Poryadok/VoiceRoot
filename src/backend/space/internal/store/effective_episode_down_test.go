@@ -9,12 +9,22 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // This is a destructive-DDL transaction oracle over the actual ledger DDL,
 // not a membership or P3 provider fixture. It defines no native predicate.
 func TestEffectiveEpisodeDownCannotEraseFirstCommittedWriter(t *testing.T) {
+	runEffectiveEpisodeDownOracle(t, false)
+}
+
+func TestEffectiveEpisodeDownRejectsInheritedSnapshot(t *testing.T) {
+	runEffectiveEpisodeDownOracle(t, true)
+}
+
+func runEffectiveEpisodeDownOracle(t *testing.T, inheritedSnapshot bool) {
+	t.Helper()
 	dsn := os.Getenv("VOICE_EFFECTIVE_EPISODE_TEST_DSN")
 	if dsn == "" {
 		t.Skip("explicit private PostgreSQL fixture required")
@@ -75,6 +85,31 @@ func TestEffectiveEpisodeDownCannotEraseFirstCommittedWriter(t *testing.T) {
 	space, profile, cutover := uuid.New(), uuid.New(), uuid.New()
 	if _, e = pool.Exec(ctx, `INSERT INTO spaces(id,name,owner_profile_id) VALUES($1,'private DDL oracle',$2)`, space, profile); e != nil {
 		t.Fatal(e)
+	}
+	if inheritedSnapshot {
+		remover, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer remover.Rollback(context.Background())
+		var before int
+		if err = remover.QueryRow(ctx, `SELECT count(*) FROM space_effective_member_heads`).Scan(&before); err != nil || before != 0 {
+			t.Fatalf("empty inherited snapshot: %d %v", before, err)
+		}
+		if _, err = pool.Exec(ctx, `INSERT INTO space_effective_member_heads(space_id,profile_id,generation,retired_through,ledger_revision,episode_id,state,boundary_state,observed_at,cutover_id,ordinary_legacy) VALUES($1,$2,0,0,1,NULL,'NONE','UNKNOWN',clock_timestamp(),$3,false)`, space, profile, cutover); err != nil {
+			t.Fatal(err)
+		}
+		_, err = remover.Exec(ctx, string(down))
+		_ = remover.Rollback(ctx)
+		pgErr, ok := err.(*pgconn.PgError)
+		if !ok || pgErr.Code != "55000" {
+			t.Fatalf("DOWN must reject inherited snapshot before DROP: %v", err)
+		}
+		var retained bool
+		if err = pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_effective_member_heads WHERE space_id=$1 AND profile_id=$2)`, space, profile).Scan(&retained); err != nil || !retained {
+			t.Fatalf("committed row not preserved after inherited snapshot: %v", err)
+		}
+		return
 	}
 	writer, e := pool.Begin(ctx)
 	if e != nil {
