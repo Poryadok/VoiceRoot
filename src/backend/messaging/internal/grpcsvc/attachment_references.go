@@ -109,7 +109,7 @@ func (s *MessagingGRPC) insertMessageWithAttachments(ctx context.Context, row st
 		saved, _, err := s.Messages.InsertMessageWithOutbox(ctx, row, policy.SpaceID, events)
 		return saved, messageContextStatus(err)
 	}
-	saved, err := s.Messages.InsertMessageWithReferencesAndOutbox(ctx, row, policy.SpaceID, request, s.AttachmentReferences.Acquire, events)
+	saved, err := s.Messages.InsertMessageWithPreparedReferencesAndOutbox(ctx, row, policy.SpaceID, request, s.AttachmentReferences.Acquire, s.AttachmentReferences.PreparePreview, events)
 	if err != nil {
 		err = messageContextStatus(err)
 		switch {

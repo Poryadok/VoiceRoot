@@ -61,6 +61,10 @@ func (s *MessagesStore) InsertMessageWithReferences(ctx context.Context, row Mes
 }
 
 func (s *MessagesStore) InsertMessageWithReferencesAndOutbox(ctx context.Context, row MessageRow, space *uuid.UUID, request *filev1.AcquireFileReferencesRequest, acquire func(context.Context, *filev1.AcquireFileReferencesRequest) error, events []messageevents.OutboxEvent) (*MessageRow, error) {
+	return s.InsertMessageWithPreparedReferencesAndOutbox(ctx, row, space, request, acquire, nil, events)
+}
+
+func (s *MessagesStore) InsertMessageWithPreparedReferencesAndOutbox(ctx context.Context, row MessageRow, space *uuid.UUID, request *filev1.AcquireFileReferencesRequest, acquire func(context.Context, *filev1.AcquireFileReferencesRequest) error, prepare func(context.Context, *MessageRow, *filev1.AcquireFileReferencesRequest) error, events []messageevents.OutboxEvent) (*MessageRow, error) {
 	if err := validateForwardCommentary(row); err != nil {
 		return nil, err
 	}
@@ -142,7 +146,20 @@ func (s *MessagesStore) InsertMessageWithReferencesAndOutbox(ctx context.Context
 		return nil, err
 	} else {
 		if !bytes.Equal(savedHash, hash[:]) {
-			return nil, ErrAttachmentIntentConflict
+			// A committed exact caller receipt survives owner enrichment and an
+			// upgrade of the private intent normalization. No missing receipt is
+			// treated as authority for this compatibility path.
+			var exact bool
+			if row.AdmissionRequestHash != "" {
+				if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM message_send_receipts WHERE message_id=$1 AND request_rpc=$2 AND request_sha256=$3)`, savedID, row.AdmissionRequestRPC, row.AdmissionRequestHash).Scan(&exact); err != nil {
+					return nil, err
+				}
+			}
+			legacy, legacyErr := attachmentIntentIdentityLegacy(row, space)
+			legacyHash := sha256.Sum256(legacy)
+			if !exact && (legacyErr != nil || !bytes.Equal(savedHash, legacyHash[:])) {
+				return nil, ErrAttachmentIntentConflict
+			}
 		}
 		if state == "RELEASED" {
 			return nil, ErrAttachmentIntentExpired
@@ -186,6 +203,11 @@ func (s *MessagesStore) InsertMessageWithReferencesAndOutbox(ctx context.Context
 		return nil, err
 	}
 	row.ID = savedID
+	if prepare != nil {
+		if err = prepare(ctx, &row, &bound); err != nil {
+			return nil, err
+		}
+	}
 	commit, err := conn.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -195,6 +217,9 @@ func (s *MessagesStore) InsertMessageWithReferencesAndOutbox(ctx context.Context
 		return nil, err
 	}
 	if err = s.reconcileMusicInsert(ctx, commit, &row); err != nil {
+		return nil, err
+	}
+	if err = s.reconcileFilePreviewInsert(ctx, commit, &row, space); err != nil {
 		return nil, err
 	}
 	if err := insertForwardCommentaryDB(ctx, commit, row); err != nil {
@@ -228,6 +253,30 @@ func (s *MessagesStore) InsertMessageWithReferencesAndOutbox(ctx context.Context
 // caller's file/content/key identity bound, but never hash mutable enrichment.
 // Non-Music rows retain the exact existing serialized identity shape.
 func attachmentIntentIdentity(row MessageRow, space *uuid.UUID) ([]byte, error) {
+	if row.AdmissionRequestHash != "" && !row.IsE2E && row.ContentType != "music" {
+		var attachments []map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(row.AttachmentsJSON), &attachments); err != nil {
+			return nil, err
+		}
+		for _, attachment := range attachments {
+			var file string
+			if json.Unmarshal(attachment["file_id"], &file) != nil || file == "" {
+				continue
+			}
+			for _, key := range []string{"width", "height", "duration_seconds", "processing_status", "has_thumbnail", "has_converted", "url", "preview_url", "converted_url", "thumb_url", "converted_r2_key", "thumbnail_r2_key"} {
+				delete(attachment, key)
+			}
+		}
+		raw, err := json.Marshal(attachments)
+		if err != nil {
+			return nil, err
+		}
+		row.AttachmentsJSON = string(raw)
+	}
+	return attachmentIntentIdentityLegacy(row, space)
+}
+
+func attachmentIntentIdentityLegacy(row MessageRow, space *uuid.UUID) ([]byte, error) {
 	row.ID = uuid.Nil
 	if row.MusicBinding != nil && !row.IsE2E && row.ContentType == "music" {
 		var attachments []map[string]any
@@ -312,7 +361,7 @@ func (s *MessagesStore) reconcileAttachmentIntent(ctx context.Context, op uuid.U
 	var id uuid.UUID
 	var raw []byte
 	var exists bool
-	err = conn.QueryRow(ctx, `SELECT i.message_id,i.references_bytes,EXISTS(SELECT 1 FROM messages m WHERE m.id=i.message_id) FROM messaging_attachment_send_intents i WHERE operation_id=$1 AND state='PENDING' AND expires_at<=clock_timestamp()`, op).Scan(&id, &raw, &exists)
+	err = conn.QueryRow(ctx, `SELECT i.message_id,i.references_bytes,EXISTS(SELECT 1 FROM messages m WHERE m.id=i.message_id AND m.deleted_at IS NULL) FROM messaging_attachment_send_intents i WHERE operation_id=$1 AND state='PENDING' AND expires_at<=clock_timestamp()`, op).Scan(&id, &raw, &exists)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}

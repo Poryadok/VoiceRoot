@@ -747,6 +747,25 @@ message FileProcessed {
   optional string thumbnail_r2_key = 4;
   // File-owned plaintext processing snapshot. Never emitted for E2E files.
   optional FileMusicMetadata music = 5;
+  // Complete redacted plaintext non-Music snapshot. Mutually exclusive with music.
+  optional FilePreviewSnapshot preview = 6;
+}
+
+message FilePreviewSnapshot {
+  uint32 protocol_version = 1;
+  string file_id = 2;
+  uint64 metadata_revision = 3;
+  string status = 4;
+  string file_type = 5;
+  string upload_intent = 6;
+  bool is_e2e = 7;
+  int64 size_bytes = 8;
+  string scan_result = 9;
+  optional int32 width = 10;
+  optional int32 height = 11;
+  optional int32 duration_seconds = 12;
+  bool has_thumbnail = 13;
+  bool has_converted = 14;
 }
 
 message FileMusicMetadata {

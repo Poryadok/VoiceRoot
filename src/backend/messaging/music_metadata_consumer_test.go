@@ -27,6 +27,18 @@ func TestMusicConsumerContractAndBoundedEventAdmission(t *testing.T) {
 	event, err := decodeMusicSnapshot(body)
 	require.NoError(t, err)
 	require.Nil(t, event, "legacy image processing remains unrelated")
+	envelope.GetFileProcessed().Preview = &eventsv1.FilePreviewSnapshot{ProtocolVersion: 1, FileId: envelope.GetFileProcessed().FileId, MetadataRevision: 1, Status: "ready", FileType: "image", SizeBytes: 40, ScanResult: "clean"}
+	body, err = proto.Marshal(envelope)
+	require.NoError(t, err)
+	event, err = decodeMusicSnapshot(body)
+	require.NoError(t, err)
+	require.NotNil(t, event.GetPreview(), "new generic branch uses the existing durable")
+	envelope.GetFileProcessed().Music = &eventsv1.FileMusicMetadata{ChatId: uuid.NewString(), MetadataRevision: 1, SizeBytes: 40, ScanResult: "skipped", DurationSeconds: 2}
+	body, err = proto.Marshal(envelope)
+	require.NoError(t, err)
+	_, err = decodeMusicSnapshot(body)
+	require.Error(t, err, "two authority branches cannot share one event")
+	envelope.GetFileProcessed().Preview = nil
 	envelope.GetFileProcessed().Music = &eventsv1.FileMusicMetadata{ChatId: uuid.NewString(), MetadataRevision: 1, SizeBytes: 40, ScanResult: "skipped", DurationSeconds: 2}
 	body, err = proto.Marshal(envelope)
 	require.NoError(t, err)

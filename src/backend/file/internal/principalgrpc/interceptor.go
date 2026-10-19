@@ -18,6 +18,7 @@ type Verifier interface {
 func IsProtectedMethod(method string) bool {
 	switch method {
 	case filev1.FileService_ValidateStoryMedia_FullMethodName,
+		filev1.FileService_ResolveMessageAttachmentPreview_FullMethodName,
 		filev1.FileService_AcquireFileReferences_FullMethodName,
 		filev1.FileService_ReleaseFileReferences_FullMethodName,
 		filev1.FileService_GetFileReferenceGCStatus_FullMethodName,
@@ -82,6 +83,7 @@ func expectedIssuerForMethod(method string) string {
 	case filev1.FileService_PrepareSpaceDeletionReferenceManifest_FullMethodName, filev1.FileService_ApplySpaceLifecycleFence_FullMethodName, filev1.FileService_PurgeSpace_FullMethodName, filev1.FileService_GetSpacePurgeReceipt_FullMethodName:
 		return "space"
 	case filev1.FileService_AcquireFileReferences_FullMethodName,
+		filev1.FileService_ResolveMessageAttachmentPreview_FullMethodName,
 		filev1.FileService_ReleaseFileReferences_FullMethodName,
 		filev1.FileService_GetFileReferenceGCStatus_FullMethodName:
 		return "messaging"

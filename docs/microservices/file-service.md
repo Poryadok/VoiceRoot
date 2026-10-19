@@ -281,11 +281,18 @@ When conversion finishes (`status=ready` or `failed`), File publishes **`file.pr
 |---------------|--------------|
 | `file_id` | Lookup messages referencing attachment |
 | `status` | `ready` → swap thumb/dimensions; `failed` → composer error state |
-| `converted_url`, `thumb_url` | Bubble + list-row preview (presigned or CDN URLs) |
-| `width`, `height`, `duration_seconds` | Video note / GIF / music metadata |
-| `intent` (or `upload_intent`) | Branch refresh logic (`gif`, `sticker`, `video_note`, …) |
+| `preview` | Complete File-owned v1 snapshot with independent positive revision, category, persisted intent, size/scan, optional dimensions/duration and variant availability; never URLs/storage keys |
 
-**Messaging consumer (spec — not yet implemented):** on `file.processed`, update attachment JSON on affected messages, recompute `GetChatListMetadata` for impacted `chat_id`s, emit Realtime `message_update` so client refreshes bubble + inbox row without full history reload. Applies to all intents including `video_note`, `music`, `sticker`, `gif`. Checklist — [todo/backend.md](../todo/backend.md).
+**BE-080 contract:** File commits state, preview revision and stable event bytes
+in one transaction. Generic snapshots exclude Music and E2E. The new protected
+Messaging-only exact-reference resolver refreshes an existing MESSAGE projection,
+without creating a reference or authorizing a viewer. Terminal snapshots expose
+only identity/revision/status. Messaging privately binds attachment slots and
+updates its ordinary message.edited outbox atomically; URL resolution retains
+real-viewer authorization. Existing Music remains a separate mutually exclusive
+payload and revision namespace. This extension does not create processors for
+unsupported intents. Implementation and staged activation are tracked in the
+[BE-080 plan](../testing/be080-file-preview-exec-plan.md).
 
 ## Публикуемые события (→ NATS)
 
@@ -294,7 +301,7 @@ When conversion finishes (`status=ready` or `failed`), File publishes **`file.pr
 | Событие              | Данные                                    |
 |----------------------|-------------------------------------------|
 | `file.uploaded`      | file_id, uploader_id, type, size          |
-| `file.processed`     | file_id, status, converted_url, thumb_url, **width**, **height**, **duration_seconds**, **intent** |
+| `file.processed`     | file_id, status, mutually exclusive redacted revisioned preview or existing Music snapshot; no URL |
 | `file.scan_infected` | file_id, uploader_id                      |
 | `file.expired`       | file_id, chat_id                          |
 | `file.downloaded`    | `file_id`, `downloader_profile_id`        |

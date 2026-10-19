@@ -10,6 +10,7 @@ import (
 	"time"
 	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/messaging/internal/store"
+	"voice/backend/pkg/filepreview"
 )
 
 const musicMetadataStream = "file_events"
@@ -41,6 +42,13 @@ func decodeMusicSnapshot(data []byte) (*eventsv1.FileProcessed, error) {
 		return nil, errors.New("music event malformed")
 	}
 	event := envelope.GetFileProcessed()
+	if event.GetPreview() != nil {
+		id, err := uuid.Parse(envelope.GetEventId())
+		if err != nil || id == uuid.Nil || filepreview.ValidateEvent(event) != nil {
+			return nil, errors.New("file preview event authority invalid")
+		}
+		return event, nil
+	}
 	if event.GetMusic() == nil {
 		return nil, nil
 	} // Existing image/document events.
@@ -55,6 +63,13 @@ func decodeMusicSnapshot(data []byte) (*eventsv1.FileProcessed, error) {
 }
 
 func applyMusicSnapshot(ctx context.Context, messages musicMetadataStore, policy musicChatPolicy, event *eventsv1.FileProcessed) error {
+	if event.GetPreview() != nil {
+		generic, ok := messages.(filePreviewStore)
+		if !ok {
+			return errors.New("file preview store unavailable")
+		}
+		return generic.PersistFilePreview(ctx, event)
+	}
 	current, err := messages.PersistMusicSnapshot(ctx, event)
 	if err != nil {
 		return err
