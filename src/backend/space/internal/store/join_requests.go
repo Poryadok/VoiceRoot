@@ -268,6 +268,12 @@ func (s *SpaceStore) approveJoinAttempt(ctx context.Context, in JoinAttemptAppro
 		return nil, err
 	}
 	newDecision := a.State == "PENDING"
+	if !newDecision && hook != nil {
+		// A sealed new-decision writer cannot manufacture another basis or
+		// commit an unlinked technical alias after a concurrent reviewer won.
+		// Exact completed operation replay returned above without any hook.
+		return nil, ErrJoinAttemptUnavailable
+	}
 	if newDecision {
 		a.approvedAccount = &in.ActorAccountID
 		a.approvedProfile = &in.ActorProfileID
