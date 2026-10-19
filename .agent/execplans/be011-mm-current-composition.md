@@ -191,3 +191,12 @@ nil admission in RC through callback/ACK and rejects configured native callers.
 Keep genuine pre-cut behavior and closed terminal RELEASE; qualify both native
 ADMITTED/CLOSED missing-binding cases and the historical projection regressions.
 This is a same-task correction, not completion of the native root or response.
+
+Review309 additionally identified first-begin between the pre-cut RR read and
+Redis dispatch. A real two-connection RED proved the installation close gate
+could overtake that interval. EnterPrecutQueueProjection now acquires nil
+admission in a fresh RC transaction and retains only its advisory gate through
+dispatch/classification/ACK; no party/session row locks cross Redis. Native
+projection keeps its external explicit-release registration and zero acquired
+SQL connections over RPC. The oracle waits on actual PostgreSQL lock state and
+requires the first closer to observe the committed projection ACK after release.

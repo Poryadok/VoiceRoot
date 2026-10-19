@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,6 +28,29 @@ type PartyQueueProjection struct {
 	Lease    PartyQueueLease
 	Enqueue  bool
 	Sessions []SearchSession
+}
+
+// EnterPrecutQueueProjection retains only the FIRST installation advisory gate
+// through legacy dispatch and its durable ACK. No party/session row lock is
+// held over Redis. Native dispatch uses external lifetime registration instead.
+func (s *PartyStore) EnterPrecutQueueProjection(ctx context.Context) (func(), error) {
+	if s == nil || s.Pool == nil || s.NativeAdmission != nil {
+		return nil, ErrSourcePartyUnavailable
+	}
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return nil, ErrSourcePartyUnavailable
+	}
+	release := sync.OnceFunc(func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = tx.Rollback(cleanup)
+	})
+	if err := admission.Acquire(ctx, tx, nil); err != nil {
+		release()
+		return nil, err
+	}
+	return release, nil
 }
 
 func (s *PartyStore) ClaimQueueIntent(ctx context.Context, lease time.Duration) (*PartyQueueLease, error) {

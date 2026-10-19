@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+	admission "voice/backend/matchmaking/internal/mmadmission"
 	"voice/backend/matchmaking/internal/queue"
 	"voice/backend/matchmaking/internal/store"
 )
@@ -57,6 +58,50 @@ type projectionSpy struct {
 	after    func()
 }
 
+func TestPrecutProjectorKeepsFirstAdmissionGateThroughQueueAndAck(t *testing.T) {
+	ctx := context.Background()
+	pool := partyDB(t)
+	params := partyParams(t, pool)
+	st := &store.PartyStore{Pool: pool}
+	created, err := st.CreateSourceParty(ctx, params)
+	require.NoError(t, err)
+	q := projectionRedis(t)
+	done := make(chan error, 1)
+	before := func() {
+		go func() {
+			bounded, cancel := context.WithTimeout(ctx, 8*time.Second)
+			defer cancel()
+			tx, err := pool.Begin(bounded)
+			if err != nil {
+				done <- err
+				return
+			}
+			defer tx.Rollback(context.Background())
+			if err = admission.AcquireCloseGate(bounded, tx); err == nil {
+				var ack bool
+				err = tx.QueryRow(bounded, `SELECT projected_at IS NOT NULL FROM matchmaking_party_search_queue_intents WHERE party_id=$1`, created.Party.ID).Scan(&ack)
+				if err == nil && !ack {
+					err = store.ErrSourcePartyUnavailable
+				}
+			}
+			done <- err
+		}()
+		require.Eventually(t, func() bool {
+			select {
+			case err := <-done:
+				t.Fatalf("first begin bypassed in-flight pre-cut projection: %v", err)
+			default:
+			}
+			var waiting bool
+			return pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%pg_catalog.pg_advisory_xact_lock($1)%')`).Scan(&waiting) == nil && waiting
+		}, 3*time.Second, 10*time.Millisecond)
+	}
+	claimed, err := (&Projector{Store: st, Queue: projectionSpy{delegate: q, before: before}}).RunOnce(ctx)
+	require.True(t, claimed)
+	require.NoError(t, err)
+	require.NoError(t, <-done, "first begin must observe the durable ACK after admission guard release")
+}
+
 func (s projectionSpy) RecoverParty(ctx context.Context, sessions []queue.SearchRecovery) error {
 	if s.before != nil {
 		s.before()
@@ -100,7 +145,9 @@ func TestPartyProjectorRecoversLostAckWithExactLeaseAndNoDuplicateQueue(t *testi
 	require.NoError(t, q.RecoverParty(ctx, projectionSessions(cut.Sessions)))
 	_, err = pool.Exec(ctx, `UPDATE matchmaking_party_search_queue_intents SET lease_until=clock_timestamp()-interval '1 second' WHERE party_id=$1`, created.Party.ID)
 	require.NoError(t, err)
-	claimed, err := (&Projector{Store: st, Queue: projectionSpy{delegate: q, before: func() { require.Zero(t, pool.Stat().AcquiredConns()) }}}).RunOnce(ctx)
+	claimed, err := (&Projector{Store: st, Queue: projectionSpy{delegate: q, before: func() {
+		require.EqualValues(t, 1, pool.Stat().AcquiredConns(), "pre-cut advisory-only guard spans dispatch, without row locks")
+	}}}).RunOnce(ctx)
 	require.NoError(t, err)
 	require.True(t, claimed)
 	ids, err := q.ListSessionIDs(ctx, params.GameID, params.Mode, "eu", 10)
@@ -162,7 +209,7 @@ func TestPartyProjectorPausedEnqueueCannotOverwriteNativeResetRelease(t *testing
 	created, err := st.CreateSourceParty(ctx, params)
 	require.NoError(t, err)
 	late := &Projector{Store: st, Queue: projectionSpy{delegate: q, before: func() {
-		require.Zero(t, pool.Stat().AcquiredConns())
+		require.EqualValues(t, 1, pool.Stat().AcquiredConns(), "pre-cut advisory-only guard spans dispatch, without row locks")
 		_, err := (&store.MatchStore{Pool: pool}).ResetVoiceParty(ctx, created.Party.ID)
 		require.NoError(t, err)
 		claimed, err := (&Projector{Store: st, Queue: q}).RunOnce(ctx)
@@ -226,7 +273,7 @@ func TestPartyProjectorDoesNotAckStaleSessionCutWhenIntentRevisionIsUnchanged(t 
 	created, err := st.CreateSourceParty(ctx, params)
 	require.NoError(t, err)
 	late := &Projector{Store: st, Queue: projectionSpy{delegate: q, before: func() {
-		require.Zero(t, pool.Stat().AcquiredConns())
+		require.EqualValues(t, 1, pool.Stat().AcquiredConns(), "pre-cut advisory-only guard spans dispatch, without row locks")
 		_, err := (&store.SessionStore{Pool: pool}).Cancel(ctx, created.Sessions[1].ID)
 		require.NoError(t, err)
 	}}}

@@ -41,6 +41,13 @@ func (p *Projector) RunOnce(ctx context.Context) (bool, error) {
 	}
 	cut, workErr := p.Store.ReadQueueIntent(ctx, *lease)
 	finishLease := *lease
+	if workErr == nil && cut.Enqueue && p.Store.NativeAdmission == nil {
+		var release func()
+		release, workErr = p.Store.EnterPrecutQueueProjection(ctx)
+		if release != nil {
+			defer release()
+		}
+	}
 	if workErr == nil {
 		if cut.Enqueue && p.Store.NativeAdmission != nil {
 			var release func()

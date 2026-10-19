@@ -643,6 +643,11 @@ Terminal RELEASE remains available with closed admission.
 Losing the native binding cannot select pre-cut queue projection after the
 admission head has begun. A nil-binding positive projection checks the canonical
 never-begun cut; terminal RELEASE does not require this positive admission.
+Before legacy Redis dispatch, a fresh READ COMMITTED nil-binding admission gate
+is retained through the durable projection ACK. It holds no party/session rows;
+the first installation closer cannot overtake an already-authorized pre-cut
+projection. Native dispatch retains its external registration and uses short SQL
+transactions, with no database connection held over Redis.
 The scalar legacy recovery callback acquires the pre-cut admission gate FIRST
 and retains it through callback acknowledgement. Configured native callers
 cannot invoke it, and a retained admission head refuses lost-binding callers.
