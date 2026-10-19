@@ -1,5 +1,19 @@
 # Role Service
 
+### Owning source catalog qualification
+
+The existing fixed RoleState v1 mask projection serves exact clean16/17 and
+independently qualified clean20. Intermediate18/19, dirty and unknown versions
+remain unavailable. Migration17 restores Admin manage-role bit2;19 adds bit42;
+20 adds the explicit built-in43/44 deltas. Actual16→20 qualification seeds
+built-ins/custom roles and overrides, checks all eight row invalidations and
+unchanged SDK revision, and compares the executed snapshot fold with native
+GetEffectiveMask. The original source DDL/function hashes remain unchanged;
+catalog20 additionally guards both new SpaceChat clock inputs and four triggers.
+This projection does not represent the separate binding-aware SpaceChat policy
+decision or activate admission RPCs. EnsureDefaultMemberRole/RemoveMemberRoles
+remain unimplemented; ordinary network calls and the protected allowlist deny.
+
 ### Admission readiness target (ADMISSION-ROLE-READINESS-v1)
 
 Accepted BE-010 c12/c13 separates the ordinary membership incarnation from an

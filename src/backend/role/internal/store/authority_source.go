@@ -15,7 +15,8 @@ import (
 
 var _ authoritysource.Reader = (*RoleStore)(nil)
 
-// Migration 17 only corrects Admin data; its owner catalog is identical to 16.
+// Exact20 is independently qualified by the actual16→20 migrator and native
+// mask-fold tests. It adds two guarded clock inputs, not a new state projection.
 // This read selects a fixed catalog, never authorizes from an unlocked hint:
 // BeginRead repeats the exact version/dirty/catalog proof under schema locks.
 func beginRoleAuthorityRead(ctx context.Context, pool *pgxpool.Pool) (pgx.Tx, error) {
@@ -26,10 +27,14 @@ func beginRoleAuthorityRead(ctx context.Context, pool *pgxpool.Pool) (pgx.Tx, er
 	if err := pool.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil {
 		return nil, errors.New("role source schema unavailable")
 	}
-	if version != 16 && version != 17 {
+	catalog := roleAuthorityCatalog
+	switch version {
+	case 16, 17:
+	case 20:
+		catalog = roleAuthorityCatalog20
+	default:
 		return nil, errors.New("role source schema version unavailable")
 	}
-	catalog := roleAuthorityCatalog
 	catalog.Version = version
 	return authoritysource.BeginRead(ctx, pool, catalog)
 }
@@ -126,6 +131,12 @@ func (s *RoleStore) ReadAuthoritySnapshot(ctx context.Context, scope *authorityv
 		return authoritysource.State{}, err
 	}
 	defer authoritysource.RollbackRead(ctx, tx)
+	return readRoleAuthoritySnapshot(ctx, tx, scope)
+}
+
+// Qualification uses the same projection after strict candidate preflight.
+// Serving transactions still come only from beginAuthorityRead.
+func readRoleAuthoritySnapshot(ctx context.Context, tx pgx.Tx, scope *authorityv1.SourceScope) (authoritysource.State, error) {
 	role, sdk, err := roleSourceRevisions(ctx, tx, scope.SpaceId)
 	if err != nil {
 		return authoritysource.State{}, err

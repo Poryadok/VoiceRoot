@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
 	"testing"
 	"time"
@@ -10,13 +11,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	chatv1 "voice.app/voice/chat/v1"
 	rolev1 "voice.app/voice/role/v1"
 	"voice/backend/role/internal/authctx"
+	"voice/backend/role/internal/principalgrpc"
 	"voice/backend/role/internal/roleevents"
 	"voice/backend/role/internal/store"
 	"voice/backend/role/permissions"
@@ -225,12 +229,41 @@ func TestOrdinaryHandlerFences(t *testing.T) {
 		"CheckGameSessionGrant":   true,
 		"ResolveVoiceRoomGrants":  true,
 	}
-	trustedUnregistered := map[string]bool{}
+	// Proto declarations are present, but no RoleGRPC implementation or protected
+	// route exists yet. The network/stub checks below keep this classification honest.
+	trustedUnregistered := map[string]bool{"EnsureDefaultMemberRole": true, "RemoveMemberRoles": true}
 	for _, method := range rolev1.RoleService_ServiceDesc.Methods {
 		require.True(t, covered[method.MethodName] || excluded[method.MethodName] || trustedServiceMethods[method.MethodName] || trustedUnregistered[method.MethodName], method.MethodName)
 	}
 	f := newOrdinaryHandlerFixture(t, ctx, pool)
 	prepareOrdinaryHandlerFixture(t, ctx, pool, f)
+	t.Run("unregistered admission cannot mutate through ordinary network", func(t *testing.T) {
+		before := ordinaryHandlerSnapshot(t, ctx, pool)
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		server := grpc.NewServer(grpc.UnaryInterceptor(principalgrpc.OwnershipUnaryInterceptor(nil)))
+		rolev1.RegisterRoleServiceServer(server, f.svc)
+		done := make(chan error, 1)
+		go func() { done <- server.Serve(listener) }()
+		defer func() { server.Stop(); <-done }()
+		conn, err := grpc.NewClient(listener.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		require.NoError(t, err)
+		defer func() { require.NoError(t, conn.Close()) }()
+		client := rolev1.NewRoleServiceClient(conn)
+		call := metadata.NewOutgoingContext(ctx, metadata.Pairs(authctx.HeaderProfileID, f.owner.String(), "authorization", "Bearer forged", "x-request-id", uuid.NewString()))
+		_, err = client.EnsureDefaultMemberRole(call, &rolev1.EnsureDefaultMemberRoleRequest{})
+		require.Equal(t, codes.Unavailable, status.Code(err))
+		_, err = client.RemoveMemberRoles(call, &rolev1.RemoveMemberRolesRequest{})
+		require.Equal(t, codes.Unavailable, status.Code(err))
+		_, err = f.svc.EnsureDefaultMemberRole(f.ctx, &rolev1.EnsureDefaultMemberRoleRequest{})
+		require.Equal(t, codes.Unimplemented, status.Code(err), "proto stub is not an implemented readiness producer")
+		_, err = f.svc.RemoveMemberRoles(f.ctx, &rolev1.RemoveMemberRolesRequest{})
+		require.Equal(t, codes.Unimplemented, status.Code(err))
+		require.Equal(t, before, ordinaryHandlerSnapshot(t, ctx, pool))
+		count, visibilityErrors := f.events.snapshot()
+		require.Zero(t, count)
+		require.Empty(t, visibilityErrors)
+	})
 	for _, tc := range cases {
 		t.Run("prepared/"+tc.name, func(t *testing.T) {
 			before := ordinaryHandlerSnapshot(t, ctx, pool)
