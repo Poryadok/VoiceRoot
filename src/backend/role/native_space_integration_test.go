@@ -189,8 +189,8 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool) {
 	ownerAccount := uuid.NewString()
 	var floor atomic.Int64
 	floor.Store(7)
-	runtime, err := principalruntime.NewWithSessionEpochChecker(ctx, principalruntime.Config{ListenAddr: "127.0.0.1:0", TLSCertFile: certFile, TLSKeyFile: keyFile, ClientCAFile: clientCA, ReplayAddr: redisAddress, JWKSCAFile: certFile, JWKSURLs: map[string]string{"space": jwks.URL, "voice": jwks.URL, "gameintegration": jwks.URL, "gateway": jwks.URL, "bot": jwks.URL}, BotLifecycleEnabled: true, DelegatedUserEnabled: true, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: time.Second}, func(_ context.Context, account string, epoch int64) error {
-		if account != ownerAccount || epoch < floor.Load() {
+	runtime, err := principalruntime.NewWithSessionEpochChecker(ctx, principalruntime.Config{ListenAddr: "127.0.0.1:0", TLSCertFile: certFile, TLSKeyFile: keyFile, ClientCAFile: clientCA, ReplayAddr: redisAddress, JWKSCAFile: certFile, JWKSURLs: map[string]string{"space": jwks.URL, "voice": jwks.URL, "gameintegration": jwks.URL, "gateway": jwks.URL, "bot": jwks.URL}, BotLifecycleEnabled: true, DelegatedUserEnabled: true, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: time.Second}, func(_ context.Context, observedAccount string, epoch int64) error {
+		if (observedAccount != ownerAccount && observedAccount != account.String()) || epoch < floor.Load() {
 			return errors.New("stale session")
 		}
 		return nil
@@ -266,16 +266,32 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool) {
 	require.Equal(t, codes.Unauthenticated, status.Code(err), "Bot cannot borrow the Space settings purpose")
 	gateway, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "current", PrivateKey: current})
 	require.NoError(t, err)
-	delegated := func(method string, request proto.Message) context.Context {
+	delegatedFor := func(account, profile, method string, request proto.Message) context.Context {
 		hash, err := principal.RequestHash(request)
 		require.NoError(t, err)
 		id := uuid.NewString()
-		token, err := gateway.IssueDelegatedUser(principal.DelegatedUserInput{Audience: "role", RPC: method, RequestID: id, RequestHash: hash, AccountID: ownerAccount, ProfileID: owner.String(), SessionEpoch: 7, ClientExpiresAt: time.Now().Add(time.Minute)})
+		token, err := gateway.IssueDelegatedUser(principal.DelegatedUserInput{Audience: "role", RPC: method, RequestID: id, RequestHash: hash, AccountID: account, ProfileID: profile, SessionEpoch: 7, ClientExpiresAt: time.Now().Add(time.Minute)})
 		require.NoError(t, err)
 		call, cancel := context.WithTimeout(ctx, 5*time.Second)
 		t.Cleanup(cancel)
 		return metadata.NewOutgoingContext(call, metadata.Pairs("authorization", "Bearer "+token, "x-request-id", id))
 	}
+	delegated := func(method string, request proto.Message) context.Context {
+		return delegatedFor(ownerAccount, owner.String(), method, request)
+	}
+	listRequest := &rolev1.ListRolesRequest{SpaceId: b.SpaceID}
+	_, err = client.ListRoles(delegated(rolev1.RoleService_ListRoles_FullMethodName, listRequest), listRequest)
+	require.NoError(t, err, "qualified canonical Owner may read definitions")
+	_, err = client.ListRoles(delegatedFor(account.String(), b.ProfileID, rolev1.RoleService_ListRoles_FullMethodName, listRequest), listRequest)
+	require.NoError(t, err, "current member need not have management permission to read definitions")
+	_, err = client.ListRoles(delegatedFor(ownerAccount, uuid.NewString(), rolev1.RoleService_ListRoles_FullMethodName, listRequest), listRequest)
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "authenticated outsider must not read private Space Role definitions")
+	memberResponse, err = client.GetMemberRoles(delegated(rolev1.RoleService_GetMemberRoles_FullMethodName, memberRequest), memberRequest)
+	require.NoError(t, err, "member data is readable only within the caller's current Space membership")
+	require.Len(t, memberResponse.GetRoleList().GetRoles(), 1)
+	foreignMember := &rolev1.GetMemberRolesRequest{SpaceId: b.SpaceID, ProfileId: uuid.NewString()}
+	_, err = client.GetMemberRoles(delegated(rolev1.RoleService_GetMemberRoles_FullMethodName, foreignMember), foreignMember)
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "target membership must also be qualified in the same Space")
 	create := &rolev1.CreateRoleRequest{SpaceId: b.SpaceID, Name: "native interactive", Position: 1, PermissionsMask: 1}
 	custom, err := client.CreateRole(delegated(rolev1.RoleService_CreateRole_FullMethodName, create), create)
 	require.NoError(t, err)

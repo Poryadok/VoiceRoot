@@ -47,6 +47,8 @@ implementation, not a request to merge a disabled foundation.
 - [x] Strict source21 negative matrix and SDK independent clock/source parity.
 - [x] Actual GetMemberRoles/GetEffectiveMask/hierarchy at21 require observations;
   the protected Space GetMemberRoles caller collects them outside Role locks.
+- [x] Delegated actor and target must have current membership in the same fenced
+  Space; membership eligibility is separate from possessing a role/grant.
 - [ ] Finish native public target ACL, assignment/revocation and derived-reader
   cutovers with durable authorized-operation references.
 - [ ] Complete actual delegated Auth/session/receiver ordering proof.
@@ -181,6 +183,32 @@ oracle; it is not the feature RED. The fixture now consistently uses the accepte
 5s calls. Runtime/principal suites passed race17.359s/1.019s plus vet.
 Cleanup ApplyBotInstallationRemoval is not enabled by this decision-only change;
 44's Role25 correction and source qualification remain separate.
+
+Review82 c57 identified nested unknown-field admission and expiry after the
+last override/Voice epoch query. Corrective19d8dfa7 adds recursive message/list/
+map rejection and final freshness checks after queries and read-only fence
+commit. Nested controls passed while unknown requests failed on old code0.031s;
+realPG override/epoch cases failed16.824s and delayed COMMIT cases15.473s. Final
+four-case PG/race26.699s, full principalrace1.022s, vet and native Role build
+passed. Same review c2 / parentc59 independently CLEARed only this corrective
+scope; later Bot/ACL changes still require their own review.
+
+The global caller/target membership ACL uses EligibleMember from the same pure
+qualifier, with local independent floors. It does not infer membership from
+role count or grant an implicit Member role to a native episode. Actual signed
+Gateway Owner and current Member read controls passed while an outsider actor
+incorrectly read definitions (RED42.641s); a nonmember target also returned
+success (RED26.578s). Both now deny under the final Role fence/CAS, with actual
+RolePG/SpacePG/mTLS/race protocol24.327s and source2 parity6.727s plus vet.
+The new local ACL helper also rejects another Space's transaction: realPG
+positive-same-fence/negative-wrong-fence RED5.331s -> GREEN9.805s, vet0. Shared
+pure-qualifier suite passed race2.105s and vet. An earlier fixture build used a
+nonexistent EnsureBinding account field; that diagnostic is not a behavior RED.
+
+Private chat-scoped observation collection remains unfinished. No unsupported
+node is promoted from an unscoped observation. Role25 adapter99ae37a has scoped
+review144 CLEAR but is not yet imported/qualified by this native cohort; adding
+its version to a list would not establish source2/writer/late-Bot readiness.
 
 The complete native caller/writer/derived-reader cutover is still required.
 Public delegated transport enablement requires a real current Auth-floor client;

@@ -113,6 +113,17 @@ func withNativeOrdinary(ctx context.Context, s *RoleGRPC, space uuid.UUID, targe
 					return store.ErrScopeUnavailable
 				}
 			}
+			if _, ok := authctx.ProfileID(observed); ok {
+				for _, id := range ids {
+					present, err := scoped.QualifiedMemberPresent(observed, space, uuid.MustParse(id))
+					if err != nil {
+						return err
+					}
+					if !present {
+						return status.Error(codes.PermissionDenied, "current Space membership required for actor and target")
+					}
+				}
+			}
 			if err = call(observed, scoped); err != nil {
 				return err
 			}

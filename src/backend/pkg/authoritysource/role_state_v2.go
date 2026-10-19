@@ -85,6 +85,7 @@ type MemberRoleObservation interface {
 type QualifiedRoleMember struct {
 	Roles          []RoleDefinitionV2
 	EffectiveMask  uint64
+	EligibleMember bool
 	CanonicalOwner bool
 	TopPosition    int32
 	Contributions  []RoleContributionV2
@@ -123,6 +124,7 @@ func QualifyRoleMember(state RoleStateV2, observation MemberRoleObservation, pro
 			knownMember = true
 		}
 	}
+	out.EligibleMember = knownMember
 	selected := map[string]bool{}
 	if state.Owner != nil && state.Owner.ProfileID == profile {
 		if !observation.IsOwner(profile, now) {

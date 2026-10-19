@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	"time"
 	"voice/backend/pkg/authoritysource"
+	"voice/backend/role/internal/memberauthority"
 )
 
 // NativeMembershipRequired is an owner-schema decision, never a request flag.
@@ -43,6 +45,36 @@ func (s *RoleStore) QualifiedRevision(ctx context.Context, space uuid.UUID) (uin
 		return 0, fmt.Errorf("%w: %w", ErrScopeUnavailable, err)
 	}
 	return role + sdk, nil
+}
+
+// QualifiedMemberPresent distinguishes current membership from possessing a
+// role. Native episodes need not carry an implicit Member/default grant.
+func (s *RoleStore) QualifiedMemberPresent(ctx context.Context, space, profile uuid.UUID) (bool, error) {
+	if s == nil || s.tx == nil {
+		return false, ErrScopeUnavailable
+	}
+	if _, fenced := s.scopeSpaces[space]; !fenced {
+		return false, ErrScopeUnavailable
+	}
+	observation, ok := memberauthority.FromContext(ctx, space.String(), profile.String())
+	if !ok || !observation.Available(time.Now()) {
+		return false, ErrScopeUnavailable
+	}
+	if err := authoritysource.CheckCatalog(ctx, s.tx, roleAuthorityCatalog21); err != nil {
+		return false, fmt.Errorf("%w: %w", ErrScopeUnavailable, err)
+	}
+	state, err := readMemberRoleState(ctx, s.db(), space.String())
+	if err != nil {
+		return false, fmt.Errorf("%w: %w", ErrScopeUnavailable, err)
+	}
+	member, err := authoritysource.QualifyRoleMember(state, observation, profile.String(), "", "", time.Now())
+	if err != nil {
+		return false, fmt.Errorf("%w: %w", ErrScopeUnavailable, err)
+	}
+	if !observation.Available(time.Now()) {
+		return false, ErrScopeUnavailable
+	}
+	return member.EligibleMember, nil
 }
 
 // GetRawMemberRoleInventory is explicitly non-authoritative migration/cleanup
