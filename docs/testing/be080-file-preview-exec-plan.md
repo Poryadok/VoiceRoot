@@ -278,7 +278,9 @@ and generated parity, and realPG lifecycle/preview rollback cases must pass.
 OwnWT31/privateLinux fixtures only; no shared stands/host tests/GH/F13 edits.
 Genuine378 reviews frozen delta before actual121accepted delivery.
 
-Census result:44 backend modules,19 reach File,15 root Docker consumers.
+Census result:45 tracked backend go.mod files represent44 module identities;
+19 reach File and15 are root Docker consumers. The two GameIntegration proto
+module copies share one identity; neither reaches File. No module file is excluded.
 The four missing local Events replacements are GameIntegration and standalone
 Calls/Space/Subscription. Other Docker contexts copy Events directly or via
 the Messaging pb ancestor. Standalone Calls/Space had no go.sum; the new
@@ -290,3 +292,17 @@ RED is the expected11/actual12 equality, and canonical buf format RED is100.
 The first corrected Game build/short/vet and actual Dockerfile build pass;
 strict lifecycle and preview rollback PG suites pass. Final immutable archive
 checks include the standalone lockfiles and retain all initial results.
+
+Final qualified code984ad52ee passes readonly GameIntegration build/short/vet,
+all three standalone proto compilations,19 local Events lookups and the actual
+canonical Dockerfile build. The short suite has85top/106sub passes and93 explicit
+integration skips; generated modules have no tests and are compile-only checks.
+Actual PG lifecycle2top and preview rollback3top/21sub pass with zero skips.
+Canonical root golangci-lint2.6.1 built with Go1.26.5 reports zero issues for
+GameIntegration and File grpcsvc. All4202 final native input files match Git
+before/after checks and after lint. All4161 Docker-context backend files also
+match the immutable archive. Canonical buf format/lint/breaking pass; normalized
+FileDescriptorSets are equal after import ordering/source-location normalization.
+The three File Go mirrors match and Dart output has no drift. None of these
+component results claims wholeCI/T16/T31E2E, native H5 successor authority,
+rollout or acceptance. Current publisher121 must bind the precise new inputs.
