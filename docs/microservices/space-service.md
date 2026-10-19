@@ -483,6 +483,73 @@ authorization and transaction, Role completion, Gateway wiring and negative
 concurrency/runtime evidence. No admission capability is enabled by this
 documentation change.
 
+#### Admission identity authority (SPACE-ADMISSION-IDENTITY-v1)
+
+This additive target preserves the policy/proof and native membership contracts;
+it does not activate admission transport. `VerifiedCreator` remains exclusive to
+`CreateSpace`. A session floor, SDK profile lookup, client flag or raw metadata
+is not current applicant eligibility.
+
+Gateway's exact delegated-user credential binds method, final protobuf hash,
+fresh request ID/JTI, account/profile, positive session epoch and explicit
+`regular|guest` type. A constructor-private `VerifiedAdmissionCall` accepts only
+Start/Get/SubmitJoinAttempt, List/GetJoinRequest and ApproveJoinRequest on the
+protected listener; old JoinSpace/JoinByInvite use the same boundary before new
+admission. Missing type, ordinary/direct/Bot/SDK callers, a Submit credential at
+Approve, unknown fields or changed body deny before journal effects. Credential
+TTL is at most 30 seconds and never exceeds client expiry. Durable shared replay
+continuity and body/expiry rechecks after waits are mandatory. SetEntryPolicy
+keeps its separate settings ACL; admission identity grants no review permission.
+
+Space calls the new Auth-only-surface `ObserveSpaceAdmissionSubject` as signed
+`service:space`, not the Role/Voice floor RPCs. Request v1 binds phase
+`START|READ|SUBMIT|APPROVE|FIRST_PUBLISH`, subject role `APPLICANT|REVIEWER`, exact
+account/profile/Space and domain-separated SHA-256 of server-owned context.
+That context includes originating method/request, operation, exact A/invite,
+policy/config/submission and, at FIRST_PUBLISH, saved candidate/P/generation and
+approval. Absent stage fields are explicitly absent. An acting interactive
+subject also supplies its verified session epoch; stored applicants at approval
+and durable publication subjects supply none.
+
+Auth observes its current active, nondeleted account, explicit type, positive
+security revision and maximum durable/retained session floor. Its new Auth-only
+User call `GetSpaceAdmissionProfileEligibility` checks exact account ownership,
+positive authoritative profile revision, deleted/frozen flags and binding echo.
+Reusing the owned query is allowed; widening the SDK wire caller set is not.
+Auth rereads its own account/floor after User; errors, mismatched echoes,
+unknown type or invalid revisions deny/unavailable. Neither service reads the
+other's DB. No phone attestation is included. These are additive producer APIs,
+not capabilities already proven by a floor response.
+
+Submit observes the live applicant. Approve observes the live reviewer and saved
+applicant, current reviewer membership and exact online Role permission. Reserve
+the operation's selected attempt durably **before** remote owner calls. Different
+invite IDs retain separate A/proofs; ambiguous grouping requires explicit
+`attempt_id`, never latest/valid-invite fallback. Retry uses its saved selection.
+
+FIRST_PUBLISH obtains new applicant observations and, for manual decisions, new
+saved-reviewer eligibility, membership and Role permission. A private
+`VerifiedAdmissionContinuation` comes only from the exact decided nonterminal
+journal and these fresh observations, never a serialized capability or arbitrary
+service context. It and the historical same-transaction attempt verifier are
+both required; they are distinct from the once-only local completion hook.
+Completed native replay invokes none of them and returns only saved outcome.
+
+Pending has no age TTL and retains no old bearer/JTI/session epoch. Original
+logout, JWT expiry or profile switch does not by itself cancel the durable
+intent. Current account/profile ineligibility and all current local gates still
+deny new publication. Current eligible profile revision need not equal an older
+revision after an unrelated edit. If either saved A or current Auth is guest,
+apply guest restrictions without rewriting A or promoting its bound class.
+
+Every owner call has a two-second deadline; nested User work fits the remaining
+Auth deadline. All checks share the strict earliest-call monotonic `<5s` budget,
+rechecked after local waits and immediately before guarded mutation/commit.
+Observe outside Space locks. There is no cached allow or cross-service ACID:
+remote changes after their owner read retain the bounded snapshot race above.
+Producer implementation, secure clients/verifiers, native assembly and real
+I01–I14 transport/SQL/concurrency evidence remain explicit activation gates.
+
 #### Admission Role readiness and ordinary membership generations
 
 Space stores a decided admission candidate outside `space_members`. A permanent
