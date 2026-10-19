@@ -1,5 +1,45 @@
 # Story Service
 
+## Private qualified LFP consent (accepted implementation contract)
+
+The qualified pair JOIN/INVITE source is defined by BE-011 c23
+`BE011-LFP-CONSENT-SOURCE-v1`. The private wire is
+[`lfp_consent.proto`](../../protos/voice/story/v1/lfp_consent.proto), with a strict
+canonical codec in `src/backend/pkg/lfpconsent`. Protocol1 UUIDs are nonzero
+16-byte values, digests exactly32 bytes, and all material fields required.
+Consent SHA256 uses `voice.story.lfp-consent-receipt.v1` plus one NUL byte and
+the exact deterministic `LfpConsentMaterial` bytes. Unknown, duplicate,
+reordered, overlong, truncated or semantically invalid material denies.
+
+Story must capture account/profile/positive epoch from the exact verified
+delegated Gateway responder action, persist immutable offer incarnation,
+revision, criteria/offer digest and exact operation consent before delivery.
+No raw profile header or public event creates this authority. The private
+`LfpConsentRegistryService` is implemented by Matchmaking and accepts only
+protected exact `service:story` requests. Register and readback bind the same
+registration operation, consent and hash; the original MM registration ID,
+generation and captured-search-intent hash must never change on retry.
+`LfpConsentRegistration.registration_sha256` hashes deterministic fields1–7,
+omitting field8, under `voice.mm.lfp-consent-registration.v1` plus one NUL.
+Explicit NONE is part of MM's exact captured witness, never an absent digest.
+
+The private `LfpConsentOfferService` is implemented by Story and accepts only
+protected exact `service:matchmaking`. It validates the exact saved receipt and
+current Story offer, including visibility, expiry/retraction and unchanged
+incarnation/revision/digests. Success echoes the complete exact binding and
+expiry; it is a bounded fresh observation, not a permanent permit. Outage is
+unavailable, never allow. MM still owns current Auth-floor/all-account checks,
+atomic acceptance and all member/session replacement.
+
+Public `story.lfp_response` remains profile-only discovery. Historical requests
+cannot be promoted by a current owner lookup or guessed epoch. Pair INVITE
+preserves responder leadership, pair JOIN author leadership; unsupported group
+contexts fail explicitly without dropping peers. Natural Story expiry after
+consumption does not invalidate MM's already accepted immutable source.
+Wire/codec presence alone does not install this protected runtime or journal;
+the [producer execution plan](../testing/be011-lfp-consent-producer-exec-plan.md)
+tracks their implementation and verification. Existing activation gates remain.
+
 ## Обзор
 
 Сторис: 24-часовой контент, архив, хайлайты, интеграция с матчмейкингом ("ищу пати").
