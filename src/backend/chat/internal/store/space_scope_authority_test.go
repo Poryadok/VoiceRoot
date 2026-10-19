@@ -42,6 +42,7 @@ func TestSpaceScopeAuthorityConcurrentNativeWritesAndSnapshot(t *testing.T) {
 	pool := startChatDBForStoreTest(t, ctx)
 	applyChatMigrationsForStoreTest(t, ctx, pool)
 	applyScopeAuthorityMigration(t, ctx, pool)
+	applyReportAttachmentMigration(t, ctx, pool)
 	st := &DMStore{Pool: pool}
 	space, other := uuid.New(), uuid.New()
 	row, err := st.CreateSpaceChannelChat(ctx, uuid.New(), space, "Concurrency", nil)
@@ -111,6 +112,7 @@ func TestSpaceScopeAuthorityRejectsABAAndTracksIndependentLifecycle(t *testing.T
 	row, err := st.CreateSpaceChannelChat(ctx, creator, space, "Before migration", nil)
 	require.NoError(t, err)
 	applyScopeAuthorityMigration(t, ctx, pool)
+	applyReportAttachmentMigration(t, ctx, pool)
 	read := func() *chatv1.GetSpaceChatScopeAuthorityResponse {
 		v, e := st.GetSpaceChatScopeAuthority(ctx, row.ID, space)
 		require.NoError(t, e)

@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	chatv1 "voice.app/voice/chat/v1"
 	"voice/backend/chat/internal/grpcsvc"
 	"voice/backend/chat/internal/store"
@@ -36,6 +37,14 @@ import (
 type scopeTransportStore struct {
 	calls  int
 	native *store.DMStore
+}
+
+func (s *scopeTransportStore) ReadSpaceReportAttachment(ctx context.Context, chat, space uuid.UUID, saved uint64) (*chatv1.ReadSpaceReportAttachmentResponse, error) {
+	s.calls++
+	if s.native != nil {
+		return s.native.ReadSpaceReportAttachment(ctx, chat, space, saved)
+	}
+	return &chatv1.ReadSpaceReportAttachmentResponse{ProtocolVersion: 1, ChatId: chat.String(), ExpectedSpaceId: space.String(), SavedAttachmentGeneration: saved, Disposition: chatv1.SpaceReportAttachmentDisposition_SPACE_REPORT_ATTACHMENT_DISPOSITION_UNCHANGED}, nil
 }
 
 func (s *scopeTransportStore) GetSpaceChatScopeAuthority(_ context.Context, chat, space uuid.UUID) (*chatv1.GetSpaceChatScopeAuthorityResponse, error) {
@@ -90,7 +99,7 @@ func TestScopeAuthorityRealTLSExactPrincipalReplayAndAlternateListeners(t *testi
 	jwks.StartTLS()
 	defer jwks.Close()
 	replay := miniredis.RunT(t)
-	sign := func(issuer, audience, method, id string, req *chatv1.GetSpaceChatScopeAuthorityRequest) string {
+	sign := func(issuer, audience, method, id string, req proto.Message) string {
 		signer, e := principal.NewIssuer(principal.IssuerConfig{Issuer: issuer, KeyID: "current", PrivateKey: key})
 		require.NoError(t, e)
 		hash, e := principal.RequestHash(req)
@@ -99,9 +108,13 @@ func TestScopeAuthorityRealTLSExactPrincipalReplayAndAlternateListeners(t *testi
 		require.NoError(t, e)
 		return token
 	}
-	for _, issuer := range []string{"role", "space"} {
+	for _, issuer := range []string{"role", "space", "messaging"} {
 		t.Run(issuer, func(t *testing.T) {
-			runtime, err := New(context.Background(), Config{Issuer: issuer, Audience: Audience, AllowedMethods: []string{ScopeAuthorityMethod}, TLSCertFile: certPath, TLSKeyFile: keyPath, ClientCAFile: clientCAPath, JWKSURL: jwks.URL, JWKSCAFile: caPath, ReplayAddr: replay.Addr()})
+			methods := []string{ScopeAuthorityMethod}
+			if issuer == "messaging" {
+				methods = append(methods, ReportAttachmentMethod)
+			}
+			runtime, err := New(context.Background(), Config{Issuer: issuer, Audience: Audience, AllowedMethods: methods, TLSCertFile: certPath, TLSKeyFile: keyPath, ClientCAFile: clientCAPath, JWKSURL: jwks.URL, JWKSCAFile: caPath, ReplayAddr: replay.Addr()})
 			require.NoError(t, err)
 			defer runtime.Close()
 			listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -133,7 +146,7 @@ func TestScopeAuthorityRealTLSExactPrincipalReplayAndAlternateListeners(t *testi
 			require.Equal(t, 1, source.calls)
 			require.Equal(t, codes.Unauthenticated, status.Code(call(conn, token, req.OperationId)))
 			require.Equal(t, codes.Unauthenticated, status.Code(call(conn, "", req.OperationId)))
-			for _, wrong := range []string{"role", "space", "search", "gameintegration", "gateway"} {
+			for _, wrong := range []string{"role", "space", "messaging", "search", "gameintegration", "gateway"} {
 				if wrong != issuer {
 					require.Equal(t, codes.Unauthenticated, status.Code(call(conn, sign(wrong, "chat", ScopeAuthorityMethod, req.OperationId, req), req.OperationId)))
 				}
@@ -159,6 +172,29 @@ func TestScopeAuthorityRealTLSExactPrincipalReplayAndAlternateListeners(t *testi
 			require.Equal(t, 1, source.calls, "all denied requests must precede the native source")
 			require.NoError(t, call(conn, sign(issuer, "chat", ScopeAuthorityMethod, req.OperationId, req), req.OperationId))
 			require.Equal(t, 2, source.calls)
+			observation := &chatv1.ReadSpaceReportAttachmentRequest{ProtocolVersion: 1, OperationId: uuid.NewString(), ChatId: chatID.String(), ExpectedSpaceId: spaceID.String(), SavedAttachmentGeneration: 1}
+			observeToken := sign(issuer, "chat", ReportAttachmentMethod, observation.OperationId, observation)
+			observe := func(token string) (*chatv1.ReadSpaceReportAttachmentResponse, error) {
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+				ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token, "x-request-id", observation.OperationId))
+				return chatv1.NewChatScopeAuthorityServiceClient(conn).ReadSpaceReportAttachment(ctx, observation)
+			}
+			result, e := observe(observeToken)
+			if issuer != "messaging" {
+				require.Equal(t, codes.PermissionDenied, status.Code(e))
+				require.Equal(t, 2, source.calls)
+			} else {
+				require.NoError(t, e)
+				require.Equal(t, chatv1.SpaceReportAttachmentDisposition_SPACE_REPORT_ATTACHMENT_DISPOSITION_UNCHANGED, result.Disposition)
+				_, e = observe(observeToken)
+				require.Equal(t, codes.Unauthenticated, status.Code(e))
+				observeToken = sign(issuer, "chat", ReportAttachmentMethod, observation.OperationId, observation)
+				observation.SavedAttachmentGeneration = 2
+				_, e = observe(observeToken)
+				require.Equal(t, codes.Unauthenticated, status.Code(e))
+				require.Equal(t, 3, source.calls)
+			}
 		})
 	}
 	// Ordinary serving surface deliberately does not register the new service.
@@ -176,7 +212,7 @@ func TestScopeAuthorityRealTLSExactPrincipalReplayAndAlternateListeners(t *testi
 }
 
 func TestScopeAuthorityConfigAndAllowlistRemainNarrow(t *testing.T) {
-	for _, issuer := range []string{"role", "space"} {
+	for _, issuer := range []string{"role", "space", "messaging"} {
 		t.Run(issuer, func(t *testing.T) {
 			prefix := "CHAT_SCOPE_" + strings.ToUpper(issuer) + "_"
 			t.Setenv(prefix+"GRPC_LISTEN", ":12345")
@@ -189,10 +225,14 @@ func TestScopeAuthorityConfigAndAllowlistRemainNarrow(t *testing.T) {
 			cfg, _, enabled, err := ScopeAuthorityConfigFromEnv(issuer)
 			require.NoError(t, err)
 			require.True(t, enabled)
-			require.Equal(t, []string{ScopeAuthorityMethod}, cfg.AllowedMethods)
+			expected := []string{ScopeAuthorityMethod}
+			if issuer == "messaging" {
+				expected = append(expected, ReportAttachmentMethod)
+			}
+			require.Equal(t, expected, cfg.AllowedMethods)
 			methods, err := configuredMethods(issuer, cfg.AllowedMethods)
 			require.NoError(t, err)
-			require.Len(t, methods, 1)
+			require.Len(t, methods, len(expected))
 			for _, other := range []string{ProvisionMethod, GetManifestPageMethod, "/voice.authority.v1.AuthoritySourceService/ReadSnapshot"} {
 				_, err = (&Runtime{methods: methods}).allowlist(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: other}, func(context.Context, any) (any, error) {
 					t.Fatal("scope listener admitted another method")
@@ -206,4 +246,8 @@ func TestScopeAuthorityConfigAndAllowlistRemainNarrow(t *testing.T) {
 	require.Error(t, err)
 	_, err = configuredMethods(Issuer, []string{ScopeAuthorityMethod})
 	require.Error(t, err)
+	for _, issuer := range []string{"role", "space", "search", Issuer} {
+		_, err = configuredMethods(issuer, []string{ReportAttachmentMethod})
+		require.Error(t, err, "attachment observation is Messaging-only")
+	}
 }

@@ -540,15 +540,17 @@ const IsProfilePairsBlockedRequest$json = {
   '2': [
     {'1': 'viewer_profile_id', '3': 1, '4': 1, '5': 9, '10': 'viewerProfileId'},
     {'1': 'other_profile_ids', '3': 2, '4': 3, '5': 9, '10': 'otherProfileIds'},
+    {'1': 'protocol_version', '3': 3, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'operation_id', '3': 4, '4': 1, '5': 9, '10': 'operationId'},
   ],
 };
 
 /// Descriptor for `IsProfilePairsBlockedRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List isProfilePairsBlockedRequestDescriptor =
-    $convert.base64Decode(
-        'ChxJc1Byb2ZpbGVQYWlyc0Jsb2NrZWRSZXF1ZXN0EioKEXZpZXdlcl9wcm9maWxlX2lkGAEgAS'
-        'gJUg92aWV3ZXJQcm9maWxlSWQSKgoRb3RoZXJfcHJvZmlsZV9pZHMYAiADKAlSD290aGVyUHJv'
-        'ZmlsZUlkcw==');
+final $typed_data.Uint8List isProfilePairsBlockedRequestDescriptor = $convert.base64Decode(
+    'ChxJc1Byb2ZpbGVQYWlyc0Jsb2NrZWRSZXF1ZXN0EioKEXZpZXdlcl9wcm9maWxlX2lkGAEgAS'
+    'gJUg92aWV3ZXJQcm9maWxlSWQSKgoRb3RoZXJfcHJvZmlsZV9pZHMYAiADKAlSD290aGVyUHJv'
+    'ZmlsZUlkcxIpChBwcm90b2NvbF92ZXJzaW9uGAMgASgNUg9wcm90b2NvbFZlcnNpb24SIQoMb3'
+    'BlcmF0aW9uX2lkGAQgASgJUgtvcGVyYXRpb25JZA==');
 
 @$core.Deprecated('Use profilePairBlockResultDescriptor instead')
 const ProfilePairBlockResult$json = {
@@ -577,14 +579,18 @@ const IsProfilePairsBlockedResponse$json = {
       '6': '.voice.social.v1.ProfilePairBlockResult',
       '10': 'results'
     },
+    {'1': 'protocol_version', '3': 2, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'viewer_profile_id', '3': 4, '4': 1, '5': 9, '10': 'viewerProfileId'},
   ],
 };
 
 /// Descriptor for `IsProfilePairsBlockedResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List isProfilePairsBlockedResponseDescriptor =
-    $convert.base64Decode(
-        'Ch1Jc1Byb2ZpbGVQYWlyc0Jsb2NrZWRSZXNwb25zZRJBCgdyZXN1bHRzGAEgAygLMicudm9pY2'
-        'Uuc29jaWFsLnYxLlByb2ZpbGVQYWlyQmxvY2tSZXN1bHRSB3Jlc3VsdHM=');
+final $typed_data.Uint8List isProfilePairsBlockedResponseDescriptor = $convert.base64Decode(
+    'Ch1Jc1Byb2ZpbGVQYWlyc0Jsb2NrZWRSZXNwb25zZRJBCgdyZXN1bHRzGAEgAygLMicudm9pY2'
+    'Uuc29jaWFsLnYxLlByb2ZpbGVQYWlyQmxvY2tSZXN1bHRSB3Jlc3VsdHMSKQoQcHJvdG9jb2xf'
+    'dmVyc2lvbhgCIAEoDVIPcHJvdG9jb2xWZXJzaW9uEiEKDG9wZXJhdGlvbl9pZBgDIAEoCVILb3'
+    'BlcmF0aW9uSWQSKgoRdmlld2VyX3Byb2ZpbGVfaWQYBCABKAlSD3ZpZXdlclByb2ZpbGVJZA==');
 
 @$core.Deprecated('Use areFriendsRequestDescriptor instead')
 const AreFriendsRequest$json = {

@@ -20,8 +20,8 @@ type chatScopeListenerConfig struct {
 }
 
 func loadChatScopeAuthorityConfigs() ([]chatScopeListenerConfig, error) {
-	configs := make([]chatScopeListenerConfig, 0, 2)
-	for _, issuer := range []string{"role", "space"} {
+	configs := make([]chatScopeListenerConfig, 0, 3)
+	for _, issuer := range []string{"role", "space", "messaging"} {
 		cfg, listen, enabled, err := gisprincipal.ScopeAuthorityConfigFromEnv(issuer)
 		if err != nil {
 			return nil, err

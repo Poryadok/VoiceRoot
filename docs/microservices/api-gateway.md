@@ -148,6 +148,21 @@ POST /api/v1/realtime/ws-ticket → Gateway (short-lived WS ticket; JWT в за�
 /ws                      → Realtime Service (WebSocket upgrade; `Authorization` или `?ticket=`)
 ```
 
+BE-066 additionally defines a separate target route family
+`/api/v1/spaces/{space_id}/moderation/reports` to Moderation:
+`POST` accepts a local message complaint (202, `report_id` only), `GET` lists
+local summaries, `GET /{report_id}` reads permitted detail,
+`PATCH /{report_id}/assignee` changes assignment and
+`POST /{report_id}/resolve` records a versioned local decision. These are distinct
+DTOs/RPCs from platform reports; they never route to Space or global admin
+handlers. Path scope must match every signed request field. Derive the current
+delegated-user principal for `aud=moderation`, exact local RPC and deterministic
+body hash; never forward caller-supplied internal/profile identity. A reporter
+receives no local status privilege. Current Role plus owner-proven content ACL
+govern review. See the [local report contract](moderation-service.md#space-local-report-jurisdiction-accepted-target)
+for fields, isolation, errors and activation gates. The route family is target
+contract only until its protected owner/Role adapters and client path are proven.
+
 The caller-relative profile action check is `GET /api/v1/chats/dm-permission/{other_profile_id}` and returns only `{ "allowed": boolean }` from Chat `CanCreateDM`. Gateway preserves typed authorization/dependency errors. The route performs no chat mutation; the subsequent `POST /api/v1/chats/dm` repeats Chat authorization.
 
 ### Scheduled message REST transport

@@ -1,5 +1,30 @@
 # Space Service
 
+## Local-report read context (BE-066 accepted target)
+
+NEW `ResolveSpaceReportReadContext` accepts only exact signed
+`service:messaging`, audience `space`, bound to protocol1, operation ID,
+`space_id`, canonical `ChatRef` and viewer profile. Use normal Phase-0
+method/body/request/JTI/JWKS/epoch where applicable and protected mTLS guards.
+The existing communication/timeout RPC does not grant this read capability.
+
+One native Space snapshot reads live/unfrozen lifecycle, exact Chat tree
+attachment and current active published membership. Return the request binding,
+`eligible`, Space authority revision, lifecycle generation, tree attachment
+incarnation, membership binding and `history_visible_since` with explicit
+known/unknown state. Do not return roster, owner IDs or other members.
+Pending/revoked/left membership is ineligible. A timeout alone does not deny read.
+
+The history boundary is the canonical continuous effective membership episode
+across ordinary/community sources. Rejoining cannot revive a previous episode;
+consumers cannot choose the oldest historical join. Missing exact history
+provenance is unknown, never time zero; Messaging fails UNAVAILABLE in the
+since-entry branch. It separately requires current Role TEXT_CHAT_VIEW and, for
+older history, TEXT_CHAT_READ_HISTORY, plus native message visibility and Social.
+ListMembers page100 and unmanaged Chat entitlement are not substitutes for this
+producer. No foreign database reads, raw viewer identity metadata or public
+caller registration is introduced by this target contract.
+
 ## Composite Chat creation (accepted implementation contract)
 
 `CommitSpaceChatCreation` admits only a freshly authenticated `service:chat`

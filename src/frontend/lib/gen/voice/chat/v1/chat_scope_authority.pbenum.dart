@@ -14,6 +14,84 @@ import 'dart:core' as $core;
 
 import 'package:protobuf/protobuf.dart' as $pb;
 
+class SpaceReportAttachmentDisposition extends $pb.ProtobufEnum {
+  static const SpaceReportAttachmentDisposition
+      SPACE_REPORT_ATTACHMENT_DISPOSITION_UNSPECIFIED =
+      SpaceReportAttachmentDisposition._(
+          0,
+          _omitEnumNames
+              ? ''
+              : 'SPACE_REPORT_ATTACHMENT_DISPOSITION_UNSPECIFIED');
+  static const SpaceReportAttachmentDisposition
+      SPACE_REPORT_ATTACHMENT_DISPOSITION_UNKNOWN =
+      SpaceReportAttachmentDisposition._(1,
+          _omitEnumNames ? '' : 'SPACE_REPORT_ATTACHMENT_DISPOSITION_UNKNOWN');
+  static const SpaceReportAttachmentDisposition
+      SPACE_REPORT_ATTACHMENT_DISPOSITION_UNCHANGED =
+      SpaceReportAttachmentDisposition._(
+          2,
+          _omitEnumNames
+              ? ''
+              : 'SPACE_REPORT_ATTACHMENT_DISPOSITION_UNCHANGED');
+  static const SpaceReportAttachmentDisposition
+      SPACE_REPORT_ATTACHMENT_DISPOSITION_RETIRED =
+      SpaceReportAttachmentDisposition._(3,
+          _omitEnumNames ? '' : 'SPACE_REPORT_ATTACHMENT_DISPOSITION_RETIRED');
+
+  static const $core.List<SpaceReportAttachmentDisposition> values =
+      <SpaceReportAttachmentDisposition>[
+    SPACE_REPORT_ATTACHMENT_DISPOSITION_UNSPECIFIED,
+    SPACE_REPORT_ATTACHMENT_DISPOSITION_UNKNOWN,
+    SPACE_REPORT_ATTACHMENT_DISPOSITION_UNCHANGED,
+    SPACE_REPORT_ATTACHMENT_DISPOSITION_RETIRED,
+  ];
+
+  static final $core.List<SpaceReportAttachmentDisposition?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 3);
+  static SpaceReportAttachmentDisposition? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const SpaceReportAttachmentDisposition._(super.value, super.name);
+}
+
+class SpaceReportAttachmentRetirementReason extends $pb.ProtobufEnum {
+  static const SpaceReportAttachmentRetirementReason
+      SPACE_REPORT_ATTACHMENT_RETIREMENT_REASON_UNSPECIFIED =
+      SpaceReportAttachmentRetirementReason._(
+          0,
+          _omitEnumNames
+              ? ''
+              : 'SPACE_REPORT_ATTACHMENT_RETIREMENT_REASON_UNSPECIFIED');
+  static const SpaceReportAttachmentRetirementReason
+      SPACE_REPORT_ATTACHMENT_RETIREMENT_REASON_TARGET_DELETED =
+      SpaceReportAttachmentRetirementReason._(
+          1,
+          _omitEnumNames
+              ? ''
+              : 'SPACE_REPORT_ATTACHMENT_RETIREMENT_REASON_TARGET_DELETED');
+  static const SpaceReportAttachmentRetirementReason
+      SPACE_REPORT_ATTACHMENT_RETIREMENT_REASON_TARGET_MOVED =
+      SpaceReportAttachmentRetirementReason._(
+          2,
+          _omitEnumNames
+              ? ''
+              : 'SPACE_REPORT_ATTACHMENT_RETIREMENT_REASON_TARGET_MOVED');
+
+  static const $core.List<SpaceReportAttachmentRetirementReason> values =
+      <SpaceReportAttachmentRetirementReason>[
+    SPACE_REPORT_ATTACHMENT_RETIREMENT_REASON_UNSPECIFIED,
+    SPACE_REPORT_ATTACHMENT_RETIREMENT_REASON_TARGET_DELETED,
+    SPACE_REPORT_ATTACHMENT_RETIREMENT_REASON_TARGET_MOVED,
+  ];
+
+  static final $core.List<SpaceReportAttachmentRetirementReason?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 2);
+  static SpaceReportAttachmentRetirementReason? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const SpaceReportAttachmentRetirementReason._(super.value, super.name);
+}
+
 class ChatScopeManagedKind extends $pb.ProtobufEnum {
   static const ChatScopeManagedKind CHAT_SCOPE_MANAGED_KIND_UNSPECIFIED =
       ChatScopeManagedKind._(

@@ -311,6 +311,9 @@ func configuredMethods(issuer string, allowed []string) (map[string]struct{}, er
 		approved[GetManifestPageMethod] = struct{}{}
 	case "role":
 		approved[ScopeAuthorityMethod] = struct{}{}
+	case "messaging":
+		approved[ScopeAuthorityMethod] = struct{}{}
+		approved[ReportAttachmentMethod] = struct{}{}
 	case "realtime":
 		approved[ResolveRealtimeLifecycleMethod] = struct{}{}
 	default:

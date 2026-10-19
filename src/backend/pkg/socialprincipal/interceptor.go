@@ -39,6 +39,8 @@ func Method(target string) string {
 		return "/voice.space.v1.SpaceService/ResolveVoiceRoomAccess"
 	case "space-messaging-communication":
 		return "/voice.space.v1.SpaceService/ResolveMemberCommunicationState"
+	case "social-messaging-report":
+		return "/voice.social.v1.SocialService/IsProfilePairsBlocked"
 	}
 	return ""
 }
@@ -50,7 +52,7 @@ func AllowsMethod(target, method string) bool {
 	switch target {
 	case "auth-admission":
 		return method == Method(target)
-	case "space-voice-communication", "space-messaging-communication":
+	case "space-voice-communication", "space-messaging-communication", "social-messaging-report":
 		return method == Method(target)
 	case "user":
 		switch method {
@@ -299,7 +301,7 @@ func expectedIssuer(target string) string {
 	if target == "space-voice-communication" {
 		return "voice"
 	}
-	if target == "space-messaging-communication" {
+	if target == "space-messaging-communication" || target == "social-messaging-report" {
 		return "messaging"
 	}
 	if target == "file" {
@@ -323,7 +325,7 @@ func expectedIssuer(target string) string {
 // RequiresMutualTLS preserves legacy listener settings while requiring both
 // transport identities for newly migrated protected authority capabilities.
 func RequiresMutualTLS(capability string) bool {
-	return capability == "auth-admission" || capability == "messaging" || capability == "space-voice-communication" || capability == "space-messaging-communication"
+	return capability == "auth-admission" || capability == "messaging" || capability == "space-voice-communication" || capability == "space-messaging-communication" || capability == "social-messaging-report"
 }
 
 // CheckDomain preserves separately migrated ordinary callers while enforcing

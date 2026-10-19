@@ -475,8 +475,42 @@ interceptor ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md));
 | `space` service | `BootstrapSpaceRoles`, `GetDefaultJoinRole`, `ListRoles`, `GetMemberRoles`, `EnsureDefaultMemberRole` (**target dedicated lifecycle RPC**), `RemoveMemberRoles` (**target dedicated lifecycle RPC**), `CheckPermission` | `owner_profile_id` only for bootstrap; dedicated lifecycle RPCs bind the joining/leaving `profile_id`, `space_id` and Role-resolved default/member roles. Generic `AssignRole`/`RevokeRole` are not accepted from Space. `CheckPermission` is limited to the global permission names enumerated below. |
 | `space` trusted transfer | `GetOwnershipTransferCapabilities`, `PrepareOwnershipTransfer`, `FinalizeOwnershipTransfer`, `AbortOwnershipTransfer` | protocol 2 and exact `space_id`, `old_owner_profile_id`, `new_owner_profile_id`, `operation_id` and request binding; same action is idempotent; no generic Role RPC may mutate `Owner` |
 | `voice`, `chat`, `messaging` service | `CheckPermission` | explicit `profile_id` only as the decision subject, plus requested `space_id`/node scope; no actor mutation authority |
+| `moderation` service (BE-066 target) | `CheckPermission` only | exact `MODERATION_MANAGE_REPORTS` decision for a verified local-report actor/assignee and authoritative Space Chat node; no platform report or mutation authority |
 | `bot` service | `CheckPermission`, `GetMemberRoles`, `RevokeRole`, `DeleteRolesCreatedByProfile` | only signed `service:bot` lifecycle/decision calls below; no actor-mutation authority; cleanup cannot touch `Owner` or system roles |
 | `bot` signed `bot_actor` capability | `CreateRole`, `AssignRole`, `RevokeRole` | only the exact scope and claim-bound space below; no generic Gateway principal or metadata fallback; `Owner` and every system-role mutation are rejected |
+
+### Moderation local-report decision contract (accepted target)
+
+For the same BE-066 chain, a new protected Messaging decision route allows
+only exact signed `service:messaging` `CheckPermission` for `TEXT_CHAT_VIEW` and
+`TEXT_CHAT_READ_HISTORY`, with authoritative Space/ChatRef, verified viewer as
+subject data, absence of voice-room scope and complete deterministic request
+binding. These decisions grant no message body access on their own; native
+Space history/membership and Messaging/Social visibility remain required.
+This narrow route does not make existing unrelated Messaging permission calls
+globally strict or authorize fallback to their raw metadata adapters.
+
+Only `/voice.role.v1.RoleService/CheckPermission` may accept
+`principal_type=service`, `iss=moderation`, `sub=service:moderation`, `aud=role`
+for the separate [local report jurisdiction](moderation-service.md#space-local-report-jurisdiction-accepted-target).
+Use the ordinary verified service claims, exact RPC, deterministic full request
+hash, `request_id`, `jti`, `kid`, and TTL at most 30 seconds. Bind canonical
+`space_id`, decision-subject `profile_id`,
+`permission_name=MODERATION_MANAGE_REPORTS`, the authoritative `group`/`channel`
+`ChatRef` including its type, and absence of `voice_room_id`. Arbitrary names,
+missing/multiple node scopes, unrelated nodes and other Role RPCs are denied.
+The verified Moderation consumer derives actor/assignee subjects from its local
+request authority; request subjects and raw metadata are not caller identity.
+
+Role evaluates its ordinary current Space/member/lifecycle/node restrictions
+and Owner/Admin behavior. An assignment or earlier allow does not reserve
+permission. This decision grants no message-history read privilege, reporter
+identity, global staff privilege, sanction, ban or message deletion authority.
+Moderation independently requires current owner-proven content visibility.
+Fail closed on unavailable dependencies and use the per-RPC migration rules
+below; documenting the target caller does not activate the current listener or
+make unrelated callers globally strict. New caller routing needs negative
+principal/request-binding tests and actual protected-listener qualification.
 
 ### Space `CheckPermission` decision contract
 

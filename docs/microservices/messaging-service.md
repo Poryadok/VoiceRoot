@@ -1,5 +1,53 @@
 # Messaging Service
 
+## Space-local report owner decisions (BE-066 accepted target)
+
+The separate local jurisdiction in [reports.md](../features/reports.md#локальные-жалобы-space)
+uses NEW content-free `CheckSpaceReportTargets` and separate non-viewer
+`ObserveSpaceReportTargetLifecycle`, both accepting only exact signed
+`service:moderation`, audience `messaging`, method/body/request binding and
+ordinary Phase-0 temporal/JWKS/replay/mTLS guards. Existing moderation
+`TombstoneGameMessage` registration grants neither method. No legacy listener or
+no-profile `GetMessage` path can serve this viewer decision.
+
+`CheckSpaceReportTargets` protocol1 binds `operation_id`, viewer profile, expected
+Space and 1..100 unique ordered targets `{message_id,expected_chat_id,saved_binding?}`.
+Saved binding is immutable message incarnation, Chat/Space and report attachment
+generation; it is not a capability. Return exactly one `READABLE` or
+`NOT_VISIBLE {message_id}` per input. READABLE returns canonical current ChatRef,
+Space, binding and observation revisions, never message content or identities.
+NOT_VISIBLE reveals no reason or foreign scope. Any unknown/malformed owner
+result makes the entire RPC UNAVAILABLE, without partial allow defaults.
+
+For each target, Messaging reads its native immutable timestamp/Chat and current
+deleted/ghost/FOR_ME visibility, then obtains matching live ordinary group/channel
+scope through a NEW signed Messaging registration on Chat scope authority. It
+calls NEW Space `ResolveSpaceReportReadContext` for exact current tree attachment,
+published membership and continuous effective entry boundary. Protected Role
+`TEXT_CHAT_VIEW` must allow; absent `TEXT_CHAT_READ_HISTORY`, created_at must be
+at or after that exact boundary. Unknown cutoff is UNAVAILABLE. Chat's managed
+interval restriction is additional and uses a NEW protected Messaging route;
+its unmanaged=true does not prove Space access. Protected Social directional
+viewer-to-sender block checks cover at most100 distinct senders; missing,
+duplicate or foreign results fail the whole batch. Finally reread local message
+visibility/version; changes during evaluation are UNAVAILABLE, not retried in a
+loop. No lock spans RPCs, no bearer is forwarded across audiences, and raw
+subject metadata never supplies authority. This is request-time authorization,
+not a distributed commit/revocation fence.
+
+`ObserveSpaceReportTargetLifecycle` binds protocol1, operation and a persisted
+saved binding, without viewer or content mode. Return `UNCHANGED`,
+`RETIRED {TARGET_DELETED|TARGET_MOVED,owner_event_id,owner_revision,exact_retired_binding}`
+or `UNKNOWN`; dependency errors are UNAVAILABLE. Positive native Messaging
+deletion or exact Chat retirement alone permits RETIRED. Missing rows, ACL deny,
+freeze, stale incarnation and dependency timeout never prove deletion. Do not
+return destination Space. Same-ID replacement needs a new stable message
+incarnation and cannot revive an old complaint.
+
+These are required producer/consumer additions, not shipped RPCs. The complete
+finite list and cleanup contract is in the
+[implementation plan](../testing/space-local-reports-exec-plan.md).
+
 ## Space communication timeout (BE-044-TIMEOUT-v1)
 
 Accepted target: apply the [Space-owned communication state](space-service.md#communication-timeout-authority-be-044-timeout-v1)

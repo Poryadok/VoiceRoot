@@ -1765,10 +1765,14 @@ class IsProfilePairsBlockedRequest extends $pb.GeneratedMessage {
   factory IsProfilePairsBlockedRequest({
     $core.String? viewerProfileId,
     $core.Iterable<$core.String>? otherProfileIds,
+    $core.int? protocolVersion,
+    $core.String? operationId,
   }) {
     final result = create();
     if (viewerProfileId != null) result.viewerProfileId = viewerProfileId;
     if (otherProfileIds != null) result.otherProfileIds.addAll(otherProfileIds);
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (operationId != null) result.operationId = operationId;
     return result;
   }
 
@@ -1788,6 +1792,9 @@ class IsProfilePairsBlockedRequest extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'viewerProfileId')
     ..pPS(2, _omitFieldNames ? '' : 'otherProfileIds')
+    ..aI(3, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(4, _omitFieldNames ? '' : 'operationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1823,6 +1830,25 @@ class IsProfilePairsBlockedRequest extends $pb.GeneratedMessage {
 
   @$pb.TagNumber(2)
   $pb.PbList<$core.String> get otherProfileIds => $_getList(1);
+
+  /// Required only by the dedicated Messaging report-policy listener.
+  @$pb.TagNumber(3)
+  $core.int get protocolVersion => $_getIZ(2);
+  @$pb.TagNumber(3)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProtocolVersion() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProtocolVersion() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get operationId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set operationId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasOperationId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearOperationId() => $_clearField(4);
 }
 
 class ProfilePairBlockResult extends $pb.GeneratedMessage {
@@ -1896,9 +1922,15 @@ class ProfilePairBlockResult extends $pb.GeneratedMessage {
 class IsProfilePairsBlockedResponse extends $pb.GeneratedMessage {
   factory IsProfilePairsBlockedResponse({
     $core.Iterable<ProfilePairBlockResult>? results,
+    $core.int? protocolVersion,
+    $core.String? operationId,
+    $core.String? viewerProfileId,
   }) {
     final result = create();
     if (results != null) result.results.addAll(results);
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (operationId != null) result.operationId = operationId;
+    if (viewerProfileId != null) result.viewerProfileId = viewerProfileId;
     return result;
   }
 
@@ -1918,6 +1950,10 @@ class IsProfilePairsBlockedResponse extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..pPM<ProfilePairBlockResult>(1, _omitFieldNames ? '' : 'results',
         subBuilder: ProfilePairBlockResult.create)
+    ..aI(2, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
+    ..aOS(4, _omitFieldNames ? '' : 'viewerProfileId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1944,6 +1980,34 @@ class IsProfilePairsBlockedResponse extends $pb.GeneratedMessage {
 
   @$pb.TagNumber(1)
   $pb.PbList<ProfilePairBlockResult> get results => $_getList(0);
+
+  /// Exact echoes on the protected Messaging report-policy listener only.
+  @$pb.TagNumber(2)
+  $core.int get protocolVersion => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProtocolVersion() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProtocolVersion() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get viewerProfileId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set viewerProfileId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasViewerProfileId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearViewerProfileId() => $_clearField(4);
 }
 
 class AreFriendsRequest extends $pb.GeneratedMessage {

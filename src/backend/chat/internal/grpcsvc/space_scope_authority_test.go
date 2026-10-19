@@ -32,7 +32,7 @@ func TestSpaceScopeAuthorityBoundaryBindsExactCallerAndBody(t *testing.T) {
 	hash, err := principal.RequestHash(request)
 	require.NoError(t, err)
 	p := principal.Principal{Kind: "service", Issuer: "role", Subject: "service:role", Audience: "chat", RPC: chatv1.ChatScopeAuthorityService_GetSpaceChatScopeAuthority_FullMethodName, RequestID: request.OperationId, RequestHash: hash}
-	for _, issuer := range []string{"role", "space"} {
+	for _, issuer := range []string{"role", "space", "messaging"} {
 		current := p
 		current.Issuer = issuer
 		current.Subject = "service:" + issuer
