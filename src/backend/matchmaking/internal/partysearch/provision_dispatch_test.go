@@ -256,3 +256,39 @@ func TestValidatedActivationLosesToCommittedAbandonment(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT required_providers FROM matchmaking_match_squad_teardowns WHERE match_id=$1`, intent.MatchID).Scan(&required))
 	require.Equal(t, []string{"chat", "voice"}, required)
 }
+
+func TestNativePartyResetAtomicallyLatchesPossibleProviderDispatch(t *testing.T) {
+	ctx := context.Background()
+	pool, st, p, intent := dispatchFixture(t)
+	candidate, proof := dispatchProof(t, st, intent.MatchID, p)
+	_, err := st.SaveValidatedMatchSquadProvisioningIntent(ctx, candidate, proof, intent)
+	require.NoError(t, err)
+	candidate, proof = dispatchProof(t, st, intent.MatchID, p)
+	_, err = st.AuthorizeMatchSquadProviderDispatch(ctx, candidate, proof, intent.OperationID, "chat")
+	require.NoError(t, err)
+	var partyID uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `SELECT id FROM parties WHERE search_operation_id=$1`, p.SearchOperationID).Scan(&partyID))
+	// A later cancellation failure must roll back both the reset and the latch.
+	_, err = pool.Exec(ctx, `ALTER TABLE matchmaking_voice_roster_cancellation_outbox ADD CONSTRAINT reject_test_cancel CHECK (false)`)
+	require.NoError(t, err)
+	_, err = st.ResetVoiceParties(ctx, []uuid.UUID{partyID})
+	require.Error(t, err)
+	var disposition, state string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT provision_disposition,state FROM matchmaking_match_squad_operations WHERE match_id=$1`, intent.MatchID).Scan(&disposition, &state))
+	require.Equal(t, "LIVE", disposition)
+	require.Equal(t, "provisioning", state)
+	match, err := st.Get(ctx, intent.MatchID)
+	require.NoError(t, err)
+	require.Equal(t, store.MatchStatusPendingAccept, match.Status)
+	_, err = pool.Exec(ctx, `ALTER TABLE matchmaking_voice_roster_cancellation_outbox DROP CONSTRAINT reject_test_cancel`)
+	require.NoError(t, err)
+	count, err := st.ResetVoiceParties(ctx, []uuid.UUID{partyID})
+	require.NoError(t, err)
+	require.Equal(t, len(p.MemberProfileIDs), count.CancelledSessions)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT provision_disposition,state FROM matchmaking_match_squad_operations WHERE match_id=$1`, intent.MatchID).Scan(&disposition, &state))
+	require.Equal(t, "ABANDONED", disposition)
+	require.Equal(t, "compensating", state)
+	var required []string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT required_providers FROM matchmaking_match_squad_teardowns WHERE match_id=$1`, intent.MatchID).Scan(&required))
+	require.Equal(t, []string{"chat"}, required)
+}

@@ -1,5 +1,23 @@
 BEGIN;
 
+-- Freeze the legacy inventory before classifying any possible dispatch. Old
+-- terminal states and sealed provider sets cannot prove absence of a resource.
+LOCK TABLE matchmaking_match_squad_operations, matchmaking_match_squad_teardowns IN ACCESS EXCLUSIVE MODE;
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM matchmaking_match_squad_operations o
+        WHERE (o.state='closed' AND
+          (o.chat_receipt_id IS NULL OR (o.voice_request_bytes IS NOT NULL AND o.voice_receipt_id IS NULL)))
+        OR EXISTS (SELECT 1 FROM matchmaking_match_squad_teardowns a
+          WHERE a.match_id=o.match_id AND a.purpose='PROVISION_COMPENSATION'
+          AND a.required_providers <> CASE WHEN o.voice_request_bytes IS NULL
+            THEN ARRAY['chat']::TEXT[] ELSE ARRAY['chat','voice']::TEXT[] END)
+    ) THEN
+        RAISE EXCEPTION 'legacy dispatch obligations require reconciliation';
+    END IF;
+END $$;
+
 ALTER TABLE matchmaking_match_squad_operations
     ADD COLUMN dispatch_protocol_version SMALLINT NOT NULL DEFAULT 0 CHECK (dispatch_protocol_version IN (0,1)),
     ADD COLUMN provision_disposition TEXT NOT NULL DEFAULT 'LIVE' CHECK (provision_disposition IN ('LIVE','ABANDONED')),

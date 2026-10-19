@@ -159,6 +159,9 @@ func expirePendingMatchLocked(ctx context.Context, tx pgx.Tx, match Match, propo
 		return nil, err
 	}
 
+	if err := latchMatchAbandonmentCauseTx(ctx, tx, match.ID, "PROPOSAL_DEADLINE"); err != nil {
+		return nil, err
+	}
 	var changed []SearchSession
 	for _, sess := range sessions {
 		if sess.Status != SessionStatusPendingAccept {
@@ -226,7 +229,7 @@ func responseSessionPartyKey(sess SearchSession, proposals []MatchProposal) stri
 	return ""
 }
 
-func recoverDeclinedMatchLocked(ctx context.Context, tx pgx.Tx, match Match, proposals []MatchProposal, sessions []SearchSession, declinedParty string, dbNow time.Time) ([]SearchSession, error) {
+func recoverDeclinedMatchLocked(ctx context.Context, tx pgx.Tx, match Match, proposals []MatchProposal, sessions []SearchSession, declinedParty string, dbNow time.Time, cause string) ([]SearchSession, error) {
 	for _, proposal := range proposals {
 		if responsePartyKey(proposal) != declinedParty || proposal.Response != ProposalResponsePending {
 			continue
@@ -242,6 +245,9 @@ func recoverDeclinedMatchLocked(ctx context.Context, tx pgx.Tx, match Match, pro
 		UPDATE matches SET status = $2, completed_at = $3
 		WHERE id = $1 AND status = $4
 	`, match.ID, MatchStatusAbandoned, dbNow, MatchStatusPendingAccept); err != nil {
+		return nil, err
+	}
+	if err := latchMatchAbandonmentCauseTx(ctx, tx, match.ID, cause); err != nil {
 		return nil, err
 	}
 	changed := make([]SearchSession, 0, len(sessions))
@@ -509,7 +515,7 @@ func (s *MatchStore) RecordDecline(ctx context.Context, matchID, profileID uuid.
 	); err != nil {
 		return AcceptanceResult{}, err
 	}
-	changed, err := recoverDeclinedMatchLocked(ctx, tx, match, proposals, sessions, responsePartyKey(result.Proposal), dbNow)
+	changed, err := recoverDeclinedMatchLocked(ctx, tx, match, proposals, sessions, responsePartyKey(result.Proposal), dbNow, "PROPOSAL_DECLINED")
 	if err != nil {
 		return AcceptanceResult{}, err
 	}
@@ -1334,15 +1340,32 @@ func scanMatchRow(rows pgx.Rows) (Match, error) {
 	return m, nil
 }
 
-// AbandonMatch marks match abandoned and cancels pending sessions.
+// AbandonMatch fences pending activation and latches possible provider effects.
 func (s *MatchStore) AbandonMatch(ctx context.Context, matchID uuid.UUID) error {
 	if s == nil || s.Pool == nil {
 		return errors.New("match store unavailable")
 	}
-	now := time.Now().UTC()
-	_, err := s.Pool.Exec(ctx, `
-		UPDATE matches SET status = $2, completed_at = $3
-		WHERE id = $1 AND status = $4
-	`, matchID, MatchStatusAbandoned, now, MatchStatusPendingAccept)
-	return err
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var status string
+	err = tx.QueryRow(ctx, `SELECT status FROM matches WHERE id=$1 FOR UPDATE`, matchID).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if status != MatchStatusPendingAccept && status != MatchStatusAbandoned {
+		return nil
+	}
+	if _, err = tx.Exec(ctx, `UPDATE matches SET status='abandoned',completed_at=COALESCE(completed_at,clock_timestamp()) WHERE id=$1`, matchID); err != nil {
+		return err
+	}
+	if err = latchMatchAbandonmentCauseTx(ctx, tx, matchID, "MATCH_ABANDONED"); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
