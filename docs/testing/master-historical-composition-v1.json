@@ -1,0 +1,3358 @@
+{
+  "version": "MASTER-HISTORICAL-COMPOSITION-v1",
+  "at": "2026-10-19T07:49:59.747534+00:00",
+  "source": "5bf6c4857c19fba2b91fb44eb9e9bc6ae816c485",
+  "base": "698d4f064f032ea74abf3ede2017100b26c8ee69",
+  "criterion": "Exact historical composition-source review only: complete guarded resolution set and all actual merge parents/best bases/raw modes/types/OIDs; preserve each parent intended contract and protected principal/lifecycle/default/fatal behavior; no authored unknown behavior or rollback privacy weakening. Generated files must agree with resolved canonical descriptors and retain existing fields/reservations/oneofs/RPCs. Keep all original real producer and runtime/taint rows. No current/future path exemption, native/Game authority expansion, feature activation, or runtime PASS from textual union. Missing evidence yields explicit source/runtime gaps; semantic security uncertainty requires bounded escalation.",
+  "qualification": true,
+  "runtime_pass": false,
+  "prior_records": [
+    "31276 exact test resolution418c6/Rroleaea/K2ab reviewedc7",
+    "fa152 Voice merge separately evaluated by complete native H2/H3 unit; no authority granted by this packet"
+  ],
+  "rows": [
+    {
+      "merge": "e963849df092f28ca0d4a79de04ba5abe609cf38",
+      "parents": [
+        "a635c0ad19a233f9bd934dca57943bc6363a6da3",
+        "0c94544318f0057feee3e180d93d7cab103edf7b"
+      ],
+      "best_bases": [
+        "9c59b3d753d1594e205f3c61b8592f3b5fa3d60d"
+      ],
+      "whole_conflict_paths": [
+        "protos/voice/space/v1/space.proto",
+        "src/backend/user/pb/voice/space/v1/space.pb.go",
+        "src/backend/voice/pb/voice/space/v1/space.pb.go",
+        "src/frontend/lib/gen/voice/space/v1/space.pb.dart",
+        "src/frontend/lib/gen/voice/space/v1/space.pbjson.dart"
+      ],
+      "guarded_resolutions": [
+        {
+          "path": "protos/voice/space/v1/space.proto",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "dde084bb8ee0d1b76786f4f63adf4f7afa52bef3"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "8573e97a4e3e808198dc375220e63dc97948fdbe"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "392662cea24912dbd501e37765d6172bcfcf1d8c"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "a2332d23b3f77009a9dbae43d0194558b8ac2434"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/e963849df092/base__protos__voice__space__v1__space.proto",
+              "sha256": "317c640ac5920b6b60852ae8ac22364b1675940e9af9c571d6c07608adaa2ba6"
+            },
+            "first": {
+              "name": "historical-composition/e963849df092/first__protos__voice__space__v1__space.proto",
+              "sha256": "454e2316cf12c619be5ee2655c2c23e3b31fd565987a789d48fde467b4ed7bb9"
+            },
+            "incoming": {
+              "name": "historical-composition/e963849df092/incoming__protos__voice__space__v1__space.proto",
+              "sha256": "6118d95b7e7bbec0dde613cd40a6ed709d7e31ead2b0b59979fa8d36a25895db"
+            },
+            "result": {
+              "name": "historical-composition/e963849df092/result__protos__voice__space__v1__space.proto",
+              "sha256": "067d62892ba2d32e48b37691b66b744e444c83f2208e82d520006c35ff759f89"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "d22e7a3e3373604d985591dbbd45e63636386733"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/user/pb/voice/space/v1/space.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "3f3794253fbb2482a916c2bd151e43e6f68402fa"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "99acdb97655632e677f066942bf06c7407ee52fe"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "4ee4e016b76bc3d26b74ea37b25f461c4365dd38"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "040926292738d1ad3ea2878d7d9324513eb4b748"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/e963849df092/base__src__backend__user__pb__voice__space__v1__space.pb.go",
+              "sha256": "324fda59e1c9ece805cdf55822702372d3746cc996b065afc7adee63703cad83"
+            },
+            "first": {
+              "name": "historical-composition/e963849df092/first__src__backend__user__pb__voice__space__v1__space.pb.go",
+              "sha256": "3bb000b99d9b724e331029f60d31e013149c3db683bacec94860a5e16fd07998"
+            },
+            "incoming": {
+              "name": "historical-composition/e963849df092/incoming__src__backend__user__pb__voice__space__v1__space.pb.go",
+              "sha256": "b5663ef5a3456aec356d8f81693dbbc468905da4888e55816abe58279fdaa684"
+            },
+            "result": {
+              "name": "historical-composition/e963849df092/result__src__backend__user__pb__voice__space__v1__space.pb.go",
+              "sha256": "3e1c76e7fa5307425c254e5552803ff4849a6666291b7ba96f0cfc9fe7502265"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "8fb1b6a3988c795cee563623e0df2a010ab1bc0e"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/voice/pb/voice/space/v1/space.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "3f3794253fbb2482a916c2bd151e43e6f68402fa"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "99acdb97655632e677f066942bf06c7407ee52fe"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "4ee4e016b76bc3d26b74ea37b25f461c4365dd38"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "040926292738d1ad3ea2878d7d9324513eb4b748"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/e963849df092/base__src__backend__voice__pb__voice__space__v1__space.pb.go",
+              "sha256": "324fda59e1c9ece805cdf55822702372d3746cc996b065afc7adee63703cad83"
+            },
+            "first": {
+              "name": "historical-composition/e963849df092/first__src__backend__voice__pb__voice__space__v1__space.pb.go",
+              "sha256": "3bb000b99d9b724e331029f60d31e013149c3db683bacec94860a5e16fd07998"
+            },
+            "incoming": {
+              "name": "historical-composition/e963849df092/incoming__src__backend__voice__pb__voice__space__v1__space.pb.go",
+              "sha256": "b5663ef5a3456aec356d8f81693dbbc468905da4888e55816abe58279fdaa684"
+            },
+            "result": {
+              "name": "historical-composition/e963849df092/result__src__backend__voice__pb__voice__space__v1__space.pb.go",
+              "sha256": "3e1c76e7fa5307425c254e5552803ff4849a6666291b7ba96f0cfc9fe7502265"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "8fb1b6a3988c795cee563623e0df2a010ab1bc0e"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        }
+      ]
+    },
+    {
+      "merge": "abd477df924e455d39690a06d0a16b049fa8243f",
+      "parents": [
+        "bf23588335fa3b708248de7ee8d7bcddf8dcd4d1",
+        "9c2623177d1a829fffab6c0e6c4b575b60c1f57a"
+      ],
+      "best_bases": [
+        "6678fee674c371203dd69f2e9b4fcdbc70e86c9e"
+      ],
+      "whole_conflict_paths": [
+        "src/backend/space/main.go"
+      ],
+      "guarded_resolutions": [
+        {
+          "path": "src/backend/space/internal/store/lifecycle_retention.go",
+          "category": "GUARDED_RESULT_DIFFERS_DETERMINISTIC_MERGE",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "233196ddf3af54b3248b551185669dff4dbf08c5"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "233196ddf3af54b3248b551185669dff4dbf08c5"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "233196ddf3af54b3248b551185669dff4dbf08c5"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "9d85c11238bf2c3183f7bf17dda0bc497c1d94db"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/abd477df924e/base__src__backend__space__internal__store__lifecycle_retention.go",
+              "sha256": "86ea8608ada1167b15ba769cd34ed8834fd467da9d9fc95ec4de3df03bd12b00"
+            },
+            "first": {
+              "name": "historical-composition/abd477df924e/first__src__backend__space__internal__store__lifecycle_retention.go",
+              "sha256": "86ea8608ada1167b15ba769cd34ed8834fd467da9d9fc95ec4de3df03bd12b00"
+            },
+            "incoming": {
+              "name": "historical-composition/abd477df924e/incoming__src__backend__space__internal__store__lifecycle_retention.go",
+              "sha256": "86ea8608ada1167b15ba769cd34ed8834fd467da9d9fc95ec4de3df03bd12b00"
+            },
+            "result": {
+              "name": "historical-composition/abd477df924e/result__src__backend__space__internal__store__lifecycle_retention.go",
+              "sha256": "048283b8d14a4542fc59168d894d9bf32724ae5a3d925b38dd22c983f1819d0d"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "d60a5b027ab88ba0fa393fa44afdc64f642b5f48"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/space/main.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "7decc6ae1d135179bf7a7e8cfa36678f3e2435cb"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "1fa9db68284c04ff0f0ff9638f57890991092c94"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "4268fed50f545ff6ad291bacb45beaa5b3627102"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "020885e273aac4648e3f5862a92d50a9b5a71f3f"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/abd477df924e/base__src__backend__space__main.go",
+              "sha256": "81b815c3209b20f66c2e37d24819086deff4739828e207e764438267ef31b70c"
+            },
+            "first": {
+              "name": "historical-composition/abd477df924e/first__src__backend__space__main.go",
+              "sha256": "ff34d6dee392c9651db7b67126bb9d6ea3215e4f88e1fdfb581f8ad89c3221ed"
+            },
+            "incoming": {
+              "name": "historical-composition/abd477df924e/incoming__src__backend__space__main.go",
+              "sha256": "0042bf459c32acbaa3d1b906062c7f74d1cbbbb8c77f4014b0626a599f8c1714"
+            },
+            "result": {
+              "name": "historical-composition/abd477df924e/result__src__backend__space__main.go",
+              "sha256": "2124d37a0b4c5a2355e24cd2cfe7ff5fd25888959ca16ff83c5bc7da058680a2"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "4bf46b33ae4809ee3dcefd9e4f164ca7cf519459"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        }
+      ]
+    },
+    {
+      "merge": "9b4e3410e79b6be48de64511867f9c4da591cac4",
+      "parents": [
+        "abd477df924e455d39690a06d0a16b049fa8243f",
+        "6684fd3ce9276b79d6a01e59d465be1bfbc583da"
+      ],
+      "best_bases": [
+        "698d4f064f032ea74abf3ede2017100b26c8ee69"
+      ],
+      "whole_conflict_paths": [
+        ".agent/execplans/be-a2-composite-chat-node.md",
+        ".agent/execplans/be130-audit-ingestion.md",
+        "docs/DATA_STORES.md",
+        "docs/microservices/space-service.md",
+        "src/backend/space/internal/chatcreation/runtime.go",
+        "src/backend/space/internal/chatcreation/runtime_test.go"
+      ],
+      "guarded_resolutions": [
+        {
+          "path": "src/backend/space/internal/chatcreation/runtime.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": null,
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "3832a4ec722b643c1e9eba7fd1f0e09dd5c5d826"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "899d254e13c00f717246394a8f77ca2d8cde5d29"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "3832a4ec722b643c1e9eba7fd1f0e09dd5c5d826"
+            }
+          },
+          "files": {
+            "first": {
+              "name": "historical-composition/9b4e3410e79b/first__src__backend__space__internal__chatcreation__runtime.go",
+              "sha256": "489415b9fd4c137e0730acb1134cf253a3eca96041a8fb7a7499c588c45d7fad"
+            },
+            "incoming": {
+              "name": "historical-composition/9b4e3410e79b/incoming__src__backend__space__internal__chatcreation__runtime.go",
+              "sha256": "9db00c4fd22fdb920a65bc8fd0150df131ea271434003c076680018f796e5ee8"
+            },
+            "result": {
+              "name": "historical-composition/9b4e3410e79b/result__src__backend__space__internal__chatcreation__runtime.go",
+              "sha256": "489415b9fd4c137e0730acb1134cf253a3eca96041a8fb7a7499c588c45d7fad"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "3832a4ec722b643c1e9eba7fd1f0e09dd5c5d826"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/space/internal/chatcreation/runtime_test.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": null,
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "59ab9b92c72263a7613e9e1ab3da310409d05780"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "d6a9ea3e9d343f055674efbc1a698b4f550c0ee3"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "59ab9b92c72263a7613e9e1ab3da310409d05780"
+            }
+          },
+          "files": {
+            "first": {
+              "name": "historical-composition/9b4e3410e79b/first__src__backend__space__internal__chatcreation__runtime_test.go",
+              "sha256": "5695536491c834dbd57afd4288fda849ad6a9365be2dc246eb682d45c1e31411"
+            },
+            "incoming": {
+              "name": "historical-composition/9b4e3410e79b/incoming__src__backend__space__internal__chatcreation__runtime_test.go",
+              "sha256": "f617877abe39f04a15906dbbd35439a406313b1d7cb881b79575c67c828a37ad"
+            },
+            "result": {
+              "name": "historical-composition/9b4e3410e79b/result__src__backend__space__internal__chatcreation__runtime_test.go",
+              "sha256": "5695536491c834dbd57afd4288fda849ad6a9365be2dc246eb682d45c1e31411"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "59ab9b92c72263a7613e9e1ab3da310409d05780"
+          },
+          "test_only": true,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        }
+      ]
+    },
+    {
+      "merge": "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+      "parents": [
+        "eaf51ba199af1bedf976291303bcc9c611331d16",
+        "47784a68f3ae2276ab34b9b23f3f1974b1b1ee3d"
+      ],
+      "best_bases": [
+        "698d4f064f032ea74abf3ede2017100b26c8ee69"
+      ],
+      "whole_conflict_paths": [
+        "docs/microservices/space-service.md",
+        "protos/voice/space/v1/space.proto",
+        "src/backend/chat/pb/voice/chat/v1/chat.pb.go",
+        "src/backend/gateway/transcode.go",
+        "src/backend/messaging/pb/voice/chat/v1/chat.pb.go",
+        "src/backend/role/go.mod",
+        "src/backend/space/internal/lifecycleprincipal/interceptor.go",
+        "src/backend/space/internal/lifecycleprincipal/interceptor_test.go",
+        "src/backend/user/pb/voice/chat/v1/chat.pb.go",
+        "src/backend/user/pb/voice/space/v1/space.pb.go",
+        "src/backend/voice/pb/voice/chat/v1/chat.pb.go",
+        "src/backend/voice/pb/voice/space/v1/space.pb.go",
+        "src/frontend/lib/gen/voice/space/v1/space.pb.dart",
+        "src/frontend/lib/gen/voice/space/v1/space.pbjson.dart"
+      ],
+      "guarded_resolutions": [
+        {
+          "path": "protos/voice/space/v1/space.proto",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "dde084bb8ee0d1b76786f4f63adf4f7afa52bef3"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "a2332d23b3f77009a9dbae43d0194558b8ac2434"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "48e938b65cc5f8a98dada52824cd72d746fb9574"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "545b48406153435d6512a2cd8ebed03ec43eb462"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/9dc0d50b65a2/base__protos__voice__space__v1__space.proto",
+              "sha256": "317c640ac5920b6b60852ae8ac22364b1675940e9af9c571d6c07608adaa2ba6"
+            },
+            "first": {
+              "name": "historical-composition/9dc0d50b65a2/first__protos__voice__space__v1__space.proto",
+              "sha256": "067d62892ba2d32e48b37691b66b744e444c83f2208e82d520006c35ff759f89"
+            },
+            "incoming": {
+              "name": "historical-composition/9dc0d50b65a2/incoming__protos__voice__space__v1__space.proto",
+              "sha256": "9cc9b2e4335ab5183f46a2cbbe2e4fca8f504641fe145c1a1cc3fdcee5b3c501"
+            },
+            "result": {
+              "name": "historical-composition/9dc0d50b65a2/result__protos__voice__space__v1__space.proto",
+              "sha256": "e6428c6704b46390af2e2b56545efd6a63c50af22f0c8607667888077a40d03f"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "d22e7a3e3373604d985591dbbd45e63636386733"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/chat/pb/voice/chat/v1/chat.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "e12f9e678790abe2cae4adc8f791f2e3b2bb8768"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "047f474e0a3f4ea92c866b782ff1e5eadb07541c"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "cf7bff8611711300f361a0b067646a7a3660af38"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "fabd6877647324869d5c07cefc8e7fc982baa3e8"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/9dc0d50b65a2/base__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169"
+            },
+            "first": {
+              "name": "historical-composition/9dc0d50b65a2/first__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "daea12719146fce8058d6582203cead835b4b305202d09c02256935eac692911"
+            },
+            "incoming": {
+              "name": "historical-composition/9dc0d50b65a2/incoming__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "1d0e3a3b1b8e69a22b22983a354e651c590d091d3e624747ae2ece81b2d0c0ed"
+            },
+            "result": {
+              "name": "historical-composition/9dc0d50b65a2/result__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "5d95e209f40dde05721822bc5d6fb9905986e8b2029e66040d91280901421b23"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/messaging/pb/voice/chat/v1/chat.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "e12f9e678790abe2cae4adc8f791f2e3b2bb8768"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "047f474e0a3f4ea92c866b782ff1e5eadb07541c"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "cf7bff8611711300f361a0b067646a7a3660af38"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "fabd6877647324869d5c07cefc8e7fc982baa3e8"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/9dc0d50b65a2/base__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169"
+            },
+            "first": {
+              "name": "historical-composition/9dc0d50b65a2/first__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "daea12719146fce8058d6582203cead835b4b305202d09c02256935eac692911"
+            },
+            "incoming": {
+              "name": "historical-composition/9dc0d50b65a2/incoming__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "1d0e3a3b1b8e69a22b22983a354e651c590d091d3e624747ae2ece81b2d0c0ed"
+            },
+            "result": {
+              "name": "historical-composition/9dc0d50b65a2/result__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "5d95e209f40dde05721822bc5d6fb9905986e8b2029e66040d91280901421b23"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/role/go.mod",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "2c7c3df73b6cd173ea9fa57046bc468204f610f2"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "70e9e4ca9a05d08384257e3c98f421e458d1eb24"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "ef253a01e11b049b6360152417940712c5cb734a"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "fc5b40e57b8083cf44c12ccc4b9b2ccc5662a2eb"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/9dc0d50b65a2/base__src__backend__role__go.mod",
+              "sha256": "bec0fdadc3c2dae06380f02b7ae47aada1b4f258f2fba306f7eb6db3386f6840"
+            },
+            "first": {
+              "name": "historical-composition/9dc0d50b65a2/first__src__backend__role__go.mod",
+              "sha256": "3be25695917a4fc43c6ac71a2c81a165150593c876a09be7b50234c22f4f910d"
+            },
+            "incoming": {
+              "name": "historical-composition/9dc0d50b65a2/incoming__src__backend__role__go.mod",
+              "sha256": "ad1517bc9910eaeb47f2d0c733ac378425ba9e4a8cc5fa2012686efbcd266d11"
+            },
+            "result": {
+              "name": "historical-composition/9dc0d50b65a2/result__src__backend__role__go.mod",
+              "sha256": "f155635caca8c707dae764fad99419ccb81ce611d4adf673fc7d7d7f0abf9085"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "5bfdf899c774ff1ae5bba3b5b64be8f4f36ad294"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/space/internal/lifecycleprincipal/interceptor.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "d54c14fee68d5c97fcb665d7faadd9b5c3df69fb"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "aeff15b397180d7bc478cefb87696e4f205914a3"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "69641485e4563eef9a3a183588d46bfbb77f8bbb"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "5a10c79ade74f91ecefcd6ccc915ee166b978713"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/9dc0d50b65a2/base__src__backend__space__internal__lifecycleprincipal__interceptor.go",
+              "sha256": "64c7424ea672ca6c28ffec5d4473de84fa3e951d3416544aa4ae9df2cdc85206"
+            },
+            "first": {
+              "name": "historical-composition/9dc0d50b65a2/first__src__backend__space__internal__lifecycleprincipal__interceptor.go",
+              "sha256": "ec7f626dc1b2e9aff43efffa3cb07ae4b03c2e8cdc546cc78cda1d52107cc0e0"
+            },
+            "incoming": {
+              "name": "historical-composition/9dc0d50b65a2/incoming__src__backend__space__internal__lifecycleprincipal__interceptor.go",
+              "sha256": "dee924d028b99ad3070acedd7ceff067ffe95e04349eae06f468d8288f11aa19"
+            },
+            "result": {
+              "name": "historical-composition/9dc0d50b65a2/result__src__backend__space__internal__lifecycleprincipal__interceptor.go",
+              "sha256": "b3ab69fe0da12f2c2062d2639561a62bb080af5e682f472022f181f0afc09f08"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "b1c7198a1e68addcfca97dbfa712d4e779d51dc1"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/space/internal/lifecycleprincipal/interceptor_test.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "4d010b18e7a062d1f8888d5d6e50a1f07d09b4a4"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "cedb886d4c92b92c372df22b747c98025b5908c9"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "788e4b435377786cf390ace63bcb91f0b897f8bb"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "32a7721ee86a89a6ee24ac133968f6d0b8bd1a43"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/9dc0d50b65a2/base__src__backend__space__internal__lifecycleprincipal__interceptor_test.go",
+              "sha256": "24e092057163c5ccad1e984dbdb7cd58d7b1399c53f2fd9dc9b31f8d814536b3"
+            },
+            "first": {
+              "name": "historical-composition/9dc0d50b65a2/first__src__backend__space__internal__lifecycleprincipal__interceptor_test.go",
+              "sha256": "66dacc7fe5108f9c5d13f7a7f7fa7b1121ea36051d63cd569ae80d984eeeb470"
+            },
+            "incoming": {
+              "name": "historical-composition/9dc0d50b65a2/incoming__src__backend__space__internal__lifecycleprincipal__interceptor_test.go",
+              "sha256": "b6276c594d4ed8c6637a120dd61bc1c250e7f2e245e8416b5caf954a56afd993"
+            },
+            "result": {
+              "name": "historical-composition/9dc0d50b65a2/result__src__backend__space__internal__lifecycleprincipal__interceptor_test.go",
+              "sha256": "3238b61c518a399faca6b1e746a99d4ee73db6837cbdf7857e6ec0a3ffafed51"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "32a7721ee86a89a6ee24ac133968f6d0b8bd1a43"
+          },
+          "test_only": true,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/user/pb/voice/chat/v1/chat.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "e12f9e678790abe2cae4adc8f791f2e3b2bb8768"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "047f474e0a3f4ea92c866b782ff1e5eadb07541c"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "cf7bff8611711300f361a0b067646a7a3660af38"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "fabd6877647324869d5c07cefc8e7fc982baa3e8"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/9dc0d50b65a2/base__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169"
+            },
+            "first": {
+              "name": "historical-composition/9dc0d50b65a2/first__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "daea12719146fce8058d6582203cead835b4b305202d09c02256935eac692911"
+            },
+            "incoming": {
+              "name": "historical-composition/9dc0d50b65a2/incoming__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "1d0e3a3b1b8e69a22b22983a354e651c590d091d3e624747ae2ece81b2d0c0ed"
+            },
+            "result": {
+              "name": "historical-composition/9dc0d50b65a2/result__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "5d95e209f40dde05721822bc5d6fb9905986e8b2029e66040d91280901421b23"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/user/pb/voice/space/v1/space.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "3f3794253fbb2482a916c2bd151e43e6f68402fa"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "040926292738d1ad3ea2878d7d9324513eb4b748"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "612651c96f9e77ffd7e9894fa91813fc069d5051"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "072725bd1cf40342e429c31d9683649c459561de"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/9dc0d50b65a2/base__src__backend__user__pb__voice__space__v1__space.pb.go",
+              "sha256": "324fda59e1c9ece805cdf55822702372d3746cc996b065afc7adee63703cad83"
+            },
+            "first": {
+              "name": "historical-composition/9dc0d50b65a2/first__src__backend__user__pb__voice__space__v1__space.pb.go",
+              "sha256": "3e1c76e7fa5307425c254e5552803ff4849a6666291b7ba96f0cfc9fe7502265"
+            },
+            "incoming": {
+              "name": "historical-composition/9dc0d50b65a2/incoming__src__backend__user__pb__voice__space__v1__space.pb.go",
+              "sha256": "a49e3eabc555a5fedc7189d049a37a300ae7890030839500e2b7b0dc85b8cded"
+            },
+            "result": {
+              "name": "historical-composition/9dc0d50b65a2/result__src__backend__user__pb__voice__space__v1__space.pb.go",
+              "sha256": "b489a05731577a86aff8a4e32fcdfa5f12b4a17566ceea0e2f2b59ab0faf7f59"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "8fb1b6a3988c795cee563623e0df2a010ab1bc0e"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/voice/pb/voice/chat/v1/chat.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "e12f9e678790abe2cae4adc8f791f2e3b2bb8768"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "047f474e0a3f4ea92c866b782ff1e5eadb07541c"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "cf7bff8611711300f361a0b067646a7a3660af38"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "fabd6877647324869d5c07cefc8e7fc982baa3e8"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/9dc0d50b65a2/base__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169"
+            },
+            "first": {
+              "name": "historical-composition/9dc0d50b65a2/first__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "daea12719146fce8058d6582203cead835b4b305202d09c02256935eac692911"
+            },
+            "incoming": {
+              "name": "historical-composition/9dc0d50b65a2/incoming__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "1d0e3a3b1b8e69a22b22983a354e651c590d091d3e624747ae2ece81b2d0c0ed"
+            },
+            "result": {
+              "name": "historical-composition/9dc0d50b65a2/result__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "5d95e209f40dde05721822bc5d6fb9905986e8b2029e66040d91280901421b23"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/voice/pb/voice/space/v1/space.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "3f3794253fbb2482a916c2bd151e43e6f68402fa"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "040926292738d1ad3ea2878d7d9324513eb4b748"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "612651c96f9e77ffd7e9894fa91813fc069d5051"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "072725bd1cf40342e429c31d9683649c459561de"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/9dc0d50b65a2/base__src__backend__voice__pb__voice__space__v1__space.pb.go",
+              "sha256": "324fda59e1c9ece805cdf55822702372d3746cc996b065afc7adee63703cad83"
+            },
+            "first": {
+              "name": "historical-composition/9dc0d50b65a2/first__src__backend__voice__pb__voice__space__v1__space.pb.go",
+              "sha256": "3e1c76e7fa5307425c254e5552803ff4849a6666291b7ba96f0cfc9fe7502265"
+            },
+            "incoming": {
+              "name": "historical-composition/9dc0d50b65a2/incoming__src__backend__voice__pb__voice__space__v1__space.pb.go",
+              "sha256": "a49e3eabc555a5fedc7189d049a37a300ae7890030839500e2b7b0dc85b8cded"
+            },
+            "result": {
+              "name": "historical-composition/9dc0d50b65a2/result__src__backend__voice__pb__voice__space__v1__space.pb.go",
+              "sha256": "b489a05731577a86aff8a4e32fcdfa5f12b4a17566ceea0e2f2b59ab0faf7f59"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "8fb1b6a3988c795cee563623e0df2a010ab1bc0e"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        }
+      ]
+    },
+    {
+      "merge": "3bda9054eff2f1f7d2dd9d5bff46e097e06f683e",
+      "parents": [
+        "dfde01af172dd7b1a8864dba1605731293067e83",
+        "f75d28905adec759dcc208c6ae43c1161007a423"
+      ],
+      "best_bases": [
+        "698d4f064f032ea74abf3ede2017100b26c8ee69"
+      ],
+      "whole_conflict_paths": [
+        "docs/microservices/chat-service.md",
+        "protos/voice/chat/v1/chat.proto",
+        "src/backend/chat/pb/voice/chat/v1/chat.pb.go",
+        "src/backend/messaging/pb/voice/chat/v1/chat.pb.go",
+        "src/backend/user/pb/voice/chat/v1/chat.pb.go",
+        "src/backend/voice/pb/voice/chat/v1/chat.pb.go",
+        "src/frontend/lib/gen/voice/chat/v1/chat.pb.dart",
+        "src/frontend/lib/gen/voice/chat/v1/chat.pbjson.dart"
+      ],
+      "guarded_resolutions": [
+        {
+          "path": "protos/voice/chat/v1/chat.proto",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "e5a46a96139f578365a5bd1239513d1929ec8fe9"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "5917175ed393d9ac41738a929499ef7f5d009d34"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "eb803c56c370fe56a3d9923e4fc2b3647b4c9114"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "18b6111bc67a6f16536408343bdb87197bac4933"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/3bda9054eff2/base__protos__voice__chat__v1__chat.proto",
+              "sha256": "2fb4b1adc7c356a5a9f3ef8953a28d61c6d662cde84bd6cea5d1279b22d2c2a3"
+            },
+            "first": {
+              "name": "historical-composition/3bda9054eff2/first__protos__voice__chat__v1__chat.proto",
+              "sha256": "ee5da539f819df6f007fa77b5f7518237c62c3a750085623c08cdbfce4a01c08"
+            },
+            "incoming": {
+              "name": "historical-composition/3bda9054eff2/incoming__protos__voice__chat__v1__chat.proto",
+              "sha256": "3d9e6f3c422429e56c0f0ad6b9386fa028d63d852cd7b25f76238c88c8caf751"
+            },
+            "result": {
+              "name": "historical-composition/3bda9054eff2/result__protos__voice__chat__v1__chat.proto",
+              "sha256": "dad257b5cfe314c6bd2c8f22cc796194465afe02ac35b9c1756b0559515a6bd5"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "998e7880ab0a10d52d89475a2f8219c5999e0ad9"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/chat/pb/voice/chat/v1/chat.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "e12f9e678790abe2cae4adc8f791f2e3b2bb8768"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "fabd6877647324869d5c07cefc8e7fc982baa3e8"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "6043858c5ec3f4d025907d905481803becb05d56"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "13d2cf40fd9c13fc0c2e501961e3fbd0fde9bba0"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/3bda9054eff2/base__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169"
+            },
+            "first": {
+              "name": "historical-composition/3bda9054eff2/first__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "5d95e209f40dde05721822bc5d6fb9905986e8b2029e66040d91280901421b23"
+            },
+            "incoming": {
+              "name": "historical-composition/3bda9054eff2/incoming__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "ecf8c80b34e2247452b6c052ac2f25fe57f18a8a860f99ff9fc0dee688af6756"
+            },
+            "result": {
+              "name": "historical-composition/3bda9054eff2/result__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "48666c7deefec04c788cef457c920af6c83bcdb9c349e7db47f9a6b6b976c690"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/messaging/pb/voice/chat/v1/chat.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "e12f9e678790abe2cae4adc8f791f2e3b2bb8768"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "fabd6877647324869d5c07cefc8e7fc982baa3e8"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "6043858c5ec3f4d025907d905481803becb05d56"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "13d2cf40fd9c13fc0c2e501961e3fbd0fde9bba0"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/3bda9054eff2/base__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169"
+            },
+            "first": {
+              "name": "historical-composition/3bda9054eff2/first__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "5d95e209f40dde05721822bc5d6fb9905986e8b2029e66040d91280901421b23"
+            },
+            "incoming": {
+              "name": "historical-composition/3bda9054eff2/incoming__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "ecf8c80b34e2247452b6c052ac2f25fe57f18a8a860f99ff9fc0dee688af6756"
+            },
+            "result": {
+              "name": "historical-composition/3bda9054eff2/result__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "48666c7deefec04c788cef457c920af6c83bcdb9c349e7db47f9a6b6b976c690"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/user/pb/voice/chat/v1/chat.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "e12f9e678790abe2cae4adc8f791f2e3b2bb8768"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "fabd6877647324869d5c07cefc8e7fc982baa3e8"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "6043858c5ec3f4d025907d905481803becb05d56"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "13d2cf40fd9c13fc0c2e501961e3fbd0fde9bba0"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/3bda9054eff2/base__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169"
+            },
+            "first": {
+              "name": "historical-composition/3bda9054eff2/first__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "5d95e209f40dde05721822bc5d6fb9905986e8b2029e66040d91280901421b23"
+            },
+            "incoming": {
+              "name": "historical-composition/3bda9054eff2/incoming__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "ecf8c80b34e2247452b6c052ac2f25fe57f18a8a860f99ff9fc0dee688af6756"
+            },
+            "result": {
+              "name": "historical-composition/3bda9054eff2/result__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "48666c7deefec04c788cef457c920af6c83bcdb9c349e7db47f9a6b6b976c690"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/voice/pb/voice/chat/v1/chat.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "e12f9e678790abe2cae4adc8f791f2e3b2bb8768"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "fabd6877647324869d5c07cefc8e7fc982baa3e8"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "6043858c5ec3f4d025907d905481803becb05d56"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "13d2cf40fd9c13fc0c2e501961e3fbd0fde9bba0"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/3bda9054eff2/base__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169"
+            },
+            "first": {
+              "name": "historical-composition/3bda9054eff2/first__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "5d95e209f40dde05721822bc5d6fb9905986e8b2029e66040d91280901421b23"
+            },
+            "incoming": {
+              "name": "historical-composition/3bda9054eff2/incoming__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "ecf8c80b34e2247452b6c052ac2f25fe57f18a8a860f99ff9fc0dee688af6756"
+            },
+            "result": {
+              "name": "historical-composition/3bda9054eff2/result__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "48666c7deefec04c788cef457c920af6c83bcdb9c349e7db47f9a6b6b976c690"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        }
+      ]
+    },
+    {
+      "merge": "f5864982a3408ecd6d5aac422ea6eed91303aca2",
+      "parents": [
+        "10c6be2791bc45753e007803953887c69386aca3",
+        "0361d8597f776fd02dd312cc6498d26d00bcd890"
+      ],
+      "best_bases": [
+        "698d4f064f032ea74abf3ede2017100b26c8ee69"
+      ],
+      "whole_conflict_paths": [
+        "src/backend/messaging/pb/voice/events/v1/jetstream_events.pb.go",
+        "src/backend/user/pb/voice/events/v1/jetstream_events.pb.go",
+        "src/backend/voice/pb/voice/events/v1/jetstream_events.pb.go"
+      ],
+      "guarded_resolutions": [
+        {
+          "path": "src/backend/messaging/pb/voice/events/v1/jetstream_events.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "555e29d87c57cf2a7fe1be9c515164b8be08a733"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "f4a7e713d7ad693b6000bcccdd075fc54bf7832a"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "2a4ef10f72361278e5520434fa780574754c983f"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "bce3b14e104fc9fc9d1d9e8d513490596184dbbc"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/f5864982a340/base__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "01d3bf2b743ee7e7ba86df6dd1c60dbbf979c0d231884af7c3b46a897add362b"
+            },
+            "first": {
+              "name": "historical-composition/f5864982a340/first__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "3bc9d8b1bf867e88203e8caef17e0d3785aa81d87747b3253e90ae6da4ee4293"
+            },
+            "incoming": {
+              "name": "historical-composition/f5864982a340/incoming__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "221daf60a8335eeedde17ca07705d283528018d06e63aea85664753480f4e385"
+            },
+            "result": {
+              "name": "historical-composition/f5864982a340/result__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "b33570c3d6d3c5776c076aed5edb393a4dcebd072082754850865ee6543dc7a6"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "b78e0a1ed2a2973962fff5f298e0f004a119067b"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/user/pb/voice/events/v1/jetstream_events.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "555e29d87c57cf2a7fe1be9c515164b8be08a733"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "f4a7e713d7ad693b6000bcccdd075fc54bf7832a"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "2a4ef10f72361278e5520434fa780574754c983f"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "bce3b14e104fc9fc9d1d9e8d513490596184dbbc"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/f5864982a340/base__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "01d3bf2b743ee7e7ba86df6dd1c60dbbf979c0d231884af7c3b46a897add362b"
+            },
+            "first": {
+              "name": "historical-composition/f5864982a340/first__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "3bc9d8b1bf867e88203e8caef17e0d3785aa81d87747b3253e90ae6da4ee4293"
+            },
+            "incoming": {
+              "name": "historical-composition/f5864982a340/incoming__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "221daf60a8335eeedde17ca07705d283528018d06e63aea85664753480f4e385"
+            },
+            "result": {
+              "name": "historical-composition/f5864982a340/result__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "b33570c3d6d3c5776c076aed5edb393a4dcebd072082754850865ee6543dc7a6"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "b78e0a1ed2a2973962fff5f298e0f004a119067b"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/voice/pb/voice/events/v1/jetstream_events.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "555e29d87c57cf2a7fe1be9c515164b8be08a733"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "f4a7e713d7ad693b6000bcccdd075fc54bf7832a"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "2a4ef10f72361278e5520434fa780574754c983f"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "bce3b14e104fc9fc9d1d9e8d513490596184dbbc"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/f5864982a340/base__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "01d3bf2b743ee7e7ba86df6dd1c60dbbf979c0d231884af7c3b46a897add362b"
+            },
+            "first": {
+              "name": "historical-composition/f5864982a340/first__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "3bc9d8b1bf867e88203e8caef17e0d3785aa81d87747b3253e90ae6da4ee4293"
+            },
+            "incoming": {
+              "name": "historical-composition/f5864982a340/incoming__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "221daf60a8335eeedde17ca07705d283528018d06e63aea85664753480f4e385"
+            },
+            "result": {
+              "name": "historical-composition/f5864982a340/result__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "b33570c3d6d3c5776c076aed5edb393a4dcebd072082754850865ee6543dc7a6"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "b78e0a1ed2a2973962fff5f298e0f004a119067b"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        }
+      ]
+    },
+    {
+      "merge": "97c4bf523fab0d96a4d2d17b882996fb5d515a72",
+      "parents": [
+        "147b957bb467c352689bef31822bb36871e4add1",
+        "a1dbb6532dcb00cca83981b387bd5dac35e73bee"
+      ],
+      "best_bases": [
+        "698d4f064f032ea74abf3ede2017100b26c8ee69"
+      ],
+      "whole_conflict_paths": [
+        "src/backend/chat/pb/voice/chat/v1/chat.pb.go",
+        "src/backend/messaging/pb/voice/chat/v1/chat.pb.go",
+        "src/backend/messaging/pb/voice/events/v1/jetstream_events.pb.go",
+        "src/backend/user/pb/voice/bot/v1/bot.pb.go",
+        "src/backend/user/pb/voice/chat/v1/chat.pb.go",
+        "src/backend/user/pb/voice/events/v1/jetstream_events.pb.go",
+        "src/backend/voice/pb/voice/bot/v1/bot.pb.go",
+        "src/backend/voice/pb/voice/chat/v1/chat.pb.go",
+        "src/backend/voice/pb/voice/events/v1/jetstream_events.pb.go"
+      ],
+      "guarded_resolutions": [
+        {
+          "path": "src/backend/chat/pb/voice/chat/v1/chat.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "e12f9e678790abe2cae4adc8f791f2e3b2bb8768"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "13d2cf40fd9c13fc0c2e501961e3fbd0fde9bba0"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "0229148da2e72aa7635056d4306e3faa3a7e43bb"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/97c4bf523fab/base__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169"
+            },
+            "first": {
+              "name": "historical-composition/97c4bf523fab/first__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "48666c7deefec04c788cef457c920af6c83bcdb9c349e7db47f9a6b6b976c690"
+            },
+            "incoming": {
+              "name": "historical-composition/97c4bf523fab/incoming__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "b77a47dc724ff38005516592328c5086b669d379a82e95240bc1842da6b7defa"
+            },
+            "result": {
+              "name": "historical-composition/97c4bf523fab/result__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "00cbba64641f76282772b1042cb38480582ac9b1aeffb3a72c74628cfaa62a83"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/messaging/pb/voice/chat/v1/chat.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "e12f9e678790abe2cae4adc8f791f2e3b2bb8768"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "13d2cf40fd9c13fc0c2e501961e3fbd0fde9bba0"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "0229148da2e72aa7635056d4306e3faa3a7e43bb"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/97c4bf523fab/base__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169"
+            },
+            "first": {
+              "name": "historical-composition/97c4bf523fab/first__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "48666c7deefec04c788cef457c920af6c83bcdb9c349e7db47f9a6b6b976c690"
+            },
+            "incoming": {
+              "name": "historical-composition/97c4bf523fab/incoming__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "b77a47dc724ff38005516592328c5086b669d379a82e95240bc1842da6b7defa"
+            },
+            "result": {
+              "name": "historical-composition/97c4bf523fab/result__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "00cbba64641f76282772b1042cb38480582ac9b1aeffb3a72c74628cfaa62a83"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/messaging/pb/voice/events/v1/jetstream_events.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "555e29d87c57cf2a7fe1be9c515164b8be08a733"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "e5576d3d8c5b432146210f7059734c810581fe55"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "c28fef89c33c0b2818277347cbc31b2f0d4f2a51"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "aa3d196cdeb8a427b3d5f156ba404753ecab1257"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/97c4bf523fab/base__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "01d3bf2b743ee7e7ba86df6dd1c60dbbf979c0d231884af7c3b46a897add362b"
+            },
+            "first": {
+              "name": "historical-composition/97c4bf523fab/first__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "59e7b78e0e5cfb2fe8eaa3ccd585d7bce45b82f5c13fe67afa0d0782c103ed70"
+            },
+            "incoming": {
+              "name": "historical-composition/97c4bf523fab/incoming__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "8db2180b8b9e049ca9324a801cb383bae02bd299c97d1abd6eb4cf4ab6e1729b"
+            },
+            "result": {
+              "name": "historical-composition/97c4bf523fab/result__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "b4e09110702ed881479857731de30b8a661ebdea34f4a0df2dedf89d651dba43"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "b78e0a1ed2a2973962fff5f298e0f004a119067b"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/user/pb/voice/bot/v1/bot.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "ba961fe82051cd5f221235b0956bb2f6302f8dfc"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "9e6fef7391171762863b8678c71403d268f32546"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "f487bee993a36ac83be3081064baa99b1872297a"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "cf0644a3ef884c9c40030c83d9024eeef97b4d86"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/97c4bf523fab/base__src__backend__user__pb__voice__bot__v1__bot.pb.go",
+              "sha256": "d61061f7657e202045b8120425c2178e52680c897694d4086576a7b1e21461c6"
+            },
+            "first": {
+              "name": "historical-composition/97c4bf523fab/first__src__backend__user__pb__voice__bot__v1__bot.pb.go",
+              "sha256": "328b15e403aae95ef15865f8f14b56dabfd2544fa287c97416bd293defaccf21"
+            },
+            "incoming": {
+              "name": "historical-composition/97c4bf523fab/incoming__src__backend__user__pb__voice__bot__v1__bot.pb.go",
+              "sha256": "4287a9bb11ce5c7a3f69548e9aef2e294b7a40181b7de35619f5a46834f442fc"
+            },
+            "result": {
+              "name": "historical-composition/97c4bf523fab/result__src__backend__user__pb__voice__bot__v1__bot.pb.go",
+              "sha256": "b855dd1dc86eaefc2a092cc507d8b69e30d06e05d6aa1d38510b886c42014797"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "cf0644a3ef884c9c40030c83d9024eeef97b4d86"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/user/pb/voice/chat/v1/chat.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "e12f9e678790abe2cae4adc8f791f2e3b2bb8768"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "13d2cf40fd9c13fc0c2e501961e3fbd0fde9bba0"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "0229148da2e72aa7635056d4306e3faa3a7e43bb"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/97c4bf523fab/base__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169"
+            },
+            "first": {
+              "name": "historical-composition/97c4bf523fab/first__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "48666c7deefec04c788cef457c920af6c83bcdb9c349e7db47f9a6b6b976c690"
+            },
+            "incoming": {
+              "name": "historical-composition/97c4bf523fab/incoming__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "b77a47dc724ff38005516592328c5086b669d379a82e95240bc1842da6b7defa"
+            },
+            "result": {
+              "name": "historical-composition/97c4bf523fab/result__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "00cbba64641f76282772b1042cb38480582ac9b1aeffb3a72c74628cfaa62a83"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/user/pb/voice/events/v1/jetstream_events.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "555e29d87c57cf2a7fe1be9c515164b8be08a733"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "e5576d3d8c5b432146210f7059734c810581fe55"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "c28fef89c33c0b2818277347cbc31b2f0d4f2a51"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "aa3d196cdeb8a427b3d5f156ba404753ecab1257"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/97c4bf523fab/base__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "01d3bf2b743ee7e7ba86df6dd1c60dbbf979c0d231884af7c3b46a897add362b"
+            },
+            "first": {
+              "name": "historical-composition/97c4bf523fab/first__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "59e7b78e0e5cfb2fe8eaa3ccd585d7bce45b82f5c13fe67afa0d0782c103ed70"
+            },
+            "incoming": {
+              "name": "historical-composition/97c4bf523fab/incoming__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "8db2180b8b9e049ca9324a801cb383bae02bd299c97d1abd6eb4cf4ab6e1729b"
+            },
+            "result": {
+              "name": "historical-composition/97c4bf523fab/result__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "b4e09110702ed881479857731de30b8a661ebdea34f4a0df2dedf89d651dba43"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "b78e0a1ed2a2973962fff5f298e0f004a119067b"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/voice/pb/voice/bot/v1/bot.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "ba961fe82051cd5f221235b0956bb2f6302f8dfc"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "9e6fef7391171762863b8678c71403d268f32546"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "f487bee993a36ac83be3081064baa99b1872297a"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "cf0644a3ef884c9c40030c83d9024eeef97b4d86"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/97c4bf523fab/base__src__backend__voice__pb__voice__bot__v1__bot.pb.go",
+              "sha256": "d61061f7657e202045b8120425c2178e52680c897694d4086576a7b1e21461c6"
+            },
+            "first": {
+              "name": "historical-composition/97c4bf523fab/first__src__backend__voice__pb__voice__bot__v1__bot.pb.go",
+              "sha256": "328b15e403aae95ef15865f8f14b56dabfd2544fa287c97416bd293defaccf21"
+            },
+            "incoming": {
+              "name": "historical-composition/97c4bf523fab/incoming__src__backend__voice__pb__voice__bot__v1__bot.pb.go",
+              "sha256": "4287a9bb11ce5c7a3f69548e9aef2e294b7a40181b7de35619f5a46834f442fc"
+            },
+            "result": {
+              "name": "historical-composition/97c4bf523fab/result__src__backend__voice__pb__voice__bot__v1__bot.pb.go",
+              "sha256": "b855dd1dc86eaefc2a092cc507d8b69e30d06e05d6aa1d38510b886c42014797"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "cf0644a3ef884c9c40030c83d9024eeef97b4d86"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/voice/pb/voice/chat/v1/chat.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "e12f9e678790abe2cae4adc8f791f2e3b2bb8768"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "13d2cf40fd9c13fc0c2e501961e3fbd0fde9bba0"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "0229148da2e72aa7635056d4306e3faa3a7e43bb"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/97c4bf523fab/base__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169"
+            },
+            "first": {
+              "name": "historical-composition/97c4bf523fab/first__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "48666c7deefec04c788cef457c920af6c83bcdb9c349e7db47f9a6b6b976c690"
+            },
+            "incoming": {
+              "name": "historical-composition/97c4bf523fab/incoming__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "b77a47dc724ff38005516592328c5086b669d379a82e95240bc1842da6b7defa"
+            },
+            "result": {
+              "name": "historical-composition/97c4bf523fab/result__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+              "sha256": "00cbba64641f76282772b1042cb38480582ac9b1aeffb3a72c74628cfaa62a83"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/voice/pb/voice/events/v1/jetstream_events.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "555e29d87c57cf2a7fe1be9c515164b8be08a733"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "e5576d3d8c5b432146210f7059734c810581fe55"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "c28fef89c33c0b2818277347cbc31b2f0d4f2a51"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "aa3d196cdeb8a427b3d5f156ba404753ecab1257"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/97c4bf523fab/base__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "01d3bf2b743ee7e7ba86df6dd1c60dbbf979c0d231884af7c3b46a897add362b"
+            },
+            "first": {
+              "name": "historical-composition/97c4bf523fab/first__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "59e7b78e0e5cfb2fe8eaa3ccd585d7bce45b82f5c13fe67afa0d0782c103ed70"
+            },
+            "incoming": {
+              "name": "historical-composition/97c4bf523fab/incoming__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "8db2180b8b9e049ca9324a801cb383bae02bd299c97d1abd6eb4cf4ab6e1729b"
+            },
+            "result": {
+              "name": "historical-composition/97c4bf523fab/result__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go",
+              "sha256": "b4e09110702ed881479857731de30b8a661ebdea34f4a0df2dedf89d651dba43"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "b78e0a1ed2a2973962fff5f298e0f004a119067b"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        }
+      ]
+    },
+    {
+      "merge": "6f6715c50f431c584ac046a843de4b464d52b7a6",
+      "parents": [
+        "97c4bf523fab0d96a4d2d17b882996fb5d515a72",
+        "6efea530e777e3e1883e30b83032682964e53a63"
+      ],
+      "best_bases": [
+        "698d4f064f032ea74abf3ede2017100b26c8ee69"
+      ],
+      "whole_conflict_paths": [
+        "docs/features/spaces.md",
+        "docs/microservices/space-service.md",
+        "src/backend/messaging/internal/grpcsvc/messaging_grpc.go",
+        "src/backend/space/internal/grpcsvc/space_grpc.go",
+        "src/backend/space/main.go",
+        "src/backend/user/pb/voice/space/v1/space.pb.go",
+        "src/backend/voice/pb/voice/space/v1/space.pb.go"
+      ],
+      "guarded_resolutions": [
+        {
+          "path": "src/backend/space/internal/grpcsvc/space_grpc.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "396dbbadaa8bfc5d9676fadf3e7b481c4859e6cf"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "57dd68ec191984b56fc4448fb1a0fe3eb0364733"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "e907e7c9c3f727625b3ef282ba46af55a510fc9b"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "91d542d0f43f23d7bee921a3740b142ba57c9866"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/6f6715c50f43/base__src__backend__space__internal__grpcsvc__space_grpc.go",
+              "sha256": "048700cb587997e1a7a170a6c0afff38eb9fcb3be346aa6c643017e6c26dc300"
+            },
+            "first": {
+              "name": "historical-composition/6f6715c50f43/first__src__backend__space__internal__grpcsvc__space_grpc.go",
+              "sha256": "9f97684bf7efe3afcef54a0bdc337c5888268440251880f21abe742c59b64a26"
+            },
+            "incoming": {
+              "name": "historical-composition/6f6715c50f43/incoming__src__backend__space__internal__grpcsvc__space_grpc.go",
+              "sha256": "8cdeefcce3b50ad0c468cd2e89ae1aaf657944fdd418a06e6060b6bdd794a419"
+            },
+            "result": {
+              "name": "historical-composition/6f6715c50f43/result__src__backend__space__internal__grpcsvc__space_grpc.go",
+              "sha256": "87c07b189fd5c742d7c7b6ad1cd8b4183e86b7bf4e54d69e437e1642f3b7cb0e"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "91d542d0f43f23d7bee921a3740b142ba57c9866"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/space/main.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "7decc6ae1d135179bf7a7e8cfa36678f3e2435cb"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "0847c288250c218a812c5a933eee4e53e3c5469d"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "bf629f7e01035e5c03c6a0e62106f6ac05feff2e"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "7f10b0e5738f9e1cb74d77545b006cc13039255b"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/6f6715c50f43/base__src__backend__space__main.go",
+              "sha256": "81b815c3209b20f66c2e37d24819086deff4739828e207e764438267ef31b70c"
+            },
+            "first": {
+              "name": "historical-composition/6f6715c50f43/first__src__backend__space__main.go",
+              "sha256": "0e709f2dee53c1ff34d4b6bd490d0e4dad9e8775ce288ae860cb7278c27725c3"
+            },
+            "incoming": {
+              "name": "historical-composition/6f6715c50f43/incoming__src__backend__space__main.go",
+              "sha256": "8e2c7e57ca41264c60cb985f38d5e34ede30e1129b199f520ff8a6c8b21f58ca"
+            },
+            "result": {
+              "name": "historical-composition/6f6715c50f43/result__src__backend__space__main.go",
+              "sha256": "40bcc163e8375e31524338c0ab21d484fddf5fae924a15243a483d6af1fa80b7"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "4bf46b33ae4809ee3dcefd9e4f164ca7cf519459"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/user/pb/voice/space/v1/space.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "3f3794253fbb2482a916c2bd151e43e6f68402fa"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "072725bd1cf40342e429c31d9683649c459561de"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "6ce25ffb5aa18fa2ff07ecb0a9928eebe19b5dde"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "db8d89708042545148e565057283494f4ffbfe1f"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/6f6715c50f43/base__src__backend__user__pb__voice__space__v1__space.pb.go",
+              "sha256": "324fda59e1c9ece805cdf55822702372d3746cc996b065afc7adee63703cad83"
+            },
+            "first": {
+              "name": "historical-composition/6f6715c50f43/first__src__backend__user__pb__voice__space__v1__space.pb.go",
+              "sha256": "b489a05731577a86aff8a4e32fcdfa5f12b4a17566ceea0e2f2b59ab0faf7f59"
+            },
+            "incoming": {
+              "name": "historical-composition/6f6715c50f43/incoming__src__backend__user__pb__voice__space__v1__space.pb.go",
+              "sha256": "c4ebda642df859fbb2ee7b8e85bef2b4c71ccc0f0e271bfd7b932d15127b6c87"
+            },
+            "result": {
+              "name": "historical-composition/6f6715c50f43/result__src__backend__user__pb__voice__space__v1__space.pb.go",
+              "sha256": "4d2065bc2904036195fad86543e80ff8bf9386002e656a3035022fd1ced78e72"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "8fb1b6a3988c795cee563623e0df2a010ab1bc0e"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        },
+        {
+          "path": "src/backend/voice/pb/voice/space/v1/space.pb.go",
+          "category": "GUARDED_ACTUAL_CONFLICT_RESOLUTION",
+          "entries": {
+            "base": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "3f3794253fbb2482a916c2bd151e43e6f68402fa"
+            },
+            "first": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "072725bd1cf40342e429c31d9683649c459561de"
+            },
+            "incoming": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "6ce25ffb5aa18fa2ff07ecb0a9928eebe19b5dde"
+            },
+            "result": {
+              "mode": "100644",
+              "type": "blob",
+              "oid": "db8d89708042545148e565057283494f4ffbfe1f"
+            }
+          },
+          "files": {
+            "base": {
+              "name": "historical-composition/6f6715c50f43/base__src__backend__voice__pb__voice__space__v1__space.pb.go",
+              "sha256": "324fda59e1c9ece805cdf55822702372d3746cc996b065afc7adee63703cad83"
+            },
+            "first": {
+              "name": "historical-composition/6f6715c50f43/first__src__backend__voice__pb__voice__space__v1__space.pb.go",
+              "sha256": "b489a05731577a86aff8a4e32fcdfa5f12b4a17566ceea0e2f2b59ab0faf7f59"
+            },
+            "incoming": {
+              "name": "historical-composition/6f6715c50f43/incoming__src__backend__voice__pb__voice__space__v1__space.pb.go",
+              "sha256": "c4ebda642df859fbb2ee7b8e85bef2b4c71ccc0f0e271bfd7b932d15127b6c87"
+            },
+            "result": {
+              "name": "historical-composition/6f6715c50f43/result__src__backend__voice__pb__voice__space__v1__space.pb.go",
+              "sha256": "4d2065bc2904036195fad86543e80ff8bf9386002e656a3035022fd1ced78e72"
+            }
+          },
+          "current_h3_entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "8fb1b6a3988c795cee563623e0df2a010ab1bc0e"
+          },
+          "test_only": false,
+          "review": "SOURCE_CLEAR: SWARM c65 for non-generated Space Go; closure review c8 for proto/generated/Role module. Runtime authority not granted."
+        }
+      ]
+    }
+  ],
+  "runtime_evidence_policy": "Historical author/source receipts and current affected runtime checks are separate from source composition verdict. Never infer installed/provider/feature acceptance. Each reviewer records applicable actual existing proof or an explicit gap; current-head CI is mandatory.",
+  "proposal_sha256": "9342b02985648fd03eb61903d5a3923f6d8958302812bcb7f22051baf79841da",
+  "source_qualification": {
+    "status": "SOURCE_CLEAR",
+    "criterion": "Exact historical composition-source review only: complete guarded resolution set and all actual merge parents/best bases/raw modes/types/OIDs; preserve each parent intended contract and protected principal/lifecycle/default/fatal behavior; no authored unknown behavior or rollback privacy weakening. Generated files must agree with resolved canonical descriptors and retain existing fields/reservations/oneofs/RPCs. Keep all original real producer and runtime/taint rows. No current/future path exemption, native/Game authority expansion, feature activation, or runtime PASS from textual union. Missing evidence yields explicit source/runtime gaps; semantic security uncertainty requires bounded escalation.",
+    "reviews": [
+      {
+        "record": "SWARM-DEVELOP-20261018",
+        "comment": "c65",
+        "reviewer": "Рудеус-144",
+        "scope": "Eight non-generated Space occurrences in abd477/9b4e/9dc0/6f671; principal/lifecycle/default/fatal contracts preserved; no cross-merge runtime claim."
+      },
+      {
+        "record": "REVIEW-NATIVE-P3-CLOSURE-53f75f745237",
+        "comment": "c8",
+        "reviewer": "Рудеус-418",
+        "scope": "Twenty-nine proto/generated occurrences and one Role go.mod; complete descriptor/parent union, lexical generated Go equivalence, exact module requirements/replaces."
+      }
+    ]
+  },
+  "qualification_kind": "historical_source_composition_only",
+  "activation_authority": false,
+  "current_or_future_path_authority": false,
+  "consumption_contract": {
+    "kind": "typed_complete_historical_unit",
+    "required_checks": [
+      "Fixed immutable record commit and raw SHA256; no record from untrusted workspace.",
+      "Load and validate all eight exact merges/ordered parents/single actual best base/complete whole conflict set and all 38 reviewed mode/type/blob tuples as one unit.",
+      "For a historical call require exact merge, ordered parents, best base, reviewed path and base/first/incoming/result entries. Reject any absent or differing tuple.",
+      "Keep every actual producer row, source/content/owner association, runtime-required flag, execution evidence and taint. This record never fabricates runtime PASS or clears history.",
+      "Current source 5bf bindings are an evidence boundary, not a current/future path exemption. Native/Game/test-only Role source authorities remain distinct.",
+      "Runtime eligibility is separately evaluated under the existing producer contract and actual current CI. Source review cannot replace execution evidence."
+    ]
+  },
+  "runtime_coverage": {
+    "status": "NOT_GRANTED",
+    "gap": "144 c65 establishes no executed cross-merge boot/principal/retention PASS. Original producer execution/taint must be retained and current exact-head CI bound separately. Proto generation/source composition checks are not runtime tests.",
+    "source": "5bf6c4857c19fba2b91fb44eb9e9bc6ae816c485"
+  },
+  "artifacts": [
+    {
+      "name": "historical-composition/3bda9054eff2/base__protos__voice__chat__v1__chat.proto",
+      "sha256": "2fb4b1adc7c356a5a9f3ef8953a28d61c6d662cde84bd6cea5d1279b22d2c2a3",
+      "bytes": 22459
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/base__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169",
+      "bytes": 349384
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/base__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169",
+      "bytes": 349384
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/base__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169",
+      "bytes": 349384
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/base__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169",
+      "bytes": 349384
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/first-result__protos__voice__chat__v1__chat.proto.diff",
+      "sha256": "98a6f9da1690a238baddbeef43b32765566a5b03cce241e0dfc1bdb7457e3222",
+      "bytes": 2068
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/first-result__src__backend__chat__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "154e26ab420a6ae530031d2426e7999f83fed9c312a95980a0c7bc1eb628a0f0",
+      "bytes": 227052
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/first-result__src__backend__messaging__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "e011a309742fbc4456a237c24279025fbe2d6dd6e5296a6f1fdf1250864d8b99",
+      "bytes": 227072
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/first-result__src__backend__user__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "335b835cb8a03691b8341007ff1cc420c9afedbab1ece55ca8b0e5a4d4a5f139",
+      "bytes": 227052
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/first-result__src__backend__voice__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "d4ec894302087a10b8fda8dc6cd0ddd8b5169599870a431881ecfdf03e17ef36",
+      "bytes": 227056
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/first__protos__voice__chat__v1__chat.proto",
+      "sha256": "ee5da539f819df6f007fa77b5f7518237c62c3a750085623c08cdbfce4a01c08",
+      "bytes": 23096
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/first__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "5d95e209f40dde05721822bc5d6fb9905986e8b2029e66040d91280901421b23",
+      "bytes": 355473
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/first__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "5d95e209f40dde05721822bc5d6fb9905986e8b2029e66040d91280901421b23",
+      "bytes": 355473
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/first__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "5d95e209f40dde05721822bc5d6fb9905986e8b2029e66040d91280901421b23",
+      "bytes": 355473
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/first__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "5d95e209f40dde05721822bc5d6fb9905986e8b2029e66040d91280901421b23",
+      "bytes": 355473
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/incoming-result__protos__voice__chat__v1__chat.proto.diff",
+      "sha256": "63beefded3c84889bc3939d4fb1f7931632f4e4c8298f4e3770d6155e2b7a8c1",
+      "bytes": 1541
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/incoming-result__src__backend__chat__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "05fa16355115ba6226d22dd01ff17fc024cfa02513a642041ac5f02aa4c4b16c",
+      "bytes": 155847
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/incoming-result__src__backend__messaging__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "2e5c48049d1a872e63a2b4c03aafc586d2edd088dd0ad7f1a5836179e0cf1b0b",
+      "bytes": 155867
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/incoming-result__src__backend__user__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "f87ff7160010445789c2043e543bea164b23966712f166467a480f389ce60098",
+      "bytes": 155847
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/incoming-result__src__backend__voice__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "66d06622e30ae01098d057168db465aa420d275f5b1856eb4837a39a6b3a9c40",
+      "bytes": 155851
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/incoming__protos__voice__chat__v1__chat.proto",
+      "sha256": "3d9e6f3c422429e56c0f0ad6b9386fa028d63d852cd7b25f76238c88c8caf751",
+      "bytes": 23320
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/incoming__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "ecf8c80b34e2247452b6c052ac2f25fe57f18a8a860f99ff9fc0dee688af6756",
+      "bytes": 363056
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/incoming__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "ecf8c80b34e2247452b6c052ac2f25fe57f18a8a860f99ff9fc0dee688af6756",
+      "bytes": 363056
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/incoming__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "ecf8c80b34e2247452b6c052ac2f25fe57f18a8a860f99ff9fc0dee688af6756",
+      "bytes": 363056
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/incoming__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "ecf8c80b34e2247452b6c052ac2f25fe57f18a8a860f99ff9fc0dee688af6756",
+      "bytes": 363056
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/merge-tree.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/merge-tree.stdout",
+      "sha256": "7306b600584b6c794c770e78a0a9569fb747a6c8f86a7489daf44b3a2aad1854",
+      "bytes": 4043
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/result__protos__voice__chat__v1__chat.proto",
+      "sha256": "dad257b5cfe314c6bd2c8f22cc796194465afe02ac35b9c1756b0559515a6bd5",
+      "bytes": 23956
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/result__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "48666c7deefec04c788cef457c920af6c83bcdb9c349e7db47f9a6b6b976c690",
+      "bytes": 369144
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/result__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "48666c7deefec04c788cef457c920af6c83bcdb9c349e7db47f9a6b6b976c690",
+      "bytes": 369144
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/result__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "48666c7deefec04c788cef457c920af6c83bcdb9c349e7db47f9a6b6b976c690",
+      "bytes": 369144
+    },
+    {
+      "name": "historical-composition/3bda9054eff2/result__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "48666c7deefec04c788cef457c920af6c83bcdb9c349e7db47f9a6b6b976c690",
+      "bytes": 369144
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/base__src__backend__space__internal__grpcsvc__space_grpc.go",
+      "sha256": "048700cb587997e1a7a170a6c0afff38eb9fcb3be346aa6c643017e6c26dc300",
+      "bytes": 3122
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/base__src__backend__space__main.go",
+      "sha256": "81b815c3209b20f66c2e37d24819086deff4739828e207e764438267ef31b70c",
+      "bytes": 16725
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/base__src__backend__user__pb__voice__space__v1__space.pb.go",
+      "sha256": "324fda59e1c9ece805cdf55822702372d3746cc996b065afc7adee63703cad83",
+      "bytes": 351726
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/base__src__backend__voice__pb__voice__space__v1__space.pb.go",
+      "sha256": "324fda59e1c9ece805cdf55822702372d3746cc996b065afc7adee63703cad83",
+      "bytes": 351726
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/first-result__src__backend__space__internal__grpcsvc__space_grpc.go.diff",
+      "sha256": "e6e1f3698ccd8513deda6ef5ceaa22e496fb5d2ca586e18f82fd7600a6d6a162",
+      "bytes": 3726
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/first-result__src__backend__space__main.go.diff",
+      "sha256": "47798380770ad44c14e98282747ce9059571ac6135d49bfa68ae518219cc47f2",
+      "bytes": 1682
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/first-result__src__backend__user__pb__voice__space__v1__space.pb.go.diff",
+      "sha256": "8d551c4893f9508cccd0c897dc380b9671048629e360d10adcd508ebc636a623",
+      "bytes": 236976
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/first-result__src__backend__voice__pb__voice__space__v1__space.pb.go.diff",
+      "sha256": "1b9b676136a3199782ce6e22cbc83a75126d220ce7264b78972b0dc0f5e9ff65",
+      "bytes": 236980
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/first__src__backend__space__internal__grpcsvc__space_grpc.go",
+      "sha256": "9f97684bf7efe3afcef54a0bdc337c5888268440251880f21abe742c59b64a26",
+      "bytes": 3207
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/first__src__backend__space__main.go",
+      "sha256": "0e709f2dee53c1ff34d4b6bd490d0e4dad9e8775ce288ae860cb7278c27725c3",
+      "bytes": 21542
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/first__src__backend__user__pb__voice__space__v1__space.pb.go",
+      "sha256": "b489a05731577a86aff8a4e32fcdfa5f12b4a17566ceea0e2f2b59ab0faf7f59",
+      "bytes": 395375
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/first__src__backend__voice__pb__voice__space__v1__space.pb.go",
+      "sha256": "b489a05731577a86aff8a4e32fcdfa5f12b4a17566ceea0e2f2b59ab0faf7f59",
+      "bytes": 395375
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/incoming-result__src__backend__space__internal__grpcsvc__space_grpc.go.diff",
+      "sha256": "1e0b2c34f5d639dc2ca4734e2072076509a60b97727f8fcf9e33722fcf0356bc",
+      "bytes": 1914
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/incoming-result__src__backend__space__main.go.diff",
+      "sha256": "71f1bac8413f1341de94d66f901b327bc5b43b789a69c039ecbd74676e241e60",
+      "bytes": 8038
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/incoming-result__src__backend__user__pb__voice__space__v1__space.pb.go.diff",
+      "sha256": "bb7eb33702be406cf15358347e235cce260e7293024364dd03e191e517884caf",
+      "bytes": 219847
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/incoming-result__src__backend__voice__pb__voice__space__v1__space.pb.go.diff",
+      "sha256": "8bb38a92e3b4d430863a24784f8fed27cdee8d555c621cd532fc5920d6ef4920",
+      "bytes": 219851
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/incoming__src__backend__space__internal__grpcsvc__space_grpc.go",
+      "sha256": "8cdeefcce3b50ad0c468cd2e89ae1aaf657944fdd418a06e6060b6bdd794a419",
+      "bytes": 3451
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/incoming__src__backend__space__main.go",
+      "sha256": "8e2c7e57ca41264c60cb985f38d5e34ede30e1129b199f520ff8a6c8b21f58ca",
+      "bytes": 17193
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/incoming__src__backend__user__pb__voice__space__v1__space.pb.go",
+      "sha256": "c4ebda642df859fbb2ee7b8e85bef2b4c71ccc0f0e271bfd7b932d15127b6c87",
+      "bytes": 368741
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/incoming__src__backend__voice__pb__voice__space__v1__space.pb.go",
+      "sha256": "c4ebda642df859fbb2ee7b8e85bef2b4c71ccc0f0e271bfd7b932d15127b6c87",
+      "bytes": 368741
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/merge-tree.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/merge-tree.stdout",
+      "sha256": "6ea05dae9502ba20e1edb24ef999a7736fd41778a1c5834f2f1218bc7470aa8e",
+      "bytes": 3680
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/result__src__backend__space__internal__grpcsvc__space_grpc.go",
+      "sha256": "87c07b189fd5c742d7c7b6ad1cd8b4183e86b7bf4e54d69e437e1642f3b7cb0e",
+      "bytes": 3553
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/result__src__backend__space__main.go",
+      "sha256": "40bcc163e8375e31524338c0ab21d484fddf5fae924a15243a483d6af1fa80b7",
+      "bytes": 22010
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/result__src__backend__user__pb__voice__space__v1__space.pb.go",
+      "sha256": "4d2065bc2904036195fad86543e80ff8bf9386002e656a3035022fd1ced78e72",
+      "bytes": 412390
+    },
+    {
+      "name": "historical-composition/6f6715c50f43/result__src__backend__voice__pb__voice__space__v1__space.pb.go",
+      "sha256": "4d2065bc2904036195fad86543e80ff8bf9386002e656a3035022fd1ced78e72",
+      "bytes": 412390
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/base__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169",
+      "bytes": 349384
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/base__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169",
+      "bytes": 349384
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/base__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "01d3bf2b743ee7e7ba86df6dd1c60dbbf979c0d231884af7c3b46a897add362b",
+      "bytes": 460045
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/base__src__backend__user__pb__voice__bot__v1__bot.pb.go",
+      "sha256": "d61061f7657e202045b8120425c2178e52680c897694d4086576a7b1e21461c6",
+      "bytes": 253261
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/base__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169",
+      "bytes": 349384
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/base__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "01d3bf2b743ee7e7ba86df6dd1c60dbbf979c0d231884af7c3b46a897add362b",
+      "bytes": 460045
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/base__src__backend__voice__pb__voice__bot__v1__bot.pb.go",
+      "sha256": "d61061f7657e202045b8120425c2178e52680c897694d4086576a7b1e21461c6",
+      "bytes": 253261
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/base__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169",
+      "bytes": 349384
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/base__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "01d3bf2b743ee7e7ba86df6dd1c60dbbf979c0d231884af7c3b46a897add362b",
+      "bytes": 460045
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/first-result__src__backend__chat__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "f69e60f5028196cca811870316431bdc0a0c8b3770e90c24d1e74fa898cfc7e8",
+      "bytes": 160882
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/first-result__src__backend__messaging__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "cc48640d54463a7e406e6187e8534f2f02242ade58ca5cb6ddf22e7a9b44b231",
+      "bytes": 160902
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/first-result__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go.diff",
+      "sha256": "e1a6261c0b942aa3652b00d0ec35afd93dfb94f9e51c31935967a3d8fc91ca0c",
+      "bytes": 63778
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/first-result__src__backend__user__pb__voice__bot__v1__bot.pb.go.diff",
+      "sha256": "06cacc5dc0a78764549a8e8125b3c0f80f1a315ae77b52b583a547203c59d320",
+      "bytes": 121961
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/first-result__src__backend__user__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "f3bc0e0201545286d82e2cf2efb0ba8e43b67841c80cbd06a8858063c62c5198",
+      "bytes": 160882
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/first-result__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go.diff",
+      "sha256": "f0e384aea55242d73f7ac810fc3af9f96e3b95bb2b264781e8f542ff00342d56",
+      "bytes": 63758
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/first-result__src__backend__voice__pb__voice__bot__v1__bot.pb.go.diff",
+      "sha256": "cc387a1f74f6249122d9cd0104121b3949957a26bab9b96d7d35762e8c5fc209",
+      "bytes": 121965
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/first-result__src__backend__voice__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "08b5bb3d33e1e4be402ff8d4a6c8528e022ff660ef37bbf6e4f5a9e89f760481",
+      "bytes": 160886
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/first-result__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go.diff",
+      "sha256": "66cd2caaa6c32416b48ca3859ff267375f825d3873eb9b5eef82e005bfc4493d",
+      "bytes": 63762
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/first__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "48666c7deefec04c788cef457c920af6c83bcdb9c349e7db47f9a6b6b976c690",
+      "bytes": 369144
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/first__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "48666c7deefec04c788cef457c920af6c83bcdb9c349e7db47f9a6b6b976c690",
+      "bytes": 369144
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/first__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "59e7b78e0e5cfb2fe8eaa3ccd585d7bce45b82f5c13fe67afa0d0782c103ed70",
+      "bytes": 471597
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/first__src__backend__user__pb__voice__bot__v1__bot.pb.go",
+      "sha256": "328b15e403aae95ef15865f8f14b56dabfd2544fa287c97416bd293defaccf21",
+      "bytes": 262295
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/first__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "48666c7deefec04c788cef457c920af6c83bcdb9c349e7db47f9a6b6b976c690",
+      "bytes": 369144
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/first__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "59e7b78e0e5cfb2fe8eaa3ccd585d7bce45b82f5c13fe67afa0d0782c103ed70",
+      "bytes": 471597
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/first__src__backend__voice__pb__voice__bot__v1__bot.pb.go",
+      "sha256": "328b15e403aae95ef15865f8f14b56dabfd2544fa287c97416bd293defaccf21",
+      "bytes": 262295
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/first__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "48666c7deefec04c788cef457c920af6c83bcdb9c349e7db47f9a6b6b976c690",
+      "bytes": 369144
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/first__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "59e7b78e0e5cfb2fe8eaa3ccd585d7bce45b82f5c13fe67afa0d0782c103ed70",
+      "bytes": 471597
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/incoming-result__src__backend__chat__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "4054caf5e49eb3449d6103fe11b4d9b0553a598569944e8a9fe00eab27222662",
+      "bytes": 228684
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/incoming-result__src__backend__messaging__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "3ad89f73294b1d3d1e29c5be48f81c62ed913f70d0e1b07cda07cf23d1f1882a",
+      "bytes": 228704
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/incoming-result__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go.diff",
+      "sha256": "446d2b5eee865ccf95829d1a4ededb39d53eeae873babb1d4b0962f77ddde2bc",
+      "bytes": 329886
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/incoming-result__src__backend__user__pb__voice__bot__v1__bot.pb.go.diff",
+      "sha256": "617ef7bfa3329e6554a7c254b527f4a11730e4e791b4689c1ec6978e9c86fed0",
+      "bytes": 333988
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/incoming-result__src__backend__user__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "9d89ce8d312e6ee6b8922ed907788d6e5135be6eb9fbf62d25bde9c4e88c3e8d",
+      "bytes": 228684
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/incoming-result__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go.diff",
+      "sha256": "b89f998cb64c5b2852453ebc5220499296a10ffa2d00a579f55385bd651117b3",
+      "bytes": 329866
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/incoming-result__src__backend__voice__pb__voice__bot__v1__bot.pb.go.diff",
+      "sha256": "5baac5e2ddb04dc7128fed3355f4741f545464965db8b18748de065233a8fe37",
+      "bytes": 333992
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/incoming-result__src__backend__voice__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "6c31c0ed4eb7e4cde2b67948ead2180a140fdb03d118da3358d89e643cebebc2",
+      "bytes": 228688
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/incoming-result__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go.diff",
+      "sha256": "1a16017563f71da9e9beeb158df83eb4010f6b4f155610cc2a393116504fcbcf",
+      "bytes": 329870
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/incoming__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "b77a47dc724ff38005516592328c5086b669d379a82e95240bc1842da6b7defa",
+      "bytes": 349427
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/incoming__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "b77a47dc724ff38005516592328c5086b669d379a82e95240bc1842da6b7defa",
+      "bytes": 349427
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/incoming__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "8db2180b8b9e049ca9324a801cb383bae02bd299c97d1abd6eb4cf4ab6e1729b",
+      "bytes": 460117
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/incoming__src__backend__user__pb__voice__bot__v1__bot.pb.go",
+      "sha256": "4287a9bb11ce5c7a3f69548e9aef2e294b7a40181b7de35619f5a46834f442fc",
+      "bytes": 253515
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/incoming__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "b77a47dc724ff38005516592328c5086b669d379a82e95240bc1842da6b7defa",
+      "bytes": 349427
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/incoming__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "8db2180b8b9e049ca9324a801cb383bae02bd299c97d1abd6eb4cf4ab6e1729b",
+      "bytes": 460117
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/incoming__src__backend__voice__pb__voice__bot__v1__bot.pb.go",
+      "sha256": "4287a9bb11ce5c7a3f69548e9aef2e294b7a40181b7de35619f5a46834f442fc",
+      "bytes": 253515
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/incoming__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "b77a47dc724ff38005516592328c5086b669d379a82e95240bc1842da6b7defa",
+      "bytes": 349427
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/incoming__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "8db2180b8b9e049ca9324a801cb383bae02bd299c97d1abd6eb4cf4ab6e1729b",
+      "bytes": 460117
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/merge-tree.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/merge-tree.stdout",
+      "sha256": "33864bb2bca9c20ded35406161a2b059349a6af517ab7479bd01b261c6b8d8ad",
+      "bytes": 4485
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/result__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "00cbba64641f76282772b1042cb38480582ac9b1aeffb3a72c74628cfaa62a83",
+      "bytes": 369186
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/result__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "00cbba64641f76282772b1042cb38480582ac9b1aeffb3a72c74628cfaa62a83",
+      "bytes": 369186
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/result__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "b4e09110702ed881479857731de30b8a661ebdea34f4a0df2dedf89d651dba43",
+      "bytes": 471670
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/result__src__backend__user__pb__voice__bot__v1__bot.pb.go",
+      "sha256": "b855dd1dc86eaefc2a092cc507d8b69e30d06e05d6aa1d38510b886c42014797",
+      "bytes": 262550
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/result__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "00cbba64641f76282772b1042cb38480582ac9b1aeffb3a72c74628cfaa62a83",
+      "bytes": 369186
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/result__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "b4e09110702ed881479857731de30b8a661ebdea34f4a0df2dedf89d651dba43",
+      "bytes": 471670
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/result__src__backend__voice__pb__voice__bot__v1__bot.pb.go",
+      "sha256": "b855dd1dc86eaefc2a092cc507d8b69e30d06e05d6aa1d38510b886c42014797",
+      "bytes": 262550
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/result__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "00cbba64641f76282772b1042cb38480582ac9b1aeffb3a72c74628cfaa62a83",
+      "bytes": 369186
+    },
+    {
+      "name": "historical-composition/97c4bf523fab/result__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "b4e09110702ed881479857731de30b8a661ebdea34f4a0df2dedf89d651dba43",
+      "bytes": 471670
+    },
+    {
+      "name": "historical-composition/9b4e3410e79b/first-result__src__backend__space__internal__chatcreation__runtime.go.diff",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "name": "historical-composition/9b4e3410e79b/first-result__src__backend__space__internal__chatcreation__runtime_test.go.diff",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "name": "historical-composition/9b4e3410e79b/first__src__backend__space__internal__chatcreation__runtime.go",
+      "sha256": "489415b9fd4c137e0730acb1134cf253a3eca96041a8fb7a7499c588c45d7fad",
+      "bytes": 6965
+    },
+    {
+      "name": "historical-composition/9b4e3410e79b/first__src__backend__space__internal__chatcreation__runtime_test.go",
+      "sha256": "5695536491c834dbd57afd4288fda849ad6a9365be2dc246eb682d45c1e31411",
+      "bytes": 8701
+    },
+    {
+      "name": "historical-composition/9b4e3410e79b/incoming-result__src__backend__space__internal__chatcreation__runtime.go.diff",
+      "sha256": "cccf7a76dacbc603103ff151a8ba7292cc6a7879ac6d70132e3376f8ddf5d3a7",
+      "bytes": 3199
+    },
+    {
+      "name": "historical-composition/9b4e3410e79b/incoming-result__src__backend__space__internal__chatcreation__runtime_test.go.diff",
+      "sha256": "ea27f83b39616209d35fa4729222b2ef7b8bc2c3761bf6dd58cd26b65cb14bd2",
+      "bytes": 2015
+    },
+    {
+      "name": "historical-composition/9b4e3410e79b/incoming__src__backend__space__internal__chatcreation__runtime.go",
+      "sha256": "9db00c4fd22fdb920a65bc8fd0150df131ea271434003c076680018f796e5ee8",
+      "bytes": 6391
+    },
+    {
+      "name": "historical-composition/9b4e3410e79b/incoming__src__backend__space__internal__chatcreation__runtime_test.go",
+      "sha256": "f617877abe39f04a15906dbbd35439a406313b1d7cb881b79575c67c828a37ad",
+      "bytes": 8431
+    },
+    {
+      "name": "historical-composition/9b4e3410e79b/merge-tree.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "name": "historical-composition/9b4e3410e79b/merge-tree.stdout",
+      "sha256": "94777f675c5f085eec02a7589f7fde20285dca890c5d852cf243f035462f7a37",
+      "bytes": 2204
+    },
+    {
+      "name": "historical-composition/9b4e3410e79b/result__src__backend__space__internal__chatcreation__runtime.go",
+      "sha256": "489415b9fd4c137e0730acb1134cf253a3eca96041a8fb7a7499c588c45d7fad",
+      "bytes": 6965
+    },
+    {
+      "name": "historical-composition/9b4e3410e79b/result__src__backend__space__internal__chatcreation__runtime_test.go",
+      "sha256": "5695536491c834dbd57afd4288fda849ad6a9365be2dc246eb682d45c1e31411",
+      "bytes": 8701
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/base__protos__voice__space__v1__space.proto",
+      "sha256": "317c640ac5920b6b60852ae8ac22364b1675940e9af9c571d6c07608adaa2ba6",
+      "bytes": 20152
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/base__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169",
+      "bytes": 349384
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/base__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169",
+      "bytes": 349384
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/base__src__backend__role__go.mod",
+      "sha256": "bec0fdadc3c2dae06380f02b7ae47aada1b4f258f2fba306f7eb6db3386f6840",
+      "bytes": 4390
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/base__src__backend__space__internal__lifecycleprincipal__interceptor.go",
+      "sha256": "64c7424ea672ca6c28ffec5d4473de84fa3e951d3416544aa4ae9df2cdc85206",
+      "bytes": 3592
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/base__src__backend__space__internal__lifecycleprincipal__interceptor_test.go",
+      "sha256": "24e092057163c5ccad1e984dbdb7cd58d7b1399c53f2fd9dc9b31f8d814536b3",
+      "bytes": 4928
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/base__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169",
+      "bytes": 349384
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/base__src__backend__user__pb__voice__space__v1__space.pb.go",
+      "sha256": "324fda59e1c9ece805cdf55822702372d3746cc996b065afc7adee63703cad83",
+      "bytes": 351726
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/base__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "7f97dc06da1c57d73e0c541db27bc08e16b00257bbefaf85b5e992bae3fa7169",
+      "bytes": 349384
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/base__src__backend__voice__pb__voice__space__v1__space.pb.go",
+      "sha256": "324fda59e1c9ece805cdf55822702372d3746cc996b065afc7adee63703cad83",
+      "bytes": 351726
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first-result__protos__voice__space__v1__space.proto.diff",
+      "sha256": "8835ac23ad2148686c819b0f5b61f5c8cc6955fc4f0a06703ec380ff2ea27a28",
+      "bytes": 3279
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first-result__src__backend__chat__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "38519270d7d9258167e9679123b527001674888a0a9180ac6f0ec8fb694592c9",
+      "bytes": 106584
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first-result__src__backend__messaging__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "5813ee377bec74060960f9512e2dcfe8a2ebb80ac19a7fd3a1c4c3f38183de93",
+      "bytes": 106604
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first-result__src__backend__role__go.mod.diff",
+      "sha256": "1c815ed6a2e8de8545ef650090e269e84e3b4ae2498754dc672c215b3ac656c2",
+      "bytes": 480
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first-result__src__backend__space__internal__lifecycleprincipal__interceptor.go.diff",
+      "sha256": "a95c0494dee1a3f20b8db5fe9c9761c452b2e495fbf4abd8445898953f4926d0",
+      "bytes": 2352
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first-result__src__backend__space__internal__lifecycleprincipal__interceptor_test.go.diff",
+      "sha256": "f8fc4ae7ae65957747bd2a876872b8bcfa8891880f3dbbbc43ed03fd5e10880a",
+      "bytes": 3842
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first-result__src__backend__user__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "dad145ea3b173a24c2c184c7c122239d6b2c75767cbcfd199ebe9b3a2f07a129",
+      "bytes": 106584
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first-result__src__backend__user__pb__voice__space__v1__space.pb.go.diff",
+      "sha256": "196041e5799c63b676b99c3bb32ff285d9f7ffade87156757d2cf56d6c4894a5",
+      "bytes": 163348
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first-result__src__backend__voice__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "c77a7090871e68e6b697aa55640ce7d0b97ac844fb55bc7643f22fb4f41c7a30",
+      "bytes": 106588
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first-result__src__backend__voice__pb__voice__space__v1__space.pb.go.diff",
+      "sha256": "4e95922a65b698a5ec01763cef3a5082cd8ae5d96998cf76d60065631007245f",
+      "bytes": 163352
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first__protos__voice__space__v1__space.proto",
+      "sha256": "067d62892ba2d32e48b37691b66b744e444c83f2208e82d520006c35ff759f89",
+      "bytes": 21323
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "daea12719146fce8058d6582203cead835b4b305202d09c02256935eac692911",
+      "bytes": 354183
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "daea12719146fce8058d6582203cead835b4b305202d09c02256935eac692911",
+      "bytes": 354183
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first__src__backend__role__go.mod",
+      "sha256": "3be25695917a4fc43c6ac71a2c81a165150593c876a09be7b50234c22f4f910d",
+      "bytes": 4650
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first__src__backend__space__internal__lifecycleprincipal__interceptor.go",
+      "sha256": "ec7f626dc1b2e9aff43efffa3cb07ae4b03c2e8cdc546cc78cda1d52107cc0e0",
+      "bytes": 3802
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first__src__backend__space__internal__lifecycleprincipal__interceptor_test.go",
+      "sha256": "66dacc7fe5108f9c5d13f7a7f7fa7b1121ea36051d63cd569ae80d984eeeb470",
+      "bytes": 4986
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "daea12719146fce8058d6582203cead835b4b305202d09c02256935eac692911",
+      "bytes": 354183
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first__src__backend__user__pb__voice__space__v1__space.pb.go",
+      "sha256": "3e1c76e7fa5307425c254e5552803ff4849a6666291b7ba96f0cfc9fe7502265",
+      "bytes": 363086
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "daea12719146fce8058d6582203cead835b4b305202d09c02256935eac692911",
+      "bytes": 354183
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/first__src__backend__voice__pb__voice__space__v1__space.pb.go",
+      "sha256": "3e1c76e7fa5307425c254e5552803ff4849a6666291b7ba96f0cfc9fe7502265",
+      "bytes": 363086
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming-result__protos__voice__space__v1__space.proto.diff",
+      "sha256": "3088c7ae1b7b2851a799126d7708a825e47187d9f1ec09cc2f51a1a370f77ec5",
+      "bytes": 2560
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming-result__src__backend__chat__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "3f59b99362fbf714d3ec8572c77aa728e87c55733a76c287e65e6997a36d6eca",
+      "bytes": 102144
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming-result__src__backend__messaging__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "b4afa57af0fadd115dcb291ebe12dffe773b9e16b2198a1002f075ffefa01f98",
+      "bytes": 102164
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming-result__src__backend__role__go.mod.diff",
+      "sha256": "7f4e89601c44403df3aaf59fcd31dfe52b3ea0c99642d5a7da1a5bc1b140b200",
+      "bytes": 960
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming-result__src__backend__space__internal__lifecycleprincipal__interceptor.go.diff",
+      "sha256": "3f17d03a40004be1e20b028d2cffcace99ccc01a908da99859be63c25b145ccf",
+      "bytes": 2207
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming-result__src__backend__space__internal__lifecycleprincipal__interceptor_test.go.diff",
+      "sha256": "3f7d46d6f8da673efa5a574dbc07e36c22bbfc7a87cc46d5384a944bde92aee5",
+      "bytes": 1329
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming-result__src__backend__user__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "963c1b9ba4574be06798679db598ee043f6e0dc1409b1be4cd67a7386a47e62e",
+      "bytes": 102144
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming-result__src__backend__user__pb__voice__space__v1__space.pb.go.diff",
+      "sha256": "750082fc985d3becf18fc3f0b8544fab1553e5449ff07d57914cf4165cb1cff7",
+      "bytes": 147172
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming-result__src__backend__voice__pb__voice__chat__v1__chat.pb.go.diff",
+      "sha256": "f48745b058fd911ff5ad7f2c8eb213b62ea2d95aa2c30b9eb91540e0af39c1a1",
+      "bytes": 102148
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming-result__src__backend__voice__pb__voice__space__v1__space.pb.go.diff",
+      "sha256": "e7ed8adfd9337429edb21bac811a1bd88818438e554168cdcb3c3c309ec5d36e",
+      "bytes": 147176
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming__protos__voice__space__v1__space.proto",
+      "sha256": "9cc9b2e4335ab5183f46a2cbbe2e4fca8f504641fe145c1a1cc3fdcee5b3c501",
+      "bytes": 22655
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "1d0e3a3b1b8e69a22b22983a354e651c590d091d3e624747ae2ece81b2d0c0ed",
+      "bytes": 350675
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "1d0e3a3b1b8e69a22b22983a354e651c590d091d3e624747ae2ece81b2d0c0ed",
+      "bytes": 350675
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming__src__backend__role__go.mod",
+      "sha256": "ad1517bc9910eaeb47f2d0c733ac378425ba9e4a8cc5fa2012686efbcd266d11",
+      "bytes": 4674
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming__src__backend__space__internal__lifecycleprincipal__interceptor.go",
+      "sha256": "dee924d028b99ad3070acedd7ceff067ffe95e04349eae06f468d8288f11aa19",
+      "bytes": 3980
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming__src__backend__space__internal__lifecycleprincipal__interceptor_test.go",
+      "sha256": "b6276c594d4ed8c6637a120dd61bc1c250e7f2e245e8416b5caf954a56afd993",
+      "bytes": 7063
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "1d0e3a3b1b8e69a22b22983a354e651c590d091d3e624747ae2ece81b2d0c0ed",
+      "bytes": 350675
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming__src__backend__user__pb__voice__space__v1__space.pb.go",
+      "sha256": "a49e3eabc555a5fedc7189d049a37a300ae7890030839500e2b7b0dc85b8cded",
+      "bytes": 384015
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "1d0e3a3b1b8e69a22b22983a354e651c590d091d3e624747ae2ece81b2d0c0ed",
+      "bytes": 350675
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/incoming__src__backend__voice__pb__voice__space__v1__space.pb.go",
+      "sha256": "a49e3eabc555a5fedc7189d049a37a300ae7890030839500e2b7b0dc85b8cded",
+      "bytes": 384015
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/merge-tree.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/merge-tree.stdout",
+      "sha256": "31b0e5bc23a5fca92bd842280aee95d1e89f34af7745b5fc207e69ef62e77a4f",
+      "bytes": 6782
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/result__protos__voice__space__v1__space.proto",
+      "sha256": "e6428c6704b46390af2e2b56545efd6a63c50af22f0c8607667888077a40d03f",
+      "bytes": 23826
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/result__src__backend__chat__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "5d95e209f40dde05721822bc5d6fb9905986e8b2029e66040d91280901421b23",
+      "bytes": 355473
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/result__src__backend__messaging__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "5d95e209f40dde05721822bc5d6fb9905986e8b2029e66040d91280901421b23",
+      "bytes": 355473
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/result__src__backend__role__go.mod",
+      "sha256": "f155635caca8c707dae764fad99419ccb81ce611d4adf673fc7d7d7f0abf9085",
+      "bytes": 4733
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/result__src__backend__space__internal__lifecycleprincipal__interceptor.go",
+      "sha256": "b3ab69fe0da12f2c2062d2639561a62bb080af5e682f472022f181f0afc09f08",
+      "bytes": 4190
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/result__src__backend__space__internal__lifecycleprincipal__interceptor_test.go",
+      "sha256": "3238b61c518a399faca6b1e746a99d4ee73db6837cbdf7857e6ec0a3ffafed51",
+      "bytes": 7121
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/result__src__backend__user__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "5d95e209f40dde05721822bc5d6fb9905986e8b2029e66040d91280901421b23",
+      "bytes": 355473
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/result__src__backend__user__pb__voice__space__v1__space.pb.go",
+      "sha256": "b489a05731577a86aff8a4e32fcdfa5f12b4a17566ceea0e2f2b59ab0faf7f59",
+      "bytes": 395375
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/result__src__backend__voice__pb__voice__chat__v1__chat.pb.go",
+      "sha256": "5d95e209f40dde05721822bc5d6fb9905986e8b2029e66040d91280901421b23",
+      "bytes": 355473
+    },
+    {
+      "name": "historical-composition/9dc0d50b65a2/result__src__backend__voice__pb__voice__space__v1__space.pb.go",
+      "sha256": "b489a05731577a86aff8a4e32fcdfa5f12b4a17566ceea0e2f2b59ab0faf7f59",
+      "bytes": 395375
+    },
+    {
+      "name": "historical-composition/abd477df924e/base__src__backend__space__internal__store__lifecycle_retention.go",
+      "sha256": "86ea8608ada1167b15ba769cd34ed8834fd467da9d9fc95ec4de3df03bd12b00",
+      "bytes": 4360
+    },
+    {
+      "name": "historical-composition/abd477df924e/base__src__backend__space__main.go",
+      "sha256": "81b815c3209b20f66c2e37d24819086deff4739828e207e764438267ef31b70c",
+      "bytes": 16725
+    },
+    {
+      "name": "historical-composition/abd477df924e/first-result__src__backend__space__internal__store__lifecycle_retention.go.diff",
+      "sha256": "2002f2e8fea9798bab82c9fc8947789a334c046cf34538cda7f6c3648378b611",
+      "bytes": 879
+    },
+    {
+      "name": "historical-composition/abd477df924e/first-result__src__backend__space__main.go.diff",
+      "sha256": "feb345643c789d1f3de43e9de620ad2b8d714c5a0fe22032a86615423d2413c5",
+      "bytes": 3175
+    },
+    {
+      "name": "historical-composition/abd477df924e/first__src__backend__space__internal__store__lifecycle_retention.go",
+      "sha256": "86ea8608ada1167b15ba769cd34ed8834fd467da9d9fc95ec4de3df03bd12b00",
+      "bytes": 4360
+    },
+    {
+      "name": "historical-composition/abd477df924e/first__src__backend__space__main.go",
+      "sha256": "ff34d6dee392c9651db7b67126bb9d6ea3215e4f88e1fdfb581f8ad89c3221ed",
+      "bytes": 18998
+    },
+    {
+      "name": "historical-composition/abd477df924e/incoming-result__src__backend__space__internal__store__lifecycle_retention.go.diff",
+      "sha256": "2002f2e8fea9798bab82c9fc8947789a334c046cf34538cda7f6c3648378b611",
+      "bytes": 879
+    },
+    {
+      "name": "historical-composition/abd477df924e/incoming-result__src__backend__space__main.go.diff",
+      "sha256": "833fb763446b52ade99ea5e90995455df842481f48162e179271b9d2c984a656",
+      "bytes": 4251
+    },
+    {
+      "name": "historical-composition/abd477df924e/incoming__src__backend__space__internal__store__lifecycle_retention.go",
+      "sha256": "86ea8608ada1167b15ba769cd34ed8834fd467da9d9fc95ec4de3df03bd12b00",
+      "bytes": 4360
+    },
+    {
+      "name": "historical-composition/abd477df924e/incoming__src__backend__space__main.go",
+      "sha256": "0042bf459c32acbaa3d1b906062c7f74d1cbbbb8c77f4014b0626a599f8c1714",
+      "bytes": 18061
+    },
+    {
+      "name": "historical-composition/abd477df924e/merge-tree.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "name": "historical-composition/abd477df924e/merge-tree.stdout",
+      "sha256": "745ed20bd5fd96e56f2284d7f2d167642038d190cf8d4fc9903d6eb870ec36de",
+      "bytes": 485
+    },
+    {
+      "name": "historical-composition/abd477df924e/result__src__backend__space__internal__store__lifecycle_retention.go",
+      "sha256": "048283b8d14a4542fc59168d894d9bf32724ae5a3d925b38dd22c983f1819d0d",
+      "bytes": 4437
+    },
+    {
+      "name": "historical-composition/abd477df924e/result__src__backend__space__main.go",
+      "sha256": "2124d37a0b4c5a2355e24cd2cfe7ff5fd25888959ca16ff83c5bc7da058680a2",
+      "bytes": 20334
+    },
+    {
+      "name": "historical-composition/composition-PROPOSAL.json",
+      "sha256": "9342b02985648fd03eb61903d5a3923f6d8958302812bcb7f22051baf79841da",
+      "bytes": 88969
+    },
+    {
+      "name": "historical-composition/e963849df092/base__protos__voice__space__v1__space.proto",
+      "sha256": "317c640ac5920b6b60852ae8ac22364b1675940e9af9c571d6c07608adaa2ba6",
+      "bytes": 20152
+    },
+    {
+      "name": "historical-composition/e963849df092/base__src__backend__user__pb__voice__space__v1__space.pb.go",
+      "sha256": "324fda59e1c9ece805cdf55822702372d3746cc996b065afc7adee63703cad83",
+      "bytes": 351726
+    },
+    {
+      "name": "historical-composition/e963849df092/base__src__backend__voice__pb__voice__space__v1__space.pb.go",
+      "sha256": "324fda59e1c9ece805cdf55822702372d3746cc996b065afc7adee63703cad83",
+      "bytes": 351726
+    },
+    {
+      "name": "historical-composition/e963849df092/first-result__protos__voice__space__v1__space.proto.diff",
+      "sha256": "c68990f4fcd07ed5b1f3be4b6746667015650781e49beeac57ee8d64321010b2",
+      "bytes": 1550
+    },
+    {
+      "name": "historical-composition/e963849df092/first-result__src__backend__user__pb__voice__space__v1__space.pb.go.diff",
+      "sha256": "4abd69d61302f223adebf6819368ea574e5b6598ffd17c5a54592e55f100b68c",
+      "bytes": 105854
+    },
+    {
+      "name": "historical-composition/e963849df092/first-result__src__backend__voice__pb__voice__space__v1__space.pb.go.diff",
+      "sha256": "4e28f7cf57e31b72f33f77b5134721386ea27d82f3ab10bdff6066420593d16b",
+      "bytes": 105858
+    },
+    {
+      "name": "historical-composition/e963849df092/first__protos__voice__space__v1__space.proto",
+      "sha256": "454e2316cf12c619be5ee2655c2c23e3b31fd565987a789d48fde467b4ed7bb9",
+      "bytes": 20581
+    },
+    {
+      "name": "historical-composition/e963849df092/first__src__backend__user__pb__voice__space__v1__space.pb.go",
+      "sha256": "3bb000b99d9b724e331029f60d31e013149c3db683bacec94860a5e16fd07998",
+      "bytes": 356897
+    },
+    {
+      "name": "historical-composition/e963849df092/first__src__backend__voice__pb__voice__space__v1__space.pb.go",
+      "sha256": "3bb000b99d9b724e331029f60d31e013149c3db683bacec94860a5e16fd07998",
+      "bytes": 356897
+    },
+    {
+      "name": "historical-composition/e963849df092/incoming-result__protos__voice__space__v1__space.proto.diff",
+      "sha256": "9dc653de1a010046a78797a714a6f8808529626cc0b5d2873581d7febeffa3ed",
+      "bytes": 1312
+    },
+    {
+      "name": "historical-composition/e963849df092/incoming-result__src__backend__user__pb__voice__space__v1__space.pb.go.diff",
+      "sha256": "5b5613eee559ad72be38b137c68c6b1ecf7f6b7e0dd6748d36cc8f2bb51e6b52",
+      "bytes": 110392
+    },
+    {
+      "name": "historical-composition/e963849df092/incoming-result__src__backend__voice__pb__voice__space__v1__space.pb.go.diff",
+      "sha256": "24dbabf2471b95f2cf10cc7b49cc1f5842ca498b4e7059c1b519c46d3615e758",
+      "bytes": 110396
+    },
+    {
+      "name": "historical-composition/e963849df092/incoming__protos__voice__space__v1__space.proto",
+      "sha256": "6118d95b7e7bbec0dde613cd40a6ed709d7e31ead2b0b59979fa8d36a25895db",
+      "bytes": 20894
+    },
+    {
+      "name": "historical-composition/e963849df092/incoming__src__backend__user__pb__voice__space__v1__space.pb.go",
+      "sha256": "b5663ef5a3456aec356d8f81693dbbc468905da4888e55816abe58279fdaa684",
+      "bytes": 357914
+    },
+    {
+      "name": "historical-composition/e963849df092/incoming__src__backend__voice__pb__voice__space__v1__space.pb.go",
+      "sha256": "b5663ef5a3456aec356d8f81693dbbc468905da4888e55816abe58279fdaa684",
+      "bytes": 357914
+    },
+    {
+      "name": "historical-composition/e963849df092/merge-tree.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "name": "historical-composition/e963849df092/merge-tree.stdout",
+      "sha256": "69785b2ffd21946f91e7a7c2c6ded3944327d8ccfe1c8bde170bea80e34a07be",
+      "bytes": 2572
+    },
+    {
+      "name": "historical-composition/e963849df092/result__protos__voice__space__v1__space.proto",
+      "sha256": "067d62892ba2d32e48b37691b66b744e444c83f2208e82d520006c35ff759f89",
+      "bytes": 21323
+    },
+    {
+      "name": "historical-composition/e963849df092/result__src__backend__user__pb__voice__space__v1__space.pb.go",
+      "sha256": "3e1c76e7fa5307425c254e5552803ff4849a6666291b7ba96f0cfc9fe7502265",
+      "bytes": 363086
+    },
+    {
+      "name": "historical-composition/e963849df092/result__src__backend__voice__pb__voice__space__v1__space.pb.go",
+      "sha256": "3e1c76e7fa5307425c254e5552803ff4849a6666291b7ba96f0cfc9fe7502265",
+      "bytes": 363086
+    },
+    {
+      "name": "historical-composition/f5864982a340/base__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "01d3bf2b743ee7e7ba86df6dd1c60dbbf979c0d231884af7c3b46a897add362b",
+      "bytes": 460045
+    },
+    {
+      "name": "historical-composition/f5864982a340/base__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "01d3bf2b743ee7e7ba86df6dd1c60dbbf979c0d231884af7c3b46a897add362b",
+      "bytes": 460045
+    },
+    {
+      "name": "historical-composition/f5864982a340/base__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "01d3bf2b743ee7e7ba86df6dd1c60dbbf979c0d231884af7c3b46a897add362b",
+      "bytes": 460045
+    },
+    {
+      "name": "historical-composition/f5864982a340/first-result__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go.diff",
+      "sha256": "430db5856ea7ec8b614dc4433827e9fe565ec9b64f8cc0d4033e218d7ddf99ee",
+      "bytes": 296271
+    },
+    {
+      "name": "historical-composition/f5864982a340/first-result__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go.diff",
+      "sha256": "4608f2f039601e695846a9d65881d3bff822570c9eb72da9cd97839ea6d89fe5",
+      "bytes": 296251
+    },
+    {
+      "name": "historical-composition/f5864982a340/first-result__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go.diff",
+      "sha256": "fba3d391acee17dc145f74aa28dfc7e84a38e94919eba25cf6507d3dc0afffee",
+      "bytes": 296255
+    },
+    {
+      "name": "historical-composition/f5864982a340/first__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "3bc9d8b1bf867e88203e8caef17e0d3785aa81d87747b3253e90ae6da4ee4293",
+      "bytes": 464559
+    },
+    {
+      "name": "historical-composition/f5864982a340/first__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "3bc9d8b1bf867e88203e8caef17e0d3785aa81d87747b3253e90ae6da4ee4293",
+      "bytes": 464559
+    },
+    {
+      "name": "historical-composition/f5864982a340/first__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "3bc9d8b1bf867e88203e8caef17e0d3785aa81d87747b3253e90ae6da4ee4293",
+      "bytes": 464559
+    },
+    {
+      "name": "historical-composition/f5864982a340/incoming-result__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go.diff",
+      "sha256": "64b20fc47d621093379218873b8ef52bb0386c99314e71d786dd93239b136c44",
+      "bytes": 233446
+    },
+    {
+      "name": "historical-composition/f5864982a340/incoming-result__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go.diff",
+      "sha256": "735b4a30782e4ab29d3aa2c9d80ce5ff45a17271d9723fb5d925b5f6b1fd5f4a",
+      "bytes": 233426
+    },
+    {
+      "name": "historical-composition/f5864982a340/incoming-result__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go.diff",
+      "sha256": "f37935fbbcee688dc9393d1638e71b5847e4d62a4826cfeba0f7383c411c8230",
+      "bytes": 233430
+    },
+    {
+      "name": "historical-composition/f5864982a340/incoming__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "221daf60a8335eeedde17ca07705d283528018d06e63aea85664753480f4e385",
+      "bytes": 466946
+    },
+    {
+      "name": "historical-composition/f5864982a340/incoming__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "221daf60a8335eeedde17ca07705d283528018d06e63aea85664753480f4e385",
+      "bytes": 466946
+    },
+    {
+      "name": "historical-composition/f5864982a340/incoming__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "221daf60a8335eeedde17ca07705d283528018d06e63aea85664753480f4e385",
+      "bytes": 466946
+    },
+    {
+      "name": "historical-composition/f5864982a340/merge-tree.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "name": "historical-composition/f5864982a340/merge-tree.stdout",
+      "sha256": "618103d927b6d93c6bd74b3c757645144c7910f93d52f89ba9629abbbeffb5c1",
+      "bytes": 1822
+    },
+    {
+      "name": "historical-composition/f5864982a340/result__src__backend__messaging__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "b33570c3d6d3c5776c076aed5edb393a4dcebd072082754850865ee6543dc7a6",
+      "bytes": 471461
+    },
+    {
+      "name": "historical-composition/f5864982a340/result__src__backend__user__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "b33570c3d6d3c5776c076aed5edb393a4dcebd072082754850865ee6543dc7a6",
+      "bytes": 471461
+    },
+    {
+      "name": "historical-composition/f5864982a340/result__src__backend__voice__pb__voice__events__v1__jetstream_events.pb.go",
+      "sha256": "b33570c3d6d3c5776c076aed5edb393a4dcebd072082754850865ee6543dc7a6",
+      "bytes": 471461
+    }
+  ]
+}
