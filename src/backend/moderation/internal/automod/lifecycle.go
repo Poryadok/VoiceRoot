@@ -6,6 +6,31 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+func (s *Store) ProvisionChecked(ctx context.Context, binding Subject, check BootCheck) error {
+	if check == nil {
+		return ErrBootClosed
+	}
+	return s.provision(ctx, binding, check)
+}
+func (s *Store) BindSubjectChecked(ctx context.Context, binding Subject, check BootCheck) error {
+	if check == nil {
+		return ErrBootClosed
+	}
+	return s.accountTxChecked(ctx, binding.AccountID, check, func(tx pgx.Tx) error { return s.BindSubjectTx(ctx, tx, binding) })
+}
+func (s *Store) RefreshSubjectChecked(ctx context.Context, binding Subject, check BootCheck) error {
+	if check == nil {
+		return ErrBootClosed
+	}
+	return s.refreshSubject(ctx, binding, check)
+}
+func (s *Store) RestrictionSnapshotChecked(ctx context.Context, account, subject uuid.UUID, check BootCheck) (Restriction, error) {
+	if check == nil {
+		return Restriction{}, ErrBootClosed
+	}
+	return s.restrictionSnapshot(ctx, account, subject, check)
+}
+
 func (s *Store) ThroughSequence(ctx context.Context, id uuid.UUID) (uint64, error) {
 	var through uint64
 	if s == nil || s.Pool == nil || id == uuid.Nil {
@@ -18,10 +43,14 @@ func (s *Store) ThroughSequence(ctx context.Context, id uuid.UUID) (uint64, erro
 // RefreshSubject consumes fresh Auth lifecycle authority for an already
 // provisioned stream. Evidence alone cannot create/reset the stream baseline.
 func (s *Store) RefreshSubject(ctx context.Context, fresh Subject) error {
+	return s.refreshSubject(ctx, fresh, nil)
+}
+
+func (s *Store) refreshSubject(ctx context.Context, fresh Subject, check BootCheck) error {
 	if !validSubject(fresh) {
 		return ErrEvidence
 	}
-	return s.accountTx(ctx, fresh.AccountID, func(tx pgx.Tx) error {
+	return s.accountTxChecked(ctx, fresh.AccountID, check, func(tx pgx.Tx) error {
 		if err := lockSubject(ctx, tx, fresh.ID); err != nil {
 			return err
 		}

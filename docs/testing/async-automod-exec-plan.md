@@ -15,6 +15,15 @@ and the existing complete-ban-set/stale-CAS test pass under Linux `-race`
 (3.148s). Main startup/census integration remains open; an empty batch or a
 successful sync call is not itself a P3/P4 receipt.
 
+Private lifecycle mutation boundary: provision, subject binding, lifecycle
+refresh and effective snapshot now carry the captured boot check through the
+account transaction, including after account-lock acquisition and immediately
+before commit. Entry-only checks reproduced four committed-after-close REDs
+(8.563s). All four rollback oracles plus signed evidence RPC and restriction
+worker regressions pass under real Linux PostgreSQL `-race` (9.684s). Legacy
+internal helpers remain for local authoritative participants/tests; the private
+RPC service exclusively uses the checked entry points.
+
 Auth local-issuer/bootstrap checkpoint: native RED reproduced the SDK-off local
 issuer depending on a User endpoint. A complete key pair now creates exactly one
 issuer with no SDK/User client; all twelve configuration tests pass, preserving

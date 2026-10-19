@@ -161,10 +161,14 @@ func validLifecycle(s Subject) bool {
 // Provision is called only with freshly verified Auth authority, never an inbox
 // event's claimed identity. An existing source epoch or cursor cannot be reset.
 func (s *Store) Provision(ctx context.Context, subject Subject) error {
+	return s.provision(ctx, subject, nil)
+}
+
+func (s *Store) provision(ctx context.Context, subject Subject, check BootCheck) error {
 	if !validSubject(subject) {
 		return ErrEvidence
 	}
-	return s.accountTx(ctx, subject.AccountID, func(tx pgx.Tx) error {
+	return s.accountTxChecked(ctx, subject.AccountID, check, func(tx pgx.Tx) error {
 		if err := lockSubject(ctx, tx, subject.ID); err != nil {
 			return err
 		}

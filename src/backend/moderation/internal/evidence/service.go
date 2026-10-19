@@ -90,7 +90,7 @@ func (s *Service) ProvisionSubject(ctx context.Context, r *automodv1.ProvisionSu
 	if err = check(ctx); err != nil {
 		return nil, mapError(err)
 	}
-	if err = s.Store.Provision(ctx, subject(fresh.GetSubject(), epoch)); err != nil {
+	if err = s.Store.ProvisionChecked(ctx, subject(fresh.GetSubject(), epoch), check); err != nil {
 		return nil, mapError(err)
 	}
 	through, err := s.Store.ThroughSequence(ctx, uuid.MustParse(fresh.GetSubject().GetSubjectId()))
@@ -181,7 +181,7 @@ func (s *Service) IngestCommittedMessageEvidence(ctx context.Context, r *automod
 	if err = check(ctx); err != nil {
 		return nil, mapError(err)
 	}
-	if err = s.Store.RefreshSubject(ctx, subject(fresh.GetSubject(), epoch)); err != nil {
+	if err = s.Store.RefreshSubjectChecked(ctx, subject(fresh.GetSubject(), epoch), check); err != nil {
 		return nil, mapError(err)
 	}
 	envelope := automod.Envelope{Subject: subject(captured, epoch), EventID: eventID, Sequence: int64(sequence), RecordedAt: recorded.AsTime(), Eligibility: eligibility, Digests: digests, LinkCount: linkCount, Hash: hash, BeforeCommit: check}
@@ -255,10 +255,10 @@ func (s *Service) GetEffectiveRestrictionSnapshot(ctx context.Context, r *automo
 	if err = check(ctx); err != nil {
 		return nil, mapError(err)
 	}
-	if err = s.Store.BindSubject(ctx, subject(fresh.GetSubject(), uuid.Nil)); err != nil {
+	if err = s.Store.BindSubjectChecked(ctx, subject(fresh.GetSubject(), uuid.Nil), check); err != nil {
 		return nil, mapError(err)
 	}
-	snapshot, err := s.Store.RestrictionSnapshot(ctx, account, id)
+	snapshot, err := s.Store.RestrictionSnapshotChecked(ctx, account, id, check)
 	if err != nil {
 		return nil, mapError(err)
 	}

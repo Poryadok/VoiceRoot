@@ -72,8 +72,12 @@ func (s *Store) QueueRestrictionTx(ctx context.Context, tx pgx.Tx, account uuid.
 }
 
 func (s *Store) RestrictionSnapshot(ctx context.Context, account, subject uuid.UUID) (result Restriction, err error) {
+	return s.restrictionSnapshot(ctx, account, subject, nil)
+}
+
+func (s *Store) restrictionSnapshot(ctx context.Context, account, subject uuid.UUID, check BootCheck) (result Restriction, err error) {
 	result = Restriction{AccountID: account, SubjectID: subject}
-	err = s.accountTx(ctx, account, func(tx pgx.Tx) error {
+	err = s.accountTxChecked(ctx, account, check, func(tx pgx.Tx) error {
 		var actual uuid.UUID
 		if err := tx.QueryRow(ctx, `SELECT subject_id FROM automod_subjects WHERE account_id=$1`, account).Scan(&actual); err != nil {
 			return err
