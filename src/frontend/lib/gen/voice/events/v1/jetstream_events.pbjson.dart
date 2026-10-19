@@ -3054,11 +3054,22 @@ const FileProcessed$json = {
       '10': 'music',
       '17': true
     },
+    {
+      '1': 'preview',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.FilePreviewSnapshot',
+      '9': 3,
+      '10': 'preview',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_converted_r2_key'},
     {'1': '_thumbnail_r2_key'},
     {'1': '_music'},
+    {'1': '_preview'},
   ],
 };
 
@@ -3067,8 +3078,71 @@ final $typed_data.Uint8List fileProcessedDescriptor = $convert.base64Decode(
     'Cg1GaWxlUHJvY2Vzc2VkEhcKB2ZpbGVfaWQYASABKAlSBmZpbGVJZBIWCgZzdGF0dXMYAiABKA'
     'lSBnN0YXR1cxItChBjb252ZXJ0ZWRfcjJfa2V5GAMgASgJSABSDmNvbnZlcnRlZFIyS2V5iAEB'
     'Ei0KEHRodW1ibmFpbF9yMl9rZXkYBCABKAlIAVIOdGh1bWJuYWlsUjJLZXmIAQESPQoFbXVzaW'
-    'MYBSABKAsyIi52b2ljZS5ldmVudHMudjEuRmlsZU11c2ljTWV0YWRhdGFIAlIFbXVzaWOIAQFC'
-    'EwoRX2NvbnZlcnRlZF9yMl9rZXlCEwoRX3RodW1ibmFpbF9yMl9rZXlCCAoGX211c2lj');
+    'MYBSABKAsyIi52b2ljZS5ldmVudHMudjEuRmlsZU11c2ljTWV0YWRhdGFIAlIFbXVzaWOIAQES'
+    'QwoHcHJldmlldxgGIAEoCzIkLnZvaWNlLmV2ZW50cy52MS5GaWxlUHJldmlld1NuYXBzaG90SA'
+    'NSB3ByZXZpZXeIAQFCEwoRX2NvbnZlcnRlZF9yMl9rZXlCEwoRX3RodW1ibmFpbF9yMl9rZXlC'
+    'CAoGX211c2ljQgoKCF9wcmV2aWV3');
+
+@$core.Deprecated('Use filePreviewSnapshotDescriptor instead')
+const FilePreviewSnapshot$json = {
+  '1': 'FilePreviewSnapshot',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'file_id', '3': 2, '4': 1, '5': 9, '10': 'fileId'},
+    {
+      '1': 'metadata_revision',
+      '3': 3,
+      '4': 1,
+      '5': 4,
+      '10': 'metadataRevision'
+    },
+    {'1': 'status', '3': 4, '4': 1, '5': 9, '10': 'status'},
+    {'1': 'file_type', '3': 5, '4': 1, '5': 9, '10': 'fileType'},
+    {'1': 'upload_intent', '3': 6, '4': 1, '5': 9, '10': 'uploadIntent'},
+    {'1': 'is_e2e', '3': 7, '4': 1, '5': 8, '10': 'isE2e'},
+    {'1': 'size_bytes', '3': 8, '4': 1, '5': 3, '10': 'sizeBytes'},
+    {'1': 'scan_result', '3': 9, '4': 1, '5': 9, '10': 'scanResult'},
+    {'1': 'width', '3': 10, '4': 1, '5': 5, '9': 0, '10': 'width', '17': true},
+    {
+      '1': 'height',
+      '3': 11,
+      '4': 1,
+      '5': 5,
+      '9': 1,
+      '10': 'height',
+      '17': true
+    },
+    {
+      '1': 'duration_seconds',
+      '3': 12,
+      '4': 1,
+      '5': 5,
+      '9': 2,
+      '10': 'durationSeconds',
+      '17': true
+    },
+    {'1': 'has_thumbnail', '3': 13, '4': 1, '5': 8, '10': 'hasThumbnail'},
+    {'1': 'has_converted', '3': 14, '4': 1, '5': 8, '10': 'hasConverted'},
+  ],
+  '8': [
+    {'1': '_width'},
+    {'1': '_height'},
+    {'1': '_duration_seconds'},
+  ],
+};
+
+/// Descriptor for `FilePreviewSnapshot`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List filePreviewSnapshotDescriptor = $convert.base64Decode(
+    'ChNGaWxlUHJldmlld1NuYXBzaG90EikKEHByb3RvY29sX3ZlcnNpb24YASABKA1SD3Byb3RvY2'
+    '9sVmVyc2lvbhIXCgdmaWxlX2lkGAIgASgJUgZmaWxlSWQSKwoRbWV0YWRhdGFfcmV2aXNpb24Y'
+    'AyABKARSEG1ldGFkYXRhUmV2aXNpb24SFgoGc3RhdHVzGAQgASgJUgZzdGF0dXMSGwoJZmlsZV'
+    '90eXBlGAUgASgJUghmaWxlVHlwZRIjCg11cGxvYWRfaW50ZW50GAYgASgJUgx1cGxvYWRJbnRl'
+    'bnQSFQoGaXNfZTJlGAcgASgIUgVpc0UyZRIdCgpzaXplX2J5dGVzGAggASgDUglzaXplQnl0ZX'
+    'MSHwoLc2Nhbl9yZXN1bHQYCSABKAlSCnNjYW5SZXN1bHQSGQoFd2lkdGgYCiABKAVIAFIFd2lk'
+    'dGiIAQESGwoGaGVpZ2h0GAsgASgFSAFSBmhlaWdodIgBARIuChBkdXJhdGlvbl9zZWNvbmRzGA'
+    'wgASgFSAJSD2R1cmF0aW9uU2Vjb25kc4gBARIjCg1oYXNfdGh1bWJuYWlsGA0gASgIUgxoYXNU'
+    'aHVtYm5haWwSIwoNaGFzX2NvbnZlcnRlZBgOIAEoCFIMaGFzQ29udmVydGVkQggKBl93aWR0aE'
+    'IJCgdfaGVpZ2h0QhMKEV9kdXJhdGlvbl9zZWNvbmRz');
 
 @$core.Deprecated('Use fileMusicMetadataDescriptor instead')
 const FileMusicMetadata$json = {

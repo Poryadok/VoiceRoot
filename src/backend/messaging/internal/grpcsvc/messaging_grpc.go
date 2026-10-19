@@ -508,7 +508,7 @@ func (s *MessagingGRPC) validateFileBackedAttachments(ctx context.Context, chatI
 		}
 		fileIDs = append(fileIDs, fileID)
 	}
-	resp, err := s.Files.GetBulkMetadata(ctx, &filev1.GetBulkMetadataRequest{FileIds: fileIDs})
+	resp, err := s.Files.GetBulkMetadata(ctx, fileMetadataRequest(ctx, fileIDs))
 	if err != nil {
 		return 0, status.Error(codes.Internal, err.Error())
 	}
@@ -1641,6 +1641,17 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		attachments = "[]"
 	}
 	contentType := store.EffectiveContentType(source.ContentType, source.Content, attachments)
+	sourceReferences, err := attachmentAcquisitionRequest(attachments)
+	if err != nil {
+		return nil, err
+	}
+	if len(sourceReferences.References) > 0 {
+		sourcePolicy, err := s.loadMutationChatPolicy(ctx, source.ChatID)
+		if err != nil {
+			return nil, err
+		}
+		ctx = context.WithValue(ctx, forwardFileSelectorKey{}, forwardFileSelector{message: source.ID, space: sourcePolicy.SpaceID})
+	}
 	if _, err := s.validateForwardAttachments(ctx, attachments, contentType); err != nil {
 		return nil, err
 	}
@@ -2727,7 +2738,7 @@ func (s *MessagingGRPC) ListSharedMedia(ctx context.Context, req *messagingv1.Li
 	}
 	metaByID := map[string]*filev1.FileMetadata{}
 	if len(fileIDs) > 0 && s.Files != nil {
-		resp, err := s.Files.GetBulkMetadata(ctx, &filev1.GetBulkMetadataRequest{FileIds: fileIDs})
+		resp, err := s.Files.GetBulkMetadata(ctx, fileMetadataRequest(ctx, fileIDs))
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}

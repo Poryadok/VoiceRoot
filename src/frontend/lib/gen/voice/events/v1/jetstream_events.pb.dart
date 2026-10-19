@@ -8839,6 +8839,7 @@ class FileProcessed extends $pb.GeneratedMessage {
     $core.String? convertedR2Key,
     $core.String? thumbnailR2Key,
     FileMusicMetadata? music,
+    FilePreviewSnapshot? preview,
   }) {
     final result = create();
     if (fileId != null) result.fileId = fileId;
@@ -8846,6 +8847,7 @@ class FileProcessed extends $pb.GeneratedMessage {
     if (convertedR2Key != null) result.convertedR2Key = convertedR2Key;
     if (thumbnailR2Key != null) result.thumbnailR2Key = thumbnailR2Key;
     if (music != null) result.music = music;
+    if (preview != null) result.preview = preview;
     return result;
   }
 
@@ -8869,6 +8871,8 @@ class FileProcessed extends $pb.GeneratedMessage {
     ..aOS(4, _omitFieldNames ? '' : 'thumbnailR2Key')
     ..aOM<FileMusicMetadata>(5, _omitFieldNames ? '' : 'music',
         subBuilder: FileMusicMetadata.create)
+    ..aOM<FilePreviewSnapshot>(6, _omitFieldNames ? '' : 'preview',
+        subBuilder: FilePreviewSnapshot.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -8937,6 +8941,232 @@ class FileProcessed extends $pb.GeneratedMessage {
   void clearMusic() => $_clearField(5);
   @$pb.TagNumber(5)
   FileMusicMetadata ensureMusic() => $_ensure(4);
+
+  /// Complete redacted plaintext non-Music snapshot. Mutually exclusive with music.
+  @$pb.TagNumber(6)
+  FilePreviewSnapshot get preview => $_getN(5);
+  @$pb.TagNumber(6)
+  set preview(FilePreviewSnapshot value) => $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasPreview() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearPreview() => $_clearField(6);
+  @$pb.TagNumber(6)
+  FilePreviewSnapshot ensurePreview() => $_ensure(5);
+}
+
+class FilePreviewSnapshot extends $pb.GeneratedMessage {
+  factory FilePreviewSnapshot({
+    $core.int? protocolVersion,
+    $core.String? fileId,
+    $fixnum.Int64? metadataRevision,
+    $core.String? status,
+    $core.String? fileType,
+    $core.String? uploadIntent,
+    $core.bool? isE2e,
+    $fixnum.Int64? sizeBytes,
+    $core.String? scanResult,
+    $core.int? width,
+    $core.int? height,
+    $core.int? durationSeconds,
+    $core.bool? hasThumbnail,
+    $core.bool? hasConverted,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (fileId != null) result.fileId = fileId;
+    if (metadataRevision != null) result.metadataRevision = metadataRevision;
+    if (status != null) result.status = status;
+    if (fileType != null) result.fileType = fileType;
+    if (uploadIntent != null) result.uploadIntent = uploadIntent;
+    if (isE2e != null) result.isE2e = isE2e;
+    if (sizeBytes != null) result.sizeBytes = sizeBytes;
+    if (scanResult != null) result.scanResult = scanResult;
+    if (width != null) result.width = width;
+    if (height != null) result.height = height;
+    if (durationSeconds != null) result.durationSeconds = durationSeconds;
+    if (hasThumbnail != null) result.hasThumbnail = hasThumbnail;
+    if (hasConverted != null) result.hasConverted = hasConverted;
+    return result;
+  }
+
+  FilePreviewSnapshot._();
+
+  factory FilePreviewSnapshot.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory FilePreviewSnapshot.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'FilePreviewSnapshot',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'fileId')
+    ..a<$fixnum.Int64>(
+        3, _omitFieldNames ? '' : 'metadataRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOS(4, _omitFieldNames ? '' : 'status')
+    ..aOS(5, _omitFieldNames ? '' : 'fileType')
+    ..aOS(6, _omitFieldNames ? '' : 'uploadIntent')
+    ..aOB(7, _omitFieldNames ? '' : 'isE2e')
+    ..aInt64(8, _omitFieldNames ? '' : 'sizeBytes')
+    ..aOS(9, _omitFieldNames ? '' : 'scanResult')
+    ..aI(10, _omitFieldNames ? '' : 'width')
+    ..aI(11, _omitFieldNames ? '' : 'height')
+    ..aI(12, _omitFieldNames ? '' : 'durationSeconds')
+    ..aOB(13, _omitFieldNames ? '' : 'hasThumbnail')
+    ..aOB(14, _omitFieldNames ? '' : 'hasConverted')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FilePreviewSnapshot clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FilePreviewSnapshot copyWith(void Function(FilePreviewSnapshot) updates) =>
+      super.copyWith((message) => updates(message as FilePreviewSnapshot))
+          as FilePreviewSnapshot;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FilePreviewSnapshot create() => FilePreviewSnapshot._();
+  @$core.override
+  FilePreviewSnapshot createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static FilePreviewSnapshot getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<FilePreviewSnapshot>(create);
+  static FilePreviewSnapshot? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get fileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set fileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasFileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearFileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $fixnum.Int64 get metadataRevision => $_getI64(2);
+  @$pb.TagNumber(3)
+  set metadataRevision($fixnum.Int64 value) => $_setInt64(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasMetadataRevision() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearMetadataRevision() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get status => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set status($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasStatus() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearStatus() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get fileType => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set fileType($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasFileType() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearFileType() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get uploadIntent => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set uploadIntent($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasUploadIntent() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearUploadIntent() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.bool get isE2e => $_getBF(6);
+  @$pb.TagNumber(7)
+  set isE2e($core.bool value) => $_setBool(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasIsE2e() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearIsE2e() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $fixnum.Int64 get sizeBytes => $_getI64(7);
+  @$pb.TagNumber(8)
+  set sizeBytes($fixnum.Int64 value) => $_setInt64(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasSizeBytes() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearSizeBytes() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.String get scanResult => $_getSZ(8);
+  @$pb.TagNumber(9)
+  set scanResult($core.String value) => $_setString(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasScanResult() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearScanResult() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $core.int get width => $_getIZ(9);
+  @$pb.TagNumber(10)
+  set width($core.int value) => $_setSignedInt32(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasWidth() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearWidth() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $core.int get height => $_getIZ(10);
+  @$pb.TagNumber(11)
+  set height($core.int value) => $_setSignedInt32(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasHeight() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearHeight() => $_clearField(11);
+
+  @$pb.TagNumber(12)
+  $core.int get durationSeconds => $_getIZ(11);
+  @$pb.TagNumber(12)
+  set durationSeconds($core.int value) => $_setSignedInt32(11, value);
+  @$pb.TagNumber(12)
+  $core.bool hasDurationSeconds() => $_has(11);
+  @$pb.TagNumber(12)
+  void clearDurationSeconds() => $_clearField(12);
+
+  @$pb.TagNumber(13)
+  $core.bool get hasThumbnail => $_getBF(12);
+  @$pb.TagNumber(13)
+  set hasThumbnail($core.bool value) => $_setBool(12, value);
+  @$pb.TagNumber(13)
+  $core.bool hasHasThumbnail() => $_has(12);
+  @$pb.TagNumber(13)
+  void clearHasThumbnail() => $_clearField(13);
+
+  @$pb.TagNumber(14)
+  $core.bool get hasConverted => $_getBF(13);
+  @$pb.TagNumber(14)
+  set hasConverted($core.bool value) => $_setBool(13, value);
+  @$pb.TagNumber(14)
+  $core.bool hasHasConverted() => $_has(13);
+  @$pb.TagNumber(14)
+  void clearHasConverted() => $_clearField(14);
 }
 
 class FileMusicMetadata extends $pb.GeneratedMessage {
