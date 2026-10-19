@@ -66,7 +66,10 @@ func (s *MatchStore) AuthorizeMatchSquadProviderDispatch(ctx context.Context, ca
 			Scan(&protocol, &disposition, &dispatch, &firstID); err != nil {
 			return err
 		}
-		if operation.OperationID != operationID || protocol != 1 || disposition != "LIVE" || operation.State != "provisioning" {
+		// Zero preserves the origin of an operation classified by021's
+		// conservative historical backfill. It still needs this exact fresh
+		// source/ban/candidate transaction before any LIVE retry.
+		if operation.OperationID != operationID || (protocol != 0 && protocol != 1) || disposition != "LIVE" || operation.State != "provisioning" {
 			return ErrMatchSquadPending
 		}
 		if dispatch == "RECEIPT_KNOWN" || (provider == "voice" && (operation.ChatReceiptID == nil || len(operation.VoiceRequestHash) != 32 || len(operation.VoiceRequestBytes) == 0)) {
@@ -128,7 +131,7 @@ func (s *MatchStore) ActivateValidatedProvisionedMatch(ctx context.Context, cand
 			Scan(&persistedID, &protocol, &disposition, &state, &chat, &voice); err != nil {
 			return err
 		}
-		if persistedID != operationID || protocol != 1 || disposition != "LIVE" || state != "provisioning" || chat != "RECEIPT_KNOWN" || voice != "RECEIPT_KNOWN" {
+		if persistedID != operationID || (protocol != 0 && protocol != 1) || disposition != "LIVE" || state != "provisioning" || chat != "RECEIPT_KNOWN" || voice != "RECEIPT_KNOWN" {
 			return ErrMatchSquadPending
 		}
 		var err error

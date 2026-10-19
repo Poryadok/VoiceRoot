@@ -545,12 +545,14 @@ func activateProvisionedMatchTx(ctx context.Context, tx pgx.Tx, matchID uuid.UUI
 	if err != nil {
 		return Match{}, err
 	}
-	var protocol int16
-	if err := tx.QueryRow(ctx, `SELECT COALESCE(to_jsonb(o)->>'dispatch_protocol_version','0')::smallint
+	var protocol *int16
+	if err := tx.QueryRow(ctx, `SELECT (to_jsonb(o)->>'dispatch_protocol_version')::smallint
 		FROM matchmaking_match_squad_operations o WHERE match_id=$1`, matchID).Scan(&protocol); err != nil {
 		return Match{}, err
 	}
-	if (dispatchProtocol && protocol != 1) || (!dispatchProtocol && protocol == 1) {
+	// A missing column is the old component schema. An explicit zero is an
+	// upgraded historical origin, not permission to bypass the private proof.
+	if (dispatchProtocol && (protocol == nil || (*protocol != 0 && *protocol != 1))) || (!dispatchProtocol && protocol != nil) {
 		return Match{}, ErrMatchSquadPending
 	}
 	if operation.State == "active" {

@@ -335,3 +335,45 @@ child/launcher processes were stopped; terminal1, no AST PASS. No runtime comman
 or scarce stand/GH resource held. Own portless Linux runner/PG remain checkpointed.
 Independent reviewer299 owns the prior evidence review; its exactc110 successor
 correction and this separate typed delta require their own actual scoped results.
+
+### Independent core review309 corrections
+
+Reviewer309 requested changes on exact3191 (parent async c21/c22): P1 historical
+operations retain immutable dispatch origin0 under021, but validated dispatch and
+activation required1 forever. Old writer retirement is not a completed drain of
+every LIVE operation. The unvalidated activation wrapper also conflated explicit
+upgraded0 with missing021 and could bypass fresh proof for such historical rows.
+P2 typed saga outcomes ignored permanent teardown-participant CONTRACT_MISMATCH.
+
+Keep021/022/023 and historical provenance unchanged. Validated APIs now accept
+origin0 with exactly the same fresh source/ban/candidate/locks as1, preserving the
+original possible-dispatch marker/request IDs/bytes. New intents still require
+protocol1/NOT_ISSUED via the unchanged insert trigger. Unvalidated activation is
+allowed only for the old component schema with no021 column; explicit upgraded0
+is denied. No NULL LFP adoption, source backfill or private authority fabrication.
+022's existing captures still require reset/fresh capture; this fix is no waiver.
+
+The saga outcome query now gives permanent teardown mismatch priority over both
+COMPENSATION_PENDING and SETTLING_ABANDONED, including an unknown other creation.
+Known other-provider cleanup still records its exact receipt independently while
+the aggregate remains pending and the mismatch persists.
+
+Real Linux PG/race RED2top2sub14.176s reproduced unknown historical Chat refusal,
+unvalidated historical both-known activation success, and teardown typed-state
+misclassification. First corrected GREEN7.072s. Expanded4top4subPASS14.778s/0skip
+includes both-known/unknown Voice mismatch and independent Voice cleanup plus
+existing all-member ban/fresh-cut/abandonment-wins activation regressions. An
+intermediate expanded run/vet compile failure (missing bool fixture argument) is
+preserved; only the fixture call was corrected, source assertions unchanged.
+Original no021 durable lifecycle component1PG-racePASS5.312s confirms compatibility.
+Scopedvet-v2=0/fullMMbuild=0; short27PASS/116PGskip/0fail, not runtime coverage.
+
+Historical protocol fixture removes021 only while operation inventory is empty,
+uses old intent/receipt APIs, then applies actual021 backfill with a separately
+fresh qualified private capture. It tests protocol behavior independently; it
+does not retrofit authority onto pre022 captures or certify a rollout/cold cut.
+Graphify after source batch bounded no output; Treehouse+CIM verified own38840 ->
+56392 -> 51796, own children stopped, no AST PASS. All test sessions terminal;
+same WT31 lease and own portless Linux runner/PG retained for composition.
+Independent309 successor recheck via queen is required; no old3191 CLEAR claimed.
+299's separate c110 empty-receipt correction gate remains independent.

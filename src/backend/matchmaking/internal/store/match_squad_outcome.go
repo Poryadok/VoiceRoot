@@ -36,7 +36,9 @@ func (s *MatchStore) GetMatchSquadProvisioningOutcome(ctx context.Context, match
  COALESCE(to_jsonb(o)->>'provision_disposition',''),COALESCE(to_jsonb(o)->>'chat_dispatch_state',''),COALESCE(to_jsonb(o)->>'voice_dispatch_state',''),
  COALESCE(o.chat_id::text,''),COALESCE(o.voice_room_id::text,''),
  EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='matchmaking_match_squad_operations'::regclass AND attname='creation_evidence_version' AND NOT attisdropped),
- (to_jsonb(o)->>'chat_creation_mismatch_bytes' IS NOT NULL OR to_jsonb(o)->>'voice_creation_mismatch_bytes' IS NOT NULL)
+ (to_jsonb(o)->>'chat_creation_mismatch_bytes' IS NOT NULL OR to_jsonb(o)->>'voice_creation_mismatch_bytes' IS NOT NULL
+ OR EXISTS(SELECT 1 FROM matchmaking_match_squad_teardowns a JOIN matchmaking_match_squad_teardown_participants p USING(aggregate_id)
+ WHERE a.match_id=m.id AND p.state='CONTRACT_MISMATCH'))
  FROM matches m LEFT JOIN matchmaking_match_squad_operations o ON o.match_id=m.id WHERE m.id=$1`, matchID).
 		Scan(&status, &operationID, &state, &disposition, &chat, &voice, &chatID, &roomID, &ready, &mismatch)
 	if err != nil {
