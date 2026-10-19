@@ -196,11 +196,13 @@ func (s *ProfileStore) ResolvePrimaryProfileIDs(ctx context.Context, accountIDs 
 // MarkAccountRegular clears the guest marker for every profile owned by an account.
 // It deliberately includes soft-deleted profiles and succeeds unchanged for unknown/already-regular accounts.
 func (s *ProfileStore) MarkAccountRegular(ctx context.Context, accountID uuid.UUID) error {
-	_, err := s.pool.Exec(ctx, `
+	return s.withSearchProjectionTx(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
 		UPDATE profiles
 		SET is_guest_account = false, updated_at = now()
 		WHERE account_id = $1 AND is_guest_account = true`, accountID)
-	return err
+		return err
+	})
 }
 
 type UpdateProfileInput struct {
@@ -424,24 +426,34 @@ func MaxProfilesForTier(tier string) int {
 
 // ApplyFreeTierFreeze marks profiles beyond the free cap as frozen (keeps primary + earliest secondaries).
 func (s *ProfileStore) ApplyFreeTierFreeze(ctx context.Context, accountID uuid.UUID) error {
-	rows, err := s.ListByAccountID(ctx, accountID)
-	if err != nil {
-		return err
-	}
-	if len(rows) <= profileCountFree {
-		return nil
-	}
-	for i := profileCountFree; i < len(rows); i++ {
-		if rows[i].FrozenAt != nil {
-			continue
-		}
-		_, err := s.pool.Exec(ctx, `UPDATE profiles SET frozen_at = now(), updated_at = now()
-			WHERE id = $1 AND account_id = $2 AND frozen_at IS NULL`, rows[i].ID, accountID)
+	return s.withSearchProjectionTx(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT id FROM profiles
+			WHERE account_id = $1 AND deleted_at IS NULL
+			ORDER BY is_primary DESC, created_at ASC`, accountID)
 		if err != nil {
 			return err
 		}
-	}
-	return nil
+		var ids []uuid.UUID
+		for rows.Next() {
+			var id uuid.UUID
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return err
+			}
+			ids = append(ids, id)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		for i := profileCountFree; i < len(ids); i++ {
+			if _, err := tx.Exec(ctx, `UPDATE profiles SET frozen_at = now(), updated_at = now()
+				WHERE id = $1 AND account_id = $2 AND frozen_at IS NULL`, ids[i], accountID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // GetOwnedProfile returns a profile owned by the account (not soft-deleted).
@@ -526,7 +538,7 @@ func (s *ProfileStore) ensurePrimaryProfileTx(ctx context.Context, tx pgx.Tx, ac
 }
 
 func (s *ProfileStore) withSearchProjectionTx(ctx context.Context, fn func(pgx.Tx) error) error {
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.beginIdentityMutationTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -584,6 +596,8 @@ func (s *ProfileStore) SetNotificationPrefsJSON(ctx context.Context, profileID u
 	if strings.TrimSpace(prefsJSON) == "" {
 		prefsJSON = "{}"
 	}
-	_, err := s.pool.Exec(ctx, `UPDATE profiles SET notification_prefs_json = $2::jsonb, updated_at = now() WHERE id = $1`, profileID, prefsJSON)
-	return err
+	return s.withSearchProjectionTx(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `UPDATE profiles SET notification_prefs_json = $2::jsonb, updated_at = now() WHERE id = $1`, profileID, prefsJSON)
+		return err
+	})
 }

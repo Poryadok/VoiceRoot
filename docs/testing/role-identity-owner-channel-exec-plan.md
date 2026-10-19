@@ -349,8 +349,41 @@ by that merge. Combined native compatibility uses exact156 ae4298ca migrations:
 V27 SHA256 da32e423267b418f1856eced453bac369a6d3faa13f2bb5a49a66b4b79cec880,
 V29 bdbb92dde4e56b2671832c6edbb95eca81b5221426a498c32f68a3572426d49e,
 V30 bb84293efe66359f0b7c9fc85d25bce4ee9fc58bca16e3cd8aafbf9b4c4c05a9.
-Role8 passed/0skip at03:35:28Z on all30 migrations; parent/bootstrap/Spring runs
-remain live in29047 on separate databases and must not yet be claimed complete.
+Role8 passed/0skip at03:35:28Z on all30 migrations. Parent5 subsequently passed.
+Bootstrap initially exhausted its unchanged3s transaction budget before the first
+SQL registration statement; the failed log/XML remain preserved. One unchanged-
+source retry using an owned Linux-native copy of the existing Maven cache passed3
+at03:53:14Z, then Spring passed1 at03:55:58Z. All accepted17 cases have zero skips;
+no SQL timeout was relaxed. The cache-I/O explanation remains an inference.
 156 confirms the independent opaque Role/Mod cycle UUID namespaces bind the
 same canonical account deletion transition/deadline, without cross-purpose UUID
 equality or authority borrowing. Source review/activation remains OPEN.
+
+## Canonical User transaction integration preparation
+
+Normal merge5701967f consumes290's immutable compile/API pin70c386c4. It includes
+the private identityMutationTx bridge and strict owned Version22 catalog, but NOT
+the unpublished User22 migration or its native fixtures. This is source preparation;
+it establishes no executable schema, full-core readiness or birth activation.
+
+The sole172 profile.go integration routes withSearchProjectionTx and its callers
+through beginIdentityMutationTx. MarkAccountRegular, notification preferences and
+free-tier freeze also enter that bridge before profile writes. Freeze reads the
+ordered current roster only after acquiring I and applies its writes in the same
+transaction; the existing primary/created_at order and free-cap rule are retained.
+There is no old-schema fallback.290 retains the four adjacent SDK/verification/
+Search entrypoint files and canonical core; no parallel edits are made there.
+
+Linux compile-only completed successfully for internal/store and
+internal/identityassociation with -run '^$' (no tests executed). A first RO Windows
+module-cache run was stopped while scanning; a second cached-image attempt lacked
+required modules with GOPROXY=off and failed setup. The accepted compile used the
+existing host module ZIP cache as a read-only file:// proxy and extracted modules
+into the owned Linux build volume, with network none. No source, versions or
+runtime checks were relaxed; these attempts establish no PostgreSQL behavior.
+
+Before runtime qualification, real PostgreSQL barriers must demonstrate I-before-
+profile/allocator lock order for these entrypoints on the coherent immutable22 DDL.
+All births additionally require typed Auth preflight outside I and canonical birth
+registration in the same transaction. Auth issuance lock choreography, private
+serving, Role history/current completeness and whole-copy acceptance remain open.
