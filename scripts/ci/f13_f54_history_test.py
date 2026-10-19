@@ -87,10 +87,15 @@ class ProducerTrace(unittest.TestCase):
     def test_rehashed_drop_reorder_forgery_and_raw_dag_do_not_substitute_trace(self):
         self.hidden_runtime(); p, out = self.collect(); self.assertEqual(p.returncode, 0, p.stderr)
         m = module(); original = [json.loads(v) for v in (out/'trace.jsonl').read_text().splitlines()]
-        for change in ('drop_classification', 'reorder', 'duplicate', 'flag', 'content_base', 'incoming_source', 'parent_index', 'raw_dag'):
+        for change in ('whole_operation', 'whole_path', 'drop_classification', 'reorder', 'duplicate', 'flag', 'content_base', 'incoming_source', 'parent_index', 'raw_dag'):
             with self.subTest(change=change):
                 events = json.loads(json.dumps(original))
-                if change == 'drop_classification': events = [e for e in events if e['kind'] != 'classification']
+                if change == 'whole_operation':
+                    removed=next(e['operation'] for e in events if e['kind']=='operation_begin')
+                    events=[e for e in events if e['operation']!=removed]
+                elif change == 'whole_path':
+                    events=[e for e in events if e['payload'].get('path')!=PROTO]
+                elif change == 'drop_classification': events = [e for e in events if e['kind'] != 'classification']
                 elif change == 'reorder': events[1], events[2] = events[2], events[1]
                 elif change == 'duplicate': events.insert(2, events[1])
                 elif change == 'flag': next(e for e in events if e['kind']=='classification')['payload']['trigger']='false'
@@ -122,6 +127,11 @@ class ProducerTrace(unittest.TestCase):
         original_trigger=next(e for e in events if e['kind']=='classification' and e['operation']==parent['payload']['id'])
         self.assertEqual(original_trigger['payload']['trigger'],'false')
         m=module();self.assertFalse(m.validate_trace(self.repo,out/'trace.jsonl',hashlib.sha256((out/'trace.jsonl').read_bytes()).hexdigest())['admission'])
+        child_id=child['payload']['id']
+        dropped=[e for e in events if e['frame']!=child_id]
+        path=out/'whole-child-dropped.jsonl';m.write_events(path,dropped)
+        with self.assertRaises(m.Rejected):
+            m.validate_trace(self.repo,path,hashlib.sha256(path.read_bytes()).hexdigest())
 
     def test_same_bytes_independent_owners_remain_a_duplicate_failure(self):
         self.write(PROTO, 'same final\n');self.write(RUNTIME,'package main\n// earlier true operation\n')

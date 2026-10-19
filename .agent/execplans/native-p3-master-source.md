@@ -74,6 +74,21 @@ a partial/failing observation is evidence only and cannot freeze approved R/K.
 Negative checks: altered/drop/reorder/duplicate frames/operations/flags/hash/parents,
 raw33history substituted as trace, third/future tuple and all existing guards.
 
+Prototype checkpoint: source6f84ccac preserves the original non-admitting gate.
+The real supplemental O..P2 partitiontrue collector completed on source65ac0538
+(582 events, five frames, twelve operations); this is not the original outer
+partitionfalse ledger. Its exact observation is retained separately. The frozen
+6f84 prefix capture remains a distinct provenance experiment until terminal.
+
+Meaningful successor RED whole-drop-red.log proves that rehashed whole-operation
+and whole-path omission escaped the earlier validator. The successor validates
+the actual ordered operation prefix, complete successful-operation path visits
+and commits, required real child frames, and replayed map hashes before/after
+mutation and at frame exit. Successful original sync gates have explicit source
+identity receipts. No new admission or pin is introduced. Missing observations
+remain rejection/HOLD, not reconstructed rows. Independent frozen review and
+complete actual33-node qualification are still OPEN.
+
 - [x] Existing stage custody accepted; exclusive WT19 lease acquired at ac7e039.
 - [x] Master route read, independent418 closure c1 and121 exclusive-write freeze confirmed.
 - [x] Focused Linux qualification9/history4/unchanged correction10 pass; history tests exposed and corrected lost runtime taint.

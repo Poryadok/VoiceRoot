@@ -3642,6 +3642,9 @@ f13_collect_develop_contributions() {
       # Keep the novel first-parent commits from base..target, but do not
       # re-attribute base-side history as a source contribution.
       f13_validate_sync_merge_resolution "${repo}" "${commit}" "${diagnostic_file}" || return 1
+      if [[ -n "${f13_f54_trace_file:-}" ]]; then
+        f13_f54_trace_event sync_gate_passed "${repo}" || return 1
+      fi
       for path in "${!guarded_entries[@]}"; do
         if [[ -n "${f13_f54_trace_file:-}" ]]; then
           f13_f54_trace_event sync_gate_before "${repo}" "${path}" "${output}" || return 1

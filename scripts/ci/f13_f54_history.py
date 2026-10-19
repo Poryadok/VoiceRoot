@@ -149,6 +149,8 @@ def append(path, kind, frame, operation, repo, values):
     elif kind == 'classification':
         trigger, delta = values
         payload = dict(trigger=trigger, unapproved_delta=raw_binding(Path(delta).read_bytes()), classifier=classifier_binding())
+    elif kind == 'sync_gate_passed':
+        payload=dict(gate='f13_validate_sync_merge_resolution',classifier=classifier_binding())
     elif kind in ('row_before','path_gate_before','final_gate_before','sync_gate_before'):
         name, output, *incoming = values
         matches=[v for v in Path(output).read_text().splitlines() if v.split('\t')[0] == name]
@@ -283,6 +285,26 @@ def validate_trace(repo, path, expected_sha, complete=False):
     raw=Path(path).read_bytes();require(sha(raw)==expected_sha,'trace_raw_hash')
     events=[json.loads(v) for v in raw.splitlines()];require(events,'nonempty_producer_trace')
     previous='0'*64;frames={};stack=[];operations={};attempts={};classified={};pending={};cumulative={};child_flags={};child_rows={};frame_rows={};carry={};failures=[];observed=set()
+    expected_operations={};seen_operations={};visited={};committed={};maps={};children={}
+    def map_binding(frame):
+        raw=''.join('\t'.join(parts)+'\n' for parts in maps[frame]).encode()
+        return dict(bytes=len(raw),sha256=sha(raw))
+    def map_before(frame, value):
+        require(value['map_before']==map_binding(frame),'conserved_map_before')
+        if 'prior_rows' in value:
+            require([row(x) for x in value['prior_rows']]==[x for x in maps[frame] if x[0]==value['path']],'conserved_prior_rows')
+    def finished(operation):
+        require(operation in operations,'complete_operation_begin')
+        value=operations[operation]
+        if value['classification']=='sync':
+            require(operation in sync_gates,'actual_sync_gate_receipt')
+            return
+        require(operation in classified,'complete_operation_classification')
+        require(visited.get(operation,[])==value['paths'],'complete_ordered_path_visits')
+        require(committed.get(operation,[])==value['paths'],'complete_ordered_path_commits')
+        if frames[operation.split('/')[0]]['partition_source_history']=='true' and value['classification']=='merge':
+            require(children.get(operation)==[(value['boundary'],value['source_head'],'true','false')],'complete_real_child_frame')
+    sync_gates=set()
     for sequence,e in enumerate(events,1):
         require(set(e)=={'schema','sequence','previous','kind','frame','operation','payload','digest'} and e['schema']==SCHEMA,'producer_event_schema')
         value=dict(e);digest=value.pop('digest')
@@ -293,9 +315,20 @@ def validate_trace(repo, path, expected_sha, complete=False):
             require((not v['parent'] and v['parent_operation'] is None) or v['parent_operation'] in attempts,'actual_parent_operation_reference')
             actual=git(repo,'rev-list','--first-parent','--reverse',v['base']+'..'+v['target']).decode().splitlines()
             require(v['first_parent_operations']==actual,'actual_frame_operations');frames[identity]=v;stack.append(identity)
+            maps[identity]=[];seen_operations[identity]=[];expected_operations[identity]=[]
+            for commit in actual:
+                parents=git(repo,'rev-list','--parents','-n','1',commit).decode().split()[1:]
+                expected_operations[identity].extend((commit,index) for index in ([1] if len(parents)==1 else range(2,len(parents)+1)))
+            if v['parent_operation']:
+                children.setdefault(v['parent_operation'],[]).append((v['base'],v['target'],v['allow_direct_followup'],v['partition_source_history']))
             continue
         require(stack and frame==stack[-1],'current_live_frame')
         if kind=='frame_exit':
+            require(v['final_map']==map_binding(frame),'conserved_final_map')
+            seen=seen_operations[frame]
+            require(seen==expected_operations[frame][:len(seen)],'ordered_actual_operation_prefix')
+            if v['exit']==0:require(seen==expected_operations[frame],'complete_actual_operations')
+            for commit,index in (seen if v['exit']==0 else seen[:-1]):finished(frame+'/'+commit+'/'+str(index))
             require(v['exit']!=0 or not any(key[0]==frame for key in pending),'row_without_commit')
             if v['exit']!=0: failures.append(dict(frame=frame,category=v['category']))
             parent_operation=frames[frame]['parent_operation']
@@ -313,7 +346,10 @@ def validate_trace(repo, path, expected_sha, complete=False):
             index=v['parent_index'];require(type(index) is int and 1<=index<=len(parents),'actual_attempt_index')
             require(v['source_head']==(v['commit'] if len(parents)==1 else parents[index-1]),'actual_attempt_source')
             require(v['candidates']==git(repo,'merge-base','--all',v['first_parent'],v['source_head']).decode().splitlines(),'actual_attempt_bases')
-            attempts[op]=v;continue
+            seen=seen_operations[frame]
+            if seen:finished(frame+'/'+seen[-1][0]+'/'+str(seen[-1][1]))
+            require(len(seen)<len(expected_operations[frame]) and (v['commit'],index)==expected_operations[frame][len(seen)],'ordered_actual_operation_prefix')
+            seen.append((v['commit'],index));attempts[op]=v;continue
         if kind=='operation_begin':
             require(op==v['id'] and v['id'] not in operations and v['commit'] in frames[frame]['first_parent_operations'],'actual_unique_operation')
             require(op in attempts and all(v[k]==attempts[op][k] for k in ('commit','ordered_parents','parent_index','first_parent','source_head')),'actual_attempt_before_begin')
@@ -331,18 +367,30 @@ def validate_trace(repo, path, expected_sha, complete=False):
             if kind=='scalar_seam_observation':require(v['status']==1,'scalar_only_still_rejects')
             continue
         if kind=='failure': failures.append(dict(frame=frame,category=v['category']));continue
-        if kind=='final_gate_before': continue
+        if kind=='final_gate_before':map_before(frame,v);continue
         require(op in operations,'referenced_real_operation')
+        if kind=='sync_gate_passed':
+            require(operations[op]['classification']=='sync' and v['gate']=='f13_validate_sync_merge_resolution' and v['classifier']==classifier_binding(),'actual_sync_gate_identity')
+            sync_gates.add(op);continue
         if kind=='classification':
             require(op not in classified and v['classifier']==classifier_binding(),'original_classifier_identity')
             require(v['trigger']==classify(v['unapproved_delta']['raw'].splitlines()),'actual_raw_classifier_flag')
             require(v['unapproved_delta']==raw_binding(v['unapproved_delta']['raw']),'actual_delta_bytes')
             classified[op]=v;continue
-        if kind in ('path_gate_before','sync_gate_before'):continue
-        if kind=='disposition':require(v['operation_reference']==op and v['reason'],'actual_disposition_reference');continue
+        if kind in ('path_gate_before','sync_gate_before'):
+            map_before(frame,v)
+            if kind=='path_gate_before':visited.setdefault(op,[]).append(v['path'])
+            continue
+        if kind=='disposition':
+            require(v['operation_reference']==op and v['reason'],'actual_disposition_reference');map_before(frame,v)
+            if v['reason']=='verified_original_sync_reconciliation':
+                require(op in sync_gates,'sync_receipt_before_reconciliation')
+                if sum(x[0]==v['path'] for x in maps[frame])==1:maps[frame]=[x for x in maps[frame] if x[0]!=v['path']]
+            continue
         require(op in classified,'classification_before_row')
         key=(frame,v['path'])
         if kind=='row_before':
+            map_before(frame,v)
             prior=row(v['prior']);incoming=row(v['incoming'])
             require(key not in pending and incoming[0]==v['path'] and incoming[2]==operations[op]['commit'],'actual_incoming_operation')
             operation=operations[op]
@@ -363,9 +411,13 @@ def validate_trace(repo, path, expected_sha, complete=False):
             parts=row(v['row']);require(parts[6]==pending[key]['incoming'][6],'original_content_base')
             require(parts[1]==('true' if cumulative[key] else 'false'),'cumulative_operation_or')
             if kind=='row_after':pending[key]['after']=parts;carry[op]=parts[1]=='true'
+            else:maps[frame]=[x for x in maps[frame] if x[0]!=v['path']]
         elif kind=='row_committed':
             require(key in pending and pending[key]['after']==row(v['row']),'actual_committed_row')
             frame_rows[key]=row(v['row'])
+            maps[frame].append(row(v['row']))
+            require(v['map_after']==map_binding(frame) and [row(x) for x in v['retained_rows']]==[x for x in maps[frame] if x[0]==v['path']],'conserved_committed_map')
+            committed.setdefault(op,[]).append(v['path'])
             pending.pop(key)
         else:raise Rejected('unknown_trace_kind')
     require(not stack,'closed_frames')
