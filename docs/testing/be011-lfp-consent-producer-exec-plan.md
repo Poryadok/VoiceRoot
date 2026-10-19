@@ -82,6 +82,14 @@ CI and product acceptance remain distinct from source/component proof.
   PostgreSQL constraint trigger that blocks actual COMMIT while close/drain
   remains incomplete. No installed controller or real restore proof inferred.
 - [ ] Freeze journal pin, independent exact-head review and producer transport.
+- [x] Review147 found P1: pgx COMMIT error/ErrTxClosed did not prove native
+  transaction completion. Real PostgreSQL canceled-caller/deferred-COMMIT RED
+  reproduced false successful drain. Completion guard now releases only after
+  confirmed COMMIT or confirmed pre-commit ROLLBACK. Unknown BEGIN, COMMIT or
+  ROLLBACK retains restrictive admission; no timeout/reopen/connection-close
+  assumption releases it. Actual old execution/database-session retirement is
+  required to replace that runtime. Added canceled admission-head rollback and
+  confirmed ordinary rejection rollback oracles; independent recheck remains.
 
 ## Decisions
 

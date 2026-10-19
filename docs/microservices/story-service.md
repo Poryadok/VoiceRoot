@@ -53,6 +53,11 @@ the unchanged v1 material. `pkg/storylfpadmission.Barrier` is the shared local
 ABI: the bound journal obtains admission before SQL and releases after commit or
 rollback. Its local shared admission-head lock supplements that external permit.
 Neither database marker nor constructing an Origin establishes admission.
+Only confirmed transaction completion releases its permit. An ambiguous BEGIN,
+COMMIT or ROLLBACK retains restrictive admission: pgx's closed transaction or
+asynchronous connection close is not database-session quiescence. No local timeout
+or reopen releases this uncertainty; the actual controller must retire the old
+runtime and its database sessions before admitting replacement execution.
 `BE011-STORY-LFP-RESTORE-CONTROLLER` owns the still-absent deployment controller,
 full replica/transaction drain, external state and credential/route custody;
 consumers are Story291 and MM145. Unknown authority leaves qualification closed.

@@ -81,8 +81,16 @@ func (s *Store) begin(ctx context.Context) (pgx.Tx, origin, func(), error) {
 	}
 	tx, e := s.Pool.Begin(ctx)
 	if e != nil {
-		release()
+		// BEGIN may have crossed the wire before the caller lost its session.
+		// Without a transaction handle there is no confirmed terminal result.
+		// Retain restrictive admission until the bound runtime is retired.
 		return nil, origin{}, nil, ErrUnavailable
+	}
+	guard := &completionTx{Tx: tx}
+	confirmedRelease := func() {
+		if guard.terminal {
+			release()
+		}
 	}
 	var dbOrigin origin
 	var db []byte
@@ -92,16 +100,45 @@ func (s *Store) begin(ctx context.Context) (pgx.Tx, origin, func(), error) {
 		copy(dbOrigin.database[:], db)
 	}
 	if e != nil || !dbOrigin.valid() || phase != "open" {
-		_ = tx.Rollback(ctx)
-		release()
+		_ = guard.Rollback(ctx)
+		confirmedRelease()
 		return nil, origin{}, nil, ErrUnavailable
 	}
 	if o != dbOrigin {
-		_ = tx.Rollback(ctx)
-		release()
+		_ = guard.Rollback(ctx)
+		confirmedRelease()
 		return nil, origin{}, nil, ErrStale
 	}
 	// Shared row lock spans the WHOLE owning transaction, including commit.
 	// Controller close updates this row only after external ingress is closed.
-	return tx, o, release, nil
+	return guard, o, confirmedRelease, nil
+}
+
+// completionTx deliberately keeps an unresolved permit restrictive. In pgx,
+// Commit marks a transaction closed even on failure; a later ErrTxClosed or an
+// asynchronously closed connection does not prove native COMMIT quiescence.
+// No timeout or DB marker can release this guard. The actual controller must
+// retire the old runtime and its database sessions before admitting replacement
+// execution. This package has no operation that pretends that custody exists.
+type completionTx struct {
+	pgx.Tx
+	commitAttempted bool
+	terminal        bool
+}
+
+func (t *completionTx) Commit(ctx context.Context) error {
+	t.commitAttempted = true
+	e := t.Tx.Commit(ctx)
+	if e == nil {
+		t.terminal = true
+	}
+	return e
+}
+
+func (t *completionTx) Rollback(ctx context.Context) error {
+	e := t.Tx.Rollback(ctx)
+	if e == nil && !t.commitAttempted {
+		t.terminal = true
+	}
+	return e
 }

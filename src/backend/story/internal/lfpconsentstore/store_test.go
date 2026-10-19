@@ -130,6 +130,116 @@ CREATE CONSTRAINT TRIGGER wait_lfp_commit AFTER INSERT ON story_lfp_consents DEF
 	require.NoError(t, barrier.CloseAndDrain(ctx))
 }
 
+func TestJournalUncertainCommitNeverClaimsDrained(t *testing.T) {
+	s, id, _ := fixture(t)
+	ctx := context.Background()
+	o := s.authority.(fixtureAdmission).o
+	shared, e := storylfpadmission.NewOrigin(o.environment, o.installation, o.incarnation, o.database)
+	require.NoError(t, e)
+	barrier := storylfpadmission.NewBarrier(shared, fixtureSharedAdmission{shared})
+	s = NewBoundStore(s.Pool, barrier)
+	offer, e := s.ObserveOffer(ctx, id)
+	require.NoError(t, e)
+	_, e = s.Pool.Exec(ctx, `CREATE FUNCTION wait_uncertain_commit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(2910006); RETURN NEW; END $$;
+CREATE CONSTRAINT TRIGGER wait_uncertain_commit AFTER INSERT ON story_lfp_consents DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION wait_uncertain_commit()`)
+	require.NoError(t, e)
+	lock, e := s.Pool.Begin(ctx)
+	require.NoError(t, e)
+	defer func() { _ = lock.Rollback(ctx) }()
+	_, e = lock.Exec(ctx, `SELECT pg_advisory_xact_lock(2910006)`)
+	require.NoError(t, e)
+	caller, cancelCaller := context.WithCancel(ctx)
+	defer cancelCaller()
+	result := make(chan error, 1)
+	go func() {
+		_, b, h, e := s.RecordResponse(caller, response(offer))
+		if b != nil || h != [32]byte{} {
+			e = errors.New("ambiguous commit returned material")
+		}
+		result <- e
+	}()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		var blocked int
+		require.NoError(t, s.Pool.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE application_name=current_setting('application_name') AND wait_event_type='Lock' AND lower(query)='commit'`).Scan(&blocked))
+		if blocked > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("caller never reached actual blocked COMMIT")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancelCaller()
+	select {
+	case e = <-result:
+		require.ErrorIs(t, e, ErrUnavailable)
+	case <-time.After(3 * time.Second):
+		t.Fatal("canceled caller never returned")
+	}
+	drain, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+	require.ErrorIs(t, barrier.CloseAndDrain(drain), context.DeadlineExceeded, "unconfirmed native COMMIT must retain its permit")
+	require.NoError(t, lock.Commit(ctx))
+}
+
+func TestJournalUncertainAdmissionRollbackNeverClaimsDrained(t *testing.T) {
+	s, id, _ := fixture(t)
+	ctx := context.Background()
+	o := s.authority.(fixtureAdmission).o
+	shared, e := storylfpadmission.NewOrigin(o.environment, o.installation, o.incarnation, o.database)
+	require.NoError(t, e)
+	barrier := storylfpadmission.NewBarrier(shared, fixtureSharedAdmission{shared})
+	s = NewBoundStore(s.Pool, barrier)
+	lock, e := s.Pool.Begin(ctx)
+	require.NoError(t, e)
+	defer func() { _ = lock.Rollback(ctx) }()
+	_, e = lock.Exec(ctx, `SELECT singleton FROM story_lfp_admission_head FOR UPDATE`)
+	require.NoError(t, e)
+	caller, cancelCaller := context.WithCancel(ctx)
+	defer cancelCaller()
+	result := make(chan error, 1)
+	go func() { _, e := s.ObserveOffer(caller, id); result <- e }()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		var blocked int
+		require.NoError(t, s.Pool.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE application_name=current_setting('application_name') AND wait_event_type='Lock' AND query LIKE '%FROM story_lfp_admission_head%FOR SHARE%'`).Scan(&blocked))
+		if blocked > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("caller never reached actual admission row lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancelCaller()
+	select {
+	case e = <-result:
+		require.ErrorIs(t, e, ErrUnavailable)
+	case <-time.After(3 * time.Second):
+		t.Fatal("canceled admission caller never returned")
+	}
+	drain, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+	require.ErrorIs(t, barrier.CloseAndDrain(drain), context.DeadlineExceeded)
+	require.NoError(t, lock.Commit(ctx))
+}
+
+func TestJournalConfirmedRejectionRollbackReleasesPermit(t *testing.T) {
+	s, _, _ := fixture(t)
+	ctx := context.Background()
+	o := s.authority.(fixtureAdmission).o
+	shared, e := storylfpadmission.NewOrigin(o.environment, o.installation, o.incarnation, o.database)
+	require.NoError(t, e)
+	barrier := storylfpadmission.NewBarrier(shared, fixtureSharedAdmission{shared})
+	s = NewBoundStore(s.Pool, barrier)
+	_, e = s.ObserveOffer(ctx, uuid.New())
+	require.ErrorIs(t, e, ErrStale)
+	drain, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	require.NoError(t, barrier.CloseAndDrain(drain))
+}
+
 func publish(t *testing.T, s *Store, id uuid.UUID) Offer {
 	t.Helper()
 	var author uuid.UUID
