@@ -37,6 +37,26 @@ import voice.backend.auth.sessionepoch.PreparedSessionEpoch;
 import voice.backend.auth.sessionepoch.SessionEpochIssuanceGate;
 
 public class AuthService {
+  private voice.backend.auth.releasepolicy.ReleasePolicy releasePolicy =
+      voice.backend.auth.releasepolicy.ReleasePolicy.development();
+  private boolean releasePolicyConfigured;
+
+  public synchronized void configureReleasePolicy(voice.backend.auth.releasepolicy.ReleasePolicy policy) {
+    if (releasePolicyConfigured) throw new IllegalStateException("release policy already configured");
+    this.releasePolicy = java.util.Objects.requireNonNull(policy);
+    releasePolicyConfigured = true;
+  }
+
+  public voice.backend.auth.releasepolicy.ReleasePolicy releasePolicy() { return releasePolicy; }
+
+  private void requirePhoneCapability(String phone) {
+    if (phone != null && !phone.isBlank() && !releasePolicy.allowsPhoneAuth())
+      throw new AuthException("capability_unavailable");
+  }
+
+  private void requireIssuanceCapability(Account account) {
+    if (account.email() == null || account.email().isBlank()) requirePhoneCapability(account.phone());
+  }
   /** Max opaque encrypted blob size for E2E key backup (512 KiB). */
   public static final int E2E_KEY_BACKUP_MAX_BLOB_BYTES = 512 * 1024;
   static final Duration ACCOUNT_RESTORE_GRACE = Duration.ofDays(30);
@@ -140,6 +160,7 @@ public class AuthService {
         mailSender,
         sessionEpochFloors);
     copy.securityTransactions = securityTransactions;
+    copy.configureReleasePolicy(releasePolicy);
     copy.observations = observations;
     if (deletionOperations != null && deletionTokenCodec != null && deletionEventPublisher != null
         && deletionStarter != null && deletionFloorWorker != null && deletionEventWorker != null) {
@@ -217,6 +238,7 @@ public class AuthService {
   }
 
   public AuthSession register(RegisterCommand command) {
+    requirePhoneCapability(command.phone());
     if (command.registrationIntentId() != null) {
       if (command.guest()) throw new AuthException("validation_failed");
       if (registrationSessionEpochPreparer == null) throw new AuthException("auth_unavailable");
@@ -266,6 +288,7 @@ public class AuthService {
   }
 
   public synchronized AuthSession login(LoginCommand command) {
+    requirePhoneCapability(command.phone());
     try {
       Account observed = findLoginAccount(command.email(), command.phone());
       LoginPreparation preparation = securityTransaction(() -> {
@@ -379,6 +402,7 @@ public class AuthService {
     Account account = accounts.findById(current.accountId().toString())
         .orElseThrow(() -> new AuthException("invalid_token"));
     ensureActive(account);
+    requireIssuanceCapability(account);
     return account;
   }
 
@@ -641,6 +665,7 @@ public class AuthService {
       if (account.totpSecret() == null || account.totpSecret().length == 0) {
         throw new AuthException("totp_not_enrolled");
       }
+      requireIssuanceCapability(account);
       if (!totpService.verifyEncrypted(account.totpSecret(), totpCode)) {
         throw new AuthException("invalid_totp");
       }
@@ -835,6 +860,7 @@ public class AuthService {
         throw new AuthException("token_revoked");
       }
       ensureAnonymousGuest(account);
+      requirePhoneCapability(command.phone());
       if (command.password() == null || command.password().length() < 8) {
         throw new AuthException("validation_failed");
       }
@@ -1100,6 +1126,7 @@ public class AuthService {
   }
 
   private AuthSession issueSession(Account account, PreparedSessionEpoch prepared, String deviceInfoJson) {
+    requireIssuanceCapability(account);
     String profileId = primaryProfileProvisioner.ensurePrimaryProfile(
         account.id(), displayHint(account), "guest".equals(account.type()));
     return issueSessionForProfile(account, prepared, profileId, deviceInfoJson);
@@ -1107,6 +1134,7 @@ public class AuthService {
 
   private AuthSession issueSessionForProfile(
       Account account, PreparedSessionEpoch prepared, String profileId, String deviceInfoJson) {
+    requireIssuanceCapability(account);
     if (!account.id().equals(prepared.accountId())) {
       throw new IllegalStateException("prepared session epoch account mismatch");
     }

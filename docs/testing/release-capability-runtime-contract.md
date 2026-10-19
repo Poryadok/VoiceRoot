@@ -134,3 +134,40 @@ The Notification Docker build accepts `VOICE_SOURCE_SHA` and embeds it through
 `-X main.buildSourceSHA`. An empty/unbound value cannot start alpha. Current
 release image jobs/rollout still need independently resolved build-arg, digest
 and mount binding; this source change does not claim they already supply it.
+
+## Implemented Auth phone owner guard
+
+Auth parses the same closed v2 artifact in an early bean-factory postprocessor,
+before ordinary database/provider/listener beans. Its Docker build writes the
+protected caller's `VOICE_SOURCE_SHA` build argument into the packaged
+`voice-build-source.sha` resource. Runtime environment source strings cannot bind
+an alpha artifact. The Auth image CI job binds this argument to its protected
+`github.sha` context. Compose, the Auth image smoke and test fixtures explicitly select `development`;
+an operator alpha configuration needs the bound policy and a fresh absolute
+`VOICE_RELEASE_SNAPSHOT_FILE` target. There is no implicit production fallback.
+
+The same immutable object is installed once on both AuthService and OtpService.
+Nonempty phone input, including mixed email+phone input, fails before account,
+password, session, OTP throttle/code or provider effects at register/login and
+OTP send/verify. Conversion first preserves current authenticated anonymous-guest
+checks, then denies before password hashing or account/session effects. Old
+phone-only accounts cannot refresh into a replacement session or complete 2FA
+session issuance; refresh denial preserves the unconsumed credential. The final
+session writer also guards phone-only issuance. These failures map to HTTP 412
+and gRPC `FAILED_PRECONDITION`, with `capability_unavailable`. Existing email,
+guest, email OTP/reset, reads, logout and safety cleanup retain their behavior;
+phone contact-sync and unimplemented methods are unchanged.
+
+Before lifecycle listeners start, Auth verifies serving-object identity, real
+JDBC account/refresh/OTP repositories, the configured Resend sender and absence
+of TOTP test bypass. It creates a private exclusive 0600 snapshot without
+following existing symlinks. The snapshot joins build/policy/config/route digests
+and actual adapter modes; route inventory includes the generated gRPC descriptor,
+registered REST mappings and direct owner guard entries. Guard IDs are
+`auth.register_phone.v1`, `auth.login_phone.v1`, `auth.convert_guest_phone.v1`,
+`auth.refresh_phone.v1`, `auth.verify_2fa_phone.v1`, `auth.issue_phone_session.v1`,
+`auth.send_otp_phone.v1` and `auth.verify_otp_phone.v1`.
+
+These are source and local component checks. They do not qualify a provider,
+running alpha image/replica window, Flutter projection, other paid Auth benefits,
+the full 18 groups, shared environments or acceptance.
