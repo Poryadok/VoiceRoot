@@ -5,19 +5,26 @@ import (
 	"context"
 	"github.com/google/uuid"
 	"slices"
+	"voice/backend/space/internal/admissionauthority"
 )
 
 // CompleteLegacyJoinPending aliases only the exact no-input pending winner.
 // The fresh private START proof authenticates this new legacy call, but is NOT
 // saved as another submission basis. Referenced observations/P remain original.
 func (s *SpaceStore) CompleteLegacyJoinPending(ctx context.Context, d *VerifiedLegacyJoinStart) (*JoinSubmissionRecord, error) {
-	if ctx == nil || s == nil || s.Pool == nil || s.tx != nil || d == nil || d.proposal == nil {
+	if d == nil || d.proposal == nil {
 		return nil, ErrJoinAttemptUnavailable
 	}
-	if _, err := d.check(); err != nil {
+	return s.completeLegacyJoinPending(ctx, d.proposal, d.check, nil)
+}
+
+func (s *SpaceStore) completeLegacyJoinPending(ctx context.Context, p *JoinLegacyStartProposal, check func() (admissionauthority.SubjectIdentity, error), resume *JoinLegacyPendingResumeProposal) (*JoinSubmissionRecord, error) {
+	if ctx == nil || s == nil || s.Pool == nil || s.tx != nil || p == nil || p.call == nil || p.selection == nil || check == nil {
+		return nil, ErrJoinAttemptUnavailable
+	}
+	if _, err := p.call.ActorFor(p.request); err != nil {
 		return nil, err
 	}
-	p := d.proposal
 	c := p.selection.Context
 	in := c.Operation
 	tx, err := s.Pool.Begin(ctx)
@@ -45,6 +52,23 @@ func (s *SpaceStore) CompleteLegacyJoinPending(ctx context.Context, d *VerifiedL
 	if err != nil || actual != expected {
 		return nil, ErrJoinAttemptConflict
 	}
+	if saved.Operation.State == "COMPLETED" {
+		var code int32
+		var raw, observed []byte
+		if err = tx.QueryRow(ctx, `SELECT outcome_code,outcome_proto,observed_basis_sha256 FROM space_join_operations WHERE actor_profile_id=$1 AND operation_id=$2`, in.ActorProfileID, in.OperationID).Scan(&code, &raw, &observed); err != nil {
+			return nil, err
+		}
+		if code != 9 || raw == nil || len(raw) != 0 || !validJoinDecisionDigest(observed) || saved.Operation.AttemptID == nil {
+			return nil, ErrJoinAttemptUnavailable
+		}
+		if _, err = p.call.ActorFor(p.request); err != nil {
+			return nil, err
+		}
+		if err = tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		return nil, ErrJoinAttemptPending
+	}
 	if saved.Operation.State != "RESERVED" || saved.Operation.AttemptID == nil {
 		return nil, ErrJoinAttemptUnavailable
 	}
@@ -58,7 +82,10 @@ func (s *SpaceStore) CompleteLegacyJoinPending(ctx context.Context, d *VerifiedL
 	if a.State != "PENDING" || a.approvedAccount != nil || a.approvedProfile != nil || a.approvalOperation != nil || a.publication != nil {
 		return nil, ErrJoinAttemptUnavailable
 	}
-	identity, err := d.check()
+	if resume != nil && (resume.selectionSHA != actual || resume.attempt != a.ID || !bytes.Equal(resume.binding, a.binding) || !bytes.Equal(joinBinding(a.Input, a.PolicyVersion, a.policyDigest), a.binding)) {
+		return nil, ErrJoinAttemptUnavailable
+	}
+	identity, err := check()
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +170,7 @@ func (s *SpaceStore) CompleteLegacyJoinPending(ctx context.Context, d *VerifiedL
 	if tag.RowsAffected() != 1 {
 		return nil, ErrJoinAttemptConflict
 	}
-	if _, err = d.check(); err != nil {
+	if _, err = check(); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(ctx); err != nil {
