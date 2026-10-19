@@ -165,7 +165,8 @@ func newUserPresenceRuntimeFixture(t *testing.T) *userPresenceRuntimeFixture {
 		}
 	}
 	settings := map[string]string{
-		"DATABASE_URL": pool.Config().ConnConfig.ConnString(), "USER_GRPC_ADDR": publicAddr, "LISTEN_ADDR": httpAddr,
+		"VOICE_RELEASE_PROFILE": "development",
+		"DATABASE_URL":          pool.Config().ConnConfig.ConnString(), "USER_GRPC_ADDR": publicAddr, "LISTEN_ADDR": httpAddr,
 		"AUTH_GRPC_ADDR": authAddr, "USER_REDIS_ADDR": redis.Addr(),
 		"USER_NOTIFICATION_PRINCIPAL_REPLAY_REDIS_ADDR": redis.Addr(),
 		"USER_NOTIFICATION_PRINCIPAL_TLS_CERT_FILE":     certFile, "USER_NOTIFICATION_PRINCIPAL_TLS_KEY_FILE": keyFile,
