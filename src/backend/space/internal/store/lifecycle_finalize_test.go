@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	commonv1 "voice.app/voice/common/v1"
+	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/space/internal/spacecore"
 )
 
@@ -27,7 +28,7 @@ func (testLifecycleHasher) HashAccount(_ context.Context, id uuid.UUID) ([]byte,
 func TestLifecycleFinalizeDeletesLocalDataAtomicallyAndKeepsUnrelatedSpace(t *testing.T) {
 	st := lifecycleStoreFixture(t)
 	ctx := context.Background()
-	for _, name := range []string{"000014_ownership_outbox_delivery.up.sql", "000015_audit_ledger.up.sql", "000022_lifecycle_runtime.up.sql", "000023_lifecycle_evidence_retention.up.sql", "000025_tree_audit_actions.up.sql", "000027_audit_ingestion.up.sql", "000029_audit_receipt_minimization.up.sql"} {
+	for _, name := range []string{"000014_ownership_outbox_delivery.up.sql", "000015_audit_ledger.up.sql", "000022_lifecycle_runtime.up.sql", "000023_lifecycle_evidence_retention.up.sql", "000024_authority_revision.up.sql", "000025_tree_audit_actions.up.sql", "000027_audit_ingestion.up.sql", "000029_audit_receipt_minimization.up.sql", "000030_entry_policy.up.sql"} {
 		raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/space_db", name))
 		require.NoError(t, err)
 		_, err = st.Pool.Exec(ctx, string(raw))
@@ -59,6 +60,23 @@ func TestLifecycleFinalizeDeletesLocalDataAtomicallyAndKeepsUnrelatedSpace(t *te
 	other, err := st.CreateSpace(ctx, uuid.New(), "unrelated", "", "private")
 	require.NoError(t, err)
 	otherID := other.ID
+	applyMemberAuthorityIfPresent(t, st)
+	_, err = st.Pool.Exec(ctx, `CREATE TABLE schema_migrations(version bigint NOT NULL,dirty boolean NOT NULL); INSERT INTO schema_migrations VALUES(33,false)`)
+	require.NoError(t, err)
+	// Historical retired intent fixture: exercise immutable evidence deletion,
+	// not a new admission or a forged positive Role/publication observation.
+	retired := MemberAdmissionInput{OperationID: uuid.New(), SpaceID: spaceID, AccountID: uuid.New(), ProfileID: uuid.New()}
+	retiredRequest := admissionRequestHash(retired)
+	retiredBinding := bytes.Repeat([]byte{0x31}, 32)
+	_, err = st.Pool.Exec(ctx, `INSERT INTO space_ordinary_member_heads(space_id,profile_id,generation,retired_through,publication_id,state,account_id,admission_binding_sha256)
+	 VALUES($1,$2,2,2,$3,'RETIRED',$4,$5)`, spaceID, retired.ProfileID, retired.OperationID, retired.AccountID, retiredBinding)
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, `INSERT INTO space_member_admission_intents(`+memberAdmissionColumns+`) VALUES($1,$2,$3,$4,NULL,false,1,$5,$6,1,'RETIRED',NULL,NULL,NULL)`, retired.OperationID, spaceID, retired.ProfileID, retired.AccountID, retiredRequest[:], retiredBinding)
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, `DELETE FROM space_member_admission_intents WHERE operation_id=$1`, retired.OperationID)
+	require.Error(t, err, "retired private evidence still requires the actual terminal P3 cleanup")
+	_, err = st.Pool.Exec(ctx, `DELETE FROM space_ordinary_member_heads WHERE space_id=$1`, spaceID)
+	require.Error(t, err, "per-profile anti-ABA heads cannot disappear before terminal P3")
 	for _, id := range []uuid.UUID{spaceID, otherID} {
 		_, err = st.Pool.Exec(ctx, `INSERT INTO audit_log(id,space_id,actor_profile_id,action,target_type,target_id,details) VALUES($1,$2,$3,'invite_revoked','invite',$4,'{}')`, uuid.New(), id, uuid.New(), uuid.New())
 		require.NoError(t, err)
@@ -78,6 +96,16 @@ func TestLifecycleFinalizeDeletesLocalDataAtomicallyAndKeepsUnrelatedSpace(t *te
 	require.True(t, exists, "local error must roll back tombstone, event and deletion")
 	_, err = st.Pool.Exec(ctx, `DROP TRIGGER fail_local_purge ON spaces; DROP FUNCTION fail_local_purge()`)
 	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, `INSERT INTO space_member_admission_outbox(event_id,operation_id,space_id,profile_id,generation,occurred_at) VALUES($1,$2,$3,$4,1,clock_timestamp())`, uuid.New(), uuid.New(), spaceID, actor)
+	require.NoError(t, err)
+	_, err = finalizer.FinalizeLifecyclePurge(ctx, spaceID, testLifecycleHasher{})
+	require.Error(t, err, "terminal minimization must not erase an undelivered membership event")
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM spaces WHERE id=$1) AND NOT EXISTS(SELECT 1 FROM space_permanent_purge_fences WHERE space_id=$1)`, spaceID).Scan(&exists))
+	require.True(t, exists, "drain failure rolls back Space deletion and terminal fence together")
+	// Simulate the independent dispatcher's durable acknowledgement in this
+	// store fixture. Production publication requires its actual sink receipt.
+	_, err = st.Pool.Exec(ctx, `UPDATE space_member_admission_outbox SET delivered_at=clock_timestamp(),delivery_stream='chat_events',delivery_sequence=1 WHERE space_id=$1`, spaceID)
+	require.NoError(t, err)
 	var before time.Time
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&before))
 	completed, err := finalizer.FinalizeLifecyclePurge(ctx, spaceID, testLifecycleHasher{})
@@ -85,6 +113,24 @@ func TestLifecycleFinalizeDeletesLocalDataAtomicallyAndKeepsUnrelatedSpace(t *te
 	require.False(t, completed.Snapshot().DeletedEvent.OccurredAt.Before(before))
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM spaces WHERE id=$1) AND NOT EXISTS(SELECT 1 FROM audit_log WHERE space_id=$1) AND EXISTS(SELECT 1 FROM spaces WHERE id=$2) AND EXISTS(SELECT 1 FROM audit_log WHERE space_id=$2) AND EXISTS(SELECT 1 FROM space_lifecycle_outbox WHERE space_id=$1 AND event_type='space.deleted' AND state='READY')`, spaceID, otherID).Scan(&exists))
 	require.True(t, exists)
+	for _, table := range []string{"space_ordinary_member_heads", "space_community_member_heads", "space_member_admission_intents", "space_native_member_publications", "space_member_role_cleanup", "space_member_admission_outbox"} {
+		var identities int
+		require.NoError(t, st.Pool.QueryRow(ctx, "SELECT count(*) FROM "+table+" WHERE space_id=$1", spaceID).Scan(&identities))
+		require.Zero(t, identities, "terminal purge must minimize private membership identities: "+table)
+	}
+	var identityFreeOwnership bool
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT owner_profile_id IS NULL AND state='RETIRED' AND generation>1 FROM space_membership_ownership_heads WHERE space_id=$1`, spaceID).Scan(&identityFreeOwnership))
+	require.True(t, identityFreeOwnership, "only the identity-free ownership generation survives")
+	terminal, err := st.ReadMemberAdmissionAuthority(ctx, &spacev1.GetMemberAdmissionAuthorityRequest{ProtocolVersion: 1, SpaceId: spaceID.String(), ProfileId: actor.String()})
+	require.NoError(t, err)
+	require.Equal(t, spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_RETIRED, terminal.Lifecycle.State)
+	require.Equal(t, spacev1.MemberAdmissionOwnershipState_MEMBER_ADMISSION_OWNERSHIP_STATE_RETIRED, terminal.Ownership.State)
+	require.Empty(t, terminal.Ownership.CurrentOwnerProfileId)
+	var otherHeads int
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM space_ordinary_member_heads WHERE space_id=$1`, otherID).Scan(&otherHeads))
+	require.Equal(t, 1, otherHeads, "unrelated membership anti-ABA heads remain")
+	_, err = st.PrepareMemberAdmission(ctx, MemberAdmissionInput{OperationID: uuid.New(), SpaceID: spaceID, ProfileID: actor, AccountID: uuid.New()})
+	require.ErrorIs(t, err, ErrLifecycleFrozen, "global terminal fence prevents old identities being recreated")
 	replay, err := finalizer.FinalizeLifecyclePurge(ctx, spaceID, testLifecycleHasher{})
 	require.NoError(t, err)
 	require.Equal(t, completed.Snapshot().DeletedEvent, replay.Snapshot().DeletedEvent)

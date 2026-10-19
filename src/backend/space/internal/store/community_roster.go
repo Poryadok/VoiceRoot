@@ -53,6 +53,11 @@ func (s *SpaceStore) ApplyCommunityRoster(ctx context.Context, in CommunityRoste
 		in.OwnerGeneration <= 0 || in.SourceRevision <= 0 || len(in.SnapshotSHA256) != sha256.Size || in.LeaseExpiresAt.IsZero() {
 		return CommunityRosterReceipt{}, errors.New("invalid community roster projection")
 	}
+	if s.tx == nil {
+		return withOwnershipScopeValue(s, ctx, []uuid.UUID{in.SpaceID}, func(scoped *SpaceStore) (CommunityRosterReceipt, error) {
+			return scoped.ApplyCommunityRoster(ctx, in)
+		})
+	}
 	profiles := append([]uuid.UUID{}, in.ProfileIDs...)
 	for i, id := range profiles {
 		if id == uuid.Nil || (i > 0 && profiles[i-1].String() >= id.String()) {
@@ -74,7 +79,7 @@ func (s *SpaceStore) ApplyCommunityRoster(ctx context.Context, in CommunityRoste
 		return CommunityRosterReceipt{}, err
 	}
 	requestHash := sha256.Sum256(requestBytes)
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.db().Begin(ctx)
 	if err != nil {
 		return CommunityRosterReceipt{}, err
 	}
@@ -120,7 +125,9 @@ func (s *SpaceStore) ApplyCommunityRoster(ctx context.Context, in CommunityRoste
 	if err = tx.QueryRow(ctx, `SELECT $1::timestamptz>clock_timestamp() AND $1::timestamptz<=clock_timestamp()+interval '2 minutes'`, in.LeaseExpiresAt.UTC()).Scan(&leaseValid); err != nil {
 		return CommunityRosterReceipt{}, err
 	}
-	if !leaseValid { return CommunityRosterReceipt{}, ErrCommunityRosterConflict }
+	if !leaseValid {
+		return CommunityRosterReceipt{}, ErrCommunityRosterConflict
+	}
 	if in.SourceRevision < currentRevision || (in.SourceRevision == currentRevision && !bytes.Equal(currentHash, in.SnapshotSHA256)) {
 		return CommunityRosterReceipt{}, ErrCommunityRosterConflict
 	}
@@ -137,7 +144,9 @@ func (s *SpaceStore) ApplyCommunityRoster(ctx context.Context, in CommunityRoste
 		if err = tx.QueryRow(ctx, `SELECT roster_lease_expires_at>clock_timestamp() FROM community_owner_authority WHERE space_id=$1 AND owner_generation=$2 AND status='active'`, in.SpaceID, generation).Scan(&activeLease); err != nil {
 			return CommunityRosterReceipt{}, err
 		}
-		if !activeLease { return CommunityRosterReceipt{}, ErrCommunityRosterConflict }
+		if !activeLease {
+			return CommunityRosterReceipt{}, ErrCommunityRosterConflict
+		}
 		if err = tx.Commit(ctx); err != nil {
 			return CommunityRosterReceipt{}, err
 		}
@@ -182,12 +191,17 @@ func (s *SpaceStore) ApplyCommunityRoster(ctx context.Context, in CommunityRoste
 			removed = append(removed, id)
 		}
 	}
-	if _, err = tx.Exec(ctx, `DELETE FROM community_roster_members WHERE space_id=$1`, in.SpaceID); err != nil {
+	// Retain continuously eligible rows so their durable membership episode is
+	// preserved. A deleted/readded row represents a real source discontinuity.
+	if _, err = tx.Exec(ctx, `DELETE FROM community_roster_members WHERE space_id=$1 AND NOT(profile_id=ANY($2::uuid[]))`, in.SpaceID, profiles); err != nil {
 		return CommunityRosterReceipt{}, err
 	}
 	for _, profileID := range profiles {
 		if _, err = tx.Exec(ctx, `INSERT INTO community_roster_members(space_id,profile_id,source_rank,source_reasons,source_revision,owner_generation,lease_expires_at)
-			VALUES($1,$2,'member',ARRAY['membership']::TEXT[],$3,$4,$5)`, in.SpaceID, profileID, in.SourceRevision, generation, leaseExpiry); err != nil {
+			VALUES($1,$2,'member',ARRAY['membership']::TEXT[],$3,$4,$5)
+			ON CONFLICT(space_id,profile_id) DO UPDATE SET source_rank=EXCLUDED.source_rank,source_reasons=EXCLUDED.source_reasons,
+			source_revision=EXCLUDED.source_revision,owner_generation=EXCLUDED.owner_generation,
+			lease_expires_at=EXCLUDED.lease_expires_at,revoked_at=NULL`, in.SpaceID, profileID, in.SourceRevision, generation, leaseExpiry); err != nil {
 			return CommunityRosterReceipt{}, err
 		}
 	}
@@ -222,36 +236,77 @@ func (s *SpaceStore) RevokeExpiredCommunityRosterMemberships(ctx context.Context
 	if s == nil || s.Pool == nil {
 		return 0, errors.New("space store: pool not configured")
 	}
-	// Keep the durable source rows for operation history, but remove them from
-	// effective access immediately through lease-filtered membership queries.
-	tag, err := s.Pool.Exec(ctx, `WITH due AS (
-		SELECT ctid FROM community_roster_members WHERE revoked_at IS NULL AND lease_expires_at<=clock_timestamp()
-		ORDER BY lease_expires_at,space_id,profile_id LIMIT 500 FOR UPDATE SKIP LOCKED
-	), revoked AS (
-		UPDATE community_roster_members m SET revoked_at=clock_timestamp() FROM due WHERE m.ctid=due.ctid RETURNING m.space_id
-	), affected AS (SELECT DISTINCT space_id FROM revoked)
-	UPDATE spaces s SET member_count=(SELECT count(*)::int FROM (
+	// The scan is only a hint. Each controlling mutation takes the same Space
+	// fence as refresh/owner/lifecycle writers and resamples DB time afterward.
+	rows, err := s.db().Query(ctx, `SELECT DISTINCT space_id FROM community_roster_members
+		WHERE revoked_at IS NULL AND lease_expires_at<=clock_timestamp() ORDER BY space_id LIMIT 100`)
+	if err != nil {
+		return 0, err
+	}
+	var spaces []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		spaces = append(spaces, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return 0, err
+	}
+	var affected int64
+	for _, id := range spaces {
+		err := s.withOwnershipScope(ctx, []uuid.UUID{id}, func(scoped *SpaceStore) error {
+			tag, err := scoped.db().Exec(ctx, `UPDATE community_roster_members SET revoked_at=clock_timestamp()
+			 WHERE space_id=$1 AND revoked_at IS NULL AND lease_expires_at<=clock_timestamp()`, id)
+			if err != nil || tag.RowsAffected() == 0 {
+				return err
+			}
+			_, err = scoped.db().Exec(ctx, `UPDATE spaces s SET member_count=(SELECT count(*)::int FROM (
 		SELECT profile_id FROM space_members WHERE space_id=s.id
 		UNION SELECT m.profile_id FROM community_roster_members m JOIN community_owner_authority a
 		ON a.space_id=m.space_id AND a.owner_generation=m.owner_generation AND a.status='active'
 		WHERE m.space_id=s.id AND m.revoked_at IS NULL AND m.lease_expires_at>clock_timestamp() AND a.roster_lease_expires_at>clock_timestamp()
-	) active_members),updated_at=clock_timestamp() FROM affected WHERE s.id=affected.space_id`)
-	if err != nil {
-		return 0, fmt.Errorf("expire community roster leases: %w", err)
+	) active_members),updated_at=clock_timestamp() WHERE s.id=$1`, id)
+			if err == nil {
+				affected++
+			}
+			return err
+		})
+		if errors.Is(err, ErrOwnershipFrozen) || errors.Is(err, ErrLifecycleFrozen) {
+			// Lease-filtered reads already deny expired access. Frozen source
+			// cleanup belongs to the controlling ownership/lifecycle operation.
+			continue
+		}
+		if err != nil {
+			return affected, fmt.Errorf("expire community roster leases: %w", err)
+		}
 	}
-	return tag.RowsAffected(), nil
+	return affected, nil
 }
 
 func RunCommunityRosterExpiryWorker(ctx context.Context, s *SpaceStore, interval time.Duration) {
-	if interval <= 0 { interval = time.Second }
-	ticker:=time.NewTicker(interval); defer ticker.Stop()
+	if interval <= 0 {
+		interval = time.Second
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
 	for {
 		select {
-		case <-ctx.Done(): return
+		case <-ctx.Done():
+			return
 		case <-ticker.C:
-			workCtx,cancel:=context.WithTimeout(ctx,5*time.Second)
-			count,err:=s.RevokeExpiredCommunityRosterMemberships(workCtx); cancel()
-			if err!=nil { slog.Warn("Space community roster expiry failed","error",err) } else if count>0 { slog.Info("Space community membership lease expired","count",count) }
+			workCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			count, err := s.RevokeExpiredCommunityRosterMemberships(workCtx)
+			cancel()
+			if err != nil {
+				slog.Warn("Space community roster expiry failed", "error", err)
+			} else if count > 0 {
+				slog.Info("Space community membership lease expired", "count", count)
+			}
 		}
 	}
 }

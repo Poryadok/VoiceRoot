@@ -1,0 +1,442 @@
+-- Space-issued membership incarnations are permanent anti-ABA heads, not a
+-- projection of mutable timestamps. No cascading FK may erase their floors.
+CREATE TABLE space_ordinary_member_heads (
+    space_id UUID NOT NULL,
+    profile_id UUID NOT NULL,
+    generation BIGINT NOT NULL CHECK (generation >= 0),
+    retired_through BIGINT NOT NULL DEFAULT 0 CHECK (retired_through >= 0),
+    publication_id UUID NOT NULL CHECK (publication_id <> '00000000-0000-0000-0000-000000000000'),
+    state TEXT NOT NULL CHECK (state IN ('NONE','PREPARING','ACTIVE','RETIRED')),
+    legacy BOOLEAN NOT NULL DEFAULT false,
+    account_id UUID,
+    admission_binding_sha256 BYTEA,
+    role_receipt_sha256 BYTEA,
+    publication_kind SMALLINT NOT NULL DEFAULT 0 CHECK(publication_kind BETWEEN 0 AND 6),
+    native_publication_sha256 BYTEA,
+    PRIMARY KEY (space_id,profile_id),
+    CHECK (NOT legacy OR (generation=0 AND state='ACTIVE')),
+    CHECK (admission_binding_sha256 IS NULL OR octet_length(admission_binding_sha256)=32),
+    CHECK (role_receipt_sha256 IS NULL OR octet_length(role_receipt_sha256)=32),
+    CHECK (native_publication_sha256 IS NULL OR octet_length(native_publication_sha256)=32),
+    CHECK (state<>'PREPARING' OR (generation>0 AND NOT legacy AND publication_kind=0
+      AND admission_binding_sha256 IS NOT NULL AND role_receipt_sha256 IS NULL AND native_publication_sha256 IS NULL)),
+    CHECK (state<>'ACTIVE' OR (
+      (legacy AND generation=0 AND publication_kind=2 AND admission_binding_sha256 IS NULL AND role_receipt_sha256 IS NULL AND native_publication_sha256 IS NULL)
+      OR (NOT legacy AND generation>0 AND publication_kind=1 AND admission_binding_sha256 IS NOT NULL AND role_receipt_sha256 IS NOT NULL AND native_publication_sha256 IS NULL)
+      OR (NOT legacy AND generation>0 AND publication_kind BETWEEN 3 AND 6 AND native_publication_sha256 IS NOT NULL AND admission_binding_sha256 IS NULL AND role_receipt_sha256 IS NULL))),
+    CHECK (generation>=retired_through)
+);
+
+CREATE TABLE space_community_member_heads (
+    space_id UUID NOT NULL,
+    profile_id UUID NOT NULL,
+    generation BIGINT NOT NULL CHECK (generation>0),
+    retired_through BIGINT NOT NULL DEFAULT 0 CHECK (retired_through>=0),
+    owner_generation BIGINT NOT NULL CHECK (owner_generation>0),
+    episode_id UUID NOT NULL CHECK (episode_id <> '00000000-0000-0000-0000-000000000000'),
+    state TEXT NOT NULL CHECK (state IN ('ACTIVE','RETIRED')),
+    PRIMARY KEY (space_id,profile_id),
+    CHECK (generation>=retired_through)
+);
+
+CREATE TABLE space_member_admission_intents (
+ operation_id UUID PRIMARY KEY,
+ space_id UUID NOT NULL, profile_id UUID NOT NULL, account_id UUID NOT NULL,
+ invite_id UUID, guest BOOLEAN NOT NULL,
+ generation BIGINT NOT NULL CHECK(generation>0),
+ request_sha256 BYTEA NOT NULL CHECK(octet_length(request_sha256)=32),
+ binding_sha256 BYTEA NOT NULL CHECK(octet_length(binding_sha256)=32),
+ policy_version BIGINT NOT NULL CHECK(policy_version>0),
+ state TEXT NOT NULL CHECK(state IN ('PREPARING','PUBLISHED','RETIRED')),
+ role_id UUID, role_receipt_sha256 BYTEA, published_at TIMESTAMPTZ,
+ join_attempt_id UUID, join_attempt_evidence_sha256 BYTEA, decision_basis_sha256 BYTEA,
+ CHECK ((join_attempt_id IS NULL AND join_attempt_evidence_sha256 IS NULL AND decision_basis_sha256 IS NULL)
+   OR (join_attempt_id IS NOT NULL AND join_attempt_id<>'00000000-0000-0000-0000-000000000000'
+     AND join_attempt_evidence_sha256 IS NOT NULL AND octet_length(join_attempt_evidence_sha256)=32
+     AND decision_basis_sha256 IS NOT NULL AND octet_length(decision_basis_sha256)=32
+     AND join_attempt_evidence_sha256<>decode(repeat('00',32),'hex')
+     AND decision_basis_sha256<>decode(repeat('00',32),'hex'))),
+ CHECK ((state='PUBLISHED')=(role_id IS NOT NULL AND role_receipt_sha256 IS NOT NULL AND published_at IS NOT NULL)),
+ CHECK (role_receipt_sha256 IS NULL OR octet_length(role_receipt_sha256)=32)
+);
+CREATE INDEX space_member_admission_subject ON space_member_admission_intents(space_id,profile_id);
+CREATE TABLE space_member_admission_outbox (
+ event_id UUID PRIMARY KEY, operation_id UUID NOT NULL UNIQUE,
+ space_id UUID NOT NULL, profile_id UUID NOT NULL,
+ generation BIGINT NOT NULL CHECK(generation>0), occurred_at TIMESTAMPTZ NOT NULL,
+ delivered_at TIMESTAMPTZ, delivery_stream TEXT, delivery_sequence BIGINT,
+ CHECK ((delivered_at IS NULL)=(delivery_stream IS NULL AND delivery_sequence IS NULL)),
+ CHECK (delivered_at IS NULL OR (delivery_stream IS NOT NULL AND delivery_sequence IS NOT NULL AND delivery_stream='chat_events' AND delivery_sequence>0))
+);
+CREATE TABLE space_member_role_cleanup (
+ operation_id UUID PRIMARY KEY, space_id UUID NOT NULL, profile_id UUID NOT NULL,
+ removal_floor BIGINT NOT NULL CHECK(removal_floor>0), completed_at TIMESTAMPTZ,
+ receipt_sha256 BYTEA CHECK(receipt_sha256 IS NULL OR octet_length(receipt_sha256)=32),
+ CHECK((completed_at IS NULL)=(receipt_sha256 IS NULL))
+);
+-- No actor or Space identity: global durable replay keys outlive every live
+-- credential including skew, independently from Redis continuity or restart.
+CREATE TABLE space_creator_principal_replays (
+ issuer TEXT NOT NULL CHECK(issuer='gateway'), jti TEXT NOT NULL CHECK(jti ~ '^[A-Za-z0-9_-]{27}$'),
+ recorded_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(), expires_at TIMESTAMPTZ NOT NULL,
+ PRIMARY KEY(issuer,jti), CHECK(expires_at>recorded_at)
+);
+CREATE INDEX space_creator_principal_replay_expiry ON space_creator_principal_replays(expires_at,jti);
+CREATE TABLE space_native_creator_operations (
+ operation_id UUID PRIMARY KEY, space_id UUID NOT NULL UNIQUE,
+ account_id UUID NOT NULL, profile_id UUID NOT NULL, session_epoch BIGINT NOT NULL CHECK(session_epoch>0),
+ request_id UUID NOT NULL UNIQUE, jti TEXT NOT NULL UNIQUE CHECK(jti ~ '^[A-Za-z0-9_-]{27}$'),
+ request_sha256 BYTEA NOT NULL CHECK(octet_length(request_sha256)=32),
+ credential_issued_at TIMESTAMPTZ NOT NULL, credential_expires_at TIMESTAMPTZ NOT NULL,
+ published_at TIMESTAMPTZ NOT NULL,
+ CHECK(credential_expires_at>credential_issued_at AND credential_expires_at<=credential_issued_at+interval '30 seconds'),
+ CHECK(published_at<credential_expires_at AND published_at>=credential_issued_at-interval '5 seconds')
+);
+CREATE TABLE space_membership_ownership_heads (
+ space_id UUID PRIMARY KEY, generation BIGINT NOT NULL CHECK(generation>0),
+ owner_profile_id UUID, state TEXT NOT NULL CHECK(state IN ('ACTIVE','RETIRED')),
+ CHECK ((state='ACTIVE')=(owner_profile_id IS NOT NULL))
+);
+INSERT INTO space_membership_ownership_heads(space_id,generation,owner_profile_id,state)
+ SELECT s.id,1,s.owner_profile_id,'ACTIVE' FROM spaces s
+ WHERE NOT EXISTS(SELECT 1 FROM ownership_journal j WHERE j.space_id=s.id AND j.state NOT IN ('completed','aborted'))
+ AND NOT EXISTS(SELECT 1 FROM community_owner_authority a WHERE a.space_id=s.id AND a.status<>'active');
+CREATE TABLE space_native_member_publications (
+ operation_id UUID PRIMARY KEY,space_id UUID NOT NULL,profile_id UUID NOT NULL,
+ generation BIGINT NOT NULL CHECK(generation>0),kind SMALLINT NOT NULL CHECK(kind BETWEEN 3 AND 6),
+ binding_bytes BYTEA NOT NULL,binding_sha256 BYTEA NOT NULL CHECK(octet_length(binding_sha256)=32),
+ state TEXT NOT NULL CHECK(state IN ('RESERVED','PUBLISHED','INVALIDATED')),published_at TIMESTAMPTZ
+);
+CREATE FUNCTION space_membership_ownership_changed() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='INSERT' THEN
+  INSERT INTO space_membership_ownership_heads(space_id,generation,owner_profile_id,state)
+   VALUES(NEW.id,1,NEW.owner_profile_id,'ACTIVE') ON CONFLICT(space_id) DO NOTHING;
+  RETURN NEW;
+ ELSIF TG_OP='DELETE' THEN
+  UPDATE space_membership_ownership_heads SET generation=generation+1,owner_profile_id=NULL,state='RETIRED' WHERE space_id=OLD.id;
+  RETURN OLD;
+ ELSIF NEW.owner_profile_id IS DISTINCT FROM OLD.owner_profile_id THEN
+  UPDATE space_membership_ownership_heads SET generation=generation+1,owner_profile_id=NEW.owner_profile_id
+   WHERE space_id=NEW.id AND state='ACTIVE' AND owner_profile_id=OLD.owner_profile_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'known ownership authority required' USING ERRCODE='55000'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER space_membership_ownership_changed AFTER INSERT OR UPDATE OF owner_profile_id OR DELETE ON spaces
+ FOR EACH ROW EXECUTE FUNCTION space_membership_ownership_changed();
+CREATE FUNCTION space_membership_ownership_head_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP IN ('DELETE','TRUNCATE') THEN
+  RAISE EXCEPTION 'identity-free ownership generation must survive terminal purge' USING ERRCODE='55000';
+ END IF;
+ IF NEW.space_id IS DISTINCT FROM OLD.space_id OR NEW.generation<OLD.generation
+ OR (OLD.state='RETIRED' AND (NEW.state<>'RETIRED' OR NEW.owner_profile_id IS NOT NULL))
+ OR ((NEW.owner_profile_id IS DISTINCT FROM OLD.owner_profile_id OR NEW.state IS DISTINCT FROM OLD.state)
+     AND NEW.generation<>OLD.generation+1) THEN
+  RAISE EXCEPTION 'ownership identity or generation cannot regress or rebind' USING ERRCODE='55000';
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER membership_ownership_head_guard BEFORE UPDATE OR DELETE ON space_membership_ownership_heads
+ FOR EACH ROW EXECUTE FUNCTION space_membership_ownership_head_guard();
+CREATE TRIGGER membership_ownership_head_truncate BEFORE TRUNCATE ON space_membership_ownership_heads
+ FOR EACH STATEMENT EXECUTE FUNCTION space_membership_ownership_head_guard();
+
+-- These are explicit existing publications. No Role readiness receipt is
+-- synthesized for them, and reads never invent another publication UUID.
+INSERT INTO space_ordinary_member_heads(space_id,profile_id,generation,publication_id,state,legacy,publication_kind)
+SELECT space_id,profile_id,0,gen_random_uuid(),'ACTIVE',true,2 FROM space_members;
+
+INSERT INTO space_community_member_heads(space_id,profile_id,generation,owner_generation,episode_id,state)
+SELECT m.space_id,m.profile_id,1,m.owner_generation,gen_random_uuid(),'ACTIVE'
+FROM community_roster_members m JOIN community_owner_authority a
+ON a.space_id=m.space_id AND a.owner_generation=m.owner_generation
+WHERE a.status='active' AND m.revoked_at IS NULL
+AND m.lease_expires_at>clock_timestamp() AND a.roster_lease_expires_at>clock_timestamp();
+
+ALTER TABLE space_members ADD COLUMN membership_generation BIGINT,
+    ADD COLUMN admission_operation_id UUID;
+UPDATE space_members m SET membership_generation=h.generation,admission_operation_id=h.publication_id
+FROM space_ordinary_member_heads h WHERE h.space_id=m.space_id AND h.profile_id=m.profile_id;
+
+-- Per-profile heads survive ordinary removals. Terminal P3 replaces them with
+-- the existing identity-free Space fence; raw profiles are not permanent data.
+-- Use the canonical participant predicate, including compatible future sets.
+CREATE FUNCTION space_membership_terminal_cleanup_allowed(target UUID) RETURNS boolean LANGUAGE plpgsql STABLE AS $$
+BEGIN
+ RETURN EXISTS(SELECT 1 FROM space_permanent_purge_fences f
+  JOIN space_lifecycle_aggregates a ON a.space_id=f.space_id
+   AND a.deletion_operation_id=f.deletion_operation_id AND a.generation=f.purge_generation
+  WHERE f.space_id=target AND a.phase='PURGED' AND a.local_purge_completed
+   AND NOT EXISTS(SELECT 1 FROM spaces s WHERE s.id=target))
+  AND space_terminal_purge_ready(target);
+END $$;
+
+CREATE FUNCTION space_member_head_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='DELETE' AND space_membership_terminal_cleanup_allowed(OLD.space_id) THEN
+  RETURN OLD;
+ END IF;
+ IF TG_OP IN ('DELETE','TRUNCATE') THEN
+  RAISE EXCEPTION 'permanent membership head cannot be erased' USING ERRCODE='55000';
+ END IF;
+ IF NEW.space_id IS DISTINCT FROM OLD.space_id OR NEW.profile_id IS DISTINCT FROM OLD.profile_id
+ OR NEW.generation<OLD.generation OR NEW.retired_through<OLD.retired_through THEN
+  RAISE EXCEPTION 'membership identity or floor cannot regress' USING ERRCODE='55000';
+ END IF;
+ IF NEW.generation=OLD.generation THEN
+  IF TG_TABLE_NAME='space_ordinary_member_heads' THEN
+   IF NEW.publication_id IS DISTINCT FROM OLD.publication_id OR NEW.legacy IS DISTINCT FROM OLD.legacy
+   OR NEW.account_id IS DISTINCT FROM OLD.account_id
+   OR (OLD.state='RETIRED' AND NEW.state<>'RETIRED') THEN
+    RAISE EXCEPTION 'ordinary membership incarnation cannot be rebound' USING ERRCODE='55000';
+   END IF;
+   IF OLD.state IN ('ACTIVE','RETIRED') AND (
+    NEW.state IS DISTINCT FROM OLD.state OR NEW.admission_binding_sha256 IS DISTINCT FROM OLD.admission_binding_sha256
+    OR NEW.role_receipt_sha256 IS DISTINCT FROM OLD.role_receipt_sha256 OR NEW.publication_kind IS DISTINCT FROM OLD.publication_kind
+    OR NEW.native_publication_sha256 IS DISTINCT FROM OLD.native_publication_sha256) THEN
+    RAISE EXCEPTION 'published membership proof is immutable' USING ERRCODE='55000';
+   END IF;
+   IF OLD.state='PREPARING' AND (
+    NEW.admission_binding_sha256 IS DISTINCT FROM OLD.admission_binding_sha256
+    OR NEW.state NOT IN ('PREPARING','ACTIVE')) THEN
+    RAISE EXCEPTION 'prepared admission binding is immutable' USING ERRCODE='55000';
+   END IF;
+  ELSIF NEW.episode_id IS DISTINCT FROM OLD.episode_id OR NEW.owner_generation IS DISTINCT FROM OLD.owner_generation
+   OR (OLD.state='RETIRED' AND NEW.state<>'RETIRED') THEN
+   RAISE EXCEPTION 'community membership incarnation cannot be rebound' USING ERRCODE='55000';
+  END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER ordinary_member_head_guard BEFORE UPDATE OR DELETE ON space_ordinary_member_heads
+FOR EACH ROW EXECUTE FUNCTION space_member_head_guard();
+CREATE TRIGGER ordinary_member_head_truncate BEFORE TRUNCATE ON space_ordinary_member_heads
+FOR EACH STATEMENT EXECUTE FUNCTION space_member_head_guard();
+CREATE TRIGGER community_member_head_guard BEFORE UPDATE OR DELETE ON space_community_member_heads
+FOR EACH ROW EXECUTE FUNCTION space_member_head_guard();
+CREATE TRIGGER community_member_head_truncate BEFORE TRUNCATE ON space_community_member_heads
+FOR EACH STATEMENT EXECUTE FUNCTION space_member_head_guard();
+
+CREATE FUNCTION space_ordinary_publication_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE head space_ordinary_member_heads%ROWTYPE;
+BEGIN
+ IF TG_OP='DELETE' THEN
+  UPDATE space_ordinary_member_heads SET generation=generation+1,retired_through=generation+1,
+    state='RETIRED',legacy=false WHERE space_id=OLD.space_id AND profile_id=OLD.profile_id;
+  UPDATE space_member_admission_intents SET state='RETIRED'
+   WHERE space_id=OLD.space_id AND profile_id=OLD.profile_id AND state='PREPARING';
+  INSERT INTO space_member_role_cleanup(operation_id,space_id,profile_id,removal_floor)
+   SELECT gen_random_uuid(),space_id,profile_id,retired_through FROM space_ordinary_member_heads
+   WHERE space_id=OLD.space_id AND profile_id=OLD.profile_id;
+  RETURN OLD;
+ END IF;
+ IF TG_OP='UPDATE' AND (NEW.space_id IS DISTINCT FROM OLD.space_id OR NEW.profile_id IS DISTINCT FROM OLD.profile_id
+ OR NEW.membership_generation IS DISTINCT FROM OLD.membership_generation
+ OR NEW.admission_operation_id IS DISTINCT FROM OLD.admission_operation_id) THEN
+  RAISE EXCEPTION 'published membership binding is immutable' USING ERRCODE='55000';
+ END IF;
+ SELECT * INTO head FROM space_ordinary_member_heads WHERE space_id=NEW.space_id AND profile_id=NEW.profile_id;
+ IF NOT FOUND OR head.state<>'ACTIVE' OR NEW.membership_generation IS DISTINCT FROM head.generation
+ OR NEW.admission_operation_id IS DISTINCT FROM head.publication_id THEN
+  RAISE EXCEPTION 'exact published membership authority required' USING ERRCODE='55000';
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER space_ordinary_publication_guard BEFORE INSERT OR UPDATE OR DELETE ON space_members
+FOR EACH ROW EXECUTE FUNCTION space_ordinary_publication_guard();
+
+CREATE FUNCTION space_community_episode_changed() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE head space_community_member_heads%ROWTYPE; live_owner BOOLEAN; continuous BOOLEAN;
+BEGIN
+ IF TG_OP='DELETE' THEN
+  UPDATE space_community_member_heads SET retired_through=generation,state='RETIRED'
+   WHERE space_id=OLD.space_id AND profile_id=OLD.profile_id;
+  RETURN OLD;
+ END IF;
+ IF TG_OP='UPDATE' AND (NEW.space_id IS DISTINCT FROM OLD.space_id OR NEW.profile_id IS DISTINCT FROM OLD.profile_id) THEN
+  RAISE EXCEPTION 'community member scope is immutable' USING ERRCODE='55000';
+ END IF;
+ SELECT * INTO head FROM space_community_member_heads WHERE space_id=NEW.space_id AND profile_id=NEW.profile_id FOR UPDATE;
+ SELECT EXISTS(SELECT 1 FROM community_owner_authority WHERE space_id=NEW.space_id
+  AND owner_generation=NEW.owner_generation AND status='active' AND roster_lease_expires_at>clock_timestamp()) INTO live_owner;
+ continuous:=TG_OP='UPDATE' AND head.state='ACTIVE' AND OLD.owner_generation=NEW.owner_generation
+  AND head.owner_generation=NEW.owner_generation AND OLD.revoked_at IS NULL
+  AND OLD.lease_expires_at>clock_timestamp() AND live_owner;
+ IF NEW.revoked_at IS NOT NULL OR NEW.lease_expires_at<=clock_timestamp() THEN
+  UPDATE space_community_member_heads SET state='RETIRED',retired_through=generation
+   WHERE space_id=NEW.space_id AND profile_id=NEW.profile_id;
+ ELSIF NOT continuous THEN
+  INSERT INTO space_community_member_heads(space_id,profile_id,generation,owner_generation,episode_id,state)
+  VALUES(NEW.space_id,NEW.profile_id,1,NEW.owner_generation,gen_random_uuid(),'ACTIVE')
+  ON CONFLICT(space_id,profile_id) DO UPDATE SET
+   generation=space_community_member_heads.generation+1,
+   retired_through=space_community_member_heads.generation,
+   owner_generation=EXCLUDED.owner_generation,episode_id=EXCLUDED.episode_id,state='ACTIVE';
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER space_community_episode_changed AFTER INSERT OR UPDATE OR DELETE ON community_roster_members
+FOR EACH ROW EXECUTE FUNCTION space_community_episode_changed();
+
+CREATE FUNCTION space_community_owner_episode_changed() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN
+  UPDATE space_community_member_heads SET state='RETIRED',retired_through=generation WHERE space_id=OLD.space_id;
+  RETURN OLD;
+ END IF;
+ IF NEW.owner_generation IS DISTINCT FROM OLD.owner_generation OR NEW.status<>'active'
+ OR NEW.roster_lease_expires_at<=clock_timestamp() THEN
+  UPDATE space_community_member_heads SET state='RETIRED',retired_through=generation WHERE space_id=NEW.space_id;
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER space_community_owner_episode_changed AFTER UPDATE OR DELETE ON community_owner_authority
+FOR EACH ROW EXECUTE FUNCTION space_community_owner_episode_changed();
+
+CREATE FUNCTION space_membership_terminal_cleanup() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NOT space_membership_terminal_cleanup_allowed(OLD.id) THEN
+  RAISE EXCEPTION 'membership minimization requires terminal P3 receipts and permanent Space fence' USING ERRCODE='55000';
+ END IF;
+ IF EXISTS(SELECT 1 FROM space_member_admission_outbox WHERE space_id=OLD.id AND delivered_at IS NULL) THEN
+  RAISE EXCEPTION 'membership publication obligations must drain before terminal purge' USING ERRCODE='55000';
+ END IF;
+ -- Role retirement is already a mandatory canonical participant receipt.
+ -- Neither a per-profile floor nor private admission/native provenance remains.
+ DELETE FROM space_member_admission_outbox WHERE space_id=OLD.id;
+ DELETE FROM space_member_role_cleanup WHERE space_id=OLD.id;
+ DELETE FROM space_member_admission_intents WHERE space_id=OLD.id;
+ DELETE FROM space_native_member_publications WHERE space_id=OLD.id;
+ DELETE FROM space_native_creator_operations WHERE space_id=OLD.id;
+ DELETE FROM space_ordinary_member_heads WHERE space_id=OLD.id;
+ DELETE FROM space_community_member_heads WHERE space_id=OLD.id;
+ -- The ownership trigger already erased owner_profile_id. Its separate
+ -- generation/state is an identity-free Space fence, not retained actor data.
+ RETURN OLD;
+END $$;
+CREATE TRIGGER space_membership_terminal_cleanup AFTER DELETE ON spaces
+ FOR EACH ROW EXECUTE FUNCTION space_membership_terminal_cleanup();
+
+CREATE FUNCTION space_member_admission_event_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN
+  IF space_membership_terminal_cleanup_allowed(OLD.space_id) THEN RETURN OLD; END IF;
+  RAISE EXCEPTION 'membership event requires terminal minimization' USING ERRCODE='55000';
+ ELSIF TG_OP='TRUNCATE' THEN
+  RAISE EXCEPTION 'membership event outbox cannot be truncated' USING ERRCODE='55000';
+ END IF;
+ IF NEW.event_id IS DISTINCT FROM OLD.event_id OR NEW.operation_id IS DISTINCT FROM OLD.operation_id
+ OR NEW.space_id IS DISTINCT FROM OLD.space_id OR NEW.profile_id IS DISTINCT FROM OLD.profile_id
+ OR NEW.generation IS DISTINCT FROM OLD.generation OR NEW.occurred_at IS DISTINCT FROM OLD.occurred_at
+ OR (OLD.delivered_at IS NOT NULL AND (NEW.delivered_at IS DISTINCT FROM OLD.delivered_at
+  OR NEW.delivery_stream IS DISTINCT FROM OLD.delivery_stream OR NEW.delivery_sequence IS DISTINCT FROM OLD.delivery_sequence)) THEN
+  RAISE EXCEPTION 'membership event or first acknowledgement is immutable' USING ERRCODE='55000';
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER member_admission_event_guard BEFORE UPDATE OR DELETE ON space_member_admission_outbox
+ FOR EACH ROW EXECUTE FUNCTION space_member_admission_event_guard();
+CREATE TRIGGER member_admission_event_truncate BEFORE TRUNCATE ON space_member_admission_outbox
+ FOR EACH STATEMENT EXECUTE FUNCTION space_member_admission_event_guard();
+
+CREATE FUNCTION space_native_member_publication_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN
+  IF space_membership_terminal_cleanup_allowed(OLD.space_id) THEN RETURN OLD; END IF;
+ END IF;
+ RAISE EXCEPTION 'native membership provenance is immutable until terminal P3 minimization' USING ERRCODE='55000';
+END $$;
+CREATE TRIGGER native_member_publication_guard BEFORE UPDATE OR DELETE ON space_native_member_publications
+ FOR EACH ROW EXECUTE FUNCTION space_native_member_publication_guard();
+CREATE TRIGGER native_member_publication_truncate BEFORE TRUNCATE ON space_native_member_publications
+ FOR EACH STATEMENT EXECUTE FUNCTION space_native_member_publication_guard();
+
+CREATE FUNCTION space_member_role_cleanup_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN
+  IF space_membership_terminal_cleanup_allowed(OLD.space_id) THEN RETURN OLD; END IF;
+ ELSIF TG_OP='UPDATE' THEN
+  IF ROW(NEW.operation_id,NEW.space_id,NEW.profile_id,NEW.removal_floor)
+   IS DISTINCT FROM ROW(OLD.operation_id,OLD.space_id,OLD.profile_id,OLD.removal_floor) THEN
+   RAISE EXCEPTION 'member role removal intent is immutable' USING ERRCODE='55000';
+  END IF;
+  IF OLD.completed_at IS NOT NULL AND ROW(NEW.completed_at,NEW.receipt_sha256)
+   IS DISTINCT FROM ROW(OLD.completed_at,OLD.receipt_sha256) THEN
+   RAISE EXCEPTION 'member role removal acknowledgement is immutable' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+ END IF;
+ RAISE EXCEPTION 'member role cleanup requires terminal P3 minimization' USING ERRCODE='55000';
+END $$;
+CREATE TRIGGER member_role_cleanup_guard BEFORE UPDATE OR DELETE ON space_member_role_cleanup
+ FOR EACH ROW EXECUTE FUNCTION space_member_role_cleanup_guard();
+CREATE TRIGGER member_role_cleanup_truncate BEFORE TRUNCATE ON space_member_role_cleanup
+ FOR EACH STATEMENT EXECUTE FUNCTION space_member_role_cleanup_guard();
+
+CREATE FUNCTION space_member_admission_intent_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN
+  IF space_membership_terminal_cleanup_allowed(OLD.space_id) THEN RETURN OLD; END IF;
+ ELSIF TG_OP='UPDATE' THEN
+  IF ROW(NEW.operation_id,NEW.space_id,NEW.profile_id,NEW.account_id,NEW.invite_id,NEW.guest,
+      NEW.generation,NEW.request_sha256,NEW.binding_sha256,NEW.policy_version,
+      NEW.join_attempt_id,NEW.join_attempt_evidence_sha256,NEW.decision_basis_sha256)
+   IS DISTINCT FROM ROW(OLD.operation_id,OLD.space_id,OLD.profile_id,OLD.account_id,OLD.invite_id,OLD.guest,
+      OLD.generation,OLD.request_sha256,OLD.binding_sha256,OLD.policy_version,
+      OLD.join_attempt_id,OLD.join_attempt_evidence_sha256,OLD.decision_basis_sha256) THEN
+   RAISE EXCEPTION 'member admission input and proof binding are immutable' USING ERRCODE='55000';
+  END IF;
+  IF OLD.state IN ('PUBLISHED','RETIRED') AND NEW IS DISTINCT FROM OLD THEN
+   RAISE EXCEPTION 'member admission terminal outcome is immutable' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+ END IF;
+ RAISE EXCEPTION 'member admission evidence requires terminal P3 minimization' USING ERRCODE='55000';
+END $$;
+CREATE TRIGGER member_admission_intent_guard BEFORE UPDATE OR DELETE ON space_member_admission_intents
+ FOR EACH ROW EXECUTE FUNCTION space_member_admission_intent_guard();
+CREATE TRIGGER member_admission_intent_truncate BEFORE TRUNCATE ON space_member_admission_intents
+ FOR EACH STATEMENT EXECUTE FUNCTION space_member_admission_intent_guard();
+
+CREATE FUNCTION space_creator_principal_replay_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='DELETE' AND OLD.expires_at<clock_timestamp()-interval '5 seconds' THEN RETURN OLD; END IF;
+ RAISE EXCEPTION 'creator replay identity must survive credential lifetime and skew' USING ERRCODE='55000';
+END $$;
+CREATE TRIGGER creator_principal_replay_guard BEFORE UPDATE OR DELETE ON space_creator_principal_replays
+ FOR EACH ROW EXECUTE FUNCTION space_creator_principal_replay_guard();
+CREATE TRIGGER creator_principal_replay_truncate BEFORE TRUNCATE ON space_creator_principal_replays
+ FOR EACH STATEMENT EXECUTE FUNCTION space_creator_principal_replay_guard();
+
+CREATE FUNCTION space_native_creator_operation_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='INSERT' THEN
+  IF NOT EXISTS(SELECT 1 FROM space_creator_principal_replays p WHERE p.issuer='gateway' AND p.jti=NEW.jti
+    AND p.expires_at=NEW.credential_expires_at AND p.recorded_at<=NEW.published_at)
+   OR NEW.credential_expires_at<=clock_timestamp() THEN
+   RAISE EXCEPTION 'native creator requires its durable admitted credential' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+ ELSIF TG_OP='DELETE' THEN
+  IF space_membership_terminal_cleanup_allowed(OLD.space_id) THEN RETURN OLD; END IF;
+ END IF;
+ RAISE EXCEPTION 'native creator evidence is immutable until terminal P3 minimization' USING ERRCODE='55000';
+END $$;
+CREATE TRIGGER native_creator_operation_guard BEFORE INSERT OR UPDATE OR DELETE ON space_native_creator_operations
+ FOR EACH ROW EXECUTE FUNCTION space_native_creator_operation_guard();
+CREATE TRIGGER native_creator_operation_truncate BEFORE TRUNCATE ON space_native_creator_operations
+ FOR EACH STATEMENT EXECUTE FUNCTION space_native_creator_operation_guard();
+
+-- Existing databases without the unrelated Federation-source preflight still
+-- get permanent heads. Full production migration order supplies its revision
+-- function; new inputs participate in exactly that same monotonic Space clock.
+DO $$ DECLARE name TEXT; BEGIN
+ IF to_regprocedure('space_authority_revision_changed()') IS NOT NULL THEN
+  FOREACH name IN ARRAY ARRAY['space_ordinary_member_heads','space_community_member_heads','space_entry_policies','space_member_admission_intents','space_membership_ownership_heads','space_native_member_publications','space_lifecycle_operations','space_lifecycle_participants','space_lifecycle_completions','space_lifecycle_outbox','space_permanent_purge_fences','community_bootstrap_operations','space_native_creator_operations'] LOOP
+   EXECUTE format('CREATE TRIGGER %I AFTER INSERT OR UPDATE OR DELETE ON %I FOR EACH ROW EXECUTE FUNCTION space_authority_revision_changed(''space_id'')','space_authority_revision_'||name,name);
+   EXECUTE format('CREATE TRIGGER %I BEFORE TRUNCATE ON %I FOR EACH STATEMENT EXECUTE FUNCTION space_authority_revision_floor_guard()','space_authority_revision_'||name||'_truncate',name);
+  END LOOP;
+ END IF;
+END $$;

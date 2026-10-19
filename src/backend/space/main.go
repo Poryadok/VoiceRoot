@@ -35,6 +35,7 @@ import (
 	"voice/backend/space/internal/chatcreation"
 	grpcsvc "voice/backend/space/internal/grpcsvc"
 	"voice/backend/space/internal/lifecycleprincipal"
+	"voice/backend/space/internal/memberauthorityprincipal"
 	"voice/backend/space/internal/outboxdelivery"
 	"voice/backend/space/internal/s2s"
 	"voice/backend/space/internal/spaceevents"
@@ -105,6 +106,13 @@ func main() {
 	}
 	if auditEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
 		log.Fatal("Space audit listener requires DATABASE_URL")
+	}
+	memberAuthorityConfig, memberAuthorityEnabled, err := memberauthorityprincipal.LoadFromEnv()
+	if err != nil {
+		log.Fatalf("Space member authority config: %v", err)
+	}
+	if memberAuthorityEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+		log.Fatal("Space member authority requires DATABASE_URL")
 	}
 	principalConfig, principalEnabled, err := socialprincipal.LoadFromEnv("space")
 	if err != nil {
@@ -243,6 +251,15 @@ func main() {
 		}
 
 		var ownershipAuthClient authv1.AuthServiceClient
+		if memberAuthorityEnabled && (ownershipRoleClient == nil || principalIssuer == nil) {
+			log.Fatal("Space member authority requires protected Role principal transport")
+		}
+		if memberAuthorityEnabled {
+			stopRoleRemovalDelivery := startMemberRoleRemovalDelivery(runCtx, spaceStore, ownershipRoleClient, principalIssuer, logger)
+			defer stopRoleRemovalDelivery()
+			stopCreatorReplayCleanup := startCreatorReplayCleanup(runCtx, spaceStore, logger)
+			defer stopCreatorReplayCleanup()
+		}
 		if addr := strings.TrimSpace(os.Getenv("AUTH_PRINCIPAL_GRPC_ADDR")); addr != "" {
 			if principalIssuer == nil {
 				log.Fatal("Space principal issuer is required for Auth ownership transport")
@@ -285,6 +302,7 @@ func main() {
 		grpcOptions = append(grpcOptions, grpc.ChainUnaryInterceptor(
 			chatcreation.OrdinaryUnary(),
 			auditprincipal.OrdinaryUnary(),
+			memberauthorityprincipal.OrdinaryUnary(),
 			lifecycleprincipal.OrdinaryUnary(),
 			socialprincipal.OrdinaryUnaryInterceptor("space"),
 			ordinaryCommunicationUnary(),
@@ -361,6 +379,10 @@ func main() {
 				}
 			}()
 			logger.Info("space subscription entitlement consumer enabled")
+			if memberAuthorityEnabled {
+				stopAdmissionDelivery := startMemberAdmissionDelivery(runCtx, spaceStore, jsPub, logger)
+				defer stopAdmissionDelivery()
+			}
 			voiceInvalidations := outboxdelivery.NewVoiceInvalidationDispatcher(spaceStore, jsPub)
 			voiceInvalidations.OnError = func(err error) {
 				logger.Warn("Space Voice invalidation delivery failed", slog.String("error", err.Error()))
@@ -450,6 +472,11 @@ func main() {
 				}
 			}()
 		}
+		stopMemberAuthority, err := startMemberAuthorityServer(runCtx, memberAuthorityConfig, memberAuthorityEnabled, spaceStore, sharedOptions)
+		if err != nil {
+			log.Fatalf("Space member authority startup: %v", err)
+		}
+		defer stopMemberAuthority()
 		stopCommunication, err := startCommunicationServers(runCtx, communicationConfigs, spaceSvc, sharedOptions)
 		if err != nil {
 			log.Fatalf("Space communication authority startup: %v", err)
@@ -466,7 +493,12 @@ func main() {
 				log.Fatalf("Space Gateway lifecycle listen: %v", err)
 			}
 			options := append([]grpc.ServerOption{}, sharedOptions...)
-			options = append(options, publicRuntime.ServerOptions()...)
+			creatorDependencies := creatorMembershipDependencies(spaceStore, ownershipAuthClient, principalIssuer)
+			if !memberAuthorityEnabled && creatorDependencies.CreatorReplay != nil {
+				stopCreatorReplayCleanup := startCreatorReplayCleanup(runCtx, spaceStore, logger)
+				defer stopCreatorReplayCleanup()
+			}
+			options = append(options, publicRuntime.ServerOptionsWithMembership(creatorDependencies)...)
 			publicServer = grpc.NewServer(options...)
 			spacev1.RegisterSpaceServiceServer(publicServer, &grpcsvc.PublicLifecycleSpace{SpaceGRPC: spaceSvc, Composite: compositeService})
 			go func() {

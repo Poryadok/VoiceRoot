@@ -16,6 +16,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -67,7 +68,20 @@ func (ca transportCA) leaf(t *testing.T, serial int64, usage x509.ExtKeyUsage) (
 
 type lifecycleTransportServer struct {
 	spacev1.UnimplementedSpaceServiceServer
-	calls atomic.Int32
+	calls          atomic.Int32
+	admissionCalls atomic.Int32
+}
+
+func (s *lifecycleTransportServer) JoinSpace(ctx context.Context, req *spacev1.JoinSpaceRequest) (*spacev1.JoinSpaceResponse, error) {
+	call, err := RequireAdmissionJoinSpace(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = call.ActorFor(req); err != nil {
+		return nil, err
+	}
+	s.admissionCalls.Add(1)
+	return &spacev1.JoinSpaceResponse{}, nil
 }
 
 func (s *lifecycleTransportServer) RestoreSpace(ctx context.Context, _ *spacev1.RestoreSpaceRequest) (*spacev1.RestoreSpaceResponse, error) {
@@ -114,7 +128,34 @@ func TestRealLifecycleTLSJWKSReplayAndRevocation(t *testing.T) {
 	listener, err := net.Listen("tcp", cfg.Listen)
 	require.NoError(t, err)
 	service := &lifecycleTransportServer{}
-	server := grpc.NewServer(runtime.ServerOptions()...)
+	// Controlled owner/replay callbacks test actual dependency selection over
+	// TLS/JWKS. They are not Java Auth or durable PG integration evidence.
+	var admissionFloor atomic.Int64
+	admissionFloor.Store(7)
+	var admissionReplayMu sync.Mutex
+	admissionSeen := map[string]bool{}
+	dependencies := MembershipDependencies{
+		AdmissionEpoch: func(_ context.Context, _ string, epoch int64) error {
+			floor := admissionFloor.Load()
+			if floor == 0 {
+				return ErrDependencyUnavailable
+			}
+			if epoch < floor {
+				return status.Error(codes.Unauthenticated, "revoked admission")
+			}
+			return nil
+		},
+		AdmissionReplay: func(_ context.Context, _ string, jti string, _ time.Time) error {
+			admissionReplayMu.Lock()
+			defer admissionReplayMu.Unlock()
+			if admissionSeen[jti] {
+				return status.Error(codes.Unauthenticated, "admission replay")
+			}
+			admissionSeen[jti] = true
+			return nil
+		},
+	}
+	server := grpc.NewServer(runtime.ServerOptionsWithMembership(dependencies)...)
 	spacev1.RegisterSpaceServiceServer(server, service)
 	go func() { _ = server.Serve(listener) }()
 	defer server.Stop()
@@ -125,6 +166,32 @@ func TestRealLifecycleTLSJWKSReplayAndRevocation(t *testing.T) {
 		return spacev1.NewSpaceServiceClient(conn)
 	}
 	client := connect([]tls.Certificate{clientCert})
+	joinRequest := &spacev1.JoinSpaceRequest{SpaceId: uuid.NewString()}
+	signAdmission := func(accountType string) context.Context {
+		hash, err := principal.RequestHash(joinRequest)
+		require.NoError(t, err)
+		issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "current", PrivateKey: keys["current"]})
+		require.NoError(t, err)
+		id := uuid.NewString()
+		token, err := issuer.IssueDelegatedUser(principal.DelegatedUserInput{Audience: "space", RPC: spacev1.SpaceService_JoinSpace_FullMethodName, RequestID: id, RequestHash: hash, AccountID: uuid.NewString(), ProfileID: uuid.NewString(), SessionEpoch: 7, AccountType: accountType, ClientExpiresAt: time.Now().Add(time.Minute)})
+		require.NoError(t, err)
+		return metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token, "x-request-id", id))
+	}
+	for _, accountType := range []string{"regular", "guest"} {
+		ctx := signAdmission(accountType)
+		_, err = client.JoinSpace(ctx, joinRequest)
+		require.NoError(t, err)
+		_, err = client.JoinSpace(ctx, joinRequest)
+		require.Equal(t, codes.Unauthenticated, status.Code(err))
+	}
+	require.EqualValues(t, 2, service.admissionCalls.Load())
+	admissionFloor.Store(8)
+	_, err = client.JoinSpace(signAdmission("regular"), joinRequest)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	admissionFloor.Store(0)
+	_, err = client.JoinSpace(signAdmission("regular"), joinRequest)
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.EqualValues(t, 2, service.admissionCalls.Load())
 	req := &spacev1.RestoreSpaceRequest{SpaceId: uuid.NewString(), OperationId: uuid.NewString()}
 	account, profile := uuid.NewString(), uuid.NewString()
 	replay.Set("auth:session:min_epoch:"+account, "7")

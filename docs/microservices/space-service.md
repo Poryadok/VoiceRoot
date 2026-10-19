@@ -687,6 +687,39 @@ ordinary rights require matching published generation/operation/receipt and
 fresh owner eligibility. Unknown/error is unavailable. This remains a bounded
 owner observation under the snapshot limitation above, not distributed ACID.
 
+The native transport is isolated from ordinary Space and Federation listeners.
+`SPACE_MEMBER_AUTHORITY_GRPC_LISTEN` defaults to `:9096`; enabling any owned
+setting requires `SPACE_MEMBER_AUTHORITY_TLS_CERT_FILE`,
+`SPACE_MEMBER_AUTHORITY_TLS_KEY_FILE`, `SPACE_MEMBER_AUTHORITY_CLIENT_CA_FILE`
+and `SPACE_MEMBER_AUTHORITY_REPLAY_REDIS_ADDR` (optional
+`SPACE_MEMBER_AUTHORITY_REPLAY_REDIS_PASSWORD`). Shared `S2S_JWKS_*` TLS/cache
+configuration selects only the `role` HTTPS endpoint. Shared JWKS settings alone
+do not enable this listener; present-empty owned settings fail startup. mTLS,
+exact signed `service:role`/audience `space`/RPC/body/request-ID binding and a
+separate Redis replay namespace are mandatory. Registration exposes this read
+only, and ordinary listener interception denies it explicitly.
+Native membership runtime also requires the existing protected Role principal
+client configuration and Space service issuer; the ordinary Role client is not
+a fallback for admission cleanup.
+
+Each read takes the same Space fence, validates owned relation/trigger/function
+semantics against the migration contract, then samples DB time. Compatible
+additive migrations remain allowed; a clean version number cannot compensate
+for missing/disabled guards. The response has one positive authority revision
+and at most five seconds of remaining validity. Initial lifecycle `LIVE,0`
+requires authoritative absence of aggregate **and** all prior lifecycle or
+terminal history; query failure is unavailable. Existing aggregate generations
+are preserved. A permanent purge fence overrides a recreated LIVE aggregate.
+
+Positive native Owner creation, community bootstrap/recovery and Bot install
+remain the same ORDINARY source, with a distinct immutable publication kind and
+private canonical native proof. Such provenance creates no default role or
+Owner privilege. Admission default grants still require the exact Role READY
+receipt. A new native writer must not manufacture legacy generation zero or a
+READY receipt. Verified creator/session authority, fully validated recovery
+FINALIZED evidence and durable Bot installation/cancellation identity are real
+activation prerequisites; old raw actor metadata does not establish them.
+
 Leave/kick/ban/purge invalidate pending candidates under the same Space fence,
 advance the permanent ordinary generation and persist typed removal work even
 if no membership row exists. Account ban invalidates all pending profile aliases
@@ -696,8 +729,25 @@ newer `g>R` or independently sourced community contributions. System baseline
 Member cleanup is a separate typed source operation; Owner is exclusively
 bootstrap/ownership/P3 authority. Physical cleanup may lag, but new effective
 rights cannot rely on an orphaned ordinary contribution after Space removal.
+Cleanup delivery preserves the committed operation, Space/profile and removal
+floor. Every technical retry signs a fresh request ID/JTI for the exact
+service:space/audience role/RemoveMemberRoles body, outside DB locks. Only a
+matching typed receipt and shared fingerprint can acknowledge the immutable
+queue row under the Space fence; the first acknowledgement cannot be rebound.
+Unknown RPC/commit outcomes remain retryable. Each RPC is bounded to five
+seconds, and worker shutdown waits for the current cancelled pass.
 Rejoin cannot inherit old-generation Admin/custom grants. P3 retirement
 permanently dominates every ordinary generation and late retry.
+
+Per-profile heads survive ordinary removal, not terminal private-data retention.
+After canonical P3 participant retirement, local cleanup requires its matching
+identity-free permanent Space fence and removes private membership heads,
+admission/native proofs and completed delivery data. The separate retired
+ownership generation retains no owner profile. Undelivered membership events
+block terminal local deletion; their dispatcher reuses the committed event ID,
+timestamp and body and marks the exact tuple only after a valid `chat_events`
+PubAck. Retry after failed marking cannot mint another event. Historical
+completed admission replay cannot attach a new target or rerun publication hooks.
 
 Role effective role/permission/hierarchy reads and generic user/bot mutations
 must qualify ordinary contributions against this live incarnation; actor and

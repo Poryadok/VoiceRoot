@@ -190,6 +190,32 @@ func (r *Runtime) checkEpoch(ctx context.Context, account string, epoch int64) e
 func (r *Runtime) ServerOptions() []grpc.ServerOption {
 	return []grpc.ServerOption{grpc.Creds(r.credentials), grpc.ChainUnaryInterceptor(r.verifier.Unary())}
 }
+
+// Creator uses its separate durable replay and authoritative Auth observation.
+// Copying the verifier keeps the existing lifecycle method dependencies intact.
+func (r *Runtime) ServerOptionsWithCreator(epoch principal.SessionEpochChecker, replay principal.ReplayGuard) []grpc.ServerOption {
+	return r.ServerOptionsWithMembership(MembershipDependencies{CreatorEpoch: epoch, CreatorReplay: replay})
+}
+
+// MembershipDependencies keeps interactive admission separate from Creator's
+// existing regular-only checks. An absent dependency disables that method set.
+// AdmissionEpoch must use the Space-purpose owner surface and map unknown
+// authority to ErrDependencyUnavailable; it is not profile eligibility.
+type MembershipDependencies struct {
+	CreatorEpoch    principal.SessionEpochChecker
+	CreatorReplay   principal.ReplayGuard
+	AdmissionEpoch  principal.SessionEpochChecker
+	AdmissionReplay principal.ReplayGuard
+}
+
+func (r *Runtime) ServerOptionsWithMembership(dependencies MembershipDependencies) []grpc.ServerOption {
+	v := r.verifier
+	v.CreatorEpoch = dependencies.CreatorEpoch
+	v.CreatorReplay = dependencies.CreatorReplay
+	v.AdmissionEpoch = dependencies.AdmissionEpoch
+	v.AdmissionReplay = dependencies.AdmissionReplay
+	return []grpc.ServerOption{grpc.Creds(r.credentials), grpc.ChainUnaryInterceptor(v.Unary())}
+}
 func (r *Runtime) Close() error {
 	if r == nil {
 		return nil

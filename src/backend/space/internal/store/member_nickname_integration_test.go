@@ -189,6 +189,7 @@ func TestMemberNickname_ConcurrentLeaveNeverRecreatesMembership(t *testing.T) {
 
 func TestMemberNickname_ManagedRosterDoesNotCreateLocalOverride(t *testing.T) {
 	st := nicknameStoreFixture(t)
+	applyMemberAuthorityIfPresent(t, st)
 	ctx := context.Background()
 	app, env, owner, account, target := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	space, _, err := st.CreateCommunityBootstrapSpace(ctx, CommunityBootstrapSpaceInput{OperationID: uuid.New(), ApplicationID: app, EnvironmentID: env, OwnerAccountID: account, OwnerProfileID: owner, CorporationKey: "nickname-corp", TemplateID: "guild-default"})
