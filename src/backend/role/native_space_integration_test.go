@@ -482,10 +482,9 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 		}
 	}
 	// Same operation with a changed body cannot replace the immutable receipt.
-	changed := *request
-	changed.AdmissionBindingSha256 = append([]byte(nil), request.AdmissionBindingSha256...)
+	changed := proto.Clone(request).(*rolev1.EnsureDefaultMemberRoleRequest)
 	changed.AdmissionBindingSha256[0] ^= 1
-	_, err = call(&changed)
+	_, err = call(changed)
 	require.Equal(t, codes.AlreadyExists, status.Code(err))
 	_, err = client.EnsureDefaultMemberRole(context.Background(), request)
 	require.Equal(t, codes.Unauthenticated, status.Code(err))

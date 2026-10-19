@@ -243,8 +243,18 @@ positive, with a fresh directory, short-lived fixture files, separate Bot-only
 fixture signer, independent PostgreSQL identifiers and a bounded consumer stop
 file. It must not export Auth attestations, bearer tokens or readiness/private
 capabilities. The longer test-process lifetime does not extend authority TTLs.
-The actual standalone signed consumer probe and stop/teardown proof are still
-required for this new harness; no portable serving PASS is claimed by compile.
+The standalone signed client then passed against the actual exported fixture:
+2s owner allow, exact transport replay rejected, fresh signed retry allowed,
+cleanup validator reached without invented installation evidence, generic Bot
+Role read rejected. Explicit stop removed ready/private-key files (0600), and
+the full test cleaned up its own processes/PG/Redis with race81.095s. This is
+sourcef3c209b execution, not a public Bot install or Auth attestation. The first
+4031717 attempt failed18.709s because the separate Bot JWKS fixture accidentally
+published only one key; the immutable successor publishes its required distinct
+current/next pair. That configuration failure is preserved, not called the
+missing-export feature RED. Affected historical39/UNKNOWN44 regression passed
+race43.482s; tag-aware vet then found an older protobuf lock-copy in the test's
+changed-body control. It is corrected with proto.Clone and its check repeated.
 
 The existing Role25 consumer now has an executable denial fixture compiled
 inside immutable Space d410305b2e74993966e07aca5a486c16766d9e9a. It uses
