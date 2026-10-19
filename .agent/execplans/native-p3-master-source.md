@@ -1,5 +1,34 @@
 # Native/P3 source qualification for master
 
+## Current e114 prototype author checkpoint
+
+Preserve f6df64080dcf4da3b3c066716abb0cf0c2d077e8/26701 as a genuine
+duplicate_guarded_owner failure at M/auth.proto, before that path's mutation.
+Its trace4fb79a0b2a789369d2f66fef1606b90cb7d039d56882fc3eea0334cffbfb1300
+and complete ledger0c34469a17c2b5de2ccbf9fce0a1075e8cd6ba1b38969cb7948354d9f3133ef5
+remain immutable. Prior owner/P1 entry e26f6 differs from incoming P2/M dc582;
+stored/result equality never substitutes for prior-owner history.
+
+410 decision5f0d04f36301009d510fe6aed366aea6268e07d7ed2ecdf88cece761cd30de23
+permits a distinct exact-unit supersession predicate only in this explicit
+prototype. Bind the complete checked unit, actual33 dispositions, all real
+prior rows and producer/classifier/commit references, actual parent containment,
+entries, earliest content base, pending row and full map. Explicitly consume
+whole-parent composition even when source==result skipped the original seam.
+Record a dedicated receipt, then consume that same receipt in conservation
+before replacement. Do not change false source_lineage/incremental predicates,
+source identity, raw flags, original later policy, or any existing source pin.
+
+The new separate master author entrypoint calls the original PR/push wrapper,
+using independently qualified native B/S/T and real source/result parity. Its
+actual root is B-to-current-source; only the genuine nested B-to-H53/M frame
+receives the exact capability. Retain ancestor frames/maps/owners separately;
+link the original aggregate reference and its actual nested occurrence without
+renaming old observations. A successful full collection must bind the real
+root map and original wrapper copy, then the d294 original router seal. Unit
+proofs are not outer-wrapper proofs. M/R/K/runtime/current CI remains HOLD until
+actual execution and independent frozen-source/proof review.
+
 ## Purpose and context
 
 Finish the existing PR875 blocking F13 repair. The reviewed dormant/restrictive

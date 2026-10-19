@@ -220,6 +220,11 @@ def append(path, kind, frame, operation, repo, values):
     elif kind == 'complete_ledger_conserved':
         name,receipt=values
         payload=dict(path=name,receipt=json.loads(Path(receipt).read_bytes()),policy_result=None,admission=False)
+    elif kind == 'exact_unit_supersession':
+        name,receipt=values
+        payload=dict(path=name,receipt=json.loads(Path(receipt).read_bytes()),admission=False)
+    elif kind in ('master_entry','master_wrapper_result'):
+        payload=json.loads(Path(values[0]).read_bytes())
     else: raise Rejected('unknown_event_kind')
     e=dict(schema=SCHEMA,sequence=sequence,previous=previous['digest'] if previous else '0'*64,
         kind=kind,frame=identity if kind=='frame_enter' else frame or None,
@@ -367,6 +372,39 @@ def composition_capability(repo, path, merge, boundary, first, source, name, res
     require(name in value['actual_source_delta']['raw'].splitlines(),'exact_source_path_not_future_authority')
     actual=composition(repo,boundary,first,source,name,result)
     return dict(actual,type=value['whole_parent_composition']['type'],capability_sha256=sha(canonical(value)))
+
+
+def master_context(repo, capability, binding_raw, context):
+    """Bind the original B/S/T entry; M capability remains nested H53-only."""
+    spec=importlib.util.spec_from_file_location('f54_master_native',ROOT/'scripts/ci/f13_native_p3_source.py')
+    native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
+    binding=json.loads(binding_raw)
+    actual=native.qualify(repo,binding['base'],binding['source'],binding['target'],context['GITHUB_EVENT_NAME'],
+        context['GITHUB_REF'],context['GITHUB_SHA'],context['VOICE_CI_PUSH_BEFORE_SHA'],context['GITHUB_BASE_REF'])
+    require(actual==binding and binding['target']==git(repo,'rev-parse','HEAD').decode().strip(),'actual_master_native_B_S_T_context')
+    require(binding['base']==capability['collector_scope']['base'],'master_actual_original_base')
+    git(repo,'merge-base','--is-ancestor',capability['collector_scope']['target'],binding['source'])
+    parents=git(repo,'rev-list','--parents','-n','1',binding['target']).decode().split()
+    require(parents==[binding['target'],binding['base'],binding['source']],'actual_master_two_parent_shape')
+    source_delta=git(repo,'diff','--name-only',binding['base'],binding['source'])
+    require(source_delta==git(repo,'diff','--name-only',binding['base'],binding['target']),'actual_master_source_result_delta_parity')
+    entries={name:entry_binding(repo,binding['source'],name) for name in source_delta.decode().splitlines()}
+    require(all(entry_binding(repo,binding['target'],name)==value for name,value in entries.items()),'actual_master_source_result_entry_parity')
+    return dict(type='F54_EXPLICIT_MASTER_PROTOTYPE_ENTRY',native_binding=raw_binding(binding_raw),context=context,
+        capability=raw_binding(canonical(capability)),base=binding['base'],source=binding['source'],target=binding['target'],
+        source_delta=raw_binding(source_delta),entries=entries,source_context=router_source_context(repo),admission=False)
+
+
+def prepare_master_entry(repo, capability_path, binding_path):
+    context={key:os.environ.get(key,'') for key in ('GITHUB_EVENT_NAME','GITHUB_REF','GITHUB_SHA','VOICE_CI_PUSH_BEFORE_SHA','GITHUB_BASE_REF')}
+    return master_context(repo,verified_capabilities(repo,capability_path),Path(binding_path).read_bytes(),context)
+
+
+def master_wrapper_result(entry_path, source_map, output):
+    entry=json.loads(Path(entry_path).read_bytes());raw=Path(source_map).read_bytes()
+    require(raw==Path(output).read_bytes(),'actual_original_wrapper_map_copy_parity')
+    return dict(type='F54_ACTUAL_MASTER_WRAPPER_RESULT',entry_sha256=sha(canonical(entry)),source_map=file_binding(source_map),
+        output=file_binding(output),source_map_path=str(source_map),output_path=str(output),admission=False)
 
 
 def dag_dispositions(repo, events):
@@ -561,9 +599,10 @@ def build_M_ready(repo, state, events, prefix_binding, original_path, span_path,
     original=[json.loads(v) for v in Path(original_path).read_bytes().splitlines()]
     reference='F1/'+SPAN_AGGREGATE+'/2'
     old=next(e for e in original if e['kind']=='operation_begin' and e['operation']==reference)
-    actual=next(e for e in events if e['kind']=='operation_begin' and e['operation']==reference)
-    require(actual['payload']==old['payload'],'M_prefix_original_aggregate_operation')
-    require([e['payload'] for e in events if e['kind']=='row_committed' and e['operation']==reference]==
+    current_reference=state['frame']+'/'+SPAN_AGGREGATE+'/2'
+    actual=next(e for e in events if e['kind']=='operation_begin' and e['operation']==current_reference)
+    require({k:v for k,v in actual['payload'].items() if k!='id'}=={k:v for k,v in old['payload'].items() if k!='id'},'M_prefix_original_aggregate_operation')
+    require([e['payload'] for e in events if e['kind']=='row_committed' and e['operation']==current_reference]==
         [e['payload'] for e in original if e['kind']=='row_committed' and e['operation']==reference],
         'M_prefix_original_aggregate_rows')
     coverage=state['coverage'];replacements={v['node']:v for v in span['dispositions']}
@@ -589,6 +628,7 @@ def build_M_ready(repo, state, events, prefix_binding, original_path, span_path,
     outer=state['ledger'][state['frame']]
     return dict(type='F54_ACTUAL_M_COMPLETE_RETAINED_LEDGER',operation=state['operation'],
         capability_sha256=state['capability_sha256'],prefix=prefix_binding,operation_binding=state['operation_binding'],
+        frame_ancestry=state['frame_ancestry'],aggregate_references=dict(original=reference,current=current_reference),
         original_trace=str(original_path),original_native=str(original_native),current_native=str(current_native),
         span_trace=str(span_path),span_trace_sha256=span_sha,ledger=state['ledger'],coverage=coverage,
         outer_rows=outer['rows'],outer_map_binding=outer['map_binding'],required_qualification=required,
@@ -631,10 +671,81 @@ def consume_M_path(ready, expected_sha, trace_path, name, actual_map, after_gate
     require(transition in ('append','replace') and (transition!='replace' or prior),'M_consumer_actual_transition')
     after_rows=([x for x in rows if x.split('\t')[0]!=name] if transition=='replace' else rows)+[after_gate_raw]
     after_map=('\n'.join(after_rows)+'\n').encode()
-    return dict(path=name,ledger_sha256=sha(canonical(value)),incoming=before['payload']['incoming'],after_gate_row=raw_binding(after_gate_raw),
+    supersessions=[e['payload']['receipt'] for e in events[before['sequence']:] if e['kind']=='exact_unit_supersession' and e['operation']==value['operation'] and e['payload']['path']==name]
+    require(len(supersessions)<=1,'one_actual_exact_supersession')
+    receipt=dict(path=name,ledger_sha256=sha(canonical(value)),incoming=before['payload']['incoming'],after_gate_row=raw_binding(after_gate_raw),
         prior_rows=prior,map_before=dict(bytes=len(actual_map),sha256=sha(actual_map)),transition=transition,
         expected_post_map=dict(bytes=len(after_map),sha256=sha(after_map)),aggregate=aggregate,
         obligations=value['required_qualification'][name],policy_result=None,admission=False)
+    if supersessions:
+        exact=supersessions[0]
+        require(transition=='replace' and exact['operation']==value['operation'] and exact['path']==name
+            and exact['ledger_sha256']==sha(canonical(value)) and exact['incoming']==before['payload']['incoming'] and exact['prior_rows']==prior
+            and exact['map_before']==receipt['map_before'] and exact['aggregate']==aggregate,'conservation_same_exact_qualified_transition')
+        receipt['exact_unit_supersession']=exact
+    return receipt
+
+
+def supersession_evidence(repo, capability, ready, events, name, actual_map, incoming_raw, composition_receipt):
+    """Finite transition qualification; neither ancestry nor source is rebound.
+
+    The runtime constructor and final trace validator both call this predicate.
+    A caller-supplied hash alone cannot replace its real operation references.
+    """
+    operation=ready['operation'];frame=operation.split('/')[0]
+    require(operation==frame+'/'+M+'/2' and ready['capability_sha256']==sha(canonical(capability)), 'supersession_exact_M_capability')
+    require(name in capability['guarded_difference_paths'] and name in capability['actual_source_delta']['raw'].splitlines(), 'supersession_complete_unit_path')
+    require(all(v['disposition'] in ('visited_real_operation','shared_real_operation','exact_single_commit_source_of_real_operation','aggregate_span_qualified')
+        for node in ready['coverage'] for v in node['operations']) and len(ready['coverage'])==33, 'supersession_complete_actual_history')
+    before=next((e for e in reversed(events) if e['kind']=='row_before' and e['operation']==operation),None)
+    require(before is not None and before['payload']['path']==name,'supersession_actual_pending_row')
+    value=before['payload'];incoming=row(raw_binding(incoming_raw))
+    require(value['incoming']==raw_binding(incoming_raw) and incoming[:1]+incoming[2:6]+incoming[7:]==[name,M,P1,O,P2,','.join(BASES)],'supersession_no_source_or_owner_rebind')
+    require(value['map_before']==dict(bytes=len(actual_map),sha256=sha(actual_map)),'supersession_actual_full_premap')
+    prior=[raw_binding(x) for x in actual_map.decode().splitlines() if x.split('\t')[0]==name]
+    require(prior and prior==value['prior_rows']==[raw_binding(x) for x in ready['outer_rows'] if x.split('\t')[0]==name],'supersession_all_prior_rows')
+    expected=composition(repo,O,P1,P2,name,tree_entry(repo,M,name).rstrip('\0'))
+    expected=dict(expected,type=capability['whole_parent_composition']['type'],capability_sha256=sha(canonical(capability)))
+    require(composition_receipt==expected,'supersession_explicit_whole_parent_composition')
+    require(any(e['kind']=='composition_capability' and e['operation']==operation and e['payload']==expected
+        for e in events[before['sequence']:]),'supersession_real_transition_composition_reference')
+    references=[]
+    for raw in prior:
+        parts=row(raw);require(parts[6]==incoming[6],'supersession_earliest_content_base')
+        ancestor=lambda a,b:subprocess.run(['git','--no-replace-objects','-C',str(repo),'merge-base','--is-ancestor',a,b],capture_output=True).returncode==0
+        require(ancestor(parts[2],P1) and ancestor(parts[5],P2),'supersession_checked_parent_containment')
+        entry=tree_entry(repo,parts[2],name)
+        require(entry and entry==tree_entry(repo,parts[5],name)==tree_entry(repo,P1,name),'supersession_actual_prior_owner_source_entries')
+        versions=next(v['versions'] for v in capability['complete_41_entries'] if v['path']==name)
+        mode,kind,rest=entry.rstrip('\0').split(' ',2);oid=rest.split('\t')[0]
+        require(dict(mode=mode,type=kind,oid=oid) in versions.values(),'supersession_prior_entry_in_fixed_versions')
+        commits=[e for e in events[:before['sequence']-1] if e['kind']=='row_committed' and e['frame']==frame and e['payload']['row']==raw]
+        require(commits,'supersession_real_prior_owner_commit')
+        committed=commits[-1];origin=committed['operation']
+        require(origin==frame+'/'+parts[2]+'/'+origin.rsplit('/',1)[1], 'supersession_actual_prior_operation_owner')
+        starts=[e for e in events[:committed['sequence']] if e['operation']==origin and e['kind']=='operation_begin']
+        classifications=[e for e in events[:committed['sequence']] if e['operation']==origin and e['kind']=='classification']
+        changes=[e for e in events[:committed['sequence']] if e['operation']==origin and e['kind']=='row_after' and e['payload']['row']==raw]
+        require(len(starts)==len(classifications)==1 and changes,'supersession_real_prior_classification_and_transformation')
+        require(any(item['operation']==origin for item in ready['ledger'][frame]['paths'][name]['evidence']),'supersession_prior_owner_consumed_ledger')
+        references.append(dict(row=raw,operation=origin,begin=starts[0]['digest'],classification=classifications[0]['digest'],
+            row_after=changes[-1]['digest'],committed=committed['digest'],entry=raw_binding(entry),
+            owner_to_O=ancestor(parts[2],O),source_to_O=ancestor(parts[5],O)))
+    aggregate=ready['required_qualification'][name]['aggregate'] or any(row(v)[1]=='true' for v in prior) or incoming[1]=='true'
+    return dict(type='F54_EXACT_UNIT_SUPERSESSION_PROTOTYPE',operation=operation,path=name,capability_sha256=sha(canonical(capability)),
+        ledger_sha256=sha(canonical(ready)),prior_rows=prior,incoming=raw_binding(incoming_raw),map_before=value['map_before'],
+        prior_operations=references,composition=composition_receipt,aggregate=aggregate,source_rebind=False,admission=False)
+
+
+def qualify_supersession(repo, capability_path, ready_path, ready_sha, trace_path, name, map_path, incoming_raw):
+    capability=verified_capabilities(repo,capability_path)
+    raw=Path(ready_path).read_bytes();require(sha(raw)==ready_sha,'supersession_complete_ledger_raw_hash');ready=json.loads(raw)
+    trace=Path(trace_path).read_bytes();prefix=ready['prefix']
+    require(len(trace)>=prefix['bytes'] and sha(trace[:prefix['bytes']])==prefix['sha256'],'supersession_sealed_actual_prefix')
+    events=[json.loads(v) for v in trace.splitlines()]
+    composition_receipt=next((e['payload'] for e in reversed(events) if e['kind']=='composition_capability' and e['operation']==ready['operation'] and e['payload']['path']==name),None)
+    receipt=supersession_evidence(repo,capability,ready,events,name,Path(map_path).read_bytes(),incoming_raw,composition_receipt)
+    return dict(receipt,trace_prefix=dict(bytes=len(trace),sha256=sha(trace)))
 
 
 def finalize_collection(repo, trace_path, map_path):
@@ -642,7 +753,7 @@ def finalize_collection(repo, trace_path, map_path):
     require(not verified['failures'] and len(verified['M_ready'])==1,'successful_exact_M_collection_required')
     operation,ready=next(iter(verified['M_ready'].items()))
     require(verified['M_consumed'][operation]==ready['operation_binding']['paths'],'all_M_transitions_conserved')
-    root=operation.split('/')[0];outer=verified['ledger'][root];actual=Path(map_path).read_bytes()
+    root=verified['root_frame'];outer=verified['ledger'][root];actual=Path(map_path).read_bytes()
     require(outer['map_binding']==dict(bytes=len(actual),sha256=sha(actual)) and outer['rows']==actual.decode().splitlines(),'final_full_original_map')
     required=ready['required_qualification']
     for frame,ledger in verified['ledger'].items():
@@ -657,6 +768,7 @@ def finalize_collection(repo, trace_path, map_path):
         ledger=verified['ledger'],required_qualification=required,coverage=ready['coverage'],
         child_span=dict(path=ready['span_trace'],sha256=ready['span_trace_sha256']),M_transitions=transitions,
         capability_sha256=ready['capability_sha256'],M=M,source_context=router_source_context(repo),
+        master_entry=verified['master_entry'],master_wrapper=verified['master_wrapper'],root_frame=root,M_frame=operation.split('/')[0],
         qualification='HOLD',admission=False,runtime_pass=False)
 
 
@@ -706,6 +818,28 @@ def seal_router(repo, collection_path, collection_sha, map_path, context_path):
     context=json.loads(Path(context_path).read_bytes())
     require(context==policy_context(repo,map_path,sum(([k,v] for k,v in context['values'].items()),[])),'actual_original_policy_context')
     require(context['values']['r22_runtime_delta']==classify([n for n,v in collection['required_qualification'].items() if v['aggregate']]),'global_runtime_consumes_full_retained_history')
+    values=context['values'];source=(ROOT/'scripts/ci/voice-db-runtime-provisioning-contract_test.sh').read_text()
+    fixed=dict(re.findall(r"(?m)^(accepted_game_checkpoint|accepted_r23_base|game_checkpoint_snapshot_base|game_checkpoint_snapshot_head|game_checkpoint_snapshot_record)='([0-9a-f]{40})'$",source))
+    require(set(fixed)<=set(values) and all(values[k]==v for k,v in fixed.items()),'original_fixed_checkpoint_context_not_caller_selected')
+    events=[json.loads(v) for v in Path(collection['collection_trace']).read_bytes().splitlines()]
+    frame=next(e['payload'] for e in events if e['kind']=='frame_enter')
+    require(values['base_sha']==frame['base'],'actual_collection_policy_base')
+    ancestor=lambda a,b:subprocess.run(['git','--no-replace-objects','-C',str(repo),'merge-base','--is-ancestor',a,b],capture_output=True).returncode==0
+    require(values['game_checkpoint_enabled']==('true' if ancestor(fixed['accepted_game_checkpoint'],context['source_context']['target']) else 'false'),'original_Game_enabled_derivation')
+    manifest=subprocess.run(['git','--no-replace-objects','-C',str(repo),'cat-file','-e',values['base_sha']+':protos/voice/r23_contract_manifest.json'],capture_output=True).returncode==0
+    require(values['r23_allowlist_enabled']==('true' if ancestor(fixed['accepted_r23_base'],values['base_sha']) and not manifest else 'false'),'original_R23_window_derivation')
+    observed=[e['payload'] for e in events if e['kind']=='native_rebind_gate']
+    if observed:
+        require(values['native_p3_active']=='true','observed_native_obligations_cannot_be_disabled')
+        binding_path=values['native_p3_binding'];binding_raw=Path(binding_path).read_bytes()
+        require(all(e['binding']==raw_binding(binding_raw) and e['context']=={k:context['event'].get(k,'') for k in e['context']} for e in observed),'same_actual_native_context_reaches_router')
+        spec=importlib.util.spec_from_file_location('f54_router_native',ROOT/'scripts/ci/f13_native_p3_source.py')
+        native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
+        binding=json.loads(binding_raw);event=context['event']
+        actual=native.qualify(repo,binding['base'],binding['source'],binding['target'],event['GITHUB_EVENT_NAME'],event['GITHUB_REF'],event['GITHUB_SHA'],event['VOICE_CI_PUSH_BEFORE_SHA'],event['GITHUB_BASE_REF'])
+        require(actual==binding,'router_native_binding_independently_qualified')
+        proof=native.audit_map(repo,binding,map_path,Path(values['TMP_DIR'])/'f13-native-p3-history.tsv')
+        require(proof==json.loads((Path(values['TMP_DIR'])/'f13-native-p3-approval.json').read_bytes()),'original_complete_native_map_audit_before_router')
     return dict(type='F54_ORIGINAL_ROUTER_SEAL',collection_path=str(collection_path),collection_sha256=collection_sha,
         complete_ledger_sha256=sha(canonical(collection)),context=context,map_path=str(map_path),admission=False)
 
@@ -840,7 +974,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
     events=[json.loads(v) for v in raw.splitlines()];require(events,'nonempty_producer_trace')
     previous='0'*64;frames={};stack=[];operations={};attempts={};classified={};pending={};cumulative={};child_flags={};child_rows={};frame_rows={};carry={};failures=[];observed=set()
     expected_operations={};seen_operations={};visited={};committed={};maps={};children={};obligations={};native_bindings={}
-    M_capabilities={};M_compositions={};M_ready={};M_consumed={}
+    M_capabilities={};M_compositions={};M_ready={};M_consumed={};M_supersessions={};master_entry=None;master_wrapper=None
     def map_binding(frame):
         raw=''.join('\t'.join(parts)+'\n' for parts in maps[frame]).encode()
         return dict(bytes=len(raw),sha256=sha(raw))
@@ -869,7 +1003,13 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
     def M_checkpoint_state(operation,prefix_events):
         require(operation in M_capabilities and operation in classified,'typed_classified_M_checkpoint')
         frame=operation.split('/')[0];value=operations[operation]
-        require(stack==[frame] and seen_operations[frame][-1]==(M,2),'exact_live_outer_M_checkpoint')
+        require(stack and stack[-1]==frame and seen_operations[frame][-1]==(M,2),'exact_live_M_checkpoint')
+        if len(stack)>1:
+            require(master_entry is not None and frames[stack[0]]['base']==master_entry['base'] and frames[stack[0]]['target']==master_entry['source'], 'M_real_master_ancestor_context')
+            for child in stack[1:]:
+                parent_op=frames[child]['parent_operation'];attempt=attempts[parent_op]
+                require(frames[child]['parent']==parent_op.split('/')[0] and frames[child]['target']==attempt['source_head'], 'M_actual_recursive_ancestor_operation')
+        else:require(master_entry is None,'master_entry_cannot_relabel_unit_trace')
         require(visited.get(operation,[])==value['paths'] and not committed.get(operation) and not pending,'M_checkpoint_before_any_row')
         require(children.get(operation)==[(O,P2,'true','true')],'complete_M_child_before_rows')
         for commit,index in seen_operations[frame][:-1]:finished(frame+'/'+commit+'/'+str(index))
@@ -878,13 +1018,25 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
         return dict(type='F54_CLASSIFIED_M_PREFIX_CHECKPOINT',operation=operation,frame=frame,
             capability_sha256=sha(canonical(M_capabilities[operation])),operation_binding=value,
             classification=classified[operation],paths=value['paths'],ledger=ledger_state(),child_frame=child[0],
-            coverage=dag_dispositions(repo,prefix_events),M_rows_pending=True,admission=False)
+            coverage=dag_dispositions(repo,prefix_events),frame_ancestry=[dict(frame=name,context=frames[name]) for name in stack],M_rows_pending=True,admission=False)
     sync_gates=set()
     for sequence,e in enumerate(events,1):
         require(set(e)=={'schema','sequence','previous','kind','frame','operation','payload','digest'} and e['schema']==SCHEMA,'producer_event_schema')
         value=dict(e);digest=value.pop('digest')
         require(e['sequence']==sequence and e['previous']==previous and sha(canonical(value))==digest,'append_only_chain');previous=digest
         kind=e['kind'];v=e['payload'];frame=e['frame'];op=e['operation']
+        if kind=='master_entry':
+            require(sequence==1 and not frames and frame is None and op is None and master_entry is None,'one_explicit_master_origin_before_frames')
+            capability=json.loads(v['capability']['raw'])
+            require(v['capability']==raw_binding(canonical(capability)) and capability==prepare_capabilities(repo,capability['unit_directory']),'master_complete_source_capability')
+            require(v==master_context(repo,capability,v['native_binding']['raw'].encode(),v['context']),'independent_actual_master_origin')
+            master_entry=v;continue
+        if kind=='master_wrapper_result':
+            require(master_entry is not None and master_wrapper is None and not stack and not failures and frame is None and op is None,'original_wrapper_result_after_successful_outer_frame')
+            require(v['type']=='F54_ACTUAL_MASTER_WRAPPER_RESULT' and v['entry_sha256']==sha(canonical(master_entry)) and v['admission'] is False,'actual_wrapper_same_entry')
+            root=next(iter(frames));require(v['source_map']==v['output']==map_binding(root),'original_wrapper_full_root_map_parity')
+            require(Path(v['source_map_path']).read_bytes()==Path(v['output_path']).read_bytes(),'actual_wrapper_output_copy_not_selected_map')
+            master_wrapper=v;continue
         if kind=='span_link':
             require(sequence==1 and not frames and frame is None and op is None and v['admission'] is False,'separate_span_link_before_execution')
             require(v['supplemental_classifier']==classifier_binding(),'supplemental_collector_context')
@@ -894,6 +1046,8 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
             require((not v['parent'] and v['parent_operation'] is None) or v['parent_operation'] in attempts,'actual_parent_operation_reference')
             actual=git(repo,'rev-list','--first-parent','--reverse',v['base']+'..'+v['target']).decode().splitlines()
             require(v['first_parent_operations']==actual,'actual_frame_operations');frames[identity]=v;stack.append(identity)
+            if len(frames)==1 and master_entry is not None:
+                require([v[k] for k in ('base','target','allow_direct_followup','partition_source_history')]==[master_entry['base'],master_entry['source'],'true','true'],'genuine_original_master_source_frame')
             maps[identity]=[];seen_operations[identity]=[];expected_operations[identity]=[]
             for commit in actual:
                 parents=git(repo,'rev-list','--parents','-n','1',commit).decode().split()[1:]
@@ -978,7 +1132,9 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
             require(op in M_capabilities and v['path'] in operations[op]['paths'],'exact_M_composition_path')
             expected=composition(repo,O,P1,P2,v['path'],tree_entry(repo,M,v['path']).rstrip('\0'))
             expected=dict(expected,type=M_capabilities[op]['whole_parent_composition']['type'],capability_sha256=sha(canonical(M_capabilities[op])))
-            require(v==expected and v['path'] not in M_compositions.setdefault(op,{}),'actual_distinct_whole_parent_composition_receipt')
+            require(v==expected,'actual_distinct_whole_parent_composition_receipt')
+            if v['path'] in M_compositions.setdefault(op,{}):
+                require(M_compositions[op][v['path']]==v and (frame,v['path']) in pending,'repeat_composition_only_for_actual_pending_transition')
             M_compositions[op][v['path']]=v;continue
         if kind=='failure': failures.append(dict(frame=frame,category=v['category']));continue
         if kind=='final_gate_before':map_before(frame,v);continue
@@ -1021,6 +1177,14 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
         if kind=='qualification_pending':
             require(op in M_capabilities and key in pending and v['admission'] is False,'explicit_M_consumer_pending_without_mutation')
             require(v['map_before']==map_binding(frame),'pending_M_map_is_unchanged');continue
+        if kind=='exact_unit_supersession':
+            require(op in M_ready and key in pending and key not in M_supersessions and not pending[key]['removed'],'exact_supersession_before_mutation')
+            item=pending[key];receipt=v['receipt'];prefix_raw=b''.join(raw.splitlines(keepends=True)[:sequence-1])
+            expected=supersession_evidence(repo,M_capabilities[op],M_ready[op],events[:sequence-1],v['path'],
+                ''.join('\t'.join(x)+'\n' for x in maps[frame]).encode(),'\t'.join(item['incoming']),M_compositions[op].get(v['path']))
+            expected=dict(expected,trace_prefix=dict(bytes=len(prefix_raw),sha256=sha(prefix_raw)))
+            require(receipt==expected and v['admission'] is False,'independent_exact_supersession_actual_history_binding')
+            M_supersessions[key]=receipt;continue
         if kind=='complete_ledger_conserved':
             require(op in M_ready and key in pending and pending[key]['op']==op,'complete_M_ledger_before_real_row_mutation')
             receipt=v['receipt'];item=pending[key];parts=row(receipt['after_gate_row'])
@@ -1033,6 +1197,8 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
             aggregate=cumulative[key] or M_ready[op]['required_qualification'][v['path']]['aggregate']
             require(type(receipt['aggregate']) is bool and receipt['aggregate']==aggregate,'M_consumer_must_keep_full_aggregate_or')
             require(v['policy_result'] is None and receipt['policy_result'] is None,'conservation_is_not_policy_admission')
+            if key in M_supersessions:
+                require(receipt.get('exact_unit_supersession')==M_supersessions[key], 'conservation_consumes_exact_supersession_not_unused_sidecar')
             M_consumed.setdefault(op,[]).append(v['path']);item['conservation']=receipt
             continue
         if kind=='native_rebind_gate':
@@ -1105,12 +1271,14 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
         else:raise Rejected('unknown_trace_kind')
     checkpoint_state=M_checkpoint_state(checkpoint,events) if checkpoint else None
     require(not stack or checkpoint_state is not None,'closed_frames')
+    require(checkpoint_state is not None or master_entry is None or failures or master_wrapper is not None,'successful_master_collection_requires_actual_wrapper_result')
     coverage=dag_dispositions(repo,events) if complete else []
     accepted={'visited_real_operation','shared_real_operation','exact_single_commit_source_of_real_operation'}
     require(not complete or (all(v['disposition'] in accepted for node in coverage for v in node['operations']) and not failures),'complete_33_real_producer_coverage_and_gates')
     ledger=ledger_state()
     return dict(schema=SCHEMA,trace_sha256=expected_sha,frames=len(frames),operations=len(operations),failures=failures,
         ledger=ledger,coverage=coverage,M_checkpoint=checkpoint_state,M_ready=M_ready,M_consumed=M_consumed,
+        root_frame=next(iter(frames)),master_entry=master_entry,master_wrapper=master_wrapper,
         observed_qualification='COMPLETE' if complete else 'OBSERVED_PREFIX_ONLY',admission=False)
 
 
@@ -1144,7 +1312,10 @@ def main():
         if command=='cap-boundary':print(json.dumps(boundary_capability(*args)));return 0
         if command=='cap-entry':print(json.dumps(entry_capability(*args)));return 0
         if command=='cap-composition':print(json.dumps(composition_capability(*args)));return 0
+        if command=='master-entry':print(json.dumps(prepare_master_entry(*args)));return 0
+        if command=='master-result':print(json.dumps(master_wrapper_result(*args)));return 0
         if command=='M-ledger':print(json.dumps(prepare_M_ledger(*args)));return 0
+        if command=='M-supersession':print(json.dumps(qualify_supersession(*args)));return 0
         if command=='M-consume':
             ready,digest,trace,name,map_path,incoming,transition=args
             print(json.dumps(consume_M_path(ready,digest,trace,name,Path(map_path).read_bytes(),incoming,transition)));return 0

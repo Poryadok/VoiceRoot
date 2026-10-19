@@ -3272,6 +3272,37 @@ f13_f54_collect_exact_unit() {
   f13_f54_collection_sha="$(python3 -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "${f13_f54_collection_file}")"
 }
 
+f13_f54_collect_exact_master_unit() {
+  local repo="$1" base="$2" target="$3" output="$4" category="$5" unit="$6"
+  local f13_f54_original_trace="$7" f13_f54_original_native="$8" f13_f54_current_native="$9"
+  local f13_f54_capability_file="${TMP_DIR}/f54-exact-source-capabilities.json"
+  local f13_f54_M_operation='' f13_f54_M_child_map="${TMP_DIR}/f54-actual-M-child-map"
+  local f13_f54_M_span_trace="${TMP_DIR}/f54-actual-M-span.jsonl" f13_f54_M_span_map="${TMP_DIR}/f54-actual-M-span-map"
+  local f13_f54_M_ledger="${TMP_DIR}/f54-actual-M-ledger.json" f13_f54_M_ledger_sha=''
+  local entry="${TMP_DIR}/f54-master-entry.json" result="${TMP_DIR}/f54-master-wrapper-result.json"
+  [[ "${repo}" == "${ROOT}" && "${f13_f54_observer:-}" == "${ROOT}/scripts/ci/f13_f54_history.py" &&
+    "${native_p3_active:-false}" == true && -n "${f13_f54_trace_file:-}" && ! -e "${f13_f54_trace_file}" &&
+    ! -e "${f13_f54_capability_file}" ]] || return 1
+  # Same original wrapper and native B/S/T rules. This explicit author caller
+  # only supplies finite M evidence to its genuine nested H53 source frame.
+  python3 "${f13_f54_observer}" capabilities "${repo}" "${unit}" >"${f13_f54_capability_file}" || return 1
+  python3 "${f13_f54_observer}" master-entry "${repo}" "${f13_f54_capability_file}" "${native_p3_binding}" >"${entry}" || return 1
+  f13_f54_trace_event master_entry "${repo}" "${entry}" || return 1
+  case "${GITHUB_EVENT_NAME:-}:${GITHUB_REF:-}" in
+    pull_request:refs/pull/*/merge)
+      f13_collect_master_release_pr_contributions "${repo}" "${base}" "${target}" "${output}" "${category}" || return 1 ;;
+    push:refs/heads/master)
+      f13_collect_master_push_contributions "${repo}" "${GITHUB_EVENT_NAME}" "${GITHUB_REF}" \
+        "${VOICE_CI_PUSH_BEFORE_SHA:-}" "${base}" "${target}" "${output}" "${category}" || return 1 ;;
+    *) return 1 ;;
+  esac
+  python3 "${f13_f54_observer}" master-result "${entry}" "${output}.source-map" "${output}" >"${result}" || return 1
+  f13_f54_trace_event master_wrapper_result "${repo}" "${result}" || return 1
+  f13_f54_collection_file="${TMP_DIR}/f54-completed-collection.json"
+  python3 "${f13_f54_observer}" collection-seal "${repo}" "${f13_f54_trace_file}" "${output}" >"${f13_f54_collection_file}" || return 1
+  f13_f54_collection_sha="$(python3 -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "${f13_f54_collection_file}")"
+}
+
 f13_f54_policy_context() {
   local output="$1" name
   local -a values=()
@@ -3338,6 +3369,21 @@ f13_f54_consume_M_before_mutation() {
   # Conservation precedes mutation. The original full policy router stays at
   # its later phase; a raw Boolean is neither rewritten nor an admission grant.
   f13_f54_trace_event complete_ledger_conserved "${repo}" "${path}" "${receipt}"
+}
+
+f13_f54_exact_supersession() {
+  local repo="$1" path="$2" output="$3" incoming="$4" composition receipt result
+  [[ -n "${f13_f54_M_operation:-}" && "${f13_f54_operation:-}" == "${f13_f54_M_operation}" &&
+    -n "${f13_f54_capability_file:-}" && -n "${f13_f54_M_ledger_sha:-}" ]] || return 1
+  result="$(git -C "${repo}" ls-tree f54bcadab4aa19969281d7d35d76ebad91553d4d -- ":(literal)${path}")" || return 1
+  composition="$(python3 "${f13_f54_observer}" cap-composition "${repo}" "${f13_f54_capability_file}" \
+    f54bcadab4aa19969281d7d35d76ebad91553d4d 4d943fac27fd247d136d84ae145440e54485d3ab \
+    0a0024900b5bb3ba2f6fee391615f0f4fa0864e3 f15d718b2d20837ae5503dc049134b66592b3675 "${path}" "${result}")" || return 1
+  f13_f54_trace_event composition_capability "${repo}" "${composition}" || return 1
+  receipt="${TMP_DIR}/f54-exact-supersession.json"
+  python3 "${f13_f54_observer}" M-supersession "${repo}" "${f13_f54_capability_file}" \
+    "${f13_f54_M_ledger}" "${f13_f54_M_ledger_sha}" "${f13_f54_trace_file}" "${path}" "${output}" "${incoming}" >"${receipt}" || return 1
+  f13_f54_trace_event exact_unit_supersession "${repo}" "${path}" "${receipt}"
 }
 
 f13_f54_prepare_M_ledger() {
@@ -4075,6 +4121,7 @@ f13_collect_develop_contributions() {
         fi
       fi
       native_supersession_status=1
+      local exact_unit_supersession=false
       if [[ -n "${owners[${path}]+present}" ]] && f13_path_is_guarded "${path}"; then
         # A release PR may directly correct a guarded path imported by an
         # earlier merge, or re-import its exact descendant source in a later
@@ -4171,7 +4218,15 @@ f13_collect_develop_contributions() {
             space_audit_allowed=true
           fi
         fi
-        if [[ "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && "${space_audit_allowed}" != true && \
+        if [[ "${allow_direct_followup}" == true && "${is_direct}" != true && "${incremental_merge}" != true &&
+          "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && "${space_audit_allowed}" != true &&
+          -n "${f13_f54_capability_file:-}" ]]; then
+          if f13_f54_exact_supersession "${repo}" "${path}" "${output}" \
+            "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")"; then
+            exact_unit_supersession=true
+          fi
+        fi
+        if [[ "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && "${space_audit_allowed}" != true && "${exact_unit_supersession}" != true && \
           ( "${allow_direct_followup}" != true || \
           ( "${is_direct}" != true && "${incremental_merge}" != true ) ) ]]; then
           f13_emit_guarded_failure_diagnostic duplicate_guarded_owner "${path}" \

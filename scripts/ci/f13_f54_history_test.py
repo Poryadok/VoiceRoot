@@ -9,6 +9,7 @@ import shlex
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from f13_guarded_merge_test import definitions, git
 
@@ -26,6 +27,100 @@ def module():
 
 
 class ProducerTrace(unittest.TestCase):
+    def test_private_master_entry_binds_actual_B_S_T_and_original_wrapper_copy(self):
+        from f13_native_p3_source_test import NativeSourceTest, native
+        fixture=NativeSourceTest();fixture.setUp();self.addCleanup(fixture.doCleanups)
+        # Private immutable native record and its ordinary qualifier; these
+        # in-memory/disk fixture pins never authorize the real repository.
+        source=Path(native.__file__).read_text()
+        for key,value in fixture.pins.items():
+            source=re.sub(r'(?m)^'+key+r' = .*$',key+' = '+repr(value),source)
+        fixture.write(native.VERIFIER_PATH,source)
+        fixture.commit('private exact native verifier pins');head=fixture.git('rev-parse','HEAD')
+        target=fixture.git('commit-tree',head+'^{tree}','-p',fixture.base,'-p',head,'-m','private master two-parent carrier')
+        fixture.git('checkout','-q',target)
+        spec=importlib.util.spec_from_file_location('private_master_native',fixture.repo/native.VERIFIER_PATH)
+        checker=importlib.util.module_from_spec(spec);spec.loader.exec_module(checker)
+        binding=checker.qualify(fixture.repo,fixture.base,head,target,'pull_request','refs/pull/875/merge',target,fixture.base,'master')
+        m=module();m.ROOT=fixture.repo
+        capability=dict(collector_scope=dict(base=fixture.base,target=fixture.head))
+        context=dict(GITHUB_EVENT_NAME='pull_request',GITHUB_REF='refs/pull/875/merge',GITHUB_SHA=target,
+            VOICE_CI_PUSH_BEFORE_SHA=fixture.base,GITHUB_BASE_REF='master')
+        entry=m.master_context(fixture.repo,capability,m.canonical(binding),context)
+        self.assertEqual((entry['base'],entry['source'],entry['target']),(fixture.base,head,target))
+        self.assertFalse(entry['admission'])
+        for change in ('target','before','base'):
+            wrong=dict(context);cap=json.loads(json.dumps(capability))
+            if change=='target':wrong['GITHUB_SHA']=head
+            elif change=='before':wrong.update(GITHUB_EVENT_NAME='push',GITHUB_REF='refs/heads/master',VOICE_CI_PUSH_BEFORE_SHA=head)
+            else:cap['collector_scope']['base']=head
+            with self.assertRaises((m.Rejected,native.Rejected,ValueError)):
+                m.master_context(fixture.repo,cap,m.canonical(binding),wrong)
+        source_map=self.folder/'source-map';output=self.folder/'wrapper-map';record=self.folder/'master-entry.json'
+        source_map.write_bytes(b'actual full original rows\n');output.write_bytes(source_map.read_bytes());record.write_bytes(m.canonical(entry))
+        result=m.master_wrapper_result(record,source_map,output)
+        self.assertEqual(result['source_map'],result['output'])
+        output.write_bytes(b'selected clean map\n')
+        with self.assertRaises(m.Rejected):m.master_wrapper_result(record,source_map,output)
+
+    def test_private_native_early_branch_consumes_full_transport_and_rejects_stale_map_context(self):
+        from f13_native_p3_source_test import NativeSourceTest, native
+        fixture=NativeSourceTest();fixture.setUp();self.addCleanup(fixture.doCleanups)
+        for name in ('f13_f54_history.py','voice-r22-runtime-scope.sh'):
+            fixture.write('scripts/ci/'+name,(ROOT/'scripts/ci'/name).read_text())
+        fixture.commit('private observer inputs');fixture.carrier=fixture.git('rev-parse','HEAD')
+        binding=fixture.qualify()
+        self.repo=fixture.repo;self.base=fixture.base
+        result,out=self.collect(target=fixture.carrier)
+        self.assertEqual(result.returncode,0,result.stderr)
+        m=module();trace=out/'trace.jsonl';trace_raw=trace.read_bytes()
+        verified=m.validate_trace(self.repo,trace,m.sha(trace_raw))
+        actual_map=out/'f13-contributions';actual_map.write_bytes((out/'map').read_bytes())
+        paths=out/'native-paths';paths.write_text('\n'.join(binding['paths'])+'\n')
+        native_binding=out/'native-binding.json';native_binding.write_bytes(m.canonical(binding))
+        # Exact original producer rows, not invented eight-field Git-node rows.
+        history=out/'f13-native-p3-history.tsv'
+        history.write_text(''.join(x+'\n' for x in actual_map.read_text().splitlines() if x.split('\t')[0] in binding['paths']))
+        with patch.multiple(native,**fixture.pins):
+            proof=native.audit_map(self.repo,binding,actual_map,history)
+        (out/'f13-native-p3-approval.json').write_bytes(m.canonical(proof))
+        context_values=dict(ROOT=str(self.repo),TMP_DIR=str(out),base_sha=self.base,
+            accepted_game_checkpoint='',game_checkpoint_enabled='false',game_checkpoint_aggregate_map='',
+            native_p3_active='true',native_p3_paths=str(paths),native_p3_binding=str(native_binding),
+            native_p3_paths_hash=fixture.git('hash-object',str(paths)),native_p3_binding_hash=fixture.git('hash-object',str(native_binding)),
+            r23_allowlist_enabled='false',r22_runtime_delta='true')
+        name='src/backend/voice/main.go';(out/'changed-files').write_text(name+'\n')
+        context=m.policy_context(self.repo,actual_map,sum(([k,v] for k,v in context_values.items()),[]))
+        context_file=out/'context.json';context_file.write_bytes(m.canonical(context))
+        root=verified['ledger']['F1']
+        # Isolate the transport binding with genuine generic producer evidence.
+        # This is NOT an M collection: the real constructor must reject it.
+        collection=dict(type='F54_SEALED_SUCCESSFUL_COLLECTION',admission=False,
+            collection_trace=str(trace),collection_prefix=dict(bytes=len(trace_raw),sha256=m.sha(trace_raw)),
+            source_context=m.router_source_context(self.repo),map_path=str(actual_map),map_binding=root['map_binding'],outer_rows=root['rows'],
+            required_qualification=root['paths'])
+        collection_file=out/'private-transport.json';collection_file.write_bytes(m.canonical(collection))
+        with self.assertRaises(m.Rejected):m.seal_router(self.repo,collection_file,m.sha(collection_file.read_bytes()),actual_map,context_file)
+        seal=dict(type='F54_ORIGINAL_ROUTER_SEAL',collection_path=str(collection_file),collection_sha256=m.sha(collection_file.read_bytes()),
+            complete_ledger_sha256=m.sha(m.canonical(collection)),context=context,map_path=str(actual_map),admission=False)
+        seal_file=out/'private-seal.json';seal_file.write_bytes(m.canonical(seal));seal_sha=m.sha(seal_file.read_bytes())
+        bound=m.router_binding(self.repo,seal_file,seal_sha,actual_map,context_file,name)
+        self.assertTrue(bound['aggregate']);self.assertTrue(bound['obligations']['evidence'])
+        actual=m.execute_original_router(context,bound)
+        self.assertEqual((actual['gate'],actual['status']),('native_p3_path_allowed_for_provenance',0))
+        # The unchanged original native predicate alone still accepts its row;
+        # the top seal must catch missing evidence before that early continue.
+        original_collection=collection_file.read_bytes();collection['required_qualification'][name]['evidence']=[]
+        collection_file.write_bytes(m.canonical(collection))
+        with self.assertRaises(m.Rejected):m.router_binding(self.repo,seal_file,seal_sha,actual_map,context_file,name)
+        collection_file.write_bytes(original_collection)
+        original_map=actual_map.read_bytes();actual_map.write_bytes(original_map+b'forged\tfalse\towner\tparent\tbase\thead\tcontent\tbest\n')
+        with self.assertRaises(m.Rejected):m.router_binding(self.repo,seal_file,seal_sha,actual_map,context_file,name)
+        actual_map.write_bytes(original_map)
+        changed_context=json.loads(context_file.read_bytes());changed_context['values']['r23_allowlist_enabled']='true'
+        context_file.write_bytes(m.canonical(changed_context))
+        with self.assertRaises(m.Rejected):m.router_binding(self.repo,seal_file,seal_sha,actual_map,context_file,name)
+
     def test_original_full_router_keeps_auth_exception_and_rejects_forbidden_revert_control(self):
         self.write('scripts/ci/t31-r22-scope-allowlist.txt',(ROOT/'scripts/ci/t31-r22-scope-allowlist.txt').read_text())
         self.base=self.commit('private original policy context')
@@ -74,6 +169,22 @@ class ProducerTrace(unittest.TestCase):
                 ((prior+'\n').encode(),name,incoming.replace(m.P2,m.M),digest)):
             with self.assertRaises(m.Rejected):m.consume_M_path(ledger,expected_hash,trace,path,map_bytes,after)
         self.assertEqual(receipt['obligations'],evidence)
+        # A qualified replacement must consume the same pending transition;
+        # a true sidecar bit or receipt from another operation is insufficient.
+        exact=dict(operation=op,path=name,ledger_sha256=m.sha(m.canonical(ready)),
+            incoming=m.raw_binding(incoming),prior_rows=[m.raw_binding(prior)],
+            map_before=before['payload']['map_before'],aggregate=True)
+        original_trace=trace.read_bytes()
+        event=dict(kind='exact_unit_supersession',operation=op,payload=dict(path=name,receipt=exact))
+        trace.write_bytes(original_trace+json.dumps(event).encode()+b'\n')
+        replacement=m.consume_M_path(ledger,digest,trace,name,(prior+'\n').encode(),incoming,'replace')
+        self.assertEqual(replacement['exact_unit_supersession'],exact)
+        self.assertTrue(replacement['aggregate']);self.assertEqual(replacement['after_gate_row']['raw'],incoming)
+        for field,value in (('operation','F999/'+m.M+'/2'),('path',name+'.future'),
+                ('ledger_sha256','0'*64),('aggregate',False),('prior_rows',[])):
+            altered=dict(exact);altered[field]=value
+            event['payload']['receipt']=altered;trace.write_bytes(original_trace+json.dumps(event).encode()+b'\n')
+            with self.assertRaises(m.Rejected):m.consume_M_path(ledger,digest,trace,name,(prior+'\n').encode(),incoming,'replace')
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
