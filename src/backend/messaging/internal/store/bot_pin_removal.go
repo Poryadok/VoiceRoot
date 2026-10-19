@@ -143,7 +143,13 @@ func bindBotPinRemovalRequest(request *messagingv1.ApplyBotChatPinRemovalRequest
 	// Requests without lifetime identity are eligible only for exact historical
 	// replay; they cannot create a new cleanup or bridge into another operation.
 	if len(request.Attachments) > 0 {
-		b.attachments, err = bindBotPinAttachments(request)
+		// Later source/coverage decisions must read the exact frozen body, not
+		// pointers into the caller's protobuf after SQL or provider waits.
+		owned := new(messagingv1.ApplyBotChatPinRemovalRequest)
+		if proto.Unmarshal(b.body, owned) != nil {
+			return nil, ErrBotPinRemovalBinding
+		}
+		b.attachments, err = bindBotPinAttachments(owned)
 		if err != nil {
 			return nil, err
 		}

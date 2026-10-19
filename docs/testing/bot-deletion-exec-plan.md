@@ -212,3 +212,12 @@ whole affected Bot-pin group in 43.845s. Current Chat source facts in these test
 are controlled PG rows read through production SQL, not actual protected Chat
 transport. Private Messaging ingress, production datasource wiring, producer
 delivery/recovery, purge proof coverage and full BE-170 remain open.
+
+Independent review of batch slice404 found that attachment descriptors retained
+caller-owned protobuf pointers despite the frozen full body. A deterministic
+actual-PG source-loader barrier reproduced repair of the authenticated stale
+incarnation and a nil-response panic after the wait (RED 7.785s). Binding now
+decodes its own canonical body before building attachment descriptors. Both
+mutations leave the original stale source rejected with zero effects and no
+panic (PG/race GREEN 9.316s). This correction does not qualify private ingress or
+the unfinished producer/worker/Purge work.
