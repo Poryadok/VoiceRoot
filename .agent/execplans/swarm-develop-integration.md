@@ -592,3 +592,23 @@ separate record binds all8 exact historical tuples, preserves runtime flags and
 taint, and never grants runtime PASS or a current/future path exemption. Actual
 full F13 and final exact-head required CI remain OPEN. STAGING_DEPLOY_ENABLED
 was read as false; recheck final workflow and variable before eventual merge.
+
+### Existing PR875 Role composition correction
+
+Independent144 SWARMc69 found the incoming protected creation contract was
+blocked by an unconditional nickname-only listener wrapper, despite exact
+creation/nickname dispatch already being enforced by StrictUnaryInterceptor.
+This is a current merge-blocking composition repair, not a new permission or
+endpoint. Canonical Role service BE131 requires signed service:space creation
+decisions; protected nickname checks and ordinary-listener denial remain.
+
+Acceptance: an actual mTLS listener with real HTTPS JWKS/RSA/Redis must admit
+the exact creation request once, reject replay/otherpermission/chat-or-voice
+scope/wrongissuer/body/rawactor/duplicatecredentials/noncanonical IDs before
+the handler, and preserve the existing nickname listener suite.121 owns both
+regression and minimum fix;144 rechecks the same finding independently.
+The new real-listener regression failed on the original wrapper with
+PermissionDenied/global-nickname and zero handler calls. Removing the redundant
+post-Strict nickname wrapper made all10 cases pass; broader affected packages,
+vet/lint and final source review remain required before qualification/merge.
+No generic identical-blob duplicate-owner grant or runtime taint reset is made.

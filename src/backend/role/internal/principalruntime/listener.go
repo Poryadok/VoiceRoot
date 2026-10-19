@@ -11,7 +11,7 @@ import (
 )
 
 // ServerOptions secures the dedicated mTLS listener and exposes only trusted
-// ownership, retirement, and GIS/Voice game-session grant RPCs.
+// ownership, retirement, protected Space decisions, and GIS/Voice grant RPCs.
 func (r *Runtime) ServerOptions() []grpc.ServerOption {
 	return []grpc.ServerOption{
 		grpc.Creds(r.credentials),
@@ -25,18 +25,7 @@ func (r *Runtime) ServerOptions() []grpc.ServerOption {
 			if !isTrustedServiceMethod(info.FullMethod) {
 				return nil, status.Error(codes.PermissionDenied, "method unavailable on trusted-service listener")
 			}
-			return principalgrpc.StrictUnaryInterceptor(r)(ctx, req, info, func(verified context.Context, request any) (any, error) {
-				if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
-					check, ok := request.(*rolev1.CheckPermissionRequest)
-					if !ok {
-						return nil, status.Error(codes.InvalidArgument, "invalid nickname decision")
-					}
-					if err := principalgrpc.RequireNicknamePermission(verified, check); err != nil {
-						return nil, err
-					}
-				}
-				return handler(verified, request)
-			})
+			return principalgrpc.StrictUnaryInterceptor(r)(ctx, req, info, handler)
 		}, func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 			if info.FullMethod == rolev1.RoleService_GetOwnershipTransferCapabilities_FullMethodName && r.ownershipV2CapabilitiesActive.Load() {
 				ctx = principalgrpc.WithOwnershipV2CapabilitiesActive(ctx)
