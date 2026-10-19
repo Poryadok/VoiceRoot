@@ -20,11 +20,12 @@ func TestOrdinaryLossPreservesLiveCommunityMemberAndCount(t *testing.T) {
 		t.Run(action, func(t *testing.T) {
 			ctx, st := authorityRevisionSpaceThrough(t, 34)
 			app, environment, ownerAccount, owner := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-			space, _, err := st.CreateCommunityBootstrapSpace(ctx, CommunityBootstrapSpaceInput{
-				OperationID: uuid.New(), ApplicationID: app, EnvironmentID: environment,
-				OwnerAccountID: ownerAccount, OwnerProfileID: owner,
-				CorporationKey: "independent-loss", TemplateID: "guild-default",
-			})
+			// Explicit official34 legacy fixture: native GIS publication is tested
+			// separately against the current full migrator, never bypassed here.
+			space, err := st.CreateSpace(ctx, owner, "Official34 community", "", "public")
+			require.NoError(t, err)
+			_, err = st.Pool.Exec(ctx, `INSERT INTO community_owner_authority(space_id,application_id,environment_id,corporation_key,owner_account_id,owner_profile_id,owner_generation,status)
+			 VALUES($1,$2,$3,'independent-loss',$4,$5,1,'active')`, space.ID, app, environment, ownerAccount, owner)
 			require.NoError(t, err)
 			// Roster snapshots require canonical, unique profile ordering.
 			member := uuid.MustParse("11111111-1111-4111-8111-111111111111")
