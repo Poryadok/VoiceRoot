@@ -141,6 +141,7 @@ func (s *RoleStore) transitionOwnershipV2(ctx context.Context, action string, in
 				if changed.RowsAffected() != 1 {
 					return ErrOwnershipTransferState
 				}
+				if err:=scoped.recordNativeOwnerTransfer(ctx,in,roleID);err!=nil{return err}
 				_, err = db.Exec(ctx, `UPDATE ownership_transfer_v2 SET state='finalized',finalize_request_hash=$2,updated_at=now() WHERE operation_id=$1`, in.OperationID, in.RequestHash)
 				if err != nil {
 					return err

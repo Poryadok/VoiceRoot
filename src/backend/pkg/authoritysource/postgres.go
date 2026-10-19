@@ -89,28 +89,62 @@ func CheckCatalog(ctx context.Context, tx pgx.Tx, catalog Catalog) error {
   FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1)`, tables, len(tables)).Scan(&valid); err != nil || !valid {
 		return errors.New("owner source relation unavailable")
 	}
-	for _, trigger := range catalog.Triggers {
-		arguments := []byte{}
-		if trigger.Argument != "" {
-			arguments = []byte(trigger.Argument + "\x00")
+	// Validate complete fixed sets in two roundtrips. Per-item roundtrips made
+	// the native two-stage protocol exhaust its existing5s budget under load;
+	// all table/type/namespace/argument/body predicates remain mandatory.
+	if len(catalog.Triggers) > 0 {
+		n := len(catalog.Triggers)
+		tables, names, functions := make([]string, n), make([]string, n), make([]string, n)
+		types, args := make([]int16, n), make([][]byte, n)
+		for i, t := range catalog.Triggers {
+			tables[i], names[i], functions[i], types[i], args[i] = t.Table, t.Name, t.Function, t.Type, []byte{}
+			if t.Argument != "" {
+				args[i] = []byte(t.Argument + "\x00")
+			}
 		}
-		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid
-   JOIN pg_namespace n ON n.oid=p.pronamespace WHERE t.tgrelid=to_regclass($1) AND t.tgname=$2 AND NOT t.tgisinternal
-   AND t.tgenabled='O' AND t.tgtype=$3 AND n.nspname='public' AND p.proname=$4 AND t.tgargs=$5)`,
-			"public."+trigger.Table, trigger.Name, trigger.Type, trigger.Function, arguments).Scan(&valid); err != nil || !valid {
-			return fmt.Errorf("owner source trigger unavailable: %s", trigger.Name)
+		err = tx.QueryRow(ctx, `SELECT count(*)=$6 FROM unnest($1::text[],$2::text[],$3::text[],$4::smallint[],$5::bytea[]) e(table_name,trigger_name,function_name,trigger_type,arguments)
+ JOIN pg_trigger t ON t.tgrelid=to_regclass(format('public.%I',e.table_name)) AND t.tgname=e.trigger_name
+ JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace n ON n.oid=p.pronamespace
+ WHERE NOT t.tgisinternal AND t.tgenabled='O' AND t.tgtype=e.trigger_type AND n.nspname='public' AND p.proname=e.function_name AND t.tgargs=e.arguments`, tables, names, functions, types, args, n).Scan(&valid)
+		if err != nil || !valid {
+			return errors.New("owner source trigger unavailable")
 		}
 	}
-	for _, function := range catalog.Functions {
-		var body string
-		if err = tx.QueryRow(ctx, `SELECT p.prosrc FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-   JOIN pg_language l ON l.oid=p.prolang WHERE n.nspname='public' AND p.proname=$1 AND p.pronargs=$2
-   AND NOT p.prosecdef AND p.provolatile='v' AND l.lanname='plpgsql' AND p.prorettype=to_regtype($3)`, function.Name, function.Arguments, function.ReturnType).Scan(&body); err != nil {
+	if len(catalog.Functions) > 0 {
+		n := len(catalog.Functions)
+		names, returns, hashes := make([]string, n), make([]string, n), make([]string, n)
+		arguments := make([]int16, n)
+		for i, f := range catalog.Functions {
+			names[i], returns[i], hashes[i], arguments[i] = f.Name, f.ReturnType, f.BodySHA256, f.Arguments
+		}
+		rows, err := tx.Query(ctx, `SELECT e.body_hash,p.prosrc FROM unnest($1::text[],$2::smallint[],$3::text[],$4::text[]) e(name,arguments,return_type,body_hash)
+ JOIN pg_proc p ON p.proname=e.name AND p.pronargs=e.arguments AND p.prorettype=to_regtype(e.return_type)
+ JOIN pg_namespace n ON n.oid=p.pronamespace JOIN pg_language l ON l.oid=p.prolang
+ WHERE n.nspname='public' AND NOT p.prosecdef AND p.provolatile='v' AND l.lanname='plpgsql'`, names, arguments, returns, hashes)
+		if err != nil {
 			return errors.New("owner source function unavailable")
 		}
-		hash := sha256.Sum256([]byte(body))
-		if hex.EncodeToString(hash[:]) != function.BodySHA256 {
-			return errors.New("owner source function changed")
+		defer rows.Close()
+		count := 0
+		for rows.Next() {
+			var expected, body string
+			if err := rows.Scan(&expected, &body); err != nil {
+				return err
+			}
+			hash := sha256.Sum256([]byte(body))
+			if hex.EncodeToString(hash[:]) != expected {
+				return errors.New("owner source function changed")
+			}
+			count++
+			if count > n {
+				return errors.New("owner source function ambiguous")
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		if count != n {
+			return fmt.Errorf("owner source function unavailable: expected %d, got %d", n, count)
 		}
 	}
 	return nil

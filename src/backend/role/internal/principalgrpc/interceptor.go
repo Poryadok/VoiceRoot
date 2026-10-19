@@ -60,9 +60,23 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 				return nil, err
 			}
 		}
+		if IsDelegatedRoleMethod(info.FullMethod) {
+			if err := RequirePublicRole(principal.WithVerified(ctx, verified), message, info.FullMethod); err != nil {
+				return nil, err
+			}
+		}
+		if info.FullMethod == rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName || info.FullMethod == rolev1.RoleService_RemoveMemberRoles_FullMethodName {
+			if err := RequireMemberAdmission(principal.WithVerified(ctx, verified), message, info.FullMethod); err != nil {
+				return nil, err
+			}
+		}
 		if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
 			var decisionErr error
-			if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.MemberManageNicknames {
+			if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceApproveJoinRequests {
+				decisionErr = RequireJoinApprovalPermission(principal.WithVerified(ctx, verified), req)
+			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceManageSettings {
+				decisionErr = RequireSettingsPermission(principal.WithVerified(ctx, verified), req)
+			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.MemberManageNicknames {
 				decisionErr = RequireNicknamePermission(principal.WithVerified(ctx, verified), req)
 			} else {
 				decisionErr = validateCreationDecision(verified, message, transport.RequestID, requestHash)
@@ -85,6 +99,10 @@ func Unavailable(err error) error {
 	}
 	return unavailableError{err}
 }
+func IsUnavailable(err error) bool {
+	var dependency unavailableError
+	return errors.As(err, &dependency)
+}
 func verificationStatus(err error) error {
 	var unavailable unavailableError
 	if errors.As(err, &unavailable) {
@@ -97,13 +115,21 @@ func verificationStatus(err error) error {
 // listener without consuming protected verifier dependencies.
 func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if IsDelegatedRoleMethod(info.FullMethod) {
+			return nil, status.Error(codes.Unauthenticated, "protected verified Role actor listener required")
+		}
 
 		if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
+			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && (req.GetPermissionName() == permissions.SpaceApproveJoinRequests || req.GetPermissionName() == permissions.SpaceManageSettings) {
+				return nil, status.Error(codes.PermissionDenied, "protected approval decision listener required")
+			}
 			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.MemberManageNicknames {
 				return nil, status.Error(codes.PermissionDenied, "protected nickname decision listener required")
 			}
 		}
 		switch info.FullMethod {
+		case rolev1.RoleService_DeleteRolesCreatedByProfile_FullMethodName:
+			return nil, status.Error(codes.Unavailable, "protected Bot cleanup adapter required")
 		case rolev1.RoleService_BootstrapSpaceRoles_FullMethodName:
 			return nil, status.Error(codes.Unavailable, "protected bootstrap listener required")
 		case rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName,

@@ -61,7 +61,7 @@ func TestRoleSource20ActualUpgradePreservesProjection(t *testing.T) {
 	beforeState, err := authoritysource.DecodeRoleState(before.CanonicalState)
 	require.NoError(t, err)
 	ddl := roleSourceDDL(t, ctx, st)
-	fixture.Run(true, "up")
+	fixture.Run(true, "goto", "20")
 	var version int64
 	var dirty bool
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT version,dirty FROM schema_migrations`).Scan(&version, &dirty))
@@ -137,7 +137,7 @@ func TestRoleSource20ServingSelectorAndGuards(t *testing.T) {
 	}
 	ctx := context.Background()
 	fixture := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/role_db"))
-	fixture.Run(true, "up")
+	fixture.Run(true, "goto", "20")
 	st := &RoleStore{Pool: fixture.Pool}
 	check := func() error { return st.CheckAuthoritySourceSchema(ctx) }
 	require.NoError(t, check())

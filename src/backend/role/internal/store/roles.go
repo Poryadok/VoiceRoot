@@ -127,6 +127,9 @@ func (s *RoleStore) unscopedBootstrapSpaceRolesWithCreatedSystemRoles(ctx contex
 				return nil, errors.New("bootstrap cannot change existing Owner")
 			}
 			if ownerCount == 1 {
+				if err := s.recordNativeOwnerBootstrap(ctx, spaceID, ownerProfileID, r.ID); err != nil {
+					return nil, err
+				}
 				return created, nil
 			}
 			if _, err := tx.Exec(ctx, `
@@ -134,6 +137,9 @@ INSERT INTO member_roles (space_id, profile_id, role_id, assigned_by)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (space_id, profile_id, role_id) DO NOTHING
 `, spaceID, ownerProfileID, r.ID, ownerProfileID); err != nil {
+				return nil, err
+			}
+			if err := s.recordNativeOwnerBootstrap(ctx, spaceID, ownerProfileID, r.ID); err != nil {
 				return nil, err
 			}
 			return created, nil
@@ -244,6 +250,17 @@ DELETE FROM member_roles WHERE space_id = $1 AND profile_id = $2 AND role_id = $
 
 // GetMemberRoles returns roles assigned to a member.
 func (s *RoleStore) unscopedGetMemberRoles(ctx context.Context, spaceID, profileID uuid.UUID) ([]RoleRow, error) {
+	native, err := s.NativeMembershipRequired(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if native {
+		return s.qualifiedMemberRoles(ctx, spaceID, profileID, nil)
+	}
+	return s.rawMemberRoleInventory(ctx, spaceID, profileID)
+}
+
+func (s *RoleStore) rawMemberRoleInventory(ctx context.Context, spaceID, profileID uuid.UUID) ([]RoleRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("role store: pool not configured")
 	}
@@ -274,10 +291,21 @@ ORDER BY r.position DESC
 
 // GetEffectiveMask computes effective permissions per role-service.md algorithm.
 func (s *RoleStore) unscopedGetEffectiveMask(ctx context.Context, spaceID, profileID uuid.UUID, chatID, voiceRoomID *uuid.UUID) (uint64, error) {
+	native, err := s.NativeMembershipRequired(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if native {
+		return s.GetQualifiedEffectiveMask(ctx, spaceID, profileID, chatID, voiceRoomID)
+	}
 	roles, err := s.GetMemberRoles(ctx, spaceID, profileID)
 	if err != nil {
 		return 0, err
 	}
+	return s.effectiveMaskForRoles(ctx, spaceID, roles, chatID, voiceRoomID, true)
+}
+
+func (s *RoleStore) effectiveMaskForRoles(ctx context.Context, spaceID uuid.UUID, roles []RoleRow, chatID, voiceRoomID *uuid.UUID, includeLegacyDefault bool) (uint64, error) {
 	if len(roles) == 0 {
 		return 0, nil
 	}
@@ -286,15 +314,17 @@ func (s *RoleStore) unscopedGetEffectiveMask(ctx context.Context, spaceID, profi
 		return 0, err
 	}
 	for _, r := range roles {
-		if r.Name == permissions.RoleOwner {
+		if r.Name == permissions.RoleOwner && (includeLegacyDefault || r.Managed) {
 			return all, nil
 		}
 	}
 	var mask uint64
-	if defaultRole, err := s.GetDefaultJoinRole(ctx, spaceID); err != nil {
-		return 0, err
-	} else if defaultRole != nil {
-		mask = defaultRole.PermissionsMask
+	if includeLegacyDefault {
+		if defaultRole, err := s.GetDefaultJoinRole(ctx, spaceID); err != nil {
+			return 0, err
+		} else if defaultRole != nil {
+			mask = defaultRole.PermissionsMask
+		}
 	}
 	for _, r := range roles {
 		mask |= r.PermissionsMask
@@ -377,7 +407,7 @@ func (s *RoleStore) unscopedCanManageRole(ctx context.Context, spaceID, actorPro
 	}
 	var actorTop int32 = -1
 	for _, ar := range actorRoles {
-		if ar.Name == permissions.RoleOwner {
+		if ar.Managed && ar.Name == permissions.RoleOwner {
 			return true, nil
 		}
 		if ar.Position > actorTop {
@@ -406,7 +436,7 @@ func (s *RoleStore) unscopedCanCreateRole(ctx context.Context, spaceID, actorPro
 	}
 	var actorTop int32 = -1
 	for _, ar := range actorRoles {
-		if ar.Name == permissions.RoleOwner {
+		if ar.Managed && ar.Name == permissions.RoleOwner {
 			return true, nil
 		}
 		if ar.Position > actorTop {

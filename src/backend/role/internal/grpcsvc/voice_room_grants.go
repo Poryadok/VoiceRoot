@@ -7,7 +7,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	rolev1 "voice.app/voice/role/v1"
+	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/pkg/principal"
+	"voice/backend/role/internal/memberauthority"
 	"voice/backend/role/internal/store"
 )
 
@@ -55,6 +57,27 @@ func (s *RoleGRPC) ResolveVoiceRoomGrants(ctx context.Context, request *rolev1.R
 	}
 	if grantStore == nil {
 		return nil, status.Error(codes.Unavailable, "Voice room grant persistence unavailable")
+	}
+	if s.Store != nil && s.voiceRoomGrantStore == nil {
+		native, err := s.Store.NativeMembershipRequired(ctx)
+		if err != nil {
+			return nil, memberAdmissionError(ctx, err)
+		}
+		if native {
+			if s.MemberAuthority == nil {
+				return nil, status.Error(codes.Unavailable, "native membership authority unavailable")
+			}
+			// Complete the owner call before ResolveVoiceRoomGrants takes the
+			// local Role fence; the immutable observation retains its deadline.
+			observation, err := s.MemberAuthority.ObserveMember(ctx, &spacev1.GetMemberAdmissionAuthorityRequest{ProtocolVersion: 1, SpaceId: request.SpaceId, ProfileId: request.ProfileId})
+			if err != nil {
+				return nil, memberAdmissionError(ctx, err)
+			}
+			ctx, err = memberauthority.WithObservations(ctx, observation)
+			if err != nil {
+				return nil, memberAdmissionError(ctx, err)
+			}
+		}
 	}
 	decision, err := grantStore.ResolveVoiceRoomGrants(ctx, spaceID, voiceRoomID, profileID)
 	if err != nil {

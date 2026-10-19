@@ -38,6 +38,8 @@ type Runtime struct {
 	closeOnce                     sync.Once
 	closeErr                      error
 	ownershipV2CapabilitiesActive atomic.Bool
+	delegatedUserEnabled          bool
+	sessionEpochChecker           principal.SessionEpochChecker
 	authoritySourceEnabled        bool
 	authoritySourceServer         *authoritysource.Server
 	authoritySourceInterceptor    grpc.UnaryServerInterceptor
@@ -50,6 +52,13 @@ type OwnershipV2Activation struct {
 }
 
 func New(ctx context.Context, config Config) (*Runtime, error) {
+	return NewWithSessionEpochChecker(ctx, config, nil)
+}
+
+func NewWithSessionEpochChecker(ctx context.Context, config Config, checker principal.SessionEpochChecker) (*Runtime, error) {
+	if config.DelegatedUserEnabled && checker == nil {
+		return nil, errors.New("delegated Role requires current Auth session checker")
+	}
 	if err := config.validate(); err != nil {
 		return nil, err
 	}
@@ -136,6 +145,8 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 		MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs,
 	})}
 	runtime.authoritySourceEnabled = config.AuthoritySourceEnabled
+	runtime.delegatedUserEnabled = config.DelegatedUserEnabled
+	runtime.sessionEpochChecker = checker
 	startup, cancel := context.WithTimeout(ctx, dependencyTimeout)
 	defer cancel()
 	if err := replay.Ping(startup).Err(); err != nil {
@@ -191,6 +202,9 @@ func isOwnershipMethod(method string) bool {
 }
 
 func isTrustedServiceMethod(method string) bool {
+	if method == rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName || method == rolev1.RoleService_RemoveMemberRoles_FullMethodName {
+		return true
+	}
 	if method == rolev1.RoleService_CheckPermission_FullMethodName || method == rolev1.RoleService_BootstrapSpaceRoles_FullMethodName {
 		return true
 	}
@@ -224,8 +238,13 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash str
 	if r == nil || r.resolver == nil || r.replay == nil {
 		return principal.Principal{}, principalgrpc.Unavailable(errors.New("principal runtime unavailable"))
 	}
+	if principalgrpc.IsDelegatedRoleMethod(method) {
+		return r.verifyPublicRole(ctx, token, method, requestID, hash)
+	}
 	issuer := ""
 	switch method {
+	case rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName, rolev1.RoleService_RemoveMemberRoles_FullMethodName:
+		issuer = "space"
 	case rolev1.RoleService_CheckPermission_FullMethodName, rolev1.RoleService_BootstrapSpaceRoles_FullMethodName:
 		issuer = "space"
 	case rolev1.RoleService_ApplyGameSessionGrants_FullMethodName, rolev1.RoleService_RevokeGameSessionGrants_FullMethodName:
