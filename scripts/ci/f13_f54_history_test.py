@@ -178,6 +178,25 @@ class ProducerTrace(unittest.TestCase):
                 path,digest=self.forged_trace(m,out,events,change+'.jsonl')
                 with self.assertRaises(m.Rejected):m.validate_trace(self.repo,path,digest)
 
+    def test_sync_boundary_retains_actual_attempt_bases_without_aliasing(self):
+        common=self.base
+        self.write('lane.md','lane\n');lane=self.commit('independent lane')
+        git(self.repo,'checkout','-qb','master-side',common)
+        self.write('master.md','master\n');self.base=self.commit('later actual frame base')
+        git(self.repo,'checkout','-q',lane)
+        git(self.repo,'merge','--no-ff','-qm','actual base synchronization',self.base)
+        p,out=self.collect();self.assertEqual(p.returncode,0,p.stderr)
+        m=module();events=[json.loads(v) for v in (out/'trace.jsonl').read_bytes().splitlines()]
+        attempt=next(e for e in events if e['kind']=='operation_attempt' and e['payload']['classification']=='sync')
+        begin=next(e for e in events if e['kind']=='operation_begin' and e['payload']['classification']=='sync')
+        self.assertEqual(attempt['payload']['candidates'],[common])
+        self.assertEqual(begin['payload']['candidates'],[self.base])
+        self.assertNotEqual(common,self.base)
+        path=out/'trace.jsonl';m.validate_trace(self.repo,path,hashlib.sha256(path.read_bytes()).hexdigest())
+        begin['payload']['boundary']=common
+        path,digest=self.forged_trace(m,out,events,'forged-sync-base.jsonl')
+        with self.assertRaisesRegex(m.Rejected,'actual_sync_source_boundary'):m.validate_trace(self.repo,path,digest)
+
     def bound_span_fixture(self, hidden_runtime=False):
         self.write('README','first lane\n');first_lane=self.commit('first lane')
         git(self.repo,'checkout','-qb','span',self.base)

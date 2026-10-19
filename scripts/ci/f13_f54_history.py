@@ -525,12 +525,17 @@ def validate_trace(repo, path, expected_sha, complete=False):
             require(v['ordered_parents']==parents and v['first_parent']==parents[0],'actual_ordered_parents')
             index=v['parent_index'];require(type(index) is int and 1<=index<=len(parents),'parent_index')
             require((len(parents)==1 and index==1 and v['source_head']==v['commit']) or (len(parents)>1 and index>=2 and v['source_head']==parents[index-1]),'actual_source_parent')
-            require(v['classification']==attempts[op]['classification'] and v['candidates']==attempts[op]['candidates'],'actual_attempt_classification_and_candidates')
+            require(v['classification']==attempts[op]['classification'],'actual_attempt_classification')
             if v['classification']=='direct':
+                require(v['candidates']==attempts[op]['candidates'],'actual_attempt_candidates')
                 require(v['boundary']==v['first_parent'],'actual_direct_source_boundary')
             elif v['classification']=='sync':
-                require(v['boundary']==v['source_head']==frames[frame]['base'],'actual_sync_source_boundary')
+                # The real sync collector contributes no base-side history.
+                # Its empty boundary is the frame base. The preceding attempt
+                # retains the independently checked, potentially different bases.
+                require(v['boundary']==v['source_head']==frames[frame]['base'] and v['candidates']==[frames[frame]['base']],'actual_sync_source_boundary')
             else:
+                require(v['candidates']==attempts[op]['candidates'],'actual_attempt_candidates')
                 # Multibase admission is a distinct, unfinished capability.
                 # A caller-selected scalar must never erase operation paths.
                 require(v['candidates']==[v['boundary']],'actual_single_best_source_boundary')
