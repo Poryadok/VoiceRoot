@@ -27,6 +27,36 @@ def module():
 
 
 class ProducerTrace(unittest.TestCase):
+    def test_large_range_receipts_use_exact_file_transport_not_argv(self):
+        # Transport only: the collector stub grants no range/source authority.
+        # The real caller used to expand this complete origin into one argv.
+        m=module();origin=self.folder/'large-origin.json';trace=self.folder/'transport.jsonl'
+        payload=dict(type='PRIVATE_TRANSPORT_ONLY',admission=False,private_transport_only=True,retained_maps={'raw-owner-evidence':'x'*262144})
+        origin.write_bytes(m.canonical(payload))
+        names={'f13_f54_trace_event','f13_f54_fixed3071_range_side'}
+        functions='\n'.join(match.group(0) for match in re.finditer(
+            r'(?ms)^([A-Za-z_][A-Za-z0-9_]*)\(\) \{\n.*?^\}\n',SHELL.read_text()) if match.group(1) in names)
+        program='set -eu\n'+functions+'\nf13_collect_develop_contributions() { return 0; }\n'
+        program+='f13_f54_observer='+shlex.quote(str(HELPER))+'\nTMP_DIR='+shlex.quote(str(self.folder))+'\n'
+        program+='f13_f54_fixed3071_range_side '+ ' '.join(shlex.quote(str(value)) for value in (self.repo,origin,trace,self.folder/'unused-map'))+'\n'
+        result=subprocess.run(['bash','-c',program],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        first=json.loads(trace.read_bytes());self.assertEqual(first['payload'],payload)
+        for receipt in (origin,self.folder/'missing.json',self.folder/'malformed.json'):
+            if receipt.name=='malformed.json':receipt.write_text('{incomplete')
+            before=trace.read_bytes()
+            command=['python3',str(HELPER),'append',str(trace),'range_3071_branch','private-frame','private-operation',str(self.repo),str(receipt)]
+            result=subprocess.run(command,capture_output=True,text=True)
+            if receipt==origin:
+                self.assertEqual(result.returncode,0,result.stderr)
+                second=json.loads(trace.read_bytes().splitlines()[-1]);self.assertEqual(second['payload'],payload)
+                self.assertEqual(second['previous'],first['digest'])
+            else:
+                self.assertNotEqual(result.returncode,0)
+                self.assertEqual(trace.read_bytes(),before)
+        # These are transport events, not real engine observations.
+        with self.assertRaises(m.Rejected):m.validate_trace(self.repo,trace,m.sha(trace.read_bytes()))
+
     def test_private_I_consumer_keeps_actual_side_true_and_raw_false_main_row(self):
         # Private transport/oracles only. These are real temporary collector
         # traces, not production I/J observations or an exact-nine qualification.

@@ -3408,13 +3408,13 @@ f13_f54_fixed3071_range_observe() {
   python3 "${f13_f54_observer}" 3071-range-branch "${repo}" "${origin}" "${side_trace}" "${side_map}" >"${receipt}" || return 1
   # The ordinary range predicate is still false. A distinct fixed witness and
   # successful actual side frame permit only observation of the same engine.
-  f13_f54_trace_event range_3071_branch "${repo}" "$(<"${receipt}")"
+  f13_f54_trace_event range_3071_branch "${repo}" "${receipt}"
 }
 
 f13_f54_fixed3071_range_side() {
   local repo="$1" origin="$2" trace="$3" output="$4"
   local f13_f54_trace_file="${trace}" f13_f54_frame='' f13_f54_operation='' f13_f54_running=false
-  f13_f54_trace_event range_side_link "${repo}" "$(<"${origin}")" || return 1
+  f13_f54_trace_event range_side_link "${repo}" "${origin}" || return 1
   # Separate evidence. Original operation body/gates, flags and owners stay raw.
   # Never concatenate this map into the three-spine persistent output map.
   f13_collect_develop_contributions "${repo}" d4abb829622e9bd91b26842b61522e6840840867 \

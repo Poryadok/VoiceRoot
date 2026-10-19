@@ -229,12 +229,14 @@ def append(path, kind, frame, operation, repo, values):
         payload=dict(status=int(values[0]),original_gate='single_best_base_required',admission=False)
     elif kind in ('span_link','range_side_link'):
         require(previous is None and not frame and not operation,'separate_supplemental_trace')
-        payload=json.loads(values[0]);require(payload['admission'] is False,'span_not_admission')
+        payload=json.loads(Path(values[0]).read_bytes() if kind=='range_side_link' else values[0])
+        require(payload['admission'] is False,'span_not_admission')
     elif kind in ('history_capability','history_3071_capability'):
         capability,receipt=values
         payload=dict(capability=raw_binding(Path(capability).read_bytes()),receipt=json.loads(receipt),admission=False)
     elif kind in ('composition_capability','composition_3071_capability','range_3071_branch'):
-        payload=json.loads(values[0]);require(payload['admission'] is False,'composition_not_production_authority')
+        payload=json.loads(Path(values[0]).read_bytes() if kind=='range_3071_branch' else values[0])
+        require(payload['admission'] is False,'composition_not_production_authority')
     elif kind == 'boundary_3071_observation':
         output,boundary=values
         payload=dict(history_boundary=boundary,prefix=raw_binding(Path(output).read_bytes()),admission=False)

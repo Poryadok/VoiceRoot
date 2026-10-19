@@ -78,6 +78,20 @@ d4a prefix also supplies a source-specific origin component, not a new producer
 continuation. A fresh immutable source and real whole-wrapper execution are
 still required for the new range/I implementation; all qualification stays HOLD.
 
+Actual frozen35967609 full original wrapper returned1/category first_parent_range,
+7933 events, trace15d65efba2faf069a0264c6121c2a6a4458329f0f795ad9e1764b6664d8817a4.
+It reached the exact nested range, but the new side-link caller expanded its
+374717-byte complete origin into one argv: Linux rejected execution with
+Argument list too long before the supplemental engine. The ordinary guard then
+refused. This is a transport defect, not failed structural qualification or a
+passing new range. Full trace, origin, private target and prior failures remain
+immutable. A private262144-byte payload reproduces the same actual caller RED.
+Only the two new range event transports now pass filenames and read full JSON
+bytes in append; no truncation, gate/identity/flag change or input normalization.
+The regression checks exact payload/hash-chain preservation, missing/malformed
+file rejection and refusal to treat transport-only events as qualified history.
+New frozen execution remains required; J/full router/production R/K stay HOLD.
+
 The first external origin-negative harness preserved a test-driver assertion
 failure: wrong-main-mode was correctly rejected earlier by
 actual_incoming_source_boundary, rather than its overly narrow expected final
