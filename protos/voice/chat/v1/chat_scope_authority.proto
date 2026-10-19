@@ -7,9 +7,25 @@ import "voice/chat/v1/chat.proto";
 option go_package = "voice.app/voice/chat/v1;chatv1";
 
 // Narrow own-DB resource facts. This service grants no user permissions and is
-// served only on dedicated signed Role/Space mTLS listeners.
+// served only on caller-specific signed mTLS listeners.
 service ChatScopeAuthorityService {
   rpc GetSpaceChatScopeAuthority(GetSpaceChatScopeAuthorityRequest) returns (GetSpaceChatScopeAuthorityResponse);
+  // Bot-only source observation, including qualified retained retired heads.
+  // This read grants no membership or cleanup completion authority.
+  rpc GetBotChatScopeAuthority(GetBotChatScopeAuthorityRequest) returns (GetBotChatScopeAuthorityResponse);
+}
+
+message GetBotChatScopeAuthorityRequest {
+  uint32 protocol_version = 1;
+  string chat_id = 2;
+  string expected_space_id = 3;
+  string operation_id = 4;
+}
+
+message GetBotChatScopeAuthorityResponse {
+  GetSpaceChatScopeAuthorityResponse scope = 1;
+  // Raw SHA256 of the deterministic complete request protobuf.
+  bytes request_sha256 = 2;
 }
 
 message GetSpaceChatScopeAuthorityRequest {

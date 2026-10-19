@@ -21,7 +21,7 @@ import 'chat_scope_authority.pb.dart' as $0;
 export 'chat_scope_authority.pb.dart';
 
 /// Narrow own-DB resource facts. This service grants no user permissions and is
-/// served only on dedicated signed Role/Space mTLS listeners.
+/// served only on caller-specific signed mTLS listeners.
 @$pb.GrpcServiceName('voice.chat.v1.ChatScopeAuthorityService')
 class ChatScopeAuthorityServiceClient extends $grpc.Client {
   /// The hostname for this service.
@@ -44,6 +44,17 @@ class ChatScopeAuthorityServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// Bot-only source observation, including qualified retained retired heads.
+  /// This read grants no membership or cleanup completion authority.
+  $grpc.ResponseFuture<$0.GetBotChatScopeAuthorityResponse>
+      getBotChatScopeAuthority(
+    $0.GetBotChatScopeAuthorityRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getBotChatScopeAuthority, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$getSpaceChatScopeAuthority = $grpc.ClientMethod<
@@ -52,6 +63,12 @@ class ChatScopeAuthorityServiceClient extends $grpc.Client {
       '/voice.chat.v1.ChatScopeAuthorityService/GetSpaceChatScopeAuthority',
       ($0.GetSpaceChatScopeAuthorityRequest value) => value.writeToBuffer(),
       $0.GetSpaceChatScopeAuthorityResponse.fromBuffer);
+  static final _$getBotChatScopeAuthority = $grpc.ClientMethod<
+          $0.GetBotChatScopeAuthorityRequest,
+          $0.GetBotChatScopeAuthorityResponse>(
+      '/voice.chat.v1.ChatScopeAuthorityService/GetBotChatScopeAuthority',
+      ($0.GetBotChatScopeAuthorityRequest value) => value.writeToBuffer(),
+      $0.GetBotChatScopeAuthorityResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.chat.v1.ChatScopeAuthorityService')
@@ -69,6 +86,15 @@ abstract class ChatScopeAuthorityServiceBase extends $grpc.Service {
             $0.GetSpaceChatScopeAuthorityRequest.fromBuffer(value),
         ($0.GetSpaceChatScopeAuthorityResponse value) =>
             value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetBotChatScopeAuthorityRequest,
+            $0.GetBotChatScopeAuthorityResponse>(
+        'GetBotChatScopeAuthority',
+        getBotChatScopeAuthority_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetBotChatScopeAuthorityRequest.fromBuffer(value),
+        ($0.GetBotChatScopeAuthorityResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.GetSpaceChatScopeAuthorityResponse>
@@ -80,4 +106,13 @@ abstract class ChatScopeAuthorityServiceBase extends $grpc.Service {
   $async.Future<$0.GetSpaceChatScopeAuthorityResponse>
       getSpaceChatScopeAuthority(
           $grpc.ServiceCall call, $0.GetSpaceChatScopeAuthorityRequest request);
+
+  $async.Future<$0.GetBotChatScopeAuthorityResponse>
+      getBotChatScopeAuthority_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.GetBotChatScopeAuthorityRequest> $request) async {
+    return getBotChatScopeAuthority($call, await $request);
+  }
+
+  $async.Future<$0.GetBotChatScopeAuthorityResponse> getBotChatScopeAuthority(
+      $grpc.ServiceCall call, $0.GetBotChatScopeAuthorityRequest request);
 }

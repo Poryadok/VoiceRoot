@@ -249,6 +249,16 @@ are contract mismatch and are not ACKed as success.
 
 ### BE170 durable Bot removal (accepted private target)
 
+`ChatScopeAuthorityService/GetBotChatScopeAuthority` is a separate source read
+for exact `service:bot`, `aud=chat`, full body/op binding and fresh JTI over its
+own `CHAT_SCOPE_BOT_*` mTLS/JWKS/replay binding. Its dedicated request retains the
+same four source-scope field numbers/types as the old read. The response contains
+the native current or qualified retired scope and raw32 complete-request hash;
+it grants no rights or completed effects. Role/Space listeners retain only their
+original method. Bot saves observations for new/enabled whitelist admission and
+historical cleanup; Messaging must validate current scope independently before
+first effects. Missing/foreign source never substitutes for completion.
+
 | Producer | Exact private method | Durable result |
 |---|---|---|
 | Bot, verified `service:bot`, dedicated mTLS, `aud=role` | `RoleService/ApplyBotInstallationRemoval` | One frozen Bot/Space target: global Bot marker and/or installation tombstone; non-system/non-Owner created roles and assignments removed; exact immutable completion receipt |
