@@ -85,6 +85,14 @@ full 18 groups require exact observed replica/build/config/readback controls.
 
 ## Risks And Follow-Ups
 
+121 reported a new shared-path composition risk after the initial 6d source
+review. Normal merge of reviewed BE195 e020da4 preserves its 60/60s/192h quota.
+New test-first interoperability cases reproduce mobile-only quota/grouping
+effects and erroneous Redis-outage failure before correction. The release guard
+now runs inside lifecycle protection before lazy preparation and again before
+provider dispatch. Mixed web allow/deny/error controls preserve ordinary quota.
+Only this union/delta needs a scoped 295 recheck; unchanged producer proof remains.
+
 Old pods/config cannot qualify. Build jobs must pass independently resolved source
 metadata and rollout must mount a matching policy/snapshot target before alpha.
 Other owners remain required; partial Notification source is never full alpha

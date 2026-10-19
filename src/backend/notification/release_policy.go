@@ -107,7 +107,7 @@ func (runtime *notificationDeliveryRuntime) Snapshot(instance string) ([]byte, e
 	if err != nil {
 		return nil, errReleaseConfig
 	}
-	routes := []string{"dispatch:PushDispatcher.Send"}
+	routes := []string{"dispatch:PushDispatcher.Send", "dispatch:PushDispatcher.PrepareAndSend"}
 	for _, method := range notificationv1.NotificationService_ServiceDesc.Methods {
 		routes = append(routes, "grpc:/"+notificationv1.NotificationService_ServiceDesc.ServiceName+"/"+method.MethodName)
 	}

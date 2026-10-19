@@ -98,6 +98,9 @@ Authenticated mobile registration is rejected before token writes. Unregister
 and allowed web registration retain their owner behavior.
 
 Final dispatch rechecks every stored target under the existing lifecycle gate.
+After BE195 composition it also checks target eligibility inside that gate
+**before** the lazy quota/grouping callback; suppressed/invalid mobile targets
+spend nothing. Allowed web targets retain BE195 logical admission and retries.
 Mobile attempts complete as suppressed without provider calls, so old events
 can ACK instead of retrying forever; stored tokens are not deleted. APNs/VoIP
 adapters are disabled in alpha; the default FCM noop is normalized to absent,
@@ -120,7 +123,8 @@ Notification guard IDs are `notification.register_mobile_device.v1` and
 `notification.dispatch_mobile_push.v1`. Only those guards are claimed; desired
 global capability bits do not attest other services. The config digest hashes
 resolved recording/debug flags and actual effective provider modes. The route
-digest hashes sorted JSON entries `dispatch:PushDispatcher.Send` plus every
+digest hashes sorted JSON entries `dispatch:PushDispatcher.Send`,
+`dispatch:PushDispatcher.PrepareAndSend` plus every
 `grpc:/<ServiceDesc.ServiceName>/<MethodName>` from the actual generated descriptor.
 Snapshot generation checks the serving object's policy/dispatcher identity.
 FCM is `real` only for an actual nonnil HTTPSender, `absent` when unconfigured;
