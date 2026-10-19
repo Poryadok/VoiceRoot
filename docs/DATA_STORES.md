@@ -5,7 +5,11 @@
 Accepted target, implementation tracked in the
 [ExecPlan](testing/async-automod-exec-plan.md): Auth owns immutable private subject,
 lifecycle/deletion revision and terminal fences plus the revisioned moderation
-restriction projection. Bot owns owner-account/actor/installation correspondence
+restriction projection. `moderation_authority_generation` identifies the sealed
+finite terminal view and its append-only high-water. It is opaque authority
+metadata, not an independent proof that a restored database is current. Terminal
+snapshot count/hash/cut framing is in the [startup contract](testing/async-automod-startup-restore.md).
+Bot owns owner-account/actor/installation correspondence
 and positive ownership revision. Messaging owns versioned account-scoped HMAC
 keys, subject/source counter, immutable account-only v2 core outbox and content-free
 expiry receipts. Moderation owns subject/source baseline, contiguous inbox cursor,

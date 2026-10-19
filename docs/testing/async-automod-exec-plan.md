@@ -2,6 +2,17 @@
 
 ## Account-core v2 implementation checkpoint
 
+Privacy-only retained-subject helper checkpoint: naive binding admitted an
+already due DELETED snapshot (real PostgreSQL RED). The dedicated helper now
+checks fresh DB time, exact lifecycle/state/deadline and permanent terminal
+fences under caller-owned account then subject locks. It permits pre-deadline
+DELETED only for privacy recovery and leaves `RequireLiveSubjectTx` unchanged.
+Expired captured authority is unavailable, never a permanent terminal assertion;
+older DELETED cannot overwrite a newer local LIVE restore. Rechecking after
+intervening work is required before commit. Focused PostgreSQL race proof covers
+rollback at deadline, unchanged send denial, immutable same-revision deadline,
+stale revision and terminal replay. Actual report recovery worker remains144.
+
 Terminal-seal checkpoint: the old client accepting `complete=true` without a
 seal was reproduced as RED against the immutable pre-change client. Strict Go
 client/codec race tests pass (1.626s/1.191s). Auth now produces one bounded
