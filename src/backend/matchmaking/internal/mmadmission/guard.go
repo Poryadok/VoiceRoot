@@ -102,6 +102,21 @@ func AcquireCloseGate(ctx context.Context, tx pgx.Tx) error {
 	return acquireGate(ctx, tx, false)
 }
 
+// AcquireTerminal is only for exact terminal decisions retaining the current
+// binding. It never qualifies a forward transition: CLOSED remains refused by
+// Acquire. The shared FIRST gate is retained through the terminal COMMIT.
+func AcquireTerminal(ctx context.Context, tx pgx.Tx, expected *Binding) error {
+	if expected == nil || expected.Validate() != nil {
+		return ErrUnavailable
+	}
+	want := *expected
+	if err := acquireGate(ctx, tx, true); err != nil {
+		return err
+	}
+	_, err := ReadTerminalHistory(ctx, tx, WireBinding(want))
+	return err
+}
+
 func acquireGate(ctx context.Context, tx pgx.Tx, shared bool) error {
 	if tx == nil {
 		return ErrUnavailable

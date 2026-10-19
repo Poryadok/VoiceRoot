@@ -50,13 +50,24 @@ func (h HistoryCut) Authority() (wire.Scope, wire.ID, wire.ID) {
 }
 
 func ReadHistory(ctx context.Context, tx pgx.Tx, expected wire.Binding) (HistoryCut, error) {
+	return readHistory(ctx, tx, expected, false)
+}
+
+// ReadTerminalHistory validates retained provenance for an exact terminal
+// decision. CLOSED is not forward admission; positive readers still use
+// ReadHistory and transitions must use Acquire, never this function as a grant.
+func ReadTerminalHistory(ctx context.Context, tx pgx.Tx, expected wire.Binding) (HistoryCut, error) {
+	return readHistory(ctx, tx, expected, true)
+}
+
+func readHistory(ctx context.Context, tx pgx.Tx, expected wire.Binding, terminal bool) (HistoryCut, error) {
 	if tx == nil || expected.Validate() != nil {
 		return HistoryCut{}, ErrUnavailable
 	}
 	if checkHistoryView(ctx, tx) != nil {
 		return HistoryCut{}, ErrUnavailable
 	}
-	actual, lineage, root, err := readHistoryHead(ctx, tx)
+	actual, lineage, root, err := readHistoryHead(ctx, tx, terminal)
 	if err != nil || actual != expected {
 		return HistoryCut{}, ErrUnavailable
 	}
@@ -183,12 +194,12 @@ func readHistoryReceipt(ctx context.Context, tx pgx.Tx, hash wire.Hash) (wire.Ar
 	return r, nil
 }
 
-func readHistoryHead(ctx context.Context, tx pgx.Tx) (wire.Binding, wire.ID, wire.Hash, error) {
+func readHistoryHead(ctx context.Context, tx pgx.Tx, terminal bool) (wire.Binding, wire.ID, wire.Hash, error) {
 	var b Binding
 	var lineage uuid.UUID
 	var root []byte
 	hashes := make([][]byte, 6)
-	err := tx.QueryRow(ctx, `SELECT protocol_version,environment_id,installation_id,authority_incarnation,transition_id,admission_generation,credential_cohort_id,database_binding_sha256,schema_contract_sha256,source_factory_manifest_sha256,fresh_route_manifest_sha256,admission_receipt_sha256,launch_manifest_sha256,expected_login_role_oid,expected_login_role_name,database_lineage_id,continuity_history_root_sha256 FROM public.mm_native_admission_head WHERE singleton AND state='ADMITTED'`).Scan(&b.ProtocolVersion, &b.EnvironmentID, &b.InstallationID, &b.AuthorityIncarnation, &b.TransitionID, &b.AdmissionGeneration, &b.CredentialCohortID, &hashes[0], &hashes[1], &hashes[2], &hashes[3], &hashes[4], &hashes[5], &b.ExpectedLoginRoleOID, &b.ExpectedLoginRoleName, &lineage, &root)
+	err := tx.QueryRow(ctx, `SELECT protocol_version,environment_id,installation_id,authority_incarnation,transition_id,admission_generation,credential_cohort_id,database_binding_sha256,schema_contract_sha256,source_factory_manifest_sha256,fresh_route_manifest_sha256,admission_receipt_sha256,launch_manifest_sha256,expected_login_role_oid,expected_login_role_name,database_lineage_id,continuity_history_root_sha256 FROM public.mm_native_admission_head WHERE singleton AND (state='ADMITTED' OR ($1 AND state='CLOSED'))`, terminal).Scan(&b.ProtocolVersion, &b.EnvironmentID, &b.InstallationID, &b.AuthorityIncarnation, &b.TransitionID, &b.AdmissionGeneration, &b.CredentialCohortID, &hashes[0], &hashes[1], &hashes[2], &hashes[3], &hashes[4], &hashes[5], &b.ExpectedLoginRoleOID, &b.ExpectedLoginRoleName, &lineage, &root)
 	if err != nil || lineage == uuid.Nil || len(root) != 32 {
 		return wire.Binding{}, wire.ID{}, wire.Hash{}, ErrUnavailable
 	}

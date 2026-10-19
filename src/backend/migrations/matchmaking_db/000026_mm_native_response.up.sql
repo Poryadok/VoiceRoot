@@ -35,4 +35,27 @@ END $$;
 CREATE TRIGGER mm_native_projection_invalidation
  BEFORE UPDATE OF revision,action,projected_at ON public.matchmaking_party_search_queue_intents
  FOR EACH ROW EXECUTE FUNCTION public.mm_native_projection_invalidate();
+-- One immutable semantic decision per authenticated actor operation. Public
+-- IDs and retained provenance remain personal operational evidence. Serving
+-- roles need SELECT/INSERT only; final owner erasure is a separate guarded cut.
+CREATE TABLE public.matchmaking_match_response_receipts (
+ actor_account_id UUID NOT NULL,
+ actor_profile_id UUID NOT NULL,
+ operation_id UUID NOT NULL,
+ request_sha256 BYTEA NOT NULL CHECK(octet_length(request_sha256)=32),
+ match_id UUID NOT NULL REFERENCES public.matches(id) ON DELETE RESTRICT,
+ proposal_id UUID NOT NULL REFERENCES public.match_proposals(id) ON DELETE RESTRICT,
+ search_session_id UUID NOT NULL REFERENCES public.search_sessions(id) ON DELETE RESTRICT,
+ session_generation BIGINT NOT NULL CHECK(session_generation>=0),
+ actor_session_epoch BIGINT NOT NULL CHECK(actor_session_epoch>0),
+ accept BOOLEAN NOT NULL,
+ source_cut_sha256 BYTEA NOT NULL CHECK(octet_length(source_cut_sha256)=32),
+ source_manifest_sha256 BYTEA NOT NULL CHECK(octet_length(source_manifest_sha256)=32),
+ source_origin_bytes BYTEA NOT NULL CHECK(octet_length(source_origin_bytes) BETWEEN 1 AND 1048576),
+ source_origin_sha256 BYTEA NOT NULL CHECK(octet_length(source_origin_sha256)=32),
+ outcome TEXT NOT NULL CHECK(outcome IN ('ACCEPTED','DECLINED','EXPIRED','ALREADY_RESPONDED')),
+ created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(actor_account_id,actor_profile_id,operation_id)
+);
+CREATE INDEX mm_response_receipts_match ON public.matchmaking_match_response_receipts(match_id,proposal_id);
 COMMIT;

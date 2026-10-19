@@ -92,6 +92,9 @@ func (s *MatchmakingGRPC) GetMatch(ctx context.Context, req *matchmakingv1.GetMa
 }
 
 func (s *MatchmakingGRPC) RespondToMatch(ctx context.Context, req *matchmakingv1.RespondToMatchRequest) (*matchmakingv1.RespondToMatchResponse, error) {
+	if s.freshRoutes == nativeVoiceFreshRoutes || (s.Matches != nil && s.Matches.NativeAdmission != nil) {
+		return s.respondToNativeMatch(ctx, req)
+	}
 	profileID, ok := authctx.ProfileID(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")

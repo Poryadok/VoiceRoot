@@ -129,12 +129,20 @@ type provisionProposal struct {
 }
 
 func readProvisionCandidate(ctx context.Context, tx pgx.Tx, id uuid.UUID, binding *admission.Binding) (ProvisionCandidate, error) {
-	return readMatchPartyCandidate(ctx, tx, id, binding, false)
+	return readMatchPartyCandidate(ctx, tx, id, binding, provisionRead)
 }
+
+type matchPartyReadMode uint8
+
+const (
+	provisionRead matchPartyReadMode = iota
+	responseRead
+	terminalResponseRead
+)
 
 // Pending proposals are only read by the private response wrapper. Public
 // provisioning capture/verification always requires every response accepted.
-func readMatchPartyCandidate(ctx context.Context, tx pgx.Tx, id uuid.UUID, binding *admission.Binding, allowPending bool) (ProvisionCandidate, error) {
+func readMatchPartyCandidate(ctx context.Context, tx pgx.Tx, id uuid.UUID, binding *admission.Binding, mode matchPartyReadMode) (ProvisionCandidate, error) {
 	var raw string
 	var now time.Time
 	if err := tx.QueryRow(ctx, provisionCutSQL, id).Scan(&raw, &now); err != nil {
@@ -174,7 +182,7 @@ func readMatchPartyCandidate(ctx context.Context, tx pgx.Tx, id uuid.UUID, bindi
 	seen := map[uuid.UUID]bool{}
 	for _, p := range view.Proposals {
 		s, ok := sessions[p.SessionID]
-		if !ok || p.ID == uuid.Nil || seen[p.SessionID] || (p.Response != ProposalResponseAccepted && (!allowPending || p.Response != ProposalResponsePending)) || p.ProfileID != s.ProfileID || !samePartyUUID(p.PartyID, s.PartyID) {
+		if !ok || p.ID == uuid.Nil || seen[p.SessionID] || (p.Response != ProposalResponseAccepted && (mode == provisionRead || p.Response != ProposalResponsePending)) || p.ProfileID != s.ProfileID || !samePartyUUID(p.PartyID, s.PartyID) {
 			return ProvisionCandidate{}, ErrSourcePartyUnavailable
 		}
 		seen[p.SessionID] = true
@@ -215,7 +223,7 @@ func readMatchPartyCandidate(ctx context.Context, tx pgx.Tx, id uuid.UUID, bindi
 	if len(cut.parties) == 0 {
 		return ProvisionCandidate{}, ErrSourcePartyUnavailable
 	}
-	origins, err := readCandidateOrigins(ctx, tx, cut.binding, cut.parties)
+	origins, err := readCandidateOriginsMode(ctx, tx, cut.binding, cut.parties, mode == terminalResponseRead)
 	if err != nil {
 		return ProvisionCandidate{}, errors.Join(ErrSourcePartyUnavailable, err)
 	}

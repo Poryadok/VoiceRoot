@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 	"testing"
+	admission "voice/backend/matchmaking/internal/mmadmission"
 	"voice/backend/matchmaking/internal/partysource"
 	"voice/backend/matchmaking/internal/store"
 )
@@ -62,4 +63,17 @@ func TestResponseCandidateAcceptsPendingWithoutRelaxingProvisioning(t *testing.T
 	require.NoError(t, err)
 	_, err = st.CaptureResponseCandidate(ctx, params)
 	require.Error(t, err, "positive response candidate cannot outlive current admission")
+	decline := params
+	decline.Accept = false
+	terminal, err := st.CaptureResponseCandidate(ctx, decline)
+	require.NoError(t, err, "exact pending DECLINE retains original source authority with CLOSED admission")
+	require.False(t, terminal.Params().Accept)
+	tx, err = pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	require.NoError(t, err)
+	require.NoError(t, admission.AcquireTerminal(ctx, tx, st.NativeAdmission))
+	require.NoError(t, store.VerifyResponseCandidateTx(ctx, tx, terminal))
+	require.Error(t, admission.Acquire(ctx, tx, st.NativeAdmission), "terminal gate must not satisfy positive admission")
+	require.NoError(t, tx.Rollback(ctx))
+	_, err = st.CaptureProvisionCandidate(ctx, intent.MatchID)
+	require.Error(t, err, "terminal history never enrolls a provisioning candidate")
 }

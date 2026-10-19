@@ -52,7 +52,11 @@ func readResponseCandidate(ctx context.Context, tx pgx.Tx, params ResponseParams
 	if binding == nil || params.MatchID == uuid.Nil || params.AccountID == uuid.Nil || params.ProfileID == uuid.Nil || params.OperationID == uuid.Nil || params.SessionEpoch <= 0 || params.RequestHash == ([32]byte{}) {
 		return ResponseCandidate{}, ErrSourcePartyUnavailable
 	}
-	cut, err := readMatchPartyCandidate(ctx, tx, params.MatchID, binding, true)
+	mode := responseRead
+	if !params.Accept {
+		mode = terminalResponseRead
+	}
+	cut, err := readMatchPartyCandidate(ctx, tx, params.MatchID, binding, mode)
 	if err != nil || len(cut.Accounts()) == 0 {
 		return ResponseCandidate{}, ErrSourcePartyUnavailable
 	}

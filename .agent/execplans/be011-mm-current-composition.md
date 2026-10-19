@@ -234,5 +234,37 @@ provision reader still rejects every unaccepted proposal. Live responding-device
 epoch may differ from original admitted epochs. Fresh source validation returns
 a private exact-candidate proof, Unknown no reset/proof; locked re-read rejects
 changed proposal state. Real PG RED then3top racePASS0skip/fullvet0 qualify this
-reader and existing provisioning negatives. Atomic response receipt/transition
-and closed terminal-decline path remain to implement before handler wiring.
+reader and existing provisioning negatives. The following response stage now
+implements the atomic receipt/transition and closed terminal-decline path.
+
+For c117 closed terminal DECLINE, read the same immutable receipt/origin lineage
+under an explicitly terminal reader and FIRST shared local gate. It accepts
+only the exact retained binding in ADMITTED or CLOSED; it does not produce OPEN
+readback or permit ACCEPT/provider dispatch. Positive readers and Acquire remain
+ADMITTED-only. The sealed response candidate hashes its decision discriminator,
+so a terminal observation cannot be reinterpreted as ACCEPT. This follows c117
+terminal/history behavior; no new installer or admission authority is created.
+
+The native handler now requires the actual private response principal on both
+decisions, validates every captured party before ACCEPT, retains explicit
+forward registration through durable response/provider completion, and invokes
+the existing validated provider coordinator only for the first all-accepted
+transition. The persisted match must be ACTIVE before public resource IDs are
+returned. Exact operation retries read the immutable receipt without validation,
+new registration or provider dispatch, including CLOSED admission. A changed
+body conflicts. DECLINE takes the same authenticated actor and terminal binding,
+performs canonical whole-party recovery and commits its receipt atomically.
+Unknown source/ban/readback preserves the pending party; a definitive typed
+member denial resets only affected whole parties. No raw authctx fallback.
+
+MM026 includes append-only response receipts. Runtime privilege checks allow
+SELECT/INSERT and reject effective table/column mutation authority. DOWN holds
+the admission gate and table locks before checking retained receipts, including
+an uncommitted noncooperating first writer. Final native Linux PG/race tests
+exercise activation once, closed retry/decline, receipt-insert rollback,
+all-account denial, source/local-cut races, held-closer refusal, expiry receipt,
+RR rollback refusal and concurrent receipt retention. Separate actual LOGIN
+tests cover column-only mutation grants. Provider/Voice snapshot and lifetime
+fixtures are explicit component fixtures, not installed service authority.
+Gateway/client/native root integration and final identity-erasure custody remain
+unfinished; this source stage is not a complete MASTER delivery offer.

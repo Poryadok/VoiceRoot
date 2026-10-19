@@ -44,6 +44,8 @@ type MatchmakingGRPC struct {
 	Lfp                     *store.LfpStore
 	SpaceLifecycle          *spacelifecycle.Store
 	PartySnapshots          partysource.SnapshotReader
+	ResponseValidator       partysource.ResponseValidator
+	ResponseLifetime        ResponseForwardLifetime
 	freshRoutes             freshRoutePolicy
 }
 

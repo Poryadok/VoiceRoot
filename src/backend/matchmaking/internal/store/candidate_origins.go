@@ -17,13 +17,21 @@ type candidateOriginCut struct {
 }
 
 func readCandidateOrigins(ctx context.Context, tx pgx.Tx, binding *admission.Binding, parties []SourceParty) (candidateOriginCut, error) {
+	return readCandidateOriginsMode(ctx, tx, binding, parties, false)
+}
+
+func readCandidateOriginsMode(ctx context.Context, tx pgx.Tx, binding *admission.Binding, parties []SourceParty, terminal bool) (candidateOriginCut, error) {
 	if binding == nil {
 		if err := admission.CheckPrecutCut(ctx, tx); err != nil {
 			return candidateOriginCut{}, err
 		}
 		return candidateOriginCut{Version: 1}, nil
 	}
-	cut, err := admission.ReadHistory(ctx, tx, admission.WireBinding(*binding))
+	read := admission.ReadHistory
+	if terminal {
+		read = admission.ReadTerminalHistory
+	}
+	cut, err := read(ctx, tx, admission.WireBinding(*binding))
 	if err != nil || len(parties) == 0 {
 		return candidateOriginCut{}, admission.ErrUnavailable
 	}
