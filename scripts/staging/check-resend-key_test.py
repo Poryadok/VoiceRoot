@@ -67,11 +67,13 @@ class MergeUploadTest(unittest.TestCase):
         self.assertIn("POSTGRES_PASSWORD", missing)
         self.assertIsNone(patch)
 
-    def test_missing_gis_runtime_database_url_is_reported(self):
-        incomplete = dict(self.live_data)
-        incomplete.pop("GAME_INTEGRATION_DATABASE_URL")
-        missing = module.missing_keys(secret(data=incomplete), "voice-staging")
-        self.assertIn("GAME_INTEGRATION_DATABASE_URL", missing)
+    def test_missing_runtime_database_urls_are_reported(self):
+        for key in ("GAME_INTEGRATION_DATABASE_URL", "REALTIME_DATABASE_URL"):
+            with self.subTest(key=key):
+                incomplete = dict(self.live_data)
+                incomplete.pop(key)
+                missing = module.missing_keys(secret(data=incomplete), "voice-staging")
+                self.assertIn(key, missing)
 
     def test_wrong_identity_and_invalid_base64_fail_closed(self):
         upload = secret(data={"AUTH_RESEND_API_KEY": "not base64!"}, version=None)
