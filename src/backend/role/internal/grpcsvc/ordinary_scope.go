@@ -220,6 +220,9 @@ func (s *RoleGRPC) SetChatOverride(ctx context.Context, req *rolev1.SetChatOverr
 }
 
 func (s *RoleGRPC) GetEffectivePermissions(ctx context.Context, req *rolev1.GetEffectivePermissionsRequest) (*rolev1.GetEffectivePermissionsResponse, error) {
+	if chat := req.GetChat(); chat != nil {
+		ctx = context.WithValue(ctx, nativeMemberChatScopeKey{}, nativeMemberChatScope{profile: req.GetProfileId(), chat: chat.GetId(), voicePresent: req.VoiceRoomId != nil})
+	}
 	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.GetEffectivePermissionsResponse, error) {
 		return scoped.getEffectivePermissions(callCtx, req)
 	}, req.GetProfileId())

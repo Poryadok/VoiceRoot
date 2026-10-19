@@ -205,8 +205,7 @@ positive-same-fence/negative-wrong-fence RED5.331s -> GREEN9.805s, vet0. Shared
 pure-qualifier suite passed race2.105s and vet. An earlier fixture build used a
 nonexistent EnsureBinding account field; that diagnostic is not a behavior RED.
 
-Private chat-scoped observation collection remains unfinished. No unsupported
-node is promoted from an unscoped observation. Role25 adapter99ae37a has scoped
+Chat-scoped effective reads collect an exact protected Space tree observation outside Role locks and revalidate it under the same revision/CAS and expiry budget. Actual RolePG/SpacePG RED52.628s preceded implementation; final expanded race32.792s plus vet/build passed, including node removal and three invalid scopes. Intermediate31.689s dependency failure before the chat oracle is retained, not a feature RED. Historical Space5e remains a component fixture, not current all-writer readiness under Space c76-c78. No unsupported node is promoted from an unscoped observation. Role25 adapter99ae37a has scoped
 review144 CLEAR but is not yet imported/qualified by this native cohort; adding
 its version to a list would not establish source2/writer/late-Bot readiness.
 

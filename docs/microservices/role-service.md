@@ -11,8 +11,7 @@ unchanged SDK revision, and compares the executed snapshot fold with native
 GetEffectiveMask. The original source DDL/function hashes remain unchanged;
 catalog20 additionally guards both new SpaceChat clock inputs and four triggers.
 This projection does not represent the separate binding-aware SpaceChat policy
-decision or activate admission RPCs. EnsureDefaultMemberRole/RemoveMemberRoles
-remain unimplemented; ordinary network calls and the protected allowlist deny.
+decision. The separate development native21/source2 cohort implements protected EnsureDefaultMemberRole/RemoveMemberRoles with fresh Space authority, immutable receipts and generation floors; ordinary listeners deny these methods. Component transport/RolePG/SpacePG proof does not establish complete all-writer cutover, current owner-channel readiness or full runtime activation.
 
 ### Admission readiness target (ADMISSION-ROLE-READINESS-v1)
 
