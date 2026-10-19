@@ -224,6 +224,37 @@ journal writes at submission/validation and terminal account/subject/late-result
 cleanup. It also implements bounded journal byte verification, finite SQL capture
 and authorized journal-only import as enabling inputs for the shared coordinator.
 
+### Verified-pair journal backfill
+
+`BackfillVerifiedReportJournal` handles only missing receipts for stored
+`VERIFIED_AT_SUBMISSION` reporters and `VERIFIED_AT_VALIDATION` User targets.
+Its bounded limit is 1–100 reports; `Journaled` counts slots, `Purged` counts
+reports and `More` describes the observed local batch, never a current source
+cut or readiness. Legacy and `OWNER_RECOVERED_LEGACY` rows are not promoted.
+
+The worker closes its repeatable-read candidate transaction before protected
+Auth calls. Each distinct stored account/subject pair needs fresh exact Auth
+binding with a revision at least as new as the stored pair. A positive local
+permanent terminal fence instead selects terminal receipt repair and raw report
+purge; transport failures, error text and elapsed deletion deadlines cannot do
+that. Retained DELETED bindings must pass the existing typed Auth validator and
+database-clock deadline checks.
+
+The write transaction acquires all sorted account locks before subject and
+report locks, compares the complete raw/journal observations and checks the
+captured private-repair generation before commit. Concurrent canonical owner
+facts survive unchanged. A deadline crossing or generation closure rolls back
+both the new local binding and journal receipt. Successful backfill leaves
+report provenance, validation state, events and threshold hooks unchanged and
+does not provision a lifecycle producer epoch or cursor.
+
+Real Linux PostgreSQL race tests cover retained LIVE/DELETED pairs, authority
+failures, newer local revisions, both captured-generation boundaries, deadline
+crossing behind a held report lock, concurrent User owner facts, bounded
+deduplicated calls, legacy exclusion and positive-terminal-only cleanup.
+The shared lifecycle cycle projection and coordinator invocation remain owned
+by BE-045; this helper does not establish their assembled acceptance.
+
 It does **not** complete legacy owner recovery or authoritative boot repair,
 the protected User recovery RPC or assembled
 P0-P5 activation. Those remain required before complete BE-137 integration and
