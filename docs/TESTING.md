@@ -475,6 +475,13 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 
 ### Compose E2E (локально и CI)
 
+- Compose bootstrap creates and migrates Realtime's owned `realtime_db` before
+  its fail-closed startup. Dirty or nonempty untracked Realtime catalogs fail
+  without `migrate force`; reconcile their migration history explicitly.
+  `python3 docker/postgres/compose-realtime-migrations_test.py` exercises fresh,
+  existing-volume, repeated, dirty and untracked paths through the shell pipeline
+  with stateful command fixtures; actual Compose startup remains a separate check.
+
 The E2E catalog CLI (`bash scripts/ci/e2e-manifest.sh MANIFEST SECTION`)
 requires Python 3 and `python3 -m pip install -r scripts/ci/requirements-e2e.txt`
 (PyYAML 6.0.3). CI installs that dependency in every catalog-consuming job.
