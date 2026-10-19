@@ -14,6 +14,8 @@ import (
 	"encoding/pem"
 	"errors"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -29,6 +31,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -41,7 +44,9 @@ import (
 	"voice/backend/pkg/principal"
 	"voice/backend/role/internal/grpcsvc"
 	"voice/backend/role/internal/memberauthority"
+	"voice/backend/role/internal/principalgrpc"
 	"voice/backend/role/internal/principalruntime"
+	"voice/backend/role/internal/store"
 	"voice/backend/role/permissions"
 )
 
@@ -71,6 +76,31 @@ func (b *nativeFixtureLog) String() string {
 type nativeTrackedObserver struct {
 	client *memberauthority.Client
 	calls  atomic.Int64
+}
+
+type nativeCommitSQLKey struct{}
+type nativeChatCommitExpiry struct {
+	space, profile string
+	calls          atomic.Int64
+	fresh          atomic.Bool
+}
+
+func (d *nativeChatCommitExpiry) TraceQueryStart(ctx context.Context, _ *pgx.Conn, q pgx.TraceQueryStartData) context.Context {
+	return context.WithValue(ctx, nativeCommitSQLKey{}, strings.TrimSpace(q.SQL))
+}
+func (d *nativeChatCommitExpiry) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryEndData) {
+	if sql, _ := ctx.Value(nativeCommitSQLKey{}).(string); sql != "commit" {
+		return
+	}
+	o, ok := memberauthority.FromContext(ctx, d.space, d.profile)
+	if !ok {
+		return
+	}
+	d.calls.Add(1)
+	d.fresh.Store(o.Available(time.Now()))
+	for o.Available(time.Now()) {
+		time.Sleep(time.Millisecond)
+	}
 }
 
 func (o *nativeTrackedObserver) ObserveMember(ctx context.Context, req *spacev1.GetMemberAdmissionAuthorityRequest) (memberauthority.Observation, error) {
@@ -312,6 +342,28 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool) {
 	chatPermissions, err := client.GetEffectivePermissions(delegated(rolev1.RoleService_GetEffectivePermissions_FullMethodName, chatRequest), chatRequest)
 	require.NoError(t, err, "actual native text-chat permission reader must collect its exact current Space-tree observation")
 	require.Equal(t, globalPermissions.GetPermissionSet().GetEffectiveMask()&^view, chatPermissions.GetPermissionSet().GetEffectiveMask())
+	// Execute the exact signed interceptor -> chat handler -> coordinator path.
+	// Delay only after its owning final COMMIT has actually succeeded. A direct
+	// scoped Store call would not cover this outer transaction boundary.
+	delay := &nativeChatCommitExpiry{space: b.SpaceID, profile: b.ProfileID}
+	tracedConfig := roles.Pool.Config().Copy()
+	tracedConfig.ConnConfig.Tracer = delay
+	tracedPool, err := pgxpool.NewWithConfig(ctx, tracedConfig)
+	require.NoError(t, err)
+	t.Cleanup(tracedPool.Close)
+	tracedHandler := &grpcsvc.RoleGRPC{Store: &store.RoleStore{Pool: tracedPool}, MemberAuthority: trackedAuthority}
+	signed := delegated(rolev1.RoleService_GetEffectivePermissions_FullMethodName, chatRequest)
+	md, ok := metadata.FromOutgoingContext(signed)
+	require.True(t, ok)
+	staleResponse, staleErr := principalgrpc.StrictUnaryInterceptor(runtime)(metadata.NewIncomingContext(ctx, md), chatRequest, &grpc.UnaryServerInfo{FullMethod: rolev1.RoleService_GetEffectivePermissions_FullMethodName}, func(callCtx context.Context, req any) (any, error) {
+		return tracedHandler.GetEffectivePermissions(callCtx, req.(*rolev1.GetEffectivePermissionsRequest))
+	})
+	require.EqualValues(t, 1, delay.calls.Load())
+	require.True(t, delay.fresh.Load(), "original observation fresh at successful outer COMMIT completion")
+	require.Error(t, staleErr, "expired original vector cannot return a permission after outer COMMIT")
+	if response, ok := staleResponse.(*rolev1.GetEffectivePermissionsResponse); ok {
+		require.Nil(t, response)
+	}
 	for _, invalid := range []struct {
 		name   string
 		mutate func(*rolev1.GetEffectivePermissionsRequest)
