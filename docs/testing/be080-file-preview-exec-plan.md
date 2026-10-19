@@ -254,3 +254,26 @@ and image-readiness setup failures are retained separately. Runtime source
 archives/manifests and comment-only final delta remain explicitly distinguished.
 Genuine378 original rollback SOURCE CLEARc3 is preserved; current composition
 review and actual121 delivery/MASTER CI are separate subsequent events.
+
+## K5 actual CI correction plan
+
+Immutable0128f325 CI triage8ca2e8c4 identifies three BE080 causes: new
+File-to-Events transitive module closure, File import formatting and strict
+legacy lifecycle fixture missing migration007 outbox. Census all backend
+go.mod files and every service Dockerfile before fixing only missing closure.
+GameIntegration root and standalone Calls/Space/Subscription proto modules
+need canonical local Events resolution; GameIntegration Docker must copy its
+go.mod before download and generated source before build. Keep dependency
+versions and security/runtime logic. Canonical format may reorder descriptor
+imports; regenerate exact Go/Dart mirrors and explicitly rebind future native
+inputs rather than reusing H5 authority.
+
+Preserve exact table equality in the lifecycle fingerprint, adding only the
+known preview outbox to the canonical schema and asserting it survives the
+unrelated older lifecycle DOWN. Never change production DDL/retention guards.
+OriginalK5 readonly Game build, buf format100 and actual PG fingerprintRED
+precede minimal correction. Then all affected standalone/root readonly builds
+and tests, actual GameIntegration Dockerfile build, buf format/lint/breaking
+and generated parity, and realPG lifecycle/preview rollback cases must pass.
+OwnWT31/privateLinux fixtures only; no shared stands/host tests/GH/F13 edits.
+Genuine378 reviews frozen delta before actual121accepted delivery.
