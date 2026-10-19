@@ -58,13 +58,13 @@ func TestStartSearch_HappyPath(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pool := startDB(t, ctx)
+	pool := startNativeSearchTestDB(t, ctx)
 	srv := searchTestServer(t, pool)
 	profileID := uuid.New()
 	ctx = ctxWithProfileAccount(profileID, uuid.New())
 
 	gameID := dotaGameID(t, srv, ctx)
-	resp, err := srv.StartSearch(ctx, &matchmakingv1.StartSearchRequest{
+	resp, err := startProtectedSearchForTest(t, srv, ctx, &matchmakingv1.StartSearchRequest{
 		GameId:       gameID,
 		Mode:         "5v5 Ranked",
 		CriteriaJson: validDotaCriteriaJSON(),
@@ -90,11 +90,11 @@ func TestCancelSearch_RetryAfterCancellationIsIdempotent(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pool := startDB(t, ctx)
+	pool := startNativeSearchTestDB(t, ctx)
 	srv := searchTestServer(t, pool)
 	ctx = ctxWithProfileAccount(uuid.New(), uuid.New())
 
-	started, err := srv.StartSearch(ctx, &matchmakingv1.StartSearchRequest{
+	started, err := startProtectedSearchForTest(t, srv, ctx, &matchmakingv1.StartSearchRequest{
 		GameId:       dotaGameID(t, srv, ctx),
 		Mode:         "5v5 Ranked",
 		CriteriaJson: validDotaCriteriaJSON(),
@@ -127,12 +127,12 @@ func TestStartSearch_InvalidCriteriaRejected(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pool := startDB(t, ctx)
+	pool := startNativeSearchTestDB(t, ctx)
 	srv := searchTestServer(t, pool)
 	ctx = ctxWithProfileAccount(uuid.New(), uuid.New())
 
 	gameID := dotaGameID(t, srv, ctx)
-	_, err := srv.StartSearch(ctx, &matchmakingv1.StartSearchRequest{
+	_, err := startProtectedSearchForTest(t, srv, ctx, &matchmakingv1.StartSearchRequest{
 		GameId:       gameID,
 		Mode:         "5v5 Ranked",
 		CriteriaJson: `{"region":"na","self":{"role":"Carry","rank":"Herald"}}`,
@@ -145,20 +145,20 @@ func TestStartSearch_DuplicateSearchRejected(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pool := startDB(t, ctx)
+	pool := startNativeSearchTestDB(t, ctx)
 	srv := searchTestServer(t, pool)
 	profileID := uuid.New()
 	ctx = ctxWithProfileAccount(profileID, uuid.New())
 
 	gameID := dotaGameID(t, srv, ctx)
-	_, err := srv.StartSearch(ctx, &matchmakingv1.StartSearchRequest{
+	_, err := startProtectedSearchForTest(t, srv, ctx, &matchmakingv1.StartSearchRequest{
 		GameId:       gameID,
 		Mode:         "5v5 Ranked",
 		CriteriaJson: validDotaCriteriaJSON(),
 	})
 	require.NoError(t, err)
 
-	_, err = srv.StartSearch(ctx, &matchmakingv1.StartSearchRequest{
+	_, err = startProtectedSearchForTest(t, srv, ctx, &matchmakingv1.StartSearchRequest{
 		GameId:       gameID,
 		Mode:         "5v5 Ranked",
 		CriteriaJson: validDotaCriteriaJSON(),
@@ -171,18 +171,19 @@ func TestStartSearch_RedisUnavailable(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pool := startDB(t, ctx)
+	pool := startNativeSearchTestDB(t, ctx)
 	badRedis := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"})
 	t.Cleanup(func() { _ = badRedis.Close() })
 	srv := &MatchmakingGRPC{
 		Games:    &store.GameStore{Pool: pool},
 		Sessions: &store.SessionStore{Pool: pool},
 		Queue:    &queue.RedisQueue{Client: badRedis, Prefix: "test"},
+		Bans:     &store.BanStore{Pool: pool},
 		Events:   mmevents.NoopPublisher{},
 	}
-	ctx = ctxWithProfile(uuid.New())
+	ctx = ctxWithProfileAccount(uuid.New(), uuid.New())
 	gameID := dotaGameID(t, srv, ctx)
-	_, err := srv.StartSearch(ctx, &matchmakingv1.StartSearchRequest{
+	_, err := startProtectedSearchForTest(t, srv, ctx, &matchmakingv1.StartSearchRequest{
 		GameId:       gameID,
 		Mode:         "5v5 Ranked",
 		CriteriaJson: validDotaCriteriaJSON(),
@@ -195,12 +196,12 @@ func TestGetSearchStatus_NotOwnerDenied(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pool := startDB(t, ctx)
+	pool := startNativeSearchTestDB(t, ctx)
 	srv := searchTestServer(t, pool)
 	owner := uuid.New()
 	ctxOwner := ctxWithProfileAccount(owner, uuid.New())
 	gameID := dotaGameID(t, srv, ctxOwner)
-	started, err := srv.StartSearch(ctxOwner, &matchmakingv1.StartSearchRequest{
+	started, err := startProtectedSearchForTest(t, srv, ctxOwner, &matchmakingv1.StartSearchRequest{
 		GameId:       gameID,
 		Mode:         "5v5 Ranked",
 		CriteriaJson: validDotaCriteriaJSON(),
@@ -220,7 +221,7 @@ func TestStartSearch_QueueUnavailable(t *testing.T) {
 		Sessions: &store.SessionStore{},
 		Queue:    nil,
 	}
-	_, err := srv.StartSearch(ctxWithProfile(uuid.New()), &matchmakingv1.StartSearchRequest{
+	_, err := startProtectedSearchForTest(t, srv, ctxWithProfileAccount(uuid.New(), uuid.New()), &matchmakingv1.StartSearchRequest{
 		GameId:       uuid.New().String(),
 		Mode:         "5v5 Ranked",
 		CriteriaJson: validDotaCriteriaJSON(),

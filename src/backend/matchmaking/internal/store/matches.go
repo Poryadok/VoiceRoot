@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"voice/backend/matchmaking/internal/mmadmission"
 )
 
 const (
@@ -159,6 +160,9 @@ func expirePendingMatchLocked(ctx context.Context, tx pgx.Tx, match Match, propo
 		return nil, err
 	}
 
+	if err := latchMatchAbandonmentCauseTx(ctx, tx, match.ID, "PROPOSAL_DEADLINE"); err != nil {
+		return nil, err
+	}
 	var changed []SearchSession
 	for _, sess := range sessions {
 		if sess.Status != SessionStatusPendingAccept {
@@ -226,7 +230,7 @@ func responseSessionPartyKey(sess SearchSession, proposals []MatchProposal) stri
 	return ""
 }
 
-func recoverDeclinedMatchLocked(ctx context.Context, tx pgx.Tx, match Match, proposals []MatchProposal, sessions []SearchSession, declinedParty string, dbNow time.Time) ([]SearchSession, error) {
+func recoverDeclinedMatchLocked(ctx context.Context, tx pgx.Tx, match Match, proposals []MatchProposal, sessions []SearchSession, declinedParty string, dbNow time.Time, cause string) ([]SearchSession, error) {
 	for _, proposal := range proposals {
 		if responsePartyKey(proposal) != declinedParty || proposal.Response != ProposalResponsePending {
 			continue
@@ -242,6 +246,9 @@ func recoverDeclinedMatchLocked(ctx context.Context, tx pgx.Tx, match Match, pro
 		UPDATE matches SET status = $2, completed_at = $3
 		WHERE id = $1 AND status = $4
 	`, match.ID, MatchStatusAbandoned, dbNow, MatchStatusPendingAccept); err != nil {
+		return nil, err
+	}
+	if err := latchMatchAbandonmentCauseTx(ctx, tx, match.ID, cause); err != nil {
 		return nil, err
 	}
 	changed := make([]SearchSession, 0, len(sessions))
@@ -509,7 +516,7 @@ func (s *MatchStore) RecordDecline(ctx context.Context, matchID, profileID uuid.
 	); err != nil {
 		return AcceptanceResult{}, err
 	}
-	changed, err := recoverDeclinedMatchLocked(ctx, tx, match, proposals, sessions, responsePartyKey(result.Proposal), dbNow)
+	changed, err := recoverDeclinedMatchLocked(ctx, tx, match, proposals, sessions, responsePartyKey(result.Proposal), dbNow, "PROPOSAL_DECLINED")
 	if err != nil {
 		return AcceptanceResult{}, err
 	}
@@ -725,7 +732,8 @@ type MatchProposal struct {
 
 // MatchStore persists matches and proposals.
 type MatchStore struct {
-	Pool *pgxpool.Pool
+	Pool            *pgxpool.Pool
+	NativeAdmission *mmadmission.Binding
 }
 
 // ProposalSession links a search session to a new match proposal.
@@ -749,8 +757,8 @@ type CreateProposalResult struct {
 	Proposals []MatchProposal
 }
 
-// CreateProposal inserts match, proposals, and moves sessions to pending_accept.
-func (s *MatchStore) CreateProposal(ctx context.Context, p CreateProposalParams) (CreateProposalResult, error) {
+// createProposal shares the atomic legacy/validated reservation writes.
+func (s *MatchStore) createProposal(ctx context.Context, p CreateProposalParams, candidate *ProposalCandidate, proof ProposalValidationProof) (CreateProposalResult, error) {
 	if s == nil || s.Pool == nil {
 		return CreateProposalResult{}, errors.New("match store unavailable")
 	}
@@ -758,11 +766,21 @@ func (s *MatchStore) CreateProposal(ctx context.Context, p CreateProposalParams)
 		return CreateProposalResult{}, errors.New("no sessions")
 	}
 
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return CreateProposalResult{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	var banGuard *PlatformBanGuard
+	if err := mmadmission.Acquire(ctx, tx, s.NativeAdmission); err != nil {
+		return CreateProposalResult{}, err
+	}
+	if candidate != nil {
+		banGuard, err = AcquirePlatformBanGuard(ctx, tx, candidate.Accounts())
+		if err != nil {
+			return CreateProposalResult{}, err
+		}
+	}
 
 	proposalSessions := append([]ProposalSession(nil), p.Sessions...)
 	sort.Slice(proposalSessions, func(i, j int) bool {
@@ -777,10 +795,14 @@ func (s *MatchStore) CreateProposal(ctx context.Context, p CreateProposalParams)
 		requestedByID[candidate.SessionID] = candidate
 		sessionIDs = append(sessionIDs, candidate.SessionID)
 	}
+	partyIDs, err := lockProposalParties(ctx, tx, proposalSessions)
+	if err != nil {
+		return CreateProposalResult{}, err
+	}
 	lockedRows, err := tx.Query(ctx, `
 		SELECT `+sessionSelectCols+`
-		FROM search_sessions WHERE id = ANY($1) ORDER BY id FOR UPDATE
-	`, sessionIDs)
+		FROM search_sessions WHERE id = ANY($1::uuid[]) OR party_id = ANY($2::uuid[]) ORDER BY id FOR UPDATE
+	`, sessionIDs, partyIDs)
 	if err != nil {
 		return CreateProposalResult{}, err
 	}
@@ -790,6 +812,13 @@ func (s *MatchStore) CreateProposal(ctx context.Context, p CreateProposalParams)
 		if err != nil {
 			lockedRows.Close()
 			return CreateProposalResult{}, err
+		}
+		if _, requested := requestedByID[sess.ID]; !requested {
+			if sess.Status == SessionStatusSearching || sess.Status == SessionStatusPendingAccept {
+				lockedRows.Close()
+				return CreateProposalResult{}, ErrSessionNotSearchable
+			}
+			continue
 		}
 		lockedSessions[sess.ID] = sess
 	}
@@ -801,15 +830,40 @@ func (s *MatchStore) CreateProposal(ctx context.Context, p CreateProposalParams)
 	if len(lockedSessions) != len(proposalSessions) {
 		return CreateProposalResult{}, ErrSessionNotSearchable
 	}
+	var now time.Time
+	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+		return CreateProposalResult{}, err
+	}
+	var spaceID *uuid.UUID
+	if len(proposalSessions) > 0 {
+		spaceID = lockedSessions[proposalSessions[0].SessionID].SpaceID
+	}
 	for _, candidate := range proposalSessions {
 		sess, ok := lockedSessions[candidate.SessionID]
-		if !ok || sess.Status != SessionStatusSearching || sess.ProfileID != candidate.ProfileID || !samePartyID(sess.PartyID, candidate.PartyID) {
+		if !ok || sess.Status != SessionStatusSearching || sess.ProfileID != candidate.ProfileID || !samePartyID(sess.PartyID, candidate.PartyID) || !samePartyID(sess.SpaceID, spaceID) || !proposalSessionScopeMatches(sess, p, now) {
 			return CreateProposalResult{}, ErrSessionNotSearchable
 		}
 	}
 
+	if candidate == nil {
+		if err := requireUntypedProposalTx(ctx, tx, partyIDs); err != nil {
+			return CreateProposalResult{}, err
+		}
+	} else {
+		if proof == nil || !proof.Matches(*candidate) {
+			return CreateProposalResult{}, ErrSourcePartyUnavailable
+		}
+		// Both reads start after every inner lock has been acquired. Never fold
+		// the fresh ban observation into the statement that waited for a lock.
+		if err := banGuard.Check(ctx); err != nil {
+			return CreateProposalResult{}, err
+		}
+		if err := VerifyProposalCandidateTx(ctx, tx, *candidate); err != nil {
+			return CreateProposalResult{}, err
+		}
+	}
+
 	matchID := uuid.New()
-	now := time.Now().UTC()
 	participants := make([]MatchParticipant, len(proposalSessions))
 	for i, sess := range proposalSessions {
 		participants[i] = MatchParticipant{
@@ -1334,15 +1388,32 @@ func scanMatchRow(rows pgx.Rows) (Match, error) {
 	return m, nil
 }
 
-// AbandonMatch marks match abandoned and cancels pending sessions.
+// AbandonMatch fences pending activation and latches possible provider effects.
 func (s *MatchStore) AbandonMatch(ctx context.Context, matchID uuid.UUID) error {
 	if s == nil || s.Pool == nil {
 		return errors.New("match store unavailable")
 	}
-	now := time.Now().UTC()
-	_, err := s.Pool.Exec(ctx, `
-		UPDATE matches SET status = $2, completed_at = $3
-		WHERE id = $1 AND status = $4
-	`, matchID, MatchStatusAbandoned, now, MatchStatusPendingAccept)
-	return err
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var status string
+	err = tx.QueryRow(ctx, `SELECT status FROM matches WHERE id=$1 FOR UPDATE`, matchID).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if status != MatchStatusPendingAccept && status != MatchStatusAbandoned {
+		return nil
+	}
+	if _, err = tx.Exec(ctx, `UPDATE matches SET status='abandoned',completed_at=COALESCE(completed_at,clock_timestamp()) WHERE id=$1`, matchID); err != nil {
+		return err
+	}
+	if err = latchMatchAbandonmentCauseTx(ctx, tx, matchID, "MATCH_ABANDONED"); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }

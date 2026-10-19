@@ -3349,13 +3349,14 @@ const SearchCancelled$json = {
   '2': [
     {'1': 'session_id', '3': 1, '4': 1, '5': 9, '10': 'sessionId'},
     {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'reason', '3': 3, '4': 1, '5': 9, '10': 'reason'},
   ],
 };
 
 /// Descriptor for `SearchCancelled`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List searchCancelledDescriptor = $convert.base64Decode(
     'Cg9TZWFyY2hDYW5jZWxsZWQSHQoKc2Vzc2lvbl9pZBgBIAEoCVIJc2Vzc2lvbklkEh0KCnByb2'
-    'ZpbGVfaWQYAiABKAlSCXByb2ZpbGVJZA==');
+    'ZpbGVfaWQYAiABKAlSCXByb2ZpbGVJZBIWCgZyZWFzb24YAyABKAlSBnJlYXNvbg==');
 
 @$core.Deprecated('Use matchFoundDescriptor instead')
 const MatchFound$json = {

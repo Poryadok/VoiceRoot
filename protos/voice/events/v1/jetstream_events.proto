@@ -817,6 +817,8 @@ message SearchStarted {
 message SearchCancelled {
   string session_id = 1;
   string profile_id = 2;
+  // A3 whole-party reset uses VOICE_ROSTER_CHANGED. Empty for legacy producers.
+  string reason = 3;
 }
 
 message MatchFound {

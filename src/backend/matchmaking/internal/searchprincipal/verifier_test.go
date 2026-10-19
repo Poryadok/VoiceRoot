@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/hex"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,13 +25,17 @@ func TestVerifier_BindsVerifiedSubjectToExactSearch(t *testing.T) {
 	input := credentialInput(t, req, now)
 	token, err := issuer.IssueDelegatedUser(input)
 	require.NoError(t, err)
-	ctx, err := v.Verify(incoming(token, "request-1"), req)
+	ctx, err := v.Verify(incoming(token, "10000000-0000-4000-8000-000000000001"), req)
 	require.NoError(t, err)
 	subject, ok := SubjectFromContext(ctx, req)
 	require.True(t, ok)
 	require.Equal(t, uuid.MustParse(input.AccountID), subject.AccountID)
 	require.Equal(t, uuid.MustParse(input.ProfileID), subject.ProfileID)
 	require.Equal(t, int64(7), subject.SessionEpoch)
+	require.Equal(t, uuid.MustParse(input.RequestID), subject.SearchOperationID)
+	expectedHash, err := hex.DecodeString(strings.TrimPrefix(input.RequestHash, "sha256:"))
+	require.NoError(t, err)
+	require.Equal(t, expectedHash, subject.SearchRequestHash[:])
 	_, ok = SubjectFromContext(ctx, &matchmakingv1.StartSearchRequest{GameId: req.GameId, Mode: "squad"})
 	require.False(t, ok, "a verified subject must not be reused for altered request bytes")
 	_, ok = SubjectFromContext(ctx, nil)
@@ -57,15 +63,43 @@ func TestVerifier_RejectsCredentialBindingAndIdentity(t *testing.T) {
 		{"profile malformed", func(i *principal.DelegatedUserInput) { i.ProfileID = "invalid" }},
 		{"account zero", func(i *principal.DelegatedUserInput) { i.AccountID = uuid.Nil.String() }},
 		{"profile zero", func(i *principal.DelegatedUserInput) { i.ProfileID = uuid.Nil.String() }},
+		{"account noncanonical", func(i *principal.DelegatedUserInput) { i.AccountID = "20000000000040008000000000000001" }},
+		{"profile noncanonical", func(i *principal.DelegatedUserInput) { i.ProfileID = "20000000000040008000000000000001" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			input := credentialInput(t, req, now)
 			tc.change(&input)
 			token, err := issuer.IssueDelegatedUser(input)
 			require.NoError(t, err)
-			ctx, err := v.Verify(incoming(token, "request-1"), req)
+			ctx, err := v.Verify(incoming(token, "10000000-0000-4000-8000-000000000001"), req)
 			require.Equal(t, codes.Unauthenticated, status.Code(err))
 			require.Nil(t, ctx)
+		})
+	}
+}
+
+func TestVerifierRejectsNoncanonicalOperationAndUnknownRequestFields(t *testing.T) {
+	for _, kind := range []string{"nonUUID", "zero", "compact", "unknown request fields"} {
+		t.Run(kind, func(t *testing.T) {
+			v, issuer, now := fixture(t)
+			req := &matchmakingv1.StartSearchRequest{GameId: uuid.NewString()}
+			input := credentialInput(t, req, now)
+			switch kind {
+			case "nonUUID":
+				input.RequestID = "not-an-operation"
+			case "zero":
+				input.RequestID = uuid.Nil.String()
+			case "compact":
+				input.RequestID = "20000000000040008000000000000001"
+			case "unknown request fields":
+				req.ProtoReflect().SetUnknown([]byte{0xa0, 0x06, 0x01})
+				input.RequestHash, _ = principal.RequestHash(req)
+			}
+			token, err := issuer.IssueDelegatedUser(input)
+			require.NoError(t, err)
+			ctx, err := v.Verify(incoming(token, input.RequestID), req)
+			require.Nil(t, ctx)
+			require.Equal(t, codes.Unauthenticated, status.Code(err))
 		})
 	}
 }
@@ -81,11 +115,11 @@ func TestVerifier_RejectsMetadataBeforeDependencyCalls(t *testing.T) {
 	}
 	for _, pairs := range [][]string{
 		{}, {"authorization", "Bearer " + token},
-		{"authorization", "Bearer " + token, "authorization", "Bearer " + token, "x-request-id", "request-1"},
-		{"authorization", "Bearer " + token, "x-request-id", "request-1", "x-request-id", "request-1"},
-		{"authorization", "Bearer " + token, "x-request-id", "request-1", "x-voice-profile-id", uuid.NewString()},
-		{"authorization", "Bearer " + token, "x-request-id", "request-1", "x-profile-id", uuid.NewString()},
-		{"authorization", "Basic " + token, "x-request-id", "request-1"},
+		{"authorization", "Bearer " + token, "authorization", "Bearer " + token, "x-request-id", "10000000-0000-4000-8000-000000000001"},
+		{"authorization", "Bearer " + token, "x-request-id", "10000000-0000-4000-8000-000000000001", "x-request-id", "10000000-0000-4000-8000-000000000001"},
+		{"authorization", "Bearer " + token, "x-request-id", "10000000-0000-4000-8000-000000000001", "x-voice-profile-id", uuid.NewString()},
+		{"authorization", "Bearer " + token, "x-request-id", "10000000-0000-4000-8000-000000000001", "x-profile-id", uuid.NewString()},
+		{"authorization", "Basic " + token, "x-request-id", "10000000-0000-4000-8000-000000000001"},
 	} {
 		ctx, err := v.Verify(metadata.NewIncomingContext(context.Background(), metadata.Pairs(pairs...)), req)
 		require.Equal(t, codes.Unauthenticated, status.Code(err))
@@ -121,7 +155,7 @@ func TestVerifier_RequiresLiveEpochAndReplayDependencies(t *testing.T) {
 			token, err := issuer.IssueDelegatedUser(credentialInput(t, req, now))
 			require.NoError(t, err)
 			tc.change(&v)
-			ctx, err := v.Verify(incoming(token, "request-1"), req)
+			ctx, err := v.Verify(incoming(token, "10000000-0000-4000-8000-000000000001"), req)
 			require.Equal(t, codes.Unauthenticated, status.Code(err))
 			require.Nil(t, ctx)
 		})
@@ -197,7 +231,7 @@ func credentialInput(t *testing.T, req *matchmakingv1.StartSearchRequest, now ti
 	t.Helper()
 	hash, err := principal.RequestHash(req)
 	require.NoError(t, err)
-	return principal.DelegatedUserInput{Audience: "matchmaking", RPC: matchmakingv1.MatchmakingService_StartSearch_FullMethodName, RequestID: "request-1", RequestHash: hash, AccountID: uuid.NewString(), ProfileID: uuid.NewString(), SessionEpoch: 7, ClientExpiresAt: now.Add(time.Minute)}
+	return principal.DelegatedUserInput{Audience: "matchmaking", RPC: matchmakingv1.MatchmakingService_StartSearch_FullMethodName, RequestID: "10000000-0000-4000-8000-000000000001", RequestHash: hash, AccountID: uuid.NewString(), ProfileID: uuid.NewString(), SessionEpoch: 7, ClientExpiresAt: now.Add(time.Minute)}
 }
 
 func incoming(token, requestID string) context.Context {

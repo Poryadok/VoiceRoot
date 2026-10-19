@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const matchmakingJWKSChildMode = "MATCHMAKING_MAIN_JWKS_TEST_CHILD"
@@ -28,6 +32,7 @@ func TestMatchmakingJWKSStartsBeforeSpaceProviderReadiness(t *testing.T) {
 		runMatchmakingJWKSChild()
 		return
 	}
+	databaseURL := matchmakingJWKSDatabase(t)
 
 	keysDir := t.TempDir()
 	writeMatchmakingRotationKeys(t, keysDir)
@@ -65,6 +70,7 @@ func TestMatchmakingJWKSStartsBeforeSpaceProviderReadiness(t *testing.T) {
 		"MATCHMAKING_TEST_TLS_KEY=" + keyFile,
 		"MATCHMAKING_TEST_LISTEN_ADDR=" + jwksAddr,
 		"MATCHMAKING_TEST_SPACE_ADDR=" + spaceListener.Addr().String(),
+		"MATCHMAKING_TEST_DATABASE_URL=" + databaseURL,
 	}
 	if runtime.GOOS == "windows" {
 		command.Env = append(command.Env, "SYSTEMROOT="+os.Getenv("SYSTEMROOT"))
@@ -145,6 +151,7 @@ func runMatchmakingJWKSChild() {
 	keyFile := os.Getenv("MATCHMAKING_TEST_TLS_KEY")
 	listenAddr := os.Getenv("MATCHMAKING_TEST_LISTEN_ADDR")
 	spaceAddr := os.Getenv("MATCHMAKING_TEST_SPACE_ADDR")
+	databaseURL := os.Getenv("MATCHMAKING_TEST_DATABASE_URL")
 	// Winsock needs SYSTEMROOT even when the service fixture isolates its env.
 	systemRoot := os.Getenv("SYSTEMROOT")
 	os.Clearenv()
@@ -152,7 +159,7 @@ func runMatchmakingJWKSChild() {
 		_ = os.Setenv("SYSTEMROOT", systemRoot)
 	}
 	for key, value := range map[string]string{
-		"DATABASE_URL":                              "postgres://test:test@127.0.0.1:5432/voice?sslmode=disable",
+		"DATABASE_URL":                              databaseURL,
 		"SPACE_GRPC_ADDR":                           spaceAddr,
 		"LISTEN_ADDR":                               "127.0.0.1:0",
 		"MATCHMAKING_GRPC_LISTEN":                   "127.0.0.1:0",
@@ -176,6 +183,43 @@ func runMatchmakingJWKSChild() {
 		}
 	}
 	main()
+}
+
+// The compatibility root must validate actual pre-cut database admission before
+// publishing JWKS. Keep remote readiness unready, but provide that real local
+// prerequisite rather than depending on a pool that never connects.
+func matchmakingJWKSDatabase(t *testing.T) string {
+	t.Helper()
+	dsn := os.Getenv("BE011_TEST_PG_DSN")
+	if dsn == "" {
+		t.Skip("real PostgreSQL unavailable: set BE011_TEST_PG_DSN")
+	}
+	ctx := context.Background()
+	admin, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatal("open local PostgreSQL fixture")
+	}
+	name := "mm_jwks_" + uuid.NewString()[:8]
+	if _, err := admin.Exec(ctx, `CREATE DATABASE `+name); err != nil {
+		admin.Close()
+		t.Fatal("create isolated JWKS fixture database")
+	}
+	t.Cleanup(func() {
+		_, _ = admin.Exec(context.Background(), `DROP DATABASE `+name)
+		admin.Close()
+	})
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		parsed, err := url.Parse(dsn)
+		if err != nil {
+			t.Fatal("parse local PostgreSQL fixture")
+		}
+		parsed.Path, parsed.RawPath = "/"+name, ""
+		query := parsed.Query()
+		query.Del("dbname")
+		parsed.RawQuery = query.Encode()
+		return parsed.String()
+	}
+	return dsn + " dbname=" + name
 }
 
 func writeMatchmakingRotationKeys(t *testing.T, directory string) {

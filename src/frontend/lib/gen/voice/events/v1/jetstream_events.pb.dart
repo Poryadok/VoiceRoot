@@ -9788,10 +9788,12 @@ class SearchCancelled extends $pb.GeneratedMessage {
   factory SearchCancelled({
     $core.String? sessionId,
     $core.String? profileId,
+    $core.String? reason,
   }) {
     final result = create();
     if (sessionId != null) result.sessionId = sessionId;
     if (profileId != null) result.profileId = profileId;
+    if (reason != null) result.reason = reason;
     return result;
   }
 
@@ -9811,6 +9813,7 @@ class SearchCancelled extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'sessionId')
     ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..aOS(3, _omitFieldNames ? '' : 'reason')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -9849,6 +9852,16 @@ class SearchCancelled extends $pb.GeneratedMessage {
   $core.bool hasProfileId() => $_has(1);
   @$pb.TagNumber(2)
   void clearProfileId() => $_clearField(2);
+
+  /// A3 whole-party reset uses VOICE_ROSTER_CHANGED. Empty for legacy producers.
+  @$pb.TagNumber(3)
+  $core.String get reason => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set reason($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasReason() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearReason() => $_clearField(3);
 }
 
 class MatchFound extends $pb.GeneratedMessage {

@@ -75,10 +75,7 @@ func (s *MatchStore) SaveMatchSquadProvisioningIntent(ctx context.Context, inten
 	if s == nil || s.Pool == nil {
 		return MatchSquadProvisioningOperation{}, errors.New("match store unavailable")
 	}
-	if intent.MatchID == uuid.Nil || intent.OperationID == uuid.Nil || intent.ChatOperationID == uuid.Nil || intent.VoiceOperationID == uuid.Nil ||
-		len(intent.ParticipantManifestBytes) == 0 || len(intent.ChatRequestBytes) == 0 ||
-		!bytes.Equal(sumSHA256(intent.ParticipantManifestBytes), intent.ParticipantManifestHash) ||
-		!bytes.Equal(sumSHA256(intent.ChatRequestBytes), intent.ChatRequestHash) {
+	if !validMatchSquadIntentFields(intent) {
 		return MatchSquadProvisioningOperation{}, ErrMatchSquadConflict
 	}
 	tx, err := s.Pool.Begin(ctx)
@@ -86,7 +83,17 @@ func (s *MatchStore) SaveMatchSquadProvisioningIntent(ctx context.Context, inten
 		return MatchSquadProvisioningOperation{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	operation, err := saveMatchSquadProvisioningIntentTx(ctx, tx, intent, false)
+	if err != nil {
+		return MatchSquadProvisioningOperation{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return MatchSquadProvisioningOperation{}, err
+	}
+	return operation, nil
+}
 
+func saveMatchSquadProvisioningIntentTx(ctx context.Context, tx pgx.Tx, intent MatchSquadProvisioningIntent, dispatchProtocol bool) (MatchSquadProvisioningOperation, error) {
 	match, err := scanMatch(tx.QueryRow(ctx, `
 		SELECT id, game_id, mode, region, participants, left_profile_ids, voice_room_id, chat_id, status, created_at, completed_at
 		FROM matches WHERE id = $1 FOR UPDATE
@@ -142,14 +149,23 @@ func (s *MatchStore) SaveMatchSquadProvisioningIntent(ctx context.Context, inten
 		return MatchSquadProvisioningOperation{}, ErrMatchSquadConflict
 	}
 
-	_, err = tx.Exec(ctx, `
+	if dispatchProtocol {
+		_, err = tx.Exec(ctx, `INSERT INTO matchmaking_match_squad_operations
+		(match_id,operation_id,participant_manifest_sha256,participant_manifest_bytes,state,
+		 chat_operation_id,chat_request_sha256,chat_request_bytes,voice_operation_id,dispatch_protocol_version)
+		VALUES ($1,$2,$3,$4,'provisioning',$5,$6,$7,$8,1) ON CONFLICT(match_id) DO NOTHING`,
+			intent.MatchID, intent.OperationID, intent.ParticipantManifestHash, intent.ParticipantManifestBytes,
+			intent.ChatOperationID, intent.ChatRequestHash, intent.ChatRequestBytes, intent.VoiceOperationID)
+	} else {
+		_, err = tx.Exec(ctx, `
 		INSERT INTO matchmaking_match_squad_operations
 		(match_id, operation_id, participant_manifest_sha256, participant_manifest_bytes,
 		 state, chat_operation_id, chat_request_sha256, chat_request_bytes, voice_operation_id)
 		VALUES ($1,$2,$3,$4,'provisioning',$5,$6,$7,$8)
 		ON CONFLICT (match_id) DO NOTHING
 	`, intent.MatchID, intent.OperationID, intent.ParticipantManifestHash, intent.ParticipantManifestBytes,
-		intent.ChatOperationID, intent.ChatRequestHash, intent.ChatRequestBytes, intent.VoiceOperationID)
+			intent.ChatOperationID, intent.ChatRequestHash, intent.ChatRequestBytes, intent.VoiceOperationID)
+	}
 	if err != nil {
 		return MatchSquadProvisioningOperation{}, err
 	}
@@ -166,9 +182,6 @@ func (s *MatchStore) SaveMatchSquadProvisioningIntent(ctx context.Context, inten
 		!bytes.Equal(operation.ParticipantManifestHash, intent.ParticipantManifestHash) || !bytes.Equal(operation.ParticipantManifestBytes, intent.ParticipantManifestBytes) ||
 		!bytes.Equal(operation.ChatRequestHash, intent.ChatRequestHash) || !bytes.Equal(operation.ChatRequestBytes, intent.ChatRequestBytes) {
 		return MatchSquadProvisioningOperation{}, ErrMatchSquadConflict
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return MatchSquadProvisioningOperation{}, err
 	}
 	return operation, nil
 }
@@ -187,6 +200,9 @@ func (s *MatchStore) RecordMatchSquadChatReceipt(ctx context.Context, matchID, r
 		return MatchSquadProvisioningOperation{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockMatchSquadReceiptMatchTx(ctx, tx, matchID); err != nil {
+		return MatchSquadProvisioningOperation{}, err
+	}
 	operation, err := scanMatchSquadProvisioningOperation(tx.QueryRow(ctx, `
 		SELECT match_id, operation_id, participant_manifest_sha256, participant_manifest_bytes, state,
 		       chat_operation_id, chat_request_sha256, chat_request_bytes, chat_receipt_id, chat_receipt_bytes, chat_id,
@@ -199,8 +215,9 @@ func (s *MatchStore) RecordMatchSquadChatReceipt(ctx context.Context, matchID, r
 	if err != nil {
 		return MatchSquadProvisioningOperation{}, err
 	}
-	if operation.State != "provisioning" {
-		return MatchSquadProvisioningOperation{}, ErrMatchSquadPending
+	mode, err := readMatchSquadReceiptModeTx(ctx, tx, operation, "chat")
+	if err != nil {
+		return MatchSquadProvisioningOperation{}, err
 	}
 	chatReceipt := new(chatv1.MatchSquadChatReceipt)
 	voiceRequest := new(callsv1.CreateMatchSquadRoomRequest)
@@ -234,12 +251,20 @@ func (s *MatchStore) RecordMatchSquadChatReceipt(ctx context.Context, matchID, r
 			return MatchSquadProvisioningOperation{}, ErrMatchSquadConflict
 		}
 	} else {
-		_, err = tx.Exec(ctx, `
+		if mode.dispatch {
+			_, err = tx.Exec(ctx, `UPDATE matchmaking_match_squad_operations
+			 SET chat_receipt_id=$2,chat_receipt_bytes=$3,chat_id=$4,
+			 voice_request_sha256=$5,voice_request_bytes=$6,chat_dispatch_state='RECEIPT_KNOWN',
+			 provision_revision=provision_revision+1,provision_last_progress_at=clock_timestamp(),updated_at=clock_timestamp()
+			 WHERE match_id=$1 AND chat_receipt_id IS NULL`, matchID, receiptID, receiptBytes, chatID, voiceRequestHash, voiceRequestBytes)
+		} else {
+			_, err = tx.Exec(ctx, `
 			UPDATE matchmaking_match_squad_operations
 			SET chat_receipt_id=$2, chat_receipt_bytes=$3, chat_id=$4,
 			    voice_request_sha256=$5, voice_request_bytes=$6, updated_at=clock_timestamp()
 			WHERE match_id=$1 AND state='provisioning' AND chat_receipt_id IS NULL
 		`, matchID, receiptID, receiptBytes, chatID, voiceRequestHash, voiceRequestBytes)
+		}
 		if err != nil {
 			return MatchSquadProvisioningOperation{}, err
 		}
@@ -248,6 +273,11 @@ func (s *MatchStore) RecordMatchSquadChatReceipt(ctx context.Context, matchID, r
 		operation.ChatID = &chatID
 		operation.VoiceRequestHash = append([]byte(nil), voiceRequestHash...)
 		operation.VoiceRequestBytes = append([]byte(nil), voiceRequestBytes...)
+	}
+	if mode.abandoned {
+		if err := materializeMatchSquadCompensationTx(ctx, tx, operation, "chat"); err != nil {
+			return MatchSquadProvisioningOperation{}, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return MatchSquadProvisioningOperation{}, err
@@ -269,6 +299,9 @@ func (s *MatchStore) RecordMatchSquadVoiceReceipt(ctx context.Context, matchID, 
 		return MatchSquadProvisioningOperation{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockMatchSquadReceiptMatchTx(ctx, tx, matchID); err != nil {
+		return MatchSquadProvisioningOperation{}, err
+	}
 	operation, err := scanMatchSquadProvisioningOperation(tx.QueryRow(ctx, `
 		SELECT match_id, operation_id, participant_manifest_sha256, participant_manifest_bytes, state,
 		       chat_operation_id, chat_request_sha256, chat_request_bytes, chat_receipt_id, chat_receipt_bytes, chat_id,
@@ -281,7 +314,11 @@ func (s *MatchStore) RecordMatchSquadVoiceReceipt(ctx context.Context, matchID, 
 	if err != nil {
 		return MatchSquadProvisioningOperation{}, err
 	}
-	if operation.State != "provisioning" || operation.ChatReceiptID == nil || len(operation.VoiceRequestBytes) == 0 {
+	mode, err := readMatchSquadReceiptModeTx(ctx, tx, operation, "voice")
+	if err != nil {
+		return MatchSquadProvisioningOperation{}, err
+	}
+	if operation.ChatReceiptID == nil || len(operation.VoiceRequestBytes) == 0 {
 		return MatchSquadProvisioningOperation{}, ErrMatchSquadPending
 	}
 	if operation.ChatID == nil {
@@ -306,17 +343,29 @@ func (s *MatchStore) RecordMatchSquadVoiceReceipt(ctx context.Context, matchID, 
 			return MatchSquadProvisioningOperation{}, ErrMatchSquadConflict
 		}
 	} else {
-		_, err = tx.Exec(ctx, `
+		if mode.dispatch {
+			_, err = tx.Exec(ctx, `UPDATE matchmaking_match_squad_operations
+			 SET voice_receipt_id=$2,voice_receipt_bytes=$3,voice_room_id=$4,voice_dispatch_state='RECEIPT_KNOWN',
+			 provision_revision=provision_revision+1,provision_last_progress_at=clock_timestamp(),updated_at=clock_timestamp()
+			 WHERE match_id=$1 AND voice_receipt_id IS NULL`, matchID, receiptID, receiptBytes, roomID)
+		} else {
+			_, err = tx.Exec(ctx, `
 			UPDATE matchmaking_match_squad_operations
 			SET voice_receipt_id=$2, voice_receipt_bytes=$3, voice_room_id=$4, updated_at=clock_timestamp()
 			WHERE match_id=$1 AND state='provisioning' AND voice_receipt_id IS NULL AND chat_receipt_id IS NOT NULL
 		`, matchID, receiptID, receiptBytes, roomID)
+		}
 		if err != nil {
 			return MatchSquadProvisioningOperation{}, err
 		}
 		operation.VoiceReceiptID = &receiptID
 		operation.VoiceReceiptBytes = append([]byte(nil), receiptBytes...)
 		operation.VoiceRoomID = &roomID
+	}
+	if mode.abandoned {
+		if err := materializeMatchSquadCompensationTx(ctx, tx, operation, "voice"); err != nil {
+			return MatchSquadProvisioningOperation{}, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return MatchSquadProvisioningOperation{}, err
@@ -455,6 +504,17 @@ func (s *MatchStore) ActivateProvisionedMatch(ctx context.Context, matchID uuid.
 		return Match{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	activated, err := activateProvisionedMatchTx(ctx, tx, matchID, false)
+	if err != nil {
+		return Match{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Match{}, err
+	}
+	return activated, nil
+}
+
+func activateProvisionedMatchTx(ctx context.Context, tx pgx.Tx, matchID uuid.UUID, dispatchProtocol bool) (Match, error) {
 	match, err := scanMatch(tx.QueryRow(ctx, `
 		SELECT id, game_id, mode, region, participants, left_profile_ids, voice_room_id, chat_id, status, created_at, completed_at
 		FROM matches WHERE id=$1 FOR UPDATE
@@ -485,13 +545,20 @@ func (s *MatchStore) ActivateProvisionedMatch(ctx context.Context, matchID uuid.
 	if err != nil {
 		return Match{}, err
 	}
+	var protocol *int16
+	if err := tx.QueryRow(ctx, `SELECT (to_jsonb(o)->>'dispatch_protocol_version')::smallint
+		FROM matchmaking_match_squad_operations o WHERE match_id=$1`, matchID).Scan(&protocol); err != nil {
+		return Match{}, err
+	}
+	// A missing column is the old component schema. An explicit zero is an
+	// upgraded historical origin, not permission to bypass the private proof.
+	if (dispatchProtocol && (protocol == nil || (*protocol != 0 && *protocol != 1))) || (!dispatchProtocol && protocol != nil) {
+		return Match{}, ErrMatchSquadPending
+	}
 	if operation.State == "active" {
 		if match.Status != MatchStatusActive || match.ChatID == nil || match.VoiceRoomID == nil || operation.ChatID == nil || operation.VoiceRoomID == nil ||
 			*match.ChatID != operation.ChatID.String() || *match.VoiceRoomID != operation.VoiceRoomID.String() {
 			return Match{}, ErrMatchSquadConflict
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return Match{}, err
 		}
 		return match, nil
 	}
@@ -535,9 +602,6 @@ func (s *MatchStore) ActivateProvisionedMatch(ctx context.Context, matchID uuid.
 		return Match{}, err
 	}
 	match.Status, match.ChatID, match.VoiceRoomID = MatchStatusActive, uuidString(operation.ChatID), uuidString(operation.VoiceRoomID)
-	if err := tx.Commit(ctx); err != nil {
-		return Match{}, err
-	}
 	return match, nil
 }
 

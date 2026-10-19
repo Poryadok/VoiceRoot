@@ -25,7 +25,7 @@ func TestStartSearch_BansNotConfigured(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pool := startDB(t, ctx)
+	pool := startNativeSearchTestDB(t, ctx)
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() {
@@ -40,7 +40,7 @@ func TestStartSearch_BansNotConfigured(t *testing.T) {
 		Events:   mmevents.NoopPublisher{},
 	}
 	gameID := dotaGameID(t, srv, ctxWithProfile(uuid.New()))
-	_, err := srv.StartSearch(ctxWithProfileAccount(uuid.New(), uuid.New()), &matchmakingv1.StartSearchRequest{
+	_, err := startProtectedSearchForTest(t, srv, ctxWithProfileAccount(uuid.New(), uuid.New()), &matchmakingv1.StartSearchRequest{
 		GameId:       gameID,
 		Mode:         "5v5 Ranked",
 		CriteriaJson: validDotaCriteriaJSON(),
@@ -56,10 +56,10 @@ func TestStartSearch_MissingAccountID(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pool := startDB(t, ctx)
+	pool := startNativeSearchTestDB(t, ctx)
 	srv := searchTestServer(t, pool)
 	gameID := dotaGameID(t, srv, ctxWithProfile(uuid.New()))
-	_, err := srv.StartSearch(ctxWithProfile(uuid.New()), &matchmakingv1.StartSearchRequest{
+	_, err := startProtectedSearchForTest(t, srv, ctxWithProfile(uuid.New()), &matchmakingv1.StartSearchRequest{
 		GameId:       gameID,
 		Mode:         "5v5 Ranked",
 		CriteriaJson: validDotaCriteriaJSON(),

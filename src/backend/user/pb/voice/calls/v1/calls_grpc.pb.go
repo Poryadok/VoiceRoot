@@ -475,30 +475,31 @@ var MatchSquadVoiceService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	VoiceService_StartCall_FullMethodName                = "/voice.calls.v1.VoiceService/StartCall"
-	VoiceService_AcceptCall_FullMethodName               = "/voice.calls.v1.VoiceService/AcceptCall"
-	VoiceService_DeclineCall_FullMethodName              = "/voice.calls.v1.VoiceService/DeclineCall"
-	VoiceService_JoinCall_FullMethodName                 = "/voice.calls.v1.VoiceService/JoinCall"
-	VoiceService_LeaveCall_FullMethodName                = "/voice.calls.v1.VoiceService/LeaveCall"
-	VoiceService_EndCall_FullMethodName                  = "/voice.calls.v1.VoiceService/EndCall"
-	VoiceService_JoinVoiceRoom_FullMethodName            = "/voice.calls.v1.VoiceService/JoinVoiceRoom"
-	VoiceService_LeaveVoiceRoom_FullMethodName           = "/voice.calls.v1.VoiceService/LeaveVoiceRoom"
-	VoiceService_MoveToVoiceRoom_FullMethodName          = "/voice.calls.v1.VoiceService/MoveToVoiceRoom"
-	VoiceService_MoveVoiceRoomParticipant_FullMethodName = "/voice.calls.v1.VoiceService/MoveVoiceRoomParticipant"
-	VoiceService_GetJoinToken_FullMethodName             = "/voice.calls.v1.VoiceService/GetJoinToken"
-	VoiceService_UpdateVoiceState_FullMethodName         = "/voice.calls.v1.VoiceService/UpdateVoiceState"
-	VoiceService_GetVoiceStates_FullMethodName           = "/voice.calls.v1.VoiceService/GetVoiceStates"
-	VoiceService_GetActiveCall_FullMethodName            = "/voice.calls.v1.VoiceService/GetActiveCall"
-	VoiceService_StartScreenShare_FullMethodName         = "/voice.calls.v1.VoiceService/StartScreenShare"
-	VoiceService_StopScreenShare_FullMethodName          = "/voice.calls.v1.VoiceService/StopScreenShare"
-	VoiceService_SetCommanderMode_FullMethodName         = "/voice.calls.v1.VoiceService/SetCommanderMode"
-	VoiceService_SetBroadcasting_FullMethodName          = "/voice.calls.v1.VoiceService/SetBroadcasting"
-	VoiceService_RaiseHand_FullMethodName                = "/voice.calls.v1.VoiceService/RaiseHand"
-	VoiceService_LowerHand_FullMethodName                = "/voice.calls.v1.VoiceService/LowerHand"
-	VoiceService_GrantFloor_FullMethodName               = "/voice.calls.v1.VoiceService/GrantFloor"
-	VoiceService_RevokeFloor_FullMethodName              = "/voice.calls.v1.VoiceService/RevokeFloor"
-	VoiceService_ApplySpaceLifecycleFence_FullMethodName = "/voice.calls.v1.VoiceService/ApplySpaceLifecycleFence"
-	VoiceService_PurgeSpace_FullMethodName               = "/voice.calls.v1.VoiceService/PurgeSpace"
+	VoiceService_StartCall_FullMethodName                   = "/voice.calls.v1.VoiceService/StartCall"
+	VoiceService_AcceptCall_FullMethodName                  = "/voice.calls.v1.VoiceService/AcceptCall"
+	VoiceService_DeclineCall_FullMethodName                 = "/voice.calls.v1.VoiceService/DeclineCall"
+	VoiceService_JoinCall_FullMethodName                    = "/voice.calls.v1.VoiceService/JoinCall"
+	VoiceService_LeaveCall_FullMethodName                   = "/voice.calls.v1.VoiceService/LeaveCall"
+	VoiceService_EndCall_FullMethodName                     = "/voice.calls.v1.VoiceService/EndCall"
+	VoiceService_JoinVoiceRoom_FullMethodName               = "/voice.calls.v1.VoiceService/JoinVoiceRoom"
+	VoiceService_LeaveVoiceRoom_FullMethodName              = "/voice.calls.v1.VoiceService/LeaveVoiceRoom"
+	VoiceService_MoveToVoiceRoom_FullMethodName             = "/voice.calls.v1.VoiceService/MoveToVoiceRoom"
+	VoiceService_MoveVoiceRoomParticipant_FullMethodName    = "/voice.calls.v1.VoiceService/MoveVoiceRoomParticipant"
+	VoiceService_GetJoinToken_FullMethodName                = "/voice.calls.v1.VoiceService/GetJoinToken"
+	VoiceService_UpdateVoiceState_FullMethodName            = "/voice.calls.v1.VoiceService/UpdateVoiceState"
+	VoiceService_GetVoiceStates_FullMethodName              = "/voice.calls.v1.VoiceService/GetVoiceStates"
+	VoiceService_GetActiveCall_FullMethodName               = "/voice.calls.v1.VoiceService/GetActiveCall"
+	VoiceService_GetMatchmakingPartySnapshot_FullMethodName = "/voice.calls.v1.VoiceService/GetMatchmakingPartySnapshot"
+	VoiceService_StartScreenShare_FullMethodName            = "/voice.calls.v1.VoiceService/StartScreenShare"
+	VoiceService_StopScreenShare_FullMethodName             = "/voice.calls.v1.VoiceService/StopScreenShare"
+	VoiceService_SetCommanderMode_FullMethodName            = "/voice.calls.v1.VoiceService/SetCommanderMode"
+	VoiceService_SetBroadcasting_FullMethodName             = "/voice.calls.v1.VoiceService/SetBroadcasting"
+	VoiceService_RaiseHand_FullMethodName                   = "/voice.calls.v1.VoiceService/RaiseHand"
+	VoiceService_LowerHand_FullMethodName                   = "/voice.calls.v1.VoiceService/LowerHand"
+	VoiceService_GrantFloor_FullMethodName                  = "/voice.calls.v1.VoiceService/GrantFloor"
+	VoiceService_RevokeFloor_FullMethodName                 = "/voice.calls.v1.VoiceService/RevokeFloor"
+	VoiceService_ApplySpaceLifecycleFence_FullMethodName    = "/voice.calls.v1.VoiceService/ApplySpaceLifecycleFence"
+	VoiceService_PurgeSpace_FullMethodName                  = "/voice.calls.v1.VoiceService/PurgeSpace"
 )
 
 // VoiceServiceClient is the client API for VoiceService service.
@@ -522,6 +523,9 @@ type VoiceServiceClient interface {
 	UpdateVoiceState(ctx context.Context, in *UpdateVoiceStateRequest, opts ...grpc.CallOption) (*UpdateVoiceStateResponse, error)
 	GetVoiceStates(ctx context.Context, in *GetVoiceStatesRequest, opts ...grpc.CallOption) (*GetVoiceStatesResponse, error)
 	GetActiveCall(ctx context.Context, in *GetActiveCallRequest, opts ...grpc.CallOption) (*GetActiveCallResponse, error)
+	// @voice.security=protected;callers=service:matchmaking
+	// Native authority only; never available on the ordinary user listener.
+	GetMatchmakingPartySnapshot(ctx context.Context, in *GetMatchmakingPartySnapshotRequest, opts ...grpc.CallOption) (*GetMatchmakingPartySnapshotResponse, error)
 	StartScreenShare(ctx context.Context, in *StartScreenShareRequest, opts ...grpc.CallOption) (*StartScreenShareResponse, error)
 	StopScreenShare(ctx context.Context, in *StopScreenShareRequest, opts ...grpc.CallOption) (*StopScreenShareResponse, error)
 	SetCommanderMode(ctx context.Context, in *SetCommanderModeRequest, opts ...grpc.CallOption) (*SetCommanderModeResponse, error)
@@ -684,6 +688,16 @@ func (c *voiceServiceClient) GetActiveCall(ctx context.Context, in *GetActiveCal
 	return out, nil
 }
 
+func (c *voiceServiceClient) GetMatchmakingPartySnapshot(ctx context.Context, in *GetMatchmakingPartySnapshotRequest, opts ...grpc.CallOption) (*GetMatchmakingPartySnapshotResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetMatchmakingPartySnapshotResponse)
+	err := c.cc.Invoke(ctx, VoiceService_GetMatchmakingPartySnapshot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *voiceServiceClient) StartScreenShare(ctx context.Context, in *StartScreenShareRequest, opts ...grpc.CallOption) (*StartScreenShareResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(StartScreenShareResponse)
@@ -805,6 +819,9 @@ type VoiceServiceServer interface {
 	UpdateVoiceState(context.Context, *UpdateVoiceStateRequest) (*UpdateVoiceStateResponse, error)
 	GetVoiceStates(context.Context, *GetVoiceStatesRequest) (*GetVoiceStatesResponse, error)
 	GetActiveCall(context.Context, *GetActiveCallRequest) (*GetActiveCallResponse, error)
+	// @voice.security=protected;callers=service:matchmaking
+	// Native authority only; never available on the ordinary user listener.
+	GetMatchmakingPartySnapshot(context.Context, *GetMatchmakingPartySnapshotRequest) (*GetMatchmakingPartySnapshotResponse, error)
 	StartScreenShare(context.Context, *StartScreenShareRequest) (*StartScreenShareResponse, error)
 	StopScreenShare(context.Context, *StopScreenShareRequest) (*StopScreenShareResponse, error)
 	SetCommanderMode(context.Context, *SetCommanderModeRequest) (*SetCommanderModeResponse, error)
@@ -868,6 +885,9 @@ func (UnimplementedVoiceServiceServer) GetVoiceStates(context.Context, *GetVoice
 }
 func (UnimplementedVoiceServiceServer) GetActiveCall(context.Context, *GetActiveCallRequest) (*GetActiveCallResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetActiveCall not implemented")
+}
+func (UnimplementedVoiceServiceServer) GetMatchmakingPartySnapshot(context.Context, *GetMatchmakingPartySnapshotRequest) (*GetMatchmakingPartySnapshotResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetMatchmakingPartySnapshot not implemented")
 }
 func (UnimplementedVoiceServiceServer) StartScreenShare(context.Context, *StartScreenShareRequest) (*StartScreenShareResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StartScreenShare not implemented")
@@ -1172,6 +1192,24 @@ func _VoiceService_GetActiveCall_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VoiceService_GetMatchmakingPartySnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetMatchmakingPartySnapshotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VoiceServiceServer).GetMatchmakingPartySnapshot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VoiceService_GetMatchmakingPartySnapshot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VoiceServiceServer).GetMatchmakingPartySnapshot(ctx, req.(*GetMatchmakingPartySnapshotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _VoiceService_StartScreenShare_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(StartScreenShareRequest)
 	if err := dec(in); err != nil {
@@ -1414,6 +1452,10 @@ var VoiceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetActiveCall",
 			Handler:    _VoiceService_GetActiveCall_Handler,
+		},
+		{
+			MethodName: "GetMatchmakingPartySnapshot",
+			Handler:    _VoiceService_GetMatchmakingPartySnapshot_Handler,
 		},
 		{
 			MethodName: "StartScreenShare",
