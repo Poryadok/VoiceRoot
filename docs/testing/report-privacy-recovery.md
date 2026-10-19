@@ -220,6 +220,18 @@ unknown classes, missing/mismatched receipts and unresolved retained bindings
 reject. A recovered legacy class requires its User owner fact and confers no
 new submission, vote or validation authority.
 
+After migration 9, retained DELETED bindings also require a known nonzero Auth
+deletion cycle; LIVE bindings require a NULL cycle. This applies to reporters,
+validated targets and retained target-subject history after plain rejection.
+A legacy NULL cycle with a future deadline is unresolved, never fabricated or
+promoted by this read-only checker. Fresh owning-authority repair must preserve
+the exact cycle and its immutable deadline before completion.
+The report-created outbox applies the same known-cycle/retained-deadline rule
+under its account/subject/report locks before invoking publication. A legacy
+NULL cycle produces no send, ACK or invented terminal marker. A fresh retained
+cycle can still publish within its exact database deadline; this is not a new
+submission or target-admission authority.
+
 A fresh opaque pending target without a target receipt still has no inferred
 owner or eligibility; it does not require synchronous target lookup at intake or
 this checker. Known current receipts cannot be discarded to make an older row

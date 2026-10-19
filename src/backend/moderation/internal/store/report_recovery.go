@@ -39,7 +39,9 @@ func (s *ReportStore) RequirePrivacyRecovery(ctx context.Context) error {
   OR NOT EXISTS(SELECT 1 FROM automod_subjects a
    WHERE a.account_id=r.reporter_account_id AND a.subject_id=r.reporter_subject_id
    AND a.lifecycle_revision>=r.reporter_subject_revision
-   AND ((a.lifecycle_state='LIVE' AND a.purge_at IS NULL) OR (a.lifecycle_state='DELETED' AND a.purge_at>clock_timestamp()))
+   AND ((a.lifecycle_state='LIVE' AND a.purge_at IS NULL AND a.deletion_cycle_id IS NULL)
+    OR (a.lifecycle_state='DELETED' AND a.purge_at>clock_timestamp() AND a.deletion_cycle_id IS NOT NULL
+     AND a.deletion_cycle_id<>'00000000-0000-0000-0000-000000000000'::uuid))
    AND NOT EXISTS(SELECT 1 FROM automod_terminal_subjects t WHERE t.subject_id=a.subject_id))
   OR (rejection.report_id IS NOT NULL AND (r.target_type<>'user' OR r.validation_state NOT IN ('MISSING','DELETED') OR rejection.decision<>r.validation_state))
   OR (r.target_type='user' AND r.validation_state IN ('MISSING','DELETED') AND (
@@ -53,7 +55,9 @@ func (s *ReportStore) RequirePrivacyRecovery(ctx context.Context) error {
    OR EXISTS(SELECT 1 FROM report_threshold_evaluations e WHERE e.report_id=r.id)
    OR (jt.report_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM automod_subjects a
     WHERE a.subject_id=jt.subject_id AND a.lifecycle_revision>0
-    AND ((a.lifecycle_state='LIVE' AND a.purge_at IS NULL) OR (a.lifecycle_state='DELETED' AND a.purge_at>clock_timestamp()))
+    AND ((a.lifecycle_state='LIVE' AND a.purge_at IS NULL AND a.deletion_cycle_id IS NULL)
+     OR (a.lifecycle_state='DELETED' AND a.purge_at>clock_timestamp() AND a.deletion_cycle_id IS NOT NULL
+      AND a.deletion_cycle_id<>'00000000-0000-0000-0000-000000000000'::uuid))
     AND NOT EXISTS(SELECT 1 FROM automod_terminal_subjects t WHERE t.subject_id=a.subject_id)))
   ))
   OR ((r.target_type<>'user' OR r.validation_state IN ('PENDING','VALID')) AND (r.target_id IS NULL OR r.target_id='00000000-0000-0000-0000-000000000000'::uuid))
@@ -68,7 +72,9 @@ func (s *ReportStore) RequirePrivacyRecovery(ctx context.Context) error {
    OR NOT EXISTS(SELECT 1 FROM automod_subjects a
     WHERE a.account_id=r.validated_target_account_id AND a.subject_id=r.validated_target_subject_id
     AND a.lifecycle_revision>=r.validated_target_subject_revision
-    AND ((a.lifecycle_state='LIVE' AND a.purge_at IS NULL) OR (a.lifecycle_state='DELETED' AND a.purge_at>clock_timestamp()))
+    AND ((a.lifecycle_state='LIVE' AND a.purge_at IS NULL AND a.deletion_cycle_id IS NULL)
+     OR (a.lifecycle_state='DELETED' AND a.purge_at>clock_timestamp() AND a.deletion_cycle_id IS NOT NULL
+      AND a.deletion_cycle_id<>'00000000-0000-0000-0000-000000000000'::uuid))
     AND NOT EXISTS(SELECT 1 FROM automod_terminal_subjects t WHERE t.subject_id=a.subject_id))
   )))`).Scan(&unresolved)
 	if err != nil {

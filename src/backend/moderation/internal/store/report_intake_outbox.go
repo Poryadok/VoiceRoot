@@ -101,7 +101,12 @@ func (s *ReportStore) deliverIntakeEvent(ctx context.Context, publish func(conte
 	for _, binding := range bindings {
 		var live bool
 		var purgeAt *time.Time
-		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM automod_subjects a WHERE a.account_id=$1 AND a.subject_id=$2 AND a.lifecycle_revision >= $3 AND (a.lifecycle_state='LIVE' AND a.purge_at IS NULL OR a.lifecycle_state='DELETED' AND a.purge_at>clock_timestamp()) AND NOT EXISTS(SELECT 1 FROM automod_terminal_subjects t WHERE t.subject_id=a.subject_id)),(SELECT purge_at FROM automod_subjects WHERE account_id=$1 AND subject_id=$2)`, binding.account, binding.subject, binding.revision).Scan(&live, &purgeAt); err != nil {
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM automod_subjects a WHERE a.account_id=$1 AND a.subject_id=$2 AND a.lifecycle_revision >= $3
+ AND ((a.lifecycle_state='LIVE' AND a.purge_at IS NULL AND a.deletion_cycle_id IS NULL)
+ OR (a.lifecycle_state='DELETED' AND a.purge_at>clock_timestamp() AND a.deletion_cycle_id IS NOT NULL
+ AND a.deletion_cycle_id<>'00000000-0000-0000-0000-000000000000'::uuid))
+ AND NOT EXISTS(SELECT 1 FROM automod_terminal_subjects t WHERE t.subject_id=a.subject_id)),
+ (SELECT purge_at FROM automod_subjects WHERE account_id=$1 AND subject_id=$2)`, binding.account, binding.subject, binding.revision).Scan(&live, &purgeAt); err != nil {
 			return false, err
 		}
 		if !live {

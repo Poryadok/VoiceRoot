@@ -360,7 +360,7 @@ func TestReportDispatchDeadlineContext(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, applied)
 	var purgeAt time.Time
-	require.NoError(t, pool.QueryRow(ctx, `UPDATE automod_subjects SET lifecycle_revision=2,lifecycle_state='DELETED',purge_at=clock_timestamp()+interval '2 seconds' WHERE subject_id=$1 RETURNING purge_at`, reporter.ID).Scan(&purgeAt))
+	require.NoError(t, pool.QueryRow(ctx, `UPDATE automod_subjects SET lifecycle_revision=2,lifecycle_state='DELETED',deletion_cycle_id=$2,purge_at=clock_timestamp()+interval '2 seconds' WHERE subject_id=$1 RETURNING purge_at`, reporter.ID, uuid.New()).Scan(&purgeAt))
 	attempted, err := reports.DeliverIntakeEvent(ctx, func(attempt context.Context, event store.IntakeEvent) error {
 		deadline, ok := attempt.Deadline()
 		require.True(t, ok)
