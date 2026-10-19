@@ -26,6 +26,25 @@ def module():
 
 
 class ProducerTrace(unittest.TestCase):
+    def test_original_full_router_keeps_auth_exception_and_rejects_forbidden_revert_control(self):
+        self.write('scripts/ci/t31-r22-scope-allowlist.txt',(ROOT/'scripts/ci/t31-r22-scope-allowlist.txt').read_text())
+        self.base=self.commit('private original policy context')
+        auth='protos/voice/auth/v1/auth.proto'
+        self.write(auth,'private auth contract\n');self.hidden_runtime()
+        result,out=self.collect();self.assertEqual(result.returncode,0,result.stderr)
+        (out/'f13-contributions').write_bytes((out/'map').read_bytes())
+        m=module()
+        context=dict(values=dict(ROOT=str(self.repo),TMP_DIR=str(out),base_sha=self.base,
+            accepted_game_checkpoint='',game_checkpoint_enabled='false',game_checkpoint_aggregate_map='',
+            native_p3_active='false',r23_allowlist_enabled='false',r22_runtime_delta='true'),event={})
+        allowed=m.execute_original_router(context,dict(path=auth,aggregate=True,covered=True))
+        self.assertEqual((allowed['gate'],allowed['status']),('space_media_path_allowed',0))
+        self.assertEqual(m.original_scope_exit(auth,'true'),1)
+        # This proto is outside every applicable earlier original exception.
+        # The real operation contained runtime, subsequently reverted to base.
+        forbidden=m.execute_original_router(context,dict(path=PROTO,aggregate=True,covered=True))
+        self.assertEqual((forbidden['gate'],forbidden['status']),('original_remaining_path_policy',1))
+
     def test_M_consumer_uses_prior_true_and_original_gate_without_flag_rewrite(self):
         # Private transport unit test only. Actual constructor/trace validation
         # is separate; these hand-built inputs never claim observed M rows.
@@ -37,7 +56,7 @@ class ProducerTrace(unittest.TestCase):
         # supplies a real JSONL prefix in the actual producer proof.
         prefix=b'{"kind":"private-fixture-prefix"}\n'
         before=dict(kind='row_before',operation=op,sequence=2,payload=dict(path=name,
-            incoming=m.raw_binding(incoming),prior_rows=[m.raw_binding(prior)]))
+            incoming=m.raw_binding(incoming),prior_rows=[m.raw_binding(prior)],map_before=dict(bytes=len((prior+'\n').encode()),sha256=m.sha((prior+'\n').encode()))))
         trace.write_bytes(prefix+json.dumps(before).encode()+b'\n')
         evidence=dict(aggregate=True,retained_evidence=[dict(frame='F1',evidence=[dict(prior_rows=[m.raw_binding(prior)])])],span_evidence=None,M_classification=None)
         ready=dict(type='F54_ACTUAL_M_COMPLETE_RETAINED_LEDGER',operation=op,admission=False,

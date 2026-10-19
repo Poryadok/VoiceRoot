@@ -3201,6 +3201,12 @@ f13_path_is_guarded() {
 # governed by this collector has the same complete tree entry at each best
 # base. Differences in those paths remain ambiguous and fail closed.
 f13_f54_capability_file=''
+f13_f54_collection_file=''
+f13_f54_collection_sha=''
+f13_f54_router_seal=''
+f13_f54_router_seal_sha=''
+f13_f54_router_receipt=''
+f13_f54_router_observation=''
 
 f13_f54_trace_event() {
   local kind="$1" trace_repo="$2"
@@ -3260,7 +3266,52 @@ f13_f54_collect_exact_unit() {
   # not initialize a capability from environment or prototype constants.
   python3 "${f13_f54_observer}" capabilities "${repo}" "${unit}" >"${f13_f54_capability_file}" || return 1
   python3 "${f13_f54_observer}" cap-entry "${repo}" "${f13_f54_capability_file}" "${base}" "${target}" >/dev/null || return 1
-  f13_collect_develop_contributions "${repo}" "${base}" "${target}" "${output}" "${category}" true false
+  f13_collect_develop_contributions "${repo}" "${base}" "${target}" "${output}" "${category}" true false || return 1
+  f13_f54_collection_file="${TMP_DIR}/f54-completed-collection.json"
+  python3 "${f13_f54_observer}" collection-seal "${repo}" "${f13_f54_trace_file}" "${output}" >"${f13_f54_collection_file}" || return 1
+  f13_f54_collection_sha="$(python3 -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "${f13_f54_collection_file}")"
+}
+
+f13_f54_policy_context() {
+  local output="$1" name
+  local -a values=()
+  while IFS= read -r name; do
+    case "${name}" in
+      ROOT|TMP_DIR|base_sha|r22_runtime_delta|accepted_*|game_checkpoint_*|native_p3_*|r23_*) values+=("${name}" "${!name-}") ;;
+    esac
+  done < <(compgen -v | LC_ALL=C sort -u)
+  python3 "${f13_f54_observer}" policy-context "${ROOT}" "${TMP_DIR}/f13-contributions" "${values[@]}" >"${output}"
+}
+
+f13_f54_router_prepare() {
+  [[ -n "${f13_f54_collection_file:-}" ]] || return 0
+  local context="${TMP_DIR}/f54-original-policy-context.json"
+  f13_f54_policy_context "${context}" || return 1
+  f13_f54_router_seal="${TMP_DIR}/f54-original-router-seal.json"
+  python3 "${f13_f54_observer}" router-seal "${ROOT}" "${f13_f54_collection_file}" "${f13_f54_collection_sha}" \
+    "${TMP_DIR}/f13-contributions" "${context}" >"${f13_f54_router_seal}" || return 1
+  f13_f54_router_seal_sha="$(python3 -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "${f13_f54_router_seal}")" || return 1
+  f13_f54_router_observation="${TMP_DIR}/f54-original-router.jsonl"
+  [[ ! -e "${f13_f54_router_observation}" ]]
+}
+
+f13_f54_router_begin() {
+  local path="$1"
+  [[ -n "${f13_f54_collection_file:-}" ]] || return 0
+  [[ -n "${f13_f54_router_seal:-}" ]] || return 1
+  f13_f54_policy_context "${TMP_DIR}/f54-current-policy-context.json" || return 1
+  f13_f54_router_receipt="${TMP_DIR}/f54-current-router-receipt.json"
+  python3 "${f13_f54_observer}" router-bind "${ROOT}" "${f13_f54_router_seal}" "${f13_f54_router_seal_sha}" \
+    "${TMP_DIR}/f13-contributions" "${TMP_DIR}/f54-current-policy-context.json" "${path}" >"${f13_f54_router_receipt}" || return 1
+  python3 "${f13_f54_observer}" router-append "${f13_f54_router_observation}" before "${f13_f54_router_receipt}"
+}
+
+f13_f54_router_gate() {
+  local gate="$1" status="$2"
+  shift 2
+  [[ -n "${f13_f54_collection_file:-}" ]] || return 0
+  [[ -s "${f13_f54_router_receipt:-}" ]] || return 1
+  python3 "${f13_f54_observer}" router-append "${f13_f54_router_observation}" gate "${f13_f54_router_receipt}" "${gate}" "${status}" "$@"
 }
 
 f13_f54_execute_M_history() {
@@ -3279,20 +3330,14 @@ f13_f54_execute_M_history() {
 }
 
 f13_f54_consume_M_before_mutation() {
-  local repo="$1" path="$2" output="$3" incoming="$4" category="$5" receipt aggregate status=0
+  local repo="$1" path="$2" output="$3" incoming="$4" category="$5" transition="$6" receipt
   [[ -n "${f13_f54_M_operation:-}" && "${f13_f54_operation}" == "${f13_f54_M_operation}" ]] || return 0
   receipt="${TMP_DIR}/f54-actual-M-consumed.json"
   python3 "${f13_f54_observer}" M-consume "${f13_f54_M_ledger}" "${f13_f54_M_ledger_sha}" \
-    "${f13_f54_trace_file}" "${path}" "${output}" "${incoming}" >"${receipt}" || return 1
-  aggregate="$(python3 -c 'import json,sys;print(str(json.load(open(sys.argv[1]))["aggregate"]).lower())' "${receipt}")" || return 1
-  # Consume the aggregate in the original predicate before any map mutation.
-  # This does not rewrite the raw producer flag or grant a new path exception.
-  f13_cross_scope_path_allowed "${path}" "${aggregate}" || status=$?
-  f13_f54_trace_event complete_ledger_consumed "${repo}" "${path}" "${receipt}" "${status}" || return 1
-  if [[ "${status}" != 0 ]]; then
-    f13_collect_failure "${category}" f54_complete_ledger_cross_scope
-    return 1
-  fi
+    "${f13_f54_trace_file}" "${path}" "${output}" "${incoming}" "${transition}" >"${receipt}" || return 1
+  # Conservation precedes mutation. The original full policy router stays at
+  # its later phase; a raw Boolean is neither rewritten nor an admission grant.
+  f13_f54_trace_event complete_ledger_conserved "${repo}" "${path}" "${receipt}"
 }
 
 f13_f54_prepare_M_ledger() {
@@ -4157,7 +4202,7 @@ f13_collect_develop_contributions() {
         fi
         if [[ -n "${f13_f54_trace_file:-}" ]]; then
           f13_f54_consume_M_before_mutation "${repo}" "${path}" "${output}" \
-            "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" "${diagnostic_file}" || return 1
+            "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" "${diagnostic_file}" replace || return 1
           f13_f54_path_consumed=true
           f13_f54_trace_event row_remove "${repo}" "${path}" \
             "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" original_guarded_map_replacement || return 1
@@ -4174,7 +4219,7 @@ f13_collect_develop_contributions() {
       if [[ -n "${f13_f54_trace_file:-}" ]]; then
         if [[ "${f13_f54_path_consumed}" != true ]]; then
           f13_f54_consume_M_before_mutation "${repo}" "${path}" "${output}" \
-            "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" "${diagnostic_file}" || return 1
+            "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" "${diagnostic_file}" append || return 1
         fi
         f13_f54_trace_event row_after "${repo}" "${path}" \
           "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" original_owner_and_row_assignment || return 1
@@ -5721,13 +5766,23 @@ if [[ -s "${TMP_DIR}/f13-contributions" ]]; then
   awk -F '\t' '$2 == "true" { print $1 }' "${TMP_DIR}/f13-contributions" \
     | LC_ALL=C sort -u >"${TMP_DIR}/unapproved-runtime-delta"
 fi
+if [[ -n "${f13_f54_collection_file:-}" ]]; then
+  python3 "${f13_f54_observer}" collection-runtime-paths "${ROOT}" "${f13_f54_collection_file}" "${f13_f54_collection_sha}" \
+    "${TMP_DIR}/f13-contributions" >"${TMP_DIR}/unapproved-runtime-delta" || exit 2
+fi
 r22_runtime_delta=false
 if voice_r22_runtime_changed <"${TMP_DIR}/unapproved-runtime-delta"; then
   r22_runtime_delta=true
 fi
 
 f13_runtime_for_path() {
-  local path="$1"
+  local path="$1" f54_status=0 f54_value
+  if [[ -n "${f13_f54_collection_file:-}" ]]; then
+    f54_value="$(python3 "${f13_f54_observer}" router-runtime "${ROOT}" "${f13_f54_router_seal}" "${f13_f54_router_seal_sha}" \
+      "${TMP_DIR}/f13-contributions" "${TMP_DIR}/f54-current-policy-context.json" "${path}")" || f54_status=$?
+    if [[ "${f54_status}" == 0 ]]; then printf '%s\n' "${f54_value}"; return 0; fi
+    [[ "${f54_status}" == 3 ]] || return 2
+  fi
   if [[ -s "${TMP_DIR}/f13-contributions" ]]; then
     awk -F '\t' -v path="${path}" '$1 == path { value=$2; found=1 } END { if (!found) exit 1; print value }' \
       "${TMP_DIR}/f13-contributions"
@@ -6181,14 +6236,21 @@ f13_run_synthetic_provenance_fixtures() {
 
 # The producer-shaped fixtures also call this provenance helper. Invoke them
 # only after every collector and path-authorization function is defined.
+f13_f54_router_prepare || exit 2
 f13_run_synthetic_provenance_fixtures
 
+f13_f54_run_original_router() {
+  local f13_original_path_list="$1"
 while IFS= read -r file; do
+  f13_f54_router_begin "${file}" || exit 2
+  f13_f54_router_failures_before="${failures}"
   if native_p3_path_allowed_for_provenance "${ROOT}" "${TMP_DIR}/f13-contributions" "${file}"; then
+    f13_f54_router_gate native_p3_path_allowed_for_provenance 0 "${ROOT}" "${TMP_DIR}/f13-contributions" "${file}" || exit 2
     continue
   fi
   if game_checkpoint_alias_path_allowed_for_provenance \
     "${ROOT}" "${TMP_DIR}/f13-contributions" "${file}"; then
+    f13_f54_router_gate game_checkpoint_alias_path_allowed_for_provenance 0 "${ROOT}" "${TMP_DIR}/f13-contributions" "${file}" || exit 2
     continue
   fi
   f13_path_delta="${TMP_DIR}/changed-files"
@@ -6210,11 +6272,13 @@ while IFS= read -r file; do
     }
   fi
   if game_checkpoint_path_allowed_for_provenance "${ROOT}" "${TMP_DIR}/f13-contributions" "${file}"; then
+    f13_f54_router_gate game_checkpoint_path_allowed_for_provenance 0 "${ROOT}" "${TMP_DIR}/f13-contributions" "${file}" || exit 2
     continue
   fi
   file_r22_runtime_delta="${r22_runtime_delta}"
   if [[ -s "${TMP_DIR}/f13-contributions" ]]; then
     file_r22_runtime_delta="$(f13_runtime_for_path "${file}")" || {
+      [[ -z "${f13_f54_collection_file:-}" ]] || exit 2
       if f13_path_is_guarded "${file}"; then
         fail "F13: changed guarded path has no unique contribution provenance: ${file}"
       fi
@@ -6222,22 +6286,28 @@ while IFS= read -r file; do
     }
   fi
   if game_checkpoint_path_allowed "${file}" "${f13_path_delta}"; then
+    f13_f54_router_gate game_checkpoint_path_allowed 0 "${file}" "${f13_path_delta}" || exit 2
     continue
   fi
   actual_blob="$(git -C "${ROOT}" hash-object --path="${file}" "${ROOT}/${file}" 2>/dev/null || true)"
   if voice_room_grants_checkpoint_authorized_in_delta "${ROOT}" "${f13_path_target}" "${file}" "${f13_path_delta}" "${actual_blob}"; then
+    f13_f54_router_gate voice_room_grants_checkpoint_authorized_in_delta 0 "${ROOT}" "${f13_path_target}" "${file}" "${f13_path_delta}" "${actual_blob}" || exit 2
     continue
   fi
   if be255_checkpoint_path_authorized_in_delta "${file}" "${f13_path_delta}" "${actual_blob}"; then
+    f13_f54_router_gate be255_checkpoint_path_authorized_in_delta 0 "${file}" "${f13_path_delta}" "${actual_blob}" || exit 2
     continue
   fi
   if r23_contract_path_allowed_for_window "${r23_allowlist_enabled}" "${file}" "${f13_path_delta}"; then
+    f13_f54_router_gate r23_contract_path_allowed_for_window 0 "${r23_allowlist_enabled}" "${file}" "${f13_path_delta}" || exit 2
     continue
   fi
   if t31_runtime_path_allowed "${file}"; then
+    f13_f54_router_gate t31_runtime_path_allowed 0 "${file}" || exit 2
     continue
   fi
   if [[ "${file_r22_runtime_delta}" == true ]] && space_media_path_allowed "${file}"; then
+    f13_f54_router_gate space_media_path_allowed 0 "${file}" || exit 2
     continue
   fi
   if ! f13_cross_scope_path_allowed "${file}" "${file_r22_runtime_delta}"; then
@@ -6272,7 +6342,19 @@ while IFS= read -r file; do
         esac
       fi
   fi
-done <"${TMP_DIR}/changed-files"
+  f13_f54_router_status=0
+  [[ "${failures}" == "${f13_f54_router_failures_before}" ]] || f13_f54_router_status=1
+  f13_f54_router_gate original_remaining_path_policy "${f13_f54_router_status}" "${file}" "${file_r22_runtime_delta}" "${f13_path_target}" "${f13_path_delta}" "${actual_blob}" || exit 2
+done <"${f13_original_path_list}"
+}
+f13_f54_run_original_router "${TMP_DIR}/changed-files"
+if [[ -n "${f13_f54_collection_file:-}" ]]; then
+  # Reverted/net-absent paths remain actual history obligations. Qualify them
+  # explicitly with the same original policy/map/context; invent no endpoint row.
+  python3 "${f13_f54_observer}" collection-retained-paths "${ROOT}" "${f13_f54_collection_file}" "${f13_f54_collection_sha}" \
+    "${TMP_DIR}/f13-contributions" "${TMP_DIR}/changed-files" >"${TMP_DIR}/f54-retained-history-paths" || exit 2
+  f13_f54_run_original_router "${TMP_DIR}/f54-retained-history-paths"
+fi
 
 while IFS= read -r file; do
   if game_checkpoint_path_allowed "${file}" "${TMP_DIR}/changed-files"; then

@@ -14,6 +14,8 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
+from functools import lru_cache
 
 M = 'f54bcadab4aa19969281d7d35d76ebad91553d4d'
 P1 = '0a0024900b5bb3ba2f6fee391615f0f4fa0864e3'
@@ -215,6 +217,9 @@ def append(path, kind, frame, operation, repo, values):
     elif kind == 'complete_ledger_consumed':
         name,receipt,status=values
         payload=dict(path=name,receipt=json.loads(Path(receipt).read_bytes()),scope_exit=int(status),admission=False)
+    elif kind == 'complete_ledger_conserved':
+        name,receipt=values
+        payload=dict(path=name,receipt=json.loads(Path(receipt).read_bytes()),policy_result=None,admission=False)
     else: raise Rejected('unknown_event_kind')
     e=dict(schema=SCHEMA,sequence=sequence,previous=previous['digest'] if previous else '0'*64,
         kind=kind,frame=identity if kind=='frame_enter' else frame or None,
@@ -600,7 +605,7 @@ def prepare_M_ledger(repo, capability_path, trace_path, original_path, span_path
         sha(Path(span_path).read_bytes()),original_native,current_native)
 
 
-def consume_M_path(ready, expected_sha, trace_path, name, actual_map, after_gate_raw):
+def consume_M_path(ready, expected_sha, trace_path, name, actual_map, after_gate_raw, transition='append'):
     """Only the constructor-generated full ledger is consumed by the real gate.
 
     The final validator independently reconstructs it at the append boundary.
@@ -614,6 +619,7 @@ def consume_M_path(ready, expected_sha, trace_path, name, actual_map, after_gate
     events=[json.loads(v) for v in prefix.splitlines()]
     before=next(e for e in reversed(events) if e['kind']=='row_before' and e['operation']==value['operation'])
     require(before['payload']['path']==name,'M_consumer_current_original_row')
+    require(before['payload']['map_before']==dict(bytes=len(actual_map),sha256=sha(actual_map)),'M_consumer_entire_still_current_map')
     rows=actual_map.decode().splitlines();prior=[raw_binding(x) for x in rows if x.split('\t')[0]==name]
     require(prior==before['payload']['prior_rows'] and prior==[raw_binding(x) for x in value['outer_rows'] if x.split('\t')[0]==name],'M_consumer_retains_all_original_prior_rows')
     incoming=row(before['payload']['incoming']);after=row(raw_binding(after_gate_raw))
@@ -622,8 +628,211 @@ def consume_M_path(ready, expected_sha, trace_path, name, actual_map, after_gate
         gates=[e for e in events[before['sequence']:] if e['kind']=='native_rebind_gate' and e['operation']==value['operation'] and e['payload']['path']==name]
         require(len(gates)==1 and gates[0]['payload']['status']==0 and after[4:6]==[P1,M],'M_consumer_actual_source_rebind_gate')
     aggregate=value['required_qualification'][name]['aggregate'] or any(row(x)[1]=='true' for x in prior) or incoming[1]=='true' or after[1]=='true'
+    require(transition in ('append','replace') and (transition!='replace' or prior),'M_consumer_actual_transition')
+    after_rows=([x for x in rows if x.split('\t')[0]!=name] if transition=='replace' else rows)+[after_gate_raw]
+    after_map=('\n'.join(after_rows)+'\n').encode()
     return dict(path=name,ledger_sha256=sha(canonical(value)),incoming=before['payload']['incoming'],after_gate_row=raw_binding(after_gate_raw),
-        prior_rows=prior,aggregate=aggregate,obligations=value['required_qualification'][name],admission=False)
+        prior_rows=prior,map_before=dict(bytes=len(actual_map),sha256=sha(actual_map)),transition=transition,
+        expected_post_map=dict(bytes=len(after_map),sha256=sha(after_map)),aggregate=aggregate,
+        obligations=value['required_qualification'][name],policy_result=None,admission=False)
+
+
+def finalize_collection(repo, trace_path, map_path):
+    raw=Path(trace_path).read_bytes();verified=validate_trace(repo,trace_path,sha(raw))
+    require(not verified['failures'] and len(verified['M_ready'])==1,'successful_exact_M_collection_required')
+    operation,ready=next(iter(verified['M_ready'].items()))
+    require(verified['M_consumed'][operation]==ready['operation_binding']['paths'],'all_M_transitions_conserved')
+    root=operation.split('/')[0];outer=verified['ledger'][root];actual=Path(map_path).read_bytes()
+    require(outer['map_binding']==dict(bytes=len(actual),sha256=sha(actual)) and outer['rows']==actual.decode().splitlines(),'final_full_original_map')
+    required=ready['required_qualification']
+    for frame,ledger in verified['ledger'].items():
+        for name,value in ledger['paths'].items():
+            item=required.setdefault(name,dict(aggregate=False,retained_evidence=[],span_evidence=None,M_classification=None))
+            item['aggregate']=item['aggregate'] or value['aggregate']
+            item['retained_evidence'].append(dict(final_frame=frame,aggregate=value['aggregate'],evidence=value['evidence']))
+    events=[json.loads(v) for v in raw.splitlines()]
+    transitions=[e for e in events if e['kind'] in ('complete_ledger_conserved','row_remove','row_after','row_committed') and e['operation']==operation]
+    return dict(type='F54_SEALED_SUCCESSFUL_COLLECTION',collection_prefix=dict(bytes=len(raw),sha256=sha(raw)),
+        collection_trace=str(trace_path),map_path=str(map_path),map_binding=outer['map_binding'],outer_rows=outer['rows'],
+        ledger=verified['ledger'],required_qualification=required,coverage=ready['coverage'],
+        child_span=dict(path=ready['span_trace'],sha256=ready['span_trace_sha256']),M_transitions=transitions,
+        capability_sha256=ready['capability_sha256'],M=M,source_context=router_source_context(repo),
+        qualification='HOLD',admission=False,runtime_pass=False)
+
+
+def router_source_context(repo):
+    return dict(ROOT=str(Path(repo).resolve()),target=git(repo,'rev-parse','HEAD').decode().strip(),M=M,
+        files={name:file_binding(ROOT/name) for name in ('scripts/ci/f13_f54_history.py',
+            'scripts/ci/voice-db-runtime-provisioning-contract_test.sh','scripts/ci/voice-r22-runtime-scope.sh')})
+
+
+def load_collection(repo, path, expected_sha, map_path):
+    raw=Path(path).read_bytes();require(sha(raw)==expected_sha,'sealed_collection_document_hash')
+    value=json.loads(raw);require(value['type']=='F54_SEALED_SUCCESSFUL_COLLECTION' and value['admission'] is False,'sealed_collection_type')
+    trace=Path(value['collection_trace']).read_bytes();seal=value['collection_prefix']
+    require(len(trace)==seal['bytes'] and sha(trace)==seal['sha256'],'immutable_completed_collection_prefix')
+    require(value['source_context']==router_source_context(repo),'actual_collection_source_context')
+    actual=Path(map_path).read_bytes()
+    require(value['map_path']==str(map_path) and value['map_binding']==dict(bytes=len(actual),sha256=sha(actual)) and value['outer_rows']==actual.decode().splitlines(),'router_full_original_map_not_selected_rows')
+    return value
+
+
+def policy_context(repo, map_path, pairs):
+    require(len(pairs)%2==0,'policy_context_name_value_pairs');values=dict(zip(pairs[::2],pairs[1::2]))
+    mandatory={'ROOT','TMP_DIR','base_sha','accepted_game_checkpoint','game_checkpoint_enabled','native_p3_active','r23_allowlist_enabled','r22_runtime_delta'}
+    require(mandatory<=set(values) and values['ROOT']==str(Path(repo).resolve()),'finite_actual_policy_context')
+    allowed=lambda n:n in ('ROOT','TMP_DIR','base_sha','r22_runtime_delta') or n.startswith(('accepted_','game_checkpoint_','native_p3_','r23_'))
+    require(all(allowed(n) for n in values),'no_whole_environment_authority_snapshot')
+    files={str(map_path):file_binding(map_path)}
+    # Existing authority inputs only, not ephemeral per-path delta scratch files.
+    for name,value in values.items():
+        if name not in ('ROOT','TMP_DIR') and value and Path(value).is_file():files[value]=file_binding(value)
+    temporary=Path(values['TMP_DIR'])
+    for name in ('game-checkpoint-tree','be255-checkpoint-tree','f13-native-p3-history.tsv','f13-native-p3-approval.json',
+            'r23-fixed-delta','r23-allowed-paths','changed-files'):
+        files[str(temporary/name)]=file_binding(temporary/name)
+    for suffix in ('.game-snapshot-approvals','.game-snapshot-alias-approvals','.native-p3-history','.role-conditional-history','.space-audit-history'):
+        files[str(map_path)+suffix]=file_binding(str(map_path)+suffix)
+    return dict(values=values,files=files,event={k:os.environ.get(k,'') for k in
+        ('GITHUB_EVENT_NAME','GITHUB_REF','GITHUB_SHA','VOICE_CI_PUSH_BEFORE_SHA','GITHUB_BASE_REF','GITHUB_HEAD_REF')},
+        source_context=router_source_context(repo))
+
+
+def seal_router(repo, collection_path, collection_sha, map_path, context_path):
+    collection=load_collection(repo,collection_path,collection_sha,map_path)
+    # A hash is transport, not authority: reconstruct the successful source
+    # collector's complete ledger once before sealing the later policy phase.
+    require(collection==finalize_collection(repo,collection['collection_trace'],map_path),'independently_reconstructed_collection_ledger')
+    context=json.loads(Path(context_path).read_bytes())
+    require(context==policy_context(repo,map_path,sum(([k,v] for k,v in context['values'].items()),[])),'actual_original_policy_context')
+    require(context['values']['r22_runtime_delta']==classify([n for n,v in collection['required_qualification'].items() if v['aggregate']]),'global_runtime_consumes_full_retained_history')
+    return dict(type='F54_ORIGINAL_ROUTER_SEAL',collection_path=str(collection_path),collection_sha256=collection_sha,
+        complete_ledger_sha256=sha(canonical(collection)),context=context,map_path=str(map_path),admission=False)
+
+
+def router_binding(repo, seal_path, seal_sha, map_path, context_path, name):
+    raw=Path(seal_path).read_bytes();require(sha(raw)==seal_sha,'router_seal_hash')
+    seal=json.loads(raw);require(seal['type']=='F54_ORIGINAL_ROUTER_SEAL' and seal['admission'] is False,'router_seal_type')
+    collection=load_collection(repo,seal['collection_path'],seal['collection_sha256'],map_path)
+    require(sha(canonical(collection))==seal['complete_ledger_sha256'],'router_complete_ledger_identity')
+    context=json.loads(Path(context_path).read_bytes())
+    require(context==seal['context'] and context==policy_context(repo,map_path,sum(([k,v] for k,v in context['values'].items()),[])),'router_context_survives_fixtures_and_consumption')
+    item=collection['required_qualification'].get(name)
+    changed=(Path(context['values']['TMP_DIR'])/'changed-files').read_text().splitlines()
+    require(name in changed or item is not None,'no_future_or_foreign_router_path_authority')
+    return dict(path=name,seal_sha256=seal_sha,collection_prefix=collection['collection_prefix'],complete_ledger_sha256=seal['complete_ledger_sha256'],
+        map_binding=collection['map_binding'],context_sha256=sha(canonical(context)),obligations=item,
+        aggregate=item['aggregate'] if item else None,covered=item is not None,
+        scope='changed' if name in changed else 'retained_history',admission=False)
+
+
+def append_router(path, kind, receipt):
+    p=Path(path);previous=last_event(p);e=dict(schema='F54-ORIGINAL-ROUTER-OBSERVATION-v1',
+        sequence=previous['sequence']+1 if previous else 1,previous=previous['digest'] if previous else '0'*64,
+        kind=kind,payload=receipt)
+    e['digest']=sha(canonical(e))
+    with p.open('a',encoding='utf-8',newline='\n') as stream:stream.write(json.dumps(e,sort_keys=True)+'\n')
+
+
+def original_router_body():
+    source=(ROOT/'scripts/ci/voice-db-runtime-provisioning-contract_test.sh').read_text()
+    start=source.index('while IFS= read -r file; do\n  f13_f54_router_begin')
+    end=source.index('done <"${f13_original_path_list}"',start)
+    return source[source.index('\n',start)+1:end]
+
+
+@lru_cache(maxsize=2)
+def original_policy_functions(source):
+    # This fixed shell contains Python heredocs with standalone closing braces.
+    # A regex's first brace is not necessarily the Bash function terminator.
+    prefixes=('f13_','native_p3_','game_checkpoint_','voice_room_grants_','be255_','r23_','t31_',
+        'space_media_','identity_publisher_','voice_role_status_','account_voice_admission_')
+    functions=[];covered=0
+    for match in re.finditer(r'(?m)^([A-Za-z_][A-Za-z0-9_]*)\(\) \{\n',source):
+        if match.start()<covered:continue
+        symbol=match.group(1)
+        if not (symbol.startswith(prefixes) or symbol in ('fail','changed_content','forbidden_activation_content')):continue
+        for end in re.finditer(r'(?m)^\}\n',source[match.end():]):
+            stop=match.end()+end.end();candidate=source[match.start():stop]
+            if subprocess.run(['bash','-n'],input=candidate.encode(),capture_output=True).returncode==0:
+                functions.append(candidate);covered=stop;break
+        else:raise Rejected('actual_original_policy_function_boundary:'+symbol)
+    return '\n'.join(functions)
+
+
+def execute_original_router(context, binding):
+    """Later read-only qualification recheck, never policy before mutation.
+
+    Reexecute the exact frozen loop body and real predicates, with the same
+    complete map/context and verified aggregate. Hooks only capture its branch.
+    No fake accepting native/Game predicate or selected owner map is supplied.
+    """
+    source=(ROOT/'scripts/ci/voice-db-runtime-provisioning-contract_test.sh').read_text()
+    functions=original_policy_functions(source)
+    runtime=(ROOT/'scripts/ci/voice-r22-runtime-scope.sh').read_text()
+    functions+='\n'+runtime
+    with tempfile.TemporaryDirectory(prefix='f54-router-recheck-') as folder:
+        capture=Path(folder)/'branch.jsonl'
+        # Variable names were checked by policy_context; values remain argv,
+        # never shell code. Exact ordinary policy bodies above are unchanged.
+        script='set -euo pipefail\n'+functions+'\n'
+        script+='while (( $# )); do printf -v "$1" "%s" "$2"; shift 2; done\n'
+        script+='f13_f54_collection_file=\'\'\nfailures=0\n'
+        script+='f13_f54_router_begin() { :; }\n'
+        script+='f13_f54_router_gate() { python3 -c \'import json,sys;open(sys.argv[1],"a").write(json.dumps(sys.argv[2:])+"\\n")\' "$F54_CAPTURE" "$@"; }\n'
+        if binding['covered']:
+            script+='f13_runtime_for_path() { printf "%s\\n" "$F54_AGGREGATE"; }\n'
+        script+='for file in "$F54_PATH"; do\n'+original_router_body()+'done\n'
+        pairs=sum(([k,v] for k,v in context['values'].items()),[])
+        environment=dict(os.environ,**context['event'],F54_CAPTURE=str(capture),F54_PATH=binding['path'],
+            F54_AGGREGATE='true' if binding['aggregate'] else 'false')
+        executable=Path(folder)/'original-router.sh';executable.write_text(script)
+        p=subprocess.run(['bash',str(executable),*pairs],capture_output=True,env=environment)
+        require(p.returncode==0 and capture.is_file(),'actual_original_router_recheck_execution:'+p.stderr.decode()[-1200:])
+        events=[json.loads(x) for x in capture.read_bytes().splitlines()]
+        require(len(events)==1,'one_actual_original_router_branch')
+        gate,status,*arguments=events[0]
+        return dict(gate=gate,status=int(status),arguments=arguments,
+            argument_files={x:file_binding(x) for x in arguments if Path(x).is_file()},
+            stdout=raw_binding(p.stdout),stderr=raw_binding(p.stderr))
+
+
+def validate_router(repo, seal_path, seal_sha, map_path, context_path, sidecar_path, sidecar_sha):
+    raw=Path(sidecar_path).read_bytes();require(sha(raw)==sidecar_sha,'actual_router_sidecar_hash')
+    seal=json.loads(Path(seal_path).read_bytes())
+    require(seal==seal_router(repo,seal['collection_path'],seal['collection_sha256'],map_path,context_path),'complete_router_seal_reconstructed_not_hash_only')
+    require(sha(Path(seal_path).read_bytes())==seal_sha,'actual_router_seal_raw_hash')
+    previous='0'*64;pending=None;seen=set();receipts=[]
+    for sequence,e in enumerate([json.loads(v) for v in raw.splitlines()],1):
+        value=dict(e);digest=value.pop('digest')
+        require(e['schema']=='F54-ORIGINAL-ROUTER-OBSERVATION-v1' and e['sequence']==sequence and e['previous']==previous and sha(canonical(value))==digest,'router_append_only_chain');previous=digest
+        if e['kind']=='before':
+            require(pending is None,'router_prior_path_has_actual_disposition')
+            v=e['payload'];name=v['path'];require(name not in seen,'router_no_reordered_duplicate_path')
+            expected=router_binding(repo,seal_path,seal_sha,map_path,context_path,name)
+            require(v==expected,'router_consumes_full_provenance_before_early_continue')
+            pending=v;seen.add(name)
+        elif e['kind']=='gate':
+            v=e['payload'];require(pending is not None and v['binding']==pending,'real_router_gate_bound_to_same_ledger')
+            actual=execute_original_router(seal['context'],pending)
+            require(all(v[k]==actual[k] for k in ('gate','status','arguments','argument_files')),'actual_original_ordered_policy_branch_and_arguments')
+            receipts.append(dict(path=pending['path'],aggregate=pending['aggregate'],gate=actual['gate'],status=actual['status'],
+                source_context=seal['context']['source_context'],binding=sha(canonical(pending))))
+            pending=None
+        else:raise Rejected('router_observation_kind')
+    require(pending is None,'router_final_path_disposition_required')
+    changed=Path(seal['context']['values']['TMP_DIR'])/'changed-files'
+    expected=changed.read_text().splitlines()
+    collection=load_collection(repo,seal['collection_path'],seal['collection_sha256'],map_path)
+    missing=set(collection['required_qualification'])-set(expected)
+    require([v['path'] for v in receipts]==expected+sorted(missing),'all_changed_and_retained_history_obligations_actually_qualified')
+    # Extra receipts are explicitly history qualifications through the same
+    # original policy, not manufactured endpoint changes or outer owner rows.
+    retained={name:collection['required_qualification'][name] for name in sorted(missing)}
+    require(all(v['retained_evidence'] or v['span_evidence'] for v in retained.values()),'reverted_paths_keep_real_history_dispositions')
+    return dict(type='F54_ORIGINAL_ROUTER_RECHECK',collection_prefix=collection['collection_prefix'],
+        sidecar_sha256=sidecar_sha,receipts=receipts,retained_history_obligations=retained,
+        failures=[v for v in receipts if v['status']!=0],qualification='HOLD',admission=False,runtime_pass=False)
 
 
 def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
@@ -812,7 +1021,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
         if kind=='qualification_pending':
             require(op in M_capabilities and key in pending and v['admission'] is False,'explicit_M_consumer_pending_without_mutation')
             require(v['map_before']==map_binding(frame),'pending_M_map_is_unchanged');continue
-        if kind=='complete_ledger_consumed':
+        if kind=='complete_ledger_conserved':
             require(op in M_ready and key in pending and pending[key]['op']==op,'complete_M_ledger_before_real_row_mutation')
             receipt=v['receipt'];item=pending[key];parts=row(receipt['after_gate_row'])
             require(receipt['path']==v['path'] and receipt['incoming']==raw_binding('\t'.join(item['incoming'])),'actual_M_consumer_incoming')
@@ -820,10 +1029,11 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
             require(parts[1]==item['incoming'][1] or (parts[1]=='true' and cumulative[key]),'actual_M_consumer_raw_flag')
             require(receipt['ledger_sha256']==sha(canonical(M_ready[op])) and receipt['prior_rows']==[raw_binding('\t'.join(x)) for x in maps[frame] if x[0]==v['path']],'complete_M_consumer_prior_ledger')
             require(receipt['obligations']==M_ready[op]['required_qualification'][v['path']] and receipt['admission'] is False and v['admission'] is False,'complete_M_consumer_evidence_not_sidecar_bit')
+            require(receipt['map_before']==map_binding(frame) and receipt['transition'] in ('append','replace'),'M_transition_actual_premap')
             aggregate=cumulative[key] or M_ready[op]['required_qualification'][v['path']]['aggregate']
             require(type(receipt['aggregate']) is bool and receipt['aggregate']==aggregate,'M_consumer_must_keep_full_aggregate_or')
-            require(v['scope_exit']==original_scope_exit(v['path'],'true' if aggregate else 'false'),'actual_original_scope_gate_on_complete_ledger')
-            if v['scope_exit']==0:M_consumed.setdefault(op,[]).append(v['path'])
+            require(v['policy_result'] is None and receipt['policy_result'] is None,'conservation_is_not_policy_admission')
+            M_consumed.setdefault(op,[]).append(v['path']);item['conservation']=receipt
             continue
         if kind=='native_rebind_gate':
             require(key in pending and pending[key]['op']==op and not pending[key]['removed'] and 'rebind' not in pending[key],'native_gate_before_exact_mutation')
@@ -887,6 +1097,9 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
             frame_rows[key]=row(v['row'])
             maps[frame].append(row(v['row']))
             require(v['map_after']==map_binding(frame) and [row(x) for x in v['retained_rows']]==[x for x in maps[frame] if x[0]==v['path']],'conserved_committed_map')
+            if op in M_capabilities:
+                receipt=pending[key]['conservation']
+                require(receipt['expected_post_map']==map_binding(frame) and (receipt['transition']=='replace')==pending[key]['removed'],'M_conserved_exact_actual_post_transition')
             committed.setdefault(op,[]).append(v['path'])
             pending.pop(key)
         else:raise Rejected('unknown_trace_kind')
@@ -897,7 +1110,8 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None):
     require(not complete or (all(v['disposition'] in accepted for node in coverage for v in node['operations']) and not failures),'complete_33_real_producer_coverage_and_gates')
     ledger=ledger_state()
     return dict(schema=SCHEMA,trace_sha256=expected_sha,frames=len(frames),operations=len(operations),failures=failures,
-        ledger=ledger,coverage=coverage,M_checkpoint=checkpoint_state,observed_qualification='COMPLETE' if complete else 'OBSERVED_PREFIX_ONLY',admission=False)
+        ledger=ledger,coverage=coverage,M_checkpoint=checkpoint_state,M_ready=M_ready,M_consumed=M_consumed,
+        observed_qualification='COMPLETE' if complete else 'OBSERVED_PREFIX_ONLY',admission=False)
 
 
 def consume_aggregate(verified, frame, name, actual_map, actual_trigger):
@@ -932,8 +1146,29 @@ def main():
         if command=='cap-composition':print(json.dumps(composition_capability(*args)));return 0
         if command=='M-ledger':print(json.dumps(prepare_M_ledger(*args)));return 0
         if command=='M-consume':
-            ready,digest,trace,name,map_path,incoming=args
-            print(json.dumps(consume_M_path(ready,digest,trace,name,Path(map_path).read_bytes(),incoming)));return 0
+            ready,digest,trace,name,map_path,incoming,transition=args
+            print(json.dumps(consume_M_path(ready,digest,trace,name,Path(map_path).read_bytes(),incoming,transition)));return 0
+        if command=='collection-seal':print(json.dumps(finalize_collection(*args)));return 0
+        if command=='policy-context':
+            repo,map_path,*pairs=args;print(json.dumps(policy_context(repo,map_path,pairs)));return 0
+        if command=='router-seal':print(json.dumps(seal_router(*args)));return 0
+        if command=='router-validate':print(json.dumps(validate_router(*args)));return 0
+        if command=='router-bind':print(json.dumps(router_binding(*args)));return 0
+        if command=='router-append':
+            path,kind,receipt,*arguments=args;value=json.loads(Path(receipt).read_bytes())
+            if kind=='gate':value=dict(binding=value,gate=arguments[0],status=int(arguments[1]),arguments=arguments[2:],
+                argument_files={x:file_binding(x) for x in arguments[2:] if Path(x).is_file()})
+            append_router(path,kind,value);return 0
+        if command=='router-runtime':
+            repo,path,digest,map_path,context_path,name=args;value=router_binding(repo,path,digest,map_path,context_path,name)
+            if not value['covered']:return 3
+            print('true' if value['aggregate'] else 'false');return 0
+        if command=='collection-runtime-paths':
+            repo,path,digest,map_path=args;value=load_collection(repo,path,digest,map_path)
+            print('\n'.join(name for name,item in value['required_qualification'].items() if item['aggregate']));return 0
+        if command=='collection-retained-paths':
+            repo,path,digest,map_path,changed_path=args;value=load_collection(repo,path,digest,map_path)
+            print('\n'.join(sorted(set(value['required_qualification'])-set(Path(changed_path).read_text().splitlines()))));return 0
         if command=='span-origin':print(json.dumps(span_origin(*args)));return 0
         if command=='span-validate':print(json.dumps(validate_aggregate_span(*args)));return 0
         if command=='unit-observe':print(json.dumps(observe_qualified_unit(*args)));return 0
