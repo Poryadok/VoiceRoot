@@ -253,6 +253,13 @@ gate. Actual media/cleanup evidence still requires the authorized live run.
 ### Flutter (клиент)
 
 - Виджеты и логика: **`flutter test`**.
+- Presigned object-storage uploads/downloads: `flutter test
+  test/presigned_upload_test.dart` checks the native Compose-to-loopback
+  connection with its signed Host. Separately run `flutter test --platform
+  chrome test/presigned_upload_web_test.dart` to check that browsers preserve
+  the exact signed endpoint and send no Gateway bearer or custom Host. Web
+  deployments must issue a browser-reachable storage URL with the required
+  storage CORS policy; browsers cannot spoof the signed Host after a rewrite.
 - Сценарии с бэкендом: **`integration_test`**, когда API для сценария доступен (staging или локальный compose).
 - Статический анализ: **`flutter analyze`** — в CI на каждый PR; для a11y см. [features/accessibility.md](features/accessibility.md).
 
