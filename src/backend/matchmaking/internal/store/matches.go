@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"voice/backend/matchmaking/internal/mmadmission"
 )
 
 const (
@@ -731,7 +732,8 @@ type MatchProposal struct {
 
 // MatchStore persists matches and proposals.
 type MatchStore struct {
-	Pool *pgxpool.Pool
+	Pool            *pgxpool.Pool
+	NativeAdmission *mmadmission.Binding
 }
 
 // ProposalSession links a search session to a new match proposal.
@@ -770,6 +772,9 @@ func (s *MatchStore) createProposal(ctx context.Context, p CreateProposalParams,
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var banGuard *PlatformBanGuard
+	if err := mmadmission.Acquire(ctx, tx, s.NativeAdmission); err != nil {
+		return CreateProposalResult{}, err
+	}
 	if candidate != nil {
 		banGuard, err = AcquirePlatformBanGuard(ctx, tx, candidate.Accounts())
 		if err != nil {

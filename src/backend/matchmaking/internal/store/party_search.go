@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"voice/backend/matchmaking/internal/mmadmission"
 	"voice/backend/pkg/partyauthority"
 )
 
@@ -96,6 +97,9 @@ func (s *PartyStore) CreateSourceParty(ctx context.Context, p CreateSourcePartyP
 		return SourcePartySearch{}, errors.Join(ErrSourcePartyUnavailable, err)
 	}
 	defer rollbackPartySearch(tx)
+	if err := mmadmission.Acquire(ctx, tx, s.NativeAdmission); err != nil {
+		return SourcePartySearch{}, err
+	}
 	accounts := make([]uuid.UUID, 0, len(p.MemberAuthorities))
 	for _, member := range p.MemberAuthorities {
 		accounts = append(accounts, member.AccountID)

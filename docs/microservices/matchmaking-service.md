@@ -488,3 +488,28 @@ profile fails construction, and a server-name mismatch or a certificate that
 cannot authenticate a client fails before the application handler. Constructing
 this client does not install the complete native serving cohort or authorize
 activation; native main wiring must require the independently qualified package.
+
+The MM native serving contract uses a separate fixed executable/image and its
+own protected installation binding; Voice startup and Story restore bindings do
+not substitute for it. The required native route set denies `StartSpaceQueue` and
+profile-only `DecideLfpRequest` until genuine typed adapters are qualified. The
+existing pre-cut executable remains a separately admitted artifact.
+
+Migration 024 adds an installer-owned local admission head. An incomplete
+CLOSED/PREPARED marker is sufficient to prevent legacy fallback; only a complete
+ADMITTED binding can pass the cooperating transition guard. That guard takes one
+stable database-local shared advisory transaction lock **before** account and
+party/session locks, then reads the exact head in fresh READ COMMITTED statements.
+The real installation closer takes the matching exclusive gate before changing
+the head, waits admitted transactions through commit and retains the marker.
+Source-party creation and proposal reservation consume their store's immutable
+`NativeAdmission` binding; an unbound store refuses any begun head. The safe DOWN
+refuses to discard a retained marker. Application guard APIs never issue a
+receipt or mutate admission state. The remaining native writers and executable
+must use the same gate before native activation.
+
+This local serialization component does not prove external MM installation
+custody, physical database continuity, role privileges, predecessor retirement
+or restore reconciliation. Those remain required independently, including the
+complete route/factory package and exact real installation readback. An empty
+head, matching fixture row or transport profile cannot authorize native serving.

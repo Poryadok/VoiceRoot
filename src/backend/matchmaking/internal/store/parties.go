@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"voice/backend/matchmaking/internal/mmadmission"
 )
 
 var ErrPartyNotFound = errors.New("party not found")
@@ -27,7 +28,8 @@ type Party struct {
 
 // PartyStore persists matchmaking parties.
 type PartyStore struct {
-	Pool *pgxpool.Pool
+	Pool            *pgxpool.Pool
+	NativeAdmission *mmadmission.Binding
 }
 
 // CreatePartyParams inserts a new party.
