@@ -76,11 +76,11 @@ func StartBotPinCleanupServer(ctx context.Context, config BotPinCleanupConfig, p
 	service.Methods = nil
 	service.Streams = nil
 	for _, method := range messagingv1.MessagingService_ServiceDesc.Methods {
-		if method.MethodName == "ApplyBotChatPinRemoval" {
+		if method.MethodName == "ApplyBotChatPinRemoval" || method.MethodName == "GetBotPurgeChatCoverage" {
 			service.Methods = append(service.Methods, method)
 		}
 	}
-	server.RegisterService(&service, &BotPinCleanupGRPC{Pins: pins})
+	server.RegisterService(&service, &BotPinCleanupGRPC{Pins: pins, Coverage: &store.MessagesStore{Pool: pins.Pool}})
 	runtime := &BotPinCleanupRuntime{server: server, listener: listener, principal: verifier, serveError: make(chan error, 1)}
 	go func() { runtime.serveError <- server.Serve(listener); close(runtime.serveError) }()
 	return runtime, nil

@@ -19,7 +19,8 @@ type BotPinCleanupStore interface {
 // Ordinary MessagingGRPC intentionally retains no alternate cleanup method.
 type BotPinCleanupGRPC struct {
 	messagingv1.UnimplementedMessagingServiceServer
-	Pins BotPinCleanupStore
+	Pins     BotPinCleanupStore
+	Coverage BotPurgeCoverageStore
 }
 
 func (s *BotPinCleanupGRPC) ApplyBotChatPinRemoval(ctx context.Context, request *messagingv1.ApplyBotChatPinRemovalRequest) (*messagingv1.ApplyBotChatPinRemovalResponse, error) {

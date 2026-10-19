@@ -74,6 +74,9 @@ func Require(ctx context.Context, request *messagingv1.ApplyBotChatPinRemovalReq
 
 func UnaryServerInterceptor(verifier ServiceVerifier) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if info.FullMethod == messagingv1.MessagingService_GetBotPurgeChatCoverage_FullMethodName {
+			return coverageUnary(ctx, request, info, handler, verifier)
+		}
 		if info.FullMethod != messagingv1.MessagingService_ApplyBotChatPinRemoval_FullMethodName {
 			return nil, status.Error(codes.PermissionDenied, "method unavailable on Bot cleanup listener")
 		}

@@ -531,3 +531,16 @@ No actor/human identity, caller pages, new clock, permanent personal digest or
 retention exception is added. Canonical Settings/native/batch fields are kept.
 Actual relay/coverage receivers, positively proved local journal retirement,
 P3-native drain and independent global terminal obligations remain required.
+
+The finite Messaging coverage receiver now implements its read-only portion:
+exact own SEALED manifest/current irreversible source binding and ordered
+membership, with no new database schema or evidence clock. Private signed Bot
+capability/body snapshot, real mTLS/HTTPS-JWKS/Redis and post-SQL-wait expiry
+checks are exercised independently from the Bot consumer. The store matrix
+also verifies wrong binding/unsealed/restorable rejection, own full-receipt
+retention erasure without fabricated completion, and caller-array mutation
+while blocked on an actual SQL table lock. The remote missing-method RED is
+an unregistered RPC, not a claim about prior cryptographic enforcement.
+Original ordinary pin cleanup remains on the same finite dedicated listener;
+its affected transport regression must stay green. Space relay, native drain,
+qualified local journal adoption and independent global terminal work remain.

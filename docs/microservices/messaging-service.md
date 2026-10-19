@@ -981,6 +981,26 @@ Key backup хранится в **Auth Service** (`PutE2EKeyBackup` / `GetE2EKeyB
 
 ## P3 Space lifecycle participant (target)
 
+`GetBotPurgeChatCoverage` is a separate read purpose on the existing dedicated
+Bot pin-cleanup mTLS listener. It requires pure signed `service:bot`, the exact
+method/audience, canonical read request ID/full body hash and fresh replay-safe
+JWT. A private owned capability is checked again after SQL waits. Ordinary
+Messaging/Gateway contexts cannot authorize this read. Existing cleanup
+configuration and its required current-Chat datasource remain fail-closed.
+
+The response echoes the exact Space/deletion-operation/purge-generation and
+ManifestBinding and reports source schedule generation plus one membership
+entry for each sorted unique requested Chat ID (maximum1000). It reads only
+Messaging's own SEALED manifest and matching irreversible lifecycle fence in
+one read-only snapshot. Foreign chats are explicitly uncovered. Missing,
+unsealed, restorable or conflicting source cannot provide an observation.
+No caller pages, Bot/actor/human identity, pin effects or cleanup receipt are
+accepted or created. This observation may survive normal full-receipt erasure
+only as manifest membership; it never reconstructs the erased receipt or
+extends a retention clock. Bot must combine it with the exact original
+Messaging COMPLETED receipt relayed from Space's accepted coordinator ledger
+under BE170c89. That consumer adoption and full P3 convergence remain separate.
+
 The participant implementation has Space-authenticated manifest-page import,
 lifecycle-fence, and purge RPCs on a dedicated mutual-TLS listener. Manifest pages
 are validated for domain-separated hashes, canonical sorted Chat IDs, page
