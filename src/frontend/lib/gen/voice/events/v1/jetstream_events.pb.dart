@@ -1874,6 +1874,15 @@ enum RoleStreamEvent_Payload {
   roleAssignmentChanged,
   roleDefinitionChanged,
   voiceRoomPolicyInvalidated,
+  roleCreated,
+  roleUpdated,
+  roleDeleted,
+  roleAssigned,
+  roleRevoked,
+  roleChatOverrideSet,
+  roleChatOverrideRemoved,
+  roleVoiceOverrideSet,
+  roleVoiceOverrideRemoved,
   notSet
 }
 
@@ -1884,6 +1893,15 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
     RoleAssignmentChanged? roleAssignmentChanged,
     RoleDefinitionChanged? roleDefinitionChanged,
     VoiceRoomPolicyInvalidated? voiceRoomPolicyInvalidated,
+    RoleMutation? roleCreated,
+    RoleMutation? roleUpdated,
+    RoleMutation? roleDeleted,
+    RoleMutation? roleAssigned,
+    RoleMutation? roleRevoked,
+    RoleMutation? roleChatOverrideSet,
+    RoleMutation? roleChatOverrideRemoved,
+    RoleMutation? roleVoiceOverrideSet,
+    RoleMutation? roleVoiceOverrideRemoved,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -1894,6 +1912,19 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
       result.roleDefinitionChanged = roleDefinitionChanged;
     if (voiceRoomPolicyInvalidated != null)
       result.voiceRoomPolicyInvalidated = voiceRoomPolicyInvalidated;
+    if (roleCreated != null) result.roleCreated = roleCreated;
+    if (roleUpdated != null) result.roleUpdated = roleUpdated;
+    if (roleDeleted != null) result.roleDeleted = roleDeleted;
+    if (roleAssigned != null) result.roleAssigned = roleAssigned;
+    if (roleRevoked != null) result.roleRevoked = roleRevoked;
+    if (roleChatOverrideSet != null)
+      result.roleChatOverrideSet = roleChatOverrideSet;
+    if (roleChatOverrideRemoved != null)
+      result.roleChatOverrideRemoved = roleChatOverrideRemoved;
+    if (roleVoiceOverrideSet != null)
+      result.roleVoiceOverrideSet = roleVoiceOverrideSet;
+    if (roleVoiceOverrideRemoved != null)
+      result.roleVoiceOverrideRemoved = roleVoiceOverrideRemoved;
     return result;
   }
 
@@ -1911,6 +1942,15 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
     10: RoleStreamEvent_Payload.roleAssignmentChanged,
     11: RoleStreamEvent_Payload.roleDefinitionChanged,
     12: RoleStreamEvent_Payload.voiceRoomPolicyInvalidated,
+    13: RoleStreamEvent_Payload.roleCreated,
+    14: RoleStreamEvent_Payload.roleUpdated,
+    15: RoleStreamEvent_Payload.roleDeleted,
+    16: RoleStreamEvent_Payload.roleAssigned,
+    17: RoleStreamEvent_Payload.roleRevoked,
+    18: RoleStreamEvent_Payload.roleChatOverrideSet,
+    19: RoleStreamEvent_Payload.roleChatOverrideRemoved,
+    20: RoleStreamEvent_Payload.roleVoiceOverrideSet,
+    21: RoleStreamEvent_Payload.roleVoiceOverrideRemoved,
     0: RoleStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -1918,7 +1958,7 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12])
+    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -1931,6 +1971,24 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
     ..aOM<VoiceRoomPolicyInvalidated>(
         12, _omitFieldNames ? '' : 'voiceRoomPolicyInvalidated',
         subBuilder: VoiceRoomPolicyInvalidated.create)
+    ..aOM<RoleMutation>(13, _omitFieldNames ? '' : 'roleCreated',
+        subBuilder: RoleMutation.create)
+    ..aOM<RoleMutation>(14, _omitFieldNames ? '' : 'roleUpdated',
+        subBuilder: RoleMutation.create)
+    ..aOM<RoleMutation>(15, _omitFieldNames ? '' : 'roleDeleted',
+        subBuilder: RoleMutation.create)
+    ..aOM<RoleMutation>(16, _omitFieldNames ? '' : 'roleAssigned',
+        subBuilder: RoleMutation.create)
+    ..aOM<RoleMutation>(17, _omitFieldNames ? '' : 'roleRevoked',
+        subBuilder: RoleMutation.create)
+    ..aOM<RoleMutation>(18, _omitFieldNames ? '' : 'roleChatOverrideSet',
+        subBuilder: RoleMutation.create)
+    ..aOM<RoleMutation>(19, _omitFieldNames ? '' : 'roleChatOverrideRemoved',
+        subBuilder: RoleMutation.create)
+    ..aOM<RoleMutation>(20, _omitFieldNames ? '' : 'roleVoiceOverrideSet',
+        subBuilder: RoleMutation.create)
+    ..aOM<RoleMutation>(21, _omitFieldNames ? '' : 'roleVoiceOverrideRemoved',
+        subBuilder: RoleMutation.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1955,11 +2013,29 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(10)
   @$pb.TagNumber(11)
   @$pb.TagNumber(12)
+  @$pb.TagNumber(13)
+  @$pb.TagNumber(14)
+  @$pb.TagNumber(15)
+  @$pb.TagNumber(16)
+  @$pb.TagNumber(17)
+  @$pb.TagNumber(18)
+  @$pb.TagNumber(19)
+  @$pb.TagNumber(20)
+  @$pb.TagNumber(21)
   RoleStreamEvent_Payload whichPayload() =>
       _RoleStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
   @$pb.TagNumber(11)
   @$pb.TagNumber(12)
+  @$pb.TagNumber(13)
+  @$pb.TagNumber(14)
+  @$pb.TagNumber(15)
+  @$pb.TagNumber(16)
+  @$pb.TagNumber(17)
+  @$pb.TagNumber(18)
+  @$pb.TagNumber(19)
+  @$pb.TagNumber(20)
+  @$pb.TagNumber(21)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -2017,6 +2093,105 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
   void clearVoiceRoomPolicyInvalidated() => $_clearField(12);
   @$pb.TagNumber(12)
   VoiceRoomPolicyInvalidated ensureVoiceRoomPolicyInvalidated() => $_ensure(4);
+
+  @$pb.TagNumber(13)
+  RoleMutation get roleCreated => $_getN(5);
+  @$pb.TagNumber(13)
+  set roleCreated(RoleMutation value) => $_setField(13, value);
+  @$pb.TagNumber(13)
+  $core.bool hasRoleCreated() => $_has(5);
+  @$pb.TagNumber(13)
+  void clearRoleCreated() => $_clearField(13);
+  @$pb.TagNumber(13)
+  RoleMutation ensureRoleCreated() => $_ensure(5);
+
+  @$pb.TagNumber(14)
+  RoleMutation get roleUpdated => $_getN(6);
+  @$pb.TagNumber(14)
+  set roleUpdated(RoleMutation value) => $_setField(14, value);
+  @$pb.TagNumber(14)
+  $core.bool hasRoleUpdated() => $_has(6);
+  @$pb.TagNumber(14)
+  void clearRoleUpdated() => $_clearField(14);
+  @$pb.TagNumber(14)
+  RoleMutation ensureRoleUpdated() => $_ensure(6);
+
+  @$pb.TagNumber(15)
+  RoleMutation get roleDeleted => $_getN(7);
+  @$pb.TagNumber(15)
+  set roleDeleted(RoleMutation value) => $_setField(15, value);
+  @$pb.TagNumber(15)
+  $core.bool hasRoleDeleted() => $_has(7);
+  @$pb.TagNumber(15)
+  void clearRoleDeleted() => $_clearField(15);
+  @$pb.TagNumber(15)
+  RoleMutation ensureRoleDeleted() => $_ensure(7);
+
+  @$pb.TagNumber(16)
+  RoleMutation get roleAssigned => $_getN(8);
+  @$pb.TagNumber(16)
+  set roleAssigned(RoleMutation value) => $_setField(16, value);
+  @$pb.TagNumber(16)
+  $core.bool hasRoleAssigned() => $_has(8);
+  @$pb.TagNumber(16)
+  void clearRoleAssigned() => $_clearField(16);
+  @$pb.TagNumber(16)
+  RoleMutation ensureRoleAssigned() => $_ensure(8);
+
+  @$pb.TagNumber(17)
+  RoleMutation get roleRevoked => $_getN(9);
+  @$pb.TagNumber(17)
+  set roleRevoked(RoleMutation value) => $_setField(17, value);
+  @$pb.TagNumber(17)
+  $core.bool hasRoleRevoked() => $_has(9);
+  @$pb.TagNumber(17)
+  void clearRoleRevoked() => $_clearField(17);
+  @$pb.TagNumber(17)
+  RoleMutation ensureRoleRevoked() => $_ensure(9);
+
+  @$pb.TagNumber(18)
+  RoleMutation get roleChatOverrideSet => $_getN(10);
+  @$pb.TagNumber(18)
+  set roleChatOverrideSet(RoleMutation value) => $_setField(18, value);
+  @$pb.TagNumber(18)
+  $core.bool hasRoleChatOverrideSet() => $_has(10);
+  @$pb.TagNumber(18)
+  void clearRoleChatOverrideSet() => $_clearField(18);
+  @$pb.TagNumber(18)
+  RoleMutation ensureRoleChatOverrideSet() => $_ensure(10);
+
+  @$pb.TagNumber(19)
+  RoleMutation get roleChatOverrideRemoved => $_getN(11);
+  @$pb.TagNumber(19)
+  set roleChatOverrideRemoved(RoleMutation value) => $_setField(19, value);
+  @$pb.TagNumber(19)
+  $core.bool hasRoleChatOverrideRemoved() => $_has(11);
+  @$pb.TagNumber(19)
+  void clearRoleChatOverrideRemoved() => $_clearField(19);
+  @$pb.TagNumber(19)
+  RoleMutation ensureRoleChatOverrideRemoved() => $_ensure(11);
+
+  @$pb.TagNumber(20)
+  RoleMutation get roleVoiceOverrideSet => $_getN(12);
+  @$pb.TagNumber(20)
+  set roleVoiceOverrideSet(RoleMutation value) => $_setField(20, value);
+  @$pb.TagNumber(20)
+  $core.bool hasRoleVoiceOverrideSet() => $_has(12);
+  @$pb.TagNumber(20)
+  void clearRoleVoiceOverrideSet() => $_clearField(20);
+  @$pb.TagNumber(20)
+  RoleMutation ensureRoleVoiceOverrideSet() => $_ensure(12);
+
+  @$pb.TagNumber(21)
+  RoleMutation get roleVoiceOverrideRemoved => $_getN(13);
+  @$pb.TagNumber(21)
+  set roleVoiceOverrideRemoved(RoleMutation value) => $_setField(21, value);
+  @$pb.TagNumber(21)
+  $core.bool hasRoleVoiceOverrideRemoved() => $_has(13);
+  @$pb.TagNumber(21)
+  void clearRoleVoiceOverrideRemoved() => $_clearField(21);
+  @$pb.TagNumber(21)
+  RoleMutation ensureRoleVoiceOverrideRemoved() => $_ensure(13);
 }
 
 class RoleAssignmentChanged extends $pb.GeneratedMessage {
@@ -12315,6 +12490,132 @@ class SpaceMemberBanned extends $pb.GeneratedMessage {
   $core.bool hasBannedByProfileId() => $_has(2);
   @$pb.TagNumber(3)
   void clearBannedByProfileId() => $_clearField(3);
+}
+
+/// Appended to preserve descriptor indices for existing event message types.
+/// Ordinary Role notifications. The oneof arm selects the action and must match
+/// its exact role.* subject. This is neither an authorization command nor a role
+/// snapshot. Generic arms 10/11 retain unspecified legacy semantics; consumers
+/// must not infer their action or role_ids meaning from a subject.
+class RoleMutation extends $pb.GeneratedMessage {
+  factory RoleMutation({
+    $core.String? spaceId,
+    $core.String? roleId,
+    $core.String? profileId,
+    $core.String? name,
+    $core.String? chatId,
+    $core.String? voiceRoomId,
+    $core.Iterable<$core.String>? changedFields,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (roleId != null) result.roleId = roleId;
+    if (profileId != null) result.profileId = profileId;
+    if (name != null) result.name = name;
+    if (chatId != null) result.chatId = chatId;
+    if (voiceRoomId != null) result.voiceRoomId = voiceRoomId;
+    if (changedFields != null) result.changedFields.addAll(changedFields);
+    return result;
+  }
+
+  RoleMutation._();
+
+  factory RoleMutation.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RoleMutation.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RoleMutation',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'roleId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..aOS(4, _omitFieldNames ? '' : 'name')
+    ..aOS(5, _omitFieldNames ? '' : 'chatId')
+    ..aOS(6, _omitFieldNames ? '' : 'voiceRoomId')
+    ..pPS(7, _omitFieldNames ? '' : 'changedFields')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RoleMutation clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RoleMutation copyWith(void Function(RoleMutation) updates) =>
+      super.copyWith((message) => updates(message as RoleMutation))
+          as RoleMutation;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RoleMutation create() => RoleMutation._();
+  @$core.override
+  RoleMutation createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RoleMutation getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RoleMutation>(create);
+  static RoleMutation? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get roleId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set roleId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasRoleId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearRoleId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get name => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set name($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasName() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearName() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get chatId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set chatId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasChatId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearChatId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get voiceRoomId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set voiceRoomId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasVoiceRoomId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearVoiceRoomId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $pb.PbList<$core.String> get changedFields => $_getList(6);
 }
 
 const $core.bool _omitFieldNames =

@@ -95,6 +95,14 @@ separate durable guest-conversion/account-deletion contracts.
 | `federation.events`    | Federation        | Analytics, Role, Moderation |
 | `bot.events`           | Bot               | Analytics, Messaging |
 
+Ordinary Role readers currently implemented are Realtime and Analytics;
+Notification/Federation entries above are target inventory, not active Role NATS
+handlers. Voice reads only the separate policy invalidation below. The
+[ordinary Role wire contract](microservices/role-service.md#ordinary-notification-wire-role-ordinary-wire-v1)
+adds action arms13..21, retains flat JSON readers and requires a reader-first
+release before binary publication. Reconcile actual configured consumers during
+authorized cutover; an unaccounted JSON-only reader blocks that cutover.
+
 ### Space-room media authority invalidation (BE255 slice)
 
 These are dedicated typed subjects; they do not reuse legacy `space.updated`,
