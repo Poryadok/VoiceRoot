@@ -939,6 +939,10 @@ partial schema refuses startup with a fixed migration diagnostic. Migration
 metadata is trusted; this runtime check does not replace migration execution.
 Disabled lifecycle keeps the baseline startup path. Rollback of 000026 refuses
 while any saved intent exists; drain and export its evidence before rollback.
+Its DOWN requires READ COMMITTED and holds a write-excluding table lock before
+the current-snapshot guard through DROP in one atomic statement. A concurrent
+first intent must survive rollback refusal; an older repeatable-read snapshot
+is rejected rather than treated as evidence that the table is empty.
 
 Messaging stores its generation fence, imported immutable Chat manifest pages,
 and exact request/receipt evidence. `FROZEN` imports and seals the exact Chat
