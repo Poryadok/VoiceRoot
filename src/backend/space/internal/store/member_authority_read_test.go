@@ -71,13 +71,18 @@ func TestMemberAuthorityReadInitialLiveZeroAndMissingAggregateHistory(t *testing
 	require.NoError(t, err)
 	_, err = reader.ReadMemberAdmissionAuthority(ctx, req)
 	require.NoError(t, err, "reviewed35 private journal is explicitly qualified with native33 and participant34")
-	for _, future := range []int64{36, 999} {
+	applyJoinOperationMigration(t, st)
+	_, err = pool.Exec(ctx, `UPDATE schema_migrations SET version=36`)
+	require.NoError(t, err)
+	_, err = reader.ReadMemberAdmissionAuthority(ctx, req)
+	require.NoError(t, err, "actual36 historical journal preserves the native authority source")
+	for _, future := range []int64{37, 999} {
 		_, err = pool.Exec(ctx, `UPDATE schema_migrations SET version=$1`, future)
 		require.NoError(t, err)
 		_, err = reader.ReadMemberAdmissionAuthority(ctx, req)
 		require.ErrorIs(t, err, ErrMemberAuthorityUnavailable, "unknown future migration requires actual source qualification")
 	}
-	_, err = pool.Exec(ctx, `UPDATE schema_migrations SET version=35`)
+	_, err = pool.Exec(ctx, `UPDATE schema_migrations SET version=36`)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `ALTER TABLE space_ordinary_member_heads DISABLE TRIGGER ordinary_member_head_guard`)
 	require.NoError(t, err)

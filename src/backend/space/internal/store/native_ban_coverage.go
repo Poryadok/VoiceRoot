@@ -20,7 +20,7 @@ func (s *SpaceStore) checkKnownNativeBanCoverage(ctx context.Context, space, acc
 	}
 	if tracked {
 		var valid bool
-		if err := s.db().QueryRow(ctx, `SELECT count(*)=1 AND bool_and(NOT dirty AND (($1::boolean AND version IN (33,34,35)) OR (NOT $1::boolean AND version<33))) FROM public.schema_migrations`, native).Scan(&valid); err != nil || !valid {
+		if err := s.db().QueryRow(ctx, `SELECT count(*)=1 AND bool_and(NOT dirty AND (($1::boolean AND version IN (33,34,35,36)) OR (NOT $1::boolean AND version<33))) FROM public.schema_migrations`, native).Scan(&valid); err != nil || !valid {
 			return false, ErrMemberAuthorityUnavailable
 		}
 	}
