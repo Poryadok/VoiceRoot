@@ -270,3 +270,29 @@ func TestTerminalEvidenceAndCapacity(t *testing.T) {
 		t.Fatal("oversized artifact accepted")
 	}
 }
+
+func TestAuthSubjectEvidenceIdentity(t *testing.T) {
+	r := fixtureRecord()
+	r.EvidenceID = uuid.New()
+	t.Run("parse", func(t *testing.T) {
+		m, chunks, cut := fixture(t, fixtureView(), line(t, r))
+		if _, err := Parse(m, chunks, cut); err == nil {
+			t.Fatal("accepted unrelated Auth evidence identity")
+		}
+	})
+	t.Run("encode", func(t *testing.T) {
+		if _, _, _, err := Encode(fixtureView(), []Record{r}); err == nil {
+			t.Fatal("encoded unrelated Auth evidence identity")
+		}
+	})
+	t.Run("distinct_user_owner_fact", func(t *testing.T) {
+		r.EvidenceKind = "USER_OWNER_FACT"
+		m, chunks, cut, err := Encode(fixtureView(), []Record{r})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Parse(m, chunks, cut); err != nil {
+			t.Fatal(err)
+		}
+	})
+}

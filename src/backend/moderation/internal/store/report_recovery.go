@@ -18,6 +18,7 @@ func (s *ReportStore) RequirePrivacyRecovery(ctx context.Context) error {
   j.report_id='00000000-0000-0000-0000-000000000000'::uuid
   OR j.evidence_id='00000000-0000-0000-0000-000000000000'::uuid
   OR j.subject_id='00000000-0000-0000-0000-000000000000'::uuid
+  OR (j.evidence_kind='AUTH_SUBJECT' AND (j.subject_id IS NULL OR j.subject_id<>j.evidence_id))
   OR (j.evidence_kind='AUTH_TERMINAL' AND (
    j.subject_id IS NULL OR j.subject_id<>j.evidence_id
    OR NOT EXISTS(SELECT 1 FROM automod_terminal_subjects t WHERE t.subject_id=j.subject_id)))

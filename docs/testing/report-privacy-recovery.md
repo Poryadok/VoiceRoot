@@ -168,7 +168,12 @@ FINAL writer drain, other domain cuts or a real restore operation.
 generation, valid opaque receipt identities and the local permanent terminal
 union for every `AUTH_TERMINAL` receipt. Every retained reporter must have its
 exact subject in a `BOUND` receipt and the evidence kind corresponding to its
-explicit provenance class. The same holds for a VALID User target or an existing
+explicit provenance class.
+For `AUTH_SUBJECT`, the evidence UUID is the opaque subject UUID itself: Auth
+returns a binding/revision, not a separate binding-fact UUID. The store writer,
+snapshot codec and final checker reject a different UUID, including orphan
+journal records. `USER_OWNER_FACT` retains its distinct canonical owner-fact UUID.
+The same correspondence holds for a VALID User target or an existing
 User-target receipt restored alongside an older raw row. Redacted raw residue,
 unknown classes, missing/mismatched receipts and unresolved retained bindings
 reject. A recovered legacy class requires its User owner fact and confers no
