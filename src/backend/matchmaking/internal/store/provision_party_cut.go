@@ -129,6 +129,12 @@ type provisionProposal struct {
 }
 
 func readProvisionCandidate(ctx context.Context, tx pgx.Tx, id uuid.UUID, binding *admission.Binding) (ProvisionCandidate, error) {
+	return readMatchPartyCandidate(ctx, tx, id, binding, false)
+}
+
+// Pending proposals are only read by the private response wrapper. Public
+// provisioning capture/verification always requires every response accepted.
+func readMatchPartyCandidate(ctx context.Context, tx pgx.Tx, id uuid.UUID, binding *admission.Binding, allowPending bool) (ProvisionCandidate, error) {
 	var raw string
 	var now time.Time
 	if err := tx.QueryRow(ctx, provisionCutSQL, id).Scan(&raw, &now); err != nil {
@@ -168,7 +174,7 @@ func readProvisionCandidate(ctx context.Context, tx pgx.Tx, id uuid.UUID, bindin
 	seen := map[uuid.UUID]bool{}
 	for _, p := range view.Proposals {
 		s, ok := sessions[p.SessionID]
-		if !ok || p.ID == uuid.Nil || seen[p.SessionID] || p.Response != ProposalResponseAccepted || p.ProfileID != s.ProfileID || !samePartyUUID(p.PartyID, s.PartyID) {
+		if !ok || p.ID == uuid.Nil || seen[p.SessionID] || (p.Response != ProposalResponseAccepted && (!allowPending || p.Response != ProposalResponsePending)) || p.ProfileID != s.ProfileID || !samePartyUUID(p.PartyID, s.PartyID) {
 			return ProvisionCandidate{}, ErrSourcePartyUnavailable
 		}
 		seen[p.SessionID] = true

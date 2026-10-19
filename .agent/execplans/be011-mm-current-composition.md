@@ -225,3 +225,14 @@ Actual Linux race checks: search8top25sub, response2top18sub, protected transpor
 also pass. Initial full transport run lacked docker-compose.yml test fixture;
 restored exact current tracked file then all package tests passed. This is not
 the response SQL receipt/handler, Gateway/client, native root or installed proof.
+
+The response reader now seals a distinct native ResponseCandidate over the
+persisted pending match/proposals/complete parties and sessions, private actor
+account binding, original source origins/current admission history and exact
+operation/request. It does not expose a pending ProvisionCandidate: the public
+provision reader still rejects every unaccepted proposal. Live responding-device
+epoch may differ from original admitted epochs. Fresh source validation returns
+a private exact-candidate proof, Unknown no reset/proof; locked re-read rejects
+changed proposal state. Real PG RED then3top racePASS0skip/fullvet0 qualify this
+reader and existing provisioning negatives. Atomic response receipt/transition
+and closed terminal-decline path remain to implement before handler wiring.
