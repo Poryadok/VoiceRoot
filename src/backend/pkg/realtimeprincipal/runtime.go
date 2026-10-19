@@ -131,10 +131,10 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	if cfg.JWKSCAFile != "" {
 		pem, err := os.ReadFile(cfg.JWKSCAFile)
 		if err != nil {
-			return nil, fmt.Errorf("Realtime lifecycle JWKS CA: %w", err)
+			return nil, fmt.Errorf("realtime lifecycle JWKS CA: %w", err)
 		}
 		if !roots.AppendCertsFromPEM(pem) {
-			return nil, errors.New("Realtime lifecycle JWKS CA contains no certificates")
+			return nil, errors.New("realtime lifecycle JWKS CA contains no certificates")
 		}
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -250,15 +250,15 @@ func configuredMethods(issuer string, allowed []string) (map[string]struct{}, er
 func loadServerTLS(certFile, keyFile, clientCAFile string) (*tls.Config, error) {
 	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
-		return nil, fmt.Errorf("Realtime lifecycle TLS certificate: %w", err)
+		return nil, fmt.Errorf("realtime lifecycle TLS certificate: %w", err)
 	}
 	clientCAPEM, err := os.ReadFile(clientCAFile)
 	if err != nil {
-		return nil, fmt.Errorf("Realtime lifecycle client CA: %w", err)
+		return nil, fmt.Errorf("realtime lifecycle client CA: %w", err)
 	}
 	clientCAs := x509.NewCertPool()
 	if !clientCAs.AppendCertsFromPEM(clientCAPEM) {
-		return nil, errors.New("Realtime lifecycle client CA contains no certificates")
+		return nil, errors.New("realtime lifecycle client CA contains no certificates")
 	}
 	return &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs}, nil
 }
@@ -288,7 +288,7 @@ func (r *Runtime) ServerOptions() []grpc.ServerOption {
 // domain RPC, consuming a JTI, refreshing keys, or qualifying global P3 coverage.
 func (r *Runtime) Ready(ctx context.Context) error {
 	if r == nil || !r.resolver.Usable(r.issuer) {
-		return errors.New("Realtime lifecycle issuer keys unavailable or expired")
+		return errors.New("realtime lifecycle issuer keys unavailable or expired")
 	}
 	return r.replay.Ping(ctx).Err()
 }
