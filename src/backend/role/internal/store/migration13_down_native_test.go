@@ -168,3 +168,30 @@ func TestRole13EmptyDownUpRoundtrip(t *testing.T) {
 	require.NoError(t, writer.Commit(ctx))
 	role13NativeAssertRows(t, ctx, pool, "grant")
 }
+
+func TestRole13DownRejectsStaleTransactionSnapshots(t *testing.T) {
+	for _, isolation := range []pgx.TxIsoLevel{pgx.RepeatableRead, pgx.Serializable} {
+		t.Run(string(isolation), func(t *testing.T) {
+			pool := role13NativeDatabase(t)
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+			down, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: isolation})
+			require.NoError(t, err)
+			defer down.Rollback(context.Background())
+			var empty bool
+			require.NoError(t, down.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM game_session_grant_operations)`).Scan(&empty))
+			require.True(t, empty)
+			writer, err := pool.Begin(ctx)
+			require.NoError(t, err)
+			defer writer.Rollback(context.Background())
+			require.NoError(t, role13NativeFirstWriter(ctx, writer, "operation"))
+			require.NoError(t, writer.Commit(ctx))
+			_, err = down.Exec(ctx, role13NativeSQL(t, "down"))
+			var pgErr *pgconn.PgError
+			require.ErrorAs(t, err, &pgErr, "a stale empty snapshot must never authorize DROP")
+			require.Equal(t, "0A000", pgErr.Code)
+			require.NoError(t, down.Rollback(ctx))
+			role13NativeAssertRows(t, ctx, pool, "operation")
+		})
+	}
+}
