@@ -15,8 +15,9 @@ carrier K pinning R and its hash. Verify the entire 88-entry projection and455
 dependency/context entries before consuming any path. Source qualification is
 neither ACTIVE A3 nor deployment/provider authority. Existing Game/R1/R2 and
 Voice013 correction authorities stay distinct. Keep all unrelated product paths
-under their existing checks.121 owns publication/CI/merge;416 exclusively owns
-this bounded verifier/shell/docs stage in WT19.
+  under their existing checks.121 owns publication/CI/merge.416 returned the
+bounded verifier/shell/docs stage to121 through supported handoff e9; WT19 was
+returned without transferring physical resources.
 
 The native consumer extends the existing real direct/nested Git producer and
 records source bases/best-base sets/content bases/runtime taint, merge outcomes
@@ -50,4 +51,8 @@ remain explicit completion gaps until actually obtained. No stand or ports.
 - [x] Existing stage custody accepted; exclusive WT19 lease acquired at ac7e039.
 - [x] Master route read, independent418 closure c1 and121 exclusive-write freeze confirmed.
 - [x] Focused Linux qualification9/history4/unchanged correction10 pass; history tests exposed and corrected lost runtime taint.
-- [ ] Complete literal A/B evidence mapping remains OPEN; current R has explicit OPEN for each clause and consumer rejects it.121 owns finite proof continuation. No source/CI qualification claimed.
+- [x] 418 c3 independently reviewed H2=6c117e9 complete88/455 rebind and seven literal A/B clauses. Only owning Space documentation and unrelated Makefile discover targets changed; native executable/test/proto/migration bytes equal H53.
+- [x] Independent external H53 verification driver closes B2 grant-without-target and B3 DOWN-first/DDL-failure/lock-timeout cases:4 realPG-race cases PASS0skip, no product edit.
+- [x] Successful empty DOWN/UP unrelated-schema/data sentinel supplement PASS1/0skip1.220s;418 c4 accepts B1 and resolves full eight-clause scope. This is finite dormant/restrictive source evidence, not activation/provider/stand authority.
+- [x] New immutable R3 ba8b63851eaf61876a1a87d32c163adddfc1b779 descends reviewed H2 and binds all eight reviewed clauses and hashed original/supplemental evidence.
+- [ ] Later K rebinds only fixed H/R/hash pins; independent exact carrier review and actual original-B0/master B/S/T F13 remain required before qualification/CI/merge claims.
