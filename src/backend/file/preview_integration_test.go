@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -23,8 +22,6 @@ func TestPreviewProducerAtomicReplayAndExactReferenceResolver(t *testing.T) {
 	ctx := context.Background()
 	pool := startFilePostgres(t, ctx)
 	defer pool.Close()
-	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000004_file_reference_lifecycle.up.sql"))
-	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000005_reference_gc_receipts.up.sql"))
 	files := store.NewFilesStore(pool)
 	id, owner, space := uuid.New(), uuid.New(), uuid.New()
 	_, err := files.InsertPendingFile(ctx, store.FileRow{ID: id, UploaderProfileID: uuid.New(), OriginalName: "image.png", MimeType: "image/png", SizeBytes: 42, R2Key: "private/original", Status: "pending_upload", FileType: "image", ScanResult: "pending"})
@@ -135,8 +132,6 @@ func TestPreviewResolverConcurrentReferenceReleaseAndAcquire(t *testing.T) {
 	ctx := context.Background()
 	pool := startFilePostgres(t, ctx)
 	defer pool.Close()
-	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000004_file_reference_lifecycle.up.sql"))
-	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000005_reference_gc_receipts.up.sql"))
 	files := store.NewFilesStore(pool)
 	service := grpcsvc.New(grpcsvc.Deps{Files: files})
 	bind := func(ctx context.Context, method string, request proto.Message) context.Context {
