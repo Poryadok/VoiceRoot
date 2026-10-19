@@ -508,6 +508,11 @@ refuses to discard a retained marker. Application guard APIs never issue a
 receipt or mutate admission state. The remaining native writers and executable
 must use the same gate before native activation.
 
+The DOWN migration takes that exclusive admission gate and an ACCESS EXCLUSIVE
+table lock before checking the head. A marker committed by a concurrent writer
+while DOWN waits must be observed and retained, including writers that did not
+take the cooperating advisory gate.
+
 This local serialization component does not prove external MM installation
 custody, physical database continuity, role privileges, predecessor retirement
 or restore reconciliation. Those remain required independently, including the

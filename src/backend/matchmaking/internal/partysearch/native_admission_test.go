@@ -54,6 +54,42 @@ func TestNativeAdmissionLegacyCreatesRefuseBegunHead(t *testing.T) {
 
 // This deliberately synthetic local-head fixture tests only transaction
 // serialization/equality. It is NOT an installed MM admission/custody receipt.
+func TestNativeAdmissionDownRetainsMarkerCommittedWhileWaiting(t *testing.T) {
+	ctx := context.Background()
+	pool := partyDB(t)
+	writer, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	defer writer.Rollback(ctx)
+	_, err = writer.Exec(ctx, `INSERT INTO public.mm_native_admission_head(protocol_version,state) VALUES(1,'CLOSED')`)
+	require.NoError(t, err)
+	down, err := os.ReadFile(filepath.Join("..", "..", "..", "migrations", "matchmaking_db", "000024_mm_native_admission.down.sql"))
+	require.NoError(t, err)
+	result := make(chan error, 1)
+	go func() {
+		bounded, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		conn, err := pool.Acquire(bounded)
+		if err != nil {
+			result <- err
+			return
+		}
+		defer conn.Release()
+		_, err = conn.Exec(bounded, string(down))
+		_, _ = conn.Exec(context.Background(), `ROLLBACK`)
+		result <- err
+	}()
+	require.Eventually(t, func() bool {
+		var waiting bool
+		err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%MM native admission marker must be retained%')`).Scan(&waiting)
+		return err == nil && waiting
+	}, 5*time.Second, 10*time.Millisecond)
+	require.NoError(t, writer.Commit(ctx))
+	require.Error(t, <-result, "DOWN must observe the marker committed by the writer it waited for")
+	var state string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM public.mm_native_admission_head`).Scan(&state))
+	require.Equal(t, "CLOSED", state)
+}
+
 func admissionFixture() mmadmission.Binding {
 	return mmadmission.Binding{ProtocolVersion: 1, EnvironmentID: uuid.New(), InstallationID: uuid.New(), AuthorityIncarnation: uuid.New(), TransitionID: uuid.New(), AdmissionGeneration: 1, CredentialCohortID: uuid.New(), DatabaseBindingHash: [32]byte{1}, SchemaContractHash: [32]byte{2}, SourceFactoryManifestHash: [32]byte{3}, FreshRouteManifestHash: [32]byte{4}, AdmissionReceiptHash: [32]byte{5}, LaunchManifestHash: [32]byte{6}, ExpectedLoginRoleOID: 42, ExpectedLoginRoleName: "fixture-not-installed"}
 }
