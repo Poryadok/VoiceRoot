@@ -30,7 +30,7 @@ func TestProvisionGateBanEvidenceResetsOnlyAffectedCapturedParty(t *testing.T) {
 			sessions = append(sessions, store.ProposalSession{SessionID: s.ID, ProfileID: s.ProfileID, PartyID: s.PartyID})
 		}
 	}
-	proposal, err := st.CreateProposal(ctx, store.CreateProposalParams{GameID: game, Mode: mode, Region: "eu", Sessions: sessions})
+	proposal, err := createProvisionProposalFixture(t, pool, st, store.CreateProposalParams{GameID: game, Mode: mode, Region: "eu", Sessions: sessions})
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `UPDATE match_proposals SET response='accepted' WHERE match_id=$1`, proposal.Match.ID)
 	require.NoError(t, err)
@@ -94,7 +94,7 @@ func TestProvisionPartyGateFreshCutUnknownAndAtomicChangedReset(t *testing.T) {
 			sessions = append(sessions, store.ProposalSession{SessionID: s.ID, ProfileID: s.ProfileID, PartyID: s.PartyID})
 		}
 	}
-	proposal, err := st.CreateProposal(ctx, store.CreateProposalParams{GameID: game, Mode: mode, Region: "eu", Sessions: sessions})
+	proposal, err := createProvisionProposalFixture(t, pool, st, store.CreateProposalParams{GameID: game, Mode: mode, Region: "eu", Sessions: sessions})
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `UPDATE match_proposals SET response='accepted' WHERE match_id=$1`, proposal.Match.ID)
 	require.NoError(t, err)

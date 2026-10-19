@@ -21,7 +21,7 @@ func TestProvisionCutBindsWholePersistedPartyAndLocalChanges(t *testing.T) {
 		sessions = append(sessions, store.ProposalSession{SessionID: s.ID, ProfileID: s.ProfileID, PartyID: s.PartyID})
 	}
 	matches := &store.MatchStore{Pool: pool}
-	proposal, err := matches.CreateProposal(ctx, store.CreateProposalParams{GameID: p.GameID, Mode: p.Mode, Region: "eu", Sessions: sessions})
+	proposal, err := createProvisionProposalFixture(t, pool, matches, store.CreateProposalParams{GameID: p.GameID, Mode: p.Mode, Region: "eu", Sessions: sessions})
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `UPDATE match_proposals SET response='accepted' WHERE match_id=$1`, proposal.Match.ID)
 	require.NoError(t, err)
@@ -113,7 +113,7 @@ func TestProvisionValidationUnknownDoesNotReturnPartialCancellation(t *testing.T
 		}
 	}
 	matches := &store.MatchStore{Pool: pool}
-	match, err := matches.CreateProposal(ctx, store.CreateProposalParams{GameID: game, Mode: mode, Sessions: sessions})
+	match, err := createProvisionProposalFixture(t, pool, matches, store.CreateProposalParams{GameID: game, Mode: mode, Region: "eu", Sessions: sessions})
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `UPDATE match_proposals SET response='accepted' WHERE match_id=$1`, match.Match.ID)
 	require.NoError(t, err)
@@ -149,7 +149,7 @@ func TestProvisionCutNeverInventsCaptureForLegacySession(t *testing.T) {
 	session, err := (&store.SessionStore{Pool: pool}).Create(ctx, store.CreateSessionParams{ProfileID: p.InitiatorProfileID, GameID: p.GameID, Mode: p.Mode, Criteria: p.Criteria, TimeoutAt: p.TimeoutAt})
 	require.NoError(t, err)
 	matches := &store.MatchStore{Pool: pool}
-	proposal, err := matches.CreateProposal(ctx, store.CreateProposalParams{GameID: p.GameID, Mode: p.Mode, Sessions: []store.ProposalSession{{SessionID: session.ID, ProfileID: session.ProfileID}}})
+	proposal, err := matches.CreateProposal(ctx, store.CreateProposalParams{GameID: p.GameID, Mode: p.Mode, Region: "eu", Sessions: []store.ProposalSession{{SessionID: session.ID, ProfileID: session.ProfileID}}})
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `UPDATE match_proposals SET response='accepted' WHERE match_id=$1`, proposal.Match.ID)
 	require.NoError(t, err)

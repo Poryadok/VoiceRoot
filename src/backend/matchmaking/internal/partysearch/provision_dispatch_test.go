@@ -223,7 +223,7 @@ func dispatchFixture(t *testing.T) (*pgxpool.Pool, *store.MatchStore, store.Crea
 		sessions = append(sessions, store.ProposalSession{SessionID: session.ID, ProfileID: session.ProfileID, PartyID: session.PartyID})
 	}
 	st := &store.MatchStore{Pool: pool}
-	proposal, err := st.CreateProposal(ctx, store.CreateProposalParams{GameID: p.GameID, Mode: p.Mode, Region: "eu", Sessions: sessions})
+	proposal, err := createProvisionProposalFixture(t, pool, st, store.CreateProposalParams{GameID: p.GameID, Mode: p.Mode, Region: "eu", Sessions: sessions})
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `UPDATE match_proposals SET response='accepted' WHERE match_id=$1`, proposal.Match.ID)
 	require.NoError(t, err)

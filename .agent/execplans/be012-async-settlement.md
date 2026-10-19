@@ -377,3 +377,42 @@ Graphify after source batch bounded no output; Treehouse+CIM verified own38840 -
 same WT31 lease and own portless Linux runner/PG retained for composition.
 Independent309 successor recheck via queen is required; no old3191 CLEAR claimed.
 299's separate c110 empty-receipt correction gate remains independent.
+
+### Composition with145 qualified proposal reservation
+
+Actual local develop304b49dc read before dependency composition. Normalmerge
+145 exact90612cc42ae41d78f4d6adf1d64829ba685af5f5 produced49e7a9ee39ea3da6a4b60cd78859dfea40f21fec.
+Imported27 dependency files include145 native startup readers/descriptor and
+matcher/proposal producers; no activation inferred from that source merge.
+Own five native partysearch fixture callsites now capture a real ProposalCandidate,
+use145 genuine Revalidator.ValidateProposalCandidate private attempt, then call
+CreateValidatedProposal. No raw reservation SQL, fake Matches or NULL adoption.
+Explicit eu region matches stored fixture criteria. Legacy NULL negative retains
+the public path and still cannot invent a source capture.
+
+New isolated Linux source is immutable49e7 archive at /src/proposal-gate, plus
+only the four exact owning fixture changes. First unchanged fixture RED2.208s
+correctly hit the new native public-path guard. Adapted six-test run preserved
+5PASS/1FAIL27.413s: the existing legacy negative omitted its stored eu region.
+Only this fixture field was corrected; failed case then PASS5.014s. No failed run
+is relabelled green. Current composed own provisioning/core suite23top+13subPASS,
+0skip/0fail159.826s, including fresh proposal authority, bans/candidate/reset,
+issued replay/late receipts, both independent review corrections and typed states.
+Scopedvet0/fullMMbuild0. This is current component composition, not installed
+rights, security/TLS, full feature/CI, coldcut or rollout acceptance.
+
+Separate unchanged store-package probe did not reach a reservation assertion:
+its old shared Testcontainers StartPostgres ignores BE011_TEST_PG_DSN and expects
+a mapped5432. Two bounded startup attempts failed at123.882s. Exact JSON/stderr/
+exit retained as settlement-store-proposal-fixture-gap, never a schema/native
+source defect or a failed-reservation repro. The inspected test process exited
+naturally before targeted stop; no process was killed by a stale PID. No known
+owned transient testcontainer remains; unrelated Docker containers untouched.
+Portless owning-store fixture support and qualifying pre022 captures remain a
+separate explicit test-composition continuation, not a production guard bypass.
+
+Graphify after fixture batch bounded without output. Canonical Treehouse/CIM
+proved own54996 ->33980 ->30728; only own children stopped, no AST PASS.
+All native test/graph sessions terminal; own keeper runner+portlessPG and WT31
+lease retained. Exact299 c110 SOURCE CLEAR and309 eac SOURCE CLEAR are scoped
+prerequisites, not approval of this new dependency/fixture composition.
