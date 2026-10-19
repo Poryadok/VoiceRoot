@@ -104,6 +104,12 @@ func (s *SpaceStore) CreateSpaceWithCreator(ctx context.Context, creator *lifecy
 	if err != nil {
 		return nil, err
 	}
+	scoped := *s
+	scoped.tx = tx
+	effective, err := scoped.captureNativeEffectiveMemberMutation(ctx, w.space, []uuid.UUID{w.profile})
+	if err != nil {
+		return nil, err
+	}
 	var published time.Time
 	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&published); err != nil {
 		return nil, err
@@ -117,6 +123,11 @@ func (s *SpaceStore) CreateSpaceWithCreator(ctx context.Context, creator *lifecy
 	binding := &spacev1.NativeMembershipPublicationBinding{ProtocolVersion: 1, PublicationOperationId: w.operation.String(), SpaceId: w.space.String(), ProfileId: w.profile.String(), OrdinaryGeneration: 1, Kind: spacev1.MemberAdmissionPublicationKind_MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_OWNER_CREATE, InitiatingService: "gateway", InitiatingAccountId: &account, InitiatingProfileId: w.profile.String(), RequestSha256: w.requestHash, ProducerOperationId: w.operation.String(), ProducerEvidenceSha256: evidence[:], PublishedAt: timestamppb.New(published)}
 	if err = insertNativeOrdinaryPublication(ctx, tx, binding, w.account); err != nil {
 		return nil, err
+	}
+	if effective != nil {
+		if err = scoped.finishEffectiveMemberMutations(ctx, effective); err != nil {
+			return nil, err
+		}
 	}
 	if _, err = creator.ActorFor(request); err != nil {
 		return nil, err
