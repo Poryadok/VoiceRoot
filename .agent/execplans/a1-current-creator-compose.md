@@ -59,3 +59,10 @@ ListMySpaces because protectedCreator is intentionally newly supported; their
 deny assertion remains intact. No audit/nickname/composite projection changed.
 Dedicated Authfloor mTLS configuration regression passed1.034. These are
 component results; main/native/allwriter assembly and public e2e remain open.
+
+Protected outgoing Role caller regression passed1.097/vetPASS on currentSpace.
+Compose contract RED7.045 missingGateway lifecycle address became2testsPASS8.643;
+the exact expected environment keysets were extended without removing services
+or credential mount scope assertions. Snapshot initially omitted canonical
+Phase0 overlay, fixed the owned runner snapshot before behavioral RED. Own tools
+container/sourcevolume is preparation only; no app/DB listeners started yet.
