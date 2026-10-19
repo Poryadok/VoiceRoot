@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	chatv1 "voice.app/voice/chat/v1"
 )
 
 func TestSpaceReportAttachmentNativeProducer(t *testing.T) {
@@ -63,6 +64,8 @@ func TestSpaceReportAttachmentNativeProducer(t *testing.T) {
 	spaceA, spaceB := uuid.New(), uuid.New()
 	concurrent, err := (&DMStore{Pool: pool}).CreateSpaceChannelChat(ctx, uuid.New(), spaceA, "Two writers", nil)
 	require.NoError(t, err)
+	beforeMove, err := (&DMStore{Pool: pool}).GetSpaceChatScopeAuthority(ctx, concurrent.ID, spaceA)
+	require.NoError(t, err)
 	tx, err := pool.Begin(ctx)
 	require.NoError(t, err)
 	defer tx.Rollback(ctx)
@@ -91,4 +94,23 @@ func TestSpaceReportAttachmentNativeProducer(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM chat_report_attachment_retirements
         WHERE chat_id=$1 AND attachment_generation=1 AND space_id=$2 AND reason='TARGET_MOVED'`, concurrent.ID, spaceA).Scan(&history))
 	require.Equal(t, 1, history)
+	afterMove, err := (&DMStore{Pool: pool}).GetSpaceChatScopeAuthority(ctx, concurrent.ID, spaceB)
+	require.NoError(t, err)
+	require.True(t, afterMove.Live)
+	require.Equal(t, chatv1.ChatType_CHAT_TYPE_GROUP, afterMove.ChatType)
+	require.Equal(t, beforeMove.ChatAuthorityRevision+2, afterMove.ChatAuthorityRevision)
+	_, err = (&SpaceLifecycleStore{Pool: pool}).PrepareSpaceDeletionManifest(ctx, &chatv1.PrepareSpaceDeletionManifestRequest{
+		ProtocolVersion: 1, SpaceId: spaceB.String(), DeletionOperationId: uuid.NewString(), ScheduleGeneration: 1,
+	})
+	require.NoError(t, err)
+	frozen, err := (&DMStore{Pool: pool}).GetSpaceChatScopeAuthority(ctx, concurrent.ID, spaceB)
+	require.NoError(t, err)
+	require.False(t, frozen.Live)
+	require.Equal(t, chatv1.ChatScopeLifecycleState_CHAT_SCOPE_LIFECYCLE_STATE_FROZEN, frozen.LifecycleState)
+	require.Equal(t, afterMove.ChatScopeIncarnation, frozen.ChatScopeIncarnation)
+	require.Greater(t, frozen.ChatAuthorityRevision, afterMove.ChatAuthorityRevision)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT report_attachment_generation FROM chats WHERE id=$1`, concurrent.ID).Scan(&generation))
+	require.Equal(t, int64(2), generation, "freeze cannot retire the report binding")
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM chat_report_attachment_retirements WHERE chat_id=$1`, concurrent.ID).Scan(&history))
+	require.Equal(t, 1, history, "lifecycle observation is not positive target retirement")
 }

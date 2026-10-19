@@ -141,6 +141,14 @@ sanction or local appeal system. Existing global intake semantics are unchanged.
   before tests (partial copy, no engine-outage inference). First DSN overlay
   missed shared PostgresImage constant: build failed before tests, then corrected;
   raw setup-failure logs remain distinct from the actual passing runtime.
+- [x] Close the named integration gap in c13: same26 DB now exercises actual
+  GetSpaceChatScopeAuthority after move/type and actual
+  PrepareSpaceDeletionManifest/freeze; report generation and positive receipt
+  remain unchanged on freeze. Final archive
+  `d9a67b4c4bf889c41b20c51a68039fc73a439c84b29f65179e28dc2f3398e6d1`,
+  real Linux PostgreSQL `-race` 4top PASS/0FAIL/0SKIP36.857s, scoped vet0 and
+  runner exit0. The three older tests retain their declared schema25 fixtures;
+  the new producer test supplies the explicit schema26 reader integration.
 - [ ] Obtain independent exact migration/rollback/source review before intake;
   implement remaining protected chain and local scenario. No feature PASS yet.
 
