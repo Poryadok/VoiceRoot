@@ -44,7 +44,9 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 	for _, table := range tables {
 		names = append(names, pgx.Identifier{"public", table}.Sanitize())
 	}
-	if _, err := tx.Exec(ctx, `SET LOCAL row_security=off; SET LOCAL search_path=public,pg_catalog`); err != nil {
+	// Explicit pg_temp LAST prevents PostgreSQL's implicit temporary-schema
+	// precedence from replacing qualified native source/floor reads afterward.
+	if _, err := tx.Exec(ctx, `SET LOCAL row_security=off; SET LOCAL search_path=pg_catalog,public,pg_temp`); err != nil {
 		return ErrMemberAuthorityUnavailable
 	}
 	if _, err := tx.Exec(ctx, "LOCK TABLE "+strings.Join(names, ",")+" IN ACCESS SHARE MODE"); err != nil {

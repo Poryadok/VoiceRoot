@@ -92,7 +92,7 @@ func TestNativeBotCatalog42RejectsCorruption(t *testing.T) {
 		{"disabled_attempt", `ALTER TABLE space_bot_installation_attempts DISABLE TRIGGER bot_installation_attempt_guard`},
 		{"disabled_cancel", `ALTER TABLE space_bot_installation_cancellations DISABLE TRIGGER bot_installation_cancellation_guard`},
 		{"function_settings", `ALTER FUNCTION space_bot_installation_head_guard() SET search_path=public`},
-		{"body", `CREATE OR REPLACE FUNCTION space_bot_installation_head_guard() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RETURN NEW; END'`},
+		{"body", `CREATE OR REPLACE FUNCTION public.space_bot_installation_head_guard() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RETURN NEW; END'`},
 		{"rls", `ALTER TABLE space_bot_installation_attempts ENABLE ROW LEVEL SECURITY`},
 	}
 	for _, c := range cases {
