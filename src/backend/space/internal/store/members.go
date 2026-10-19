@@ -134,7 +134,7 @@ ORDER BY joined_at ASC,profile_id ASC LIMIT $4
 	return out, next, nil
 }
 
-// RemoveMember deletes membership and decrements member_count.
+// RemoveMember deletes the ordinary source and refreshes the effective count.
 func (s *SpaceStore) RemoveMember(ctx context.Context, spaceID, profileID uuid.UUID) error {
 	if s == nil || s.Pool == nil {
 		return errors.New("space store: pool not configured")
@@ -153,11 +153,7 @@ DELETE FROM space_members WHERE space_id = $1 AND profile_id = $2
 	if tag.RowsAffected() == 0 {
 		return pgx.ErrNoRows
 	}
-	_, err = s.db().Exec(ctx, `
-UPDATE spaces SET member_count = GREATEST(member_count - 1, 0), updated_at = now()
-WHERE id = $1
-`, spaceID)
-	if err != nil {
+	if err = s.refreshEffectiveMemberCount(ctx, spaceID); err != nil {
 		return err
 	}
 	_, _ = s.db().Exec(ctx, `
@@ -184,7 +180,7 @@ func (s *SpaceStore) KickMember(ctx context.Context, spaceID, profileID, actor u
 	if tag.RowsAffected() == 0 {
 		return pgx.ErrNoRows
 	}
-	if _, err := s.db().Exec(ctx, `UPDATE spaces SET member_count=GREATEST(member_count-1,0),updated_at=now() WHERE id=$1`, spaceID); err != nil {
+	if err := s.refreshEffectiveMemberCount(ctx, spaceID); err != nil {
 		return err
 	}
 	if _, err := s.db().Exec(ctx, `DELETE FROM space_member_timeouts WHERE space_id=$1 AND profile_id=$2`, spaceID, profileID); err != nil {
