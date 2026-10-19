@@ -8,6 +8,8 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"errors"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -47,6 +49,10 @@ func TestJoinAttempt_SealedSubmissionFromRealAdmissionVerifier(t *testing.T) {
 			space, err := st.CreateSpace(ctx, owner, "Sealed submission", "", "public")
 			require.NoError(t, err)
 			applyEntryPolicyMigration(t, st)
+			rawQ, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/space_db/000032_join_request_groups.up.sql"))
+			require.NoError(t, err)
+			_, err = pool.Exec(ctx, string(rawQ))
+			require.NoError(t, err)
 			applyJoinAttemptMigration(t, st)
 			applyJoinOperationMigration(t, st)
 			question := uuid.New()
@@ -192,6 +198,12 @@ func TestJoinAttempt_SealedSubmissionFromRealAdmissionVerifier(t *testing.T) {
 				require.Equal(t, wantState, state)
 				require.Equal(t, "DECIDED", opState)
 				require.Equal(t, record.DecisionBasisSHA256, basis)
+				if mode == "manual" {
+					group, groupErr := st.LookupJoinRequestGroupForAttempt(ctx, space.ID, a.ID)
+					require.NoError(t, groupErr)
+					require.NotEqual(t, a.ID, group.ID, "Q is a group identity, never an attempt alias")
+					require.Equal(t, in.AccountID, group.AccountID)
+				}
 				_, err = st.LoadJoinDecisionBasis(ctx, basis)
 				require.NoError(t, err)
 			}

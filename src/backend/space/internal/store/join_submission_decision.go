@@ -38,6 +38,7 @@ type VerifiedJoinSubmissionDecision struct {
 type JoinSubmissionRecord struct {
 	Attempt             JoinAttempt
 	DecisionBasisSHA256 []byte
+	RequestID           *uuid.UUID
 }
 
 func (d *VerifiedJoinSubmissionDecision) currentApplicant() (admissionauthority.SubjectIdentity, error) {
@@ -119,6 +120,7 @@ func (s *SpaceStore) CommitJoinSubmissionDecision(ctx context.Context, decision 
 			}
 		}
 		hookRan := false
+		var requestID *uuid.UUID
 		hook := func(ctx context.Context, local *SpaceStore, a *joinAttemptPrivate) error {
 			if a.ID != c.AttemptID || a.PolicyVersion != p.policyVersion || !bytes.Equal(joinDigest("input", a.Input), joinDigest("input", p.input)) || !bytes.Equal(a.binding, c.AttemptBindingSHA256) || !bytes.Equal(a.submission, c.SubmissionSHA256) || !bytes.Equal(a.EvidenceSHA256, c.ReadyEvidenceSHA256) || a.approvedAccount != nil || a.approvedProfile != nil || a.approvalOperation != nil {
 				return ErrJoinAttemptUnavailable
@@ -132,6 +134,14 @@ func (s *SpaceStore) CommitJoinSubmissionDecision(ctx context.Context, decision 
 			}
 			if tag.RowsAffected() != 1 {
 				return ErrJoinAttemptConflict
+			}
+			if a.State == "PENDING" {
+				group, err := local.AttachJoinRequestAttempt(ctx, a.ID)
+				if err != nil {
+					return err
+				}
+				id := group.ID
+				requestID = &id
 			}
 			hookRan = true
 			return nil
@@ -155,7 +165,7 @@ func (s *SpaceStore) CommitJoinSubmissionDecision(ctx context.Context, decision 
 		if err = guard(); err != nil {
 			return nil, err
 		}
-		return &JoinSubmissionRecord{Attempt: *attempt, DecisionBasisSHA256: slices.Clone(basisSHA[:])}, nil
+		return &JoinSubmissionRecord{Attempt: *attempt, DecisionBasisSHA256: slices.Clone(basisSHA[:]), RequestID: requestID}, nil
 	})
 }
 
