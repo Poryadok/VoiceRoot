@@ -180,7 +180,17 @@ func (s *SpaceStore) KickMember(ctx context.Context, spaceID, profileID, actor u
 	}
 	if s.tx == nil {
 		return s.withOwnershipScope(ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) error {
-			return scoped.KickMember(ctx, spaceID, profileID, actor)
+			capture, err := scoped.captureMemberRemovalMutation(ctx, spaceID, profileID)
+			if err != nil {
+				return err
+			}
+			if err = scoped.KickMember(ctx, spaceID, profileID, actor); err != nil {
+				return err
+			}
+			if capture != nil {
+				return scoped.finishEffectiveMemberMutations(ctx, capture)
+			}
+			return nil
 		})
 	}
 	tag, err := s.db().Exec(ctx, `DELETE FROM space_members WHERE space_id=$1 AND profile_id=$2`, spaceID, profileID)
