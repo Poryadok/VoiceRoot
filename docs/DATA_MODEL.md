@@ -1,5 +1,13 @@
 # Модель данных — общие правила
 
+BE-066 local moderation uses separate Moderation-owned report IDs and immutable
+Space/Chat/message jurisdiction references. Target message UUIDv7 does not prove
+ownership or visibility; verified owner responses supply those facts. Local DTOs
+omit the private reporter profile and cannot reuse the platform `Report` DTO.
+Assignment/resolve use monotone row versions and conditional updates. See the
+[owning contract](microservices/moderation-service.md#space-local-report-jurisdiction-accepted-target)
+and [store inventory](DATA_STORES.md#moderation-local-reports-be-066-accepted-target).
+
 Договорённости для описания таблиц и связей по сервисам: секция «Модель данных» в [docs/microservices/](microservices/) и миграции рядом с кодом сервиса ([OPERATIONS.md](OPERATIONS.md)). Инвентарь БД: [DATA_STORES.md](DATA_STORES.md).
 
 **Скоуп первой итерации схем** (какие сервисы и сущности входят до полного каталога таблиц): [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md).

@@ -351,6 +351,10 @@ and Voice IDs denied while history remains.
 - [ ] **[Role] Voice chat organizer role not implemented — no system/custom role, no permission bits, no Voice-side organizer powers (mute, floor, raise-hand).** — `docs/features/roles.md` § «Организатор войс-чата»; `src/backend/role/permissions/permissions.go`
 - [ ] **[Role] Override targets not validated S2S — `SetChatOverride` / `SetVoiceRoomOverride` accept arbitrary UUIDs; doc dependency on Space/Chat validation is missing.** — `src/backend/role/internal/grpcsvc/roles.go`, `roles_manage.go`; `docs/microservices/role-service.md` § «Зависимости»
 - [ ] **[Role] `MODERATION_MANAGE_REPORTS` unused — bit exists; Moderation service has no `CheckPermission` integration.** — `src/backend/role/permissions/permissions.go`; `src/backend/moderation/`
+  BE-066 implements this through a separate local jurisdiction, never a Role
+  branch on platform reports. The accepted narrow target and pending owner-read
+  protocol/runtime work are tracked in
+  [space-local-reports-exec-plan.md](../testing/space-local-reports-exec-plan.md).
 - [x] **[Role/Space] `SPACE_MANAGE_MATCHMAKING`** — matchmaking configuration is owned by Space, not queue admission: `UpdateSpaceMmConfig` requires this permission; generic `UpdateSpace.mm_config_json` requires it in addition to `SPACE_MANAGE_SETTINGS` for any ordinary settings fields. Regression coverage: `space_mm_permissions_integration_test.go`.
 - [ ] **[Role] Many text-chat permission bits not enforced downstream — Messaging checks send + mentions/threads/pins; не все attach/embed/react/manage/slow-mode bits.** — `src/backend/messaging/internal/grpcsvc/messaging_grpc.go`, `threads_policy.go`
 - [x] **[Role] `SPACE_MANAGE_SETTINGS`** — `UpdateSpace` → `requireSpacePermission(..., SpaceManageSettings)` (`space.go`).

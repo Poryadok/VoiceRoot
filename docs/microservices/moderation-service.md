@@ -212,6 +212,9 @@ report.created event ──► Check thresholds:
 
 ## P3 Space deletion classification (accepted target)
 
+This section applies to platform reports. The separate local jurisdiction is
+specified below and never enters the platform sanctions/appeal pipeline.
+
 Moderation is not a purge-completion participant. At Space purge, `pending` and
 `reviewing` Space-target reports atomically become `dismissed` with
 `resolution_code=TARGET_DELETED`, then descriptions, screenshots and message
@@ -226,4 +229,89 @@ approve, deny or revoke without retaining report or Space content. The accepted
 product/Moderation decision declares that snapshot sufficient for every active
 appeal; no hidden `RETAIN_UNTIL_POLICY` exception or staff evidence archive is
 created in P3.
+
+## Space-local report jurisdiction (accepted target)
+
+BE-066 adds the separate local scenario in [reports.md](../features/reports.md#локальные-жалобы-space).
+This is a target contract; the existing `Report` DTO, `reports` table and global
+handlers do not acquire local Role authorization. Existing rows remain PLATFORM.
+Use independent `space_reports` persistence, API messages and repository methods;
+no backfill/copy, implicit routing by target owner or cross-jurisdiction IDs.
+
+| Target RPC | HTTP route under `/api/v1/spaces/{space_id}/moderation/reports` |
+|---|---|
+| `CreateSpaceReport` | `POST /` → 202, opaque `report_id` only |
+| `ListSpaceReports` | `GET /` → scoped summary page |
+| `GetSpaceReport` | `GET /{report_id}` → permitted local detail |
+| `AssignSpaceReport` | `PATCH /{report_id}/assignee` → versioned result |
+| `ResolveSpaceReport` | `POST /{report_id}/resolve` → versioned result |
+
+Requests bind canonical `space_id`, exact `ChatRef` and `message_id`; optional
+evidence references must equal that target. No body can override the path scope.
+Assign and Resolve carry `expected_version`; initial version is positive and
+increments on each actual change. Terminal same-decision retry returns its
+existing result without changing version; conflicting terminal actions fail.
+Report IDs are UUIDv4. Target message IDs remain Messaging UUIDv7; their version
+does not prove existence or jurisdiction. `List` supports status filtering and
+bounded cursor pagination after authorized jurisdiction/content selection.
+
+Local DTOs never contain reporter identity, global report/sanction identifiers,
+arbitrary evidence JSON, account mappings or copied message bodies. Summary
+excludes description/evidence/decision notes; detail includes only fields allowed
+by current target ACL. Description and required decision note each have a
+500-codepoint bound. Local reports never feed platform threshold/event workers.
+Global staff status supplies no implicit local read override; staff use a
+separately authorized local actor or the platform jurisdiction.
+
+### Protected authority and owner inputs
+
+Every new client RPC accepts only verified Gateway `delegated_user`,
+`iss=gateway`, `aud=moderation`, account `sub`, active `profile_id`,
+`session_epoch`, exact full RPC, deterministic protobuf request hash and
+`request_id`, plus ordinary temporal/JWKS/replay/TLS guards. No raw identity or
+internal metadata fallback; the legacy listener cannot dispatch new methods.
+
+Moderation obtains message existence, canonical Chat/Space ownership, immutable
+message timestamp, current actor membership and exact content visibility from
+the owning services through protected request-bound RPCs. It does not query
+foreign databases or infer jurisdiction from client `space_id`. Fetching a
+message without a viewer is not proof of viewer access. The owner protocol must
+also support per-row list filtering, current read authorization and positive
+deletion/move observations without exposing a public existence oracle.
+
+Role is checked via the separately allowed signed `service:moderation`
+`CheckPermission` for `MODERATION_MANAGE_REPORTS` and the exact canonical Chat
+node. Check actor on List/Get/Assign/Resolve and assignee on Assign; no role-name
+shortcut. Each operation revalidates current owner/Role inputs before its local
+decision. A short-lived credential or earlier list result is not an atomic
+remote-revocation fence. This v1 follows request-time owner authorization, with
+ordinary in-flight operations serialized by local version checks; it does not
+promise distributed ACID or revoke-before-commit linearizability.
+
+Unavailable verifier/Role/owner inputs fail closed before disclosure/effects.
+Foreign or inaccessible report IDs have the same non-disclosing response.
+Deletion/move cleanup requires an authoritative positive observation and exact
+saved target binding; absence, timeout and malformed replies never trigger it.
+Target protocol implementation/qualification is required before activation.
+
+### Durable data and lifecycle
+
+`space_reports` owns immutable report/Space/Chat/message binding, closed private
+reporter profile reference, category, bounded description, typed target evidence,
+status, nullable assignee, version, bounded terminal note/code and timestamps.
+Any idempotency/work/cursor records are Moderation-owned and jurisdiction-bound.
+Cross-service identifiers are references without foreign-database FKs.
+
+Creation and state/version changes commit atomically. A failed authorization,
+conflict or rollback emits no report decision, sanction or event. Assignment
+does not reserve permission. Local effects are limited to the review workflow;
+enforcement stays with each action owner. All lifecycle writers preserve this
+separation. Freeze denies ordinary local access; positive delete/move scrubs
+content, and irreversible P3/account erasure cleans owned personal content and
+derived work. Local evidence is not copied into global audit/export/automod.
+Schema rollback must refuse while retained local data or replay obligations
+would be lost; no delete-to-downgrade path is allowed.
+
+Implementation and discriminating tests are tracked in
+[space-local-reports-exec-plan.md](../testing/space-local-reports-exec-plan.md).
 
