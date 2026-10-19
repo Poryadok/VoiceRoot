@@ -579,6 +579,26 @@ func main() {
 	if sessionEpochChecker != nil {
 		mediaSessionEpochChecker = sessionEpochChecker
 	}
+	// This legacy/pre-cut root serves its real public signing keys before
+	// recovery calls Space with a signed principal and a cold verifier cache.
+	// The additive native executable retains its separate protected startup gate.
+	var principalJWKSPublisher *principaljwks.Publisher
+	if principalJWKSEnabled {
+		principalJWKSPublisher, err = principaljwks.Start(principalJWKSConfig, func(handler http.Handler) http.Handler {
+			return httpserver.Wrap(handler, logger)
+		})
+		if err != nil {
+			log.Fatalf("voice principal JWKS startup: %v", err)
+		}
+		defer func() { _ = principalJWKSPublisher.Close() }()
+		logger.Info("principal JWKS TLS listener started", slog.String("addr", principalJWKSPublisher.Addr().String()))
+		go func() {
+			if serveErr := <-principalJWKSPublisher.Errors(); serveErr != nil && serveErr != http.ErrServerClosed {
+				runCancel()
+				log.Fatalf("voice principal JWKS serve: %v", serveErr)
+			}
+		}()
+	}
 	closeSpaceMediaRuntime := startSpaceMediaRuntime(runCtx, voiceSvc, lifecyclePool,
 		mediaSessionEpochChecker, callStoreDurable, strings.TrimSpace(os.Getenv("NATS_URL")),
 		livekit.NewSDKRoomLifecycle(strings.TrimSpace(os.Getenv("LIVEKIT_URL")),
@@ -660,26 +680,11 @@ func main() {
 		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName, lifecycleReadiness), metricsReg), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
-	var principalJWKSServer *http.Server
-	if principalJWKSEnabled {
-		mux := http.NewServeMux()
-		mux.Handle("/internal/v1/principal/jwks.json", principal.JWKSHandlerKeys([]principal.JWKSKey{
-			{KeyID: principalJWKSConfig.KeyID, PublicKey: &principalJWKSConfig.SigningKey.PublicKey},
-			{KeyID: principalJWKSConfig.NextKeyID, PublicKey: &principalJWKSConfig.NextSigningKey.PublicKey},
-		}))
-		principalJWKSServer = &http.Server{Addr: principalJWKSConfig.ListenAddr, Handler: httpserver.Wrap(mux, logger), ReadHeaderTimeout: 5 * time.Second}
-	}
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 1)
 	logger.Info("listening", slog.String("addr", addr))
 	go func() {
 		errCh <- server.ListenAndServe()
 	}()
-	if principalJWKSServer != nil {
-		go func() {
-			logger.Info("principal JWKS TLS listener started", slog.String("addr", principalJWKSServer.Addr))
-			errCh <- principalJWKSServer.ListenAndServeTLS(principalJWKSConfig.TLSCert, principalJWKSConfig.TLSKey)
-		}()
-	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -696,8 +701,8 @@ func main() {
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)
 		}
-		if principalJWKSServer != nil {
-			if err := principalJWKSServer.Shutdown(ctx); err != nil {
+		if principalJWKSPublisher != nil {
+			if err := principalJWKSPublisher.Shutdown(ctx); err != nil {
 				log.Fatal(err)
 			}
 		}

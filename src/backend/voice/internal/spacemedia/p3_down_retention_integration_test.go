@@ -37,6 +37,7 @@ func TestP3DownRefusesRetainedGrantTargetsAndReceipt(t *testing.T) {
 	pool := startSpaceMediaAdmissionPostgres(t, ctx)
 	admissions := NewPostgresAdmissionStore(pool)
 	a := admissionFixture()
+	ctx = ownAdmission(ctx, &a)
 	a.Identity, _ = livekit.SpaceParticipantIdentity(a.ProfileID.String(), a.Generation)
 	require.NoError(t, prepareAdmission(ctx, admissions, &a))
 	require.NoError(t, admissions.Fence(ctx, a))

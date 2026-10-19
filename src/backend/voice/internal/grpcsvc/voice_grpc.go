@@ -62,8 +62,6 @@ type SpaceMediaAdmissionStore interface {
 	MarkAborting(context.Context, uuid.UUID, string) error
 	ReleaseFence(context.Context, voicestore.SpaceMediaAdmission) error
 	MarkCleanupCompleted(context.Context, uuid.UUID, string) error
-	BeginRoomLeave(context.Context, uuid.UUID, string) error
-	CompleteRoomLeave(context.Context, voicestore.SpaceMediaAdmission) error
 }
 
 type CurrentSessionEpochChecker interface {

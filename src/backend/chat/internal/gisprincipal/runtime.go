@@ -142,7 +142,7 @@ func RealtimeLifecycleConfigFromEnv() (Config, string, bool, error) {
 		return Config{}, "", false, nil
 	}
 	if listen == "" || cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || cfg.ClientCAFile == "" || cfg.JWKSURL == "" || cfg.JWKSCAFile == "" || cfg.ReplayAddr == "" || (cfg.JWKSClientCertFile == "") != (cfg.JWKSClientKeyFile == "") {
-		return Config{}, "", true, errors.New("Chat Realtime lifecycle principal configuration is incomplete")
+		return Config{}, "", true, errors.New("chat Realtime lifecycle principal configuration is incomplete")
 	}
 	return cfg, listen, true, nil
 }
@@ -373,7 +373,7 @@ func (r *Runtime) ServerOptions() []grpc.ServerOption {
 // keys, consuming a JTI, or contacting an issuer application health endpoint.
 func (r *Runtime) Ready(ctx context.Context) error {
 	if r == nil || !r.resolver.Usable(r.issuer) {
-		return errors.New("Chat principal issuer keys unavailable or expired")
+		return errors.New("chat principal issuer keys unavailable or expired")
 	}
 	return r.replay.Ping(ctx).Err()
 }

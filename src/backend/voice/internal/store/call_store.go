@@ -111,6 +111,7 @@ type SpaceMediaAdmissionEvent struct {
 }
 
 type SpaceMediaAdmission struct {
+	Ownership           SpaceAdmissionOwnership `json:"-"`
 	LifecycleGeneration int64
 	OperationID         uuid.UUID
 	Generation          string

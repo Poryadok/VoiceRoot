@@ -17,6 +17,7 @@ func TestSpacePartyRosterCommitsOnlyEligibilityDeltas(t *testing.T) {
 	pool := startSpaceMediaAdmissionPostgres(t, ctx)
 	st := NewPostgresAdmissionStore(pool)
 	a := admissionFixture()
+	ctx = ownAdmission(ctx, &a)
 	require.NoError(t, prepareAdmission(ctx, st, &a))
 	check := func(version int64, changes []string) {
 		t.Helper()
@@ -77,7 +78,7 @@ func TestSpacePartyRosterCommitsOnlyEligibilityDeltas(t *testing.T) {
 	check(1, []string{"JOINED"})
 	_, err = pool.Exec(ctx, `ALTER TABLE voice_roster_outbox ADD CONSTRAINT reject_test_left CHECK(change <> 'LEFT')`)
 	require.NoError(t, err)
-	require.Error(t, st.BeginRoomLeave(ctx, a.OperationID, a.Generation))
+	require.Error(t, fixtureBeginOwnedLeave(ctx, st, a.OperationID, a.Generation))
 	check(1, []string{"JOINED"})
 	require.NoError(t, st.ConfirmProjection(ctx, a.OperationID, a.Generation), "failed outbox must roll back revocation")
 	_, err = pool.Exec(ctx, `ALTER TABLE voice_roster_outbox DROP CONSTRAINT reject_test_left`)
@@ -87,7 +88,7 @@ func TestSpacePartyRosterCommitsOnlyEligibilityDeltas(t *testing.T) {
 	require.ErrorIs(t, st.ApplyPartyEligibilityLoss(ctx, loss), ErrPartySourceChanged)
 	require.ErrorIs(t, st.MarkProjectionApplied(ctx, a.OperationID, a.Generation), ErrRoomHeadPending,
 		"late projection confirmation cannot resurrect a departing last member")
-	require.NoError(t, st.BeginRoomLeave(ctx, a.OperationID, a.Generation))
+	require.NoError(t, fixtureBeginOwnedLeave(ctx, st, a.OperationID, a.Generation))
 	check(2, []string{"JOINED", "LEFT"})
 }
 
@@ -99,11 +100,13 @@ func TestSpacePartyRoomCloseSharesCallerTransactionAndOrdersDepartures(t *testin
 	pool := startSpaceMediaAdmissionPostgres(t, ctx)
 	st := NewPostgresAdmissionStore(pool)
 	first := admissionFixture()
+	ctx = ownAdmission(ctx, &first)
 	require.NoError(t, prepareAdmission(ctx, st, &first))
 	require.NoError(t, st.Fence(ctx, first))
 	require.NoError(t, st.MarkCommitted(ctx, first.OperationID, first.Generation))
 	require.NoError(t, st.MarkProjectionApplied(ctx, first.OperationID, first.Generation))
 	second := admissionFixture()
+	ctx = ownAdmission(ctx, &second)
 	second.RoomID = first.RoomID
 	second.SpaceID = first.SpaceID
 	second.VoiceRoomID = first.VoiceRoomID

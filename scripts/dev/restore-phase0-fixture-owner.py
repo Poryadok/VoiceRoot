@@ -48,6 +48,8 @@ def restore(destination: Path) -> None:
              root / "tls/voice-match-squad-member-grpc.crt",
              root / "tls/voice-match-squad-member-grpc.key",
              root / "tls/matchmaking-client.crt", root / "tls/matchmaking-client.key",
+             root / "tls/space-lifecycle.crt", root / "tls/space-lifecycle.key",
+             root / "tls/space-client.crt", root / "tls/space-client.key",
              root / "ca/ca.crt"]
     if matchmaking.is_symlink():
         raise RuntimeError("fixture ownership path must not be a symlink")

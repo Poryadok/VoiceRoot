@@ -318,25 +318,9 @@ func (s *VoiceGRPC) leaveSpaceMediaParticipant(ctx context.Context, call voicest
 	if s.SpaceMediaRevoker == nil || s.SpaceMediaAdmissions == nil {
 		return status.Error(codes.Unavailable, "Space media revocation is not ready")
 	}
-	operationID, operationErr := uuid.Parse(participant.AdmissionOperationID)
-	accountID, accountErr := uuid.Parse(participant.AccountID)
-	profileUUID, profileErr := uuid.Parse(profileID)
-	spaceUUID, spaceErr := uuid.Parse(call.SpaceID)
-	if operationErr != nil || accountErr != nil || profileErr != nil || spaceErr != nil || participant.Generation == "" {
-		return status.Error(codes.Unavailable, "Space media admission fence is invalid")
-	}
-	if err := s.SpaceMediaAdmissions.BeginRoomLeave(ctx, operationID, participant.Generation); err != nil {
-		return status.Error(codes.Unavailable, "Space media participant drain is pending")
-	}
 	updated, removed, err := s.SpaceMediaRevoker.RevokeSpaceMediaParticipant(ctx, call, participant)
 	if err != nil {
 		return status.Error(codes.Unavailable, "Space media participant removal is pending")
-	}
-	if err := s.SpaceMediaAdmissions.CompleteRoomLeave(ctx, voicestore.SpaceMediaAdmission{
-		OperationID: operationID, Generation: participant.Generation, AccountID: accountID,
-		ProfileID: profileUUID, SpaceID: spaceUUID, RoomID: call.RoomID,
-	}); err != nil {
-		return status.Error(codes.Unavailable, "Space media participant cleanup is pending")
 	}
 	if !removed {
 		return nil
