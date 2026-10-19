@@ -1036,12 +1036,25 @@ const JoinByInviteRequest$json = {
   '1': 'JoinByInviteRequest',
   '2': [
     {'1': 'code', '3': 1, '4': 1, '5': 9, '10': 'code'},
+    {
+      '1': 'operation_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'operationId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_operation_id'},
   ],
 };
 
 /// Descriptor for `JoinByInviteRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List joinByInviteRequestDescriptor = $convert
-    .base64Decode('ChNKb2luQnlJbnZpdGVSZXF1ZXN0EhIKBGNvZGUYASABKAlSBGNvZGU=');
+final $typed_data.Uint8List joinByInviteRequestDescriptor = $convert.base64Decode(
+    'ChNKb2luQnlJbnZpdGVSZXF1ZXN0EhIKBGNvZGUYASABKAlSBGNvZGUSJgoMb3BlcmF0aW9uX2'
+    'lkGAIgASgJSABSC29wZXJhdGlvbklkiAEBQg8KDV9vcGVyYXRpb25faWQ=');
 
 @$core.Deprecated('Use spaceMembershipDescriptor instead')
 const SpaceMembership$json = {
@@ -1085,12 +1098,25 @@ const JoinSpaceRequest$json = {
   '1': 'JoinSpaceRequest',
   '2': [
     {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'operation_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'operationId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_operation_id'},
   ],
 };
 
 /// Descriptor for `JoinSpaceRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List joinSpaceRequestDescriptor = $convert.base64Decode(
-    'ChBKb2luU3BhY2VSZXF1ZXN0EhkKCHNwYWNlX2lkGAEgASgJUgdzcGFjZUlk');
+    'ChBKb2luU3BhY2VSZXF1ZXN0EhkKCHNwYWNlX2lkGAEgASgJUgdzcGFjZUlkEiYKDG9wZXJhdG'
+    'lvbl9pZBgCIAEoCUgAUgtvcGVyYXRpb25JZIgBAUIPCg1fb3BlcmF0aW9uX2lk');
 
 @$core.Deprecated('Use leaveSpaceRequestDescriptor instead')
 const LeaveSpaceRequest$json = {

@@ -338,6 +338,8 @@ message InviteList {
 
 message JoinByInviteRequest {
   string code = 1;
+  // Optional normalized Idempotency-Key, included before the request is signed.
+  optional string operation_id = 2;
 }
 
 message SpaceMembership {
@@ -350,6 +352,8 @@ message SpaceMembership {
 
 message JoinSpaceRequest {
   string space_id = 1;
+  // Absence retains legacy no-key semantics; a present empty value is invalid.
+  optional string operation_id = 2;
 }
 
 message LeaveSpaceRequest {
