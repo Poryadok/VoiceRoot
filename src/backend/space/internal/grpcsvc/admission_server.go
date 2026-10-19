@@ -25,6 +25,7 @@ type AdmissionDependencies struct {
 	Subjects  *admissionauthority.Client
 	Reviewers *admissionauthority.ReviewerClient
 	Roles     *memberadmissionrole.Client
+	Settings  *admissionauthority.SettingsClient
 }
 
 // The passed base retains all Composite/Audit behavior. Only the additive
@@ -211,9 +212,11 @@ func mapAdmissionError(err error) error {
 		return status.Error(codes.NotFound, "join request not found")
 	case errors.Is(err, admissionauthority.ErrIneligible), errors.Is(err, store.ErrJoinAttemptDenied), errors.Is(err, store.ErrGuestsNotAllowed), errors.Is(err, store.ErrAccountBanned):
 		return status.Error(codes.PermissionDenied, "admission denied")
-	case errors.Is(err, store.ErrJoinAttemptConflict):
+	case errors.Is(err, store.ErrJoinAttemptConflict), errors.Is(err, store.ErrEntryPolicyConflict):
 		return status.Error(codes.AlreadyExists, "admission operation conflict")
-	case errors.Is(err, admissionauthority.ErrBinding), errors.Is(err, admissionauthority.ErrUnavailable), errors.Is(err, store.ErrJoinAttemptUnavailable):
+	case errors.Is(err, store.ErrEntryPolicyVersion):
+		return status.Error(codes.Aborted, "entry policy revision conflict")
+	case errors.Is(err, admissionauthority.ErrBinding), errors.Is(err, admissionauthority.ErrUnavailable), errors.Is(err, store.ErrJoinAttemptUnavailable), errors.Is(err, store.ErrEntryPolicyUnavailable), errors.Is(err, store.ErrEffectiveEpisodeUnavailable):
 		return status.Error(codes.Unavailable, "admission authority unavailable")
 	default:
 		return status.Error(codes.Internal, "admission operation failed")
