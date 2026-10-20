@@ -578,3 +578,12 @@ transport or Role's unallocated root-only API. Actual migration controls cover
 retained historical root backfill, empty RC/old RR DOWN and an actual first
 BeginBotDeletion writer blocking DOWN. No old evidence erasure or new clock is
 authorized; ordinary accepted-cancellation semantics remain separate.
+
+ROLE-BOT-TERMINAL-v1 (BE-170 c103/c104) allocates a distinct Role-only minimal
+wire after original183/44 interface agreement. Request protocol/Bot/root tags
+1-3 match the minimal assertion, but its signed RPC/audience are Role-specific.
+The own receipt carries protocol/participant=role/Bot/root/receipt/time/outcome
+tags1-7 and only BOT_ACTOR_ROLE_MUTATIONS_FENCED. It cannot settle Space's slot
+or any per-Space cleanup. Codec and descriptor preservation do not activate
+the receiver, qualified Role25 projection, old kernel guards, migrations or
+unsupported BotActor methods. Legacy erasure/action-stop boundaries remain.

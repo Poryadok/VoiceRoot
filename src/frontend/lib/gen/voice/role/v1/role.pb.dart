@@ -825,6 +825,288 @@ class ApplyBotInstallationRemovalResponse extends $pb.GeneratedMessage {
   BotInstallationRemovalReceipt ensureReceipt() => $_ensure(0);
 }
 
+/// Exact accepted Bot-owner global root; decision_id is transport request_id.
+/// No actor/Space/account/root digest or interactive Role mutation authority.
+/// @voice.unknown_fields=reject
+class RegisterBotGlobalTerminalRequest extends $pb.GeneratedMessage {
+  factory RegisterBotGlobalTerminalRequest({
+    $core.int? protocolVersion,
+    $core.String? botId,
+    $core.String? decisionId,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (botId != null) result.botId = botId;
+    if (decisionId != null) result.decisionId = decisionId;
+    return result;
+  }
+
+  RegisterBotGlobalTerminalRequest._();
+
+  factory RegisterBotGlobalTerminalRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RegisterBotGlobalTerminalRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RegisterBotGlobalTerminalRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'botId')
+    ..aOS(3, _omitFieldNames ? '' : 'decisionId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RegisterBotGlobalTerminalRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RegisterBotGlobalTerminalRequest copyWith(
+          void Function(RegisterBotGlobalTerminalRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as RegisterBotGlobalTerminalRequest))
+          as RegisterBotGlobalTerminalRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RegisterBotGlobalTerminalRequest create() =>
+      RegisterBotGlobalTerminalRequest._();
+  @$core.override
+  RegisterBotGlobalTerminalRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RegisterBotGlobalTerminalRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RegisterBotGlobalTerminalRequest>(
+          create);
+  static RegisterBotGlobalTerminalRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get botId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set botId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasBotId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearBotId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get decisionId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set decisionId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasDecisionId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearDecisionId() => $_clearField(3);
+}
+
+/// Receiver-owned terminal fact, not deletion/assignment/Owner cleanup proof.
+class BotGlobalTerminalReceipt extends $pb.GeneratedMessage {
+  factory BotGlobalTerminalReceipt({
+    $core.int? protocolVersion,
+    $core.String? participant,
+    $core.String? botId,
+    $core.String? decisionId,
+    $core.String? receiptId,
+    $1.Timestamp? registeredAt,
+    BotGlobalTerminalOutcome? outcome,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (participant != null) result.participant = participant;
+    if (botId != null) result.botId = botId;
+    if (decisionId != null) result.decisionId = decisionId;
+    if (receiptId != null) result.receiptId = receiptId;
+    if (registeredAt != null) result.registeredAt = registeredAt;
+    if (outcome != null) result.outcome = outcome;
+    return result;
+  }
+
+  BotGlobalTerminalReceipt._();
+
+  factory BotGlobalTerminalReceipt.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory BotGlobalTerminalReceipt.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'BotGlobalTerminalReceipt',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'participant')
+    ..aOS(3, _omitFieldNames ? '' : 'botId')
+    ..aOS(4, _omitFieldNames ? '' : 'decisionId')
+    ..aOS(5, _omitFieldNames ? '' : 'receiptId')
+    ..aOM<$1.Timestamp>(6, _omitFieldNames ? '' : 'registeredAt',
+        subBuilder: $1.Timestamp.create)
+    ..aE<BotGlobalTerminalOutcome>(7, _omitFieldNames ? '' : 'outcome',
+        enumValues: BotGlobalTerminalOutcome.values)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  BotGlobalTerminalReceipt clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  BotGlobalTerminalReceipt copyWith(
+          void Function(BotGlobalTerminalReceipt) updates) =>
+      super.copyWith((message) => updates(message as BotGlobalTerminalReceipt))
+          as BotGlobalTerminalReceipt;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static BotGlobalTerminalReceipt create() => BotGlobalTerminalReceipt._();
+  @$core.override
+  BotGlobalTerminalReceipt createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static BotGlobalTerminalReceipt getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<BotGlobalTerminalReceipt>(create);
+  static BotGlobalTerminalReceipt? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get participant => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set participant($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasParticipant() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearParticipant() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get botId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set botId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasBotId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearBotId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get decisionId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set decisionId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasDecisionId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearDecisionId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get receiptId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set receiptId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasReceiptId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearReceiptId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $1.Timestamp get registeredAt => $_getN(5);
+  @$pb.TagNumber(6)
+  set registeredAt($1.Timestamp value) => $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasRegisteredAt() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearRegisteredAt() => $_clearField(6);
+  @$pb.TagNumber(6)
+  $1.Timestamp ensureRegisteredAt() => $_ensure(5);
+
+  @$pb.TagNumber(7)
+  BotGlobalTerminalOutcome get outcome => $_getN(6);
+  @$pb.TagNumber(7)
+  set outcome(BotGlobalTerminalOutcome value) => $_setField(7, value);
+  @$pb.TagNumber(7)
+  $core.bool hasOutcome() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearOutcome() => $_clearField(7);
+}
+
+class RegisterBotGlobalTerminalResponse extends $pb.GeneratedMessage {
+  factory RegisterBotGlobalTerminalResponse({
+    BotGlobalTerminalReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  RegisterBotGlobalTerminalResponse._();
+
+  factory RegisterBotGlobalTerminalResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RegisterBotGlobalTerminalResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RegisterBotGlobalTerminalResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOM<BotGlobalTerminalReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: BotGlobalTerminalReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RegisterBotGlobalTerminalResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RegisterBotGlobalTerminalResponse copyWith(
+          void Function(RegisterBotGlobalTerminalResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as RegisterBotGlobalTerminalResponse))
+          as RegisterBotGlobalTerminalResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RegisterBotGlobalTerminalResponse create() =>
+      RegisterBotGlobalTerminalResponse._();
+  @$core.override
+  RegisterBotGlobalTerminalResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RegisterBotGlobalTerminalResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RegisterBotGlobalTerminalResponse>(
+          create);
+  static RegisterBotGlobalTerminalResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  BotGlobalTerminalReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt(BotGlobalTerminalReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  BotGlobalTerminalReceipt ensureReceipt() => $_ensure(0);
+}
+
 class EnsureDefaultMemberRoleRequest extends $pb.GeneratedMessage {
   factory EnsureDefaultMemberRoleRequest({
     $core.int? protocolVersion,

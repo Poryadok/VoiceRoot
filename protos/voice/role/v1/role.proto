@@ -53,6 +53,9 @@ service RoleService {
   // Durable one-installation Bot lifecycle cleanup; no generic actor mutation.
   // @voice.security=protected;callers=service:bot
   rpc ApplyBotInstallationRemoval(ApplyBotInstallationRemovalRequest) returns (ApplyBotInstallationRemovalResponse);
+  // Minimal global BotActor Role fence; no per-Space cleanup authority.
+  // @voice.security=protected;callers=service:bot
+  rpc RegisterBotGlobalTerminal(RegisterBotGlobalTerminalRequest) returns (RegisterBotGlobalTerminalResponse);
 
   // Trusted Space-only lifecycle operations. These are the sole Owner mutation path.
   // Staged v2 contract: runtime activation requires the durable journal/freeze cutover.
@@ -141,6 +144,35 @@ message BotInstallationRemovalReceipt {
 
 message ApplyBotInstallationRemovalResponse {
   BotInstallationRemovalReceipt receipt = 1;
+}
+
+// Exact accepted Bot-owner global root; decision_id is transport request_id.
+// No actor/Space/account/root digest or interactive Role mutation authority.
+// @voice.unknown_fields=reject
+message RegisterBotGlobalTerminalRequest {
+  uint32 protocol_version = 1;
+  string bot_id = 2;
+  string decision_id = 3;
+}
+
+enum BotGlobalTerminalOutcome {
+  BOT_GLOBAL_TERMINAL_OUTCOME_UNSPECIFIED = 0;
+  BOT_GLOBAL_TERMINAL_OUTCOME_BOT_ACTOR_ROLE_MUTATIONS_FENCED = 1;
+}
+
+// Receiver-owned terminal fact, not deletion/assignment/Owner cleanup proof.
+message BotGlobalTerminalReceipt {
+  uint32 protocol_version = 1;
+  string participant = 2; // role
+  string bot_id = 3;
+  string decision_id = 4;
+  string receipt_id = 5;
+  google.protobuf.Timestamp registered_at = 6;
+  BotGlobalTerminalOutcome outcome = 7;
+}
+
+message RegisterBotGlobalTerminalResponse {
+  BotGlobalTerminalReceipt receipt = 1;
 }
 
 message EnsureDefaultMemberRoleRequest {

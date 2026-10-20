@@ -223,6 +223,17 @@ class RoleServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// Minimal global BotActor Role fence; no per-Space cleanup authority.
+  /// @voice.security=protected;callers=service:bot
+  $grpc.ResponseFuture<$0.RegisterBotGlobalTerminalResponse>
+      registerBotGlobalTerminal(
+    $0.RegisterBotGlobalTerminalRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$registerBotGlobalTerminal, request,
+        options: options);
+  }
+
   /// Trusted Space-only lifecycle operations. These are the sole Owner mutation path.
   /// Staged v2 contract: runtime activation requires the durable journal/freeze cutover.
   /// Trusted Space-only methods; never reinterpret the legacy Apply/Compensate pair.
@@ -453,6 +464,12 @@ class RoleServiceClient extends $grpc.Client {
       '/voice.role.v1.RoleService/ApplyBotInstallationRemoval',
       ($0.ApplyBotInstallationRemovalRequest value) => value.writeToBuffer(),
       $0.ApplyBotInstallationRemovalResponse.fromBuffer);
+  static final _$registerBotGlobalTerminal = $grpc.ClientMethod<
+          $0.RegisterBotGlobalTerminalRequest,
+          $0.RegisterBotGlobalTerminalResponse>(
+      '/voice.role.v1.RoleService/RegisterBotGlobalTerminal',
+      ($0.RegisterBotGlobalTerminalRequest value) => value.writeToBuffer(),
+      $0.RegisterBotGlobalTerminalResponse.fromBuffer);
   static final _$getOwnershipTransferCapabilities = $grpc.ClientMethod<
           $0.GetOwnershipTransferCapabilitiesRequest,
           $0.GetOwnershipTransferCapabilitiesResponse>(
@@ -728,6 +745,15 @@ abstract class RoleServiceBase extends $grpc.Service {
             $0.ApplyBotInstallationRemovalRequest.fromBuffer(value),
         ($0.ApplyBotInstallationRemovalResponse value) =>
             value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.RegisterBotGlobalTerminalRequest,
+            $0.RegisterBotGlobalTerminalResponse>(
+        'RegisterBotGlobalTerminal',
+        registerBotGlobalTerminal_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.RegisterBotGlobalTerminalRequest.fromBuffer(value),
+        ($0.RegisterBotGlobalTerminalResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.GetOwnershipTransferCapabilitiesRequest,
             $0.GetOwnershipTransferCapabilitiesResponse>(
         'GetOwnershipTransferCapabilities',
@@ -1042,6 +1068,15 @@ abstract class RoleServiceBase extends $grpc.Service {
   $async.Future<$0.ApplyBotInstallationRemovalResponse>
       applyBotInstallationRemoval($grpc.ServiceCall call,
           $0.ApplyBotInstallationRemovalRequest request);
+
+  $async.Future<$0.RegisterBotGlobalTerminalResponse>
+      registerBotGlobalTerminal_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.RegisterBotGlobalTerminalRequest> $request) async {
+    return registerBotGlobalTerminal($call, await $request);
+  }
+
+  $async.Future<$0.RegisterBotGlobalTerminalResponse> registerBotGlobalTerminal(
+      $grpc.ServiceCall call, $0.RegisterBotGlobalTerminalRequest request);
 
   $async.Future<$0.GetOwnershipTransferCapabilitiesResponse>
       getOwnershipTransferCapabilities_Pre(
