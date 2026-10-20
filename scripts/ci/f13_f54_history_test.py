@@ -97,18 +97,29 @@ class ProducerTrace(unittest.TestCase):
         ready=m.build_3071_J_ready(state,m.file_digest(prefix))
         ledger=self.folder/'private-J-native-ledger';ledger.write_bytes(m.canonical(ready))
         trace=self.folder/'private-J-native-trace'
-        def consume(event=gate,final=after,current=actual,value=ready,pending=before,
+        def consume(event=gate,final=after,current=actual,value=None,pending=before,
                     genesis='0'*64,malformed_genesis=None):
-            ledger.write_bytes(m.canonical(value))
             current_prefix,root_digest=encode(dict(kind='master_entry',frame=None,operation=None,
                 payload=dict(native_binding=m.raw_binding(bound.read_bytes()),context=context)),1,genesis)
             if malformed_genesis:
                 first=json.loads(current_prefix)
-                if malformed_genesis=='missing':first.pop('previous')
-                elif malformed_genesis=='tampered':first['digest']='0'*64
+                if malformed_genesis=='missing':
+                    first.pop('previous')
+                    body=dict(first);body.pop('digest',None);first['digest']=m.sha(m.canonical(body))
+                elif malformed_genesis=='tampered':first['digest']='f'*64
+                root_digest=first['digest']
                 current_prefix=m.canonical(first)+b'\n'
+            if value is None:value=m.build_3071_J_ready(state,m.file_digest(current_prefix))
+            self.assertEqual(value['prefix'],m.file_digest(current_prefix))
+            ledger.write_bytes(m.canonical(value))
             pending_raw,digest=encode(pending,2,root_digest)
-            trace.write_bytes(current_prefix+pending_raw+(encode(event,3,digest)[0] if event else b''))
+            gate_raw=encode(event,3,digest)[0] if event else b''
+            trace.write_bytes(current_prefix+pending_raw+gate_raw)
+            downstream=[json.loads(item) for item in trace.read_bytes().splitlines()]
+            for index,item in enumerate(downstream[1:],1):
+                body=dict(item);item_digest=body.pop('digest')
+                self.assertEqual(item['previous'],downstream[index-1]['digest'])
+                self.assertEqual(m.sha(m.canonical(body)),item_digest)
             return m.consume_3071_J_path(ledger,m.sha(ledger.read_bytes()),trace,name,current,final,'replace')
         result=consume()
         self.assertTrue(result['aggregate']);self.assertEqual(result['prior_rows'],[m.raw_binding(prior)])
@@ -116,7 +127,7 @@ class ProducerTrace(unittest.TestCase):
         self.assertEqual(result['expected_post_map'],m.file_digest((other+'\n'+after+'\n').encode()))
         for label,genesis,malformed in (('null',None,None),('nonzero','f'*64,None),
                                         ('missing',None,'missing'),('tampered-chain','0'*64,'tampered')):
-            with self.subTest(genesis=label),self.assertRaises(m.Rejected):
+            with self.subTest(genesis=label),self.assertRaisesRegex(m.Rejected,'fixed3071_J_native_append_only_trace'):
                 consume(genesis=genesis,malformed_genesis=malformed)
         for error in ('missing','failed','status2','foreign-frame','foreign-operation','foreign-path','binding-rehashed',
                       'foreign-prior','foreign-source','foreign-owner','content','map','map-rehashed','map-reorder-rehashed',

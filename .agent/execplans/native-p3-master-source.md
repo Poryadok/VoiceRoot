@@ -614,3 +614,47 @@ Raw logs and their hashes are in the local `425-validation` evidence packet.
 the exact owned process remained at 0 CPU with no output, PID 46268 was stopped.
 It also reported one unrelated C++ header syntax warning. Graphify completion
 is therefore a recorded tooling limitation, not a successful update claim.
+
+## Discriminating genesis-negative fixture follow-up (425)
+
+Basis: accepted `F13-J-genesis-negative-fix/REQUEST.md` SHA-256
+`7a086d44b0214c99d02ad93559b6fa0174faf3f63f1a549b33b8a943122d10c8`,
+independent c47 finding, exact base `1a4ba48faa5c2975d46b34cfd8fcf9b97427164f`.
+The current negative variants reuse the ready ledger built from the original
+zero-genesis prefix; their changed trace is rejected at
+`fixed3071_J_sealed_real_prefix` before `qualified_J_native_normalization`.
+Therefore generic rejection assertions do not prove the genesis guard.
+
+Scope is test-only: `scripts/ci/f13_f54_history_test.py` and this evidence plan.
+Keep `scripts/ci/f13_f54_history.py` byte-identical to `1a4`. First change the
+negative assertion to require `fixed3071_J_native_append_only_trace`, run the
+focused test, and preserve the expected RED showing current fixtures fail at
+`fixed3071_J_sealed_real_prefix`. Then rebuild each private ready value from
+its exact serialized malformed prefix, rehash downstream events so their
+chain remains valid, and retain only the intended genesis/digest defect. For
+missing predecessor, recompute the event digest after field removal; for
+tampered digest, point the next event to that tampered digest and rehash later
+events. Keep the outer prefix seal bound to the exact variant bytes. Re-run the
+focused test, affected 39-test history suite and Python/shell syntax on private
+Linux; verify production helper blob remains exactly the `1a4` blob. Preserve
+all prior positives and negatives and the original F13 failure/HOLD state.
+
+CodeGraph context reuses the recorded frozen-index contract and root52c006ec;
+direct reads are limited to the exact `1a4` fixture and consumer barriers
+729–744. Do not requery broadly or fall back to CLI. Freeze the test-only
+commit, base-bound bundle and raw RED/GREEN evidence for the already-accepted
+finite reviewer437 recheck, then return source custody to 121. No producer,
+CI, PR, runtime or candidate qualification.
+
+Execution: the strengthened assertion first failed all four variants with the
+actual `fixed3071_J_sealed_real_prefix` mismatch (not the intended guard).
+After each variant rebuilt its own serialized prefix/ready value, and the
+missing/tampered variants rehashed valid downstream links, focused GREEN
+passed with the exact `fixed3071_J_native_append_only_trace` assertions. The
+affected history suite passes 39/39 in 207.156s; Python AST and unchanged shell
+`bash -n` pass. The production helper blob is byte-identical to the `1a4` blob
+`8ccba60abeb31817d932094f90f412e3bd339c3d`. Raw logs and hashes are in the
+`425-validation` evidence packet. Graphify extracted 170/170 files, with the
+same unrelated C++ header warning, but remained alive without CPU/output;
+only the owned PID39288 running `graphify.exe update .` (CPU 0.02 after AST
+completion) was stopped. No graphify success is claimed.
