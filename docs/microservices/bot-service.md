@@ -442,6 +442,20 @@ safeguard does not resolve the separate BE-170 retired snapshot/downstream P3
 coverage and post30day proof-provider gap; no clearing or compaction provider
 is implied. Existing unfinished cleanup journals remain separate obligations.
 
+Bot015 captures eligible live installations, whitelist sources and unfinished
+accepted journals atomically before local P3 erasure. Its snapshot includes
+pending native targets even after their accepted native ACK/local CANCELED.
+The original add/cancel tuple and a separate P3 child identity survive retries;
+legacy evidence never becomes a fabricated native installation. Accepted
+uninstall journals can outlive their disposable live-intent projection. An
+uncovered nonempty snapshot commits recoverable pending work and emits no Bot
+purge receipt. A receipt-insert database guard also rejects an old application
+which bypasses this preparation, rolling back its deletes in the same transaction.
+The local canonical-original/manifest-coverage validator is a separate bounded
+component; actual protected proof reads, native P3 drain and positively covered
+journal retirement remain unfinished. Ordinary uninstall still accepts Empty
+after its durable native ACK while independent typed cleanup remains pending.
+
 The message recipient producer, webhook worker and development polling send
 share the participant's Space advisory guard. They acquire all distinct actual
 Space keys in ascending order before bot, whitelist and delivery/event row locks,

@@ -612,3 +612,44 @@ fence evidence with controlled verified-owner admission, a manually configured
 equivalent mTLS client and service reinstantiation on the same Bot Pool. It does
 not prove public Gateway/Auth admission, actual Role26, per-Space cleanup, P3
 drain/retention or complete DeleteBot. No live provider handles are transferred.
+
+Active P3 consumer work is separate from the frozen minimal-fence proof.
+The first local validator checks canonical original Role retirement and FULL
+Messaging wrapper bytes with fixed producer domains, their exact receipts and
+the separate sealed-manifest membership observation. It owns deep snapshots,
+keeps absent/uncovered evidence pending, and never mints a participant receipt.
+It is not yet connected to a journal transition or PurgeSpace. The next steps
+are to capture the finite eligible local sources under the irreversible Space
+guard, read downstream proof outside locks, then re-enter the same decision,
+generation, manifest and claim guard for explicit P3-covered retirement. The
+live-intent FK must not be removed without that positive retained state and
+missing-intent rejection. Native drain remains the separately agreed c90
+receiver requirement; no non-LIVE ordinary cancellation bypass is implied.
+
+Bot015 now decouples the accepted journal from its disposable live intent while
+introducing a durable, finite pending snapshot before any local erasure. The
+original exact9088 pending-uninstall oracle failed with FK23503 in5.506s;
+snapshot capture now returns recoverable pending without changing that journal
+or issuing a purge receipt. A separate old9088 application with the new SQL pair
+first incorrectly committed purge (RED16.329s). The new PUBLIC-execute-revoked
+INVOKER receipt-insert guard rejects its unprepared receipt and rolls back all
+projection erasure (GREEN5.910s). This SQL guard is local Bot scope and reuses no
+stopped function/privilege artifact. The accepted completed journal may outlive
+its retired live projection, but DOWN refuses restoring its former FK.
+
+The current pending source also freezes native-drain inputs for accepted targets
+whose live intent is already CANCELED. The causal missing-input PG RED5.235s now
+passes with exact original Remove bytes/raw SHA, preserved cancel identity and
+separate once-persisted outer P3 operation. Duplicate active/accepted references
+to one installation must agree; no legacy tuple is fabricated. Retry reuses
+the exact source bytes. These are input snapshots, not remote drain receipts.
+
+Current affected metadata matrix passes32.715s: pending/CANCELED/completed-journal
+controls, exact-original coverage validation, default-RC/old-RR DOWN, actual first
+PurgeSpace writer versus DOWN, and a fresh nonsuperuser LOGIN proving INVOKER
+trigger execution without a function EXECUTE grant, denied ALTER and P0001 for
+unprepared receipt insertion. The first negative SQL probe referenced a nonexistent
+column and is retained as a test-setup failure, not product RED. All nonempty
+handoffs still remain pending: protected c89 reads/claim CAS, native49 drain,
+positive journal retirement, bounded retention cleanup and full P3 completion
+are the next original implementation steps. No component result closes BE-170.

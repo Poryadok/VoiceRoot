@@ -187,6 +187,16 @@ func (s *BotStore) PurgeSpace(ctx context.Context, req *commonv1.SpacePurgeReque
 	if state != "PURGE_DECIDED" {
 		return nil, ErrSpaceLifecycleConflict
 	}
+	pending, err := s.preparePurgeHandoffTx(ctx, tx, spaceID, opID, generation, requestBytes, hash[:])
+	if err != nil {
+		return nil, err
+	}
+	if pending {
+		if err = tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		return nil, ErrDeletionPending
+	}
 	if err = s.markRetiredCleanupUnresolved(ctx, tx, spaceID); err != nil {
 		return nil, err
 	}
@@ -233,6 +243,9 @@ WHERE e.space_id=$1 OR (e.event_type='message' AND e.space_id IS NULL AND EXISTS
 		return nil, err
 	}
 	if _, err = tx.Exec(ctx, `INSERT INTO bot_space_lifecycle_purge_receipts(space_id,deletion_operation_id,generation,request_sha256,request_bytes,receipt_bytes) VALUES($1,$2,$3,$4,$5,$6)`, spaceID, opID, generation, hash[:], requestBytes, receiptBytes); err != nil {
+		return nil, err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE bot_space_purge_handoffs SET state='COMPLETE',completed_at=$2 WHERE space_id=$1 AND state='COVERED' AND source_count=0`, spaceID, now.AsTime()); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(ctx); err != nil {

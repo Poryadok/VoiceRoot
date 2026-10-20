@@ -32,7 +32,8 @@ func TestBotGlobalTerminalMigrationPreservesOldDecisionAndReopensMissingProof(t 
 	ctx := t.Context()
 	pool := integrationtest.StartPostgres(t, ctx, "botdb", "")
 	up := globalTerminalMigration(t, "up")
-	_, err := pool.Exec(ctx, strings.TrimSuffix(migrationSQL(t), up+"\n"))
+	beforeHandoff := strings.TrimSuffix(migrationSQL(t), purgeHandoffMigration(t, "up")+"\n")
+	_, err := pool.Exec(ctx, strings.TrimSuffix(beforeHandoff, up+"\n"))
 	require.NoError(t, err)
 	st := &store.BotStore{Pool: pool}
 	bot, _, err := st.CreateBot(ctx, uuid.New(), "Retained root", "", `[]`, uuid.New())
