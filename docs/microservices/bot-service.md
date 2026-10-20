@@ -508,6 +508,18 @@ does not roll back owner revocation or turn an empty local target set into
 success. Bot-token lookup admits only live Bots. Ordinary Space uninstall uses
 its separate accepted-native-cancellation protocol described above.
 
+Global root completion also requires independently retained terminal obligations
+for Space and Role even when no installation target remains. The minimal Space
+registration contains only protocol/Bot/committed server decision IDs; the
+decision ID is its signed request identity. Its typed receipt proves the global
+native Add fence only. It does not complete per-Space cleanup or Role's fence.
+Recovery signs the exact sealed request with a fresh service credential after
+loading the accepted owner decision and checking the local disabled Bot mapping.
+Missing, conflicting or unqualified results keep the root retryable. Migration
+000014 preserves old decisions and reopens historically missing terminal proof;
+it does not turn legacy unqualified decisions into delivery authority. The Role
+root-only adapter remains unallocated; no Space/actor/evidence tuple is invented.
+
 New public install/cancel permission decisions use the separate
 `BOT_ROLE_INSTALLATION_GRPC_ADDR`, `BOT_ROLE_INSTALLATION_TLS_CA_FILE`,
 `BOT_ROLE_INSTALLATION_TLS_SERVER_NAME`, `BOT_ROLE_INSTALLATION_TLS_CERT_FILE`,

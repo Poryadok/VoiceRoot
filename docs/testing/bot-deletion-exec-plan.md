@@ -567,3 +567,14 @@ source counts or new erasure authority enters this wire. Receiver/catalog,
 producer/reducer and actual zero-target/replay/concurrent Add proofs remain
 separate implementation requirements. Existing known46 projection cannot
 authorize legacy personal-data erasure; its actual trigger gap stays open.
+
+Bot014 implements independent root-terminal journal slots without a Space FK.
+The zero-target causal PG RED3.419 observed COMPLETE after successful atomic
+disable/token denial/root persistence; the pending/reducer gate now passes.
+Exact minimal Space request sealing, strict typed receipt/CAS, fresh signing,
+lost ACK/corrupt result recovery and independent Role-pending are exercised with
+real Bot PG and a controlled signed receiver. They do not qualify native48
+transport or Role's unallocated root-only API. Actual migration controls cover
+retained historical root backfill, empty RC/old RR DOWN and an actual first
+BeginBotDeletion writer blocking DOWN. No old evidence erasure or new clock is
+authorized; ordinary accepted-cancellation semantics remain separate.

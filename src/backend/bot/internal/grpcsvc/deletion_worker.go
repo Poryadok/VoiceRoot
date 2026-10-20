@@ -74,6 +74,27 @@ func (s *BotGRPC) processDeletionClaim(ctx context.Context, claim *store.BotDele
 		return err
 	}
 	var pending error
+	if cleanupPurpose(claim) == "global_delete" {
+		terminals, err := s.Store.GlobalTerminalEffects(ctx, claim)
+		if err != nil {
+			return err
+		}
+		for _, terminal := range terminals {
+			if terminal.Participant == "space" {
+				err = s.applyGlobalSpaceTerminal(ctx, claim, terminal)
+			} else {
+				// No root-only Role authority adapter is qualified yet. A Space
+				// receipt or empty target list cannot discharge this obligation.
+				err = store.ErrDeletionPending
+			}
+			if errors.Is(err, store.ErrDeletionClaimLost) {
+				return err
+			}
+			if err != nil && pending == nil {
+				pending = err
+			}
+		}
+	}
 	for _, effect := range effects {
 		if ctx.Err() != nil {
 			return ctx.Err()

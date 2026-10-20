@@ -37,8 +37,8 @@ func cleanupPurpose(op *store.BotDeletion) string {
 
 // Recovery authority is the exact committed decision, not a still-live user
 // bearer token. Expired admission timestamps therefore remain historical data.
-func validateDeletionSource(op *store.BotDeletion, effect store.BotDeletionEffect) error {
-	if op == nil || op.OperationID == uuid.Nil || op.BotID == uuid.Nil || op.OwnerAccountID == uuid.Nil || op.ActorProfileID == uuid.Nil || op.State != "RUNNING" || op.ClaimGeneration <= 0 || effect.EffectID == uuid.Nil {
+func validateDeletionDecision(op *store.BotDeletion) error {
+	if op == nil || op.OperationID == uuid.Nil || op.BotID == uuid.Nil || op.OwnerAccountID == uuid.Nil || op.ActorProfileID == uuid.Nil || op.State != "RUNNING" || op.ClaimGeneration <= 0 {
 		return errDeletionEvidence
 	}
 	if op.Purpose != "" && op.Purpose != "global_delete" && op.Purpose != "space_uninstall" {
@@ -84,7 +84,24 @@ func validateDeletionSource(op *store.BotDeletion, effect store.BotDeletionEffec
 			return errDeletionEvidence
 		}
 	case *botv1.UninstallBotFromSpaceRequest:
-		if q.BotId != op.BotID.String() || q.SpaceId != effect.Target.SpaceID.String() {
+		if q.BotId != op.BotID.String() || !deletionUUID(q.SpaceId) {
+			return errDeletionEvidence
+		}
+	}
+	return nil
+}
+
+func validateDeletionSource(op *store.BotDeletion, effect store.BotDeletionEffect) error {
+	if effect.EffectID == uuid.Nil || validateDeletionDecision(op) != nil {
+		return errDeletionEvidence
+	}
+	if cleanupPurpose(op) == "space_uninstall" {
+		var decision struct{ Admission *store.DeletionAdmission }
+		if json.Unmarshal(op.DecisionBytes, &decision) != nil || decision.Admission == nil {
+			return errDeletionEvidence
+		}
+		q := new(botv1.UninstallBotFromSpaceRequest)
+		if proto.Unmarshal(decision.Admission.RequestBytes, q) != nil || q.SpaceId != effect.Target.SpaceID.String() {
 			return errDeletionEvidence
 		}
 	}

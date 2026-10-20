@@ -228,7 +228,8 @@ func (s *BotStore) CompleteBotDeletion(ctx context.Context, claim *BotDeletion) 
 	// Serialize with Space->Bot purge and owner admission using the actual root's
 	// Bot before locking the root. No Space lock is acquired below this lock.
 	var retiredUnresolved bool
-	err = tx.QueryRow(ctx, `SELECT b.retired_cleanup_unresolved FROM bots b JOIN bot_deletion_operations o ON o.bot_id=b.id WHERE o.operation_id=$1 FOR UPDATE OF b`, claim.OperationID).Scan(&retiredUnresolved)
+	var botStatus string
+	err = tx.QueryRow(ctx, `SELECT b.retired_cleanup_unresolved,b.status FROM bots b JOIN bot_deletion_operations o ON o.bot_id=b.id WHERE o.operation_id=$1 FOR UPDATE OF b`, claim.OperationID).Scan(&retiredUnresolved, &botStatus)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrDeletionClaimLost
 	}
@@ -238,7 +239,17 @@ func (s *BotStore) CompleteBotDeletion(ctx context.Context, claim *BotDeletion) 
 	if err = s.lockLifecycleClaim(ctx, tx, claim); err != nil {
 		return err
 	}
+	if botStatus != "disabled" {
+		return ErrInstallationConflict
+	}
 	if retiredUnresolved {
+		return ErrDeletionPending
+	}
+	var terminals int
+	if err = tx.QueryRow(ctx, `SELECT count(*) FROM bot_deletion_terminal_effects WHERE operation_id=$1 AND state='COMPLETE'`, claim.OperationID).Scan(&terminals); err != nil {
+		return err
+	}
+	if terminals != 2 {
 		return ErrDeletionPending
 	}
 	var pending bool

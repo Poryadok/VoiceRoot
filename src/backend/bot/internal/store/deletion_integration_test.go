@@ -67,6 +67,12 @@ func TestBotLifecycleDownAcceptsEmptyDefaultReadCommitted(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			st := startBotStore(t)
 			_, file, _, _ := runtime.Caller(0)
+			//014 adds independent global root obligations; undo its empty
+			//schema first when isolating the historical008/009 DOWN controls.
+			terminal, err := os.ReadFile(filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db", "000014_global_terminal_obligations.down.sql"))
+			require.NoError(t, err)
+			_, err = st.Pool.Exec(t.Context(), string(terminal))
+			require.NoError(t, err)
 			if name == "000008_installation_intents.down.sql" {
 				// Current012 references installation intents. Roll it back in the
 				// official reverse order before isolating the historical008 control.

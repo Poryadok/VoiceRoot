@@ -170,15 +170,11 @@ func (s *BotStore) beginBotDeletionAttempt(ctx context.Context, botID, owner uui
 	}
 	digest := sha256.Sum256(op.DecisionBytes)
 	op.DecisionSHA256 = digest[:]
-	var retiredUnresolved bool
-	if err = tx.QueryRow(ctx, `SELECT retired_cleanup_unresolved FROM bots WHERE id=$1`, botID).Scan(&retiredUnresolved); err != nil {
-		return nil, false, err
-	}
-	if len(spaces) == 0 && !retiredUnresolved {
-		op.State = "COMPLETE"
-	}
 	_, err = tx.Exec(ctx, `INSERT INTO bot_deletion_operations(operation_id,bot_id,owner_account_id,actor_profile_id,decision_bytes,decision_sha256,state,completed_at) VALUES($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7='COMPLETE' THEN now() ELSE NULL END)`, op.OperationID, op.BotID, owner, op.ActorProfileID, op.DecisionBytes, op.DecisionSHA256, op.State)
 	if err != nil {
+		return nil, false, err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO bot_deletion_terminal_effects(operation_id,participant) VALUES($1,'space'),($1,'role')`, op.OperationID); err != nil {
 		return nil, false, err
 	}
 	for _, space := range spaces {

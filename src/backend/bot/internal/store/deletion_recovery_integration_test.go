@@ -51,10 +51,20 @@ func TestBotDeletionRecoveryFencesStaleClaimAndFreezesRequestsAndReceipts(t *tes
 	require.Equal(t, []byte("exact receipt"), replay[0].ReceiptBytes)
 	require.NoError(t, st.SealBotDeletionRequest(ctx, second, effects[1].EffectID, request))
 	require.NoError(t, st.SaveBotDeletionReceipt(ctx, second, effects[1].EffectID, request, []byte("other receipt")))
-	require.NoError(t, st.CompleteBotDeletion(ctx, second))
+	// The original scoped journal assertions above remain unchanged. Its
+	// completed per-Space effects no longer stand in for independent global
+	// Space/Role terminal receipts, including a root with no remaining targets.
+	require.ErrorIs(t, st.CompleteBotDeletion(ctx, second), store.ErrDeletionPending)
+	terminals, err := st.GlobalTerminalEffects(ctx, second)
+	require.NoError(t, err)
+	require.Len(t, terminals, 2)
+	for _, terminal := range terminals {
+		require.Equal(t, "PENDING", terminal.State)
+		require.Nil(t, terminal.ReceiptBytes)
+	}
 	_, err = st.ClaimBotDeletion(ctx, operation.OperationID)
 	require.ErrorIs(t, err, store.ErrDeletionClaimLost)
 	var state string
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT state FROM bot_deletion_operations WHERE operation_id=$1`, operation.OperationID).Scan(&state))
-	require.Equal(t, "COMPLETE", state)
+	require.Equal(t, "RUNNING", state)
 }
