@@ -53,6 +53,48 @@ final $typed_data.Uint8List chatScopeLifecycleStateDescriptor = $convert.base64D
     'NMRV9TVEFURV9QVVJHRV9ERUNJREVEEAMSJQohQ0hBVF9TQ09QRV9MSUZFQ1lDTEVfU1RBVEVf'
     'UFVSR0VEEAQ=');
 
+@$core.Deprecated('Use getBotChatScopeAuthorityRequestDescriptor instead')
+const GetBotChatScopeAuthorityRequest$json = {
+  '1': 'GetBotChatScopeAuthorityRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'chat_id', '3': 2, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'expected_space_id', '3': 3, '4': 1, '5': 9, '10': 'expectedSpaceId'},
+    {'1': 'operation_id', '3': 4, '4': 1, '5': 9, '10': 'operationId'},
+  ],
+};
+
+/// Descriptor for `GetBotChatScopeAuthorityRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getBotChatScopeAuthorityRequestDescriptor =
+    $convert.base64Decode(
+        'Ch9HZXRCb3RDaGF0U2NvcGVBdXRob3JpdHlSZXF1ZXN0EikKEHByb3RvY29sX3ZlcnNpb24YAS'
+        'ABKA1SD3Byb3RvY29sVmVyc2lvbhIXCgdjaGF0X2lkGAIgASgJUgZjaGF0SWQSKgoRZXhwZWN0'
+        'ZWRfc3BhY2VfaWQYAyABKAlSD2V4cGVjdGVkU3BhY2VJZBIhCgxvcGVyYXRpb25faWQYBCABKA'
+        'lSC29wZXJhdGlvbklk');
+
+@$core.Deprecated('Use getBotChatScopeAuthorityResponseDescriptor instead')
+const GetBotChatScopeAuthorityResponse$json = {
+  '1': 'GetBotChatScopeAuthorityResponse',
+  '2': [
+    {
+      '1': 'scope',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.GetSpaceChatScopeAuthorityResponse',
+      '10': 'scope'
+    },
+    {'1': 'request_sha256', '3': 2, '4': 1, '5': 12, '10': 'requestSha256'},
+  ],
+};
+
+/// Descriptor for `GetBotChatScopeAuthorityResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getBotChatScopeAuthorityResponseDescriptor =
+    $convert.base64Decode(
+        'CiBHZXRCb3RDaGF0U2NvcGVBdXRob3JpdHlSZXNwb25zZRJHCgVzY29wZRgBIAEoCzIxLnZvaW'
+        'NlLmNoYXQudjEuR2V0U3BhY2VDaGF0U2NvcGVBdXRob3JpdHlSZXNwb25zZVIFc2NvcGUSJQoO'
+        'cmVxdWVzdF9zaGEyNTYYAiABKAxSDXJlcXVlc3RTaGEyNTY=');
+
 @$core.Deprecated('Use getSpaceChatScopeAuthorityRequestDescriptor instead')
 const GetSpaceChatScopeAuthorityRequest$json = {
   '1': 'GetSpaceChatScopeAuthorityRequest',

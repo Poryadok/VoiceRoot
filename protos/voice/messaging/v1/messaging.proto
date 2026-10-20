@@ -4,6 +4,7 @@ package voice.messaging.v1;
 
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
+import "voice/chat/v1/chat_scope_authority.proto";
 import "voice/common/v1/common.proto";
 import "voice/common/v1/space_lifecycle.proto";
 import "voice/gameintegration/v1/game_event.proto";
@@ -23,6 +24,101 @@ enum DeleteScope {
   DELETE_SCOPE_UNSPECIFIED = 0;
   DELETE_SCOPE_FOR_EVERYONE = 1;
   DELETE_SCOPE_FOR_ME = 2;
+}
+
+// @voice.unknown_fields=reject
+message BotRemovalNativeEvidence {
+  string installation_id = 1;
+  string install_operation_id = 2;
+  uint64 generation = 3; // positive, at most signed int64 max
+}
+
+// @voice.unknown_fields=reject
+message BotRemovalLegacyInstallationEvidence {
+  string installation_id = 1;
+  string snapshot_id = 2;
+  bytes snapshot_sha256 = 3;
+}
+
+// @voice.unknown_fields=reject
+message BotRemovalOrphanWhitelistEvidence {
+  string snapshot_id = 1;
+  bytes snapshot_sha256 = 2;
+}
+
+// Exact typed point-in-time facts from the separate Bot-only Chat authority.
+// @voice.unknown_fields=reject
+message BotRemovalChatScopeObservation {
+  voice.chat.v1.GetBotChatScopeAuthorityRequest request = 1;
+  voice.chat.v1.GetBotChatScopeAuthorityResponse response = 2;
+}
+
+// One durable local whitelist/admitted-target lifetime, never a Space grant.
+// @voice.unknown_fields=reject
+message BotChatPinRemovalAttachment {
+  string attachment_id = 1;
+  oneof original_scope_evidence {
+    BotRemovalChatScopeObservation original_scope = 2;
+    bool original_scope_unqualified = 4; // must be true for this arm
+  }
+  BotRemovalChatScopeObservation current_scope = 3;
+  string covering_operation_id = 5; // optional hint to a receiver-owned row
+}
+
+// @voice.unknown_fields=reject
+message ApplyBotChatPinRemovalRequest {
+  uint32 protocol_version = 1; // exactly 1
+  string operation_id = 2;
+  string decision_id = 3;
+  bytes decision_sha256 = 4;
+  string purpose = 5; // global_delete or space_uninstall
+  string bot_id = 6;
+  string actor_profile_id = 7;
+  string space_id = 8;
+  bytes frozen_scope_sha256 = 9;
+  oneof evidence {
+    BotRemovalNativeEvidence native = 10;
+    BotRemovalLegacyInstallationEvidence legacy_installation = 11;
+    BotRemovalOrphanWhitelistEvidence orphan_whitelist = 12;
+  }
+  string chat_id = 13;
+  repeated BotChatPinRemovalAttachment attachments = 14; // nonempty, sorted IDs
+}
+
+// @voice.unknown_fields=reject
+message BotChatPinRemovalTargetReceipt {
+  string attachment_id = 1;
+  bytes effect_target_sha256 = 2;
+  uint64 cleanup_revision = 3;
+  string covering_operation_id = 4;
+  string covering_receipt_id = 5;
+  bytes covering_response_sha256 = 6;
+}
+
+message BotChatPinRemovalReceipt {
+  uint32 protocol_version = 1;
+  string receipt_id = 2;
+  string operation_id = 3;
+  string decision_id = 4;
+  string purpose = 5;
+  string bot_id = 6;
+  string actor_profile_id = 7;
+  string space_id = 8;
+  string evidence_kind = 9;
+  bytes evidence_sha256 = 10;
+  bytes frozen_scope_sha256 = 11;
+  bytes request_sha256 = 12;
+  string participant = 13; // messaging
+  string outcome = 14; // COMPLETED
+  google.protobuf.Timestamp completed_at = 15;
+  string chat_id = 16;
+  uint64 removed_pin_count = 17;
+  repeated BotChatPinRemovalTargetReceipt targets = 18;
+  uint64 execution_cleanup_revision = 19;
+}
+
+message ApplyBotChatPinRemovalResponse {
+  BotChatPinRemovalReceipt receipt = 1;
 }
 
 // Messages, reactions, pins, read receipts. HTTP: /api/v1/messages/**.
@@ -67,6 +163,13 @@ service MessagingService {
   // BOT-B: bulk unpin for bot uninstall cleanup (sender_profile_id + chat_ids).
   rpc UnpinMessagesBySenderInChats(UnpinMessagesBySenderInChatsRequest) returns (UnpinMessagesBySenderInChatsResponse);
 
+  // Durable cleanup of pins in one frozen whitelisted chat. Messages remain.
+  // @voice.security=protected;callers=service:bot
+  rpc ApplyBotChatPinRemoval(ApplyBotChatPinRemovalRequest) returns (ApplyBotChatPinRemovalResponse);
+  // Exact sealed-manifest membership only; never a purge completion receipt.
+  // @voice.security=protected;callers=service:bot
+  rpc GetBotPurgeChatCoverage(GetBotPurgeChatCoverageRequest) returns (GetBotPurgeChatCoverageResponse);
+
   rpc ForwardMessage(ForwardMessageRequest) returns (ForwardMessageResponse);
 
   rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
@@ -99,6 +202,34 @@ service MessagingService {
 
   // @voice.security=protected;callers=service:space
   rpc ImportSpacePurgeManifestPage(voice.messaging.v1.ImportSpacePurgeManifestPageRequest) returns (voice.messaging.v1.ImportSpacePurgeManifestPageResponse);
+}
+
+// @voice.unknown_fields=reject
+message GetBotPurgeChatCoverageRequest {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  string space_id = 3;
+  string deletion_operation_id = 4;
+  uint64 generation = 5;
+  voice.common.v1.ManifestBinding manifest = 6;
+  repeated string chat_ids = 7;
+}
+
+message BotPurgeChatCoverage {
+  string chat_id = 1;
+  bool covered = 2;
+}
+
+message GetBotPurgeChatCoverageResponse {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  string space_id = 3;
+  string deletion_operation_id = 4;
+  uint64 generation = 5;
+  voice.common.v1.ManifestBinding manifest = 6;
+  uint64 source_schedule_generation = 7;
+  repeated voice.messaging.v1.BotPurgeChatCoverage coverage = 8;
+  bytes request_sha256 = 9;
 }
 
 message SendGameEventMessageRequest {

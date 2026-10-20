@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	ChatScopeAuthorityService_GetSpaceChatScopeAuthority_FullMethodName = "/voice.chat.v1.ChatScopeAuthorityService/GetSpaceChatScopeAuthority"
+	ChatScopeAuthorityService_GetBotChatScopeAuthority_FullMethodName   = "/voice.chat.v1.ChatScopeAuthorityService/GetBotChatScopeAuthority"
 )
 
 // ChatScopeAuthorityServiceClient is the client API for ChatScopeAuthorityService service.
@@ -27,9 +28,12 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // Narrow own-DB resource facts. This service grants no user permissions and is
-// served only on dedicated signed Role/Space mTLS listeners.
+// served only on caller-specific signed mTLS listeners.
 type ChatScopeAuthorityServiceClient interface {
 	GetSpaceChatScopeAuthority(ctx context.Context, in *GetSpaceChatScopeAuthorityRequest, opts ...grpc.CallOption) (*GetSpaceChatScopeAuthorityResponse, error)
+	// Bot-only source observation, including qualified retained retired heads.
+	// This read grants no membership or cleanup completion authority.
+	GetBotChatScopeAuthority(ctx context.Context, in *GetBotChatScopeAuthorityRequest, opts ...grpc.CallOption) (*GetBotChatScopeAuthorityResponse, error)
 }
 
 type chatScopeAuthorityServiceClient struct {
@@ -50,14 +54,27 @@ func (c *chatScopeAuthorityServiceClient) GetSpaceChatScopeAuthority(ctx context
 	return out, nil
 }
 
+func (c *chatScopeAuthorityServiceClient) GetBotChatScopeAuthority(ctx context.Context, in *GetBotChatScopeAuthorityRequest, opts ...grpc.CallOption) (*GetBotChatScopeAuthorityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetBotChatScopeAuthorityResponse)
+	err := c.cc.Invoke(ctx, ChatScopeAuthorityService_GetBotChatScopeAuthority_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChatScopeAuthorityServiceServer is the server API for ChatScopeAuthorityService service.
 // All implementations must embed UnimplementedChatScopeAuthorityServiceServer
 // for forward compatibility.
 //
 // Narrow own-DB resource facts. This service grants no user permissions and is
-// served only on dedicated signed Role/Space mTLS listeners.
+// served only on caller-specific signed mTLS listeners.
 type ChatScopeAuthorityServiceServer interface {
 	GetSpaceChatScopeAuthority(context.Context, *GetSpaceChatScopeAuthorityRequest) (*GetSpaceChatScopeAuthorityResponse, error)
+	// Bot-only source observation, including qualified retained retired heads.
+	// This read grants no membership or cleanup completion authority.
+	GetBotChatScopeAuthority(context.Context, *GetBotChatScopeAuthorityRequest) (*GetBotChatScopeAuthorityResponse, error)
 	mustEmbedUnimplementedChatScopeAuthorityServiceServer()
 }
 
@@ -70,6 +87,9 @@ type UnimplementedChatScopeAuthorityServiceServer struct{}
 
 func (UnimplementedChatScopeAuthorityServiceServer) GetSpaceChatScopeAuthority(context.Context, *GetSpaceChatScopeAuthorityRequest) (*GetSpaceChatScopeAuthorityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetSpaceChatScopeAuthority not implemented")
+}
+func (UnimplementedChatScopeAuthorityServiceServer) GetBotChatScopeAuthority(context.Context, *GetBotChatScopeAuthorityRequest) (*GetBotChatScopeAuthorityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetBotChatScopeAuthority not implemented")
 }
 func (UnimplementedChatScopeAuthorityServiceServer) mustEmbedUnimplementedChatScopeAuthorityServiceServer() {
 }
@@ -111,6 +131,24 @@ func _ChatScopeAuthorityService_GetSpaceChatScopeAuthority_Handler(srv interface
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatScopeAuthorityService_GetBotChatScopeAuthority_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBotChatScopeAuthorityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatScopeAuthorityServiceServer).GetBotChatScopeAuthority(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatScopeAuthorityService_GetBotChatScopeAuthority_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatScopeAuthorityServiceServer).GetBotChatScopeAuthority(ctx, req.(*GetBotChatScopeAuthorityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChatScopeAuthorityService_ServiceDesc is the grpc.ServiceDesc for ChatScopeAuthorityService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -121,6 +159,10 @@ var ChatScopeAuthorityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSpaceChatScopeAuthority",
 			Handler:    _ChatScopeAuthorityService_GetSpaceChatScopeAuthority_Handler,
+		},
+		{
+			MethodName: "GetBotChatScopeAuthority",
+			Handler:    _ChatScopeAuthorityService_GetBotChatScopeAuthority_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

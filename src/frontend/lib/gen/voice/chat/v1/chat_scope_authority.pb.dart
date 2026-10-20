@@ -22,6 +22,177 @@ export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
 
 export 'chat_scope_authority.pbenum.dart';
 
+class GetBotChatScopeAuthorityRequest extends $pb.GeneratedMessage {
+  factory GetBotChatScopeAuthorityRequest({
+    $core.int? protocolVersion,
+    $core.String? chatId,
+    $core.String? expectedSpaceId,
+    $core.String? operationId,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (chatId != null) result.chatId = chatId;
+    if (expectedSpaceId != null) result.expectedSpaceId = expectedSpaceId;
+    if (operationId != null) result.operationId = operationId;
+    return result;
+  }
+
+  GetBotChatScopeAuthorityRequest._();
+
+  factory GetBotChatScopeAuthorityRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetBotChatScopeAuthorityRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetBotChatScopeAuthorityRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'chatId')
+    ..aOS(3, _omitFieldNames ? '' : 'expectedSpaceId')
+    ..aOS(4, _omitFieldNames ? '' : 'operationId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetBotChatScopeAuthorityRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetBotChatScopeAuthorityRequest copyWith(
+          void Function(GetBotChatScopeAuthorityRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as GetBotChatScopeAuthorityRequest))
+          as GetBotChatScopeAuthorityRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetBotChatScopeAuthorityRequest create() =>
+      GetBotChatScopeAuthorityRequest._();
+  @$core.override
+  GetBotChatScopeAuthorityRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetBotChatScopeAuthorityRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetBotChatScopeAuthorityRequest>(
+          create);
+  static GetBotChatScopeAuthorityRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get chatId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set chatId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasChatId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearChatId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get expectedSpaceId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set expectedSpaceId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasExpectedSpaceId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearExpectedSpaceId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get operationId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set operationId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasOperationId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearOperationId() => $_clearField(4);
+}
+
+class GetBotChatScopeAuthorityResponse extends $pb.GeneratedMessage {
+  factory GetBotChatScopeAuthorityResponse({
+    GetSpaceChatScopeAuthorityResponse? scope,
+    $core.List<$core.int>? requestSha256,
+  }) {
+    final result = create();
+    if (scope != null) result.scope = scope;
+    if (requestSha256 != null) result.requestSha256 = requestSha256;
+    return result;
+  }
+
+  GetBotChatScopeAuthorityResponse._();
+
+  factory GetBotChatScopeAuthorityResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetBotChatScopeAuthorityResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetBotChatScopeAuthorityResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOM<GetSpaceChatScopeAuthorityResponse>(1, _omitFieldNames ? '' : 'scope',
+        subBuilder: GetSpaceChatScopeAuthorityResponse.create)
+    ..a<$core.List<$core.int>>(
+        2, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetBotChatScopeAuthorityResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetBotChatScopeAuthorityResponse copyWith(
+          void Function(GetBotChatScopeAuthorityResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as GetBotChatScopeAuthorityResponse))
+          as GetBotChatScopeAuthorityResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetBotChatScopeAuthorityResponse create() =>
+      GetBotChatScopeAuthorityResponse._();
+  @$core.override
+  GetBotChatScopeAuthorityResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetBotChatScopeAuthorityResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetBotChatScopeAuthorityResponse>(
+          create);
+  static GetBotChatScopeAuthorityResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  GetSpaceChatScopeAuthorityResponse get scope => $_getN(0);
+  @$pb.TagNumber(1)
+  set scope(GetSpaceChatScopeAuthorityResponse value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasScope() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearScope() => $_clearField(1);
+  @$pb.TagNumber(1)
+  GetSpaceChatScopeAuthorityResponse ensureScope() => $_ensure(0);
+
+  /// Raw SHA256 of the deterministic complete request protobuf.
+  @$pb.TagNumber(2)
+  $core.List<$core.int> get requestSha256 => $_getN(1);
+  @$pb.TagNumber(2)
+  set requestSha256($core.List<$core.int> value) => $_setBytes(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasRequestSha256() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearRequestSha256() => $_clearField(2);
+}
+
 class GetSpaceChatScopeAuthorityRequest extends $pb.GeneratedMessage {
   factory GetSpaceChatScopeAuthorityRequest({
     $core.int? protocolVersion,
