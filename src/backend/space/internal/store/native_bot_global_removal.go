@@ -87,7 +87,7 @@ func (s *SpaceStore) ApplyBotInstallationRemoval(ctx context.Context, proof *bot
 		return nil, err
 	}
 	var version int64
-	if err = tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || version != 46 && version != 47 {
+	if err = tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || version != 46 && version != 47 && version != 48 {
 		return nil, ErrMemberAuthorityUnavailable
 	}
 	var terminal bool
@@ -110,8 +110,14 @@ func (s *SpaceStore) ApplyBotInstallationRemoval(ctx context.Context, proof *bot
 	if err = scoped.RequireScopedNativeMembershipReadiness(ctx, in.SpaceID); err != nil {
 		return nil, err
 	}
+	savedSQL := `SELECT public.space_bot_global_removal_saved($1,$2)`
+	recordSQL := `SELECT public.space_bot_global_removal_record($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`
+	if version == 48 {
+		savedSQL = `SELECT public.space_bot_global_removal_saved48($1,$2)`
+		recordSQL = `SELECT public.space_bot_global_removal_record48($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`
+	}
 	var saved []byte
-	if err = tx.QueryRow(ctx, `SELECT public.space_bot_global_removal_saved($1,$2)`, binding.OperationID, in.SpaceID).Scan(&saved); err != nil {
+	if err = tx.QueryRow(ctx, savedSQL, binding.OperationID, in.SpaceID).Scan(&saved); err != nil {
 		return nil, ErrMemberAuthorityUnavailable
 	}
 	if saved != nil {
@@ -163,7 +169,7 @@ func (s *SpaceStore) ApplyBotInstallationRemoval(ctx context.Context, proof *bot
 	if err != nil {
 		return nil, err
 	}
-	if err = tx.QueryRow(ctx, `SELECT public.space_bot_global_removal_record($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, binding.OperationID, binding.DecisionID, binding.DecisionSHA256[:], in.BotID, in.SpaceID, in.OperationID, in.InstallOperationID, evidenceSHA[:], requestRaw, binding.FrozenScopeSHA256[:], out.ReceiptId, resultRaw, completed).Scan(&saved); err != nil {
+	if err = tx.QueryRow(ctx, recordSQL, binding.OperationID, binding.DecisionID, binding.DecisionSHA256[:], in.BotID, in.SpaceID, in.OperationID, in.InstallOperationID, evidenceSHA[:], requestRaw, binding.FrozenScopeSHA256[:], out.ReceiptId, resultRaw, completed).Scan(&saved); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return nil, ErrMemberAdmissionConflict

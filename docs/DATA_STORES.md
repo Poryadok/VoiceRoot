@@ -462,3 +462,23 @@ aggregate evidence remains retained, and full coordinator originals expire on
 the existing aggregate PURGED+30d clock. Compact hashes cannot recreate erased
 originals. This read seam is neither a P3 native drain nor a global Bot terminal
 fence or an authorization to retain personal root/actor fingerprints forever.
+
+### Space minimal Bot terminal storage
+
+Forward48 adds protected `bot_terminal_registrations`, uniquely binding Bot
+UUID and accepted opaque global decision UUID to receiver receipt UUID and
+first registration time. These four scalar fields persist the all-Add fence
+and stable terminal-only replay; they contain no actor, account, Space or
+personal-derived root/source digest. They do not prove source cleanup.
+`bot_removal_receipts48` separately retains exact full per-Space source results
+until the existing native/current11 P3 deletion permits their removal.
+`catalog48_transition` records only installer epoch/migration/catalog evidence.
+Ordinary application roles cannot directly mutate these protected tables.
+
+The old46 terminal/evidence tables remain intact. Their root and actor digests
+are personal-derived, despite domain separation; the global erasure trigger
+and its authenticated delivery are still an explicit gap.48 neither invents
+a retention clock nor borrows Space P3/account deletion authority. A trusted
+known46 projection creates an actual new minimal receipt without erasing old
+proof or fabricating full replay after evidence loss. Unknown old provenance
+cannot be adopted by a schema upgrade or a supplied UUID.

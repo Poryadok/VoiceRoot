@@ -59,7 +59,7 @@ func (s *SpaceStore) mutateBotInstallation(ctx context.Context, proof *botmember
 	if err = tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&beforeSpaceVersion); err != nil {
 		return ErrMemberAuthorityUnavailable
 	}
-	if beforeSpaceVersion == 46 || beforeSpaceVersion == 47 {
+	if beforeSpaceVersion == 46 || beforeSpaceVersion == 47 || beforeSpaceVersion == 48 {
 		if err = checkMemberAuthorityCatalog(ctx, tx); err != nil {
 			return err
 		}
@@ -83,7 +83,7 @@ func (s *SpaceStore) mutateBotInstallation(ctx context.Context, proof *botmember
 		return err
 	}
 	var version int64
-	if err = tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || (version != 42 && version != 44 && version != 45 && version != 46 && version != 47) {
+	if err = tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || (version != 42 && version != 44 && version != 45 && version != 46 && version != 47 && version != 48) {
 		return ErrMemberAuthorityUnavailable
 	}
 	scoped := *s
@@ -91,7 +91,7 @@ func (s *SpaceStore) mutateBotInstallation(ctx context.Context, proof *botmember
 	if err = scoped.effectiveMutationScope(ctx, in.SpaceID); err != nil {
 		return err
 	}
-	if (version == 46 || version == 47) && !remove {
+	if (version == 46 || (version == 47 || version == 48)) && !remove {
 		var global []byte
 		if err = tx.QueryRow(ctx, `SELECT public.space_bot_global_removal_saved($1,$2)`, in.OperationID, in.SpaceID).Scan(&global); err != nil {
 			return ErrMemberAuthorityUnavailable
@@ -126,7 +126,7 @@ func (s *SpaceStore) mutateBotInstallation(ctx context.Context, proof *botmember
 	// Guarded44 journals and cancellation tombstones are native source state
 	// even when no current membership is removed. Complete the full DB cohort
 	// for those writes too; the domain primitive still rejects unknown sources.
-	if mutatesSource || version == 44 || version == 45 || (version == 46 || version == 47) {
+	if mutatesSource || version == 44 || version == 45 || (version == 46 || (version == 47 || version == 48)) {
 		capture, err = scoped.captureNativeEffectiveMemberMutation(ctx, in.SpaceID, []uuid.UUID{in.ProfileID})
 		if err != nil {
 			return err
@@ -150,7 +150,7 @@ func (s *SpaceStore) mutateBotInstallation(ctx context.Context, proof *botmember
 			return err
 		}
 	}
-	if version == 46 || version == 47 {
+	if version == 46 || (version == 47 || version == 48) {
 		if err = scoped.flushMemberAdmissionDeferredChecks(ctx, capture); err != nil {
 			return err
 		}

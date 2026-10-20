@@ -1791,3 +1791,51 @@ This relay is separate from `ReconcileBotPurgeInstallation` and root-only global
 Bot terminal registration. Those mutation/receipt arms and legacy46 personal
 fingerprint erasure remain unimplemented by this read seam. Ordinary public
 uninstall still preserves its accepted Empty-after-durable-native-ACK policy.
+
+### Minimal Bot-wide terminal registration (schema48)
+
+The protected Bot listener exposes `RegisterBotGlobalTerminal`, a distinct
+pure `service:bot` method. Its protocol1 body contains only Bot UUID and the
+opaque immutable decision UUID, also used as the transport request identity.
+Bot must load that pair from its already committed accepted global deletion
+journal and local terminal revocation. Space authenticates the exact method,
+body, request ID, credential time and JTI; human/mixed claims and unknown body
+fields are rejected. No Space, owner lookup, Role permission or P3 decision is
+needed for this strictly terminal-only effect, including a zero-target Bot.
+
+One atomic commit creates the permanent all-native-Add fence and its own
+minimal receipt: Bot/decision, receiver receipt UUID, original registration
+time and `GLOBAL_NATIVE_ADDS_FENCED`. The same pair replays that result;
+rebinding either identifier conflicts. This receipt does not claim source
+cancellation, participant cleanup or full DeleteBot completion. Every native
+Add, including a saved positive replay, later generation/installation and
+another Space, checks both retained terminal representations under the shared
+Bot lock before any Space fence. Other Bots and ordinary uninstall/reinstall
+semantics remain independent.
+
+Forward48 adds `bot_terminal_registrations`, P3-bounded
+`bot_removal_receipts48` and immutable `catalog48_transition` in the protected
+schema. The minimal marker contains exactly Bot/decision/receipt/time, without
+actor/account/Space or personal-derived hashes. A new full per-Space cleanup
+stores its source proof only in the bounded48 receipt table and shares the
+minimal fence. The obsolete46 writer cannot create new permanent personal
+hashes on48; retained original46 receipts still replay through their existing
+exact evidence checks. Current11 P3 removes bounded per-Space evidence while
+leaving the Bot-wide minimal fence and stable terminal-only receipt.
+
+The explicit trusted48 installer authenticates fixed PG16/18 structures,
+functions, triggers and privileges, the admitted46→47 transition chain and
+the unchanged old catalog projection before an epoch CAS. Installing SQL alone
+does not enable serving. Known old46 terminal facts receive a newly issued
+minimal receipt/time, never a fabricated original receipt or repeated source
+mutation/count. Old44–47 migration bytes and Space cutover IDs are preserved;
+unknown provenance, dirty/future schema and bypass-capable DB roles remain
+unavailable. DOWN refuses retained registration, source results or activation.
+
+Legacy46 `decision_sha256` and `actor_binding_sha256` remain personal-derived
+fingerprints. This transition preserves that existing evidence and introduces
+no erasure trigger or TTL. Its authorized global erasure policy and delivery
+remain unresolved; Space P3 deadlines are not substitutes. Neither the new
+minimal result nor a digest can reconstruct erased old full evidence or claim
+its historical actor/body equality. The separate P3-native drain remains a
+different contract from this terminal registration.

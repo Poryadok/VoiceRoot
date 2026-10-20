@@ -20,7 +20,7 @@ func (s *SpaceStore) CleanupLifecycleEvidence(ctx context.Context) error {
 		if err := s.Pool.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil {
 			return err
 		}
-		if version == 47 {
+		if version == 47 || version == 48 {
 			return s.cleanupLifecycleEvidence47(ctx)
 		}
 	}

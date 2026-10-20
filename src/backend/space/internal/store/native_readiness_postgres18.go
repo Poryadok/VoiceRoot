@@ -21,6 +21,8 @@ func nativeReadinessExpectedStructure(schema int64, serverVersion int) (string, 
 			return nativeReadinessStructure46SHA, nil
 		case 47:
 			return nativeReadinessStructure47SHA, nil
+		case 48:
+			return nativeReadinessStructure48SHA, nil
 		}
 	case 18:
 		switch schema {
@@ -32,6 +34,8 @@ func nativeReadinessExpectedStructure(schema int64, serverVersion int) (string, 
 			return nativeReadinessStructure4618SHA, nil
 		case 47:
 			return nativeReadinessStructure4718SHA, nil
+		case 48:
+			return nativeReadinessStructure4818SHA, nil
 		}
 	}
 	return "", ErrMemberAuthorityUnavailable

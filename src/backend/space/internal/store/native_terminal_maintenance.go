@@ -157,7 +157,7 @@ func (s *SpaceStore) markTerminalLifecycleEventDelivered(ctx context.Context, tx
 	if err := tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil {
 		return true, err
 	}
-	if version != 47 {
+	if version != 47 && version != 48 {
 		// Preserve historical44/45/46 replay and its existing fail-closed FIRST
 		// behavior. This forward helper does not reinterpret those schemas.
 		if version == 44 || version == 45 || version == 46 {

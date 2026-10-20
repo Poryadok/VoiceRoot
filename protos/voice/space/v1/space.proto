@@ -141,6 +141,9 @@ service SpaceService {
   // Relay only the exact accepted producer-owned Role/Messaging P3 evidence.
   // @voice.security=protected;callers=service:bot
   rpc GetBotPurgeHandoff(GetBotPurgeHandoffRequest) returns (GetBotPurgeHandoffResponse);
+  // Minimal all-Add fence from Bot's committed verified-owner global root.
+  // @voice.security=protected;callers=service:bot
+  rpc RegisterBotGlobalTerminal(RegisterBotGlobalTerminalRequest) returns (RegisterBotGlobalTerminalResponse);
 }
 
 // @voice.unknown_fields=reject
@@ -1146,4 +1149,32 @@ message BotInstallationRemovalReceipt {
 
 message ApplyBotInstallationRemovalResponse {
   BotInstallationRemovalReceipt receipt = 1;
+}
+
+// No Space, actor, human credential, root hash or source-cleanup authority.
+// @voice.unknown_fields=reject
+message RegisterBotGlobalTerminalRequest {
+  uint32 protocol_version = 1;
+  string bot_id = 2;
+  // Actual committed server global decision; also exact transport request_id.
+  string decision_id = 3;
+}
+
+enum BotGlobalTerminalOutcome {
+  BOT_GLOBAL_TERMINAL_OUTCOME_UNSPECIFIED = 0;
+  BOT_GLOBAL_TERMINAL_OUTCOME_GLOBAL_NATIVE_ADDS_FENCED = 1;
+}
+
+// Receiver-owned minimal terminal result. Per-Space cleanup stays independent.
+message BotGlobalTerminalReceipt {
+  uint32 protocol_version = 1;
+  string bot_id = 2;
+  string decision_id = 3;
+  string receipt_id = 4;
+  google.protobuf.Timestamp registered_at = 5;
+  BotGlobalTerminalOutcome outcome = 6;
+}
+
+message RegisterBotGlobalTerminalResponse {
+  BotGlobalTerminalReceipt receipt = 1;
 }

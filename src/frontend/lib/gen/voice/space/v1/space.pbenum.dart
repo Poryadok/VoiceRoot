@@ -213,5 +213,31 @@ class JoinAdmissionState extends $pb.ProtobufEnum {
   const JoinAdmissionState._(super.value, super.name);
 }
 
+class BotGlobalTerminalOutcome extends $pb.ProtobufEnum {
+  static const BotGlobalTerminalOutcome
+      BOT_GLOBAL_TERMINAL_OUTCOME_UNSPECIFIED = BotGlobalTerminalOutcome._(
+          0, _omitEnumNames ? '' : 'BOT_GLOBAL_TERMINAL_OUTCOME_UNSPECIFIED');
+  static const BotGlobalTerminalOutcome
+      BOT_GLOBAL_TERMINAL_OUTCOME_GLOBAL_NATIVE_ADDS_FENCED =
+      BotGlobalTerminalOutcome._(
+          1,
+          _omitEnumNames
+              ? ''
+              : 'BOT_GLOBAL_TERMINAL_OUTCOME_GLOBAL_NATIVE_ADDS_FENCED');
+
+  static const $core.List<BotGlobalTerminalOutcome> values =
+      <BotGlobalTerminalOutcome>[
+    BOT_GLOBAL_TERMINAL_OUTCOME_UNSPECIFIED,
+    BOT_GLOBAL_TERMINAL_OUTCOME_GLOBAL_NATIVE_ADDS_FENCED,
+  ];
+
+  static final $core.List<BotGlobalTerminalOutcome?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 1);
+  static BotGlobalTerminalOutcome? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const BotGlobalTerminalOutcome._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');
