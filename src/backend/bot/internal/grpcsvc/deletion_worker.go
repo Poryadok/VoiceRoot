@@ -178,5 +178,9 @@ func (s *BotGRPC) RunBotDeletionRecovery(ctx context.Context) {
 		if err != nil && ctx.Err() == nil && !errors.Is(err, store.ErrDeletionPending) {
 			slog.Warn("Bot deletion cleanup remains pending", "code", status.Code(err).String())
 		}
+		_, err = s.ProcessNextBotPurgeHandoff(ctx)
+		if err != nil && ctx.Err() == nil && !errors.Is(err, store.ErrDeletionPending) {
+			slog.Warn("Bot P3 handoff remains pending", "code", status.Code(err).String())
+		}
 	}
 }

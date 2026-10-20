@@ -653,3 +653,34 @@ column and is retained as a test-setup failure, not product RED. All nonempty
 handoffs still remain pending: protected c89 reads/claim CAS, native49 drain,
 positive journal retirement, bounded retention cleanup and full P3 completion
 are the next original implementation steps. No component result closes BE-170.
+
+The next c89 read-consumer stage now implements due SKIP LOCKED P3 claims,
+private immutable request/source inputs and source-bound observation CAS.
+After Space->sorted Bot->row waits it rechecks the same irreversible decision,
+manifest, complete source set and current lease. A stale generation, expired
+wait or changed/extra source cannot write. The consumer signs only the exact
+Space relay or Messaging manifest-read method/body/read ID using the existing
+protected clients. No human token/default Role or ordinary metadata is used.
+
+Coverage is an explicit local P3_COVERAGE observation, not a participant receipt.
+The worker persists an immutable validated prefix of <=1000-chat batches, so
+a bounded pass resumes extra chats without dropping them or rereading accepted
+originals. It semantically validates retained observations even when their SHA
+matches. Native drain and positive retired-journal transition are still absent;
+all nonempty sources remain PENDING and no Bot purge receipt is emitted.
+
+Final current real-BotPG/race component matrix25PASS0skip:
+store23.188s/grpc18.858s. It covers SKIP LOCKED, reclaimed generation fencing,
+private copies, caller-proof mutation while blocked on the actual Space guard,
+lease expiry after that wait, changed/extra frozen source refusal, and controlled
+RSA pure-service receiver requests. Zero/one/1001-chat sources exercise outage,
+missing Role original, explicitly uncovered membership, saved first-thousand
+prefix before a second-batch failure, exact resume and no repeated RPC after
+complete observation. A digest-consistent invalid typed saved proof fails
+before RPC. This is not actual mTLS/Space49/Messaging provider composition.
+The new read-only adapter follows the already frozen canonical contract;
+no production causal RED is invented from an absent previous method. Earlier
+claim21.276s and worker8.280s/16.146s successes retain their exact earlier inputs.
+Actual protected provider handoff, native49 receipt adoption, current physical
+source/journal version revalidation for retirement, applicable retention cleanup
+and full P3/BE-170 completion remain original implementation work.

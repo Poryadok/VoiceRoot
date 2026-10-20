@@ -451,9 +451,18 @@ uninstall journals can outlive their disposable live-intent projection. An
 uncovered nonempty snapshot commits recoverable pending work and emits no Bot
 purge receipt. A receipt-insert database guard also rejects an old application
 which bypasses this preparation, rolling back its deletes in the same transaction.
-The local canonical-original/manifest-coverage validator is a separate bounded
-component; actual protected proof reads, native P3 drain and positively covered
-journal retirement remain unfinished. Ordinary uninstall still accepts Empty
+The recovery consumer claims due P3 work with a monotone bounded lease, then
+uses the existing protected Space membership and Messaging cleanup connections
+for the exact Bot-only relay/manifest RPCs. Pure service credentials bind the
+method, body and fresh read identity; no public metadata or human Role fallback
+is used. Canonical-original/membership observations are saved as an explicit
+local `P3_COVERAGE` arm with the frozen source SHA. Chats are read in sorted
+batches of at most1000, with an immutable accepted prefix persisted between
+bounded worker passes. A saved observation is semantically revalidated before
+reuse. Claim expiry, exact irreversible decision and the complete source set
+are checked after database waits. These read observations keep the source
+PENDING; actual native P3 drain and positively covered journal retirement
+remain unfinished. Ordinary uninstall still accepts Empty
 after its durable native ACK while independent typed cleanup remains pending.
 
 The message recipient producer, webhook worker and development polling send

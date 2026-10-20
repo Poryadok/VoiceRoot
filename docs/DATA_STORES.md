@@ -175,6 +175,17 @@ Sticker/GIF bytes live in **`file_db`** (`files`); send payloads in **`messaging
 | `bot_deletion_terminal_effects` | Migration `000014`; independent root-level Space/Role terminal obligations, including zero Space targets. No Space FK or actor snapshot. Sealed minimal requests/typed receipts retain exact SHA and root claim CAS. Old COMPLETE roots reopen only their missing obligations, preserving original decisions; no authority/receipt is fabricated. DOWN requires RC, serializes with root writers and refuses retained rows. Both typed callers and distinct receipt CAS are component-tested; actual native48 and Role receiver/catalog transport qualification remain unfinished BE-170 work. |
 | `bot_space_purge_handoffs`, `bot_space_purge_sources` | Migration `000015`; exact local irreversible P3 request and finite eligible installation/whitelist/unfinished-journal snapshots, captured under the Space guard and sorted Bot locks before any projection erasure. Native inputs include already-CANCELED accepted pending targets, retain their original cancellation and separately persist a P3 child ID. The accepted uninstall journal no longer has a FK to the disposable live intent. Nonempty snapshots remain pending until explicit downstream coverage/native-drain adoption is implemented; no missing-row or SQL-state completion. `bot_require_prepared_purge_handoff()` is a PUBLIC-execute-revoked INVOKER receipt-insert trigger: an old application lacking the prepared handoff rolls back its entire purge. RC-only DOWN serializes first writers, refuses retained handoff/source rows and refuses an accepted journal whose old live-intent FK cannot be restored. No new evidence clock, erasure authority or service grant. |
 
+The existing015 claim fields now fence due P3 recovery with a30-second lease.
+Private claim snapshots own request/source bytes; returned RPC inputs are
+copies. `coverage_bytes` can hold a canonical local `P3_COVERAGE` observation
+with exact original receipts and sorted manifest membership batches. Its source
+SHA and accepted batch prefix are immutable; appending validated batches does
+not replace an original receipt or reset a completion timestamp. The source
+remains PENDING with no `covered_at`; this arm alone is not native drain or
+participant completion. Saving it rechecks the full source set and claim after
+Space/Bot/row waits. Native receipt adoption, explicit retired-journal completion
+and the already applicable retention cleanup remain separate unfinished work.
+
 ---
 
 ### `messaging_db` (Messaging Service): File preview projection
