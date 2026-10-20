@@ -153,6 +153,13 @@ echo "${job_block}" | grep -Eq '^    needs: changes$' \
   || fail "ci-script-tests must depend on changes"
 echo "${job_block}" | grep -Fq "needs.changes.outputs.global == 'true'" \
   || fail "ci-script-tests must run for existing global CI-policy paths"
+ci_global_paths="$(sed -n '/^ci_global:$/,/^[[:alnum:]_]*:$/p' "${PATH_FILTERS}")"
+for compatibility_path in \
+  'scripts/release/client_compatibility.py' \
+  'scripts/release/client_compatibility_test.py'; do
+  echo "${ci_global_paths}" | grep -Fxq "  - ${compatibility_path}" \
+    || fail "ci_global must select ${compatibility_path} so its changes run ci-script-tests"
+done
 echo "${job_block}" | grep -Eq '^      - name: CI script regression tests$' \
   || fail "ci-script-tests must name its regression-test step"
 echo "${job_block}" | grep -Eq '^        run: make ci-script-tests$' \

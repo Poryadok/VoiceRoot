@@ -17,6 +17,8 @@ global:
 # Changes to CI wiring run broad checks but are not deployment inputs.
 ci_global:
   - scripts/release/capability_manifest*.py
+  - scripts/release/client_compatibility.py
+  - scripts/release/client_compatibility_test.py
   - Makefile
   - .golangci.yml
   - .github/workflows/**
