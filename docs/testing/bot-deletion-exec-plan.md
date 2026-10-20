@@ -724,3 +724,25 @@ completed Space/actor/chat scope, and never fabricate remote receipts or an
 expiry. Original specialist251 receives the exact source-backed finite question;
 actual native49 provider composition proceeds independently from immutable
 provider input, without borrowing a running process.
+
+The optional provider branch is now exercised by the actual BotPG caller from
+`TestPurgeNativeActual49RelayAndTypedResultRecovery`, using immutable Space
+provideracc3fff9 in the same caller-owned private Linux namespace. Actual LIVE49
+Add precedes the provider's own irreversible P3/controlled Role-first decision;
+the caller then obtains the real protected c89 original and native typed result.
+After the real receiver commits, a transport decorator loses the ACK, then
+corrupts the P3 binding on the next result. Both leave local work pending. A
+fresh JWT for the same saved request recovers its exact result; the fourth pass
+makes no RPC. Provider independently verifies its own saved child/native source
+before writing a synchronization signal. Final caller58.95s/provider59.76s pass
+with zero skips. The first attempt failed only because the standalone caller
+binary used a relative migration directory from a different cwd; a source-owned
+runtime.Caller path fixes that harness input, with the failed logs preserved.
+
+This covers actual native49 mTLS/JWKS/Redis/PG transport and Bot durable typed
+CAS. TLS is manually configured equivalently to the separately tested production
+constructor. Empty chats require Role-only coverage; upstream Role/fences are
+provider-controlled, not actual remote Role/Chat/Messaging admission. There is
+no public Gateway/Auth ingress, OS-process Bot restart or local journal retirement
+claim. The caller explicitly asserts local PENDING and absence of a Bot P3
+receipt; that remaining transition is the next original implementation stage.
