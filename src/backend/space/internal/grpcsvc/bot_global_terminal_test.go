@@ -79,11 +79,17 @@ func TestMinimalBotTerminal48ProtectedZeroSpace(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(clientCertFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientCert.Certificate[0]}), 0600))
 	require.NoError(t, os.WriteFile(clientKeyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private}), 0600))
+	var listenerAddress string
 	start := func() (spacev1.SpaceServiceClient, spacev1.SpaceServiceClient, func()) {
 		runtime, err := botmembershipprincipal.New(ctx, botmembershipprincipal.Config{ListenAddr: "127.0.0.1:0", CertFile: certFile, KeyFile: keyFile, ClientCAFile: caFile, ReplayAddr: addr, JWKSCAFile: caFile, JWKSClientCertFile: clientCertFile, JWKSClientKeyFile: clientKeyFile, JWKSURLs: map[string]string{"bot": jwks.URL}, RefreshAfter: 100 * time.Millisecond, HardExpiry: 200 * time.Millisecond, UnknownKIDCooldown: 50 * time.Millisecond})
 		require.NoError(t, err)
-		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		bind := "127.0.0.1:0"
+		if os.Getenv("VOICE_BOT_MINIMAL48_HANDOFF_DIR") != "" {
+			bind = "0.0.0.0:0"
+		}
+		listener, err := net.Listen("tcp", bind)
 		require.NoError(t, err)
+		listenerAddress = listener.Addr().String()
 		server := grpc.NewServer(runtime.ServerOptions()...)
 		RegisterBotMembershipServer(server, &BotMembershipGRPC{Store: serving})
 		go func() { _ = server.Serve(listener) }()
@@ -105,6 +111,10 @@ func TestMinimalBotTerminal48ProtectedZeroSpace(t *testing.T) {
 		}
 	}
 	client, noCert, stop := start()
+	if nativeBotMinimal48Handoff(t, ctx, db.Pool, client, listenerAddress, key, caFile, clientCertFile, clientKeyFile) {
+		stop()
+		return
+	}
 	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "bot", KeyID: "current", PrivateKey: key})
 	require.NoError(t, err)
 	nextIssuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "bot", KeyID: "next", PrivateKey: next})
