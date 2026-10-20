@@ -186,16 +186,16 @@ func TestPurgeNativeActual49RelayAndTypedResultRecovery(t *testing.T) {
 		_, err = database.Pool.Exec(ctx, `UPDATE bot_space_purge_handoffs SET next_attempt_at=clock_timestamp() WHERE space_id=$1`, space)
 		require.NoError(t, err)
 		worked, e := svc.ProcessNextBotPurgeHandoff(ctx)
-		require.True(t, worked)
+		require.Equal(t, n < 3, worked)
 		if n == 0 {
 			require.Equal(t, codes.DeadlineExceeded, status.Code(e))
 		} else if n == 1 {
 			require.Equal(t, codes.Unavailable, status.Code(e))
 		} else {
-			require.ErrorIs(t, e, store.ErrDeletionPending)
+			require.NoError(t, e)
 		}
 		var body []byte
-		require.NoError(t, database.Pool.QueryRow(ctx, `SELECT coverage_bytes FROM bot_space_purge_sources WHERE space_id=$1 AND bot_id=$2 AND state='PENDING' AND covered_at IS NULL`, space, bot.ID).Scan(&body))
+		require.NoError(t, database.Pool.QueryRow(ctx, `SELECT coverage_bytes FROM bot_space_purge_sources WHERE space_id=$1 AND bot_id=$2`, space, bot.ID).Scan(&body))
 		var envelope struct {
 			Native []struct {
 				Request []byte `json:"request_bytes"`
@@ -222,13 +222,25 @@ func TestPurgeNativeActual49RelayAndTypedResultRecovery(t *testing.T) {
 	q := new(spacev1.ReconcileBotPurgeInstallationRequest)
 	require.NoError(t, proto.Unmarshal(client.request, q))
 	require.NoError(t, store.ValidateBotPurgeNativeReceipt(q, r))
-	write("complete.json", map[string]any{"schema_version": 1, "bot_id": bot.ID.String(), "installation_id": intent.InstallationID.String(), "drain_operation_id": q.OperationId, "native_receipt_id": r.Receipt.ReceiptId})
+	localReceipt, err := st.PurgeSpace(ctx, purge)
+	require.NoError(t, err)
+	require.Equal(t, commonv1.PurgeReceiptState_PURGE_RECEIPT_STATE_COMPLETED, localReceipt.State)
+	write("complete.json", map[string]any{"schema_version": 1, "bot_id": bot.ID.String(), "installation_id": intent.InstallationID.String(), "drain_operation_id": q.OperationId, "native_receipt_id": r.Receipt.ReceiptId, "bot_purge_receipt_id": localReceipt.ReceiptId})
 	var verified map[string]any
 	wait("verified.json", &verified)
-	_, err = st.PurgeSpace(ctx, purge)
-	require.ErrorIs(t, err, store.ErrDeletionPending, "actual typed native result is not the separate local retirement transition")
+	replay, err := st.PurgeSpace(ctx, purge)
+	require.NoError(t, err)
+	require.True(t, proto.Equal(localReceipt, replay))
 	var receipts int
 	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT count(*) FROM bot_space_lifecycle_purge_receipts WHERE space_id=$1`, space).Scan(&receipts))
-	require.Zero(t, receipts)
+	require.Equal(t, 1, receipts)
+	var intents, rootsCount int
+	var botStatus string
+	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT count(*) FROM bot_installation_intents WHERE space_id=$1`, space).Scan(&intents))
+	require.Zero(t, intents)
+	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT count(*) FROM bot_deletion_operations WHERE bot_id=$1`, bot.ID).Scan(&rootsCount))
+	require.Zero(t, rootsCount)
+	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT status FROM bots WHERE id=$1`, bot.ID).Scan(&botStatus))
+	require.Equal(t, "active", botStatus)
 	require.NoError(t, os.WriteFile(ready.Stop, []byte("stop"), 0600))
 }

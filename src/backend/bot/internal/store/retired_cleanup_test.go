@@ -33,6 +33,11 @@ func TestPurgeBeforeBotDeletionDoesNotCompleteFromMissingTargets(t *testing.T) {
 	intent, err := st.PrepareInstallation(ctx, bot.ID, space, actor, nil)
 	require.NoError(t, err)
 	require.NoError(t, st.CompleteInstallation(ctx, intent, nil))
+	// Existing minimal state from a distinct historical unrepresented retirement.
+	// No Space/actor history or new proof is invented. Positively covering this
+	// current Space must not clear that pre-existing uncertainty.
+	_, err = st.Pool.Exec(ctx, `UPDATE bots SET retired_cleanup_unresolved=true WHERE id=$1`, bot.ID)
+	require.NoError(t, err)
 	manifest := &commonv1.ManifestBinding{ManifestId: purgeOperation.String(), ManifestSha256: make([]byte, 32), ItemCount: 0}
 	fence := &commonv1.SpaceLifecycleFenceRequest{ProtocolVersion: 1, SpaceId: space.String(), DeletionOperationId: purgeOperation.String(), Generation: 1, DesiredState: commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_FROZEN, Manifest: manifest}
 	_, err = st.ApplySpaceLifecycleFence(ctx, fence)
@@ -41,9 +46,14 @@ func TestPurgeBeforeBotDeletionDoesNotCompleteFromMissingTargets(t *testing.T) {
 	_, err = st.ApplySpaceLifecycleFence(ctx, fence)
 	require.NoError(t, err)
 	_, err = st.PurgeSpace(ctx, &commonv1.SpacePurgeRequest{ProtocolVersion: 1, SpaceId: space.String(), DeletionOperationId: purgeOperation.String(), Generation: 2, ParticipantId: commonv1.ParticipantId_PARTICIPANT_ID_BOT, PurgeDecidedAt: timestamppb.New(time.Now()), Manifest: manifest})
+	require.ErrorIs(t, err, store.ErrDeletionPending)
+	purgeClaim, err := st.ClaimNextBotPurgeHandoff(ctx)
 	require.NoError(t, err)
-	// Own Bot purge completion retires local sources. It is not a downstream
-	// Role/Messaging cleanup receipt and missing source cannot prove completion.
+	saveRetirementEvidence(t, st, purgeClaim, bot.ID, true)
+	_, err = st.RetireBotPurgeHandoff(ctx, purgeClaim)
+	require.NoError(t, err)
+	// Current P3 has exact positive proof. The separate pre-existing historical
+	// unresolved bit still prevents absence from claiming whole-Bot completion.
 	request := &botv1.DeleteBotRequest{BotId: bot.ID.String()}
 	body, err := (proto.MarshalOptions{Deterministic: true}).Marshal(request)
 	require.NoError(t, err)
@@ -106,19 +116,24 @@ func TestRetiredCleanupPurgeRollbackAndFrozenJournalControls(t *testing.T) {
 			_, err = st.ApplySpaceLifecycleFence(ctx, fence)
 			require.NoError(t, err)
 			purge := &commonv1.SpacePurgeRequest{ProtocolVersion: 1, SpaceId: space.String(), DeletionOperationId: op.String(), Generation: 2, ParticipantId: commonv1.ParticipantId_PARTICIPANT_ID_BOT, PurgeDecidedAt: timestamppb.Now(), Manifest: manifest}
+			_, err = st.PurgeSpace(ctx, purge)
+			require.ErrorIs(t, err, store.ErrDeletionPending)
+			purgeClaim, err := st.ClaimNextBotPurgeHandoff(ctx)
+			require.NoError(t, err)
+			saveRetirementEvidence(t, st, purgeClaim, bot.ID, true)
 			_, err = st.Pool.Exec(ctx, `ALTER TABLE bot_space_lifecycle_purge_receipts ADD CONSTRAINT injected_retired_marker_rollback CHECK(false)`)
 			require.NoError(t, err)
-			_, err = st.PurgeSpace(ctx, purge)
+			_, err = st.RetireBotPurgeHandoff(ctx, purgeClaim)
 			require.Error(t, err)
 			var flag bool
 			require.NoError(t, st.Pool.QueryRow(ctx, `SELECT retired_cleanup_unresolved FROM bots WHERE id=$1`, bot.ID).Scan(&flag))
 			require.False(t, flag, "failed purge cannot persist a partial marker")
 			_, err = st.Pool.Exec(ctx, `ALTER TABLE bot_space_lifecycle_purge_receipts DROP CONSTRAINT injected_retired_marker_rollback`)
 			require.NoError(t, err)
-			receipt, err := st.PurgeSpace(ctx, purge)
+			receipt, err := st.RetireBotPurgeHandoff(ctx, purgeClaim)
 			require.NoError(t, err)
 			require.NoError(t, st.Pool.QueryRow(ctx, `SELECT retired_cleanup_unresolved FROM bots WHERE id=$1`, bot.ID).Scan(&flag))
-			require.Equal(t, !frozen, flag)
+			require.False(t, flag, "positively covered current sources do not create a new unresolved obligation")
 			again, err := st.PurgeSpace(ctx, purge)
 			require.NoError(t, err)
 			require.Equal(t, receipt.ReceiptId, again.ReceiptId)
@@ -129,13 +144,18 @@ func TestRetiredCleanupPurgeRollbackAndFrozenJournalControls(t *testing.T) {
 					return id
 				}())
 				require.NoError(t, e)
-				require.Len(t, effects, 2, "own purge never erases existing global obligations")
+				require.Empty(t, effects, "matched Space effects now use explicit local results, never remote receipt dispatch")
+				var count int
+				require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM bot_deletion_effects WHERE state='LOCAL_P3_COVERED'`).Scan(&count))
+				require.Equal(t, 2, count, "opaque expected effect membership survives")
+				require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM bot_deletion_terminal_effects WHERE state='PENDING'`).Scan(&count))
+				require.Equal(t, 2, count, "P3 Space effects do not discharge global terminal obligations")
 			}
 			unrelated, _, err := st.CreateBot(ctx, uuid.New(), "Unrelated", "", `[]`, uuid.New())
 			require.NoError(t, err)
 			root, err := st.BeginBotDeletion(ctx, unrelated.ID, unrelated.OwnerAccountID)
 			require.NoError(t, err)
-			require.Equal(t, "COMPLETE", root.State, "no retired source means existing zero-target semantics")
+			require.Equal(t, "PENDING", root.State, "both independent global terminal outcomes remain required even with zero Space targets")
 		})
 	}
 }
@@ -145,7 +165,19 @@ func TestRetiredCleanupGuardOfficialMigrationAndDownFirstWriter(t *testing.T) {
 		t.Skip("actual migration driver and PostgreSQL lock/isolation")
 	}
 	t.Run("official_empty_RC", func(t *testing.T) {
-		f := integrationtest.NewSourceMigrationFixture(t, t.Context(), filepath.Join("..", "..", "..", "migrations", "bot_db"))
+		// Exercise the official013 driver transition on its exact historical
+		// prefix; down1 on the current016 cohort would test a different migration.
+		directory := t.TempDir()
+		entries, e := os.ReadDir("../../../migrations/bot_db")
+		require.NoError(t, e)
+		for _, entry := range entries {
+			if entry.Name() < "000014" {
+				raw, e := os.ReadFile(filepath.Join("../../../migrations/bot_db", entry.Name()))
+				require.NoError(t, e)
+				require.NoError(t, os.WriteFile(filepath.Join(directory, entry.Name()), raw, 0600))
+			}
+		}
+		f := integrationtest.NewSourceMigrationFixture(t, t.Context(), directory)
 		f.Run(true, "up")
 		f.Run(true, "down", "1")
 		var exists bool

@@ -305,6 +305,11 @@ func (s *BotStore) beginInstallationCancellation(ctx context.Context, botID, spa
 		return nil, err
 	}
 	if i.State == "CANCELED" || i.State == "CANCELING" {
+		if i.State == "CANCELING" {
+			if _, err = frozenNativeCancelTx(ctx, tx, i, i.CancelOperationID); err != nil {
+				return nil, err
+			}
+		}
 		if i.State == "CANCELING" && admission != nil {
 			if err = s.ensureUninstallCleanupTx(ctx, tx, i, *admission); err != nil {
 				return nil, err
@@ -331,7 +336,10 @@ func (s *BotStore) beginInstallationCancellation(ctx context.Context, botID, spa
 		return nil, err
 	}
 	i.Chats = normalizedInstallationChats(chats)
-	i.CancelOperationID = uuid.New()
+	i.CancelOperationID, err = frozenNativeCancelTx(ctx, tx, i, uuid.Nil)
+	if err != nil {
+		return nil, err
+	}
 	i.State = "CANCELING"
 	raw, err := json.Marshal(i.Chats)
 	if err != nil {

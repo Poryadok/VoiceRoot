@@ -746,3 +746,29 @@ provider-controlled, not actual remote Role/Chat/Messaging admission. There is
 no public Gateway/Auth ingress, OS-process Bot restart or local journal retirement
 claim. The caller explicitly asserts local PENDING and absence of a Bot P3
 receipt; that remaining transition is the next original implementation stage.
+
+## Bot016 local target retirement (current implementation checkpoint)
+
+Canonical BE-170 c122/c123 requires an explicit local result, not a fabricated
+remote receipt. Bot016 seals expected opaque target/effect membership, retires
+only positively covered rich target projections, and commits the own Bot purge
+receipt in the same transaction. Ordinary journal completion can then use its
+own exact local result after the disposable intent is gone. Other global targets
+and both independent root-terminal obligations stay pending as required.
+The first frozen native cancellation is reused; divergent accepted IDs, unseen
+late chat lineage, missing effects/targets and expired claims fail closed.
+
+Meaningful causal checks are preserved: first-cancel identity RED8.214s to
+GREEN8.022s, and positive worker retirement RED4.765s to GREEN4.825s. Real PG
+retirement matrix8/8 passes27.045s; RC/RR and DOWN first-writer controls pass
+11.448s. The finite semantic correction run passes24 cases with two explicit
+optional handoff skips, apart from one new negative fixture which initially
+omitted mandatory added_by_profile_id; its corrected focused run passes.
+Earlier missing016 fixtures and obsolete unproved-Purge expectations remain in
+the failed raw logs, not relabeled as product REDs. Final short checks pass257
+with275 explicit skips; vet/build exit0. These skips do not prove integration.
+
+This checkpoint is not SOURCE ready: the immutable current candidate still
+needs positive local retirement composition against actual native49. Full
+evidence retention/compaction, nonempty remote Messaging coverage, historical
+unresolved-source resolution and full BE-170 completion remain open.

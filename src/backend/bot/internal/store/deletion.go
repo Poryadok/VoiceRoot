@@ -186,6 +186,9 @@ func (s *BotStore) beginBotDeletionAttempt(ctx context.Context, botID, owner uui
 			return nil, false, err
 		}
 	}
+	if err = sealLifecycleMembershipTx(ctx, tx, op); err != nil {
+		return nil, false, err
+	}
 	if _, err = tx.Exec(ctx, `UPDATE bots SET status='disabled',updated_at=now() WHERE id=$1`, botID); err != nil {
 		return nil, false, err
 	}
@@ -227,8 +230,13 @@ func (s *BotStore) snapshotDeletionTarget(ctx context.Context, tx pgx.Tx, op *Bo
 		t.ActorProfileID = i.ActorProfileID
 		t.Chats = append(t.Chats, i.Chats...)
 		t.LegacyEvidence = i.LegacyEvidence
-		if i.CancelOperationID != uuid.Nil {
-			t.CancelOperationID = i.CancelOperationID
+		candidate := i.CancelOperationID
+		if candidate == uuid.Nil && retained != nil {
+			candidate = retained.CancelOperationID
+		}
+		t.CancelOperationID, err = frozenNativeCancelTx(ctx, tx, i, candidate)
+		if err != nil {
+			return nil, err
 		}
 		if _, err = tx.Exec(ctx, `UPDATE bot_installation_intents SET state='CANCELING',cancel_operation_id=$2,updated_at=now() WHERE installation_id=$1`, i.InstallationID, t.CancelOperationID); err != nil {
 			return nil, err
@@ -309,5 +317,9 @@ func saveLifecycleTarget(ctx context.Context, tx pgx.Tx, t *BotDeletionTarget, p
 			return err
 		}
 	}
-	return nil
+	claim := &BotDeletion{Purpose: purpose, OperationID: t.OperationID}
+	if _, err = tx.Exec(ctx, lifecycleQuery(claim, `UPDATE bot_deletion_installations t SET effect_ids=ARRAY(SELECT e.effect_id FROM bot_deletion_effects e WHERE e.target_id=t.target_id ORDER BY e.effect_id) WHERE target_id=$1`), t.TargetID); err != nil {
+		return err
+	}
+	return sealLifecycleMembershipTx(ctx, tx, claim)
 }

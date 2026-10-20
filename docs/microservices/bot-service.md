@@ -469,8 +469,20 @@ credential binds each retry to the same saved body. Only an exact typed Space
 result, including the full native tuple, P3 manifest and request SHA, is saved;
 an uncertain ACK or malformed result leaves recoverable pending work. Saved
 results avoid another RPC, but do not themselves complete the local source or
-accepted cleanup journal. Positively covered journal retirement remains
-unfinished. Ordinary uninstall still accepts Empty
+accepted cleanup journal. Bot016 performs a separate guarded retirement after
+revalidating every required original, chat membership and native result against
+the frozen source and all currently accepted targets. It records an explicit
+local `LOCAL_P3_COVERED` result, retaining opaque root/target/effect membership
+and its own result identity/time while removing the completed target's rich
+Space/actor/chat/installation projection. This is not a remote participant
+receipt. Missing membership, divergent cancellation identity, uncovered late
+targets or expired claims roll back retirement and the Bot purge receipt
+together. The first frozen cancellation is reused for the same native tuple;
+already committed divergent identities are never rewritten. Global deletion's
+other targets and independent Role/Space terminal slots remain required.
+Existing unresolved historical cleanup bits are not cleared by a current
+covered Space. Full evidence retention cleanup remains unfinished.
+Ordinary uninstall still accepts Empty
 after its durable native ACK while independent typed cleanup remains pending.
 
 The message recipient producer, webhook worker and development polling send

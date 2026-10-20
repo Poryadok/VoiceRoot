@@ -173,7 +173,16 @@ Sticker/GIF bytes live in **`file_db`** (`files`); send payloads in **`messaging
 | `bot_uninstall_operations`, `bot_uninstall_installations`, `bot_uninstall_effects` | Migration `000012`; separate per-installation `space_uninstall` decision/source/receipt journal. The initiating account is a verified current Space manager, not necessarily Bot owner. Native Empty is only a local transport observation; Role/Messaging use typed receipts. No global terminal marker. Pending work and its referenced installation intent are retained; guarded DOWN refuses any journal rows. P3/retention reconciliation remains unfinished. |
 | `bots.retired_cleanup_unresolved` | Migration `000013`; ordinary Bot-level uncertainty bit set atomically before local Space purge erases actual unrepresented sources. No Space/chat/actor history, proof authority or retention clock. It prevents missing rows from falsely completing a global DeleteBot; owner revocation remains possible. Existing frozen global/pending-uninstall obligations remain in their own journals. DOWN requires RC, locks Bot writers and refuses any true bit. Retired snapshots/P3 proof adapters/post30day resolution remain unfinished BE-170 work. |
 | `bot_deletion_terminal_effects` | Migration `000014`; independent root-level Space/Role terminal obligations, including zero Space targets. No Space FK or actor snapshot. Sealed minimal requests/typed receipts retain exact SHA and root claim CAS. Old COMPLETE roots reopen only their missing obligations, preserving original decisions; no authority/receipt is fabricated. DOWN requires RC, serializes with root writers and refuses retained rows. Both typed callers and distinct receipt CAS are component-tested; actual native48 and Role receiver/catalog transport qualification remain unfinished BE-170 work. |
-| `bot_space_purge_handoffs`, `bot_space_purge_sources` | Migration `000015`; exact local irreversible P3 request and finite eligible installation/whitelist/unfinished-journal snapshots, captured under the Space guard and sorted Bot locks before any projection erasure. Native inputs include already-CANCELED accepted pending targets, retain their original cancellation and separately persist a P3 child ID. The accepted uninstall journal no longer has a FK to the disposable live intent. Nonempty snapshots remain pending until explicit downstream coverage/native-drain adoption is implemented; no missing-row or SQL-state completion. `bot_require_prepared_purge_handoff()` is a PUBLIC-execute-revoked INVOKER receipt-insert trigger: an old application lacking the prepared handoff rolls back its entire purge. RC-only DOWN serializes first writers, refuses retained handoff/source rows and refuses an accepted journal whose old live-intent FK cannot be restored. No new evidence clock, erasure authority or service grant. |
+| `bot_space_purge_handoffs`, `bot_space_purge_sources` | Migration `000015`; exact local irreversible P3 request and finite eligible installation/whitelist/unfinished-journal snapshots, captured under the Space guard and sorted Bot locks before any projection erasure. Native inputs include already-CANCELED accepted pending targets, retain their original cancellation and separately persist a P3 child ID. The accepted uninstall journal no longer has a FK to the disposable live intent. Nonempty snapshots remain pending until explicit downstream coverage/native-drain adoption and the016 local retirement transition succeed; no missing-row or SQL-state completion. `bot_require_prepared_purge_handoff()` is a PUBLIC-execute-revoked INVOKER receipt-insert trigger: an old application lacking the prepared handoff rolls back its entire purge. RC-only DOWN serializes first writers, refuses retained handoff/source rows and refuses an accepted journal whose old live-intent FK cannot be restored. No new evidence clock, erasure authority or service grant. |
+
+Bot016 adds sealed expected target/effect UUID membership and an explicit
+`LOCAL_P3_COVERED` target/effect arm to both accepted cleanup journals. A local
+result retains only opaque membership, its own result ID/version/time and the
+root binding; completed rich target fields and sealed effect request/receipt
+bytes are removed. Missing rows never satisfy the reducer. The retirement and
+own Bot purge receipt commit atomically under the existing claim/source guards.
+RC-only UP/DOWN serialize journal writers; DOWN refuses any retained local
+result. This introduces no remote receipt, evidence clock or compactor.
 
 The existing015 claim fields now fence due P3 recovery with a30-second lease.
 Private claim snapshots own request/source bytes; returned RPC inputs are
@@ -188,9 +197,11 @@ transport, then saves canonical typed result bytes under the same private
 source/claim guard. All native tuple, P3 binding, disposition and request SHA
 fields are validated; caller-owned byte slices are copied before SQL waits.
 Saved results are immutable and suppress redundant transport. They do not
-change source/header completion state. Explicit retired-journal completion,
-actual native49 transport composition and applicable retention cleanup remain
-separate unfinished work.
+change source/header completion state by themselves. The separate016 transition
+revalidates complete coverage and current accepted lineage before retiring the
+source/journal projection. Applicable full-evidence retention cleanup remains
+unfinished; native49 transport qualification is recorded separately from local
+retirement qualification.
 
 ---
 

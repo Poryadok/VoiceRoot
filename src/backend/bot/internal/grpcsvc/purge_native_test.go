@@ -25,7 +25,7 @@ import (
 	"voice/backend/pkg/principal"
 )
 
-func TestPurgeNativeWorkerPersistsExactTypedResultWithoutLocalCompletion(t *testing.T) {
+func TestPurgeNativeWorkerRecoversExactTypedResultAndRetiresCoveredSource(t *testing.T) {
 	if testing.Short() {
 		t.Skip("real BotPG P3 native persistence with controlled RSA Space receiver")
 	}
@@ -120,21 +120,25 @@ func TestPurgeNativeWorkerPersistsExactTypedResultWithoutLocalCompletion(t *test
 		_, err = pool.Exec(ctx, `UPDATE bot_space_purge_handoffs SET next_attempt_at=clock_timestamp() WHERE space_id=$1`, space)
 		require.NoError(t, err)
 		worked, e := svc.ProcessNextBotPurgeHandoff(ctx)
-		require.True(t, worked)
+		require.Equal(t, pass < 3, worked)
 		if pass == 0 {
 			require.Equal(t, codes.DeadlineExceeded, status.Code(e))
 		} else if pass == 1 {
 			require.Equal(t, codes.Unavailable, status.Code(e))
 		} else {
-			require.ErrorIs(t, e, store.ErrDeletionPending)
+			require.NoError(t, e)
 		}
 		var state string
 		require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM bot_space_purge_sources WHERE space_id=$1 AND bot_id=$2`, space, bot.ID).Scan(&state))
-		require.Equal(t, "PENDING", state)
+		if pass < 2 {
+			require.Equal(t, "PENDING", state)
+		} else {
+			require.Equal(t, "COVERED", state)
+		}
 	}
 	require.Equal(t, 3, calls, "the fourth pass validates the exact retained typed result without another RPC")
 	require.Equal(t, 1, reads)
 	var receiptCount int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM bot_space_lifecycle_purge_receipts WHERE space_id=$1`, space).Scan(&receiptCount))
-	require.Zero(t, receiptCount)
+	require.Equal(t, 1, receiptCount)
 }

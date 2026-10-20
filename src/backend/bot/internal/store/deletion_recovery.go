@@ -68,7 +68,7 @@ func (s *BotStore) LifecycleEffects(ctx context.Context, claim *BotDeletion) ([]
 }
 
 func (s *BotStore) lifecycleEffects(ctx context.Context, claim *BotDeletion, operation uuid.UUID) ([]BotDeletionEffect, error) {
-	rows, err := s.Pool.Query(ctx, lifecycleQuery(claim, `SELECT e.effect_id,t.scope_bytes,t.scope_sha256,e.kind,e.chat_id,e.request_bytes,e.request_sha256,e.receipt_bytes,e.receipt_sha256,e.state FROM bot_deletion_installations t JOIN bot_deletion_effects e ON e.target_id=t.target_id WHERE t.operation_id=$1 ORDER BY t.space_id,e.kind,e.chat_id NULLS FIRST`), operation)
+	rows, err := s.Pool.Query(ctx, lifecycleQuery(claim, `SELECT e.effect_id,t.scope_bytes,t.scope_sha256,e.kind,e.chat_id,e.request_bytes,e.request_sha256,e.receipt_bytes,e.receipt_sha256,e.state FROM bot_deletion_installations t JOIN bot_deletion_effects e ON e.target_id=t.target_id WHERE t.operation_id=$1 AND t.disposition='ACTIVE' ORDER BY t.space_id,e.kind,e.chat_id NULLS FIRST`), operation)
 	if err != nil {
 		return nil, err
 	}
@@ -243,6 +243,13 @@ func (s *BotStore) CompleteBotDeletion(ctx context.Context, claim *BotDeletion) 
 		return ErrInstallationConflict
 	}
 	if retiredUnresolved {
+		return ErrDeletionPending
+	}
+	accounted, _, err := lifecycleAccountingTx(ctx, tx, claim)
+	if err != nil {
+		return err
+	}
+	if !accounted {
 		return ErrDeletionPending
 	}
 	var terminals int

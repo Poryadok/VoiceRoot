@@ -274,10 +274,10 @@ func capturePurgeNativeDrains(source BotPurgeSource) ([]BotPurgeNativeDrain, err
 	return result, nil
 }
 
-func capturePurgeRetained(ctx context.Context, tx pgx.Tx, bot, space uuid.UUID, purpose string) ([]BotPurgeRetainedWork, error) {
+func capturePurgeRetained(ctx context.Context, tx pgx.Tx, bot, space uuid.UUID, purpose string, include ...uuid.UUID) ([]BotPurgeRetainedWork, error) {
 	// Purpose selects two closed repository-owned table families, never caller SQL.
 	claim := &BotDeletion{Purpose: purpose}
-	rows, err := tx.Query(ctx, lifecycleQuery(claim, `SELECT o.operation_id,o.decision_bytes,o.decision_sha256,t.scope_bytes,t.scope_sha256 FROM bot_deletion_operations o JOIN bot_deletion_installations t ON t.operation_id=o.operation_id WHERE t.bot_id=$1 AND t.space_id=$2 AND o.state<>'COMPLETE' ORDER BY o.operation_id FOR UPDATE OF o,t`), bot, space)
+	rows, err := tx.Query(ctx, lifecycleQuery(claim, `SELECT o.operation_id,o.decision_bytes,o.decision_sha256,t.scope_bytes,t.scope_sha256 FROM bot_deletion_operations o JOIN bot_deletion_installations t ON t.operation_id=o.operation_id WHERE t.bot_id=$1 AND t.space_id=$2 AND (o.state<>'COMPLETE' OR o.operation_id=ANY($3::uuid[])) ORDER BY o.operation_id FOR UPDATE OF o,t`), bot, space, include)
 	if err != nil {
 		return nil, err
 	}

@@ -197,8 +197,24 @@ func (s *BotStore) PurgeSpace(ctx context.Context, req *commonv1.SpacePurgeReque
 		}
 		return nil, ErrDeletionPending
 	}
-	if err = s.markRetiredCleanupUnresolved(ctx, tx, spaceID); err != nil {
+	receipt, err := s.finishPurgeSpaceTx(ctx, tx, req, spaceID, opID, generation, requestBytes, hash, false)
+	if err != nil {
 		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return receipt, nil
+}
+
+// This helper never commits. A nonempty positively covered retirement and the
+// own participant receipt share the caller's one guarded transaction.
+func (s *BotStore) finishPurgeSpaceTx(ctx context.Context, tx pgx.Tx, req *commonv1.SpacePurgeRequest, spaceID, opID uuid.UUID, generation int64, requestBytes []byte, hash [32]byte, positivelyCovered bool) (*commonv1.SpacePurgeReceipt, error) {
+	var err error
+	if !positivelyCovered {
+		if err = s.markRetiredCleanupUnresolved(ctx, tx, spaceID); err != nil {
+			return nil, err
+		}
 	}
 	// Match whitelist-before-delivery ordering. The exclusive Space guard excludes
 	// all message senders while cleanup rows and the terminal receipt commit.
@@ -233,6 +249,12 @@ WHERE e.space_id=$1 OR (e.event_type='message' AND e.space_id IS NULL AND EXISTS
 	if _, err = tx.Exec(ctx, `DELETE FROM bot_installation_intents WHERE space_id=$1`, spaceID); err != nil {
 		return nil, err
 	}
+	if _, err = tx.Exec(ctx, `DELETE FROM bot_chat_attachments WHERE space_id=$1`, spaceID); err != nil {
+		return nil, err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM bot_chat_scope_observations WHERE space_id=$1`, spaceID); err != nil {
+		return nil, err
+	}
 	now := timestamppb.Now()
 	receipt := &commonv1.SpacePurgeReceipt{ProtocolVersion: 1, ReceiptId: uuid.NewString(), SpaceId: spaceID.String(), DeletionOperationId: opID.String(), Generation: req.GetGeneration(), ParticipantId: commonv1.ParticipantId_PARTICIPANT_ID_BOT, State: commonv1.PurgeReceiptState_PURGE_RECEIPT_STATE_COMPLETED, RequestSha256: hash[:], CompletedAt: now}
 	receiptBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(receipt)
@@ -245,10 +267,7 @@ WHERE e.space_id=$1 OR (e.event_type='message' AND e.space_id IS NULL AND EXISTS
 	if _, err = tx.Exec(ctx, `INSERT INTO bot_space_lifecycle_purge_receipts(space_id,deletion_operation_id,generation,request_sha256,request_bytes,receipt_bytes) VALUES($1,$2,$3,$4,$5,$6)`, spaceID, opID, generation, hash[:], requestBytes, receiptBytes); err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec(ctx, `UPDATE bot_space_purge_handoffs SET state='COMPLETE',completed_at=$2 WHERE space_id=$1 AND state='COVERED' AND source_count=0`, spaceID, now.AsTime()); err != nil {
-		return nil, err
-	}
-	if err = tx.Commit(ctx); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE bot_space_purge_handoffs SET state='COMPLETE',completed_at=$2 WHERE space_id=$1 AND state='COVERED'`, spaceID, now.AsTime()); err != nil {
 		return nil, err
 	}
 	return receipt, nil

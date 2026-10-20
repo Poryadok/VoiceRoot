@@ -140,6 +140,9 @@ func (s *BotGRPC) ProcessNextBotPurgeHandoff(ctx context.Context) (bool, error) 
 		err = s.processPurgeNativeClaim(work, claim)
 	}
 	cancel()
+	if err == nil {
+		return true, nil
+	}
 	retry, retryCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer retryCancel()
 	if e := s.Store.RetryBotPurgeHandoff(retry, claim); e != nil {

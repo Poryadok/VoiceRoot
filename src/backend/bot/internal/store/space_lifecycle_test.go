@@ -68,6 +68,11 @@ func TestSpaceLifecycleFenceReplayAndPurgeOnlySpaceOwnedBotData(t *testing.T) {
 		ParticipantId: botcommonv1.ParticipantId_PARTICIPANT_ID_BOT, PurgeDecidedAt: timestamppb.New(time.Now().UTC()), Manifest: manifest,
 	}
 	purgeReceipt, err := st.PurgeSpace(ctx, purge)
+	require.ErrorIs(t, err, store.ErrDeletionPending, "nonempty source requires exact downstream handoff before purge")
+	claim, err := st.ClaimNextBotPurgeHandoff(ctx)
+	require.NoError(t, err)
+	saveRetirementEvidence(t, st, claim, bot.ID, true)
+	purgeReceipt, err = st.RetireBotPurgeHandoff(ctx, claim)
 	require.NoError(t, err)
 	require.Equal(t, botcommonv1.PurgeReceiptState_PURGE_RECEIPT_STATE_COMPLETED, purgeReceipt.GetState())
 	purgeReplay, err := st.PurgeSpace(ctx, proto.Clone(purge).(*botcommonv1.SpacePurgeRequest))

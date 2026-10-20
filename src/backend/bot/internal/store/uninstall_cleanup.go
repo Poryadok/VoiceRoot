@@ -206,6 +206,12 @@ func (s *BotStore) ClaimNextUninstallCleanup(ctx context.Context) (*BotDeletion,
 }
 
 func (s *BotStore) completeUninstallCleanup(ctx context.Context, claim *BotDeletion) error {
+	if claim == nil {
+		return ErrDeletionClaimLost
+	}
+	if retired, err := s.completeLocallyRetiredUninstall(ctx, claim); retired || err != nil {
+		return err
+	}
 	effects, err := s.LifecycleEffects(ctx, claim)
 	if err != nil {
 		return err
@@ -239,6 +245,13 @@ func (s *BotStore) completeUninstallCleanup(ctx context.Context, claim *BotDelet
 	}
 	if !current {
 		return ErrDeletionClaimLost
+	}
+	accounted, _, err := lifecycleAccountingTx(ctx, tx, claim)
+	if err != nil {
+		return err
+	}
+	if !accounted {
+		return ErrDeletionPending
 	}
 	var pending bool
 	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot_uninstall_effects e JOIN bot_uninstall_installations t ON t.target_id=e.target_id WHERE t.operation_id=$1 AND e.state<>'COMPLETE')`, claim.OperationID).Scan(&pending)

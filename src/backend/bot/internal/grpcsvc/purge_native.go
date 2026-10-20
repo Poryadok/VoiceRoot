@@ -78,7 +78,8 @@ func (s *BotGRPC) processPurgeNativeClaim(ctx context.Context, claim *store.BotP
 			}
 		}
 	}
-	// Own P3-native outcomes do not by themselves retire local accepted work.
-	// The next explicit atomic coverage/adoption transition still owns that step.
-	return store.ErrDeletionPending
+	// Full current source/accepted-target coverage is checked again inside the
+	// atomic local retirement and own participant-receipt transaction.
+	_, err := s.Store.RetireBotPurgeHandoff(ctx, claim)
+	return err
 }
