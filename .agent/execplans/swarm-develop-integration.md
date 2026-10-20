@@ -650,3 +650,11 @@ parity, old80messages/34RPC/3enums preservation and Role short/UserVoice
 compile/R23 checks are explicit; no oldH7 authority/fullmatrix/F13 PASS.
 Separate R and three-constant K carrier/loader/fixtures/review follow.
 416 e139 four-file F13 writer remains exclusive and disjoint.
+
+H8 loader follow-up: original preserved16 generated field was insufficient for
+two Voice Role mirrors already present in460context. Actual K51c rejection
+voice_projection_incomplete is preserved. Same-schema classification adds ONLY
+these two existing generated paths (16->18),94projection/460context unchanged.
+No helper/schema/guard exception or runtimeactivation. Ordinaryforward R2/K2
+records preserve priorhistory and require actualloader/negatives/fixtures and
+independent423 recordsemantic review before qualification claim.
