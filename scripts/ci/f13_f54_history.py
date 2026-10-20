@@ -1659,11 +1659,12 @@ def dag_dispositions(repo, events):
     return result
 
 
-def span_origin(repo, original_path, original_native_path, current_native_path):
+def span_origin(repo, original_path, original_native_path, current_native_path, author_capability_path=None):
     """Fixed old observation is provenance, never an admission record.
 
-    Only this exact missing two-node span is permitted. Current native pins
-    must be identical to the observed H4 context; a newer H5 is separate work.
+    Only this exact missing two-node span is permitted. Legacy callers retain
+    identical H4 pins. An explicit current AUTHOR certificate independently
+    qualifies distinct current authority without changing historical evidence.
     """
     raw=Path(original_path).read_bytes();require(sha(raw)==ORIGINAL_TRACE_SHA,'fixed_original_trace_hash')
     events=[json.loads(v) for v in raw.splitlines()];previous='0'*64
@@ -1685,7 +1686,26 @@ def span_origin(repo, original_path, original_native_path, current_native_path):
     require(value['delta']==raw_binding(git(repo,'diff','--name-only',SPAN_BASE,SPAN_HEAD)),'original_aggregate_delta')
     old_raw=Path(original_native_path).read_bytes();require(sha(old_raw)==ORIGINAL_NATIVE_SHA,'fixed_original_native_context')
     old=json.loads(old_raw);current_raw=Path(current_native_path).read_bytes();current=json.loads(current_raw)
-    require({k:v for k,v in old.items() if k not in ('source','target')}=={k:v for k,v in current.items() if k not in ('source','target')},'unchanged_inherited_native_pins')
+    author_fields={}
+    if author_capability_path is None:
+        require({k:v for k,v in old.items() if k not in ('source','target')}=={k:v for k,v in current.items() if k not in ('source','target')},'unchanged_inherited_native_pins')
+    else:
+        capability_raw=Path(author_capability_path).read_bytes()
+        capability=verified_capabilities(repo,author_capability_path)
+        require(capability['type']=='F54_FIXED_CURRENT_AUTHOR_CAPABILITIES','current_author_span_explicit_capability_type')
+        context={key:os.environ.get(key,'') for key in ('GITHUB_EVENT_NAME','GITHUB_REF','GITHUB_SHA','VOICE_CI_PUSH_BEFORE_SHA','GITHUB_BASE_REF')}
+        entry=master_context(repo,capability,current_raw,context)
+        require(entry['type']=='F54_EXPLICIT_MASTER_CURRENT_AUTHOR_ENTRY','current_author_span_actual_master_entry')
+        spec=importlib.util.spec_from_file_location('current_author_span_native',ROOT/'scripts/ci/f13_native_p3_source.py')
+        native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
+        native_applicability=current_author_J_native_applicability(repo,native,old,current)
+        # Reconstruct full authority before sealing it. Do not duplicate large
+        # source records/certificates in argv; consumers repeat reconstruction,
+        # so these are bindings to checked inputs, not supplied authority.
+        author_fields=dict(author_capability_path=str(Path(author_capability_path).resolve()),
+            author_capability=dict(bytes=len(capability_raw),sha256=sha(capability_raw)),
+            master_entry=dict(bytes=len(canonical(entry)),sha256=sha(canonical(entry))),
+            native_applicability=dict(bytes=len(canonical(native_applicability)),sha256=sha(canonical(native_applicability))))
     target=git(repo,'rev-parse','HEAD').decode().strip();target_parents=git(repo,'rev-list','--parents','-n','1',target).decode().split()[1:]
     require(current['target']==target and target_parents==[current['base'],current['source']],'actual_supplemental_current_target')
     require(git(repo,'rev-parse',target+'^{tree}').strip()==git(repo,'rev-parse',current['source']+'^{tree}').strip(),'supplemental_source_result_parity')
@@ -1693,10 +1713,12 @@ def span_origin(repo, original_path, original_native_path, current_native_path):
         path='scripts/ci/'+name
         require((ROOT/path).read_bytes()==git(repo,'show',target+':'+path),'actual_supplemental_observer_source_bytes')
     allowed={'scripts/ci/f13_f54_history.py','scripts/ci/f13_f54_history_test.py','scripts/ci/voice-db-runtime-provisioning-contract_test.sh','.agent/execplans/native-p3-master-source.md'}
-    require(set(git(repo,'diff','--name-only',PROTOTYPE_BASE,current['source']).decode().splitlines())<=allowed,'no_foreign_context_or_pin_drift')
+    if author_capability_path is None:
+        require(set(git(repo,'diff','--name-only',PROTOTYPE_BASE,current['source']).decode().splitlines())<=allowed,'no_foreign_context_or_pin_drift')
     retained=[e for e in events if e['kind']=='row_committed' and e['operation']==reference]
     require([e['payload']['path'] for e in retained]==value['paths'],'original_aggregate_all_committed_paths')
-    return dict(type='F54_FIXED_AGGREGATE_SPAN_OBSERVATION',original_trace_sha256=ORIGINAL_TRACE_SHA,
+    return dict(type='F54_FIXED_CURRENT_AUTHOR_AGGREGATE_SPAN_OBSERVATION' if author_capability_path is not None else 'F54_FIXED_AGGREGATE_SPAN_OBSERVATION',
+        **author_fields,original_trace_sha256=ORIGINAL_TRACE_SHA,
         original_operation=operation,original_frame=frame,original_classification=classified,
         original_committed=retained,original_native_sha256=ORIGINAL_NATIVE_SHA,current_native=current,
         current_native_sha256=sha(current_raw),supplemental_classifier=classifier_binding(),
@@ -1704,10 +1726,19 @@ def span_origin(repo, original_path, original_native_path, current_native_path):
         base=SPAN_BASE,head=SPAN_HEAD,allow_direct_followup='false',partition_source_history='true',admission=False)
 
 
+def span_author_origin(repo, original_path, original_native_path, current_native_path, author_capability_path):
+    return span_origin(repo,original_path,original_native_path,current_native_path,author_capability_path)
+
+
 def validate_aggregate_span(repo, original_path, span_path, span_sha, original_native_path, current_native_path):
-    origin=span_origin(repo,original_path,original_native_path,current_native_path)
     raw=Path(span_path).read_bytes();require(sha(raw)==span_sha,'supplemental_trace_raw_hash')
     events=[json.loads(v) for v in raw.splitlines()]
+    require(events and events[0]['kind']=='span_link','supplemental_origin_first_link')
+    supplied=events[0]['payload']
+    author_path=supplied.get('author_capability_path') if supplied.get('type')=='F54_FIXED_CURRENT_AUTHOR_AGGREGATE_SPAN_OBSERVATION' else None
+    if supplied.get('type')=='F54_FIXED_CURRENT_AUTHOR_AGGREGATE_SPAN_OBSERVATION':
+        require(isinstance(author_path,str) and bool(author_path),'current_author_span_explicit_capability_path')
+    origin=span_origin(repo,original_path,original_native_path,current_native_path,author_path)
     require(events and events[0]['kind']=='span_link' and events[0]['payload']==origin,'exact_observed_aggregate_link')
     require(sum(e['kind']=='span_link' for e in events)==1,'one_supplemental_link')
     verified=validate_trace(repo,span_path,span_sha)
@@ -2971,6 +3002,7 @@ def main():
             repo,path,digest,map_path,changed_path=args;value=load_collection(repo,path,digest,map_path)
             print('\n'.join(sorted(set(value['required_qualification'])-set(Path(changed_path).read_text().splitlines()))));return 0
         if command=='span-origin':print(json.dumps(span_origin(*args)));return 0
+        if command=='span-author-origin':print(json.dumps(span_author_origin(*args)));return 0
         if command=='span-validate':print(json.dumps(validate_aggregate_span(*args)));return 0
         if command=='unit-observe':print(json.dumps(observe_qualified_unit(*args)));return 0
         if command=='coverage':

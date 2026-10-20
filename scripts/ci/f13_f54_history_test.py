@@ -1586,6 +1586,133 @@ f13_retained_history_row() { return 1; }
         path,digest=self.forged_trace(m,out,events,'forged-sync-base.jsonl')
         with self.assertRaisesRegex(m.Rejected,'actual_sync_source_boundary'):m.validate_trace(self.repo,path,digest)
 
+    def current_author_span_fixture(self):
+        # Reuse the genuine complete-M/current native fixture, then create a
+        # distinct real aggregate with exactly two internal direct operations.
+        m,unit,_,context,old,_=self.current_author_J_fixture()
+        from f13_native_p3_source_test import native
+        base=git(self.repo,'rev-parse','HEAD')
+        self.write('docs/span-first.md','first lane\n');first_lane=self.commit('span first lane')
+        git(self.repo,'checkout','-qb','current-author-span',base)
+        name='protos/voice/span/v1/span.proto'
+        self.write(name,'first actual source\n');first=self.commit('span first actual node')
+        self.write('docs/span-side.md','second actual source\n');head=self.commit('span second actual node')
+        git(self.repo,'checkout','-q',first_lane);git(self.repo,'merge','--no-ff','-qm','span actual aggregate',head)
+        aggregate=git(self.repo,'rev-parse','HEAD')
+        self.base=base
+        p,original=self.collect(partition=False);self.assertEqual(p.returncode,0,p.stderr)
+        original_raw=(original/'trace.jsonl').read_bytes()
+        m.SPAN_BASE,m.SPAN_HEAD,m.SPAN_AGGREGATE,m.SPAN_NODES=base,head,aggregate,[first,head]
+        m.ORIGINAL_TRACE_SHA=m.sha(original_raw);m.ORIGINAL_PRODUCER_SHA=m.classifier_binding()['producer_sha256']
+        old_path=self.folder/'span-historical-native.json';old_path.write_bytes(m.canonical(old));m.ORIGINAL_NATIVE_SHA=m.sha(old_path.read_bytes())
+        m.AUTHOR_REFERENCE=aggregate;m.AUTHOR_REFERENCE_TREE=git(self.repo,'rev-parse',aggregate+'^{tree}')
+        m.AUTHOR_REFERENCE_DELTA_SHA=m.sha(m.git(self.repo,'diff','--raw','--no-abbrev','--no-renames',m.PROTOTYPE_BASE,aggregate))
+        target=git(self.repo,'commit-tree',aggregate+'^{tree}','-p',m.AUTHOR_EVENT_BASE,'-p',aggregate,'-m','actual current span target')
+        git(self.repo,'checkout','-q',target);context['GITHUB_SHA']=target
+        spec=importlib.util.spec_from_file_location('private_current_span_native',self.repo/native.VERIFIER_PATH)
+        authority=importlib.util.module_from_spec(spec);spec.loader.exec_module(authority)
+        current=authority.qualify(self.repo,m.AUTHOR_EVENT_BASE,aggregate,target,'pull_request',context['GITHUB_REF'],target,m.AUTHOR_EVENT_BASE,'master')
+        current_path=self.folder/'span-current-native.json';current_path.write_bytes(m.canonical(current))
+        capability=self.folder/'span-author-capability.json'
+        capability.write_bytes(m.canonical(m.prepare_author_capabilities(self.repo,unit)))
+        return m,original,old_path,current_path,capability,context,name,old,current
+
+    def test_current_author_span_separates_three_bases_and_reconstructs_link(self):
+        m,original,old_path,current_path,capability,context,name,old,current=self.current_author_span_fixture()
+        self.assertEqual(len({m.AUTHOR_HISTORICAL_SCOPE['base'],m.AUTHOR_NATIVE_CONTENT_BASE,m.AUTHOR_EVENT_BASE}),3)
+        original_raw=(original/'trace.jsonl').read_bytes();old_raw=old_path.read_bytes()
+        with patch.dict('os.environ',context):
+            # Before the adapter exists, exercise the actual old refusing
+            # predicate, not a missing-symbol/signature setup failure.
+            origin=(m.span_author_origin(self.repo,original/'trace.jsonl',old_path,current_path,capability)
+                if hasattr(m,'span_author_origin') else m.span_origin(self.repo,original/'trace.jsonl',old_path,current_path))
+            self.assertEqual(origin['type'],'F54_FIXED_CURRENT_AUTHOR_AGGREGATE_SPAN_OBSERVATION')
+            p,span=self.collect(target=m.SPAN_HEAD,allow=False,origin=origin);self.assertEqual(p.returncode,0,p.stderr)
+            result=m.validate_aggregate_span(self.repo,original/'trace.jsonl',span/'trace.jsonl',m.sha((span/'trace.jsonl').read_bytes()),old_path,current_path)
+        self.assertEqual([x['node'] for x in result['dispositions']],m.SPAN_NODES)
+        self.assertFalse(m.consume_span_aggregate(result,name,'false')['aggregate'])
+        self.assertEqual((original/'trace.jsonl').read_bytes(),original_raw);self.assertEqual(old_path.read_bytes(),old_raw)
+        self.assertNotEqual(old['record'],current['record']);self.assertNotEqual(old['base'],current['base'])
+        # No implicit adaptation of legacy callers when bindings differ.
+        with self.assertRaisesRegex(m.Rejected,'unchanged_inherited_native_pins'):
+            m.span_origin(self.repo,original/'trace.jsonl',old_path,current_path)
+
+    def test_current_author_span_rejects_rehashed_authority_and_real_tree_entry_forgery(self):
+        m,original,old_path,current_path,capability,context,name,old,current=self.current_author_span_fixture()
+        saved=capability.read_bytes()
+        with patch.dict('os.environ',context):
+            origin=m.span_author_origin(self.repo,original/'trace.jsonl',old_path,current_path,capability)
+            p,span=self.collect(target=m.SPAN_HEAD,allow=False,origin=origin);self.assertEqual(p.returncode,0,p.stderr)
+            events=[json.loads(x) for x in (span/'trace.jsonl').read_bytes().splitlines()]
+            for change in ('reference','carrier','historical_base','native_base','event_base','path','mode','oid','runtime','type'):
+                altered=json.loads(saved)
+                app=altered['author_applicability']
+                if change=='reference':app['reference']=m.SPAN_BASE
+                elif change=='carrier':app['current_carrier']=m.SPAN_AGGREGATE
+                elif change=='historical_base':app['historical_collector']['base']=m.AUTHOR_EVENT_BASE
+                elif change=='native_base':app['native_content_baseline']=m.AUTHOR_EVENT_BASE
+                elif change=='event_base':app['event_base']=m.AUTHOR_NATIVE_CONTENT_BASE
+                elif change=='path':app['reference_delta'].pop()
+                elif change in ('mode','oid'):
+                    # Mutate the actual serialized Git representation, not an
+                    # unused extra key in the entry dictionary (old c54 limit).
+                    item=next(x for x in app['reference_delta'] if x['current_entry'])
+                    raw=item['current_entry']
+                    item['current_entry']=(re.sub(r'^100644', '100755', raw) if change=='mode'
+                        else re.sub(r'[0-9a-f]{40}', '0'*40, raw, count=1))
+                    self.assertNotEqual(item['current_entry'],raw)
+                elif change=='runtime':app['runtime_pass']=True
+                else:altered['type']='F54_FIXED_COMPLETE_SOURCE_CAPABILITIES_PROTOTYPE'
+                capability.write_bytes(m.canonical(altered))
+                forged=json.loads(json.dumps(events))
+                forged[0]['payload']['author_capability']=dict(bytes=len(capability.read_bytes()),sha256=m.sha(capability.read_bytes()))
+                path,digest=self.forged_trace(m,span,forged,'author-certificate-'+change+'.jsonl')
+                with self.subTest(certificate=change),self.assertRaises(m.Rejected):
+                    m.validate_aggregate_span(self.repo,original/'trace.jsonl',path,digest,old_path,current_path)
+                capability.write_bytes(saved)
+            for change in ('base','content_base','source','target','record','record_sha256','snapshot','paths'):
+                altered=dict(current)
+                altered[change]=[] if change=='paths' else '0'*(64 if change=='record_sha256' else 40)
+                current_path.write_bytes(m.canonical(altered))
+                forged=json.loads(json.dumps(events));forged[0]['payload']['current_native']=altered
+                forged[0]['payload']['current_native_sha256']=m.sha(current_path.read_bytes())
+                path,digest=self.forged_trace(m,span,forged,'current-native-'+change+'.jsonl')
+                with self.subTest(native=change),self.assertRaises(m.Rejected):
+                    m.validate_aggregate_span(self.repo,original/'trace.jsonl',path,digest,old_path,current_path)
+            current_path.write_bytes(m.canonical(current))
+            for key in ('author_capability','master_entry','native_applicability'):
+                forged=json.loads(json.dumps(events));forged[0]['payload'][key]['sha256']='0'*64
+                path,digest=self.forged_trace(m,span,forged,'forged-reconstructed-'+key+'.jsonl')
+                with self.subTest(binding=key),self.assertRaisesRegex(m.Rejected,'exact_observed_aggregate_link'):
+                    m.validate_aggregate_span(self.repo,original/'trace.jsonl',path,digest,old_path,current_path)
+            with patch.dict('os.environ',dict(context,GITHUB_SHA=m.SPAN_AGGREGATE)),self.assertRaises(m.Rejected):
+                m.validate_aggregate_span(self.repo,original/'trace.jsonl',span/'trace.jsonl',m.sha((span/'trace.jsonl').read_bytes()),old_path,current_path)
+
+    def test_current_author_span_keeps_original_owner_content_map_and_or_obligations(self):
+        m,original,old_path,current_path,capability,context,name,old,current=self.current_author_span_fixture()
+        with patch.dict('os.environ',context):
+            origin=m.span_author_origin(self.repo,original/'trace.jsonl',old_path,current_path,capability)
+            p,span=self.collect(target=m.SPAN_HEAD,allow=False,origin=origin);self.assertEqual(p.returncode,0,p.stderr)
+            events=[json.loads(x) for x in (span/'trace.jsonl').read_bytes().splitlines()]
+            for change in ('owner','source','content','rawflag','frame','missing_operation','historical_origin','missing_author_capability'):
+                forged=json.loads(json.dumps(events))
+                if change in ('owner','source','content','rawflag'):
+                    index={'owner':2,'source':5,'content':6,'rawflag':1}[change]
+                    for event in forged:
+                        if event['kind'] in ('row_after','row_committed') and event['payload']['path']==name:
+                            parts=event['payload']['row']['raw'].split('\t');parts[index]='true' if change=='rawflag' else '0'*40
+                            event['payload']['row']=m.raw_binding('\t'.join(parts))
+                elif change=='frame':next(x for x in forged if x['kind']=='frame_enter')['payload']['base']=m.AUTHOR_EVENT_BASE
+                elif change=='missing_operation':forged=[x for x in forged if x.get('operation') is None or m.SPAN_NODES[0] not in x['operation']]
+                elif change=='historical_origin':forged[0]['payload']['original_trace_sha256']='0'*64
+                else:forged[0]['payload'].pop('author_capability_path')
+                path,digest=self.forged_trace(m,span,forged,'author-ledger-'+change+'.jsonl')
+                with self.subTest(ledger=change),self.assertRaises(m.Rejected):
+                    m.validate_aggregate_span(self.repo,original/'trace.jsonl',path,digest,old_path,current_path)
+            result=m.validate_aggregate_span(self.repo,original/'trace.jsonl',span/'trace.jsonl',m.sha((span/'trace.jsonl').read_bytes()),old_path,current_path)
+            with self.assertRaisesRegex(m.Rejected,'aggregate_span_consumer_must_keep_internal_taint'):
+                m.consume_span_aggregate(result,name,'true')
+
     def bound_span_fixture(self, hidden_runtime=False):
         self.write('README','first lane\n');first_lane=self.commit('first lane')
         git(self.repo,'checkout','-qb','span',self.base)

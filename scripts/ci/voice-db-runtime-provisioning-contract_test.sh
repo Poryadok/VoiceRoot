@@ -3273,10 +3273,16 @@ f13_f54_observe_child() {
 f13_f54_observe_span() {
   local repo="$1" original_trace="$2" original_native="$3" current_native="$4"
   local trace="$5" map="$6" category="$7" binding
+  local origin_command=span-origin
+  local -a origin_author_args=()
+  if [[ -n "${f13_f54_span_author_capability:-}" ]]; then
+    origin_command=span-author-origin
+    origin_author_args=("${f13_f54_span_author_capability}")
+  fi
   local f13_f54_trace_file="${trace}" f13_f54_frame='' f13_f54_operation=''
   [[ -n "${f13_f54_observer:-}" && ! -e "${trace}" && "${map}" != "${TMP_DIR}/f13-contributions" ]] || return 1
-  binding="$(python3 "${f13_f54_observer}" span-origin "${repo}" "${original_trace}" \
-    "${original_native}" "${current_native}")" || return 1
+  binding="$(python3 "${f13_f54_observer}" "${origin_command}" "${repo}" "${original_trace}" \
+    "${original_native}" "${current_native}" "${origin_author_args[@]}")" || return 1
   f13_f54_trace_event span_link "${repo}" "${binding}" || return 1
   # This is new supplemental evidence, not an original recursive call. Keep
   # the observed integration owner/map and propagate every genuine failure.
@@ -3326,6 +3332,10 @@ f13_f54_collect_master_author_impl() {
   local f13_f54_I_operation='' f13_f54_I_ledger="${TMP_DIR}/fixed3071-I-ledger.json" f13_f54_I_ledger_sha=''
   local f13_f54_J_operation='' f13_f54_J_ledger="${TMP_DIR}/fixed3071-J-ledger.json" f13_f54_J_ledger_sha=''
   local f13_f54_capability_file="${TMP_DIR}/f54-exact-source-capabilities.json"
+  local f13_f54_span_author_capability=''
+  if [[ "${capability_command}" == current-author-capabilities ]]; then
+    f13_f54_span_author_capability="${f13_f54_capability_file}"
+  fi
   local f13_f54_M_operation='' f13_f54_M_child_map="${TMP_DIR}/f54-actual-M-child-map"
   local f13_f54_M_span_trace="${TMP_DIR}/f54-actual-M-span.jsonl" f13_f54_M_span_map="${TMP_DIR}/f54-actual-M-span-map"
   local f13_f54_M_ledger="${TMP_DIR}/f54-actual-M-ledger.json" f13_f54_M_ledger_sha=''

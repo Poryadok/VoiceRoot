@@ -753,3 +753,40 @@ affected history suite passes 39/39 in 207.156s; Python AST and unchanged shell
 same unrelated C++ header warning, but remained alive without CPU/output;
 only the owned PID39288 running `graphify.exe update .` (CPU 0.02 after AST
 completion) was stopped. No graphify success is claimed.
+# Current AUTHOR supplemental-origin reconciliation (c90/c94)
+
+2026-10-20: the ONE reviewed6c9 AUTHOR wrapper ended with actual F13 EXIT1
+`unchanged_inherited_native_pins` after6546 events. Its immutable raw trace is
+SHA256 d69073f3c2768ab4e88175384b6d289240c01336512bcf05f09ac45b700297e0;
+collection/seal/original router were not reached. TT c91/e304 preserves all raw
+outputs and exact B/S/T. No rerun or qualification is inferred from this fix.
+
+Following c68 and explicit c90/c94 acceptance, the current AUTHOR caller now
+passes its checked fixed-current capability to a separately typed supplemental
+origin. The old trace/native binding remains immutable. The origin and span
+consumer independently reconstruct complete current applicability, actual
+native B/S/T qualification and historical/current source-record membership,
+entries, classification and ancestry before comparing sealed bindings. Large
+certificates/records are bound by hash/length after that reconstruction, avoiding
+duplicated raw JSON in argv. Legacy default keeps whole native-binding equality
+and the old prototype-only four-file restriction. No automatic fallback,
+native repin, owner/row/map/OR mutation or production authority is introduced.
+
+Risk-proportional test-first evidence: read-only actual6c9 span-origin command
+reproduced the exact refusal (stderr SHA d609d73e60519a812a314001a76bdc8a44cec00112c41fae62480fd9950adf43).
+A genuine private Git/native three-base/two-direct-node span test then failed
+on the same unchanged predicate (c95 log d962fd9909cddbf916ffee37877291cb999e35aeededabcfb3f189bc8deb0358).
+Focused positive passes, preserving original rows and legacy refusal. Authority
+and ledger negatives pass with updated hashes, including actual serialized Git
+mode/OID mutations, forged current record/source/event/native bases, omitted
+history/operation, owner/content/frame/map/OR changes and certificate drift at
+consumer time. The old c54 extra-key-only mode/OID limitation remains historical;
+the new literal-entry oracle covers this new current applicability certificate.
+All43 previous test bodies are AST-identical. The affected46-test suite passes
+in202.074s (log SHA2971ea360b6efddf6d1533d1631738cb386264508a497eb9d0e7e6fc908a7c3c).
+Graphify update under own claimc96/e317 completed exit0 in244.656s on these
+exact executable source hashes (log SHA7252b94b5fa7ac98d75028ffaf4790b6a61cca2d98f0d1a5faff7f5c07fb3283).
+The unrelated C++ header parse warning remains explicit; this is a graph update,
+not source qualification. Final receipts belong to the immutable source packet.
+Independent CODE review is required before any later
+separately authorized producer. No R/K, current CI, runtime or PR grant.
