@@ -15,6 +15,24 @@ import 'dart:convert' as $convert;
 import 'dart:core' as $core;
 import 'dart:typed_data' as $typed_data;
 
+@$core.Deprecated('Use botGlobalTerminalOutcomeDescriptor instead')
+const BotGlobalTerminalOutcome$json = {
+  '1': 'BotGlobalTerminalOutcome',
+  '2': [
+    {'1': 'BOT_GLOBAL_TERMINAL_OUTCOME_UNSPECIFIED', '2': 0},
+    {
+      '1': 'BOT_GLOBAL_TERMINAL_OUTCOME_BOT_ACTOR_ROLE_MUTATIONS_FENCED',
+      '2': 1
+    },
+  ],
+};
+
+/// Descriptor for `BotGlobalTerminalOutcome`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List botGlobalTerminalOutcomeDescriptor = $convert.base64Decode(
+    'ChhCb3RHbG9iYWxUZXJtaW5hbE91dGNvbWUSKwonQk9UX0dMT0JBTF9URVJNSU5BTF9PVVRDT0'
+    '1FX1VOU1BFQ0lGSUVEEAASPwo7Qk9UX0dMT0JBTF9URVJNSU5BTF9PVVRDT01FX0JPVF9BQ1RP'
+    'Ul9ST0xFX01VVEFUSU9OU19GRU5DRUQQAQ==');
+
 @$core.Deprecated('Use ownershipTransferStateDescriptor instead')
 const OwnershipTransferState$json = {
   '1': 'OwnershipTransferState',
@@ -273,6 +291,81 @@ final $typed_data.Uint8List applyBotInstallationRemovalResponseDescriptor =
     $convert.base64Decode(
         'CiNBcHBseUJvdEluc3RhbGxhdGlvblJlbW92YWxSZXNwb25zZRJGCgdyZWNlaXB0GAEgASgLMi'
         'wudm9pY2Uucm9sZS52MS5Cb3RJbnN0YWxsYXRpb25SZW1vdmFsUmVjZWlwdFIHcmVjZWlwdA==');
+
+@$core.Deprecated('Use registerBotGlobalTerminalRequestDescriptor instead')
+const RegisterBotGlobalTerminalRequest$json = {
+  '1': 'RegisterBotGlobalTerminalRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'bot_id', '3': 2, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'decision_id', '3': 3, '4': 1, '5': 9, '10': 'decisionId'},
+  ],
+};
+
+/// Descriptor for `RegisterBotGlobalTerminalRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List registerBotGlobalTerminalRequestDescriptor =
+    $convert.base64Decode(
+        'CiBSZWdpc3RlckJvdEdsb2JhbFRlcm1pbmFsUmVxdWVzdBIpChBwcm90b2NvbF92ZXJzaW9uGA'
+        'EgASgNUg9wcm90b2NvbFZlcnNpb24SFQoGYm90X2lkGAIgASgJUgVib3RJZBIfCgtkZWNpc2lv'
+        'bl9pZBgDIAEoCVIKZGVjaXNpb25JZA==');
+
+@$core.Deprecated('Use botGlobalTerminalReceiptDescriptor instead')
+const BotGlobalTerminalReceipt$json = {
+  '1': 'BotGlobalTerminalReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'participant', '3': 2, '4': 1, '5': 9, '10': 'participant'},
+    {'1': 'bot_id', '3': 3, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'decision_id', '3': 4, '4': 1, '5': 9, '10': 'decisionId'},
+    {'1': 'receipt_id', '3': 5, '4': 1, '5': 9, '10': 'receiptId'},
+    {
+      '1': 'registered_at',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'registeredAt'
+    },
+    {
+      '1': 'outcome',
+      '3': 7,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.role.v1.BotGlobalTerminalOutcome',
+      '10': 'outcome'
+    },
+  ],
+};
+
+/// Descriptor for `BotGlobalTerminalReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botGlobalTerminalReceiptDescriptor = $convert.base64Decode(
+    'ChhCb3RHbG9iYWxUZXJtaW5hbFJlY2VpcHQSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDVIPcH'
+    'JvdG9jb2xWZXJzaW9uEiAKC3BhcnRpY2lwYW50GAIgASgJUgtwYXJ0aWNpcGFudBIVCgZib3Rf'
+    'aWQYAyABKAlSBWJvdElkEh8KC2RlY2lzaW9uX2lkGAQgASgJUgpkZWNpc2lvbklkEh0KCnJlY2'
+    'VpcHRfaWQYBSABKAlSCXJlY2VpcHRJZBI/Cg1yZWdpc3RlcmVkX2F0GAYgASgLMhouZ29vZ2xl'
+    'LnByb3RvYnVmLlRpbWVzdGFtcFIMcmVnaXN0ZXJlZEF0EkEKB291dGNvbWUYByABKA4yJy52b2'
+    'ljZS5yb2xlLnYxLkJvdEdsb2JhbFRlcm1pbmFsT3V0Y29tZVIHb3V0Y29tZQ==');
+
+@$core.Deprecated('Use registerBotGlobalTerminalResponseDescriptor instead')
+const RegisterBotGlobalTerminalResponse$json = {
+  '1': 'RegisterBotGlobalTerminalResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.BotGlobalTerminalReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `RegisterBotGlobalTerminalResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List registerBotGlobalTerminalResponseDescriptor =
+    $convert.base64Decode(
+        'CiFSZWdpc3RlckJvdEdsb2JhbFRlcm1pbmFsUmVzcG9uc2USQQoHcmVjZWlwdBgBIAEoCzInLn'
+        'ZvaWNlLnJvbGUudjEuQm90R2xvYmFsVGVybWluYWxSZWNlaXB0UgdyZWNlaXB0');
 
 @$core.Deprecated('Use ensureDefaultMemberRoleRequestDescriptor instead')
 const EnsureDefaultMemberRoleRequest$json = {
