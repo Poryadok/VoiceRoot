@@ -694,3 +694,33 @@ matrix again passes25 tests with zero skips (store24.224s; grpc timing in raw
 packet), followed by vet/build0. Earlier short proof remains applicable except
 this one SQL expression and appended regression assertion; no final whole-short
 rerun is claimed solely from those unchanged cases.
+
+## Native P3 request and typed-result persistence
+
+The next component uses the frozen native49 DTO without changing authority or
+completion policy. After exact c89 coverage, the producer seals each native
+request before transport, preserving the actual original cancellation and its
+separate P3 child operation. The existing dedicated Space client receives a
+fresh pure service credential for each attempt. Exact typed receipt validation
+and claim/source CAS save owned result bytes; saved results avoid another RPC.
+No local source, accepted journal or Bot participant is completed by this arm.
+
+The final affected Linux race matrix passes34 tests including subtests, zero
+skips (Store15.676s, grpcsvc7.527s). Real BotPG checks include coverage-before-
+seal,15 malformed receipt cases, original accepted CANCELED identity, and
+caller byte mutation while blocked on the actual Space guard. A controlled
+RSA receiver proves sealed bytes exist before RPC and no SQL Space guard spans
+the call. Lost ACK and wrong typed result remain pending; a fresh JWT saves the
+same exact result, and the next pass makes no fourth RPC. This is controlled
+receiver proof, not actual native49 transport or a successful local retirement.
+An earlier callback assertion used BYTEA's hex text as JSON and failed setup;
+the corrected assertion decodes UTF-8 JSON and both failures/results remain in
+the packet. No missing-method failure is labeled a product causal RED.
+
+The remaining representation question is explicit local P3-covered retirement
+of accepted targets after disposable live intent removal. It must preserve
+ordinary accepted-ACK semantics and pending global roots, remove unnecessary
+completed Space/actor/chat scope, and never fabricate remote receipts or an
+expiry. Original specialist251 receives the exact source-backed finite question;
+actual native49 provider composition proceeds independently from immutable
+provider input, without borrowing a running process.

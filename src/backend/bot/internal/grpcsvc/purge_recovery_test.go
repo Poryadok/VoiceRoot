@@ -33,11 +33,21 @@ import (
 
 type purgeControlledSpace struct {
 	spacev1.SpaceServiceClient
-	call func(context.Context, *spacev1.GetBotPurgeHandoffRequest) (*spacev1.GetBotPurgeHandoffResponse, error)
+	call   func(context.Context, *spacev1.GetBotPurgeHandoffRequest) (*spacev1.GetBotPurgeHandoffResponse, error)
+	native func(context.Context, *spacev1.ReconcileBotPurgeInstallationRequest) (*spacev1.ReconcileBotPurgeInstallationResponse, error)
 }
 
 func (c purgeControlledSpace) GetBotPurgeHandoff(ctx context.Context, q *spacev1.GetBotPurgeHandoffRequest, _ ...grpc.CallOption) (*spacev1.GetBotPurgeHandoffResponse, error) {
 	return c.call(ctx, q)
+}
+
+func (c purgeControlledSpace) ReconcileBotPurgeInstallation(ctx context.Context, q *spacev1.ReconcileBotPurgeInstallationRequest, _ ...grpc.CallOption) (*spacev1.ReconcileBotPurgeInstallationResponse, error) {
+	// This earlier read-observation fixture deliberately leaves native work
+	// pending. The separate native receiver tests qualify that next arm.
+	if c.native != nil {
+		return c.native(ctx, q)
+	}
+	return nil, store.ErrDeletionPending
 }
 
 type purgeControlledMessaging struct {
@@ -239,6 +249,7 @@ func TestPurgeReadWorkerUsesExactPurePrincipalAndRetainsPendingNativeWork(t *tes
 					Version      int                                                                          `json:"version"`
 					SourceSHA256 []byte                                                                       `json:"source_sha256"`
 					Proofs       []struct{ Purge, HandoffRequest, Handoff, CoverageRequest, Coverage []byte } `json:"proofs"`
+					Native       []json.RawMessage                                                            `json:"native,omitempty"`
 				}
 				require.NoError(t, json.Unmarshal(raw, &envelope))
 				var bad spacev1.GetBotPurgeHandoffResponse

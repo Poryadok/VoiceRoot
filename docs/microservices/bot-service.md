@@ -461,8 +461,16 @@ batches of at most1000, with an immutable accepted prefix persisted between
 bounded worker passes. A saved observation is semantically revalidated before
 reuse. Claim expiry, exact irreversible decision and the complete source set
 are checked after database waits. These read observations keep the source
-PENDING; actual native P3 drain and positively covered journal retirement
-remain unfinished. Ordinary uninstall still accepts Empty
+PENDING. After all required read batches are present, the native caller seals
+each exact `ReconcileBotPurgeInstallation` request in that same observation
+before sending it through the dedicated Space connection. The separate P3
+operation preserves the original native add/cancel identity. A fresh pure Bot
+credential binds each retry to the same saved body. Only an exact typed Space
+result, including the full native tuple, P3 manifest and request SHA, is saved;
+an uncertain ACK or malformed result leaves recoverable pending work. Saved
+results avoid another RPC, but do not themselves complete the local source or
+accepted cleanup journal. Positively covered journal retirement remains
+unfinished. Ordinary uninstall still accepts Empty
 after its durable native ACK while independent typed cleanup remains pending.
 
 The message recipient producer, webhook worker and development polling send

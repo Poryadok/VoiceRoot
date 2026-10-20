@@ -293,6 +293,7 @@ type purgeCoverageObservation struct {
 	Version      int                             `json:"version"`
 	SourceSHA256 []byte                          `json:"source_sha256"`
 	Proofs       []purgeCoverageObservationProof `json:"proofs"`
+	Native       []purgeNativeObservation        `json:"native,omitempty"`
 }
 type purgeCoverageObservationProof struct {
 	Purge, HandoffRequest, Handoff, CoverageRequest, Coverage []byte
@@ -391,6 +392,18 @@ func (c *BotPurgeClaim) CoverageObservation(bot uuid.UUID) ([]BotPurgeCoveragePr
 		proofs = append(proofs, p)
 	}
 	canonical, err := c.coverageObservationBody(bot, proofs)
+	if err != nil {
+		return nil, ErrSpaceLifecycleConflict
+	}
+	if err = c.validateNativeObservations(bot, envelope.Native); err != nil {
+		return nil, err
+	}
+	var expected purgeCoverageObservation
+	if json.Unmarshal(canonical, &expected) != nil {
+		return nil, ErrSpaceLifecycleConflict
+	}
+	expected.Native = envelope.Native
+	canonical, err = json.Marshal(expected)
 	if err != nil || !bytes.Equal(canonical, saved.coverage) {
 		return nil, ErrSpaceLifecycleConflict
 	}

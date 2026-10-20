@@ -120,7 +120,7 @@ func (s *BotGRPC) processPurgeObservationClaim(ctx context.Context, claim *store
 	}
 	// Native drain and explicit journal retirement are separate obligations.
 	// Accepted read observations alone never complete the Bot P3 participant.
-	return store.ErrDeletionPending
+	return nil
 }
 
 func (s *BotGRPC) ProcessNextBotPurgeHandoff(ctx context.Context) (bool, error) {
@@ -136,6 +136,9 @@ func (s *BotGRPC) ProcessNextBotPurgeHandoff(ctx context.Context) (bool, error) 
 	}
 	work, cancel := context.WithTimeout(ctx, 25*time.Second)
 	err = s.processPurgeObservationClaim(work, claim)
+	if err == nil {
+		err = s.processPurgeNativeClaim(work, claim)
+	}
 	cancel()
 	retry, retryCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer retryCancel()

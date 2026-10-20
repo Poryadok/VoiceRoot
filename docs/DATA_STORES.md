@@ -183,8 +183,14 @@ SHA and accepted batch prefix are immutable; appending validated batches does
 not replace an original receipt or reset a completion timestamp. The source
 remains PENDING with no `covered_at`; this arm alone is not native drain or
 participant completion. Saving it rechecks the full source set and claim after
-Space/Bot/row waits. Native receipt adoption, explicit retired-journal completion
-and the already applicable retention cleanup remain separate unfinished work.
+Space/Bot/row waits. Its optional native arm seals exact request bytes before
+transport, then saves canonical typed result bytes under the same private
+source/claim guard. All native tuple, P3 binding, disposition and request SHA
+fields are validated; caller-owned byte slices are copied before SQL waits.
+Saved results are immutable and suppress redundant transport. They do not
+change source/header completion state. Explicit retired-journal completion,
+actual native49 transport composition and applicable retention cleanup remain
+separate unfinished work.
 
 ---
 
