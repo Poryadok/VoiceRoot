@@ -239,5 +239,51 @@ class BotGlobalTerminalOutcome extends $pb.ProtobufEnum {
   const BotGlobalTerminalOutcome._(super.value, super.name);
 }
 
+class BotPurgeInstallationDisposition extends $pb.ProtobufEnum {
+  static const BotPurgeInstallationDisposition
+      BOT_PURGE_INSTALLATION_DISPOSITION_UNSPECIFIED =
+      BotPurgeInstallationDisposition._(
+          0,
+          _omitEnumNames
+              ? ''
+              : 'BOT_PURGE_INSTALLATION_DISPOSITION_UNSPECIFIED');
+  static const BotPurgeInstallationDisposition
+      BOT_PURGE_INSTALLATION_DISPOSITION_NATIVE_CANCELED =
+      BotPurgeInstallationDisposition._(
+          1,
+          _omitEnumNames
+              ? ''
+              : 'BOT_PURGE_INSTALLATION_DISPOSITION_NATIVE_CANCELED');
+  static const BotPurgeInstallationDisposition
+      BOT_PURGE_INSTALLATION_DISPOSITION_NATIVE_ALREADY_CANCELED =
+      BotPurgeInstallationDisposition._(
+          2,
+          _omitEnumNames
+              ? ''
+              : 'BOT_PURGE_INSTALLATION_DISPOSITION_NATIVE_ALREADY_CANCELED');
+  static const BotPurgeInstallationDisposition
+      BOT_PURGE_INSTALLATION_DISPOSITION_NATIVE_NEGATIVE_INTENT_FENCED =
+      BotPurgeInstallationDisposition._(
+          3,
+          _omitEnumNames
+              ? ''
+              : 'BOT_PURGE_INSTALLATION_DISPOSITION_NATIVE_NEGATIVE_INTENT_FENCED');
+
+  static const $core.List<BotPurgeInstallationDisposition> values =
+      <BotPurgeInstallationDisposition>[
+    BOT_PURGE_INSTALLATION_DISPOSITION_UNSPECIFIED,
+    BOT_PURGE_INSTALLATION_DISPOSITION_NATIVE_CANCELED,
+    BOT_PURGE_INSTALLATION_DISPOSITION_NATIVE_ALREADY_CANCELED,
+    BOT_PURGE_INSTALLATION_DISPOSITION_NATIVE_NEGATIVE_INTENT_FENCED,
+  ];
+
+  static final $core.List<BotPurgeInstallationDisposition?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 3);
+  static BotPurgeInstallationDisposition? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const BotPurgeInstallationDisposition._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');

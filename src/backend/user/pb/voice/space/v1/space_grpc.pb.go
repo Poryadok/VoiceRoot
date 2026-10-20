@@ -83,6 +83,7 @@ const (
 	SpaceService_ApplyBotInstallationRemoval_FullMethodName       = "/voice.space.v1.SpaceService/ApplyBotInstallationRemoval"
 	SpaceService_GetBotPurgeHandoff_FullMethodName                = "/voice.space.v1.SpaceService/GetBotPurgeHandoff"
 	SpaceService_RegisterBotGlobalTerminal_FullMethodName         = "/voice.space.v1.SpaceService/RegisterBotGlobalTerminal"
+	SpaceService_ReconcileBotPurgeInstallation_FullMethodName     = "/voice.space.v1.SpaceService/ReconcileBotPurgeInstallation"
 )
 
 // SpaceServiceClient is the client API for SpaceService service.
@@ -204,6 +205,8 @@ type SpaceServiceClient interface {
 	// Minimal all-Add fence from Bot's committed verified-owner global root.
 	// @voice.security=protected;callers=service:bot
 	RegisterBotGlobalTerminal(ctx context.Context, in *RegisterBotGlobalTerminalRequest, opts ...grpc.CallOption) (*RegisterBotGlobalTerminalResponse, error)
+	// Exact own irreversible P3 decision authorizes this native-only drain.
+	ReconcileBotPurgeInstallation(ctx context.Context, in *ReconcileBotPurgeInstallationRequest, opts ...grpc.CallOption) (*ReconcileBotPurgeInstallationResponse, error)
 }
 
 type spaceServiceClient struct {
@@ -854,6 +857,16 @@ func (c *spaceServiceClient) RegisterBotGlobalTerminal(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *spaceServiceClient) ReconcileBotPurgeInstallation(ctx context.Context, in *ReconcileBotPurgeInstallationRequest, opts ...grpc.CallOption) (*ReconcileBotPurgeInstallationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReconcileBotPurgeInstallationResponse)
+	err := c.cc.Invoke(ctx, SpaceService_ReconcileBotPurgeInstallation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SpaceServiceServer is the server API for SpaceService service.
 // All implementations must embed UnimplementedSpaceServiceServer
 // for forward compatibility.
@@ -973,6 +986,8 @@ type SpaceServiceServer interface {
 	// Minimal all-Add fence from Bot's committed verified-owner global root.
 	// @voice.security=protected;callers=service:bot
 	RegisterBotGlobalTerminal(context.Context, *RegisterBotGlobalTerminalRequest) (*RegisterBotGlobalTerminalResponse, error)
+	// Exact own irreversible P3 decision authorizes this native-only drain.
+	ReconcileBotPurgeInstallation(context.Context, *ReconcileBotPurgeInstallationRequest) (*ReconcileBotPurgeInstallationResponse, error)
 	mustEmbedUnimplementedSpaceServiceServer()
 }
 
@@ -1174,6 +1189,9 @@ func (UnimplementedSpaceServiceServer) GetBotPurgeHandoff(context.Context, *GetB
 }
 func (UnimplementedSpaceServiceServer) RegisterBotGlobalTerminal(context.Context, *RegisterBotGlobalTerminalRequest) (*RegisterBotGlobalTerminalResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterBotGlobalTerminal not implemented")
+}
+func (UnimplementedSpaceServiceServer) ReconcileBotPurgeInstallation(context.Context, *ReconcileBotPurgeInstallationRequest) (*ReconcileBotPurgeInstallationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReconcileBotPurgeInstallation not implemented")
 }
 func (UnimplementedSpaceServiceServer) mustEmbedUnimplementedSpaceServiceServer() {}
 func (UnimplementedSpaceServiceServer) testEmbeddedByValue()                      {}
@@ -2348,6 +2366,24 @@ func _SpaceService_RegisterBotGlobalTerminal_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SpaceService_ReconcileBotPurgeInstallation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReconcileBotPurgeInstallationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).ReconcileBotPurgeInstallation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_ReconcileBotPurgeInstallation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).ReconcileBotPurgeInstallation(ctx, req.(*ReconcileBotPurgeInstallationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SpaceService_ServiceDesc is the grpc.ServiceDesc for SpaceService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2610,6 +2646,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RegisterBotGlobalTerminal",
 			Handler:    _SpaceService_RegisterBotGlobalTerminal_Handler,
+		},
+		{
+			MethodName: "ReconcileBotPurgeInstallation",
+			Handler:    _SpaceService_ReconcileBotPurgeInstallation_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
