@@ -83,6 +83,10 @@ func TestRole26CatalogServingACL(t *testing.T) {
 		})
 	}
 	for _, c := range []struct{ name, change, undo string }{
+		{"missing_root_unique", "ALTER TABLE public.role_bot_global_terminals DROP CONSTRAINT role_bot_global_terminals_decision_id_key", "ALTER TABLE public.role_bot_global_terminals ADD CONSTRAINT role_bot_global_terminals_decision_id_key UNIQUE(decision_id)"},
+		{"extra_personal_column", "ALTER TABLE public.role_bot_global_terminals ADD COLUMN actor_profile_id UUID", "ALTER TABLE public.role_bot_global_terminals DROP COLUMN actor_profile_id"},
+		{"extra_guard", "CREATE TRIGGER role26_extra BEFORE DELETE ON public.role_bot_global_terminals FOR EACH STATEMENT EXECUTE FUNCTION public.role_bot_removal_immutable()", "DROP TRIGGER role26_extra ON public.role_bot_global_terminals"},
+		{"clock_default", "ALTER TABLE public.role_bot_global_terminals ALTER COLUMN registered_at SET DEFAULT '2000-01-01'::timestamptz", "ALTER TABLE public.role_bot_global_terminals ALTER COLUMN registered_at SET DEFAULT clock_timestamp()"},
 		{"public_acl", "GRANT SELECT ON public.role_bot_global_terminals TO PUBLIC", "REVOKE ALL ON public.role_bot_global_terminals FROM PUBLIC"},
 		{"schema_create", "GRANT CREATE ON SCHEMA public TO " + id, "REVOKE CREATE ON SCHEMA public FROM " + id},
 		{"disabled_guard", "ALTER TABLE public.role_bot_global_terminals DISABLE TRIGGER role_bot_global_terminals_guard", "ALTER TABLE public.role_bot_global_terminals ENABLE TRIGGER role_bot_global_terminals_guard"},
