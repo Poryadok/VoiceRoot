@@ -416,6 +416,115 @@ f13_retained_history_row() { return 1; }
         # These are transport events, not real engine observations.
         with self.assertRaises(m.Rejected):m.validate_trace(self.repo,trace,m.sha(trace.read_bytes()))
 
+    def test_J_transition_cannot_borrow_M_ledger_transport(self):
+        # Private transport forgery, not an observed J classification or row.
+        m=module();name=PROTO;op='private/'+m.J3071+'/2'
+        incoming='\t'.join((name,'false',m.J3071,m.J3071_P1,m.J3071_O,m.J3071_P2,m.J3071_P1,','.join(m.J3071_BASES)))
+        empty=dict(bytes=0,sha256=m.sha(b''))
+        before=dict(kind='row_before',operation=op,sequence=1,payload=dict(path=name,map_before=empty,prior_rows=[],incoming=m.raw_binding(incoming)))
+        trace=self.folder/'private-J-as-M-trace';trace.write_text(json.dumps(before)+'\n')
+        value=dict(type='F54_ACTUAL_M_COMPLETE_RETAINED_LEDGER',admission=False,operation=op,
+            prefix=empty,operation_binding=dict(commit=m.J3071,paths=[name]),outer_rows=[],
+            required_qualification={name:dict(aggregate=True,retained_evidence=[dict(private_fixture=True)])})
+        ledger=self.folder/'private-J-as-M-ledger';ledger.write_bytes(m.canonical(value))
+        with self.assertRaises(m.Rejected):
+            m.consume_M_path(ledger,m.sha(ledger.read_bytes()),trace,name,b'',incoming,'append')
+
+    def test_private_J_prior_span_requires_all_five_real_operations_and_full_map(self):
+        # Actual temporary Git/collector evidence under an explicit private
+        # authority boundary. This does not qualify the fixed production J.
+        m=module();self.hidden_runtime();nodes=[self.first,self.head]
+        for index in range(3):
+            self.write(PROTO,'private supplemental '+str(index)+'\n')
+            nodes.append(self.commit('private supplemental direct '+str(index)))
+        origin=dict(type='PRIVATE_J_PRIOR_AUTHORITY_FIXTURE',admission=False)
+        run,out=self.collect(target=nodes[-1],partition=False,origin=origin,origin_kind='J_prior_span_link')
+        self.assertEqual(run.returncode,0,run.stderr)
+        m.J3071_PRIOR_SPAN=dict(base=self.base,target=nodes[-1],nodes=nodes)
+        # Only authority is mocked; operation/parent/delta/classifier/map and
+        # append-only evidence validation below still executes normally.
+        m.verify_J_prior_origin=lambda repo,value:self.assertEqual(value,origin)
+        trace=out/'trace.jsonl';raw=trace.read_bytes();events=[json.loads(x) for x in raw.splitlines()]
+        value=m.verify_J_prior_span(self.repo,origin,trace,out/'map')
+        self.assertEqual(len(value['actual_operations']),5)
+        self.assertTrue(value['ledger']['paths'][RUNTIME]['aggregate'])
+        self.assertEqual(len(value['classifications']),5)
+        for error in ('drop-whole-operation','classification-flag','frame-flags','node-order','map-bytes','missing-root-exit'):
+            changed=json.loads(json.dumps(events));map_path=out/'map';original_nodes=list(m.J3071_PRIOR_SPAN['nodes'])
+            if error=='drop-whole-operation':
+                operation=next(e['operation'] for e in changed if e['kind']=='operation_begin')
+                changed=[e for e in changed if e['operation']!=operation]
+            elif error=='classification-flag':
+                event=next(e for e in changed if e['kind']=='classification')
+                event['payload']['trigger']='false' if event['payload']['trigger']=='true' else 'true'
+            elif error=='frame-flags':
+                next(e for e in changed if e['kind']=='frame_enter')['payload']['partition_source_history']='true'
+            elif error=='node-order':m.J3071_PRIOR_SPAN['nodes']=list(reversed(original_nodes))
+            elif error=='map-bytes':
+                map_path=out/'forged-map';map_path.write_bytes((out/'map').read_bytes()+b'forged\n')
+            else:changed=[e for e in changed if e['kind']!='frame_exit']
+            forged=out/('forged-'+error+'.jsonl');m.write_events(forged,changed)
+            expected='closed_frames' if error=='missing-root-exit' else '.'
+            with self.subTest(error=error),self.assertRaisesRegex(m.Rejected,expected):
+                m.verify_J_prior_span(self.repo,origin,forged,map_path)
+            m.J3071_PRIOR_SPAN['nodes']=original_nodes
+
+    def test_private_J_consumer_retains_prior_span_true_without_rewriting_append(self):
+        # Transport/conservation fixture only: its real temporary source traces
+        # do not qualify the fixed production J boundary or the five-node span.
+        m=module();self.hidden_runtime();middle=self.head
+        self.write(PROTO,'J private final false\n');tail=self.commit('private J transport')
+        side_run,side=self.collect(target=tail,partition=False)
+        self.assertEqual(side_run.returncode,0,side_run.stderr)
+        side_raw=(side/'trace.jsonl').read_bytes();side_value=m.validate_trace(self.repo,side/'trace.jsonl',m.sha(side_raw))
+        side_ledger=side_value['ledger'][side_value['root_frame']]
+        old_base=self.base;self.base=middle
+        main_run,main=self.collect(target=tail,partition=False);self.base=old_base
+        self.assertEqual(main_run.returncode,0,main_run.stderr)
+        events=[json.loads(x) for x in (main/'trace.jsonl').read_bytes().splitlines()]
+        before=next(e for e in events if e['kind']=='row_before' and e['payload']['path']==PROTO)
+        classification=next(e['payload'] for e in events if e['kind']=='classification')
+        binding=next(e['payload'] for e in events if e['kind']=='operation_begin')
+        incoming=before['payload']['incoming']['raw'];self.assertEqual(incoming.split('\t')[1],'false')
+        # Only this private transport identity is synthetic; raw source rows,
+        # classifier and prior-span evidence above come from temporary traces.
+        before['operation']='private/'+tail+'/2'
+        prefix=b''.join((main/'trace.jsonl').read_bytes().splitlines(keepends=True)[:before['sequence']-1])
+        trace=self.folder/'J-private-trace';trace.write_bytes(prefix+json.dumps(before,sort_keys=True).encode()+b'\n')
+        empty=dict(bytes=0,sha256=m.sha(b''));frame=before['frame'];m.J3071=tail
+        span=dict(ledger=side_ledger,trace_sha256=m.sha(side_raw),actual_operations=[e['operation'] for e in map(json.loads,side_raw.splitlines()) if e['kind']=='operation_begin'])
+        state=dict(frame=frame,operation=before['operation'],operation_binding=binding,classification=classification,
+            capability_sha256='private-fixture-only',frame_ancestry=[],ledger={frame:dict(map_binding=empty,rows=[],paths={})},
+            coverage=[],prior_span=span,M_ready={},I_ready={},composition={})
+        ready=m.build_3071_J_ready(state,dict(bytes=len(prefix),sha256=m.sha(prefix)))
+        self.assertTrue(ready['required_qualification'][PROTO]['aggregate'])
+        self.assertEqual(ready['required_qualification'][PROTO]['prior_span_evidence'][0]['evidence'],side_ledger['paths'][PROTO]['evidence'])
+        # A reverted runtime path outside J's final delta must reach collection
+        # with its prior true and actual owner evidence, not just net paths.
+        self.assertNotIn(RUNTIME,binding['paths'])
+        required=m.include_typed_collection_required({}, {}, {ready['operation']:ready})
+        self.assertTrue(required[RUNTIME]['aggregate'])
+        self.assertEqual(required[RUNTIME]['retained_evidence'][0]['evidence'],ready['required_qualification'][RUNTIME])
+        forged=json.loads(json.dumps(ready));forged['required_qualification'][RUNTIME]['aggregate']=1
+        with self.assertRaises(m.Rejected):m.include_typed_collection_required({}, {}, {forged['operation']:forged})
+        ledger=self.folder/'J-private-ledger';ledger.write_bytes(m.canonical(ready));digest=m.sha(ledger.read_bytes())
+        receipt=m.consume_3071_J_path(ledger,digest,trace,PROTO,b'',incoming,'append')
+        self.assertTrue(receipt['aggregate']);self.assertEqual(receipt['after_gate_row']['raw'],incoming)
+        for error in ('drop-true','drop-owner-evidence','integer-aggregate','normalize-append','wrong-source','wrong-owner','wrong-map','M-type'):
+            value=json.loads(json.dumps(ready));after=incoming;actual=b''
+            if error=='drop-true':value['required_qualification'][PROTO]['aggregate']=False
+            elif error=='drop-owner-evidence':value['required_qualification'][PROTO]['prior_span_evidence']=[]
+            elif error=='integer-aggregate':value['required_qualification'][PROTO]['aggregate']=1
+            elif error=='normalize-append':
+                parts=incoming.split('\t');parts[1]='true';after='\t'.join(parts)
+            elif error in ('wrong-source','wrong-owner'):
+                parts=incoming.split('\t');parts[5 if error=='wrong-source' else 2]=middle;after='\t'.join(parts)
+            elif error=='wrong-map':actual=b'foreign map\n'
+            else:value['type']='F54_ACTUAL_M_COMPLETE_RETAINED_LEDGER'
+            ledger.write_bytes(m.canonical(value))
+            with self.subTest(error=error),self.assertRaises(m.Rejected):
+                m.consume_3071_J_path(ledger,m.sha(ledger.read_bytes()),trace,PROTO,actual,after,'append')
+
     def test_private_I_consumer_keeps_actual_side_true_and_raw_false_main_row(self):
         # Private transport/oracles only. These are real temporary collector
         # traces, not production I/J observations or an exact-nine qualification.
@@ -752,7 +861,7 @@ f13_retained_history_row() { return 1; }
         git(self.repo, 'add', '.'); git(self.repo, 'commit', '-qm', message)
         return git(self.repo, 'rev-parse', 'HEAD')
 
-    def collect(self, target=None, cross_scope=False, partition=True, allow=True, origin=None):
+    def collect(self, target=None, cross_scope=False, partition=True, allow=True, origin=None, origin_kind='span_link'):
         out = self.folder / ('out' + str(len(list(self.folder.iterdir())))); out.mkdir()
         for name in ('game-checkpoint-tree', 'be255-checkpoint-tree'): (out / name).write_text('')
         extra_names = {'f13_cross_scope_path_allowed'}
@@ -766,7 +875,13 @@ f13_retained_history_row() { return 1; }
             f13_f54_trace_file=str(out / 'trace.jsonl'), f13_f54_observer=str(HELPER))
         program = 'set -eu\n' + definitions() + '\n' + extra + '\n'
         program += '\n'.join(k + '=' + shlex.quote(v) for k, v in values.items()) + '\n'
-        if origin is not None:program+='f13_f54_trace_event span_link "$ROOT" '+shlex.quote(json.dumps(origin))+'\n'
+        if origin is not None:
+            if origin_kind=='J_prior_span_link':
+                origin_path=out/'fixture-origin.json';origin_path.write_text(json.dumps(origin))
+                program+='f13_f54_trace_event J_prior_span_link "$ROOT" '+shlex.quote(str(origin_path))+'\n'
+            else:
+                self.assertEqual(origin_kind,'span_link')
+                program+='f13_f54_trace_event span_link "$ROOT" '+shlex.quote(json.dumps(origin))+'\n'
         program += f'f13_collect_develop_contributions "$ROOT" {self.base} {target or git(self.repo,"rev-parse","HEAD")} "$TMP_DIR/map" "$TMP_DIR/category" {str(allow).lower()} {str(partition).lower()}\n'
         if cross_scope: program += 'f13_cross_scope_path_allowed ' + shlex.quote(PROTO) + ' true\n'
         p = subprocess.run(['bash', '-c', program], capture_output=True, text=True)

@@ -446,3 +446,63 @@ reference. Frozen5b affected46 tests/syntax and AST passed before correction.
 Original5b wrapper65645 remains a separate immutable execution, never fixed
 source PASS. Current source still requires frozen corrective review and actual
 successor execution; J/full collection/router/RK/CI/MASTER remain HOLD.
+
+## Classified J complete-ledger continuation after actual c357
+
+Actual c357 wrapper99035 ended driver0/F13 EXIT1 at the explicit
+`fixed3071_complete_ledger_pending` barrier (9904 events, trace
+`bcfd88ca601824f8dd0801703b6f697d67af6e19a510afa88dc6deacfa9653e9`).
+Read-only41922 validates 23 frames/202 operations, actual manual full33 gates,
+rawtrue classification, ten F/D rows,23 associations/manual-end and all61
+I conservation/committed transitions. The child exits0. Neither J classification
+nor J rows/collection/router is observed. Preserve the full terminal packet
+`416-F-c357-terminal-manifest-v1.json` (`d0ee6d21...`) and prior frozen8441
+observation (`24da63b5...`, independent418c40 prefix CLEAR only).
+
+Continue the existing exact3071 contract5862f23d and manual whole-composition
+contract d5da0faa. The next constructor consumes the actual complete child and
+unchanged outer prefix, all M/I/manual/deletion obligations and the original J
+classification before each dependent mutation. It adds no duplicate/source
+supersession authority and does not move the original final router.
+
+Early factual census: all52 J source-side nodes have real operation references.
+The73-node prior/source closure additionally needs four existing exact-single-
+commit source references and five prior internal nodes in the original dc0
+aggregate D4dabb->645d9c. A separate genuine source-only supplemental observation
+must cover those five; preserve original dc0 owner/map/rawflag and distinguish
+new observation provenance. No Git inventory or synthetic row supplies that
+history. If original gates fail, keep the failure; no stopped runtime replay.
+
+Risk checks before qualification: missing/reordered node/parent, wrong aggregate
+link/context, missing or failed supplemental span, lost prior owner/rawtrue,
+forged/manual/deletion association, stale ledger/map/trace, wrong J composition,
+and altered source/content identity reject before overwrite. Complete retained
+OR must reach collection/runtime/router, including reverted paths outside the
+net J delta. First use focused private fixtures; then freeze changed code and
+exercise the genuine original wrapper. Existing c357 FAIL remains the causal
+baseline, never an unchanged rerun-to-green or completed J grant.
+
+J author fixture checkpoint: the private J-as-M transport was wrongly accepted
+by the old M consumer (`J-typed-red`, log b086dfbe...). The M consumer now binds
+the exact M/2 identity; legitimate M/I controls remain valid. Distinct J ledger
+construction/consumer preserves rawfalse append while consuming all retained
+OR, including reverted prior-span paths outside J's net delta. It carries no
+J supersession or source-rebind authority. Collection seals reconstruct the
+complete typed I/J obligations rather than retaining only final-map paths.
+
+The private five-node fixture executes five actual linear Git/source collector
+operations under an explicitly mocked authority boundary; it is not the fixed
+production J observation. Rehashed whole-operation omission, actual trigger
+flip, frame flags, node order and map substitution reject. First attempt
+`J-prior-focused` used a nonexistent runtime key and was an invalid negative;
+the corrected actual-trigger test passes (`2121cfb0...`). Stable pre-completion-
+oracle affected49 tests and bash syntax pass (`68e9e164...`,266.300s). An added
+truncated-root-exit oracle was already GREEN (`ad38e398...`): the existing
+closed_frames guard rejects unfinished evidence. No new completion defect or
+helper correction is claimed. Final focused checks bind that exact rejection.
+
+New fixed-five classifier flags/J classification, rows and router remain
+UNKNOWN until a changed-source original wrapper executes with the literal
+1c/R5-H4 comparison. Current integration/native authority is separate. Do not
+import a supplemental map, fabricate an old dc0 child, inherit raw flags or
+reinterpret the original c357 FAIL as a successful J transition.

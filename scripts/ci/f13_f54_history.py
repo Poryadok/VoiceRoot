@@ -258,15 +258,15 @@ def append(path, kind, frame, operation, repo, values):
         payload=json.loads(values[0]);require(payload['admission'] is False,'observation_not_authority')
     elif kind == 'scalar_seam_observation':
         payload=dict(status=int(values[0]),original_gate='single_best_base_required',admission=False)
-    elif kind in ('span_link','range_side_link'):
+    elif kind in ('span_link','range_side_link','J_prior_span_link'):
         require(previous is None and not frame and not operation,'separate_supplemental_trace')
-        payload=json.loads(Path(values[0]).read_bytes() if kind=='range_side_link' else values[0])
+        payload=json.loads(values[0] if kind=='span_link' else Path(values[0]).read_bytes())
         require(payload['admission'] is False,'span_not_admission')
     elif kind in ('history_capability','history_3071_capability'):
         capability,receipt=values
         payload=dict(capability=raw_binding(Path(capability).read_bytes()),receipt=json.loads(receipt),admission=False)
-    elif kind in ('composition_capability','composition_3071_capability','corrected_F_composition','range_3071_branch'):
-        payload=json.loads(Path(values[0]).read_bytes() if kind=='range_3071_branch' else values[0])
+    elif kind in ('composition_capability','composition_3071_capability','corrected_F_composition','range_3071_branch','J_prior_history_ready'):
+        payload=json.loads(Path(values[0]).read_bytes() if kind in ('range_3071_branch','J_prior_history_ready') else values[0])
         require(payload['admission'] is False,'composition_not_production_authority')
     elif kind=='reviewed_F_deletion':
         receipt,output=values
@@ -279,12 +279,12 @@ def append(path, kind, frame, operation, repo, values):
         name,output,incoming=values
         payload=dict(path=name,map_before=file_binding(output),after_gate_row=raw_binding(incoming),
             reason='complete_ledger_consumer_required_before_mutation',admission=False)
-    elif kind in ('M_ledger_ready','range_I_ledger_ready'):
+    elif kind in ('M_ledger_ready','range_I_ledger_ready','range_J_ledger_ready'):
         payload=dict(ledger=raw_binding(Path(values[0]).read_bytes()),admission=False)
     elif kind == 'complete_ledger_consumed':
         name,receipt,status=values
         payload=dict(path=name,receipt=json.loads(Path(receipt).read_bytes()),scope_exit=int(status),admission=False)
-    elif kind in ('complete_ledger_conserved','range_I_ledger_conserved'):
+    elif kind in ('complete_ledger_conserved','range_I_ledger_conserved','range_J_ledger_conserved'):
         name,receipt=values
         payload=dict(path=name,receipt=json.loads(Path(receipt).read_bytes()),policy_result=None,admission=False)
     elif kind == 'exact_unit_supersession':
@@ -399,6 +399,87 @@ def verified_3071_capabilities(repo, path):
     return cap
 
 
+J3071_PRIOR_SPAN=dict(aggregate='dc0acdefec7e5c413988adf71f86d12bff4017bc',
+    first='6e0cd809884f9a2b80f33d00a85c55ff42077aab',base='d4abb829622e9bd91b26842b61522e6840840867',
+    target='645d9c54966c1270a1e1dbe9d767ddad6aac40ff',nodes=[
+        'adf452b9141f96b8dd4ae847df55edb43d68180a','1554ff343633274332c2350b31ac6a2613558054',
+        '2c133336d8745d44ea382932463c8707ae8dfed0','cb98a67bfab9390a4fa6adfb5416910db8dd75c1',
+        '645d9c54966c1270a1e1dbe9d767ddad6aac40ff'])
+
+
+def J_prior_origin_value(repo, capability, state, trace_path, prefix):
+    """New observation permission for one real prior aggregate, never its rows."""
+    r=J3071_PRIOR_SPAN;operation=state['frame']+'/'+r['aggregate']+'/2'
+    require(state['capability_sha256']==sha(canonical(capability)),'fixed3071_prior_same_capability')
+    require(operation in state['prior_operations'],'fixed3071_prior_actual_aggregate_before_J')
+    aggregate=state['prior_operations'][operation]
+    require([aggregate[k] for k in ('commit','first_parent','boundary','source_head','candidates')]==
+        [r['aggregate'],r['first'],r['base'],r['target'],[r['base']]],'fixed3071_prior_exact_actual_source_tuple')
+    require(git(repo,'rev-list','--topo-order','--reverse',r['base']+'..'+r['target']).decode().splitlines()==r['nodes'],
+        'fixed3071_prior_complete_five_node_range')
+    parent=r['base'];edges=[]
+    for node in r['nodes']:
+        actual=git(repo,'rev-list','--parents','-n','1',node).decode().split()[1:]
+        require(actual==[parent],'fixed3071_prior_actual_linear_edges')
+        edges.append(dict(node=node,ordered_parents=actual));parent=node
+    return dict(type='F54_FIXED3071_PRIOR_SPAN_ORIGIN',capability=capability,J_operation=state['operation'],
+        aggregate_operation=operation,aggregate_binding=aggregate,aggregate_classification=state['prior_classifications'][operation],
+        aggregate_rows=state['prior_committed_rows'][operation],outer_map_binding=state['ledger'][state['frame']]['map_binding'],
+        outer_map_path=state['frame_context']['output'],
+        main_trace=str(trace_path),prefix=prefix,range=r,ordered_edges=edges,
+        supplemental_flags=dict(allow_direct_followup='true',partition_source_history='false'),
+        source_context=router_source_context(repo),admission=False)
+
+
+def prepare_J_prior_origin(repo, capability_path, trace_path):
+    cap=verified_3071_capabilities(repo,capability_path);raw=Path(trace_path).read_bytes()
+    events=[json.loads(x) for x in raw.splitlines()]
+    operations=[e['operation'] for e in events if e['kind']=='history_3071_capability']
+    require(len(operations)==1,'fixed3071_prior_one_actual_J')
+    state=validate_trace(repo,trace_path,sha(raw),J_history_checkpoint=operations[0])['J_history_checkpoint']
+    return J_prior_origin_value(repo,cap,state,trace_path,file_digest(raw))
+
+
+def verify_J_prior_origin(repo, origin):
+    cap=origin['capability'];require(cap==prepare_3071_capabilities(repo,cap['directory'],cap['native_path']), 'fixed3071_prior_independent_capability')
+    current=Path(origin['main_trace']).read_bytes();bound=origin['prefix']
+    require(len(current)>=bound['bytes'] and sha(current[:bound['bytes']])==bound['sha256'],'fixed3071_prior_original_prefix_immutable')
+    # Validate just the sealed prefix: later actual operations cannot change its
+    # meaning or supply a disposition missing when the observation was started.
+    with tempfile.TemporaryDirectory(prefix='f13-J-prior-prefix-') as directory:
+        trace=Path(directory)/'trace.jsonl';trace.write_bytes(current[:bound['bytes']])
+        state=validate_trace(repo,trace,bound['sha256'],J_history_checkpoint=origin['J_operation'])['J_history_checkpoint']
+    require(origin==J_prior_origin_value(repo,cap,state,origin['main_trace'],bound),'fixed3071_prior_exact_original_context_and_owner')
+    return origin
+
+
+def verify_J_prior_span(repo, origin, trace_path, map_path):
+    verify_J_prior_origin(repo,origin);raw=Path(trace_path).read_bytes();events=[json.loads(x) for x in raw.splitlines()]
+    require(events and events[0]['kind']=='J_prior_span_link' and events[0]['payload']==origin,'fixed3071_prior_real_separate_observation_link')
+    checked=validate_trace(repo,trace_path,sha(raw));root=checked['root_frame']
+    require(not checked['failures'],'fixed3071_prior_observation_failure_not_swallowed')
+    frame=next(e['payload'] for e in events if e['kind']=='frame_enter');r=J3071_PRIOR_SPAN
+    require([frame[k] for k in ('base','target','allow_direct_followup','partition_source_history')]==[r['base'],r['target'],'true','false'],
+        'fixed3071_prior_real_flags_not_original_outer_flags')
+    begins=[e for e in events if e['kind']=='operation_begin']
+    require([e['payload']['commit'] for e in begins]==r['nodes'] and all(e['payload']['classification']=='direct' and e['payload']['parent_index']==1 for e in begins),
+        'fixed3071_prior_all_five_real_operations_not_Git_rows')
+    ledger=checked['ledger'][root];actual=Path(map_path).read_bytes()
+    require(ledger['map_binding']==file_digest(actual) and ledger['rows']==actual.decode().splitlines(),'fixed3071_prior_full_real_map_not_selected_paths')
+    return dict(type='F54_FIXED3071_PRIOR_SPAN_OBSERVATION',origin=origin,trace=str(trace_path),trace_sha256=sha(raw),
+        map_path=str(map_path),map_binding=file_digest(actual),ledger=ledger,
+        actual_operations=[dict(operation=e['operation'],begin_digest=e['digest'],binding=e['payload']) for e in begins],
+        classifications=[dict(operation=e['operation'],event_digest=e['digest'],classification=e['payload']) for e in events if e['kind']=='classification'],
+        admission=False)
+
+
+def prepare_J_prior_span(repo, origin_path, trace_path, map_path, outer_map_path):
+    origin=json.loads(Path(origin_path).read_bytes())
+    require(Path(outer_map_path).resolve()==Path(origin['outer_map_path']).resolve() and file_binding(outer_map_path)==origin['outer_map_binding'],
+        'fixed3071_prior_observation_cannot_replace_outer_map')
+    return verify_J_prior_span(repo,origin,trace_path,map_path)
+
+
 def fixed3071_range_structure(repo, base, target, allow, partition):
     """Exact Git witness only. It neither qualifies rows nor opens the engine."""
     r=J3071_RANGE
@@ -478,6 +559,124 @@ def prepare_3071_range_branch(repo, origin_path, trace_path, map_path):
     require(len(raw)==prefix['bytes'] and sha(raw)==prefix['sha256'],'fixed3071_still_unchanged_main_prefix_before_engine')
     require(origin==prepare_3071_range_origin(repo,origin['capability_path'],origin['main_trace']),'fixed3071_current_range_origin_rechecked')
     return verify_3071_range_side(repo,origin,trace_path,map_path)
+
+
+def J_history_coverage(repo, main_events, M_ready, range_branches, prior_span):
+    """Actual operations/dispositions, never a Git-node-to-owner-row conversion."""
+    nodes=git(repo,'rev-list','--topo-order','--reverse',J3071,'^'+J3071_O).decode().splitlines()
+    require(nodes and nodes[-1]==J3071,'fixed3071_J_complete_history_before_integration');nodes.remove(J3071)
+    references={n:[] for n in nodes}
+    sources=[dict(kind='original_main',events=main_events,sha256=None)]
+    external={}
+    for ready in M_ready.values():external[ready['span_trace']]=('actual_M_span',ready['span_trace_sha256'])
+    for branch in range_branches.values():external[branch['side_trace']]=('actual_I_range_side',branch['side_trace_sha256'])
+    external[prior_span['trace']]=('actual_J_prior_span',prior_span['trace_sha256'])
+    for path,(kind,digest) in external.items():
+        raw=Path(path).read_bytes();require(sha(raw)==digest,'fixed3071_J_actual_supplemental_trace_hash')
+        checked=validate_trace(repo,path,digest);require(not checked['failures'],'fixed3071_J_no_failed_supplemental_disposition')
+        sources.append(dict(kind=kind,events=[json.loads(x) for x in raw.splitlines()],sha256=digest))
+    for source in sources:
+        for e in source['events']:
+            if e['kind']!='operation_begin':continue
+            value=e['payload'];node=value['commit']
+            ref=dict(type='actual_operation',provenance=source['kind'],operation=e['operation'],begin_digest=e['digest'],
+                trace_sha256=source['sha256'],parent_index=value['parent_index'],ordered_parents=value['ordered_parents'])
+            if node in references:references[node].append(ref)
+            node=value['source_head']
+            if node in references and node!=value['commit']:
+                actual=git(repo,'rev-list',value['boundary']+'..'+node).decode().splitlines()
+                if actual==[node]:
+                    references[node].append(dict(ref,type='exact_single_commit_source_of_actual_operation',
+                        source_head=node,source_boundary=value['boundary'],ordered_source_parents=git(repo,'rev-list','--parents','-n','1',node).decode().split()[1:]))
+    result=[]
+    for node in nodes:
+        refs=references[node];parents=git(repo,'rev-list','--parents','-n','1',node).decode().split()[1:]
+        require(refs,'fixed3071_J_missing_real_history_disposition_'+node)
+        actual=[v for v in refs if v['type']=='actual_operation']
+        if actual:
+            required=set(range(2,len(parents)+1)) if len(parents)>1 else {1}
+            require(required<={v['parent_index'] for v in actual} and all(v['ordered_parents']==parents for v in actual),
+                'fixed3071_J_all_actual_parent_slots_'+node)
+        else:require(all(v['ordered_source_parents']==parents for v in refs),'fixed3071_J_exact_single_source_parent_facts')
+        result.append(dict(node=node,ordered_parents=parents,dispositions=refs))
+    return result
+
+
+def prepare_3071_J_ledger(repo, capability_path, trace_path):
+    cap=verified_3071_capabilities(repo,capability_path);raw=Path(trace_path).read_bytes()
+    events=[json.loads(x) for x in raw.splitlines()]
+    operations=[e['operation'] for e in events if e['kind']=='history_3071_capability'];require(len(operations)==1,'fixed3071_J_one_ledger_operation')
+    state=validate_trace(repo,trace_path,sha(raw),J_checkpoint=operations[0])['J_checkpoint']
+    require(state['capability_sha256']==sha(canonical(cap)),'fixed3071_J_same_current_capability')
+    return build_3071_J_ready(state,file_digest(raw))
+
+
+def build_3071_J_ready(state, prefix):
+    """Transport of the independently reconstructed fixed-J checkpoint.
+
+    Source/coverage qualification belongs to J_checkpoint_state, not supplied
+    JSON or this assembly function. It never imports the supplemental map.
+    """
+    required={}
+    require(state['operation_binding']['commit']==J3071 and state['operation'].split('/')[1:]==[J3071,'2'], 'fixed3071_J_transport_exact_operation')
+    require(state['classification']['trigger'] in ('true','false'), 'fixed3071_J_raw_classifier_boolean')
+    def item(name):
+        return required.setdefault(name,dict(aggregate=False,retained_evidence=[],inherited_qualification=[],prior_span_evidence=[],J_classification=None))
+    for frame,ledger in state['ledger'].items():
+        for name,value in ledger['paths'].items():
+            require(type(value['aggregate']) is bool,'fixed3071_J_retained_boolean')
+            target=item(name);target['aggregate']|=value['aggregate']
+            target['retained_evidence'].append(dict(frame=frame,map_binding=ledger['map_binding'],evidence=value['evidence']))
+    for kind,table in (('M',state['M_ready']),('I',state['I_ready'])):
+        for operation,ready in table.items():
+            for name,value in ready['required_qualification'].items():
+                require(type(value['aggregate']) is bool,'fixed3071_J_inherited_boolean')
+                target=item(name);target['aggregate']|=value['aggregate']
+                target['inherited_qualification'].append(dict(kind=kind,operation=operation,ledger_sha256=sha(canonical(ready)),obligation=value))
+    span=state['prior_span'];side=span['ledger']
+    for name,value in side['paths'].items():
+        require(type(value['aggregate']) is bool,'fixed3071_J_prior_span_boolean')
+        target=item(name);target['aggregate']|=value['aggregate']
+        target['prior_span_evidence'].append(dict(trace_sha256=span['trace_sha256'],map_binding=side['map_binding'],
+            rows=[raw_binding(x) for x in side['rows'] if x.split('\t')[0]==name],evidence=value['evidence'],actual_operations=span['actual_operations']))
+    for name in state['operation_binding']['paths']:
+        target=item(name);target['J_classification']=state['classification'];target['aggregate']|=state['classification']['trigger']=='true'
+    outer=state['ledger'][state['frame']]
+    return dict(type='F54_FIXED3071_ACTUAL_J_COMPLETE_LEDGER',operation=state['operation'],frame=state['frame'],
+        operation_binding=state['operation_binding'],classification=state['classification'],capability_sha256=state['capability_sha256'],
+        prefix=prefix,frame_ancestry=state['frame_ancestry'],ledger=state['ledger'],coverage=state['coverage'],
+        prior_span=span,inherited_M_ledgers=state['M_ready'],inherited_I_ledgers=state['I_ready'],composition=state['composition'],
+        terminal_dispositions=terminal_dispositions(state['ledger']),manual_result_operations=manual_operations(state['ledger']),
+        outer_rows=outer['rows'],outer_map_binding=outer['map_binding'],required_qualification=required,
+        qualification='HOLD',admission=False,runtime_pass=False)
+
+
+def consume_3071_J_path(ready_path, expected_sha, trace_path, name, actual_map, after_raw, transition):
+    raw=Path(ready_path).read_bytes();require(sha(raw)==expected_sha,'fixed3071_J_complete_ledger_raw_hash')
+    value=json.loads(raw);require(value['type']=='F54_FIXED3071_ACTUAL_J_COMPLETE_LEDGER' and value['admission'] is False,'fixed3071_J_distinct_ledger_type')
+    state=dict(frame=value['frame'],operation=value['operation'],operation_binding=value['operation_binding'],classification=value['classification'],
+        capability_sha256=value['capability_sha256'],frame_ancestry=value['frame_ancestry'],ledger=value['ledger'],coverage=value['coverage'],
+        prior_span=value['prior_span'],M_ready=value['inherited_M_ledgers'],I_ready=value['inherited_I_ledgers'],composition=value['composition'])
+    require(canonical(value)==canonical(build_3071_J_ready(state,value['prefix'])),'fixed3071_J_reads_complete_evidence_not_only_OR_bit')
+    require(name in value['operation_binding']['paths'],'fixed3071_J_actual_operation_path')
+    trace=Path(trace_path).read_bytes();prefix=value['prefix']
+    require(len(trace)>=prefix['bytes'] and sha(trace[:prefix['bytes']])==prefix['sha256'],'fixed3071_J_sealed_real_prefix')
+    require(value['terminal_dispositions']==terminal_dispositions_in_prefix(value['ledger'],trace,prefix),'fixed3071_J_retains_terminal_obligations')
+    require(value['manual_result_operations']==manual_operations_in_prefix(value['ledger'],trace,prefix),'fixed3071_J_retains_actual_manual_operations')
+    events=[json.loads(x) for x in trace.splitlines()]
+    before=next(e for e in reversed(events) if e['kind']=='row_before' and e['operation']==value['operation'])
+    require(before['payload']['path']==name and before['payload']['map_before']==file_digest(actual_map),'fixed3071_J_current_map_and_pending_path')
+    rows=actual_map.decode().splitlines();prior=[raw_binding(x) for x in rows if x.split('\t')[0]==name]
+    require(prior==before['payload']['prior_rows'] and prior==[raw_binding(x) for x in value['outer_rows'] if x.split('\t')[0]==name],'fixed3071_J_all_original_prior_rows')
+    incoming=row(before['payload']['incoming']);after=row(raw_binding(after_raw))
+    require(incoming[2]==J3071 and all(after[i]==incoming[i] for i in (0,2,3,4,5,6,7)),'fixed3071_J_no_owner_source_content_rebind')
+    aggregate=value['required_qualification'][name]['aggregate'] or any(row(x)[1]=='true' for x in prior) or incoming[1]=='true' or after[1]=='true'
+    require(transition in ('append','replace') and (transition!='replace' or prior),'fixed3071_J_actual_transition')
+    require((transition=='append' and after==incoming) or (transition=='replace' and (after[1]==incoming[1] or (after[1]=='true' and aggregate))),'fixed3071_J_raw_append_conserved_reduction')
+    output=([x for x in rows if x.split('\t')[0]!=name] if transition=='replace' else rows)+[after_raw]
+    return dict(path=name,ledger_sha256=sha(canonical(value)),incoming=before['payload']['incoming'],after_gate_row=raw_binding(after_raw),
+        prior_rows=prior,map_before=file_digest(actual_map),transition=transition,expected_post_map=file_digest(('\n'.join(output)+'\n').encode()),
+        aggregate=aggregate,obligations=value['required_qualification'][name],policy_result=None,admission=False)
 
 
 def build_3071_I_ready(state, prefix):
@@ -1460,6 +1659,7 @@ def consume_M_path(ready, expected_sha, trace_path, name, actual_map, after_gate
     """
     raw=Path(ready).read_bytes();require(sha(raw)==expected_sha,'M_consumer_complete_ledger_hash')
     value=json.loads(raw);require(value['type']=='F54_ACTUAL_M_COMPLETE_RETAINED_LEDGER' and value['admission'] is False,'M_consumer_type')
+    require(value['operation'].split('/')[1:]==[M,'2'],'M_consumer_fixed_operation_not_J_transport')
     require(name in value['operation_binding']['paths'],'M_consumer_exact_operation_path')
     prefix=Path(trace_path).read_bytes();bound=value['prefix']
     require(len(prefix)>=bound['bytes'] and sha(prefix[:bound['bytes']])==bound['sha256'],'M_consumer_actual_prefix')
@@ -1555,6 +1755,20 @@ def qualify_supersession(repo, capability_path, ready_path, ready_sha, trace_pat
     return dict(receipt,trace_prefix=dict(bytes=len(trace),sha256=sha(trace)))
 
 
+def include_typed_collection_required(required, I_ready, J_ready):
+    """Keep every I/J obligation, including paths absent from their net delta."""
+    required=json.loads(json.dumps(required))
+    for kind,table,expected in (('I',I_ready,'F54_FIXED3071_ACTUAL_I_RANGE_LEDGER'),('J',J_ready,'F54_FIXED3071_ACTUAL_J_COMPLETE_LEDGER')):
+        for operation,ready in table.items():
+            require(ready['type']==expected and ready['operation']==operation and ready['admission'] is False,'fixed3071_collection_exact_typed_ledger')
+            for name,value in ready['required_qualification'].items():
+                require(type(value['aggregate']) is bool,'fixed3071_collection_typed_boolean')
+                item=required.setdefault(name,dict(aggregate=False,retained_evidence=[],span_evidence=None,M_classification=None))
+                item['aggregate']|=value['aggregate']
+                item['retained_evidence'].append(dict(typed_ledger=kind,operation=operation,ledger_sha256=sha(canonical(ready)),aggregate=value['aggregate'],evidence=value))
+    return required
+
+
 def finalize_collection(repo, trace_path, map_path):
     raw=Path(trace_path).read_bytes();verified=validate_trace(repo,trace_path,sha(raw))
     require(not verified['failures'] and len(verified['M_ready'])==1,'successful_exact_M_collection_required')
@@ -1568,12 +1782,14 @@ def finalize_collection(repo, trace_path, map_path):
             item=required.setdefault(name,dict(aggregate=False,retained_evidence=[],span_evidence=None,M_classification=None))
             item['aggregate']=item['aggregate'] or value['aggregate']
             item['retained_evidence'].append(dict(final_frame=frame,aggregate=value['aggregate'],evidence=value['evidence']))
+    required=include_typed_collection_required(required,verified['I_ready'],verified['J_ready'])
     events=[json.loads(v) for v in raw.splitlines()]
     transitions=[e for e in events if e['kind'] in ('complete_ledger_conserved','row_remove','row_after','row_committed') and e['operation']==operation]
     return dict(type='F54_SEALED_SUCCESSFUL_COLLECTION',collection_prefix=dict(bytes=len(raw),sha256=sha(raw)),
         collection_trace=str(trace_path),map_path=str(map_path),map_binding=outer['map_binding'],outer_rows=outer['rows'],
         ledger=verified['ledger'],terminal_dispositions=terminal_dispositions(verified['ledger']),
         manual_result_operations=manual_operations(verified['ledger']),
+        I_ledgers=verified['I_ready'],J_ledgers=verified['J_ready'],
         required_qualification=required,coverage=ready['coverage'],
         child_span=dict(path=ready['span_trace'],sha256=ready['span_trace_sha256']),M_transitions=transitions,
         capability_sha256=ready['capability_sha256'],M=M,source_context=router_source_context(repo),
@@ -1599,6 +1815,22 @@ def load_collection(repo, path, expected_sha, map_path):
     require(value['terminal_dispositions']==terminal_dispositions_in_prefix(value['ledger'],trace,seal),
         'collection_requires_all_typed_terminal_dispositions')
     require(value.get('manual_result_operations',[])==manual_operations_in_prefix(value['ledger'],trace,seal), 'manual_F_collection_complete_operations')
+    events=[json.loads(x) for x in trace.splitlines()]
+    tables=[]
+    for kind,field in (('range_I_ledger_ready','I_ledgers'),('range_J_ledger_ready','J_ledgers')):
+        expected={}
+        for e in events:
+            if e['kind']==kind:
+                binding=e['payload']['ledger'];require(binding==raw_binding(binding['raw']),'fixed3071_collection_actual_ledger_event')
+                require(e['operation'] not in expected,'fixed3071_collection_no_duplicate_typed_ledger')
+                expected[e['operation']]=json.loads(binding['raw'])
+        require(value.get(field,{})==expected,'fixed3071_collection_all_actual_typed_ledgers')
+        tables.append(expected)
+    minimum=include_typed_collection_required({},*tables)
+    for name,obligation in minimum.items():
+        actual=value['required_qualification'].get(name)
+        require(actual is not None and type(actual['aggregate']) is bool and (not obligation['aggregate'] or actual['aggregate']), 'fixed3071_collection_no_lost_prior_or_reverted_taint')
+        require(all(record in actual['retained_evidence'] for record in obligation['retained_evidence']), 'fixed3071_collection_no_lost_typed_owner_history')
     for disposition in value['terminal_dispositions']:
         name=disposition['path'];item=value['required_qualification'].get(name)
         require(item is not None and item['aggregate'] is True and item['retained_evidence'],
@@ -1799,12 +2031,13 @@ def validate_router(repo, seal_path, seal_sha, map_path, context_path, sidecar_p
         failures=[v for v in receipts if v['status']!=0],qualification='HOLD',admission=False,runtime_pass=False)
 
 
-def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, range_checkpoint=None, I_checkpoint=None, deletion_checkpoint=None, manual_checkpoint=False, manual_end_checkpoint=None, manual_append_checkpoint=None):
+def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, range_checkpoint=None, I_checkpoint=None, deletion_checkpoint=None, manual_checkpoint=False, manual_end_checkpoint=None, manual_append_checkpoint=None, J_history_checkpoint=None, J_checkpoint=None):
     raw=Path(path).read_bytes();require(sha(raw)==expected_sha,'trace_raw_hash')
     events=[json.loads(v) for v in raw.splitlines()];require(events,'nonempty_producer_trace')
     previous='0'*64;frames={};stack=[];operations={};attempts={};classified={};pending={};cumulative={};child_flags={};child_rows={};frame_rows={};carry={};failures=[];observed=set()
     expected_operations={};seen_operations={};visited={};committed={};maps={};children={};obligations={};native_bindings={}
     M_capabilities={};M_compositions={};M_ready={};M_consumed={};M_supersessions={};master_entry=None;master_wrapper=None
+    J_prior_spans={};J_ready={};J_consumed={}
     J_capabilities={};J_compositions={};F_compositions={};range_branches={};frame_results={};I_ready={};I_consumed={}
     terminal={};final_gates={};manual_specs={};manual_gates={};manual_associations={};manual_closed={}
     def map_binding(frame):
@@ -1841,7 +2074,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             require(operation in M_ready and M_consumed.get(operation,[])==value['paths'],'complete_M_ledger_consumption_before_mutation')
         if operation in J_capabilities:
             require(children.get(operation)==[(J3071_O,J3071_P2,'true','true')],'complete_fixed3071_real_history_child')
-            require(False,'fixed3071_complete_ledger_consumer_not_yet_observed')
+            require(operation in J_ready and J_consumed.get(operation,[])==value['paths'],'fixed3071_complete_J_ledger_consumed_before_mutation')
         range_children=[name for name,data in frames.items() if data['parent_operation']==operation and name in range_branches]
         if range_children:
             require(operation in I_ready and I_consumed.get(operation,[])==value['paths'],'fixed3071_I_complete_ledger_consumed_before_collapse')
@@ -1906,6 +2139,36 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             integration_binding=integration,J_operation=owner,capability_sha256=sha(canonical(J_capabilities[owner])),
             frame_ancestry=[dict(frame=name,context=frames[name]) for name in stack],
             retained_maps={name:map_binding(name) for name in maps},admission=False)
+    def J_prefix_state(operation, classified_required=False):
+        require(operation in J_capabilities and operation in operations,'fixed3071_J_actual_boundary_operation')
+        frame=operation.split('/')[0];value=operations[operation]
+        require(stack and stack[-1]==frame and seen_operations[frame][-1]==(J3071,2),'fixed3071_J_live_original_frame')
+        require([value[k] for k in ('commit','first_parent','boundary','source_head','candidates')]==[J3071,J3071_P1,J3071_O,J3071_P2,J3071_BASES], 'fixed3071_J_exact_original_tuple')
+        require(not committed.get(operation) and not pending and not failures,'fixed3071_J_before_any_mutation')
+        require((operation in classified)==classified_required,'fixed3071_J_exact_classifier_phase')
+        if classified_required:require(visited.get(operation,[])==value['paths'],'fixed3071_J_all_original_pregates_before_rows')
+        else:require(not visited.get(operation),'fixed3071_J_history_before_original_pregates')
+        require(master_entry is not None and len(stack)>=2,'fixed3071_J_original_master_not_relabelled_unit')
+        require(children.get(operation)==[(J3071_O,J3071_P2,'true','true')],'fixed3071_J_genuine_complete_source_child')
+        child=[f for f,v in frames.items() if v['parent_operation']==operation]
+        require(len(child)==1 and frame_results.get(child[0],{}).get('exit')==0,'fixed3071_J_successful_child_not_boolean')
+        boundary=[e for e in events if e['kind']=='boundary_3071_observation' and e['operation']==operation]
+        require(len(boundary)==1 and boundary[0]['payload']['prefix']==raw_binding((''.join('\t'.join(x)+'\n' for x in maps[frame])).encode()), 'fixed3071_J_original_outer_prefix_unmodified')
+        prior={}
+        for commit,index in seen_operations[frame][:-1]:
+            identity=frame+'/'+commit+'/'+str(index);finished(identity);prior[identity]=operations[identity]
+        return dict(frame=frame,frame_context=frames[frame],operation=operation,operation_binding=value,
+            capability_sha256=sha(canonical(J_capabilities[operation])),ledger=ledger_state(),child_frame=child[0],
+            frame_ancestry=[dict(frame=f,context=frames[f]) for f in stack],prior_operations=prior,
+            prior_classifications={k:classified[k] for k in prior if k in classified},
+            prior_committed_rows={k:[e['payload']['row'] for e in events if e['kind']=='row_committed' and e['operation']==k] for k in prior},admission=False)
+    def J_checkpoint_state(operation, prefix_events):
+        state=J_prefix_state(operation,True)
+        require(operation in J_prior_spans,'fixed3071_J_requires_actual_prior_span_not_inventory')
+        state.update(classification=classified[operation],prior_span=J_prior_spans[operation],M_ready=M_ready,I_ready=I_ready,
+            coverage=J_history_coverage(repo,prefix_events,M_ready,range_branches,J_prior_spans[operation]),
+            composition=dict(whole=manual_3071_composition(repo),consumed_path_receipts=J_compositions.get(operation,{})))
+        return state
     def I_checkpoint_state(operation):
         r=J3071_RANGE;require(operation in operations and operation in classified,'fixed3071_I_actual_classified_checkpoint')
         frame=operation.split('/')[0];value=operations[operation]
@@ -1960,6 +2223,9 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             root=next(iter(frames));require(v['source_map']==v['output']==map_binding(root),'original_wrapper_full_root_map_parity')
             require(Path(v['source_map_path']).read_bytes()==Path(v['output_path']).read_bytes(),'actual_wrapper_output_copy_not_selected_map')
             master_wrapper=v;continue
+        if kind=='J_prior_span_link':
+            require(sequence==1 and not frames and frame is None and op is None,'fixed3071_prior_separate_real_frame')
+            verify_J_prior_origin(repo,v);continue
         if kind=='range_side_link':
             require(sequence==1 and not frames and frame is None and op is None and v['admission'] is False,'separate_fixed3071_side_link_before_real_execution')
             require(v['type']=='F54_FIXED3071_RANGE_AUTHOR_ORIGIN' and v['source_context']==router_source_context(repo),'fixed3071_side_actual_source_context')
@@ -2206,6 +2472,20 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
                 required=[name for name in guarded_names(operations[op]['paths']) if name in inherited_native or operations[op]['entries'][name]['source']!=operations[op]['entries'][name]['result']]
                 require(set(required)<=set(M_compositions.get(op,{})),'all_actual_M_composition_seams_consumed')
             continue
+        if kind=='J_prior_history_ready':
+            require(op in J_capabilities and op not in J_prior_spans and op not in classified,'fixed3071_prior_before_actual_J_gates')
+            state=J_prefix_state(op);require(v['origin']['main_trace']==str(path),'fixed3071_prior_same_actual_main_trace')
+            prefix=b''.join(raw.splitlines(keepends=True)[:sequence-1])
+            require(v['origin']==J_prior_origin_value(repo,J_capabilities[op],state,path,file_digest(prefix)), 'fixed3071_prior_actual_unchanged_parent_prefix')
+            require(v==verify_J_prior_span(repo,v['origin'],v['trace'],v['map_path']),'fixed3071_prior_reconstructed_real_source_evidence')
+            J_prior_spans[op]=v;continue
+        if kind=='range_J_ledger_ready':
+            require(op in J_capabilities and op not in J_ready,'fixed3071_J_one_actual_ledger_checkpoint')
+            binding=v['ledger'];require(binding==raw_binding(binding['raw']) and v['admission'] is False,'fixed3071_J_complete_ledger_raw_binding')
+            state=J_checkpoint_state(op,events[:sequence-1]);prefix=b''.join(raw.splitlines(keepends=True)[:sequence-1])
+            ready=json.loads(binding['raw'])
+            require(canonical(ready)==canonical(build_3071_J_ready(state,file_digest(prefix))),'fixed3071_J_independent_complete_owner_content_OR_ledger')
+            J_ready[op]=ready;continue
         if kind=='range_I_ledger_ready':
             require(op not in I_ready,'fixed3071_I_one_actual_ledger_checkpoint')
             binding=v['ledger'];require(binding==raw_binding(binding['raw']) and v['admission'] is False,'fixed3071_I_complete_ledger_raw_binding')
@@ -2246,9 +2526,9 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             expected=dict(expected,trace_prefix=dict(bytes=len(prefix_raw),sha256=sha(prefix_raw)))
             require(receipt==expected and v['admission'] is False,'independent_exact_supersession_actual_history_binding')
             M_supersessions[key]=receipt;continue
-        if kind in ('complete_ledger_conserved','range_I_ledger_conserved'):
-            ready_table=M_ready if kind=='complete_ledger_conserved' else I_ready
-            consumed_table=M_consumed if kind=='complete_ledger_conserved' else I_consumed
+        if kind in ('complete_ledger_conserved','range_I_ledger_conserved','range_J_ledger_conserved'):
+            ready_table={'complete_ledger_conserved':M_ready,'range_I_ledger_conserved':I_ready,'range_J_ledger_conserved':J_ready}[kind]
+            consumed_table={'complete_ledger_conserved':M_consumed,'range_I_ledger_conserved':I_consumed,'range_J_ledger_conserved':J_consumed}[kind]
             require(op in ready_table and key in pending and pending[key]['op']==op,'complete_typed_ledger_before_real_row_mutation')
             receipt=v['receipt'];item=pending[key];parts=row(receipt['after_gate_row'])
             require(receipt['path']==v['path'] and receipt['incoming']==raw_binding('\t'.join(item['incoming'])),'actual_M_consumer_incoming')
@@ -2287,7 +2567,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             require(tree_entry(repo,v['integration'],v['path'])==tree_entry(repo,b['snapshot'],v['path']),'native_receipt_actual_H_entry_restoration')
             item['rebind']=[operation['first_parent'],operation['commit']]
         elif kind=='row_before':
-            require(op not in J_capabilities,'fixed3071_unqualified_ledger_cannot_begin_mutation')
+            require(op not in J_capabilities or op in J_ready,'fixed3071_unqualified_ledger_cannot_begin_mutation')
             map_before(frame,v)
             prior=row(v['prior']);incoming=row(v['incoming'])
             require(key not in pending and incoming[0]==v['path'] and incoming[2]==operations[op]['commit'],'actual_incoming_operation')
@@ -2307,6 +2587,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             require((previous_rows[-1] if previous_rows else None)==prior,'actual_prior_row_order')
             cumulative[key]=cumulative.get(key,False) or any(p[1]=='true' for p in previous_rows) or incoming[1]=='true' or classified[op]['trigger']=='true' or child_flags.get((op,v['path']),False)
             if op in I_ready:cumulative[key]|=I_ready[op]['required_qualification'][v['path']]['aggregate']
+            if op in J_ready:cumulative[key]|=J_ready[op]['required_qualification'][v['path']]['aggregate']
             obligations.setdefault(key,[]).append(dict(operation=op,classification=classified[op],prior_rows=v['prior_rows'],incoming=v['incoming'],child_aggregate=child_flags.get((op,v['path']),False),
                 **(dict(manual_result_reference=manual_result_reference(op,manual_specs[op]),gate=manual_gates[op][v['path']]) if op in manual_specs else {})))
         elif kind in ('row_after','row_remove'):
@@ -2315,6 +2596,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             incoming=pending[key]['incoming']
             require(all(parts[i]==incoming[i] for i in (0,2,3,6,7)) and parts[4:6]==pending[key].get('rebind',incoming[4:6]),'actual_reduction_row_identity')
             if op in M_capabilities:require(v['path'] in M_consumed.get(op,[]),'M_mutation_requires_consumed_complete_ledger')
+            if op in J_capabilities:require(v['path'] in J_consumed.get(op,[]),'fixed3071_J_mutation_requires_consumed_complete_ledger')
             if any(data['parent_operation']==op and name in range_branches for name,data in frames.items()):
                 require(op in I_ready and v['path'] in I_consumed.get(op,[]),'fixed3071_I_mutation_requires_consumed_full_range_ledger')
             if kind=='row_remove':
@@ -2333,7 +2615,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             frame_rows[key]=row(v['row'])
             maps[frame].append(row(v['row']))
             require(v['map_after']==map_binding(frame) and [row(x) for x in v['retained_rows']]==[x for x in maps[frame] if x[0]==v['path']],'conserved_committed_map')
-            if op in M_capabilities or op in I_ready:
+            if op in M_capabilities or op in I_ready or op in J_ready:
                 receipt=pending[key]['conservation']
                 require(receipt['expected_post_map']==map_binding(frame) and (receipt['transition']=='replace')==pending[key]['removed'],'M_conserved_exact_actual_post_transition')
             committed.setdefault(op,[]).append(v['path'])
@@ -2353,8 +2635,10 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
     manual_state=manual_checkpoint_state() if manual_checkpoint else None
     range_state=range_checkpoint_state(range_checkpoint) if range_checkpoint else None
     I_state=I_checkpoint_state(I_checkpoint) if I_checkpoint else None
+    J_history_state=J_prefix_state(J_history_checkpoint) if J_history_checkpoint else None
+    J_state=J_checkpoint_state(J_checkpoint,events) if J_checkpoint else None
     deletion_state_value=deletion_state(deletion_checkpoint,file_digest(raw)) if deletion_checkpoint else None
-    checkpoint_state=M_checkpoint_state(checkpoint,events) if checkpoint else range_state or I_state or deletion_state_value or manual_state or manual_end_value or manual_append_value
+    checkpoint_state=M_checkpoint_state(checkpoint,events) if checkpoint else range_state or I_state or J_history_state or J_state or deletion_state_value or manual_state or manual_end_value or manual_append_value
     require(not stack or checkpoint_state is not None,'closed_frames')
     require(checkpoint_state is not None or master_entry is None or failures or master_wrapper is not None,'successful_master_collection_requires_actual_wrapper_result')
     coverage=dag_dispositions(repo,events) if complete else []
@@ -2365,6 +2649,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         ledger=ledger,coverage=coverage,M_checkpoint=checkpoint_state if checkpoint else None,M_ready=M_ready,M_consumed=M_consumed,
         root_frame=next(iter(frames)),master_entry=master_entry,master_wrapper=master_wrapper,range_checkpoint=range_state,range_branches=range_branches,
         I_checkpoint=I_state,I_ready=I_ready,I_consumed=I_consumed,deletion_checkpoint=deletion_state_value,
+        J_history_checkpoint=J_history_state,J_checkpoint=J_state,J_ready=J_ready,J_consumed=J_consumed,J_prior_spans=J_prior_spans,
         terminal_dispositions=terminal_dispositions(ledger),manual_checkpoint=manual_state,manual_end_checkpoint=manual_end_value,manual_append_checkpoint=manual_append_value,manual_result_operations=manual_operations(ledger),
         observed_qualification='COMPLETE' if complete else 'OBSERVED_PREFIX_ONLY',admission=False)
 
@@ -2421,6 +2706,12 @@ def main():
             print(json.dumps(value));return 0
         if command=='3071-range-branch':print(json.dumps(prepare_3071_range_branch(*args)));return 0
         if command=='3071-I-ledger':print(json.dumps(prepare_3071_I_ledger(*args)));return 0
+        if command=='3071-J-prior-origin':print(json.dumps(prepare_J_prior_origin(*args)));return 0
+        if command=='3071-J-prior-receipt':print(json.dumps(prepare_J_prior_span(*args)));return 0
+        if command=='3071-J-ledger':print(json.dumps(prepare_3071_J_ledger(*args)));return 0
+        if command=='3071-J-consume':
+            ready,digest,trace,name,map_path,incoming,transition=args
+            print(json.dumps(consume_3071_J_path(ready,digest,trace,name,Path(map_path).read_bytes(),incoming,transition)));return 0
         if command=='3071-I-consume':
             ready,digest,trace,name,map_path,incoming,transition=args
             print(json.dumps(consume_3071_I_path(ready,digest,trace,name,Path(map_path).read_bytes(),incoming,transition)));return 0

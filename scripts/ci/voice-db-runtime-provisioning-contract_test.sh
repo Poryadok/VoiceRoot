@@ -3227,6 +3227,9 @@ f13_f54_3071_capability_file=''
 f13_f54_I_operation=''
 f13_f54_I_ledger=''
 f13_f54_I_ledger_sha=''
+f13_f54_J_operation=''
+f13_f54_J_ledger=''
+f13_f54_J_ledger_sha=''
 f13_f54_collection_file=''
 f13_f54_collection_sha=''
 f13_f54_router_seal=''
@@ -3304,6 +3307,7 @@ f13_f54_collect_exact_master_unit() {
   local fixed3071_unit="${10:-}" f13_f54_3071_capability_file=''
   local f13_f54_F_capability_file='' f13_f54_F_deletion_ruling="${unit}/rudeus410-F-reviewed-deletion-decision.md"
   local f13_f54_I_operation='' f13_f54_I_ledger="${TMP_DIR}/fixed3071-I-ledger.json" f13_f54_I_ledger_sha=''
+  local f13_f54_J_operation='' f13_f54_J_ledger="${TMP_DIR}/fixed3071-J-ledger.json" f13_f54_J_ledger_sha=''
   local f13_f54_capability_file="${TMP_DIR}/f54-exact-source-capabilities.json"
   local f13_f54_M_operation='' f13_f54_M_child_map="${TMP_DIR}/f54-actual-M-child-map"
   local f13_f54_M_span_trace="${TMP_DIR}/f54-actual-M-span.jsonl" f13_f54_M_span_map="${TMP_DIR}/f54-actual-M-span-map"
@@ -3422,6 +3426,48 @@ f13_f54_execute_3071_history() {
   # Original failure propagates unchanged. No M supersession is extended here.
   f13_collect_develop_contributions "${repo}" "${boundary}" "${source}" \
     "${TMP_DIR}/fixed3071-child-map" "${diagnostic_file}" true true
+}
+
+f13_f54_fixed_J_prior_side() {
+  local repo="$1" origin="$2" trace="$3" output="$4"
+  local f13_f54_trace_file="${trace}" f13_f54_frame='' f13_f54_operation='' f13_f54_running=false
+  [[ ! -e "${trace}" && ! -e "${output}" ]] || return 1
+  f13_f54_trace_event J_prior_span_link "${repo}" "${origin}" || return 1
+  # New source-history observation only. No Realtime/product executable runs,
+  # and this map never replaces or concatenates the real dc0/J outer map.
+  f13_collect_develop_contributions "${repo}" d4abb829622e9bd91b26842b61522e6840840867 \
+    645d9c54966c1270a1e1dbe9d767ddad6aac40ff "${output}" "${TMP_DIR}/fixed3071-J-prior-category" true false
+}
+
+f13_f54_prepare_J_prior_history() {
+  local repo="$1" output="$2" origin="${TMP_DIR}/fixed3071-J-prior-origin.json"
+  local trace="${TMP_DIR}/fixed3071-J-prior.jsonl" map="${TMP_DIR}/fixed3071-J-prior-map"
+  local receipt="${TMP_DIR}/fixed3071-J-prior-receipt.json"
+  [[ -n "${f13_f54_3071_capability_file:-}" && ! -e "${origin}" && ! -e "${receipt}" ]] || return 1
+  python3 "${f13_f54_observer}" 3071-J-prior-origin "${repo}" "${f13_f54_3071_capability_file}" \
+    "${f13_f54_trace_file}" >"${origin}" || return 1
+  f13_f54_fixed_J_prior_side "${repo}" "${origin}" "${trace}" "${map}" || return 1
+  python3 "${f13_f54_observer}" 3071-J-prior-receipt "${repo}" "${origin}" "${trace}" "${map}" "${output}" >"${receipt}" || return 1
+  f13_f54_trace_event J_prior_history_ready "${repo}" "${receipt}"
+}
+
+f13_f54_prepare_J_ledger() {
+  local repo="$1" wanted="${f13_f54_frame:-}/3071ddad390443de4119c796cdad9899ff08f7fd/2"
+  [[ -n "${f13_f54_3071_capability_file:-}" && "${f13_f54_operation:-}" == "${wanted}" ]] || return 0
+  [[ -s "${TMP_DIR}/fixed3071-J-prior-receipt.json" && -n "${f13_f54_J_ledger:-}" && ! -e "${f13_f54_J_ledger}" ]] || return 1
+  python3 "${f13_f54_observer}" 3071-J-ledger "${repo}" "${f13_f54_3071_capability_file}" "${f13_f54_trace_file}" >"${f13_f54_J_ledger}" || return 1
+  f13_f54_J_operation="${wanted}"
+  f13_f54_J_ledger_sha="$(python3 -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "${f13_f54_J_ledger}")" || return 1
+  f13_f54_trace_event range_J_ledger_ready "${repo}" "${f13_f54_J_ledger}"
+}
+
+f13_f54_consume_J_before_mutation() {
+  local repo="$1" path="$2" output="$3" incoming="$4" transition="$5" receipt="${TMP_DIR}/fixed3071-J-consumed.json"
+  [[ -n "${f13_f54_J_operation:-}" && "${f13_f54_operation:-}" == "${f13_f54_J_operation}" ]] || return 0
+  [[ -n "${f13_f54_J_ledger_sha:-}" ]] || return 1
+  python3 "${f13_f54_observer}" 3071-J-consume "${f13_f54_J_ledger}" "${f13_f54_J_ledger_sha}" \
+    "${f13_f54_trace_file}" "${path}" "${output}" "${incoming}" "${transition}" >"${receipt}" || return 1
+  f13_f54_trace_event range_J_ledger_conserved "${repo}" "${path}" "${receipt}"
 }
 
 f13_f54_fixed3071_range_observe() {
@@ -4061,10 +4107,10 @@ f13_collect_develop_contributions() {
     fi
     if [[ "${is_direct}" != true && -n "${f13_f54_3071_capability_file:-}" && -s "${source_base_file:-}.3071-capability" ]]; then
       f13_f54_execute_3071_history "${repo}" "${commit}" "${first_parent}" "${source_head}" "${output}" "${source_base_file}.3071-capability" "${diagnostic_file}" || return 1
-      # A successful child alone is not a complete before-mutation ledger.
-      # Until that constructor is actually observed, this author stage fails closed.
-      f13_collect_failure "${diagnostic_file}" fixed3071_complete_ledger_pending
-      return 1
+      # Prior aggregate internals are separate new evidence; the successful
+      # child alone is insufficient. The full J constructor runs only after
+      # all unchanged original pregates and actual J classification below.
+      f13_f54_prepare_J_prior_history "${repo}" "${output}" || return 1
     fi
 
     game_snapshot_contribution_allowed=false
@@ -4213,6 +4259,7 @@ f13_collect_develop_contributions() {
     if [[ -n "${f13_f54_trace_file:-}" ]]; then
       f13_f54_trace_event classification "${repo}" "${trigger}" "${TMP_DIR}/f13-unapproved-delta" || return 1
       f13_f54_prepare_range_I_ledger "${repo}" || return 1
+      f13_f54_prepare_J_ledger "${repo}" || return 1
       f13_f54_prepare_M_ledger "${repo}" || return 1
     fi
     while IFS= read -r path; do
@@ -4398,6 +4445,8 @@ f13_collect_develop_contributions() {
         if [[ -n "${f13_f54_trace_file:-}" ]]; then
           f13_f54_consume_I_before_mutation "${repo}" "${path}" "${output}" \
             "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" replace || return 1
+          f13_f54_consume_J_before_mutation "${repo}" "${path}" "${output}" \
+            "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" replace || return 1
           f13_f54_consume_M_before_mutation "${repo}" "${path}" "${output}" \
             "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" "${diagnostic_file}" replace || return 1
           f13_f54_path_consumed=true
@@ -4416,6 +4465,8 @@ f13_collect_develop_contributions() {
       if [[ -n "${f13_f54_trace_file:-}" ]]; then
         if [[ "${f13_f54_path_consumed}" != true ]]; then
           f13_f54_consume_I_before_mutation "${repo}" "${path}" "${output}" \
+            "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" append || return 1
+          f13_f54_consume_J_before_mutation "${repo}" "${path}" "${output}" \
             "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" append || return 1
           f13_f54_consume_M_before_mutation "${repo}" "${path}" "${output}" \
             "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" "${diagnostic_file}" append || return 1
