@@ -24,7 +24,9 @@ func (s *RoleStore) checkBotGlobalTerminalCatalog(ctx context.Context) error {
 	if err := authoritysource.CheckCatalog(ctx, s.tx, roleBotGlobalTerminalCatalog26); err != nil {
 		return fmt.Errorf("%w: Role terminal catalog: %w", ErrScopeUnavailable, err)
 	}
-	if err := s.checkBotTerminalShape(ctx); err != nil { return fmt.Errorf("%w: Role terminal relation shape: %w",ErrScopeUnavailable,err) }
+	if err := s.checkBotTerminalShape(ctx); err != nil {
+		return fmt.Errorf("%w: Role terminal relation shape: %w", ErrScopeUnavailable, err)
+	}
 	var valid bool
 	err := s.tx.QueryRow(ctx, `SELECT current_setting('transaction_isolation')='read committed'
  AND current_user=session_user AND NOT r.rolsuper AND NOT r.rolbypassrls
@@ -44,31 +46,52 @@ func (s *RoleStore) checkBotGlobalTerminalCatalog(ctx context.Context) error {
 
 func (s *RoleStore) checkBotTerminalShape(ctx context.Context) error {
 	var valid bool
-	err:=s.tx.QueryRow(ctx,`WITH expected(number,name,kind,default_expr) AS (VALUES
+	err := s.tx.QueryRow(ctx, `WITH expected(number,name,kind,default_expr) AS (VALUES
  (1,'bot_id','uuid',''),(2,'decision_id','uuid',''),(3,'receipt_id','uuid',''),(4,'registered_at','timestamp with time zone','clock_timestamp()'))
  SELECT (SELECT count(*) FROM pg_attribute WHERE attrelid='public.role_bot_global_terminals'::regclass AND attnum>0 AND NOT attisdropped)=4
  AND (SELECT count(*) FROM pg_trigger WHERE tgrelid='public.role_bot_global_terminals'::regclass AND NOT tgisinternal)=1
  AND NOT EXISTS(SELECT 1 FROM expected e LEFT JOIN pg_attribute a ON a.attrelid='public.role_bot_global_terminals'::regclass AND a.attnum=e.number AND NOT a.attisdropped
  LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum
  WHERE a.attname IS DISTINCT FROM e.name OR a.atttypid IS DISTINCT FROM to_regtype(e.kind) OR NOT a.attnotnull OR a.attidentity<>'' OR a.attgenerated<>'' OR a.attcollation<>0 OR COALESCE(pg_get_expr(d.adbin,d.adrelid),'')<>e.default_expr)`).Scan(&valid)
-	if err != nil || !valid { return fmt.Errorf("minimal columns/default/trigger unavailable") }
-	expected:=map[string]struct{kind,key,expression string}{
-		"role_bot_global_terminals_pkey":{"p","{1}",""},
-		"role_bot_global_terminals_decision_id_key":{"u","{2}",""},
-		"role_bot_global_terminals_receipt_id_key":{"u","{3}",""},
-		"role_bot_global_terminals_bot_id_check":{"c","{1}","(bot_id <> '00000000-0000-0000-0000-000000000000'::uuid)"},
-		"role_bot_global_terminals_decision_id_check":{"c","{2}","(decision_id <> '00000000-0000-0000-0000-000000000000'::uuid)"},
-		"role_bot_global_terminals_receipt_id_check":{"c","{3}","(receipt_id <> '00000000-0000-0000-0000-000000000000'::uuid)"},
-		"role_bot_global_terminals_registered_at_check":{"c","{4}","isfinite(registered_at)"},
+	if err != nil || !valid {
+		return fmt.Errorf("minimal columns/default/trigger unavailable")
 	}
-	rows,err:=s.tx.Query(ctx,`SELECT c.conname,c.contype::text,c.conkey::text,COALESCE(pg_get_expr(c.conbin,c.conrelid),''),c.convalidated AND NOT c.condeferrable AND c.conislocal
+	expected := map[string]struct{ kind, key, expression string }{
+		"role_bot_global_terminals_pkey":                {"p", "{1}", ""},
+		"role_bot_global_terminals_decision_id_key":     {"u", "{2}", ""},
+		"role_bot_global_terminals_receipt_id_key":      {"u", "{3}", ""},
+		"role_bot_global_terminals_bot_id_check":        {"c", "{1}", "(bot_id <> '00000000-0000-0000-0000-000000000000'::uuid)"},
+		"role_bot_global_terminals_decision_id_check":   {"c", "{2}", "(decision_id <> '00000000-0000-0000-0000-000000000000'::uuid)"},
+		"role_bot_global_terminals_receipt_id_check":    {"c", "{3}", "(receipt_id <> '00000000-0000-0000-0000-000000000000'::uuid)"},
+		"role_bot_global_terminals_registered_at_check": {"c", "{4}", "isfinite(registered_at)"},
+	}
+	rows, err := s.tx.Query(ctx, `SELECT c.conname,c.contype::text,c.conkey::text,COALESCE(pg_get_expr(c.conbin,c.conrelid),''),c.convalidated AND NOT c.condeferrable AND c.conislocal
  AND (c.contype='c' OR EXISTS(SELECT 1 FROM pg_index i JOIN pg_class x ON x.oid=i.indexrelid JOIN pg_am m ON m.oid=x.relam JOIN pg_opclass o ON o.oid=i.indclass[0] JOIN pg_namespace n ON n.oid=o.opcnamespace
  WHERE i.indexrelid=c.conindid AND i.indisunique AND i.indisvalid AND i.indisready AND i.indnatts=1 AND i.indpred IS NULL AND i.indexprs IS NULL AND m.amname='btree' AND n.nspname='pg_catalog' AND o.opcname='uuid_ops'))
  FROM pg_constraint c WHERE c.conrelid='public.role_bot_global_terminals'::regclass`)
-	if err != nil { return err };defer rows.Close()
-	count:=0
-	for rows.Next(){var name,kind,key,expression string;var qualified bool;if err:=rows.Scan(&name,&kind,&key,&expression,&qualified);err!=nil{return err};want,ok:=expected[name];if !ok||!qualified||want.kind!=kind||want.key!=key||want.expression!=expression{return fmt.Errorf("minimal constraint unavailable")};count++}
-	if err:=rows.Err();err!=nil{return err};if count!=len(expected){return fmt.Errorf("minimal constraint set unavailable")}
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		var name, kind, key, expression string
+		var qualified bool
+		if err := rows.Scan(&name, &kind, &key, &expression, &qualified); err != nil {
+			return err
+		}
+		want, ok := expected[name]
+		if !ok || !qualified || want.kind != kind || want.key != key || want.expression != expression {
+			return fmt.Errorf("minimal constraint unavailable")
+		}
+		count++
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if count != len(expected) {
+		return fmt.Errorf("minimal constraint set unavailable")
+	}
 	return nil
 }
 

@@ -179,3 +179,31 @@ func TestRole26RollbackWaitsForFirstWriter(t *testing.T) {
 	require.NoError(t, f.Pool.QueryRow(ctx, "SELECT count(*) FROM public.role_bot_global_terminals").Scan(&count))
 	require.Equal(t, 1, count)
 }
+
+func TestRole26UpRejectsUnknownSourceAndOldSnapshot(t *testing.T) {
+	ctx := context.Background()
+	f := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/role_db"))
+	f.Run(true, "goto", "25")
+	up, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/role_db/000026_bot_global_terminal.up.sql"))
+	require.NoError(t, err)
+	body := strings.TrimSpace(strings.TrimPrefix(strings.TrimSuffix(strings.TrimSpace(string(up)), "COMMIT;"), "BEGIN;"))
+	old, err := f.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
+	require.NoError(t, err)
+	defer old.Rollback(ctx)
+	var count int
+	require.NoError(t, old.QueryRow(ctx, "SELECT count(*) FROM public.role_bot_global_removals").Scan(&count))
+	_, err = old.Exec(ctx, body)
+	require.ErrorContains(t, err, "READ COMMITTED")
+	require.NoError(t, old.Rollback(ctx))
+	_, err = f.Pool.Exec(ctx, "INSERT INTO public.role_bot_actor_bindings(bot_id,actor_profile_id) VALUES($1,$2)", uuid.New(), uuid.New())
+	require.NoError(t, err)
+	// Corrupt only the disposable database's old guard, never published25 SQL.
+	_, err = f.Pool.Exec(ctx, "ALTER TABLE public.role_bot_global_removals DISABLE TRIGGER role_bot_global_removals_guard")
+	require.NoError(t, err)
+	f.Run(false, "goto", "26")
+	var absent bool
+	require.NoError(t, f.Pool.QueryRow(ctx, "SELECT to_regclass('public.role_bot_global_terminals') IS NULL").Scan(&absent))
+	require.True(t, absent, "failed preflight creates no partial terminal storage")
+	require.NoError(t, f.Pool.QueryRow(ctx, "SELECT count(*) FROM public.role_bot_actor_bindings").Scan(&count))
+	require.Equal(t, 1, count, "old identity/fence evidence is never erased by forward failure")
+}
