@@ -381,29 +381,93 @@ def validate_3071_packet(repo, directory):
     return packet
 
 
-def prepare_3071_capabilities(repo, directory, native_path):
+def current_author_J_native_applicability(repo, native, historical, current):
+    """Preserve old reviewed facts; independently derive current source authority."""
+    require(historical['content_base']==current['content_base']==AUTHOR_NATIVE_CONTENT_BASE,
+        'current_author_J_same_native_content_baseline')
+    old_raw=git(repo,'show',historical['record']+':'+native.RECORD_PATH)
+    require(sha(old_raw)==historical['record_sha256'],'current_author_J_historical_record_hash')
+    old=json.loads(old_raw);new=native.load_record(repo)
+    require(old['version']==new['version']=='NATIVE-P3-SOURCE-v1'
+        and old['classification']==new['classification']=='DORMANT-A3-RESTRICTIVE-P3-SOURCE'
+        and old['base']==historical['content_base'] and old['source']==historical['snapshot']
+        and old['consumers']==new['consumers']==['DEVELOP-SOURCE-v1','MASTER-SOURCE-v1'],
+        'current_author_J_distinct_source_only_record_identities')
+    require(native.entry(repo,historical['record'],native.RECORD_PATH)['mode']=='100644',
+        'current_author_J_historical_record_mode')
+    old_paths=native.rows(old['projection'],('path','before','after'))
+    native.rows(old['context'],('path','entry'))
+    require(old_paths==historical['paths'] and set(old_paths)<=set(current['paths']),
+        'current_author_J_complete_historical_membership')
+    for item in old['projection']:
+        require(item['before']!=item['after'] and native.entry(repo,old['base'],item['path'])==item['before']
+            and native.entry(repo,old['source'],item['path'])==item['after'],'current_author_J_historical_projection_entries')
+    for item in old['context']:
+        require(item['entry'] is not None and native.entry(repo,old['source'],item['path'])==item['entry'],
+            'current_author_J_historical_context_entries')
+    for a,b in ((historical['content_base'],historical['snapshot']),
+        (historical['snapshot'],historical['record']),(historical['record'],current['source']),
+        (historical['snapshot'],current['snapshot'])):
+        git(repo,'merge-base','--is-ancestor',a,b)
+    def metadata(binding,record,raw):
+        return dict(**{k:binding[k] for k in ('base','content_base','snapshot','record','record_sha256','paths')},
+            classification=record['classification'],record_raw=raw_binding(raw))
+    return dict(type='F54_CURRENT_AUTHOR_J_NATIVE_SOURCE_APPLICABILITY',
+        historical=metadata(historical,old,old_raw),
+        current=metadata(current,new,git(repo,'show',current['record']+':'+native.RECORD_PATH)),
+        added_paths=sorted(set(current['paths'])-set(old_paths)),
+        path_entries=[dict(path=name,historical_entry=entry_binding(repo,historical['snapshot'],name),
+            current_entry=entry_binding(repo,current['snapshot'],name),
+            membership='HISTORICAL_AND_CURRENT' if name in old_paths else 'CURRENT_RECORD_ONLY; ORIGINAL_GATES_REQUIRED')
+            for name in current['paths']],admission=False,runtime_pass=False)
+
+
+def prepare_3071_capabilities(repo, directory, native_path, author_applicability=None):
     packet=validate_3071_packet(repo,directory);target=git(repo,'rev-parse','HEAD').decode().strip()
     allowed={'scripts/ci/f13_f54_history.py','scripts/ci/f13_f54_history_test.py','scripts/ci/voice-db-runtime-provisioning-contract_test.sh','.agent/execplans/native-p3-master-source.md'}
-    require(set(git(repo,'diff','--name-only',J3071_PROTOTYPE_BASE,target).decode().splitlines())<=allowed,'fixed3071_current_carrier_only_four_owned_paths')
+    if author_applicability is None:
+        require(set(git(repo,'diff','--name-only',J3071_PROTOTYPE_BASE,target).decode().splitlines())<=allowed,'fixed3071_current_carrier_only_four_owned_paths')
+    else:
+        require(author_applicability==current_author_applicability(repo),'current_author_J_independent_complete_applicability')
+        require(packet['original_caller']==AUTHOR_HISTORICAL_SCOPE,'current_author_J_original_historical_caller')
     sources=['scripts/ci/f13_f54_history.py','scripts/ci/voice-db-runtime-provisioning-contract_test.sh','scripts/ci/voice-r22-runtime-scope.sh']
     require(all((ROOT/name).read_bytes()==git(repo,'show',target+':'+name) for name in sources),'fixed3071_actual_source_carrier')
     native_raw=Path(native_path).read_bytes();binding=json.loads(native_raw);original=json.loads(packet['original_native_binding']['raw'])
-    require(all(binding[k]==original[k] for k in ('base','content_base','snapshot','record','record_sha256','paths')),'fixed3071_no_borrowed_new_native_authority')
+    if author_applicability is None:
+        require(all(binding[k]==original[k] for k in ('base','content_base','snapshot','record','record_sha256','paths')),'fixed3071_no_borrowed_new_native_authority')
     context={k:os.environ.get(k,'') for k in ('GITHUB_EVENT_NAME','GITHUB_REF','GITHUB_SHA','VOICE_CI_PUSH_BEFORE_SHA','GITHUB_BASE_REF')}
     spec=importlib.util.spec_from_file_location('fixed3071_native',ROOT/'scripts/ci/f13_native_p3_source.py')
     native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
-    actual=native.qualify(repo,binding['base'],binding['source'],binding['target'],context['GITHUB_EVENT_NAME'],context['GITHUB_REF'],context['GITHUB_SHA'],context['VOICE_CI_PUSH_BEFORE_SHA'],context['GITHUB_BASE_REF'])
+    try:
+        actual=native.qualify(repo,binding['base'],binding['source'],binding['target'],context['GITHUB_EVENT_NAME'],context['GITHUB_REF'],context['GITHUB_SHA'],context['VOICE_CI_PUSH_BEFORE_SHA'],context['GITHUB_BASE_REF'])
+    except native.Rejected as error:raise Rejected('fixed3071_native_'+str(error)) from error
     require(actual==binding and binding['target']==target,'fixed3071_actual_native_context_independently_qualified')
-    return dict(type='F54_FIXED3071_STRUCTURAL_CAPABILITIES_PROTOTYPE',directory=str(Path(directory).resolve()),packet_sha256=J3071_PACKET_SHA,
+    current_fields={}
+    if author_applicability is not None:
+        require(binding['consumer']=='MASTER-SOURCE-v1' and binding['base']==AUTHOR_EVENT_BASE,
+            'current_author_J_actual_master_event_base')
+        git(repo,'merge-base','--is-ancestor',AUTHOR_REFERENCE,binding['source'])
+        current_fields=dict(author_applicability=author_applicability,historical_native_binding=packet['original_native_binding'],
+            native_applicability=current_author_J_native_applicability(repo,native,original,binding))
+    return dict(type='F54_FIXED3071_CURRENT_AUTHOR_CAPABILITIES' if author_applicability is not None else 'F54_FIXED3071_STRUCTURAL_CAPABILITIES_PROTOTYPE',
+        **current_fields,directory=str(Path(directory).resolve()),packet_sha256=J3071_PACKET_SHA,
         tuple=exact_3071_boundary(repo,J3071,J3071_P1,J3071_P2),native_path=str(native_path),native_binding=raw_binding(native_raw),context=context,
         source_context=router_source_context(repo),caller=packet['original_caller'],git_version=git(repo,'--version').decode().strip(),
         history='UNOBSERVED',source_qualification='UNRESOLVED',supersession='NO_NEW_AUTHORITY',admission=False)
 
 
-def verified_3071_capabilities(repo, path):
-    cap=json.loads(Path(path).read_bytes())
-    require(cap==prepare_3071_capabilities(repo,cap['directory'],cap['native_path']),'fixed3071_complete_current_capability_binding')
+def prepare_3071_author_capabilities(repo, directory, native_path):
+    return prepare_3071_capabilities(repo,directory,native_path,current_author_applicability(repo))
+
+
+def checked_3071_capability_value(repo, cap):
+    prepare=prepare_3071_author_capabilities if cap.get('type')=='F54_FIXED3071_CURRENT_AUTHOR_CAPABILITIES' else prepare_3071_capabilities
+    require(cap==prepare(repo,cap['directory'],cap['native_path']),'fixed3071_complete_current_capability_binding')
     return cap
+
+
+def verified_3071_capabilities(repo, path):
+    return checked_3071_capability_value(repo,json.loads(Path(path).read_bytes()))
 
 
 J3071_PRIOR_SPAN=dict(aggregate='dc0acdefec7e5c413988adf71f86d12bff4017bc',
@@ -448,7 +512,7 @@ def prepare_J_prior_origin(repo, capability_path, trace_path):
 
 
 def verify_J_prior_origin(repo, origin):
-    cap=origin['capability'];require(cap==prepare_3071_capabilities(repo,cap['directory'],cap['native_path']), 'fixed3071_prior_independent_capability')
+    cap=origin['capability'];require(cap==checked_3071_capability_value(repo,cap), 'fixed3071_prior_independent_capability')
     current=Path(origin['main_trace']).read_bytes();bound=origin['prefix']
     require(len(current)>=bound['bytes'] and sha(current[:bound['bytes']])==bound['sha256'],'fixed3071_prior_original_prefix_immutable')
     # Read only the sealed prefix, keeping its original trace identity. Existing
@@ -2460,7 +2524,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             require(op in attempts and op not in operations and op not in J_capabilities,'fixed3071_capability_after_actual_attempt')
             binding=v['capability'];require(binding==raw_binding(binding['raw']) and v['admission'] is False,'fixed3071_capability_raw_binding')
             capability=json.loads(binding['raw'])
-            require(capability==prepare_3071_capabilities(repo,capability['directory'],capability['native_path']),'fixed3071_actual_complete_structural_capability')
+            require(capability==checked_3071_capability_value(repo,capability),'fixed3071_actual_complete_structural_capability')
             actual_frame=frames[frame];scope=capability['caller']
             require(all(actual_frame[k]==scope[k] for k in ('base','target','allow_direct_followup','partition_source_history')),'fixed3071_actual_original_false_partition_context')
             require(op==frame+'/'+J3071+'/2' and v['receipt']==dict(capability['tuple'],capability_sha256=sha(canonical(capability))),'fixed3071_exact_boundary_receipt')
@@ -2856,6 +2920,7 @@ def main():
             print(manual_delta_for_binding(router_binding(repo,path,digest,map_path,context_path,name)),end='');return 0
         if command=='reviewed-F-deletion':print(json.dumps(prepare_reviewed_F_deletion(*args)));return 0
         if command=='3071-capabilities':print(json.dumps(prepare_3071_capabilities(*args)));return 0
+        if command=='3071-current-author-capabilities':print(json.dumps(prepare_3071_author_capabilities(*args)));return 0
         if command=='3071-boundary':print(json.dumps(boundary_3071_capability(*args)));return 0
         if command=='3071-composition':print(json.dumps(composition_3071_capability(*args)));return 0
         if command=='3071-range-origin':

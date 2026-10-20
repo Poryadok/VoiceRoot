@@ -3315,6 +3315,10 @@ f13_f54_collect_master_author_impl() {
   local capability_command="$1"
   shift
   [[ "${capability_command}" == capabilities || "${capability_command}" == current-author-capabilities ]] || return 1
+  local J_capability_command=3071-capabilities
+  if [[ "${capability_command}" == current-author-capabilities ]]; then
+    J_capability_command=3071-current-author-capabilities
+  fi
   local repo="$1" base="$2" target="$3" output="$4" category="$5" unit="$6"
   local f13_f54_original_trace="$7" f13_f54_original_native="$8" f13_f54_current_native="$9"
   local fixed3071_unit="${10:-}" f13_f54_3071_capability_file=''
@@ -3336,7 +3340,7 @@ f13_f54_collect_master_author_impl() {
   if [[ -n "${fixed3071_unit}" ]]; then
     f13_f54_3071_capability_file="${TMP_DIR}/fixed3071-structural-capabilities.json"
     [[ ! -e "${f13_f54_3071_capability_file}" ]] || return 1
-    python3 "${f13_f54_observer}" 3071-capabilities "${repo}" "${fixed3071_unit}" \
+    python3 "${f13_f54_observer}" "${J_capability_command}" "${repo}" "${fixed3071_unit}" \
       "${native_p3_binding}" >"${f13_f54_3071_capability_file}" || return 1
     if [[ -f "${fixed3071_unit}/corrected-F/source-unit.json" ]]; then
       f13_f54_F_capability_file="${TMP_DIR}/corrected-F-capability.json"

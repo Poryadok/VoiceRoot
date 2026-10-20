@@ -580,6 +580,58 @@ The new explicit AUTHOR caller is not activated in the ordinary production
 route. Graphify completion and exact resource disposition are recorded in the
 separate source-bound evidence packet; no freshness is inferred here.
 
+### Current AUTHOR nested3071 applicability (c80/c82; e280)
+
+The c77 execution-only stage stopped BEFORE launch: fixed3411-to13a has190
+changed paths/186 outside the four producer files, and the original nested3071
+packet binds base698/old R5/H4 native metadata rather than current eventea845
+and the existing current native record. Frozen prelaunch manifestf60ac451 and
+ZIP172a4564 retain exact entries and both mismatches; no producer/target exists.
+Integrator121 accepted that disposition and separately offered this four-file
+author stage. c82 ACCEPT/e280 owner checkpoint and the still-held e277 lease
+a2d7b87c1c09a0ea203af00bc5db267b are the actual custody; no lease reuse/transfer.
+
+Add a distinct current AUTHOR J certificate, not a change to the original
+legacy equality/four-file predicates. Reconstruct the same fixed current
+applicability, original full structural packet and historical caller; bind the
+old native record from immutable Git/hash with all mode/type/OID/context facts.
+Independently qualify current native B/S/T under its existing record, bind
+classification/membership/current entries and keep old/current metadata apart.
+Old native membership and content baseline remain required; extra current
+record paths retain original gates. No pin/record/product/runtime promotion,
+row generation, synthetic flags, map concatenation or history/owner/OR bypass.
+All J prior-origin/history capability consumers reconstruct the typed value.
+Only the explicit current AUTHOR wrapper selects this constructor; legacy and
+ordinary production selection remain unchanged.
+
+Test-first: complete private33-node J DAG and real old/current native authority
+give two independent semantic REDs on unchanged13a, logea76a645 (carrier guard
+and old-native equality). The first attempt was a private verifier-carrier
+setup error and is not this RED. Initial distinct-constructor GREEN2/2 is
+log7e7fa8b1. Rehashed certificate/reference/record/snapshot/classification/path/
+mode/OID/caller/history/runtime substitutions, forged actual native bindings,
+and altered historical record metadata must reject; old constructors must
+still refuse each original mismatch. Existing frame/map/OR regressions and
+the affected43-test history suite remain required. Source/classifier/history
+observations and full outer/collection-seal/original-router execution are NOT
+in this author stage. Freeze complete source/proof for independent CODE review;
+no producer may run until a later separate accepted integrator stage.
+
+Execution: final negative group passes2/2 in21.469s (log8bcf00ef), preserving
+both original REDs and default refusals. One earlier negative attempt had a
+fixture dictionary/string error plus an earlier genuine historical-version
+barrier; these are retained separately (log8d0d6a9a), then corrected in tests
+without changing the helper. Affected history43/43 and shell syntax pass in
+195.305s (log895722fc); all41 existing test bodies remain AST-identical and only
+the explicit master-author implementation changed among shell functions.
+Real immutable old/current record ancestry prechecks are0; these are Git facts,
+not a producer/native qualification. Graphify36706 extracted172/172 AST files,
+then root requested owned closure: supported Ctrl-C returned terminal1 and no
+graphify/Python child or own container remained. Record CANCELLED_NO_VERDICT,
+not completed graph freshness. The final prose documents these receipts after
+testing; executable hashes remain unchanged. Full F13/J/current input proof
+and production R/K/CI remain HOLD pending later independent stages.
+
 ## J native clean-zero consumer repair (e215)
 
 Basis: intake REQUEST bc83f8eb and RAW-GAP-CONTRACT-416-ADDENDUM

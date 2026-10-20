@@ -27,6 +27,141 @@ def module():
 
 
 class ProducerTrace(unittest.TestCase):
+    def current_author_J_fixture(self, native_only=False):
+        # Complete private historical DAG plus genuine old/current native
+        # qualification. No production tuple, authority or raw row is invented.
+        from f13_native_p3_source_test import NativeSourceTest, native
+        import copy
+        m,folder,names=self.exact_M_fixture()
+        seed=NativeSourceTest();seed.setUp();self.addCleanup(seed.doCleanups)
+        f=NativeSourceTest();f.repo=self.repo;f.base=self.base
+        self.write(RUNTIME,'old dormant fixture\n');f.head=self.commit('old native snapshot')
+        f.record_data=copy.deepcopy(seed.record_data)
+        f.record_data.update(base=f.base,source=f.head,projection=[dict(path=RUNTIME,
+            before=f.entry(f.base,RUNTIME),after=f.entry(f.head,RUNTIME))],
+            context=[dict(path=PROTO,entry=f.entry(f.head,PROTO))])
+        f.pin();old_carrier=f.carrier;old_snapshot=f.head
+        old_target=git(self.repo,'commit-tree',old_carrier+'^{tree}','-p',f.base,'-p',old_carrier,'-m','old private master')
+        old=f.qualify(target=old_target,event='pull_request',ref='refs/pull/875/merge',base_ref='master')
+        self.write('docs/private-current-master.md','current event parent\n');event_base=self.commit('current event base')
+        extra='src/backend/voice/pb/voice/calls/go.mod'
+        self.write(extra,'module privatefixture\n');self.write(RUNTIME,'current dormant fixture\n')
+        f.head=self.commit('current native snapshot')
+        f.record_data.update(source=f.head,projection=[dict(path=n,before=f.entry(f.base,n),after=f.entry(f.head,n)) for n in (RUNTIME,extra)])
+        f.pin()
+        text=Path(native.__file__).read_text()
+        for key,value in f.pins.items():text=re.sub(r'(?m)^'+key+r' = .*$',key+' = '+repr(value),text)
+        self.write(native.VERIFIER_PATH,text)
+        for n in ('f13_f54_history.py','voice-r22-runtime-scope.sh'):self.write('scripts/ci/'+n,(ROOT/'scripts/ci'/n).read_text())
+        reference=self.commit('fixed current AUTHOR reference')
+        target=git(self.repo,'commit-tree',reference+'^{tree}','-p',event_base,'-p',reference,'-m','current private master')
+        git(self.repo,'checkout','-q',target)
+        context=dict(GITHUB_EVENT_NAME='pull_request',GITHUB_REF='refs/pull/875/merge',GITHUB_SHA=target,
+            VOICE_CI_PUSH_BEFORE_SHA=event_base,GITHUB_BASE_REF='master')
+        spec=importlib.util.spec_from_file_location('private_current_J_native',self.repo/native.VERIFIER_PATH)
+        authority=importlib.util.module_from_spec(spec);spec.loader.exec_module(authority)
+        binding=authority.qualify(self.repo,event_base,reference,target,'pull_request',context['GITHUB_REF'],target,event_base,'master')
+        bound=self.folder/'current-J-native.json';bound.write_bytes(m.canonical(binding))
+        m.AUTHOR_REFERENCE=reference;m.AUTHOR_REFERENCE_TREE=git(self.repo,'rev-parse',reference+'^{tree}')
+        m.AUTHOR_REFERENCE_DELTA_SHA=m.sha(m.git(self.repo,'diff','--raw','--no-abbrev','--no-renames',m.PROTOTYPE_BASE,reference))
+        m.AUTHOR_EVENT_BASE=event_base;m.AUTHOR_NATIVE_CONTENT_BASE=f.base
+        m.AUTHOR_HISTORICAL_SCOPE=dict(base=m.O,target=m.M,allow_direct_followup='true',partition_source_history='false')
+        m.J3071,m.J3071_P1,m.J3071_P2=m.M,m.P1,m.P2
+        m.J3071_O,m.J3071_BASES,m.J3071_TREE=m.O,m.BASES,m.TREE
+        # Isolate the second mismatch without skipping a guard: in that private
+        # control the genuine current carrier has no post-prototype tree delta.
+        m.J3071_PROTOTYPE_BASE=reference if native_only else old_carrier
+        rule=b'Private complete J contract; no production authority'
+        (folder/'rudeus410-3071-boundary-decision.md').write_bytes(rule);m.J3071_RULING_SHA=m.sha(rule)
+        nodes=git(self.repo,'rev-list','--topo-order','--reverse',m.M,'^'+m.O).splitlines()
+        sources=git(self.repo,'rev-list','--topo-order','--reverse',m.P2,'^'+m.O).splitlines()
+        edges=[];touched=set()
+        for node in nodes:
+            parents=git(self.repo,'rev-list','--parents','-n','1',node).split()[1:];sides=[]
+            for parent in parents:
+                paths=git(self.repo,'diff','--name-only','--no-renames',parent,node).splitlines();touched.update(paths)
+                sides.append(dict(parent=parent,paths=paths,raw_diff=m.raw_binding(m.git(self.repo,'diff','--raw','--no-abbrev','--no-renames','-z',parent,node)),
+                    entries={n:dict(before=m.tree_entry(self.repo,parent,n),after=m.tree_entry(self.repo,node,n)) for n in paths}))
+            edges.append(dict(node=node,ordered_parents=parents,parent_edges=sides,source_side=node in sources))
+        refs=dict(O=m.O,bestA=m.BASES[0],bestB=m.BASES[1],P1=m.P1,P2=m.P2,J=m.M,H53=m.M,H4=old_snapshot)
+        sets={n:git(self.repo,'diff','--name-only',a,b).splitlines() for n,a,b in
+            [('candidate_difference',*m.BASES),('history_to_source',m.O,m.P2),('first_to_result',m.P1,m.M),('source_to_result',m.P2,m.M),('older_to_result',m.O,m.M)]}
+        packet=dict(version='F54-FIXED3071-STRUCTURAL-FACTS-v1',admission=False,merge=m.M,parents=[m.P1,m.P2],best_bases=m.BASES,
+            older_history_boundary=m.O,committed_tree=m.TREE,ruling_sha256=m.J3071_RULING_SHA,nodes=edges,source_nodes=sources,
+            actual_source_first_parent_operations=git(self.repo,'rev-list','--first-parent','--reverse',m.O+'..'+m.P2).splitlines(),
+            all_internal_touched_paths=sorted(touched),all_internal_versions={n:{k:m.tree_entry(self.repo,v,n) for k,v in refs.items()} for n in sorted(touched)},
+            original_caller=dict(m.AUTHOR_HISTORICAL_SCOPE),original_native_binding=m.raw_binding(m.canonical(old)),
+            source_qualification=dict(status='UNRESOLVED'),actual_history='UNOBSERVED',actual_rows='UNOBSERVED',Git_only_path_sets=sets)
+        raw=m.canonical(packet);(folder/'structural-facts-v1.json').write_bytes(raw);m.J3071_PACKET_SHA=m.sha(raw)
+        self.assertEqual(m.validate_3071_packet(self.repo,folder),packet)
+        return m,folder,bound,context,old,binding
+
+    def test_current_author_J_binds_current_carrier_without_changing_historical_packet(self):
+        m,folder,bound,context,old,binding=self.current_author_J_fixture()
+        prepare=getattr(m,'prepare_3071_author_capabilities',m.prepare_3071_capabilities)
+        with patch.dict('os.environ',context):cap=prepare(self.repo,folder,bound)
+        self.assertEqual(cap['type'],'F54_FIXED3071_CURRENT_AUTHOR_CAPABILITIES')
+        self.assertEqual(cap['historical_native_binding'],m.raw_binding(m.canonical(old)))
+        self.assertEqual(cap['native_binding'],m.raw_binding(m.canonical(binding)))
+        self.assertEqual(cap['author_applicability']['reference'],m.AUTHOR_REFERENCE)
+        self.assertFalse(cap['admission']);self.assertEqual(cap['history'],'UNOBSERVED')
+        # The old constructor is still a refusal, not an implicit new route.
+        with patch.dict('os.environ',context),self.assertRaisesRegex(m.Rejected,'fixed3071_current_carrier_only_four_owned_paths'):
+            m.prepare_3071_capabilities(self.repo,folder,bound)
+        import copy
+        path=self.folder/'private-J-current-certificate.json';path.write_bytes(m.canonical(cap))
+        with patch.dict('os.environ',context):self.assertEqual(m.verified_3071_capabilities(self.repo,path),cap)
+        for error in ('reference','record','snapshot','classification','path','mode','oid','frame','history','runtime','type'):
+            forged=copy.deepcopy(cap)
+            if error=='reference':forged['author_applicability']['reference']=m.J3071
+            elif error=='record':forged['native_applicability']['current']['record']=old['record']
+            elif error=='snapshot':forged['native_applicability']['current']['snapshot']=old['snapshot']
+            elif error=='classification':forged['native_applicability']['current']['classification']='ACTIVE'
+            elif error=='path':forged['native_applicability']['path_entries'].pop()
+            elif error=='mode':forged['native_applicability']['path_entries'][0]['current_entry']['mode']='100755'
+            elif error=='oid':forged['native_applicability']['path_entries'][0]['current_entry']['oid']='0'*40
+            elif error=='frame':forged['caller']['base']=binding['base']
+            elif error=='history':
+                altered=dict(old);altered['content_base']=old['snapshot'];forged['historical_native_binding']=m.raw_binding(m.canonical(altered))
+            elif error=='runtime':forged['native_applicability']['runtime_pass']=True
+            else:forged['type']='F54_FIXED3071_STRUCTURAL_CAPABILITIES_PROTOTYPE'
+            path.write_bytes(m.canonical(forged))
+            with self.subTest(certificate=error),patch.dict('os.environ',context),self.assertRaises(m.Rejected):
+                m.verified_3071_capabilities(self.repo,path)
+
+    def test_current_author_J_keeps_old_native_facts_and_qualifies_current_authority(self):
+        m,folder,bound,context,old,binding=self.current_author_J_fixture(native_only=True)
+        prepare=getattr(m,'prepare_3071_author_capabilities',m.prepare_3071_capabilities)
+        with patch.dict('os.environ',context):cap=prepare(self.repo,folder,bound)
+        self.assertNotEqual(old['record'],binding['record']);self.assertNotEqual(old['base'],binding['base'])
+        self.assertEqual(cap['native_applicability']['historical']['record'],old['record'])
+        self.assertEqual(cap['native_applicability']['current']['record'],binding['record'])
+        self.assertEqual(cap['native_applicability']['added_paths'],sorted(set(binding['paths'])-set(old['paths'])))
+        with patch.dict('os.environ',context),self.assertRaisesRegex(m.Rejected,'fixed3071_no_borrowed_new_native_authority'):
+            m.prepare_3071_capabilities(self.repo,folder,bound)
+        import copy
+        for error in ('base','content_base','snapshot','record','paths','classification','source'):
+            forged=copy.deepcopy(binding)
+            if error=='paths':forged['paths']=old['paths']
+            elif error=='classification':forged[error]='ACTIVE'
+            elif error=='source':forged[error]=old['source']
+            else:forged[error]=old[error] if old[error]!=binding[error] else old['snapshot']
+            bound.write_bytes(m.canonical(forged))
+            with self.subTest(native=error),patch.dict('os.environ',context),self.assertRaisesRegex(m.Rejected,'fixed3071_(native_|actual_native_context)'):
+                prepare(self.repo,folder,bound)
+        bound.write_bytes(m.canonical(binding))
+        packet_path=folder/'structural-facts-v1.json';packet=json.loads(packet_path.read_bytes())
+        for error in ('hash','snapshot','paths'):
+            forged=copy.deepcopy(packet);historic=copy.deepcopy(old)
+            if error=='hash':historic['record_sha256']='0'*64
+            elif error=='snapshot':historic['snapshot']=binding['snapshot']
+            else:historic['paths']=[]
+            forged['original_native_binding']=m.raw_binding(m.canonical(historic))
+            raw=m.canonical(forged);packet_path.write_bytes(raw);m.J3071_PACKET_SHA=m.sha(raw)
+            expected='fixed3071_all_versioned_path_entries' if error=='snapshot' else 'current_author_J_'
+            with self.subTest(historical=error),patch.dict('os.environ',context),self.assertRaisesRegex(m.Rejected,expected):
+                prepare(self.repo,folder,bound)
+
     def test_current_author_capability_keeps_fixed_reference_and_historical_facts(self):
         # Complete private source unit; no production record/permission is made.
         m,folder,names=self.exact_M_fixture();historical=m.M
