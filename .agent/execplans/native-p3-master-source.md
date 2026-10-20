@@ -537,6 +537,49 @@ read-only actual-input revalidation before any changed-input producer. Offline
 reconstructed receipts are not appended to old traces or called producer events.
 Actual J mutation/fullcollection/router/RK/currentcandidate remain HOLD.
 
+## Current AUTHOR adapter (c68/c69/c70; e261)
+
+Implement only the fixed D6 AUTHOR applicability seam in these four files.
+Historical traversal698/H53, native content8191 and actual master eventea845
+are distinct identities; O remains the exact nested M enumeration boundary.
+Current D6's190 entries are4 author,32 native projection/context and154 retaining
+original gates. Their immutable entry binding is not new path authority. Reuse
+the177/F33 semantics and exact current34/four NONEMPTY repair equality fromc69.
+
+Test first: real private Git source-unit reference with a later accepted
+non-author carrier entry must expose the old1399/1414 restriction, and an
+independently qualified real native master tuple must expose old1464 base
+conflation. Then add a distinct current AUTHOR certificate/type, fixed reference
+and only own four-file successor delta. Legacy prototype and ordinary production
+initialization remain unchanged. Reconstruct certificates from immutable Git,
+not caller-selected path lists, hashes, bases or production toggles. Verify
+foreign source/reference/entry/base/frame, forged certificate and existing
+owner/content/map/OR negatives. Preserve actual original ledger/collection/router
+obligations; no new observations are manufactured by this source-only stage.
+
+Run private Linux focused causal and affected history tests/syntax, freeze normal
+commit/bundle and source-bound proof for independent review. No producer/CI/GH,
+R/K/pin/native helper/schema/product edit, stopped operation or current-candidate
+mutation is authorized. Fresh WT19 lease df6c7442debb72acfdbdaa86ea42c4ca belongs
+to416 for this exact stage; global CI/merge remains121.
+
+Execution: the unchanged D6 helper fails both causal private fixtures at the
+actual historical/current restriction and event/history base-equality guard
+(RED log7fb53998). Focused GREEN3 exercises the real private CLI and original
+source-base/composition shell seams plus independently qualified native B/S/T;
+two tests pass. The first affected suite preserves one compatibility ERROR
+(40/41 pass, logf2c73113): the old private master transport omits `type`.
+Optional AUTHOR discrimination fixes that legacy transport without changing
+the strict executable certificate constructor. Three focused tests pass
+(logc1327b7e), followed by final41/41 in184.660s and shell syntax
+(log6335f55b). All39 previous test bodies remain AST-identical; all executable
+source hashes match the final test receipt. This paragraph is documentation
+after that receipt. Private fixtures are not actual outer/history producer
+observations, source qualification, collection/seal/router proof or CI PASS.
+The new explicit AUTHOR caller is not activated in the ordinary production
+route. Graphify completion and exact resource disposition are recorded in the
+separate source-bound evidence packet; no freshness is inferred here.
+
 ## J native clean-zero consumer repair (e215)
 
 Basis: intake REQUEST bc83f8eb and RAW-GAP-CONTRACT-416-ADDENDUM

@@ -29,6 +29,13 @@ SCHEMA = 'F54-PRODUCER-OBSERVATION-v2'
 ROOT = Path(__file__).resolve().parents[2]
 PRODUCTION_AUTHORITY = False
 PROTOTYPE_BASE = '6d1f60f955a79e0378a3532750d209e3a11c8f23'
+AUTHOR_REFERENCE = 'd6ac6d2f4b85eb691a00f729eb2192e63ae0091f'
+AUTHOR_REFERENCE_TREE = 'bb525a189552c98656392ba0c02f0cdcd3978a0c'
+AUTHOR_REFERENCE_DELTA_SHA = '86c0e832ca3ba454016ae5ff35c40c1c7d2bd59aa0f0e52f8caacef7e80845ef'
+AUTHOR_EVENT_BASE = 'ea845cc695b3cde2a13ba9a97345dd78795833e0'
+AUTHOR_NATIVE_CONTENT_BASE = '8191a36ca3bea7d053df0dd25963ca5133284b41'
+AUTHOR_HISTORICAL_SCOPE = dict(base='698d4f064f032ea74abf3ede2017100b26c8ee69',target='53f75f74523735ac594e21582bea659f567a7288',allow_direct_followup='true',partition_source_history='false')
+AUTHOR_SOURCE_PATHS = ('scripts/ci/f13_f54_history.py','scripts/ci/f13_f54_history_test.py','scripts/ci/voice-db-runtime-provisioning-contract_test.sh','.agent/execplans/native-p3-master-source.md')
 SPAN_AGGREGATE = '8afe8e90285aa59c19ac011ded7260d2f191fa59'
 SPAN_BASE = '2445e81de07681cfd5f1491e4c793aaac747f571'
 SPAN_HEAD = '23551116ac5e741d3ec4ff7b412b7c9e248539ff'
@@ -1383,7 +1390,37 @@ def guarded_names(names):
     require(p.returncode==0,'guarded_predicate_execution');return p.stdout.decode().splitlines()
 
 
-def prepare_capabilities(repo, directory):
+def current_author_applicability(repo):
+    """Fixed current input, not a production record or new path permission."""
+    require(Path(repo).resolve()==ROOT.resolve(),'current_author_actual_ROOT')
+    reference=git(repo,'rev-parse',AUTHOR_REFERENCE+'^{commit}').decode().strip()
+    require(reference==AUTHOR_REFERENCE and git(repo,'rev-parse',reference+'^{tree}').decode().strip()==AUTHOR_REFERENCE_TREE,
+        'current_author_fixed_reference_tree')
+    reference_raw=git(repo,'diff','--raw','--no-abbrev','--no-renames',PROTOTYPE_BASE,reference)
+    require(sha(reference_raw)==AUTHOR_REFERENCE_DELTA_SHA,'current_author_complete_reference_delta')
+    target=git(repo,'rev-parse','HEAD').decode().strip()
+    git(repo,'merge-base','--is-ancestor',PROTOTYPE_BASE,reference)
+    git(repo,'merge-base','--is-ancestor',reference,target)
+    own_paths=git(repo,'diff','--name-only',reference,target).decode().splitlines()
+    require(set(own_paths)<=set(AUTHOR_SOURCE_PATHS),'current_author_only_own_four_file_delta')
+    names=git(repo,'diff','--name-only',PROTOTYPE_BASE,reference).decode().splitlines()
+    entries=[dict(path=name,prototype_entry=tree_entry(repo,PROTOTYPE_BASE,name),current_entry=tree_entry(repo,reference,name),
+        disposition='AUTHOR_CARRIER_ONLY' if name in AUTHOR_SOURCE_PATHS else 'FIXED_CURRENT_INPUT; ORIGINAL_GATES_REQUIRED') for name in names]
+    source_files={}
+    for name in AUTHOR_SOURCE_PATHS:
+        entry=tree_entry(repo,target,name);path=ROOT/name
+        raw=git(repo,'show',target+':'+name) if entry else None
+        require((path.read_bytes() if path.is_file() else None)==raw,'current_author_source_bytes_match_Git')
+        source_files[name]=dict(entry=entry,sha256=sha(raw) if raw is not None else None)
+    return dict(type='F54_FIXED_CURRENT_AUTHOR_APPLICABILITY',reference=reference,reference_tree=AUTHOR_REFERENCE_TREE,
+        reference_delta_raw=raw_binding(reference_raw),reference_delta=entries,current_carrier=target,
+        current_tree=git(repo,'rev-parse',target+'^{tree}').decode().strip(),source_files=source_files,
+        own_delta_paths=own_paths,own_delta=raw_binding(git(repo,'diff','--raw','--no-abbrev','--no-renames',reference,target)),
+        historical_collector=dict(AUTHOR_HISTORICAL_SCOPE),native_content_baseline=AUTHOR_NATIVE_CONTENT_BASE,
+        event_base=AUTHOR_EVENT_BASE,admission=False,runtime_pass=False)
+
+
+def prepare_capabilities(repo, directory, author_applicability=None):
     """Two independently checked source capabilities for the finite prototype.
 
     Constants select the question. Complete immutable source facts, actual Git
@@ -1396,7 +1433,12 @@ def prepare_capabilities(repo, directory):
     producer_sources=['scripts/ci/'+name for name in ('f13_f54_history.py','voice-db-runtime-provisioning-contract_test.sh','voice-r22-runtime-scope.sh')]
     # The nine historical versions remain exact. A new verifier implementation
     # is a separate current carrier, not a replacement historical source fact.
-    require(all(name in producer_sources for name in facts['changed_source_context_paths']),'unchanged_historical_candidate_product_context')
+    if author_applicability is None:
+        require(all(name in producer_sources for name in facts['changed_source_context_paths']),'unchanged_historical_candidate_product_context')
+    else:
+        require(author_applicability==current_author_applicability(repo),'current_author_independent_complete_applicability')
+        require(dict(base=packet['traversal_base'],target=packet['recursive_target'],allow_direct_followup='true',partition_source_history='false')==AUTHOR_HISTORICAL_SCOPE,
+            'current_author_exact_historical_collector_scope')
     names=packet['all_base_diff_paths'];guarded=guarded_names(names)
     require(len(guarded)==15 and guarded==packet['guarded_base_difference_paths']==contract['guarded_difference_paths'],'complete_actual_15_guarded_bindings')
     require(names==contract['complete_candidate_difference_paths'],'complete_contract_41_bindings')
@@ -1411,10 +1453,12 @@ def prepare_capabilities(repo, directory):
         dag.append(dict(node=node,ordered_parents=parents,parent_deltas=[dict(parent=p,delta=raw_binding(git(repo,'diff','--name-only',p,node))) for p in parents]))
     target=git(repo,'rev-parse','HEAD').decode().strip()
     allowed={'scripts/ci/f13_f54_history.py','scripts/ci/f13_f54_history_test.py','scripts/ci/voice-db-runtime-provisioning-contract_test.sh','.agent/execplans/native-p3-master-source.md'}
-    require(set(git(repo,'diff','--name-only',PROTOTYPE_BASE,target).decode().splitlines())<=allowed,'exact_prototype_source_context')
+    if author_applicability is None:
+        require(set(git(repo,'diff','--name-only',PROTOTYPE_BASE,target).decode().splitlines())<=allowed,'exact_prototype_source_context')
     for path in producer_sources:
         require((ROOT/path).read_bytes()==git(repo,'show',target+':'+path),'actual_capability_source_carrier')
-    return dict(type='F54_FIXED_COMPLETE_SOURCE_CAPABILITIES_PROTOTYPE',phase='SOURCE_PROVENANCE_ONLY',
+    return dict(type='F54_FIXED_CURRENT_AUTHOR_CAPABILITIES' if author_applicability is not None else 'F54_FIXED_COMPLETE_SOURCE_CAPABILITIES_PROTOTYPE',phase='SOURCE_PROVENANCE_ONLY',
+        **(dict(author_applicability=author_applicability) if author_applicability is not None else {}),
         unit_directory=str(folder.resolve()),source_facts=facts,prepared_at_target=target,
         producer_binding=classifier_binding(),observer_sha256=sha((ROOT/'scripts/ci/f13_f54_history.py').read_bytes()),
         history_boundary=dict(actual,type='F54_EXACT_HISTORY_BOUNDARY_CAPABILITY'),
@@ -1423,20 +1467,36 @@ def prepare_capabilities(repo, directory):
         complete_41_entries=packet['entries'],guarded_difference_paths=guarded,complete_dag=dag,
         carrier_context_transition=[dict(path=name,historical_source=SOURCE,current_carrier=target,
             historical_entry=entry_binding(repo,SOURCE,name),current_entry=entry_binding(repo,target,name),
-            disposition='CURRENT_VERIFIER_CARRIER_ONLY; historical tuple/entries unchanged') for name in facts['changed_source_context_paths']],
+            disposition='CURRENT_VERIFIER_CARRIER_ONLY; historical tuple/entries unchanged' if name in producer_sources else 'FIXED_CURRENT_INPUT_ONLY; ORIGINAL_GATES_REQUIRED') for name in facts['changed_source_context_paths']],
         collector_scope=dict(base=packet['traversal_base'],target=packet['recursive_target'],allow_direct_followup='true',partition_source_history='false'),
         actual_source_delta=raw_binding(git(repo,'diff','--name-only',O,P2)),admission=False)
 
 
-def verified_capabilities(repo, path):
-    value=json.loads(Path(path).read_bytes())
-    require(value==prepare_capabilities(repo,value['unit_directory']),'complete_exact_capability_binding')
+def prepare_author_capabilities(repo, directory):
+    return prepare_capabilities(repo,directory,current_author_applicability(repo))
+
+
+def checked_capability_value(repo, value):
+    require(value['type'] in ('F54_FIXED_CURRENT_AUTHOR_CAPABILITIES','F54_FIXED_COMPLETE_SOURCE_CAPABILITIES_PROTOTYPE'),'distinct_fixed_capability_type')
+    prepare=prepare_author_capabilities if value['type']=='F54_FIXED_CURRENT_AUTHOR_CAPABILITIES' else prepare_capabilities
+    require(value==prepare(repo,value['unit_directory']),'complete_exact_capability_binding')
     return value
 
 
-def boundary_capability(repo, path, merge, first, source):
+def verified_capabilities(repo, path):
+    return checked_capability_value(repo,json.loads(Path(path).read_bytes()))
+
+
+def current_author_frame_scope(value, collector_base, collector_target):
+    if value['type']=='F54_FIXED_CURRENT_AUTHOR_CAPABILITIES':
+        require([collector_base,collector_target]==[value['collector_scope']['base'],value['collector_scope']['target']],
+            'current_author_only_bound_historical_frame')
+
+
+def boundary_capability(repo, path, merge, first, source, collector_base='', collector_target=''):
     require([merge,first,source]==[M,P1,P2],'fixed_historical_tuple')
-    return verified_capabilities(repo,path)['history_boundary']
+    value=verified_capabilities(repo,path);current_author_frame_scope(value,collector_base,collector_target)
+    return value['history_boundary']
 
 
 def entry_capability(repo, path, base, target):
@@ -1445,9 +1505,10 @@ def entry_capability(repo, path, base, target):
     return dict(type='F54_EXACT_COLLECTOR_PROTOTYPE_CONTEXT',capability_sha256=sha(canonical(value)),admission=False)
 
 
-def composition_capability(repo, path, merge, boundary, first, source, name, result):
+def composition_capability(repo, path, merge, boundary, first, source, name, result, collector_base='', collector_target=''):
     require([merge,boundary,first,source]==[M,O,P1,P2],'fixed_historical_composition_tuple')
     value=verified_capabilities(repo,path)
+    current_author_frame_scope(value,collector_base,collector_target)
     require(name in value['actual_source_delta']['raw'].splitlines(),'exact_source_path_not_future_authority')
     actual=composition(repo,boundary,first,source,name,result)
     return dict(actual,type=value['whole_parent_composition']['type'],capability_sha256=sha(canonical(value)))
@@ -1458,10 +1519,25 @@ def master_context(repo, capability, binding_raw, context):
     spec=importlib.util.spec_from_file_location('f54_master_native',ROOT/'scripts/ci/f13_native_p3_source.py')
     native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
     binding=json.loads(binding_raw)
-    actual=native.qualify(repo,binding['base'],binding['source'],binding['target'],context['GITHUB_EVENT_NAME'],
-        context['GITHUB_REF'],context['GITHUB_SHA'],context['VOICE_CI_PUSH_BEFORE_SHA'],context['GITHUB_BASE_REF'])
+    try:
+        actual=native.qualify(repo,binding['base'],binding['source'],binding['target'],context['GITHUB_EVENT_NAME'],
+            context['GITHUB_REF'],context['GITHUB_SHA'],context['VOICE_CI_PUSH_BEFORE_SHA'],context['GITHUB_BASE_REF'])
+    except native.Rejected as error:raise Rejected('master_native_'+str(error)) from error
     require(actual==binding and binding['target']==git(repo,'rev-parse','HEAD').decode().strip(),'actual_master_native_B_S_T_context')
-    require(binding['base']==capability['collector_scope']['base'],'master_actual_original_base')
+    author_roles=None
+    if capability.get('type')=='F54_FIXED_CURRENT_AUTHOR_CAPABILITIES':
+        require(capability['author_applicability']==current_author_applicability(repo)
+            and capability['prepared_at_target']==binding['target'],'current_author_same_exact_carrier')
+        require(capability['collector_scope']==AUTHOR_HISTORICAL_SCOPE,'current_author_original_historical_scope')
+        require(binding['base']==AUTHOR_EVENT_BASE and binding['content_base']==AUTHOR_NATIVE_CONTENT_BASE,
+            'current_author_separate_event_and_native_bases')
+        git(repo,'merge-base','--is-ancestor',AUTHOR_REFERENCE,binding['source'])
+        git(repo,'merge-base','--is-ancestor',AUTHOR_HISTORICAL_SCOPE['base'],binding['base'])
+        git(repo,'merge-base','--is-ancestor',AUTHOR_NATIVE_CONTENT_BASE,AUTHOR_HISTORICAL_SCOPE['target'])
+        author_roles=dict(historical_collector=dict(AUTHOR_HISTORICAL_SCOPE),native_content_baseline=AUTHOR_NATIVE_CONTENT_BASE,
+            actual_event_base=binding['base'],reference=AUTHOR_REFERENCE)
+    else:
+        require(binding['base']==capability['collector_scope']['base'],'master_actual_original_base')
     git(repo,'merge-base','--is-ancestor',capability['collector_scope']['target'],binding['source'])
     parents=git(repo,'rev-list','--parents','-n','1',binding['target']).decode().split()
     require(parents==[binding['target'],binding['base'],binding['source']],'actual_master_two_parent_shape')
@@ -1469,7 +1545,8 @@ def master_context(repo, capability, binding_raw, context):
     require(source_delta==git(repo,'diff','--name-only',binding['base'],binding['target']),'actual_master_source_result_delta_parity')
     entries={name:entry_binding(repo,binding['source'],name) for name in source_delta.decode().splitlines()}
     require(all(entry_binding(repo,binding['target'],name)==value for name,value in entries.items()),'actual_master_source_result_entry_parity')
-    return dict(type='F54_EXPLICIT_MASTER_PROTOTYPE_ENTRY',native_binding=raw_binding(binding_raw),context=context,
+    return dict(type='F54_EXPLICIT_MASTER_CURRENT_AUTHOR_ENTRY' if author_roles is not None else 'F54_EXPLICIT_MASTER_PROTOTYPE_ENTRY',
+        **(dict(author_base_roles=author_roles) if author_roles is not None else {}),native_binding=raw_binding(binding_raw),context=context,
         capability=raw_binding(canonical(capability)),base=binding['base'],source=binding['source'],target=binding['target'],
         source_delta=raw_binding(source_delta),entries=entries,source_context=router_source_context(repo),admission=False)
 
@@ -2293,7 +2370,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         if kind=='master_entry':
             require(sequence==1 and not frames and frame is None and op is None and master_entry is None,'one_explicit_master_origin_before_frames')
             capability=json.loads(v['capability']['raw'])
-            require(v['capability']==raw_binding(canonical(capability)) and capability==prepare_capabilities(repo,capability['unit_directory']),'master_complete_source_capability')
+            require(v['capability']==raw_binding(canonical(capability)) and capability==checked_capability_value(repo,capability),'master_complete_source_capability')
             require(v==master_context(repo,capability,v['native_binding']['raw'].encode(),v['context']),'independent_actual_master_origin')
             master_entry=v;continue
         if kind=='master_wrapper_result':
@@ -2393,7 +2470,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             require(op in attempts and op not in operations and op not in M_capabilities,'history_capability_after_actual_attempt')
             binding=v['capability'];require(binding==raw_binding(binding['raw']) and v['admission'] is False,'history_capability_raw_binding')
             capability=json.loads(binding['raw'])
-            require(capability==prepare_capabilities(repo,capability['unit_directory']),'actual_complete_history_capability')
+            require(capability==checked_capability_value(repo,capability),'actual_complete_history_capability')
             scope=capability['collector_scope'];actual_frame=frames[frame]
             require([actual_frame[k] for k in ('base','target','allow_direct_followup','partition_source_history')]==[scope[k] for k in ('base','target','allow_direct_followup','partition_source_history')],'exact_capability_outer_context')
             require(op==frame+'/'+M+'/2' and v['receipt']==capability['history_boundary'],'exact_typed_M_boundary_receipt')
@@ -2760,6 +2837,7 @@ def main():
         if command=='composition':print(json.dumps(composition(*args)));return 0
         if command=='unit':print(json.dumps(load_unit(*args)));return 0
         if command=='capabilities':print(json.dumps(prepare_capabilities(*args)));return 0
+        if command=='current-author-capabilities':print(json.dumps(prepare_author_capabilities(*args)));return 0
         if command=='cap-boundary':print(json.dumps(boundary_capability(*args)));return 0
         if command=='cap-entry':print(json.dumps(entry_capability(*args)));return 0
         if command=='cap-composition':print(json.dumps(composition_capability(*args)));return 0

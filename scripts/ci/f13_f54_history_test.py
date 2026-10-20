@@ -27,6 +27,136 @@ def module():
 
 
 class ProducerTrace(unittest.TestCase):
+    def test_current_author_capability_keeps_fixed_reference_and_historical_facts(self):
+        # Complete private source unit; no production record/permission is made.
+        m,folder,names=self.exact_M_fixture();historical=m.M
+        git(self.repo,'checkout','-qb','private-current-master',m.O)
+        self.write('docs/private-master-context.md','actual event parent\n')
+        event_base=self.commit('private current event base')
+        git(self.repo,'checkout','-q',historical)
+        changed=next(n for n in names if n.startswith('protos/'))
+        self.write(changed,'separately fixed current carrier product input\n')
+        self.commit('private accepted integration input')
+        git(self.repo,'merge','--no-ff','-qm','current integration',event_base)
+        reference=git(self.repo,'rev-parse','HEAD')
+        m.AUTHOR_REFERENCE=reference;m.AUTHOR_EVENT_BASE=event_base;m.AUTHOR_NATIVE_CONTENT_BASE=self.base
+        m.AUTHOR_REFERENCE_TREE=git(self.repo,'rev-parse',reference+'^{tree}')
+        m.AUTHOR_REFERENCE_DELTA_SHA=m.sha(m.git(self.repo,'diff','--raw','--no-abbrev','--no-renames',m.PROTOTYPE_BASE,reference))
+        m.AUTHOR_HISTORICAL_SCOPE=dict(base=m.O,target=historical,allow_direct_followup='true',partition_source_history='false')
+        helper='scripts/ci/f13_f54_history.py'
+        # Re-pin the complete private factual unit in the executable too, so
+        # the real CLI/shell seams below read the same immutable authority.
+        source=(self.repo/helper).read_text();lines=source.splitlines(keepends=True)
+        keys=('M','P1','P2','O','BASES','TREE','SOURCE','PROTOTYPE_BASE','UNIT_HASHES',
+            'AUTHOR_REFERENCE','AUTHOR_EVENT_BASE','AUTHOR_NATIVE_CONTENT_BASE','AUTHOR_REFERENCE_TREE',
+            'AUTHOR_REFERENCE_DELTA_SHA','AUTHOR_HISTORICAL_SCOPE')
+        assignments=[n for n in ast.parse(source).body if isinstance(n,ast.Assign) and len(n.targets)==1
+            and isinstance(n.targets[0],ast.Name) and n.targets[0].id in keys]
+        for n in sorted(assignments,key=lambda n:n.lineno,reverse=True):
+            key=n.targets[0].id;lines[n.lineno-1:n.end_lineno]=[key+' = '+repr(getattr(m,key))+'\n']
+        self.write(helper,''.join(lines)+'\n# reviewed private AUTHOR successor\n')
+        successor=self.commit('only author successor code')
+        # The fallback exercises the unchanged D6 guard for the semantic RED;
+        # a missing API alone cannot be the regression failure.
+        prepare=getattr(m,'prepare_author_capabilities',m.prepare_capabilities)
+        cap=prepare(self.repo,folder)
+        self.assertEqual(cap['type'],'F54_FIXED_CURRENT_AUTHOR_CAPABILITIES')
+        self.assertFalse(cap['admission']);self.assertFalse(m.PRODUCTION_AUTHORITY)
+        self.assertEqual(cap['source_facts']['source_context'],historical)
+        self.assertEqual(cap['collector_scope'],m.AUTHOR_HISTORICAL_SCOPE)
+        certificate=cap['author_applicability']
+        self.assertEqual(certificate['reference'],reference)
+        self.assertEqual(certificate['current_carrier'],successor)
+        self.assertEqual(certificate['native_content_baseline'],self.base)
+        self.assertEqual(certificate['event_base'],event_base)
+        self.assertEqual(certificate['own_delta_paths'],[helper])
+        self.assertIn(changed,[x['path'] for x in certificate['reference_delta']])
+        self.assertEqual(cap['complete_41_entries'],__import__('json').loads((folder/'proposal.json').read_bytes())['entries'])
+        path=self.folder/'private-current-author-cap.json';path.write_bytes(m.canonical(cap))
+        cli=subprocess.run(['python3',str(self.repo/helper),'current-author-capabilities',str(self.repo),str(folder)],capture_output=True,text=True)
+        self.assertEqual(cli.returncode,0,cli.stderr);self.assertEqual(json.loads(cli.stdout),cap)
+        out=self.folder/'current-author-two-seams';out.mkdir();boundary_path=out/'boundary'
+        result=git(self.repo,'ls-tree',m.M,'--',changed)
+        setup='set -eu\n'+definitions()+'\nTMP_DIR='+shlex.quote(str(out))+'\n'
+        def seam_program(scope):
+            resolver='f13_resolve_source_base '+' '.join(map(shlex.quote,map(str,(self.repo,m.P1,m.P2,boundary_path,m.M,path,self.repo/helper,'',*scope))))
+            composition='f13_checkpoint_merge_tree_entry_matches '+' '.join(map(shlex.quote,map(str,(self.repo,m.O,m.P1,m.P2,changed,result,m.M,path,self.repo/helper,'','',*scope))))
+            return setup+resolver+'\n'+composition+'\n'
+        actual_seams=subprocess.run(['bash','-c',seam_program((m.O,historical))],capture_output=True,text=True)
+        self.assertEqual(actual_seams.returncode,0,actual_seams.stderr)
+        self.assertEqual(boundary_path.read_text().strip(),m.O)
+        foreign_seams=subprocess.run(['bash','-c',seam_program((event_base,historical))],capture_output=True,text=True)
+        self.assertEqual(foreign_seams.returncode,1,foreign_seams.stderr)
+        boundary=m.boundary_capability(self.repo,path,m.M,m.P1,m.P2,m.O,historical)
+        self.assertEqual(boundary['history_boundary'],m.O)
+        for wrong in ((m.O,reference),(reference,historical),('0'*40,historical)):
+            with self.subTest(frame=wrong),self.assertRaises(m.Rejected):
+                m.boundary_capability(self.repo,path,m.M,m.P1,m.P2,*wrong)
+        import copy
+        for error in ('event-base','native-base','reference','reference-entry','own-path','historical-base','owner','OR'):
+            forged=copy.deepcopy(cap)
+            if error=='event-base':forged['author_applicability']['event_base']=m.O
+            elif error=='native-base':forged['author_applicability']['native_content_baseline']=event_base
+            elif error=='reference':forged['author_applicability']['reference']=historical
+            elif error=='reference-entry':forged['author_applicability']['reference_delta'][0]['current_entry']=''
+            elif error=='own-path':forged['author_applicability']['own_delta_paths'].append('foreign.go')
+            elif error=='historical-base':forged['collector_scope']['base']=event_base
+            elif error=='owner':forged['complete_dag'][0]['ordered_parents']=[]
+            else:forged['author_applicability']['admission']=True
+            path.write_bytes(m.canonical(forged))
+            with self.subTest(error=error),self.assertRaises(m.Rejected):m.verified_capabilities(self.repo,path)
+        path.write_bytes(m.canonical(cap))
+        self.write('docs/unauthorized-after-reference.md','outside own four files\n')
+        self.commit('unauthorized current carrier drift')
+        with self.assertRaises(m.Rejected):prepare(self.repo,folder)
+
+    def test_current_author_master_keeps_event_history_and_native_bases_distinct(self):
+        # Real native qualification; only the historical capability transport is
+        # a private constructor fixture. It is not complete M/history evidence.
+        from f13_native_p3_source_test import NativeSourceTest, native
+        fixture=NativeSourceTest();fixture.setUp();self.addCleanup(fixture.doCleanups)
+        content_base=fixture.base;historical_base=fixture.head;historical_target=fixture.carrier
+        fixture.git('checkout','-qb','private-event-base',historical_base)
+        fixture.write('docs/private-event-base.md','actual master base\n');fixture.commit('actual event base')
+        event_base=fixture.git('rev-parse','HEAD')
+        fixture.git('checkout','-q',historical_target);fixture.git('merge','--no-ff','-qm','current integration',event_base)
+        source=Path(native.__file__).read_text()
+        for key,value in fixture.pins.items():source=re.sub(r'(?m)^'+key+r' = .*$',key+' = '+repr(value),source)
+        fixture.write(native.VERIFIER_PATH,source)
+        for n in ('f13_f54_history.py','voice-r22-runtime-scope.sh'):fixture.write('scripts/ci/'+n,(ROOT/'scripts/ci'/n).read_text())
+        fixture.commit('private exact current integration reference');reference=fixture.git('rev-parse','HEAD')
+        target=fixture.git('commit-tree',reference+'^{tree}','-p',event_base,'-p',reference,'-m','actual private master target')
+        fixture.git('checkout','-q',target)
+        spec=importlib.util.spec_from_file_location('private_current_author_native',fixture.repo/native.VERIFIER_PATH)
+        authority=importlib.util.module_from_spec(spec);spec.loader.exec_module(authority)
+        event=dict(GITHUB_EVENT_NAME='pull_request',GITHUB_REF='refs/pull/875/merge',GITHUB_SHA=target,
+            VOICE_CI_PUSH_BEFORE_SHA=event_base,GITHUB_BASE_REF='master')
+        binding=authority.qualify(fixture.repo,event_base,reference,target,'pull_request',event['GITHUB_REF'],target,event_base,'master')
+        m=module();m.ROOT=fixture.repo;m.PROTOTYPE_BASE=historical_base
+        m.AUTHOR_REFERENCE=reference;m.AUTHOR_EVENT_BASE=event_base;m.AUTHOR_NATIVE_CONTENT_BASE=content_base
+        m.AUTHOR_REFERENCE_TREE=fixture.git('rev-parse',reference+'^{tree}')
+        m.AUTHOR_REFERENCE_DELTA_SHA=m.sha(m.git(fixture.repo,'diff','--raw','--no-abbrev','--no-renames',historical_base,reference))
+        m.AUTHOR_HISTORICAL_SCOPE=dict(base=historical_base,target=historical_target,allow_direct_followup='true',partition_source_history='false')
+        certificate=m.current_author_applicability(fixture.repo) if hasattr(m,'current_author_applicability') else {}
+        cap=dict(type='F54_FIXED_CURRENT_AUTHOR_CAPABILITIES',collector_scope=m.AUTHOR_HISTORICAL_SCOPE,
+            author_applicability=certificate,prepared_at_target=target,admission=False)
+        result=m.master_context(fixture.repo,cap,m.canonical(binding),event)
+        self.assertEqual(result['base'],event_base);self.assertNotEqual(result['base'],historical_base)
+        self.assertEqual(result['author_base_roles']['native_content_baseline'],content_base)
+        self.assertEqual(result['author_base_roles']['historical_collector'],m.AUTHOR_HISTORICAL_SCOPE)
+        self.assertFalse(result['admission'])
+        import copy
+        for error in ('history','native','event','source','carrier','map-context'):
+            wrong=copy.deepcopy(cap);bad=copy.deepcopy(binding)
+            if error=='history':wrong['collector_scope']['base']=event_base
+            elif error=='native':wrong['author_applicability']['native_content_baseline']=historical_base
+            elif error=='event':wrong['author_applicability']['event_base']=historical_base
+            elif error=='source':bad['source']=historical_target
+            elif error=='carrier':wrong['author_applicability']['current_carrier']=reference
+            else:wrong['author_applicability']['reference_tree']='0'*40
+            with self.subTest(error=error),self.assertRaises((m.Rejected,authority.Rejected)):
+                m.master_context(fixture.repo,wrong,m.canonical(bad),event)
+
     def test_J_consumer_accepts_only_independently_qualified_native_normalization(self):
         # Private Git authority and an actual original shell predicate call.
         # The transport below is a fixture, never appended to production trace.
