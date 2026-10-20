@@ -27,21 +27,32 @@ var roleBotRemovalCatalog25 = func() authoritysource.Catalog {
 }()
 
 func (s *RoleStore) checkBotRemovalCatalog(ctx context.Context) error {
+	_, err := s.botGlobalTerminalCatalogPresent(ctx)
+	return err
+}
+
+// botGlobalTerminalCatalogPresent returns a mode only after the complete exact
+// catalog proof in the caller's transaction. Neither absence nor an unlocked
+// version hint permits a legacy fallback. The proof retains schema locks.
+func (s *RoleStore) botGlobalTerminalCatalogPresent(ctx context.Context) (bool, error) {
 	if s == nil || s.tx == nil {
-		return ErrScopeUnavailable
+		return false, ErrScopeUnavailable
 	}
 	var version int64
 	if err := s.tx.QueryRow(ctx, "SELECT version FROM public.schema_migrations WHERE NOT dirty").Scan(&version); err != nil {
-		return fmt.Errorf("%w: Bot cleanup catalog", ErrScopeUnavailable)
+		return false, fmt.Errorf("%w: Bot cleanup catalog", ErrScopeUnavailable)
 	}
 	if version == 26 {
-		return s.checkBotGlobalTerminalCatalog(ctx)
+		if err := s.checkBotGlobalTerminalCatalog(ctx); err != nil {
+			return false, err
+		}
+		return true, nil
 	}
 	if version != 25 {
-		return ErrScopeUnavailable
+		return false, ErrScopeUnavailable
 	}
 	if err := authoritysource.CheckCatalog(ctx, s.tx, roleBotRemovalCatalog25); err != nil {
-		return fmt.Errorf("%w: Bot cleanup catalog: %w", ErrScopeUnavailable, err)
+		return false, fmt.Errorf("%w: Bot cleanup catalog: %w", ErrScopeUnavailable, err)
 	}
-	return nil
+	return false, nil
 }
