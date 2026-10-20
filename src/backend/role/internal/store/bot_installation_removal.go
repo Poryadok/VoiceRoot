@@ -167,11 +167,24 @@ func (s *RoleStore) CheckBotInstallationRemovalFence(ctx context.Context, bot, a
 	if _, ok := s.scopeSpaces[space]; !ok {
 		return ErrScopeUnavailable
 	}
+	minimal, err := s.botGlobalTerminalCatalogPresent(ctx)
+	if err != nil {
+		return err
+	}
 	if err := s.lockBotRemovalBinding(ctx, bot, actor); err != nil {
 		return err
 	}
+	if minimal {
+		var terminal bool
+		if err := s.db().QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM public.role_bot_global_terminals WHERE bot_id=$1)", bot).Scan(&terminal); err != nil {
+			return err
+		}
+		if terminal {
+			return ErrBotRemovalDenied
+		}
+	}
 	var knownBot, knownActor, knownSpace uuid.UUID
-	err := s.db().QueryRow(ctx, "SELECT bot_id,actor_profile_id,space_id FROM role_bot_installation_removals WHERE installation_id=$1", installation).Scan(&knownBot, &knownActor, &knownSpace)
+	err = s.db().QueryRow(ctx, "SELECT bot_id,actor_profile_id,space_id FROM role_bot_installation_removals WHERE installation_id=$1", installation).Scan(&knownBot, &knownActor, &knownSpace)
 	if err == nil && (knownBot != bot || knownActor != actor || knownSpace != space) {
 		return ErrBotRemovalDenied
 	}
@@ -202,15 +215,24 @@ func (s *RoleStore) ApplyBotInstallationRemoval(ctx context.Context, req *rolev1
 	}
 	var response *rolev1.ApplyBotInstallationRemovalResponse
 	blocked := false
-	err = s.withLockedTransaction(ctx, b.operation, []uuid.UUID{b.space}, func(scoped *RoleStore) error {
-		if err := scoped.checkBotRemovalCatalog(ctx); err != nil {
+	apply := func(scoped *RoleStore) error {
+		minimal, err := scoped.botGlobalTerminalCatalogPresent(ctx)
+		if err != nil {
 			return err
 		}
 		if err := scoped.lockBotRemovalBinding(ctx, b.bot, b.actor); err != nil {
 			return err
 		}
+		if req.Purpose == "global_delete" {
+			if err := scoped.checkBotGlobalBindingUnion(ctx, b.bot, b.decision, minimal); err != nil {
+				if errors.Is(err, ErrBotGlobalTerminalConflict) {
+					return ErrBotRemovalConflict
+				}
+				return err
+			}
+		}
 		var savedRequest, savedResponse []byte
-		err := scoped.db().QueryRow(ctx, "SELECT request_bytes,response_bytes FROM role_bot_removal_operations WHERE operation_id=$1", b.operation).Scan(&savedRequest, &savedResponse)
+		err = scoped.db().QueryRow(ctx, "SELECT request_bytes,response_bytes FROM role_bot_removal_operations WHERE operation_id=$1", b.operation).Scan(&savedRequest, &savedResponse)
 		exists := err == nil
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
@@ -232,7 +254,7 @@ func (s *RoleStore) ApplyBotInstallationRemoval(ctx context.Context, req *rolev1
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return err
 			}
-			if err == nil && (req.Purpose != "global_delete" || decision != b.decision || !bytes.Equal(decisionHash, req.DecisionSha256)) {
+			if err == nil && req.Purpose == "global_delete" && (decision != b.decision || !bytes.Equal(decisionHash, req.DecisionSha256)) {
 				return ErrBotRemovalDenied
 			}
 			if req.Purpose == "global_delete" && errors.Is(err, pgx.ErrNoRows) {
@@ -342,7 +364,12 @@ func (s *RoleStore) ApplyBotInstallationRemoval(ctx context.Context, req *rolev1
 			_, err = db.Exec(ctx, "UPDATE role_bot_removal_operations SET response_bytes=$2 WHERE operation_id=$1 AND response_bytes IS NULL", b.operation, wire)
 			return err
 		})
-	})
+	}
+	if req.Purpose == "global_delete" {
+		err = s.withBotGlobalOperation(ctx, b.operation, b.decision, &b.space, apply)
+	} else {
+		err = s.withLockedTransaction(ctx, b.operation, []uuid.UUID{b.space}, apply)
+	}
 	if err != nil {
 		return nil, err
 	}
