@@ -768,7 +768,27 @@ Earlier missing016 fixtures and obsolete unproved-Purge expectations remain in
 the failed raw logs, not relabeled as product REDs. Final short checks pass257
 with275 explicit skips; vet/build exit0. These skips do not prove integration.
 
-This checkpoint is not SOURCE ready: the immutable current candidate still
-needs positive local retirement composition against actual native49. Full
-evidence retention/compaction, nonempty remote Messaging coverage, historical
-unresolved-source resolution and full BE-170 completion remain open.
+The subsequent immutable2c074ab actual native49 composition passes: caller58.67s
+and provider59.44s, zero skips. It proves positive local retirement/own Bot purge
+receipt, exact replay, no fourth native RPC, removed intent and a still-live Bot.
+The earlier2d6369b caller failed only at a new postcondition expecting `active`
+instead of canonical `live`; its source and failed log remain separate.
+
+Independent review then found a final global-reducer gap: after qualified
+membership accounting and both terminal slots, an old second query still
+required every effect to have remote `COMPLETE` state. Legitimate explicit local
+results could therefore never complete a global root. A real PG causal test
+with two positively retired targets and both typed terminal results reproduces
+the failure; missing target/effect, unfinished other target and pending/missing
+terminal controls remain negative. The correction removes only this redundant
+state-only query and keeps the qualified accounting and independent gates.
+The unchanged causal test fails its positive branch in4.520s (package23.782s),
+while its five negative branches already pass. After the fix all six branches
+pass22.900s; the broader local/terminal regression matrix passes29 tests
+including subtests in82.304s, zero skips. These terminal receipts are controlled
+typed results saved through production seal/validation/CAS, not new actual
+remote Role/Space delivery proof. The prior native49 composition remains a
+separate source-bound result.
+
+Full evidence retention/compaction, nonempty remote Messaging coverage,
+historical unresolved-source resolution and full BE-170 completion remain open.

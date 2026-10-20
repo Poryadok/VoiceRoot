@@ -259,14 +259,10 @@ func (s *BotStore) CompleteBotDeletion(ctx context.Context, claim *BotDeletion) 
 	if terminals != 2 {
 		return ErrDeletionPending
 	}
-	var pending bool
-	err = tx.QueryRow(ctx, lifecycleQuery(claim, `SELECT EXISTS(SELECT 1 FROM bot_deletion_effects e JOIN bot_deletion_installations t ON t.target_id=e.target_id WHERE t.operation_id=$1 AND e.state<>'COMPLETE')`), claim.OperationID).Scan(&pending)
-	if err != nil {
-		return err
-	}
-	if pending {
-		return ErrDeletionPending
-	}
+	// lifecycleAccountingTx already requires the complete sealed target/effect
+	// membership and validates each target's remote or explicit local outcome.
+	// Rechecking only the old remote COMPLETE state would reject qualified
+	// LOCAL_P3_COVERED targets forever.
 	result, err := tx.Exec(ctx, lifecycleQuery(claim, `UPDATE bot_deletion_operations SET state='COMPLETE',completed_at=clock_timestamp(),claimed_until=NULL,last_error='' WHERE operation_id=$1 AND claim_generation=$2 AND claimed_until>clock_timestamp()`), claim.OperationID, claim.ClaimGeneration)
 	if err != nil {
 		return err
