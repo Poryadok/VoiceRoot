@@ -52,5 +52,14 @@ Root receiver and writer participation remain unavailable until that agreement
 and actual44 implementation are composed and tested. Graphify AST extraction
 completed but update stalled afterwards; only own verified process chain was
 terminated, so no graph update PASS is claimed.
+
+44's kernel integration also requires a qualified predicate-mode accessor.
+`botGlobalTerminalCatalogPresent(ctx)` is now the shared exact selector:
+qualified25=false, qualified26=true with serving ACL proof; dirty/future/unknown
+or unscoped store fail unavailable. Existing cleanup checker delegates to it;
+there is no relation-existence fallback. Actual PG missing-accessor RED4.077s
+became GREEN13.393s including preserved Role25 native/source2 cleanup parity,
+with scoped store vet0. This narrow successor does not implement the c110 lock
+set or infer any receipt/cleanup completion.
 Actual44 handler/kernel and actual247 zero-Space receiver composition remain
 separate; neither current Role20 nor unsupported BotActor paths are activated.
