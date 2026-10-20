@@ -256,7 +256,7 @@ func TestBotInstallationRemoval_LegacyOrphanAndGlobalBinding(t *testing.T) {
 			changed.OperationId = uuid.NewString()
 			changed.DecisionId = uuid.NewString()
 			_, err = s.ApplyBotInstallationRemoval(ctx, changed)
-			require.ErrorIs(t, err, ErrBotRemovalDenied)
+			require.ErrorIs(t, err, ErrBotRemovalConflict)
 		})
 	}
 }
