@@ -1,4 +1,5 @@
 BEGIN;
+SET LOCAL search_path=pg_catalog,public;
 -- This Role-only transition reuses the published25 INVOKER guard. No new
 -- function, erased-source adoption or owner/provider authority is introduced.
 DO $$ BEGIN

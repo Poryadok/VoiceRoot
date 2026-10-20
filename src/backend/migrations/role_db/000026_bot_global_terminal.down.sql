@@ -1,4 +1,5 @@
 BEGIN;
+SET LOCAL search_path=pg_catalog,public;
 -- Reject stale snapshots BEFORE locks or emptiness checks. Never remove a
 -- committed minimal terminal predicate/result or weaken published25 denial.
 DO $$ BEGIN
