@@ -684,3 +684,13 @@ claim21.276s and worker8.280s/16.146s successes retain their exact earlier input
 Actual protected provider handoff, native49 receipt adoption, current physical
 source/journal version revalidation for retirement, applicable retention cleanup
 and full P3/BE-170 completion remain original implementation work.
+
+The prepacket released-lease control caught a typed-error edge in085336b:
+Retry clears claimed_until but leaves PENDING, so the same generation's second
+attempt scanned SQL NULL into bool. Exact085336b plus the identical final test
+failed in3.711s. COALESCE to false now yields ErrDeletionClaimLost after the
+same guard wait, with no write/authority relaxation. The final full affected
+matrix again passes25 tests with zero skips (store24.224s; grpc timing in raw
+packet), followed by vet/build0. Earlier short proof remains applicable except
+this one SQL expression and appended regression assertion; no final whole-short
+rerun is claimed solely from those unchanged cases.

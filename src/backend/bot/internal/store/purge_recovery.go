@@ -197,7 +197,7 @@ func (s *BotStore) purgeClaimTx(ctx context.Context, c *BotPurgeClaim) (pgx.Tx, 
 		return fail(ErrSpaceLifecycleConflict)
 	}
 	var current bool
-	err = tx.QueryRow(ctx, `SELECT claimed_until>clock_timestamp() FROM bot_space_purge_handoffs WHERE space_id=$1 AND claim_generation=$2`, c.space, c.claimGeneration).Scan(&current)
+	err = tx.QueryRow(ctx, `SELECT COALESCE(claimed_until>clock_timestamp(),false) FROM bot_space_purge_handoffs WHERE space_id=$1 AND claim_generation=$2`, c.space, c.claimGeneration).Scan(&current)
 	if err != nil {
 		return fail(err)
 	}

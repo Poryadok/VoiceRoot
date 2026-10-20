@@ -78,6 +78,7 @@ func TestBotPurgeClaimSkipsLockedWorkAndFencesOldRecovery(t *testing.T) {
 	require.Equal(t, c2.Sources(), c3.Sources())
 	require.ErrorIs(t, st.RetryBotPurgeHandoff(ctx, c2), store.ErrDeletionClaimLost)
 	require.NoError(t, st.RetryBotPurgeHandoff(ctx, c3))
+	require.ErrorIs(t, st.RetryBotPurgeHandoff(ctx, c3), store.ErrDeletionClaimLost, "a released lease is already fenced even before another generation claims it")
 	copy := c1.PurgeRequest()
 	copy.Manifest.ManifestSha256[0] ^= 1
 	require.True(t, proto.Equal(p1, c1.PurgeRequest()))
