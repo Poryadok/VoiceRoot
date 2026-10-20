@@ -24,6 +24,52 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type BotGlobalTerminalOutcome int32
+
+const (
+	BotGlobalTerminalOutcome_BOT_GLOBAL_TERMINAL_OUTCOME_UNSPECIFIED                     BotGlobalTerminalOutcome = 0
+	BotGlobalTerminalOutcome_BOT_GLOBAL_TERMINAL_OUTCOME_BOT_ACTOR_ROLE_MUTATIONS_FENCED BotGlobalTerminalOutcome = 1
+)
+
+// Enum value maps for BotGlobalTerminalOutcome.
+var (
+	BotGlobalTerminalOutcome_name = map[int32]string{
+		0: "BOT_GLOBAL_TERMINAL_OUTCOME_UNSPECIFIED",
+		1: "BOT_GLOBAL_TERMINAL_OUTCOME_BOT_ACTOR_ROLE_MUTATIONS_FENCED",
+	}
+	BotGlobalTerminalOutcome_value = map[string]int32{
+		"BOT_GLOBAL_TERMINAL_OUTCOME_UNSPECIFIED":                     0,
+		"BOT_GLOBAL_TERMINAL_OUTCOME_BOT_ACTOR_ROLE_MUTATIONS_FENCED": 1,
+	}
+)
+
+func (x BotGlobalTerminalOutcome) Enum() *BotGlobalTerminalOutcome {
+	p := new(BotGlobalTerminalOutcome)
+	*p = x
+	return p
+}
+
+func (x BotGlobalTerminalOutcome) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BotGlobalTerminalOutcome) Descriptor() protoreflect.EnumDescriptor {
+	return file_voice_role_v1_role_proto_enumTypes[0].Descriptor()
+}
+
+func (BotGlobalTerminalOutcome) Type() protoreflect.EnumType {
+	return &file_voice_role_v1_role_proto_enumTypes[0]
+}
+
+func (x BotGlobalTerminalOutcome) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BotGlobalTerminalOutcome.Descriptor instead.
+func (BotGlobalTerminalOutcome) EnumDescriptor() ([]byte, []int) {
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{0}
+}
+
 // Successful receipts never use UNSPECIFIED. Prepared freezes scoped authority.
 type OwnershipTransferState int32
 
@@ -61,11 +107,11 @@ func (x OwnershipTransferState) String() string {
 }
 
 func (OwnershipTransferState) Descriptor() protoreflect.EnumDescriptor {
-	return file_voice_role_v1_role_proto_enumTypes[0].Descriptor()
+	return file_voice_role_v1_role_proto_enumTypes[1].Descriptor()
 }
 
 func (OwnershipTransferState) Type() protoreflect.EnumType {
-	return &file_voice_role_v1_role_proto_enumTypes[0]
+	return &file_voice_role_v1_role_proto_enumTypes[1]
 }
 
 func (x OwnershipTransferState) Number() protoreflect.EnumNumber {
@@ -74,7 +120,7 @@ func (x OwnershipTransferState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use OwnershipTransferState.Descriptor instead.
 func (OwnershipTransferState) EnumDescriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{0}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{1}
 }
 
 type RoleRetirementState int32
@@ -107,11 +153,11 @@ func (x RoleRetirementState) String() string {
 }
 
 func (RoleRetirementState) Descriptor() protoreflect.EnumDescriptor {
-	return file_voice_role_v1_role_proto_enumTypes[1].Descriptor()
+	return file_voice_role_v1_role_proto_enumTypes[2].Descriptor()
 }
 
 func (RoleRetirementState) Type() protoreflect.EnumType {
-	return &file_voice_role_v1_role_proto_enumTypes[1]
+	return &file_voice_role_v1_role_proto_enumTypes[2]
 }
 
 func (x RoleRetirementState) Number() protoreflect.EnumNumber {
@@ -120,7 +166,7 @@ func (x RoleRetirementState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use RoleRetirementState.Descriptor instead.
 func (RoleRetirementState) EnumDescriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{1}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{2}
 }
 
 type GameSessionGrantOutcome int32
@@ -162,11 +208,11 @@ func (x GameSessionGrantOutcome) String() string {
 }
 
 func (GameSessionGrantOutcome) Descriptor() protoreflect.EnumDescriptor {
-	return file_voice_role_v1_role_proto_enumTypes[2].Descriptor()
+	return file_voice_role_v1_role_proto_enumTypes[3].Descriptor()
 }
 
 func (GameSessionGrantOutcome) Type() protoreflect.EnumType {
-	return &file_voice_role_v1_role_proto_enumTypes[2]
+	return &file_voice_role_v1_role_proto_enumTypes[3]
 }
 
 func (x GameSessionGrantOutcome) Number() protoreflect.EnumNumber {
@@ -175,7 +221,772 @@ func (x GameSessionGrantOutcome) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use GameSessionGrantOutcome.Descriptor instead.
 func (GameSessionGrantOutcome) EnumDescriptor() ([]byte, []int) {
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{3}
+}
+
+// @voice.unknown_fields=reject
+type BotRemovalNativeEvidence struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	InstallationId     string                 `protobuf:"bytes,1,opt,name=installation_id,json=installationId,proto3" json:"installation_id,omitempty"`
+	InstallOperationId string                 `protobuf:"bytes,2,opt,name=install_operation_id,json=installOperationId,proto3" json:"install_operation_id,omitempty"`
+	Generation         uint64                 `protobuf:"varint,3,opt,name=generation,proto3" json:"generation,omitempty"` // positive, at most signed int64 max
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *BotRemovalNativeEvidence) Reset() {
+	*x = BotRemovalNativeEvidence{}
+	mi := &file_voice_role_v1_role_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BotRemovalNativeEvidence) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BotRemovalNativeEvidence) ProtoMessage() {}
+
+func (x *BotRemovalNativeEvidence) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_role_v1_role_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BotRemovalNativeEvidence.ProtoReflect.Descriptor instead.
+func (*BotRemovalNativeEvidence) Descriptor() ([]byte, []int) {
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *BotRemovalNativeEvidence) GetInstallationId() string {
+	if x != nil {
+		return x.InstallationId
+	}
+	return ""
+}
+
+func (x *BotRemovalNativeEvidence) GetInstallOperationId() string {
+	if x != nil {
+		return x.InstallOperationId
+	}
+	return ""
+}
+
+func (x *BotRemovalNativeEvidence) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+// @voice.unknown_fields=reject
+type BotRemovalLegacyInstallationEvidence struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	InstallationId string                 `protobuf:"bytes,1,opt,name=installation_id,json=installationId,proto3" json:"installation_id,omitempty"` // actual persisted ID, never a generated substitute
+	SnapshotId     string                 `protobuf:"bytes,2,opt,name=snapshot_id,json=snapshotId,proto3" json:"snapshot_id,omitempty"`
+	SnapshotSha256 []byte                 `protobuf:"bytes,3,opt,name=snapshot_sha256,json=snapshotSha256,proto3" json:"snapshot_sha256,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *BotRemovalLegacyInstallationEvidence) Reset() {
+	*x = BotRemovalLegacyInstallationEvidence{}
+	mi := &file_voice_role_v1_role_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BotRemovalLegacyInstallationEvidence) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BotRemovalLegacyInstallationEvidence) ProtoMessage() {}
+
+func (x *BotRemovalLegacyInstallationEvidence) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_role_v1_role_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BotRemovalLegacyInstallationEvidence.ProtoReflect.Descriptor instead.
+func (*BotRemovalLegacyInstallationEvidence) Descriptor() ([]byte, []int) {
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *BotRemovalLegacyInstallationEvidence) GetInstallationId() string {
+	if x != nil {
+		return x.InstallationId
+	}
+	return ""
+}
+
+func (x *BotRemovalLegacyInstallationEvidence) GetSnapshotId() string {
+	if x != nil {
+		return x.SnapshotId
+	}
+	return ""
+}
+
+func (x *BotRemovalLegacyInstallationEvidence) GetSnapshotSha256() []byte {
+	if x != nil {
+		return x.SnapshotSha256
+	}
+	return nil
+}
+
+// Only global_delete may use an actual orphan whitelist snapshot.
+// @voice.unknown_fields=reject
+type BotRemovalOrphanWhitelistEvidence struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	SnapshotId     string                 `protobuf:"bytes,1,opt,name=snapshot_id,json=snapshotId,proto3" json:"snapshot_id,omitempty"`
+	SnapshotSha256 []byte                 `protobuf:"bytes,2,opt,name=snapshot_sha256,json=snapshotSha256,proto3" json:"snapshot_sha256,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *BotRemovalOrphanWhitelistEvidence) Reset() {
+	*x = BotRemovalOrphanWhitelistEvidence{}
+	mi := &file_voice_role_v1_role_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BotRemovalOrphanWhitelistEvidence) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BotRemovalOrphanWhitelistEvidence) ProtoMessage() {}
+
+func (x *BotRemovalOrphanWhitelistEvidence) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_role_v1_role_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BotRemovalOrphanWhitelistEvidence.ProtoReflect.Descriptor instead.
+func (*BotRemovalOrphanWhitelistEvidence) Descriptor() ([]byte, []int) {
 	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *BotRemovalOrphanWhitelistEvidence) GetSnapshotId() string {
+	if x != nil {
+		return x.SnapshotId
+	}
+	return ""
+}
+
+func (x *BotRemovalOrphanWhitelistEvidence) GetSnapshotSha256() []byte {
+	if x != nil {
+		return x.SnapshotSha256
+	}
+	return nil
+}
+
+// @voice.unknown_fields=reject
+type ApplyBotInstallationRemovalRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	ProtocolVersion   uint32                 `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"` // exactly 1
+	OperationId       string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	DecisionId        string                 `protobuf:"bytes,3,opt,name=decision_id,json=decisionId,proto3" json:"decision_id,omitempty"`
+	DecisionSha256    []byte                 `protobuf:"bytes,4,opt,name=decision_sha256,json=decisionSha256,proto3" json:"decision_sha256,omitempty"`
+	Purpose           string                 `protobuf:"bytes,5,opt,name=purpose,proto3" json:"purpose,omitempty"` // global_delete or space_uninstall
+	BotId             string                 `protobuf:"bytes,6,opt,name=bot_id,json=botId,proto3" json:"bot_id,omitempty"`
+	ActorProfileId    string                 `protobuf:"bytes,7,opt,name=actor_profile_id,json=actorProfileId,proto3" json:"actor_profile_id,omitempty"`
+	SpaceId           string                 `protobuf:"bytes,8,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
+	FrozenScopeSha256 []byte                 `protobuf:"bytes,9,opt,name=frozen_scope_sha256,json=frozenScopeSha256,proto3" json:"frozen_scope_sha256,omitempty"`
+	// Types that are valid to be assigned to Evidence:
+	//
+	//	*ApplyBotInstallationRemovalRequest_Native
+	//	*ApplyBotInstallationRemovalRequest_LegacyInstallation
+	//	*ApplyBotInstallationRemovalRequest_OrphanWhitelist
+	Evidence      isApplyBotInstallationRemovalRequest_Evidence `protobuf_oneof:"evidence"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApplyBotInstallationRemovalRequest) Reset() {
+	*x = ApplyBotInstallationRemovalRequest{}
+	mi := &file_voice_role_v1_role_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApplyBotInstallationRemovalRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApplyBotInstallationRemovalRequest) ProtoMessage() {}
+
+func (x *ApplyBotInstallationRemovalRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_role_v1_role_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApplyBotInstallationRemovalRequest.ProtoReflect.Descriptor instead.
+func (*ApplyBotInstallationRemovalRequest) Descriptor() ([]byte, []int) {
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ApplyBotInstallationRemovalRequest) GetProtocolVersion() uint32 {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return 0
+}
+
+func (x *ApplyBotInstallationRemovalRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *ApplyBotInstallationRemovalRequest) GetDecisionId() string {
+	if x != nil {
+		return x.DecisionId
+	}
+	return ""
+}
+
+func (x *ApplyBotInstallationRemovalRequest) GetDecisionSha256() []byte {
+	if x != nil {
+		return x.DecisionSha256
+	}
+	return nil
+}
+
+func (x *ApplyBotInstallationRemovalRequest) GetPurpose() string {
+	if x != nil {
+		return x.Purpose
+	}
+	return ""
+}
+
+func (x *ApplyBotInstallationRemovalRequest) GetBotId() string {
+	if x != nil {
+		return x.BotId
+	}
+	return ""
+}
+
+func (x *ApplyBotInstallationRemovalRequest) GetActorProfileId() string {
+	if x != nil {
+		return x.ActorProfileId
+	}
+	return ""
+}
+
+func (x *ApplyBotInstallationRemovalRequest) GetSpaceId() string {
+	if x != nil {
+		return x.SpaceId
+	}
+	return ""
+}
+
+func (x *ApplyBotInstallationRemovalRequest) GetFrozenScopeSha256() []byte {
+	if x != nil {
+		return x.FrozenScopeSha256
+	}
+	return nil
+}
+
+func (x *ApplyBotInstallationRemovalRequest) GetEvidence() isApplyBotInstallationRemovalRequest_Evidence {
+	if x != nil {
+		return x.Evidence
+	}
+	return nil
+}
+
+func (x *ApplyBotInstallationRemovalRequest) GetNative() *BotRemovalNativeEvidence {
+	if x != nil {
+		if x, ok := x.Evidence.(*ApplyBotInstallationRemovalRequest_Native); ok {
+			return x.Native
+		}
+	}
+	return nil
+}
+
+func (x *ApplyBotInstallationRemovalRequest) GetLegacyInstallation() *BotRemovalLegacyInstallationEvidence {
+	if x != nil {
+		if x, ok := x.Evidence.(*ApplyBotInstallationRemovalRequest_LegacyInstallation); ok {
+			return x.LegacyInstallation
+		}
+	}
+	return nil
+}
+
+func (x *ApplyBotInstallationRemovalRequest) GetOrphanWhitelist() *BotRemovalOrphanWhitelistEvidence {
+	if x != nil {
+		if x, ok := x.Evidence.(*ApplyBotInstallationRemovalRequest_OrphanWhitelist); ok {
+			return x.OrphanWhitelist
+		}
+	}
+	return nil
+}
+
+type isApplyBotInstallationRemovalRequest_Evidence interface {
+	isApplyBotInstallationRemovalRequest_Evidence()
+}
+
+type ApplyBotInstallationRemovalRequest_Native struct {
+	Native *BotRemovalNativeEvidence `protobuf:"bytes,10,opt,name=native,proto3,oneof"`
+}
+
+type ApplyBotInstallationRemovalRequest_LegacyInstallation struct {
+	LegacyInstallation *BotRemovalLegacyInstallationEvidence `protobuf:"bytes,11,opt,name=legacy_installation,json=legacyInstallation,proto3,oneof"`
+}
+
+type ApplyBotInstallationRemovalRequest_OrphanWhitelist struct {
+	OrphanWhitelist *BotRemovalOrphanWhitelistEvidence `protobuf:"bytes,12,opt,name=orphan_whitelist,json=orphanWhitelist,proto3,oneof"`
+}
+
+func (*ApplyBotInstallationRemovalRequest_Native) isApplyBotInstallationRemovalRequest_Evidence() {}
+
+func (*ApplyBotInstallationRemovalRequest_LegacyInstallation) isApplyBotInstallationRemovalRequest_Evidence() {
+}
+
+func (*ApplyBotInstallationRemovalRequest_OrphanWhitelist) isApplyBotInstallationRemovalRequest_Evidence() {
+}
+
+type BotInstallationRemovalReceipt struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	ProtocolVersion        uint32                 `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	ReceiptId              string                 `protobuf:"bytes,2,opt,name=receipt_id,json=receiptId,proto3" json:"receipt_id,omitempty"`
+	OperationId            string                 `protobuf:"bytes,3,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	DecisionId             string                 `protobuf:"bytes,4,opt,name=decision_id,json=decisionId,proto3" json:"decision_id,omitempty"`
+	Purpose                string                 `protobuf:"bytes,5,opt,name=purpose,proto3" json:"purpose,omitempty"`
+	BotId                  string                 `protobuf:"bytes,6,opt,name=bot_id,json=botId,proto3" json:"bot_id,omitempty"`
+	ActorProfileId         string                 `protobuf:"bytes,7,opt,name=actor_profile_id,json=actorProfileId,proto3" json:"actor_profile_id,omitempty"`
+	SpaceId                string                 `protobuf:"bytes,8,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
+	EvidenceKind           string                 `protobuf:"bytes,9,opt,name=evidence_kind,json=evidenceKind,proto3" json:"evidence_kind,omitempty"`
+	EvidenceSha256         []byte                 `protobuf:"bytes,10,opt,name=evidence_sha256,json=evidenceSha256,proto3" json:"evidence_sha256,omitempty"`
+	FrozenScopeSha256      []byte                 `protobuf:"bytes,11,opt,name=frozen_scope_sha256,json=frozenScopeSha256,proto3" json:"frozen_scope_sha256,omitempty"`
+	RequestSha256          []byte                 `protobuf:"bytes,12,opt,name=request_sha256,json=requestSha256,proto3" json:"request_sha256,omitempty"`
+	Participant            string                 `protobuf:"bytes,13,opt,name=participant,proto3" json:"participant,omitempty"` // role
+	Outcome                string                 `protobuf:"bytes,14,opt,name=outcome,proto3" json:"outcome,omitempty"`         // COMPLETED
+	CompletedAt            *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=completed_at,json=completedAt,proto3" json:"completed_at,omitempty"`
+	DeletedRoleCount       uint64                 `protobuf:"varint,16,opt,name=deleted_role_count,json=deletedRoleCount,proto3" json:"deleted_role_count,omitempty"`
+	RemovedAssignmentCount uint64                 `protobuf:"varint,17,opt,name=removed_assignment_count,json=removedAssignmentCount,proto3" json:"removed_assignment_count,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *BotInstallationRemovalReceipt) Reset() {
+	*x = BotInstallationRemovalReceipt{}
+	mi := &file_voice_role_v1_role_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BotInstallationRemovalReceipt) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BotInstallationRemovalReceipt) ProtoMessage() {}
+
+func (x *BotInstallationRemovalReceipt) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_role_v1_role_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BotInstallationRemovalReceipt.ProtoReflect.Descriptor instead.
+func (*BotInstallationRemovalReceipt) Descriptor() ([]byte, []int) {
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *BotInstallationRemovalReceipt) GetProtocolVersion() uint32 {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return 0
+}
+
+func (x *BotInstallationRemovalReceipt) GetReceiptId() string {
+	if x != nil {
+		return x.ReceiptId
+	}
+	return ""
+}
+
+func (x *BotInstallationRemovalReceipt) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *BotInstallationRemovalReceipt) GetDecisionId() string {
+	if x != nil {
+		return x.DecisionId
+	}
+	return ""
+}
+
+func (x *BotInstallationRemovalReceipt) GetPurpose() string {
+	if x != nil {
+		return x.Purpose
+	}
+	return ""
+}
+
+func (x *BotInstallationRemovalReceipt) GetBotId() string {
+	if x != nil {
+		return x.BotId
+	}
+	return ""
+}
+
+func (x *BotInstallationRemovalReceipt) GetActorProfileId() string {
+	if x != nil {
+		return x.ActorProfileId
+	}
+	return ""
+}
+
+func (x *BotInstallationRemovalReceipt) GetSpaceId() string {
+	if x != nil {
+		return x.SpaceId
+	}
+	return ""
+}
+
+func (x *BotInstallationRemovalReceipt) GetEvidenceKind() string {
+	if x != nil {
+		return x.EvidenceKind
+	}
+	return ""
+}
+
+func (x *BotInstallationRemovalReceipt) GetEvidenceSha256() []byte {
+	if x != nil {
+		return x.EvidenceSha256
+	}
+	return nil
+}
+
+func (x *BotInstallationRemovalReceipt) GetFrozenScopeSha256() []byte {
+	if x != nil {
+		return x.FrozenScopeSha256
+	}
+	return nil
+}
+
+func (x *BotInstallationRemovalReceipt) GetRequestSha256() []byte {
+	if x != nil {
+		return x.RequestSha256
+	}
+	return nil
+}
+
+func (x *BotInstallationRemovalReceipt) GetParticipant() string {
+	if x != nil {
+		return x.Participant
+	}
+	return ""
+}
+
+func (x *BotInstallationRemovalReceipt) GetOutcome() string {
+	if x != nil {
+		return x.Outcome
+	}
+	return ""
+}
+
+func (x *BotInstallationRemovalReceipt) GetCompletedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CompletedAt
+	}
+	return nil
+}
+
+func (x *BotInstallationRemovalReceipt) GetDeletedRoleCount() uint64 {
+	if x != nil {
+		return x.DeletedRoleCount
+	}
+	return 0
+}
+
+func (x *BotInstallationRemovalReceipt) GetRemovedAssignmentCount() uint64 {
+	if x != nil {
+		return x.RemovedAssignmentCount
+	}
+	return 0
+}
+
+type ApplyBotInstallationRemovalResponse struct {
+	state         protoimpl.MessageState         `protogen:"open.v1"`
+	Receipt       *BotInstallationRemovalReceipt `protobuf:"bytes,1,opt,name=receipt,proto3" json:"receipt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApplyBotInstallationRemovalResponse) Reset() {
+	*x = ApplyBotInstallationRemovalResponse{}
+	mi := &file_voice_role_v1_role_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApplyBotInstallationRemovalResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApplyBotInstallationRemovalResponse) ProtoMessage() {}
+
+func (x *ApplyBotInstallationRemovalResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_role_v1_role_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApplyBotInstallationRemovalResponse.ProtoReflect.Descriptor instead.
+func (*ApplyBotInstallationRemovalResponse) Descriptor() ([]byte, []int) {
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ApplyBotInstallationRemovalResponse) GetReceipt() *BotInstallationRemovalReceipt {
+	if x != nil {
+		return x.Receipt
+	}
+	return nil
+}
+
+// Exact accepted Bot-owner global root; decision_id is transport request_id.
+// No actor/Space/account/root digest or interactive Role mutation authority.
+// @voice.unknown_fields=reject
+type RegisterBotGlobalTerminalRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ProtocolVersion uint32                 `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	BotId           string                 `protobuf:"bytes,2,opt,name=bot_id,json=botId,proto3" json:"bot_id,omitempty"`
+	DecisionId      string                 `protobuf:"bytes,3,opt,name=decision_id,json=decisionId,proto3" json:"decision_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *RegisterBotGlobalTerminalRequest) Reset() {
+	*x = RegisterBotGlobalTerminalRequest{}
+	mi := &file_voice_role_v1_role_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterBotGlobalTerminalRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterBotGlobalTerminalRequest) ProtoMessage() {}
+
+func (x *RegisterBotGlobalTerminalRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_role_v1_role_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterBotGlobalTerminalRequest.ProtoReflect.Descriptor instead.
+func (*RegisterBotGlobalTerminalRequest) Descriptor() ([]byte, []int) {
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *RegisterBotGlobalTerminalRequest) GetProtocolVersion() uint32 {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return 0
+}
+
+func (x *RegisterBotGlobalTerminalRequest) GetBotId() string {
+	if x != nil {
+		return x.BotId
+	}
+	return ""
+}
+
+func (x *RegisterBotGlobalTerminalRequest) GetDecisionId() string {
+	if x != nil {
+		return x.DecisionId
+	}
+	return ""
+}
+
+// Receiver-owned terminal fact, not deletion/assignment/Owner cleanup proof.
+type BotGlobalTerminalReceipt struct {
+	state           protoimpl.MessageState   `protogen:"open.v1"`
+	ProtocolVersion uint32                   `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	Participant     string                   `protobuf:"bytes,2,opt,name=participant,proto3" json:"participant,omitempty"` // role
+	BotId           string                   `protobuf:"bytes,3,opt,name=bot_id,json=botId,proto3" json:"bot_id,omitempty"`
+	DecisionId      string                   `protobuf:"bytes,4,opt,name=decision_id,json=decisionId,proto3" json:"decision_id,omitempty"`
+	ReceiptId       string                   `protobuf:"bytes,5,opt,name=receipt_id,json=receiptId,proto3" json:"receipt_id,omitempty"`
+	RegisteredAt    *timestamppb.Timestamp   `protobuf:"bytes,6,opt,name=registered_at,json=registeredAt,proto3" json:"registered_at,omitempty"`
+	Outcome         BotGlobalTerminalOutcome `protobuf:"varint,7,opt,name=outcome,proto3,enum=voice.role.v1.BotGlobalTerminalOutcome" json:"outcome,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *BotGlobalTerminalReceipt) Reset() {
+	*x = BotGlobalTerminalReceipt{}
+	mi := &file_voice_role_v1_role_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BotGlobalTerminalReceipt) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BotGlobalTerminalReceipt) ProtoMessage() {}
+
+func (x *BotGlobalTerminalReceipt) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_role_v1_role_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BotGlobalTerminalReceipt.ProtoReflect.Descriptor instead.
+func (*BotGlobalTerminalReceipt) Descriptor() ([]byte, []int) {
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *BotGlobalTerminalReceipt) GetProtocolVersion() uint32 {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return 0
+}
+
+func (x *BotGlobalTerminalReceipt) GetParticipant() string {
+	if x != nil {
+		return x.Participant
+	}
+	return ""
+}
+
+func (x *BotGlobalTerminalReceipt) GetBotId() string {
+	if x != nil {
+		return x.BotId
+	}
+	return ""
+}
+
+func (x *BotGlobalTerminalReceipt) GetDecisionId() string {
+	if x != nil {
+		return x.DecisionId
+	}
+	return ""
+}
+
+func (x *BotGlobalTerminalReceipt) GetReceiptId() string {
+	if x != nil {
+		return x.ReceiptId
+	}
+	return ""
+}
+
+func (x *BotGlobalTerminalReceipt) GetRegisteredAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RegisteredAt
+	}
+	return nil
+}
+
+func (x *BotGlobalTerminalReceipt) GetOutcome() BotGlobalTerminalOutcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return BotGlobalTerminalOutcome_BOT_GLOBAL_TERMINAL_OUTCOME_UNSPECIFIED
+}
+
+type RegisterBotGlobalTerminalResponse struct {
+	state         protoimpl.MessageState    `protogen:"open.v1"`
+	Receipt       *BotGlobalTerminalReceipt `protobuf:"bytes,1,opt,name=receipt,proto3" json:"receipt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterBotGlobalTerminalResponse) Reset() {
+	*x = RegisterBotGlobalTerminalResponse{}
+	mi := &file_voice_role_v1_role_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterBotGlobalTerminalResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterBotGlobalTerminalResponse) ProtoMessage() {}
+
+func (x *RegisterBotGlobalTerminalResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_role_v1_role_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterBotGlobalTerminalResponse.ProtoReflect.Descriptor instead.
+func (*RegisterBotGlobalTerminalResponse) Descriptor() ([]byte, []int) {
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *RegisterBotGlobalTerminalResponse) GetReceipt() *BotGlobalTerminalReceipt {
+	if x != nil {
+		return x.Receipt
+	}
+	return nil
 }
 
 type EnsureDefaultMemberRoleRequest struct {
@@ -192,7 +1003,7 @@ type EnsureDefaultMemberRoleRequest struct {
 
 func (x *EnsureDefaultMemberRoleRequest) Reset() {
 	*x = EnsureDefaultMemberRoleRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[0]
+	mi := &file_voice_role_v1_role_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -204,7 +1015,7 @@ func (x *EnsureDefaultMemberRoleRequest) String() string {
 func (*EnsureDefaultMemberRoleRequest) ProtoMessage() {}
 
 func (x *EnsureDefaultMemberRoleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[0]
+	mi := &file_voice_role_v1_role_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -217,7 +1028,7 @@ func (x *EnsureDefaultMemberRoleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnsureDefaultMemberRoleRequest.ProtoReflect.Descriptor instead.
 func (*EnsureDefaultMemberRoleRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{0}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *EnsureDefaultMemberRoleRequest) GetProtocolVersion() uint32 {
@@ -280,7 +1091,7 @@ type DefaultMemberRoleReceipt struct {
 
 func (x *DefaultMemberRoleReceipt) Reset() {
 	*x = DefaultMemberRoleReceipt{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[1]
+	mi := &file_voice_role_v1_role_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -292,7 +1103,7 @@ func (x *DefaultMemberRoleReceipt) String() string {
 func (*DefaultMemberRoleReceipt) ProtoMessage() {}
 
 func (x *DefaultMemberRoleReceipt) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[1]
+	mi := &file_voice_role_v1_role_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -305,7 +1116,7 @@ func (x *DefaultMemberRoleReceipt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DefaultMemberRoleReceipt.ProtoReflect.Descriptor instead.
 func (*DefaultMemberRoleReceipt) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{1}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *DefaultMemberRoleReceipt) GetProtocolVersion() uint32 {
@@ -373,7 +1184,7 @@ type EnsureDefaultMemberRoleResponse struct {
 
 func (x *EnsureDefaultMemberRoleResponse) Reset() {
 	*x = EnsureDefaultMemberRoleResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[2]
+	mi := &file_voice_role_v1_role_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -385,7 +1196,7 @@ func (x *EnsureDefaultMemberRoleResponse) String() string {
 func (*EnsureDefaultMemberRoleResponse) ProtoMessage() {}
 
 func (x *EnsureDefaultMemberRoleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[2]
+	mi := &file_voice_role_v1_role_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -398,7 +1209,7 @@ func (x *EnsureDefaultMemberRoleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnsureDefaultMemberRoleResponse.ProtoReflect.Descriptor instead.
 func (*EnsureDefaultMemberRoleResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{2}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *EnsureDefaultMemberRoleResponse) GetReceipt() *DefaultMemberRoleReceipt {
@@ -422,7 +1233,7 @@ type RemoveMemberRolesRequest struct {
 
 func (x *RemoveMemberRolesRequest) Reset() {
 	*x = RemoveMemberRolesRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[3]
+	mi := &file_voice_role_v1_role_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -434,7 +1245,7 @@ func (x *RemoveMemberRolesRequest) String() string {
 func (*RemoveMemberRolesRequest) ProtoMessage() {}
 
 func (x *RemoveMemberRolesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[3]
+	mi := &file_voice_role_v1_role_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -447,7 +1258,7 @@ func (x *RemoveMemberRolesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveMemberRolesRequest.ProtoReflect.Descriptor instead.
 func (*RemoveMemberRolesRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{3}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *RemoveMemberRolesRequest) GetProtocolVersion() uint32 {
@@ -507,7 +1318,7 @@ type MemberRolesRemovalReceipt struct {
 
 func (x *MemberRolesRemovalReceipt) Reset() {
 	*x = MemberRolesRemovalReceipt{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[4]
+	mi := &file_voice_role_v1_role_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -519,7 +1330,7 @@ func (x *MemberRolesRemovalReceipt) String() string {
 func (*MemberRolesRemovalReceipt) ProtoMessage() {}
 
 func (x *MemberRolesRemovalReceipt) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[4]
+	mi := &file_voice_role_v1_role_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -532,7 +1343,7 @@ func (x *MemberRolesRemovalReceipt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MemberRolesRemovalReceipt.ProtoReflect.Descriptor instead.
 func (*MemberRolesRemovalReceipt) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{4}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *MemberRolesRemovalReceipt) GetProtocolVersion() uint32 {
@@ -593,7 +1404,7 @@ type RemoveMemberRolesResponse struct {
 
 func (x *RemoveMemberRolesResponse) Reset() {
 	*x = RemoveMemberRolesResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[5]
+	mi := &file_voice_role_v1_role_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -605,7 +1416,7 @@ func (x *RemoveMemberRolesResponse) String() string {
 func (*RemoveMemberRolesResponse) ProtoMessage() {}
 
 func (x *RemoveMemberRolesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[5]
+	mi := &file_voice_role_v1_role_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -618,7 +1429,7 @@ func (x *RemoveMemberRolesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveMemberRolesResponse.ProtoReflect.Descriptor instead.
 func (*RemoveMemberRolesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{5}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *RemoveMemberRolesResponse) GetReceipt() *MemberRolesRemovalReceipt {
@@ -638,7 +1449,7 @@ type BootstrapSpaceRolesRequest struct {
 
 func (x *BootstrapSpaceRolesRequest) Reset() {
 	*x = BootstrapSpaceRolesRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[6]
+	mi := &file_voice_role_v1_role_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -650,7 +1461,7 @@ func (x *BootstrapSpaceRolesRequest) String() string {
 func (*BootstrapSpaceRolesRequest) ProtoMessage() {}
 
 func (x *BootstrapSpaceRolesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[6]
+	mi := &file_voice_role_v1_role_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -663,7 +1474,7 @@ func (x *BootstrapSpaceRolesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapSpaceRolesRequest.ProtoReflect.Descriptor instead.
 func (*BootstrapSpaceRolesRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{6}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *BootstrapSpaceRolesRequest) GetSpaceId() string {
@@ -688,7 +1499,7 @@ type BootstrapSpaceRolesResponse struct {
 
 func (x *BootstrapSpaceRolesResponse) Reset() {
 	*x = BootstrapSpaceRolesResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[7]
+	mi := &file_voice_role_v1_role_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -700,7 +1511,7 @@ func (x *BootstrapSpaceRolesResponse) String() string {
 func (*BootstrapSpaceRolesResponse) ProtoMessage() {}
 
 func (x *BootstrapSpaceRolesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[7]
+	mi := &file_voice_role_v1_role_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -713,7 +1524,7 @@ func (x *BootstrapSpaceRolesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapSpaceRolesResponse.ProtoReflect.Descriptor instead.
 func (*BootstrapSpaceRolesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{7}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{16}
 }
 
 type DeleteRolesCreatedByProfileRequest struct {
@@ -726,7 +1537,7 @@ type DeleteRolesCreatedByProfileRequest struct {
 
 func (x *DeleteRolesCreatedByProfileRequest) Reset() {
 	*x = DeleteRolesCreatedByProfileRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[8]
+	mi := &file_voice_role_v1_role_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -738,7 +1549,7 @@ func (x *DeleteRolesCreatedByProfileRequest) String() string {
 func (*DeleteRolesCreatedByProfileRequest) ProtoMessage() {}
 
 func (x *DeleteRolesCreatedByProfileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[8]
+	mi := &file_voice_role_v1_role_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -751,7 +1562,7 @@ func (x *DeleteRolesCreatedByProfileRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use DeleteRolesCreatedByProfileRequest.ProtoReflect.Descriptor instead.
 func (*DeleteRolesCreatedByProfileRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{8}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DeleteRolesCreatedByProfileRequest) GetSpaceId() string {
@@ -776,7 +1587,7 @@ type DeleteRolesCreatedByProfileResponse struct {
 
 func (x *DeleteRolesCreatedByProfileResponse) Reset() {
 	*x = DeleteRolesCreatedByProfileResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[9]
+	mi := &file_voice_role_v1_role_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -788,7 +1599,7 @@ func (x *DeleteRolesCreatedByProfileResponse) String() string {
 func (*DeleteRolesCreatedByProfileResponse) ProtoMessage() {}
 
 func (x *DeleteRolesCreatedByProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[9]
+	mi := &file_voice_role_v1_role_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -801,7 +1612,7 @@ func (x *DeleteRolesCreatedByProfileResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use DeleteRolesCreatedByProfileResponse.ProtoReflect.Descriptor instead.
 func (*DeleteRolesCreatedByProfileResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{9}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{18}
 }
 
 type ApplyOwnershipTransferRequest struct {
@@ -816,7 +1627,7 @@ type ApplyOwnershipTransferRequest struct {
 
 func (x *ApplyOwnershipTransferRequest) Reset() {
 	*x = ApplyOwnershipTransferRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[10]
+	mi := &file_voice_role_v1_role_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -828,7 +1639,7 @@ func (x *ApplyOwnershipTransferRequest) String() string {
 func (*ApplyOwnershipTransferRequest) ProtoMessage() {}
 
 func (x *ApplyOwnershipTransferRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[10]
+	mi := &file_voice_role_v1_role_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -841,7 +1652,7 @@ func (x *ApplyOwnershipTransferRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyOwnershipTransferRequest.ProtoReflect.Descriptor instead.
 func (*ApplyOwnershipTransferRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{10}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ApplyOwnershipTransferRequest) GetSpaceId() string {
@@ -884,7 +1695,7 @@ type CompensateOwnershipTransferRequest struct {
 
 func (x *CompensateOwnershipTransferRequest) Reset() {
 	*x = CompensateOwnershipTransferRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[11]
+	mi := &file_voice_role_v1_role_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -896,7 +1707,7 @@ func (x *CompensateOwnershipTransferRequest) String() string {
 func (*CompensateOwnershipTransferRequest) ProtoMessage() {}
 
 func (x *CompensateOwnershipTransferRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[11]
+	mi := &file_voice_role_v1_role_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -909,7 +1720,7 @@ func (x *CompensateOwnershipTransferRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use CompensateOwnershipTransferRequest.ProtoReflect.Descriptor instead.
 func (*CompensateOwnershipTransferRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{11}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *CompensateOwnershipTransferRequest) GetSpaceId() string {
@@ -949,7 +1760,7 @@ type ApplyOwnershipTransferResponse struct {
 
 func (x *ApplyOwnershipTransferResponse) Reset() {
 	*x = ApplyOwnershipTransferResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[12]
+	mi := &file_voice_role_v1_role_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -961,7 +1772,7 @@ func (x *ApplyOwnershipTransferResponse) String() string {
 func (*ApplyOwnershipTransferResponse) ProtoMessage() {}
 
 func (x *ApplyOwnershipTransferResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[12]
+	mi := &file_voice_role_v1_role_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -974,7 +1785,7 @@ func (x *ApplyOwnershipTransferResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyOwnershipTransferResponse.ProtoReflect.Descriptor instead.
 func (*ApplyOwnershipTransferResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{12}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ApplyOwnershipTransferResponse) GetCurrentOwnerProfileId() string {
@@ -993,7 +1804,7 @@ type CompensateOwnershipTransferResponse struct {
 
 func (x *CompensateOwnershipTransferResponse) Reset() {
 	*x = CompensateOwnershipTransferResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[13]
+	mi := &file_voice_role_v1_role_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1005,7 +1816,7 @@ func (x *CompensateOwnershipTransferResponse) String() string {
 func (*CompensateOwnershipTransferResponse) ProtoMessage() {}
 
 func (x *CompensateOwnershipTransferResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[13]
+	mi := &file_voice_role_v1_role_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1018,7 +1829,7 @@ func (x *CompensateOwnershipTransferResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use CompensateOwnershipTransferResponse.ProtoReflect.Descriptor instead.
 func (*CompensateOwnershipTransferResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{13}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *CompensateOwnershipTransferResponse) GetCurrentOwnerProfileId() string {
@@ -1046,7 +1857,7 @@ type OwnershipTransferIntent struct {
 
 func (x *OwnershipTransferIntent) Reset() {
 	*x = OwnershipTransferIntent{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[14]
+	mi := &file_voice_role_v1_role_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1058,7 +1869,7 @@ func (x *OwnershipTransferIntent) String() string {
 func (*OwnershipTransferIntent) ProtoMessage() {}
 
 func (x *OwnershipTransferIntent) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[14]
+	mi := &file_voice_role_v1_role_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1071,7 +1882,7 @@ func (x *OwnershipTransferIntent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OwnershipTransferIntent.ProtoReflect.Descriptor instead.
 func (*OwnershipTransferIntent) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{14}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *OwnershipTransferIntent) GetProtocolVersion() uint32 {
@@ -1121,7 +1932,7 @@ type OwnershipTransferReceipt struct {
 
 func (x *OwnershipTransferReceipt) Reset() {
 	*x = OwnershipTransferReceipt{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[15]
+	mi := &file_voice_role_v1_role_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1133,7 +1944,7 @@ func (x *OwnershipTransferReceipt) String() string {
 func (*OwnershipTransferReceipt) ProtoMessage() {}
 
 func (x *OwnershipTransferReceipt) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[15]
+	mi := &file_voice_role_v1_role_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1146,7 +1957,7 @@ func (x *OwnershipTransferReceipt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OwnershipTransferReceipt.ProtoReflect.Descriptor instead.
 func (*OwnershipTransferReceipt) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{15}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *OwnershipTransferReceipt) GetIntent() *OwnershipTransferIntent {
@@ -1178,7 +1989,7 @@ type GetOwnershipTransferCapabilitiesRequest struct {
 
 func (x *GetOwnershipTransferCapabilitiesRequest) Reset() {
 	*x = GetOwnershipTransferCapabilitiesRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[16]
+	mi := &file_voice_role_v1_role_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1190,7 +2001,7 @@ func (x *GetOwnershipTransferCapabilitiesRequest) String() string {
 func (*GetOwnershipTransferCapabilitiesRequest) ProtoMessage() {}
 
 func (x *GetOwnershipTransferCapabilitiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[16]
+	mi := &file_voice_role_v1_role_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1203,7 +2014,7 @@ func (x *GetOwnershipTransferCapabilitiesRequest) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use GetOwnershipTransferCapabilitiesRequest.ProtoReflect.Descriptor instead.
 func (*GetOwnershipTransferCapabilitiesRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{16}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{25}
 }
 
 // An authenticated protocol 2 and all three exact full transition RPC paths are
@@ -1220,7 +2031,7 @@ type GetOwnershipTransferCapabilitiesResponse struct {
 
 func (x *GetOwnershipTransferCapabilitiesResponse) Reset() {
 	*x = GetOwnershipTransferCapabilitiesResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[17]
+	mi := &file_voice_role_v1_role_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1232,7 +2043,7 @@ func (x *GetOwnershipTransferCapabilitiesResponse) String() string {
 func (*GetOwnershipTransferCapabilitiesResponse) ProtoMessage() {}
 
 func (x *GetOwnershipTransferCapabilitiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[17]
+	mi := &file_voice_role_v1_role_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1245,7 +2056,7 @@ func (x *GetOwnershipTransferCapabilitiesResponse) ProtoReflect() protoreflect.M
 
 // Deprecated: Use GetOwnershipTransferCapabilitiesResponse.ProtoReflect.Descriptor instead.
 func (*GetOwnershipTransferCapabilitiesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{17}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetOwnershipTransferCapabilitiesResponse) GetProtocolVersion() uint32 {
@@ -1275,7 +2086,7 @@ type PrepareOwnershipTransferRequest struct {
 
 func (x *PrepareOwnershipTransferRequest) Reset() {
 	*x = PrepareOwnershipTransferRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[18]
+	mi := &file_voice_role_v1_role_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1287,7 +2098,7 @@ func (x *PrepareOwnershipTransferRequest) String() string {
 func (*PrepareOwnershipTransferRequest) ProtoMessage() {}
 
 func (x *PrepareOwnershipTransferRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[18]
+	mi := &file_voice_role_v1_role_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1300,7 +2111,7 @@ func (x *PrepareOwnershipTransferRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrepareOwnershipTransferRequest.ProtoReflect.Descriptor instead.
 func (*PrepareOwnershipTransferRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{18}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *PrepareOwnershipTransferRequest) GetIntent() *OwnershipTransferIntent {
@@ -1320,7 +2131,7 @@ type PrepareOwnershipTransferResponse struct {
 
 func (x *PrepareOwnershipTransferResponse) Reset() {
 	*x = PrepareOwnershipTransferResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[19]
+	mi := &file_voice_role_v1_role_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1332,7 +2143,7 @@ func (x *PrepareOwnershipTransferResponse) String() string {
 func (*PrepareOwnershipTransferResponse) ProtoMessage() {}
 
 func (x *PrepareOwnershipTransferResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[19]
+	mi := &file_voice_role_v1_role_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1345,7 +2156,7 @@ func (x *PrepareOwnershipTransferResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrepareOwnershipTransferResponse.ProtoReflect.Descriptor instead.
 func (*PrepareOwnershipTransferResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{19}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *PrepareOwnershipTransferResponse) GetReceipt() *OwnershipTransferReceipt {
@@ -1366,7 +2177,7 @@ type FinalizeOwnershipTransferRequest struct {
 
 func (x *FinalizeOwnershipTransferRequest) Reset() {
 	*x = FinalizeOwnershipTransferRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[20]
+	mi := &file_voice_role_v1_role_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1378,7 +2189,7 @@ func (x *FinalizeOwnershipTransferRequest) String() string {
 func (*FinalizeOwnershipTransferRequest) ProtoMessage() {}
 
 func (x *FinalizeOwnershipTransferRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[20]
+	mi := &file_voice_role_v1_role_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1391,7 +2202,7 @@ func (x *FinalizeOwnershipTransferRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FinalizeOwnershipTransferRequest.ProtoReflect.Descriptor instead.
 func (*FinalizeOwnershipTransferRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{20}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *FinalizeOwnershipTransferRequest) GetIntent() *OwnershipTransferIntent {
@@ -1411,7 +2222,7 @@ type FinalizeOwnershipTransferResponse struct {
 
 func (x *FinalizeOwnershipTransferResponse) Reset() {
 	*x = FinalizeOwnershipTransferResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[21]
+	mi := &file_voice_role_v1_role_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1423,7 +2234,7 @@ func (x *FinalizeOwnershipTransferResponse) String() string {
 func (*FinalizeOwnershipTransferResponse) ProtoMessage() {}
 
 func (x *FinalizeOwnershipTransferResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[21]
+	mi := &file_voice_role_v1_role_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1436,7 +2247,7 @@ func (x *FinalizeOwnershipTransferResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use FinalizeOwnershipTransferResponse.ProtoReflect.Descriptor instead.
 func (*FinalizeOwnershipTransferResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{21}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *FinalizeOwnershipTransferResponse) GetReceipt() *OwnershipTransferReceipt {
@@ -1458,7 +2269,7 @@ type AbortOwnershipTransferRequest struct {
 
 func (x *AbortOwnershipTransferRequest) Reset() {
 	*x = AbortOwnershipTransferRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[22]
+	mi := &file_voice_role_v1_role_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1470,7 +2281,7 @@ func (x *AbortOwnershipTransferRequest) String() string {
 func (*AbortOwnershipTransferRequest) ProtoMessage() {}
 
 func (x *AbortOwnershipTransferRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[22]
+	mi := &file_voice_role_v1_role_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1483,7 +2294,7 @@ func (x *AbortOwnershipTransferRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AbortOwnershipTransferRequest.ProtoReflect.Descriptor instead.
 func (*AbortOwnershipTransferRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{22}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *AbortOwnershipTransferRequest) GetIntent() *OwnershipTransferIntent {
@@ -1503,7 +2314,7 @@ type AbortOwnershipTransferResponse struct {
 
 func (x *AbortOwnershipTransferResponse) Reset() {
 	*x = AbortOwnershipTransferResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[23]
+	mi := &file_voice_role_v1_role_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1515,7 +2326,7 @@ func (x *AbortOwnershipTransferResponse) String() string {
 func (*AbortOwnershipTransferResponse) ProtoMessage() {}
 
 func (x *AbortOwnershipTransferResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[23]
+	mi := &file_voice_role_v1_role_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1528,7 +2339,7 @@ func (x *AbortOwnershipTransferResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AbortOwnershipTransferResponse.ProtoReflect.Descriptor instead.
 func (*AbortOwnershipTransferResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{23}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *AbortOwnershipTransferResponse) GetReceipt() *OwnershipTransferReceipt {
@@ -1556,7 +2367,7 @@ type Role struct {
 
 func (x *Role) Reset() {
 	*x = Role{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[24]
+	mi := &file_voice_role_v1_role_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1568,7 +2379,7 @@ func (x *Role) String() string {
 func (*Role) ProtoMessage() {}
 
 func (x *Role) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[24]
+	mi := &file_voice_role_v1_role_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1581,7 +2392,7 @@ func (x *Role) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Role.ProtoReflect.Descriptor instead.
 func (*Role) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{24}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *Role) GetId() string {
@@ -1666,7 +2477,7 @@ type CreateRoleRequest struct {
 
 func (x *CreateRoleRequest) Reset() {
 	*x = CreateRoleRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[25]
+	mi := &file_voice_role_v1_role_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1678,7 +2489,7 @@ func (x *CreateRoleRequest) String() string {
 func (*CreateRoleRequest) ProtoMessage() {}
 
 func (x *CreateRoleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[25]
+	mi := &file_voice_role_v1_role_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1691,7 +2502,7 @@ func (x *CreateRoleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRoleRequest.ProtoReflect.Descriptor instead.
 func (*CreateRoleRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{25}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *CreateRoleRequest) GetSpaceId() string {
@@ -1734,7 +2545,7 @@ type UpdateRoleRequest struct {
 
 func (x *UpdateRoleRequest) Reset() {
 	*x = UpdateRoleRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[26]
+	mi := &file_voice_role_v1_role_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1746,7 +2557,7 @@ func (x *UpdateRoleRequest) String() string {
 func (*UpdateRoleRequest) ProtoMessage() {}
 
 func (x *UpdateRoleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[26]
+	mi := &file_voice_role_v1_role_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1759,7 +2570,7 @@ func (x *UpdateRoleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateRoleRequest.ProtoReflect.Descriptor instead.
 func (*UpdateRoleRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{26}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *UpdateRoleRequest) GetRoleId() string {
@@ -1799,7 +2610,7 @@ type DeleteRoleRequest struct {
 
 func (x *DeleteRoleRequest) Reset() {
 	*x = DeleteRoleRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[27]
+	mi := &file_voice_role_v1_role_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1811,7 +2622,7 @@ func (x *DeleteRoleRequest) String() string {
 func (*DeleteRoleRequest) ProtoMessage() {}
 
 func (x *DeleteRoleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[27]
+	mi := &file_voice_role_v1_role_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1824,7 +2635,7 @@ func (x *DeleteRoleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRoleRequest.ProtoReflect.Descriptor instead.
 func (*DeleteRoleRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{27}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *DeleteRoleRequest) GetRoleId() string {
@@ -1843,7 +2654,7 @@ type ListRolesRequest struct {
 
 func (x *ListRolesRequest) Reset() {
 	*x = ListRolesRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[28]
+	mi := &file_voice_role_v1_role_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1855,7 +2666,7 @@ func (x *ListRolesRequest) String() string {
 func (*ListRolesRequest) ProtoMessage() {}
 
 func (x *ListRolesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[28]
+	mi := &file_voice_role_v1_role_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1868,7 +2679,7 @@ func (x *ListRolesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRolesRequest.ProtoReflect.Descriptor instead.
 func (*ListRolesRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{28}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ListRolesRequest) GetSpaceId() string {
@@ -1887,7 +2698,7 @@ type RoleList struct {
 
 func (x *RoleList) Reset() {
 	*x = RoleList{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[29]
+	mi := &file_voice_role_v1_role_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1899,7 +2710,7 @@ func (x *RoleList) String() string {
 func (*RoleList) ProtoMessage() {}
 
 func (x *RoleList) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[29]
+	mi := &file_voice_role_v1_role_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1912,7 +2723,7 @@ func (x *RoleList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RoleList.ProtoReflect.Descriptor instead.
 func (*RoleList) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{29}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *RoleList) GetRoles() []*Role {
@@ -1932,7 +2743,7 @@ type ReorderRolesRequest struct {
 
 func (x *ReorderRolesRequest) Reset() {
 	*x = ReorderRolesRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[30]
+	mi := &file_voice_role_v1_role_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1944,7 +2755,7 @@ func (x *ReorderRolesRequest) String() string {
 func (*ReorderRolesRequest) ProtoMessage() {}
 
 func (x *ReorderRolesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[30]
+	mi := &file_voice_role_v1_role_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1957,7 +2768,7 @@ func (x *ReorderRolesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReorderRolesRequest.ProtoReflect.Descriptor instead.
 func (*ReorderRolesRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{30}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ReorderRolesRequest) GetSpaceId() string {
@@ -1985,7 +2796,7 @@ type AssignRoleRequest struct {
 
 func (x *AssignRoleRequest) Reset() {
 	*x = AssignRoleRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[31]
+	mi := &file_voice_role_v1_role_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1997,7 +2808,7 @@ func (x *AssignRoleRequest) String() string {
 func (*AssignRoleRequest) ProtoMessage() {}
 
 func (x *AssignRoleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[31]
+	mi := &file_voice_role_v1_role_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2010,7 +2821,7 @@ func (x *AssignRoleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssignRoleRequest.ProtoReflect.Descriptor instead.
 func (*AssignRoleRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{31}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *AssignRoleRequest) GetSpaceId() string {
@@ -2045,7 +2856,7 @@ type RevokeRoleRequest struct {
 
 func (x *RevokeRoleRequest) Reset() {
 	*x = RevokeRoleRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[32]
+	mi := &file_voice_role_v1_role_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2057,7 +2868,7 @@ func (x *RevokeRoleRequest) String() string {
 func (*RevokeRoleRequest) ProtoMessage() {}
 
 func (x *RevokeRoleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[32]
+	mi := &file_voice_role_v1_role_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2070,7 +2881,7 @@ func (x *RevokeRoleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeRoleRequest.ProtoReflect.Descriptor instead.
 func (*RevokeRoleRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{32}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *RevokeRoleRequest) GetSpaceId() string {
@@ -2104,7 +2915,7 @@ type GetMemberRolesRequest struct {
 
 func (x *GetMemberRolesRequest) Reset() {
 	*x = GetMemberRolesRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[33]
+	mi := &file_voice_role_v1_role_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2116,7 +2927,7 @@ func (x *GetMemberRolesRequest) String() string {
 func (*GetMemberRolesRequest) ProtoMessage() {}
 
 func (x *GetMemberRolesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[33]
+	mi := &file_voice_role_v1_role_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2129,7 +2940,7 @@ func (x *GetMemberRolesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMemberRolesRequest.ProtoReflect.Descriptor instead.
 func (*GetMemberRolesRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{33}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *GetMemberRolesRequest) GetSpaceId() string {
@@ -2159,7 +2970,7 @@ type SetChatOverrideRequest struct {
 
 func (x *SetChatOverrideRequest) Reset() {
 	*x = SetChatOverrideRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[34]
+	mi := &file_voice_role_v1_role_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2171,7 +2982,7 @@ func (x *SetChatOverrideRequest) String() string {
 func (*SetChatOverrideRequest) ProtoMessage() {}
 
 func (x *SetChatOverrideRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[34]
+	mi := &file_voice_role_v1_role_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2184,7 +2995,7 @@ func (x *SetChatOverrideRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetChatOverrideRequest.ProtoReflect.Descriptor instead.
 func (*SetChatOverrideRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{34}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *SetChatOverrideRequest) GetSpaceId() string {
@@ -2233,7 +3044,7 @@ type RemoveChatOverrideRequest struct {
 
 func (x *RemoveChatOverrideRequest) Reset() {
 	*x = RemoveChatOverrideRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[35]
+	mi := &file_voice_role_v1_role_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2245,7 +3056,7 @@ func (x *RemoveChatOverrideRequest) String() string {
 func (*RemoveChatOverrideRequest) ProtoMessage() {}
 
 func (x *RemoveChatOverrideRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[35]
+	mi := &file_voice_role_v1_role_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2258,7 +3069,7 @@ func (x *RemoveChatOverrideRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveChatOverrideRequest.ProtoReflect.Descriptor instead.
 func (*RemoveChatOverrideRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{35}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *RemoveChatOverrideRequest) GetSpaceId() string {
@@ -2292,7 +3103,7 @@ type GetChatOverridesRequest struct {
 
 func (x *GetChatOverridesRequest) Reset() {
 	*x = GetChatOverridesRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[36]
+	mi := &file_voice_role_v1_role_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2304,7 +3115,7 @@ func (x *GetChatOverridesRequest) String() string {
 func (*GetChatOverridesRequest) ProtoMessage() {}
 
 func (x *GetChatOverridesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[36]
+	mi := &file_voice_role_v1_role_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2317,7 +3128,7 @@ func (x *GetChatOverridesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChatOverridesRequest.ProtoReflect.Descriptor instead.
 func (*GetChatOverridesRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{36}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *GetChatOverridesRequest) GetSpaceId() string {
@@ -2347,7 +3158,7 @@ type SetVoiceRoomOverrideRequest struct {
 
 func (x *SetVoiceRoomOverrideRequest) Reset() {
 	*x = SetVoiceRoomOverrideRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[37]
+	mi := &file_voice_role_v1_role_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2359,7 +3170,7 @@ func (x *SetVoiceRoomOverrideRequest) String() string {
 func (*SetVoiceRoomOverrideRequest) ProtoMessage() {}
 
 func (x *SetVoiceRoomOverrideRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[37]
+	mi := &file_voice_role_v1_role_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2372,7 +3183,7 @@ func (x *SetVoiceRoomOverrideRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetVoiceRoomOverrideRequest.ProtoReflect.Descriptor instead.
 func (*SetVoiceRoomOverrideRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{37}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *SetVoiceRoomOverrideRequest) GetSpaceId() string {
@@ -2421,7 +3232,7 @@ type RemoveVoiceRoomOverrideRequest struct {
 
 func (x *RemoveVoiceRoomOverrideRequest) Reset() {
 	*x = RemoveVoiceRoomOverrideRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[38]
+	mi := &file_voice_role_v1_role_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2433,7 +3244,7 @@ func (x *RemoveVoiceRoomOverrideRequest) String() string {
 func (*RemoveVoiceRoomOverrideRequest) ProtoMessage() {}
 
 func (x *RemoveVoiceRoomOverrideRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[38]
+	mi := &file_voice_role_v1_role_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2446,7 +3257,7 @@ func (x *RemoveVoiceRoomOverrideRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveVoiceRoomOverrideRequest.ProtoReflect.Descriptor instead.
 func (*RemoveVoiceRoomOverrideRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{38}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *RemoveVoiceRoomOverrideRequest) GetSpaceId() string {
@@ -2480,7 +3291,7 @@ type GetVoiceRoomOverridesRequest struct {
 
 func (x *GetVoiceRoomOverridesRequest) Reset() {
 	*x = GetVoiceRoomOverridesRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[39]
+	mi := &file_voice_role_v1_role_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2492,7 +3303,7 @@ func (x *GetVoiceRoomOverridesRequest) String() string {
 func (*GetVoiceRoomOverridesRequest) ProtoMessage() {}
 
 func (x *GetVoiceRoomOverridesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[39]
+	mi := &file_voice_role_v1_role_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2505,7 +3316,7 @@ func (x *GetVoiceRoomOverridesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetVoiceRoomOverridesRequest.ProtoReflect.Descriptor instead.
 func (*GetVoiceRoomOverridesRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{39}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *GetVoiceRoomOverridesRequest) GetSpaceId() string {
@@ -2531,7 +3342,7 @@ type OverrideList struct {
 
 func (x *OverrideList) Reset() {
 	*x = OverrideList{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[40]
+	mi := &file_voice_role_v1_role_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2543,7 +3354,7 @@ func (x *OverrideList) String() string {
 func (*OverrideList) ProtoMessage() {}
 
 func (x *OverrideList) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[40]
+	mi := &file_voice_role_v1_role_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2556,7 +3367,7 @@ func (x *OverrideList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OverrideList.ProtoReflect.Descriptor instead.
 func (*OverrideList) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{40}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *OverrideList) GetOverrides() []*PermissionOverride {
@@ -2580,7 +3391,7 @@ type PermissionOverride struct {
 
 func (x *PermissionOverride) Reset() {
 	*x = PermissionOverride{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[41]
+	mi := &file_voice_role_v1_role_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2592,7 +3403,7 @@ func (x *PermissionOverride) String() string {
 func (*PermissionOverride) ProtoMessage() {}
 
 func (x *PermissionOverride) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[41]
+	mi := &file_voice_role_v1_role_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2605,7 +3416,7 @@ func (x *PermissionOverride) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PermissionOverride.ProtoReflect.Descriptor instead.
 func (*PermissionOverride) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{41}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *PermissionOverride) GetChat() *v1.ChatRef {
@@ -2660,7 +3471,7 @@ type SetDefaultJoinRoleRequest struct {
 
 func (x *SetDefaultJoinRoleRequest) Reset() {
 	*x = SetDefaultJoinRoleRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[42]
+	mi := &file_voice_role_v1_role_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2672,7 +3483,7 @@ func (x *SetDefaultJoinRoleRequest) String() string {
 func (*SetDefaultJoinRoleRequest) ProtoMessage() {}
 
 func (x *SetDefaultJoinRoleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[42]
+	mi := &file_voice_role_v1_role_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2685,7 +3496,7 @@ func (x *SetDefaultJoinRoleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDefaultJoinRoleRequest.ProtoReflect.Descriptor instead.
 func (*SetDefaultJoinRoleRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{42}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *SetDefaultJoinRoleRequest) GetSpaceId() string {
@@ -2711,7 +3522,7 @@ type GetDefaultJoinRoleRequest struct {
 
 func (x *GetDefaultJoinRoleRequest) Reset() {
 	*x = GetDefaultJoinRoleRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[43]
+	mi := &file_voice_role_v1_role_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2723,7 +3534,7 @@ func (x *GetDefaultJoinRoleRequest) String() string {
 func (*GetDefaultJoinRoleRequest) ProtoMessage() {}
 
 func (x *GetDefaultJoinRoleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[43]
+	mi := &file_voice_role_v1_role_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2736,7 +3547,7 @@ func (x *GetDefaultJoinRoleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDefaultJoinRoleRequest.ProtoReflect.Descriptor instead.
 func (*GetDefaultJoinRoleRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{43}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *GetDefaultJoinRoleRequest) GetSpaceId() string {
@@ -2759,7 +3570,7 @@ type CheckPermissionRequest struct {
 
 func (x *CheckPermissionRequest) Reset() {
 	*x = CheckPermissionRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[44]
+	mi := &file_voice_role_v1_role_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2771,7 +3582,7 @@ func (x *CheckPermissionRequest) String() string {
 func (*CheckPermissionRequest) ProtoMessage() {}
 
 func (x *CheckPermissionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[44]
+	mi := &file_voice_role_v1_role_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2784,7 +3595,7 @@ func (x *CheckPermissionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckPermissionRequest.ProtoReflect.Descriptor instead.
 func (*CheckPermissionRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{44}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *CheckPermissionRequest) GetSpaceId() string {
@@ -2831,7 +3642,7 @@ type CheckPermissionResponse struct {
 
 func (x *CheckPermissionResponse) Reset() {
 	*x = CheckPermissionResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[45]
+	mi := &file_voice_role_v1_role_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2843,7 +3654,7 @@ func (x *CheckPermissionResponse) String() string {
 func (*CheckPermissionResponse) ProtoMessage() {}
 
 func (x *CheckPermissionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[45]
+	mi := &file_voice_role_v1_role_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2856,7 +3667,7 @@ func (x *CheckPermissionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckPermissionResponse.ProtoReflect.Descriptor instead.
 func (*CheckPermissionResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{45}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *CheckPermissionResponse) GetAllowed() bool {
@@ -2877,7 +3688,7 @@ type ResolveVoiceRoomGrantsRequest struct {
 
 func (x *ResolveVoiceRoomGrantsRequest) Reset() {
 	*x = ResolveVoiceRoomGrantsRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[46]
+	mi := &file_voice_role_v1_role_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2889,7 +3700,7 @@ func (x *ResolveVoiceRoomGrantsRequest) String() string {
 func (*ResolveVoiceRoomGrantsRequest) ProtoMessage() {}
 
 func (x *ResolveVoiceRoomGrantsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[46]
+	mi := &file_voice_role_v1_role_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2902,7 +3713,7 @@ func (x *ResolveVoiceRoomGrantsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveVoiceRoomGrantsRequest.ProtoReflect.Descriptor instead.
 func (*ResolveVoiceRoomGrantsRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{46}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *ResolveVoiceRoomGrantsRequest) GetSpaceId() string {
@@ -2945,7 +3756,7 @@ type VoiceRoomGrants struct {
 
 func (x *VoiceRoomGrants) Reset() {
 	*x = VoiceRoomGrants{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[47]
+	mi := &file_voice_role_v1_role_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2957,7 +3768,7 @@ func (x *VoiceRoomGrants) String() string {
 func (*VoiceRoomGrants) ProtoMessage() {}
 
 func (x *VoiceRoomGrants) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[47]
+	mi := &file_voice_role_v1_role_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2970,7 +3781,7 @@ func (x *VoiceRoomGrants) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoiceRoomGrants.ProtoReflect.Descriptor instead.
 func (*VoiceRoomGrants) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{47}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *VoiceRoomGrants) GetCanJoin() bool {
@@ -3053,7 +3864,7 @@ type ResolveVoiceRoomGrantsResponse struct {
 
 func (x *ResolveVoiceRoomGrantsResponse) Reset() {
 	*x = ResolveVoiceRoomGrantsResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[48]
+	mi := &file_voice_role_v1_role_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3065,7 +3876,7 @@ func (x *ResolveVoiceRoomGrantsResponse) String() string {
 func (*ResolveVoiceRoomGrantsResponse) ProtoMessage() {}
 
 func (x *ResolveVoiceRoomGrantsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[48]
+	mi := &file_voice_role_v1_role_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3078,7 +3889,7 @@ func (x *ResolveVoiceRoomGrantsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveVoiceRoomGrantsResponse.ProtoReflect.Descriptor instead.
 func (*ResolveVoiceRoomGrantsResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{48}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *ResolveVoiceRoomGrantsResponse) GetGrants() *VoiceRoomGrants {
@@ -3107,7 +3918,7 @@ type GetEffectivePermissionsRequest struct {
 
 func (x *GetEffectivePermissionsRequest) Reset() {
 	*x = GetEffectivePermissionsRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[49]
+	mi := &file_voice_role_v1_role_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3119,7 +3930,7 @@ func (x *GetEffectivePermissionsRequest) String() string {
 func (*GetEffectivePermissionsRequest) ProtoMessage() {}
 
 func (x *GetEffectivePermissionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[49]
+	mi := &file_voice_role_v1_role_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3132,7 +3943,7 @@ func (x *GetEffectivePermissionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEffectivePermissionsRequest.ProtoReflect.Descriptor instead.
 func (*GetEffectivePermissionsRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{49}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *GetEffectivePermissionsRequest) GetSpaceId() string {
@@ -3173,7 +3984,7 @@ type PermissionSet struct {
 
 func (x *PermissionSet) Reset() {
 	*x = PermissionSet{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[50]
+	mi := &file_voice_role_v1_role_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3185,7 +3996,7 @@ func (x *PermissionSet) String() string {
 func (*PermissionSet) ProtoMessage() {}
 
 func (x *PermissionSet) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[50]
+	mi := &file_voice_role_v1_role_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3198,7 +4009,7 @@ func (x *PermissionSet) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PermissionSet.ProtoReflect.Descriptor instead.
 func (*PermissionSet) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{50}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *PermissionSet) GetEffectiveMask() uint64 {
@@ -3224,7 +4035,7 @@ type CreateRoleResponse struct {
 
 func (x *CreateRoleResponse) Reset() {
 	*x = CreateRoleResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[51]
+	mi := &file_voice_role_v1_role_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3236,7 +4047,7 @@ func (x *CreateRoleResponse) String() string {
 func (*CreateRoleResponse) ProtoMessage() {}
 
 func (x *CreateRoleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[51]
+	mi := &file_voice_role_v1_role_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3249,7 +4060,7 @@ func (x *CreateRoleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRoleResponse.ProtoReflect.Descriptor instead.
 func (*CreateRoleResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{51}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *CreateRoleResponse) GetRole() *Role {
@@ -3268,7 +4079,7 @@ type UpdateRoleResponse struct {
 
 func (x *UpdateRoleResponse) Reset() {
 	*x = UpdateRoleResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[52]
+	mi := &file_voice_role_v1_role_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3280,7 +4091,7 @@ func (x *UpdateRoleResponse) String() string {
 func (*UpdateRoleResponse) ProtoMessage() {}
 
 func (x *UpdateRoleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[52]
+	mi := &file_voice_role_v1_role_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3293,7 +4104,7 @@ func (x *UpdateRoleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateRoleResponse.ProtoReflect.Descriptor instead.
 func (*UpdateRoleResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{52}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *UpdateRoleResponse) GetRole() *Role {
@@ -3311,7 +4122,7 @@ type DeleteRoleResponse struct {
 
 func (x *DeleteRoleResponse) Reset() {
 	*x = DeleteRoleResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[53]
+	mi := &file_voice_role_v1_role_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3323,7 +4134,7 @@ func (x *DeleteRoleResponse) String() string {
 func (*DeleteRoleResponse) ProtoMessage() {}
 
 func (x *DeleteRoleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[53]
+	mi := &file_voice_role_v1_role_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3336,7 +4147,7 @@ func (x *DeleteRoleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRoleResponse.ProtoReflect.Descriptor instead.
 func (*DeleteRoleResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{53}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{62}
 }
 
 type ListRolesResponse struct {
@@ -3348,7 +4159,7 @@ type ListRolesResponse struct {
 
 func (x *ListRolesResponse) Reset() {
 	*x = ListRolesResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[54]
+	mi := &file_voice_role_v1_role_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3360,7 +4171,7 @@ func (x *ListRolesResponse) String() string {
 func (*ListRolesResponse) ProtoMessage() {}
 
 func (x *ListRolesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[54]
+	mi := &file_voice_role_v1_role_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3373,7 +4184,7 @@ func (x *ListRolesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRolesResponse.ProtoReflect.Descriptor instead.
 func (*ListRolesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{54}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *ListRolesResponse) GetRoleList() *RoleList {
@@ -3391,7 +4202,7 @@ type ReorderRolesResponse struct {
 
 func (x *ReorderRolesResponse) Reset() {
 	*x = ReorderRolesResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[55]
+	mi := &file_voice_role_v1_role_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3403,7 +4214,7 @@ func (x *ReorderRolesResponse) String() string {
 func (*ReorderRolesResponse) ProtoMessage() {}
 
 func (x *ReorderRolesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[55]
+	mi := &file_voice_role_v1_role_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3416,7 +4227,7 @@ func (x *ReorderRolesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReorderRolesResponse.ProtoReflect.Descriptor instead.
 func (*ReorderRolesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{55}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{64}
 }
 
 type AssignRoleResponse struct {
@@ -3427,7 +4238,7 @@ type AssignRoleResponse struct {
 
 func (x *AssignRoleResponse) Reset() {
 	*x = AssignRoleResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[56]
+	mi := &file_voice_role_v1_role_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3439,7 +4250,7 @@ func (x *AssignRoleResponse) String() string {
 func (*AssignRoleResponse) ProtoMessage() {}
 
 func (x *AssignRoleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[56]
+	mi := &file_voice_role_v1_role_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3452,7 +4263,7 @@ func (x *AssignRoleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssignRoleResponse.ProtoReflect.Descriptor instead.
 func (*AssignRoleResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{56}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{65}
 }
 
 type RevokeRoleResponse struct {
@@ -3463,7 +4274,7 @@ type RevokeRoleResponse struct {
 
 func (x *RevokeRoleResponse) Reset() {
 	*x = RevokeRoleResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[57]
+	mi := &file_voice_role_v1_role_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3475,7 +4286,7 @@ func (x *RevokeRoleResponse) String() string {
 func (*RevokeRoleResponse) ProtoMessage() {}
 
 func (x *RevokeRoleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[57]
+	mi := &file_voice_role_v1_role_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3488,7 +4299,7 @@ func (x *RevokeRoleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeRoleResponse.ProtoReflect.Descriptor instead.
 func (*RevokeRoleResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{57}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{66}
 }
 
 type GetMemberRolesResponse struct {
@@ -3500,7 +4311,7 @@ type GetMemberRolesResponse struct {
 
 func (x *GetMemberRolesResponse) Reset() {
 	*x = GetMemberRolesResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[58]
+	mi := &file_voice_role_v1_role_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3512,7 +4323,7 @@ func (x *GetMemberRolesResponse) String() string {
 func (*GetMemberRolesResponse) ProtoMessage() {}
 
 func (x *GetMemberRolesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[58]
+	mi := &file_voice_role_v1_role_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3525,7 +4336,7 @@ func (x *GetMemberRolesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMemberRolesResponse.ProtoReflect.Descriptor instead.
 func (*GetMemberRolesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{58}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *GetMemberRolesResponse) GetRoleList() *RoleList {
@@ -3543,7 +4354,7 @@ type SetChatOverrideResponse struct {
 
 func (x *SetChatOverrideResponse) Reset() {
 	*x = SetChatOverrideResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[59]
+	mi := &file_voice_role_v1_role_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3555,7 +4366,7 @@ func (x *SetChatOverrideResponse) String() string {
 func (*SetChatOverrideResponse) ProtoMessage() {}
 
 func (x *SetChatOverrideResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[59]
+	mi := &file_voice_role_v1_role_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3568,7 +4379,7 @@ func (x *SetChatOverrideResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetChatOverrideResponse.ProtoReflect.Descriptor instead.
 func (*SetChatOverrideResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{59}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{68}
 }
 
 type RemoveChatOverrideResponse struct {
@@ -3579,7 +4390,7 @@ type RemoveChatOverrideResponse struct {
 
 func (x *RemoveChatOverrideResponse) Reset() {
 	*x = RemoveChatOverrideResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[60]
+	mi := &file_voice_role_v1_role_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3591,7 +4402,7 @@ func (x *RemoveChatOverrideResponse) String() string {
 func (*RemoveChatOverrideResponse) ProtoMessage() {}
 
 func (x *RemoveChatOverrideResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[60]
+	mi := &file_voice_role_v1_role_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3604,7 +4415,7 @@ func (x *RemoveChatOverrideResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveChatOverrideResponse.ProtoReflect.Descriptor instead.
 func (*RemoveChatOverrideResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{60}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{69}
 }
 
 type GetChatOverridesResponse struct {
@@ -3616,7 +4427,7 @@ type GetChatOverridesResponse struct {
 
 func (x *GetChatOverridesResponse) Reset() {
 	*x = GetChatOverridesResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[61]
+	mi := &file_voice_role_v1_role_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3628,7 +4439,7 @@ func (x *GetChatOverridesResponse) String() string {
 func (*GetChatOverridesResponse) ProtoMessage() {}
 
 func (x *GetChatOverridesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[61]
+	mi := &file_voice_role_v1_role_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3641,7 +4452,7 @@ func (x *GetChatOverridesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChatOverridesResponse.ProtoReflect.Descriptor instead.
 func (*GetChatOverridesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{61}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *GetChatOverridesResponse) GetOverrideList() *OverrideList {
@@ -3659,7 +4470,7 @@ type SetVoiceRoomOverrideResponse struct {
 
 func (x *SetVoiceRoomOverrideResponse) Reset() {
 	*x = SetVoiceRoomOverrideResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[62]
+	mi := &file_voice_role_v1_role_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3671,7 +4482,7 @@ func (x *SetVoiceRoomOverrideResponse) String() string {
 func (*SetVoiceRoomOverrideResponse) ProtoMessage() {}
 
 func (x *SetVoiceRoomOverrideResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[62]
+	mi := &file_voice_role_v1_role_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3684,7 +4495,7 @@ func (x *SetVoiceRoomOverrideResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetVoiceRoomOverrideResponse.ProtoReflect.Descriptor instead.
 func (*SetVoiceRoomOverrideResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{62}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{71}
 }
 
 type RemoveVoiceRoomOverrideResponse struct {
@@ -3695,7 +4506,7 @@ type RemoveVoiceRoomOverrideResponse struct {
 
 func (x *RemoveVoiceRoomOverrideResponse) Reset() {
 	*x = RemoveVoiceRoomOverrideResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[63]
+	mi := &file_voice_role_v1_role_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3707,7 +4518,7 @@ func (x *RemoveVoiceRoomOverrideResponse) String() string {
 func (*RemoveVoiceRoomOverrideResponse) ProtoMessage() {}
 
 func (x *RemoveVoiceRoomOverrideResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[63]
+	mi := &file_voice_role_v1_role_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3720,7 +4531,7 @@ func (x *RemoveVoiceRoomOverrideResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveVoiceRoomOverrideResponse.ProtoReflect.Descriptor instead.
 func (*RemoveVoiceRoomOverrideResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{63}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{72}
 }
 
 type GetVoiceRoomOverridesResponse struct {
@@ -3732,7 +4543,7 @@ type GetVoiceRoomOverridesResponse struct {
 
 func (x *GetVoiceRoomOverridesResponse) Reset() {
 	*x = GetVoiceRoomOverridesResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[64]
+	mi := &file_voice_role_v1_role_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3744,7 +4555,7 @@ func (x *GetVoiceRoomOverridesResponse) String() string {
 func (*GetVoiceRoomOverridesResponse) ProtoMessage() {}
 
 func (x *GetVoiceRoomOverridesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[64]
+	mi := &file_voice_role_v1_role_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3757,7 +4568,7 @@ func (x *GetVoiceRoomOverridesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetVoiceRoomOverridesResponse.ProtoReflect.Descriptor instead.
 func (*GetVoiceRoomOverridesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{64}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *GetVoiceRoomOverridesResponse) GetOverrideList() *OverrideList {
@@ -3776,7 +4587,7 @@ type GetEffectivePermissionsResponse struct {
 
 func (x *GetEffectivePermissionsResponse) Reset() {
 	*x = GetEffectivePermissionsResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[65]
+	mi := &file_voice_role_v1_role_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3788,7 +4599,7 @@ func (x *GetEffectivePermissionsResponse) String() string {
 func (*GetEffectivePermissionsResponse) ProtoMessage() {}
 
 func (x *GetEffectivePermissionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[65]
+	mi := &file_voice_role_v1_role_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3801,7 +4612,7 @@ func (x *GetEffectivePermissionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEffectivePermissionsResponse.ProtoReflect.Descriptor instead.
 func (*GetEffectivePermissionsResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{65}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *GetEffectivePermissionsResponse) GetPermissionSet() *PermissionSet {
@@ -3819,7 +4630,7 @@ type SetDefaultJoinRoleResponse struct {
 
 func (x *SetDefaultJoinRoleResponse) Reset() {
 	*x = SetDefaultJoinRoleResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[66]
+	mi := &file_voice_role_v1_role_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3831,7 +4642,7 @@ func (x *SetDefaultJoinRoleResponse) String() string {
 func (*SetDefaultJoinRoleResponse) ProtoMessage() {}
 
 func (x *SetDefaultJoinRoleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[66]
+	mi := &file_voice_role_v1_role_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3844,7 +4655,7 @@ func (x *SetDefaultJoinRoleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDefaultJoinRoleResponse.ProtoReflect.Descriptor instead.
 func (*SetDefaultJoinRoleResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{66}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{75}
 }
 
 type GetDefaultJoinRoleResponse struct {
@@ -3856,7 +4667,7 @@ type GetDefaultJoinRoleResponse struct {
 
 func (x *GetDefaultJoinRoleResponse) Reset() {
 	*x = GetDefaultJoinRoleResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[67]
+	mi := &file_voice_role_v1_role_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3868,7 +4679,7 @@ func (x *GetDefaultJoinRoleResponse) String() string {
 func (*GetDefaultJoinRoleResponse) ProtoMessage() {}
 
 func (x *GetDefaultJoinRoleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[67]
+	mi := &file_voice_role_v1_role_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3881,7 +4692,7 @@ func (x *GetDefaultJoinRoleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDefaultJoinRoleResponse.ProtoReflect.Descriptor instead.
 func (*GetDefaultJoinRoleResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{67}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *GetDefaultJoinRoleResponse) GetRole() *Role {
@@ -3902,7 +4713,7 @@ type ApplySpaceLifecycleFenceRequest struct {
 
 func (x *ApplySpaceLifecycleFenceRequest) Reset() {
 	*x = ApplySpaceLifecycleFenceRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[68]
+	mi := &file_voice_role_v1_role_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3914,7 +4725,7 @@ func (x *ApplySpaceLifecycleFenceRequest) String() string {
 func (*ApplySpaceLifecycleFenceRequest) ProtoMessage() {}
 
 func (x *ApplySpaceLifecycleFenceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[68]
+	mi := &file_voice_role_v1_role_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3927,7 +4738,7 @@ func (x *ApplySpaceLifecycleFenceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplySpaceLifecycleFenceRequest.ProtoReflect.Descriptor instead.
 func (*ApplySpaceLifecycleFenceRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{68}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *ApplySpaceLifecycleFenceRequest) GetFence() *v11.SpaceLifecycleFenceRequest {
@@ -3948,7 +4759,7 @@ type ApplySpaceLifecycleFenceResponse struct {
 
 func (x *ApplySpaceLifecycleFenceResponse) Reset() {
 	*x = ApplySpaceLifecycleFenceResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[69]
+	mi := &file_voice_role_v1_role_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3960,7 +4771,7 @@ func (x *ApplySpaceLifecycleFenceResponse) String() string {
 func (*ApplySpaceLifecycleFenceResponse) ProtoMessage() {}
 
 func (x *ApplySpaceLifecycleFenceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[69]
+	mi := &file_voice_role_v1_role_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3973,7 +4784,7 @@ func (x *ApplySpaceLifecycleFenceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplySpaceLifecycleFenceResponse.ProtoReflect.Descriptor instead.
 func (*ApplySpaceLifecycleFenceResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{69}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *ApplySpaceLifecycleFenceResponse) GetReceipt() *v11.SpaceLifecycleFenceReceipt {
@@ -3999,7 +4810,7 @@ type RetireSpaceRequest struct {
 
 func (x *RetireSpaceRequest) Reset() {
 	*x = RetireSpaceRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[70]
+	mi := &file_voice_role_v1_role_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4011,7 +4822,7 @@ func (x *RetireSpaceRequest) String() string {
 func (*RetireSpaceRequest) ProtoMessage() {}
 
 func (x *RetireSpaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[70]
+	mi := &file_voice_role_v1_role_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4024,7 +4835,7 @@ func (x *RetireSpaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetireSpaceRequest.ProtoReflect.Descriptor instead.
 func (*RetireSpaceRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{70}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *RetireSpaceRequest) GetProtocolVersion() uint32 {
@@ -4088,7 +4899,7 @@ type RetireSpaceReceipt struct {
 
 func (x *RetireSpaceReceipt) Reset() {
 	*x = RetireSpaceReceipt{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[71]
+	mi := &file_voice_role_v1_role_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4100,7 +4911,7 @@ func (x *RetireSpaceReceipt) String() string {
 func (*RetireSpaceReceipt) ProtoMessage() {}
 
 func (x *RetireSpaceReceipt) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[71]
+	mi := &file_voice_role_v1_role_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4113,7 +4924,7 @@ func (x *RetireSpaceReceipt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetireSpaceReceipt.ProtoReflect.Descriptor instead.
 func (*RetireSpaceReceipt) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{71}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *RetireSpaceReceipt) GetProtocolVersion() uint32 {
@@ -4190,7 +5001,7 @@ type RetireSpaceResponse struct {
 
 func (x *RetireSpaceResponse) Reset() {
 	*x = RetireSpaceResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[72]
+	mi := &file_voice_role_v1_role_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4202,7 +5013,7 @@ func (x *RetireSpaceResponse) String() string {
 func (*RetireSpaceResponse) ProtoMessage() {}
 
 func (x *RetireSpaceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[72]
+	mi := &file_voice_role_v1_role_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4215,7 +5026,7 @@ func (x *RetireSpaceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetireSpaceResponse.ProtoReflect.Descriptor instead.
 func (*RetireSpaceResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{72}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *RetireSpaceResponse) GetReceipt() *RetireSpaceReceipt {
@@ -4242,7 +5053,7 @@ type ApplyGameSessionGrantsRequest struct {
 
 func (x *ApplyGameSessionGrantsRequest) Reset() {
 	*x = ApplyGameSessionGrantsRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[73]
+	mi := &file_voice_role_v1_role_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4254,7 +5065,7 @@ func (x *ApplyGameSessionGrantsRequest) String() string {
 func (*ApplyGameSessionGrantsRequest) ProtoMessage() {}
 
 func (x *ApplyGameSessionGrantsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[73]
+	mi := &file_voice_role_v1_role_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4267,7 +5078,7 @@ func (x *ApplyGameSessionGrantsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyGameSessionGrantsRequest.ProtoReflect.Descriptor instead.
 func (*ApplyGameSessionGrantsRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{73}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *ApplyGameSessionGrantsRequest) GetApplicationId() string {
@@ -4333,7 +5144,7 @@ type RevokeGameSessionGrantsRequest struct {
 
 func (x *RevokeGameSessionGrantsRequest) Reset() {
 	*x = RevokeGameSessionGrantsRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[74]
+	mi := &file_voice_role_v1_role_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4345,7 +5156,7 @@ func (x *RevokeGameSessionGrantsRequest) String() string {
 func (*RevokeGameSessionGrantsRequest) ProtoMessage() {}
 
 func (x *RevokeGameSessionGrantsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[74]
+	mi := &file_voice_role_v1_role_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4358,7 +5169,7 @@ func (x *RevokeGameSessionGrantsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeGameSessionGrantsRequest.ProtoReflect.Descriptor instead.
 func (*RevokeGameSessionGrantsRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{74}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *RevokeGameSessionGrantsRequest) GetApplicationId() string {
@@ -4403,7 +5214,7 @@ type CheckGameSessionGrantRequest struct {
 
 func (x *CheckGameSessionGrantRequest) Reset() {
 	*x = CheckGameSessionGrantRequest{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[75]
+	mi := &file_voice_role_v1_role_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4415,7 +5226,7 @@ func (x *CheckGameSessionGrantRequest) String() string {
 func (*CheckGameSessionGrantRequest) ProtoMessage() {}
 
 func (x *CheckGameSessionGrantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[75]
+	mi := &file_voice_role_v1_role_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4428,7 +5239,7 @@ func (x *CheckGameSessionGrantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckGameSessionGrantRequest.ProtoReflect.Descriptor instead.
 func (*CheckGameSessionGrantRequest) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{75}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *CheckGameSessionGrantRequest) GetApplicationId() string {
@@ -4485,7 +5296,7 @@ type GameSessionGrantReceipt struct {
 
 func (x *GameSessionGrantReceipt) Reset() {
 	*x = GameSessionGrantReceipt{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[76]
+	mi := &file_voice_role_v1_role_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4497,7 +5308,7 @@ func (x *GameSessionGrantReceipt) String() string {
 func (*GameSessionGrantReceipt) ProtoMessage() {}
 
 func (x *GameSessionGrantReceipt) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[76]
+	mi := &file_voice_role_v1_role_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4510,7 +5321,7 @@ func (x *GameSessionGrantReceipt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GameSessionGrantReceipt.ProtoReflect.Descriptor instead.
 func (*GameSessionGrantReceipt) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{76}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *GameSessionGrantReceipt) GetReceiptId() string {
@@ -4585,7 +5396,7 @@ type ApplyGameSessionGrantsResponse struct {
 
 func (x *ApplyGameSessionGrantsResponse) Reset() {
 	*x = ApplyGameSessionGrantsResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[77]
+	mi := &file_voice_role_v1_role_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4597,7 +5408,7 @@ func (x *ApplyGameSessionGrantsResponse) String() string {
 func (*ApplyGameSessionGrantsResponse) ProtoMessage() {}
 
 func (x *ApplyGameSessionGrantsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[77]
+	mi := &file_voice_role_v1_role_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4610,7 +5421,7 @@ func (x *ApplyGameSessionGrantsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyGameSessionGrantsResponse.ProtoReflect.Descriptor instead.
 func (*ApplyGameSessionGrantsResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{77}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *ApplyGameSessionGrantsResponse) GetReceipt() *GameSessionGrantReceipt {
@@ -4629,7 +5440,7 @@ type RevokeGameSessionGrantsResponse struct {
 
 func (x *RevokeGameSessionGrantsResponse) Reset() {
 	*x = RevokeGameSessionGrantsResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[78]
+	mi := &file_voice_role_v1_role_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4641,7 +5452,7 @@ func (x *RevokeGameSessionGrantsResponse) String() string {
 func (*RevokeGameSessionGrantsResponse) ProtoMessage() {}
 
 func (x *RevokeGameSessionGrantsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[78]
+	mi := &file_voice_role_v1_role_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4654,7 +5465,7 @@ func (x *RevokeGameSessionGrantsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeGameSessionGrantsResponse.ProtoReflect.Descriptor instead.
 func (*RevokeGameSessionGrantsResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{78}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *RevokeGameSessionGrantsResponse) GetReceipt() *GameSessionGrantReceipt {
@@ -4673,7 +5484,7 @@ type CheckGameSessionGrantResponse struct {
 
 func (x *CheckGameSessionGrantResponse) Reset() {
 	*x = CheckGameSessionGrantResponse{}
-	mi := &file_voice_role_v1_role_proto_msgTypes[79]
+	mi := &file_voice_role_v1_role_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4685,7 +5496,7 @@ func (x *CheckGameSessionGrantResponse) String() string {
 func (*CheckGameSessionGrantResponse) ProtoMessage() {}
 
 func (x *CheckGameSessionGrantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_role_v1_role_proto_msgTypes[79]
+	mi := &file_voice_role_v1_role_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4698,7 +5509,7 @@ func (x *CheckGameSessionGrantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckGameSessionGrantResponse.ProtoReflect.Descriptor instead.
 func (*CheckGameSessionGrantResponse) Descriptor() ([]byte, []int) {
-	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{79}
+	return file_voice_role_v1_role_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *CheckGameSessionGrantResponse) GetAllowed() bool {
@@ -4719,7 +5530,158 @@ var file_voice_role_v1_role_proto_rawDesc = string([]byte{
 	0x65, 0x2f, 0x63, 0x68, 0x61, 0x74, 0x2f, 0x76, 0x31, 0x2f, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x70,
 	0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x25, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2f, 0x63, 0x6f, 0x6d, 0x6d,
 	0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x2f, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x6c, 0x69, 0x66, 0x65,
-	0x63, 0x79, 0x63, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0xaa, 0x02, 0x0a, 0x1e,
+	0x63, 0x79, 0x63, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x95, 0x01, 0x0a, 0x18,
+	0x42, 0x6f, 0x74, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x4e, 0x61, 0x74, 0x69, 0x76, 0x65,
+	0x45, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x12, 0x27, 0x0a, 0x0f, 0x69, 0x6e, 0x73, 0x74,
+	0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x0e, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49,
+	0x64, 0x12, 0x30, 0x0a, 0x14, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x5f, 0x6f, 0x70, 0x65,
+	0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x12, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x4f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x49, 0x64, 0x12, 0x1e, 0x0a, 0x0a, 0x67, 0x65, 0x6e, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x04, 0x52, 0x0a, 0x67, 0x65, 0x6e, 0x65, 0x72, 0x61, 0x74,
+	0x69, 0x6f, 0x6e, 0x22, 0x99, 0x01, 0x0a, 0x24, 0x42, 0x6f, 0x74, 0x52, 0x65, 0x6d, 0x6f, 0x76,
+	0x61, 0x6c, 0x4c, 0x65, 0x67, 0x61, 0x63, 0x79, 0x49, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61,
+	0x74, 0x69, 0x6f, 0x6e, 0x45, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x12, 0x27, 0x0a, 0x0f,
+	0x69, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74,
+	0x69, 0x6f, 0x6e, 0x49, 0x64, 0x12, 0x1f, 0x0a, 0x0b, 0x73, 0x6e, 0x61, 0x70, 0x73, 0x68, 0x6f,
+	0x74, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x73, 0x6e, 0x61, 0x70,
+	0x73, 0x68, 0x6f, 0x74, 0x49, 0x64, 0x12, 0x27, 0x0a, 0x0f, 0x73, 0x6e, 0x61, 0x70, 0x73, 0x68,
+	0x6f, 0x74, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c, 0x52,
+	0x0e, 0x73, 0x6e, 0x61, 0x70, 0x73, 0x68, 0x6f, 0x74, 0x53, 0x68, 0x61, 0x32, 0x35, 0x36, 0x22,
+	0x6d, 0x0a, 0x21, 0x42, 0x6f, 0x74, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x4f, 0x72, 0x70,
+	0x68, 0x61, 0x6e, 0x57, 0x68, 0x69, 0x74, 0x65, 0x6c, 0x69, 0x73, 0x74, 0x45, 0x76, 0x69, 0x64,
+	0x65, 0x6e, 0x63, 0x65, 0x12, 0x1f, 0x0a, 0x0b, 0x73, 0x6e, 0x61, 0x70, 0x73, 0x68, 0x6f, 0x74,
+	0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x73, 0x6e, 0x61, 0x70, 0x73,
+	0x68, 0x6f, 0x74, 0x49, 0x64, 0x12, 0x27, 0x0a, 0x0f, 0x73, 0x6e, 0x61, 0x70, 0x73, 0x68, 0x6f,
+	0x74, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0e,
+	0x73, 0x6e, 0x61, 0x70, 0x73, 0x68, 0x6f, 0x74, 0x53, 0x68, 0x61, 0x32, 0x35, 0x36, 0x22, 0xf8,
+	0x04, 0x0a, 0x22, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x42, 0x6f, 0x74, 0x49, 0x6e, 0x73, 0x74, 0x61,
+	0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x29, 0x0a, 0x10, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f,
+	0x6c, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52,
+	0x0f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
+	0x12, 0x21, 0x0a, 0x0c, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64,
+	0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x49, 0x64, 0x12, 0x1f, 0x0a, 0x0b, 0x64, 0x65, 0x63, 0x69, 0x73, 0x69, 0x6f, 0x6e, 0x5f,
+	0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x64, 0x65, 0x63, 0x69, 0x73, 0x69,
+	0x6f, 0x6e, 0x49, 0x64, 0x12, 0x27, 0x0a, 0x0f, 0x64, 0x65, 0x63, 0x69, 0x73, 0x69, 0x6f, 0x6e,
+	0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0e, 0x64,
+	0x65, 0x63, 0x69, 0x73, 0x69, 0x6f, 0x6e, 0x53, 0x68, 0x61, 0x32, 0x35, 0x36, 0x12, 0x18, 0x0a,
+	0x07, 0x70, 0x75, 0x72, 0x70, 0x6f, 0x73, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07,
+	0x70, 0x75, 0x72, 0x70, 0x6f, 0x73, 0x65, 0x12, 0x15, 0x0a, 0x06, 0x62, 0x6f, 0x74, 0x5f, 0x69,
+	0x64, 0x18, 0x06, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x62, 0x6f, 0x74, 0x49, 0x64, 0x12, 0x28,
+	0x0a, 0x10, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x5f,
+	0x69, 0x64, 0x18, 0x07, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x50,
+	0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x49, 0x64, 0x12, 0x19, 0x0a, 0x08, 0x73, 0x70, 0x61, 0x63,
+	0x65, 0x5f, 0x69, 0x64, 0x18, 0x08, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x73, 0x70, 0x61, 0x63,
+	0x65, 0x49, 0x64, 0x12, 0x2e, 0x0a, 0x13, 0x66, 0x72, 0x6f, 0x7a, 0x65, 0x6e, 0x5f, 0x73, 0x63,
+	0x6f, 0x70, 0x65, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x09, 0x20, 0x01, 0x28, 0x0c,
+	0x52, 0x11, 0x66, 0x72, 0x6f, 0x7a, 0x65, 0x6e, 0x53, 0x63, 0x6f, 0x70, 0x65, 0x53, 0x68, 0x61,
+	0x32, 0x35, 0x36, 0x12, 0x41, 0x0a, 0x06, 0x6e, 0x61, 0x74, 0x69, 0x76, 0x65, 0x18, 0x0a, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x27, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65,
+	0x2e, 0x76, 0x31, 0x2e, 0x42, 0x6f, 0x74, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x4e, 0x61,
+	0x74, 0x69, 0x76, 0x65, 0x45, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x48, 0x00, 0x52, 0x06,
+	0x6e, 0x61, 0x74, 0x69, 0x76, 0x65, 0x12, 0x66, 0x0a, 0x13, 0x6c, 0x65, 0x67, 0x61, 0x63, 0x79,
+	0x5f, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x0b, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x33, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65,
+	0x2e, 0x76, 0x31, 0x2e, 0x42, 0x6f, 0x74, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x4c, 0x65,
+	0x67, 0x61, 0x63, 0x79, 0x49, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e,
+	0x45, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x48, 0x00, 0x52, 0x12, 0x6c, 0x65, 0x67, 0x61,
+	0x63, 0x79, 0x49, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x5d,
+	0x0a, 0x10, 0x6f, 0x72, 0x70, 0x68, 0x61, 0x6e, 0x5f, 0x77, 0x68, 0x69, 0x74, 0x65, 0x6c, 0x69,
+	0x73, 0x74, 0x18, 0x0c, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x30, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
+	0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x6f, 0x74, 0x52, 0x65, 0x6d, 0x6f,
+	0x76, 0x61, 0x6c, 0x4f, 0x72, 0x70, 0x68, 0x61, 0x6e, 0x57, 0x68, 0x69, 0x74, 0x65, 0x6c, 0x69,
+	0x73, 0x74, 0x45, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x48, 0x00, 0x52, 0x0f, 0x6f, 0x72,
+	0x70, 0x68, 0x61, 0x6e, 0x57, 0x68, 0x69, 0x74, 0x65, 0x6c, 0x69, 0x73, 0x74, 0x42, 0x0a, 0x0a,
+	0x08, 0x65, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x22, 0xab, 0x05, 0x0a, 0x1d, 0x42, 0x6f,
+	0x74, 0x49, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x6d,
+	0x6f, 0x76, 0x61, 0x6c, 0x52, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x12, 0x29, 0x0a, 0x10, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x56,
+	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x1d, 0x0a, 0x0a, 0x72, 0x65, 0x63, 0x65, 0x69, 0x70,
+	0x74, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x72, 0x65, 0x63, 0x65,
+	0x69, 0x70, 0x74, 0x49, 0x64, 0x12, 0x21, 0x0a, 0x0c, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69,
+	0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x6f, 0x70, 0x65,
+	0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x64, 0x12, 0x1f, 0x0a, 0x0b, 0x64, 0x65, 0x63, 0x69,
+	0x73, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x64,
+	0x65, 0x63, 0x69, 0x73, 0x69, 0x6f, 0x6e, 0x49, 0x64, 0x12, 0x18, 0x0a, 0x07, 0x70, 0x75, 0x72,
+	0x70, 0x6f, 0x73, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x70, 0x75, 0x72, 0x70,
+	0x6f, 0x73, 0x65, 0x12, 0x15, 0x0a, 0x06, 0x62, 0x6f, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x06, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x05, 0x62, 0x6f, 0x74, 0x49, 0x64, 0x12, 0x28, 0x0a, 0x10, 0x61, 0x63,
+	0x74, 0x6f, 0x72, 0x5f, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x07,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x50, 0x72, 0x6f, 0x66, 0x69,
+	0x6c, 0x65, 0x49, 0x64, 0x12, 0x19, 0x0a, 0x08, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64,
+	0x18, 0x08, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12,
+	0x23, 0x0a, 0x0d, 0x65, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x5f, 0x6b, 0x69, 0x6e, 0x64,
+	0x18, 0x09, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0c, 0x65, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65,
+	0x4b, 0x69, 0x6e, 0x64, 0x12, 0x27, 0x0a, 0x0f, 0x65, 0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65,
+	0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18, 0x0a, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0e, 0x65,
+	0x76, 0x69, 0x64, 0x65, 0x6e, 0x63, 0x65, 0x53, 0x68, 0x61, 0x32, 0x35, 0x36, 0x12, 0x2e, 0x0a,
+	0x13, 0x66, 0x72, 0x6f, 0x7a, 0x65, 0x6e, 0x5f, 0x73, 0x63, 0x6f, 0x70, 0x65, 0x5f, 0x73, 0x68,
+	0x61, 0x32, 0x35, 0x36, 0x18, 0x0b, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x11, 0x66, 0x72, 0x6f, 0x7a,
+	0x65, 0x6e, 0x53, 0x63, 0x6f, 0x70, 0x65, 0x53, 0x68, 0x61, 0x32, 0x35, 0x36, 0x12, 0x25, 0x0a,
+	0x0e, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x73, 0x68, 0x61, 0x32, 0x35, 0x36, 0x18,
+	0x0c, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0d, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x53, 0x68,
+	0x61, 0x32, 0x35, 0x36, 0x12, 0x20, 0x0a, 0x0b, 0x70, 0x61, 0x72, 0x74, 0x69, 0x63, 0x69, 0x70,
+	0x61, 0x6e, 0x74, 0x18, 0x0d, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x70, 0x61, 0x72, 0x74, 0x69,
+	0x63, 0x69, 0x70, 0x61, 0x6e, 0x74, 0x12, 0x18, 0x0a, 0x07, 0x6f, 0x75, 0x74, 0x63, 0x6f, 0x6d,
+	0x65, 0x18, 0x0e, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x6f, 0x75, 0x74, 0x63, 0x6f, 0x6d, 0x65,
+	0x12, 0x3d, 0x0a, 0x0c, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x64, 0x5f, 0x61, 0x74,
+	0x18, 0x0f, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61,
+	0x6d, 0x70, 0x52, 0x0b, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x64, 0x41, 0x74, 0x12,
+	0x2c, 0x0a, 0x12, 0x64, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x64, 0x5f, 0x72, 0x6f, 0x6c, 0x65, 0x5f,
+	0x63, 0x6f, 0x75, 0x6e, 0x74, 0x18, 0x10, 0x20, 0x01, 0x28, 0x04, 0x52, 0x10, 0x64, 0x65, 0x6c,
+	0x65, 0x74, 0x65, 0x64, 0x52, 0x6f, 0x6c, 0x65, 0x43, 0x6f, 0x75, 0x6e, 0x74, 0x12, 0x38, 0x0a,
+	0x18, 0x72, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x64, 0x5f, 0x61, 0x73, 0x73, 0x69, 0x67, 0x6e, 0x6d,
+	0x65, 0x6e, 0x74, 0x5f, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x18, 0x11, 0x20, 0x01, 0x28, 0x04, 0x52,
+	0x16, 0x72, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x64, 0x41, 0x73, 0x73, 0x69, 0x67, 0x6e, 0x6d, 0x65,
+	0x6e, 0x74, 0x43, 0x6f, 0x75, 0x6e, 0x74, 0x22, 0x6d, 0x0a, 0x23, 0x41, 0x70, 0x70, 0x6c, 0x79,
+	0x42, 0x6f, 0x74, 0x49, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52,
+	0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x46,
+	0x0a, 0x07, 0x72, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32,
+	0x2c, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e,
+	0x42, 0x6f, 0x74, 0x49, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52,
+	0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x52, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x52, 0x07, 0x72,
+	0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x22, 0x85, 0x01, 0x0a, 0x20, 0x52, 0x65, 0x67, 0x69, 0x73,
+	0x74, 0x65, 0x72, 0x42, 0x6f, 0x74, 0x47, 0x6c, 0x6f, 0x62, 0x61, 0x6c, 0x54, 0x65, 0x72, 0x6d,
+	0x69, 0x6e, 0x61, 0x6c, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x29, 0x0a, 0x10, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x56,
+	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x15, 0x0a, 0x06, 0x62, 0x6f, 0x74, 0x5f, 0x69, 0x64,
+	0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x62, 0x6f, 0x74, 0x49, 0x64, 0x12, 0x1f, 0x0a,
+	0x0b, 0x64, 0x65, 0x63, 0x69, 0x73, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x0a, 0x64, 0x65, 0x63, 0x69, 0x73, 0x69, 0x6f, 0x6e, 0x49, 0x64, 0x22, 0xc2,
+	0x02, 0x0a, 0x18, 0x42, 0x6f, 0x74, 0x47, 0x6c, 0x6f, 0x62, 0x61, 0x6c, 0x54, 0x65, 0x72, 0x6d,
+	0x69, 0x6e, 0x61, 0x6c, 0x52, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x12, 0x29, 0x0a, 0x10, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x56,
+	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x20, 0x0a, 0x0b, 0x70, 0x61, 0x72, 0x74, 0x69, 0x63,
+	0x69, 0x70, 0x61, 0x6e, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x70, 0x61, 0x72,
+	0x74, 0x69, 0x63, 0x69, 0x70, 0x61, 0x6e, 0x74, 0x12, 0x15, 0x0a, 0x06, 0x62, 0x6f, 0x74, 0x5f,
+	0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x62, 0x6f, 0x74, 0x49, 0x64, 0x12,
+	0x1f, 0x0a, 0x0b, 0x64, 0x65, 0x63, 0x69, 0x73, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x04,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x64, 0x65, 0x63, 0x69, 0x73, 0x69, 0x6f, 0x6e, 0x49, 0x64,
+	0x12, 0x1d, 0x0a, 0x0a, 0x72, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x05,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x72, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x49, 0x64, 0x12,
+	0x3f, 0x0a, 0x0d, 0x72, 0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x65, 0x64, 0x5f, 0x61, 0x74,
+	0x18, 0x06, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61,
+	0x6d, 0x70, 0x52, 0x0c, 0x72, 0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x65, 0x64, 0x41, 0x74,
+	0x12, 0x41, 0x0a, 0x07, 0x6f, 0x75, 0x74, 0x63, 0x6f, 0x6d, 0x65, 0x18, 0x07, 0x20, 0x01, 0x28,
+	0x0e, 0x32, 0x27, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76,
+	0x31, 0x2e, 0x42, 0x6f, 0x74, 0x47, 0x6c, 0x6f, 0x62, 0x61, 0x6c, 0x54, 0x65, 0x72, 0x6d, 0x69,
+	0x6e, 0x61, 0x6c, 0x4f, 0x75, 0x74, 0x63, 0x6f, 0x6d, 0x65, 0x52, 0x07, 0x6f, 0x75, 0x74, 0x63,
+	0x6f, 0x6d, 0x65, 0x22, 0x66, 0x0a, 0x21, 0x52, 0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x42,
+	0x6f, 0x74, 0x47, 0x6c, 0x6f, 0x62, 0x61, 0x6c, 0x54, 0x65, 0x72, 0x6d, 0x69, 0x6e, 0x61, 0x6c,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x41, 0x0a, 0x07, 0x72, 0x65, 0x63, 0x65,
+	0x69, 0x70, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x27, 0x2e, 0x76, 0x6f, 0x69, 0x63,
+	0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x6f, 0x74, 0x47, 0x6c, 0x6f,
+	0x62, 0x61, 0x6c, 0x54, 0x65, 0x72, 0x6d, 0x69, 0x6e, 0x61, 0x6c, 0x52, 0x65, 0x63, 0x65, 0x69,
+	0x70, 0x74, 0x52, 0x07, 0x72, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x22, 0xaa, 0x02, 0x0a, 0x1e,
 	0x45, 0x6e, 0x73, 0x75, 0x72, 0x65, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x4d, 0x65, 0x6d,
 	0x62, 0x65, 0x72, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x29,
 	0x0a, 0x10, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69,
@@ -5387,274 +6349,299 @@ var file_voice_role_v1_role_proto_rawDesc = string([]byte{
 	0x39, 0x0a, 0x1d, 0x43, 0x68, 0x65, 0x63, 0x6b, 0x47, 0x61, 0x6d, 0x65, 0x53, 0x65, 0x73, 0x73,
 	0x69, 0x6f, 0x6e, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
 	0x12, 0x18, 0x0a, 0x07, 0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x65, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x08, 0x52, 0x07, 0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x65, 0x64, 0x2a, 0xb7, 0x01, 0x0a, 0x16, 0x4f,
-	0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72,
-	0x53, 0x74, 0x61, 0x74, 0x65, 0x12, 0x28, 0x0a, 0x24, 0x4f, 0x57, 0x4e, 0x45, 0x52, 0x53, 0x48,
-	0x49, 0x50, 0x5f, 0x54, 0x52, 0x41, 0x4e, 0x53, 0x46, 0x45, 0x52, 0x5f, 0x53, 0x54, 0x41, 0x54,
-	0x45, 0x5f, 0x55, 0x4e, 0x53, 0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12,
-	0x25, 0x0a, 0x21, 0x4f, 0x57, 0x4e, 0x45, 0x52, 0x53, 0x48, 0x49, 0x50, 0x5f, 0x54, 0x52, 0x41,
-	0x4e, 0x53, 0x46, 0x45, 0x52, 0x5f, 0x53, 0x54, 0x41, 0x54, 0x45, 0x5f, 0x50, 0x52, 0x45, 0x50,
-	0x41, 0x52, 0x45, 0x44, 0x10, 0x01, 0x12, 0x26, 0x0a, 0x22, 0x4f, 0x57, 0x4e, 0x45, 0x52, 0x53,
-	0x48, 0x49, 0x50, 0x5f, 0x54, 0x52, 0x41, 0x4e, 0x53, 0x46, 0x45, 0x52, 0x5f, 0x53, 0x54, 0x41,
-	0x54, 0x45, 0x5f, 0x46, 0x49, 0x4e, 0x41, 0x4c, 0x49, 0x5a, 0x45, 0x44, 0x10, 0x02, 0x12, 0x24,
-	0x0a, 0x20, 0x4f, 0x57, 0x4e, 0x45, 0x52, 0x53, 0x48, 0x49, 0x50, 0x5f, 0x54, 0x52, 0x41, 0x4e,
-	0x53, 0x46, 0x45, 0x52, 0x5f, 0x53, 0x54, 0x41, 0x54, 0x45, 0x5f, 0x41, 0x42, 0x4f, 0x52, 0x54,
-	0x45, 0x44, 0x10, 0x03, 0x2a, 0x5f, 0x0a, 0x13, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x74, 0x69,
-	0x72, 0x65, 0x6d, 0x65, 0x6e, 0x74, 0x53, 0x74, 0x61, 0x74, 0x65, 0x12, 0x25, 0x0a, 0x21, 0x52,
-	0x4f, 0x4c, 0x45, 0x5f, 0x52, 0x45, 0x54, 0x49, 0x52, 0x45, 0x4d, 0x45, 0x4e, 0x54, 0x5f, 0x53,
-	0x54, 0x41, 0x54, 0x45, 0x5f, 0x55, 0x4e, 0x53, 0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45, 0x44,
-	0x10, 0x00, 0x12, 0x21, 0x0a, 0x1d, 0x52, 0x4f, 0x4c, 0x45, 0x5f, 0x52, 0x45, 0x54, 0x49, 0x52,
-	0x45, 0x4d, 0x45, 0x4e, 0x54, 0x5f, 0x53, 0x54, 0x41, 0x54, 0x45, 0x5f, 0x52, 0x45, 0x54, 0x49,
-	0x52, 0x45, 0x44, 0x10, 0x01, 0x2a, 0xe4, 0x01, 0x0a, 0x17, 0x47, 0x61, 0x6d, 0x65, 0x53, 0x65,
-	0x73, 0x73, 0x69, 0x6f, 0x6e, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x4f, 0x75, 0x74, 0x63, 0x6f, 0x6d,
-	0x65, 0x12, 0x2a, 0x0a, 0x26, 0x47, 0x41, 0x4d, 0x45, 0x5f, 0x53, 0x45, 0x53, 0x53, 0x49, 0x4f,
-	0x4e, 0x5f, 0x47, 0x52, 0x41, 0x4e, 0x54, 0x5f, 0x4f, 0x55, 0x54, 0x43, 0x4f, 0x4d, 0x45, 0x5f,
-	0x55, 0x4e, 0x53, 0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x26, 0x0a,
-	0x22, 0x47, 0x41, 0x4d, 0x45, 0x5f, 0x53, 0x45, 0x53, 0x53, 0x49, 0x4f, 0x4e, 0x5f, 0x47, 0x52,
-	0x41, 0x4e, 0x54, 0x5f, 0x4f, 0x55, 0x54, 0x43, 0x4f, 0x4d, 0x45, 0x5f, 0x41, 0x50, 0x50, 0x4c,
-	0x49, 0x45, 0x44, 0x10, 0x01, 0x12, 0x27, 0x0a, 0x23, 0x47, 0x41, 0x4d, 0x45, 0x5f, 0x53, 0x45,
-	0x53, 0x53, 0x49, 0x4f, 0x4e, 0x5f, 0x47, 0x52, 0x41, 0x4e, 0x54, 0x5f, 0x4f, 0x55, 0x54, 0x43,
-	0x4f, 0x4d, 0x45, 0x5f, 0x52, 0x45, 0x50, 0x4c, 0x41, 0x59, 0x45, 0x44, 0x10, 0x02, 0x12, 0x24,
-	0x0a, 0x20, 0x47, 0x41, 0x4d, 0x45, 0x5f, 0x53, 0x45, 0x53, 0x53, 0x49, 0x4f, 0x4e, 0x5f, 0x47,
-	0x52, 0x41, 0x4e, 0x54, 0x5f, 0x4f, 0x55, 0x54, 0x43, 0x4f, 0x4d, 0x45, 0x5f, 0x53, 0x54, 0x41,
-	0x4c, 0x45, 0x10, 0x03, 0x12, 0x26, 0x0a, 0x22, 0x47, 0x41, 0x4d, 0x45, 0x5f, 0x53, 0x45, 0x53,
-	0x53, 0x49, 0x4f, 0x4e, 0x5f, 0x47, 0x52, 0x41, 0x4e, 0x54, 0x5f, 0x4f, 0x55, 0x54, 0x43, 0x4f,
-	0x4d, 0x45, 0x5f, 0x52, 0x45, 0x56, 0x4f, 0x4b, 0x45, 0x44, 0x10, 0x04, 0x32, 0x85, 0x1d, 0x0a,
-	0x0b, 0x52, 0x6f, 0x6c, 0x65, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12, 0x51, 0x0a, 0x0a,
-	0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x12, 0x20, 0x2e, 0x76, 0x6f, 0x69,
-	0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x72, 0x65, 0x61, 0x74,
+	0x08, 0x52, 0x07, 0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x65, 0x64, 0x2a, 0x88, 0x01, 0x0a, 0x18, 0x42,
+	0x6f, 0x74, 0x47, 0x6c, 0x6f, 0x62, 0x61, 0x6c, 0x54, 0x65, 0x72, 0x6d, 0x69, 0x6e, 0x61, 0x6c,
+	0x4f, 0x75, 0x74, 0x63, 0x6f, 0x6d, 0x65, 0x12, 0x2b, 0x0a, 0x27, 0x42, 0x4f, 0x54, 0x5f, 0x47,
+	0x4c, 0x4f, 0x42, 0x41, 0x4c, 0x5f, 0x54, 0x45, 0x52, 0x4d, 0x49, 0x4e, 0x41, 0x4c, 0x5f, 0x4f,
+	0x55, 0x54, 0x43, 0x4f, 0x4d, 0x45, 0x5f, 0x55, 0x4e, 0x53, 0x50, 0x45, 0x43, 0x49, 0x46, 0x49,
+	0x45, 0x44, 0x10, 0x00, 0x12, 0x3f, 0x0a, 0x3b, 0x42, 0x4f, 0x54, 0x5f, 0x47, 0x4c, 0x4f, 0x42,
+	0x41, 0x4c, 0x5f, 0x54, 0x45, 0x52, 0x4d, 0x49, 0x4e, 0x41, 0x4c, 0x5f, 0x4f, 0x55, 0x54, 0x43,
+	0x4f, 0x4d, 0x45, 0x5f, 0x42, 0x4f, 0x54, 0x5f, 0x41, 0x43, 0x54, 0x4f, 0x52, 0x5f, 0x52, 0x4f,
+	0x4c, 0x45, 0x5f, 0x4d, 0x55, 0x54, 0x41, 0x54, 0x49, 0x4f, 0x4e, 0x53, 0x5f, 0x46, 0x45, 0x4e,
+	0x43, 0x45, 0x44, 0x10, 0x01, 0x2a, 0xb7, 0x01, 0x0a, 0x16, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73,
+	0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x53, 0x74, 0x61, 0x74, 0x65,
+	0x12, 0x28, 0x0a, 0x24, 0x4f, 0x57, 0x4e, 0x45, 0x52, 0x53, 0x48, 0x49, 0x50, 0x5f, 0x54, 0x52,
+	0x41, 0x4e, 0x53, 0x46, 0x45, 0x52, 0x5f, 0x53, 0x54, 0x41, 0x54, 0x45, 0x5f, 0x55, 0x4e, 0x53,
+	0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x25, 0x0a, 0x21, 0x4f, 0x57,
+	0x4e, 0x45, 0x52, 0x53, 0x48, 0x49, 0x50, 0x5f, 0x54, 0x52, 0x41, 0x4e, 0x53, 0x46, 0x45, 0x52,
+	0x5f, 0x53, 0x54, 0x41, 0x54, 0x45, 0x5f, 0x50, 0x52, 0x45, 0x50, 0x41, 0x52, 0x45, 0x44, 0x10,
+	0x01, 0x12, 0x26, 0x0a, 0x22, 0x4f, 0x57, 0x4e, 0x45, 0x52, 0x53, 0x48, 0x49, 0x50, 0x5f, 0x54,
+	0x52, 0x41, 0x4e, 0x53, 0x46, 0x45, 0x52, 0x5f, 0x53, 0x54, 0x41, 0x54, 0x45, 0x5f, 0x46, 0x49,
+	0x4e, 0x41, 0x4c, 0x49, 0x5a, 0x45, 0x44, 0x10, 0x02, 0x12, 0x24, 0x0a, 0x20, 0x4f, 0x57, 0x4e,
+	0x45, 0x52, 0x53, 0x48, 0x49, 0x50, 0x5f, 0x54, 0x52, 0x41, 0x4e, 0x53, 0x46, 0x45, 0x52, 0x5f,
+	0x53, 0x54, 0x41, 0x54, 0x45, 0x5f, 0x41, 0x42, 0x4f, 0x52, 0x54, 0x45, 0x44, 0x10, 0x03, 0x2a,
+	0x5f, 0x0a, 0x13, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x74, 0x69, 0x72, 0x65, 0x6d, 0x65, 0x6e,
+	0x74, 0x53, 0x74, 0x61, 0x74, 0x65, 0x12, 0x25, 0x0a, 0x21, 0x52, 0x4f, 0x4c, 0x45, 0x5f, 0x52,
+	0x45, 0x54, 0x49, 0x52, 0x45, 0x4d, 0x45, 0x4e, 0x54, 0x5f, 0x53, 0x54, 0x41, 0x54, 0x45, 0x5f,
+	0x55, 0x4e, 0x53, 0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x21, 0x0a,
+	0x1d, 0x52, 0x4f, 0x4c, 0x45, 0x5f, 0x52, 0x45, 0x54, 0x49, 0x52, 0x45, 0x4d, 0x45, 0x4e, 0x54,
+	0x5f, 0x53, 0x54, 0x41, 0x54, 0x45, 0x5f, 0x52, 0x45, 0x54, 0x49, 0x52, 0x45, 0x44, 0x10, 0x01,
+	0x2a, 0xe4, 0x01, 0x0a, 0x17, 0x47, 0x61, 0x6d, 0x65, 0x53, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e,
+	0x47, 0x72, 0x61, 0x6e, 0x74, 0x4f, 0x75, 0x74, 0x63, 0x6f, 0x6d, 0x65, 0x12, 0x2a, 0x0a, 0x26,
+	0x47, 0x41, 0x4d, 0x45, 0x5f, 0x53, 0x45, 0x53, 0x53, 0x49, 0x4f, 0x4e, 0x5f, 0x47, 0x52, 0x41,
+	0x4e, 0x54, 0x5f, 0x4f, 0x55, 0x54, 0x43, 0x4f, 0x4d, 0x45, 0x5f, 0x55, 0x4e, 0x53, 0x50, 0x45,
+	0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x26, 0x0a, 0x22, 0x47, 0x41, 0x4d, 0x45,
+	0x5f, 0x53, 0x45, 0x53, 0x53, 0x49, 0x4f, 0x4e, 0x5f, 0x47, 0x52, 0x41, 0x4e, 0x54, 0x5f, 0x4f,
+	0x55, 0x54, 0x43, 0x4f, 0x4d, 0x45, 0x5f, 0x41, 0x50, 0x50, 0x4c, 0x49, 0x45, 0x44, 0x10, 0x01,
+	0x12, 0x27, 0x0a, 0x23, 0x47, 0x41, 0x4d, 0x45, 0x5f, 0x53, 0x45, 0x53, 0x53, 0x49, 0x4f, 0x4e,
+	0x5f, 0x47, 0x52, 0x41, 0x4e, 0x54, 0x5f, 0x4f, 0x55, 0x54, 0x43, 0x4f, 0x4d, 0x45, 0x5f, 0x52,
+	0x45, 0x50, 0x4c, 0x41, 0x59, 0x45, 0x44, 0x10, 0x02, 0x12, 0x24, 0x0a, 0x20, 0x47, 0x41, 0x4d,
+	0x45, 0x5f, 0x53, 0x45, 0x53, 0x53, 0x49, 0x4f, 0x4e, 0x5f, 0x47, 0x52, 0x41, 0x4e, 0x54, 0x5f,
+	0x4f, 0x55, 0x54, 0x43, 0x4f, 0x4d, 0x45, 0x5f, 0x53, 0x54, 0x41, 0x4c, 0x45, 0x10, 0x03, 0x12,
+	0x26, 0x0a, 0x22, 0x47, 0x41, 0x4d, 0x45, 0x5f, 0x53, 0x45, 0x53, 0x53, 0x49, 0x4f, 0x4e, 0x5f,
+	0x47, 0x52, 0x41, 0x4e, 0x54, 0x5f, 0x4f, 0x55, 0x54, 0x43, 0x4f, 0x4d, 0x45, 0x5f, 0x52, 0x45,
+	0x56, 0x4f, 0x4b, 0x45, 0x44, 0x10, 0x04, 0x32, 0x8c, 0x1f, 0x0a, 0x0b, 0x52, 0x6f, 0x6c, 0x65,
+	0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12, 0x51, 0x0a, 0x0a, 0x43, 0x72, 0x65, 0x61, 0x74,
+	0x65, 0x52, 0x6f, 0x6c, 0x65, 0x12, 0x20, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f,
+	0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x52, 0x6f, 0x6c, 0x65,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x21, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e,
+	0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x52, 0x6f,
+	0x6c, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x51, 0x0a, 0x0a, 0x55, 0x70,
+	0x64, 0x61, 0x74, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x12, 0x20, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
+	0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x52,
+	0x6f, 0x6c, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x21, 0x2e, 0x76, 0x6f, 0x69,
+	0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x70, 0x64, 0x61, 0x74,
+	0x65, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x51, 0x0a,
+	0x0a, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x12, 0x20, 0x2e, 0x76, 0x6f,
+	0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x6c, 0x65,
+	0x74, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x21, 0x2e,
+	0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65,
+	0x6c, 0x65, 0x74, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x4e, 0x0a, 0x09, 0x4c, 0x69, 0x73, 0x74, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x12, 0x1f, 0x2e,
+	0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69,
+	0x73, 0x74, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x20,
+	0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x4c,
+	0x69, 0x73, 0x74, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x57, 0x0a, 0x0c, 0x52, 0x65, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x52, 0x6f, 0x6c, 0x65, 0x73,
+	0x12, 0x22, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31,
+	0x2e, 0x52, 0x65, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x1a, 0x23, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c,
+	0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x52, 0x6f, 0x6c, 0x65,
+	0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x51, 0x0a, 0x0a, 0x41, 0x73, 0x73,
+	0x69, 0x67, 0x6e, 0x52, 0x6f, 0x6c, 0x65, 0x12, 0x20, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e,
+	0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x73, 0x73, 0x69, 0x67, 0x6e, 0x52, 0x6f,
+	0x6c, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x21, 0x2e, 0x76, 0x6f, 0x69, 0x63,
+	0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x73, 0x73, 0x69, 0x67, 0x6e,
+	0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x51, 0x0a, 0x0a,
+	0x52, 0x65, 0x76, 0x6f, 0x6b, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x12, 0x20, 0x2e, 0x76, 0x6f, 0x69,
+	0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x76, 0x6f, 0x6b,
 	0x65, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x21, 0x2e, 0x76,
-	0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x72, 0x65,
-	0x61, 0x74, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
-	0x51, 0x0a, 0x0a, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x12, 0x20, 0x2e,
-	0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x70,
-	0x64, 0x61, 0x74, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
-	0x21, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e,
-	0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x12, 0x51, 0x0a, 0x0a, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x52, 0x6f, 0x6c, 0x65,
-	0x12, 0x20, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31,
-	0x2e, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65,
-	0x73, 0x74, 0x1a, 0x21, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e,
-	0x76, 0x31, 0x2e, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x4e, 0x0a, 0x09, 0x4c, 0x69, 0x73, 0x74, 0x52, 0x6f, 0x6c,
-	0x65, 0x73, 0x12, 0x1f, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e,
-	0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75,
-	0x65, 0x73, 0x74, 0x1a, 0x20, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65,
-	0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x57, 0x0a, 0x0c, 0x52, 0x65, 0x6f, 0x72, 0x64, 0x65, 0x72,
-	0x52, 0x6f, 0x6c, 0x65, 0x73, 0x12, 0x22, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f,
-	0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x52, 0x6f, 0x6c,
-	0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x23, 0x2e, 0x76, 0x6f, 0x69, 0x63,
-	0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x6f, 0x72, 0x64, 0x65,
-	0x72, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x51,
-	0x0a, 0x0a, 0x41, 0x73, 0x73, 0x69, 0x67, 0x6e, 0x52, 0x6f, 0x6c, 0x65, 0x12, 0x20, 0x2e, 0x76,
-	0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x73, 0x73,
-	0x69, 0x67, 0x6e, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x21,
-	0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x41,
-	0x73, 0x73, 0x69, 0x67, 0x6e, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x12, 0x51, 0x0a, 0x0a, 0x52, 0x65, 0x76, 0x6f, 0x6b, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x12,
-	0x20, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e,
-	0x52, 0x65, 0x76, 0x6f, 0x6b, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
-	0x74, 0x1a, 0x21, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76,
-	0x31, 0x2e, 0x52, 0x65, 0x76, 0x6f, 0x6b, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70,
-	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x5d, 0x0a, 0x0e, 0x47, 0x65, 0x74, 0x4d, 0x65, 0x6d, 0x62, 0x65,
-	0x72, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x12, 0x24, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72,
-	0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4d, 0x65, 0x6d, 0x62, 0x65, 0x72,
-	0x52, 0x6f, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x25, 0x2e, 0x76,
-	0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74,
-	0x4d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x12, 0x60, 0x0a, 0x0f, 0x53, 0x65, 0x74, 0x43, 0x68, 0x61, 0x74, 0x4f, 0x76,
-	0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x12, 0x25, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72,
-	0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x43, 0x68, 0x61, 0x74, 0x4f, 0x76,
-	0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x26, 0x2e,
-	0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65,
-	0x74, 0x43, 0x68, 0x61, 0x74, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x69, 0x0a, 0x12, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x43,
-	0x68, 0x61, 0x74, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x12, 0x28, 0x2e, 0x76, 0x6f,
+	0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x76,
+	0x6f, 0x6b, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
+	0x5d, 0x0a, 0x0e, 0x47, 0x65, 0x74, 0x4d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x52, 0x6f, 0x6c, 0x65,
+	0x73, 0x12, 0x24, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76,
+	0x31, 0x2e, 0x47, 0x65, 0x74, 0x4d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x52, 0x6f, 0x6c, 0x65, 0x73,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x25, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e,
+	0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4d, 0x65, 0x6d, 0x62, 0x65,
+	0x72, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x60,
+	0x0a, 0x0f, 0x53, 0x65, 0x74, 0x43, 0x68, 0x61, 0x74, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64,
+	0x65, 0x12, 0x25, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76,
+	0x31, 0x2e, 0x53, 0x65, 0x74, 0x43, 0x68, 0x61, 0x74, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64,
+	0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x26, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
+	0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x43, 0x68, 0x61, 0x74,
+	0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x69, 0x0a, 0x12, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x43, 0x68, 0x61, 0x74, 0x4f, 0x76,
+	0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x12, 0x28, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72,
+	0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x43, 0x68, 0x61,
+	0x74, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x1a, 0x29, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31,
+	0x2e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x43, 0x68, 0x61, 0x74, 0x4f, 0x76, 0x65, 0x72, 0x72,
+	0x69, 0x64, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x63, 0x0a, 0x10, 0x47,
+	0x65, 0x74, 0x43, 0x68, 0x61, 0x74, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x73, 0x12,
+	0x26, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e,
+	0x47, 0x65, 0x74, 0x43, 0x68, 0x61, 0x74, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x73,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x27, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e,
+	0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x43, 0x68, 0x61, 0x74, 0x4f,
+	0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x6f, 0x0a, 0x14, 0x53, 0x65, 0x74, 0x56, 0x6f, 0x69, 0x63, 0x65, 0x52, 0x6f, 0x6f, 0x6d,
+	0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x12, 0x2a, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
+	0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x56, 0x6f, 0x69, 0x63,
+	0x65, 0x52, 0x6f, 0x6f, 0x6d, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x1a, 0x2b, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c,
+	0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x56, 0x6f, 0x69, 0x63, 0x65, 0x52, 0x6f, 0x6f,
+	0x6d, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x12, 0x78, 0x0a, 0x17, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x56, 0x6f, 0x69, 0x63, 0x65,
+	0x52, 0x6f, 0x6f, 0x6d, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x12, 0x2d, 0x2e, 0x76,
+	0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x6d,
+	0x6f, 0x76, 0x65, 0x56, 0x6f, 0x69, 0x63, 0x65, 0x52, 0x6f, 0x6f, 0x6d, 0x4f, 0x76, 0x65, 0x72,
+	0x72, 0x69, 0x64, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2e, 0x2e, 0x76, 0x6f,
 	0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x6d, 0x6f,
-	0x76, 0x65, 0x43, 0x68, 0x61, 0x74, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x29, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f,
-	0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x43, 0x68, 0x61, 0x74,
-	0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
-	0x12, 0x63, 0x0a, 0x10, 0x47, 0x65, 0x74, 0x43, 0x68, 0x61, 0x74, 0x4f, 0x76, 0x65, 0x72, 0x72,
-	0x69, 0x64, 0x65, 0x73, 0x12, 0x26, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c,
-	0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x43, 0x68, 0x61, 0x74, 0x4f, 0x76, 0x65, 0x72,
-	0x72, 0x69, 0x64, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x27, 0x2e, 0x76,
+	0x76, 0x65, 0x56, 0x6f, 0x69, 0x63, 0x65, 0x52, 0x6f, 0x6f, 0x6d, 0x4f, 0x76, 0x65, 0x72, 0x72,
+	0x69, 0x64, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x72, 0x0a, 0x15, 0x47,
+	0x65, 0x74, 0x56, 0x6f, 0x69, 0x63, 0x65, 0x52, 0x6f, 0x6f, 0x6d, 0x4f, 0x76, 0x65, 0x72, 0x72,
+	0x69, 0x64, 0x65, 0x73, 0x12, 0x2b, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c,
+	0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x56, 0x6f, 0x69, 0x63, 0x65, 0x52, 0x6f, 0x6f,
+	0x6d, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x1a, 0x2c, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76,
+	0x31, 0x2e, 0x47, 0x65, 0x74, 0x56, 0x6f, 0x69, 0x63, 0x65, 0x52, 0x6f, 0x6f, 0x6d, 0x4f, 0x76,
+	0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
+	0x60, 0x0a, 0x0f, 0x43, 0x68, 0x65, 0x63, 0x6b, 0x50, 0x65, 0x72, 0x6d, 0x69, 0x73, 0x73, 0x69,
+	0x6f, 0x6e, 0x12, 0x25, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e,
+	0x76, 0x31, 0x2e, 0x43, 0x68, 0x65, 0x63, 0x6b, 0x50, 0x65, 0x72, 0x6d, 0x69, 0x73, 0x73, 0x69,
+	0x6f, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x26, 0x2e, 0x76, 0x6f, 0x69, 0x63,
+	0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x68, 0x65, 0x63, 0x6b, 0x50,
+	0x65, 0x72, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x12, 0x78, 0x0a, 0x17, 0x47, 0x65, 0x74, 0x45, 0x66, 0x66, 0x65, 0x63, 0x74, 0x69, 0x76,
+	0x65, 0x50, 0x65, 0x72, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x12, 0x2d, 0x2e, 0x76,
 	0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74,
-	0x43, 0x68, 0x61, 0x74, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x73, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x6f, 0x0a, 0x14, 0x53, 0x65, 0x74, 0x56, 0x6f, 0x69, 0x63,
-	0x65, 0x52, 0x6f, 0x6f, 0x6d, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x12, 0x2a, 0x2e,
-	0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65,
-	0x74, 0x56, 0x6f, 0x69, 0x63, 0x65, 0x52, 0x6f, 0x6f, 0x6d, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69,
-	0x64, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2b, 0x2e, 0x76, 0x6f, 0x69, 0x63,
-	0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x56, 0x6f, 0x69,
-	0x63, 0x65, 0x52, 0x6f, 0x6f, 0x6d, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x78, 0x0a, 0x17, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65,
-	0x56, 0x6f, 0x69, 0x63, 0x65, 0x52, 0x6f, 0x6f, 0x6d, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64,
-	0x65, 0x12, 0x2d, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76,
-	0x31, 0x2e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x56, 0x6f, 0x69, 0x63, 0x65, 0x52, 0x6f, 0x6f,
-	0x6d, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x1a, 0x2e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31,
-	0x2e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x56, 0x6f, 0x69, 0x63, 0x65, 0x52, 0x6f, 0x6f, 0x6d,
-	0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
-	0x12, 0x72, 0x0a, 0x15, 0x47, 0x65, 0x74, 0x56, 0x6f, 0x69, 0x63, 0x65, 0x52, 0x6f, 0x6f, 0x6d,
-	0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x73, 0x12, 0x2b, 0x2e, 0x76, 0x6f, 0x69, 0x63,
-	0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x56, 0x6f, 0x69,
-	0x63, 0x65, 0x52, 0x6f, 0x6f, 0x6d, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x73, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2c, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72,
-	0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x56, 0x6f, 0x69, 0x63, 0x65, 0x52,
-	0x6f, 0x6f, 0x6d, 0x4f, 0x76, 0x65, 0x72, 0x72, 0x69, 0x64, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70,
-	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x60, 0x0a, 0x0f, 0x43, 0x68, 0x65, 0x63, 0x6b, 0x50, 0x65, 0x72,
-	0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x25, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e,
-	0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x68, 0x65, 0x63, 0x6b, 0x50, 0x65, 0x72,
-	0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x26,
-	0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x43,
-	0x68, 0x65, 0x63, 0x6b, 0x50, 0x65, 0x72, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x78, 0x0a, 0x17, 0x47, 0x65, 0x74, 0x45, 0x66, 0x66,
-	0x65, 0x63, 0x74, 0x69, 0x76, 0x65, 0x50, 0x65, 0x72, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e,
-	0x73, 0x12, 0x2d, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76,
-	0x31, 0x2e, 0x47, 0x65, 0x74, 0x45, 0x66, 0x66, 0x65, 0x63, 0x74, 0x69, 0x76, 0x65, 0x50, 0x65,
-	0x72, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x1a, 0x2e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31,
-	0x2e, 0x47, 0x65, 0x74, 0x45, 0x66, 0x66, 0x65, 0x63, 0x74, 0x69, 0x76, 0x65, 0x50, 0x65, 0x72,
-	0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
-	0x12, 0x75, 0x0a, 0x16, 0x52, 0x65, 0x73, 0x6f, 0x6c, 0x76, 0x65, 0x56, 0x6f, 0x69, 0x63, 0x65,
-	0x52, 0x6f, 0x6f, 0x6d, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x73, 0x12, 0x2c, 0x2e, 0x76, 0x6f, 0x69,
-	0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x73, 0x6f, 0x6c,
-	0x76, 0x65, 0x56, 0x6f, 0x69, 0x63, 0x65, 0x52, 0x6f, 0x6f, 0x6d, 0x47, 0x72, 0x61, 0x6e, 0x74,
-	0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2d, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
-	0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x73, 0x6f, 0x6c, 0x76, 0x65,
-	0x56, 0x6f, 0x69, 0x63, 0x65, 0x52, 0x6f, 0x6f, 0x6d, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x73, 0x52,
-	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x69, 0x0a, 0x12, 0x53, 0x65, 0x74, 0x44, 0x65,
-	0x66, 0x61, 0x75, 0x6c, 0x74, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x6f, 0x6c, 0x65, 0x12, 0x28, 0x2e,
-	0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65,
-	0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x6f, 0x6c, 0x65,
-	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x29, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e,
-	0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75,
-	0x6c, 0x74, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x12, 0x69, 0x0a, 0x12, 0x47, 0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74,
+	0x45, 0x66, 0x66, 0x65, 0x63, 0x74, 0x69, 0x76, 0x65, 0x50, 0x65, 0x72, 0x6d, 0x69, 0x73, 0x73,
+	0x69, 0x6f, 0x6e, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2e, 0x2e, 0x76, 0x6f,
+	0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x45,
+	0x66, 0x66, 0x65, 0x63, 0x74, 0x69, 0x76, 0x65, 0x50, 0x65, 0x72, 0x6d, 0x69, 0x73, 0x73, 0x69,
+	0x6f, 0x6e, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x75, 0x0a, 0x16, 0x52,
+	0x65, 0x73, 0x6f, 0x6c, 0x76, 0x65, 0x56, 0x6f, 0x69, 0x63, 0x65, 0x52, 0x6f, 0x6f, 0x6d, 0x47,
+	0x72, 0x61, 0x6e, 0x74, 0x73, 0x12, 0x2c, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f,
+	0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x73, 0x6f, 0x6c, 0x76, 0x65, 0x56, 0x6f, 0x69,
+	0x63, 0x65, 0x52, 0x6f, 0x6f, 0x6d, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x1a, 0x2d, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65,
+	0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x73, 0x6f, 0x6c, 0x76, 0x65, 0x56, 0x6f, 0x69, 0x63, 0x65,
+	0x52, 0x6f, 0x6f, 0x6d, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x12, 0x69, 0x0a, 0x12, 0x53, 0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74,
 	0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x6f, 0x6c, 0x65, 0x12, 0x28, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
-	0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x44, 0x65, 0x66, 0x61,
+	0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x44, 0x65, 0x66, 0x61,
 	0x75, 0x6c, 0x74, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65,
 	0x73, 0x74, 0x1a, 0x29, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e,
-	0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x4a, 0x6f, 0x69,
-	0x6e, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x78, 0x0a,
-	0x17, 0x45, 0x6e, 0x73, 0x75, 0x72, 0x65, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x4d, 0x65,
-	0x6d, 0x62, 0x65, 0x72, 0x52, 0x6f, 0x6c, 0x65, 0x12, 0x2d, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
-	0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x45, 0x6e, 0x73, 0x75, 0x72, 0x65, 0x44,
-	0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x4d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x52, 0x6f, 0x6c, 0x65,
-	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e,
-	0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x45, 0x6e, 0x73, 0x75, 0x72, 0x65, 0x44, 0x65,
-	0x66, 0x61, 0x75, 0x6c, 0x74, 0x4d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x52, 0x6f, 0x6c, 0x65, 0x52,
-	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x66, 0x0a, 0x11, 0x52, 0x65, 0x6d, 0x6f, 0x76,
-	0x65, 0x4d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x12, 0x27, 0x2e, 0x76,
-	0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x6d,
-	0x6f, 0x76, 0x65, 0x4d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x28, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f,
-	0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x4d, 0x65, 0x6d, 0x62,
-	0x65, 0x72, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
-	0x6c, 0x0a, 0x13, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x53, 0x70, 0x61, 0x63,
-	0x65, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x12, 0x29, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72,
-	0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70,
-	0x53, 0x70, 0x61, 0x63, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
-	0x74, 0x1a, 0x2a, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76,
+	0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x4a, 0x6f, 0x69,
+	0x6e, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x69, 0x0a,
+	0x12, 0x47, 0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x4a, 0x6f, 0x69, 0x6e, 0x52,
+	0x6f, 0x6c, 0x65, 0x12, 0x28, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65,
+	0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x4a, 0x6f,
+	0x69, 0x6e, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x29, 0x2e,
+	0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65,
+	0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x6f, 0x6c, 0x65,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x78, 0x0a, 0x17, 0x45, 0x6e, 0x73, 0x75,
+	0x72, 0x65, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x4d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x52,
+	0x6f, 0x6c, 0x65, 0x12, 0x2d, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65,
+	0x2e, 0x76, 0x31, 0x2e, 0x45, 0x6e, 0x73, 0x75, 0x72, 0x65, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c,
+	0x74, 0x4d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x2e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e,
+	0x76, 0x31, 0x2e, 0x45, 0x6e, 0x73, 0x75, 0x72, 0x65, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74,
+	0x4d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x12, 0x66, 0x0a, 0x11, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x4d, 0x65, 0x6d, 0x62,
+	0x65, 0x72, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x12, 0x27, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e,
+	0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x4d, 0x65,
+	0x6d, 0x62, 0x65, 0x72, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x1a, 0x28, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31,
+	0x2e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x4d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x52, 0x6f, 0x6c,
+	0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x6c, 0x0a, 0x13, 0x42, 0x6f,
+	0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x53, 0x70, 0x61, 0x63, 0x65, 0x52, 0x6f, 0x6c, 0x65,
+	0x73, 0x12, 0x29, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76,
 	0x31, 0x2e, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x53, 0x70, 0x61, 0x63, 0x65,
-	0x52, 0x6f, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x84, 0x01,
-	0x0a, 0x1b, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x43, 0x72, 0x65,
-	0x61, 0x74, 0x65, 0x64, 0x42, 0x79, 0x50, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x12, 0x31, 0x2e,
-	0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65,
-	0x6c, 0x65, 0x74, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64,
-	0x42, 0x79, 0x50, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x1a, 0x32, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31,
-	0x2e, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x43, 0x72, 0x65, 0x61,
-	0x74, 0x65, 0x64, 0x42, 0x79, 0x50, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70,
-	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x93, 0x01, 0x0a, 0x20, 0x47, 0x65, 0x74, 0x4f, 0x77, 0x6e, 0x65,
-	0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x43, 0x61, 0x70,
-	0x61, 0x62, 0x69, 0x6c, 0x69, 0x74, 0x69, 0x65, 0x73, 0x12, 0x36, 0x2e, 0x76, 0x6f, 0x69, 0x63,
-	0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4f, 0x77, 0x6e,
-	0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x43, 0x61,
-	0x70, 0x61, 0x62, 0x69, 0x6c, 0x69, 0x74, 0x69, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
-	0x74, 0x1a, 0x37, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76,
-	0x31, 0x2e, 0x47, 0x65, 0x74, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72,
-	0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x43, 0x61, 0x70, 0x61, 0x62, 0x69, 0x6c, 0x69, 0x74, 0x69,
-	0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7b, 0x0a, 0x18, 0x50, 0x72,
-	0x65, 0x70, 0x61, 0x72, 0x65, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72,
-	0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x12, 0x2e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72,
-	0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x72, 0x65, 0x70, 0x61, 0x72, 0x65, 0x4f, 0x77,
-	0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2f, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72,
-	0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x72, 0x65, 0x70, 0x61, 0x72, 0x65, 0x4f, 0x77,
-	0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x52,
-	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7e, 0x0a, 0x19, 0x46, 0x69, 0x6e, 0x61, 0x6c,
-	0x69, 0x7a, 0x65, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e,
-	0x73, 0x66, 0x65, 0x72, 0x12, 0x2f, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c,
-	0x65, 0x2e, 0x76, 0x31, 0x2e, 0x46, 0x69, 0x6e, 0x61, 0x6c, 0x69, 0x7a, 0x65, 0x4f, 0x77, 0x6e,
-	0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x30, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f,
-	0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x46, 0x69, 0x6e, 0x61, 0x6c, 0x69, 0x7a, 0x65, 0x4f, 0x77,
-	0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x52,
-	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x75, 0x0a, 0x16, 0x41, 0x62, 0x6f, 0x72, 0x74,
+	0x52, 0x6f, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2a, 0x2e, 0x76,
+	0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x6f, 0x6f,
+	0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x53, 0x70, 0x61, 0x63, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x73,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x84, 0x01, 0x0a, 0x1b, 0x44, 0x65, 0x6c,
+	0x65, 0x74, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x42,
+	0x79, 0x50, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x12, 0x31, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
+	0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x52,
+	0x6f, 0x6c, 0x65, 0x73, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x42, 0x79, 0x50, 0x72, 0x6f,
+	0x66, 0x69, 0x6c, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x32, 0x2e, 0x76, 0x6f,
+	0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x6c, 0x65,
+	0x74, 0x65, 0x52, 0x6f, 0x6c, 0x65, 0x73, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x42, 0x79,
+	0x50, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
+	0x84, 0x01, 0x0a, 0x1b, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x42, 0x6f, 0x74, 0x49, 0x6e, 0x73, 0x74,
+	0x61, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x12,
+	0x31, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e,
+	0x41, 0x70, 0x70, 0x6c, 0x79, 0x42, 0x6f, 0x74, 0x49, 0x6e, 0x73, 0x74, 0x61, 0x6c, 0x6c, 0x61,
+	0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x32, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e,
+	0x76, 0x31, 0x2e, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x42, 0x6f, 0x74, 0x49, 0x6e, 0x73, 0x74, 0x61,
+	0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x61, 0x6c, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7e, 0x0a, 0x19, 0x52, 0x65, 0x67, 0x69, 0x73, 0x74,
+	0x65, 0x72, 0x42, 0x6f, 0x74, 0x47, 0x6c, 0x6f, 0x62, 0x61, 0x6c, 0x54, 0x65, 0x72, 0x6d, 0x69,
+	0x6e, 0x61, 0x6c, 0x12, 0x2f, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65,
+	0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x42, 0x6f, 0x74, 0x47,
+	0x6c, 0x6f, 0x62, 0x61, 0x6c, 0x54, 0x65, 0x72, 0x6d, 0x69, 0x6e, 0x61, 0x6c, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x1a, 0x30, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c,
+	0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x42, 0x6f, 0x74,
+	0x47, 0x6c, 0x6f, 0x62, 0x61, 0x6c, 0x54, 0x65, 0x72, 0x6d, 0x69, 0x6e, 0x61, 0x6c, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x93, 0x01, 0x0a, 0x20, 0x47, 0x65, 0x74, 0x4f, 0x77,
+	0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x43,
+	0x61, 0x70, 0x61, 0x62, 0x69, 0x6c, 0x69, 0x74, 0x69, 0x65, 0x73, 0x12, 0x36, 0x2e, 0x76, 0x6f,
+	0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4f,
+	0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72,
+	0x43, 0x61, 0x70, 0x61, 0x62, 0x69, 0x6c, 0x69, 0x74, 0x69, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x1a, 0x37, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65,
+	0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70,
+	0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x43, 0x61, 0x70, 0x61, 0x62, 0x69, 0x6c, 0x69,
+	0x74, 0x69, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7b, 0x0a, 0x18,
+	0x50, 0x72, 0x65, 0x70, 0x61, 0x72, 0x65, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70,
+	0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x12, 0x2e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
+	0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x72, 0x65, 0x70, 0x61, 0x72, 0x65,
 	0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65,
-	0x72, 0x12, 0x2c, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76,
+	0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2f, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
+	0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x72, 0x65, 0x70, 0x61, 0x72, 0x65,
+	0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65,
+	0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7e, 0x0a, 0x19, 0x46, 0x69, 0x6e,
+	0x61, 0x6c, 0x69, 0x7a, 0x65, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72,
+	0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x12, 0x2f, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72,
+	0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x46, 0x69, 0x6e, 0x61, 0x6c, 0x69, 0x7a, 0x65, 0x4f,
+	0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x30, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e,
+	0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x46, 0x69, 0x6e, 0x61, 0x6c, 0x69, 0x7a, 0x65,
+	0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65,
+	0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x75, 0x0a, 0x16, 0x41, 0x62, 0x6f,
+	0x72, 0x74, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73,
+	0x66, 0x65, 0x72, 0x12, 0x2c, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65,
+	0x2e, 0x76, 0x31, 0x2e, 0x41, 0x62, 0x6f, 0x72, 0x74, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68,
+	0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x1a, 0x2d, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76,
 	0x31, 0x2e, 0x41, 0x62, 0x6f, 0x72, 0x74, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70,
-	0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
-	0x2d, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e,
-	0x41, 0x62, 0x6f, 0x72, 0x74, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72,
-	0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x75,
-	0x0a, 0x16, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70,
-	0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x12, 0x2c, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
+	0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x75, 0x0a, 0x16, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68,
+	0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x12, 0x2c, 0x2e, 0x76, 0x6f, 0x69,
+	0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x70, 0x70, 0x6c, 0x79,
+	0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65,
+	0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2d, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
 	0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x4f, 0x77,
 	0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2d, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72,
-	0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x4f, 0x77, 0x6e, 0x65,
-	0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x84, 0x01, 0x0a, 0x1b, 0x43, 0x6f, 0x6d, 0x70, 0x65, 0x6e,
-	0x73, 0x61, 0x74, 0x65, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61,
-	0x6e, 0x73, 0x66, 0x65, 0x72, 0x12, 0x31, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f,
-	0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x6f, 0x6d, 0x70, 0x65, 0x6e, 0x73, 0x61, 0x74, 0x65,
-	0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65,
-	0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x32, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
-	0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x6f, 0x6d, 0x70, 0x65, 0x6e, 0x73,
-	0x61, 0x74, 0x65, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e,
-	0x73, 0x66, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7b, 0x0a, 0x18,
-	0x41, 0x70, 0x70, 0x6c, 0x79, 0x53, 0x70, 0x61, 0x63, 0x65, 0x4c, 0x69, 0x66, 0x65, 0x63, 0x79,
-	0x63, 0x6c, 0x65, 0x46, 0x65, 0x6e, 0x63, 0x65, 0x12, 0x2e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
-	0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x53, 0x70,
-	0x61, 0x63, 0x65, 0x4c, 0x69, 0x66, 0x65, 0x63, 0x79, 0x63, 0x6c, 0x65, 0x46, 0x65, 0x6e, 0x63,
-	0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2f, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
-	0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x53, 0x70,
-	0x61, 0x63, 0x65, 0x4c, 0x69, 0x66, 0x65, 0x63, 0x79, 0x63, 0x6c, 0x65, 0x46, 0x65, 0x6e, 0x63,
-	0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x54, 0x0a, 0x0b, 0x52, 0x65, 0x74,
-	0x69, 0x72, 0x65, 0x53, 0x70, 0x61, 0x63, 0x65, 0x12, 0x21, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
-	0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x74, 0x69, 0x72, 0x65, 0x53,
-	0x70, 0x61, 0x63, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x22, 0x2e, 0x76, 0x6f,
-	0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x74, 0x69,
-	0x72, 0x65, 0x53, 0x70, 0x61, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
-	0x75, 0x0a, 0x16, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x47, 0x61, 0x6d, 0x65, 0x53, 0x65, 0x73, 0x73,
-	0x69, 0x6f, 0x6e, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x73, 0x12, 0x2c, 0x2e, 0x76, 0x6f, 0x69, 0x63,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x84, 0x01, 0x0a, 0x1b, 0x43, 0x6f, 0x6d, 0x70,
+	0x65, 0x6e, 0x73, 0x61, 0x74, 0x65, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54,
+	0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x12, 0x31, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e,
+	0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x6f, 0x6d, 0x70, 0x65, 0x6e, 0x73, 0x61,
+	0x74, 0x65, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73,
+	0x66, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x32, 0x2e, 0x76, 0x6f, 0x69,
+	0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x6f, 0x6d, 0x70, 0x65,
+	0x6e, 0x73, 0x61, 0x74, 0x65, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72,
+	0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7b,
+	0x0a, 0x18, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x53, 0x70, 0x61, 0x63, 0x65, 0x4c, 0x69, 0x66, 0x65,
+	0x63, 0x79, 0x63, 0x6c, 0x65, 0x46, 0x65, 0x6e, 0x63, 0x65, 0x12, 0x2e, 0x2e, 0x76, 0x6f, 0x69,
+	0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x70, 0x70, 0x6c, 0x79,
+	0x53, 0x70, 0x61, 0x63, 0x65, 0x4c, 0x69, 0x66, 0x65, 0x63, 0x79, 0x63, 0x6c, 0x65, 0x46, 0x65,
+	0x6e, 0x63, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2f, 0x2e, 0x76, 0x6f, 0x69,
+	0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x70, 0x70, 0x6c, 0x79,
+	0x53, 0x70, 0x61, 0x63, 0x65, 0x4c, 0x69, 0x66, 0x65, 0x63, 0x79, 0x63, 0x6c, 0x65, 0x46, 0x65,
+	0x6e, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x54, 0x0a, 0x0b, 0x52,
+	0x65, 0x74, 0x69, 0x72, 0x65, 0x53, 0x70, 0x61, 0x63, 0x65, 0x12, 0x21, 0x2e, 0x76, 0x6f, 0x69,
+	0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x74, 0x69, 0x72,
+	0x65, 0x53, 0x70, 0x61, 0x63, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x22, 0x2e,
+	0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65,
+	0x74, 0x69, 0x72, 0x65, 0x53, 0x70, 0x61, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x12, 0x75, 0x0a, 0x16, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x47, 0x61, 0x6d, 0x65, 0x53, 0x65,
+	0x73, 0x73, 0x69, 0x6f, 0x6e, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x73, 0x12, 0x2c, 0x2e, 0x76, 0x6f,
+	0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x70, 0x70, 0x6c,
+	0x79, 0x47, 0x61, 0x6d, 0x65, 0x53, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x47, 0x72, 0x61, 0x6e,
+	0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2d, 0x2e, 0x76, 0x6f, 0x69, 0x63,
 	0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x47,
 	0x61, 0x6d, 0x65, 0x53, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x73,
-	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2d, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e,
-	0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x47, 0x61, 0x6d,
-	0x65, 0x53, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x73, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x78, 0x0a, 0x17, 0x52, 0x65, 0x76, 0x6f, 0x6b, 0x65,
-	0x47, 0x61, 0x6d, 0x65, 0x53, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x47, 0x72, 0x61, 0x6e, 0x74,
-	0x73, 0x12, 0x2d, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76,
-	0x31, 0x2e, 0x52, 0x65, 0x76, 0x6f, 0x6b, 0x65, 0x47, 0x61, 0x6d, 0x65, 0x53, 0x65, 0x73, 0x73,
-	0x69, 0x6f, 0x6e, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x1a, 0x2e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31,
-	0x2e, 0x52, 0x65, 0x76, 0x6f, 0x6b, 0x65, 0x47, 0x61, 0x6d, 0x65, 0x53, 0x65, 0x73, 0x73, 0x69,
-	0x6f, 0x6e, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
-	0x12, 0x72, 0x0a, 0x15, 0x43, 0x68, 0x65, 0x63, 0x6b, 0x47, 0x61, 0x6d, 0x65, 0x53, 0x65, 0x73,
-	0x73, 0x69, 0x6f, 0x6e, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x12, 0x2b, 0x2e, 0x76, 0x6f, 0x69, 0x63,
-	0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x68, 0x65, 0x63, 0x6b, 0x47,
-	0x61, 0x6d, 0x65, 0x53, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2c, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72,
-	0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x68, 0x65, 0x63, 0x6b, 0x47, 0x61, 0x6d, 0x65,
-	0x53, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70,
-	0x6f, 0x6e, 0x73, 0x65, 0x42, 0x20, 0x5a, 0x1e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x61, 0x70,
-	0x70, 0x2f, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2f, 0x72, 0x6f, 0x6c, 0x65, 0x2f, 0x76, 0x31, 0x3b,
-	0x72, 0x6f, 0x6c, 0x65, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x78, 0x0a, 0x17, 0x52, 0x65, 0x76, 0x6f,
+	0x6b, 0x65, 0x47, 0x61, 0x6d, 0x65, 0x53, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x47, 0x72, 0x61,
+	0x6e, 0x74, 0x73, 0x12, 0x2d, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65,
+	0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x76, 0x6f, 0x6b, 0x65, 0x47, 0x61, 0x6d, 0x65, 0x53, 0x65,
+	0x73, 0x73, 0x69, 0x6f, 0x6e, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x2e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e,
+	0x76, 0x31, 0x2e, 0x52, 0x65, 0x76, 0x6f, 0x6b, 0x65, 0x47, 0x61, 0x6d, 0x65, 0x53, 0x65, 0x73,
+	0x73, 0x69, 0x6f, 0x6e, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x12, 0x72, 0x0a, 0x15, 0x43, 0x68, 0x65, 0x63, 0x6b, 0x47, 0x61, 0x6d, 0x65, 0x53,
+	0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x12, 0x2b, 0x2e, 0x76, 0x6f,
+	0x69, 0x63, 0x65, 0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x68, 0x65, 0x63,
+	0x6b, 0x47, 0x61, 0x6d, 0x65, 0x53, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x47, 0x72, 0x61, 0x6e,
+	0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2c, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
+	0x2e, 0x72, 0x6f, 0x6c, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x68, 0x65, 0x63, 0x6b, 0x47, 0x61,
+	0x6d, 0x65, 0x53, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x47, 0x72, 0x61, 0x6e, 0x74, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x20, 0x5a, 0x1e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e,
+	0x61, 0x70, 0x70, 0x2f, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2f, 0x72, 0x6f, 0x6c, 0x65, 0x2f, 0x76,
+	0x31, 0x3b, 0x72, 0x6f, 0x6c, 0x65, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 })
 
 var (
@@ -5669,210 +6656,232 @@ func file_voice_role_v1_role_proto_rawDescGZIP() []byte {
 	return file_voice_role_v1_role_proto_rawDescData
 }
 
-var file_voice_role_v1_role_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_voice_role_v1_role_proto_msgTypes = make([]protoimpl.MessageInfo, 80)
+var file_voice_role_v1_role_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_voice_role_v1_role_proto_msgTypes = make([]protoimpl.MessageInfo, 89)
 var file_voice_role_v1_role_proto_goTypes = []any{
-	(OwnershipTransferState)(0),                      // 0: voice.role.v1.OwnershipTransferState
-	(RoleRetirementState)(0),                         // 1: voice.role.v1.RoleRetirementState
-	(GameSessionGrantOutcome)(0),                     // 2: voice.role.v1.GameSessionGrantOutcome
-	(*EnsureDefaultMemberRoleRequest)(nil),           // 3: voice.role.v1.EnsureDefaultMemberRoleRequest
-	(*DefaultMemberRoleReceipt)(nil),                 // 4: voice.role.v1.DefaultMemberRoleReceipt
-	(*EnsureDefaultMemberRoleResponse)(nil),          // 5: voice.role.v1.EnsureDefaultMemberRoleResponse
-	(*RemoveMemberRolesRequest)(nil),                 // 6: voice.role.v1.RemoveMemberRolesRequest
-	(*MemberRolesRemovalReceipt)(nil),                // 7: voice.role.v1.MemberRolesRemovalReceipt
-	(*RemoveMemberRolesResponse)(nil),                // 8: voice.role.v1.RemoveMemberRolesResponse
-	(*BootstrapSpaceRolesRequest)(nil),               // 9: voice.role.v1.BootstrapSpaceRolesRequest
-	(*BootstrapSpaceRolesResponse)(nil),              // 10: voice.role.v1.BootstrapSpaceRolesResponse
-	(*DeleteRolesCreatedByProfileRequest)(nil),       // 11: voice.role.v1.DeleteRolesCreatedByProfileRequest
-	(*DeleteRolesCreatedByProfileResponse)(nil),      // 12: voice.role.v1.DeleteRolesCreatedByProfileResponse
-	(*ApplyOwnershipTransferRequest)(nil),            // 13: voice.role.v1.ApplyOwnershipTransferRequest
-	(*CompensateOwnershipTransferRequest)(nil),       // 14: voice.role.v1.CompensateOwnershipTransferRequest
-	(*ApplyOwnershipTransferResponse)(nil),           // 15: voice.role.v1.ApplyOwnershipTransferResponse
-	(*CompensateOwnershipTransferResponse)(nil),      // 16: voice.role.v1.CompensateOwnershipTransferResponse
-	(*OwnershipTransferIntent)(nil),                  // 17: voice.role.v1.OwnershipTransferIntent
-	(*OwnershipTransferReceipt)(nil),                 // 18: voice.role.v1.OwnershipTransferReceipt
-	(*GetOwnershipTransferCapabilitiesRequest)(nil),  // 19: voice.role.v1.GetOwnershipTransferCapabilitiesRequest
-	(*GetOwnershipTransferCapabilitiesResponse)(nil), // 20: voice.role.v1.GetOwnershipTransferCapabilitiesResponse
-	(*PrepareOwnershipTransferRequest)(nil),          // 21: voice.role.v1.PrepareOwnershipTransferRequest
-	(*PrepareOwnershipTransferResponse)(nil),         // 22: voice.role.v1.PrepareOwnershipTransferResponse
-	(*FinalizeOwnershipTransferRequest)(nil),         // 23: voice.role.v1.FinalizeOwnershipTransferRequest
-	(*FinalizeOwnershipTransferResponse)(nil),        // 24: voice.role.v1.FinalizeOwnershipTransferResponse
-	(*AbortOwnershipTransferRequest)(nil),            // 25: voice.role.v1.AbortOwnershipTransferRequest
-	(*AbortOwnershipTransferResponse)(nil),           // 26: voice.role.v1.AbortOwnershipTransferResponse
-	(*Role)(nil),                                     // 27: voice.role.v1.Role
-	(*CreateRoleRequest)(nil),                        // 28: voice.role.v1.CreateRoleRequest
-	(*UpdateRoleRequest)(nil),                        // 29: voice.role.v1.UpdateRoleRequest
-	(*DeleteRoleRequest)(nil),                        // 30: voice.role.v1.DeleteRoleRequest
-	(*ListRolesRequest)(nil),                         // 31: voice.role.v1.ListRolesRequest
-	(*RoleList)(nil),                                 // 32: voice.role.v1.RoleList
-	(*ReorderRolesRequest)(nil),                      // 33: voice.role.v1.ReorderRolesRequest
-	(*AssignRoleRequest)(nil),                        // 34: voice.role.v1.AssignRoleRequest
-	(*RevokeRoleRequest)(nil),                        // 35: voice.role.v1.RevokeRoleRequest
-	(*GetMemberRolesRequest)(nil),                    // 36: voice.role.v1.GetMemberRolesRequest
-	(*SetChatOverrideRequest)(nil),                   // 37: voice.role.v1.SetChatOverrideRequest
-	(*RemoveChatOverrideRequest)(nil),                // 38: voice.role.v1.RemoveChatOverrideRequest
-	(*GetChatOverridesRequest)(nil),                  // 39: voice.role.v1.GetChatOverridesRequest
-	(*SetVoiceRoomOverrideRequest)(nil),              // 40: voice.role.v1.SetVoiceRoomOverrideRequest
-	(*RemoveVoiceRoomOverrideRequest)(nil),           // 41: voice.role.v1.RemoveVoiceRoomOverrideRequest
-	(*GetVoiceRoomOverridesRequest)(nil),             // 42: voice.role.v1.GetVoiceRoomOverridesRequest
-	(*OverrideList)(nil),                             // 43: voice.role.v1.OverrideList
-	(*PermissionOverride)(nil),                       // 44: voice.role.v1.PermissionOverride
-	(*SetDefaultJoinRoleRequest)(nil),                // 45: voice.role.v1.SetDefaultJoinRoleRequest
-	(*GetDefaultJoinRoleRequest)(nil),                // 46: voice.role.v1.GetDefaultJoinRoleRequest
-	(*CheckPermissionRequest)(nil),                   // 47: voice.role.v1.CheckPermissionRequest
-	(*CheckPermissionResponse)(nil),                  // 48: voice.role.v1.CheckPermissionResponse
-	(*ResolveVoiceRoomGrantsRequest)(nil),            // 49: voice.role.v1.ResolveVoiceRoomGrantsRequest
-	(*VoiceRoomGrants)(nil),                          // 50: voice.role.v1.VoiceRoomGrants
-	(*ResolveVoiceRoomGrantsResponse)(nil),           // 51: voice.role.v1.ResolveVoiceRoomGrantsResponse
-	(*GetEffectivePermissionsRequest)(nil),           // 52: voice.role.v1.GetEffectivePermissionsRequest
-	(*PermissionSet)(nil),                            // 53: voice.role.v1.PermissionSet
-	(*CreateRoleResponse)(nil),                       // 54: voice.role.v1.CreateRoleResponse
-	(*UpdateRoleResponse)(nil),                       // 55: voice.role.v1.UpdateRoleResponse
-	(*DeleteRoleResponse)(nil),                       // 56: voice.role.v1.DeleteRoleResponse
-	(*ListRolesResponse)(nil),                        // 57: voice.role.v1.ListRolesResponse
-	(*ReorderRolesResponse)(nil),                     // 58: voice.role.v1.ReorderRolesResponse
-	(*AssignRoleResponse)(nil),                       // 59: voice.role.v1.AssignRoleResponse
-	(*RevokeRoleResponse)(nil),                       // 60: voice.role.v1.RevokeRoleResponse
-	(*GetMemberRolesResponse)(nil),                   // 61: voice.role.v1.GetMemberRolesResponse
-	(*SetChatOverrideResponse)(nil),                  // 62: voice.role.v1.SetChatOverrideResponse
-	(*RemoveChatOverrideResponse)(nil),               // 63: voice.role.v1.RemoveChatOverrideResponse
-	(*GetChatOverridesResponse)(nil),                 // 64: voice.role.v1.GetChatOverridesResponse
-	(*SetVoiceRoomOverrideResponse)(nil),             // 65: voice.role.v1.SetVoiceRoomOverrideResponse
-	(*RemoveVoiceRoomOverrideResponse)(nil),          // 66: voice.role.v1.RemoveVoiceRoomOverrideResponse
-	(*GetVoiceRoomOverridesResponse)(nil),            // 67: voice.role.v1.GetVoiceRoomOverridesResponse
-	(*GetEffectivePermissionsResponse)(nil),          // 68: voice.role.v1.GetEffectivePermissionsResponse
-	(*SetDefaultJoinRoleResponse)(nil),               // 69: voice.role.v1.SetDefaultJoinRoleResponse
-	(*GetDefaultJoinRoleResponse)(nil),               // 70: voice.role.v1.GetDefaultJoinRoleResponse
-	(*ApplySpaceLifecycleFenceRequest)(nil),          // 71: voice.role.v1.ApplySpaceLifecycleFenceRequest
-	(*ApplySpaceLifecycleFenceResponse)(nil),         // 72: voice.role.v1.ApplySpaceLifecycleFenceResponse
-	(*RetireSpaceRequest)(nil),                       // 73: voice.role.v1.RetireSpaceRequest
-	(*RetireSpaceReceipt)(nil),                       // 74: voice.role.v1.RetireSpaceReceipt
-	(*RetireSpaceResponse)(nil),                      // 75: voice.role.v1.RetireSpaceResponse
-	(*ApplyGameSessionGrantsRequest)(nil),            // 76: voice.role.v1.ApplyGameSessionGrantsRequest
-	(*RevokeGameSessionGrantsRequest)(nil),           // 77: voice.role.v1.RevokeGameSessionGrantsRequest
-	(*CheckGameSessionGrantRequest)(nil),             // 78: voice.role.v1.CheckGameSessionGrantRequest
-	(*GameSessionGrantReceipt)(nil),                  // 79: voice.role.v1.GameSessionGrantReceipt
-	(*ApplyGameSessionGrantsResponse)(nil),           // 80: voice.role.v1.ApplyGameSessionGrantsResponse
-	(*RevokeGameSessionGrantsResponse)(nil),          // 81: voice.role.v1.RevokeGameSessionGrantsResponse
-	(*CheckGameSessionGrantResponse)(nil),            // 82: voice.role.v1.CheckGameSessionGrantResponse
-	(*timestamppb.Timestamp)(nil),                    // 83: google.protobuf.Timestamp
-	(*v1.ChatRef)(nil),                               // 84: voice.chat.v1.ChatRef
-	(*v11.SpaceLifecycleFenceRequest)(nil),           // 85: voice.common.v1.SpaceLifecycleFenceRequest
-	(*v11.SpaceLifecycleFenceReceipt)(nil),           // 86: voice.common.v1.SpaceLifecycleFenceReceipt
-	(*v11.ManifestBinding)(nil),                      // 87: voice.common.v1.ManifestBinding
+	(BotGlobalTerminalOutcome)(0),                    // 0: voice.role.v1.BotGlobalTerminalOutcome
+	(OwnershipTransferState)(0),                      // 1: voice.role.v1.OwnershipTransferState
+	(RoleRetirementState)(0),                         // 2: voice.role.v1.RoleRetirementState
+	(GameSessionGrantOutcome)(0),                     // 3: voice.role.v1.GameSessionGrantOutcome
+	(*BotRemovalNativeEvidence)(nil),                 // 4: voice.role.v1.BotRemovalNativeEvidence
+	(*BotRemovalLegacyInstallationEvidence)(nil),     // 5: voice.role.v1.BotRemovalLegacyInstallationEvidence
+	(*BotRemovalOrphanWhitelistEvidence)(nil),        // 6: voice.role.v1.BotRemovalOrphanWhitelistEvidence
+	(*ApplyBotInstallationRemovalRequest)(nil),       // 7: voice.role.v1.ApplyBotInstallationRemovalRequest
+	(*BotInstallationRemovalReceipt)(nil),            // 8: voice.role.v1.BotInstallationRemovalReceipt
+	(*ApplyBotInstallationRemovalResponse)(nil),      // 9: voice.role.v1.ApplyBotInstallationRemovalResponse
+	(*RegisterBotGlobalTerminalRequest)(nil),         // 10: voice.role.v1.RegisterBotGlobalTerminalRequest
+	(*BotGlobalTerminalReceipt)(nil),                 // 11: voice.role.v1.BotGlobalTerminalReceipt
+	(*RegisterBotGlobalTerminalResponse)(nil),        // 12: voice.role.v1.RegisterBotGlobalTerminalResponse
+	(*EnsureDefaultMemberRoleRequest)(nil),           // 13: voice.role.v1.EnsureDefaultMemberRoleRequest
+	(*DefaultMemberRoleReceipt)(nil),                 // 14: voice.role.v1.DefaultMemberRoleReceipt
+	(*EnsureDefaultMemberRoleResponse)(nil),          // 15: voice.role.v1.EnsureDefaultMemberRoleResponse
+	(*RemoveMemberRolesRequest)(nil),                 // 16: voice.role.v1.RemoveMemberRolesRequest
+	(*MemberRolesRemovalReceipt)(nil),                // 17: voice.role.v1.MemberRolesRemovalReceipt
+	(*RemoveMemberRolesResponse)(nil),                // 18: voice.role.v1.RemoveMemberRolesResponse
+	(*BootstrapSpaceRolesRequest)(nil),               // 19: voice.role.v1.BootstrapSpaceRolesRequest
+	(*BootstrapSpaceRolesResponse)(nil),              // 20: voice.role.v1.BootstrapSpaceRolesResponse
+	(*DeleteRolesCreatedByProfileRequest)(nil),       // 21: voice.role.v1.DeleteRolesCreatedByProfileRequest
+	(*DeleteRolesCreatedByProfileResponse)(nil),      // 22: voice.role.v1.DeleteRolesCreatedByProfileResponse
+	(*ApplyOwnershipTransferRequest)(nil),            // 23: voice.role.v1.ApplyOwnershipTransferRequest
+	(*CompensateOwnershipTransferRequest)(nil),       // 24: voice.role.v1.CompensateOwnershipTransferRequest
+	(*ApplyOwnershipTransferResponse)(nil),           // 25: voice.role.v1.ApplyOwnershipTransferResponse
+	(*CompensateOwnershipTransferResponse)(nil),      // 26: voice.role.v1.CompensateOwnershipTransferResponse
+	(*OwnershipTransferIntent)(nil),                  // 27: voice.role.v1.OwnershipTransferIntent
+	(*OwnershipTransferReceipt)(nil),                 // 28: voice.role.v1.OwnershipTransferReceipt
+	(*GetOwnershipTransferCapabilitiesRequest)(nil),  // 29: voice.role.v1.GetOwnershipTransferCapabilitiesRequest
+	(*GetOwnershipTransferCapabilitiesResponse)(nil), // 30: voice.role.v1.GetOwnershipTransferCapabilitiesResponse
+	(*PrepareOwnershipTransferRequest)(nil),          // 31: voice.role.v1.PrepareOwnershipTransferRequest
+	(*PrepareOwnershipTransferResponse)(nil),         // 32: voice.role.v1.PrepareOwnershipTransferResponse
+	(*FinalizeOwnershipTransferRequest)(nil),         // 33: voice.role.v1.FinalizeOwnershipTransferRequest
+	(*FinalizeOwnershipTransferResponse)(nil),        // 34: voice.role.v1.FinalizeOwnershipTransferResponse
+	(*AbortOwnershipTransferRequest)(nil),            // 35: voice.role.v1.AbortOwnershipTransferRequest
+	(*AbortOwnershipTransferResponse)(nil),           // 36: voice.role.v1.AbortOwnershipTransferResponse
+	(*Role)(nil),                                     // 37: voice.role.v1.Role
+	(*CreateRoleRequest)(nil),                        // 38: voice.role.v1.CreateRoleRequest
+	(*UpdateRoleRequest)(nil),                        // 39: voice.role.v1.UpdateRoleRequest
+	(*DeleteRoleRequest)(nil),                        // 40: voice.role.v1.DeleteRoleRequest
+	(*ListRolesRequest)(nil),                         // 41: voice.role.v1.ListRolesRequest
+	(*RoleList)(nil),                                 // 42: voice.role.v1.RoleList
+	(*ReorderRolesRequest)(nil),                      // 43: voice.role.v1.ReorderRolesRequest
+	(*AssignRoleRequest)(nil),                        // 44: voice.role.v1.AssignRoleRequest
+	(*RevokeRoleRequest)(nil),                        // 45: voice.role.v1.RevokeRoleRequest
+	(*GetMemberRolesRequest)(nil),                    // 46: voice.role.v1.GetMemberRolesRequest
+	(*SetChatOverrideRequest)(nil),                   // 47: voice.role.v1.SetChatOverrideRequest
+	(*RemoveChatOverrideRequest)(nil),                // 48: voice.role.v1.RemoveChatOverrideRequest
+	(*GetChatOverridesRequest)(nil),                  // 49: voice.role.v1.GetChatOverridesRequest
+	(*SetVoiceRoomOverrideRequest)(nil),              // 50: voice.role.v1.SetVoiceRoomOverrideRequest
+	(*RemoveVoiceRoomOverrideRequest)(nil),           // 51: voice.role.v1.RemoveVoiceRoomOverrideRequest
+	(*GetVoiceRoomOverridesRequest)(nil),             // 52: voice.role.v1.GetVoiceRoomOverridesRequest
+	(*OverrideList)(nil),                             // 53: voice.role.v1.OverrideList
+	(*PermissionOverride)(nil),                       // 54: voice.role.v1.PermissionOverride
+	(*SetDefaultJoinRoleRequest)(nil),                // 55: voice.role.v1.SetDefaultJoinRoleRequest
+	(*GetDefaultJoinRoleRequest)(nil),                // 56: voice.role.v1.GetDefaultJoinRoleRequest
+	(*CheckPermissionRequest)(nil),                   // 57: voice.role.v1.CheckPermissionRequest
+	(*CheckPermissionResponse)(nil),                  // 58: voice.role.v1.CheckPermissionResponse
+	(*ResolveVoiceRoomGrantsRequest)(nil),            // 59: voice.role.v1.ResolveVoiceRoomGrantsRequest
+	(*VoiceRoomGrants)(nil),                          // 60: voice.role.v1.VoiceRoomGrants
+	(*ResolveVoiceRoomGrantsResponse)(nil),           // 61: voice.role.v1.ResolveVoiceRoomGrantsResponse
+	(*GetEffectivePermissionsRequest)(nil),           // 62: voice.role.v1.GetEffectivePermissionsRequest
+	(*PermissionSet)(nil),                            // 63: voice.role.v1.PermissionSet
+	(*CreateRoleResponse)(nil),                       // 64: voice.role.v1.CreateRoleResponse
+	(*UpdateRoleResponse)(nil),                       // 65: voice.role.v1.UpdateRoleResponse
+	(*DeleteRoleResponse)(nil),                       // 66: voice.role.v1.DeleteRoleResponse
+	(*ListRolesResponse)(nil),                        // 67: voice.role.v1.ListRolesResponse
+	(*ReorderRolesResponse)(nil),                     // 68: voice.role.v1.ReorderRolesResponse
+	(*AssignRoleResponse)(nil),                       // 69: voice.role.v1.AssignRoleResponse
+	(*RevokeRoleResponse)(nil),                       // 70: voice.role.v1.RevokeRoleResponse
+	(*GetMemberRolesResponse)(nil),                   // 71: voice.role.v1.GetMemberRolesResponse
+	(*SetChatOverrideResponse)(nil),                  // 72: voice.role.v1.SetChatOverrideResponse
+	(*RemoveChatOverrideResponse)(nil),               // 73: voice.role.v1.RemoveChatOverrideResponse
+	(*GetChatOverridesResponse)(nil),                 // 74: voice.role.v1.GetChatOverridesResponse
+	(*SetVoiceRoomOverrideResponse)(nil),             // 75: voice.role.v1.SetVoiceRoomOverrideResponse
+	(*RemoveVoiceRoomOverrideResponse)(nil),          // 76: voice.role.v1.RemoveVoiceRoomOverrideResponse
+	(*GetVoiceRoomOverridesResponse)(nil),            // 77: voice.role.v1.GetVoiceRoomOverridesResponse
+	(*GetEffectivePermissionsResponse)(nil),          // 78: voice.role.v1.GetEffectivePermissionsResponse
+	(*SetDefaultJoinRoleResponse)(nil),               // 79: voice.role.v1.SetDefaultJoinRoleResponse
+	(*GetDefaultJoinRoleResponse)(nil),               // 80: voice.role.v1.GetDefaultJoinRoleResponse
+	(*ApplySpaceLifecycleFenceRequest)(nil),          // 81: voice.role.v1.ApplySpaceLifecycleFenceRequest
+	(*ApplySpaceLifecycleFenceResponse)(nil),         // 82: voice.role.v1.ApplySpaceLifecycleFenceResponse
+	(*RetireSpaceRequest)(nil),                       // 83: voice.role.v1.RetireSpaceRequest
+	(*RetireSpaceReceipt)(nil),                       // 84: voice.role.v1.RetireSpaceReceipt
+	(*RetireSpaceResponse)(nil),                      // 85: voice.role.v1.RetireSpaceResponse
+	(*ApplyGameSessionGrantsRequest)(nil),            // 86: voice.role.v1.ApplyGameSessionGrantsRequest
+	(*RevokeGameSessionGrantsRequest)(nil),           // 87: voice.role.v1.RevokeGameSessionGrantsRequest
+	(*CheckGameSessionGrantRequest)(nil),             // 88: voice.role.v1.CheckGameSessionGrantRequest
+	(*GameSessionGrantReceipt)(nil),                  // 89: voice.role.v1.GameSessionGrantReceipt
+	(*ApplyGameSessionGrantsResponse)(nil),           // 90: voice.role.v1.ApplyGameSessionGrantsResponse
+	(*RevokeGameSessionGrantsResponse)(nil),          // 91: voice.role.v1.RevokeGameSessionGrantsResponse
+	(*CheckGameSessionGrantResponse)(nil),            // 92: voice.role.v1.CheckGameSessionGrantResponse
+	(*timestamppb.Timestamp)(nil),                    // 93: google.protobuf.Timestamp
+	(*v1.ChatRef)(nil),                               // 94: voice.chat.v1.ChatRef
+	(*v11.SpaceLifecycleFenceRequest)(nil),           // 95: voice.common.v1.SpaceLifecycleFenceRequest
+	(*v11.SpaceLifecycleFenceReceipt)(nil),           // 96: voice.common.v1.SpaceLifecycleFenceReceipt
+	(*v11.ManifestBinding)(nil),                      // 97: voice.common.v1.ManifestBinding
 }
 var file_voice_role_v1_role_proto_depIdxs = []int32{
-	4,  // 0: voice.role.v1.EnsureDefaultMemberRoleResponse.receipt:type_name -> voice.role.v1.DefaultMemberRoleReceipt
-	7,  // 1: voice.role.v1.RemoveMemberRolesResponse.receipt:type_name -> voice.role.v1.MemberRolesRemovalReceipt
-	17, // 2: voice.role.v1.OwnershipTransferReceipt.intent:type_name -> voice.role.v1.OwnershipTransferIntent
-	0,  // 3: voice.role.v1.OwnershipTransferReceipt.state:type_name -> voice.role.v1.OwnershipTransferState
-	17, // 4: voice.role.v1.PrepareOwnershipTransferRequest.intent:type_name -> voice.role.v1.OwnershipTransferIntent
-	18, // 5: voice.role.v1.PrepareOwnershipTransferResponse.receipt:type_name -> voice.role.v1.OwnershipTransferReceipt
-	17, // 6: voice.role.v1.FinalizeOwnershipTransferRequest.intent:type_name -> voice.role.v1.OwnershipTransferIntent
-	18, // 7: voice.role.v1.FinalizeOwnershipTransferResponse.receipt:type_name -> voice.role.v1.OwnershipTransferReceipt
-	17, // 8: voice.role.v1.AbortOwnershipTransferRequest.intent:type_name -> voice.role.v1.OwnershipTransferIntent
-	18, // 9: voice.role.v1.AbortOwnershipTransferResponse.receipt:type_name -> voice.role.v1.OwnershipTransferReceipt
-	83, // 10: voice.role.v1.Role.created_at:type_name -> google.protobuf.Timestamp
-	27, // 11: voice.role.v1.RoleList.roles:type_name -> voice.role.v1.Role
-	84, // 12: voice.role.v1.SetChatOverrideRequest.chat:type_name -> voice.chat.v1.ChatRef
-	84, // 13: voice.role.v1.RemoveChatOverrideRequest.chat:type_name -> voice.chat.v1.ChatRef
-	84, // 14: voice.role.v1.GetChatOverridesRequest.filter_chat:type_name -> voice.chat.v1.ChatRef
-	44, // 15: voice.role.v1.OverrideList.overrides:type_name -> voice.role.v1.PermissionOverride
-	84, // 16: voice.role.v1.PermissionOverride.chat:type_name -> voice.chat.v1.ChatRef
-	84, // 17: voice.role.v1.CheckPermissionRequest.chat:type_name -> voice.chat.v1.ChatRef
-	50, // 18: voice.role.v1.ResolveVoiceRoomGrantsResponse.grants:type_name -> voice.role.v1.VoiceRoomGrants
-	84, // 19: voice.role.v1.GetEffectivePermissionsRequest.chat:type_name -> voice.chat.v1.ChatRef
-	27, // 20: voice.role.v1.CreateRoleResponse.role:type_name -> voice.role.v1.Role
-	27, // 21: voice.role.v1.UpdateRoleResponse.role:type_name -> voice.role.v1.Role
-	32, // 22: voice.role.v1.ListRolesResponse.role_list:type_name -> voice.role.v1.RoleList
-	32, // 23: voice.role.v1.GetMemberRolesResponse.role_list:type_name -> voice.role.v1.RoleList
-	43, // 24: voice.role.v1.GetChatOverridesResponse.override_list:type_name -> voice.role.v1.OverrideList
-	43, // 25: voice.role.v1.GetVoiceRoomOverridesResponse.override_list:type_name -> voice.role.v1.OverrideList
-	53, // 26: voice.role.v1.GetEffectivePermissionsResponse.permission_set:type_name -> voice.role.v1.PermissionSet
-	27, // 27: voice.role.v1.GetDefaultJoinRoleResponse.role:type_name -> voice.role.v1.Role
-	85, // 28: voice.role.v1.ApplySpaceLifecycleFenceRequest.fence:type_name -> voice.common.v1.SpaceLifecycleFenceRequest
-	86, // 29: voice.role.v1.ApplySpaceLifecycleFenceResponse.receipt:type_name -> voice.common.v1.SpaceLifecycleFenceReceipt
-	83, // 30: voice.role.v1.RetireSpaceRequest.purge_decided_at:type_name -> google.protobuf.Timestamp
-	87, // 31: voice.role.v1.RetireSpaceRequest.manifest:type_name -> voice.common.v1.ManifestBinding
-	1,  // 32: voice.role.v1.RetireSpaceReceipt.state:type_name -> voice.role.v1.RoleRetirementState
-	83, // 33: voice.role.v1.RetireSpaceReceipt.retired_at:type_name -> google.protobuf.Timestamp
-	74, // 34: voice.role.v1.RetireSpaceResponse.receipt:type_name -> voice.role.v1.RetireSpaceReceipt
-	2,  // 35: voice.role.v1.GameSessionGrantReceipt.outcome:type_name -> voice.role.v1.GameSessionGrantOutcome
-	79, // 36: voice.role.v1.ApplyGameSessionGrantsResponse.receipt:type_name -> voice.role.v1.GameSessionGrantReceipt
-	79, // 37: voice.role.v1.RevokeGameSessionGrantsResponse.receipt:type_name -> voice.role.v1.GameSessionGrantReceipt
-	28, // 38: voice.role.v1.RoleService.CreateRole:input_type -> voice.role.v1.CreateRoleRequest
-	29, // 39: voice.role.v1.RoleService.UpdateRole:input_type -> voice.role.v1.UpdateRoleRequest
-	30, // 40: voice.role.v1.RoleService.DeleteRole:input_type -> voice.role.v1.DeleteRoleRequest
-	31, // 41: voice.role.v1.RoleService.ListRoles:input_type -> voice.role.v1.ListRolesRequest
-	33, // 42: voice.role.v1.RoleService.ReorderRoles:input_type -> voice.role.v1.ReorderRolesRequest
-	34, // 43: voice.role.v1.RoleService.AssignRole:input_type -> voice.role.v1.AssignRoleRequest
-	35, // 44: voice.role.v1.RoleService.RevokeRole:input_type -> voice.role.v1.RevokeRoleRequest
-	36, // 45: voice.role.v1.RoleService.GetMemberRoles:input_type -> voice.role.v1.GetMemberRolesRequest
-	37, // 46: voice.role.v1.RoleService.SetChatOverride:input_type -> voice.role.v1.SetChatOverrideRequest
-	38, // 47: voice.role.v1.RoleService.RemoveChatOverride:input_type -> voice.role.v1.RemoveChatOverrideRequest
-	39, // 48: voice.role.v1.RoleService.GetChatOverrides:input_type -> voice.role.v1.GetChatOverridesRequest
-	40, // 49: voice.role.v1.RoleService.SetVoiceRoomOverride:input_type -> voice.role.v1.SetVoiceRoomOverrideRequest
-	41, // 50: voice.role.v1.RoleService.RemoveVoiceRoomOverride:input_type -> voice.role.v1.RemoveVoiceRoomOverrideRequest
-	42, // 51: voice.role.v1.RoleService.GetVoiceRoomOverrides:input_type -> voice.role.v1.GetVoiceRoomOverridesRequest
-	47, // 52: voice.role.v1.RoleService.CheckPermission:input_type -> voice.role.v1.CheckPermissionRequest
-	52, // 53: voice.role.v1.RoleService.GetEffectivePermissions:input_type -> voice.role.v1.GetEffectivePermissionsRequest
-	49, // 54: voice.role.v1.RoleService.ResolveVoiceRoomGrants:input_type -> voice.role.v1.ResolveVoiceRoomGrantsRequest
-	45, // 55: voice.role.v1.RoleService.SetDefaultJoinRole:input_type -> voice.role.v1.SetDefaultJoinRoleRequest
-	46, // 56: voice.role.v1.RoleService.GetDefaultJoinRole:input_type -> voice.role.v1.GetDefaultJoinRoleRequest
-	3,  // 57: voice.role.v1.RoleService.EnsureDefaultMemberRole:input_type -> voice.role.v1.EnsureDefaultMemberRoleRequest
-	6,  // 58: voice.role.v1.RoleService.RemoveMemberRoles:input_type -> voice.role.v1.RemoveMemberRolesRequest
-	9,  // 59: voice.role.v1.RoleService.BootstrapSpaceRoles:input_type -> voice.role.v1.BootstrapSpaceRolesRequest
-	11, // 60: voice.role.v1.RoleService.DeleteRolesCreatedByProfile:input_type -> voice.role.v1.DeleteRolesCreatedByProfileRequest
-	19, // 61: voice.role.v1.RoleService.GetOwnershipTransferCapabilities:input_type -> voice.role.v1.GetOwnershipTransferCapabilitiesRequest
-	21, // 62: voice.role.v1.RoleService.PrepareOwnershipTransfer:input_type -> voice.role.v1.PrepareOwnershipTransferRequest
-	23, // 63: voice.role.v1.RoleService.FinalizeOwnershipTransfer:input_type -> voice.role.v1.FinalizeOwnershipTransferRequest
-	25, // 64: voice.role.v1.RoleService.AbortOwnershipTransfer:input_type -> voice.role.v1.AbortOwnershipTransferRequest
-	13, // 65: voice.role.v1.RoleService.ApplyOwnershipTransfer:input_type -> voice.role.v1.ApplyOwnershipTransferRequest
-	14, // 66: voice.role.v1.RoleService.CompensateOwnershipTransfer:input_type -> voice.role.v1.CompensateOwnershipTransferRequest
-	71, // 67: voice.role.v1.RoleService.ApplySpaceLifecycleFence:input_type -> voice.role.v1.ApplySpaceLifecycleFenceRequest
-	73, // 68: voice.role.v1.RoleService.RetireSpace:input_type -> voice.role.v1.RetireSpaceRequest
-	76, // 69: voice.role.v1.RoleService.ApplyGameSessionGrants:input_type -> voice.role.v1.ApplyGameSessionGrantsRequest
-	77, // 70: voice.role.v1.RoleService.RevokeGameSessionGrants:input_type -> voice.role.v1.RevokeGameSessionGrantsRequest
-	78, // 71: voice.role.v1.RoleService.CheckGameSessionGrant:input_type -> voice.role.v1.CheckGameSessionGrantRequest
-	54, // 72: voice.role.v1.RoleService.CreateRole:output_type -> voice.role.v1.CreateRoleResponse
-	55, // 73: voice.role.v1.RoleService.UpdateRole:output_type -> voice.role.v1.UpdateRoleResponse
-	56, // 74: voice.role.v1.RoleService.DeleteRole:output_type -> voice.role.v1.DeleteRoleResponse
-	57, // 75: voice.role.v1.RoleService.ListRoles:output_type -> voice.role.v1.ListRolesResponse
-	58, // 76: voice.role.v1.RoleService.ReorderRoles:output_type -> voice.role.v1.ReorderRolesResponse
-	59, // 77: voice.role.v1.RoleService.AssignRole:output_type -> voice.role.v1.AssignRoleResponse
-	60, // 78: voice.role.v1.RoleService.RevokeRole:output_type -> voice.role.v1.RevokeRoleResponse
-	61, // 79: voice.role.v1.RoleService.GetMemberRoles:output_type -> voice.role.v1.GetMemberRolesResponse
-	62, // 80: voice.role.v1.RoleService.SetChatOverride:output_type -> voice.role.v1.SetChatOverrideResponse
-	63, // 81: voice.role.v1.RoleService.RemoveChatOverride:output_type -> voice.role.v1.RemoveChatOverrideResponse
-	64, // 82: voice.role.v1.RoleService.GetChatOverrides:output_type -> voice.role.v1.GetChatOverridesResponse
-	65, // 83: voice.role.v1.RoleService.SetVoiceRoomOverride:output_type -> voice.role.v1.SetVoiceRoomOverrideResponse
-	66, // 84: voice.role.v1.RoleService.RemoveVoiceRoomOverride:output_type -> voice.role.v1.RemoveVoiceRoomOverrideResponse
-	67, // 85: voice.role.v1.RoleService.GetVoiceRoomOverrides:output_type -> voice.role.v1.GetVoiceRoomOverridesResponse
-	48, // 86: voice.role.v1.RoleService.CheckPermission:output_type -> voice.role.v1.CheckPermissionResponse
-	68, // 87: voice.role.v1.RoleService.GetEffectivePermissions:output_type -> voice.role.v1.GetEffectivePermissionsResponse
-	51, // 88: voice.role.v1.RoleService.ResolveVoiceRoomGrants:output_type -> voice.role.v1.ResolveVoiceRoomGrantsResponse
-	69, // 89: voice.role.v1.RoleService.SetDefaultJoinRole:output_type -> voice.role.v1.SetDefaultJoinRoleResponse
-	70, // 90: voice.role.v1.RoleService.GetDefaultJoinRole:output_type -> voice.role.v1.GetDefaultJoinRoleResponse
-	5,  // 91: voice.role.v1.RoleService.EnsureDefaultMemberRole:output_type -> voice.role.v1.EnsureDefaultMemberRoleResponse
-	8,  // 92: voice.role.v1.RoleService.RemoveMemberRoles:output_type -> voice.role.v1.RemoveMemberRolesResponse
-	10, // 93: voice.role.v1.RoleService.BootstrapSpaceRoles:output_type -> voice.role.v1.BootstrapSpaceRolesResponse
-	12, // 94: voice.role.v1.RoleService.DeleteRolesCreatedByProfile:output_type -> voice.role.v1.DeleteRolesCreatedByProfileResponse
-	20, // 95: voice.role.v1.RoleService.GetOwnershipTransferCapabilities:output_type -> voice.role.v1.GetOwnershipTransferCapabilitiesResponse
-	22, // 96: voice.role.v1.RoleService.PrepareOwnershipTransfer:output_type -> voice.role.v1.PrepareOwnershipTransferResponse
-	24, // 97: voice.role.v1.RoleService.FinalizeOwnershipTransfer:output_type -> voice.role.v1.FinalizeOwnershipTransferResponse
-	26, // 98: voice.role.v1.RoleService.AbortOwnershipTransfer:output_type -> voice.role.v1.AbortOwnershipTransferResponse
-	15, // 99: voice.role.v1.RoleService.ApplyOwnershipTransfer:output_type -> voice.role.v1.ApplyOwnershipTransferResponse
-	16, // 100: voice.role.v1.RoleService.CompensateOwnershipTransfer:output_type -> voice.role.v1.CompensateOwnershipTransferResponse
-	72, // 101: voice.role.v1.RoleService.ApplySpaceLifecycleFence:output_type -> voice.role.v1.ApplySpaceLifecycleFenceResponse
-	75, // 102: voice.role.v1.RoleService.RetireSpace:output_type -> voice.role.v1.RetireSpaceResponse
-	80, // 103: voice.role.v1.RoleService.ApplyGameSessionGrants:output_type -> voice.role.v1.ApplyGameSessionGrantsResponse
-	81, // 104: voice.role.v1.RoleService.RevokeGameSessionGrants:output_type -> voice.role.v1.RevokeGameSessionGrantsResponse
-	82, // 105: voice.role.v1.RoleService.CheckGameSessionGrant:output_type -> voice.role.v1.CheckGameSessionGrantResponse
-	72, // [72:106] is the sub-list for method output_type
-	38, // [38:72] is the sub-list for method input_type
-	38, // [38:38] is the sub-list for extension type_name
-	38, // [38:38] is the sub-list for extension extendee
-	0,  // [0:38] is the sub-list for field type_name
+	4,  // 0: voice.role.v1.ApplyBotInstallationRemovalRequest.native:type_name -> voice.role.v1.BotRemovalNativeEvidence
+	5,  // 1: voice.role.v1.ApplyBotInstallationRemovalRequest.legacy_installation:type_name -> voice.role.v1.BotRemovalLegacyInstallationEvidence
+	6,  // 2: voice.role.v1.ApplyBotInstallationRemovalRequest.orphan_whitelist:type_name -> voice.role.v1.BotRemovalOrphanWhitelistEvidence
+	93, // 3: voice.role.v1.BotInstallationRemovalReceipt.completed_at:type_name -> google.protobuf.Timestamp
+	8,  // 4: voice.role.v1.ApplyBotInstallationRemovalResponse.receipt:type_name -> voice.role.v1.BotInstallationRemovalReceipt
+	93, // 5: voice.role.v1.BotGlobalTerminalReceipt.registered_at:type_name -> google.protobuf.Timestamp
+	0,  // 6: voice.role.v1.BotGlobalTerminalReceipt.outcome:type_name -> voice.role.v1.BotGlobalTerminalOutcome
+	11, // 7: voice.role.v1.RegisterBotGlobalTerminalResponse.receipt:type_name -> voice.role.v1.BotGlobalTerminalReceipt
+	14, // 8: voice.role.v1.EnsureDefaultMemberRoleResponse.receipt:type_name -> voice.role.v1.DefaultMemberRoleReceipt
+	17, // 9: voice.role.v1.RemoveMemberRolesResponse.receipt:type_name -> voice.role.v1.MemberRolesRemovalReceipt
+	27, // 10: voice.role.v1.OwnershipTransferReceipt.intent:type_name -> voice.role.v1.OwnershipTransferIntent
+	1,  // 11: voice.role.v1.OwnershipTransferReceipt.state:type_name -> voice.role.v1.OwnershipTransferState
+	27, // 12: voice.role.v1.PrepareOwnershipTransferRequest.intent:type_name -> voice.role.v1.OwnershipTransferIntent
+	28, // 13: voice.role.v1.PrepareOwnershipTransferResponse.receipt:type_name -> voice.role.v1.OwnershipTransferReceipt
+	27, // 14: voice.role.v1.FinalizeOwnershipTransferRequest.intent:type_name -> voice.role.v1.OwnershipTransferIntent
+	28, // 15: voice.role.v1.FinalizeOwnershipTransferResponse.receipt:type_name -> voice.role.v1.OwnershipTransferReceipt
+	27, // 16: voice.role.v1.AbortOwnershipTransferRequest.intent:type_name -> voice.role.v1.OwnershipTransferIntent
+	28, // 17: voice.role.v1.AbortOwnershipTransferResponse.receipt:type_name -> voice.role.v1.OwnershipTransferReceipt
+	93, // 18: voice.role.v1.Role.created_at:type_name -> google.protobuf.Timestamp
+	37, // 19: voice.role.v1.RoleList.roles:type_name -> voice.role.v1.Role
+	94, // 20: voice.role.v1.SetChatOverrideRequest.chat:type_name -> voice.chat.v1.ChatRef
+	94, // 21: voice.role.v1.RemoveChatOverrideRequest.chat:type_name -> voice.chat.v1.ChatRef
+	94, // 22: voice.role.v1.GetChatOverridesRequest.filter_chat:type_name -> voice.chat.v1.ChatRef
+	54, // 23: voice.role.v1.OverrideList.overrides:type_name -> voice.role.v1.PermissionOverride
+	94, // 24: voice.role.v1.PermissionOverride.chat:type_name -> voice.chat.v1.ChatRef
+	94, // 25: voice.role.v1.CheckPermissionRequest.chat:type_name -> voice.chat.v1.ChatRef
+	60, // 26: voice.role.v1.ResolveVoiceRoomGrantsResponse.grants:type_name -> voice.role.v1.VoiceRoomGrants
+	94, // 27: voice.role.v1.GetEffectivePermissionsRequest.chat:type_name -> voice.chat.v1.ChatRef
+	37, // 28: voice.role.v1.CreateRoleResponse.role:type_name -> voice.role.v1.Role
+	37, // 29: voice.role.v1.UpdateRoleResponse.role:type_name -> voice.role.v1.Role
+	42, // 30: voice.role.v1.ListRolesResponse.role_list:type_name -> voice.role.v1.RoleList
+	42, // 31: voice.role.v1.GetMemberRolesResponse.role_list:type_name -> voice.role.v1.RoleList
+	53, // 32: voice.role.v1.GetChatOverridesResponse.override_list:type_name -> voice.role.v1.OverrideList
+	53, // 33: voice.role.v1.GetVoiceRoomOverridesResponse.override_list:type_name -> voice.role.v1.OverrideList
+	63, // 34: voice.role.v1.GetEffectivePermissionsResponse.permission_set:type_name -> voice.role.v1.PermissionSet
+	37, // 35: voice.role.v1.GetDefaultJoinRoleResponse.role:type_name -> voice.role.v1.Role
+	95, // 36: voice.role.v1.ApplySpaceLifecycleFenceRequest.fence:type_name -> voice.common.v1.SpaceLifecycleFenceRequest
+	96, // 37: voice.role.v1.ApplySpaceLifecycleFenceResponse.receipt:type_name -> voice.common.v1.SpaceLifecycleFenceReceipt
+	93, // 38: voice.role.v1.RetireSpaceRequest.purge_decided_at:type_name -> google.protobuf.Timestamp
+	97, // 39: voice.role.v1.RetireSpaceRequest.manifest:type_name -> voice.common.v1.ManifestBinding
+	2,  // 40: voice.role.v1.RetireSpaceReceipt.state:type_name -> voice.role.v1.RoleRetirementState
+	93, // 41: voice.role.v1.RetireSpaceReceipt.retired_at:type_name -> google.protobuf.Timestamp
+	84, // 42: voice.role.v1.RetireSpaceResponse.receipt:type_name -> voice.role.v1.RetireSpaceReceipt
+	3,  // 43: voice.role.v1.GameSessionGrantReceipt.outcome:type_name -> voice.role.v1.GameSessionGrantOutcome
+	89, // 44: voice.role.v1.ApplyGameSessionGrantsResponse.receipt:type_name -> voice.role.v1.GameSessionGrantReceipt
+	89, // 45: voice.role.v1.RevokeGameSessionGrantsResponse.receipt:type_name -> voice.role.v1.GameSessionGrantReceipt
+	38, // 46: voice.role.v1.RoleService.CreateRole:input_type -> voice.role.v1.CreateRoleRequest
+	39, // 47: voice.role.v1.RoleService.UpdateRole:input_type -> voice.role.v1.UpdateRoleRequest
+	40, // 48: voice.role.v1.RoleService.DeleteRole:input_type -> voice.role.v1.DeleteRoleRequest
+	41, // 49: voice.role.v1.RoleService.ListRoles:input_type -> voice.role.v1.ListRolesRequest
+	43, // 50: voice.role.v1.RoleService.ReorderRoles:input_type -> voice.role.v1.ReorderRolesRequest
+	44, // 51: voice.role.v1.RoleService.AssignRole:input_type -> voice.role.v1.AssignRoleRequest
+	45, // 52: voice.role.v1.RoleService.RevokeRole:input_type -> voice.role.v1.RevokeRoleRequest
+	46, // 53: voice.role.v1.RoleService.GetMemberRoles:input_type -> voice.role.v1.GetMemberRolesRequest
+	47, // 54: voice.role.v1.RoleService.SetChatOverride:input_type -> voice.role.v1.SetChatOverrideRequest
+	48, // 55: voice.role.v1.RoleService.RemoveChatOverride:input_type -> voice.role.v1.RemoveChatOverrideRequest
+	49, // 56: voice.role.v1.RoleService.GetChatOverrides:input_type -> voice.role.v1.GetChatOverridesRequest
+	50, // 57: voice.role.v1.RoleService.SetVoiceRoomOverride:input_type -> voice.role.v1.SetVoiceRoomOverrideRequest
+	51, // 58: voice.role.v1.RoleService.RemoveVoiceRoomOverride:input_type -> voice.role.v1.RemoveVoiceRoomOverrideRequest
+	52, // 59: voice.role.v1.RoleService.GetVoiceRoomOverrides:input_type -> voice.role.v1.GetVoiceRoomOverridesRequest
+	57, // 60: voice.role.v1.RoleService.CheckPermission:input_type -> voice.role.v1.CheckPermissionRequest
+	62, // 61: voice.role.v1.RoleService.GetEffectivePermissions:input_type -> voice.role.v1.GetEffectivePermissionsRequest
+	59, // 62: voice.role.v1.RoleService.ResolveVoiceRoomGrants:input_type -> voice.role.v1.ResolveVoiceRoomGrantsRequest
+	55, // 63: voice.role.v1.RoleService.SetDefaultJoinRole:input_type -> voice.role.v1.SetDefaultJoinRoleRequest
+	56, // 64: voice.role.v1.RoleService.GetDefaultJoinRole:input_type -> voice.role.v1.GetDefaultJoinRoleRequest
+	13, // 65: voice.role.v1.RoleService.EnsureDefaultMemberRole:input_type -> voice.role.v1.EnsureDefaultMemberRoleRequest
+	16, // 66: voice.role.v1.RoleService.RemoveMemberRoles:input_type -> voice.role.v1.RemoveMemberRolesRequest
+	19, // 67: voice.role.v1.RoleService.BootstrapSpaceRoles:input_type -> voice.role.v1.BootstrapSpaceRolesRequest
+	21, // 68: voice.role.v1.RoleService.DeleteRolesCreatedByProfile:input_type -> voice.role.v1.DeleteRolesCreatedByProfileRequest
+	7,  // 69: voice.role.v1.RoleService.ApplyBotInstallationRemoval:input_type -> voice.role.v1.ApplyBotInstallationRemovalRequest
+	10, // 70: voice.role.v1.RoleService.RegisterBotGlobalTerminal:input_type -> voice.role.v1.RegisterBotGlobalTerminalRequest
+	29, // 71: voice.role.v1.RoleService.GetOwnershipTransferCapabilities:input_type -> voice.role.v1.GetOwnershipTransferCapabilitiesRequest
+	31, // 72: voice.role.v1.RoleService.PrepareOwnershipTransfer:input_type -> voice.role.v1.PrepareOwnershipTransferRequest
+	33, // 73: voice.role.v1.RoleService.FinalizeOwnershipTransfer:input_type -> voice.role.v1.FinalizeOwnershipTransferRequest
+	35, // 74: voice.role.v1.RoleService.AbortOwnershipTransfer:input_type -> voice.role.v1.AbortOwnershipTransferRequest
+	23, // 75: voice.role.v1.RoleService.ApplyOwnershipTransfer:input_type -> voice.role.v1.ApplyOwnershipTransferRequest
+	24, // 76: voice.role.v1.RoleService.CompensateOwnershipTransfer:input_type -> voice.role.v1.CompensateOwnershipTransferRequest
+	81, // 77: voice.role.v1.RoleService.ApplySpaceLifecycleFence:input_type -> voice.role.v1.ApplySpaceLifecycleFenceRequest
+	83, // 78: voice.role.v1.RoleService.RetireSpace:input_type -> voice.role.v1.RetireSpaceRequest
+	86, // 79: voice.role.v1.RoleService.ApplyGameSessionGrants:input_type -> voice.role.v1.ApplyGameSessionGrantsRequest
+	87, // 80: voice.role.v1.RoleService.RevokeGameSessionGrants:input_type -> voice.role.v1.RevokeGameSessionGrantsRequest
+	88, // 81: voice.role.v1.RoleService.CheckGameSessionGrant:input_type -> voice.role.v1.CheckGameSessionGrantRequest
+	64, // 82: voice.role.v1.RoleService.CreateRole:output_type -> voice.role.v1.CreateRoleResponse
+	65, // 83: voice.role.v1.RoleService.UpdateRole:output_type -> voice.role.v1.UpdateRoleResponse
+	66, // 84: voice.role.v1.RoleService.DeleteRole:output_type -> voice.role.v1.DeleteRoleResponse
+	67, // 85: voice.role.v1.RoleService.ListRoles:output_type -> voice.role.v1.ListRolesResponse
+	68, // 86: voice.role.v1.RoleService.ReorderRoles:output_type -> voice.role.v1.ReorderRolesResponse
+	69, // 87: voice.role.v1.RoleService.AssignRole:output_type -> voice.role.v1.AssignRoleResponse
+	70, // 88: voice.role.v1.RoleService.RevokeRole:output_type -> voice.role.v1.RevokeRoleResponse
+	71, // 89: voice.role.v1.RoleService.GetMemberRoles:output_type -> voice.role.v1.GetMemberRolesResponse
+	72, // 90: voice.role.v1.RoleService.SetChatOverride:output_type -> voice.role.v1.SetChatOverrideResponse
+	73, // 91: voice.role.v1.RoleService.RemoveChatOverride:output_type -> voice.role.v1.RemoveChatOverrideResponse
+	74, // 92: voice.role.v1.RoleService.GetChatOverrides:output_type -> voice.role.v1.GetChatOverridesResponse
+	75, // 93: voice.role.v1.RoleService.SetVoiceRoomOverride:output_type -> voice.role.v1.SetVoiceRoomOverrideResponse
+	76, // 94: voice.role.v1.RoleService.RemoveVoiceRoomOverride:output_type -> voice.role.v1.RemoveVoiceRoomOverrideResponse
+	77, // 95: voice.role.v1.RoleService.GetVoiceRoomOverrides:output_type -> voice.role.v1.GetVoiceRoomOverridesResponse
+	58, // 96: voice.role.v1.RoleService.CheckPermission:output_type -> voice.role.v1.CheckPermissionResponse
+	78, // 97: voice.role.v1.RoleService.GetEffectivePermissions:output_type -> voice.role.v1.GetEffectivePermissionsResponse
+	61, // 98: voice.role.v1.RoleService.ResolveVoiceRoomGrants:output_type -> voice.role.v1.ResolveVoiceRoomGrantsResponse
+	79, // 99: voice.role.v1.RoleService.SetDefaultJoinRole:output_type -> voice.role.v1.SetDefaultJoinRoleResponse
+	80, // 100: voice.role.v1.RoleService.GetDefaultJoinRole:output_type -> voice.role.v1.GetDefaultJoinRoleResponse
+	15, // 101: voice.role.v1.RoleService.EnsureDefaultMemberRole:output_type -> voice.role.v1.EnsureDefaultMemberRoleResponse
+	18, // 102: voice.role.v1.RoleService.RemoveMemberRoles:output_type -> voice.role.v1.RemoveMemberRolesResponse
+	20, // 103: voice.role.v1.RoleService.BootstrapSpaceRoles:output_type -> voice.role.v1.BootstrapSpaceRolesResponse
+	22, // 104: voice.role.v1.RoleService.DeleteRolesCreatedByProfile:output_type -> voice.role.v1.DeleteRolesCreatedByProfileResponse
+	9,  // 105: voice.role.v1.RoleService.ApplyBotInstallationRemoval:output_type -> voice.role.v1.ApplyBotInstallationRemovalResponse
+	12, // 106: voice.role.v1.RoleService.RegisterBotGlobalTerminal:output_type -> voice.role.v1.RegisterBotGlobalTerminalResponse
+	30, // 107: voice.role.v1.RoleService.GetOwnershipTransferCapabilities:output_type -> voice.role.v1.GetOwnershipTransferCapabilitiesResponse
+	32, // 108: voice.role.v1.RoleService.PrepareOwnershipTransfer:output_type -> voice.role.v1.PrepareOwnershipTransferResponse
+	34, // 109: voice.role.v1.RoleService.FinalizeOwnershipTransfer:output_type -> voice.role.v1.FinalizeOwnershipTransferResponse
+	36, // 110: voice.role.v1.RoleService.AbortOwnershipTransfer:output_type -> voice.role.v1.AbortOwnershipTransferResponse
+	25, // 111: voice.role.v1.RoleService.ApplyOwnershipTransfer:output_type -> voice.role.v1.ApplyOwnershipTransferResponse
+	26, // 112: voice.role.v1.RoleService.CompensateOwnershipTransfer:output_type -> voice.role.v1.CompensateOwnershipTransferResponse
+	82, // 113: voice.role.v1.RoleService.ApplySpaceLifecycleFence:output_type -> voice.role.v1.ApplySpaceLifecycleFenceResponse
+	85, // 114: voice.role.v1.RoleService.RetireSpace:output_type -> voice.role.v1.RetireSpaceResponse
+	90, // 115: voice.role.v1.RoleService.ApplyGameSessionGrants:output_type -> voice.role.v1.ApplyGameSessionGrantsResponse
+	91, // 116: voice.role.v1.RoleService.RevokeGameSessionGrants:output_type -> voice.role.v1.RevokeGameSessionGrantsResponse
+	92, // 117: voice.role.v1.RoleService.CheckGameSessionGrant:output_type -> voice.role.v1.CheckGameSessionGrantResponse
+	82, // [82:118] is the sub-list for method output_type
+	46, // [46:82] is the sub-list for method input_type
+	46, // [46:46] is the sub-list for extension type_name
+	46, // [46:46] is the sub-list for extension extendee
+	0,  // [0:46] is the sub-list for field type_name
 }
 
 func init() { file_voice_role_v1_role_proto_init() }
@@ -5880,20 +6889,25 @@ func file_voice_role_v1_role_proto_init() {
 	if File_voice_role_v1_role_proto != nil {
 		return
 	}
-	file_voice_role_v1_role_proto_msgTypes[24].OneofWrappers = []any{}
-	file_voice_role_v1_role_proto_msgTypes[26].OneofWrappers = []any{}
-	file_voice_role_v1_role_proto_msgTypes[36].OneofWrappers = []any{}
-	file_voice_role_v1_role_proto_msgTypes[39].OneofWrappers = []any{}
-	file_voice_role_v1_role_proto_msgTypes[41].OneofWrappers = []any{}
-	file_voice_role_v1_role_proto_msgTypes[44].OneofWrappers = []any{}
-	file_voice_role_v1_role_proto_msgTypes[49].OneofWrappers = []any{}
+	file_voice_role_v1_role_proto_msgTypes[3].OneofWrappers = []any{
+		(*ApplyBotInstallationRemovalRequest_Native)(nil),
+		(*ApplyBotInstallationRemovalRequest_LegacyInstallation)(nil),
+		(*ApplyBotInstallationRemovalRequest_OrphanWhitelist)(nil),
+	}
+	file_voice_role_v1_role_proto_msgTypes[33].OneofWrappers = []any{}
+	file_voice_role_v1_role_proto_msgTypes[35].OneofWrappers = []any{}
+	file_voice_role_v1_role_proto_msgTypes[45].OneofWrappers = []any{}
+	file_voice_role_v1_role_proto_msgTypes[48].OneofWrappers = []any{}
+	file_voice_role_v1_role_proto_msgTypes[50].OneofWrappers = []any{}
+	file_voice_role_v1_role_proto_msgTypes[53].OneofWrappers = []any{}
+	file_voice_role_v1_role_proto_msgTypes[58].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_voice_role_v1_role_proto_rawDesc), len(file_voice_role_v1_role_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   80,
+			NumEnums:      4,
+			NumMessages:   89,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

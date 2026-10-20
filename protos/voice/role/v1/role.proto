@@ -50,6 +50,13 @@ service RoleService {
   // BOT-B: remove custom roles created by a profile (e.g. bot actor on uninstall).
   rpc DeleteRolesCreatedByProfile(DeleteRolesCreatedByProfileRequest) returns (DeleteRolesCreatedByProfileResponse);
 
+  // Durable one-installation Bot lifecycle cleanup; no generic actor mutation.
+  // @voice.security=protected;callers=service:bot
+  rpc ApplyBotInstallationRemoval(ApplyBotInstallationRemovalRequest) returns (ApplyBotInstallationRemovalResponse);
+  // Minimal global BotActor Role fence; no per-Space cleanup authority.
+  // @voice.security=protected;callers=service:bot
+  rpc RegisterBotGlobalTerminal(RegisterBotGlobalTerminalRequest) returns (RegisterBotGlobalTerminalResponse);
+
   // Trusted Space-only lifecycle operations. These are the sole Owner mutation path.
   // Staged v2 contract: runtime activation requires the durable journal/freeze cutover.
   // Trusted Space-only methods; never reinterpret the legacy Apply/Compensate pair.
@@ -74,6 +81,98 @@ service RoleService {
 
   // @voice.security=protected;callers=service:voice
   rpc CheckGameSessionGrant(CheckGameSessionGrantRequest) returns (CheckGameSessionGrantResponse);
+}
+
+// @voice.unknown_fields=reject
+message BotRemovalNativeEvidence {
+  string installation_id = 1;
+  string install_operation_id = 2;
+  uint64 generation = 3; // positive, at most signed int64 max
+}
+
+// @voice.unknown_fields=reject
+message BotRemovalLegacyInstallationEvidence {
+  string installation_id = 1; // actual persisted ID, never a generated substitute
+  string snapshot_id = 2;
+  bytes snapshot_sha256 = 3;
+}
+
+// Only global_delete may use an actual orphan whitelist snapshot.
+// @voice.unknown_fields=reject
+message BotRemovalOrphanWhitelistEvidence {
+  string snapshot_id = 1;
+  bytes snapshot_sha256 = 2;
+}
+
+// @voice.unknown_fields=reject
+message ApplyBotInstallationRemovalRequest {
+  uint32 protocol_version = 1; // exactly 1
+  string operation_id = 2;
+  string decision_id = 3;
+  bytes decision_sha256 = 4;
+  string purpose = 5; // global_delete or space_uninstall
+  string bot_id = 6;
+  string actor_profile_id = 7;
+  string space_id = 8;
+  bytes frozen_scope_sha256 = 9;
+  oneof evidence {
+    BotRemovalNativeEvidence native = 10;
+    BotRemovalLegacyInstallationEvidence legacy_installation = 11;
+    BotRemovalOrphanWhitelistEvidence orphan_whitelist = 12;
+  }
+}
+
+message BotInstallationRemovalReceipt {
+  uint32 protocol_version = 1;
+  string receipt_id = 2;
+  string operation_id = 3;
+  string decision_id = 4;
+  string purpose = 5;
+  string bot_id = 6;
+  string actor_profile_id = 7;
+  string space_id = 8;
+  string evidence_kind = 9;
+  bytes evidence_sha256 = 10;
+  bytes frozen_scope_sha256 = 11;
+  bytes request_sha256 = 12;
+  string participant = 13; // role
+  string outcome = 14; // COMPLETED
+  google.protobuf.Timestamp completed_at = 15;
+  uint64 deleted_role_count = 16;
+  uint64 removed_assignment_count = 17;
+}
+
+message ApplyBotInstallationRemovalResponse {
+  BotInstallationRemovalReceipt receipt = 1;
+}
+
+// Exact accepted Bot-owner global root; decision_id is transport request_id.
+// No actor/Space/account/root digest or interactive Role mutation authority.
+// @voice.unknown_fields=reject
+message RegisterBotGlobalTerminalRequest {
+  uint32 protocol_version = 1;
+  string bot_id = 2;
+  string decision_id = 3;
+}
+
+enum BotGlobalTerminalOutcome {
+  BOT_GLOBAL_TERMINAL_OUTCOME_UNSPECIFIED = 0;
+  BOT_GLOBAL_TERMINAL_OUTCOME_BOT_ACTOR_ROLE_MUTATIONS_FENCED = 1;
+}
+
+// Receiver-owned terminal fact, not deletion/assignment/Owner cleanup proof.
+message BotGlobalTerminalReceipt {
+  uint32 protocol_version = 1;
+  string participant = 2; // role
+  string bot_id = 3;
+  string decision_id = 4;
+  string receipt_id = 5;
+  google.protobuf.Timestamp registered_at = 6;
+  BotGlobalTerminalOutcome outcome = 7;
+}
+
+message RegisterBotGlobalTerminalResponse {
+  BotGlobalTerminalReceipt receipt = 1;
 }
 
 message EnsureDefaultMemberRoleRequest {

@@ -14,6 +14,32 @@ import 'dart:core' as $core;
 
 import 'package:protobuf/protobuf.dart' as $pb;
 
+class BotGlobalTerminalOutcome extends $pb.ProtobufEnum {
+  static const BotGlobalTerminalOutcome
+      BOT_GLOBAL_TERMINAL_OUTCOME_UNSPECIFIED = BotGlobalTerminalOutcome._(
+          0, _omitEnumNames ? '' : 'BOT_GLOBAL_TERMINAL_OUTCOME_UNSPECIFIED');
+  static const BotGlobalTerminalOutcome
+      BOT_GLOBAL_TERMINAL_OUTCOME_BOT_ACTOR_ROLE_MUTATIONS_FENCED =
+      BotGlobalTerminalOutcome._(
+          1,
+          _omitEnumNames
+              ? ''
+              : 'BOT_GLOBAL_TERMINAL_OUTCOME_BOT_ACTOR_ROLE_MUTATIONS_FENCED');
+
+  static const $core.List<BotGlobalTerminalOutcome> values =
+      <BotGlobalTerminalOutcome>[
+    BOT_GLOBAL_TERMINAL_OUTCOME_UNSPECIFIED,
+    BOT_GLOBAL_TERMINAL_OUTCOME_BOT_ACTOR_ROLE_MUTATIONS_FENCED,
+  ];
+
+  static final $core.List<BotGlobalTerminalOutcome?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 1);
+  static BotGlobalTerminalOutcome? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const BotGlobalTerminalOutcome._(super.value, super.name);
+}
+
 /// Successful receipts never use UNSPECIFIED. Prepared freezes scoped authority.
 class OwnershipTransferState extends $pb.ProtobufEnum {
   static const OwnershipTransferState OWNERSHIP_TRANSFER_STATE_UNSPECIFIED =

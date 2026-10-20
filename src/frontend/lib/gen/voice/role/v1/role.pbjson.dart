@@ -15,6 +15,24 @@ import 'dart:convert' as $convert;
 import 'dart:core' as $core;
 import 'dart:typed_data' as $typed_data;
 
+@$core.Deprecated('Use botGlobalTerminalOutcomeDescriptor instead')
+const BotGlobalTerminalOutcome$json = {
+  '1': 'BotGlobalTerminalOutcome',
+  '2': [
+    {'1': 'BOT_GLOBAL_TERMINAL_OUTCOME_UNSPECIFIED', '2': 0},
+    {
+      '1': 'BOT_GLOBAL_TERMINAL_OUTCOME_BOT_ACTOR_ROLE_MUTATIONS_FENCED',
+      '2': 1
+    },
+  ],
+};
+
+/// Descriptor for `BotGlobalTerminalOutcome`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List botGlobalTerminalOutcomeDescriptor = $convert.base64Decode(
+    'ChhCb3RHbG9iYWxUZXJtaW5hbE91dGNvbWUSKwonQk9UX0dMT0JBTF9URVJNSU5BTF9PVVRDT0'
+    '1FX1VOU1BFQ0lGSUVEEAASPwo7Qk9UX0dMT0JBTF9URVJNSU5BTF9PVVRDT01FX0JPVF9BQ1RP'
+    'Ul9ST0xFX01VVEFUSU9OU19GRU5DRUQQAQ==');
+
 @$core.Deprecated('Use ownershipTransferStateDescriptor instead')
 const OwnershipTransferState$json = {
   '1': 'OwnershipTransferState',
@@ -66,6 +84,288 @@ final $typed_data.Uint8List gameSessionGrantOutcomeDescriptor = $convert.base64D
     'CiNHQU1FX1NFU1NJT05fR1JBTlRfT1VUQ09NRV9SRVBMQVlFRBACEiQKIEdBTUVfU0VTU0lPTl'
     '9HUkFOVF9PVVRDT01FX1NUQUxFEAMSJgoiR0FNRV9TRVNTSU9OX0dSQU5UX09VVENPTUVfUkVW'
     'T0tFRBAE');
+
+@$core.Deprecated('Use botRemovalNativeEvidenceDescriptor instead')
+const BotRemovalNativeEvidence$json = {
+  '1': 'BotRemovalNativeEvidence',
+  '2': [
+    {'1': 'installation_id', '3': 1, '4': 1, '5': 9, '10': 'installationId'},
+    {
+      '1': 'install_operation_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'installOperationId'
+    },
+    {'1': 'generation', '3': 3, '4': 1, '5': 4, '10': 'generation'},
+  ],
+};
+
+/// Descriptor for `BotRemovalNativeEvidence`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botRemovalNativeEvidenceDescriptor = $convert.base64Decode(
+    'ChhCb3RSZW1vdmFsTmF0aXZlRXZpZGVuY2USJwoPaW5zdGFsbGF0aW9uX2lkGAEgASgJUg5pbn'
+    'N0YWxsYXRpb25JZBIwChRpbnN0YWxsX29wZXJhdGlvbl9pZBgCIAEoCVISaW5zdGFsbE9wZXJh'
+    'dGlvbklkEh4KCmdlbmVyYXRpb24YAyABKARSCmdlbmVyYXRpb24=');
+
+@$core.Deprecated('Use botRemovalLegacyInstallationEvidenceDescriptor instead')
+const BotRemovalLegacyInstallationEvidence$json = {
+  '1': 'BotRemovalLegacyInstallationEvidence',
+  '2': [
+    {'1': 'installation_id', '3': 1, '4': 1, '5': 9, '10': 'installationId'},
+    {'1': 'snapshot_id', '3': 2, '4': 1, '5': 9, '10': 'snapshotId'},
+    {'1': 'snapshot_sha256', '3': 3, '4': 1, '5': 12, '10': 'snapshotSha256'},
+  ],
+};
+
+/// Descriptor for `BotRemovalLegacyInstallationEvidence`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botRemovalLegacyInstallationEvidenceDescriptor =
+    $convert.base64Decode(
+        'CiRCb3RSZW1vdmFsTGVnYWN5SW5zdGFsbGF0aW9uRXZpZGVuY2USJwoPaW5zdGFsbGF0aW9uX2'
+        'lkGAEgASgJUg5pbnN0YWxsYXRpb25JZBIfCgtzbmFwc2hvdF9pZBgCIAEoCVIKc25hcHNob3RJ'
+        'ZBInCg9zbmFwc2hvdF9zaGEyNTYYAyABKAxSDnNuYXBzaG90U2hhMjU2');
+
+@$core.Deprecated('Use botRemovalOrphanWhitelistEvidenceDescriptor instead')
+const BotRemovalOrphanWhitelistEvidence$json = {
+  '1': 'BotRemovalOrphanWhitelistEvidence',
+  '2': [
+    {'1': 'snapshot_id', '3': 1, '4': 1, '5': 9, '10': 'snapshotId'},
+    {'1': 'snapshot_sha256', '3': 2, '4': 1, '5': 12, '10': 'snapshotSha256'},
+  ],
+};
+
+/// Descriptor for `BotRemovalOrphanWhitelistEvidence`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botRemovalOrphanWhitelistEvidenceDescriptor =
+    $convert.base64Decode(
+        'CiFCb3RSZW1vdmFsT3JwaGFuV2hpdGVsaXN0RXZpZGVuY2USHwoLc25hcHNob3RfaWQYASABKA'
+        'lSCnNuYXBzaG90SWQSJwoPc25hcHNob3Rfc2hhMjU2GAIgASgMUg5zbmFwc2hvdFNoYTI1Ng==');
+
+@$core.Deprecated('Use applyBotInstallationRemovalRequestDescriptor instead')
+const ApplyBotInstallationRemovalRequest$json = {
+  '1': 'ApplyBotInstallationRemovalRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'decision_id', '3': 3, '4': 1, '5': 9, '10': 'decisionId'},
+    {'1': 'decision_sha256', '3': 4, '4': 1, '5': 12, '10': 'decisionSha256'},
+    {'1': 'purpose', '3': 5, '4': 1, '5': 9, '10': 'purpose'},
+    {'1': 'bot_id', '3': 6, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'actor_profile_id', '3': 7, '4': 1, '5': 9, '10': 'actorProfileId'},
+    {'1': 'space_id', '3': 8, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'frozen_scope_sha256',
+      '3': 9,
+      '4': 1,
+      '5': 12,
+      '10': 'frozenScopeSha256'
+    },
+    {
+      '1': 'native',
+      '3': 10,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.BotRemovalNativeEvidence',
+      '9': 0,
+      '10': 'native'
+    },
+    {
+      '1': 'legacy_installation',
+      '3': 11,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.BotRemovalLegacyInstallationEvidence',
+      '9': 0,
+      '10': 'legacyInstallation'
+    },
+    {
+      '1': 'orphan_whitelist',
+      '3': 12,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.BotRemovalOrphanWhitelistEvidence',
+      '9': 0,
+      '10': 'orphanWhitelist'
+    },
+  ],
+  '8': [
+    {'1': 'evidence'},
+  ],
+};
+
+/// Descriptor for `ApplyBotInstallationRemovalRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyBotInstallationRemovalRequestDescriptor = $convert.base64Decode(
+    'CiJBcHBseUJvdEluc3RhbGxhdGlvblJlbW92YWxSZXF1ZXN0EikKEHByb3RvY29sX3ZlcnNpb2'
+    '4YASABKA1SD3Byb3RvY29sVmVyc2lvbhIhCgxvcGVyYXRpb25faWQYAiABKAlSC29wZXJhdGlv'
+    'bklkEh8KC2RlY2lzaW9uX2lkGAMgASgJUgpkZWNpc2lvbklkEicKD2RlY2lzaW9uX3NoYTI1Nh'
+    'gEIAEoDFIOZGVjaXNpb25TaGEyNTYSGAoHcHVycG9zZRgFIAEoCVIHcHVycG9zZRIVCgZib3Rf'
+    'aWQYBiABKAlSBWJvdElkEigKEGFjdG9yX3Byb2ZpbGVfaWQYByABKAlSDmFjdG9yUHJvZmlsZU'
+    'lkEhkKCHNwYWNlX2lkGAggASgJUgdzcGFjZUlkEi4KE2Zyb3plbl9zY29wZV9zaGEyNTYYCSAB'
+    'KAxSEWZyb3plblNjb3BlU2hhMjU2EkEKBm5hdGl2ZRgKIAEoCzInLnZvaWNlLnJvbGUudjEuQm'
+    '90UmVtb3ZhbE5hdGl2ZUV2aWRlbmNlSABSBm5hdGl2ZRJmChNsZWdhY3lfaW5zdGFsbGF0aW9u'
+    'GAsgASgLMjMudm9pY2Uucm9sZS52MS5Cb3RSZW1vdmFsTGVnYWN5SW5zdGFsbGF0aW9uRXZpZG'
+    'VuY2VIAFISbGVnYWN5SW5zdGFsbGF0aW9uEl0KEG9ycGhhbl93aGl0ZWxpc3QYDCABKAsyMC52'
+    'b2ljZS5yb2xlLnYxLkJvdFJlbW92YWxPcnBoYW5XaGl0ZWxpc3RFdmlkZW5jZUgAUg9vcnBoYW'
+    '5XaGl0ZWxpc3RCCgoIZXZpZGVuY2U=');
+
+@$core.Deprecated('Use botInstallationRemovalReceiptDescriptor instead')
+const BotInstallationRemovalReceipt$json = {
+  '1': 'BotInstallationRemovalReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'decision_id', '3': 4, '4': 1, '5': 9, '10': 'decisionId'},
+    {'1': 'purpose', '3': 5, '4': 1, '5': 9, '10': 'purpose'},
+    {'1': 'bot_id', '3': 6, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'actor_profile_id', '3': 7, '4': 1, '5': 9, '10': 'actorProfileId'},
+    {'1': 'space_id', '3': 8, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'evidence_kind', '3': 9, '4': 1, '5': 9, '10': 'evidenceKind'},
+    {'1': 'evidence_sha256', '3': 10, '4': 1, '5': 12, '10': 'evidenceSha256'},
+    {
+      '1': 'frozen_scope_sha256',
+      '3': 11,
+      '4': 1,
+      '5': 12,
+      '10': 'frozenScopeSha256'
+    },
+    {'1': 'request_sha256', '3': 12, '4': 1, '5': 12, '10': 'requestSha256'},
+    {'1': 'participant', '3': 13, '4': 1, '5': 9, '10': 'participant'},
+    {'1': 'outcome', '3': 14, '4': 1, '5': 9, '10': 'outcome'},
+    {
+      '1': 'completed_at',
+      '3': 15,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'completedAt'
+    },
+    {
+      '1': 'deleted_role_count',
+      '3': 16,
+      '4': 1,
+      '5': 4,
+      '10': 'deletedRoleCount'
+    },
+    {
+      '1': 'removed_assignment_count',
+      '3': 17,
+      '4': 1,
+      '5': 4,
+      '10': 'removedAssignmentCount'
+    },
+  ],
+};
+
+/// Descriptor for `BotInstallationRemovalReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botInstallationRemovalReceiptDescriptor = $convert.base64Decode(
+    'Ch1Cb3RJbnN0YWxsYXRpb25SZW1vdmFsUmVjZWlwdBIpChBwcm90b2NvbF92ZXJzaW9uGAEgAS'
+    'gNUg9wcm90b2NvbFZlcnNpb24SHQoKcmVjZWlwdF9pZBgCIAEoCVIJcmVjZWlwdElkEiEKDG9w'
+    'ZXJhdGlvbl9pZBgDIAEoCVILb3BlcmF0aW9uSWQSHwoLZGVjaXNpb25faWQYBCABKAlSCmRlY2'
+    'lzaW9uSWQSGAoHcHVycG9zZRgFIAEoCVIHcHVycG9zZRIVCgZib3RfaWQYBiABKAlSBWJvdElk'
+    'EigKEGFjdG9yX3Byb2ZpbGVfaWQYByABKAlSDmFjdG9yUHJvZmlsZUlkEhkKCHNwYWNlX2lkGA'
+    'ggASgJUgdzcGFjZUlkEiMKDWV2aWRlbmNlX2tpbmQYCSABKAlSDGV2aWRlbmNlS2luZBInCg9l'
+    'dmlkZW5jZV9zaGEyNTYYCiABKAxSDmV2aWRlbmNlU2hhMjU2Ei4KE2Zyb3plbl9zY29wZV9zaG'
+    'EyNTYYCyABKAxSEWZyb3plblNjb3BlU2hhMjU2EiUKDnJlcXVlc3Rfc2hhMjU2GAwgASgMUg1y'
+    'ZXF1ZXN0U2hhMjU2EiAKC3BhcnRpY2lwYW50GA0gASgJUgtwYXJ0aWNpcGFudBIYCgdvdXRjb2'
+    '1lGA4gASgJUgdvdXRjb21lEj0KDGNvbXBsZXRlZF9hdBgPIAEoCzIaLmdvb2dsZS5wcm90b2J1'
+    'Zi5UaW1lc3RhbXBSC2NvbXBsZXRlZEF0EiwKEmRlbGV0ZWRfcm9sZV9jb3VudBgQIAEoBFIQZG'
+    'VsZXRlZFJvbGVDb3VudBI4ChhyZW1vdmVkX2Fzc2lnbm1lbnRfY291bnQYESABKARSFnJlbW92'
+    'ZWRBc3NpZ25tZW50Q291bnQ=');
+
+@$core.Deprecated('Use applyBotInstallationRemovalResponseDescriptor instead')
+const ApplyBotInstallationRemovalResponse$json = {
+  '1': 'ApplyBotInstallationRemovalResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.BotInstallationRemovalReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `ApplyBotInstallationRemovalResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyBotInstallationRemovalResponseDescriptor =
+    $convert.base64Decode(
+        'CiNBcHBseUJvdEluc3RhbGxhdGlvblJlbW92YWxSZXNwb25zZRJGCgdyZWNlaXB0GAEgASgLMi'
+        'wudm9pY2Uucm9sZS52MS5Cb3RJbnN0YWxsYXRpb25SZW1vdmFsUmVjZWlwdFIHcmVjZWlwdA==');
+
+@$core.Deprecated('Use registerBotGlobalTerminalRequestDescriptor instead')
+const RegisterBotGlobalTerminalRequest$json = {
+  '1': 'RegisterBotGlobalTerminalRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'bot_id', '3': 2, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'decision_id', '3': 3, '4': 1, '5': 9, '10': 'decisionId'},
+  ],
+};
+
+/// Descriptor for `RegisterBotGlobalTerminalRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List registerBotGlobalTerminalRequestDescriptor =
+    $convert.base64Decode(
+        'CiBSZWdpc3RlckJvdEdsb2JhbFRlcm1pbmFsUmVxdWVzdBIpChBwcm90b2NvbF92ZXJzaW9uGA'
+        'EgASgNUg9wcm90b2NvbFZlcnNpb24SFQoGYm90X2lkGAIgASgJUgVib3RJZBIfCgtkZWNpc2lv'
+        'bl9pZBgDIAEoCVIKZGVjaXNpb25JZA==');
+
+@$core.Deprecated('Use botGlobalTerminalReceiptDescriptor instead')
+const BotGlobalTerminalReceipt$json = {
+  '1': 'BotGlobalTerminalReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'participant', '3': 2, '4': 1, '5': 9, '10': 'participant'},
+    {'1': 'bot_id', '3': 3, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'decision_id', '3': 4, '4': 1, '5': 9, '10': 'decisionId'},
+    {'1': 'receipt_id', '3': 5, '4': 1, '5': 9, '10': 'receiptId'},
+    {
+      '1': 'registered_at',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'registeredAt'
+    },
+    {
+      '1': 'outcome',
+      '3': 7,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.role.v1.BotGlobalTerminalOutcome',
+      '10': 'outcome'
+    },
+  ],
+};
+
+/// Descriptor for `BotGlobalTerminalReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botGlobalTerminalReceiptDescriptor = $convert.base64Decode(
+    'ChhCb3RHbG9iYWxUZXJtaW5hbFJlY2VpcHQSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDVIPcH'
+    'JvdG9jb2xWZXJzaW9uEiAKC3BhcnRpY2lwYW50GAIgASgJUgtwYXJ0aWNpcGFudBIVCgZib3Rf'
+    'aWQYAyABKAlSBWJvdElkEh8KC2RlY2lzaW9uX2lkGAQgASgJUgpkZWNpc2lvbklkEh0KCnJlY2'
+    'VpcHRfaWQYBSABKAlSCXJlY2VpcHRJZBI/Cg1yZWdpc3RlcmVkX2F0GAYgASgLMhouZ29vZ2xl'
+    'LnByb3RvYnVmLlRpbWVzdGFtcFIMcmVnaXN0ZXJlZEF0EkEKB291dGNvbWUYByABKA4yJy52b2'
+    'ljZS5yb2xlLnYxLkJvdEdsb2JhbFRlcm1pbmFsT3V0Y29tZVIHb3V0Y29tZQ==');
+
+@$core.Deprecated('Use registerBotGlobalTerminalResponseDescriptor instead')
+const RegisterBotGlobalTerminalResponse$json = {
+  '1': 'RegisterBotGlobalTerminalResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.BotGlobalTerminalReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `RegisterBotGlobalTerminalResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List registerBotGlobalTerminalResponseDescriptor =
+    $convert.base64Decode(
+        'CiFSZWdpc3RlckJvdEdsb2JhbFRlcm1pbmFsUmVzcG9uc2USQQoHcmVjZWlwdBgBIAEoCzInLn'
+        'ZvaWNlLnJvbGUudjEuQm90R2xvYmFsVGVybWluYWxSZWNlaXB0UgdyZWNlaXB0');
 
 @$core.Deprecated('Use ensureDefaultMemberRoleRequestDescriptor instead')
 const EnsureDefaultMemberRoleRequest$json = {

@@ -42,6 +42,8 @@ const (
 	RoleService_RemoveMemberRoles_FullMethodName                = "/voice.role.v1.RoleService/RemoveMemberRoles"
 	RoleService_BootstrapSpaceRoles_FullMethodName              = "/voice.role.v1.RoleService/BootstrapSpaceRoles"
 	RoleService_DeleteRolesCreatedByProfile_FullMethodName      = "/voice.role.v1.RoleService/DeleteRolesCreatedByProfile"
+	RoleService_ApplyBotInstallationRemoval_FullMethodName      = "/voice.role.v1.RoleService/ApplyBotInstallationRemoval"
+	RoleService_RegisterBotGlobalTerminal_FullMethodName        = "/voice.role.v1.RoleService/RegisterBotGlobalTerminal"
 	RoleService_GetOwnershipTransferCapabilities_FullMethodName = "/voice.role.v1.RoleService/GetOwnershipTransferCapabilities"
 	RoleService_PrepareOwnershipTransfer_FullMethodName         = "/voice.role.v1.RoleService/PrepareOwnershipTransfer"
 	RoleService_FinalizeOwnershipTransfer_FullMethodName        = "/voice.role.v1.RoleService/FinalizeOwnershipTransfer"
@@ -92,6 +94,12 @@ type RoleServiceClient interface {
 	BootstrapSpaceRoles(ctx context.Context, in *BootstrapSpaceRolesRequest, opts ...grpc.CallOption) (*BootstrapSpaceRolesResponse, error)
 	// BOT-B: remove custom roles created by a profile (e.g. bot actor on uninstall).
 	DeleteRolesCreatedByProfile(ctx context.Context, in *DeleteRolesCreatedByProfileRequest, opts ...grpc.CallOption) (*DeleteRolesCreatedByProfileResponse, error)
+	// Durable one-installation Bot lifecycle cleanup; no generic actor mutation.
+	// @voice.security=protected;callers=service:bot
+	ApplyBotInstallationRemoval(ctx context.Context, in *ApplyBotInstallationRemovalRequest, opts ...grpc.CallOption) (*ApplyBotInstallationRemovalResponse, error)
+	// Minimal global BotActor Role fence; no per-Space cleanup authority.
+	// @voice.security=protected;callers=service:bot
+	RegisterBotGlobalTerminal(ctx context.Context, in *RegisterBotGlobalTerminalRequest, opts ...grpc.CallOption) (*RegisterBotGlobalTerminalResponse, error)
 	// Trusted Space-only lifecycle operations. These are the sole Owner mutation path.
 	// Staged v2 contract: runtime activation requires the durable journal/freeze cutover.
 	// Trusted Space-only methods; never reinterpret the legacy Apply/Compensate pair.
@@ -351,6 +359,26 @@ func (c *roleServiceClient) DeleteRolesCreatedByProfile(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *roleServiceClient) ApplyBotInstallationRemoval(ctx context.Context, in *ApplyBotInstallationRemovalRequest, opts ...grpc.CallOption) (*ApplyBotInstallationRemovalResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyBotInstallationRemovalResponse)
+	err := c.cc.Invoke(ctx, RoleService_ApplyBotInstallationRemoval_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *roleServiceClient) RegisterBotGlobalTerminal(ctx context.Context, in *RegisterBotGlobalTerminalRequest, opts ...grpc.CallOption) (*RegisterBotGlobalTerminalResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegisterBotGlobalTerminalResponse)
+	err := c.cc.Invoke(ctx, RoleService_RegisterBotGlobalTerminal_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *roleServiceClient) GetOwnershipTransferCapabilities(ctx context.Context, in *GetOwnershipTransferCapabilitiesRequest, opts ...grpc.CallOption) (*GetOwnershipTransferCapabilitiesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetOwnershipTransferCapabilitiesResponse)
@@ -498,6 +526,12 @@ type RoleServiceServer interface {
 	BootstrapSpaceRoles(context.Context, *BootstrapSpaceRolesRequest) (*BootstrapSpaceRolesResponse, error)
 	// BOT-B: remove custom roles created by a profile (e.g. bot actor on uninstall).
 	DeleteRolesCreatedByProfile(context.Context, *DeleteRolesCreatedByProfileRequest) (*DeleteRolesCreatedByProfileResponse, error)
+	// Durable one-installation Bot lifecycle cleanup; no generic actor mutation.
+	// @voice.security=protected;callers=service:bot
+	ApplyBotInstallationRemoval(context.Context, *ApplyBotInstallationRemovalRequest) (*ApplyBotInstallationRemovalResponse, error)
+	// Minimal global BotActor Role fence; no per-Space cleanup authority.
+	// @voice.security=protected;callers=service:bot
+	RegisterBotGlobalTerminal(context.Context, *RegisterBotGlobalTerminalRequest) (*RegisterBotGlobalTerminalResponse, error)
 	// Trusted Space-only lifecycle operations. These are the sole Owner mutation path.
 	// Staged v2 contract: runtime activation requires the durable journal/freeze cutover.
 	// Trusted Space-only methods; never reinterpret the legacy Apply/Compensate pair.
@@ -595,6 +629,12 @@ func (UnimplementedRoleServiceServer) BootstrapSpaceRoles(context.Context, *Boot
 }
 func (UnimplementedRoleServiceServer) DeleteRolesCreatedByProfile(context.Context, *DeleteRolesCreatedByProfileRequest) (*DeleteRolesCreatedByProfileResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteRolesCreatedByProfile not implemented")
+}
+func (UnimplementedRoleServiceServer) ApplyBotInstallationRemoval(context.Context, *ApplyBotInstallationRemovalRequest) (*ApplyBotInstallationRemovalResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyBotInstallationRemoval not implemented")
+}
+func (UnimplementedRoleServiceServer) RegisterBotGlobalTerminal(context.Context, *RegisterBotGlobalTerminalRequest) (*RegisterBotGlobalTerminalResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegisterBotGlobalTerminal not implemented")
 }
 func (UnimplementedRoleServiceServer) GetOwnershipTransferCapabilities(context.Context, *GetOwnershipTransferCapabilitiesRequest) (*GetOwnershipTransferCapabilitiesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetOwnershipTransferCapabilities not implemented")
@@ -1064,6 +1104,42 @@ func _RoleService_DeleteRolesCreatedByProfile_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RoleService_ApplyBotInstallationRemoval_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyBotInstallationRemovalRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoleServiceServer).ApplyBotInstallationRemoval(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoleService_ApplyBotInstallationRemoval_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoleServiceServer).ApplyBotInstallationRemoval(ctx, req.(*ApplyBotInstallationRemovalRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RoleService_RegisterBotGlobalTerminal_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterBotGlobalTerminalRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoleServiceServer).RegisterBotGlobalTerminal(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoleService_RegisterBotGlobalTerminal_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoleServiceServer).RegisterBotGlobalTerminal(ctx, req.(*RegisterBotGlobalTerminalRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _RoleService_GetOwnershipTransferCapabilities_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetOwnershipTransferCapabilitiesRequest)
 	if err := dec(in); err != nil {
@@ -1360,6 +1436,14 @@ var RoleService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteRolesCreatedByProfile",
 			Handler:    _RoleService_DeleteRolesCreatedByProfile_Handler,
+		},
+		{
+			MethodName: "ApplyBotInstallationRemoval",
+			Handler:    _RoleService_ApplyBotInstallationRemoval_Handler,
+		},
+		{
+			MethodName: "RegisterBotGlobalTerminal",
+			Handler:    _RoleService_RegisterBotGlobalTerminal_Handler,
 		},
 		{
 			MethodName: "GetOwnershipTransferCapabilities",
