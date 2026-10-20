@@ -517,8 +517,14 @@ Recovery signs the exact sealed request with a fresh service credential after
 loading the accepted owner decision and checking the local disabled Bot mapping.
 Missing, conflicting or unqualified results keep the root retryable. Migration
 000014 preserves old decisions and reopens historically missing terminal proof;
-it does not turn legacy unqualified decisions into delivery authority. The Role
-root-only adapter remains unallocated; no Space/actor/evidence tuple is invented.
+it does not turn legacy unqualified decisions into delivery authority. Role's
+distinct minimal request uses its own exact Role RPC/audience and decision ID;
+the typed receipt must name participant `role` and outcome
+`BOT_ACTOR_ROLE_MUTATIONS_FENCED`. Only its own saved result settles Role's
+slot. Recovery keeps both slot requests stable, refreshes delivery credentials
+and revalidates saved results; no Space/actor/evidence tuple is invented. Actual
+Role receiver/catalog and current native48 transport remain separately qualified
+BE-170 work, not a consequence of the controlled caller component tests.
 
 New public install/cancel permission decisions use the separate
 `BOT_ROLE_INSTALLATION_GRPC_ADDR`, `BOT_ROLE_INSTALLATION_TLS_CA_FILE`,

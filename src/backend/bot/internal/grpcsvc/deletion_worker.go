@@ -80,11 +80,12 @@ func (s *BotGRPC) processDeletionClaim(ctx context.Context, claim *store.BotDele
 			return err
 		}
 		for _, terminal := range terminals {
-			if terminal.Participant == "space" {
+			switch terminal.Participant {
+			case "space":
 				err = s.applyGlobalSpaceTerminal(ctx, claim, terminal)
-			} else {
-				// No root-only Role authority adapter is qualified yet. A Space
-				// receipt or empty target list cannot discharge this obligation.
+			case "role":
+				err = s.applyGlobalRoleTerminal(ctx, claim, terminal)
+			default:
 				err = store.ErrDeletionPending
 			}
 			if errors.Is(err, store.ErrDeletionClaimLost) {

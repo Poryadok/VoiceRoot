@@ -102,7 +102,7 @@ func TestGlobalTerminalWorkerPersistsExactMinimalRequestAndQualifiedReceipt(t *t
 		require.NoError(t, err)
 		worked, e := svc.ProcessNextBotDeletion(ctx)
 		require.True(t, worked)
-		require.ErrorIs(t, e, store.ErrDeletionPending, "Role global terminal remains a separate unresolved obligation")
+		require.Equal(t, codes.Unavailable, status.Code(e), "missing Role terminal dependency remains retryable and independent")
 		var state string
 		var savedRequest, savedReceipt []byte
 		require.NoError(t, pool.QueryRow(ctx, `SELECT state,request_bytes,receipt_bytes FROM bot_deletion_terminal_effects WHERE operation_id=$1 AND participant='space'`, root.OperationID).Scan(&state, &savedRequest, &savedReceipt))

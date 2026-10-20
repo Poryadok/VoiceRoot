@@ -587,3 +587,13 @@ tags1-7 and only BOT_ACTOR_ROLE_MUTATIONS_FENCED. It cannot settle Space's slot
 or any per-Space cleanup. Codec and descriptor preservation do not activate
 the receiver, qualified Role25 projection, old kernel guards, migrations or
 unsupported BotActor methods. Legacy erasure/action-stop boundaries remain.
+
+The Bot Role producer now implements the separate typed caller and Role-only
+receipt CAS. Actual PG/RSA controlled-receiver RED5.131 observed zero Role
+calls; GREEN5.329 delivers the exact accepted root with fresh Role credentials.
+The expanded matrix exercises lost ACK, wrong participant, independent Space
+completion, exact Role replay, both-results-only root completion and no remote
+calls for an unqualified historical root. Shared private terminal persistence
+keeps fixed participant selection, typed validation, owned bytes, retained hashes
+and post-SQL-wait claim checks. Missing Role dependency is retryable Unavailable.
+These are controlled receiver tests, not actual Role26 or native48 serving proof.

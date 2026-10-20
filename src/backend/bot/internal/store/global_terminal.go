@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/protobuf/proto"
+	rolev1 "voice.app/voice/role/v1"
 	spacev1 "voice.app/voice/space/v1"
 )
 
@@ -57,12 +58,27 @@ func (s *BotStore) GlobalTerminalEffects(ctx context.Context, claim *BotDeletion
 	return out, nil
 }
 
-func validateGlobalSpaceRequest(claim *BotDeletion, body []byte) error {
+type minimalGlobalTerminalRequest interface {
+	proto.Message
+	GetProtocolVersion() uint32
+	GetBotId() string
+	GetDecisionId() string
+}
+
+func validateGlobalTerminalRequest(claim *BotDeletion, participant string, body []byte) error {
 	if !globalDeletion(claim) || len(body) == 0 || len(body) > 1024 {
 		return ErrInstallationConflict
 	}
-	q := new(spacev1.RegisterBotGlobalTerminalRequest)
-	if proto.Unmarshal(body, q) != nil || len(q.ProtoReflect().GetUnknown()) != 0 || q.ProtocolVersion != 1 || q.BotId != claim.BotID.String() || q.DecisionId != claim.OperationID.String() {
+	var q minimalGlobalTerminalRequest
+	switch participant {
+	case "space":
+		q = new(spacev1.RegisterBotGlobalTerminalRequest)
+	case "role":
+		q = new(rolev1.RegisterBotGlobalTerminalRequest)
+	default:
+		return ErrInstallationConflict
+	}
+	if proto.Unmarshal(body, q) != nil || len(q.ProtoReflect().GetUnknown()) != 0 || q.GetProtocolVersion() != 1 || q.GetBotId() != claim.BotID.String() || q.GetDecisionId() != claim.OperationID.String() {
 		return ErrInstallationConflict
 	}
 	canonical, err := (proto.MarshalOptions{Deterministic: true}).Marshal(q)
@@ -98,8 +114,12 @@ func (s *BotStore) globalTerminalClaimTx(ctx context.Context, claim *BotDeletion
 }
 
 func (s *BotStore) SealBotGlobalSpaceRequest(ctx context.Context, claim *BotDeletion, body []byte) error {
+	return s.sealBotGlobalTerminalRequest(ctx, claim, "space", body)
+}
+
+func (s *BotStore) sealBotGlobalTerminalRequest(ctx context.Context, claim *BotDeletion, participant string, body []byte) error {
 	body = bytes.Clone(body)
-	if err := validateGlobalSpaceRequest(claim, body); err != nil {
+	if err := validateGlobalTerminalRequest(claim, participant, body); err != nil {
 		return err
 	}
 	tx, err := s.globalTerminalClaimTx(ctx, claim)
@@ -108,7 +128,7 @@ func (s *BotStore) SealBotGlobalSpaceRequest(ctx context.Context, claim *BotDele
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	var saved, savedSHA []byte
-	err = tx.QueryRow(ctx, `SELECT request_bytes,request_sha256 FROM bot_deletion_terminal_effects WHERE operation_id=$1 AND participant='space' FOR UPDATE`, claim.OperationID).Scan(&saved, &savedSHA)
+	err = tx.QueryRow(ctx, `SELECT request_bytes,request_sha256 FROM bot_deletion_terminal_effects WHERE operation_id=$1 AND participant=$2 FOR UPDATE`, claim.OperationID, participant).Scan(&saved, &savedSHA)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrInstallationConflict
 	}
@@ -132,7 +152,7 @@ func (s *BotStore) SealBotGlobalSpaceRequest(ctx context.Context, claim *BotDele
 		return err
 	}
 	digest := sha256.Sum256(body)
-	_, err = tx.Exec(ctx, `UPDATE bot_deletion_terminal_effects SET request_bytes=$2,request_sha256=$3 WHERE operation_id=$1 AND participant='space'`, claim.OperationID, body, digest[:])
+	_, err = tx.Exec(ctx, `UPDATE bot_deletion_terminal_effects SET request_bytes=$3,request_sha256=$4 WHERE operation_id=$1 AND participant=$2`, claim.OperationID, participant, body, digest[:])
 	if err != nil {
 		return err
 	}
@@ -141,7 +161,7 @@ func (s *BotStore) SealBotGlobalSpaceRequest(ctx context.Context, claim *BotDele
 
 func (s *BotStore) SaveBotGlobalSpaceReceipt(ctx context.Context, claim *BotDeletion, body, receipt []byte) error {
 	body, receipt = bytes.Clone(body), bytes.Clone(receipt)
-	if err := validateGlobalSpaceRequest(claim, body); err != nil {
+	if err := validateGlobalTerminalRequest(claim, "space", body); err != nil {
 		return err
 	}
 	if len(receipt) == 0 || len(receipt) > 4096 {
@@ -157,13 +177,21 @@ func (s *BotStore) SaveBotGlobalSpaceReceipt(ctx context.Context, claim *BotDele
 	if err != nil || !bytes.Equal(canonical, receipt) || len(proof.ProtoReflect().GetUnknown()) != 0 || proof.ProtocolVersion != 1 || proof.BotId != claim.BotID.String() || proof.DecisionId != claim.OperationID.String() || idErr != nil || id == uuid.Nil || id.String() != proof.ReceiptId || proof.RegisteredAt == nil || proof.RegisteredAt.CheckValid() != nil || proof.RegisteredAt.Seconds <= 0 || len(proof.RegisteredAt.ProtoReflect().GetUnknown()) != 0 || proof.Outcome != spacev1.BotGlobalTerminalOutcome_BOT_GLOBAL_TERMINAL_OUTCOME_GLOBAL_NATIVE_ADDS_FENCED {
 		return ErrInstallationConflict
 	}
+	return s.saveBotGlobalTerminalReceipt(ctx, claim, "space", body, receipt)
+}
+
+func (s *BotStore) saveBotGlobalTerminalReceipt(ctx context.Context, claim *BotDeletion, participant string, body, receipt []byte) error {
+	body, receipt = bytes.Clone(body), bytes.Clone(receipt)
+	if err := validateGlobalTerminalRequest(claim, participant, body); err != nil {
+		return err
+	}
 	tx, err := s.globalTerminalClaimTx(ctx, claim)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	var savedRequest, savedRequestSHA, savedReceipt, savedReceiptSHA []byte
-	err = tx.QueryRow(ctx, `SELECT request_bytes,request_sha256,receipt_bytes,receipt_sha256 FROM bot_deletion_terminal_effects WHERE operation_id=$1 AND participant='space' FOR UPDATE`, claim.OperationID).Scan(&savedRequest, &savedRequestSHA, &savedReceipt, &savedReceiptSHA)
+	err = tx.QueryRow(ctx, `SELECT request_bytes,request_sha256,receipt_bytes,receipt_sha256 FROM bot_deletion_terminal_effects WHERE operation_id=$1 AND participant=$2 FOR UPDATE`, claim.OperationID, participant).Scan(&savedRequest, &savedRequestSHA, &savedReceipt, &savedReceiptSHA)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrInstallationConflict
 	}
@@ -182,7 +210,7 @@ func (s *BotStore) SaveBotGlobalSpaceReceipt(ctx context.Context, claim *BotDele
 	}
 	if savedReceipt == nil {
 		digest := sha256.Sum256(receipt)
-		_, err = tx.Exec(ctx, `UPDATE bot_deletion_terminal_effects SET receipt_bytes=$2,receipt_sha256=$3,state='COMPLETE' WHERE operation_id=$1 AND participant='space'`, claim.OperationID, receipt, digest[:])
+		_, err = tx.Exec(ctx, `UPDATE bot_deletion_terminal_effects SET receipt_bytes=$3,receipt_sha256=$4,state='COMPLETE' WHERE operation_id=$1 AND participant=$2`, claim.OperationID, participant, receipt, digest[:])
 		if err != nil {
 			return err
 		}
