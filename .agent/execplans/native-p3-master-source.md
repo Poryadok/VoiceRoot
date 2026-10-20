@@ -506,3 +506,33 @@ UNKNOWN until a changed-source original wrapper executes with the literal
 1c/R5-H4 comparison. Current integration/native authority is separate. Do not
 import a supplemental map, fabricate an old dc0 child, inherit raw flags or
 reinterpret the original c357 FAIL as a successful J transition.
+
+## Exact prefix-identity correction after actual e822 terminal
+
+The single e822 original wrapper42725 ended driver0/F13 EXIT1,9903 events,
+trace `51d29a4d586c8f7f1b7a4a6e56933ce28454a0e40e9b82eecf1967fdb3882ae9`.
+All10 manual rows/23 associations/manual-end and I61 transitions are observed;
+read-only validator37915 exits0 for that failed prefix only. The NEW separate
+five-node trace has606 events/exit0, raw flags false,false,false,false,false and
+SHA `fe7e408bf97674e33323d7e33f4c944ef618ef1959083b42ea0aea6fd41d5daf`.
+Original dc0 owner/map/rawfalse remains unchanged. J readiness/rows/router were
+not reached. No wall-timeout existed in that driver; execution-limit receipt
+`f12eecab...` records this explicitly, not as a timer-bounded run.
+
+Exact unchanged-e822 cause probe24498 reproduces the refusal with only one
+different origin field: main_trace. verify_J_prior_origin copied the sealed
+prefix to a temporary path, so genuine range-origin receipts failed their
+original path identity check. Original F13 receipt `8f60fae3...` and raw failure
+remain immutable. The private original-identity fixture is RED `f1dbf3fc...`.
+
+Narrow correction: validate the exact bytes/hash prefix by reading the ORIGINAL
+trace identity. The optional seal requires exact fields, a positive integer
+length within the actual file and the expected hash. All existing source/frame/
+range-origin/owner/map checks remain unchanged; no path alias or prefix-based
+admission is introduced. Later events cannot change the sealed collection.
+Foreign identical-file identity, wrong frame, rehashed old unfinished ledger,
+source prefix change and invalid hash/length reject. Focused7 GREEN596dec44 is
+finite fixture evidence; the new helper still requires frozen-source review and
+read-only actual-input revalidation before any changed-input producer. Offline
+reconstructed receipts are not appended to old traces or called producer events.
+Actual J mutation/fullcollection/router/RK/currentcandidate remain HOLD.

@@ -430,6 +430,58 @@ f13_retained_history_row() { return 1; }
         with self.assertRaises(m.Rejected):
             m.consume_M_path(ledger,m.sha(ledger.read_bytes()),trace,name,b'',incoming,'append')
 
+    def test_J_prior_prefix_preserves_original_identity_not_a_temporary_alias(self):
+        # Isolated prefix-call seam, with an explicit private authority/frame
+        # boundary. Actual fixed-J authority is exercised by the frozen probe,
+        # not manufactured by this fixture.
+        m=module();trace=self.folder/'original-main.jsonl';prefix=b'private sealed collection\n'
+        trace.write_bytes(prefix+b'later events are outside this seal\n')
+        bound=m.file_digest(prefix);cap=dict(directory='private-unit',native_path='private-native')
+        operation='private/J/2';state=dict(private_original_range=True)
+        origin=dict(capability=cap,main_trace=str(trace),prefix=bound,J_operation=operation)
+        expected=dict(origin);calls=[]
+        m.prepare_3071_capabilities=lambda repo,directory,native:cap
+        def checkpoint(repo,path,digest,**kwargs):
+            calls.append(str(path));m.require(str(path)==str(trace),'private_original_range_identity')
+            m.require(kwargs.get('sealed_prefix')==bound,'private_same_sealed_collection_not_old_ledger')
+            m.require(kwargs.get('J_history_checkpoint')==operation,'private_same_original_frame')
+            raw=Path(path).read_bytes()[:kwargs['sealed_prefix']['bytes']]
+            m.require(m.sha(raw)==digest==bound['sha256'],'private_original_prefix_hash')
+            return dict(J_history_checkpoint=state)
+        m.validate_trace=checkpoint
+        m.J_prior_origin_value=lambda repo,authority,value,path,binding:dict(expected,main_trace=str(path),prefix=binding,capability=authority)
+        self.assertEqual(m.verify_J_prior_origin(self.repo,origin),origin)
+        self.assertEqual(calls,[str(trace)])
+        foreign=self.folder/'foreign-same-bytes.jsonl';foreign.write_bytes(trace.read_bytes())
+        for error in ('foreign-identical-file','old-ledger-rehashed','foreign-frame','changed-source-prefix'):
+            value=json.loads(json.dumps(origin));original=trace.read_bytes()
+            if error=='foreign-identical-file':value['main_trace']=str(foreign)
+            elif error=='old-ledger-rehashed':value['prefix']=m.file_digest(prefix[:4])
+            elif error=='foreign-frame':value['J_operation']='private/foreign/2'
+            else:trace.write_bytes(b'X'+original[1:])
+            with self.subTest(error=error),self.assertRaises(m.Rejected):m.verify_J_prior_origin(self.repo,value)
+            trace.write_bytes(original)
+
+    def test_trace_prefix_is_exactly_sealed_and_old_unfinished_ledger_rejects(self):
+        m=module();self.hidden_runtime();run,out=self.collect(partition=False)
+        self.assertEqual(run.returncode,0,run.stderr)
+        trace=out/'trace.jsonl';prefix=trace.read_bytes();bound=m.file_digest(prefix)
+        trace.write_bytes(prefix+b'{"later":"not part of the collection seal"}\n')
+        value=m.validate_trace(self.repo,trace,bound['sha256'],sealed_prefix=bound)
+        self.assertFalse(value['failures'])
+        self.assertEqual(value['ledger'][value['root_frame']]['map_binding'],m.file_digest((out/'map').read_bytes()))
+        with self.assertRaisesRegex(m.Rejected,'trace_raw_hash'):m.validate_trace(self.repo,trace,bound['sha256'])
+        for error in ('zero-length','boolean-length','oversized-length','different-hash','old-unfinished-rehashed'):
+            binding=dict(bound);digest=bound['sha256']
+            if error=='zero-length':binding['bytes']=0
+            elif error=='boolean-length':binding['bytes']=True
+            elif error=='oversized-length':binding['bytes']=len(trace.read_bytes())+1
+            elif error=='different-hash':binding['sha256']='0'*64
+            else:
+                earlier=b''.join(prefix.splitlines(keepends=True)[:-1]);binding=m.file_digest(earlier);digest=binding['sha256']
+            with self.subTest(error=error),self.assertRaises(m.Rejected):
+                m.validate_trace(self.repo,trace,digest,sealed_prefix=binding)
+
     def test_private_J_prior_span_requires_all_five_real_operations_and_full_map(self):
         # Actual temporary Git/collector evidence under an explicit private
         # authority boundary. This does not qualify the fixed production J.

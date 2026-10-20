@@ -444,11 +444,10 @@ def verify_J_prior_origin(repo, origin):
     cap=origin['capability'];require(cap==prepare_3071_capabilities(repo,cap['directory'],cap['native_path']), 'fixed3071_prior_independent_capability')
     current=Path(origin['main_trace']).read_bytes();bound=origin['prefix']
     require(len(current)>=bound['bytes'] and sha(current[:bound['bytes']])==bound['sha256'],'fixed3071_prior_original_prefix_immutable')
-    # Validate just the sealed prefix: later actual operations cannot change its
-    # meaning or supply a disposition missing when the observation was started.
-    with tempfile.TemporaryDirectory(prefix='f13-J-prior-prefix-') as directory:
-        trace=Path(directory)/'trace.jsonl';trace.write_bytes(current[:bound['bytes']])
-        state=validate_trace(repo,trace,bound['sha256'],J_history_checkpoint=origin['J_operation'])['J_history_checkpoint']
+    # Read only the sealed prefix, keeping its original trace identity. Existing
+    # range receipts bind that exact path; a temporary alias is not their origin.
+    state=validate_trace(repo,origin['main_trace'],bound['sha256'],
+        J_history_checkpoint=origin['J_operation'],sealed_prefix=bound)['J_history_checkpoint']
     require(origin==J_prior_origin_value(repo,cap,state,origin['main_trace'],bound),'fixed3071_prior_exact_original_context_and_owner')
     return origin
 
@@ -2031,8 +2030,14 @@ def validate_router(repo, seal_path, seal_sha, map_path, context_path, sidecar_p
         failures=[v for v in receipts if v['status']!=0],qualification='HOLD',admission=False,runtime_pass=False)
 
 
-def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, range_checkpoint=None, I_checkpoint=None, deletion_checkpoint=None, manual_checkpoint=False, manual_end_checkpoint=None, manual_append_checkpoint=None, J_history_checkpoint=None, J_checkpoint=None):
-    raw=Path(path).read_bytes();require(sha(raw)==expected_sha,'trace_raw_hash')
+def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, range_checkpoint=None, I_checkpoint=None, deletion_checkpoint=None, manual_checkpoint=False, manual_end_checkpoint=None, manual_append_checkpoint=None, J_history_checkpoint=None, J_checkpoint=None, sealed_prefix=None):
+    raw=Path(path).read_bytes()
+    if sealed_prefix is not None:
+        require(isinstance(sealed_prefix,dict) and set(sealed_prefix)=={'bytes','sha256'},'trace_sealed_prefix_shape')
+        require(type(sealed_prefix['bytes']) is int and 0<sealed_prefix['bytes']<=len(raw)
+            and sealed_prefix['sha256']==expected_sha,'trace_sealed_prefix_exact_binding')
+        raw=raw[:sealed_prefix['bytes']]
+    require(sha(raw)==expected_sha,'trace_raw_hash')
     events=[json.loads(v) for v in raw.splitlines()];require(events,'nonempty_producer_trace')
     previous='0'*64;frames={};stack=[];operations={};attempts={};classified={};pending={};cumulative={};child_flags={};child_rows={};frame_rows={};carry={};failures=[];observed=set()
     expected_operations={};seen_operations={};visited={};committed={};maps={};children={};obligations={};native_bindings={}
