@@ -64,6 +64,12 @@ dev подключается к своей PostgreSQL, соединение к s
 При приёмке готовы 27 Deployment и 3 StatefulSet; requests около 960m CPU и
 3040 MiB RAM. Это наблюдение, не постоянный резерв свободных ресурсов.
 
+При восстановлении ресурсов 19 октября ClickHouse на dev имел 22 перезапуска,
+последний — `OOMKilled` при лимите 1 GiB. Его бюджет увеличен до request
+256 MiB / limit 2 GiB в живом StatefulSet и в генераторе dev-манифестов.
+После замены Pod проверены готовность, неизменный UID PVC и UUID всех шести
+прикладных таблиц. Квота namespace остаётся 20 GiB для memory limits.
+
 Четыре независимых static PV имеют storage class `voice-dev-local` и reclaim
 policy `Retain`:
 
