@@ -215,7 +215,9 @@ func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version 
 		}
 	}
 	if version == 47 || version == 48 {
-		return checkNativeTerminal47Triggers(ctx, tx)
+		if err := checkNativeTerminal47Triggers(ctx, tx); err != nil {
+			return err
+		}
 	}
 	if version == 48 {
 		if err := checkNativeMinimal48Triggers(ctx, tx); err != nil {
