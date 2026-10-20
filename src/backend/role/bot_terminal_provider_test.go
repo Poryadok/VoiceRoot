@@ -268,6 +268,8 @@ func TestRoleBotTerminalActualProvider(t *testing.T) {
 	require.True(t, proto.Equal(first, p.register(req)), "fresh transport retry returns original durable receipt")
 	p.stop()
 	p.start()
+	_, err = p.client.RegisterBotGlobalTerminal(callCtx, req)
+	require.Error(t, err, "original JWT stays spent across service restart through actual Redis")
 	require.True(t, proto.Equal(first, p.register(req)), "same database and real Redis survive service reinstantiation")
 	for _, r := range []*rolev1.RegisterBotGlobalTerminalRequest{{ProtocolVersion: 1, BotId: uuid.NewString(), DecisionId: req.DecisionId}, {ProtocolVersion: 1, BotId: req.BotId, DecisionId: uuid.NewString()}} {
 		_, err = p.client.RegisterBotGlobalTerminal(p.signed(r, method, r.DecisionId, "bot"), r)
