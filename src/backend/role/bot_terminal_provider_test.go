@@ -95,9 +95,12 @@ func newTerminalProvider(t *testing.T, ctx context.Context) *terminalProvider {
 	require.NoError(t, err)
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
+	next, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
 	jwk := map[string]string{"kid": "current", "kty": "RSA", "use": "sig", "alg": "RS256", "n": base64.RawURLEncoding.EncodeToString(key.N.Bytes()), "e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.E)).Bytes())}
+	nextJWK := map[string]string{"kid": "next", "kty": "RSA", "use": "sig", "alg": "RS256", "n": base64.RawURLEncoding.EncodeToString(next.N.Bytes()), "e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(next.E)).Bytes())}
 	jwks := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{jwk}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{jwk, nextJWK}})
 	}))
 	t.Cleanup(jwks.Close)
 	dir := t.TempDir()
