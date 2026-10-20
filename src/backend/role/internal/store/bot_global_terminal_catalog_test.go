@@ -30,6 +30,40 @@ func TestRole26SourceMigration(t *testing.T) {
 	f.Run(true, "up", "1")
 }
 
+func TestRole26CatalogMode(t *testing.T) {
+	ctx := context.Background()
+	f := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/role_db"))
+	f.Run(true, "goto", "25")
+	check := func(pool *pgxpool.Pool) (bool, error) {
+		tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+		require.NoError(t, err)
+		defer tx.Rollback(ctx)
+		reader, ok := any(&RoleStore{Pool: pool, tx: tx}).(interface {
+			botGlobalTerminalCatalogPresent(context.Context) (bool, error)
+		})
+		require.True(t, ok, "kernel needs a qualified exact25/26 mode, never relation-existence fallback")
+		return reader.botGlobalTerminalCatalogPresent(ctx)
+	}
+	present, err := check(f.Pool)
+	require.NoError(t, err)
+	require.False(t, present, "qualified25 has no new predicate")
+	f.Run(true, "goto", "26")
+	app := role26Serving(t, f.Pool)
+	present, err = check(app)
+	require.NoError(t, err)
+	require.True(t, present)
+	_, err = check(f.Pool)
+	require.ErrorIs(t, err, ErrScopeUnavailable, "26 owner cannot become serving")
+	_, err = f.Pool.Exec(ctx, "UPDATE public.schema_migrations SET dirty=true")
+	require.NoError(t, err)
+	_, err = check(app)
+	require.ErrorIs(t, err, ErrScopeUnavailable)
+	_, err = f.Pool.Exec(ctx, "UPDATE public.schema_migrations SET dirty=false,version=27")
+	require.NoError(t, err)
+	_, err = check(app)
+	require.ErrorIs(t, err, ErrScopeUnavailable)
+}
+
 func role26Fixture(t *testing.T) integrationtest.SourceMigrationFixture {
 	t.Helper()
 	f := integrationtest.NewSourceMigrationFixture(t, context.Background(), filepath.Join(repoRoot(t), "src/backend/migrations/role_db"))
