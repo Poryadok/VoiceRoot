@@ -241,6 +241,6 @@ func TestPurgeNativeActual49RelayAndTypedResultRecovery(t *testing.T) {
 	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT count(*) FROM bot_deletion_operations WHERE bot_id=$1`, bot.ID).Scan(&rootsCount))
 	require.Zero(t, rootsCount)
 	require.NoError(t, database.Pool.QueryRow(ctx, `SELECT status FROM bots WHERE id=$1`, bot.ID).Scan(&botStatus))
-	require.Equal(t, "active", botStatus)
+	require.Equal(t, "live", botStatus)
 	require.NoError(t, os.WriteFile(ready.Stop, []byte("stop"), 0600))
 }
