@@ -568,3 +568,49 @@ AST comparison confirms only consume_3071_J_path changed, with one new bounded
 normalization verifier; all prior test methods and the shell remain unchanged.
 No actual successor producer, J-completion, collection/seal/router or current
 candidate qualification is claimed. Frozen source still needs independent418.
+
+## Producer-compatible genesis validation follow-up (425)
+
+Basis: accepted `F13-J-genesis-fix/REQUEST.md` SHA-256
+`23798bcf182c77886acea3d3dc6f0e425d813331de276340c37df35490f33225`, exact
+source `451c0d0bdbc1ed1c8bb55c7b361f61299fd2b5c1`, and the immutable shell
+producer contract in that request. The consumer's first J event must have the
+producer's 64-zero `previous` value. A fixture starting with JSON `null` is not
+producer-compatible and must not be treated as an alias.
+
+Acceptance: the existing real-Git/native qualification fixture uses a 64-zero
+first-event predecessor and is GREEN; rehashed `null` and nonzero genesis,
+missing `previous`, and a tampered event chain reject. Keep all other positive
+and negative assertions, native authority, history/map/OR invariants, shell,
+schema, pins and product behavior unchanged. No producer, CI, runtime, or
+current-candidate qualification is in scope. Original F13 EXIT1/HOLD,
+collection/seal/router UNREACHED remain unchanged.
+
+Files: only `scripts/ci/f13_f54_history.py`,
+`scripts/ci/f13_f54_history_test.py`, and this plan. Test-first sequence:
+(1) change the existing fixture to encode producer-compatible 64-zero genesis
+and add explicit malformed-genesis negatives; (2) run the focused native
+normalization test against immutable `451c` and retain the expected RED; (3)
+change only `qualified_J_native_normalization`'s initial predecessor from
+`None` to 64 zeros; (4) rerun focused and full affected history tests plus
+Python syntax and shell syntax on private Linux. Freeze a normal source commit,
+bundle and exact RED/GREEN proof for the already-appointed independent 418
+recheck, then 121 publication. No edits to the shell or any authority/guard
+source.
+
+CodeGraph context: reuse the recorded bounded frozen-index result and root
+clarification `52c006ec`; it identified the helper/producer genesis mismatch.
+The frozen index permits only direct reads of the named helper and fixture to
+confirm exact implementation details; no broad query or CLI fallback. All
+checks run in the isolated lease from a branch based on exact `451c`.
+
+Execution: focused RED preserves the exact refusal
+`fixed3071_J_native_append_only_trace` for the producer-compatible fixture;
+focused GREEN passes with the zero genesis and all four malformed-genesis
+negatives. The complete affected history suite passes 39/39 twice (139.910s
+and 135.544s); Python AST and the unchanged producer shell's `bash -n` pass.
+Raw logs and their hashes are in the local `425-validation` evidence packet.
+`graphify update .` extracted 171/171 AST files but did not terminate; after
+the exact owned process remained at 0 CPU with no output, PID 46268 was stopped.
+It also reported one unrelated C++ header syntax warning. Graphify completion
+is therefore a recorded tooling limitation, not a successful update claim.

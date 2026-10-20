@@ -652,7 +652,7 @@ def build_3071_J_ready(state, prefix):
 
 def qualified_J_native_normalization(value, events, before, name, actual_map, prior, incoming, after):
     """Reconstruct the existing clean-zero shell transition, never a new grant."""
-    previous=None
+    previous='0'*64
     for sequence,event in enumerate(events,1):
         body=dict(event);digest=body.pop('digest',None)
         require(event.get('schema')==SCHEMA and event.get('sequence')==sequence

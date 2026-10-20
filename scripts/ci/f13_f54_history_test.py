@@ -93,19 +93,31 @@ class ProducerTrace(unittest.TestCase):
             event.pop('digest',None);event['digest']=m.sha(m.canonical(event))
             return m.canonical(event)+b'\n',event['digest']
         prefix,first_digest=encode(dict(kind='master_entry',frame=None,operation=None,
-            payload=dict(native_binding=m.raw_binding(bound.read_bytes()),context=context)),1,None)
+            payload=dict(native_binding=m.raw_binding(bound.read_bytes()),context=context)),1,'0'*64)
         ready=m.build_3071_J_ready(state,m.file_digest(prefix))
         ledger=self.folder/'private-J-native-ledger';ledger.write_bytes(m.canonical(ready))
         trace=self.folder/'private-J-native-trace'
-        def consume(event=gate,final=after,current=actual,value=ready,pending=before):
+        def consume(event=gate,final=after,current=actual,value=ready,pending=before,
+                    genesis='0'*64,malformed_genesis=None):
             ledger.write_bytes(m.canonical(value))
-            pending_raw,digest=encode(pending,2,first_digest)
-            trace.write_bytes(prefix+pending_raw+(encode(event,3,digest)[0] if event else b''))
+            current_prefix,root_digest=encode(dict(kind='master_entry',frame=None,operation=None,
+                payload=dict(native_binding=m.raw_binding(bound.read_bytes()),context=context)),1,genesis)
+            if malformed_genesis:
+                first=json.loads(current_prefix)
+                if malformed_genesis=='missing':first.pop('previous')
+                elif malformed_genesis=='tampered':first['digest']='0'*64
+                current_prefix=m.canonical(first)+b'\n'
+            pending_raw,digest=encode(pending,2,root_digest)
+            trace.write_bytes(current_prefix+pending_raw+(encode(event,3,digest)[0] if event else b''))
             return m.consume_3071_J_path(ledger,m.sha(ledger.read_bytes()),trace,name,current,final,'replace')
         result=consume()
         self.assertTrue(result['aggregate']);self.assertEqual(result['prior_rows'],[m.raw_binding(prior)])
         self.assertEqual(result['incoming'],m.raw_binding(incoming));self.assertEqual(result['after_gate_row'],m.raw_binding(after))
         self.assertEqual(result['expected_post_map'],m.file_digest((other+'\n'+after+'\n').encode()))
+        for label,genesis,malformed in (('null',None,None),('nonzero','f'*64,None),
+                                        ('missing',None,'missing'),('tampered-chain','0'*64,'tampered')):
+            with self.subTest(genesis=label),self.assertRaises(m.Rejected):
+                consume(genesis=genesis,malformed_genesis=malformed)
         for error in ('missing','failed','status2','foreign-frame','foreign-operation','foreign-path','binding-rehashed',
                       'foreign-prior','foreign-source','foreign-owner','content','map','map-rehashed','map-reorder-rehashed',
                       'after-source','after-base','after-owner','after-parent','after-candidates','context','classifier','drop-prior-true'):
