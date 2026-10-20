@@ -250,6 +250,25 @@ func (p *terminalProvider) assertClosedWriters(bot string) {
 	}
 }
 
+// This is the original broad require.Error predicate, extracted so the finite
+// oracle regression below discriminates the review finding before correction.
+func terminalReplayOracle(ctx context.Context, expires time.Time, err error) bool {
+	return err != nil
+}
+
+func TestTerminalReplayOracleBoundary(t *testing.T) {
+	live := context.Background()
+	valid := time.Now().Add(time.Minute)
+	require.True(t, terminalReplayOracle(live, valid, status.Error(codes.Unauthenticated, "spent JTI")))
+	for _, err := range []error{nil, context.DeadlineExceeded, status.Error(codes.DeadlineExceeded, "deadline"), status.Error(codes.Unavailable, "transport")} {
+		require.False(t, terminalReplayOracle(live, valid, err), "deadline/transport errors cannot prove replay denial")
+	}
+	canceled, cancel := context.WithCancel(live)
+	cancel()
+	require.False(t, terminalReplayOracle(canceled, valid, status.Error(codes.Unauthenticated, "expired context")))
+	require.False(t, terminalReplayOracle(live, time.Now().Add(-time.Second), status.Error(codes.Unauthenticated, "expired JWT")))
+}
+
 func TestRoleBotTerminalActualProvider(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires private actual Role26 PG/Redis")
