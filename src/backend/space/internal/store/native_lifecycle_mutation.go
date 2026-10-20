@@ -54,7 +54,7 @@ func (s *SpaceStore) captureLifecycleMaintenanceMutation(ctx context.Context, sp
 	switch version {
 	case 39, 40, 41, 42, 43:
 		return nil, nil // Preserved protocol before the mandatory DB frame.
-	case 44, 45, 46, 47, 48:
+	case 44, 45, 46, 47, 48, 49:
 	default:
 		if version <= 34 && !native {
 			return nil, nil

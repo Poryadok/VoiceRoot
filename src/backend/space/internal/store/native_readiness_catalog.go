@@ -60,18 +60,18 @@ func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version 
 	pins := append([]nativeReadinessFunctionPin(nil), nativeReadinessFunctionPins...)
 	helperCount := 1
 	privateTables := []string{"epoch", "spaces", "frames", "profiles"}
-	if version == 45 || version == 46 || (version == 47 || version == 48) {
+	if version == 45 || version == 46 || (version == 47 || (version == 48 || version == 49)) {
 		pins = append(pins, nativeReadinessLegacySelectionPin)
 		helperCount = 2
 	} else if version != 44 {
 		return ErrMemberAuthorityUnavailable
 	}
-	if version == 46 || (version == 47 || version == 48) {
+	if version == 46 || (version == 47 || (version == 48 || version == 49)) {
 		pins = append(pins, nativeReadinessGlobalRemovalPins...)
 		helperCount += 3 // Three exact public Bot wrappers; five new private functions.
 		privateTables = append(privateTables, "bot_terminals", "bot_removal_receipts", "catalog46_transition")
 	}
-	if version == 47 || version == 48 {
+	if version == 47 || (version == 48 || version == 49) {
 		// Replace only the authenticated old source_before body. Its unchanged
 		// function metadata and all other old pins remain mandatory.
 		for i := range pins {
@@ -84,7 +84,7 @@ func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version 
 		helperCount += 4 // Four new public terminal wrappers, five new private helpers.
 		privateTables = append(privateTables, "terminal_maintenance_scope", "catalog47_transition")
 	}
-	if version == 48 {
+	if version == 48 || version == 49 {
 		replaced := map[string]bool{"public.space_bot_native_terminal(uuid)": true, "native_membership_guard.bot_add_terminal_guard()": true, "public.space_bot_global_removal_record(uuid,uuid,bytea,uuid,uuid,uuid,uuid,bytea,bytea,bytea,uuid,bytea,timestamptz)": true}
 		filtered := make([]nativeReadinessFunctionPin, 0, len(pins))
 		for _, pin := range pins {
@@ -95,6 +95,11 @@ func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version 
 		pins = append(filtered, nativeReadinessMinimal48Pins...)
 		helperCount += 3
 		privateTables = append(privateTables, "bot_terminal_registrations", "bot_removal_receipts48", "catalog48_transition")
+	}
+	if version == 49 {
+		pins = append(pins, nativeReadinessPurgeChild49Pins...)
+		helperCount += 3
+		privateTables = append(privateTables, "bot_purge_children", "catalog49_transition")
 	}
 	var structure string
 	if err := tx.QueryRow(ctx, nativeReadinessStructureSQL).Scan(&structure); err != nil {
@@ -201,7 +206,7 @@ func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version 
   AND t.tgtype=19 AND t.tgfoid='public.guard_join_start_selection_immutable()'::regprocedure)`).Scan(&valid); err != nil || !valid {
 		return ErrMemberAuthorityUnavailable
 	}
-	if version == 45 || version == 46 || (version == 47 || version == 48) {
+	if version == 45 || version == 46 || (version == 47 || (version == 48 || version == 49)) {
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid='public.space_join_operations'::regclass
  AND t.tgname='space_join_legacy_selection_immutable' AND t.tgenabled='O' AND NOT t.tgdeferrable AND NOT t.tginitdeferred
  AND NOT t.tgisinternal AND t.tgtype=19 AND t.tgnargs=0 AND t.tgargs=''::bytea
@@ -209,18 +214,23 @@ func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version 
 			return ErrMemberAuthorityUnavailable
 		}
 	}
-	if version == 46 || (version == 47 || version == 48) {
+	if version == 46 || (version == 47 || (version == 48 || version == 49)) {
 		if err := checkNativeGlobalRemoval46Triggers(ctx, tx); err != nil {
 			return err
 		}
 	}
-	if version == 47 || version == 48 {
+	if version == 47 || (version == 48 || version == 49) {
 		if err := checkNativeTerminal47Triggers(ctx, tx); err != nil {
 			return err
 		}
 	}
-	if version == 48 {
+	if version == 48 || version == 49 {
 		if err := checkNativeMinimal48Triggers(ctx, tx); err != nil {
+			return err
+		}
+	}
+	if version == 49 {
+		if err := checkNativePurgeChild49Triggers(ctx, tx); err != nil {
 			return err
 		}
 	}

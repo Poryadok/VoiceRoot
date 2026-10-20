@@ -86,6 +86,9 @@ func requestBinding(value proto.Message) (InstallationBinding, string, error) {
 
 func (v Verifier) Unary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, value any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if info != nil && info.FullMethod == spacev1.SpaceService_ReconcileBotPurgeInstallation_FullMethodName {
+			return v.verifyPurgeInstallation(ctx, value, handler)
+		}
 		if info != nil && info.FullMethod == spacev1.SpaceService_RegisterBotGlobalTerminal_FullMethodName {
 			return v.verifyGlobalTerminal(ctx, value, handler)
 		}
@@ -177,6 +180,9 @@ func RequireRemove(ctx context.Context, request *spacev1.RemoveBotMemberRequest)
 
 func OrdinaryUnary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if info != nil && info.FullMethod == spacev1.SpaceService_ReconcileBotPurgeInstallation_FullMethodName {
+			return nil, status.Error(codes.PermissionDenied, "protected Bot membership listener required")
+		}
 		if info != nil && (info.FullMethod == spacev1.SpaceService_RegisterBotGlobalTerminal_FullMethodName || info.FullMethod == spacev1.SpaceService_GetBotPurgeHandoff_FullMethodName || info.FullMethod == spacev1.SpaceService_AddBotMember_FullMethodName || info.FullMethod == spacev1.SpaceService_RemoveBotMember_FullMethodName || info.FullMethod == spacev1.SpaceService_ApplyBotInstallationRemoval_FullMethodName) {
 			return nil, status.Error(codes.PermissionDenied, "protected Bot membership listener required")
 		}

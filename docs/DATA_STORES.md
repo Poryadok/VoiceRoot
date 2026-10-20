@@ -482,3 +482,17 @@ a retention clock nor borrows Space P3/account deletion authority. A trusted
 known46 projection creates an actual new minimal receipt without erasing old
 proof or fabricating full replay after evidence loss. Unknown old provenance
 cannot be adopted by a schema upgrade or a supplied UUID.
+
+### Space native P3 child evidence
+
+Forward49 `native_membership_guard.bot_purge_children` stores the exact own P3
+child operation, native cancellation request, typed result and first effect
+time. It has no live-Space/source foreign key: actual current11 Space DELETE
+preserves the child and records the exact parent's FIRST aggregate PURGED time.
+The child is private coordinator evidence, not a participant or global fence.
+An exact legitimate pending parent has no expiry yet. Full child disclosure
+ends strictly at DBtime >= FIRST parent PURGED+30d; fixed cleanup physically
+erases the entire row, personal bytes/digests and replay mapping. Parent
+compaction/expiry cannot strand the child. No permanent compact personal child
+record, new TTL or old46 global erasure trigger is introduced.
+`catalog49_transition` retains only fixed installer/migration/catalog evidence.

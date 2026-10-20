@@ -553,6 +553,16 @@ class SpaceServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// Exact own irreversible P3 decision authorizes this native-only drain.
+  $grpc.ResponseFuture<$1.ReconcileBotPurgeInstallationResponse>
+      reconcileBotPurgeInstallation(
+    $1.ReconcileBotPurgeInstallationRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$reconcileBotPurgeInstallation, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$getMemberAdmissionAuthority = $grpc.ClientMethod<
@@ -887,6 +897,12 @@ class SpaceServiceClient extends $grpc.Client {
       '/voice.space.v1.SpaceService/RegisterBotGlobalTerminal',
       ($1.RegisterBotGlobalTerminalRequest value) => value.writeToBuffer(),
       $1.RegisterBotGlobalTerminalResponse.fromBuffer);
+  static final _$reconcileBotPurgeInstallation = $grpc.ClientMethod<
+          $1.ReconcileBotPurgeInstallationRequest,
+          $1.ReconcileBotPurgeInstallationResponse>(
+      '/voice.space.v1.SpaceService/ReconcileBotPurgeInstallation',
+      ($1.ReconcileBotPurgeInstallationRequest value) => value.writeToBuffer(),
+      $1.ReconcileBotPurgeInstallationResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.space.v1.SpaceService')
@@ -1462,6 +1478,16 @@ abstract class SpaceServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $1.RegisterBotGlobalTerminalRequest.fromBuffer(value),
         ($1.RegisterBotGlobalTerminalResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.ReconcileBotPurgeInstallationRequest,
+            $1.ReconcileBotPurgeInstallationResponse>(
+        'ReconcileBotPurgeInstallation',
+        reconcileBotPurgeInstallation_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $1.ReconcileBotPurgeInstallationRequest.fromBuffer(value),
+        ($1.ReconcileBotPurgeInstallationResponse value) =>
+            value.writeToBuffer()));
   }
 
   $async.Future<$0.GetMemberAdmissionAuthorityResponse>
@@ -2034,4 +2060,16 @@ abstract class SpaceServiceBase extends $grpc.Service {
 
   $async.Future<$1.RegisterBotGlobalTerminalResponse> registerBotGlobalTerminal(
       $grpc.ServiceCall call, $1.RegisterBotGlobalTerminalRequest request);
+
+  $async.Future<$1.ReconcileBotPurgeInstallationResponse>
+      reconcileBotPurgeInstallation_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$1.ReconcileBotPurgeInstallationRequest>
+              $request) async {
+    return reconcileBotPurgeInstallation($call, await $request);
+  }
+
+  $async.Future<$1.ReconcileBotPurgeInstallationResponse>
+      reconcileBotPurgeInstallation($grpc.ServiceCall call,
+          $1.ReconcileBotPurgeInstallationRequest request);
 }

@@ -135,6 +135,28 @@ final $typed_data.Uint8List botGlobalTerminalOutcomeDescriptor = $convert.base64
     '1FX1VOU1BFQ0lGSUVEEAASOQo1Qk9UX0dMT0JBTF9URVJNSU5BTF9PVVRDT01FX0dMT0JBTF9O'
     'QVRJVkVfQUREU19GRU5DRUQQAQ==');
 
+@$core.Deprecated('Use botPurgeInstallationDispositionDescriptor instead')
+const BotPurgeInstallationDisposition$json = {
+  '1': 'BotPurgeInstallationDisposition',
+  '2': [
+    {'1': 'BOT_PURGE_INSTALLATION_DISPOSITION_UNSPECIFIED', '2': 0},
+    {'1': 'BOT_PURGE_INSTALLATION_DISPOSITION_NATIVE_CANCELED', '2': 1},
+    {'1': 'BOT_PURGE_INSTALLATION_DISPOSITION_NATIVE_ALREADY_CANCELED', '2': 2},
+    {
+      '1': 'BOT_PURGE_INSTALLATION_DISPOSITION_NATIVE_NEGATIVE_INTENT_FENCED',
+      '2': 3
+    },
+  ],
+};
+
+/// Descriptor for `BotPurgeInstallationDisposition`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List botPurgeInstallationDispositionDescriptor = $convert.base64Decode(
+    'Ch9Cb3RQdXJnZUluc3RhbGxhdGlvbkRpc3Bvc2l0aW9uEjIKLkJPVF9QVVJHRV9JTlNUQUxMQV'
+    'RJT05fRElTUE9TSVRJT05fVU5TUEVDSUZJRUQQABI2CjJCT1RfUFVSR0VfSU5TVEFMTEFUSU9O'
+    'X0RJU1BPU0lUSU9OX05BVElWRV9DQU5DRUxFRBABEj4KOkJPVF9QVVJHRV9JTlNUQUxMQVRJT0'
+    '5fRElTUE9TSVRJT05fTkFUSVZFX0FMUkVBRFlfQ0FOQ0VMRUQQAhJECkBCT1RfUFVSR0VfSU5T'
+    'VEFMTEFUSU9OX0RJU1BPU0lUSU9OX05BVElWRV9ORUdBVElWRV9JTlRFTlRfRkVOQ0VEEAM=');
+
 @$core.Deprecated('Use getBotPurgeHandoffRequestDescriptor instead')
 const GetBotPurgeHandoffRequest$json = {
   '1': 'GetBotPurgeHandoffRequest',
@@ -4169,3 +4191,144 @@ final $typed_data.Uint8List registerBotGlobalTerminalResponseDescriptor =
     $convert.base64Decode(
         'CiFSZWdpc3RlckJvdEdsb2JhbFRlcm1pbmFsUmVzcG9uc2USQgoHcmVjZWlwdBgBIAEoCzIoLn'
         'ZvaWNlLnNwYWNlLnYxLkJvdEdsb2JhbFRlcm1pbmFsUmVjZWlwdFIHcmVjZWlwdA==');
+
+@$core.Deprecated('Use reconcileBotPurgeInstallationRequestDescriptor instead')
+const ReconcileBotPurgeInstallationRequest$json = {
+  '1': 'ReconcileBotPurgeInstallationRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'space_id', '3': 3, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'generation', '3': 5, '4': 1, '5': 4, '10': 'generation'},
+    {
+      '1': 'manifest',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.ManifestBinding',
+      '10': 'manifest'
+    },
+    {'1': 'bot_id', '3': 7, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'installation_id', '3': 8, '4': 1, '5': 9, '10': 'installationId'},
+    {
+      '1': 'native_cancellation',
+      '3': 9,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.RemoveBotMemberRequest',
+      '10': 'nativeCancellation'
+    },
+  ],
+  '9': [
+    {'1': 10, '2': 11},
+  ],
+};
+
+/// Descriptor for `ReconcileBotPurgeInstallationRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List reconcileBotPurgeInstallationRequestDescriptor = $convert.base64Decode(
+    'CiRSZWNvbmNpbGVCb3RQdXJnZUluc3RhbGxhdGlvblJlcXVlc3QSKQoQcHJvdG9jb2xfdmVyc2'
+    'lvbhgBIAEoDVIPcHJvdG9jb2xWZXJzaW9uEiEKDG9wZXJhdGlvbl9pZBgCIAEoCVILb3BlcmF0'
+    'aW9uSWQSGQoIc3BhY2VfaWQYAyABKAlSB3NwYWNlSWQSMgoVZGVsZXRpb25fb3BlcmF0aW9uX2'
+    'lkGAQgASgJUhNkZWxldGlvbk9wZXJhdGlvbklkEh4KCmdlbmVyYXRpb24YBSABKARSCmdlbmVy'
+    'YXRpb24SPAoIbWFuaWZlc3QYBiABKAsyIC52b2ljZS5jb21tb24udjEuTWFuaWZlc3RCaW5kaW'
+    '5nUghtYW5pZmVzdBIVCgZib3RfaWQYByABKAlSBWJvdElkEicKD2luc3RhbGxhdGlvbl9pZBgI'
+    'IAEoCVIOaW5zdGFsbGF0aW9uSWQSVwoTbmF0aXZlX2NhbmNlbGxhdGlvbhgJIAEoCzImLnZvaW'
+    'NlLnNwYWNlLnYxLlJlbW92ZUJvdE1lbWJlclJlcXVlc3RSEm5hdGl2ZUNhbmNlbGxhdGlvbkoE'
+    'CAoQCw==');
+
+@$core.Deprecated('Use botPurgeInstallationReceiptDescriptor instead')
+const BotPurgeInstallationReceipt$json = {
+  '1': 'BotPurgeInstallationReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'request_sha256', '3': 4, '4': 1, '5': 12, '10': 'requestSha256'},
+    {'1': 'space_id', '3': 5, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'generation', '3': 7, '4': 1, '5': 4, '10': 'generation'},
+    {
+      '1': 'manifest',
+      '3': 8,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.ManifestBinding',
+      '10': 'manifest'
+    },
+    {'1': 'bot_id', '3': 9, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'installation_id', '3': 10, '4': 1, '5': 9, '10': 'installationId'},
+    {
+      '1': 'native_cancellation',
+      '3': 11,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.RemoveBotMemberRequest',
+      '10': 'nativeCancellation'
+    },
+    {
+      '1': 'disposition',
+      '3': 12,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.space.v1.BotPurgeInstallationDisposition',
+      '10': 'disposition'
+    },
+    {
+      '1': 'completed_at',
+      '3': 13,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'completedAt'
+    },
+  ],
+};
+
+/// Descriptor for `BotPurgeInstallationReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botPurgeInstallationReceiptDescriptor = $convert.base64Decode(
+    'ChtCb3RQdXJnZUluc3RhbGxhdGlvblJlY2VpcHQSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDV'
+    'IPcHJvdG9jb2xWZXJzaW9uEh0KCnJlY2VpcHRfaWQYAiABKAlSCXJlY2VpcHRJZBIhCgxvcGVy'
+    'YXRpb25faWQYAyABKAlSC29wZXJhdGlvbklkEiUKDnJlcXVlc3Rfc2hhMjU2GAQgASgMUg1yZX'
+    'F1ZXN0U2hhMjU2EhkKCHNwYWNlX2lkGAUgASgJUgdzcGFjZUlkEjIKFWRlbGV0aW9uX29wZXJh'
+    'dGlvbl9pZBgGIAEoCVITZGVsZXRpb25PcGVyYXRpb25JZBIeCgpnZW5lcmF0aW9uGAcgASgEUg'
+    'pnZW5lcmF0aW9uEjwKCG1hbmlmZXN0GAggASgLMiAudm9pY2UuY29tbW9uLnYxLk1hbmlmZXN0'
+    'QmluZGluZ1IIbWFuaWZlc3QSFQoGYm90X2lkGAkgASgJUgVib3RJZBInCg9pbnN0YWxsYXRpb2'
+    '5faWQYCiABKAlSDmluc3RhbGxhdGlvbklkElcKE25hdGl2ZV9jYW5jZWxsYXRpb24YCyABKAsy'
+    'Ji52b2ljZS5zcGFjZS52MS5SZW1vdmVCb3RNZW1iZXJSZXF1ZXN0UhJuYXRpdmVDYW5jZWxsYX'
+    'Rpb24SUQoLZGlzcG9zaXRpb24YDCABKA4yLy52b2ljZS5zcGFjZS52MS5Cb3RQdXJnZUluc3Rh'
+    'bGxhdGlvbkRpc3Bvc2l0aW9uUgtkaXNwb3NpdGlvbhI9Cgxjb21wbGV0ZWRfYXQYDSABKAsyGi'
+    '5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUgtjb21wbGV0ZWRBdA==');
+
+@$core.Deprecated('Use reconcileBotPurgeInstallationResponseDescriptor instead')
+const ReconcileBotPurgeInstallationResponse$json = {
+  '1': 'ReconcileBotPurgeInstallationResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.BotPurgeInstallationReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `ReconcileBotPurgeInstallationResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List reconcileBotPurgeInstallationResponseDescriptor =
+    $convert.base64Decode(
+        'CiVSZWNvbmNpbGVCb3RQdXJnZUluc3RhbGxhdGlvblJlc3BvbnNlEkUKB3JlY2VpcHQYASABKA'
+        'syKy52b2ljZS5zcGFjZS52MS5Cb3RQdXJnZUluc3RhbGxhdGlvblJlY2VpcHRSB3JlY2VpcHQ=');

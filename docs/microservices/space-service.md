@@ -1839,3 +1839,42 @@ remain unresolved; Space P3 deadlines are not substitutes. Neither the new
 minimal result nor a digest can reconstruct erased old full evidence or claim
 its historical actor/body equality. The separate P3-native drain remains a
 different contract from this terminal registration.
+
+### Native Bot installation drain under the own P3 decision
+
+`ReconcileBotPurgeInstallation` is a separate pure-Bot method on the protected
+membership listener. Its signed full request binds a distinct child operation,
+Space/deletion operation/P3 generation/manifest and the exact original native
+`RemoveBotMemberRequest`. P3 generation is independent of Bot installation
+generation. The outer operation cannot reuse the deletion, Add or cancellation
+operation. Ordinary Add/Remove retain their existing LIVE-only checks.
+
+A fresh effect requires Space's own saved irreversible PURGING decision,
+accepted Auth deletion evidence and individual COMPLETE typed Role retirement.
+The Bot participant need not be complete. Space validates the exact native
+journal source, captures/finalizes the full guarded cohort and atomically saves
+its own typed result. A valid absent native attempt may receive only an actual
+negative-intent fence; an unrelated pre-journal source remains unavailable.
+The result distinguishes cancellation, already-canceled adoption and negative
+intent fencing. It proves neither legacy cleanup nor global Bot completion.
+
+Forward49 adds protected child evidence independent of the live Space and
+installation tables. The actual current11 terminal DELETE records the parent's
+FIRST aggregate completion on each child. Fresh signed exact replay validates
+the saved request/result, parent binding, current fixed catalog and serving
+credentials; it never repeats the effect or consults a destroyed live source.
+Before aggregate completion the exact legitimate pending parent is required.
+At DBtime >= FIRST aggregate PURGED+30d full replay is unavailable even before
+cleanup. Cleanup removes the entire child row, including personal wire bodies,
+hashes and replay mapping; there is no permanent compact child identity/hash.
+Fixed parent compaction/expiry also performs this erasure atomically, and
+refuses to strand an unexpired or unqualified child. The child is not a twelfth
+participant and introduces no retention clock for old46 global evidence.
+
+The trusted49 installer qualifies exact PG16/18 structure, function bodies,
+triggers and ACLs plus the admitted48 chain and unchanged old projection before
+an epoch CAS. Projection deparsing uses the same fixed search path as the
+catalog function; serving source reads retain their separate safe path. SQL
+installation alone does not authorize serving. Old44–48 migration bytes stay
+unchanged; unknown provenance and future schemas remain unavailable. DOWN
+requires RC before locks and refuses any retained child or activation.

@@ -144,6 +144,8 @@ service SpaceService {
   // Minimal all-Add fence from Bot's committed verified-owner global root.
   // @voice.security=protected;callers=service:bot
   rpc RegisterBotGlobalTerminal(RegisterBotGlobalTerminalRequest) returns (RegisterBotGlobalTerminalResponse);
+  // Exact own irreversible P3 decision authorizes this native-only drain.
+  rpc ReconcileBotPurgeInstallation(ReconcileBotPurgeInstallationRequest) returns (ReconcileBotPurgeInstallationResponse);
 }
 
 // @voice.unknown_fields=reject
@@ -1177,4 +1179,49 @@ message BotGlobalTerminalReceipt {
 
 message RegisterBotGlobalTerminalResponse {
   BotGlobalTerminalReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+message ReconcileBotPurgeInstallationRequest {
+  uint32 protocol_version = 1;
+  string operation_id = 2; // stable P3 child; exact signed request_id
+  string space_id = 3;
+  string deletion_operation_id = 4;
+  uint64 generation = 5; // Space P3 generation, not Bot installation generation
+  voice.common.v1.ManifestBinding manifest = 6;
+  string bot_id = 7;
+  string installation_id = 8;
+  // Preserve actual original Add/cancel/installation/actor/Bot generation.
+  RemoveBotMemberRequest native_cancellation = 9;
+  reserved 10; // legacy stays explicitly uncovered; no invented native identity
+}
+
+enum BotPurgeInstallationDisposition {
+  BOT_PURGE_INSTALLATION_DISPOSITION_UNSPECIFIED = 0;
+  BOT_PURGE_INSTALLATION_DISPOSITION_NATIVE_CANCELED = 1;
+  BOT_PURGE_INSTALLATION_DISPOSITION_NATIVE_ALREADY_CANCELED = 2;
+  BOT_PURGE_INSTALLATION_DISPOSITION_NATIVE_NEGATIVE_INTENT_FENCED = 3;
+}
+
+// Own exact P3-native result, independent of global Bot terminal fences.
+// Same-body replay retains the first receipt/time under the existing Space P3
+// full-evidence window. Empty ACK or missing source is never this receipt.
+message BotPurgeInstallationReceipt {
+  uint32 protocol_version = 1;
+  string receipt_id = 2;
+  string operation_id = 3;
+  bytes request_sha256 = 4; // RAW SHA256(deterministic FULL request)
+  string space_id = 5;
+  string deletion_operation_id = 6;
+  uint64 generation = 7;
+  voice.common.v1.ManifestBinding manifest = 8;
+  string bot_id = 9;
+  string installation_id = 10;
+  RemoveBotMemberRequest native_cancellation = 11;
+  BotPurgeInstallationDisposition disposition = 12;
+  google.protobuf.Timestamp completed_at = 13; // original first effect time
+}
+
+message ReconcileBotPurgeInstallationResponse {
+  BotPurgeInstallationReceipt receipt = 1;
 }

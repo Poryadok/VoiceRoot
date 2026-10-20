@@ -12915,6 +12915,460 @@ class RegisterBotGlobalTerminalResponse extends $pb.GeneratedMessage {
   BotGlobalTerminalReceipt ensureReceipt() => $_ensure(0);
 }
 
+/// @voice.unknown_fields=reject
+class ReconcileBotPurgeInstallationRequest extends $pb.GeneratedMessage {
+  factory ReconcileBotPurgeInstallationRequest({
+    $core.int? protocolVersion,
+    $core.String? operationId,
+    $core.String? spaceId,
+    $core.String? deletionOperationId,
+    $fixnum.Int64? generation,
+    $2.ManifestBinding? manifest,
+    $core.String? botId,
+    $core.String? installationId,
+    RemoveBotMemberRequest? nativeCancellation,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (operationId != null) result.operationId = operationId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (deletionOperationId != null)
+      result.deletionOperationId = deletionOperationId;
+    if (generation != null) result.generation = generation;
+    if (manifest != null) result.manifest = manifest;
+    if (botId != null) result.botId = botId;
+    if (installationId != null) result.installationId = installationId;
+    if (nativeCancellation != null)
+      result.nativeCancellation = nativeCancellation;
+    return result;
+  }
+
+  ReconcileBotPurgeInstallationRequest._();
+
+  factory ReconcileBotPurgeInstallationRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ReconcileBotPurgeInstallationRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ReconcileBotPurgeInstallationRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..aOS(3, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(4, _omitFieldNames ? '' : 'deletionOperationId')
+    ..a<$fixnum.Int64>(
+        5, _omitFieldNames ? '' : 'generation', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOM<$2.ManifestBinding>(6, _omitFieldNames ? '' : 'manifest',
+        subBuilder: $2.ManifestBinding.create)
+    ..aOS(7, _omitFieldNames ? '' : 'botId')
+    ..aOS(8, _omitFieldNames ? '' : 'installationId')
+    ..aOM<RemoveBotMemberRequest>(
+        9, _omitFieldNames ? '' : 'nativeCancellation',
+        subBuilder: RemoveBotMemberRequest.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReconcileBotPurgeInstallationRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReconcileBotPurgeInstallationRequest copyWith(
+          void Function(ReconcileBotPurgeInstallationRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as ReconcileBotPurgeInstallationRequest))
+          as ReconcileBotPurgeInstallationRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ReconcileBotPurgeInstallationRequest create() =>
+      ReconcileBotPurgeInstallationRequest._();
+  @$core.override
+  ReconcileBotPurgeInstallationRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ReconcileBotPurgeInstallationRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ReconcileBotPurgeInstallationRequest>(create);
+  static ReconcileBotPurgeInstallationRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get spaceId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set spaceId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSpaceId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSpaceId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get deletionOperationId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set deletionOperationId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasDeletionOperationId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearDeletionOperationId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $fixnum.Int64 get generation => $_getI64(4);
+  @$pb.TagNumber(5)
+  set generation($fixnum.Int64 value) => $_setInt64(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasGeneration() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearGeneration() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $2.ManifestBinding get manifest => $_getN(5);
+  @$pb.TagNumber(6)
+  set manifest($2.ManifestBinding value) => $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasManifest() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearManifest() => $_clearField(6);
+  @$pb.TagNumber(6)
+  $2.ManifestBinding ensureManifest() => $_ensure(5);
+
+  @$pb.TagNumber(7)
+  $core.String get botId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set botId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasBotId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearBotId() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.String get installationId => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set installationId($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasInstallationId() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearInstallationId() => $_clearField(8);
+
+  /// Preserve actual original Add/cancel/installation/actor/Bot generation.
+  @$pb.TagNumber(9)
+  RemoveBotMemberRequest get nativeCancellation => $_getN(8);
+  @$pb.TagNumber(9)
+  set nativeCancellation(RemoveBotMemberRequest value) => $_setField(9, value);
+  @$pb.TagNumber(9)
+  $core.bool hasNativeCancellation() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearNativeCancellation() => $_clearField(9);
+  @$pb.TagNumber(9)
+  RemoveBotMemberRequest ensureNativeCancellation() => $_ensure(8);
+}
+
+/// Own exact P3-native result, independent of global Bot terminal fences.
+/// Same-body replay retains the first receipt/time under the existing Space P3
+/// full-evidence window. Empty ACK or missing source is never this receipt.
+class BotPurgeInstallationReceipt extends $pb.GeneratedMessage {
+  factory BotPurgeInstallationReceipt({
+    $core.int? protocolVersion,
+    $core.String? receiptId,
+    $core.String? operationId,
+    $core.List<$core.int>? requestSha256,
+    $core.String? spaceId,
+    $core.String? deletionOperationId,
+    $fixnum.Int64? generation,
+    $2.ManifestBinding? manifest,
+    $core.String? botId,
+    $core.String? installationId,
+    RemoveBotMemberRequest? nativeCancellation,
+    BotPurgeInstallationDisposition? disposition,
+    $4.Timestamp? completedAt,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (receiptId != null) result.receiptId = receiptId;
+    if (operationId != null) result.operationId = operationId;
+    if (requestSha256 != null) result.requestSha256 = requestSha256;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (deletionOperationId != null)
+      result.deletionOperationId = deletionOperationId;
+    if (generation != null) result.generation = generation;
+    if (manifest != null) result.manifest = manifest;
+    if (botId != null) result.botId = botId;
+    if (installationId != null) result.installationId = installationId;
+    if (nativeCancellation != null)
+      result.nativeCancellation = nativeCancellation;
+    if (disposition != null) result.disposition = disposition;
+    if (completedAt != null) result.completedAt = completedAt;
+    return result;
+  }
+
+  BotPurgeInstallationReceipt._();
+
+  factory BotPurgeInstallationReceipt.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory BotPurgeInstallationReceipt.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'BotPurgeInstallationReceipt',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
+    ..a<$core.List<$core.int>>(
+        4, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
+    ..aOS(5, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(6, _omitFieldNames ? '' : 'deletionOperationId')
+    ..a<$fixnum.Int64>(
+        7, _omitFieldNames ? '' : 'generation', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOM<$2.ManifestBinding>(8, _omitFieldNames ? '' : 'manifest',
+        subBuilder: $2.ManifestBinding.create)
+    ..aOS(9, _omitFieldNames ? '' : 'botId')
+    ..aOS(10, _omitFieldNames ? '' : 'installationId')
+    ..aOM<RemoveBotMemberRequest>(
+        11, _omitFieldNames ? '' : 'nativeCancellation',
+        subBuilder: RemoveBotMemberRequest.create)
+    ..aE<BotPurgeInstallationDisposition>(
+        12, _omitFieldNames ? '' : 'disposition',
+        enumValues: BotPurgeInstallationDisposition.values)
+    ..aOM<$4.Timestamp>(13, _omitFieldNames ? '' : 'completedAt',
+        subBuilder: $4.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  BotPurgeInstallationReceipt clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  BotPurgeInstallationReceipt copyWith(
+          void Function(BotPurgeInstallationReceipt) updates) =>
+      super.copyWith(
+              (message) => updates(message as BotPurgeInstallationReceipt))
+          as BotPurgeInstallationReceipt;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static BotPurgeInstallationReceipt create() =>
+      BotPurgeInstallationReceipt._();
+  @$core.override
+  BotPurgeInstallationReceipt createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static BotPurgeInstallationReceipt getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<BotPurgeInstallationReceipt>(create);
+  static BotPurgeInstallationReceipt? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get receiptId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set receiptId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReceiptId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReceiptId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.List<$core.int> get requestSha256 => $_getN(3);
+  @$pb.TagNumber(4)
+  set requestSha256($core.List<$core.int> value) => $_setBytes(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasRequestSha256() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearRequestSha256() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get spaceId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set spaceId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasSpaceId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearSpaceId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get deletionOperationId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set deletionOperationId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasDeletionOperationId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearDeletionOperationId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $fixnum.Int64 get generation => $_getI64(6);
+  @$pb.TagNumber(7)
+  set generation($fixnum.Int64 value) => $_setInt64(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasGeneration() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearGeneration() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $2.ManifestBinding get manifest => $_getN(7);
+  @$pb.TagNumber(8)
+  set manifest($2.ManifestBinding value) => $_setField(8, value);
+  @$pb.TagNumber(8)
+  $core.bool hasManifest() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearManifest() => $_clearField(8);
+  @$pb.TagNumber(8)
+  $2.ManifestBinding ensureManifest() => $_ensure(7);
+
+  @$pb.TagNumber(9)
+  $core.String get botId => $_getSZ(8);
+  @$pb.TagNumber(9)
+  set botId($core.String value) => $_setString(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasBotId() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearBotId() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $core.String get installationId => $_getSZ(9);
+  @$pb.TagNumber(10)
+  set installationId($core.String value) => $_setString(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasInstallationId() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearInstallationId() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  RemoveBotMemberRequest get nativeCancellation => $_getN(10);
+  @$pb.TagNumber(11)
+  set nativeCancellation(RemoveBotMemberRequest value) => $_setField(11, value);
+  @$pb.TagNumber(11)
+  $core.bool hasNativeCancellation() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearNativeCancellation() => $_clearField(11);
+  @$pb.TagNumber(11)
+  RemoveBotMemberRequest ensureNativeCancellation() => $_ensure(10);
+
+  @$pb.TagNumber(12)
+  BotPurgeInstallationDisposition get disposition => $_getN(11);
+  @$pb.TagNumber(12)
+  set disposition(BotPurgeInstallationDisposition value) =>
+      $_setField(12, value);
+  @$pb.TagNumber(12)
+  $core.bool hasDisposition() => $_has(11);
+  @$pb.TagNumber(12)
+  void clearDisposition() => $_clearField(12);
+
+  @$pb.TagNumber(13)
+  $4.Timestamp get completedAt => $_getN(12);
+  @$pb.TagNumber(13)
+  set completedAt($4.Timestamp value) => $_setField(13, value);
+  @$pb.TagNumber(13)
+  $core.bool hasCompletedAt() => $_has(12);
+  @$pb.TagNumber(13)
+  void clearCompletedAt() => $_clearField(13);
+  @$pb.TagNumber(13)
+  $4.Timestamp ensureCompletedAt() => $_ensure(12);
+}
+
+class ReconcileBotPurgeInstallationResponse extends $pb.GeneratedMessage {
+  factory ReconcileBotPurgeInstallationResponse({
+    BotPurgeInstallationReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  ReconcileBotPurgeInstallationResponse._();
+
+  factory ReconcileBotPurgeInstallationResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ReconcileBotPurgeInstallationResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ReconcileBotPurgeInstallationResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<BotPurgeInstallationReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: BotPurgeInstallationReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReconcileBotPurgeInstallationResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReconcileBotPurgeInstallationResponse copyWith(
+          void Function(ReconcileBotPurgeInstallationResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ReconcileBotPurgeInstallationResponse))
+          as ReconcileBotPurgeInstallationResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ReconcileBotPurgeInstallationResponse create() =>
+      ReconcileBotPurgeInstallationResponse._();
+  @$core.override
+  ReconcileBotPurgeInstallationResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ReconcileBotPurgeInstallationResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ReconcileBotPurgeInstallationResponse>(create);
+  static ReconcileBotPurgeInstallationResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  BotPurgeInstallationReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt(BotPurgeInstallationReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  BotPurgeInstallationReceipt ensureReceipt() => $_ensure(0);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

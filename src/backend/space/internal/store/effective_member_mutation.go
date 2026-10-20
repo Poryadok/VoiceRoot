@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	spacev1 "voice.app/voice/space/v1"
+	"voice/backend/space/internal/botmembershipprincipal"
 )
 
 type effectiveMemberMutation struct {
@@ -28,6 +29,7 @@ type effectiveMemberMutations struct {
 	purpose           effectiveMutationPurpose
 	recoveryOperation uuid.UUID
 	recoveryHash      [32]byte
+	purgeBinding      *botmembershipprincipal.PurgeInstallationBinding
 	used              bool
 }
 
@@ -39,6 +41,7 @@ const (
 	effectiveMutationCommunityRecoveryReservation
 	effectiveMutationCommunityRecoveryCompletion
 	effectiveMutationLifecycleMaintenance
+	effectiveMutationNativeP3Child
 )
 
 // Only the Creator's already verified, preallocated new identity enters here.
@@ -52,7 +55,7 @@ func (s *SpaceStore) captureBornCreatorEffectiveMutation(ctx context.Context, sp
 		return nil, err
 	}
 	version, err := s.memberDecisionSchema(ctx)
-	if err != nil || (version != 44 && version != 45 && version != 46 && version != 47 && version != 48) {
+	if err != nil || (version != 44 && version != 45 && version != 46 && version != 47 && (version != 48 && version != 49)) {
 		return nil, ErrEffectiveEpisodeUnavailable
 	}
 	parts := make([]string, 0, len(nativeMembershipGuardCoverage))
@@ -127,7 +130,7 @@ func (s *SpaceStore) effectiveMutationStorageScope(ctx context.Context, space uu
 		return ErrEffectiveEpisodeUnavailable
 	}
 	var version int64
-	if err := s.tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || (version != 41 && version != 42 && version != 44 && version != 45 && version != 46 && version != 47 && version != 48) {
+	if err := s.tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || (version != 41 && version != 42 && version != 44 && version != 45 && version != 46 && version != 47 && (version != 48 && version != 49)) {
 		return ErrEffectiveEpisodeUnavailable
 	}
 	return nil
@@ -158,7 +161,7 @@ func (s *SpaceStore) captureLifecyclePurgeMutation(ctx context.Context, space uu
 	switch version {
 	case 39, 40, 41, 42, 43:
 		return nil, nil // preserved pre-DB-frame terminal protocol
-	case 44, 45, 46, 47, 48:
+	case 44, 45, 46, 47, 48, 49:
 	default:
 		if version <= 34 && !native {
 			return nil, nil
@@ -259,7 +262,7 @@ func (s *SpaceStore) captureEffectiveMemberMutationFacts(ctx context.Context, sp
 	if err != nil {
 		return nil, ErrEffectiveEpisodeUnavailable
 	}
-	if len(profiles) == 0 && (version != 44 && version != 45 && version != 46 && version != 47 && version != 48) {
+	if len(profiles) == 0 && (version != 44 && version != 45 && version != 46 && version != 47 && (version != 48 && version != 49)) {
 		return nil, ErrEffectiveEpisodeUnavailable
 	}
 	for _, p := range profiles {
@@ -269,7 +272,7 @@ func (s *SpaceStore) captureEffectiveMemberMutationFacts(ctx context.Context, sp
 	}
 	profiles = normalizedOwnershipSpaceIDs(profiles)
 	capture := &effectiveMemberMutations{tx: s.tx, space: space}
-	if version == 44 || version == 45 || (version == 46 || (version == 47 || version == 48)) {
+	if version == 44 || version == 45 || (version == 46 || (version == 47 || (version == 48 || version == 49))) {
 		capture.dbMutation, err = s.beginNativeMembershipDBMutation(ctx, space, profiles)
 		if err != nil {
 			return nil, err
@@ -340,6 +343,11 @@ func (s *SpaceStore) finishEffectiveMemberMutations(ctx context.Context, capture
 		scopeErr = s.communityRecoveryMutationScope(ctx, capture)
 	case effectiveMutationLifecycleMaintenance:
 		scopeErr = s.lifecycleMaintenanceMutationScope(ctx, capture.space)
+	case effectiveMutationNativeP3Child:
+		if capture.purgeBinding == nil {
+			return ErrEffectiveEpisodeUnavailable
+		}
+		scopeErr = s.nativeP3ChildMutationScope(ctx, capture.space, *capture.purgeBinding)
 	default:
 		return ErrEffectiveEpisodeUnavailable
 	}

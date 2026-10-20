@@ -38,7 +38,7 @@ func (s *SpaceStore) RegisterBotGlobalTerminal(ctx context.Context, proof *botme
 		return nil, err
 	}
 	var version int64
-	if err = tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || version != 48 {
+	if err = tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || (version != 48 && version != 49) {
 		return nil, ErrMemberAuthorityUnavailable
 	}
 	var receipt uuid.UUID

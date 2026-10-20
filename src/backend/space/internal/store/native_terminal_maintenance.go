@@ -101,6 +101,18 @@ func (s *SpaceStore) cleanupLifecycleSpace47(ctx context.Context, space uuid.UUI
 	scoped.tx = tx
 	var capture *effectiveMemberMutations
 	if terminal {
+		var version int64
+		if err = tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil {
+			return err
+		}
+		if version == 49 {
+			// Child evidence shares the parent's first PURGED+30d deadline.
+			// Erase its complete row before the fixed parent compaction removes
+			// full coordinator evidence, in this same fenced transaction.
+			if _, err = tx.Exec(ctx, `SELECT public.space_bot_purge_child_expire($1)`, space); err != nil {
+				return err
+			}
+		}
 		for _, query := range []string{
 			`SELECT public.space_native_terminal_compact($1)`,
 			`SELECT public.space_native_terminal_expire_events($1)`,
@@ -157,7 +169,7 @@ func (s *SpaceStore) markTerminalLifecycleEventDelivered(ctx context.Context, tx
 	if err := tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil {
 		return true, err
 	}
-	if version != 47 && version != 48 {
+	if version != 47 && (version != 48 && version != 49) {
 		// Preserve historical44/45/46 replay and its existing fail-closed FIRST
 		// behavior. This forward helper does not reinterpret those schemas.
 		if version == 44 || version == 45 || version == 46 {
