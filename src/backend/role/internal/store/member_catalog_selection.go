@@ -17,6 +17,9 @@ func qualifiedRoleCatalog(version int64) (authoritysource.Catalog, error) {
 		// typed contributions through the same guarded native21 Role clocks.
 		// Consequently state2 facts/fold stay unchanged, with mandatory25 guards.
 		return roleBotRemovalCatalog25, nil
+	case 26:
+		// The minimal Bot terminal predicate grants no membership or mask.
+		return roleBotGlobalTerminalCatalog26, nil
 	default:
 		return authoritysource.Catalog{}, ErrScopeUnavailable
 	}

@@ -30,6 +30,16 @@ func (s *RoleStore) checkBotRemovalCatalog(ctx context.Context) error {
 	if s == nil || s.tx == nil {
 		return ErrScopeUnavailable
 	}
+	var version int64
+	if err := s.tx.QueryRow(ctx, "SELECT version FROM public.schema_migrations WHERE NOT dirty").Scan(&version); err != nil {
+		return fmt.Errorf("%w: Bot cleanup catalog", ErrScopeUnavailable)
+	}
+	if version == 26 {
+		return s.checkBotGlobalTerminalCatalog(ctx)
+	}
+	if version != 25 {
+		return ErrScopeUnavailable
+	}
 	if err := authoritysource.CheckCatalog(ctx, s.tx, roleBotRemovalCatalog25); err != nil {
 		return fmt.Errorf("%w: Bot cleanup catalog: %w", ErrScopeUnavailable, err)
 	}
