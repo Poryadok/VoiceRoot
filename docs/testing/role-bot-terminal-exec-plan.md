@@ -33,6 +33,24 @@ produced RED5.051s (unique root, extra column/guard/default); exact columns,
 constraints/indexes/default/trigger-set qualification closed them: PG/race48.986s.
 No new function was created: new statement guard uses immutable25 INVOKER body.
 Reviewed247 d8b39 wire was imported as exactly11 canonical/generated files only.
-Final combined source/forward-failure/module verification remains the next proof.
+Actual nonowner native-role positive then source-registration26 exposed a
+separate selector defect (RED5.611s): preflight selected state1. Exact26 now
+selects existing state2; state1 remains unavailable. Final coherent PG/race
+43.027s passes source2/native mask parity plus ACL/shape/UP/DOWN/oldRR/concurrency
+controls. Principal/race1.027s and signed mTLS dispatch/race1.412s pass; complete
+Role short suite, vet and build exit0. Executed backend manifests before/after
+match the immutable f0dcc79 archive. Transport uses a recording handler and
+miniredis: it proves dispatch/body/replay, not actual root receipt persistence.
+Earlier final-short stale test failures and no-Docker harness failure remain in
+the proof packet; they are not relabelled successful runs.
+
+Cross-table old25/new26 SAMEdecision/differentBot is a separately identified
+contract/implementation gate: per-Bot locks and intra-table UNIQUE alone do not
+serialize it. 251 is freezing an existing-operation-lock-set ruling. No new
+lock-helper or writer-cohort scope is silently added in this producer stage.
+Root receiver and writer participation remain unavailable until that agreement
+and actual44 implementation are composed and tested. Graphify AST extraction
+completed but update stalled afterwards; only own verified process chain was
+terminated, so no graph update PASS is claimed.
 Actual44 handler/kernel and actual247 zero-Space receiver composition remain
 separate; neither current Role20 nor unsupported BotActor paths are activated.
