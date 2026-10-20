@@ -197,8 +197,8 @@ func TestNativeP3ChildTypedEffectBeforeBotReceipt(t *testing.T) {
 		})
 	}
 	// Hold an actual native source row after the child has acquired its own
-	// operation/Space authority. The original private credential must expire
-	// before this SQL wait is released; every effect and child row rolls back.
+	// operation/Space authority. This expires the DB five-second mutation
+	// horizon, not the independent default thirty-second service JWT.
 	blocker, err := db.Pool.Begin(ctx)
 	require.NoError(t, err)
 	defer blocker.Rollback(ctx)
@@ -283,9 +283,39 @@ func TestNativeP3ChildTypedEffectBeforeBotReceipt(t *testing.T) {
 	// Freeze only this test PostgreSQL process clock before the real owner
 	// samples FIRST aggregate completion. No product timestamps are rewritten.
 	setNativeTerminalDBTime(t, admin, time.Now().UTC().Add(2*time.Second).Truncate(time.Second))
-	purged, err := serving.FinalizeLifecyclePurge(ctx, space.ID, testLifecycleHasher{})
+	waitQueued := func(pid int32, count int) {
+		t.Helper()
+		var queued int
+		for until := time.Now().Add(3 * time.Second); time.Now().Before(until); {
+			require.NoError(t, db.Pool.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity w WHERE $1=ANY(pg_blocking_pids(w.pid)) OR EXISTS(
+ SELECT 1 FROM pg_stat_activity b WHERE b.pid=ANY(pg_blocking_pids(w.pid)) AND $1=ANY(pg_blocking_pids(b.pid)))`, pid).Scan(&queued))
+			if queued >= count {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		require.GreaterOrEqual(t, queued, count, "observe actual direct/queued Space-fence waiters")
+	}
+	finalizeBlocker, err := db.Pool.Begin(ctx)
 	require.NoError(t, err)
-	require.Equal(t, spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_PURGED, purged.Phase())
+	defer finalizeBlocker.Rollback(ctx)
+	require.NoError(t, lockLifecycleSpace(ctx, finalizeBlocker, space.ID))
+	var finalizePID int32
+	require.NoError(t, finalizeBlocker.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&finalizePID))
+	finalized := make(chan error, 1)
+	go func() {
+		_, err := serving.FinalizeLifecyclePurge(ctx, space.ID, testLifecycleHasher{})
+		finalized <- err
+	}()
+	waitQueued(finalizePID, 1)
+	replayed := make(chan outcome, 1)
+	go func() { r, e := childCall(child); replayed <- outcome{r, e} }()
+	waitQueued(finalizePID, 2)
+	require.NoError(t, finalizeBlocker.Rollback(ctx))
+	require.NoError(t, <-finalized)
+	concurrentReplay := <-replayed
+	require.NoError(t, concurrentReplay.err)
+	require.True(t, proto.Equal(receipt, concurrentReplay.receipt), "queued replay survives actual finalization without live/source lookup")
 	var deadline time.Time
 	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT parent_completed_at+interval '30 days' FROM native_membership_guard.bot_purge_children WHERE operation_id=$1`, child.OperationId).Scan(&deadline))
 	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM public.spaces WHERE id=$1)
@@ -319,7 +349,21 @@ func TestNativeP3ChildTypedEffectBeforeBotReceipt(t *testing.T) {
 	var compacted bool
 	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT evidence_compacted FROM public.space_lifecycle_aggregates WHERE space_id=$1`, space.ID).Scan(&compacted))
 	require.False(t, compacted, "child erase and parent compaction roll back together")
-	require.NoError(t, serving.CleanupLifecycleEvidence(ctx))
+	expiryBlocker, err := serving.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	require.NoError(t, err)
+	defer expiryBlocker.Rollback(ctx)
+	require.NoError(t, lockLifecycleSpace(ctx, expiryBlocker, space.ID))
+	var expiryPID int32
+	require.NoError(t, expiryBlocker.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&expiryPID))
+	go func() { r, e := childCall(child); replayed <- outcome{r, e} }()
+	waitQueued(expiryPID, 1)
+	cleaned := make(chan error, 1)
+	go func() { cleaned <- serving.CleanupLifecycleEvidence(ctx) }()
+	waitQueued(expiryPID, 2)
+	require.NoError(t, expiryBlocker.Rollback(ctx))
+	expiredReplay := <-replayed
+	require.ErrorIs(t, expiredReplay.err, ErrMemberAuthorityUnavailable, "concurrent deadline replay never discloses expired full evidence")
+	require.NoError(t, <-cleaned)
 	var remaining int
 	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT count(*) FROM native_membership_guard.bot_purge_children WHERE space_id=$1 OR operation_id=$2`, space.ID, child.OperationId).Scan(&remaining))
 	require.Zero(t, remaining, "normal lifecycle cleanup must erase all child personal bytes, digests and replay mappings")
