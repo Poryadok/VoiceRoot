@@ -250,10 +250,42 @@ func (p *terminalProvider) assertClosedWriters(bot string) {
 	}
 }
 
-// This is the original broad require.Error predicate, extracted so the finite
-// oracle regression below discriminates the review finding before correction.
+// An authentication error proves replay denial only with live transport and an
+// unexpired original token. Other failures are not equivalent evidence.
 func terminalReplayOracle(ctx context.Context, expires time.Time, err error) bool {
-	return err != nil
+	return ctx.Err() == nil && time.Now().Before(expires) && status.Code(err) == codes.Unauthenticated
+}
+
+func (p *terminalProvider) assertOriginalReplay(original context.Context, req *rolev1.RegisterBotGlobalTerminalRequest, phase string) {
+	md, ok := metadata.FromOutgoingContext(original)
+	require.True(p.t, ok)
+	values := md.Get("authorization")
+	require.True(p.t, len(values) == 1)
+	parts := strings.Split(strings.TrimPrefix(values[0], "Bearer "), ".")
+	require.True(p.t, len(parts) == 3, "own previously accepted JWT must have three parts")
+	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
+	require.NoError(p.t, err)
+	var temporal struct {
+		Issued    int64 `json:"iat"`
+		NotBefore int64 `json:"nbf"`
+		Expires   int64 `json:"exp"`
+	}
+	require.NoError(p.t, json.Unmarshal(raw, &temporal))
+	expires := time.Unix(temporal.Expires, 0)
+	require.LessOrEqual(p.t, temporal.Issued, time.Now().Unix())
+	require.LessOrEqual(p.t, temporal.NotBefore, time.Now().Unix())
+	require.True(p.t, time.Until(expires) > 5*time.Second, "same accepted token must still be temporally valid before replay")
+	// Copy the exact original JWT/request metadata, but NEVER inherit its first
+	// RPC deadline. The owning provider context has the independent test budget.
+	ctx, cancel := context.WithTimeout(metadata.NewOutgoingContext(p.ctx, md.Copy()), 2*time.Second)
+	defer cancel()
+	require.NoError(p.t, ctx.Err())
+	_, err = p.client.RegisterBotGlobalTerminal(ctx, req)
+	require.NoError(p.t, ctx.Err(), "transport context must remain live after replay response")
+	require.True(p.t, time.Until(expires) > 5*time.Second, "token expiry cannot explain replay response")
+	require.Equal(p.t, codes.Unauthenticated, status.Code(err))
+	require.True(p.t, terminalReplayOracle(ctx, expires, err))
+	p.t.Logf("original-JWT replay %s: code=%s context_live=true token_valid_remaining_gt5s=true", phase, status.Code(err))
 }
 
 func TestTerminalReplayOracleBoundary(t *testing.T) {
@@ -282,13 +314,11 @@ func TestRoleBotTerminalActualProvider(t *testing.T) {
 	first, err := p.client.RegisterBotGlobalTerminal(callCtx, req)
 	require.NoError(t, err)
 	p.assertReceipt(req, first)
-	_, err = p.client.RegisterBotGlobalTerminal(callCtx, req)
-	require.Error(t, err, "same JWT must not replay")
+	p.assertOriginalReplay(callCtx, req, "before restart")
 	require.True(t, proto.Equal(first, p.register(req)), "fresh transport retry returns original durable receipt")
 	p.stop()
 	p.start()
-	_, err = p.client.RegisterBotGlobalTerminal(callCtx, req)
-	require.Error(t, err, "original JWT stays spent across service restart through actual Redis")
+	p.assertOriginalReplay(callCtx, req, "after restart")
 	require.True(t, proto.Equal(first, p.register(req)), "same database and real Redis survive service reinstantiation")
 	for _, r := range []*rolev1.RegisterBotGlobalTerminalRequest{{ProtocolVersion: 1, BotId: uuid.NewString(), DecisionId: req.DecisionId}, {ProtocolVersion: 1, BotId: req.BotId, DecisionId: uuid.NewString()}} {
 		_, err = p.client.RegisterBotGlobalTerminal(p.signed(r, method, r.DecisionId, "bot"), r)
