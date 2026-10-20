@@ -650,6 +650,74 @@ def build_3071_J_ready(state, prefix):
         qualification='HOLD',admission=False,runtime_pass=False)
 
 
+def qualified_J_native_normalization(value, events, before, name, actual_map, prior, incoming, after):
+    """Reconstruct the existing clean-zero shell transition, never a new grant."""
+    previous=None
+    for sequence,event in enumerate(events,1):
+        body=dict(event);digest=body.pop('digest',None)
+        require(event.get('schema')==SCHEMA and event.get('sequence')==sequence
+            and event.get('previous')==previous and sha(canonical(body))==digest,'fixed3071_J_native_append_only_trace')
+        previous=digest
+    require(before['frame']==value['frame'] and before['operation']==value['operation']
+        and events[before['sequence']-1]==before,'fixed3071_J_native_pending_frame')
+    tail=events[before['sequence']:]
+    require(len(tail)==1 and tail[0]['kind']=='native_rebind_gate'
+        and tail[0]['frame']==before['frame'] and tail[0]['operation']==before['operation'],'fixed3071_J_native_exact_pending_gate')
+    gate=tail[0]['payload'];operation=value['operation_binding']
+    require(prior and gate['path']==name and gate['gate']=='native_p3_duplicate_owner_qualified'
+        and type(gate['status']) is int and gate['status']==0 and gate['outcome'] in ('clean','guarded_conflict')
+        and gate['classifier']==classifier_binding(),'fixed3071_J_native_original_clean_zero')
+    require([gate[k] for k in ('prior_owner','prior_source','current_owner','current_source','integration')]
+        ==[row(prior[-1])[2],row(prior[-1])[5],incoming[2],incoming[5],operation['commit']],
+        'fixed3071_J_native_exact_owner_source_arguments')
+    parents=git(ROOT,'rev-list','--parents','-n','1',J3071).decode().split()
+    require(parents==[J3071,J3071_P1,J3071_P2] and operation['commit']==J3071
+        and operation['first_parent']==J3071_P1 and operation['source_head']==J3071_P2 and operation['boundary']==J3071_O
+        and incoming[3]==parents[1] and incoming[4:6]==[J3071_O,J3071_P2]
+        and incoming[7]==','.join(operation['candidates']) and after[4:6]==[parents[1],parents[0]],'fixed3071_J_native_immutable_parent_normalization')
+    # Fold actual already-conserved J transitions from the sealed initial map.
+    # A rehashed pending map cannot erase or reorder unrelated retained rows.
+    current=list(value['outer_rows']);receipts={}
+    for event in events:
+        if event['sequence']>=before['sequence']:break
+        # Prefix bytes may use noncanonical whitespace. Its last sequence is
+        # determined by its already-verified raw byte seal by the caller.
+        if event['sequence']<=value['_prefix_events']:continue
+        if event['frame']!=value['frame']:continue
+        payload=event['payload'];path=payload.get('path')
+        if event['kind']=='range_J_ledger_conserved':
+            receipt=payload['receipt']
+            require(event['operation']==value['operation'] and receipt['ledger_sha256']==value['_ledger_sha256']
+                and receipt['map_before']==file_digest((''.join(x+'\n' for x in current)).encode()),'fixed3071_J_native_prior_conservation')
+            receipts[path]=receipt
+        elif event['kind']=='row_remove':
+            require(path in receipts and receipts[path]['transition']=='replace'
+                and payload['row']==receipts[path]['after_gate_row'],'fixed3071_J_native_prior_exact_remove')
+            current=[x for x in current if x.split('\t')[0]!=path]
+        elif event['kind']=='row_committed':
+            require(path in receipts and payload['row']==receipts[path]['after_gate_row'],'fixed3071_J_native_prior_exact_commit')
+            row(payload['row']);current.append(payload['row']['raw'])
+            require(payload['map_after']==receipts[path]['expected_post_map']==file_digest((''.join(x+'\n' for x in current)).encode()),'fixed3071_J_native_prior_postmap')
+            del receipts[path]
+    require(not receipts and actual_map==(''.join(x+'\n' for x in current)).encode(),'fixed3071_J_native_complete_current_map')
+    binding=gate['binding'];require(binding==raw_binding(binding['raw']),'fixed3071_J_native_binding_raw_hash')
+    require(events[0]['kind']=='master_entry' and events[0]['payload']['native_binding']==binding
+        and events[0]['payload']['context']==gate['context'],'fixed3071_J_native_original_master_context')
+    spec=importlib.util.spec_from_file_location('f54_J_native_rebind',ROOT/'scripts/ci/f13_native_p3_source.py')
+    native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
+    bound=json.loads(binding['raw']);context=gate['context']
+    try:
+        qualified=native.qualify(ROOT,bound['base'],bound['source'],bound['target'],context['GITHUB_EVENT_NAME'],
+            context['GITHUB_REF'],context['GITHUB_SHA'],context['VOICE_CI_PUSH_BEFORE_SHA'],context['GITHUB_BASE_REF'])
+    except native.Rejected as error:raise Rejected('fixed3071_J_native_authority_'+str(error)) from error
+    require(qualified==bound and bound['target']==git(ROOT,'rev-parse','HEAD').decode().strip()
+        and name in bound['paths'],'fixed3071_J_native_independent_current_authority')
+    for candidate in (gate['prior_owner'],gate['prior_source'],gate['current_owner'],gate['current_source'],gate['integration']):
+        git(ROOT,'merge-base','--is-ancestor',candidate,bound['snapshot'])
+    require(tree_entry(ROOT,J3071,name)==tree_entry(ROOT,bound['snapshot'],name),'fixed3071_J_native_actual_snapshot_restoration')
+    return dict(event_digest=tail[0]['digest'],binding_sha256=binding['sha256'],normalized_source=after[4:6])
+
+
 def consume_3071_J_path(ready_path, expected_sha, trace_path, name, actual_map, after_raw, transition):
     raw=Path(ready_path).read_bytes();require(sha(raw)==expected_sha,'fixed3071_J_complete_ledger_raw_hash')
     value=json.loads(raw);require(value['type']=='F54_FIXED3071_ACTUAL_J_COMPLETE_LEDGER' and value['admission'] is False,'fixed3071_J_distinct_ledger_type')
@@ -668,12 +736,18 @@ def consume_3071_J_path(ready_path, expected_sha, trace_path, name, actual_map, 
     rows=actual_map.decode().splitlines();prior=[raw_binding(x) for x in rows if x.split('\t')[0]==name]
     require(prior==before['payload']['prior_rows'] and prior==[raw_binding(x) for x in value['outer_rows'] if x.split('\t')[0]==name],'fixed3071_J_all_original_prior_rows')
     incoming=row(before['payload']['incoming']);after=row(raw_binding(after_raw))
-    require(incoming[2]==J3071 and all(after[i]==incoming[i] for i in (0,2,3,4,5,6,7)),'fixed3071_J_no_owner_source_content_rebind')
+    require(incoming[2]==J3071 and all(after[i]==incoming[i] for i in (0,2,3,6,7)),'fixed3071_J_no_owner_source_content_rebind')
+    normalization=None
+    if after[4:6]!=incoming[4:6]:
+        require(transition=='replace','fixed3071_J_native_normalization_requires_existing_owner')
+        native_value=dict(value,_prefix_events=len(trace[:prefix['bytes']].splitlines()),_ledger_sha256=sha(canonical(value)))
+        normalization=qualified_J_native_normalization(native_value,events,before,name,actual_map,prior,incoming,after)
     aggregate=value['required_qualification'][name]['aggregate'] or any(row(x)[1]=='true' for x in prior) or incoming[1]=='true' or after[1]=='true'
     require(transition in ('append','replace') and (transition!='replace' or prior),'fixed3071_J_actual_transition')
     require((transition=='append' and after==incoming) or (transition=='replace' and (after[1]==incoming[1] or (after[1]=='true' and aggregate))),'fixed3071_J_raw_append_conserved_reduction')
     output=([x for x in rows if x.split('\t')[0]!=name] if transition=='replace' else rows)+[after_raw]
     return dict(path=name,ledger_sha256=sha(canonical(value)),incoming=before['payload']['incoming'],after_gate_row=raw_binding(after_raw),
+        **(dict(native_normalization=normalization) if normalization else {}),
         prior_rows=prior,map_before=file_digest(actual_map),transition=transition,expected_post_map=file_digest(('\n'.join(output)+'\n').encode()),
         aggregate=aggregate,obligations=value['required_qualification'][name],policy_result=None,admission=False)
 

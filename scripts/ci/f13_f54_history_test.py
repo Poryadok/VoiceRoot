@@ -27,6 +27,114 @@ def module():
 
 
 class ProducerTrace(unittest.TestCase):
+    def test_J_consumer_accepts_only_independently_qualified_native_normalization(self):
+        # Private Git authority and an actual original shell predicate call.
+        # The transport below is a fixture, never appended to production trace.
+        import copy
+        from f13_native_p3_source_test import NativeSourceTest, native
+        fixture=NativeSourceTest();fixture.setUp();self.addCleanup(fixture.doCleanups)
+        old=fixture.head
+        fixture.git('checkout','-q',old);fixture.write('private-first-parent.md','first parent\n')
+        fixture.commit('private first parent');first=fixture.git('rev-parse','HEAD')
+        integration=fixture.git('commit-tree',first+'^{tree}','-p',first,'-p',old,'-m','private J integration')
+        fixture.git('checkout','-q',integration)
+        fixture.head=integration;fixture.record_data['source']=integration;fixture.pin()
+        # Independent qualifier reads these committed private constants itself.
+        text=Path(native.__file__).read_text()
+        for key,value in fixture.pins.items():
+            text=re.sub(r'(?m)^'+key+r' = .*$',key+' = '+repr(value),text)
+        fixture.write(native.VERIFIER_PATH,text)
+        fixture.write('scripts/ci/voice-r22-runtime-scope.sh',(ROOT/'scripts/ci/voice-r22-runtime-scope.sh').read_text())
+        fixture.commit('private pinned authority carrier');fixture.carrier=fixture.git('rev-parse','HEAD')
+        spec=importlib.util.spec_from_file_location('private_J_native',fixture.repo/native.VERIFIER_PATH)
+        authority=importlib.util.module_from_spec(spec);spec.loader.exec_module(authority)
+        target=fixture.git('commit-tree',fixture.carrier+'^{tree}','-p',fixture.base,'-p',fixture.carrier,'-m','private master T')
+        fixture.git('checkout','-q',target)
+        context=dict(GITHUB_EVENT_NAME='pull_request',GITHUB_REF='refs/pull/875/merge',
+            GITHUB_SHA=target,VOICE_CI_PUSH_BEFORE_SHA=fixture.base,GITHUB_BASE_REF='master')
+        binding=authority.qualify(fixture.repo,fixture.base,fixture.carrier,target,
+            context['GITHUB_EVENT_NAME'],context['GITHUB_REF'],target,fixture.base,'master')
+        m=module();m.ROOT=fixture.repo;m.J3071=integration;m.J3071_P1=first;m.J3071_P2=old;m.J3071_O=fixture.base
+        name=RUNTIME;frame='private-J';op=frame+'/'+integration+'/2'
+        prior='\t'.join([name,'true',old,fixture.base,fixture.base,old,fixture.base,fixture.base])
+        incoming='\t'.join([name,'false',integration,first,fixture.base,old,fixture.base,fixture.base])
+        after=incoming.split('\t');after[4:6]=[first,integration];after='\t'.join(after)
+        other='\t'.join([PROTO,'false',old,fixture.base,fixture.base,old,fixture.base,fixture.base])
+        actual=(prior+'\n'+other+'\n').encode();empty=m.file_digest(b'')
+        operation=dict(commit=integration,first_parent=first,source_head=old,boundary=fixture.base,
+            candidates=[fixture.base],paths=[name],classification='merge')
+        state=dict(frame=frame,operation=op,operation_binding=operation,classification=dict(trigger='false'),
+            capability_sha256='private-Git-fixture',frame_ancestry=[],coverage=[],M_ready={},I_ready={},composition={},
+            ledger={frame:dict(map_binding=m.file_digest(actual),rows=[prior,other],paths={name:dict(aggregate=True,evidence=[m.raw_binding(prior)]),
+                PROTO:dict(aggregate=False,evidence=[m.raw_binding(other)])})},
+            prior_span=dict(ledger=dict(paths={},rows=[],map_binding=empty),trace_sha256=m.sha(b''),actual_operations=[]))
+        before=dict(kind='row_before',frame=frame,operation=op,sequence=2,
+            payload=dict(path=name,map_before=m.file_digest(actual),prior_rows=[m.raw_binding(prior)],incoming=m.raw_binding(incoming)))
+        paths=self.folder/'private-native-paths';paths.write_text('\n'.join(binding['paths'])+'\n')
+        bound=self.folder/'private-native-binding';bound.write_bytes(m.canonical(binding))
+        functions=definitions()+'\n'+'\n'.join(x.group(0) for x in re.finditer(
+            r'(?ms)^([A-Za-z_][A-Za-z0-9_]*)\(\) \{\n.*?^\}\n',SHELL.read_text())
+            if x.group(1) in ('native_p3_path_bound','native_p3_duplicate_owner_qualified'))
+        values=dict(ROOT=str(fixture.repo),native_p3_active='true',native_p3_snapshot=integration,
+            native_p3_paths=str(paths),native_p3_binding=str(bound),native_p3_paths_hash=fixture.git('hash-object',str(paths)),
+            native_p3_binding_hash=fixture.git('hash-object',str(bound)))
+        program=functions+'\n'+'\n'.join(k+'='+shlex.quote(v) for k,v in values.items())+'\n'
+        program+='native_p3_duplicate_owner_qualified '+ ' '.join(map(shlex.quote,[str(fixture.repo),name,old,old,integration,old,integration,'clean']))+'\n'
+        status=subprocess.run(['bash','-c',program],capture_output=True)
+        self.assertEqual(status.returncode,0,status.stderr)
+        gate=dict(kind='native_rebind_gate',frame=frame,operation=op,sequence=3,payload=dict(path=name,
+            gate='native_p3_duplicate_owner_qualified',status=status.returncode,outcome='clean',prior_owner=old,prior_source=old,
+            current_owner=integration,current_source=old,integration=integration,binding=m.raw_binding(bound.read_bytes()),
+            classifier=m.classifier_binding(),context=context))
+        # Only master transport is constructed; all native authority/Git/gate
+        # checks below run genuinely under this explicitly private ROOT.
+        def encode(event,sequence,previous):
+            event=copy.deepcopy(event);event.update(schema=m.SCHEMA,sequence=sequence,previous=previous)
+            event.pop('digest',None);event['digest']=m.sha(m.canonical(event))
+            return m.canonical(event)+b'\n',event['digest']
+        prefix,first_digest=encode(dict(kind='master_entry',frame=None,operation=None,
+            payload=dict(native_binding=m.raw_binding(bound.read_bytes()),context=context)),1,None)
+        ready=m.build_3071_J_ready(state,m.file_digest(prefix))
+        ledger=self.folder/'private-J-native-ledger';ledger.write_bytes(m.canonical(ready))
+        trace=self.folder/'private-J-native-trace'
+        def consume(event=gate,final=after,current=actual,value=ready,pending=before):
+            ledger.write_bytes(m.canonical(value))
+            pending_raw,digest=encode(pending,2,first_digest)
+            trace.write_bytes(prefix+pending_raw+(encode(event,3,digest)[0] if event else b''))
+            return m.consume_3071_J_path(ledger,m.sha(ledger.read_bytes()),trace,name,current,final,'replace')
+        result=consume()
+        self.assertTrue(result['aggregate']);self.assertEqual(result['prior_rows'],[m.raw_binding(prior)])
+        self.assertEqual(result['incoming'],m.raw_binding(incoming));self.assertEqual(result['after_gate_row'],m.raw_binding(after))
+        self.assertEqual(result['expected_post_map'],m.file_digest((other+'\n'+after+'\n').encode()))
+        for error in ('missing','failed','status2','foreign-frame','foreign-operation','foreign-path','binding-rehashed',
+                      'foreign-prior','foreign-source','foreign-owner','content','map','map-rehashed','map-reorder-rehashed',
+                      'after-source','after-base','after-owner','after-parent','after-candidates','context','classifier','drop-prior-true'):
+            event=copy.deepcopy(gate);final=after;current=actual;value=copy.deepcopy(ready);pending=copy.deepcopy(before)
+            if error=='missing':event=None
+            elif error in ('failed','status2'):event['payload']['status']=1 if error=='failed' else 2
+            elif error=='foreign-frame':event['frame']='foreign'
+            elif error=='foreign-operation':event['operation']='foreign/'+integration+'/2'
+            elif error=='foreign-path':event['payload']['path']=PROTO
+            elif error=='binding-rehashed':
+                forged=copy.deepcopy(binding);forged['paths']=[];event['payload']['binding']=m.raw_binding(m.canonical(forged))
+            elif error=='foreign-prior':event['payload']['prior_owner']=fixture.base
+            elif error=='foreign-source':event['payload']['current_source']=fixture.base
+            elif error=='foreign-owner':event['payload']['current_owner']=old
+            elif error=='content':
+                parts=final.split('\t');parts[6]=old;final='\t'.join(parts)
+            elif error=='map':current=actual+actual
+            elif error in ('map-rehashed','map-reorder-rehashed'):
+                current=(prior+'\n').encode() if error=='map-rehashed' else (other+'\n'+prior+'\n').encode()
+                pending['payload']['map_before']=m.file_digest(current)
+            elif error.startswith('after-'):
+                index={'after-source':5,'after-base':4,'after-owner':2,'after-parent':3,'after-candidates':7}[error]
+                parts=final.split('\t');parts[index]=old if error=='after-candidates' else fixture.base;final='\t'.join(parts)
+            elif error=='context':event['payload']['context']['GITHUB_REF']='refs/pull/876/merge'
+            elif error=='classifier':event['payload']['classifier']['sha256']='0'*64
+            else:value['outer_rows']=[]
+            with self.subTest(error=error),self.assertRaises((m.Rejected,authority.Rejected)):
+                consume(event,final,current,value,pending)
+
     def test_manual_result_full33_spec_preserves_real_parent_rows_and_disjoint_edges(self):
         # Explicit value-constructor fixture, not an executed producer ledger.
         # Immutable Git establishes the full residual and content identities.

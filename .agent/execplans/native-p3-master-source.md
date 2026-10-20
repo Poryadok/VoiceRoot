@@ -536,3 +536,35 @@ finite fixture evidence; the new helper still requires frozen-source review and
 read-only actual-input revalidation before any changed-input producer. Offline
 reconstructed receipts are not appended to old traces or called producer events.
 Actual J mutation/fullcollection/router/RK/currentcandidate remain HOLD.
+
+## J native clean-zero consumer repair (e215)
+
+Basis: intake REQUEST bc83f8eb and RAW-GAP-CONTRACT-416-ADDENDUM
+52c006ec, actual8581 terminal c48/c51. Native gate10509 clean/status0
+qualifies the existing shell4380-4383 source normalization, but J consumer671
+compares the after tuple with the pre-gate tuple. Preserve that original FAIL.
+Developer416 owns the same four files under a fresh lease; current CI/MASTER121.
+
+Test first with a private real Git/native qualification and actual shell gate:
+legitimate normalization must reach conservation; missing/failed/status2 gate,
+foreign operation/frame/path, forged rehashed binding/owner/source/content,
+changed current map or lost prior true must reject. No trusted caller hash alone.
+Derive the normalized pair from immutable integration parents and independently
+qualified native snapshot, binding the pending row and original full ledger.
+Keep ordinary unchanged source transitions, raw prior rows, content and OR.
+Then run focused private Linux tests, affected history regressions and shell
+syntax, freeze normal source/bundle and finite proof for independent418 review.
+No producer/CI rerun or current-input/native record/pin/product authority here.
+
+Executed: the new real-Git/native predicate fixture first rejected with the
+original671 error after genuine native clean0. The final fixture against the
+immutable8581 helper also rejects that same semantic condition (log594b8137).
+Corrected focused fixture passes (7f0aa372), including rehashed foreign native
+binding, map omission/order, owner/source/content/parent/context/classifier and
+missing/failed/status2 gate negatives. The unchanged ordinary J append/OR tests
+remain included. Full affected history39 tests and shell syntax pass in private
+Linux116.562s (log89a4b36c); all executable source hashes stayed stable.
+AST comparison confirms only consume_3071_J_path changed, with one new bounded
+normalization verifier; all prior test methods and the shell remain unchanged.
+No actual successor producer, J-completion, collection/seal/router or current
+candidate qualification is claimed. Frozen source still needs independent418.
