@@ -22,7 +22,7 @@ func (r *Runtime) ServerOptions() []grpc.ServerOption {
 				}
 				return r.authoritySourceInterceptor(ctx, req, info, handler)
 			}
-			botRemoval := r.botLifecycleEnabled && info.FullMethod == rolev1.RoleService_ApplyBotInstallationRemoval_FullMethodName
+			botRemoval := r.botLifecycleEnabled && (info.FullMethod == rolev1.RoleService_ApplyBotInstallationRemoval_FullMethodName || info.FullMethod == rolev1.RoleService_RegisterBotGlobalTerminal_FullMethodName)
 			if !botRemoval && !isTrustedServiceMethod(info.FullMethod) && !principalgrpc.IsSpaceRoleRead(info.FullMethod) && !(r.delegatedUserEnabled && principalgrpc.IsDelegatedRoleMethod(info.FullMethod)) {
 				return nil, status.Error(codes.PermissionDenied, "method unavailable on trusted-service listener")
 			}

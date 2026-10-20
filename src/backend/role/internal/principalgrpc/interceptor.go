@@ -72,6 +72,15 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 				return nil, err
 			}
 		}
+		if info.FullMethod == rolev1.RoleService_RegisterBotGlobalTerminal_FullMethodName {
+			terminal, ok := message.(*rolev1.RegisterBotGlobalTerminalRequest)
+			if !ok {
+				return nil, status.Error(codes.InvalidArgument, "invalid Bot terminal request")
+			}
+			if err := RequireBotGlobalTerminal(principal.WithVerified(ctx, verified), terminal); err != nil {
+				return nil, err
+			}
+		}
 		if info.FullMethod == rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName || info.FullMethod == rolev1.RoleService_RemoveMemberRoles_FullMethodName {
 			if err := RequireMemberAdmission(principal.WithVerified(ctx, verified), message, info.FullMethod); err != nil {
 				return nil, err
@@ -142,7 +151,7 @@ func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 			}
 		}
 		switch info.FullMethod {
-		case rolev1.RoleService_ApplyBotInstallationRemoval_FullMethodName:
+		case rolev1.RoleService_ApplyBotInstallationRemoval_FullMethodName, rolev1.RoleService_RegisterBotGlobalTerminal_FullMethodName:
 			return nil, status.Error(codes.Unavailable, "protected Bot cleanup listener required")
 		case rolev1.RoleService_DeleteRolesCreatedByProfile_FullMethodName:
 			return nil, status.Error(codes.Unavailable, "protected Bot cleanup adapter required")

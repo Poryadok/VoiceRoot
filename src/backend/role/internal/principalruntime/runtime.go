@@ -270,7 +270,7 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash str
 	}
 	issuer := ""
 	switch method {
-	case rolev1.RoleService_ApplyBotInstallationRemoval_FullMethodName:
+	case rolev1.RoleService_ApplyBotInstallationRemoval_FullMethodName, rolev1.RoleService_RegisterBotGlobalTerminal_FullMethodName:
 		if r.botLifecycleEnabled {
 			issuer = "bot"
 		}
