@@ -63,7 +63,7 @@ func (s *RoleStore) CheckAuthoritySourceSchema(ctx context.Context) error {
 		return err
 	}
 	schema := uint32(authoritysource.SchemaVersion)
-	if version == 21 || version == 25 {
+	if version == 21 || version == 25 || version == 26 {
 		schema = authoritysource.QualifiedSchemaVersion
 	}
 	tx, err := beginRoleAuthorityReadSchema(ctx, s.Pool, schema)
