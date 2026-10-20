@@ -597,3 +597,18 @@ calls for an unqualified historical root. Shared private terminal persistence
 keeps fixed participant selection, typed validation, owned bytes, retained hashes
 and post-SQL-wait claim checks. Missing Role dependency is retryable Unavailable.
 These are controlled receiver tests, not actual Role26 or native48 serving proof.
+
+The separate minimal Space48 handoff now exercises real Bot PG014 accepted-root
+and local revocation through the production worker, signer and typed receipt CAS
+against immutable corrected Space48 source d667 plus provider0d5b. The actual
+private mTLS/HTTPS JWKS/Redis/PG18 receiver commits before a simulated lost ACK;
+a corrupted decision receipt is rejected, then a fresh credential recovers the
+stable own result. A fourth worker pass revalidates saved bytes without another
+Space RPC. The independent ROLE row stays PENDING and the root RETRY_WAIT.
+The provider independently checks the four-column minimal marker, stable RPC
+replay, and generation1/2 Add denial in different absent Spaces before lookup.
+Caller race8.745s and provider race32.525s pass without skips. This is zero-target
+fence evidence with controlled verified-owner admission, a manually configured
+equivalent mTLS client and service reinstantiation on the same Bot Pool. It does
+not prove public Gateway/Auth admission, actual Role26, per-Space cleanup, P3
+drain/retention or complete DeleteBot. No live provider handles are transferred.
