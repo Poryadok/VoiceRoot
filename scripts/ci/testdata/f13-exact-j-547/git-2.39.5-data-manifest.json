@@ -1,0 +1,41 @@
+{
+  "schema": "HISTORICAL_GIT_LOCAL_BUILTIN_ELF_CANDIDATE_v1",
+  "image": "sha256:989dfaaf76224d22919d5abeaa15b29e3acbf23c36b25497312ad2e79488757e",
+  "package": "git 1:2.39.5-0+deb12u3",
+  "files": [
+    {
+      "path": "bin/git",
+      "source": "/usr/bin/git",
+      "bytes": 3713416,
+      "sha256": "2540879925a6881e3877ff7e3330746ba3027b04edf16a3a12dccd1644c4f32d"
+    },
+    {
+      "path": "lib/libpcre2-8.so.0",
+      "source": "/usr/lib/x86_64-linux-gnu/libpcre2-8.so.0.11.2",
+      "bytes": 629384,
+      "sha256": "19c626251526131ac9340826c8f7bcb693c6ceb9d5da55919c3aa45d972b704f"
+    },
+    {
+      "path": "lib/libz.so.1",
+      "source": "/usr/lib/x86_64-linux-gnu/libz.so.1.2.13",
+      "bytes": 121280,
+      "sha256": "7e2a72b4c4b38c61e6962de6e3f4a5e9ae692e732c68deead10a7ce2135a7f68"
+    },
+    {
+      "path": "lib/libc.so.6",
+      "source": "/usr/lib/x86_64-linux-gnu/libc.so.6",
+      "bytes": 1926232,
+      "sha256": "6b4a45352fd0c540a9c7c718f35ce8c8e46a4e482f9d3885a910c32d1a0e1421"
+    },
+    {
+      "path": "lib/ld-linux-x86-64.so.2",
+      "source": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+      "bytes": 215000,
+      "sha256": "02bcda52c1a5dfc236f94d9e5255b4a0e26347d8a372a5223b650e31f291ce3c"
+    }
+  ],
+  "source_container": "ef5edd18028e419d1e79be60ebc93c7e32cc165a711c0b2768da00ab9620fe24",
+  "container_never_started": true,
+  "removed_without_force": true,
+  "scope": "Local Git builtins ELF candidate ONLY; no git-core external scripts/remote transports. Completeness for exact command inventory and namespace mounting requires independent review before harness modification/execution. No registry-origin attestation claimed; image local content ID and extracted file hashes are explicit."
+}
