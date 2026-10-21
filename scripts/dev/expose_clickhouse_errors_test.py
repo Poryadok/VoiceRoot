@@ -205,6 +205,77 @@ class ConsoleTests(unittest.TestCase):
         self.assertIsNotNone(client.lock)
         self.assertFalse(any(args[0] == 'delete' for args, _ in client.calls))
 
+    def test_replace_after_config_deletes_only_pinned_oom_pod_under_retained_lock(self):
+        client = Fake()
+        client.config['data'] = diagnostic.console_data()
+        client.lock = {'metadata': {'namespace': update_images.NS, 'name': update_images.LOCK,
+                                    'uid': 'retained-lock', 'resourceVersion': '22',
+                                    'labels': dict(update_images.LABELS)},
+                       'data': {'operation': 'retained-operation'}}
+        lock_pins = ('retained-lock', '22', 'retained-operation')
+        diagnostic.replace_after_config(client, PINS, lock_pins)
+        self.assertEqual(client.pod['metadata']['uid'], 'oom-pod')
+        self.assertEqual(client.lock['metadata']['uid'], 'retained-lock')
+        self.assertFalse(any(args[0] == 'patch' for args, _ in client.calls))
+        self.assertEqual(len([1 for args, _ in client.calls if args[0] == 'delete']), 1)
+        diagnostic.replace_after_config(client, PINS, lock_pins, apply=True)
+        self.assertEqual(client.pod['metadata']['uid'], 'recreated-pod')
+        self.assertEqual(client.lock['metadata']['uid'], 'retained-lock')
+        self.assertEqual(client.config['data'], diagnostic.console_data())
+        self.assertEqual(client.sts['metadata']['resourceVersion'], '14')
+        deletes = [(args, body) for args, body in client.calls if args[0] == 'delete']
+        self.assertEqual(len([1 for args, _ in deletes if 'dryRun=All' not in args[1]]), 1)
+        self.assertEqual(deletes[-1][1]['preconditions'], {'uid': 'oom-pod', 'resourceVersion': '18'})
+
+    def test_replace_after_config_rejects_lock_target_or_pod_drift(self):
+        lock_pins = ('retained-lock', '22', 'retained-operation')
+        for drift in ('lock_uid', 'lock_rv', 'lock_operation', 'config', 'pod', 'owner', 'ready'):
+            client = Fake()
+            client.config['data'] = diagnostic.console_data()
+            client.lock = {'metadata': {'namespace': update_images.NS, 'name': update_images.LOCK,
+                                        'uid': 'retained-lock', 'resourceVersion': '22',
+                                        'labels': dict(update_images.LABELS)},
+                           'data': {'operation': 'retained-operation'}}
+            if drift == 'lock_uid':
+                client.lock['metadata']['uid'] = 'foreign'
+            elif drift == 'lock_rv':
+                client.lock['metadata']['resourceVersion'] = 'foreign'
+            elif drift == 'lock_operation':
+                client.lock['data']['operation'] = 'foreign'
+            elif drift == 'config':
+                client.config['data'] = policy.clickhouse_memory_config()['data']
+            elif drift == 'pod':
+                client.pod['metadata']['uid'] = 'foreign'
+            elif drift == 'owner':
+                client.pod['metadata']['ownerReferences'][0]['uid'] = 'foreign'
+            else:
+                client.pod['status']['containerStatuses'][0]['ready'] = True
+            with self.subTest(drift=drift), self.assertRaises((RuntimeError, ValueError)):
+                diagnostic.replace_after_config(client, PINS, lock_pins, apply=True)
+            self.assertFalse(any(args[0] == 'delete' and 'dryRun=All' not in args[1]
+                                 for args, _ in client.calls))
+
+    def test_replace_after_config_stops_on_pod_rv_change_after_preview(self):
+        class Race(Fake):
+            def call(self, *args, body=None):
+                result = super().call(*args, body=body)
+                if args[0] == 'delete' and 'dryRun=All' in args[1]:
+                    self.pod['metadata']['resourceVersion'] = 'foreign'
+                return result
+        client = Race()
+        client.config['data'] = diagnostic.console_data()
+        client.lock = {'metadata': {'namespace': update_images.NS, 'name': update_images.LOCK,
+                                    'uid': 'retained-lock', 'resourceVersion': '22',
+                                    'labels': dict(update_images.LABELS)},
+                       'data': {'operation': 'retained-operation'}}
+        with self.assertRaises(RuntimeError):
+            diagnostic.replace_after_config(client, PINS,
+                                            ('retained-lock', '22', 'retained-operation'), apply=True)
+        self.assertEqual(client.pod['metadata']['uid'], 'oom-pod')
+        self.assertEqual(client.lock['metadata']['uid'], 'retained-lock')
+        self.assertFalse(any(args[0] == 'delete' and 'dryRun=All' not in args[1]
+                             for args, _ in client.calls))
+
 
 if __name__ == '__main__':
     unittest.main()

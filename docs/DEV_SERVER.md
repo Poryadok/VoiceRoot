@@ -123,6 +123,12 @@ ConfigMap, PVC/PV и quota, затем только CAS-обновляет су�
 Новый pod получит fragment лишь при следующем естественном пересоздании;
 сохранить lock и TT окно до readback логов и состояния, не считать патч
 исправлением OOM.
+Если старый pod с `subPath` остаётся после обновления ConfigMap, отдельный
+`--replace-after-config` проверяет UID/RV/operation сохранённого updater lock,
+текущую console-конфигурацию, exact OOM pod/owner/revision, PVC/PV и quota.
+После server dry-run он делает graceful DELETE только pod с UID/RV preconditions;
+ConfigMap/StatefulSet/lock не изменяет. После появления нового pod немедленно
+сверить stdout и те же PVC/PV, сохраняя окно и lock при сомнительном результате.
 
 Четыре независимых static PV имеют storage class `voice-dev-local` и reclaim
 policy `Retain`:

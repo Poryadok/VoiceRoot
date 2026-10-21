@@ -6,7 +6,9 @@ CAS-patches the existing policy ConfigMap. The default mode also gracefully
 deletes only the pinned OOM pod with UID/resourceVersion preconditions.
 --config-only never reads or deletes a Pod; a later natural replacement consumes
 the updated read-only config.d subPath. The lock is retained for operator
-readback. This command never force-deletes or unlocks anything.
+readback. --replace-after-config requires the exact console ConfigMap and
+retained lock, then gracefully deletes only the pinned OOM Pod with UID/RV
+preconditions. This command never force-deletes or unlocks anything.
 """
 import argparse
 from pathlib import Path
@@ -131,6 +133,45 @@ def dry_run(client, cm, pod):
         raise RuntimeError('DEV ClickHouse Pod delete server dry-run drift')
 
 
+def dry_run_delete(client, pod):
+    path = '/api/v1/namespaces/' + NS + '/pods/' + POD + '?dryRun=All'
+    preview = client.call('delete', '--raw=' + path, '-f', '-', body=delete_options(pod))
+    if preview.get('metadata', {}).get('uid') != pod['metadata']['uid']:
+        raise RuntimeError('DEV ClickHouse Pod delete server dry-run drift')
+
+
+def replace_after_config(client, pins, lock_pins, apply=False):
+    lock_uid, lock_rv, lock_operation = lock_pins
+    expected_lock = {'metadata': {'uid': lock_uid, 'resourceVersion': lock_rv},
+                     'data': {'operation': lock_operation}}
+    cm, sts, pod = snapshot(client, pins, console=True)
+    verify_retained_lock(client, expected_lock)
+    dry_run_delete(client, pod)
+    print('DEV_CLICKHOUSE_CONSOLE_REPLACE_PREVIEW pod_uid=' + pins[1] +
+          ' lock_uid=' + lock_uid)
+    if not apply:
+        return
+    try:
+        check_cm, check_sts, check_pod = snapshot(client, pins, console=True)
+        if (check_cm != cm or check_sts['metadata']['resourceVersion'] != sts['metadata']['resourceVersion'] or
+                check_sts['spec'] != sts['spec'] or
+                check_pod['metadata']['uid'] != pod['metadata']['uid'] or
+                check_pod['metadata']['resourceVersion'] != pod['metadata']['resourceVersion']):
+            raise RuntimeError('DEV ClickHouse console replacement target changed')
+        verify_retained_lock(client, expected_lock)
+        dry_run_delete(client, check_pod)
+        verify_retained_lock(client, expected_lock)
+        result = client.call('delete', '--raw=/api/v1/namespaces/' + NS + '/pods/' + POD,
+                             '-f', '-', body=delete_options(check_pod))
+        if result.get('metadata', {}).get('uid') != pins[1]:
+            raise RuntimeError('DEV ClickHouse Pod delete outcome uncertain')
+        print('DEV_CLICKHOUSE_CONSOLE_REPLACEMENT_SUBMITTED old_pod_uid=' + pins[1] +
+              ' lock_uid=' + lock_uid + ' lock_retained=true')
+    except (ValueError, KeyError, TypeError, RuntimeError):
+        print('DEV_CLICKHOUSE_LOCK_RECHECK_REQUIRED', file=sys.stderr)
+        raise
+
+
 def expose(client, pins, apply=False, config_only=False):
     cm, sts, pod = snapshot(client, pins, config_only=config_only)
     dry_run(client, cm, pod)
@@ -183,18 +224,34 @@ def main():
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--config-only', action='store_true',
                         help='CAS-patch only the existing ConfigMap; never delete a pod')
+    parser.add_argument('--replace-after-config', action='store_true',
+                        help='under the retained lock, replace only the pinned OOM pod')
     for name in ('statefulset-uid', 'pvc-uid', 'pv-uid',
                  'configmap-uid', 'revision', 'statefulset-generation'):
         parser.add_argument('--expected-' + name, required=True)
     parser.add_argument('--expected-pod-uid')
+    parser.add_argument('--expected-lock-uid')
+    parser.add_argument('--expected-lock-resource-version')
+    parser.add_argument('--expected-lock-operation')
     args = parser.parse_args()
+    if args.config_only and args.replace_after_config:
+        parser.error('--config-only and --replace-after-config are exclusive')
     if not args.config_only and not args.expected_pod_uid:
         parser.error('--expected-pod-uid is required without --config-only')
+    if args.replace_after_config and not all((args.expected_lock_uid,
+                                              args.expected_lock_resource_version,
+                                              args.expected_lock_operation)):
+        parser.error('--replace-after-config requires exact lock UID, resourceVersion and operation')
     pins = (args.expected_statefulset_uid, args.expected_pod_uid, args.expected_pvc_uid,
             args.expected_pv_uid, args.expected_configmap_uid, args.expected_revision,
             int(args.expected_statefulset_generation))
     try:
-        expose(Client(), pins, args.apply, args.config_only)
+        if args.replace_after_config:
+            replace_after_config(Client(), pins,
+                                 (args.expected_lock_uid, args.expected_lock_resource_version,
+                                  args.expected_lock_operation), args.apply)
+        else:
+            expose(Client(), pins, args.apply, args.config_only)
     except (ValueError, KeyError, TypeError, RuntimeError):
         print('DEV ClickHouse console diagnostic failed; inspect retained lock and workload',
               file=sys.stderr)

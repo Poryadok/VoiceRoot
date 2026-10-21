@@ -115,6 +115,13 @@ updater lock. It never reads, patches or deletes a Pod or StatefulSet. Keep the
 lock and TT window while observing whether a later natural Pod replacement
 actually loads the fragment; a successful ConfigMap patch alone is no proof of
 startup recovery or log visibility.
+If the old `subPath` Pod persists after the ConfigMap-only patch, use a separate
+`--replace-after-config` preview with pinned OOM Pod UID, console ConfigMap UID,
+StatefulSet revision/generation, PVC/PV UIDs and the retained lock UID,
+resourceVersion and operation. This mode server-dry-runs and then gracefully
+deletes only that exact Pod with UID/resourceVersion preconditions. It does not
+patch ConfigMap or StatefulSet or create/release a lock. Read the new Pod and
+its logs immediately; preserve the lock and TT window on uncertain outcome.
 Schema-changing builds need separately reviewed dev migrations from the same
 source before image updates. Migrations use `migrate up` / Flyway `migrate`;
 Flyway repair is not automatic.
