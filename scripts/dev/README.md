@@ -73,6 +73,23 @@ retains that lock on uncertain mutation/rollout. No force unlock, rollback,
 table deletion, broad apply, pool tuning or Preservation service operation is
 provided. Keep the TT resource window through independent verification;
 neither the lock nor TT fences unrelated external kubectl operations.
+The 4Gi rollout can still OOM while the ClickHouse server uses the image's
+default `max_server_memory_usage_to_ram_ratio=0.9`. The separate
+`mitigate_clickhouse_memory.py` is an opt-in DEV-only trial for that exact
+partially completed operation. It requires the retained updater lock UID and
+operation marker plus the StatefulSet, current 4Gi Pod, and Bound PVC UIDs.
+Preview creates nothing and server-dry-runs a create-only ConfigMap and a
+UID/resourceVersion/full-spec-guarded StatefulSet patch. `--apply` creates only
+`voice-clickhouse-memory-policy` with `clickhouse-memory-0.8.xml`, then mounts
+one file read-only via `subPath` under `config.d`; this preserves the image's
+existing `docker_related_config.xml`. The image digest, 4Gi container cap,
+256Mi request, PVC and other workload fields stay fixed. The script retains
+the original lock on any uncertain result and releases it only after a new
+Ready Pod, unchanged PVC/image/spec, parsed ratio `0.8`, and a startup log
+reporting the derived 3.20GiB server cap. The ratio is a reversible trial,
+not proof that startup OOM will stop. Keep the TT DEV claim/window until
+independent smoke and resource readback; do not rerun the initial repair,
+force-delete a pod, or remove a retained lock on timeout.
 Schema-changing builds need separately reviewed dev migrations from the same
 source before image updates. Migrations use `migrate up` / Flyway `migrate`;
 Flyway repair is not automatic.

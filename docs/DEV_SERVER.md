@@ -96,6 +96,17 @@ request и PVC не меняются. При неопределённом apply 
 TT claim необходимо удерживать до независимой проверки; TT сам по себе не
 останавливает внешние kubectl-процессы. Готовность rollout не заменяет проверку
 стабильности restartCount/OOM, доступа к ClickHouse и прикладным таблицам.
+Если новый pod уже на 4Gi, но продолжает OOMKilled, допускается отдельный
+DEV-only пробный `scripts/dev/mitigate_clickhouse_memory.py`. Он требует точные
+UID удержанного updater lock, StatefulSet, текущего pod и PVC вместе с
+operation marker. Без `--apply` команда проверяет цель и server-side dry-run;
+после свежего TT claim/readback `--apply` добавляет только ConfigMap с
+`max_server_memory_usage_to_ram_ratio=0.8` и read-only single-file mount в
+`config.d`. Штатный файл образа в этом каталоге сохраняется, лимит контейнера
+остаётся 4Gi. Скрипт требует Ready на новой revision, тот же image/PVC,
+эффективный config `0.8` и startup log с вычисленным пределом 3.20GiB перед
+снятием updater lock. При OOM или неопределённом результате lock и TT окно
+сохраняются; не удалять pod и не менять память/таблицы вне reviewed flow.
 
 Четыре независимых static PV имеют storage class `voice-dev-local` и reclaim
 policy `Retain`:
