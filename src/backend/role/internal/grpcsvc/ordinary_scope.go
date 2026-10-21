@@ -185,7 +185,7 @@ func (s *RoleGRPC) CheckPermission(ctx context.Context, req *rolev1.CheckPermiss
 	if req.GetPermissionName() == "SPACE_MANAGE_SETTINGS" {
 		return s.checkQualifiedSettings(ctx, req)
 	}
-	if p, verified := principal.FromContext(ctx); verified && req.GetPermissionName() == "TEXT_CHAT_VIEW" {
+	if p, verified := principal.FromContext(ctx); verified && (p.Issuer == "chat" || req.GetPermissionName() == "TEXT_CHAT_VIEW") {
 		if err := principalgrpc.RequireChatCurrentACL(ctx, req); err != nil {
 			return nil, err
 		}
