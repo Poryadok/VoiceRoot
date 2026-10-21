@@ -127,9 +127,9 @@ func TestSpaceCompositeRollbackSerializesEmptyFirstWriter(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires PostgreSQL")
 	}
+	pool := compositePG(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	pool := compositePG(t)
 	down, err := os.ReadFile(filepath.Join(chatRepoRoot(t), "src", "backend", "migrations", "chat_db", "000027_space_composite_creations.down.sql"))
 	require.NoError(t, err)
 	tx, err := pool.Begin(ctx)
@@ -220,9 +220,9 @@ func TestSpaceCompositeExpiredInitiatorAfterLockCannotPrepare(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires PostgreSQL")
 	}
+	pool := compositePG(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	pool := compositePG(t)
 	req := compositeCreateRequest()
 	authority := compositeCreator(t, req, uuid.NewString())
 	p, ok := principal.FromContext(authority)
