@@ -210,11 +210,22 @@ func (s *VoiceGRPC) joinOrdinaryCall(ctx context.Context, r *ordinarycall.Room, 
 }
 
 func (s *VoiceGRPC) terminateOrdinaryCall(ctx context.Context, r *ordinarycall.Room, profile, kind string) (*ordinarycall.Room, error) {
+	// Bind the request to the membership observed before trusted User/Auth IO.
+	// A Leave/Join can replace it while that IO is in flight.
+	roomID, operationID := r.Intent.RoomID, r.Intent.OperationID
+	observed := r.Members[profile]
 	id, err := s.ordinaryActor(ctx, r, profile)
 	if err != nil {
 		return nil, err
 	}
-	result, err := s.OrdinaryCalls.Change(ctx, r.Intent.RoomID, func(r *ordinarycall.Room) error {
+	result, err := s.OrdinaryCalls.Change(ctx, roomID, func(r *ordinarycall.Room) error {
+		current, exists := r.Members[profile]
+		if r.Intent.OperationID != operationID || !exists ||
+			current.AccountID != observed.AccountID || current.ProfileID != observed.ProfileID ||
+			current.Generation != observed.Generation || current.FenceOperationID != observed.FenceOperationID ||
+			current.MediaIdentity != observed.MediaIdentity {
+			return ordinarycall.ErrStaleGeneration
+		}
 		now := ordinaryDecisionAt(s, r)
 		switch kind {
 		case "decline":
