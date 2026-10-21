@@ -10,10 +10,30 @@ import java.time.ZoneOffset;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 
-class AuthChatFloorPrincipalTest {
+public class AuthChatFloorPrincipalTest {
   static final String RPC = "/voice.auth.v1.AuthService/GetChatSessionEpochFloor";
   static final String REQUEST_ID = "5a2980a4-fddc-4b24-aae1-7ef5152e84bd";
   static final String HASH = "sha256:" + "0".repeat(64);
+  public static java.security.KeyPair signingKey() { return AuthPrincipalVerifierTest.KEY; }
+
+  /** Shared test-only HTTPS source; no production visibility is changed for fixtures. */
+  public static final class HttpsFixture implements AutoCloseable {
+    private final AuthPrincipalJwksHttpTest https = new AuthPrincipalJwksHttpTest();
+    public HttpsFixture() throws Exception { https.startHttps(); }
+    public int requests() { return https.requests.get(); }
+    public AuthPrincipalVerifier.KeyResolver keys() { return resolver("/jwks")::resolve; }
+    public AuthPrincipalVerifier.KeyResolver outageKeys() {
+      https.server.createContext("/outage", exchange -> { exchange.sendResponseHeaders(503, -1); exchange.close(); });
+      return resolver("/outage")::resolve;
+    }
+    private AuthPrincipalJwksResolver resolver(String path) {
+      return new AuthPrincipalJwksResolver(issuer -> {
+        assertEquals("chat", issuer);
+        return AuthPrincipalConfiguration.fetch(https.trusted, https.endpoint(path));
+      }, Clock.systemUTC(), java.time.Duration.ofSeconds(30), java.time.Duration.ofMinutes(2), java.time.Duration.ofSeconds(5));
+    }
+    @Override public void close() { https.stopHttps(); }
+  }
   final Set<String> seen = new HashSet<>();
   final AuthPrincipalVerifier verifier = new AuthPrincipalVerifier(
       (issuer, kid) -> (RSAPublicKey) AuthPrincipalVerifierTest.KEY.getPublic(),

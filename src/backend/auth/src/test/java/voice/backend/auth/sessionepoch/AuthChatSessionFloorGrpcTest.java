@@ -1,4 +1,4 @@
-package voice.backend.auth.principal;
+package voice.backend.auth.sessionepoch;
 
 import voice.backend.auth.grpc.AuthGrpcService;
 
@@ -38,6 +38,7 @@ import org.junit.jupiter.api.Test;
 import voice.backend.auth.principal.AuthPrincipalServerInterceptor;
 import voice.backend.auth.principal.AuthPrincipalServices;
 import voice.backend.auth.principal.AuthPrincipalVerifier;
+import voice.backend.auth.principal.AuthChatFloorPrincipalTest;
 import voice.backend.auth.repository.Account;
 import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
@@ -206,30 +207,21 @@ class AuthChatSessionFloorGrpcTest {
   }
 
   @Test void actualChatSignedMutualTlsUsesItsOwnHttpsJwksAndFailsClosedOnOutage() throws Exception {
-    var https = new AuthPrincipalJwksHttpTest();
-    https.startHttps();
-    try {
+    try (var https = new AuthChatFloorPrincipalTest.HttpsFixture()) {
       UUID id = UUID.randomUUID();
       AccountRepository accounts = mock(AccountRepository.class);
       SessionEpochFloorStore floors = mock(SessionEpochFloorStore.class);
       when(accounts.findById(id.toString())).thenReturn(java.util.Optional.of(account(id, 9)));
       when(floors.requireFloor(id)).thenReturn(4L);
-      var resolver = new AuthPrincipalJwksResolver(issuer -> {
-        assertEquals("chat", issuer);
-        return AuthPrincipalConfiguration.fetch(https.trusted, https.endpoint("/jwks"));
-      }, Clock.systemUTC(), java.time.Duration.ofSeconds(30), java.time.Duration.ofMinutes(2), java.time.Duration.ofSeconds(5));
       var request = GetChatSessionEpochFloorRequest.newBuilder().setAccountId(id.toString()).build();
-      assertEquals(9L, invoke(request, accounts, floors, resolver::resolve).getSessionEpochFloor());
-      assertEquals(1, https.requests.get());
+      assertEquals(9L, invoke(request, accounts, floors, https.keys()).getSessionEpochFloor());
+      assertEquals(1, https.requests());
       org.mockito.Mockito.clearInvocations(accounts, floors);
-      https.server.createContext("/outage", exchange -> { exchange.sendResponseHeaders(503, -1); exchange.close(); });
-      var unavailable = new AuthPrincipalJwksResolver(issuer ->
-          AuthPrincipalConfiguration.fetch(https.trusted, https.endpoint("/outage")), Clock.systemUTC(),
-          java.time.Duration.ofSeconds(30), java.time.Duration.ofMinutes(2), java.time.Duration.ofSeconds(5));
-      var failure = assertThrows(StatusRuntimeException.class, () -> invoke(request, accounts, floors, unavailable::resolve));
+      var unavailable = https.outageKeys();
+      var failure = assertThrows(StatusRuntimeException.class, () -> invoke(request, accounts, floors, unavailable));
       assertEquals(Status.Code.UNAVAILABLE, failure.getStatus().getCode());
       verifyNoInteractions(accounts, floors);
-    } finally { https.stopHttps(); }
+    }
   }
 
   private static Account account(UUID id, long epoch) {
@@ -250,13 +242,13 @@ class AuthChatSessionFloorGrpcTest {
   private static app.voice.auth.v1.GetChatSessionEpochFloorResponse invoke(
       GetChatSessionEpochFloorRequest request, AccountRepository accounts, SessionEpochFloorStore floors) throws Exception {
     return invoke(request, accounts, floors, (issuer, kid) ->
-        "current".equals(kid) && "chat".equals(issuer) ? (RSAPublicKey) AuthPrincipalVerifierTest.KEY.getPublic() : null);
+        "current".equals(kid) && "chat".equals(issuer) ? (RSAPublicKey) AuthChatFloorPrincipalTest.signingKey().getPublic() : null);
   }
 
   private static app.voice.auth.v1.GetChatSessionEpochFloorResponse invoke(
       GetChatSessionEpochFloorRequest request, AccountRepository accounts, SessionEpochFloorStore floors,
       AuthPrincipalVerifier.KeyResolver keys) throws Exception {
-    KeyPair keyPair = AuthPrincipalVerifierTest.KEY;
+    KeyPair keyPair = AuthChatFloorPrincipalTest.signingKey();
     var clock = Clock.systemUTC();
     Set<String> replay = new HashSet<>();
     var verifier = new AuthPrincipalVerifier(
