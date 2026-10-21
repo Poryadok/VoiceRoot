@@ -5,6 +5,7 @@ import (
 	"errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	rolev1 "voice.app/voice/role/v1"
@@ -47,7 +48,22 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, "invalid request")
 		}
-		verified, err := verifier.Verify(ctx, transport.BearerToken, info.FullMethod, transport.RequestID, requestHash)
+		var verified principal.Principal
+		chatACL := false
+		if req, ok := message.(*rolev1.CheckPermissionRequest); ok && info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName && req.GetPermissionName() == "TEXT_CHAT_VIEW" {
+			chatACL = true
+		}
+		if chatACL {
+			chatVerifier, ok := verifier.(interface {
+				VerifyChatCurrentACL(context.Context, string, string, string, string) (principal.Principal, error)
+			})
+			if !ok {
+				return nil, status.Error(codes.Unavailable, "Chat ACL verifier unavailable")
+			}
+			verified, err = chatVerifier.VerifyChatCurrentACL(ctx, transport.BearerToken, info.FullMethod, transport.RequestID, requestHash)
+		} else {
+			verified, err = verifier.Verify(ctx, transport.BearerToken, info.FullMethod, transport.RequestID, requestHash)
+		}
 		if err != nil {
 			return nil, verificationStatus(err)
 		}
@@ -81,7 +97,9 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 		}
 		if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
 			var decisionErr error
-			if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceManageBots {
+			if req, ok := message.(*rolev1.CheckPermissionRequest); ok && chatACL {
+				decisionErr = RequireChatCurrentACL(principal.WithVerified(ctx, verified), req)
+			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceManageBots {
 				decisionErr = RequireBotManagementPermission(principal.WithVerified(ctx, verified), req)
 			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceApproveJoinRequests {
 				decisionErr = RequireJoinApprovalPermission(principal.WithVerified(ctx, verified), req)
@@ -133,6 +151,11 @@ func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 		if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
 			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && (req.GetPermissionName() == permissions.SpaceApproveJoinRequests || req.GetPermissionName() == permissions.SpaceManageSettings || req.GetPermissionName() == permissions.SpaceManageBots) {
 				return nil, status.Error(codes.PermissionDenied, "protected approval decision listener required")
+			}
+			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == "TEXT_CHAT_VIEW" {
+				if md, _ := metadata.FromIncomingContext(ctx); len(md.Get("authorization")) != 0 {
+					return nil, status.Error(codes.Unavailable, "protected Chat ACL listener required")
+				}
 			}
 			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.MemberManageNicknames {
 				return nil, status.Error(codes.PermissionDenied, "protected nickname decision listener required")

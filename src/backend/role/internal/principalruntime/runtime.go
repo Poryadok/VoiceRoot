@@ -44,6 +44,7 @@ type Runtime struct {
 	authoritySourceEnabled        bool
 	authoritySourceServer         *authoritysource.Server
 	authoritySourceInterceptor    grpc.UnaryServerInterceptor
+	chatCurrentACLEnabled         bool
 }
 
 type OwnershipV2Activation struct {
@@ -149,6 +150,7 @@ func NewWithSessionEpochChecker(ctx context.Context, config Config, checker prin
 	runtime.delegatedUserEnabled = config.DelegatedUserEnabled
 	runtime.botLifecycleEnabled = config.BotLifecycleEnabled
 	runtime.sessionEpochChecker = checker
+	_, runtime.chatCurrentACLEnabled = config.JWKSURLs["chat"]
 	startup, cancel := context.WithTimeout(ctx, dependencyTimeout)
 	defer cancel()
 	if err := replay.Ping(startup).Err(); err != nil {
@@ -308,6 +310,18 @@ func (r *Runtime) recordReplay(ctx context.Context, issuer, jwtID string, expire
 	return nil
 }
 
+// VerifyChatCurrentACL has one explicit issuer; no token-claim-selected fallback
+// or conversion of a Chat-audience credential into another service authority.
+func (r *Runtime) VerifyChatCurrentACL(ctx context.Context, token, method, requestID, hash string) (principal.Principal, error) {
+	if r == nil || !r.chatCurrentACLEnabled || r.resolver == nil || r.replay == nil {
+		return principal.Principal{}, principalgrpc.Unavailable(errors.New("Chat ACL verifier unavailable"))
+	}
+	if method != rolev1.RoleService_CheckPermission_FullMethodName {
+		return principal.Principal{}, errors.New("Chat ACL method not allowed")
+	}
+	return principal.VerifyService(ctx, token, principal.VerifyConfig{ExpectedIssuer: "chat", ExpectedAudience: "role", ExpectedRPC: method, ExpectedRequestID: requestID, ExpectedRequestHash: hash, KeyResolver: r.resolver.Resolve, ReplayGuard: r.recordReplay})
+}
+
 // Remote JWKS is intentionally lazy: Space startup depends on Role process
 // health. Requests without a complete trusted set still fail closed.
 func (r *Runtime) refreshLoop(ctx context.Context, interval time.Duration) {
@@ -321,6 +335,9 @@ func (r *Runtime) refreshLoop(ctx context.Context, interval time.Duration) {
 		case <-ticker.C:
 			// A failed refresh retains last-good only until the resolver's hard expiry.
 			_ = r.resolver.Refresh(ctx, "space")
+			if r.chatCurrentACLEnabled {
+				_ = r.resolver.Refresh(ctx, "chat")
+			}
 		}
 	}
 }

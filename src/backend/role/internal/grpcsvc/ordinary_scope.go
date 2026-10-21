@@ -3,11 +3,13 @@ package grpcsvc
 import (
 	"context"
 	"errors"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	rolev1 "voice.app/voice/role/v1"
+	"voice/backend/pkg/principal"
 	"voice/backend/role/internal/principalgrpc"
 	"voice/backend/role/internal/roleevents"
 	"voice/backend/role/internal/store"
@@ -182,6 +184,23 @@ func (s *RoleGRPC) CheckPermission(ctx context.Context, req *rolev1.CheckPermiss
 	}
 	if req.GetPermissionName() == "SPACE_MANAGE_SETTINGS" {
 		return s.checkQualifiedSettings(ctx, req)
+	}
+	if p, verified := principal.FromContext(ctx); verified && req.GetPermissionName() == "TEXT_CHAT_VIEW" {
+		if err := principalgrpc.RequireChatCurrentACL(ctx, req); err != nil {
+			return nil, err
+		}
+		response, err := ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.CheckPermissionResponse, error) {
+			return scoped.checkPermission(ctx, req)
+		})
+		if err != nil {
+			return nil, err
+		}
+		// Read only: after the owning COMMIT, the original credential must still
+		// be live. This never reinterprets a committed mutation or recovery fact.
+		if ctx.Err() != nil || !p.ExpiresAt.After(time.Now()) {
+			return nil, status.Error(codes.Unavailable, "Chat ACL decision expired")
+		}
+		return response, nil
 	}
 	if req.GetPermissionName() == "MEMBER_MANAGE_NICKNAMES" {
 		if err := principalgrpc.RequireNicknamePermission(ctx, req); err != nil {
