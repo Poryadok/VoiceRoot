@@ -354,7 +354,12 @@ ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test bu
 	$(BASH) "$(ROOT)/scripts/staging/setup-github-runner_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/nats-search-jetstream-workflow-contract_test.sh"
 
+ci-script-tests: release-policy-wiring-test
 ci-script-tests: export PYTHONDONTWRITEBYTECODE := 1
+
+.PHONY: release-policy-wiring-test
+release-policy-wiring-test:
+	python3 "$(ROOT)/scripts/release-policy-wiring_test.py"
 
 e2e-manifest-helper-test:
 	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_helper_test.sh"

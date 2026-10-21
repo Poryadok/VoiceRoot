@@ -23,6 +23,7 @@ ROLLOUT+=('closed_archive.py','closed_durable.py','closed-seal-source-policies.j
 ROLLOUT+=('operator_reset.py',)
 ROLLOUT+=('deployment_report.py',)
 ROLLOUT+=('provisional.py',)
+ROLLOUT+=('release_policy_wiring.py',)
 
 def build(kernel,output,renewer,story_probe):
     source=Path(__file__).resolve().parents[1];kernel=Path(kernel);output=Path(output)

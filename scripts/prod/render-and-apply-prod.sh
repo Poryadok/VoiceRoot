@@ -24,6 +24,13 @@ export VOICE_IMAGE_TAG="${TAG}"
 export VOICE_K8S_NAMESPACE="${NS}"
 export PROD_MANIFEST_DIR="${PROD_MANIFEST_DIR:-${ROOT}/deploy/prod}"
 
+# Validate the same required passive release input before ANY branch dispatch,
+# including infrastructure/gateway/migration helpers in full/app-only modes.
+# This source preflight neither creates the external object nor attests images.
+python3 "${ROOT}/scripts/staging/nats-rollout-preservation/release_policy_wiring.py" \
+  "${VOICE_RELEASE_POLICY_INPUT:-}" "${TAG}" "${NS}" \
+  "${PROD_MANIFEST_DIR}/services.yaml" >/dev/null
+
 echo "Applying Voice production: ${REGISTRY} tag ${TAG} namespace ${NS} mode=${MODE}"
 
 case "${MODE}" in
