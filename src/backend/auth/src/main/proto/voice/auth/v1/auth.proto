@@ -22,6 +22,7 @@ service AuthService {
   rpc GetRoleSessionEpochFloor(GetRoleSessionEpochFloorRequest) returns (GetRoleSessionEpochFloorResponse);
   rpc GetSpaceSessionEpochFloor(GetSpaceSessionEpochFloorRequest) returns (GetSpaceSessionEpochFloorResponse);
   rpc GetBotSessionEpochFloor(GetBotSessionEpochFloorRequest) returns (GetBotSessionEpochFloorResponse);
+  rpc GetChatSessionEpochFloor(GetChatSessionEpochFloorRequest) returns (GetChatSessionEpochFloorResponse);
   // @voice.security=protected;callers=service:space
   // Exact read-only current Auth account + User profile observation; never grants membership.
   rpc ObserveSpaceAdmissionSubject(ObserveSpaceAdmissionSubjectRequest) returns (ObserveSpaceAdmissionSubjectResponse);
@@ -583,4 +584,13 @@ message ObserveSpaceAdmissionSubjectResponse {
   uint64 session_epoch_floor = 6;
   uint64 profile_revision = 7;
   SpaceAdmissionDecision decision = 8;
+}
+
+// Exact Chat-only current floor read for delegated mutation verification.
+message GetChatSessionEpochFloorRequest {
+  string account_id = 1;
+}
+
+message GetChatSessionEpochFloorResponse {
+  int64 session_epoch_floor = 1;
 }

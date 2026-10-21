@@ -15,6 +15,7 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
   public static final String LOOKUP_RPC = "/voice.auth.v1.AuthService/GetOwnershipTransferReceipt";
   public static final String VOICE_SESSION_FLOOR_RPC = "/voice.auth.v1.AuthService/GetVoiceSessionEpochFloor";
   public static final String SPACE_SESSION_FLOOR_RPC = "/voice.auth.v1.AuthService/GetSpaceSessionEpochFloor";
+  public static final String CHAT_SESSION_FLOOR_RPC = "/voice.auth.v1.AuthService/GetChatSessionEpochFloor";
   public static final String BOT_SESSION_FLOOR_RPC = "/voice.auth.v1.AuthService/GetBotSessionEpochFloor";
   public static final String ROLE_SESSION_FLOOR_RPC = "/voice.auth.v1.AuthService/GetRoleSessionEpochFloor";
   public static final String SPACE_DELETE_CONSUME_RPC =
@@ -45,7 +46,7 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
     String rpc = "/" + call.getMethodDescriptor().getFullMethodName();
     if (!ISSUE_RPC.equals(rpc) && !CONSUME_RPC.equals(rpc) && !LOOKUP_RPC.equals(rpc) && !SPACE_ADMISSION_RPC.equals(rpc)
         && !VOICE_SESSION_FLOOR_RPC.equals(rpc)
-        && !ROLE_SESSION_FLOOR_RPC.equals(rpc) && !SPACE_SESSION_FLOOR_RPC.equals(rpc) && !BOT_SESSION_FLOOR_RPC.equals(rpc)
+        && !ROLE_SESSION_FLOOR_RPC.equals(rpc) && !SPACE_SESSION_FLOOR_RPC.equals(rpc) && !BOT_SESSION_FLOOR_RPC.equals(rpc) && !CHAT_SESSION_FLOOR_RPC.equals(rpc)
         && !SPACE_DELETE_CONSUME_RPC.equals(rpc) && !SPACE_DELETE_LOOKUP_RPC.equals(rpc)
         && !SPACE_DELETE_ACK_RPC.equals(rpc)) return next.startCall(call, headers);
     final String token, requestId;
@@ -87,7 +88,7 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
           verified = verifier.verify(token, rpc, requestId, requestHash((MessageLite) request));
         } catch (RuntimeException ex) {
           Status status = Status.fromThrowable(ex);
-          deny((SPACE_SESSION_FLOOR_RPC.equals(rpc) || BOT_SESSION_FLOOR_RPC.equals(rpc)) && status.getCode() == Status.Code.UNAVAILABLE
+          deny((SPACE_SESSION_FLOOR_RPC.equals(rpc) || BOT_SESSION_FLOOR_RPC.equals(rpc) || CHAT_SESSION_FLOOR_RPC.equals(rpc)) && status.getCode() == Status.Code.UNAVAILABLE
               ? Status.UNAVAILABLE
               : status.getCode() == Status.Code.PERMISSION_DENIED ? Status.PERMISSION_DENIED : Status.UNAUTHENTICATED);
           return;

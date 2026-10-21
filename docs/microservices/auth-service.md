@@ -922,6 +922,36 @@ or peer configuration. Bot cannot borrow any old protected Auth method. The Bot
 method is absent from ordinary and proof listeners. Deployment must supply its
 actual Bot identity; test fixture URI values are not deployment defaults.
 
+The BE131 recipient freshness producer adds the distinct Chat-only
+`AuthService.GetChatSessionEpochFloor`: request `account_id:string = 1`, response
+positive `session_epoch_floor:int64 = 1`. It reads the existing authoritative
+positive maximum of durable account epoch and retained Redis floor, without
+initializing, repairing, caching or advancing either source. Canonical nonzero
+lowercase UUID and no unknown request fields are required. Missing/deleted
+account returns `NOT_FOUND`; missing, malformed or unavailable authority is
+`UNAVAILABLE`, never a default epoch. The existing protected mTLS floor listener
+alone exposes this method; ordinary and ownership/deletion listeners deny it.
+
+Only `principal_type=service`, `iss=chat`, `sub=service:chat`, audience `auth`
+with exact `/voice.auth.v1.AuthService/GetChatSessionEpochFloor`, complete
+deterministic request hash, canonical request UUID, fresh JTI and existing short
+TTL may call it. Its payload contains only the eleven service credential claims
+`iss`, `sub`, `principal_type`, `aud`, `rpc`, `request_id`, `request_hash`, `jti`,
+`iat`, `nbf`, `exp`; user/actor/delegation claims are rejected even if null/empty.
+Chat uses its own issuer key, configured HTTPS `chat` endpoint in
+`S2S_JWKS_URLS_JSON` and certificate trusted by the existing
+`AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE`. Missing Chat keys/config, JWKS/replay
+outage or transport failure denies the read; no raw identity/Redis or legacy
+fallback. Existing Role/Voice/Space/Bot method, peer and claim policies do not
+change, and Chat may not borrow any of their RPCs or credentials.
+
+Chat consumer44 must read this floor on every protected delegated Create
+verification, require a positive answer and `token.session_epoch >= floor`,
+and fail closed before effects when the check fails. This read grants no Chat
+mutation, actor, membership, guest, tree-scope or public disclosure authority.
+Actual client/config/assembly and independent source qualification remain
+separate requirements; the producer alone is not Chat activation evidence.
+
 `accounts.session_epoch` — положительный монотонный durable source of truth
 Auth. Auth атомарно увеличивает его для отзыва всех сессий и никогда не
 уменьшает. Каждый access JWT, выпущенный Auth, содержит положительный integer

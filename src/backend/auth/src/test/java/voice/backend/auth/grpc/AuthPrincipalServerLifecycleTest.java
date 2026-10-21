@@ -32,6 +32,7 @@ class AuthPrincipalServerLifecycleTest {
   static final MethodDescriptor<Struct,Struct> FLOOR = method(AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC);
   static final MethodDescriptor<Struct,Struct> SPACE_FLOOR = method(AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC);
   static final MethodDescriptor<Struct,Struct> ROLE_FLOOR = method(AuthPrincipalServerInterceptor.ROLE_SESSION_FLOOR_RPC);
+  static final MethodDescriptor<Struct,Struct> CHAT_FLOOR = method(AuthPrincipalServerInterceptor.CHAT_SESSION_FLOOR_RPC);
   static final MethodDescriptor<Struct,Struct> BOT_FLOOR = method(AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC);
   static final MethodDescriptor<Struct,Struct> ADMISSION = method(AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC);
   static final MethodDescriptor<Struct,Struct> LOGIN = method("/" + SERVICE + "/Login");
@@ -74,6 +75,7 @@ class AuthPrincipalServerLifecycleTest {
       assertStatus(legacy, ROLE_FLOOR, Status.Code.UNIMPLEMENTED);
       assertStatus(legacy, SPACE_FLOOR, Status.Code.UNIMPLEMENTED);
       assertStatus(legacy, BOT_FLOOR, Status.Code.UNIMPLEMENTED);
+      assertStatus(legacy, CHAT_FLOOR, Status.Code.UNIMPLEMENTED);
       assertStatus(legacy, ADMISSION, Status.Code.UNIMPLEMENTED);
       assertEquals(0, proofCalls.get());
       assertEquals(REQUEST, call(legacy, LOGIN));
@@ -90,6 +92,7 @@ class AuthPrincipalServerLifecycleTest {
       assertStatus(privateChannel, ROLE_FLOOR, Status.Code.UNIMPLEMENTED);
       assertStatus(privateChannel, SPACE_FLOOR, Status.Code.UNIMPLEMENTED);
       assertStatus(privateChannel, BOT_FLOOR, Status.Code.UNIMPLEMENTED);
+      assertStatus(privateChannel, CHAT_FLOOR, Status.Code.UNIMPLEMENTED);
       assertStatus(privateChannel, ADMISSION, Status.Code.UNIMPLEMENTED);
       assertEquals(REQUEST, call(floorChannel, FLOOR));
       assertEquals(voicePrincipal, observed.get());
@@ -194,6 +197,10 @@ class AuthPrincipalServerLifecycleTest {
 
   ServerServiceDefinition definition(boolean includeConsume) {
     var definition = ServerServiceDefinition.builder(SERVICE)
+        .addMethod(CHAT_FLOOR, ServerCalls.asyncUnaryCall((request, observer) -> {
+          proofCalls.incrementAndGet(); observed.set(VerifiedPrincipal.current());
+          observer.onNext(request); observer.onCompleted();
+        }))
         .addMethod(BOT_FLOOR, ServerCalls.asyncUnaryCall((request, observer) -> {
           proofCalls.incrementAndGet(); observed.set(VerifiedPrincipal.current());
           observer.onNext(request); observer.onCompleted();
