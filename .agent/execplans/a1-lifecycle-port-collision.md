@@ -23,8 +23,19 @@ Implementation now changes only the three lifecycle port values to9095 and
 adds a collision comment. Voice communication9094 and all activation flags are
 unchanged. Both existing Docker endpoints fail because their named pipes are
 absent; only Docker's service WSL distro exists, not an approved general Linux
-runner. No alternative runtime is borrowed. Actual RED and GREEN execution
-remain required before integration; preserve basef1b for causal RED replay.
+runner. No alternative runtime is borrowed.
+
+Offline Compose rendering works without either engine endpoint. On the user's
+explicit offline-validation instruction, the actual new targeted Phase0 test
+passed5.344s with Compose2.31.0. A separate temporary source root using exactf1b
+base/lifecycle YAML and the same new test failed5.585s at the intended assertion:
+both protected listeners equal :9094. No containers/services/listeners ran.
+This causal RED was executed after the production edit because the approved
+offline route was identified later; it is not claimed as pre-edit runtime TDD.
+Windows Python/Compose offline evidence is not Linux runtime/public503 proof.
+The opt-in overlay port contract is verified; canonical Creator/native45 and
+full public activation remain open. Graphify update was bounded and its own
+process canceled after no output; no graph freshness claim.
 
 Full Creator assembly remains gated on accepted468 producer→186 native closure
 and current Role/authority inputs. These are separate from this port repair.
