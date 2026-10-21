@@ -13,7 +13,16 @@ class MergePauseTests(unittest.TestCase):
         self.assertEqual(root.findtext('logger/console'), '1')
         self.assertEqual(root.findtext('logger/console_log_level'), 'error')
         self.assertEqual(root.findtext('merge_tree/max_bytes_to_merge_at_max_space_in_pool'), '1')
+        self.assertEqual(root.findtext('merge_tree/max_bytes_to_merge_at_min_space_in_pool'), '1')
         self.assertEqual(len(root), 3)
+
+    def test_restore_fragment_removes_both_global_merge_caps(self):
+        root = ET.fromstring(merges.console_data()[merges.FILE])
+        self.assertEqual(root.findtext('max_server_memory_usage_to_ram_ratio'), '0.8')
+        self.assertEqual(root.findtext('logger/console'), '1')
+        self.assertIsNone(root.find('merge_tree'))
+        self.assertIsNone(root.find('merge_tree/max_bytes_to_merge_at_max_space_in_pool'))
+        self.assertIsNone(root.find('merge_tree/max_bytes_to_merge_at_min_space_in_pool'))
 
     def test_pause_and_restore_are_exact_opposite_configmap_cas(self):
         client = console_test.Fake()

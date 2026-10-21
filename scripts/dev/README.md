@@ -126,8 +126,11 @@ For a bounded read-only investigation of the failing background merge, the
 separate `diagnose_clickhouse_merges.py` offers `--mode pause`,
 `replace-paused`, `restore`, and `replace-restored`. It preserves the existing
 4Gi cap, ratio `0.8`, error-only console logger, image, StatefulSet and PVC.
-The pause XML sets only the global MergeTree
-`max_bytes_to_merge_at_max_space_in_pool=1`; an isolated run of the exact
+The pause XML sets the global MergeTree
+`max_bytes_to_merge_at_max_space_in_pool=1` and
+`max_bytes_to_merge_at_min_space_in_pool=1`; v24.8
+[`getMaxSourcePartsSizeForMerge`](https://github.com/ClickHouse/ClickHouse/blob/v24.8.14.39-lts/src/Storages/MergeTree/MergeTreeDataMergerMutator.cpp)
+can interpolate between those caps as pool entries are occupied. An isolated run of the exact
 24.8 image kept five small MergeTree parts separate while a control instance
 merged them. A per-table override may defeat the global setting. This pauses
 only automatic background merges; manual `OPTIMIZE` can still merge, so do not
@@ -152,6 +155,75 @@ Pod's effective configuration. ConfigMap restore alone cannot undo a `subPath`
 mount already held by the current Pod. If either mutation or readback fails,
 retain the updater lock and TT window; do not claim restored behavior until a
 replacement Pod confirms it. Never treat the paused Pod as repaired.
+
+The separately reviewed `alter_clickhouse_metric_log.py` is an **experimental**
+next step, not a proven OOM fix. Do not apply it from the current crashloop:
+first complete the guarded pause/replacement above and obtain live read-only
+`system.tables`, `system.parts`, `system.merges`, and log evidence. Bind the
+failing UUID from the OOM log to exactly one `system.metric_log` or
+`system.metric_log_N` row, record its full `SHOW CREATE`/engine, target partition
+part names, rows, bytes and `hash_of_all_files`; the prior failed merge must be
+absent from `system.merges`. A `metric_log` config fragment with a per-table
+setting is **not** a fix for existing parts: exact 24.8 isolated startup renamed
+the old table to `metric_log_0` with its original setting and created a new
+empty `metric_log`. The synthetic 19-part fixture (332,082 rows/48.47 MB)
+merged at 4Gi with only about 572 MiB cgroup peak, so it does not reproduce
+DEV's sparse-column OOM and cannot establish efficacy.
+
+For an independently accepted causal trial only, obtain a fresh TT/lock/Pod/
+PVC/PV/quota readback and effective pause timestamp. Run the ALTER helper in
+read-only `--inventory-file` mode with the exact failing table UUID and
+partition. The JSON file contains the full create query and each active part's
+name, rows, bytes and file hash; stdout supplies the table name and DDL/part
+SHA-256 pins. Compare this evidence with the OOM task and prior SQL observation
+before an ALTER preview. Produce a **new inventory in each effective pause
+window**; an earlier window's file is stale even if the table UUID is unchanged.
+Pass that file as `--baseline-file` together with those three pins for both
+preview and apply. The helper checks its DDL/parts self-hashes, target partition,
+Pod UID, ConfigMap UID/resourceVersion, lock pins and pause-start timestamp.
+The guard allows only added
+active parts: every baseline `(partition, name, rows, bytes_on_disk,
+hash_of_all_files)` must remain identical, even if `metric_log` inserts more
+parts while paused. Missing/changed baseline parts, UUID/DDL/cap drift, or an
+active merge/DDL aborts; it repeats this check immediately before ALTER and
+after readback. Use `--apply` only while the
+paused Pod is Ready and fewer than 180 seconds have elapsed. It refuses active
+target merges or DDL, changed K8s identities/lock/DDL/parts, global forced
+merge age above zero, any explicit target-table merge-cap or forced-merge
+override, and either global merge cap other than 1. On success it requires the
+same UUID and parts with explicit `merge_max_block_size=1024`; it does not touch
+other tables, data, ConfigMap,
+Pod, StatefulSet, or updater lock. ClickHouse has no atomic UUID precondition
+for `ALTER TABLE name`, so a rename between final readback and ALTER remains a
+race; any ambiguity retains the lock and requires operator investigation.
+The reviewer must accept this exact limitation before any DEV ALTER.
+All helper modes require `--effective-pause-start-utc` from the first Ready Pod
+readback confirming effective pause=1, plus exact StatefulSet/Pod/PVC/PV/
+ConfigMap/revision/generation and updater-lock UID/RV/operation pins. The
+180-second timer guards inventory, preview and ALTER; the operator still owns
+the immediate reviewed restore, including when the helper aborts. Never run
+`--apply` solely from stale inventory output.
+
+Immediately restore the original ratio-0.8/console ConfigMap and replace the
+exact paused Pod under the reviewed UID guard. Resolve the original UUID again
+after restart: it may now be `metric_log_N`. Verify that its 1024 override and
+at least the original active row count remain, the current `metric_log` has
+the baseline setting, and both global merge caps have returned to their
+pre-pause values. In the isolated exact v24.8.14.39 image, the original defaults
+were `max_bytes_to_merge_at_max_space_in_pool=161061273600` (150 GiB) and
+`max_bytes_to_merge_at_min_space_in_pool=1048576` (1 MiB); the pause fragment
+read back as `1/1`, and restoring the console fragment read back as those
+defaults. Pin the actual DEV pre-pause values separately; do not infer a live
+restore solely from these isolated defaults or the ConfigMap data. Require
+the restored max cap to exceed the candidate merge source bytes. If the Pod
+crashloops before effective SQL readback, retain the claim and updater lock
+and report restore as unverified. Observe only natural
+automatic merges; never run `OPTIMIZE`. Watch cgroup peak, OOM, Ready/SQL,
+merge backlog and write errors. On inconclusive/failure, re-enter a newly
+reviewed bounded pause and use the helper's `--reset-setting` against that
+same UUID, then restore again. Exact-image isolation confirmed `RESET SETTING`
+returns the old table DDL without changing its UUID or rows. No health claim
+or updater-lock release precedes sustained Ready/SQL and independent verify.
 Schema-changing builds need separately reviewed dev migrations from the same
 source before image updates. Migrations use `migrate up` / Flyway `migrate`;
 Flyway repair is not automatic.
