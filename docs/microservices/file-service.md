@@ -365,6 +365,15 @@ owner evidence and writers serialized by the same blob authority. See
 [BE-264 execution plan](../testing/be264-legacy-delete-authority-exec-plan.md)
 for outstanding runtime and concurrency gates.
 
+The first logical `expired` transition also commits the exact `file.expired`
+envelope in `file_expiry_event_outbox`. The existing expiry worker drains this
+queue even when storage deletion fails or no ready files remain after restart.
+Publication is independent of byte-GC completion: consumers observe logical
+expiry. A bounded row lock covers PubAck; failure/response loss leaves the same
+event ID, time and payload pending. JetStream uses that ID as `Nats-Msg-Id`.
+NATS-disabled/Noop mode does not acknowledge queued events. Apply migration
+`000008` before the binary; DOWN refuses to erase any retained event evidence.
+
 Upload/download — через presigned URLs (R2 обслуживает напрямую). Конвертация — отдельный пул воркеров, масштабируется по очереди задач.
 
 ### Subscription retention projection (A7 accepted target; not implemented)
