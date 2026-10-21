@@ -439,6 +439,11 @@ func (s *DMStore) PrepareSpaceComposite(ctx context.Context, req *chatv1.CreateC
 			return nil, err
 		}
 	}
+	// A conflicting keyed INSERT can wait independently of the Space lock.
+	// Do not retain a reservation after that wait outlives its initiating JWT.
+	if _, err = chatcreation.Creator(ctx, req); err != nil {
+		return nil, err
+	}
 	chatID, nodeID, auditID := uuid.New(), uuid.New(), uuid.New()
 	var now time.Time
 	if err = tx.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&now); err != nil {
