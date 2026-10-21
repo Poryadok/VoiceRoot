@@ -107,6 +107,15 @@ operation marker. Без `--apply` команда проверяет цель и
 эффективный config `0.8` и startup log с вычисленным пределом 3.20GiB перед
 снятием updater lock. При OOM или неопределённом результате lock и TT окно
 сохраняются; не удалять pod и не менять память/таблицы вне reviewed flow.
+Если независимая проверка затем обнаружила OOM у того же pod, отдельная
+диагностическая процедура `scripts/dev/expose_clickhouse_errors.py` может
+направить сообщения уровня error в stdout. Она сохраняет ratio `0.8`, 4Gi,
+образ и PVC, меняет только существующий DEV ConfigMap под UID/RV CAS и
+пересоздаёт единственный pinned OOM pod через graceful DELETE с UID/RV
+preconditions после server-side dry-run. `subPath` требует новой инкарнации
+pod для чтения файла. Процедура атомарно занимает общий updater lock и всегда
+оставляет его для сверки результата; нельзя считать это исправлением OOM или
+освобождать TT окно до фактической проверки логов и нового pod.
 
 Четыре независимых static PV имеют storage class `voice-dev-local` и reclaim
 policy `Retain`:

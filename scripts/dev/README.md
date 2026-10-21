@@ -90,6 +90,22 @@ reporting the derived 3.20GiB server cap. The ratio is a reversible trial,
 not proof that startup OOM will stop. Keep the TT DEV claim/window until
 independent smoke and resource readback; do not rerun the initial repair,
 force-delete a pod, or remove a retained lock on timeout.
+If independent stability verification finds that the same 0.8-policy pod is
+again OOMKilled, `expose_clickhouse_errors.py` is a separate DEV-only diagnostic
+step. It keeps ratio `0.8`, the 4Gi cap and all data/storage fields fixed, and
+adds only `logger.console=1` with `console_log_level=error` to the existing
+ConfigMap. The exact ClickHouse 24.8 image parses both settings and emits
+application errors to container stdout. Because the file is mounted via
+read-only `subPath`, the command requires a fresh Pod to consume the update.
+Its preview verifies the failed Pod, StatefulSet revision, ConfigMap, PVC/PV
+identities and quota, and server-dry-runs both the ConfigMap CAS patch and a
+graceful delete of that one Pod with UID/resourceVersion preconditions. After
+fresh TT DEV deploy admission, `--apply` acquires the shared updater lock,
+rechecks the target, patches the ConfigMap and submits only that exact Pod
+delete. It always retains the lock for operator readback, including after a
+successful submission; inspect the controller-created Pod and `kubectl logs`
+before any separately reviewed repair or lock disposition. This diagnostic
+step is not a ClickHouse availability fix and does not imply product PASS.
 Schema-changing builds need separately reviewed dev migrations from the same
 source before image updates. Migrations use `migrate up` / Flyway `migrate`;
 Flyway repair is not automatic.
