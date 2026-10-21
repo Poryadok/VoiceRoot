@@ -26,9 +26,10 @@ func TestAuditDelegationUsesRawParsedAccountType(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			payload := cloneConfigJWTPayload(f.payload)
 			payload["account_type"] = kind
-			if kind == "missing" {
+			switch kind {
+			case "missing":
 				delete(payload, "account_type")
-			} else if kind == "empty" {
+			case "empty":
 				payload["account_type"] = ""
 			}
 			r := httptest.NewRequest(http.MethodPost, "/api/v1/spaces/"+uuid.NewString()+"/chats", nil)
@@ -122,10 +123,11 @@ func TestSpaceChatDelegationUsesStrictJWTBoundary(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/api/v1/spaces/"+uuid.NewString()+"/chats", strings.NewReader(`{"type":"CHAT_TYPE_GROUP","name":"group"}`))
 			r.Header.Set("Authorization", "Bearer "+token)
 			r.Header.Set("X-Voice-Account-Type", "regular")
-			if scenario == "query token" {
+			switch scenario {
+			case "query token":
 				r.Header.Del("Authorization")
 				r.URL.RawQuery = "access_token=" + token
-			} else if scenario == "duplicate bearer" {
+			case "duplicate bearer":
 				r.Header.Add("Authorization", "Bearer "+token)
 			}
 			w := httptest.NewRecorder()
