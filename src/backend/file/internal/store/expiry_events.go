@@ -29,7 +29,7 @@ func recordExpiryEvent(ctx context.Context, tx pgx.Tx, row FileRow) error {
 	return err
 }
 
-// The row lock leases one pending event through a bounded PubAck. On uncertain
+// DispatchExpiryEvent leases one pending event through a bounded PubAck. On uncertain
 // publication/completion the retained exact envelope may be delivered again.
 func (s *FilesStore) DispatchExpiryEvent(ctx context.Context, publish func(context.Context, []byte) error) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)

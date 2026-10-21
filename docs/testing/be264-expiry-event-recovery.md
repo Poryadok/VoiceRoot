@@ -29,7 +29,11 @@ unchanged legacy retention policy; no new lifecycle/owner scope or P3 activation
 - [x] Observe GREEN and negative/no-event/migration guards: three real-PG tests
   and two publisher tests PASS, zero skips. A real JetStream accepts a publish
   whose PubAck is discarded, then deduplicates the exact-envelope retry.
-- [ ] Final affected short/vet/lint and selected race checks.
+- [x] Final private-Linux checks: scoped five tests PASS/zero skips; selected
+  lease/lost-PubAck race tests two PASS/zero skips; short suite234 PASS/97 expected
+  integration skips, zero failures; `go vet ./...` exit0.
+- [x] Lint final: initial staticcheck ST1020 reported an exported-method comment;
+  corrected its prefix, final recheck0 issues. No runtime behavior changed.
 - [ ] Independent review; deliver immutable commit/bundle/proof to sole publisher121.
 
 Private Linux PG/Go containers on an internal network have no host ports, Docker
@@ -45,8 +49,9 @@ must retain pending events. Existing full-P3 and retention-policy gates remain.
 
 ## Progress
 
-Runtime proof pending; no PASS from fixture/source presence. CodeGraph/Graphify
-are explicitly excluded by current user override relayed by121.
+Runtime results above are from actual execution, independently of fixture/source
+presence. Independent source review and integration acceptance remain pending.
+CodeGraph/Graphify are explicitly excluded by current user override relayed by121.
 
 Executed proof files: `tmp/swarm/rudeus134-expiry/red.jsonl`, `green.jsonl` and
 `final-scoped.jsonl` outside the product worktree. Linux Go1.26 and PostgreSQL16;
