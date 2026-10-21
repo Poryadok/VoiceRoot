@@ -223,6 +223,10 @@ func TestNewRoleGRPCServers_ConfiguredRuntimeEnforcesListenerMatrix(t *testing.T
 }
 
 func newMainPrincipalRuntime(t *testing.T, enableAuthority ...bool) (*principalruntime.Runtime, *x509.CertPool, *rsa.PrivateKey, tls.Certificate) {
+	return newMainPrincipalRuntimeWithReplay(t, "", enableAuthority...)
+}
+
+func newMainPrincipalRuntimeWithReplay(t *testing.T, replayAddr string, enableAuthority ...bool) (*principalruntime.Runtime, *x509.CertPool, *rsa.PrivateKey, tls.Certificate) {
 	t.Helper()
 	current, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -258,7 +262,9 @@ func newMainPrincipalRuntime(t *testing.T, enableAuthority ...bool) (*principalr
 	require.NoError(t, os.WriteFile(clientCAFile, clientCertPEM, 0o600))
 	clientCertificate, err := tls.X509KeyPair(clientCertPEM, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: clientKeyDER}))
 	require.NoError(t, err)
-	replay := miniredis.RunT(t)
+	if replayAddr == "" {
+		replayAddr = miniredis.RunT(t).Addr()
+	}
 	sourceEnabled := len(enableAuthority) > 0 && enableAuthority[0]
 	botEnabled := len(enableAuthority) > 1 && enableAuthority[1]
 	urls := map[string]string{"space": server.URL, "gameintegration": server.URL, "voice": server.URL}
@@ -268,9 +274,12 @@ func newMainPrincipalRuntime(t *testing.T, enableAuthority ...bool) (*principalr
 	if botEnabled {
 		urls["bot"] = server.URL
 	}
+	if len(enableAuthority) > 2 && enableAuthority[2] {
+		urls["chat"] = server.URL
+	}
 	runtime, err := principalruntime.New(context.Background(), principalruntime.Config{
 		JWKSURLs: urls, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute, AuthoritySourceEnabled: sourceEnabled, BotLifecycleEnabled: botEnabled,
-		UnknownKIDCooldown: time.Second, ReplayAddr: replay.Addr(), JWKSCAFile: certFile,
+		UnknownKIDCooldown: time.Second, ReplayAddr: replayAddr, JWKSCAFile: certFile,
 		TLSCertFile: certFile, TLSKeyFile: keyFile, ClientCAFile: clientCAFile, ListenAddr: "127.0.0.1:0",
 	})
 	require.NoError(t, err)
