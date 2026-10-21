@@ -178,7 +178,7 @@ def render(snapshot, node):
                 memory = '1024Mi' if meta['name'] == 'voice-auth' else '384Mi'
                 request_memory = '64Mi'
                 if meta['name'] == 'voice-clickhouse':
-                    memory = '2048Mi'
+                    memory = '4096Mi'
                     request_memory = '256Mi'
                 if meta['name'] == 'voice-clamav':
                     memory = '1536Mi'
