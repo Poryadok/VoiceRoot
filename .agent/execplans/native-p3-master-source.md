@@ -1097,3 +1097,12 @@ These are transport data tests, not the awaited actual shared-guard RED. All54
 transition oracles remain PLANNED; historical547/current4ea5 fullF13 remains HOLD.
 Freeze this three-file correction with source-bound receipts for original418
 independent CODE recheck before121 authorizes any new hosted-head execution.
+
+Final fixture validation strengthens the raw-bytes negative to a one-byte
+mutation of the genuine109549632-byte captured record, retaining its exact
+length. This discriminates SHA rejection from length-only rejection. The final
+four-test Linux group passes in4.552s, log
+`3c2d4678a1bce3417a88475ec036e6093040399149ead979a57d01b515c1890f`,
+on unchanged executable harness7271a4ec and final transport-test33770277.
+The earlier2.726s GREEN remains evidence for its prior length-control source,
+not for this strengthened same-size checksum oracle. No broader run occurred.

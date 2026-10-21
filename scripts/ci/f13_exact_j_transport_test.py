@@ -3,6 +3,7 @@ import hashlib
 from pathlib import Path
 import tempfile
 import unittest
+import zipfile
 
 import f13_exact_j_historical_red_test as harness
 
@@ -35,10 +36,15 @@ class HistoricalJTransport(unittest.TestCase):
             root = Path(folder)
             source = root / harness.J_CAPTURE.lstrip('/')
             source.parent.mkdir(parents=True)
-            source.write_bytes(b'untrusted bytes; never qualification')
+            with zipfile.ZipFile(harness.FIXTURE / 'historical-inputs.zip') as archive:
+                forged = bytearray(archive.read('objects/' + harness.LEDGER_SHA))
+            self.assertEqual(len(forged), harness.J_RECORD_BYTES)
+            forged[-1] ^= 1  # Same-length actual record mutation must hit SHA, not size.
+            self.assertNotEqual(hashlib.sha256(forged).hexdigest(), harness.LEDGER_SHA)
+            source.write_bytes(forged)
             with self.assertRaisesRegex(harness.SetupFailure, 'J_record_raw_binding'):
                 harness.materialize_J_record_alias(root, {harness.J_CAPTURE: (harness.LEDGER_SHA, 109549632)})
-            self.assertEqual(source.read_bytes(), b'untrusted bytes; never qualification')
+            self.assertEqual(source.read_bytes(), forged)
             self.assertFalse((root / harness.J_ORIGINAL_RECORD.lstrip('/')).exists())
 
     def test_record_alias_never_overwrites_existing_target(self):
