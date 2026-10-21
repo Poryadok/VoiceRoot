@@ -31,6 +31,10 @@ Trusted browser input covers anonymous entry, invalid OAuth state, login,
 Content/Spaces separation, staff assignment, denied resolution with retained
 input, destructive sanction cancel/confirm, resolution retry, appeal approval,
 and logout/direct reload. Unexpected requests or skipped assertions fail.
+The command first runs the no-listener DOM readiness regression. A newly
+navigated document without a body remains pending in the existing bounded
+text wait; unexpected script errors still fail. Run that regression alone
+with `node --test browser/text-readiness.node.mjs`.
 JSON and PNG evidence is written to `../../tmp/admin-browser` (override with
 `ADMIN_BROWSER_OUTPUT`), including source SHA and Chromium version. The
 `Admin browser` workflow runs this suite for Admin changes. This fixture is
