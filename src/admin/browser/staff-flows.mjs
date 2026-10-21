@@ -8,6 +8,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { bodyTextIncludesExpression } from './text-readiness.mjs';
 
 const root = resolve('dist');
 const output = resolve(process.env.ADMIN_BROWSER_OUTPUT ?? '../../tmp/admin-browser');
@@ -188,7 +189,7 @@ try {
     for (const type of ['mousePressed', 'mouseReleased']) await cdp.send('Input.dispatchMouseEvent', { type, ...point, button: 'left', clickCount: 1 });
   };
   const fill = async (selector, text) => { await click(selector); await cdp.send('Input.insertText', { text }); };
-  const text = value => until(value, () => evaluate(`document.body.innerText.includes(${JSON.stringify(value)})`));
+  const text = value => until(value, () => evaluate(bodyTextIncludesExpression(value)));
   const absent = selector => until(`absent ${selector}`, () => evaluate(`!document.querySelector(${JSON.stringify(selector)})`));
   const check = name => evidence.checks.push(name);
   screenshot = async name => { const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' }); await writeFile(join(output, `${name}.png`), Buffer.from(data, 'base64')); };
