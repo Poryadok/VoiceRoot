@@ -180,8 +180,18 @@ reordered or omitted full map/row/trace/ledger with recomputed hashes; rawfalse
 normalization, incoming rawtrue loss, dropped reverted/internal/deletion true;
 M receipt reused for J; supplied `qualified=true` or equal blob/OR without the
 new real receipt; permission omitted/reordered/replayed at conservation or
-mutation; collection seal/router context/retained history loss. All reject
-before destructive mutation. Literal mode/OID controls must alter the real
+mutation. Every such pre-transition negative must reject in the constructor,
+duplicate guard or pre-mutation J consumer: the pending before-map and retained
+rows stay byte-identical, with no destructive remove/overwrite/commit for that
+attempt. A later downstream rejection cannot satisfy these oracles.
+
+For the three genuinely downstream mutations, require the first applicable
+stage and full F13 failure: changed after-map at post-transition trace/map-fold
+validation; lost retained obligation at collection/seal reconstruction; changed
+router context at the original router's top-loop seal/context binding before
+its early continue or runtime lookup. These cases may follow valid earlier
+transitions and must not falsely assert an unchanged pre-transition map.
+Literal mode/OID controls must alter the real
 serialized tree_record rather than merely adding unused dictionary keys.
 
 Milestones:
