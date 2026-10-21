@@ -70,6 +70,33 @@ dev подключается к своей PostgreSQL, соединение к s
 После замены Pod проверены готовность, неизменный UID PVC и UUID всех шести
 прикладных таблиц. Квота namespace остаётся 20 GiB для memory limits.
 
+21 октября заполненный ClickHouse снова получает cgroup OOM при 2 GiB во время
+старта. Он правильно определяет cgroup v2 и выставляет внутренний потолок
+1,8 GiB; тот же image с пустыми данными запускается при 2 GiB. DEV-генератор
+теперь задаёт limit 4 GiB при прежнем request 256 MiB. Это ремонт бюджета
+памяти, без изменения image, потоков или таблиц. На момент подготовки сумма
+limits после ремонта составляет 19 584 из 20 480 MiB, доступная память узла —
+около 19 GiB. Перед применением эти значения нужно проверить заново.
+
+Для существующего стенда предусмотрена только узкая процедура этого ремонта:
+
+```sh
+python3 scripts/dev/repair_clickhouse_memory.py
+python3 scripts/dev/repair_clickhouse_memory.py --apply
+```
+
+Запускать из проверенной версии исходников на Linux под актуальным TT DEV
+claim после свежего `resource check --phase deploy` и проверки памяти узла.
+Первая команда выполняет server dry-run без создания lock; вторая использует
+общий `voice-dev-image-update-lock`, CAS по UID/resourceVersion и полной spec,
+проверку квоты, Bound PVC с неизменным UID, ожидание StatefulSet rollout и
+повторное сравнение spec/PVC. Она меняет только limit 2 GiB → 4 GiB; image,
+request и PVC не меняются. При неопределённом apply или неудаче rollout lock
+сохраняется для разбора. Не удалять его вслепую и не повторять bootstrap.
+TT claim необходимо удерживать до независимой проверки; TT сам по себе не
+останавливает внешние kubectl-процессы. Готовность rollout не заменяет проверку
+стабильности restartCount/OOM, доступа к ClickHouse и прикладным таблицам.
+
 Четыре независимых static PV имеют storage class `voice-dev-local` и reclaim
 policy `Retain`:
 
