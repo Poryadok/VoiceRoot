@@ -1064,3 +1064,36 @@ production dispatcher/decision, historical547 evidence/archive, all46 old histor
 tests, native/Game authorities and all54 PLANNED transition vectors are unchanged.
 Freeze a normal successor and obtain original418 narrow CODE recheck before
 any test, namespace, qualifier or producer execution. No RED/PASS is claimed.
+
+### c16 hosted SETUP: preserve the original raw J record pathname
+
+Exact PR4ea5/run39666435164/job119452798769 reached the focused harness but
+ended SETUP2: log1fb3953de22700ea8c69bb387b4ed2d75515ea2d4e2e5d3ca285cbe8ec05be9f
+line725 lacked `/tmp/F13-author-547/fixed3071-J-ledger.json`. The unchanged ba6
+archive contains the genuine109549632-byte record974d3d65 only under its captured
+`/out/actual/observed` name. This is a materialization alias omission, not missing
+history, a faithful F13 RED or a defective production guard.
+
+Following explicit c16/c17/e31 custody, a Linux data regression called the real
+`materialize()` on that exact archive and failed the literal consumer-path
+assertion:1test/2.473s, stderr5df2fe956e02e854851dc586dfe1092764fc4146d5ce2b375ff674f701a94511.
+The minimal correction copies only this one fixed captured raw record to its
+original pathname after checking declared binding, actual size/SHA and private
+non-symlink paths. Exclusive creation forbids overwriting any target. No generic
+missing-file fallback, invented JSON/ready value, row/OR change or guard waiver.
+The existing independent complete J/native/Game/history reconstruction remains
+unchanged and mandatory after materialization.
+
+Focused Linux GREEN passes4tests/2.726s, stderr2bacd435e8e9fd94fa8a7cc0570ea3cd941063ffe1c447233cfb3b9d0850c68c:
+actual archive bytes at both paths, wrong/missing declared binding, forged raw
+bytes, and byte-exact preservation of an existing target. Tests used immutable
+image989dfa with explicit Python entrypoint, networknone, capdropALL, read-only
+source/rootfs and private noexec tmpfs. No engine restore, namespace, qualifier,
+original image test, producer, hosted CI or GitHub call occurred. Rejection-only
+byte controls supply no source/permission authority. The original positive test
+body is unchanged between RED and GREEN.
+
+These are transport data tests, not the awaited actual shared-guard RED. All54
+transition oracles remain PLANNED; historical547/current4ea5 fullF13 remains HOLD.
+Freeze this three-file correction with source-bound receipts for original418
+independent CODE recheck before121 authorizes any new hosted-head execution.

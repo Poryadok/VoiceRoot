@@ -30,6 +30,9 @@ MAP_SHA = 'f088e093d271ea39b5394be0dd217d1d17f99782b8f7349d39be5eac0dde9e45'
 LEDGER_SHA = '974d3d65066541c254645d87bb0939e66e30341dd59ea47e5310755c45b1ed17'
 PENDING_SHA = 'd54ddd7340b0de4b1e9aed91286ccc1e5148bad7b8f832af898b452245da552a'
 OBSERVED = Path('/tmp/F13-author-547')
+J_CAPTURE = '/out/actual/observed/fixed3071-J-ledger.json'
+J_ORIGINAL_RECORD = '/tmp/F13-author-547/fixed3071-J-ledger.json'
+J_RECORD_BYTES = 109549632
 PATH = 'src/backend/space/internal/grpcsvc/audit.go'
 OPERATION = 'F5/3071ddad390443de4119c796cdad9899ff08f7fd/2'
 OUTER_SOURCE_HASHES = {
@@ -62,6 +65,30 @@ def run(args, **kwargs):
     p = subprocess.run(args, capture_output=True, **kwargs)
     require(p.returncode == 0, 'command:' + repr(args) + ':' + p.stderr.decode(errors='replace')[-2000:])
     return p.stdout
+
+
+def materialize_J_record_alias(root, logical):
+    """Lossless replay of one captured file at its original consumer pathname.
+
+    This creates no ready value or qualification; the original J reconstruction
+    below still must independently equal this captured raw transport.
+    """
+    require(logical.get(J_CAPTURE) == (LEDGER_SHA, J_RECORD_BYTES), 'J_record_declared_binding')
+    root = root.resolve()
+    source, target = root / J_CAPTURE.lstrip('/'), root / J_ORIGINAL_RECORD.lstrip('/')
+    for path in (source, target):
+        require(root in path.resolve().parents, 'J_record_private_path')
+        current = path
+        while current != root:
+            require(not current.is_symlink(), 'J_record_no_symlink')
+            current = current.parent
+    require(source.is_file(), 'J_record_captured_source_required')
+    require(not target.exists(), 'J_record_no_overwrite')
+    raw = source.read_bytes()
+    require(len(raw) == J_RECORD_BYTES and sha(raw) == LEDGER_SHA, 'J_record_raw_binding')
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open('xb') as stream:
+        stream.write(raw)
 
 
 def materialize(root):
@@ -103,6 +130,7 @@ def materialize(root):
             dest.write_bytes(data)
     for item in m['expected_absences']:
         require(not (root / item['logical_path'].lstrip('/')).exists(), 'keep_actual_absence')
+    materialize_J_record_alias(root, logical)
     return m
 
 
