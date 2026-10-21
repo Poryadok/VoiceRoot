@@ -30,6 +30,7 @@ class AuthPrincipalServicesTest {
   static final MethodDescriptor<Struct,Struct> ROLE_FLOOR = method("/" + SERVICE + "/GetRoleSessionEpochFloor");
   static final MethodDescriptor<Struct,Struct> SPACE_FLOOR = method("/" + SERVICE + "/GetSpaceSessionEpochFloor");
   static final MethodDescriptor<Struct,Struct> BOT_FLOOR = method("/" + SERVICE + "/GetBotSessionEpochFloor");
+  static final MethodDescriptor<Struct,Struct> CHAT_FLOOR = method("/" + SERVICE + "/GetChatSessionEpochFloor");
   static final MethodDescriptor<Struct,Struct> ADMISSION = method(AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC);
   static final MethodDescriptor<Struct,Struct> LOGIN = method("/" + SERVICE + "/Login");
   final AtomicInteger proofCalls = new AtomicInteger(), loginCalls = new AtomicInteger();
@@ -69,6 +70,10 @@ class AuthPrincipalServicesTest {
           proofCalls.incrementAndGet(); principal.set(VerifiedPrincipal.current());
           observer.onNext(request); observer.onCompleted();
         }))
+        .addMethod(CHAT_FLOOR, ServerCalls.asyncUnaryCall((request, observer) -> {
+          proofCalls.incrementAndGet(); principal.set(VerifiedPrincipal.current());
+          observer.onNext(request); observer.onCompleted();
+        }))
         .addMethod(LOGIN, ServerCalls.asyncUnaryCall((request, observer) -> {
           loginCalls.incrementAndGet(); observer.onNext(request); observer.onCompleted();
         })).build();
@@ -79,7 +84,7 @@ class AuthPrincipalServicesTest {
     assertEquals(Set.of(ISSUE.getFullMethodName(), CONSUME.getFullMethodName(), LOOKUP.getFullMethodName()), service.getMethods().stream()
         .map(method -> method.getMethodDescriptor().getFullMethodName()).collect(Collectors.toSet()));
     var floor = AuthPrincipalServices.sessionFloorService(all(), new AuthPrincipalServerInterceptor(fixture.verifier));
-    assertEquals(Set.of(FLOOR.getFullMethodName(), ROLE_FLOOR.getFullMethodName(), SPACE_FLOOR.getFullMethodName(), BOT_FLOOR.getFullMethodName(), ADMISSION.getFullMethodName()), floor.getMethods().stream()
+    assertEquals(Set.of(FLOOR.getFullMethodName(), ROLE_FLOOR.getFullMethodName(), SPACE_FLOOR.getFullMethodName(), BOT_FLOOR.getFullMethodName(), CHAT_FLOOR.getFullMethodName(), ADMISSION.getFullMethodName()), floor.getMethods().stream()
         .map(method -> method.getMethodDescriptor().getFullMethodName()).collect(Collectors.toSet()));
     for (var missing : Set.of(ISSUE, CONSUME, LOOKUP)) {
       var builder = ServerServiceDefinition.builder(SERVICE);
@@ -134,6 +139,40 @@ class AuthPrincipalServicesTest {
       assertEquals(Status.Code.UNIMPLEMENTED, failure.getStatus().getCode());
       assertEquals(0, loginCalls.get());
     } finally { stop(channel, server); }
+  }
+
+  @Test void chatHasOnlyItsExactFloorOnMutualTlsAndNoOrdinaryOrProofSurface() throws Exception {
+    Server server = floorTlsServer("server-cert.pem");
+    ManagedChannel channel = NettyChannelBuilder.forAddress("localhost", server.getPort())
+        .sslContext(tlsClientContext(true, "server-cert.pem")).build();
+    try {
+      assertEquals(REQUEST, call(channel, CHAT_FLOOR));
+      assertEquals("chat", principal.get().issuer());
+      for (String issuer : Set.of("role", "voice", "space", "bot", "gateway")) {
+        var denied = assertThrows(StatusRuntimeException.class, () -> call(channel, CHAT_FLOOR, issuer));
+        assertEquals(Status.Code.PERMISSION_DENIED, denied.getStatus().getCode());
+      }
+      for (var method : Set.of(FLOOR, ROLE_FLOOR, SPACE_FLOOR, ADMISSION)) {
+        var denied = assertThrows(StatusRuntimeException.class, () -> call(channel, method, "chat"));
+        assertEquals(Status.Code.PERMISSION_DENIED, denied.getStatus().getCode());
+      }
+      assertEquals(1, proofCalls.get());
+    } finally { stop(channel, server); }
+    Server legacy = NettyServerBuilder.forPort(0).addService(AuthPrincipalServices.legacyService(all())).build().start();
+    ManagedChannel ordinary = NettyChannelBuilder.forAddress("localhost", legacy.getPort()).usePlaintext().build();
+    try {
+      var denied = assertThrows(StatusRuntimeException.class, () -> call(ordinary, CHAT_FLOOR));
+      assertEquals(Status.Code.UNIMPLEMENTED, denied.getStatus().getCode());
+      assertEquals(1, proofCalls.get());
+    } finally { stop(ordinary, legacy); }
+    Server proof = tlsServer();
+    ManagedChannel privateChannel = NettyChannelBuilder.forAddress("localhost", proof.getPort())
+        .sslContext(tlsClientContext(true, "server-cert.pem")).build();
+    try {
+      var denied = assertThrows(StatusRuntimeException.class, () -> call(privateChannel, CHAT_FLOOR));
+      assertEquals(Status.Code.UNIMPLEMENTED, denied.getStatus().getCode());
+      assertEquals(1, proofCalls.get());
+    } finally { stop(privateChannel, proof); }
   }
 
   @Test void existingProofListenerStillAcceptsItsPriorServerTlsClientWithoutClientCertificate() throws Exception {
@@ -267,8 +306,8 @@ class AuthPrincipalServicesTest {
     var claims = AuthPrincipalVerifierTest.claims();
     claims.put("rpc", rpcOverride == null ? "/" + method.getFullMethodName() : rpcOverride);
     claims.put("request_hash", AuthPrincipalServerInterceptor.requestHash(REQUEST));
-    if (method == CONSUME || method == LOOKUP || method == FLOOR || method == ROLE_FLOOR || method == SPACE_FLOOR) {
-      String issuer = method == ROLE_FLOOR ? "role" : method == FLOOR ? "voice" : "space";
+    if (method == CONSUME || method == LOOKUP || method == FLOOR || method == ROLE_FLOOR || method == SPACE_FLOOR || method == CHAT_FLOOR) {
+      String issuer = method == CHAT_FLOOR ? "chat" : method == ROLE_FLOOR ? "role" : method == FLOOR ? "voice" : "space";
       claims.put("iss", issuer); claims.put("sub", "service:" + issuer); claims.put("principal_type", "service");
       claims.remove("account_id"); claims.remove("profile_id"); claims.remove("session_epoch");
     }
@@ -277,9 +316,11 @@ class AuthPrincipalServicesTest {
       claims.put("principal_type", "service");
       claims.remove("account_id"); claims.remove("profile_id"); claims.remove("session_epoch");
     }
+    String requestId = method == CHAT_FLOOR ? java.util.UUID.randomUUID().toString() : "request-1";
+    claims.put("request_id", requestId);
     Metadata headers = new Metadata();
     headers.put(AuthPrincipalServerInterceptorTest.AUTH, "Bearer " + AuthPrincipalVerifierTest.token(claims));
-    headers.put(AuthPrincipalServerInterceptorTest.REQUEST_ID, "request-1");
+    headers.put(AuthPrincipalServerInterceptorTest.REQUEST_ID, requestId);
     Channel signed = ClientInterceptors.intercept(channel, MetadataUtils.newAttachHeadersInterceptor(headers));
     return ClientCalls.blockingUnaryCall(signed, method, CallOptions.DEFAULT.withDeadlineAfter(5, TimeUnit.SECONDS), REQUEST);
   }

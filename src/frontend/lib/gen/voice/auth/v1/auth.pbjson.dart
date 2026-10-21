@@ -1833,3 +1833,37 @@ final $typed_data.Uint8List observeSpaceAdmissionSubjectResponseDescriptor = $co
     'RSEXNlc3Npb25FcG9jaEZsb29yEikKEHByb2ZpbGVfcmV2aXNpb24YByABKARSD3Byb2ZpbGVS'
     'ZXZpc2lvbhJBCghkZWNpc2lvbhgIIAEoDjIlLnZvaWNlLmF1dGgudjEuU3BhY2VBZG1pc3Npb2'
     '5EZWNpc2lvblIIZGVjaXNpb24=');
+
+@$core.Deprecated('Use getChatSessionEpochFloorRequestDescriptor instead')
+const GetChatSessionEpochFloorRequest$json = {
+  '1': 'GetChatSessionEpochFloorRequest',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+  ],
+};
+
+/// Descriptor for `GetChatSessionEpochFloorRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getChatSessionEpochFloorRequestDescriptor =
+    $convert.base64Decode(
+        'Ch9HZXRDaGF0U2Vzc2lvbkVwb2NoRmxvb3JSZXF1ZXN0Eh0KCmFjY291bnRfaWQYASABKAlSCW'
+        'FjY291bnRJZA==');
+
+@$core.Deprecated('Use getChatSessionEpochFloorResponseDescriptor instead')
+const GetChatSessionEpochFloorResponse$json = {
+  '1': 'GetChatSessionEpochFloorResponse',
+  '2': [
+    {
+      '1': 'session_epoch_floor',
+      '3': 1,
+      '4': 1,
+      '5': 3,
+      '10': 'sessionEpochFloor'
+    },
+  ],
+};
+
+/// Descriptor for `GetChatSessionEpochFloorResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getChatSessionEpochFloorResponseDescriptor =
+    $convert.base64Decode(
+        'CiBHZXRDaGF0U2Vzc2lvbkVwb2NoRmxvb3JSZXNwb25zZRIuChNzZXNzaW9uX2Vwb2NoX2Zsb2'
+        '9yGAEgASgDUhFzZXNzaW9uRXBvY2hGbG9vcg==');

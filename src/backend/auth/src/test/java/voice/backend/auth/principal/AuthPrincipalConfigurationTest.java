@@ -37,6 +37,17 @@ class AuthPrincipalConfigurationTest {
     verifyNoInteractions(epochs, redis);
   }
 
+  @Test void optionalChatJwksUsesExistingHttpsConfigurationWithoutChangingOldRequirements() {
+    String configured = VALID.substring(0, VALID.length() - 1) + ",\"chat\":\"https://chat.invalid/jwks\"}";
+    try (var interceptor = AuthPrincipalConfiguration.fromEnvironment(new MockEnvironment()
+        .withProperty(URLS, configured), epochs, redis)) {
+      assertTrue(interceptor.enabled());
+    }
+    assertThrows(IllegalArgumentException.class, () -> AuthPrincipalConfiguration.fromEnvironment(
+        new MockEnvironment().withProperty(URLS, configured.replace("https://chat.invalid", "http://chat.invalid")), epochs, redis));
+    verifyNoInteractions(epochs, redis);
+  }
+
   @Test void acceptsExplicitStandardDurations() {
     var environment = new MockEnvironment().withProperty(URLS, VALID)
         .withProperty("S2S_JWKS_REFRESH_AFTER", "30s")

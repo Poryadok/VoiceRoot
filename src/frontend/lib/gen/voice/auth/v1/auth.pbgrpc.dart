@@ -101,6 +101,15 @@ class AuthServiceClient extends $grpc.Client {
         options: options);
   }
 
+  $grpc.ResponseFuture<$0.GetChatSessionEpochFloorResponse>
+      getChatSessionEpochFloor(
+    $0.GetChatSessionEpochFloorRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getChatSessionEpochFloor, request,
+        options: options);
+  }
+
   /// @voice.security=protected;callers=service:space
   /// Exact read-only current Auth account + User profile observation; never grants membership.
   $grpc.ResponseFuture<$0.ObserveSpaceAdmissionSubjectResponse>
@@ -388,6 +397,12 @@ class AuthServiceClient extends $grpc.Client {
       '/voice.auth.v1.AuthService/GetBotSessionEpochFloor',
       ($0.GetBotSessionEpochFloorRequest value) => value.writeToBuffer(),
       $0.GetBotSessionEpochFloorResponse.fromBuffer);
+  static final _$getChatSessionEpochFloor = $grpc.ClientMethod<
+          $0.GetChatSessionEpochFloorRequest,
+          $0.GetChatSessionEpochFloorResponse>(
+      '/voice.auth.v1.AuthService/GetChatSessionEpochFloor',
+      ($0.GetChatSessionEpochFloorRequest value) => value.writeToBuffer(),
+      $0.GetChatSessionEpochFloorResponse.fromBuffer);
   static final _$observeSpaceAdmissionSubject = $grpc.ClientMethod<
           $0.ObserveSpaceAdmissionSubjectRequest,
           $0.ObserveSpaceAdmissionSubjectResponse>(
@@ -618,6 +633,15 @@ abstract class AuthServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.GetBotSessionEpochFloorRequest.fromBuffer(value),
         ($0.GetBotSessionEpochFloorResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetChatSessionEpochFloorRequest,
+            $0.GetChatSessionEpochFloorResponse>(
+        'GetChatSessionEpochFloor',
+        getChatSessionEpochFloor_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetChatSessionEpochFloorRequest.fromBuffer(value),
+        ($0.GetChatSessionEpochFloorResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ObserveSpaceAdmissionSubjectRequest,
             $0.ObserveSpaceAdmissionSubjectResponse>(
         'ObserveSpaceAdmissionSubject',
@@ -946,6 +970,15 @@ abstract class AuthServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetBotSessionEpochFloorResponse> getBotSessionEpochFloor(
       $grpc.ServiceCall call, $0.GetBotSessionEpochFloorRequest request);
+
+  $async.Future<$0.GetChatSessionEpochFloorResponse>
+      getChatSessionEpochFloor_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.GetChatSessionEpochFloorRequest> $request) async {
+    return getChatSessionEpochFloor($call, await $request);
+  }
+
+  $async.Future<$0.GetChatSessionEpochFloorResponse> getChatSessionEpochFloor(
+      $grpc.ServiceCall call, $0.GetChatSessionEpochFloorRequest request);
 
   $async.Future<$0.ObserveSpaceAdmissionSubjectResponse>
       observeSpaceAdmissionSubject_Pre(
