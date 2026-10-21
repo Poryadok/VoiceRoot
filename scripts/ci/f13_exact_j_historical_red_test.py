@@ -196,7 +196,7 @@ def inside():
         require(len(blob) == version['bytes'] and sha(blob) == version['sha256'], 'actual_source_content')
         require(git('rev-list', '--parents', '-n', '1', version['ref']).decode().split()[1:] == version['ordered_parents'], 'actual_source_ordered_parents')
     for edge in unit['edges'].values():
-        require(sha(git('diff', '--raw', '--no-abbrev', '--no-renames', edge['from'], edge['to'], '--', PATH)) == edge['raw_sha256'], 'actual_full_source_edge')
+        require(sha(git('diff', '--raw', '-z', '--no-abbrev', '--no-renames', edge['from'], edge['to'], '--', PATH)) == edge['raw_sha256'], 'actual_full_source_edge')
         require(sha(git('diff', '--no-ext-diff', '--no-renames', '--abbrev=9', edge['from'], edge['to'], '--', PATH)) == edge['patch_sha256'], 'actual_full_source_patch')
     h = historical_module()
     trace = OBSERVED / 'trace.jsonl'
@@ -238,7 +238,16 @@ def inside():
     require(incoming[4:6] == nested[4:6] and incoming[1] == nested[1], 'original_child_flags_source')
     frame = next(x['context'] for x in reconstructed['frame_ancestry'] if x['frame'] == 'F5')
     op = reconstructed['operation_binding']
-    require(op['classification'] == 'merge' and frame['partition_source_history'] == 'true', 'actual_merge_partition')
+    require(op['classification'] == 'merge' and frame['partition_source_history'] == 'false' and
+        frame['allow_direct_followup'] == 'true' and frame['base'] == h.AUTHOR_HISTORICAL_SCOPE['base'] and
+        frame['target'] == h.AUTHOR_HISTORICAL_SCOPE['target'], 'actual_outer_F5_merge_partition')
+    outer = next(x['context'] for x in reconstructed['frame_ancestry'] if x['frame'] == 'F2')
+    require(frame['parent'] == 'F2' and frame['parent_operation'] == 'F2/e6757e8ac26032ac4bad7f4356e91fffbf0725ba/2' and
+        outer['base'] == BASE and outer['target'] == SOURCE and outer['parent'] is None and
+        outer['allow_direct_followup'] == 'true' and outer['partition_source_history'] == 'true', 'actual_F5_parent_not_child_frame')
+    parent_operation = next(e for e in events if e['kind'] == 'operation_begin' and e['operation'] == frame['parent_operation'])
+    require(parent_operation['frame'] == frame['parent'] and parent_operation['payload']['source_head'] == frame['target'] and
+        parent_operation['payload']['boundary'] == frame['base'], 'actual_parent_operation_source_boundary_link')
     require(h.classify(reconstructed['classification']['unapproved_delta']['raw'].splitlines()) == reconstructed['classification']['trigger'], 'actual_full_classifier_recomputed')
     require(PATH not in json.loads(expected['files'][context['values']['native_p3_binding']]['raw'])['paths'], 'non_native_audit_actual_membership')
     require(not expected['values']['game_checkpoint_aggregate_active'] == 'true' or PATH not in expected['files'][expected['values']['game_checkpoint_aggregate_paths']]['raw'].splitlines(), 'non_Game_audit_actual_membership')

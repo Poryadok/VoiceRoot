@@ -1048,3 +1048,19 @@ Then121 controls normal publication and separately authorized hosted execution;
 only faithful actual-row RED can release the already accepted MASTER transition
 implementation. Historical source547 FAIL/current ordinary source_base failure
 and missing full collection/seal/router qualification remain explicit.
+
+### c75 static CODE HOLD correction
+
+Independent418 reviewed frozen8ac and found two deterministic fixture setup
+errors before the shared guard. The Git raw source edges bind NUL records, so
+the fixture now uses `git diff --raw -z`; immutable source-unit hashes stay
+unchanged. The real outer F5 is historical698/H53 true/false, parented by F2
+ea845/source547 true/true. The fixture now verifies those exact distinct frame
+flags plus actual parent-operation/source-boundary linkage, rather than
+substituting the J child's true/true traversal for its parent.
+
+These are source-only setup corrections; no executable proof was run. The
+production dispatcher/decision, historical547 evidence/archive, all46 old history
+tests, native/Game authorities and all54 PLANNED transition vectors are unchanged.
+Freeze a normal successor and obtain original418 narrow CODE recheck before
+any test, namespace, qualifier or producer execution. No RED/PASS is claimed.
