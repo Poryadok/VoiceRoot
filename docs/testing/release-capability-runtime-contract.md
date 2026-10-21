@@ -43,6 +43,55 @@ The local Compose fixture makes that choice explicitly. Alpha configuration
 must be supplied before a corresponding image rollout; old configs/pods cannot
 qualify. No rollout is authorized by this source contract.
 
+## Source-only deployment wiring
+
+Production and staging application manifests now require a bound release input.
+This is static wiring, not image/runtime/rollout qualification. No final policy
+bytes are committed: generate them only after the protected final candidate
+freeze. Any source change requires a new candidate binding and policy digest.
+
+The trusted stdlib helper is
+`scripts/staging/nats-rollout-preservation/release_policy_wiring.py`. Production
+`render-and-apply-prod.sh` and `apply-app-manifests.sh` require
+`VOICE_RELEASE_POLICY_INPUT` (a local closed JSON descriptor). The outer caller
+validates before any infrastructure/gateway/migration dispatch; the app helper
+validates/renders before its first cluster command.
+Captured staging `compiler.py` and `source_plan.py` accept the same descriptor
+as the explicit `release_policy` parameter; target code and environment variables
+do not supply that protected input. A later authorized root caller must carry it
+through its approved source/parameter provenance. Missing input blocks new
+source; no root authority, preservation gate or historical old-source check is
+bypassed. Older source without this new placeholder contract stays readable.
+
+The descriptor has exactly `profile`, `source_sha`, `policy_sha256`,
+`policy_object`, `owners`. Profile is only `free-invite-alpha`; source must equal
+the protected caller's candidate/tag. `policy_object` is a complete external
+immutable v1 ConfigMap descriptor with exactly apiVersion/kind/metadata/immutable/
+data. Metadata is exactly name/namespace; data has one validated key containing
+the exact UTF-8 v2 policy string. Its SHA256 and source binding are verified,
+with six disabled capabilities and all nine restricted intents disabled. This
+source stage neither creates that object nor attests its actual live content.
+
+`owners` has exactly auth/user/notification/realtime, each with caller-provided
+`policy_directory` and `snapshot_file`. The policy directory is absolute and
+mounted read-only, with the supplied ConfigMap key mapped to `policy.json`.
+All four variables are explicit on each application container, including Auth.
+Snapshot files are direct `/tmp/<filename>` children, on the container writable
+layer, without a covering volume or read-only root filesystem. The four current
+images have direct service/JVM ENTRYPOINTs; a service exit restarts its container
+and its writable layer. Persistent emptyDir/PVC snapshots or merely PodUID-unique
+filenames cannot provide freshness across a container restart. Runtime O_EXCL /
+CREATE_NEW and 0600 creation remain authoritative. Semantic CI rejects entrypoint
+overrides, covering mounts and read-only roots; actual image filesystem and
+restart validation remain live HOLD. No actual mount path is selected for an
+environment by this source contract.
+
+`make release-policy-wiring-test` checks synthetic offline inputs and both
+rendered environments, and is included in `ci-script-tests`. Live image tuples,
+actual immutable objects/mounts, snapshot readbacks and an authorized rollout
+owner/resource claim remain separate requirements. Static GREEN closes only
+the missing source wiring finding; it cannot attest the 18 qualification groups.
+
 ## Required owners and qualification
 
 | Capability | Required enforcement owners / preserved behavior |

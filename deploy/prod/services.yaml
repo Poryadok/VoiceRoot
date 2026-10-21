@@ -27,6 +27,10 @@ spec:
           image: __IMAGE_REGISTRY__/auth:__IMAGE_TAG__
           ports: [{containerPort: 8080, name: http}, {containerPort: 9090, name: grpc}]
           env:
+            - {name: VOICE_RELEASE_PROFILE, value: "free-invite-alpha"}
+            - {name: VOICE_RELEASE_POLICY_FILE, value: "__RELEASE_POLICY_DIRECTORY_AUTH__/policy.json"}
+            - {name: VOICE_RELEASE_POLICY_SHA256, value: "__RELEASE_POLICY_SHA256__"}
+            - {name: VOICE_RELEASE_SNAPSHOT_FILE, value: "__RELEASE_SNAPSHOT_AUTH__"}
             - {name: SPRING_DATASOURCE_URL, value: "jdbc:postgresql://voice-postgres:5432/auth_db"}
             - {name: SPRING_DATASOURCE_USERNAME, valueFrom: {configMapKeyRef: {name: voice-app-config, key: POSTGRES_USER}}}
             - {name: SPRING_DATASOURCE_PASSWORD, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: POSTGRES_PASSWORD}}}
@@ -49,6 +53,7 @@ spec:
             - {name: AUTH_TOTP_ENCRYPTION_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: AUTH_TOTP_ENCRYPTION_KEY}}}
             - {name: ACCOUNT_DELETE_TOKEN_SECRET, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: ACCOUNT_DELETE_TOKEN_SECRET}}}
           volumeMounts:
+            - {name: release-policy, mountPath: "__RELEASE_POLICY_DIRECTORY_AUTH__", readOnly: true}
             - {name: jwt-key, mountPath: /run/jwt.pem, subPath: jwt.pem, readOnly: true}
           startupProbe: {httpGet: {path: /health, port: http}, periodSeconds: 10, failureThreshold: 60}
           readinessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 5, failureThreshold: 6}
@@ -61,6 +66,8 @@ spec:
             - {name: nats-service-creds, mountPath: /var/run/nats/creds/auth.creds, subPath: auth.creds, readOnly: true}
             - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
       volumes:
+        - name: release-policy
+          configMap: {name: "__RELEASE_POLICY_OBJECT__", items: [{key: "__RELEASE_POLICY_KEY__", path: policy.json}]}
         - name: jwt-key
           secret: {secretName: voice-app-secrets, items: [{key: AUTH_JWT_PRIVATE_KEY, path: jwt.pem}]}
         - name: nats-leaf-config
@@ -180,6 +187,10 @@ spec:
           image: __IMAGE_REGISTRY__/user:__IMAGE_TAG__
           ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 9091}, {containerPort: 9092}, {containerPort: 9093}, {containerPort: 9095, name: notif-presence}]
           env:
+            - {name: VOICE_RELEASE_PROFILE, value: "free-invite-alpha"}
+            - {name: VOICE_RELEASE_POLICY_FILE, value: "__RELEASE_POLICY_DIRECTORY_USER__/policy.json"}
+            - {name: VOICE_RELEASE_POLICY_SHA256, value: "__RELEASE_POLICY_SHA256__"}
+            - {name: VOICE_RELEASE_SNAPSHOT_FILE, value: "__RELEASE_SNAPSHOT_USER__"}
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_DATABASE_URL}}}
             - {name: USER_ACCOUNT_DELETE_CONSUMER_ENABLED, value: "false"}
             - {name: USER_GRPC_ADDR, value: ":9090"}
@@ -217,6 +228,7 @@ spec:
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
           volumeMounts:
+            - {name: release-policy, mountPath: "__RELEASE_POLICY_DIRECTORY_USER__", readOnly: true}
             - {name: principal-tls, mountPath: /etc/voice/principal/tls, readOnly: true}
             - {name: file-principal-tls, mountPath: /etc/voice/file-principal/tls, readOnly: true}
             - {name: principal-ca, mountPath: /etc/voice/principal/ca, readOnly: true}
@@ -229,6 +241,8 @@ spec:
             - {name: nats-service-creds, mountPath: /var/run/nats/creds/user.creds, subPath: user.creds, readOnly: true}
             - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
       volumes:
+        - name: release-policy
+          configMap: {name: "__RELEASE_POLICY_OBJECT__", items: [{key: "__RELEASE_POLICY_KEY__", path: policy.json}]}
         - name: principal-tls
           secret: {secretName: voice-user-principal-tls}
         - name: file-principal-tls
@@ -792,6 +806,10 @@ spec:
           image: __IMAGE_REGISTRY__/notification:__IMAGE_TAG__
           ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 8443, name: principal-jwks}]
           env:
+            - {name: VOICE_RELEASE_PROFILE, value: "free-invite-alpha"}
+            - {name: VOICE_RELEASE_POLICY_FILE, value: "__RELEASE_POLICY_DIRECTORY_NOTIFICATION__/policy.json"}
+            - {name: VOICE_RELEASE_POLICY_SHA256, value: "__RELEASE_POLICY_SHA256__"}
+            - {name: VOICE_RELEASE_SNAPSHOT_FILE, value: "__RELEASE_SNAPSHOT_NOTIFICATION__"}
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: NOTIFICATION_DATABASE_URL}}}
             - {name: NOTIFICATION_GRPC_LISTEN, value: ":9090"}
             - {name: NOTIFICATION_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
@@ -820,6 +838,7 @@ spec:
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
           volumeMounts:
+            - {name: release-policy, mountPath: "__RELEASE_POLICY_DIRECTORY_NOTIFICATION__", readOnly: true}
             - {name: notification-principal-signing, mountPath: /etc/voice/notification-principal/keys, readOnly: true}
             - {name: notification-principal-tls, mountPath: /etc/voice/notification-principal/tls, readOnly: true}
             - {name: principal-ca, mountPath: /etc/voice/notification-principal/ca, readOnly: true}
@@ -832,6 +851,8 @@ spec:
             - {name: nats-service-creds, mountPath: /var/run/nats/creds/notification.creds, subPath: notification.creds, readOnly: true}
             - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
       volumes:
+        - name: release-policy
+          configMap: {name: "__RELEASE_POLICY_OBJECT__", items: [{key: "__RELEASE_POLICY_KEY__", path: policy.json}]}
         - name: nats-leaf-config
           configMap: {name: voice-nats-leaf-config}
         - name: nats-service-creds
@@ -880,6 +901,10 @@ spec:
           image: __IMAGE_REGISTRY__/realtime:__IMAGE_TAG__
           ports: [{containerPort: 8080}, {containerPort: 9091}]
           env:
+            - {name: VOICE_RELEASE_PROFILE, value: "free-invite-alpha"}
+            - {name: VOICE_RELEASE_POLICY_FILE, value: "__RELEASE_POLICY_DIRECTORY_REALTIME__/policy.json"}
+            - {name: VOICE_RELEASE_POLICY_SHA256, value: "__RELEASE_POLICY_SHA256__"}
+            - {name: VOICE_RELEASE_SNAPSHOT_FILE, value: "__RELEASE_SNAPSHOT_REALTIME__"}
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: REALTIME_DATABASE_URL}}}
             - {name: REALTIME_PRINCIPAL_SIGNING_KEYS_DIR, value: /etc/voice/p3/keys}
             - {name: REALTIME_PRINCIPAL_ACTIVE_KID, value: current}
@@ -903,6 +928,7 @@ spec:
             - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           volumeMounts:
+            - {name: release-policy, mountPath: "__RELEASE_POLICY_DIRECTORY_REALTIME__", readOnly: true}
             - {name: p3-signing, mountPath: /etc/voice/p3/keys, readOnly: true}
             - {name: p3-public, mountPath: /etc/voice/p3/public, readOnly: true}
             - {name: p3-server, mountPath: /etc/voice/p3/tls, readOnly: true}
@@ -917,6 +943,8 @@ spec:
             - {name: nats-service-creds, mountPath: /var/run/nats/creds/realtime.creds, subPath: realtime.creds, readOnly: true}
             - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
       volumes:
+        - name: release-policy
+          configMap: {name: "__RELEASE_POLICY_OBJECT__", items: [{key: "__RELEASE_POLICY_KEY__", path: policy.json}]}
         - name: p3-signing
           secret: {secretName: voice-realtime-principal-signing, defaultMode: 0440, items: [{key: current.pem, path: current.pem}, {key: next.pem, path: next.pem}]}
         - name: p3-public
