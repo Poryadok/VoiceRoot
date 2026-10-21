@@ -88,8 +88,8 @@ def verify_results(source, report):
             raise ValueError("evidence URI must be portable and nonempty")
         parsed = urlsplit(uri)
         if (parsed.scheme not in ("https", "artifact") or not parsed.netloc or not parsed.path.strip("/")
-                or parsed.username is not None or parsed.password is not None):
-            raise ValueError("evidence URI must be an https/artifact reference without credentials")
+                or parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment):
+            raise ValueError("evidence URI must be an https/artifact reference without credentials, query, or fragment")
         seen.add(case_id)
     if seen != required:
         raise ValueError("missing required negative cases")

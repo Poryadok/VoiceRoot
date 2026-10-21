@@ -119,9 +119,10 @@ class CapabilityManifestTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             manifest.compile_suite(source)
 
-    def test_credentials_in_evidence_are_rejected(self):
+    def test_nonportable_evidence_uris_are_rejected(self):
         suite = manifest.compile_suite(candidate())
-        for uri in ("https://user:secret@host/proof", "file:///tmp/proof", "artifact://run", "", "https://host/a b"):
+        for uri in ("https://user:secret@host/proof", "file:///tmp/proof", "artifact://run", "",
+                    "https://host/a b", "https://host/proof?token=secret", "https://host/proof#private"):
             report = results(suite)
             report["observations"][0]["evidence_uri"] = uri
             with self.subTest(uri=uri), self.assertRaises(ValueError):
