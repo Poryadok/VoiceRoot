@@ -28,12 +28,14 @@ def console_data():
     return {FILE: Path(__file__).with_name('clickhouse-memory-console.xml').read_text(encoding='utf-8')}
 
 
-def snapshot(client, pins, console=False, config_only=False):
+def snapshot(client, pins, console=False, config_only=False, expected_data=None,
+             require_oom=True, require_not_ready=True):
     sts_uid, pod_uid, pvc_uid, pv_uid, config_uid, revision, generation = pins
     verify_ownership(client)
     cm = client.call('get', 'configmap', CONFIG, '-o', 'json')
     cm_meta = cm['metadata']
-    expected_data = console_data() if console else clickhouse_memory_config()['data']
+    if expected_data is None:
+        expected_data = console_data() if console else clickhouse_memory_config()['data']
     if (cm_meta.get('namespace') != NS or cm_meta.get('name') != CONFIG or
             cm_meta.get('uid') != config_uid or not cm_meta.get('resourceVersion') or
             any(cm_meta.get('labels', {}).get(k) != v for k, v in LABELS.items()) or
@@ -51,7 +53,9 @@ def snapshot(client, pins, console=False, config_only=False):
             spec.get('updateStrategy', {}).get('rollingUpdate', {}).get('partition', 0) != 0 or
             status.get('observedGeneration') != generation or
             status.get('currentRevision') != revision or status.get('updateRevision') != revision or
-            status.get('updatedReplicas') != 1 or status.get('readyReplicas', 0) != 0 or
+            status.get('updatedReplicas') != 1 or
+            (require_not_ready and status.get('readyReplicas', 0) != 0) or
+            status.get('readyReplicas', 0) not in (0, 1) or
             len(pod_spec.get('containers', [])) != 1 or
             pod_spec.get('volumes') != [{'name': 'clickhouse-memory-policy',
                                         'configMap': {'name': CONFIG, 'defaultMode': 420,
@@ -83,8 +87,10 @@ def snapshot(client, pins, console=False, config_only=False):
                 not any(v.get('name') == 'chdata' and
                         v.get('persistentVolumeClaim', {}).get('claimName') == PVC
                         for v in pod['spec'].get('volumes', [])) or
-                len(statuses) != 1 or statuses[0].get('ready') is not False or
-                statuses[0].get('lastState', {}).get('terminated', {}).get('reason') != 'OOMKilled'):
+                len(statuses) != 1 or
+                (require_oom and (statuses[0].get('ready') is not False or
+                                  statuses[0].get('lastState', {}).get('terminated', {}).get('reason')
+                                  != 'OOMKilled'))):
             raise RuntimeError('DEV ClickHouse pod is not the pinned OOM target')
     pvc = client.call('get', 'pvc', PVC, '-o', 'json')
     pvc_meta = pvc['metadata']
@@ -104,12 +110,14 @@ def snapshot(client, pins, console=False, config_only=False):
     return cm, sts, pod
 
 
-def config_patch(cm):
+def config_patch(cm, target_data=None):
     meta = cm['metadata']
+    if target_data is None:
+        target_data = console_data()
     return [{'op': 'test', 'path': '/metadata/uid', 'value': meta['uid']},
             {'op': 'test', 'path': '/metadata/resourceVersion', 'value': meta['resourceVersion']},
             {'op': 'test', 'path': '/data', 'value': cm['data']},
-            {'op': 'replace', 'path': '/data/' + FILE, 'value': console_data()[FILE]}]
+            {'op': 'replace', 'path': '/data/' + FILE, 'value': target_data[FILE]}]
 
 
 def delete_options(pod):
@@ -140,11 +148,14 @@ def dry_run_delete(client, pod):
         raise RuntimeError('DEV ClickHouse Pod delete server dry-run drift')
 
 
-def replace_after_config(client, pins, lock_pins, apply=False):
+def replace_after_config(client, pins, lock_pins, apply=False, expected_data=None,
+                         require_oom=True):
     lock_uid, lock_rv, lock_operation = lock_pins
     expected_lock = {'metadata': {'uid': lock_uid, 'resourceVersion': lock_rv},
                      'data': {'operation': lock_operation}}
-    cm, sts, pod = snapshot(client, pins, console=True)
+    cm, sts, pod = snapshot(client, pins, console=True, expected_data=expected_data,
+                            require_oom=require_oom,
+                            require_not_ready=require_oom)
     verify_retained_lock(client, expected_lock)
     dry_run_delete(client, pod)
     print('DEV_CLICKHOUSE_CONSOLE_REPLACE_PREVIEW pod_uid=' + pins[1] +
@@ -152,8 +163,13 @@ def replace_after_config(client, pins, lock_pins, apply=False):
     if not apply:
         return
     try:
-        check_cm, check_sts, check_pod = snapshot(client, pins, console=True)
-        if (check_cm != cm or check_sts['metadata']['resourceVersion'] != sts['metadata']['resourceVersion'] or
+        check_cm, check_sts, check_pod = snapshot(client, pins, console=True,
+                                                 expected_data=expected_data,
+                                                 require_oom=require_oom,
+                                                 require_not_ready=require_oom)
+        if (check_cm != cm or
+                (require_oom and check_sts['metadata']['resourceVersion'] !=
+                 sts['metadata']['resourceVersion']) or
                 check_sts['spec'] != sts['spec'] or
                 check_pod['metadata']['uid'] != pod['metadata']['uid'] or
                 check_pod['metadata']['resourceVersion'] != pod['metadata']['resourceVersion']):

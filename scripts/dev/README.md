@@ -122,6 +122,36 @@ resourceVersion and operation. This mode server-dry-runs and then gracefully
 deletes only that exact Pod with UID/resourceVersion preconditions. It does not
 patch ConfigMap or StatefulSet or create/release a lock. Read the new Pod and
 its logs immediately; preserve the lock and TT window on uncertain outcome.
+For a bounded read-only investigation of the failing background merge, the
+separate `diagnose_clickhouse_merges.py` offers `--mode pause`,
+`replace-paused`, `restore`, and `replace-restored`. It preserves the existing
+4Gi cap, ratio `0.8`, error-only console logger, image, StatefulSet and PVC.
+The pause XML sets only the global MergeTree
+`max_bytes_to_merge_at_max_space_in_pool=1`; an isolated run of the exact
+24.8 image kept five small MergeTree parts separate while a control instance
+merged them. A per-table override may defeat the global setting. This pauses
+only automatic background merges; manual `OPTIMIZE` can still merge, so do not
+run `OPTIMIZE` during this diagnostic window. This is a diagnostic, not an
+availability fix. Do not use it until the four modes, exact
+ConfigMap and Pod identities, shared lock, source digest, and return procedure
+have independent review.
+Under the held DEV TT claim/window and updater lock, preview then apply `pause`
+(ConfigMap UID/resourceVersion/data CAS only); preview then apply
+`replace-paused` against the current exact NotReady OOM Pod UID/RV. Both
+replacement modes server-dry-run and delete only that single pinned Pod with
+UID/RV API preconditions, leaving the StatefulSet controller to recreate it.
+Observe the new Pod, verify the effective global **and table** settings and
+query only metadata in `system.parts`/`system.merges`. Bound the SQL readback
+window to three minutes from the paused Pod becoming Ready. The operator must
+enforce this deadline; the CLI has no timer. Abort the SQL readback earlier on
+`Too many parts`, write errors, OOM, wrong table setting, or failed identity
+checks. Immediately preview/apply
+`restore` to the prior ratio `0.8` plus console XML, then preview/apply
+`replace-restored` against that paused Pod's exact UID/RV and verify the next
+Pod's effective configuration. ConfigMap restore alone cannot undo a `subPath`
+mount already held by the current Pod. If either mutation or readback fails,
+retain the updater lock and TT window; do not claim restored behavior until a
+replacement Pod confirms it. Never treat the paused Pod as repaired.
 Schema-changing builds need separately reviewed dev migrations from the same
 source before image updates. Migrations use `migrate up` / Flyway `migrate`;
 Flyway repair is not automatic.

@@ -31,6 +31,7 @@ class Fake(policy_test.Fake):
                    'spec': {'claimRef': {'uid': 'pvc-uid', 'namespace': update_images.NS},
                             'persistentVolumeReclaimPolicy': 'Retain'}}
         self.delete_failed = False
+        self.stale_config_on_apply = False
 
     def call(self, *args, body=None):
         if args[:2] == ('get', 'resourcequota'):
@@ -55,8 +56,10 @@ class Fake(policy_test.Fake):
             if body[2]['value'] != self.config['data']:
                 raise RuntimeError('ConfigMap data CAS conflict')
             result = copy.deepcopy(self.config)
-            result['data'] = diagnostic.console_data()
+            result['data'] = {diagnostic.FILE: body[-1]['value']}
             if '--dry-run=server' not in args:
+                if self.stale_config_on_apply:
+                    raise RuntimeError('ConfigMap UID/resourceVersion CAS conflict')
                 self.config = copy.deepcopy(result)
                 self.config['metadata']['resourceVersion'] = '21'
             return result
