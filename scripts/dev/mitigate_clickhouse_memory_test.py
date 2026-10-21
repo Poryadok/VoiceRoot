@@ -98,6 +98,7 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual([p['op'] for p in patch[:3]], ['test', 'test', 'test'])
         self.assertEqual(patch[0]['value'], 'store-uid')
         self.assertEqual(patch[1]['value'], '14')
+        self.assertEqual(patch[3]['value'][0]['configMap']['defaultMode'], 420)
 
     def test_apply_exact_policy_replacement_readback_then_releases_lock(self):
         client = Fake()

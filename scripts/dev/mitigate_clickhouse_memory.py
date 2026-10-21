@@ -37,7 +37,8 @@ def add_clickhouse_memory_mount(pod):
                 for m in pod['containers'][0].get('volumeMounts', []))):
         raise ValueError('unexpected ClickHouse config mount baseline')
     pod['volumes'] = [{'name': 'clickhouse-memory-policy',
-                       'configMap': {'name': CONFIG, 'items': [{'key': FILE, 'path': FILE}]}}]
+                       'configMap': {'name': CONFIG, 'defaultMode': 420,
+                                     'items': [{'key': FILE, 'path': FILE}]}}]
     pod['containers'][0].setdefault('volumeMounts', []).append({
         'name': 'clickhouse-memory-policy',
         'mountPath': '/etc/clickhouse-server/config.d/' + FILE,
