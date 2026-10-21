@@ -116,6 +116,13 @@ preconditions после server-side dry-run. `subPath` требует ново�
 pod для чтения файла. Процедура атомарно занимает общий updater lock и всегда
 оставляет его для сверки результата; нельзя считать это исправлением OOM или
 освобождать TT окно до фактической проверки логов и нового pod.
+Если UID pod меняется между preview и apply без установленного источника,
+вариант `--config-only` не привязывается к pod: он сверяет ту же StatefulSet,
+ConfigMap, PVC/PV и quota, затем только CAS-обновляет существующий ConfigMap
+под новым updater lock. Он не читает, не изменяет и не удаляет pod/StatefulSet.
+Новый pod получит fragment лишь при следующем естественном пересоздании;
+сохранить lock и TT окно до readback логов и состояния, не считать патч
+исправлением OOM.
 
 Четыре независимых static PV имеют storage class `voice-dev-local` и reclaim
 policy `Retain`:

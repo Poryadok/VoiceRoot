@@ -106,6 +106,15 @@ delete. It always retains the lock for operator readback, including after a
 successful submission; inspect the controller-created Pod and `kubectl logs`
 before any separately reviewed repair or lock disposition. This diagnostic
 step is not a ClickHouse availability fix and does not imply product PASS.
+When the Pod UID changes and its deleting actor cannot be established,
+`--config-only` is the narrower reviewed mode. It omits
+`--expected-pod-uid`, pins the same StatefulSet revision, image, 4Gi cap,
+ConfigMap UID/data, PVC/PV and quota, and performs only the server-dry-run and
+UID/resourceVersion/data CAS patch of the existing ConfigMap under a new shared
+updater lock. It never reads, patches or deletes a Pod or StatefulSet. Keep the
+lock and TT window while observing whether a later natural Pod replacement
+actually loads the fragment; a successful ConfigMap patch alone is no proof of
+startup recovery or log visibility.
 Schema-changing builds need separately reviewed dev migrations from the same
 source before image updates. Migrations use `migrate up` / Flyway `migrate`;
 Flyway repair is not automatic.

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Expose errors from the exact failed DEV ClickHouse pod without changing memory or data.
+"""Expose DEV ClickHouse startup errors without changing memory or data.
 
-Preview uses server dry-runs only. Apply atomically creates the shared updater
-lock, CAS-patches the existing policy ConfigMap, and gracefully deletes only the
-pinned OOM pod with UID/resourceVersion preconditions. The StatefulSet recreates
-the same ordinal and revision with the updated read-only config.d subPath. The
-lock is deliberately retained for operator readback, even after a successful
-delete response. This command never force-deletes or unlocks anything.
+Preview uses server dry-runs only. Apply creates the shared updater lock and
+CAS-patches the existing policy ConfigMap. The default mode also gracefully
+deletes only the pinned OOM pod with UID/resourceVersion preconditions.
+--config-only never reads or deletes a Pod; a later natural replacement consumes
+the updated read-only config.d subPath. The lock is retained for operator
+readback. This command never force-deletes or unlocks anything.
 """
 import argparse
 from pathlib import Path
@@ -26,7 +26,7 @@ def console_data():
     return {FILE: Path(__file__).with_name('clickhouse-memory-console.xml').read_text(encoding='utf-8')}
 
 
-def snapshot(client, pins, console=False):
+def snapshot(client, pins, console=False, config_only=False):
     sts_uid, pod_uid, pvc_uid, pv_uid, config_uid, revision, generation = pins
     verify_ownership(client)
     cm = client.call('get', 'configmap', CONFIG, '-o', 'json')
@@ -65,23 +65,25 @@ def snapshot(client, pins, console=False):
                  'mountPath': '/etc/clickhouse-server/config.d/' + FILE,
                  'subPath': FILE, 'readOnly': True}]):
         raise RuntimeError('DEV ClickHouse image, memory or mounts changed')
-    pod = client.call('get', 'pod', POD, '-o', 'json')
-    pm = pod['metadata']
-    owners = pm.get('ownerReferences', [])
-    statuses = pod.get('status', {}).get('containerStatuses', [])
-    if (pm.get('namespace') != NS or pm.get('name') != POD or pm.get('uid') != pod_uid or
-            not pm.get('resourceVersion') or pm.get('deletionTimestamp') or
-            len(owners) != 1 or owners[0].get('kind') != 'StatefulSet' or
-            owners[0].get('name') != NAME or owners[0].get('uid') != sts_uid or
-            owners[0].get('controller') is not True or
-            pm.get('labels', {}).get('controller-revision-hash') != revision or
-            pod['spec'].get('containers') != pod_spec['containers'] or
-            not any(v.get('name') == 'chdata' and
-                    v.get('persistentVolumeClaim', {}).get('claimName') == PVC
-                    for v in pod['spec'].get('volumes', [])) or
-            len(statuses) != 1 or statuses[0].get('ready') is not False or
-            statuses[0].get('lastState', {}).get('terminated', {}).get('reason') != 'OOMKilled'):
-        raise RuntimeError('DEV ClickHouse pod is not the pinned OOM target')
+    pod = None
+    if not config_only:
+        pod = client.call('get', 'pod', POD, '-o', 'json')
+        pm = pod['metadata']
+        owners = pm.get('ownerReferences', [])
+        statuses = pod.get('status', {}).get('containerStatuses', [])
+        if (pm.get('namespace') != NS or pm.get('name') != POD or pm.get('uid') != pod_uid or
+                not pm.get('resourceVersion') or pm.get('deletionTimestamp') or
+                len(owners) != 1 or owners[0].get('kind') != 'StatefulSet' or
+                owners[0].get('name') != NAME or owners[0].get('uid') != sts_uid or
+                owners[0].get('controller') is not True or
+                pm.get('labels', {}).get('controller-revision-hash') != revision or
+                pod['spec'].get('containers') != pod_spec['containers'] or
+                not any(v.get('name') == 'chdata' and
+                        v.get('persistentVolumeClaim', {}).get('claimName') == PVC
+                        for v in pod['spec'].get('volumes', [])) or
+                len(statuses) != 1 or statuses[0].get('ready') is not False or
+                statuses[0].get('lastState', {}).get('terminated', {}).get('reason') != 'OOMKilled'):
+            raise RuntimeError('DEV ClickHouse pod is not the pinned OOM target')
     pvc = client.call('get', 'pvc', PVC, '-o', 'json')
     pvc_meta = pvc['metadata']
     pv = client.call('get', 'pv', PV, '-o', 'json')
@@ -120,6 +122,8 @@ def dry_run(client, cm, pod):
     if (preview_cm.get('metadata', {}).get('uid') != cm['metadata']['uid'] or
             preview_cm.get('data') != console_data()):
         raise RuntimeError('DEV ClickHouse console ConfigMap server dry-run drift')
+    if pod is None:
+        return
     path = '/api/v1/namespaces/' + NS + '/pods/' + POD
     preview_pod = client.call('delete', '--raw=' + path + '?dryRun=All', '-f', '-',
                               body=delete_options(pod))
@@ -127,28 +131,36 @@ def dry_run(client, cm, pod):
         raise RuntimeError('DEV ClickHouse Pod delete server dry-run drift')
 
 
-def expose(client, pins, apply=False):
-    cm, sts, pod = snapshot(client, pins)
+def expose(client, pins, apply=False, config_only=False):
+    cm, sts, pod = snapshot(client, pins, config_only=config_only)
     dry_run(client, cm, pod)
-    print('DEV_CLICKHOUSE_CONSOLE_PREVIEW pod_uid=' + pod['metadata']['uid'])
+    print('DEV_CLICKHOUSE_CONSOLE_PREVIEW ' +
+          ('config_only=true' if config_only else 'pod_uid=' + pod['metadata']['uid']))
     if not apply:
         return
     lock = acquire_lock(client)
     try:
-        check_cm, check_sts, check_pod = snapshot(client, pins)
+        check_cm, check_sts, check_pod = snapshot(client, pins, config_only=config_only)
         if (check_cm != cm or check_sts['metadata']['resourceVersion'] != sts['metadata']['resourceVersion'] or
-                check_sts['spec'] != sts['spec'] or check_pod['metadata']['uid'] != pod['metadata']['uid']):
+                check_sts['spec'] != sts['spec'] or
+                (not config_only and check_pod['metadata']['uid'] != pod['metadata']['uid'])):
             raise RuntimeError('DEV ClickHouse diagnostic target changed before mutation')
         verify_retained_lock(client, lock)
         patched = client.call('patch', 'configmap', CONFIG, '--type=json', '--patch-file=-',
                               '-o', 'json', body=config_patch(cm))
         if (patched.get('metadata', {}).get('uid') != pins[4] or patched.get('data') != console_data()):
             raise RuntimeError('DEV ClickHouse console ConfigMap patch outcome uncertain')
-        updated_cm, current_sts, current_pod = snapshot(client, pins, console=True)
+        updated_cm, current_sts, current_pod = snapshot(client, pins, console=True,
+                                                       config_only=config_only)
         if (updated_cm['metadata']['uid'] != cm['metadata']['uid'] or
                 current_sts['metadata']['resourceVersion'] != sts['metadata']['resourceVersion'] or
                 current_sts['spec'] != sts['spec']):
-            raise RuntimeError('DEV ClickHouse diagnostic baseline changed before pod replacement')
+            raise RuntimeError('DEV ClickHouse diagnostic baseline changed after ConfigMap patch')
+        if config_only:
+            verify_retained_lock(client, lock)
+            print('DEV_CLICKHOUSE_CONSOLE_CONFIG_UPDATED configmap_uid=' + pins[4] +
+                  ' lock_uid=' + lock['metadata']['uid'] + ' lock_retained=true')
+            return
         verify_retained_lock(client, lock)
         dry_path = '/api/v1/namespaces/' + NS + '/pods/' + POD + '?dryRun=All'
         options = delete_options(current_pod)
@@ -169,15 +181,20 @@ def expose(client, pins, apply=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply', action='store_true')
-    for name in ('statefulset-uid', 'pod-uid', 'pvc-uid', 'pv-uid',
+    parser.add_argument('--config-only', action='store_true',
+                        help='CAS-patch only the existing ConfigMap; never delete a pod')
+    for name in ('statefulset-uid', 'pvc-uid', 'pv-uid',
                  'configmap-uid', 'revision', 'statefulset-generation'):
         parser.add_argument('--expected-' + name, required=True)
+    parser.add_argument('--expected-pod-uid')
     args = parser.parse_args()
+    if not args.config_only and not args.expected_pod_uid:
+        parser.error('--expected-pod-uid is required without --config-only')
     pins = (args.expected_statefulset_uid, args.expected_pod_uid, args.expected_pvc_uid,
             args.expected_pv_uid, args.expected_configmap_uid, args.expected_revision,
             int(args.expected_statefulset_generation))
     try:
-        expose(Client(), pins, args.apply)
+        expose(Client(), pins, args.apply, args.config_only)
     except (ValueError, KeyError, TypeError, RuntimeError):
         print('DEV ClickHouse console diagnostic failed; inspect retained lock and workload',
               file=sys.stderr)

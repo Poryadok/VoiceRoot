@@ -49,6 +49,11 @@ class Fake(policy_test.Fake):
             return copy.deepcopy(self.lock)
         if args[:2] == ('patch', 'configmap'):
             self.calls.append((args, body))
+            if any(p['value'] != self.config['metadata'][p['path'].split('/')[-1]]
+                   for p in body[:2]):
+                raise RuntimeError('ConfigMap UID/resourceVersion CAS conflict')
+            if body[2]['value'] != self.config['data']:
+                raise RuntimeError('ConfigMap data CAS conflict')
             result = copy.deepcopy(self.config)
             result['data'] = diagnostic.console_data()
             if '--dry-run=server' not in args:
@@ -150,6 +155,55 @@ class ConsoleTests(unittest.TestCase):
         self.assertIsNotNone(client.lock)
         self.assertEqual(client.config['data'], diagnostic.console_data())
         self.assertEqual(client.pod['metadata']['uid'], 'oom-pod')
+
+    def test_config_only_preview_and_apply_never_read_or_delete_pod(self):
+        pins = (PINS[0], None, *PINS[2:])
+        client = Fake()
+        client.pod['metadata']['uid'] = 'rotated-before-preview'
+        diagnostic.expose(client, pins, config_only=True)
+        self.assertIsNone(client.lock)
+        self.assertEqual(client.config['data'], policy.clickhouse_memory_config()['data'])
+        self.assertFalse(any(args[:2] == ('get', 'pod') or args[0] == 'delete'
+                             for args, _ in client.calls))
+        diagnostic.expose(client, pins, apply=True, config_only=True)
+        self.assertEqual(client.config['data'], diagnostic.console_data())
+        self.assertEqual(client.pod['metadata']['uid'], 'rotated-before-preview')
+        self.assertEqual(client.sts['metadata']['resourceVersion'], '14')
+        self.assertEqual(client.lock['metadata']['uid'], 'new-lock')
+        self.assertFalse(any(args[:2] == ('get', 'pod') or args[0] == 'delete'
+                             for args, _ in client.calls))
+
+    def test_config_only_foreign_base_or_cas_conflict_cannot_patch(self):
+        pins = (PINS[0], None, *PINS[2:])
+        for drift in ('sts', 'config', 'pvc', 'pv', 'quota'):
+            client = Fake()
+            if drift == 'sts':
+                client.sts['metadata']['generation'] = 5
+            elif drift == 'config':
+                client.config['data'] = {'foreign': 'setting'}
+            elif drift == 'pvc':
+                client.pvc['metadata']['uid'] = 'foreign'
+            elif drift == 'pv':
+                client.pv['metadata']['uid'] = 'foreign'
+            else:
+                client.used = '21Gi'
+            with self.subTest(drift=drift), self.assertRaises((RuntimeError, ValueError)):
+                diagnostic.expose(client, pins, apply=True, config_only=True)
+            self.assertIsNone(client.lock)
+            self.assertEqual(client.config['data'], {'foreign': 'setting'} if drift == 'config'
+                             else policy.clickhouse_memory_config()['data'])
+
+        class Race(Fake):
+            def call(self, *args, body=None):
+                if args[:2] == ('patch', 'configmap') and '--dry-run=server' not in args:
+                    self.config['metadata']['resourceVersion'] = 'foreign'
+                return super().call(*args, body=body)
+        client = Race()
+        with self.assertRaises(RuntimeError):
+            diagnostic.expose(client, pins, apply=True, config_only=True)
+        self.assertEqual(client.config['data'], policy.clickhouse_memory_config()['data'])
+        self.assertIsNotNone(client.lock)
+        self.assertFalse(any(args[0] == 'delete' for args, _ in client.calls))
 
 
 if __name__ == '__main__':
