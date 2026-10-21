@@ -1163,3 +1163,19 @@ receipt. All execution used UID1000/private Linux/networknone/no ports/rootfsRO/
 capdropALL/no-new-privileges, with only private component-test tmpfs executable.
 The actual historical namespace, fullcapability reconstruction, qualifiers and
 shared guard were NOT invoked; actual F13 RED remains UNOBSERVED/54PLANNED.
+
+The new fixture metadata manifest was copied with CRLF bytes; staged diffcheck
+reported trailing whitespace. Intermediate normal367f0fc0 is preserved, not the
+final CODE-ready head. A normal LF-only metadata successor updates the fixed
+manifest SHA to2450a593; original observed provenance manifestbfb0 remains in the
+design packet. JSON values and all five ELF hashes/bytes/archive6326 are identical.
+Final-source materialization/manifest-forgery/real-loader checks are repeated;
+the prior12-test result stays explicitly bound to its pre-LF source, with the
+unchanged function bodies/tests reused only within that scope.
+
+Final LF source passes the three affected checks (actual materialize, manifest
+forgery and real loader/argv0/output/exit) in5.713s/exit0, logfe0c7bb0. Harness
+412b9b7b/test40441d16 hashes bind that receipt. Every function body is AST-equal
+to the prior12/12 source; only the fixed manifest hash constant and metadata LF
+bytes changed. Full namespace/capability/qualifier execution is still forbidden
+until independent frozen CODE review, and no such execution is claimed here.

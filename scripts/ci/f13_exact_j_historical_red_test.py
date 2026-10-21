@@ -50,7 +50,7 @@ HARNESS_SOURCE_PATHS = list(OUTER_SOURCE_HASHES) + [
     'scripts/ci/testdata/f13-exact-j-547/git-2.39.5-data-manifest.json',
 ]
 GIT_ARCHIVE_SHA = '6326cc23ae91825a592ae6b4c70e34b40566661128b357cc6642404f7ed87462'
-GIT_MANIFEST_SHA = 'bfb029902433cb3f64c900747bc7e0c05ec4cff34c583d497b2eed103b12183c'
+GIT_MANIFEST_SHA = '2450a593c024b8ce6d03ed97c5db6c60b397b90ec5c57d3e8d5c5a9287bf41ff'
 GIT_COMMANDS = ('cat-file', 'checkout', 'clone', 'config', 'diff', 'diff-tree', 'hash-object',
                 'index-pack', 'ls-tree', 'merge-base', 'merge-tree', 'rev-list', 'rev-parse', 'show', 'version')
 UTILITY_DIRS = ('/usr/local/bin', '/usr/bin', '/bin')
