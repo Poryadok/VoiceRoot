@@ -224,6 +224,58 @@ reviewed bounded pause and use the helper's `--reset-setting` against that
 same UUID, then restore again. Exact-image isolation confirmed `RESET SETTING`
 returns the old table DDL without changing its UUID or rows. No health claim
 or updater-lock release precedes sustained Ready/SQL and independent verify.
+
+`persist_clickhouse_metric_log.py` is a separate DEV-only candidate for **future**
+`system.metric_log` tables after the old failing UUID has been guardedly ALTERed.
+Its `clickhouse-memory-metric-log-1024.xml` adds only
+`<metric_log><settings>merge_max_block_size=1024</settings></metric_log>` to the
+ratio-0.8/error-console policy. It leaves global `merge_tree` settings, 4Gi,
+image and storage unchanged. In an isolated exact 24.8.14.39 image, enabling
+this fragment renamed a current default-setting `metric_log` to `metric_log_0`
+with the **same UUID and rows**, then created a new current UUID with explicit
+`merge_max_block_size=1024`; restarting with the same fragment did not create
+another suffix. A separate isolated `ALTER` of the current table itself also
+caused a rollover, so pre-ALTER is not a way to avoid it. This is a config and
+continuity test, not a reproduction of the DEV OOM or proof of large-merge
+efficacy. The previously altered DEV UUID may already be `metric_log_0`; do not
+assume which `_N` suffix the next rollover selects.
+
+Before any reviewed trial, under the current TT DEV claim and retained updater
+lock, capture `system.tables` name/UUID/full create query for **all**
+`metric_log` and `metric_log_N` tables, plus active part names, rows, bytes and
+`hash_of_all_files` by UUID. Capture current Pod/StatefulSet/ConfigMap/PVC/PV
+UIDs, revision/generation, quota, cgroup and OOM state. Confirm the old failing
+UUID still has 1024 and remains intact. Preview `--mode enable` with exact
+Kubernetes and lock pins, then apply only after independent acceptance and a
+fresh server dry-run. The command changes ConfigMap data by UID/resourceVersion
+CAS and retains the lock. Because the file is mounted by `subPath`, preview and
+apply `--mode replace-enabled` against the **current exact Ready Pod UID/RV**;
+it uses only a graceful, UID/RV-preconditioned Pod delete. Do not run a broad
+selector delete or touch the StatefulSet/PVC. Any drift or uncertain result
+requires readback under the retained lock, never a blind retry.
+
+After controller recreation, verify the same StatefulSet owner, revision,
+image, 4Gi cgroup cap, PVC/PV UIDs and Bound state, quota, Ready/SQL and no
+new OOM. Query all `metric_log*` UUIDs/DDL/active parts: every prior UUID must
+still exist, with its prior data/part identity or a documented natural merge;
+the new canonical `metric_log` must have explicit 1024; the prior current table
+should be a distinct `_N` with its original UUID and no lost rows. Verify
+global max/min automatic-merge caps remain at the pre-trial values (DEV
+previously read 150GiB/1MiB), rather than the diagnostic `1/1`. Repeated
+restart should not roll over again while the fragment is unchanged. Do not run
+`OPTIMIZE` or force a large merge to manufacture a PASS. Observe natural merges,
+parts backlog, write errors, OOM and cgroup peak over a separately agreed
+window; Ready/SQL and small-part consolidation alone do not resolve e25.
+
+The reviewed inverse is `--mode rollback` (same ConfigMap CAS) followed by
+`--mode replace-rollback` for the exact current Pod. Rolling the fragment back
+can itself create another `metric_log_N` at startup; compare the full UUID/parts
+inventory again and retain all historical tables. If rollback or SQL readback
+is uncertain, keep the updater lock and TT window; do not declare healthy or
+release either. Focused offline checks:
+`python3 -m unittest -v persist_clickhouse_metric_log_test diagnose_clickhouse_merges_test expose_clickhouse_errors_test alter_clickhouse_metric_log_test`
+from `scripts/dev` in Linux/Docker.
+
 Schema-changing builds need separately reviewed dev migrations from the same
 source before image updates. Migrations use `migrate up` / Flyway `migrate`;
 Flyway repair is not automatic.
