@@ -78,6 +78,42 @@ tests and shell syntax checks; CI execution/publication belongs to 121.
 - Policy bytes are generated only after final protected candidate freeze. A
   source edit changes candidate SHA, so old 4ea5/fcdf artifacts cannot be embedded.
 
+## Captured import closure correction (review 485 c4 / parent c32)
+
+The independent review of cd9d6129 found that the real captured bundle's fixed
+ROLLOUT list omitted `release_policy_wiring.py`, while compiler/source-plan
+import it. The source checkout tests did not exercise that packaging boundary.
+cd9d6129 remains NOT CLEAR. Original owner 273 accepted the bounded correction
+and obtained a fresh exclusive worktree lease before writes.
+
+Only add the required module to ROLLOUT, add an actual packaging/import closure
+regression in `bundle_test.py`, and record evidence here. The regression calls
+the real `bundle.build`, supplies explicitly synthetic ELF fixture bytes (never
+executed), verifies the generated capture-manifest against all archive members,
+extracts only those bytes, then imports actual compiler/source-plan under isolated
+`python -I -S` with only captured module paths. It must fail on unchanged cd9d6129
+for missing `release_policy_wiring`, then pass with the allowlist correction.
+A duplicate constant-list assertion or importing modules from the checkout
+cannot substitute for this test. No root launcher, installer, runtime kernel,
+cluster, network, provider, hosted CI, CodeGraph or Graphify is executed.
+
+- [x] Actual captured archive import-closure RED reproduced: real archive built
+  from cd9d6129 fails `compiler.py:15` import with `ModuleNotFoundError:
+  No module named 'release_policy_wiring'`, one assertion failure.
+- [x] Same captured-consumer regression GREEN after the one-member allowlist
+  correction: one test PASS, zero skips, 0.277s; both consumer module origins
+  resolve inside the extracted archive, with full manifest content hashes equal.
+- [ ] Freeze normal successor and portable packet/readback; offer same 485 narrow
+  independent recheck through 121 before intake.
+
+The prior nine static checks and three inherited baseline failures remain exactly
+limited as recorded; this correction does not relabel them as broader PASS or
+supply any live qualification input or final candidate policy bytes.
+The correction changes only bundle.py, its real-capture regression and this
+plan; prior wiring/parser/consumer/static-test bytes are unchanged. Their nine
+static checks are reused, not rerun or expanded. No old bundle protection,
+historical source validation, archive hash or allowlist check is weakened.
+
 ## Risks and follow-ups
 
 Qualified source/image tuples, actual immutable policy mounts, writable private

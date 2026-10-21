@@ -10,6 +10,47 @@ import tarfile
 import tempfile
 import unittest
 
+class CapturedImportClosureTest(unittest.TestCase):
+    def test_actual_archive_imports_both_policy_consumers_without_checkout_fallback(self):
+        import bundle
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            # build() checks ELF custody shape; these inert bytes are NEVER run.
+            elf = root / 'synthetic-not-executable.elf'
+            elf.write_bytes(b'\x7fELFsynthetic-offline-packaging-fixture')
+            output = root / 'output'
+            archive_sha = bundle.build(elf, output, elf, elf)
+            raw = (output / 'rollout-bundle.tar').read_bytes()
+            self.assertEqual(hashlib.sha256(raw).hexdigest(), archive_sha)
+            captured = root / 'captured'
+            captured.mkdir()
+            with tarfile.open(fileobj=io.BytesIO(raw)) as archive:
+                contents = {m.name: archive.extractfile(m).read() for m in archive.getmembers()}
+            manifest = json.loads(contents.pop('capture-manifest.json'))
+            self.assertEqual(manifest, {name: hashlib.sha256(data).hexdigest() for name, data in contents.items()})
+            for name, data in contents.items():
+                path = captured / name
+                self.assertTrue(path.resolve().is_relative_to(captured.resolve()))
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(data)
+            # -I/-S ignore checkout/PYTHONPATH/site-packages. Actual importer
+            # origins must be the extracted archive, not the test process.
+            script = '''import pathlib, sys
+root = pathlib.Path(sys.argv[1]).resolve()
+sys.path[:0] = [str(root / 'nats-rollout-preservation'), str(root / 'nats-known-baseline')]
+import compiler, source_plan, release_policy_wiring
+for module in (compiler, source_plan, release_policy_wiring):
+    assert pathlib.Path(module.__file__).resolve().is_relative_to(root)
+assert compiler.release_policy_wiring is source_plan.release_policy_wiring
+print('CAPTURED_IMPORT_CLOSURE_OK')
+'''
+            result = subprocess.run([sys.executable, '-I', '-S', '-c', script, str(captured)],
+                                    cwd=captured, capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), 'CAPTURED_IMPORT_CLOSURE_OK')
+            helper = 'nats-rollout-preservation/release_policy_wiring.py'
+            self.assertEqual(contents[helper], Path(__file__).with_name('release_policy_wiring.py').read_bytes())
+
 class BundleCaptureTest(unittest.TestCase):
     def setUp(self):
         self.assertEqual(os.getuid(),0)
