@@ -411,13 +411,14 @@ spec:
             - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+          volumeMounts:
+            - {name: realtime-p3-server, mountPath: /etc/voice/realtime-p3/tls, readOnly: true}
+            - {name: realtime-p3-trust, mountPath: /etc/voice/realtime-p3/trust, readOnly: true}
         - name: nats-leaf
           image: nats:2.12-alpine
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/chat.creds"}]
           volumeMounts:
-            - {name: realtime-p3-server, mountPath: /etc/voice/realtime-p3/tls, readOnly: true}
-            - {name: realtime-p3-trust, mountPath: /etc/voice/realtime-p3/trust, readOnly: true}
             - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
             - {name: nats-service-creds, mountPath: /var/run/nats/creds/chat.creds, subPath: chat.creds, readOnly: true}
             - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
