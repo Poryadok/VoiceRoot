@@ -59,6 +59,20 @@ concurrent edits; an atomic ConfigMap lock serializes this tool. A failed or
 uncertain mutation retains `voice-dev-image-update-lock`. Inspect the Deployment,
 rollout and lock UID before manually resolving it; do not blindly delete it.
 The updater never resets stores, applies migrations or changes configuration.
+
+The separate `repair_clickhouse_memory.py` is a fixed DEV-only maintenance
+operation for the recurring populated-store startup OOM: preview with no flags,
+then `--apply` from reviewed Linux source under the current TT DEV claim and
+fresh deploy admission. It changes only ClickHouse's 2Gi memory limit to 4Gi;
+the 256Mi request, image, full remaining spec and PVC identity stay unchanged.
+Check actual node memory headroom first. The tool checks namespace ownership,
+the digest-pinned single-container StatefulSet, quota, server dry-run, full-spec
+and UID/resourceVersion CAS, Bound PVC UID before/after, then rollout/readback.
+It uses the same `voice-dev-image-update-lock` as the app image updater and
+retains that lock on uncertain mutation/rollout. No force unlock, rollback,
+table deletion, broad apply, pool tuning or Preservation service operation is
+provided. Keep the TT resource window through independent verification;
+neither the lock nor TT fences unrelated external kubectl operations.
 Schema-changing builds need separately reviewed dev migrations from the same
 source before image updates. Migrations use `migrate up` / Flyway `migrate`;
 Flyway repair is not automatic.
