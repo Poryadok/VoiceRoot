@@ -197,7 +197,7 @@ def inside():
         require(git('rev-list', '--parents', '-n', '1', version['ref']).decode().split()[1:] == version['ordered_parents'], 'actual_source_ordered_parents')
     for edge in unit['edges'].values():
         require(sha(git('diff', '--raw', '--no-abbrev', '--no-renames', edge['from'], edge['to'], '--', PATH)) == edge['raw_sha256'], 'actual_full_source_edge')
-        require(sha(git('diff', '--no-ext-diff', '--no-renames', edge['from'], edge['to'], '--', PATH)) == edge['patch_sha256'], 'actual_full_source_patch')
+        require(sha(git('diff', '--no-ext-diff', '--no-renames', '--abbrev=9', edge['from'], edge['to'], '--', PATH)) == edge['patch_sha256'], 'actual_full_source_patch')
     h = historical_module()
     trace = OBSERVED / 'trace.jsonl'
     raw = trace.read_bytes()
