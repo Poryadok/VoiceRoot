@@ -405,6 +405,7 @@ staging-app-secrets-test:
 voice-db-runtime-provisioning-contract-test:
 	$(BASH) "$(ROOT)/scripts/ci/voice-r22-runtime-scope_test.sh"
 	python3 "$(ROOT)/scripts/ci/f13_guarded_correction_test.py"
+	python3 "$(ROOT)/scripts/ci/f13_exact_j_historical_red_test.py"
 	$(BASH) "$(ROOT)/scripts/ci/voice-db-runtime-provisioning-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/apply-migrate-jobs_test.sh"
 

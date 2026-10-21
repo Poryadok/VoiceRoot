@@ -707,6 +707,7 @@ f13_checkpoint_merge_tree_entry_matches() {
   local conflict_path guarded_conflict=false
   local exact_merge="${7:-}" exact_capability="${8:-}" exact_observer="${9:-}" exact_receipt exact_3071_capability="${10:-}"
   local corrected_F_capability="${11:-}"
+  local collector_base="${12:-}" collector_target="${13:-}"
   bases_file="${TMP_DIR}/f13-checkpoint-merge-bases"
   output_file="${TMP_DIR}/f13-checkpoint-merge-tree"
   git -C "${repo}" merge-base --all "${first_parent}" "${source_head}" \
@@ -725,7 +726,8 @@ f13_checkpoint_merge_tree_entry_matches() {
     if [[ -n "${exact_merge}" && -n "${exact_capability}" &&
       "${exact_observer}" == "${repo}/scripts/ci/f13_f54_history.py" ]] &&
       exact_receipt="$(python3 "${exact_observer}" cap-composition "${repo}" "${exact_capability}" \
-        "${exact_merge}" "${expected_base}" "${first_parent}" "${source_head}" "${path}" "${result_entry}")"; then
+        "${exact_merge}" "${expected_base}" "${first_parent}" "${source_head}" "${path}" "${result_entry}" \
+        "${collector_base}" "${collector_target}")"; then
       # A distinct complete-unit whole-parent proof answers this exact seam.
       # It does not relabel O as a best base or waive any native/source gate.
       if [[ -n "${f13_f54_trace_file:-}" ]]; then
@@ -3271,10 +3273,16 @@ f13_f54_observe_child() {
 f13_f54_observe_span() {
   local repo="$1" original_trace="$2" original_native="$3" current_native="$4"
   local trace="$5" map="$6" category="$7" binding
+  local origin_command=span-origin
+  local -a origin_author_args=()
+  if [[ -n "${f13_f54_span_author_capability:-}" ]]; then
+    origin_command=span-author-origin
+    origin_author_args=("${f13_f54_span_author_capability}")
+  fi
   local f13_f54_trace_file="${trace}" f13_f54_frame='' f13_f54_operation=''
   [[ -n "${f13_f54_observer:-}" && ! -e "${trace}" && "${map}" != "${TMP_DIR}/f13-contributions" ]] || return 1
-  binding="$(python3 "${f13_f54_observer}" span-origin "${repo}" "${original_trace}" \
-    "${original_native}" "${current_native}")" || return 1
+  binding="$(python3 "${f13_f54_observer}" "${origin_command}" "${repo}" "${original_trace}" \
+    "${original_native}" "${current_native}" "${origin_author_args[@]}")" || return 1
   f13_f54_trace_event span_link "${repo}" "${binding}" || return 1
   # This is new supplemental evidence, not an original recursive call. Keep
   # the observed integration owner/map and propagate every genuine failure.
@@ -3302,6 +3310,21 @@ f13_f54_collect_exact_unit() {
 }
 
 f13_f54_collect_exact_master_unit() {
+  f13_f54_collect_master_author_impl capabilities "$@"
+}
+
+f13_f54_collect_current_author_master_unit() {
+  f13_f54_collect_master_author_impl current-author-capabilities "$@"
+}
+
+f13_f54_collect_master_author_impl() {
+  local capability_command="$1"
+  shift
+  [[ "${capability_command}" == capabilities || "${capability_command}" == current-author-capabilities ]] || return 1
+  local J_capability_command=3071-capabilities
+  if [[ "${capability_command}" == current-author-capabilities ]]; then
+    J_capability_command=3071-current-author-capabilities
+  fi
   local repo="$1" base="$2" target="$3" output="$4" category="$5" unit="$6"
   local f13_f54_original_trace="$7" f13_f54_original_native="$8" f13_f54_current_native="$9"
   local fixed3071_unit="${10:-}" f13_f54_3071_capability_file=''
@@ -3309,6 +3332,10 @@ f13_f54_collect_exact_master_unit() {
   local f13_f54_I_operation='' f13_f54_I_ledger="${TMP_DIR}/fixed3071-I-ledger.json" f13_f54_I_ledger_sha=''
   local f13_f54_J_operation='' f13_f54_J_ledger="${TMP_DIR}/fixed3071-J-ledger.json" f13_f54_J_ledger_sha=''
   local f13_f54_capability_file="${TMP_DIR}/f54-exact-source-capabilities.json"
+  local f13_f54_span_author_capability=''
+  if [[ "${capability_command}" == current-author-capabilities ]]; then
+    f13_f54_span_author_capability="${f13_f54_capability_file}"
+  fi
   local f13_f54_M_operation='' f13_f54_M_child_map="${TMP_DIR}/f54-actual-M-child-map"
   local f13_f54_M_span_trace="${TMP_DIR}/f54-actual-M-span.jsonl" f13_f54_M_span_map="${TMP_DIR}/f54-actual-M-span-map"
   local f13_f54_M_ledger="${TMP_DIR}/f54-actual-M-ledger.json" f13_f54_M_ledger_sha=''
@@ -3318,12 +3345,12 @@ f13_f54_collect_exact_master_unit() {
     ! -e "${f13_f54_capability_file}" ]] || return 1
   # Same original wrapper and native B/S/T rules. This explicit author caller
   # only supplies finite M evidence to its genuine nested H53 source frame.
-  python3 "${f13_f54_observer}" capabilities "${repo}" "${unit}" >"${f13_f54_capability_file}" || return 1
+  python3 "${f13_f54_observer}" "${capability_command}" "${repo}" "${unit}" >"${f13_f54_capability_file}" || return 1
   python3 "${f13_f54_observer}" master-entry "${repo}" "${f13_f54_capability_file}" "${native_p3_binding}" >"${entry}" || return 1
   if [[ -n "${fixed3071_unit}" ]]; then
     f13_f54_3071_capability_file="${TMP_DIR}/fixed3071-structural-capabilities.json"
     [[ ! -e "${f13_f54_3071_capability_file}" ]] || return 1
-    python3 "${f13_f54_observer}" 3071-capabilities "${repo}" "${fixed3071_unit}" \
+    python3 "${f13_f54_observer}" "${J_capability_command}" "${repo}" "${fixed3071_unit}" \
       "${native_p3_binding}" >"${f13_f54_3071_capability_file}" || return 1
     if [[ -f "${fixed3071_unit}/corrected-F/source-unit.json" ]]; then
       f13_f54_F_capability_file="${TMP_DIR}/corrected-F-capability.json"
@@ -3403,8 +3430,10 @@ f13_f54_router_gate() {
 
 f13_f54_execute_M_history() {
   local repo="$1" merge="$2" first="$3" source="$4" output="$5" receipt="$6" boundary
+  local collector_base="${7:-}" collector_target="${8:-}"
   [[ -n "${f13_f54_capability_file:-}" && -s "${receipt}" ]] || return 1
-  boundary="$(python3 "${f13_f54_observer}" cap-boundary "${repo}" "${f13_f54_capability_file}" "${merge}" "${first}" "${source}")" || return 1
+  boundary="$(python3 "${f13_f54_observer}" cap-boundary "${repo}" "${f13_f54_capability_file}" \
+    "${merge}" "${first}" "${source}" "${collector_base}" "${collector_target}")" || return 1
   boundary="$(python3 -c 'import json,sys;print(json.loads(sys.argv[1])["history_boundary"])' "${boundary}")" || return 1
   f13_f54_M_operation="${f13_f54_operation}"
   f13_f54_trace_event boundary_observation "${repo}" "${output}" "${boundary}" || return 1
@@ -3533,12 +3562,14 @@ f13_f54_consume_M_before_mutation() {
 
 f13_f54_exact_supersession() {
   local repo="$1" path="$2" output="$3" incoming="$4" composition receipt result
+  local collector_base="${5:-}" collector_target="${6:-}"
   [[ -n "${f13_f54_M_operation:-}" && "${f13_f54_operation:-}" == "${f13_f54_M_operation}" &&
     -n "${f13_f54_capability_file:-}" && -n "${f13_f54_M_ledger_sha:-}" ]] || return 1
   result="$(git -C "${repo}" ls-tree f54bcadab4aa19969281d7d35d76ebad91553d4d -- ":(literal)${path}")" || return 1
   composition="$(python3 "${f13_f54_observer}" cap-composition "${repo}" "${f13_f54_capability_file}" \
     f54bcadab4aa19969281d7d35d76ebad91553d4d 4d943fac27fd247d136d84ae145440e54485d3ab \
-    0a0024900b5bb3ba2f6fee391615f0f4fa0864e3 f15d718b2d20837ae5503dc049134b66592b3675 "${path}" "${result}")" || return 1
+    0a0024900b5bb3ba2f6fee391615f0f4fa0864e3 f15d718b2d20837ae5503dc049134b66592b3675 "${path}" "${result}" \
+    "${collector_base}" "${collector_target}")" || return 1
   f13_f54_trace_event composition_capability "${repo}" "${composition}" || return 1
   receipt="${TMP_DIR}/f54-exact-supersession.json"
   python3 "${f13_f54_observer}" M-supersession "${repo}" "${f13_f54_capability_file}" \
@@ -3560,6 +3591,7 @@ f13_f54_prepare_M_ledger() {
 f13_resolve_source_base() {
   local repo="$1" first_parent="$2" source_head="$3" output_file="$4"
   local exact_merge="${5:-}" exact_capability="${6:-}" exact_observer="${7:-}" exact_receipt exact_3071_capability="${8:-}"
+  local collector_base="${9:-}" collector_target="${10:-}"
   local bases canonical base path first_entry entry first_entry_set
   local paths="${TMP_DIR}/f13-ambiguous-base-paths-${first_parent}-${source_head}"
   bases="$(git -C "${repo}" merge-base --all "${first_parent}" "${source_head}" 2>/dev/null)" || return 1
@@ -3581,7 +3613,7 @@ f13_resolve_source_base() {
     if [[ -n "${exact_merge}" && -n "${exact_capability}" &&
       "${exact_observer}" == "${repo}/scripts/ci/f13_f54_history.py" ]] &&
       exact_receipt="$(python3 "${exact_observer}" cap-boundary "${repo}" "${exact_capability}" \
-        "${exact_merge}" "${first_parent}" "${source_head}")"; then
+        "${exact_merge}" "${first_parent}" "${source_head}" "${collector_base}" "${collector_target}")"; then
       # This value is an exact history boundary, never a selected best base.
       canonical="$(python3 -c 'import json,sys;print(json.loads(sys.argv[1])["history_boundary"])' "${exact_receipt}")" || return 1
       printf '%s\n' "${canonical}" >"${output_file}" || return 1
@@ -3930,6 +3962,120 @@ f13_guarded_correction_qualified() {
   printf 'CI_DIAG stage=f13-guarded-correction qualification=%s\n' "${receipt}" >&2
 }
 
+f13_evaluate_guarded_owner_qualifiers() {
+  local repo="$1" path="$2" output="$3"
+  incremental_merge=false
+  checkpoint_supersession_status=1
+  previous_source_head="${owner_source_heads[${path}]:-}"
+  previous_source_entry="${owner_source_entries[${path}]:-}"
+  if [[ -n "${previous_source_head}" && -n "${previous_source_entry}" ]] && \
+    git -C "${repo}" merge-base --is-ancestor "${previous_source_head}" "${nested_base}" 2>/dev/null; then
+    base_entry="$(git -C "${repo}" ls-tree "${nested_base}" -- "${path}" 2>/dev/null)" || {
+      f13_collect_failure "${diagnostic_file}" source_tree_entry
+      return 1
+    }
+    [[ "${previous_source_entry}" == "${base_entry}" ]] && source_lineage=true
+  fi
+  if [[ "${allow_direct_followup}" == true && "${is_direct}" != true ]]; then
+    [[ "${ordinary_guarded_merge}" == true ]] && incremental_merge=true
+    if git -C "${repo}" merge-base --is-ancestor "${owners[${path}]}" "${source_base}" 2>/dev/null; then
+      incremental_merge=true
+    fi
+    [[ "${source_lineage}" == true ]] && incremental_merge=true
+  fi
+  if [[ "${allow_direct_followup}" == true && "${is_direct}" != true && \
+    "${incremental_merge}" != true ]]; then
+    if game_checkpoint_duplicate_owner_supersession_allowed \
+      "${repo}" "${path}" "${owners[${path}]}" "${previous_source_head}" \
+      "${nested_owner_commit}" "${nested_head}" "${commit}" \
+      "${checkpoint_merge_outcomes[${path}]:-unverified}"; then
+      incremental_merge=true
+      checkpoint_supersession_status=0
+    else
+      checkpoint_supersession_status=$?
+      [[ "${checkpoint_supersession_status}" == 2 ]] && incremental_merge=true
+    fi
+  fi
+  if [[ "${allow_direct_followup}" != true && "${is_direct}" == true ]] && \
+    f13_guarded_correction_qualified "${repo}" "${base}" "${target}" "${path}" "${commit}" "${output}"; then
+    guarded_correction_allowed=true
+  fi
+  if [[ "${guarded_correction_allowed}" != true ]] &&
+    [[ "${native_p3_active:-false}" == true ]] && native_p3_path_bound "${repo}" "${path}"; then
+    native_merge_outcome="${checkpoint_merge_outcomes[${path}]:-unverified}"
+    [[ "${is_direct}" == true ]] && native_merge_outcome=direct
+    if native_p3_duplicate_owner_qualified "${repo}" "${path}" \
+      "${owners[${path}]}" "${previous_source_head}" "${nested_owner_commit}" \
+      "${nested_head}" "${commit}" "${native_merge_outcome}"; then
+      native_supersession_status=0
+    else
+      native_supersession_status=$?
+    fi
+    if [[ "${native_supersession_status}" == 0 || "${native_supersession_status}" == 2 ]]; then
+      guarded_correction_allowed=true
+      # This is the actual producer history, not replacement proof rows.
+      awk -F '\t' -v candidate="${path}" '$1 == candidate' "${output}" \
+        >>"${TMP_DIR}/f13-native-p3-history.tsv" || return 1
+      printf 'supersession\t%s\t%s\t%s\t%s\t%s\n' "${path}" "${commit}" \
+        "${nested_head}" "${native_merge_outcome}" "${native_supersession_status}" \
+        >>"${TMP_DIR}/f13-native-p3-history.tsv" || return 1
+      if [[ "${native_supersession_status}" == 0 ]]; then
+        if [[ -n "${f13_f54_trace_file:-}" ]]; then
+          f13_f54_trace_event native_rebind_gate "${repo}" "${path}" \
+            "${native_supersession_status}" "${owners[${path}]}" "${previous_source_head}" \
+            "${nested_owner_commit}" "${nested_head}" "${commit}" "${native_merge_outcome}" \
+            "${native_p3_binding}" || return 1
+        fi
+        source_entry="$(git -C "${repo}" ls-tree "${commit}" -- ":(literal)${path}")" || return 1
+        nested_owner_commit="${commit}"
+        nested_base="${first_parent}"
+        nested_head="${commit}"
+        unset 'guarded_entries[$path]' 'guarded_entry_commits[$path]'
+      fi
+    fi
+  fi
+  if [[ "${allow_direct_followup}" == true && "${is_direct}" != true &&
+    "${incremental_merge}" != true && "${guarded_correction_allowed}" != true ]] &&
+    declare -F f13_role_conditional_qualified >/dev/null; then
+    role_incoming_row="$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' \
+      "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" \
+      "${nested_head}" "${content_base}" "${source_base_candidates}")" || return 1
+    if f13_role_conditional_qualified "${repo}" "${output}" "${path}" "${role_incoming_row}"; then
+      role_duplicate_allowed=true
+    fi
+  fi
+  if [[ "${allow_direct_followup}" == true && "${is_direct}" != true &&
+    "${incremental_merge}" != true && "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true ]] &&
+    declare -F f13_space_audit_qualified >/dev/null; then
+    role_incoming_row="$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' \
+      "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" \
+      "${nested_head}" "${content_base}" "${source_base_candidates}")" || return 1
+    if f13_space_audit_qualified "${repo}" "${output}" "${path}" "${role_incoming_row}"; then
+      space_audit_allowed=true
+    fi
+  fi
+  if [[ "${allow_direct_followup}" == true && "${is_direct}" != true && "${incremental_merge}" != true &&
+    "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && "${space_audit_allowed}" != true &&
+    -n "${f13_f54_capability_file:-}" ]]; then
+    if f13_f54_exact_supersession "${repo}" "${path}" "${output}" \
+      "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" "${base}" "${target}"; then
+      exact_unit_supersession=true
+    fi
+  fi
+  return 0
+}
+
+f13_guarded_owner_transition_allowed() {
+  local guarded_correction_allowed="$1" role_duplicate_allowed="$2" space_audit_allowed="$3"
+  local exact_unit_supersession="$4" allow_direct_followup="$5" is_direct="$6" incremental_merge="$7"
+  if [[ "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && "${space_audit_allowed}" != true && "${exact_unit_supersession}" != true && \
+    ( "${allow_direct_followup}" != true || \
+    ( "${is_direct}" != true && "${incremental_merge}" != true ) ) ]]; then
+    return 1
+  fi
+  return 0
+}
+
 f13_collect_develop_contributions() {
   if [[ -n "${f13_f54_trace_file:-}" && "${f13_f54_running:-false}" != true ]]; then
     local f13_f54_parent="${f13_f54_frame:-}" f13_f54_parent_operation="${f13_f54_operation:-}"
@@ -4068,7 +4214,7 @@ f13_collect_develop_contributions() {
       fi
       source_base_file="${TMP_DIR}/f13-source-base-${contribution_id}"
       f13_resolve_source_base "${repo}" "${first_parent}" "${source_head}" "${source_base_file}" \
-        "${commit}" "${f13_f54_capability_file:-}" "${f13_f54_observer:-}" "${f13_f54_3071_capability_file:-}" || {
+        "${commit}" "${f13_f54_capability_file:-}" "${f13_f54_observer:-}" "${f13_f54_3071_capability_file:-}" "${base}" "${target}" || {
         if [[ -n "${f13_f54_trace_file:-}" ]]; then
           f13_f54_observe_child "${repo}" "${commit}" "${first_parent}" "${source_head}" "${output}" || return 1
         fi
@@ -4103,7 +4249,7 @@ f13_collect_develop_contributions() {
         "${is_direct}" "${delta}")" || return 1
     fi
     if [[ "${is_direct}" != true && -n "${f13_f54_capability_file:-}" && -s "${source_base_file:-}.capability" ]]; then
-      f13_f54_execute_M_history "${repo}" "${commit}" "${first_parent}" "${source_head}" "${output}" "${source_base_file}.capability" || return 1
+      f13_f54_execute_M_history "${repo}" "${commit}" "${first_parent}" "${source_head}" "${output}" "${source_base_file}.capability" "${base}" "${target}" || return 1
     fi
     if [[ "${is_direct}" != true && -n "${f13_f54_3071_capability_file:-}" && -s "${source_base_file:-}.3071-capability" ]]; then
       f13_f54_execute_3071_history "${repo}" "${commit}" "${first_parent}" "${source_head}" "${output}" "${source_base_file}.3071-capability" "${diagnostic_file}" || return 1
@@ -4156,7 +4302,7 @@ f13_collect_develop_contributions() {
           { [[ "${native_p3_active:-false}" == true ]] && native_p3_path_bound "${repo}" "${path}"; }; then
           if f13_checkpoint_merge_tree_entry_matches "${repo}" "${source_base}" \
             "${first_parent}" "${source_head}" "${path}" "${result_entry}" \
-            "${commit}" "${f13_f54_capability_file:-}" "${f13_f54_observer:-}" "${f13_f54_3071_capability_file:-}" "${f13_f54_F_capability_file:-}"; then
+            "${commit}" "${f13_f54_capability_file:-}" "${f13_f54_observer:-}" "${f13_f54_3071_capability_file:-}" "${f13_f54_F_capability_file:-}" "${base}" "${target}"; then
             checkpoint_merge_outcomes["${path}"]=clean
           else
             merge_tree_status=$?
@@ -4315,107 +4461,10 @@ f13_collect_develop_contributions() {
         # merge. The latter is incremental only when the previous owner is an
         # ancestor of this merge's source base; independent merge owners remain
         # ambiguous and fail closed.
-        incremental_merge=false
-        checkpoint_supersession_status=1
-        previous_source_head="${owner_source_heads[${path}]:-}"
-        previous_source_entry="${owner_source_entries[${path}]:-}"
-        if [[ -n "${previous_source_head}" && -n "${previous_source_entry}" ]] && \
-          git -C "${repo}" merge-base --is-ancestor "${previous_source_head}" "${nested_base}" 2>/dev/null; then
-          base_entry="$(git -C "${repo}" ls-tree "${nested_base}" -- "${path}" 2>/dev/null)" || {
-            f13_collect_failure "${diagnostic_file}" source_tree_entry
-            return 1
-          }
-          [[ "${previous_source_entry}" == "${base_entry}" ]] && source_lineage=true
-        fi
-        if [[ "${allow_direct_followup}" == true && "${is_direct}" != true ]]; then
-          [[ "${ordinary_guarded_merge}" == true ]] && incremental_merge=true
-          if git -C "${repo}" merge-base --is-ancestor "${owners[${path}]}" "${source_base}" 2>/dev/null; then
-            incremental_merge=true
-          fi
-          [[ "${source_lineage}" == true ]] && incremental_merge=true
-        fi
-        if [[ "${allow_direct_followup}" == true && "${is_direct}" != true && \
-          "${incremental_merge}" != true ]]; then
-          if game_checkpoint_duplicate_owner_supersession_allowed \
-            "${repo}" "${path}" "${owners[${path}]}" "${previous_source_head}" \
-            "${nested_owner_commit}" "${nested_head}" "${commit}" \
-            "${checkpoint_merge_outcomes[${path}]:-unverified}"; then
-            incremental_merge=true
-            checkpoint_supersession_status=0
-          else
-            checkpoint_supersession_status=$?
-            [[ "${checkpoint_supersession_status}" == 2 ]] && incremental_merge=true
-          fi
-        fi
-        if [[ "${allow_direct_followup}" != true && "${is_direct}" == true ]] && \
-          f13_guarded_correction_qualified "${repo}" "${base}" "${target}" "${path}" "${commit}" "${output}"; then
-          guarded_correction_allowed=true
-        fi
-        if [[ "${guarded_correction_allowed}" != true ]] &&
-          [[ "${native_p3_active:-false}" == true ]] && native_p3_path_bound "${repo}" "${path}"; then
-          native_merge_outcome="${checkpoint_merge_outcomes[${path}]:-unverified}"
-          [[ "${is_direct}" == true ]] && native_merge_outcome=direct
-          if native_p3_duplicate_owner_qualified "${repo}" "${path}" \
-            "${owners[${path}]}" "${previous_source_head}" "${nested_owner_commit}" \
-            "${nested_head}" "${commit}" "${native_merge_outcome}"; then
-            native_supersession_status=0
-          else
-            native_supersession_status=$?
-          fi
-          if [[ "${native_supersession_status}" == 0 || "${native_supersession_status}" == 2 ]]; then
-            guarded_correction_allowed=true
-            # This is the actual producer history, not replacement proof rows.
-            awk -F '\t' -v candidate="${path}" '$1 == candidate' "${output}" \
-              >>"${TMP_DIR}/f13-native-p3-history.tsv" || return 1
-            printf 'supersession\t%s\t%s\t%s\t%s\t%s\n' "${path}" "${commit}" \
-              "${nested_head}" "${native_merge_outcome}" "${native_supersession_status}" \
-              >>"${TMP_DIR}/f13-native-p3-history.tsv" || return 1
-            if [[ "${native_supersession_status}" == 0 ]]; then
-              if [[ -n "${f13_f54_trace_file:-}" ]]; then
-                f13_f54_trace_event native_rebind_gate "${repo}" "${path}" \
-                  "${native_supersession_status}" "${owners[${path}]}" "${previous_source_head}" \
-                  "${nested_owner_commit}" "${nested_head}" "${commit}" "${native_merge_outcome}" \
-                  "${native_p3_binding}" || return 1
-              fi
-              source_entry="$(git -C "${repo}" ls-tree "${commit}" -- ":(literal)${path}")" || return 1
-              nested_owner_commit="${commit}"
-              nested_base="${first_parent}"
-              nested_head="${commit}"
-              unset 'guarded_entries[$path]' 'guarded_entry_commits[$path]'
-            fi
-          fi
-        fi
-        if [[ "${allow_direct_followup}" == true && "${is_direct}" != true &&
-          "${incremental_merge}" != true && "${guarded_correction_allowed}" != true ]] &&
-          declare -F f13_role_conditional_qualified >/dev/null; then
-          role_incoming_row="$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' \
-            "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" \
-            "${nested_head}" "${content_base}" "${source_base_candidates}")" || return 1
-          if f13_role_conditional_qualified "${repo}" "${output}" "${path}" "${role_incoming_row}"; then
-            role_duplicate_allowed=true
-          fi
-        fi
-        if [[ "${allow_direct_followup}" == true && "${is_direct}" != true &&
-          "${incremental_merge}" != true && "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true ]] &&
-          declare -F f13_space_audit_qualified >/dev/null; then
-          role_incoming_row="$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' \
-            "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" \
-            "${nested_head}" "${content_base}" "${source_base_candidates}")" || return 1
-          if f13_space_audit_qualified "${repo}" "${output}" "${path}" "${role_incoming_row}"; then
-            space_audit_allowed=true
-          fi
-        fi
-        if [[ "${allow_direct_followup}" == true && "${is_direct}" != true && "${incremental_merge}" != true &&
-          "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && "${space_audit_allowed}" != true &&
-          -n "${f13_f54_capability_file:-}" ]]; then
-          if f13_f54_exact_supersession "${repo}" "${path}" "${output}" \
-            "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")"; then
-            exact_unit_supersession=true
-          fi
-        fi
-        if [[ "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && "${space_audit_allowed}" != true && "${exact_unit_supersession}" != true && \
-          ( "${allow_direct_followup}" != true || \
-          ( "${is_direct}" != true && "${incremental_merge}" != true ) ) ]]; then
+        f13_evaluate_guarded_owner_qualifiers "${repo}" "${path}" "${output}" || return 1
+        if ! f13_guarded_owner_transition_allowed "${guarded_correction_allowed}" \
+          "${role_duplicate_allowed}" "${space_audit_allowed}" "${exact_unit_supersession}" \
+          "${allow_direct_followup}" "${is_direct}" "${incremental_merge}"; then
           f13_emit_guarded_failure_diagnostic duplicate_guarded_owner "${path}" \
             "${commit}" "${game_checkpoint_aggregate_head:-}" "${owners[${path}]:-}" \
             "${nested_head:-}" "${guarded_entries[${path}]:-}" "${source_entry}" \

@@ -1,5 +1,214 @@
 # Native/P3 source qualification for master
 
+## Exact-J audit owner transition: c119 CONTRACT PROPOSAL
+
+Status: PROPOSED, not an implemented or accepted duplicate permission. The
+existing-contract DENY in PR875-J-OWNER-TRANSITION-ADJUDICATION c2 (decision
+72f94e93) and independent c60/c61 remains correct for source547. The user then
+explicitly authorized necessary bounded work to merge PR875, including this
+exact transition; integrator c119/e431 offered this contract/test stage and
+416 ACCEPT c120/e432 was read back before writes. This section proposes the
+new meaning for independent CONTRACT review. That review must precede any
+guard extension. It does not authorize a producer, production R/K, current CI,
+runtime, product `audit.go` changes or any other duplicate.
+
+### Purpose, sources and immutable baseline
+
+Permit only a separately qualified AUTHOR transition for the complete rows
+below, once actual provenance, both-parent source containment, full historical
+source entries, whole-J composition, current AUTHOR applicability and complete
+retained ledger have been independently reconstructed. The permission must be
+distinct from conservation, M supersession, native/Game/Role/Space authority,
+source_lineage and incremental_merge. Those existing predicates remain intact.
+
+Sources: canonical410 decision5862f23d section3/5.6; existing c2 adjudication;
+this plan's J-ledger section; shell4344-4457 and J consume4480; helper
+build_3071_J_ready, consume_3071_J_path and the M-only supersession predicate.
+Use docs/TESTING.md, CONTRIBUTING.md and the canonical TDD workflow for checks.
+
+The real baseline is source547df286d3e8c5846b09885a6c21d0610b42d7f5,
+private targetc6a7876239ddbf70ac1d084c64a1e3f95eeda846, event parent
+ea845cc695b3cde2a13ba9a97345dd78795833e0. Original75958 ended F13 EXIT1,
+10648 events/raw SHA08259a181aca2a185a3310aa2f745f663fc6a0baddc458418136b02da02e4fe8.
+Pending10645/failure10646 is before this path's mutation; map468816 bytes/SHA
+f088e093d271ea39b5394be0dd217d1d17f99782b8f7349d39be5eac0dde9e45 is
+retained. J conservation116 is not J completion. Collection/seal/router are
+UNREACHED. c110/e420 portable terminal evidence and c114/e428 diagnosis remain
+FAIL/HOLD, not a passing producer or a newly qualified current candidate.
+
+Historical collector698/H53, native content8191 and event parentea845 are three
+different identities. Current PR f1b/master373 and later integration inputs are
+not this baseline. A successor's four-file AUTHOR carrier must reconstruct its
+own accepted current certificate/native B/S/T and source/result parity; no
+blind repin, old target substitution or automatic current-candidate grant.
+
+### Fixed complete row unit and source qualification
+
+Only `src/backend/space/internal/grpcsvc/audit.go` and the following ordered
+eight-field tuples are candidates. Every field is exact, including the raw
+boolean and the ordered complete candidate string. Field order is path, raw
+trigger, integration owner, first parent, source base, source head, earliest
+content base, candidates.
+
+Prior:
+
+```
+src/backend/space/internal/grpcsvc/audit.go	false	2445e81de07681cfd5f1491e4c793aaac747f571	5cc425b35bc71738d86261c1cf4772c7babd4519	e3dc9ba836100707a9c4313d83bea1872f1f9016	c14f59c1a43b486d48322d62e7c5baa2816e1253	c6225ae5b968345b04a2c7d410875fe7d370b300	e3dc9ba836100707a9c4313d83bea1872f1f9016
+```
+
+Incoming:
+
+```
+src/backend/space/internal/grpcsvc/audit.go	true	3071ddad390443de4119c796cdad9899ff08f7fd	a45862ca7e2e885ae4e36afc758c9e9fe39ca86c	7bd7dfba7e8f85bc0572617c6ef3af4a15e59172	140f6612e2f9df22aa9ac0c60744d5d41fe7fbcd	c6225ae5b968345b04a2c7d410875fe7d370b300	68927e5912ebc218050fcc9daf4b76cf4a9e3c86,e020da4b4edcded41bde9785615262beb1946ad2
+```
+
+The prior/incoming raw hashes are bdcd1df8603081f14a80d5627616466f7ede36439915a193e62345d177af8ee1
+and51a6d356845a23ab3b4f1e7d362075a284d55aea9d3fb907e7d0ec00a62fb13d.
+These hashes seal bytes after reconstructing them; they are not authority.
+
+Reconstruct the immutable J/P1/P2/O/all-best-bases/committed-tree tuple with the
+existing exact J capability, including its full reviewed manual whole-parent
+composition. Verify the complete `audit.go` source unit against Git: entries
+and full bytes at prior owner, prior first parent/base/source, earliest content,
+O, both best bases, P1, P2, J and historical H53. Bind mode/type/OID/absence,
+full content hashes and their exact parent-edge diffs. The actual prior owner,
+prior source, P1, P2 and J all have100644 blobd24e08d221c42661e8b1431defe61d742b23e8d9;
+O and earliest content have different full blobs. Require the fixed versions,
+not a rule accepting arbitrary equal blobs. Review the complete bound source
+unit and source/owner transformation with this contract; names, membership,
+current endpoint repairs and future source facts cannot qualify other bytes.
+
+Verify prior owner is contained by P1 and prior source by P2; verify the real
+prior ordered parents/source base and pending J parent slot. Both failures of
+ancestry into O are retained as facts. Never set source_lineage or incremental
+to true, and never change source to J or content to O to pass this case.
+
+### Proposed typed permission and reconstruction
+
+Use a distinct `F54_EXACT_J_AUDIT_OWNER_TRANSITION_AUTHOR_v1` receipt, selected
+only by the explicit current AUTHOR wrapper and its independently reconstructed
+J current AUTHOR capability. Ordinary/legacy routes, M/third operations and
+unrelated paths must return the existing refusal. No caller boolean, supplied
+record, pathlist, hash or receipt can enable this case.
+
+The constructor and final trace verifier must independently check all of:
+
+1. Exact operation's J/2 identity, ordered parents/full base vector/O/tree,
+   original H53 child invocation and actual parent-frame linkage. Frame labels
+   are not authority. Current carrier/helper/classifier/native context and all
+   active Game/native/checkpoint authority are derived from immutable source
+   and original qualifiers, not trusted supplied snapshots.
+2. Complete actual J history coverage, successful source/child/supplemental
+   dispositions and original gates; full fixed J composition receipt, even
+   where a source==result shortcut avoided the old per-path composition call.
+   Reuse accepted source/composition facts only with their exact bindings;
+   unqualified or failed source facts remain a refusal.
+3. Every actual prior raw row for this path, exactly the fixed prior tuple,
+   and its real operation_begin/classification/row_after/row_committed references
+   in the actual retained ledger. The source unit and checked parent containment
+   above must agree with those operations. The exact incoming tuple is the
+   actual pending row_before; no synthetic row supplies any obligation.
+4. A sealed successful J constructor prefix, the whole independently rebuilt
+   J ledger hash and complete before-map. Reconstruct the pending map from
+   that ledger's outer rows plus every already-conserved J removal/commit;
+   compare full bytes/order and pending binding. Dropping or rehashing a prior
+   row, operation, classifier, other path or retained true must fail.
+5. The path's entire retained obligation, including M/I/manual/deletion/prior
+   span evidence, and its boolean aggregate OR. Its actual prior rawfalse and
+   incoming rawtrue remain unchanged. Earliest content and all eight row fields
+   remain real. A last-row true or a sidecar not consumed by later gates is not
+   a substitute for the complete evidence.
+
+Receipt fields: type, exact contract/source-unit identity, current capability
+binding, operation/frame/actual ancestry, raw prior rows/incoming, all original
+operation/classification/transformation digest references, full J composition
+and source-version bindings, successful ledger-prefix binding, full ledger hash,
+complete map_before, aggregate, trace prefix including the actual pending row,
+`source_rebind=false`, `admission=false`. No self-hash or permission/PASS field
+is accepted in lieu of these independent reconstructions.
+
+### Real guard, conservation and downstream consumers
+
+Only after independent CONTRACT acceptance may a minimal new AUTHOR-only
+predicate run at the actual duplicate seam. It emits a dedicated append-only
+event/receipt before the original guard decision; a distinct local result
+allows just this fixed owner transition. It does not alias any old qualifier
+status, mutate ordinary flags or relax another guard.
+
+The real J before-mutation consumer must reconstruct the receipt again and
+require the exact same pending row, operation, context, map and ledger. It must
+consume it together with the complete J qualification before row_remove or map
+overwrite. Preserve every prior row/reference in retained history, the real
+incoming J/P2 tuple, content/candidates/raw flags and exact expected after-map.
+Trace validation independently rejects missing/forged/reordered permission,
+conservation, removal and commit events. A permit receipt without successful
+conservation never authorizes mutation; a ledger alone never authorizes the
+duplicate predicate.
+
+Collection/seal/original router retain this obligation and complete OR, including
+history outside net J delta. Existing original router order/early gate context
+and aggregate-backed runtime lookup remain unchanged. Their actual execution
+and review, later R/K and current CI remain separate required stages.
+
+### Test-first oracles and review sequence
+
+The genuine source547 full-wrapper refusal and the c114 read-only exact final
+predicate replay (receipt5d51c86d) are the causal RED. Reuse those unchanged
+inputs; do not rerun the producer for a new RED label. The replay's qualified
+and incremental synthetic controls are branch checks only, never a successful
+J receipt or permission. No constructor GREEN or new negative execution is
+claimed by this proposed specification.
+
+Before implementation, freeze this full contract, complete row/source unit,
+actual map/ledger/operation bindings and a machine-readable oracle matrix for
+independent CONTRACT review. Then add focused private real-Git/actual-prefix
+tests, minimal implementation and causal GREEN/negative checks. The tests must
+exercise the new real receipt/guard/consumer seams, not injected true flags.
+
+Positive: this exact AUTHOR tuple with all reconstructed source/history/context
+and composition evidence permits the distinct predicate, then J conservation,
+retained rows/OR and the exact unchanged incoming identity. Legacy/default and
+M controls retain their old results. Missing evidence stays its original failure.
+
+Negatives: each of the eight prior or incoming fields independently changed;
+foreign owner/source/path/frame/operation/parent slot or J/M/third tuple;
+swapped/missing/extra best base or wrong O/tree; literal serialized Git entry
+mode/type/OID/absence/content drift; forged native/Game membership/context or
+authority snapshot with updated hashes; missing/reordered/forged prior operation,
+classification, source/composition receipt or whole history disposition; stale,
+reordered or omitted full map/row/trace/ledger with recomputed hashes; rawfalse
+normalization, incoming rawtrue loss, dropped reverted/internal/deletion true;
+M receipt reused for J; supplied `qualified=true` or equal blob/OR without the
+new real receipt; permission omitted/reordered/replayed at conservation or
+mutation. Every such pre-transition negative must reject in the constructor,
+duplicate guard or pre-mutation J consumer: the pending before-map and retained
+rows stay byte-identical, with no destructive remove/overwrite/commit for that
+attempt. A later downstream rejection cannot satisfy these oracles.
+
+For the three genuinely downstream mutations, require the first applicable
+stage and full F13 failure: changed after-map at post-transition trace/map-fold
+validation; lost retained obligation at collection/seal reconstruction; changed
+router context at the original router's top-loop seal/context binding before
+its early continue or runtime lookup. These cases may follow valid earlier
+transitions and must not falsely assert an unchanged pre-transition map.
+Literal mode/OID controls must alter the real
+serialized tree_record rather than merely adding unused dictionary keys.
+
+Milestones:
+
+- [x] c120/e432 own TT/resource readback; source547 clean and retained WT19.
+- [x] Preserve old existing-contract DENY, actual full FAIL and faithful RED.
+- [ ] Freeze complete proposed contract/source unit/oracles for CONTRACT review.
+- [ ] Independent CONTRACT review accepts a precise extension or returns findings.
+- [ ] Only after acceptance: focused tests, minimal AUTHOR-only receipt/guard/J
+  consumer implementation, causal GREEN/negatives and affected history suite.
+- [ ] Required scoped Graphify update after code changes; immutable source/proof
+  and independent CODE review before any separately authorized producer.
+
+Allowed source scope remains this ExecPlan, f13_f54_history.py, its test file
+and the F13 shell. No product source, native helper/schema/record/pin, runtime,
+CI/GH/PR/R-K operation or new actor/task is part of this contract proposal.
+
 ## Current e129 exact reviewed-F deletion
 
 Supported e129/readback owner416 precedes fresh WT19 lease
@@ -537,6 +746,101 @@ read-only actual-input revalidation before any changed-input producer. Offline
 reconstructed receipts are not appended to old traces or called producer events.
 Actual J mutation/fullcollection/router/RK/currentcandidate remain HOLD.
 
+## Current AUTHOR adapter (c68/c69/c70; e261)
+
+Implement only the fixed D6 AUTHOR applicability seam in these four files.
+Historical traversal698/H53, native content8191 and actual master eventea845
+are distinct identities; O remains the exact nested M enumeration boundary.
+Current D6's190 entries are4 author,32 native projection/context and154 retaining
+original gates. Their immutable entry binding is not new path authority. Reuse
+the177/F33 semantics and exact current34/four NONEMPTY repair equality fromc69.
+
+Test first: real private Git source-unit reference with a later accepted
+non-author carrier entry must expose the old1399/1414 restriction, and an
+independently qualified real native master tuple must expose old1464 base
+conflation. Then add a distinct current AUTHOR certificate/type, fixed reference
+and only own four-file successor delta. Legacy prototype and ordinary production
+initialization remain unchanged. Reconstruct certificates from immutable Git,
+not caller-selected path lists, hashes, bases or production toggles. Verify
+foreign source/reference/entry/base/frame, forged certificate and existing
+owner/content/map/OR negatives. Preserve actual original ledger/collection/router
+obligations; no new observations are manufactured by this source-only stage.
+
+Run private Linux focused causal and affected history tests/syntax, freeze normal
+commit/bundle and source-bound proof for independent review. No producer/CI/GH,
+R/K/pin/native helper/schema/product edit, stopped operation or current-candidate
+mutation is authorized. Fresh WT19 lease df6c7442debb72acfdbdaa86ea42c4ca belongs
+to416 for this exact stage; global CI/merge remains121.
+
+Execution: the unchanged D6 helper fails both causal private fixtures at the
+actual historical/current restriction and event/history base-equality guard
+(RED log7fb53998). Focused GREEN3 exercises the real private CLI and original
+source-base/composition shell seams plus independently qualified native B/S/T;
+two tests pass. The first affected suite preserves one compatibility ERROR
+(40/41 pass, logf2c73113): the old private master transport omits `type`.
+Optional AUTHOR discrimination fixes that legacy transport without changing
+the strict executable certificate constructor. Three focused tests pass
+(logc1327b7e), followed by final41/41 in184.660s and shell syntax
+(log6335f55b). All39 previous test bodies remain AST-identical; all executable
+source hashes match the final test receipt. This paragraph is documentation
+after that receipt. Private fixtures are not actual outer/history producer
+observations, source qualification, collection/seal/router proof or CI PASS.
+The new explicit AUTHOR caller is not activated in the ordinary production
+route. Graphify completion and exact resource disposition are recorded in the
+separate source-bound evidence packet; no freshness is inferred here.
+
+### Current AUTHOR nested3071 applicability (c80/c82; e280)
+
+The c77 execution-only stage stopped BEFORE launch: fixed3411-to13a has190
+changed paths/186 outside the four producer files, and the original nested3071
+packet binds base698/old R5/H4 native metadata rather than current eventea845
+and the existing current native record. Frozen prelaunch manifestf60ac451 and
+ZIP172a4564 retain exact entries and both mismatches; no producer/target exists.
+Integrator121 accepted that disposition and separately offered this four-file
+author stage. c82 ACCEPT/e280 owner checkpoint and the still-held e277 lease
+a2d7b87c1c09a0ea203af00bc5db267b are the actual custody; no lease reuse/transfer.
+
+Add a distinct current AUTHOR J certificate, not a change to the original
+legacy equality/four-file predicates. Reconstruct the same fixed current
+applicability, original full structural packet and historical caller; bind the
+old native record from immutable Git/hash with all mode/type/OID/context facts.
+Independently qualify current native B/S/T under its existing record, bind
+classification/membership/current entries and keep old/current metadata apart.
+Old native membership and content baseline remain required; extra current
+record paths retain original gates. No pin/record/product/runtime promotion,
+row generation, synthetic flags, map concatenation or history/owner/OR bypass.
+All J prior-origin/history capability consumers reconstruct the typed value.
+Only the explicit current AUTHOR wrapper selects this constructor; legacy and
+ordinary production selection remain unchanged.
+
+Test-first: complete private33-node J DAG and real old/current native authority
+give two independent semantic REDs on unchanged13a, logea76a645 (carrier guard
+and old-native equality). The first attempt was a private verifier-carrier
+setup error and is not this RED. Initial distinct-constructor GREEN2/2 is
+log7e7fa8b1. Rehashed certificate/reference/record/snapshot/classification/path/
+mode/OID/caller/history/runtime substitutions, forged actual native bindings,
+and altered historical record metadata must reject; old constructors must
+still refuse each original mismatch. Existing frame/map/OR regressions and
+the affected43-test history suite remain required. Source/classifier/history
+observations and full outer/collection-seal/original-router execution are NOT
+in this author stage. Freeze complete source/proof for independent CODE review;
+no producer may run until a later separate accepted integrator stage.
+
+Execution: final negative group passes2/2 in21.469s (log8bcf00ef), preserving
+both original REDs and default refusals. One earlier negative attempt had a
+fixture dictionary/string error plus an earlier genuine historical-version
+barrier; these are retained separately (log8d0d6a9a), then corrected in tests
+without changing the helper. Affected history43/43 and shell syntax pass in
+195.305s (log895722fc); all41 existing test bodies remain AST-identical and only
+the explicit master-author implementation changed among shell functions.
+Real immutable old/current record ancestry prechecks are0; these are Git facts,
+not a producer/native qualification. Graphify36706 extracted172/172 AST files,
+then root requested owned closure: supported Ctrl-C returned terminal1 and no
+graphify/Python child or own container remained. Record CANCELLED_NO_VERDICT,
+not completed graph freshness. The final prose documents these receipts after
+testing; executable hashes remain unchanged. Full F13/J/current input proof
+and production R/K/CI remain HOLD pending later independent stages.
+
 ## J native clean-zero consumer repair (e215)
 
 Basis: intake REQUEST bc83f8eb and RAW-GAP-CONTRACT-416-ADDENDUM
@@ -658,3 +962,105 @@ affected history suite passes 39/39 in 207.156s; Python AST and unchanged shell
 same unrelated C++ header warning, but remained alive without CPU/output;
 only the owned PID39288 running `graphify.exe update .` (CPU 0.02 after AST
 completion) was stopped. No graphify success is claimed.
+# Current AUTHOR supplemental-origin reconciliation (c90/c94)
+
+2026-10-20: the ONE reviewed6c9 AUTHOR wrapper ended with actual F13 EXIT1
+`unchanged_inherited_native_pins` after6546 events. Its immutable raw trace is
+SHA256 d69073f3c2768ab4e88175384b6d289240c01336512bcf05f09ac45b700297e0;
+collection/seal/original router were not reached. TT c91/e304 preserves all raw
+outputs and exact B/S/T. No rerun or qualification is inferred from this fix.
+
+Following c68 and explicit c90/c94 acceptance, the current AUTHOR caller now
+passes its checked fixed-current capability to a separately typed supplemental
+origin. The old trace/native binding remains immutable. The origin and span
+consumer independently reconstruct complete current applicability, actual
+native B/S/T qualification and historical/current source-record membership,
+entries, classification and ancestry before comparing sealed bindings. Large
+certificates/records are bound by hash/length after that reconstruction, avoiding
+duplicated raw JSON in argv. Legacy default keeps whole native-binding equality
+and the old prototype-only four-file restriction. No automatic fallback,
+native repin, owner/row/map/OR mutation or production authority is introduced.
+
+Risk-proportional test-first evidence: read-only actual6c9 span-origin command
+reproduced the exact refusal (stderr SHA d609d73e60519a812a314001a76bdc8a44cec00112c41fae62480fd9950adf43).
+A genuine private Git/native three-base/two-direct-node span test then failed
+on the same unchanged predicate (c95 log d962fd9909cddbf916ffee37877291cb999e35aeededabcfb3f189bc8deb0358).
+Focused positive passes, preserving original rows and legacy refusal. Authority
+and ledger negatives pass with updated hashes, including actual serialized Git
+mode/OID mutations, forged current record/source/event/native bases, omitted
+history/operation, owner/content/frame/map/OR changes and certificate drift at
+consumer time. The old c54 extra-key-only mode/OID limitation remains historical;
+the new literal-entry oracle covers this new current applicability certificate.
+All43 previous test bodies are AST-identical. The affected46-test suite passes
+in202.074s (log SHA2971ea360b6efddf6d1533d1631738cb386264508a497eb9d0e7e6fc908a7c3c).
+Graphify update under own claimc96/e317 completed exit0 in244.656s on these
+exact executable source hashes (log SHA7252b94b5fa7ac98d75028ffaf4790b6a61cca2d98f0d1a5faff7f5c07fb3283).
+The unrelated C++ header parse warning remains explicit; this is a graph update,
+not source qualification. Final receipts belong to the immutable source packet.
+Independent CODE review is required before any later
+separately authorized producer. No R/K, current CI, runtime or PR grant.
+
+## Faithful historical J RED harness preparation (HARNESS c72/c4)
+
+2026-10-21: accepted seam proposal manifest
+`de9e7034a790f753c551cb6d7fc1271cf0c9a712573a865ea9bc78dd9fb0e195`
+and independent418 c72 SEAM/DESIGN CONTRACT CLEAR authorize only the minimal
+behavior-preserving shared extraction and fixture preparation. This is the
+explicit testability exception to the former c129 no-executable-seam gap, not
+transition implementation or source/runtime admission. CodeGraph/graphify are
+excluded by the user's current override. Owner416 retains WT19 leasea2d7.
+
+The original collector now calls a shared qualifier dispatcher containing its
+entire original4350-4447 body, followed by the shared seven-status final guard.
+The caller keeps original defaults, diagnostics/fatal propagation, OR/J
+conservation, destructive mutation and later router order. Existing guarded
+test definition loaders select the two added dependencies; no old history-test
+body changes. Production helper/native pins/records and the original AUTHOR
+four-path restriction remain unchanged.
+
+The focused fixture uses separately pinned historical547/c6a/ea845 Git/authority
+and the exact10648-event failed trace. Its new test head supplies only the shared
+functions. Native/Game authority, complete J checkpoint/ledger and the complete
+failed history/map must independently reconstruct before the pending audit.go
+transition can be evaluated. Old raw rows/flags/owners/content/OR remain byte
+exact; no ready object is trusted, live frame prefilled or producer resumed.
+The fixture assertion expects the accepted c69 transition; the still-unchanged
+guard must actually refuse it for meaningful RED. Setup failure is exit2 and
+cannot qualify as that assertion RED(exit1). All54 vectors remain PLANNED.
+
+Transport is the exact lossless227-object archive92933183B,
+SHA256ba6a775f6c38664d8603ac8080abca5c5e464d865b2e94b297127b6217549bd1,
+binding246 logical files/400559753 unique raw bytes. The extractor is bounded,
+rejects conflicting paths/objects/symlinks/unknown files and preserves five
+actual absent bindings. Historical absolute paths require an isolated Linux
+mount/network/pid namespace; source tools are mounted read-only, fixture paths
+exist only in its unique chroot, and Python drops to the ordinary runner uid.
+No Docker engine/pull/host listener/firewall/DEV/STAGING operation is involved.
+Failure to establish isolation remains setup failure, not RED. The M ledger
+file omitted from the transport closure is materialized only from the original
+M_ledger_ready raw bytes after independent reconstruction/equality, never from
+a newly assembled or caller-trusted ready value.
+
+Current evidence is preparation/static source only. No shell/Python fixture,
+test, producer, CI or GitHub operation has run for this change. Freeze full
+CODE/input/parity packet for independent418 security review before execution.
+Then121 controls normal publication and separately authorized hosted execution;
+only faithful actual-row RED can release the already accepted MASTER transition
+implementation. Historical source547 FAIL/current ordinary source_base failure
+and missing full collection/seal/router qualification remain explicit.
+
+### c75 static CODE HOLD correction
+
+Independent418 reviewed frozen8ac and found two deterministic fixture setup
+errors before the shared guard. The Git raw source edges bind NUL records, so
+the fixture now uses `git diff --raw -z`; immutable source-unit hashes stay
+unchanged. The real outer F5 is historical698/H53 true/false, parented by F2
+ea845/source547 true/true. The fixture now verifies those exact distinct frame
+flags plus actual parent-operation/source-boundary linkage, rather than
+substituting the J child's true/true traversal for its parent.
+
+These are source-only setup corrections; no executable proof was run. The
+production dispatcher/decision, historical547 evidence/archive, all46 old history
+tests, native/Game authorities and all54 PLANNED transition vectors are unchanged.
+Freeze a normal successor and obtain original418 narrow CODE recheck before
+any test, namespace, qualifier or producer execution. No RED/PASS is claimed.
