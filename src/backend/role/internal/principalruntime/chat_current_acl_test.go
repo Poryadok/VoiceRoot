@@ -18,7 +18,7 @@ func TestChatCurrentACLActualSignedBoundary(t *testing.T) {
 	f.config.JWKSURLs["chat"] = f.config.JWKSURLs["space"]
 	address, recorder, roots := startRuntimeListener(t, f)
 	client := runtimeListenerClient(t, address, runtimeTLSCredentials(f, roots))
-	req := &rolev1.CheckPermissionRequest{SpaceId: uuid.NewString(), ProfileId: uuid.NewString(), PermissionName: "TEXT_CHAT_VIEW", Chat: &chatv1.ChatRef{Id: uuid.NewString(), Type: chatv1.ChatType_CHAT_TYPE_GROUP}}
+	req := &rolev1.CheckPermissionRequest{SpaceId: uuid.NewString(), ProfileId: uuid.NewString(), PermissionName: "TEXT_CHAT_VIEW", Chat: &chatv1.ChatRef{Id: uuid.NewString(), Type: chatv1.ChatType_CHAT_TYPE_GROUP.Enum()}}
 	hash, err := principal.RequestHash(req)
 	require.NoError(t, err)
 	id := uuid.NewString()
