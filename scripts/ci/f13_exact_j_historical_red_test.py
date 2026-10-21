@@ -16,6 +16,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import tarfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,7 +46,14 @@ HARNESS_SOURCE_PATHS = list(OUTER_SOURCE_HASHES) + [
     'scripts/ci/f13_exact_j_historical_red_test.py', 'scripts/ci/f13_guarded_merge_test.py',
     'scripts/ci/f13_guarded_correction_test.py', 'Makefile',
     'scripts/ci/testdata/f13-exact-j-547/source-unit.json',
+    'scripts/ci/testdata/f13-exact-j-547/git-2.39.5-data.tar.gz',
+    'scripts/ci/testdata/f13-exact-j-547/git-2.39.5-data-manifest.json',
 ]
+GIT_ARCHIVE_SHA = '6326cc23ae91825a592ae6b4c70e34b40566661128b357cc6642404f7ed87462'
+GIT_MANIFEST_SHA = '2450a593c024b8ce6d03ed97c5db6c60b397b90ec5c57d3e8d5c5a9287bf41ff'
+GIT_COMMANDS = ('cat-file', 'checkout', 'clone', 'config', 'diff', 'diff-tree', 'hash-object',
+                'index-pack', 'ls-tree', 'merge-base', 'merge-tree', 'rev-list', 'rev-parse', 'show', 'version')
+UTILITY_DIRS = ('/usr/local/bin', '/usr/bin', '/bin')
 
 
 class SetupFailure(Exception):
@@ -65,6 +73,222 @@ def run(args, **kwargs):
     p = subprocess.run(args, capture_output=True, **kwargs)
     require(p.returncode == 0, 'command:' + repr(args) + ':' + p.stderr.decode(errors='replace')[-2000:])
     return p.stdout
+
+
+def pinned_manifest():
+    raw = (FIXTURE / 'git-2.39.5-data-manifest.json').read_bytes()
+    require(sha(raw) == GIT_MANIFEST_SHA, 'pinned_Git_manifest')
+    manifest = json.loads(raw)
+    require(len(manifest['files']) == 5, 'pinned_Git_five_files')
+    return {item['path']: item for item in manifest['files']}
+
+
+def expected_utilities():
+    utilities = {}
+    for directory in UTILITY_DIRS:
+        source = Path(directory)
+        if source.is_dir():
+            for path in sorted(source.iterdir()):
+                if path.name != 'git' and not path.name.startswith('git-') and path.name not in utilities:
+                    if path.is_file() and os.access(path, os.X_OK):
+                        utilities[path.name] = str(path)
+    return utilities
+
+
+def verify_pinned_git(root, runtime=True):
+    base = root / 'historical-git'
+    require(not base.is_symlink(), 'pinned_Git_root_path')
+    for name, item in pinned_manifest().items():
+        path = base / name
+        require(base.resolve() in path.resolve().parents and not path.is_symlink(), 'pinned_Git_path')
+        current = path
+        while current != root:
+            require(not current.is_symlink(), 'pinned_Git_path')
+            current = current.parent
+        require(path.is_file() and stat.S_IMODE(path.stat().st_mode) == 0o555, 'pinned_Git_mode')
+        raw = path.read_bytes()
+        require(len(raw) == item['bytes'] and sha(raw) == item['sha256'] and raw[:4] == b'\x7fELF', 'pinned_Git_bytes')
+    if runtime:
+        require(all(not (base / name).is_symlink() and stat.S_IMODE((base / name).stat().st_mode) == 0o555
+                    for name in ('bin', 'lib', 'launch', 'exec', 'util', 'templates')), 'pinned_Git_runtime_directories')
+        require((base / 'bin/git-elf').read_bytes() == (base / 'bin/git').read_bytes() and
+                not (base / 'bin/git-elf').is_symlink(), 'pinned_Git_loader_target')
+        for folder, names in [('launch', {'git'}), ('exec', {'git', 'git-index-pack', 'git-rev-list'})]:
+            require({p.name for p in (base / folder).iterdir()} == names, 'pinned_Git_closed_execpath')
+            for name in names:
+                path = base / folder / name
+                require(not path.is_symlink() and path.read_bytes() == git_launcher().encode() and
+                        stat.S_IMODE(path.stat().st_mode) == 0o555, 'pinned_Git_launcher_bytes')
+        actual = {p.name: str(p.readlink()) for p in (base / 'util').iterdir() if p.is_symlink()}
+        require(len(list((base / 'util').iterdir())) == len(actual) and actual == expected_utilities(), 'pinned_Git_private_utility_view')
+        require(not any((base / 'templates').iterdir()), 'pinned_Git_empty_templates')
+    return base
+
+
+def git_launcher():
+    # The real immutable ELF handles ALL commands, including --version. No output
+    # or status is synthesized. --argv0 preserves Git's own dashed dispatch.
+    commands = '|'.join(GIT_COMMANDS)
+    return '''#!/bin/sh
+set -eu
+here=${0%/*}; base=${here%/*}; name=${0##*/}
+reject() { printf '%s\\n' 'F13_PINNED_GIT_SETUP_FAILURE' >&2; exit 125; }
+case "$here" in "$base/launch"|"$base/exec") ;; *) reject ;; esac
+[ "${GIT_EXEC_PATH-}" = "$base/exec" ] || reject
+[ "${GIT_TEMPLATE_DIR-}" = "$base/templates" ] || reject
+rest=${PATH-}
+while :; do
+ case "$rest" in "$base/exec:"*) rest=${rest#"$base/exec:"} ;; *) break ;; esac
+done
+[ "$rest" = "$base/launch:$base/util" ] || reject
+[ "${GIT_CONFIG_NOSYSTEM-}" = 1 ] || reject
+[ "${GIT_CONFIG_GLOBAL-}" = /dev/null ] || reject
+[ "${GIT_ALLOW_PROTOCOL-}" = file ] || reject
+[ -z "${LD_PRELOAD-}${LD_LIBRARY_PATH-}${LD_AUDIT-}" ] || reject
+/usr/bin/env | while IFS='=' read -r key value; do
+ case "$key" in
+  GIT_EXEC_PATH|GIT_TEMPLATE_DIR|GIT_CONFIG_NOSYSTEM|GIT_CONFIG_GLOBAL|GIT_ALLOW_PROTOCOL) ;;
+  GIT_DIR) [ "$value" = "${base%/*}/repo/.git" ] || exit 125 ;;
+  GIT_PREFIX) [ -z "$value" ] || exit 125 ;;
+  GIT_NO_REPLACE_OBJECTS) [ "$value" = 1 ] || exit 125 ;;
+  GIT_*|LD_*) exit 125 ;;
+ esac
+done || reject
+case "$name" in
+ git) command=; skip=0
+  for arg do
+   if [ "$skip" = 1 ]; then skip=0; continue; fi
+   case "$arg" in
+    -C) skip=1 ;;
+    --no-replace-objects) ;;
+    --version) command=version; break ;;
+    -*) reject ;;
+    *) command=$arg; break ;;
+   esac
+  done
+  [ "$skip" = 0 ] || reject ;;
+ git-index-pack) command=index-pack ;;
+ git-rev-list) command=rev-list ;;
+ *) reject ;;
+esac
+case "$command" in ''' + commands + ''') ;; *) reject ;; esac
+if [ "$command" = clone ]; then
+ [ "$#" = 4 ] && [ "$1" = clone ] && [ "$2" = --no-checkout ] &&
+ [ "$3" = "${base%/*}/out/prelaunch/private-target.bundle" ] && [ "$4" = "${base%/*}/repo" ] || reject
+fi
+if [ "$command" = checkout ]; then
+ [ "$#" = 5 ] && [ "$1" = -C ] && [ "$2" = "${base%/*}/repo" ] &&
+ [ "$3" = checkout ] && [ "$4" = --detach ] && [ "$5" = c6a7876239ddbf70ac1d084c64a1e3f95eeda846 ] || reject
+fi
+exec "$base/lib/ld-linux-x86-64.so.2" --library-path "$base/lib" --argv0 "$name" "$base/bin/git-elf" "$@"
+'''
+
+
+def materialize_pinned_git(root):
+    root = root.resolve()
+    base = root / 'historical-git'
+    require(not base.exists() and not base.is_symlink(), 'pinned_Git_no_overwrite')
+    archive = FIXTURE / 'git-2.39.5-data.tar.gz'
+    require(archive.stat().st_size == 3082106 and sha(archive.read_bytes()) == GIT_ARCHIVE_SHA, 'pinned_Git_archive')
+    expected = pinned_manifest()
+    with tarfile.open(archive, 'r:gz') as tar:
+        members = tar.getmembers()
+        require(len(members) == 5 and {m.name for m in members} == set(expected), 'pinned_Git_exact_members')
+        # Validate every member and byte before creating ANY executable.
+        files = {}
+        for member in members:
+            item = expected[member.name]
+            require(member.isfile() and not member.issym() and not member.islnk() and
+                    member.mode == 0o555 and member.size == item['bytes'], 'pinned_Git_member_type_mode_size')
+            require(not PurePosixPath(member.name).is_absolute() and '..' not in PurePosixPath(member.name).parts,
+                    'pinned_Git_member_path')
+            raw = tar.extractfile(member).read()
+            require(len(raw) == item['bytes'] and sha(raw) == item['sha256'] and raw[:4] == b'\x7fELF', 'pinned_Git_member_SHA')
+            files[member.name] = raw
+    for name, raw in files.items():
+        path = base / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open('xb') as stream:
+            stream.write(raw)
+        path.chmod(0o555)
+    verify_pinned_git(root, runtime=False)
+    # Retain the raw binary at its reviewed name for verification; invoke a
+    # separate exact-byte hardlink via the transparent loader launcher.
+    os.link(base / 'bin/git', base / 'bin/git-elf')
+    for folder in ('exec', 'util', 'templates'):
+        (base / folder).mkdir()
+    launcher = git_launcher().encode()
+    # bin/git remains the immutable manifest-bound ELF. Public entrypoints live
+    # in a dedicated bin view, so no review-bound binary is overwritten.
+    (base / 'launch').mkdir()
+    for folder, names in [('launch', ['git']), ('exec', ['git', 'git-index-pack', 'git-rev-list'])]:
+        for name in names:
+            path = base / folder / name
+            path.write_bytes(launcher)
+            path.chmod(0o555)
+    # Launcher location is one level below base just like exec. This private
+    # launch directory is the sole normal Git PATH entry.
+    for name, target in expected_utilities().items():
+        (base / 'util' / name).symlink_to(target)
+    for directory in sorted(base.rglob('*'), reverse=True):
+        if directory.is_dir():
+            directory.chmod(0o555)
+    base.chmod(0o555)
+    return base
+
+
+def pinned_git_environment(root):
+    base = verify_pinned_git(root)
+    require(not any(key.startswith(('LD_', 'GIT_')) and key not in
+                    ('GIT_EXEC_PATH', 'GIT_TEMPLATE_DIR', 'GIT_CONFIG_NOSYSTEM', 'GIT_CONFIG_GLOBAL', 'GIT_ALLOW_PROTOCOL')
+                    for key in os.environ), 'pinned_Git_inherited_override')
+    desired = dict(PATH=str(base / 'launch') + ':' + str(base / 'util'), GIT_EXEC_PATH=str(base / 'exec'),
+                   GIT_TEMPLATE_DIR=str(base / 'templates'), GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL='/dev/null', GIT_ALLOW_PROTOCOL='file')
+    require(all(key not in os.environ or os.environ[key] == value for key, value in desired.items() if key != 'PATH'),
+            'pinned_Git_context_override')
+    env = dict(os.environ, **desired)
+    return env
+
+
+def verify_checkout_inputs(repo, target):
+    values = run(['git', '-C', str(repo), 'config', '--null', '--list']).split(b'\0')
+    allowed = ('core.repositoryformatversion', 'core.filemode', 'core.bare', 'core.logallrefupdates',
+               'remote.origin.url', 'remote.origin.fetch')
+    for record in filter(None, values):
+        key = record.split(b'\n', 1)[0].decode()
+        require(key in allowed or re.fullmatch(r'branch\.[A-Za-z0-9_./-]+\.(remote|merge)', key), 'pinned_Git_unsafe_config:' + key)
+    hooks = repo / '.git/hooks'
+    require(not hooks.exists() or not any(hooks.iterdir()), 'pinned_Git_hooks_absent')
+    require(not (repo / '.git/objects/info/alternates').exists() and
+            not (repo / '.git/info/attributes').exists(), 'pinned_Git_no_unbound_child_inputs')
+    names = run(['git', '-C', str(repo), 'ls-tree', '-rz', '--name-only', target]).split(b'\0')
+    for raw_name in filter(None, names):
+        name = raw_name.decode()
+        if PurePosixPath(name).name == '.gitattributes':
+            attributes = run(['git', '-C', str(repo), 'show', target + ':' + name]).decode()
+            require(not any(re.search(r'(?:^|\s)(?:filter|diff|merge|working-tree-encoding)=', line)
+                            for line in attributes.splitlines() if not line.lstrip().startswith('#')),
+                    'pinned_Git_unbound_attribute_driver:' + name)
+
+
+def capability_differences(captured, actual, path='$'):
+    """Diagnostic paths only; never adjusts a captured authority value."""
+    if type(captured) is not type(actual):
+        return [path]
+    if isinstance(captured, dict):
+        differences = []
+        for key in sorted(set(captured) | set(actual)):
+            if key not in captured or key not in actual:
+                differences.append(path + '.' + key)
+            else:
+                differences.extend(capability_differences(captured[key], actual[key], path + '.' + key))
+        return differences
+    if isinstance(captured, list):
+        if len(captured) != len(actual):
+            return [path]
+        return [difference for i, (left, right) in enumerate(zip(captured, actual))
+                for difference in capability_differences(left, right, path + '[' + str(i) + ']')]
+    return [] if captured == actual else [path]
 
 
 def materialize_J_record_alias(root, logical):
@@ -131,6 +355,7 @@ def materialize(root):
     for item in m['expected_absences']:
         require(not (root / item['logical_path'].lstrip('/')).exists(), 'keep_actual_absence')
     materialize_J_record_alias(root, logical)
+    materialize_pinned_git(root)
     return m
 
 
@@ -161,6 +386,7 @@ def namespace_main():
                 (root / name).mkdir(exist_ok=True)
                 mounts.append((str(source), str(root / name)))
         mounts.append((str(ROOT), str(root / 'harness')))
+        mounts.append((str(root / 'historical-git'), str(root / 'historical-git')))
         script = 'set -eu\nmount --make-rprivate /\n'
         for source, target in mounts:
             script += 'mount --bind ' + shlex.quote(source) + ' ' + shlex.quote(target) + '\n'
@@ -170,7 +396,7 @@ def namespace_main():
         script += 'mount -t proc proc ' + shlex.quote(str(root / 'proc')) + '\n'
         executable = '/harness/scripts/ci/f13_exact_j_historical_red_test.py'
         script += 'exec chroot --userspec=' + str(os.getuid()) + ':' + str(os.getgid()) + ' ' + shlex.quote(str(root))
-        script += ' /usr/bin/env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp PYTHONDONTWRITEBYTECODE=1 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null '
+        script += ' /usr/bin/env -i PATH=/historical-git/launch:/historical-git/util GIT_EXEC_PATH=/historical-git/exec GIT_TEMPLATE_DIR=/historical-git/templates GIT_ALLOW_PROTOCOL=file HOME=/tmp PYTHONDONTWRITEBYTECODE=1 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null '
         script += 'F13_HARNESS_IDENTITY=' + shlex.quote(harness_identity) + ' '
         script += shlex.quote(sys.executable) + ' -B ' + executable + ' --inside\n'
         # User/mount/network/pid isolation is fixture infrastructure only. There
@@ -207,8 +433,11 @@ def inside():
     require(set(harness_identity['files']) == set(HARNESS_SOURCE_PATHS), 'complete_testhead_source_binding')
     require(all(sha((ROOT / name).read_bytes()) == digest for name, digest in harness_identity['files'].items()), 'mounted_testhead_same_bytes')
     repo = Path('/repo')
+    # Validate the complete read-only pinned closure before the first inner Git.
+    pinned_git_environment(Path('/'))
     bundle = '/out/prelaunch/private-target.bundle'
     run(['git', 'clone', '--no-checkout', bundle, str(repo)])
+    verify_checkout_inputs(repo, TARGET)
     run(['git', '-C', str(repo), 'checkout', '--detach', TARGET])
     git = lambda *args: run(['git', '--no-replace-objects', '-C', str(repo), *args])
     require(git('rev-list', '--parents', '-n', '1', 'HEAD').decode().split() == [TARGET, BASE, SOURCE], 'historical_actual_parents')
@@ -242,6 +471,15 @@ def inside():
     captured = json.loads((OBSERVED / 'fixed3071-J-ledger.json').read_bytes())
     require(sha((OBSERVED / 'fixed3071-J-ledger.json').read_bytes()) == LEDGER_SHA, 'captured_ledger_raw')
     prefix = captured['prefix']
+    cap_raw = (OBSERVED / 'fixed3071-structural-capabilities.json').read_bytes()
+    cap = json.loads(cap_raw)
+    actual_cap = h.prepare_3071_author_capabilities(repo, cap['directory'], cap['native_path'])
+    differences = capability_differences(cap, actual_cap)
+    if differences:
+        print(json.dumps(dict(kind='F13_HISTORICAL_CAPABILITY_MISMATCH', paths=differences[:64],
+                              total=len(differences), captured_sha256=sha(cap_raw), captured_bytes=len(cap_raw),
+                              actual_sha256=sha(h.canonical(actual_cap)), actual_bytes=len(h.canonical(actual_cap)))))
+    require(cap == actual_cap and not differences, 'fixed3071_complete_current_capability_binding')
     checked = h.validate_trace(repo, trace, prefix['sha256'], J_checkpoint=OPERATION, sealed_prefix=prefix)
     reconstructed = h.build_3071_J_ready(checked['J_checkpoint'], prefix)
     require(h.canonical(reconstructed) == h.canonical(captured), 'independent_complete_J_not_trusted_import')

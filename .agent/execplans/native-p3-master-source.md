@@ -1106,3 +1106,76 @@ four-test Linux group passes in4.552s, log
 on unchanged executable harness7271a4ec and final transport-test33770277.
 The earlier2.726s GREEN remains evidence for its prior length-control source,
 not for this strengthened same-size checksum oracle. No broader run occurred.
+
+### Historical Git closure implementation (HARNESS c33/c34, 2026-10-21)
+
+Hosted run39677595387 correctly rejected complete capability equality: captured
+Git2.39.5 differs from hosted2.55.0. c27 preserves that static diagnosis, not a
+guard defect. c28/c29 selected an immutable historical toolchain; c87 reviewed
+the corrected c31 design (manifestfc6467/ZIP7809) with mandatory CODE conditions.
+No field stripping, recapture, fake version or production authority is permitted.
+
+The retained WT19a2d7/416 and current task ownership were freshly read before
+c34 ACCEPT/checkpoint. Scoped implementation touches only the test harness,
+transport tests, immutable toolchain data and this ExecPlan. Historical source547,
+targetc6a, eventea845, rawba6/cap/trace/Jledger and producer/helper bytes remain
+unchanged; fresh fixture test-head identity remains separate from AUTHOR carrier.
+
+The test-first actual materialize regression failed at the intended missing
+pinned Git assertion (1test/5.451s/exit1, log882dbd40); same positive body then
+passed (1test/5.090s/exit0, logac612e8f). These are setup-data RED/GREEN only,
+not the original shared-guard RED. All54 transition oracles remain PLANNED.
+
+Five immutable ELF files are safely materialized from archive6326, manifestbfb0,
+checked by fixed SHA/length/type/mode/member set before executable creation.
+The real Git ELF executes through its pinned loader/libraries and argv0; no
+version/result shim. Execpath has only the three reviewed entrypoints, while a
+private utility view excludes all hosted git/git-* names and preserves ordinary
+tool precedence. Environment/global-option/command routing rejects unsupported
+or loader/config overrides. Git's own closed execpath prefixing is supported
+without appending raw hosted tool directories. Fixed clone/checkout arguments,
+empty templates and precheckout config/hooks/attributes/alternates gates fail
+setup before any unexpected helper or side effect. Future full capability
+reconstruction compares EVERY field and emits diagnostic paths/hashes on mismatch
+without modifying captured values; original trace/J/qualifier checks still follow.
+
+Unprivileged Linux component tests cover real ELF stdout/stderr/exit/dashed argv0,
+captured bundle clone and index-pack/rev-list child routing, no host fallback,
+same-size binary/four-library corruption, path/mode/context/archive/manifest
+forgeries and precheckout unsafe config/hooks. The initial combined group had
+12tests/3 PermissionError setup errors because the private tmpfs lacked explicit
+exec; that terminal remains preserved. Only the component runner mount was
+corrected to private exec tmpfs, with UID1000/netnone/capdropALL/RO source/rootfs.
+This does not change or replace the original namespace/chroot/dropuid harness.
+No namespace, full capability, qualifier, producer or hosted CI execution is
+released before independent frozen CODE review by original418.
+
+The exec-enabled component group next proved real loader/argv0/child clone,
+but one test incorrectly asked for HEAD before checkout; the captured bundle's
+default HEAD is not established by --no-checkout. The test now asks for exact
+TARGET c6a and preserves the same expected ordered parents. That intermediate
+12test/1error receipt is retained, not hidden as GREEN.
+
+Final scoped group passes12/12 in22.935s, exit0/noOOM, log
+`647fa81163bbb6dde49c87bcb353e400134dbb6f5748b5e87d3d45c332d102a0`;
+executable harness566125b3 and transport-test40441d16 are source-bound in its
+receipt. All execution used UID1000/private Linux/networknone/no ports/rootfsRO/
+capdropALL/no-new-privileges, with only private component-test tmpfs executable.
+The actual historical namespace, fullcapability reconstruction, qualifiers and
+shared guard were NOT invoked; actual F13 RED remains UNOBSERVED/54PLANNED.
+
+The new fixture metadata manifest was copied with CRLF bytes; staged diffcheck
+reported trailing whitespace. Intermediate normal367f0fc0 is preserved, not the
+final CODE-ready head. A normal LF-only metadata successor updates the fixed
+manifest SHA to2450a593; original observed provenance manifestbfb0 remains in the
+design packet. JSON values and all five ELF hashes/bytes/archive6326 are identical.
+Final-source materialization/manifest-forgery/real-loader checks are repeated;
+the prior12-test result stays explicitly bound to its pre-LF source, with the
+unchanged function bodies/tests reused only within that scope.
+
+Final LF source passes the three affected checks (actual materialize, manifest
+forgery and real loader/argv0/output/exit) in5.713s/exit0, logfe0c7bb0. Harness
+412b9b7b/test40441d16 hashes bind that receipt. Every function body is AST-equal
+to the prior12/12 source; only the fixed manifest hash constant and metadata LF
+bytes changed. Full namespace/capability/qualifier execution is still forbidden
+until independent frozen CODE review, and no such execution is claimed here.
