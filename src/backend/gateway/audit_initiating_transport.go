@@ -21,7 +21,8 @@ func (t *transcoder) auditInitiatingContext(r *http.Request, request proto.Messa
 		return nil, status.Error(codes.Unauthenticated, "verified actor required")
 	}
 	claims, ok := r.Context().Value(verifiedUserClaimsKey{}).(tokenClaims)
-	if !ok || !canonicalLifecycleUUID(claims.UserID) || !canonicalLifecycleUUID(claims.ProfileID) || claims.SessionEpoch <= 0 || !claims.ExpiresAt.After(time.Now()) || (claims.AccountType != "regular" && claims.AccountType != "guest" && claims.AccountType != "sdk-account") {
+	accountType := claims.AuthenticatedAccountType
+	if !ok || !canonicalLifecycleUUID(claims.UserID) || !canonicalLifecycleUUID(claims.ProfileID) || claims.SessionEpoch <= 0 || !claims.ExpiresAt.After(time.Now()) || (accountType != "regular" && accountType != "guest" && accountType != "sdk-account") {
 		return nil, status.Error(codes.Unauthenticated, "verified explicit actor required")
 	}
 	audience := auditInitiatingAudience(method)
@@ -38,7 +39,7 @@ func (t *transcoder) auditInitiatingContext(r *http.Request, request proto.Messa
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid initiating request")
 	}
-	token, err := t.lifecycleIssuer.IssueDelegatedUser(principal.DelegatedUserInput{Audience: audience, RPC: method, RequestID: requestID, RequestHash: hash, AccountID: claims.UserID, ProfileID: claims.ProfileID, SessionEpoch: claims.SessionEpoch, AccountType: claims.AccountType, ClientExpiresAt: claims.ExpiresAt})
+	token, err := t.lifecycleIssuer.IssueDelegatedUser(principal.DelegatedUserInput{Audience: audience, RPC: method, RequestID: requestID, RequestHash: hash, AccountID: claims.UserID, ProfileID: claims.ProfileID, SessionEpoch: claims.SessionEpoch, AccountType: accountType, ClientExpiresAt: claims.ExpiresAt})
 	if err != nil {
 		return nil, status.Error(codes.Unavailable, "initiating credential unavailable")
 	}

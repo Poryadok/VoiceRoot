@@ -23,7 +23,7 @@ func TestAuditInitiatingContext_UsesVerifiedExplicitActorAndFreshCredential(t *t
 	require.NoError(t, err)
 	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "current", PrivateKey: key})
 	require.NoError(t, err)
-	claims := tokenClaims{UserID: uuid.NewString(), ProfileID: uuid.NewString(), SessionEpoch: 5, ExpiresAt: time.Now().Add(time.Minute), AccountType: "guest"}
+	claims := tokenClaims{UserID: uuid.NewString(), ProfileID: uuid.NewString(), SessionEpoch: 5, ExpiresAt: time.Now().Add(time.Minute), AccountType: "guest", AuthenticatedAccountType: "guest"}
 	r := httptest.NewRequest("POST", "/api/v1/chats", nil)
 	r = r.WithContext(context.WithValue(r.Context(), verifiedUserClaimsKey{}, claims))
 	r.Header.Set("X-Voice-Profile-Id", uuid.NewString())
