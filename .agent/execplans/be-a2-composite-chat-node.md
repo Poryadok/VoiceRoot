@@ -177,3 +177,36 @@ bypass. This conservatively also blocks apparently matching historical overlaps;
 they require explicit verified reconciliation, not implicit approval from hashes.
 Current source has not been activated, so no historical overlap is assumed absent
 without inspection and no production repair or data deletion is authorized here.
+
+### PR875 explicit actor correction (2026-10-21)
+
+Existing author18 accepted the named correction in TTc10/checkpoint before own
+WT38 leasec59dea450237e8d0888d01527b4defbd. Base is exact
+4ea5dbc551aa0abf890d0c745bb8d341e8622808; source review is
+PR875-INDEPENDENT-CODE-REVIEW-ASTRA-20261021 c4/c6 by480. Both initiating
+signers used compatibility AccountType, which defaults absent signed claims to
+regular; the actual Space Chat POST also missed the strict delegation boundary.
+
+High-risk JWT boundary, ordinary test-first workflow: real signed JWT/JWKS parser
+must exercise missing/empty/trimmed raw type, explicit regular/guest and existing
+sdk-account audit-only allowance. HTTP dispatch negatives cover missing JTI,
+wrong/unconfigured issuer/audience, query/duplicate bearer, static credentials and
+compatibility epoch mode. Reuse existing strict delegation and preserve ordinary
+JWT compatibility. Only current production caller POST spaces/{id}/chats joins
+the strict boundary; no producer/caller cutover is invented for the separate c3.
+
+Scope: three Gateway production files, parser-backed regression tests and this
+checkpoint. Checks: focused meaningful RED/GREEN, affected Gateway suite/vet/lint
+and independent480 correction review through publisher121. User excludes CodeGraph
+and Graphify until restored. No Chat producer/config/authority expansion, runtime,
+CI, GitHub or deployment actions by18;121 is sole publisher.
+
+Parser-backed test-first RED observed8PASS/15FAIL before the three production
+edits. Initial host focusedGREEN34PASS is historical only: upon receipt of the
+Linux/Docker-only restriction the pending host command had already completed;
+no matching Go/test process remained and no further host tests were started.
+Authorized final proof used golang1.26.2-bookworm Linux containers, readonly WT,
+own Go caches, no published ports: full Gateway short suitePASS, focused34PASS
+(5top-level plus29subtests,0skip/0fail), vetPASS. Linux CI-pinned lintv2.6.1 and
+independent security correction review remain pending at source freeze. Actual
+JWT/JWKS and Redis fixtures are local to the containers, not Windows listeners.

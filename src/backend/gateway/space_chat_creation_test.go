@@ -52,7 +52,7 @@ func TestSpaceChatCompositeRouteUsesProtectedOriginalResultWithoutUpsert(t *test
 			require.NoError(t, err)
 			issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "current", PrivateKey: key})
 			require.NoError(t, err)
-			claims := tokenClaims{UserID: uuid.NewString(), ProfileID: uuid.NewString(), SessionEpoch: 7, AccountType: "regular", ExpiresAt: time.Now().Add(time.Minute)}
+			claims := tokenClaims{UserID: uuid.NewString(), ProfileID: uuid.NewString(), SessionEpoch: 7, AccountType: "regular", AuthenticatedAccountType: "regular", ExpiresAt: time.Now().Add(time.Minute)}
 			spaceID, chatID, nodeID, opID, requestID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 			verify := func(ctx context.Context, message proto.Message, method, audience, id string) {
 				md, ok := metadata.FromOutgoingContext(ctx)
