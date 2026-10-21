@@ -516,6 +516,37 @@ class ComposeTests(unittest.TestCase):
                     mounts.append((source.relative_to(self.fixture).as_posix(), volume))
         return mounts
 
+    def test_lifecycle_overlay_keeps_media_listener_and_gateway_target_distinct(self):
+        command = ["docker", "compose", "--env-file", self.empty_env,
+                   "--profile", "*", "-f", ROOT / "docker-compose.yml",
+                   "-f", MEDIA_OVERLAY, "-f", ROOT / "docker-compose.space-lifecycle.yml",
+                   "config", "--format", "json"]
+        services = json.loads(require_success(run(*command, env=self.env)))["services"]
+        space = services["space"]
+        environment = space["environment"]
+        communication = environment["SPACE_VOICE_COMMUNICATION_GRPC_LISTEN"]
+        lifecycle = environment["SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN"]
+        self.assertNotEqual(lifecycle, communication,
+                            "both protected servers run in the same Space process")
+        self.assertEqual(communication, ":9094")
+        self.assertEqual(lifecycle, ":9095")
+        self.assertTrue({"9094", "9095"}.issubset(set(space["expose"])))
+        gateway = services["gateway"]
+        self.assertEqual(gateway["environment"]["GATEWAY_SPACE_LIFECYCLE_GRPC_ADDR"],
+                         "space" + lifecycle)
+        for key in ("GATEWAY_SPACE_LIFECYCLE_TLS_CA_FILE",
+                    "GATEWAY_SPACE_LIFECYCLE_CLIENT_CERT_FILE",
+                    "GATEWAY_SPACE_LIFECYCLE_CLIENT_KEY_FILE"):
+            target = gateway["environment"][key]
+            mounts = [m for m in gateway["volumes"] if m["target"] == target]
+            self.assertEqual(len(mounts), 1)
+            self.assertTrue(mounts[0]["read_only"])
+        # This opt-in overlay still owns its existing activation choices.
+        self.assertEqual(environment["SPACE_LIFECYCLE_ENABLED"], "true")
+        self.assertEqual(environment["SPACE_LIFECYCLE_MODE"], "development")
+        self.assertNotIn("SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN",
+                         self.media_merged["space"]["environment"])
+
     def source_at(self, service, target):
         for source, volume in self.fixture_mounts(service):
             if volume["target"] == target:
