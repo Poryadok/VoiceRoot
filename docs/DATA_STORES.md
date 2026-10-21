@@ -20,7 +20,7 @@
 | Space Service        | `space_db`        | Social principal replay; shared signed Voice/Messaging communication-decision replay | — |
 | Role Service         | `role_db`         | Shared principal replay Redis | —                                |
 | Voice Service        | `voice_db`, including `voice_space_media_admission_owners` workflow token/epoch/DB lease and exact dispatch-fence acknowledgement | active-call compatibility projection + lifecycle admission/receipt mirror; per-admission dispatch nonce/epoch gate; `voice_match_squad_operations` and `voice_room_instances` own MatchSquad operation/resource state | Redis call/session projection; LiveKit room `match-squad-<room UUID>` |
-| File Service         | `file_db`         | Shared principal replay Redis | R2, воркеры конвертации; `files.preview_metadata_revision` and `file_preview_event_outbox` atomically retain redacted generic preview facts independently of Music |
+| File Service         | `file_db`         | Shared principal replay Redis | R2, воркеры конвертации; `files.preview_metadata_revision` and `file_preview_event_outbox` atomically retain redacted generic preview facts independently of Music; `file_expiry_event_outbox` retains exact logical-expiry envelopes until acknowledged, independently of byte GC |
 | Notification Service | `notification_db` | grouping push, limits     | FCM, APNs, email                 |
 | Search Service       | `search_db` (target) | —                      | Meilisearch v2, Elasticsearch v3 |
 | Matchmaking Service  | `matchmaking_db`  | очереди, locks            | —                                |

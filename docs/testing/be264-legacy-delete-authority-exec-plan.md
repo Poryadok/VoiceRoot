@@ -69,8 +69,9 @@ deleted_at remains revivable; legacy prepare sets deleted_at durably.
 Full Astra c5 real-PG barriers, ambiguous commits, all-key retry and concurrent
 expiry/GC must be demonstrated before merge. Shared GitHub transport outage
 blocks publication; preserve portable bundle and exact next action if unchanged.
-Existing file.expired publication is still best effort after synchronous GC
-completion; a crash/pending external deletion can omit that event, as there is
-no durable generic file.expired outbox. Music tombstones remain transactional.
+The expiry-event-loss follow-up now commits an exact logical-expiry envelope
+and retries independently of byte GC; see
+[expiry recovery](be264-expiry-event-recovery.md) for causal RED/GREEN evidence.
+Music tombstones remain transactional.
 Full c5 matrix (ambiguous prepare commit/completion commit, concurrent expiry
 and GC, real Acquire at both winner barriers) remains open beyond these fixtures.

@@ -21,15 +21,32 @@ func RunExpiryPurgeOnce(
 	deleter r2file.ObjectDeleter,
 	pub fileevents.Publisher,
 	now time.Time,
-) (int64, error) {
+) (processed int64, result error) {
 	if files == nil || files.Pool == nil {
 		return 0, nil
+	}
+	// Retry committed intents even if storage failed or the ready-only scan is
+	// empty after restart. Noop/non-durable publishers cannot acknowledge rows.
+	if publisher, ok := pub.(interface {
+		PublishExpiryEvent(context.Context, []byte) error
+	}); ok {
+		defer func() {
+			for i := 0; i < expiryBatchSize; i++ {
+				published, err := files.DispatchExpiryEvent(ctx, publisher.PublishExpiryEvent)
+				if err != nil {
+					result = errors.Join(result, err)
+					return
+				}
+				if !published {
+					return
+				}
+			}
+		}()
 	}
 	rows, err := files.ListExpiredReadyFiles(ctx, now.UTC(), expiryBatchSize)
 	if err != nil {
 		return 0, err
 	}
-	var processed int64
 	for _, row := range rows {
 		completed, err := files.DeleteLegacyFile(ctx, row.ID, &now, deleter)
 		if errors.Is(err, store.ErrFileRetained) {
@@ -40,14 +57,6 @@ func RunExpiryPurgeOnce(
 		}
 		if !completed {
 			continue
-		}
-		if pub != nil {
-			var chatID *string
-			if row.ChatID != nil {
-				s := row.ChatID.String()
-				chatID = &s
-			}
-			_ = pub.PublishFileExpired(ctx, row.ID.String(), chatID)
 		}
 		processed++
 	}

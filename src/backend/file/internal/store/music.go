@@ -60,6 +60,11 @@ func markUnavailableWithMusicEventTx(ctx context.Context, tx pgx.Tx, row FileRow
 	}
 	after := row
 	after.Status = status
+	if status == "expired" {
+		if err := recordExpiryEvent(ctx, tx, row); err != nil {
+			return err
+		}
+	}
 	return recordPreviewChange(ctx, tx, row, after)
 }
 
