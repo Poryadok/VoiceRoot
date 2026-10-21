@@ -117,6 +117,10 @@ func (c Config) validate() error {
 	if c.DelegatedUserEnabled {
 		allowedIssuers["gateway"] = struct{}{}
 	}
+	// An explicit Chat key endpoint opts in only the narrow CURRENTACL read.
+	if _, configured := c.JWKSURLs["chat"]; configured {
+		allowedIssuers["chat"] = struct{}{}
+	}
 	if c.AuthoritySourceEnabled {
 		allowedIssuers["federation"] = struct{}{}
 	}
