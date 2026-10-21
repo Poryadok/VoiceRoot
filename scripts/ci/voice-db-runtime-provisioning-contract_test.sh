@@ -3962,6 +3962,120 @@ f13_guarded_correction_qualified() {
   printf 'CI_DIAG stage=f13-guarded-correction qualification=%s\n' "${receipt}" >&2
 }
 
+f13_evaluate_guarded_owner_qualifiers() {
+  local repo="$1" path="$2" output="$3"
+  incremental_merge=false
+  checkpoint_supersession_status=1
+  previous_source_head="${owner_source_heads[${path}]:-}"
+  previous_source_entry="${owner_source_entries[${path}]:-}"
+  if [[ -n "${previous_source_head}" && -n "${previous_source_entry}" ]] && \
+    git -C "${repo}" merge-base --is-ancestor "${previous_source_head}" "${nested_base}" 2>/dev/null; then
+    base_entry="$(git -C "${repo}" ls-tree "${nested_base}" -- "${path}" 2>/dev/null)" || {
+      f13_collect_failure "${diagnostic_file}" source_tree_entry
+      return 1
+    }
+    [[ "${previous_source_entry}" == "${base_entry}" ]] && source_lineage=true
+  fi
+  if [[ "${allow_direct_followup}" == true && "${is_direct}" != true ]]; then
+    [[ "${ordinary_guarded_merge}" == true ]] && incremental_merge=true
+    if git -C "${repo}" merge-base --is-ancestor "${owners[${path}]}" "${source_base}" 2>/dev/null; then
+      incremental_merge=true
+    fi
+    [[ "${source_lineage}" == true ]] && incremental_merge=true
+  fi
+  if [[ "${allow_direct_followup}" == true && "${is_direct}" != true && \
+    "${incremental_merge}" != true ]]; then
+    if game_checkpoint_duplicate_owner_supersession_allowed \
+      "${repo}" "${path}" "${owners[${path}]}" "${previous_source_head}" \
+      "${nested_owner_commit}" "${nested_head}" "${commit}" \
+      "${checkpoint_merge_outcomes[${path}]:-unverified}"; then
+      incremental_merge=true
+      checkpoint_supersession_status=0
+    else
+      checkpoint_supersession_status=$?
+      [[ "${checkpoint_supersession_status}" == 2 ]] && incremental_merge=true
+    fi
+  fi
+  if [[ "${allow_direct_followup}" != true && "${is_direct}" == true ]] && \
+    f13_guarded_correction_qualified "${repo}" "${base}" "${target}" "${path}" "${commit}" "${output}"; then
+    guarded_correction_allowed=true
+  fi
+  if [[ "${guarded_correction_allowed}" != true ]] &&
+    [[ "${native_p3_active:-false}" == true ]] && native_p3_path_bound "${repo}" "${path}"; then
+    native_merge_outcome="${checkpoint_merge_outcomes[${path}]:-unverified}"
+    [[ "${is_direct}" == true ]] && native_merge_outcome=direct
+    if native_p3_duplicate_owner_qualified "${repo}" "${path}" \
+      "${owners[${path}]}" "${previous_source_head}" "${nested_owner_commit}" \
+      "${nested_head}" "${commit}" "${native_merge_outcome}"; then
+      native_supersession_status=0
+    else
+      native_supersession_status=$?
+    fi
+    if [[ "${native_supersession_status}" == 0 || "${native_supersession_status}" == 2 ]]; then
+      guarded_correction_allowed=true
+      # This is the actual producer history, not replacement proof rows.
+      awk -F '\t' -v candidate="${path}" '$1 == candidate' "${output}" \
+        >>"${TMP_DIR}/f13-native-p3-history.tsv" || return 1
+      printf 'supersession\t%s\t%s\t%s\t%s\t%s\n' "${path}" "${commit}" \
+        "${nested_head}" "${native_merge_outcome}" "${native_supersession_status}" \
+        >>"${TMP_DIR}/f13-native-p3-history.tsv" || return 1
+      if [[ "${native_supersession_status}" == 0 ]]; then
+        if [[ -n "${f13_f54_trace_file:-}" ]]; then
+          f13_f54_trace_event native_rebind_gate "${repo}" "${path}" \
+            "${native_supersession_status}" "${owners[${path}]}" "${previous_source_head}" \
+            "${nested_owner_commit}" "${nested_head}" "${commit}" "${native_merge_outcome}" \
+            "${native_p3_binding}" || return 1
+        fi
+        source_entry="$(git -C "${repo}" ls-tree "${commit}" -- ":(literal)${path}")" || return 1
+        nested_owner_commit="${commit}"
+        nested_base="${first_parent}"
+        nested_head="${commit}"
+        unset 'guarded_entries[$path]' 'guarded_entry_commits[$path]'
+      fi
+    fi
+  fi
+  if [[ "${allow_direct_followup}" == true && "${is_direct}" != true &&
+    "${incremental_merge}" != true && "${guarded_correction_allowed}" != true ]] &&
+    declare -F f13_role_conditional_qualified >/dev/null; then
+    role_incoming_row="$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' \
+      "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" \
+      "${nested_head}" "${content_base}" "${source_base_candidates}")" || return 1
+    if f13_role_conditional_qualified "${repo}" "${output}" "${path}" "${role_incoming_row}"; then
+      role_duplicate_allowed=true
+    fi
+  fi
+  if [[ "${allow_direct_followup}" == true && "${is_direct}" != true &&
+    "${incremental_merge}" != true && "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true ]] &&
+    declare -F f13_space_audit_qualified >/dev/null; then
+    role_incoming_row="$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' \
+      "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" \
+      "${nested_head}" "${content_base}" "${source_base_candidates}")" || return 1
+    if f13_space_audit_qualified "${repo}" "${output}" "${path}" "${role_incoming_row}"; then
+      space_audit_allowed=true
+    fi
+  fi
+  if [[ "${allow_direct_followup}" == true && "${is_direct}" != true && "${incremental_merge}" != true &&
+    "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && "${space_audit_allowed}" != true &&
+    -n "${f13_f54_capability_file:-}" ]]; then
+    if f13_f54_exact_supersession "${repo}" "${path}" "${output}" \
+      "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" "${base}" "${target}"; then
+      exact_unit_supersession=true
+    fi
+  fi
+  return 0
+}
+
+f13_guarded_owner_transition_allowed() {
+  local guarded_correction_allowed="$1" role_duplicate_allowed="$2" space_audit_allowed="$3"
+  local exact_unit_supersession="$4" allow_direct_followup="$5" is_direct="$6" incremental_merge="$7"
+  if [[ "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && "${space_audit_allowed}" != true && "${exact_unit_supersession}" != true && \
+    ( "${allow_direct_followup}" != true || \
+    ( "${is_direct}" != true && "${incremental_merge}" != true ) ) ]]; then
+    return 1
+  fi
+  return 0
+}
+
 f13_collect_develop_contributions() {
   if [[ -n "${f13_f54_trace_file:-}" && "${f13_f54_running:-false}" != true ]]; then
     local f13_f54_parent="${f13_f54_frame:-}" f13_f54_parent_operation="${f13_f54_operation:-}"
@@ -4347,107 +4461,10 @@ f13_collect_develop_contributions() {
         # merge. The latter is incremental only when the previous owner is an
         # ancestor of this merge's source base; independent merge owners remain
         # ambiguous and fail closed.
-        incremental_merge=false
-        checkpoint_supersession_status=1
-        previous_source_head="${owner_source_heads[${path}]:-}"
-        previous_source_entry="${owner_source_entries[${path}]:-}"
-        if [[ -n "${previous_source_head}" && -n "${previous_source_entry}" ]] && \
-          git -C "${repo}" merge-base --is-ancestor "${previous_source_head}" "${nested_base}" 2>/dev/null; then
-          base_entry="$(git -C "${repo}" ls-tree "${nested_base}" -- "${path}" 2>/dev/null)" || {
-            f13_collect_failure "${diagnostic_file}" source_tree_entry
-            return 1
-          }
-          [[ "${previous_source_entry}" == "${base_entry}" ]] && source_lineage=true
-        fi
-        if [[ "${allow_direct_followup}" == true && "${is_direct}" != true ]]; then
-          [[ "${ordinary_guarded_merge}" == true ]] && incremental_merge=true
-          if git -C "${repo}" merge-base --is-ancestor "${owners[${path}]}" "${source_base}" 2>/dev/null; then
-            incremental_merge=true
-          fi
-          [[ "${source_lineage}" == true ]] && incremental_merge=true
-        fi
-        if [[ "${allow_direct_followup}" == true && "${is_direct}" != true && \
-          "${incremental_merge}" != true ]]; then
-          if game_checkpoint_duplicate_owner_supersession_allowed \
-            "${repo}" "${path}" "${owners[${path}]}" "${previous_source_head}" \
-            "${nested_owner_commit}" "${nested_head}" "${commit}" \
-            "${checkpoint_merge_outcomes[${path}]:-unverified}"; then
-            incremental_merge=true
-            checkpoint_supersession_status=0
-          else
-            checkpoint_supersession_status=$?
-            [[ "${checkpoint_supersession_status}" == 2 ]] && incremental_merge=true
-          fi
-        fi
-        if [[ "${allow_direct_followup}" != true && "${is_direct}" == true ]] && \
-          f13_guarded_correction_qualified "${repo}" "${base}" "${target}" "${path}" "${commit}" "${output}"; then
-          guarded_correction_allowed=true
-        fi
-        if [[ "${guarded_correction_allowed}" != true ]] &&
-          [[ "${native_p3_active:-false}" == true ]] && native_p3_path_bound "${repo}" "${path}"; then
-          native_merge_outcome="${checkpoint_merge_outcomes[${path}]:-unverified}"
-          [[ "${is_direct}" == true ]] && native_merge_outcome=direct
-          if native_p3_duplicate_owner_qualified "${repo}" "${path}" \
-            "${owners[${path}]}" "${previous_source_head}" "${nested_owner_commit}" \
-            "${nested_head}" "${commit}" "${native_merge_outcome}"; then
-            native_supersession_status=0
-          else
-            native_supersession_status=$?
-          fi
-          if [[ "${native_supersession_status}" == 0 || "${native_supersession_status}" == 2 ]]; then
-            guarded_correction_allowed=true
-            # This is the actual producer history, not replacement proof rows.
-            awk -F '\t' -v candidate="${path}" '$1 == candidate' "${output}" \
-              >>"${TMP_DIR}/f13-native-p3-history.tsv" || return 1
-            printf 'supersession\t%s\t%s\t%s\t%s\t%s\n' "${path}" "${commit}" \
-              "${nested_head}" "${native_merge_outcome}" "${native_supersession_status}" \
-              >>"${TMP_DIR}/f13-native-p3-history.tsv" || return 1
-            if [[ "${native_supersession_status}" == 0 ]]; then
-              if [[ -n "${f13_f54_trace_file:-}" ]]; then
-                f13_f54_trace_event native_rebind_gate "${repo}" "${path}" \
-                  "${native_supersession_status}" "${owners[${path}]}" "${previous_source_head}" \
-                  "${nested_owner_commit}" "${nested_head}" "${commit}" "${native_merge_outcome}" \
-                  "${native_p3_binding}" || return 1
-              fi
-              source_entry="$(git -C "${repo}" ls-tree "${commit}" -- ":(literal)${path}")" || return 1
-              nested_owner_commit="${commit}"
-              nested_base="${first_parent}"
-              nested_head="${commit}"
-              unset 'guarded_entries[$path]' 'guarded_entry_commits[$path]'
-            fi
-          fi
-        fi
-        if [[ "${allow_direct_followup}" == true && "${is_direct}" != true &&
-          "${incremental_merge}" != true && "${guarded_correction_allowed}" != true ]] &&
-          declare -F f13_role_conditional_qualified >/dev/null; then
-          role_incoming_row="$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' \
-            "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" \
-            "${nested_head}" "${content_base}" "${source_base_candidates}")" || return 1
-          if f13_role_conditional_qualified "${repo}" "${output}" "${path}" "${role_incoming_row}"; then
-            role_duplicate_allowed=true
-          fi
-        fi
-        if [[ "${allow_direct_followup}" == true && "${is_direct}" != true &&
-          "${incremental_merge}" != true && "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true ]] &&
-          declare -F f13_space_audit_qualified >/dev/null; then
-          role_incoming_row="$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' \
-            "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" \
-            "${nested_head}" "${content_base}" "${source_base_candidates}")" || return 1
-          if f13_space_audit_qualified "${repo}" "${output}" "${path}" "${role_incoming_row}"; then
-            space_audit_allowed=true
-          fi
-        fi
-        if [[ "${allow_direct_followup}" == true && "${is_direct}" != true && "${incremental_merge}" != true &&
-          "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && "${space_audit_allowed}" != true &&
-          -n "${f13_f54_capability_file:-}" ]]; then
-          if f13_f54_exact_supersession "${repo}" "${path}" "${output}" \
-            "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")" "${base}" "${target}"; then
-            exact_unit_supersession=true
-          fi
-        fi
-        if [[ "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && "${space_audit_allowed}" != true && "${exact_unit_supersession}" != true && \
-          ( "${allow_direct_followup}" != true || \
-          ( "${is_direct}" != true && "${incremental_merge}" != true ) ) ]]; then
+        f13_evaluate_guarded_owner_qualifiers "${repo}" "${path}" "${output}" || return 1
+        if ! f13_guarded_owner_transition_allowed "${guarded_correction_allowed}" \
+          "${role_duplicate_allowed}" "${space_audit_allowed}" "${exact_unit_supersession}" \
+          "${allow_direct_followup}" "${is_direct}" "${incremental_merge}"; then
           f13_emit_guarded_failure_diagnostic duplicate_guarded_owner "${path}" \
             "${commit}" "${game_checkpoint_aggregate_head:-}" "${owners[${path}]:-}" \
             "${nested_head:-}" "${guarded_entries[${path}]:-}" "${source_entry}" \

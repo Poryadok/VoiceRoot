@@ -999,3 +999,52 @@ The unrelated C++ header parse warning remains explicit; this is a graph update,
 not source qualification. Final receipts belong to the immutable source packet.
 Independent CODE review is required before any later
 separately authorized producer. No R/K, current CI, runtime or PR grant.
+
+## Faithful historical J RED harness preparation (HARNESS c72/c4)
+
+2026-10-21: accepted seam proposal manifest
+`de9e7034a790f753c551cb6d7fc1271cf0c9a712573a865ea9bc78dd9fb0e195`
+and independent418 c72 SEAM/DESIGN CONTRACT CLEAR authorize only the minimal
+behavior-preserving shared extraction and fixture preparation. This is the
+explicit testability exception to the former c129 no-executable-seam gap, not
+transition implementation or source/runtime admission. CodeGraph/graphify are
+excluded by the user's current override. Owner416 retains WT19 leasea2d7.
+
+The original collector now calls a shared qualifier dispatcher containing its
+entire original4350-4447 body, followed by the shared seven-status final guard.
+The caller keeps original defaults, diagnostics/fatal propagation, OR/J
+conservation, destructive mutation and later router order. Existing guarded
+test definition loaders select the two added dependencies; no old history-test
+body changes. Production helper/native pins/records and the original AUTHOR
+four-path restriction remain unchanged.
+
+The focused fixture uses separately pinned historical547/c6a/ea845 Git/authority
+and the exact10648-event failed trace. Its new test head supplies only the shared
+functions. Native/Game authority, complete J checkpoint/ledger and the complete
+failed history/map must independently reconstruct before the pending audit.go
+transition can be evaluated. Old raw rows/flags/owners/content/OR remain byte
+exact; no ready object is trusted, live frame prefilled or producer resumed.
+The fixture assertion expects the accepted c69 transition; the still-unchanged
+guard must actually refuse it for meaningful RED. Setup failure is exit2 and
+cannot qualify as that assertion RED(exit1). All54 vectors remain PLANNED.
+
+Transport is the exact lossless227-object archive92933183B,
+SHA256ba6a775f6c38664d8603ac8080abca5c5e464d865b2e94b297127b6217549bd1,
+binding246 logical files/400559753 unique raw bytes. The extractor is bounded,
+rejects conflicting paths/objects/symlinks/unknown files and preserves five
+actual absent bindings. Historical absolute paths require an isolated Linux
+mount/network/pid namespace; source tools are mounted read-only, fixture paths
+exist only in its unique chroot, and Python drops to the ordinary runner uid.
+No Docker engine/pull/host listener/firewall/DEV/STAGING operation is involved.
+Failure to establish isolation remains setup failure, not RED. The M ledger
+file omitted from the transport closure is materialized only from the original
+M_ledger_ready raw bytes after independent reconstruction/equality, never from
+a newly assembled or caller-trusted ready value.
+
+Current evidence is preparation/static source only. No shell/Python fixture,
+test, producer, CI or GitHub operation has run for this change. Freeze full
+CODE/input/parity packet for independent418 security review before execution.
+Then121 controls normal publication and separately authorized hosted execution;
+only faithful actual-row RED can release the already accepted MASTER transition
+implementation. Historical source547 FAIL/current ordinary source_base failure
+and missing full collection/seal/router qualification remain explicit.

@@ -24,6 +24,7 @@ def git(repo, *args):
 def functions(path):
     selected = {
         "f13_collect_develop_contributions", "f13_path_is_guarded",
+        "f13_evaluate_guarded_owner_qualifiers", "f13_guarded_owner_transition_allowed",
         "f13_resolve_source_base", "f13_collect_failure",
         "f13_emit_guarded_failure_diagnostic", "f13_tree_entry_identity", "f13_guarded_entry_matches_final_target",
         "game_checkpoint_contribution_allowed", "game_checkpoint_aggregate_path_allowed",
