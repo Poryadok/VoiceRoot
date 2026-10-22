@@ -1133,6 +1133,18 @@ def materialize(root):
     return m
 
 
+def prepare():
+    """Pure-Python fixture construction in the final ordinary-user chroot."""
+    require(sys.platform == 'linux' and ROOT == Path('/harness'), 'private_namespace_required')
+    require(os.geteuid() != 0, 'ordinary_runner_uid_required')
+    harness_identity = json.loads(os.environ['F13_HARNESS_IDENTITY'])
+    require(re.fullmatch('[0-9a-f]{40}', harness_identity['commit']), 'explicit_frozen_testhead')
+    require(set(harness_identity['files']) == set(HARNESS_SOURCE_PATHS), 'complete_testhead_source_binding')
+    require(all(sha((ROOT / name).read_bytes()) == digest for name, digest in harness_identity['files'].items()), 'mounted_testhead_same_bytes')
+    materialize(Path('/'))
+    return 0
+
+
 def namespace_main():
     """Mounts exist only in the isolated child's namespace; no Docker/service."""
     require(sys.platform == 'linux', 'Linux_only_no_Windows_test')
@@ -1148,10 +1160,11 @@ def namespace_main():
     with tempfile.TemporaryDirectory(prefix='f13-exact-j-') as folder:
         root = Path(folder) / 'root'
         root.mkdir()
-        materialize(root)
-        paired_context = prepare_paired_utility_context(root, json.loads(harness_identity))
+        # Deferred preparation occurs only after the final fixed roots are mounted.
+        # No owning outer POST snapshot exists; optional disclosure stays unavailable.
+        paired_context = None
         context_failure = {}
-        diagnostic_context = prepare_public_diagnostic_context(root, json.loads(harness_identity), context_failure)
+        diagnostic_context = None
         for name in ('repo', 'harness', 'tmp', 'dev', 'proc'):
             (root / name).mkdir(exist_ok=True)
         # The runner's already-installed toolchain is mounted read-only. No pull,
@@ -1163,7 +1176,6 @@ def namespace_main():
                 (root / name).mkdir(exist_ok=True)
                 mounts.append((str(source), str(root / name)))
         mounts.append((str(ROOT), str(root / 'harness')))
-        mounts.append((str(root / 'historical-git'), str(root / 'historical-git')))
         script = 'set -eu\nmount --make-rprivate /\n'
         for source, target in mounts:
             script += 'mount --bind ' + shlex.quote(source) + ' ' + shlex.quote(target) + '\n'
@@ -1172,10 +1184,16 @@ def namespace_main():
         script += 'mount --bind /dev/null ' + shlex.quote(str(root / 'dev/null')) + '\n'
         script += 'mount -t proc proc ' + shlex.quote(str(root / 'proc')) + '\n'
         executable = '/harness/scripts/ci/f13_exact_j_historical_red_test.py'
-        script += 'exec chroot --userspec=' + str(os.getuid()) + ':' + str(os.getgid()) + ' ' + shlex.quote(str(root))
-        script += ' /usr/bin/env -i PATH=/historical-git/launch:/historical-git/util GIT_EXEC_PATH=/historical-git/exec GIT_TEMPLATE_DIR=/historical-git/templates GIT_ALLOW_PROTOCOL=file HOME=/tmp PYTHONDONTWRITEBYTECODE=1 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null '
-        script += 'F13_HARNESS_IDENTITY=' + shlex.quote(harness_identity) + ' '
-        script += shlex.quote(sys.executable) + ' -B ' + executable + ' --inside\n'
+        invocation = 'chroot --userspec=' + str(os.getuid()) + ':' + str(os.getgid()) + ' ' + shlex.quote(str(root))
+        invocation += ' /usr/bin/env -i PATH=/historical-git/launch:/historical-git/util GIT_EXEC_PATH=/historical-git/exec GIT_TEMPLATE_DIR=/historical-git/templates GIT_ALLOW_PROTOCOL=file HOME=/tmp PYTHONDONTWRITEBYTECODE=1 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null '
+        invocation += 'F13_HARNESS_IDENTITY=' + shlex.quote(harness_identity) + ' '
+        invocation += shlex.quote(sys.executable) + ' -B ' + executable
+        script += invocation + ' --prepare\n'
+        toolchain = shlex.quote(str(root / 'historical-git'))
+        script += 'test -d ' + toolchain + '\ntest ! -L ' + toolchain + '\n'
+        script += 'mount --bind ' + toolchain + ' ' + toolchain + '\n'
+        script += 'mount -o remount,bind,ro ' + toolchain + '\n'
+        script += 'exec ' + invocation + ' --inside\n'
         # User/mount/network/pid isolation is fixture infrastructure only. There
         # is no listener, published port, engine start, DEV or STAGING operation.
         result = subprocess.run(['sudo', '-n', 'unshare', '--mount', '--net', '--pid', '--fork', 'bash', '-c', script], capture_output=True)
@@ -1383,9 +1401,19 @@ def inside():
     return 0
 
 
+def main():
+    arguments = sys.argv[1:]
+    require(arguments in ([], ['--prepare'], ['--inside']), 'explicit_harness_mode')
+    if arguments == ['--prepare']:
+        return prepare()
+    if arguments == ['--inside']:
+        return inside()
+    return namespace_main()
+
+
 if __name__ == '__main__':
     try:
-        raise SystemExit(inside() if sys.argv[1:] == ['--inside'] else namespace_main())
+        raise SystemExit(main())
     except Exception as error:
         print('F13_HISTORICAL_SETUP_FAILURE: ' + type(error).__name__ + ': ' + str(error), file=sys.stderr)
         raise SystemExit(2)

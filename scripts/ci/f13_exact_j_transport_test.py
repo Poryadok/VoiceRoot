@@ -17,6 +17,193 @@ import f13_exact_j_historical_red_test as harness
 
 
 
+class SameFinalViewContract(unittest.TestCase):
+    """Preparation component proof; real namespace and actual guard remain separate."""
+    def capture_namespace(self, result=None):
+        import types
+        outputs = (io.BytesIO(), io.BytesIO())
+        def command(args):
+            if args[-2:] == ['rev-parse', 'HEAD']:
+                return b'a' * 40 + b'\n'
+            return (harness.ROOT / args[-1].split(':', 1)[1]).read_bytes()
+        def old_materialize(root):
+            (root / 'historical-git').mkdir()
+        guard = b'{"kind":"FAITHFUL_HISTORICAL_SHARED_GUARD","guard_observed":1,"contract_expected":0}\n'
+        with mock.patch.object(harness.os, 'geteuid', return_value=1000), \
+             mock.patch.object(harness.shutil, 'which', return_value='/trusted/tool'), \
+             mock.patch.object(harness, 'run', side_effect=command), \
+             mock.patch.object(harness, 'materialize', side_effect=old_materialize) as outer, \
+             mock.patch.object(harness, 'prepare_public_diagnostic_context', return_value=None), \
+             mock.patch.object(harness.subprocess, 'run', return_value=result or subprocess.CompletedProcess([], 1, guard, b'')) as spawn, \
+             mock.patch.object(harness.sys, 'stdout', types.SimpleNamespace(buffer=outputs[0])), \
+             mock.patch.object(harness.sys, 'stderr', types.SimpleNamespace(buffer=outputs[1])):
+            status = harness.namespace_main()
+        return status, outer, spawn, outputs
+
+    def test_preparation_runs_in_final_view_before_seal_without_outer_materialization(self):
+        status, outer, spawn, _ = self.capture_namespace()
+        self.assertEqual(status, 1)
+        outer.assert_not_called()
+        self.assertEqual(spawn.call_count, 1)
+        self.assertEqual(spawn.call_args.kwargs, {'capture_output': True})
+        argv = spawn.call_args.args[0]
+        self.assertEqual(argv[:-1], ['sudo', '-n', 'unshare', '--mount', '--net', '--pid', '--fork', 'bash', '-c'])
+        script = argv[-1]
+        self.assertEqual(script.count(' --prepare\n'), 1)
+        self.assertEqual(script.count(' --inside\n'), 1)
+        prepare = script.index(' --prepare\n')
+        seal = script.index('mount --bind ', prepare)
+        inside = script.index(' --inside\n')
+        self.assertLess(prepare, seal)
+        self.assertLess(seal, inside)
+        self.assertEqual(script.count('chroot --userspec='), 2)
+        self.assertEqual(script.count(' /usr/bin/env -i PATH=/historical-git/launch:/historical-git/util '), 2)
+        self.assertLess(script.index('mount -t proc proc '), prepare)
+        self.assertLess(script.index('mount -o remount,bind,ro '), prepare)
+        self.assertIn('test -d ', script[prepare:seal])
+        self.assertIn('test ! -L ', script[prepare:seal])
+        self.assertIn('exec chroot --userspec=', script[seal:])
+
+
+    def test_prepare_validates_ordinary_identity_and_exact_source_before_materializing(self):
+        prepare = getattr(harness, 'prepare', None)
+        self.assertTrue(callable(prepare), 'missing selected source-bound prepare mode')
+        identity = dict(commit='a' * 40, files={name:harness.sha(b'fixed source') for name in harness.HARNESS_SOURCE_PATHS})
+        with mock.patch.object(harness, 'ROOT', Path('/harness')), \
+             mock.patch.object(harness.os, 'geteuid', return_value=1000), \
+             mock.patch.dict(os.environ, {'F13_HARNESS_IDENTITY':json.dumps(identity)}), \
+             mock.patch.object(Path, 'read_bytes', return_value=b'fixed source'), \
+             mock.patch.object(harness, 'materialize') as materialize, \
+             mock.patch.object(harness.subprocess, 'run') as child:
+            self.assertEqual(prepare(), 0)
+            materialize.assert_called_once_with(Path('/'))
+            child.assert_not_called()
+            materialize.reset_mock()
+            for invalid in ({'commit':'bad','files':identity['files']},
+                            {'commit':identity['commit'],'files':{}},
+                            {'commit':identity['commit'],'files':{**identity['files'],next(iter(identity['files'])):'0'*64}}):
+                with mock.patch.dict(os.environ, {'F13_HARNESS_IDENTITY':json.dumps(invalid)}), self.assertRaises(harness.SetupFailure):
+                    prepare()
+                materialize.assert_not_called()
+            with mock.patch.object(harness.os, 'geteuid', return_value=0), self.assertRaisesRegex(harness.SetupFailure, 'ordinary_runner_uid_required'):
+                prepare()
+            materialize.assert_not_called()
+            with mock.patch.object(harness, 'ROOT', Path('/wrong')), self.assertRaisesRegex(harness.SetupFailure, 'private_namespace_required'):
+                prepare()
+            materialize.assert_not_called()
+            materialize.side_effect = harness.SetupFailure('fixed_failure')
+            with self.assertRaisesRegex(harness.SetupFailure, '^fixed_failure$'):
+                prepare()
+
+    def test_dispatch_is_exact_and_does_not_fall_back_to_namespace_for_unknown_modes(self):
+        main = getattr(harness, 'main', None)
+        self.assertTrue(callable(main))
+        with mock.patch.object(harness, 'prepare', return_value=0) as prepare, \
+             mock.patch.object(harness, 'inside', return_value=1) as inside, \
+             mock.patch.object(harness, 'namespace_main', return_value=2) as outer:
+            for argv, expected in (([],2), (['--prepare'],0), (['--inside'],1)):
+                with mock.patch.object(harness.sys, 'argv', ['driver']+argv):
+                    self.assertEqual(main(), expected)
+            self.assertEqual((prepare.call_count,inside.call_count,outer.call_count),(1,1,1))
+            for argv in (['--unknown'], ['--prepare','extra'], ['--inside','--prepare']):
+                with mock.patch.object(harness.sys, 'argv', ['driver']+argv), self.assertRaisesRegex(harness.SetupFailure, 'explicit_harness_mode'):
+                    main()
+            self.assertEqual((prepare.call_count,inside.call_count,outer.call_count),(1,1,1))
+
+    def test_shell_aborts_before_inside_on_prepare_or_seal_failure(self):
+        # Execute the real generated shell with fixed test-only mount/chroot functions.
+        # This proves ordering/fail-closed shell semantics, not actual mount privileges.
+        _, _, spawn, _ = self.capture_namespace()
+        script = spawn.call_args.args[0][-1].replace('exec chroot ', 'chroot ')
+        for failure in ('none', 'prepare', 'seal'):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as folder:
+                trace = Path(folder)/'trace'
+                prefix = 'set -eu\n'
+                prefix += 'mount() { printf "mount\\n" >> "$TRACE"; '
+                prefix += 'if [ "$FAILURE" = seal ] && [ "$1" = -o ] && [ "${3##*/}" = historical-git ]; then return 42; fi; }\n'
+                prefix += 'chroot() { for last do :; done; printf "%s\\n" "$last" >> "$TRACE"; '
+                prefix += 'if [ "$last" = --prepare ] && [ "$FAILURE" = prepare ]; then return 41; fi; }\n'
+                # Test-only directory predicates accept the sealed private target.
+                prefix += 'test() { return 0; }\n'
+                result = subprocess.run(['bash','-c',prefix+script], capture_output=True,
+                                        env=dict(os.environ,TRACE=str(trace),FAILURE=failure))
+                events = trace.read_text().splitlines()
+                self.assertEqual(events.count('--prepare'),1)
+                self.assertEqual(events.count('--inside'), 1 if failure=='none' else 0)
+                self.assertEqual(result.returncode, {'none':0,'prepare':41,'seal':42}[failure])
+
+    def test_original_map_rejects_stale_or_forged_entries_after_preparation(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)/'root'
+            root.mkdir()
+            utilities = Path(folder)/'utilities'
+            utilities.mkdir()
+            referent = Path(folder)/'referent'
+            referent.write_bytes(b'executable fixture')
+            referent.chmod(0o555)
+            (utilities/'fixture_inside').symlink_to(referent)
+            with mock.patch.object(harness,'UTILITY_DIRS',(str(utilities),)):
+                base = harness.materialize_pinned_git(root)
+                harness.verify_pinned_git(root)
+                referent.chmod(0o444)
+                with contextlib.redirect_stderr(io.StringIO()), self.assertRaisesRegex(harness.SetupFailure,'pinned_Git_private_utility_view'):
+                    harness.verify_pinned_git(root)
+                referent.chmod(0o555)
+                harness.verify_pinned_git(root)
+                referent.unlink()
+                with contextlib.redirect_stderr(io.StringIO()), self.assertRaisesRegex(harness.SetupFailure,'pinned_Git_private_utility_view'):
+                    harness.verify_pinned_git(root)
+                referent.write_bytes(b'executable fixture')
+                referent.chmod(0o555)
+                harness.verify_pinned_git(root)
+                (base/'util').chmod(0o755)
+                (base/'util'/'forged').write_bytes(b'non-symlink')
+                (base/'util').chmod(0o555)
+                with contextlib.redirect_stderr(io.StringIO()), self.assertRaisesRegex(harness.SetupFailure,'pinned_Git_private_utility_view'):
+                    harness.verify_pinned_git(root)
+
+
+    def test_complete_original_predicate_uses_stable_final_view_without_outer_only_closure(self):
+        # Controlled pathname availability model, not a real mount/chroot experiment.
+        with tempfile.TemporaryDirectory() as folder:
+            workspace = Path(folder)
+            early, late = workspace/'early', workspace/'late'
+            early.mkdir()
+            late.mkdir()
+            inside, outside = workspace/'inside', workspace/'outside'
+            inside.write_bytes(b'inside executable')
+            outside.write_bytes(b'outside executable')
+            inside.chmod(0o555)
+            outside.chmod(0o555)
+            (early/'fixture_inside').symlink_to(inside)
+            (early/'fixture_outer_only').symlink_to(outside)
+            (late/'fixture_inside').symlink_to(outside)
+            (early/'git').symlink_to(inside)
+            (early/'git-private').symlink_to(inside)
+            (early/'directory').mkdir()
+            (early/'nonexec').write_bytes(b'not executable')
+            oldroot, newroot = workspace/'old', workspace/'new'
+            oldroot.mkdir()
+            newroot.mkdir()
+            with mock.patch.object(harness,'UTILITY_DIRS',(str(early),str(late))):
+                self.assertEqual(harness.expected_utilities(),
+                                 {'fixture_inside':str(early/'fixture_inside'),
+                                  'fixture_outer_only':str(early/'fixture_outer_only')})
+                oldbase = harness.materialize_pinned_git(oldroot)
+                outside.rename(workspace/'outside-hidden')
+                final_expected = {'fixture_inside':str(early/'fixture_inside')}
+                self.assertEqual(harness.expected_utilities(), final_expected)
+                with contextlib.redirect_stderr(io.StringIO()), self.assertRaisesRegex(harness.SetupFailure,'pinned_Git_private_utility_view'):
+                    harness.verify_pinned_git(oldroot)
+                newbase = harness.materialize_pinned_git(newroot)
+                self.assertEqual({p.name:str(p.readlink()) for p in (newbase/'util').iterdir()}, final_expected)
+                harness.verify_pinned_git(newroot)
+                (workspace/'outside-hidden').rename(outside)
+                with contextlib.redirect_stderr(io.StringIO()), self.assertRaisesRegex(harness.SetupFailure,'pinned_Git_private_utility_view'):
+                    harness.verify_pinned_git(newroot)
+                harness.verify_pinned_git(oldroot)
+
+
 class PairedResolutionContract(unittest.TestCase):
     """Opaque function proof; no actual hosted cause, guard or ownership claim."""
     def test_real_closure_loss_keeps_rejection_and_pairs_fixed_missing_observation(self):
@@ -230,7 +417,10 @@ class PairedResolutionContract(unittest.TestCase):
                     (root / 'historical-git' / 'util' / 'PRIVATE_TOOL').symlink_to(program)
                     holder.update(root=root, program=program)
                 def spawn(args, **kwargs):
-                    root = holder['root']
+                    # Child-only synthetic candidate: no owning outer snapshot exists.
+                    root = Path(tempfile.mkdtemp(prefix='f13-deferred-candidate-'))
+                    self.addCleanup(shutil.rmtree, root)
+                    materialize(root)
                     actual = {'PRIVATE_TOOL': str(holder['program'])}
                     holder['program'].unlink()
                     identity = dict(commit='a' * 40, files={name:harness.sha((harness.ROOT / name).read_bytes())
@@ -255,7 +445,7 @@ class PairedResolutionContract(unittest.TestCase):
                 self.assertFalse(any(line.startswith(harness.PAIRED_UTILITY_NAMESPACE) for line in raw.splitlines()))
                 records = [json.loads(line) for line in raw.splitlines()]
                 pairs = [r for r in records if r.get('kind')=='F13_PAIRED_UTILITY_CONTEXT_RECEIPT_v1']
-                self.assertEqual(len(pairs), 0 if broken_output else 1)
+                self.assertEqual(len(pairs), 0, 'deferred preparation has no authenticated outer snapshot')
                 if pairs:
                     self.assertEqual(pairs[0]['entries'][0]['outer']['state'], 'regular')
                     self.assertEqual(pairs[0]['entries'][0]['inner']['error'], 'ENOENT')
@@ -296,7 +486,8 @@ class ContextFailureContract(unittest.TestCase):
         try:
             resource.setrlimit(resource.RLIMIT_NOFILE, (32, limits[1]))
             with mock.patch.object(harness.os, 'open', side_effect=traced_open):
-                self.assertIsNone(harness.prepare_public_diagnostic_context(prepared_root, {}))
+                direct_failure = {}
+                self.assertIsNone(harness.prepare_public_diagnostic_context(prepared_root, {}, direct_failure))
                 with mock.patch.object(harness.os, 'geteuid', return_value=1000), \
                      mock.patch.object(harness.shutil, 'which', return_value='/trusted/tool'), \
                      mock.patch.object(harness, 'run', side_effect=command), \
@@ -309,6 +500,7 @@ class ContextFailureContract(unittest.TestCase):
         finally:
             resource.setrlimit(resource.RLIMIT_NOFILE, limits)
         self.assertIn(errno.EMFILE, observed, 'must exercise actual original open exhaustion')
+        self.assert_fixed_reason(direct_failure, 'catalog_descriptor_exhausted')
         self.assertEqual(len(os.listdir('/proc/self/fd')), before)
         self.assertIsNotNone(harness.read_public_utility_catalog())
         self.assertIsNotNone(harness.prepare_public_diagnostic_context(prepared_root, {}))
@@ -318,8 +510,8 @@ class ContextFailureContract(unittest.TestCase):
         raw = outputs[1].getvalue()
         self.assertTrue(raw.startswith(mismatch))
         self.assertEqual([json.loads(line) for line in raw[len(mismatch):].splitlines()], [
-            dict(kind='F13_PUBLIC_UTILITY_DIAGNOSTIC_STATUS_v1', status='context_unavailable'),
-            dict(kind='F13_PUBLIC_UTILITY_CONTEXT_FAILURE_v1', reason='catalog_descriptor_exhausted')])
+            dict(kind='F13_PUBLIC_UTILITY_DIAGNOSTIC_STATUS_v1', status='context_unavailable')])
+        # Namespace did not attempt outer catalog collection; never invent its failure.
 
 
     def assert_fixed_reason(self, failure, reason):
@@ -651,7 +843,8 @@ class OuterPublicResolution(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertNotIn('F13_OPAQUE', calls[0][0][-1])
         self.assertNotIn('F13_PUBLIC', calls[0][0][-1])
-        self.assertIn(b'F13_PUBLIC_UTILITY_OUTER_RESOLUTION_RECEIPT_v1', outputs[1].getvalue())
+        self.assertNotIn(b'F13_PUBLIC_UTILITY_OUTER_RESOLUTION_RECEIPT_v1', outputs[1].getvalue(),
+                         'no owning outer context exists before deferred preparation')
         self.assertNotIn(b'F13_OPAQUE_UTILITY_', outputs[1].getvalue())
 
     def test_catalog_parser_canonical_lexical_and_bounds(self):
