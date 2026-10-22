@@ -58,6 +58,15 @@ func (s *SpaceStore) FinalizeLifecyclePurge(ctx context.Context, spaceID uuid.UU
 			return false, err
 		}
 		snapshot = aggregate.Snapshot()
+		// The actual owner has now checked the saved operation and current11
+		// evidence. Capture precedes the FIRST permanent-fence/source write;
+		// persisted PURGED is not assumed before the real terminal transition.
+		scoped := *s
+		scoped.tx = tx
+		membershipFrame, err := scoped.captureLifecyclePurgeMutation(ctx, spaceID)
+		if err != nil {
+			return false, err
+		}
 		if err := sealChatCreationPurge(ctx, tx, spaceID, uuid.MustParse(snapshot.DeletionOperationID), snapshot.Generation, snapshot.DeletedEvent.OccurredAt); err != nil {
 			return false, err
 		}
@@ -90,6 +99,13 @@ func (s *SpaceStore) FinalizeLifecyclePurge(ctx context.Context, spaceID uuid.UU
 				_, err = tx.Exec(ctx, query, spaceID)
 			}
 			if err != nil {
+				return false, err
+			}
+		}
+		if membershipFrame != nil {
+			// DELETE's guarded terminal cleanup erased the private frame. Only
+			// its real same-TX token-bound receipt may replace normal completion.
+			if err = scoped.completeNativeMembershipDBPurge(ctx, membershipFrame); err != nil {
 				return false, err
 			}
 		}

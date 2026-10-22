@@ -1,0 +1,905 @@
+{
+  "base": "b8a71768d3a147fabcec01dd6c05b996314f3e3e",
+  "native45_source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+  "wire_source": "1a01d0914932dee614c874472b7a5a96fe63089c",
+  "ingress_dependency": "5594ef06e7b3c239b111c1e2b0f15acd81f051cc",
+  "scope": "selected existing immutable dependencies only; no main/Gateway/Role source or46-49features",
+  "files": [
+    {
+      "path": "protos/voice/space/v1/member_admission.proto",
+      "source": "1a01d0914932dee614c874472b7a5a96fe63089c",
+      "source_blob": "198118bc68a993fdfa3c4ccf21f3d06194fe2b1b",
+      "sha256": "f644982755bbe360024b25787e14f80244c3c9660b7dcceff98aa6a082d0abce",
+      "reason": "existing reviewed additive wire/codegen dependency; preserve Settings",
+      "changes_base": true,
+      "projected_sha256": "f644982755bbe360024b25787e14f80244c3c9660b7dcceff98aa6a082d0abce",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "protos/voice/space/v1/space.proto",
+      "source": "1a01d0914932dee614c874472b7a5a96fe63089c",
+      "source_blob": "23f020dbcb963414f090d727c6e12a37df4dac75",
+      "sha256": "ac1bbbd6bb67494ef2d0b2fa0528f3358f77bda559989e76c2c481e0c9702061",
+      "reason": "existing reviewed additive wire/codegen dependency; preserve Settings",
+      "changes_base": true,
+      "projected_sha256": "ac1bbbd6bb67494ef2d0b2fa0528f3358f77bda559989e76c2c481e0c9702061",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000035_join_attempts.down.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "47a8d43e9d39a6f48ec316128de519ac36c2af36",
+      "sha256": "1b777a49bd5c02710cbb14d26e598684a9603fc93f354aa84be8e350b402daea",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "1b777a49bd5c02710cbb14d26e598684a9603fc93f354aa84be8e350b402daea",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000035_join_attempts.up.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "affb0f7444c2d27a02ec8742ae75ab8d919cf9b2",
+      "sha256": "3b62c7f4a991f292c1f753a0af31360ece2fe34387b8362e3fdddd81d1d439da",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "3b62c7f4a991f292c1f753a0af31360ece2fe34387b8362e3fdddd81d1d439da",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000036_join_operation_namespace.down.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "f88ea1bc76d81610ed11841e1bc37efce53ccf53",
+      "sha256": "fbe9fd0aefeeeb108d7a037ea6fbc4374a79ffc0e40424a075ee22b8b9afff5a",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "fbe9fd0aefeeeb108d7a037ea6fbc4374a79ffc0e40424a075ee22b8b9afff5a",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000036_join_operation_namespace.up.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "311b9fd696fab78877e1432fb0b351ae0b090be3",
+      "sha256": "3d2a89e33a0fba4bc2de1168389a31c0d1f0933d162d0b883876cb62165ac4cd",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "3d2a89e33a0fba4bc2de1168389a31c0d1f0933d162d0b883876cb62165ac4cd",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000037_join_request_groups_forward.down.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "76809920678a7cf373559f9d1f0460862eeb3539",
+      "sha256": "181ee8c320213a1ac3c787f07f19f8315b63ed0b18a056605b475289c6b2aeb9",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "181ee8c320213a1ac3c787f07f19f8315b63ed0b18a056605b475289c6b2aeb9",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000037_join_request_groups_forward.up.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "6af902738272b16fc249b8fef569818131552430",
+      "sha256": "e48c641fe92722c676b96f4cdbbe169a973f4732a3d2329cf00b338e1525972a",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "e48c641fe92722c676b96f4cdbbe169a973f4732a3d2329cf00b338e1525972a",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000039_native_membership_authority.down.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "84d766836586c02628754ed56b9de8058358eb5f",
+      "sha256": "f377ecf9266c92bbbb8372a7b129ed0ddc3ffdbc9f259adf2d41f10583da53eb",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "f377ecf9266c92bbbb8372a7b129ed0ddc3ffdbc9f259adf2d41f10583da53eb",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000039_native_membership_authority.up.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "58a7bc9ee48bd07428319c28257788c32f0c85f0",
+      "sha256": "fd2ef92a1a0b70d6da18cea364d01b097905370223e9281be6735c7c1ff9f6ee",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "fd2ef92a1a0b70d6da18cea364d01b097905370223e9281be6735c7c1ff9f6ee",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000040_join_decision_basis_v2.down.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "e5d58ec97e4978eb9574cba0b7642a2b6b9c43df",
+      "sha256": "91e4c66380d873f723a9ae22f67bcbdcd8d9f9f3ba2094d0c63d0245866eacbc",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "91e4c66380d873f723a9ae22f67bcbdcd8d9f9f3ba2094d0c63d0245866eacbc",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000040_join_decision_basis_v2.up.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "a150e190112fd9eb89a15c7f12e4271b2e358fa6",
+      "sha256": "80b3c417985429acada34406bd7239a2f2923b4dd323d4cc74ae13502f491f1f",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "80b3c417985429acada34406bd7239a2f2923b4dd323d4cc74ae13502f491f1f",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000041_effective_member_episodes.down.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "00435404a419437bdd77d6571d2784bd7e679b3d",
+      "sha256": "93baf82531a62596604bbde97b02d88d41edd0283b657b4224a2b63c8c665591",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "93baf82531a62596604bbde97b02d88d41edd0283b657b4224a2b63c8c665591",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000041_effective_member_episodes.up.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "6419605554240675b24e2912a5572fcaefcbcecb",
+      "sha256": "32249964cdc3ce6da473fe187b3bdd7a412b1a2c609e0015045190eedb1a708a",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "32249964cdc3ce6da473fe187b3bdd7a412b1a2c609e0015045190eedb1a708a",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000042_native_bot_membership_journal.down.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "520d63fce2aa24241a8e8f0ba6b9b9d0f03f84cd",
+      "sha256": "3c0685eb8ff78d796ef8371cd905df8c16028ccee97f00497f16efa07a804c79",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "3c0685eb8ff78d796ef8371cd905df8c16028ccee97f00497f16efa07a804c79",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000042_native_bot_membership_journal.up.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "1fd3562e3bc6e7bce07eb2be4f43e0dfdb81e859",
+      "sha256": "f78189ebc4a1d5cbe5ed130279e142281d0a027f61728ed0f471c5b4d183300e",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "f78189ebc4a1d5cbe5ed130279e142281d0a027f61728ed0f471c5b4d183300e",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000043_join_public_operation_context.down.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "0dfa6b9c8224bb7786b943d4a2d013d1855eb658",
+      "sha256": "3cc873288e0db5c538d6324d44f59c042948dc82b6dcdec24e2470742f07c403",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "3cc873288e0db5c538d6324d44f59c042948dc82b6dcdec24e2470742f07c403",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000043_join_public_operation_context.up.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "a5be9ae8a1a7550bba2bacab8e005328aa50b7cf",
+      "sha256": "971b728eeb048d7cfb31bc8e23a25547dc22a47c185b4ac842931ac9743ddf8c",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "971b728eeb048d7cfb31bc8e23a25547dc22a47c185b4ac842931ac9743ddf8c",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000044_native_membership_readiness.down.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "1cd3c45e396cd25dc3b3485f14ff9048f9fd9642",
+      "sha256": "d83b30afbe236384db7e0872658cf8fb55d2bb36106627a07126582053245b3b",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "d83b30afbe236384db7e0872658cf8fb55d2bb36106627a07126582053245b3b",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000044_native_membership_readiness.up.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "88a7a5052080bfeb09a793df768bbeedf0a2649b",
+      "sha256": "0dab50e0f42a7787ec904bf33d61c4e87d078d1860a9d4855f959716169560af",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "0dab50e0f42a7787ec904bf33d61c4e87d078d1860a9d4855f959716169560af",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000045_join_legacy_selection_context.down.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "a17150071471dfd1efd3ccdf157c013d251b6be0",
+      "sha256": "40d5b4ef1f93be9ceab4f1216cb296c72ca7c9ced9845b4afd39cec1c9fd034c",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "40d5b4ef1f93be9ceab4f1216cb296c72ca7c9ced9845b4afd39cec1c9fd034c",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/migrations/space_db/000045_join_legacy_selection_context.up.sql",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "c8927cdee114087f8b6737557f5134565f21dbae",
+      "sha256": "f424f4f8afbf5a2a0aeb0530a1987ada0db6046a76aad769f736f19dce39ff62",
+      "reason": "immutable canonical forward SQL input",
+      "changes_base": true,
+      "projected_sha256": "f424f4f8afbf5a2a0aeb0530a1987ada0db6046a76aad769f736f19dce39ff62",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/pkg/integrationtest/authority_migrator.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "42e141d9039375da78fc59a147566c8bba6db47a",
+      "sha256": "b32e93e39471f6e21ef917f16a515a2ff99a90d650bda729b411373667621070",
+      "reason": "reviewed PG18 source migrator fixture dependency",
+      "changes_base": true,
+      "projected_sha256": "b32e93e39471f6e21ef917f16a515a2ff99a90d650bda729b411373667621070",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/admissionauthority/reviewer.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "cb12ebaa1e13b23bb065c69e8ea51d9224c6162e",
+      "sha256": "c74f04defc0e228ef70ce641b5f70f3437e47d95d9adfb9445a2424e44ea97ac",
+      "reason": "existing private dependency, not listener activation",
+      "changes_base": true,
+      "projected_sha256": "c74f04defc0e228ef70ce641b5f70f3437e47d95d9adfb9445a2424e44ea97ac",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/admissionauthority/subject.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "0f75d4c895df11a16f06840eef7f529e7d99f7be",
+      "sha256": "c4b0319231ce92142c1a6ef79fb0e491dc619b05a12d31ab7b669e7eba34d282",
+      "reason": "existing private dependency, not listener activation",
+      "changes_base": true,
+      "projected_sha256": "c4b0319231ce92142c1a6ef79fb0e491dc619b05a12d31ab7b669e7eba34d282",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/botmembershipprincipal/config.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "a2a91e0528429deb12099d1b1049802ea8dec518",
+      "sha256": "203c6c88f149783608f2749df24651bff161109266c9ec4b5138e604d0167a12",
+      "reason": "existing private dependency, not listener activation",
+      "changes_base": true,
+      "projected_sha256": "203c6c88f149783608f2749df24651bff161109266c9ec4b5138e604d0167a12",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/botmembershipprincipal/interceptor.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "c55be8aa2b7a9163db2124cd5376cbcbba548fbb",
+      "sha256": "0bf3e77b1d86dbfa47a503ea3f05432628a06605d2683d0b3009ab83ece1eb97",
+      "reason": "existing private dependency, not listener activation",
+      "changes_base": true,
+      "projected_sha256": "0bf3e77b1d86dbfa47a503ea3f05432628a06605d2683d0b3009ab83ece1eb97",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/botmembershipprincipal/runtime.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "af7c25d82fc11436d7d07dbc6b426b96aade2166",
+      "sha256": "584f00f97c11245ab9896137bb9111e778ecceedd82319702c1ec53238e2263e",
+      "reason": "existing private dependency, not listener activation",
+      "changes_base": true,
+      "projected_sha256": "584f00f97c11245ab9896137bb9111e778ecceedd82319702c1ec53238e2263e",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/lifecycleprincipal/admission_call.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "c847e5f0931b037bb4c04395d856e782e1f79165",
+      "sha256": "9738c3ee27c7c0b84d5e5c7093491480210272b690266fd12e549a308573b8f6",
+      "reason": "existing immutable private capability type and pure ActorFor dependency; no runtime registration",
+      "changes_base": true,
+      "projected_sha256": "9738c3ee27c7c0b84d5e5c7093491480210272b690266fd12e549a308573b8f6",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/memberadmissionrole/client.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "948050476dfc709fa8ba793e136fe61e0336340e",
+      "sha256": "e7422d6016bb846e7cde3f35039a02b17710f2ee923602c75c62d20edfa1a2b9",
+      "reason": "existing private dependency, not listener activation",
+      "changes_base": true,
+      "projected_sha256": "e7422d6016bb846e7cde3f35039a02b17710f2ee923602c75c62d20edfa1a2b9",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/admission_replay.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "1d4f5eb2b9bd96a0b4c59ca29d69905970106a5a",
+      "sha256": "a69cf087605e3758433b60b4c02dbab0b97a2e7802f8dec5a9fbfbaa3eb87420",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "a69cf087605e3758433b60b4c02dbab0b97a2e7802f8dec5a9fbfbaa3eb87420",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/bot_member.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "a8b556014952949ee1ca476de27175a587f3374a",
+      "sha256": "5be43a4e69b4ac121d4618ba46e049dd0f05800bb1a268a2723977ec044c6075",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "5be43a4e69b4ac121d4618ba46e049dd0f05800bb1a268a2723977ec044c6075",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/community_owner_recovery.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "37455495906944e4436d0789c49cf677e6728202",
+      "sha256": "d4f60274d389146736ee2e42a8a91efc05316f073b433c2f3cdf8b1bfe43d5c6",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "d4f60274d389146736ee2e42a8a91efc05316f073b433c2f3cdf8b1bfe43d5c6",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/community_roster.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "7151cfb7ad873027187bac187d3762c842fb7f08",
+      "sha256": "1018d9fe4ab38b0ee7761d955cb2b707125c1c924879fc15c2b86f6f22f012a8",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "1018d9fe4ab38b0ee7761d955cb2b707125c1c924879fc15c2b86f6f22f012a8",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/creator_replay.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "1cd0b28ea033e34976c64e6a92ffe38fe8d8c802",
+      "sha256": "5b81e3cf34ab13564ebbfe36999ae5a70314278796e92b2c8d2a1512d45ea810",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "5b81e3cf34ab13564ebbfe36999ae5a70314278796e92b2c8d2a1512d45ea810",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/effective_episode.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "526513fcf8ac2cc357f3d9ebdf4b197f85a26a4b",
+      "sha256": "efd9db3aecfe0d4b6335405d1e81ef1ca7d48e456dea8dc97cafabe10304d3df",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "efd9db3aecfe0d4b6335405d1e81ef1ca7d48e456dea8dc97cafabe10304d3df",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/effective_episode_persistence.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "f13c2d48ebd5b45fc49adbb5364b37c0bc87d311",
+      "sha256": "cc9950278c1fb613819268bd417bd6d3602124c476259a1887947ec905278ea9",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "cc9950278c1fb613819268bd417bd6d3602124c476259a1887947ec905278ea9",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/effective_member_mutation.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "78a9992c74f91d45de7a88114fbbbdbe806402e4",
+      "sha256": "65dd3c5a35ae4660d8ff0f6cceece2e274c8fd83f51d790a2fb04cb3245c6eca",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "65dd3c5a35ae4660d8ff0f6cceece2e274c8fd83f51d790a2fb04cb3245c6eca",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/join_decision_basis.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "ae51b5bb835da507fa319a6a22ac58a776b1570b",
+      "sha256": "ad7982d3573e0ec2e7197cad8d42c765ba676437957956441c6f08bff61f1329",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "ad7982d3573e0ec2e7197cad8d42c765ba676437957956441c6f08bff61f1329",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/join_decision_store.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "4a8fd71b980defe33ca6afb8a5b43eb1ecd430ef",
+      "sha256": "a5541309d5eb987feaed385849acf66d5babd086577e3596668740ac8d6457e1",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "a5541309d5eb987feaed385849acf66d5babd086577e3596668740ac8d6457e1",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/join_legacy_decision_basis.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "f6963f5b52d332e28a337dfe6736a6eeff33097c",
+      "sha256": "2ab4bfc803c5aaa9ab6826800a46f893ff9826ea5e13decb014db7a7747f682e",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "2ab4bfc803c5aaa9ab6826800a46f893ff9826ea5e13decb014db7a7747f682e",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/join_operations.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "42c195ad9824057f7a03c30a8cd7a137a62177e0",
+      "sha256": "e30e5248fa5ae5d8d827026084d9c19404c3e42ba156bc489782f3c893c8dc1b",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "e30e5248fa5ae5d8d827026084d9c19404c3e42ba156bc489782f3c893c8dc1b",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/join_request_groups.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "49848f0e3227f0edf7f6788affedf34397950d89",
+      "sha256": "c46a46d8b8a9a96c19224652a5de6061084cb8d0fe26a0e1390f9e4092fe0d60",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "c46a46d8b8a9a96c19224652a5de6061084cb8d0fe26a0e1390f9e4092fe0d60",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/join_requests.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "de0a3ec269aa6d7edd3474ddd3b7a24cfff3d3dd",
+      "sha256": "568a3123b35bd308b4180c500358bcc03e7c4ae5bda7b6a2545f318c45a18ac3",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "568a3123b35bd308b4180c500358bcc03e7c4ae5bda7b6a2545f318c45a18ac3",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/join_versioned_decision_store.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "5cf105c4ddd08770631de6e24fa81cfb41a3cfdb",
+      "sha256": "6011da4b70d9c0ca2581307b4ee83a54e719bfc910984b317cea1681b0b66a79",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "6011da4b70d9c0ca2581307b4ee83a54e719bfc910984b317cea1681b0b66a79",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/lifecycle_finalize.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "5d0847698098308152c6aff22898533be48500e0",
+      "sha256": "9329d658670b73ff9a9593f98fb1ed08af1e1137588e275486af05d95b413f32",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "9329d658670b73ff9a9593f98fb1ed08af1e1137588e275486af05d95b413f32",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/member_admission.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "6412879f6ce69e8d60fadfe05f9615c65f1d6c6b",
+      "sha256": "259a525b9961c1c01b8e6116eadfdcbeb08bb889d3840b7466abf7607f01f97c",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "259a525b9961c1c01b8e6116eadfdcbeb08bb889d3840b7466abf7607f01f97c",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/member_admission_candidate.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "c61151cdaab8c9544b1467a509a6203b7260031c",
+      "sha256": "c4c38058a63cbe683ed54f2ba91b6772cd888612f641b8c2f32a6a9590c1fc16",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "c4c38058a63cbe683ed54f2ba91b6772cd888612f641b8c2f32a6a9590c1fc16",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/member_admission_complete.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "299449ded7dafe185cdc4f2849cf1b2c6f049680",
+      "sha256": "682db0fc701c4f805cf75d1bf6e33168e74cb13114aadf090cfdc8aefeacd880",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "682db0fc701c4f805cf75d1bf6e33168e74cb13114aadf090cfdc8aefeacd880",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/member_admission_continuation.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "9c2a7d0ac735528a41b45ce7ecbff28ed6bc3929",
+      "sha256": "413aefaa899ab490d14244ad914d668f78abd4bce53f39454e1c7d37038cbdce",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "413aefaa899ab490d14244ad914d668f78abd4bce53f39454e1c7d37038cbdce",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/member_admission_initiating_call.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "00883aabbd25b55ef3f0287dd6455ea0c073eb47",
+      "sha256": "bfa2db66cfa760ed43fb3b607291c4145b036f37733fca128846e81ce793a336",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "bfa2db66cfa760ed43fb3b607291c4145b036f37733fca128846e81ce793a336",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/member_admission_interactive.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "64988b895de4c595612b22697b1122491172b1ca",
+      "sha256": "0e55bd077c550bca5191c67bdbaedbc610fbe1d4a996fb53eecae1c63851381c",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "0e55bd077c550bca5191c67bdbaedbc610fbe1d4a996fb53eecae1c63851381c",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/member_admission_outbox.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "30ece33605ee0cd6d84d97eda0d58cc06123472f",
+      "sha256": "42d47e681ad6369850f3c1ce6045c94b1a87329bf6c7f6cb741fa17eef39e643",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "42d47e681ad6369850f3c1ce6045c94b1a87329bf6c7f6cb741fa17eef39e643",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/member_admission_retirement_scope.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "0b03bb1931a1d183d55c306b70d5a19f71ff5bc3",
+      "sha256": "4e0bbf59359c3f37816da57402a7f9c290d22c6d7596c610d81b614932f89735",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "4e0bbf59359c3f37816da57402a7f9c290d22c6d7596c610d81b614932f89735",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/member_admission_versioned.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "d3fe26a5cca3972b315950ff9b20e5e541af18d4",
+      "sha256": "9fc0eb8a612f4e32514ba6090ecc1a8b43006a998f226f9d7e20992813f66ac8",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "9fc0eb8a612f4e32514ba6090ecc1a8b43006a998f226f9d7e20992813f66ac8",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/member_authority.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "431b520e1452d97a08fb101eeafc514a0dd4a3a1",
+      "sha256": "1627edae92f4f34c40fd719fb5068f68d68b68a18c8b4c1f0bd9e55b29f15b0b",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "1627edae92f4f34c40fd719fb5068f68d68b68a18c8b4c1f0bd9e55b29f15b0b",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/member_authority_catalog.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "24efadad0fab5957776fef5a68a7d201f146e2e1",
+      "sha256": "11b889ce7f7dfe0904b05a9e1432656c536fb087e54a49688399c94b442c640b",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "11b889ce7f7dfe0904b05a9e1432656c536fb087e54a49688399c94b442c640b",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/member_authority_effective_functions.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "5beee8014b8dba7f7df4f6b68c2d5f3b6b6763b6",
+      "sha256": "9b12178c4f876dcfabe94e73e75cc15cac74a4b5b2a52fa53ff814bb3501b260",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "9b12178c4f876dcfabe94e73e75cc15cac74a4b5b2a52fa53ff814bb3501b260",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/member_authority_functions.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "40a6f7580c6746854b478361a0bac97abb0a58b9",
+      "sha256": "205536950fc90b58f42d6bbda28ddf294c03b490baf23a677aa6313bc2687c43",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "205536950fc90b58f42d6bbda28ddf294c03b490baf23a677aa6313bc2687c43",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/member_count.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "edb61674dcff088e0a6f797b2a52139527bcd334",
+      "sha256": "096fdaf9c7784cba36bb09a0ec4808d7823614151e58811d2c2436f8208e2ed9",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "096fdaf9c7784cba36bb09a0ec4808d7823614151e58811d2c2436f8208e2ed9",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/member_role_cleanup.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "7bec54c7f9267e8079f0eb38bcefafa6d6f2c9e8",
+      "sha256": "f42c400d8e8530243c0e6371ee63c2b5d1b34c3f3489c0d19c29de8dad88f3f1",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "f42c400d8e8530243c0e6371ee63c2b5d1b34c3f3489c0d19c29de8dad88f3f1",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/member_source_bindings.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "a5559d39fa82d6955d1c3216311fa19b974fc75c",
+      "sha256": "2c8a7d743433e7c3bfa064c0110feed7a773fd740403c7240d5583012f208f79",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "2c8a7d743433e7c3bfa064c0110feed7a773fd740403c7240d5583012f208f79",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/members.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "b49ac497bc33335347e5dacb53d82a4857d5f470",
+      "sha256": "ebe45dd4ad5ad3e1383598b861962ffdc83dd7b55e7090d0837cdbfa50259909",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "ebe45dd4ad5ad3e1383598b861962ffdc83dd7b55e7090d0837cdbfa50259909",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/native_bot_authority_functions.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "14c289acc99fad7f04c60783743f1f0fd75de500",
+      "sha256": "6593ec544d92b8742acb6beac46c4dde3ddc1a37c6260d429c1fc1cffa1fc56d",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "6593ec544d92b8742acb6beac46c4dde3ddc1a37c6260d429c1fc1cffa1fc56d",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/native_bot_member.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "fa922308ad699894ad1df065a3a7d36f5d9e7562",
+      "sha256": "f9aafb3bf7b7cd919d7368c516aad32ef334ac3cdce3cd853156360fe6a5bead",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "f9aafb3bf7b7cd919d7368c516aad32ef334ac3cdce3cd853156360fe6a5bead",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/native_bot_publication.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "34525cf15237c1673fc6e6c365500261acfacaba",
+      "sha256": "b1577e035fec2017d3d92d8f02588409c49a48331848ed61f77d151b8f0fd657",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "b1577e035fec2017d3d92d8f02588409c49a48331848ed61f77d151b8f0fd657",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/native_catalog45_projection.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "e5a7d0b541f22006d9b7c10aa09395c527972de5",
+      "sha256": "954d4385fde8d664b75a8b5034a064b5e31d89b1caf611eb3e6e46e801c032ad",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "954d4385fde8d664b75a8b5034a064b5e31d89b1caf611eb3e6e46e801c032ad",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/native_catalog45_transition.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "6a62067d6c229a1bbf97aab34c1ff336fa09a3be",
+      "sha256": "7fe899d7a7ddb7580cfaae8a19ddbf9bb1de71e2e5b09f47d2be38c84e8c2f33",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "7fe899d7a7ddb7580cfaae8a19ddbf9bb1de71e2e5b09f47d2be38c84e8c2f33",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/native_community_bootstrap.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "d27cdbf635269428f88a45f05c7b401c559451a9",
+      "sha256": "ed94a776d38d7e911da136194e116781744680805e842cb7162f5fda11428178",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "ed94a776d38d7e911da136194e116781744680805e842cb7162f5fda11428178",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/native_creator.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "497324a57e70d8f12bfabd738297da2fd49261cf",
+      "sha256": "96ddf7a6a3c14a003c2a26052ab94c156ea22c17e623379b5791fee6a434243b",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "6fd4f29cf27139199142b91a70a33eda4f5e06fee7c5f9dada71b3838d87c28e",
+      "byte_exact_origin": false
+    },
+    {
+      "path": "src/backend/space/internal/store/native_member_publication.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "9db5ca4eda66f68b8533dbd93e601bcf3ff44abc",
+      "sha256": "eb7c649af42891b33b7448a64c8a738f31e75625660473de9cf44560d047e497",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "eb7c649af42891b33b7448a64c8a738f31e75625660473de9cf44560d047e497",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/native_membership_initialization.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "fdcad6b39cc92e994b46cfa14b589c53bd63e80d",
+      "sha256": "0e39d0ca1f46eb8e6596aef031067fc5f7dd21ceb04136379f0f3c4029c40f27",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "0e39d0ca1f46eb8e6596aef031067fc5f7dd21ceb04136379f0f3c4029c40f27",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/native_membership_readiness.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "a66ceec2191ce1628f9a9d8b74bc0fca48727af1",
+      "sha256": "bbd3c4181a713e9e7a709eb84dcfe1ed871d3f7d5aa92a66d275e269c0059ad6",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "bbd3c4181a713e9e7a709eb84dcfe1ed871d3f7d5aa92a66d275e269c0059ad6",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/native_readiness_catalog.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "f5a54678b0c3dbac139cc1961fef8f7c2321a127",
+      "sha256": "cdfa95de83031945f256870ae6c77547d79010a702ab44c4655dacf15805e125",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "cdfa95de83031945f256870ae6c77547d79010a702ab44c4655dacf15805e125",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/native_readiness_catalog45.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "65bb39b3c1832e01c308ede1143841861efcb3ac",
+      "sha256": "0c4045d8ce49269ddb35e80c4b2521d1d8044d120917a268e6e4598551673750",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "0c4045d8ce49269ddb35e80c4b2521d1d8044d120917a268e6e4598551673750",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/native_readiness_function_pins.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "1f737d3601e83783ed3491da07114b0aadab73fa",
+      "sha256": "da9d87805a83ce1ef5fcb44a10701d302bf419e806b8952bfd0fc0664c2812f9",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "da9d87805a83ce1ef5fcb44a10701d302bf419e806b8952bfd0fc0664c2812f9",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/native_readiness_postgres18.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "939b6818633c94edbb114b0ff2cedd6843a2f3e6",
+      "sha256": "a494c451a5bbd65cb21b5a30b4daa6641594c1868f27863a2d79d2fa82e67d36",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "a494c451a5bbd65cb21b5a30b4daa6641594c1868f27863a2d79d2fa82e67d36",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/space/internal/store/space.go",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "1f2b677e164032450258609852f0befafbc343b0",
+      "sha256": "8071b7f8fac1cd5c1a70037b737dab853113c9c6ff7034c7ac72ce08a8c4450c",
+      "reason": "native45 Store/package dependency",
+      "changes_base": true,
+      "projected_sha256": "8071b7f8fac1cd5c1a70037b737dab853113c9c6ff7034c7ac72ce08a8c4450c",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/user/pb/voice/space/v1/member_admission.pb.go",
+      "source": "1a01d0914932dee614c874472b7a5a96fe63089c",
+      "source_blob": "5f5f3588f0f834fa9f3d4643dd1603411881a295",
+      "sha256": "ca484fb0444774c1d4e330cacb31aad1d8b9a2a49eb50fc5cc1e75c7f29f40a4",
+      "reason": "existing reviewed additive wire/codegen dependency; preserve Settings",
+      "changes_base": true,
+      "projected_sha256": "ca484fb0444774c1d4e330cacb31aad1d8b9a2a49eb50fc5cc1e75c7f29f40a4",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/user/pb/voice/space/v1/space.pb.go",
+      "source": "1a01d0914932dee614c874472b7a5a96fe63089c",
+      "source_blob": "64de050e126a0d4d9716be8214db07ef9dd7cb04",
+      "sha256": "0840c85060d7c36687058d9508798812ee41e6b071d79baeac4cbd9e0ac693fb",
+      "reason": "existing reviewed additive wire/codegen dependency; preserve Settings",
+      "changes_base": true,
+      "projected_sha256": "0840c85060d7c36687058d9508798812ee41e6b071d79baeac4cbd9e0ac693fb",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/voice/pb/voice/space/v1/member_admission.pb.go",
+      "source": "1a01d0914932dee614c874472b7a5a96fe63089c",
+      "source_blob": "5f5f3588f0f834fa9f3d4643dd1603411881a295",
+      "sha256": "ca484fb0444774c1d4e330cacb31aad1d8b9a2a49eb50fc5cc1e75c7f29f40a4",
+      "reason": "existing reviewed additive wire/codegen dependency; preserve Settings",
+      "changes_base": true,
+      "projected_sha256": "ca484fb0444774c1d4e330cacb31aad1d8b9a2a49eb50fc5cc1e75c7f29f40a4",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/voice/pb/voice/space/v1/space.pb.go",
+      "source": "1a01d0914932dee614c874472b7a5a96fe63089c",
+      "source_blob": "64de050e126a0d4d9716be8214db07ef9dd7cb04",
+      "sha256": "0840c85060d7c36687058d9508798812ee41e6b071d79baeac4cbd9e0ac693fb",
+      "reason": "existing reviewed additive wire/codegen dependency; preserve Settings",
+      "changes_base": true,
+      "projected_sha256": "0840c85060d7c36687058d9508798812ee41e6b071d79baeac4cbd9e0ac693fb",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/frontend/lib/gen/voice/space/v1/member_admission.pb.dart",
+      "source": "1a01d0914932dee614c874472b7a5a96fe63089c",
+      "source_blob": "43c16f595f6d8792ea2040c4847f77cf4f5a75ef",
+      "sha256": "26c18f2cbb208a17d5b6c56fc2dba3629c6ce47d7e748f027d6244aaf811a04d",
+      "reason": "existing reviewed additive wire/codegen dependency; preserve Settings",
+      "changes_base": true,
+      "projected_sha256": "26c18f2cbb208a17d5b6c56fc2dba3629c6ce47d7e748f027d6244aaf811a04d",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/frontend/lib/gen/voice/space/v1/member_admission.pbenum.dart",
+      "source": "1a01d0914932dee614c874472b7a5a96fe63089c",
+      "source_blob": "2ffeeb6ff4e248ede740aa080de58231445ca6f2",
+      "sha256": "f81fed23d1797df9a416b723357472a86c16124d4bf62c2adeff6132c8ea5e1b",
+      "reason": "existing reviewed additive wire/codegen dependency; preserve Settings",
+      "changes_base": true,
+      "projected_sha256": "f81fed23d1797df9a416b723357472a86c16124d4bf62c2adeff6132c8ea5e1b",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/frontend/lib/gen/voice/space/v1/member_admission.pbjson.dart",
+      "source": "1a01d0914932dee614c874472b7a5a96fe63089c",
+      "source_blob": "684f47c3cddd7180b9d7b9b6494e84602a144475",
+      "sha256": "fcc189eb68ab1263e3323f505037dfe125ae0c9e76d8a511d1d2b6c91058a531",
+      "reason": "existing reviewed additive wire/codegen dependency; preserve Settings",
+      "changes_base": true,
+      "projected_sha256": "fcc189eb68ab1263e3323f505037dfe125ae0c9e76d8a511d1d2b6c91058a531",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/frontend/lib/gen/voice/space/v1/space.pb.dart",
+      "source": "1a01d0914932dee614c874472b7a5a96fe63089c",
+      "source_blob": "a35cb2f16d84e75181f097a3ea8d22697697429c",
+      "sha256": "a70442a4ad3c5ecc033206e2299bbc38327ad608dd791400512219cd9a002455",
+      "reason": "existing reviewed additive wire/codegen dependency; preserve Settings",
+      "changes_base": true,
+      "projected_sha256": "a70442a4ad3c5ecc033206e2299bbc38327ad608dd791400512219cd9a002455",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/frontend/lib/gen/voice/space/v1/space.pbenum.dart",
+      "source": "1a01d0914932dee614c874472b7a5a96fe63089c",
+      "source_blob": "e6069f6366ba72bd3560ab917deafb41d1d98ba8",
+      "sha256": "f8c6f460a63703f7a7870a2925e7b2ee678643dd348b3b082c3ab4485527459a",
+      "reason": "existing reviewed additive wire/codegen dependency; preserve Settings",
+      "changes_base": true,
+      "projected_sha256": "f8c6f460a63703f7a7870a2925e7b2ee678643dd348b3b082c3ab4485527459a",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/frontend/lib/gen/voice/space/v1/space.pbgrpc.dart",
+      "source": "1a01d0914932dee614c874472b7a5a96fe63089c",
+      "source_blob": "a36c9903dde4e377bf00a802a1e6910a2476c80a",
+      "sha256": "e75b336b7139eaaf7bc3c5407c97dfbd51bdc4806f58ba672d442a3c6e08229c",
+      "reason": "existing reviewed additive wire/codegen dependency; preserve Settings",
+      "changes_base": true,
+      "projected_sha256": "e75b336b7139eaaf7bc3c5407c97dfbd51bdc4806f58ba672d442a3c6e08229c",
+      "byte_exact_origin": true
+    },
+    {
+      "path": "src/frontend/lib/gen/voice/space/v1/space.pbjson.dart",
+      "source": "1a01d0914932dee614c874472b7a5a96fe63089c",
+      "source_blob": "857818f3b70b9b521957cef827b6c4da9b0845bd",
+      "sha256": "f9cc0e45cb6ba6b7859d3691e8038e435852e4a9c0d1746c0864f9703963d6fc",
+      "reason": "existing reviewed additive wire/codegen dependency; preserve Settings",
+      "changes_base": true,
+      "projected_sha256": "f9cc0e45cb6ba6b7859d3691e8038e435852e4a9c0d1746c0864f9703963d6fc",
+      "byte_exact_origin": true
+    }
+  ],
+  "owned_adaptation": {
+    "path": "src/backend/space/internal/store/native_creator.go",
+    "reason": "same fixed M44 serving role restriction before BORN first INSERT; genuine owner-session RED25.876 to focused GREEN23.896",
+    "sql_migrations_changed_from_origin": false
+  },
+  "status": "Creator component source/proof offer only; full current application activation HOLD"
+}

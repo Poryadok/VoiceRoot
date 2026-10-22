@@ -25,12 +25,19 @@ type SourceMigrationFixture struct {
 // NewSourceMigrationFixture applies real driver transitions on a private owned
 // PostgreSQL instance. Failure reporting excludes its connection credentials.
 func NewSourceMigrationFixture(t *testing.T, ctx context.Context, directory string) SourceMigrationFixture {
+	return NewSourceMigrationFixtureWithImage(t, ctx, directory, PostgresImage)
+}
+
+// NewSourceMigrationFixtureWithImage runs the same actual pinned migration
+// driver on an explicitly selected server for version-specific catalog tests.
+// The default fixture and its PostgreSQL16 coverage remain unchanged.
+func NewSourceMigrationFixtureWithImage(t *testing.T, ctx context.Context, directory, image string) SourceMigrationFixture {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("requires isolated PostgreSQL and pinned migration driver")
 	}
 	ConfigureDockerTesting()
-	pg, err := postgres.Run(ctx, PostgresImage, postgres.BasicWaitStrategies(), postgres.WithDatabase("authority_source"), postgres.WithUsername("source_fixture"), postgres.WithPassword("fixture_only"))
+	pg, err := postgres.Run(ctx, image, postgres.BasicWaitStrategies(), postgres.WithDatabase("authority_source"), postgres.WithUsername("source_fixture"), postgres.WithPassword("fixture_only"))
 	if pg != nil {
 		t.Cleanup(func() {
 			cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
