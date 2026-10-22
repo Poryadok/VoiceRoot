@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,6 +29,67 @@ func compositePG(t *testing.T) *pgxpool.Pool {
 	f := integrationtest.NewSourceMigrationFixture(t, context.Background(), filepath.Join(chatRepoRoot(t), "src", "backend", "migrations", "chat_db"))
 	f.Run(true, "goto", "27")
 	return f.Pool
+}
+
+func TestSpaceCompositeMainFeedDefaultsPersistAcrossPrepareFinalizeReplay(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires PostgreSQL")
+	}
+	pool := compositePG(t)
+	ctx := context.Background()
+	s := &DMStore{Pool: pool}
+	var observed []ChatRow
+	// This optional test artifact carries actual committed producer rows to the
+	// separately compiled Messaging SendMessage contract test. No policy is copied.
+	defer func() {
+		if path := os.Getenv("BE131_COMPOSITE_MAINFEED_PROJECTION"); path != "" {
+			b, err := json.Marshal(struct {
+				SourceSHA string
+				Chats     []ChatRow
+			}{os.Getenv("BE131_COMPOSITE_SOURCE_SHA"), observed})
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(path, b, 0600))
+		}
+	}()
+	for _, kind := range []chatv1.ChatType{chatv1.ChatType_CHAT_TYPE_GROUP, chatv1.ChatType_CHAT_TYPE_CHANNEL} {
+		t.Run(kind.String(), func(t *testing.T) {
+			req, actor := compositeCreateRequest(), uuid.NewString()
+			req.Type = kind
+			prepared, err := s.PrepareSpaceComposite(compositeCreator(t, req, actor), req)
+			require.NoError(t, err)
+			loadedPrepared, err := s.LoadSpaceComposite(ctx, uuid.MustParse(prepared.Binding.OperationId))
+			require.NoError(t, err)
+			preparedReplay, err := s.PrepareSpaceComposite(compositeCreator(t, req, actor), req)
+			require.NoError(t, err)
+			finished, err := s.ResolveSpaceComposite(ctx, uuid.MustParse(prepared.Binding.OperationId), committedComposite(prepared))
+			require.NoError(t, err)
+			visible, err := s.FindChatByID(ctx, uuid.MustParse(prepared.Binding.ChatId))
+			require.NoError(t, err)
+			require.NotNil(t, visible)
+			observed = append(observed, *visible)
+			wantFeed := kind == chatv1.ChatType_CHAT_TYPE_GROUP
+			require.Equal(t, wantFeed, visible.AllowUserMainFeed, "actual active row must preserve the canonical send-relevant creation default")
+			for _, op := range []*SpaceCompositeOperation{prepared, loadedPrepared, preparedReplay, finished} {
+				require.Equal(t, wantFeed, op.Response.Chat.AllowUserMainFeed)
+				require.Equal(t, kind == chatv1.ChatType_CHAT_TYPE_CHANNEL, op.Response.Chat.ThreadsEnabled)
+				require.True(t, proto.Equal(prepared.Binding, op.Binding))
+			}
+			var result []byte
+			require.NoError(t, pool.QueryRow(ctx, "SELECT result_bytes FROM chat_create_requests WHERE operation_id=$1", prepared.Binding.OperationId).Scan(&result))
+			var snapshot ChatRow
+			require.NoError(t, json.Unmarshal(result, &snapshot))
+			require.Equal(t, wantFeed, snapshot.AllowUserMainFeed, "durable keyed snapshot agrees with prepared and active rows")
+			require.Equal(t, visible.ID, snapshot.ID)
+			_, err = pool.Exec(ctx, "UPDATE chats SET name='later metadata' WHERE id=$1", visible.ID)
+			require.NoError(t, err)
+			replayed, err := s.PrepareSpaceComposite(compositeCreator(t, req, actor), req)
+			require.NoError(t, err)
+			require.True(t, proto.Equal(finished.Response, replayed.Response), "replay returns the original result, including main-feed default")
+			resolvedReplay, err := s.ResolveSpaceComposite(ctx, uuid.MustParse(prepared.Binding.OperationId), committedComposite(prepared))
+			require.NoError(t, err)
+			require.True(t, proto.Equal(finished.Response, resolvedReplay.Response))
+		})
+	}
 }
 
 func TestSpaceCompositePurgeWaitsForActualDeliveryAndExpiresOwnEvidence(t *testing.T) {
