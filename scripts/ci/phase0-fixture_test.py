@@ -886,6 +886,19 @@ class ComposeTests(unittest.TestCase):
             self.assertIn("restore-phase0-fixture-owner.py", source, relative)
             self.assertIn("generate-phase0-fixture.py", source, relative)
 
+        profile = (ROOT / "scripts/ci/compose-a1-flutter-profile-handoff.sh").read_text(encoding="utf-8")
+        compose = profile.split("compose() {", 1)[1].split("\n}", 1)[0]
+        self.assertEqual(re.findall(r'-f "([^"\n]+)"', compose), [
+            "$COMPOSE_FILE_PATH",
+            "${ROOT}/docker-compose.voice-space-media.yml",
+            "${ROOT}/docker-compose.phase0.yml",
+        ], "profile proof must consume the full Phase0 transport fixture after media")
+        gateway = self.ci_merged["gateway"]["environment"]
+        self.assertEqual(gateway["GATEWAY_CHAT_AUDIT_GRPC_ADDR"], "chat:9094")
+        self.assertEqual(gateway["GATEWAY_CHAT_AUDIT_TLS_SERVER_NAME"], "chat")
+        for suffix in ("TLS_CA_FILE", "CLIENT_CERT_FILE", "CLIENT_KEY_FILE"):
+            self.media_source_at("gateway", gateway["GATEWAY_CHAT_AUDIT_" + suffix], self.ci_merged)
+
         workflows = (
             (".github/workflows/ci.yml", "compose-e2e", "Generate disposable media principal and TLS fixture"),
             (".github/workflows/t31-session-events-e2e.yml", "compose-https-claim-inbox-ack",
