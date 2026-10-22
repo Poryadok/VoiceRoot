@@ -25,20 +25,20 @@ func startChatCreation(ctx context.Context, cfg chatcreation.CreateConfig, enabl
 		return func() {}, nil
 	}
 	if issuer == nil || dm == nil || dm.Pool == nil || publisher == nil {
-		return nil, errors.New("Chat creation requires persistence, signing issuer and JetStream publisher")
+		return nil, errors.New("chat creation requires persistence, signing issuer and JetStream publisher")
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
 	if _, err := dm.Pool.Exec(ctx, "SELECT operation_id,state,binding_bytes FROM chat_space_composite_operations LIMIT 0; SELECT event_id,eligibility,payload FROM chat_space_composite_outbox LIMIT 0"); err != nil {
-		return nil, errors.New("Chat creation durable schema unavailable")
+		return nil, errors.New("chat creation durable schema unavailable")
 	}
 	floor, closeFloor, err := newChatCreateAuthCheckerFromEnv(issuer)
 	if err != nil {
 		return nil, err
 	}
 	if floor == nil {
-		return nil, errors.New("Chat creation requires authoritative Auth floor transport")
+		return nil, errors.New("chat creation requires authoritative Auth floor transport")
 	}
 	failed := true
 	defer func() {

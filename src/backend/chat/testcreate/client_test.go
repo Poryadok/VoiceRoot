@@ -18,8 +18,7 @@ import (
 
 type creatorService struct {
 	chatv1.UnimplementedChatServiceServer
-	calls   atomic.Int32
-	profile string
+	calls atomic.Int32
 }
 
 func (s *creatorService) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest) (*chatv1.CreateChatResponse, error) {

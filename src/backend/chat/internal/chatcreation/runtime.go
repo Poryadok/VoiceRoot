@@ -47,7 +47,7 @@ func CreateConfigFromEnv() (CreateConfig, bool, error) {
 func (c CreateConfig) validate() error {
 	for _, v := range []string{c.Listen, c.CertFile, c.KeyFile, c.ClientCAFile, c.JWKSURL, c.JWKSCAFile, c.RedisAddr, c.JWKSClientCertFile, c.JWKSClientKeyFile, c.BotJWKSURL} {
 		if strings.TrimSpace(v) == "" || v != strings.TrimSpace(v) {
-			return errors.New("Chat creation configuration is incomplete")
+			return errors.New("chat creation configuration is incomplete")
 		}
 	}
 	for _, endpoint := range []string{c.JWKSURL, c.BotJWKSURL} {
@@ -86,11 +86,11 @@ func NewCreateRuntime(ctx context.Context, c CreateConfig, epoch principal.Sessi
 	}
 	cert, err := tls.LoadX509KeyPair(c.CertFile, c.KeyFile)
 	if err != nil {
-		return nil, fmt.Errorf("Chat creation server identity: %w", err)
+		return nil, fmt.Errorf("chat creation server identity: %w", err)
 	}
 	clients, err := rootsFromFile(c.ClientCAFile)
 	if err != nil {
-		return nil, fmt.Errorf("Chat creation client CA: %w", err)
+		return nil, fmt.Errorf("chat creation client CA: %w", err)
 	}
 	roots, err := rootsFromFile(c.JWKSCAFile)
 	if err != nil {

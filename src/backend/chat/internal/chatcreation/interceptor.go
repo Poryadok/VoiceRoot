@@ -14,7 +14,7 @@ import (
 	"voice/backend/pkg/principal"
 )
 
-var ErrDependencyUnavailable = errors.New("Chat creation authentication dependency unavailable")
+var ErrDependencyUnavailable = errors.New("chat creation authentication dependency unavailable")
 
 type CreateVerifier struct {
 	Keys   principal.KeyResolver

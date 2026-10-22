@@ -70,8 +70,7 @@ func compositeError(err error) error {
 }
 
 func (c *SpaceCompositeCoordinator) Create(ctx context.Context, req *chatv1.CreateChatRequest) (*chatv1.CreateChatResponse, error) {
-	actor, err := chatcreation.Creator(ctx, req)
-	if err != nil {
+	if _, err := chatcreation.Creator(ctx, req); err != nil {
 		return nil, compositeError(err)
 	}
 	if c == nil || c.Store == nil || c.Remote == nil || c.Public == nil {
@@ -106,7 +105,7 @@ func (c *SpaceCompositeCoordinator) Create(ctx context.Context, req *chatv1.Crea
 	}
 	// This public check is deliberately after durable rollforward. Losing ACL
 	// cannot undo a committed Space result or block autonomous recovery.
-	actor, err = chatcreation.Creator(ctx, req)
+	actor, err := chatcreation.Creator(ctx, req)
 	if err != nil {
 		return nil, compositeError(err)
 	}
