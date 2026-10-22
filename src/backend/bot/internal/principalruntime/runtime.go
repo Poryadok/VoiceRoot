@@ -2,7 +2,6 @@ package principalruntime
 
 import (
 	"context"
-	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -24,6 +23,7 @@ import (
 type Config struct {
 	GISJWKSURL, GISTLSCert, GISTLSKey, GISCAFile, ReplayRedisURL                                    string
 	BotPrivateKeyFile, BotKeyID, BotJWKSListen, BotTLSCert, BotTLSKey                               string
+	BotSigningKeysDir, BotActiveKID                                                                 string
 	BotJWKSClientCA, BotGameEventListen, BotGameEventCert, BotGameEventKey, BotGameEventClientCA    string
 	BotSpaceLifecycleListen, BotSpaceLifecycleCert, BotSpaceLifecycleKey, BotSpaceLifecycleClientCA string
 	SpaceJWKSURL, SpaceJWKSCAFile                                                                   string
@@ -36,7 +36,7 @@ type Runtime struct {
 	http             *http.Client
 	spaceHTTP        *http.Client
 	config           Config
-	privateKey       *rsa.PrivateKey
+	publicKeys       []principal.JWKSKey
 	jwksCertificate  tls.Certificate
 	spaceResolver    *principal.JWKSResolver
 	spaceCertificate tls.Certificate
@@ -51,6 +51,7 @@ func ConfigFromEnv(getenv func(string) string) (Config, bool, error) {
 		GISTLSCert: strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_TLS_CERT_FILE")), GISTLSKey: strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_TLS_KEY_FILE")),
 		GISCAFile: strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_TLS_CA_FILE")), ReplayRedisURL: strings.TrimSpace(getenv("BOT_PRINCIPAL_REPLAY_REDIS_URL")),
 		BotPrivateKeyFile: strings.TrimSpace(getenv("BOT_PRINCIPAL_PRIVATE_KEY_FILE")), BotKeyID: strings.TrimSpace(getenv("BOT_PRINCIPAL_KEY_ID")),
+		BotSigningKeysDir: strings.TrimSpace(getenv("BOT_PRINCIPAL_SIGNING_KEYS_DIR")), BotActiveKID: strings.TrimSpace(getenv("BOT_PRINCIPAL_ACTIVE_KID")),
 		BotJWKSListen: strings.TrimSpace(getenv("BOT_PRINCIPAL_JWKS_LISTEN")), BotTLSCert: strings.TrimSpace(getenv("BOT_PRINCIPAL_TLS_CERT_FILE")), BotTLSKey: strings.TrimSpace(getenv("BOT_PRINCIPAL_TLS_KEY_FILE")),
 		BotJWKSClientCA: strings.TrimSpace(getenv("BOT_PRINCIPAL_TLS_CLIENT_CA_FILE")), BotGameEventListen: strings.TrimSpace(getenv("BOT_GAME_EVENT_GRPC_LISTEN")),
 		BotGameEventCert: strings.TrimSpace(getenv("BOT_GAME_EVENT_TLS_CERT_FILE")), BotGameEventKey: strings.TrimSpace(getenv("BOT_GAME_EVENT_TLS_KEY_FILE")),
@@ -63,6 +64,12 @@ func ConfigFromEnv(getenv func(string) string) (Config, bool, error) {
 		SpaceJWKSCAFile:           strings.TrimSpace(getenv("SPACE_PRINCIPAL_JWKS_CA_FILE"))}
 	values := []string{cfg.GISJWKSURL, cfg.GISTLSCert, cfg.GISTLSKey, cfg.GISCAFile, cfg.ReplayRedisURL, cfg.BotPrivateKeyFile, cfg.BotKeyID, cfg.BotJWKSListen, cfg.BotTLSCert, cfg.BotTLSKey,
 		cfg.BotJWKSClientCA, cfg.BotGameEventListen, cfg.BotGameEventCert, cfg.BotGameEventKey, cfg.BotGameEventClientCA}
+	if cfg.BotSigningKeysDir != "" || cfg.BotActiveKID != "" {
+		if cfg.BotSigningKeysDir == "" || cfg.BotActiveKID == "" || cfg.BotPrivateKeyFile != "" || cfg.BotKeyID != "" {
+			return Config{}, true, errors.New("bot canonical signing directory and active kid must be configured together without legacy signer settings")
+		}
+		values[5], values[6] = cfg.BotSigningKeysDir, cfg.BotActiveKID
+	}
 	count := 0
 	for _, value := range values {
 		if value != "" {
@@ -102,14 +109,11 @@ func (c Config) SpaceLifecycleEnabled() bool {
 }
 
 func New(ctx context.Context, cfg Config) (*Runtime, error) {
-	if strings.TrimSpace(cfg.BotPrivateKeyFile) == "" || strings.TrimSpace(cfg.BotKeyID) == "" {
-		return nil, errors.New("bot principal signer is incomplete")
-	}
-	key, err := principal.LoadRSAPrivateKeyFile(cfg.BotPrivateKeyFile)
+	key, kid, publicKeys, err := loadBotSigningKeys(cfg)
 	if err != nil {
 		return nil, err
 	}
-	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "bot", KeyID: cfg.BotKeyID, PrivateKey: key})
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "bot", KeyID: kid, PrivateKey: key})
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +179,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		_ = redisClient.Close()
 		return nil, fmt.Errorf("bot principal JWKS TLS certificate: %w", err)
 	}
-	runtime := &Runtime{issuer: issuer, resolver: resolver, redis: redisClient, http: client, config: cfg, privateKey: key, jwksCertificate: botCertificate}
+	runtime := &Runtime{issuer: issuer, resolver: resolver, redis: redisClient, http: client, config: cfg, publicKeys: publicKeys, jwksCertificate: botCertificate}
 	runtime.replayGuard = runtime.recordReplay
 	if cfg.SpaceLifecycleEnabled() {
 		spaceCAPEM, err := os.ReadFile(cfg.SpaceJWKSCAFile)
@@ -259,7 +263,7 @@ func (r *Runtime) JWKSHTTPServer() (*http.Server, error) {
 		return nil, errors.New("bot principal client CA contains no certificates")
 	}
 	mux := http.NewServeMux()
-	mux.Handle("/.well-known/principal-jwks.json", principal.JWKSHandler(r.config.BotKeyID, &r.privateKey.PublicKey))
+	mux.Handle("/.well-known/principal-jwks.json", principal.JWKSHandlerKeys(r.publicKeys))
 	return &http.Server{Addr: r.config.BotJWKSListen, Handler: mux, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{r.jwksCertificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clients}}, nil
 }
 
