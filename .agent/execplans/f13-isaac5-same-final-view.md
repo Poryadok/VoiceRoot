@@ -83,8 +83,8 @@ test delta rather than claim every old test unchanged.
 - [x] Authoritative owner/assignee Isaac-5, task e2, after independent19 authorized
   source work during outage; actual404 then identicalcreate and claim/readback.
 - [x] Meaningful RED1test0.245s (outer materialize unexpectedly called once);
-  final63 component tests OK21.066s. Original5 and40 other existing functions
-  (41 total) AST-identical; namespace_main alone changes, prepare/main added.
+  final63 component tests OK21.066s. 41 existing functions including the original5
+  AST-identical; namespace_main alone changes, prepare/main added.
 - [ ] Review/intake/physical closeout.
 
 The current 0edfe saved CI receipt repeats outer regular/executable versus inner
@@ -122,3 +122,11 @@ After final passing tests the only driver edit removes one trailing space;
 pre/post whole-module AST equality is retained. Source/test bytes and exact
 commit/bundle/diff are frozen separately for independent review. Publication
 is not acceptance; current actual guard result remains unobserved.
+
+## Tracker reconciliation after outage
+
+The outage section above records the historical authorization, not current
+ownership. Exact GET returned authoritative404; identical intended task create
+and relation succeeded. An uncertain claim was read back AVAILABLE/unowned,
+then supported claim e2 and fresh GET confirmed owner/assignee Isaac-5 on
+PR875-F13-SAME-FINAL-VIEW-0EDFE. Parent DIAG custody remains Isaac-2.
