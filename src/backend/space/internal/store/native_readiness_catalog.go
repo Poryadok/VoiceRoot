@@ -41,6 +41,15 @@ const nativeReadinessStructureSHA = "6b43c9f367207020eee053cd3ab6eb4e057238df4c5
 // table, column, constraint, trigger, function or private ACL change. It is not
 // a caller-selected hash or permission to reseal an arbitrary current catalog.
 func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version int64) error {
+	observer50 := version == 50
+	if observer50 {
+		if err := checkAccountBanCatalog(ctx, tx); err != nil {
+			return err
+		}
+		// Structure and every unchanged body retain the fixed45 qualification.
+		// source_after and catalog have exact50 body/full-definition pins below.
+		version = 45
+	}
 	var serverVersion int
 	if err := tx.QueryRow(ctx, `SELECT current_setting('server_version_num')::integer`).Scan(&serverVersion); err != nil {
 		return ErrMemberAuthorityUnavailable
@@ -56,6 +65,22 @@ func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version 
 		helperCount = 2
 	} else if version != 44 {
 		return ErrMemberAuthorityUnavailable
+	}
+	if observer50 {
+		if _, _, err := requireNativeObserver50Definition(ctx, tx); err != nil {
+			return err
+		}
+		if _, _, err := requireNativeCatalog50Definition(ctx, tx); err != nil {
+			return err
+		}
+		for i := range pins {
+			if pins[i].signature == "native_membership_guard.catalog()" {
+				pins[i].body = nativeCatalog50BodySHA
+			}
+			if pins[i].signature == "native_membership_guard.source_after()" {
+				pins[i].body = nativeObserver50BodySHA
+			}
+		}
 	}
 	var structure string
 	if err := tx.QueryRow(ctx, nativeReadinessStructureSQL).Scan(&structure); err != nil {

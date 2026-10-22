@@ -58,7 +58,7 @@ func (s *SpaceGRPC) ApplyCommunityRoster(ctx context.Context, req *spacev1.Apply
 		return nil, status.Error(codes.Unavailable, "Space roster projection persistence unavailable")
 	}
 	if receipt.Current {
-		for _, profileID := range receipt.ProfileIDs {
+		for _, profileID := range receipt.EffectiveProfileIDs {
 			if err := s.ensureCommunityMemberRole(ctx, in.SpaceID, profileID); err != nil {
 				return nil, status.Error(codes.Unavailable, "Space baseline member Role projection unavailable")
 			}

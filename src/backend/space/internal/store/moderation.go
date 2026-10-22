@@ -48,94 +48,58 @@ SELECT 1 FROM space_bans WHERE space_id = $1 AND account_id = $2 LIMIT 1
 	return true, nil
 }
 
-// BanMember records ban and optionally removes a member profile from the space.
-func (s *SpaceStore) BanMember(
-	ctx context.Context,
-	spaceID, accountID, bannedBy uuid.UUID,
-	reason *string,
-	evictProfileID *uuid.UUID,
-) error {
-	if s == nil || s.Pool == nil {
-		return errors.New("space store: pool not configured")
-	}
-	if s.tx == nil {
-		return s.withOwnershipScope(ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) error {
-			return scoped.BanMember(ctx, spaceID, accountID, bannedBy, reason, evictProfileID)
-		})
-	}
-	details, err := json.Marshal(struct {
-		Reason *string `json:"reason,omitempty"`
-	}{Reason: reason})
-	if err != nil {
-		return err
-	}
-	tx, err := s.db().Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	var ownerProfile uuid.UUID
-	err = tx.QueryRow(ctx, `SELECT owner_profile_id FROM spaces WHERE id = $1`, spaceID).Scan(&ownerProfile)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return pgx.ErrNoRows
-	}
-	if err != nil {
-		return err
-	}
-	if evictProfileID != nil && *evictProfileID == ownerProfile {
-		return ErrCannotBanOwner
-	}
-
-	if evictProfileID != nil {
-		tag, err := tx.Exec(ctx, `
-DELETE FROM space_members WHERE space_id = $1 AND profile_id = $2
-`, spaceID, *evictProfileID)
-		if err != nil {
-			return err
-		}
-		if tag.RowsAffected() > 0 {
-			if _, err := tx.Exec(ctx, `
-UPDATE spaces SET member_count = GREATEST(member_count - 1, 0), updated_at = now() WHERE id = $1
-`, spaceID); err != nil {
-				return err
-			}
-		}
-		_, _ = tx.Exec(ctx, `DELETE FROM space_member_timeouts WHERE space_id = $1 AND profile_id = $2`, spaceID, *evictProfileID)
-	}
-
-	_, err = tx.Exec(ctx, `
-INSERT INTO space_bans (space_id, account_id, banned_by_profile_id, reason)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (space_id, account_id) DO UPDATE SET
-  banned_by_profile_id = EXCLUDED.banned_by_profile_id,
-  reason = EXCLUDED.reason,
-  banned_at = now()
-`, spaceID, accountID, bannedBy, reason)
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.Exec(ctx, `
-INSERT INTO audit_log (space_id, actor_profile_id, action, target_type, target_id, details)
-VALUES ($1, $2, 'member_banned', 'account', $3, $4::jsonb)
-`, spaceID, bannedBy, accountID, details)
-	if err != nil {
-		return err
-	}
-
-	return tx.Commit(ctx)
+// BanMember cannot manufacture authenticated public intent from raw UUIDs.
+func (s *SpaceStore) BanMember(ctx context.Context, spaceID, accountID, bannedBy uuid.UUID, reason *string, evictProfileID *uuid.UUID) error {
+	return ErrAccountBanUnavailable
 }
 
 // UnbanMember removes a ban record.
 func (s *SpaceStore) UnbanMember(ctx context.Context, spaceID, accountID, actor uuid.UUID) error {
-	if s == nil || s.Pool == nil {
-		return errors.New("space store: pool not configured")
+	return ErrAccountBanUnavailable
+}
+
+func (s *SpaceStore) unbanAccountWithOutcome(ctx context.Context, spaceID, accountID, actor uuid.UUID, outcome func() error) error {
+	if s == nil || s.tx == nil || outcome == nil {
+		return ErrAccountBanUnavailable
 	}
-	if s.tx == nil {
-		return s.withOwnershipScope(ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) error {
-			return scoped.UnbanMember(ctx, spaceID, accountID, actor)
-		})
+	var version int64
+	if err := s.tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || version != 50 {
+		return ErrAccountBanUnavailable
+	}
+	if err := checkMemberAuthorityCatalog(ctx, s.tx); err != nil {
+		return err
+	}
+	if err := s.requireRetiredUnbanSources(ctx, spaceID, accountID); err != nil {
+		return err
+	}
+	rows, err := s.tx.Query(ctx, `SELECT profile_id FROM space_account_ban_suppressions WHERE space_id=$1 AND account_id=$2 ORDER BY profile_id`, spaceID, accountID)
+	if err != nil {
+		return err
+	}
+	var profiles []uuid.UUID
+	for rows.Next() {
+		var p uuid.UUID
+		if err = rows.Scan(&p); err != nil {
+			rows.Close()
+			return err
+		}
+		profiles = append(profiles, p)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	capture, err := s.captureMemberMutationIfPresent(ctx, spaceID, profiles)
+	if err != nil {
+		return err
+	}
+	// Include revisions accepted while banned; removing the ban never lowers
+	// these floors or republishes any old episode/lease/Role contribution.
+	_, err = s.tx.Exec(ctx, `UPDATE space_account_ban_suppressions p SET source_revision=GREATEST(p.source_revision,a.roster_source_revision)
+ FROM community_owner_authority a WHERE p.space_id=$1 AND p.account_id=$2 AND a.space_id=p.space_id AND a.owner_generation=p.owner_generation`, spaceID, accountID)
+	if err != nil {
+		return err
 	}
 	tag, err := s.db().Exec(ctx, `DELETE FROM space_bans WHERE space_id = $1 AND account_id = $2`, spaceID, accountID)
 	if err != nil {
@@ -148,7 +112,19 @@ func (s *SpaceStore) UnbanMember(ctx context.Context, spaceID, accountID, actor 
 INSERT INTO audit_log (space_id, actor_profile_id, action, target_type, target_id, details)
 VALUES ($1, $2, 'member_unbanned', 'account', $3, '{}')
 `, spaceID, actor, accountID)
-	return err
+	if err != nil {
+		return err
+	}
+	if capture == nil {
+		return ErrAccountBanUnavailable
+	}
+	if err = outcome(); err != nil {
+		return err
+	}
+	if capture != nil {
+		return s.finishEffectiveMemberMutations(ctx, capture)
+	}
+	return nil
 }
 
 // ListBans returns active bans for a space.

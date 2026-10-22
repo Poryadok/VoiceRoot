@@ -49,7 +49,7 @@ func (s *SpaceStore) captureBornCreatorEffectiveMutation(ctx context.Context, sp
 		return nil, err
 	}
 	version, err := s.memberDecisionSchema(ctx)
-	if err != nil || (version != 44 && version != 45) {
+	if err != nil || (version != 44 && version != 45 && version != 50) {
 		return nil, ErrEffectiveEpisodeUnavailable
 	}
 	parts := make([]string, 0, len(nativeMembershipGuardCoverage))
@@ -124,7 +124,7 @@ func (s *SpaceStore) effectiveMutationStorageScope(ctx context.Context, space uu
 		return ErrEffectiveEpisodeUnavailable
 	}
 	var version int64
-	if err := s.tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || (version != 41 && version != 42 && version != 44 && version != 45) {
+	if err := s.tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || (version != 41 && version != 42 && version != 44 && version != 45 && version != 50) {
 		return ErrEffectiveEpisodeUnavailable
 	}
 	return nil
@@ -155,7 +155,7 @@ func (s *SpaceStore) captureLifecyclePurgeMutation(ctx context.Context, space uu
 	switch version {
 	case 39, 40, 41, 42, 43:
 		return nil, nil // preserved pre-DB-frame terminal protocol
-	case 44, 45:
+	case 44, 45, 50:
 	default:
 		if version <= 34 && !native {
 			return nil, nil
@@ -256,7 +256,7 @@ func (s *SpaceStore) captureEffectiveMemberMutationFacts(ctx context.Context, sp
 	if err != nil {
 		return nil, ErrEffectiveEpisodeUnavailable
 	}
-	if len(profiles) == 0 && (version != 44 && version != 45) {
+	if len(profiles) == 0 && (version != 44 && version != 45 && version != 50) {
 		return nil, ErrEffectiveEpisodeUnavailable
 	}
 	for _, p := range profiles {
@@ -266,7 +266,7 @@ func (s *SpaceStore) captureEffectiveMemberMutationFacts(ctx context.Context, sp
 	}
 	profiles = normalizedOwnershipSpaceIDs(profiles)
 	capture := &effectiveMemberMutations{tx: s.tx, space: space}
-	if version == 44 || version == 45 {
+	if version == 44 || version == 45 || version == 50 {
 		capture.dbMutation, err = s.beginNativeMembershipDBMutation(ctx, space, profiles)
 		if err != nil {
 			return nil, err

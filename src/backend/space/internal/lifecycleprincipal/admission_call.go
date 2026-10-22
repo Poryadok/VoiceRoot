@@ -15,7 +15,7 @@ const admissionRPCPrefix = "/voice.space.v1.SpaceService/"
 
 func admissionMethod(method string) bool {
 	switch method {
-	case admissionRPCPrefix + "StartJoinAttempt", admissionRPCPrefix + "GetJoinAttempt", admissionRPCPrefix + "SubmitJoinAttempt", admissionRPCPrefix + "ListJoinRequests", admissionRPCPrefix + "GetJoinRequest", admissionRPCPrefix + "ApproveJoinRequest", admissionRPCPrefix + "JoinSpace", admissionRPCPrefix + "JoinByInvite", admissionRPCPrefix + "SetEntryPolicy":
+	case admissionRPCPrefix + "StartJoinAttempt", admissionRPCPrefix + "GetJoinAttempt", admissionRPCPrefix + "SubmitJoinAttempt", admissionRPCPrefix + "ListJoinRequests", admissionRPCPrefix + "GetJoinRequest", admissionRPCPrefix + "ApproveJoinRequest", admissionRPCPrefix + "JoinSpace", admissionRPCPrefix + "JoinByInvite", admissionRPCPrefix + "SetEntryPolicy", admissionRPCPrefix + "BanMember", admissionRPCPrefix + "UnbanMember":
 		return true
 	}
 	return false
@@ -82,6 +82,24 @@ func (v *VerifiedAdmissionCall) ActorFor(request proto.Message) (principal.Princ
 	return p, nil
 }
 
+// Remaining preserves ingress's original monotonic observation phase. It never
+// grants a fresh budget when a handler replans or acquires a database lock.
+func (v *VerifiedAdmissionCall) Remaining(request proto.Message) (time.Duration, error) {
+	p, err := v.ActorFor(request)
+	if err != nil {
+		return 0, err
+	}
+	now := v.proof.clock()
+	remaining := v.proof.ownerStarted.Add(5 * time.Second).Sub(now)
+	if credential := p.ExpiresAt.Sub(now); credential < remaining {
+		remaining = credential
+	}
+	if remaining <= 0 {
+		return 0, status.Error(codes.Unavailable, "admission observation expired")
+	}
+	return remaining, nil
+}
+
 func requireAdmissionCall(ctx context.Context, method string, request proto.Message) (*VerifiedAdmissionCall, error) {
 	if ctx == nil {
 		return nil, status.Error(codes.Unauthenticated, "verified admission call required")
@@ -130,4 +148,13 @@ func RequireAdmissionJoinInvite(ctx context.Context, request proto.Message) (*Ve
 // settings permission and current policy CAS remain the handler's responsibility.
 func RequireEntryPolicySet(ctx context.Context, request proto.Message) (*VerifiedAdmissionCall, error) {
 	return requireAdmissionCall(ctx, admissionRPCPrefix+"SetEntryPolicy", request)
+}
+
+// These exact moderation envelopes authenticate only their own RPC/body;
+// MemberBan permission and the separate protected User capture remain required.
+func RequireModerationBan(ctx context.Context, request proto.Message) (*VerifiedAdmissionCall, error) {
+	return requireAdmissionCall(ctx, admissionRPCPrefix+"BanMember", request)
+}
+func RequireModerationUnban(ctx context.Context, request proto.Message) (*VerifiedAdmissionCall, error) {
+	return requireAdmissionCall(ctx, admissionRPCPrefix+"UnbanMember", request)
 }
