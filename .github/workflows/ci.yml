@@ -1980,6 +1980,7 @@ jobs:
             --output "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json" \
             --startup-status "$startup_status" \
             --service voice \
+            --include-space-startup \
             --compose docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app || true
             cat "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json"
             exit "$startup_status"
@@ -1996,6 +1997,7 @@ jobs:
             --output "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json" \
             --startup-status 1 \
             --service voice \
+            --include-space-startup \
             --compose docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app || true
           cat "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json"
           exit 1

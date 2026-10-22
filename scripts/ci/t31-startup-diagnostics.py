@@ -485,17 +485,20 @@ def _write_record(path: Path, record: dict) -> bool:
 
 
 def build_diagnostics(compose: list[str], startup_status: int, service: str | None = None,
-                      include_matchmaking_startup: bool = False) -> dict:
+                      include_matchmaking_startup: bool = False,
+                      include_space_startup: bool = False) -> dict:
     record = _base_record(startup_status)
     if (not compose or compose[0] != "docker"
             or (service is not None and service not in SERVICE_SET)
-            or (include_matchmaking_startup and service != "voice")):
+            or ((include_matchmaking_startup or include_space_startup) and service != "voice")):
         record["status_collection"]["result"] = "invalid_invocation"
         record["log_collection"]["result"] = "invalid_invocation"
         return record
 
     requested = (("voice", "matchmaking") if include_matchmaking_startup else
                  ((service,) if service is not None else ()))
+    if include_space_startup:
+        requested += ("space",)
     service_args = list(requested)
     ps_bytes, ps_result, _ = _bounded_command(compose + ["ps", "--all", "--format", "json", *service_args], COMMAND_TIMEOUT_SECONDS, MAX_PS_BYTES)
     status, failed_services = sanitize_status(ps_bytes, ps_result)
@@ -519,13 +522,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--startup-status", type=int, required=True)
     parser.add_argument("--service", choices=SERVICES)
     parser.add_argument("--include-matchmaking-startup", action="store_true")
+    parser.add_argument("--include-space-startup", action="store_true")
     parser.add_argument("--compose", nargs=argparse.REMAINDER, required=True)
     args = parser.parse_args(argv)
     compose = args.compose[1:] if args.compose[:1] == ["--"] else args.compose
     output = Path(args.output)
     try:
         record = build_diagnostics(compose, args.startup_status, args.service,
-                                   args.include_matchmaking_startup)
+                                   args.include_matchmaking_startup, args.include_space_startup)
     except Exception:
         record = _base_record(args.startup_status)
         record["status_collection"]["result"] = "collector_error"
