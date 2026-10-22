@@ -1,6 +1,7 @@
 import copy
 from datetime import datetime, timedelta, timezone
 import unittest
+from unittest.mock import patch
 
 import alter_clickhouse_metric_log as ddl
 import diagnose_clickhouse_merges_test as pause_test
@@ -276,6 +277,45 @@ class MetricLogAlterTests(unittest.TestCase):
             run(client, ch, apply=True,
                 pause_start=datetime.now(timezone.utc) - timedelta(seconds=181))
         self.assertEqual(ch.alters, [])
+
+    def test_final_inspection_deadline_refuses_alter_and_retains_lock(self):
+        for elapsed in (180, 181):
+            with self.subTest(elapsed=elapsed):
+                client, ch = ready_kube(), FakeClickHouse()
+                lock = copy.deepcopy(client.lock)
+                started = datetime(2026, 10, 22, tzinfo=timezone.utc)
+                now = started + timedelta(seconds=179)
+                original = ch.query
+                inspections = 0
+
+                def advance_during_final_inspection(sql):
+                    nonlocal now, inspections
+                    if 'FROM system.processes' in sql:
+                        inspections += 1
+                        # run() first captures the baseline, then guarded_alter
+                        # inspects before preview and again before mutation.
+                        if inspections == 3:
+                            now = started + timedelta(seconds=elapsed)
+                    return original(sql)
+
+                ch.query = advance_during_final_inspection
+                with patch.object(ddl, 'datetime') as clock:
+                    clock.now.side_effect = lambda tz: now
+                    with self.assertRaisesRegex(RuntimeError, 'pause window expired'):
+                        run(client, ch, apply=True, pause_start=started)
+                self.assertEqual(ch.alters, [])
+                self.assertEqual(inspections, 3)
+                self.assertNotIn('merge_max_block_size', ch.engine_full)
+                self.assertEqual(client.lock, lock)
+
+    def test_final_inspection_within_deadline_allows_alter(self):
+        client, ch = ready_kube(), FakeClickHouse()
+        started = datetime(2026, 10, 22, tzinfo=timezone.utc)
+        with patch.object(ddl, 'datetime') as clock:
+            clock.now.return_value = started + timedelta(seconds=179)
+            run(client, ch, apply=True, pause_start=started)
+        self.assertEqual(ch.alters, [('metric_log', False)])
+        self.assertIsNotNone(client.lock)
 
     def test_exact_reset_restores_ddl_without_part_or_uuid_loss(self):
         client, ch = ready_kube(), FakeClickHouse()
