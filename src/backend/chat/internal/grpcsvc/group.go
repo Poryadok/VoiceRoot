@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"voice/backend/chat/internal/authctx"
+	"voice/backend/chat/internal/chatcreation"
 	"voice/backend/chat/internal/store"
 
 	chatv1 "voice.app/voice/chat/v1"
@@ -25,17 +26,18 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 	if chatType != chatv1.ChatType_CHAT_TYPE_GROUP && chatType != chatv1.ChatType_CHAT_TYPE_CHANNEL {
 		return nil, status.Error(codes.InvalidArgument, "only group and channel chats are supported")
 	}
-	caller, ok := authctx.ProfileID(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	initiator, err := chatcreation.Creator(ctx, req)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "verified Chat create initiator required")
 	}
+	caller := initiator.ProfileID
 	spaceIDRaw := strings.TrimSpace(req.GetSpaceId())
 	// Guests may participate only after a regular member explicitly invites them
 	// to a standalone chat that opted in. Space creation remains owned by the
 	// existing Space and Role policy path.
 	if spaceIDRaw == "" {
-		if err := authctx.RequireRegular(ctx); err != nil {
-			return nil, err
+		if initiator.User == nil || initiator.AccountType != "regular" {
+			return nil, status.Error(codes.PermissionDenied, "regular account required")
 		}
 	}
 	name := strings.TrimSpace(req.GetName())
@@ -49,30 +51,26 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 	}
 
 	var row *store.ChatRow
-	var err error
 	replayed := false
 	requestID, err := parseCreateRequestID(req.GetRequestId())
 	if err != nil {
 		return nil, err
+	}
+	if spaceIDRaw != "" {
+		if s.Composite == nil {
+			return nil, status.Error(codes.Unavailable, "protected Space Chat creation unavailable")
+		}
+		return s.Composite.Create(ctx, req)
 	}
 	if requestID != nil {
 		kind := "group"
 		if chatType == chatv1.ChatType_CHAT_TYPE_CHANNEL {
 			kind = "channel"
 		}
-		var spaceID *uuid.UUID
-		if spaceIDRaw != "" {
-			parsed, parseErr := parseUUIDField("space_id", spaceIDRaw)
-			if parseErr != nil {
-				return nil, parseErr
-			}
-			spaceID = &parsed
-		}
 		row, replayed, err = s.DM.CreateChatWithRequestID(ctx, store.ChatCreateRequest{
 			CreatorProfileID: caller,
 			RequestID:        *requestID,
 			Type:             kind,
-			SpaceID:          spaceID,
 			Name:             name,
 			Topic:            topic,
 		})
@@ -80,21 +78,7 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 			return nil, status.Error(codes.AlreadyExists, "request_id already used for a different chat create")
 		}
 	} else if chatType == chatv1.ChatType_CHAT_TYPE_CHANNEL {
-		if spaceIDRaw == "" {
-			row, err = s.DM.CreateChannelChat(ctx, caller, name, topic)
-		} else {
-			spaceID, parseErr := parseUUIDField("space_id", spaceIDRaw)
-			if parseErr != nil {
-				return nil, parseErr
-			}
-			row, err = s.DM.CreateSpaceChannelChat(ctx, caller, spaceID, name, topic)
-		}
-	} else if spaceIDRaw != "" {
-		spaceID, parseErr := parseUUIDField("space_id", spaceIDRaw)
-		if parseErr != nil {
-			return nil, parseErr
-		}
-		row, err = s.DM.CreateSpaceGroupChat(ctx, caller, spaceID, name, topic)
+		row, err = s.DM.CreateChannelChat(ctx, caller, name, topic)
 	} else {
 		row, err = s.DM.CreateGroupChat(ctx, caller, name, topic)
 	}

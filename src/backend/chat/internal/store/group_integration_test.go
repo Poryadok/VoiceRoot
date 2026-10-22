@@ -35,6 +35,10 @@ func applyChatMigrationsForStoreTest(t *testing.T, ctx context.Context, pool *pg
 		_, err = pool.Exec(ctx, string(sqlBytes))
 		require.NoError(t, err)
 	}
+	// Lifecycle integration now includes the composite drain subphase. This
+	// historical focused fixture is not a source-migration catalog proof;
+	// composite tests use the official 0 -> 27 migration runner instead.
+	applyChatMigrationFile(t, ctx, pool, "000027_space_composite_creations.up.sql")
 }
 
 // TestCreateGroupChat_OwnerMembership documents creator is persisted as owner in main inbox.
