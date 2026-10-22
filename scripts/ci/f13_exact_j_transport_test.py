@@ -15,6 +15,223 @@ import zipfile
 import f13_exact_j_historical_red_test as harness
 
 
+
+class ContextFailureContract(unittest.TestCase):
+    """Parent-only failure observation; never hosted cause or guard proof."""
+    def test_real_descriptor_failure_keeps_none_and_emits_only_fixed_reason(self):
+        import errno
+        import resource
+        import types
+        self.assertNotEqual(os.geteuid(), 0)
+        self.assertIsNotNone(harness.read_public_utility_catalog())
+        folder = tempfile.TemporaryDirectory(prefix='f13-context-recovery-')
+        self.addCleanup(folder.cleanup)
+        prepared_root = Path(folder.name)
+        harness.materialize_pinned_git(prepared_root)
+        self.assertIsNotNone(harness.prepare_public_diagnostic_context(prepared_root, {}))
+        mismatch, _, _ = CoarseStatusContract().fixture()
+        outputs = (io.BytesIO(), io.BytesIO())
+        original_open = harness.os.open
+        observed = []
+        def traced_open(*args, **kwargs):
+            try:
+                return original_open(*args, **kwargs)
+            except OSError as error:
+                observed.append(error.errno)
+                raise
+        def command(args):
+            if args[-2:] == ['rev-parse', 'HEAD']:
+                return b'a' * 40 + b'\n'
+            return (harness.ROOT / args[-1].split(':', 1)[1]).read_bytes()
+        def materialize(root):
+            (root / 'historical-git').mkdir()
+        limits = resource.getrlimit(resource.RLIMIT_NOFILE)
+        before = len(os.listdir('/proc/self/fd'))
+        try:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (32, limits[1]))
+            with mock.patch.object(harness.os, 'open', side_effect=traced_open):
+                self.assertIsNone(harness.prepare_public_diagnostic_context(prepared_root, {}))
+                with mock.patch.object(harness.os, 'geteuid', return_value=1000), \
+                     mock.patch.object(harness.shutil, 'which', return_value='/trusted/tool'), \
+                     mock.patch.object(harness, 'run', side_effect=command), \
+                     mock.patch.object(harness, 'materialize', side_effect=materialize), \
+                     mock.patch.object(harness.subprocess, 'run', return_value=subprocess.CompletedProcess([], 2, b'original stdout\n', mismatch)) as spawn, \
+                     mock.patch.object(harness.sys, 'stdout', types.SimpleNamespace(buffer=outputs[0])), \
+                     mock.patch.object(harness.sys, 'stderr', types.SimpleNamespace(buffer=outputs[1])):
+                    with self.assertRaisesRegex(harness.SetupFailure, '^namespace_must_return_actual_guard_receipt_not_setup_exit$'):
+                        harness.namespace_main()
+        finally:
+            resource.setrlimit(resource.RLIMIT_NOFILE, limits)
+        self.assertIn(errno.EMFILE, observed, 'must exercise actual original open exhaustion')
+        self.assertEqual(len(os.listdir('/proc/self/fd')), before)
+        self.assertIsNotNone(harness.read_public_utility_catalog())
+        self.assertIsNotNone(harness.prepare_public_diagnostic_context(prepared_root, {}))
+        self.assertEqual(spawn.call_count, 1)
+        self.assertEqual(spawn.call_args.kwargs, {'capture_output': True})
+        self.assertEqual(outputs[0].getvalue(), b'original stdout\n')
+        raw = outputs[1].getvalue()
+        self.assertTrue(raw.startswith(mismatch))
+        self.assertEqual([json.loads(line) for line in raw[len(mismatch):].splitlines()], [
+            dict(kind='F13_PUBLIC_UTILITY_DIAGNOSTIC_STATUS_v1', status='context_unavailable'),
+            dict(kind='F13_PUBLIC_UTILITY_CONTEXT_FAILURE_v1', reason='catalog_descriptor_exhausted')])
+
+
+    def assert_fixed_reason(self, failure, reason):
+        import types
+        self.assertEqual(failure, {'reason': reason})
+        mismatch, _, _ = CoarseStatusContract().fixture()
+        status = harness.coarse_public_diagnostic_status(b'', mismatch, None, None)
+        output = io.BytesIO()
+        with mock.patch.object(harness.sys, 'stderr', types.SimpleNamespace(buffer=output)):
+            harness.emit_public_context_failure(status, failure)
+        self.assertEqual(json.loads(output.getvalue()),
+                         dict(kind='F13_PUBLIC_UTILITY_CONTEXT_FAILURE_v1', reason=reason))
+        self.assertEqual(output.getvalue().count(b'\n'), 1)
+        self.assertNotIn(b'PRIVATE_SECRET', output.getvalue())
+
+    def test_catalog_fixed_open_trust_and_directory_boundary(self):
+        import types
+        cases = [
+            (mock.patch.object(harness.os, 'open', side_effect=PermissionError('PRIVATE_SECRET/path')),
+             'catalog_open_failed'),
+            (mock.patch.object(harness.os, 'getxattr', side_effect=PermissionError('PRIVATE_SECRET/path')),
+             'catalog_permissions_or_acl_failed'),
+            (mock.patch.object(harness.os, 'scandir', return_value=contextlib.nullcontext(iter(
+                [types.SimpleNamespace(name='PRIVATE_SECRET') for _ in range(4097)]))),
+             'catalog_directory_limit'),
+        ]
+        for patch, reason in cases:
+            with self.subTest(reason=reason), patch:
+                failure = {}
+                self.assertIsNone(harness.read_public_utility_catalog(failure))
+            self.assert_fixed_reason(failure, reason)
+
+    def test_catalog_fixed_list_open_trust_read_and_canonical_sites(self):
+        import stat
+        original_open, original_xattr = harness.os.open, harness.os.getxattr
+        def list_open(*args, **kwargs):
+            if str(args[0]).endswith('.list'):
+                raise PermissionError('PRIVATE_SECRET/path')
+            return original_open(*args, **kwargs)
+        def list_trust(fd, attr):
+            if stat.S_ISREG(os.fstat(fd).st_mode):
+                raise PermissionError('PRIVATE_SECRET/path')
+            return original_xattr(fd, attr)
+        cases = [
+            (mock.patch.object(harness.os, 'open', side_effect=list_open), 'catalog_list_open_failed'),
+            (mock.patch.object(harness.os, 'getxattr', side_effect=list_trust), 'catalog_list_trust_failed'),
+            (mock.patch.object(harness.os, 'read', side_effect=OSError('PRIVATE_SECRET/path')), 'catalog_list_bytes_or_changed'),
+            (mock.patch.object(harness, 'public_catalog_from_lists', side_effect=ValueError('PRIVATE_SECRET/path')),
+             'catalog_canonical_failed'),
+        ]
+        for patch, reason in cases:
+            with self.subTest(reason=reason), patch:
+                failure = {}
+                self.assertIsNone(harness.read_public_utility_catalog(failure))
+            self.assert_fixed_reason(failure, reason)
+
+    def test_catalog_final_revalidation_and_generator_parser_phase(self):
+        parser, xattr = harness.public_catalog_from_lists, harness.os.getxattr
+        done = []
+        def parsed(lists):
+            result = parser(lists)
+            done.append(True)
+            return result
+        def final_trust(fd, attr):
+            if done:
+                raise PermissionError('PRIVATE_SECRET/path')
+            return xattr(fd, attr)
+        failure = {}
+        with mock.patch.object(harness, 'public_catalog_from_lists', side_effect=parsed), \
+             mock.patch.object(harness.os, 'getxattr', side_effect=final_trust):
+            self.assertIsNone(harness.read_public_utility_catalog(failure))
+        self.assert_fixed_reason(failure, 'catalog_changed')
+        def reject_actual_list(lists):
+            self.assertIsInstance(next(iter(lists)), bytes)
+            raise ValueError('PRIVATE_SECRET/path')
+        failure = {}
+        with mock.patch.object(harness, 'public_catalog_from_lists', side_effect=reject_actual_list):
+            self.assertIsNone(harness.read_public_utility_catalog(failure))
+        self.assert_fixed_reason(failure, 'catalog_canonical_failed')
+
+    def test_context_fixed_fallback_snapshot_limits_and_build_sites(self):
+        import types
+        catalog = ('/usr/bin/publictool',)
+        failure = {}
+        with mock.patch.object(harness, 'read_public_utility_catalog', return_value=None):
+            self.assertIsNone(harness.prepare_public_diagnostic_context(Path('/absent'), {}, failure))
+        self.assert_fixed_reason(failure, 'context_catalog_unavailable')
+        with mock.patch.object(harness, 'read_public_utility_catalog', return_value=catalog):
+            failure = {}
+            self.assertIsNone(harness.prepare_public_diagnostic_context(Path('/absent'), {}, failure))
+            self.assert_fixed_reason(failure, 'context_snapshot_failed')
+            root = mock.MagicMock()
+            base = root.__truediv__.return_value.__truediv__.return_value
+            base.iterdir.return_value = iter([types.SimpleNamespace(is_symlink=lambda:False)] * 8193)
+            failure = {}
+            self.assertIsNone(harness.prepare_public_diagnostic_context(root, {}, failure))
+            self.assert_fixed_reason(failure, 'context_snapshot_limit')
+            base.iterdir.return_value = iter([types.SimpleNamespace(name='publictool', is_symlink=lambda:True,
+                readlink=lambda:'/' + 'x' * 2097152)])
+            failure = {}
+            self.assertIsNone(harness.prepare_public_diagnostic_context(root, {}, failure))
+            self.assert_fixed_reason(failure, 'context_snapshot_limit')
+            with tempfile.TemporaryDirectory(prefix='f13-context-build-') as folder:
+                root = Path(folder)
+                (root / 'historical-git' / 'util').mkdir(parents=True)
+                failure = {}
+                with mock.patch.object(harness, 'public_diagnostic_context', side_effect=ValueError('PRIVATE_SECRET/path')):
+                    self.assertIsNone(harness.prepare_public_diagnostic_context(root, {}, failure))
+                self.assert_fixed_reason(failure, 'context_build_failed')
+
+    def test_success_non_mismatch_and_other_context_statuses_are_silent(self):
+        import types
+        failure = {}
+        self.assertIsNotNone(harness.read_public_utility_catalog(failure))
+        self.assertEqual(failure, {})
+        mismatch, context, receipt = CoarseStatusContract().fixture(public=True)
+        inputs = [(b'', b'', None, None), (b'not-json\n', b'', None, None),
+                  (b'', mismatch, context, None), (b'', mismatch, context, receipt)]
+        output = io.BytesIO()
+        with mock.patch.object(harness.sys, 'stderr', types.SimpleNamespace(buffer=output)):
+            for args in inputs:
+                harness.emit_public_context_failure(harness.coarse_public_diagnostic_status(*args),
+                                                   {'reason': 'catalog_descriptor_exhausted'})
+        self.assertEqual(output.getvalue(), b'')
+
+    def test_recorder_and_emitter_never_disclose_untrusted_values(self):
+        import types
+        class Hostile(dict):
+            def get(self, *args):
+                raise AssertionError('PRIVATE_SECRET/path')
+            def __setitem__(self, *args):
+                raise AssertionError('PRIVATE_SECRET/path')
+        class Text(str):
+            pass
+        output = io.BytesIO()
+        with mock.patch.object(harness.sys, 'stderr', types.SimpleNamespace(buffer=output)):
+            for failure in (None, [], Hostile(reason='catalog_open_failed'), {},
+                            {'reason': 'PRIVATE_SECRET/path'}, {'reason': Text('catalog_open_failed')}):
+                harness.emit_public_context_failure('context_unavailable', failure)
+            for status in (None, Text('context_unavailable'), 'PRIVATE_SECRET/path'):
+                harness.emit_public_context_failure(status, {'reason': 'catalog_open_failed'})
+        self.assertEqual(output.getvalue(), b'')
+        for failure in (None, [], Hostile()):
+            harness.record_public_context_failure(failure, 'catalog_open_failed')
+            with mock.patch.object(harness.os, 'open', side_effect=PermissionError('PRIVATE_SECRET/path')):
+                self.assertIsNone(harness.read_public_utility_catalog(failure))
+        failure = {}
+        harness.record_public_context_failure(failure, 'PRIVATE_SECRET/path')
+        self.assertEqual(failure, {})
+        harness.record_public_context_failure(failure, 'catalog_open_failed')
+        harness.record_public_context_failure(failure, 'context_catalog_unavailable', preserve=True)
+        self.assertEqual(failure, {'reason': 'catalog_open_failed'})
+        broken = mock.Mock()
+        broken.write.side_effect = OSError('PRIVATE_SECRET/path')
+        with mock.patch.object(harness.sys, 'stderr', types.SimpleNamespace(buffer=broken)):
+            harness.emit_public_context_failure('context_unavailable', failure)
+        self.assertEqual(broken.write.call_count, 1)
+
 class CoarseStatusContract(unittest.TestCase):
     """Optional observation status, never guard/admission evidence."""
     def fixture(self, public=False):
