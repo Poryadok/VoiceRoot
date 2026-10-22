@@ -23,11 +23,16 @@ import (
 // every audit assertion against the actual qualified current schema.
 func nativeAuditFixture(t *testing.T, ctx context.Context, owner, member uuid.UUID, name string) (*pgxpool.Pool, *store.SpaceRow) {
 	t.Helper()
+	return nativeAuditFixtureWithDescription(t, ctx, owner, member, name, "private")
+}
+
+func nativeAuditFixtureWithDescription(t *testing.T, ctx context.Context, owner, member uuid.UUID, name, description string) (*pgxpool.Pool, *store.SpaceRow) {
+	t.Helper()
 	directory := filepath.Join(repoRoot(t), "src/backend/migrations/space_db")
 	db := auditMigrationFixture(t, ctx, directory)
 	db.Run(true, "goto", "34")
 	st := &store.SpaceStore{Pool: db.Pool}
-	row, err := st.CreateSpace(ctx, owner, name, "private", "private")
+	row, err := st.CreateSpace(ctx, owner, name, description, "private")
 	require.NoError(t, err)
 	_, err = db.Pool.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, row.ID, member)
 	require.NoError(t, err)
