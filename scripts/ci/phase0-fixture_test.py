@@ -1068,6 +1068,66 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(record["first_error"]["startup_category"],
                          "matchmaking_space_principal_runtime")
 
+    def test_startup_failure_callers_capture_space_without_losing_services_or_status(self):
+        workflows = (
+            ROOT / ".github/workflows/t31-session-events-e2e.yml",
+            CI_WORKFLOW,
+        )
+        callers = []
+        for workflow in workflows:
+            jobs = yaml.safe_load(workflow.read_text(encoding="utf-8"))["jobs"]
+            for job in jobs.values():
+                for step in job.get("steps", []):
+                    block = step.get("run", "")
+                    if "scripts/ci/t31-startup-diagnostics.py" in block:
+                        callers.append((workflow.name, block))
+        self.assertEqual(len(callers), 3)
+        secret = "private-space-dsn-password-sentinel"
+        for workflow, block in callers:
+            with self.subTest(workflow=workflow, startup=block.splitlines()[0]):
+                original = ["voice"]
+                options = ["--service", re.search(r"--service\s+([a-z-]+)", block).group(1)]
+                if "--include-matchmaking-startup" in block:
+                    original.append("matchmaking")
+                    options.append("--include-matchmaking-startup")
+                if "--include-space-startup" in block:
+                    options.append("--include-space-startup")
+                startup_status = 37 if 'startup_status=$?' in block else 1
+                self.assertIn('exit "$startup_status"' if startup_status == 37 else "exit 1", block)
+                commands = []
+
+                def bounded(command, timeout, limit):
+                    commands.append(command)
+                    marker = "json" if "ps" in command else "--timestamps"
+                    requested = command[command.index(marker) + 1:]
+                    if "ps" in command:
+                        rows = [{"Service": name, "State": "exited" if name == "space" else "created",
+                                 "Health": "none", "ExitCode": 23 if name == "space" else 0,
+                                 "Name": secret} for name in requested]
+                        return json.dumps(rows).encode("ascii"), "complete", 0
+                    stderr = ("space-1 | FATAL SQLSTATE=08006 /app/main.go:42 password="
+                              + secret + "\n").encode("ascii") if "space" in requested else b""
+                    return stderr, "complete", 0
+
+                with tempfile.TemporaryDirectory() as tmp:
+                    output = Path(tmp) / "diagnostics.json"
+                    with patch.object(startup_diagnostics, "_bounded_command", side_effect=bounded):
+                        result = startup_diagnostics.main([
+                            "--output", str(output), "--startup-status", str(startup_status),
+                            *options, "--compose", "docker", "compose",
+                        ])
+                    self.assertEqual(result, 0)
+                    record = json.loads(output.read_text(encoding="ascii"))
+                self.assertEqual(record["startup_command_exit_status"], startup_status)
+                self.assertIn({"service": "space", "state": "exited", "health": "none", "exit_code": 23},
+                              record["status_collection"]["services"])
+                self.assertEqual(commands[0][commands[0].index("json") + 1:], [*original, "space"])
+                self.assertEqual(commands[1][commands[1].index("--timestamps") + 1:], [*original, "space"])
+                self.assertEqual(record["log_collection"]["services_requested"], [*original, "space"])
+                self.assertEqual(record["first_error"]["service"], "space")
+                self.assertEqual(record["first_error"]["sqlstate"], "08006")
+                self.assertNotIn(secret, json.dumps(record))
+
     def test_voice_startup_categories_cover_static_fatal_sites_without_dynamic_text(self):
         source = "\n".join((ROOT / path).read_text() for path in (
             "src/backend/voice/main.go", "src/backend/voice/space_media_runtime.go"))
