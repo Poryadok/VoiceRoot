@@ -51,6 +51,15 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 		if err != nil {
 			return nil, verificationStatus(err)
 		}
+		if info.FullMethod == rolev1.RoleService_BootstrapSpaceRoles_FullMethodName {
+			req, ok := message.(*rolev1.BootstrapSpaceRolesRequest)
+			if !ok {
+				return nil, status.Error(codes.InvalidArgument, "invalid bootstrap input")
+			}
+			if err := RequireOwnerBootstrap(principal.WithVerified(ctx, verified), req); err != nil {
+				return nil, err
+			}
+		}
 		if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
 			var decisionErr error
 			if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.MemberManageNicknames {
@@ -95,6 +104,8 @@ func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 			}
 		}
 		switch info.FullMethod {
+		case rolev1.RoleService_BootstrapSpaceRoles_FullMethodName:
+			return nil, status.Error(codes.Unavailable, "protected bootstrap listener required")
 		case rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName,
 			rolev1.RoleService_RemoveMemberRoles_FullMethodName:
 			return nil, status.Error(codes.Unavailable, "protected method unavailable on ordinary listener")
