@@ -888,9 +888,21 @@ message CommitSpaceChatCreationResponse {
 }
 
 // @voice.unknown_fields=reject
+message SpaceChatCreationPublicActor {
+  string profile_id = 1;
+  oneof initiator {
+    SpaceChatCreationUser user = 2;
+    SpaceChatCreationBot bot = 3;
+  }
+}
+
+// @voice.unknown_fields=reject
 message GetSpaceChatCreationOutcomeRequest {
   string space_id = 1;
   string operation_id = 2;
+  // Chat-only current verified actor for public result disclosure. Omission
+  // preserves the private recovery lookup; Gateway uses its delegated principal.
+  SpaceChatCreationPublicActor public_actor = 3;
 }
 
 // @voice.unknown_fields=accept_preserve

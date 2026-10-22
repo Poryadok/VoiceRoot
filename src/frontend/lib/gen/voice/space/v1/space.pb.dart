@@ -9827,15 +9827,122 @@ class CommitSpaceChatCreationResponse extends $pb.GeneratedMessage {
   SpaceChatCreationOutcome ensureOutcome() => $_ensure(0);
 }
 
+enum SpaceChatCreationPublicActor_Initiator { user, bot, notSet }
+
+/// @voice.unknown_fields=reject
+class SpaceChatCreationPublicActor extends $pb.GeneratedMessage {
+  factory SpaceChatCreationPublicActor({
+    $core.String? profileId,
+    SpaceChatCreationUser? user,
+    SpaceChatCreationBot? bot,
+  }) {
+    final result = create();
+    if (profileId != null) result.profileId = profileId;
+    if (user != null) result.user = user;
+    if (bot != null) result.bot = bot;
+    return result;
+  }
+
+  SpaceChatCreationPublicActor._();
+
+  factory SpaceChatCreationPublicActor.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SpaceChatCreationPublicActor.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static const $core.Map<$core.int, SpaceChatCreationPublicActor_Initiator>
+      _SpaceChatCreationPublicActor_InitiatorByTag = {
+    2: SpaceChatCreationPublicActor_Initiator.user,
+    3: SpaceChatCreationPublicActor_Initiator.bot,
+    0: SpaceChatCreationPublicActor_Initiator.notSet
+  };
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SpaceChatCreationPublicActor',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..oo(0, [2, 3])
+    ..aOS(1, _omitFieldNames ? '' : 'profileId')
+    ..aOM<SpaceChatCreationUser>(2, _omitFieldNames ? '' : 'user',
+        subBuilder: SpaceChatCreationUser.create)
+    ..aOM<SpaceChatCreationBot>(3, _omitFieldNames ? '' : 'bot',
+        subBuilder: SpaceChatCreationBot.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationPublicActor clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationPublicActor copyWith(
+          void Function(SpaceChatCreationPublicActor) updates) =>
+      super.copyWith(
+              (message) => updates(message as SpaceChatCreationPublicActor))
+          as SpaceChatCreationPublicActor;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationPublicActor create() =>
+      SpaceChatCreationPublicActor._();
+  @$core.override
+  SpaceChatCreationPublicActor createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationPublicActor getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SpaceChatCreationPublicActor>(create);
+  static SpaceChatCreationPublicActor? _defaultInstance;
+
+  @$pb.TagNumber(2)
+  @$pb.TagNumber(3)
+  SpaceChatCreationPublicActor_Initiator whichInitiator() =>
+      _SpaceChatCreationPublicActor_InitiatorByTag[$_whichOneof(0)]!;
+  @$pb.TagNumber(2)
+  @$pb.TagNumber(3)
+  void clearInitiator() => $_clearField($_whichOneof(0));
+
+  @$pb.TagNumber(1)
+  $core.String get profileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set profileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProfileId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  SpaceChatCreationUser get user => $_getN(1);
+  @$pb.TagNumber(2)
+  set user(SpaceChatCreationUser value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasUser() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearUser() => $_clearField(2);
+  @$pb.TagNumber(2)
+  SpaceChatCreationUser ensureUser() => $_ensure(1);
+
+  @$pb.TagNumber(3)
+  SpaceChatCreationBot get bot => $_getN(2);
+  @$pb.TagNumber(3)
+  set bot(SpaceChatCreationBot value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasBot() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearBot() => $_clearField(3);
+  @$pb.TagNumber(3)
+  SpaceChatCreationBot ensureBot() => $_ensure(2);
+}
+
 /// @voice.unknown_fields=reject
 class GetSpaceChatCreationOutcomeRequest extends $pb.GeneratedMessage {
   factory GetSpaceChatCreationOutcomeRequest({
     $core.String? spaceId,
     $core.String? operationId,
+    SpaceChatCreationPublicActor? publicActor,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
     if (operationId != null) result.operationId = operationId;
+    if (publicActor != null) result.publicActor = publicActor;
     return result;
   }
 
@@ -9855,6 +9962,8 @@ class GetSpaceChatCreationOutcomeRequest extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
     ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..aOM<SpaceChatCreationPublicActor>(3, _omitFieldNames ? '' : 'publicActor',
+        subBuilder: SpaceChatCreationPublicActor.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -9897,6 +10006,19 @@ class GetSpaceChatCreationOutcomeRequest extends $pb.GeneratedMessage {
   $core.bool hasOperationId() => $_has(1);
   @$pb.TagNumber(2)
   void clearOperationId() => $_clearField(2);
+
+  /// Chat-only current verified actor for public result disclosure. Omission
+  /// preserves the private recovery lookup; Gateway uses its delegated principal.
+  @$pb.TagNumber(3)
+  SpaceChatCreationPublicActor get publicActor => $_getN(2);
+  @$pb.TagNumber(3)
+  set publicActor(SpaceChatCreationPublicActor value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasPublicActor() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearPublicActor() => $_clearField(3);
+  @$pb.TagNumber(3)
+  SpaceChatCreationPublicActor ensurePublicActor() => $_ensure(2);
 }
 
 /// @voice.unknown_fields=accept_preserve

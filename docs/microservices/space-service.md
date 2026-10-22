@@ -10,6 +10,16 @@ the protected Gateway delegated-user path. Gateway additionally proves original
 creator/account ownership and current Space membership/lifecycle admission;
 service authentication alone never authorizes public disclosure.
 
+The additive `GetSpaceChatCreationOutcomeRequest.public_actor` is accepted only
+from protected signed `service:chat`, carrying current verified profile and typed
+user/bot facts. Each public read checks membership and guest admission under one
+Space lifecycle/ownership serialization scope before private receipt/expiry
+lookup, then verifies the original operation actor. Bot disclosure also calls
+the existing current Bot installation authority. Missing authority denies.
+Gateway cannot supply this field and retains its delegated path. Omitting it
+preserves private Chat COMMITTED recovery after later membership, guest policy
+or initiating session changes; successful recovery does not grant public access.
+
 Space rechecks current membership, guest policy, Role
 `TEXT_CHAT_CREATE_IN_SPACE`, lifecycle/ownership fencing and capacity before the
 first node commit. Bot creation additionally requires Bot-owned current exact

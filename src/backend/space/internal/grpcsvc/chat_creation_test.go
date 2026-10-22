@@ -20,6 +20,24 @@ import (
 	"voice/backend/space/internal/store"
 )
 
+func TestCompositePublicDisclosureBindsOriginalIdentity(t *testing.T) {
+	user := &spacev1.SpaceChatCreationUser{AccountId: uuid.NewString(), SessionEpoch: 7, AccountType: "regular"}
+	b := &spacev1.SpaceChatCreationBinding{CreatorProfileId: uuid.NewString(), Initiator: &spacev1.SpaceChatCreationBinding_User{User: user}}
+	a := chatCreationAdmission{}
+	actor := &spacev1.SpaceChatCreationPublicActor{ProfileId: b.CreatorProfileId, Initiator: &spacev1.SpaceChatCreationPublicActor_User{User: &spacev1.SpaceChatCreationUser{AccountId: user.AccountId, SessionEpoch: 8, AccountType: "guest"}}}
+	require.NoError(t, a.CheckPublicOutcomeDisclosure(context.Background(), actor, b), "current guest/epoch must not rewrite historical creation identity")
+	actor.GetUser().AccountId = uuid.NewString()
+	require.Equal(t, codes.NotFound, status.Code(a.CheckPublicOutcomeDisclosure(context.Background(), actor, b)))
+	actor.GetUser().AccountId = user.AccountId
+	actor.ProfileId = uuid.NewString()
+	require.Equal(t, codes.NotFound, status.Code(a.CheckPublicOutcomeDisclosure(context.Background(), actor, b)))
+	bot := &spacev1.SpaceChatCreationBot{BotId: uuid.NewString(), InstallationId: uuid.NewString(), BotScope: "TEXT_CHAT_CREATE_IN_SPACE"}
+	b.Initiator = &spacev1.SpaceChatCreationBinding_Bot{Bot: bot}
+	actor.ProfileId = b.CreatorProfileId
+	actor.Initiator = &spacev1.SpaceChatCreationPublicActor_Bot{Bot: bot}
+	require.Equal(t, codes.Unavailable, status.Code(a.CheckPublicOutcomeDisclosure(context.Background(), actor, b)), "missing current Bot owner authority never grants disclosure")
+}
+
 type compositeRoleClient struct {
 	rolev1.RoleServiceClient
 	check func(context.Context, *rolev1.CheckPermissionRequest) (*rolev1.CheckPermissionResponse, error)

@@ -23,6 +23,8 @@ type Admission interface {
 	CheckChatCreation(context.Context, *spacev1.SpaceChatCreationBinding) error
 	CheckOutcomeReadScope(context.Context, principal.Principal, uuid.UUID) error
 	CheckOutcomeDisclosure(context.Context, principal.Principal, *spacev1.SpaceChatCreationBinding) error
+	CheckPublicOutcomeReadScope(context.Context, *spacev1.SpaceChatCreationPublicActor, uuid.UUID) error
+	CheckPublicOutcomeDisclosure(context.Context, *spacev1.SpaceChatCreationPublicActor, *spacev1.SpaceChatCreationBinding) error
 }
 
 type Server struct {
@@ -95,6 +97,10 @@ func (s *Server) GetSpaceChatCreationOutcome(ctx context.Context, req *spacev1.G
 	if req == nil || HasUnknown(req) || !CanonicalID(req.SpaceId) || !CanonicalID(req.OperationId) {
 		return nil, status.Error(codes.InvalidArgument, "invalid composite lookup")
 	}
+	public := req.PublicActor
+	if public != nil && (gateway || !ValidPublicActor(public)) {
+		return nil, status.Error(codes.InvalidArgument, "invalid Chat public actor")
+	}
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.Unavailable, "composite persistence unavailable")
 	}
@@ -105,6 +111,14 @@ func (s *Server) GetSpaceChatCreationOutcome(ctx context.Context, req *spacev1.G
 		// PURGED/currently inaccessible Spaces are undiscoverable even when the
 		// private receipt is expired or absent. Never expose private expiry first.
 		if err := s.Admission.CheckOutcomeReadScope(ctx, p, uuid.MustParse(req.SpaceId)); err != nil {
+			return nil, err
+		}
+	}
+	if public != nil {
+		if s.Admission == nil {
+			return nil, status.Error(codes.Unavailable, "composite disclosure unavailable")
+		}
+		if err := s.Admission.CheckPublicOutcomeReadScope(ctx, public, uuid.MustParse(req.SpaceId)); err != nil {
 			return nil, err
 		}
 	}
@@ -123,5 +137,25 @@ func (s *Server) GetSpaceChatCreationOutcome(ctx context.Context, req *spacev1.G
 			return nil, err
 		}
 	}
+	if public != nil {
+		if err = s.Admission.CheckPublicOutcomeDisclosure(ctx, public, out.Binding); err != nil {
+			return nil, err
+		}
+	}
 	return &spacev1.GetSpaceChatCreationOutcomeResponse{Outcome: out}, nil
+}
+
+// ValidPublicActor validates current decision data asserted by the authenticated
+// Chat service. It does not grant authority or replace the Space owner check.
+func ValidPublicActor(actor *spacev1.SpaceChatCreationPublicActor) bool {
+	if actor == nil || HasUnknown(actor) || !CanonicalID(actor.ProfileId) {
+		return false
+	}
+	if user := actor.GetUser(); user != nil {
+		return CanonicalID(user.AccountId) && user.SessionEpoch > 0 && (user.AccountType == "regular" || user.AccountType == "guest")
+	}
+	if bot := actor.GetBot(); bot != nil {
+		return CanonicalID(bot.BotId) && CanonicalID(bot.InstallationId) && bot.BotScope == "TEXT_CHAT_CREATE_IN_SPACE"
+	}
+	return false
 }

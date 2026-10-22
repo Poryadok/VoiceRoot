@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	rolev1 "voice.app/voice/role/v1"
 	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/pkg/principal"
@@ -104,33 +105,53 @@ func (a chatCreationAdmission) CheckOutcomeDisclosure(ctx context.Context, p pri
 }
 
 func (a chatCreationAdmission) CheckOutcomeReadScope(ctx context.Context, p principal.Principal, spaceID uuid.UUID) error {
-	deny := status.Error(codes.NotFound, "composite outcome not found")
 	if !chatcreation.CanonicalID(p.ProfileID) || !chatcreation.CanonicalID(p.AccountID) || (p.AccountType != "regular" && p.AccountType != "guest") {
 		return status.Error(codes.Unauthenticated, "verified explicit actor required")
 	}
+	return a.checkCurrentPublicScope(ctx, uuid.MustParse(p.ProfileID), p.AccountType == "guest", spaceID)
+}
+
+func (a chatCreationAdmission) checkCurrentPublicScope(ctx context.Context, profileID uuid.UUID, guest bool, spaceID uuid.UUID) error {
+	deny := status.Error(codes.NotFound, "composite outcome not found")
 	if a.space == nil || a.space.Store == nil {
 		return status.Error(codes.Unavailable, "composite disclosure unavailable")
 	}
-	profileID := uuid.MustParse(p.ProfileID)
-	if err := a.space.Store.CheckOwnershipAvailable(ctx, spaceID); err != nil {
+	allowed, err := a.space.Store.CanDiscloseChatCreation(ctx, spaceID, profileID, guest)
+	if err != nil {
 		if errors.Is(err, store.ErrLifecycleFrozen) {
 			return deny
 		}
 		return mapSpaceStoreError(err)
 	}
-	member, err := a.space.Store.IsSpaceMember(ctx, spaceID, profileID)
-	if err != nil {
-		return status.Error(codes.Unavailable, "Space membership unavailable")
-	}
-	if !member {
-		return deny
-	}
-	row, err := a.space.Store.GetSpace(ctx, spaceID)
-	if err != nil {
-		return mapSpaceStoreError(err)
-	}
-	if row == nil || p.AccountType == "guest" && !row.AllowGuests {
+	if !allowed {
 		return deny
 	}
 	return nil
+}
+
+func (a chatCreationAdmission) CheckPublicOutcomeReadScope(ctx context.Context, actor *spacev1.SpaceChatCreationPublicActor, spaceID uuid.UUID) error {
+	if !chatcreation.ValidPublicActor(actor) {
+		return status.Error(codes.Unauthenticated, "verified explicit actor required")
+	}
+	return a.checkCurrentPublicScope(ctx, uuid.MustParse(actor.ProfileId), actor.GetUser() != nil && actor.GetUser().AccountType == "guest", spaceID)
+}
+
+func (a chatCreationAdmission) CheckPublicOutcomeDisclosure(ctx context.Context, actor *spacev1.SpaceChatCreationPublicActor, binding *spacev1.SpaceChatCreationBinding) error {
+	deny := status.Error(codes.NotFound, "composite outcome not found")
+	if !chatcreation.ValidPublicActor(actor) || binding == nil || actor.ProfileId != binding.CreatorProfileId {
+		return deny
+	}
+	if user := actor.GetUser(); user != nil {
+		if binding.GetUser() == nil || user.AccountId != binding.GetUser().AccountId {
+			return deny
+		}
+		return nil
+	}
+	if !proto.Equal(actor.GetBot(), binding.GetBot()) {
+		return deny
+	}
+	if a.bots == nil {
+		return status.Error(codes.Unavailable, "Bot installation authority unavailable")
+	}
+	return a.bots.CheckCurrentBotInstallation(ctx, binding)
 }

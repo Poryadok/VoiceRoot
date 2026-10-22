@@ -5,7 +5,10 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/chat/internal/chatcreation"
@@ -17,6 +20,54 @@ import (
 type SignedSpaceCompositeRemote struct {
 	Client spacev1.SpaceServiceClient
 	Issuer *principal.Issuer
+	Chats  interface {
+		FindChatByID(context.Context, uuid.UUID) (*store.ChatRow, error)
+	}
+}
+
+// Check performs a new owner-side public disclosure decision on every call.
+// The current actor never replaces the immutable initiating creation facts.
+func (r *SignedSpaceCompositeRemote) Check(ctx context.Context, actor chatcreation.Initiator, op *store.SpaceCompositeOperation) error {
+	if r == nil || r.Client == nil || op == nil || !chatcreation.ValidBinding(op.Binding) {
+		return status.Error(codes.Unavailable, "composite public authority unavailable")
+	}
+	current := &spacev1.SpaceChatCreationPublicActor{ProfileId: actor.ProfileID.String()}
+	if actor.User != nil {
+		current.Initiator = &spacev1.SpaceChatCreationPublicActor_User{User: proto.Clone(actor.User).(*spacev1.SpaceChatCreationUser)}
+	} else if actor.Bot != nil {
+		current.Initiator = &spacev1.SpaceChatCreationPublicActor_Bot{Bot: proto.Clone(actor.Bot).(*spacev1.SpaceChatCreationBot)}
+	} else {
+		return status.Error(codes.Unauthenticated, "verified public actor required")
+	}
+	req := &spacev1.GetSpaceChatCreationOutcomeRequest{SpaceId: op.Binding.SpaceId, OperationId: op.Binding.OperationId, PublicActor: current}
+	call, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	signed, err := ownCompositePrincipal(call, r.Issuer, spacev1.SpaceService_GetSpaceChatCreationOutcome_FullMethodName, req.OperationId, req)
+	if err != nil {
+		return status.Error(codes.Unavailable, "composite public credential unavailable")
+	}
+	out, err := r.Client.GetSpaceChatCreationOutcome(signed, req)
+	if err != nil {
+		return err
+	}
+	if out == nil || chatcreation.HasUnknown(out) || out.Outcome == nil || !proto.Equal(out.Outcome.Binding, op.Binding) || out.Outcome.State != spacev1.SpaceChatCreationOutcomeState_SPACE_CHAT_CREATION_OUTCOME_STATE_COMMITTED {
+		return status.Error(codes.Unavailable, "composite public evidence conflicts")
+	}
+	// Space owns its admission flag; Chat independently owns the current chat
+	// flag. A saved create response cannot establish today's guest access.
+	if actor.User != nil && actor.User.AccountType == "guest" {
+		if r.Chats == nil {
+			return status.Error(codes.Unavailable, "Chat guest authority unavailable")
+		}
+		row, err := r.Chats.FindChatByID(ctx, uuid.MustParse(op.Binding.ChatId))
+		if err != nil {
+			return status.Error(codes.Unavailable, "Chat guest authority unavailable")
+		}
+		if row == nil || row.SpaceID == nil || row.SpaceID.String() != op.Binding.SpaceId || !row.AllowGuests {
+			return status.Error(codes.NotFound, "composite outcome not found")
+		}
+	}
+	return nil
 }
 
 func ownCompositePrincipal(ctx context.Context, issuer *principal.Issuer, method, id string, request proto.Message) (context.Context, error) {

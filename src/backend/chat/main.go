@@ -57,6 +57,10 @@ func waitForRequiredGRPCReady(ctx context.Context, conn *grpc.ClientConn) error 
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	createConfig, createEnabled, createErr := chatcreation.CreateConfigFromEnv()
+	if createErr != nil {
+		log.Fatalf("Chat creation config: %v", createErr)
+	}
 	targetConfig, targetEnabled, targetErr := roleoverrideprincipal.LoadFromEnv("chat")
 	if targetErr != nil {
 		log.Fatalf("Role target principal config: %v", targetErr)
@@ -400,6 +404,12 @@ func main() {
 			}()
 		}
 
+		createCleanup, err := startChatCreation(runCtx, createConfig, createEnabled, chatPrincipalIssuer, dmStore, jsPub, logger)
+		if err != nil {
+			log.Fatalf("Chat creation runtime: %v", err)
+		}
+		defer createCleanup()
+
 		if searchManifestConfigured {
 			searchRuntime, runtimeErr := gisprincipal.New(runCtx, searchManifestConfig)
 			if runtimeErr != nil {
@@ -510,7 +520,7 @@ func main() {
 			}
 		}()
 	} else {
-		if gisPrincipalConfigured || spaceLifecycleConfigured || searchManifestConfigured || matchSquadPrincipalConfigured || realtimeLifecycleConfigured {
+		if createEnabled || gisPrincipalConfigured || spaceLifecycleConfigured || searchManifestConfigured || matchSquadPrincipalConfigured || realtimeLifecycleConfigured {
 			log.Fatal("protected principal listeners require DATABASE_URL")
 		}
 		logger.Warn("DATABASE_URL not set; gRPC disabled (health only)")

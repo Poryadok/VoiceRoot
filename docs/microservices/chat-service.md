@@ -262,6 +262,34 @@ the empty acknowledgement it marks the item delivered. Retry keeps the same
 enter the Space ledger. Chat never writes `space_db` and cannot emit Space- or
 Role-owned actions.
 
+### Public composite replay authority (BE-131)
+
+Every public Space-attached `CreateChat` result, including completed keyed
+replay, uses a fresh signed `service:chat` outcome lookup with a typed
+`public_actor` copied from the current verified initiator. Space checks current
+membership, lifecycle and guest admission before private receipt/expiry lookup,
+then binds disclosure to the original profile/account or bot installation.
+Current actor facts never replace immutable creation intent. Guest disclosure
+also checks the current Chat-owned `allow_guests`; a saved response is not current
+authority. Dependency failure denies disclosure. Private recovery omits
+`public_actor` and does not acquire this later ACL gate.
+
+Chat main composes the protected listener and durable recovery/effect worker
+together with complete `CHAT_CREATE_*` configuration: `GRPC_LISTEN`,
+`TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, `PRINCIPAL_JWKS_URL` (Gateway),
+`BOT_PRINCIPAL_JWKS_URL`, `PRINCIPAL_JWKS_CA_FILE`,
+`PRINCIPAL_JWKS_CLIENT_CERT_FILE`, `PRINCIPAL_JWKS_CLIENT_KEY_FILE`,
+`PRINCIPAL_REDIS_ADDR` and optional `PRINCIPAL_REDIS_PASSWORD`. Both HTTPS JWKS
+endpoints require distinct current/next RSA keys. `CHAT_CREATE_AUTH_*` and
+`CHAT_CREATE_SPACE_*` each require `GRPC_ADDR`, `TLS_CA_FILE`, `TLS_SERVER_NAME`,
+`CLIENT_CERT_FILE` and `CLIENT_KEY_FILE`. The runtime additionally requires Chat
+signing keys, composite schema and JetStream publisher. Partial configuration
+stops startup; the ordinary listener always denies CreateChat. This source
+composition does not prove deployment secret configuration or activation.
+Legacy snapshots without a Space composite receipt fail closed on this public
+path pending separate legacy reconciliation; replay cannot invent a receipt or
+historical audit.
+
 ### Space chat creation: durable composite target (BE131-COMPOSITE-v1)
 
 This is the accepted target; the current two-call Gateway create/tree path is
