@@ -160,7 +160,12 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 			writeGRPCError(w, err)
 			return true
 		}
-		resp, err := t.clients.chat.CreateChat(ctx, req)
+		createCtx, err := t.chatCreationContext(r, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.chatAudit.CreateChat(createCtx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
