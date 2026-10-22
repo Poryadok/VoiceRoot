@@ -6,9 +6,13 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 fixture="$(mktemp -d)"
 trap 'rm -rf "${fixture}"' EXIT
 mkdir -p "${fixture}/scripts/"{ci,prod,staging,storage} "${fixture}/bin"
+mkdir -p "${fixture}/scripts/staging/nats-rollout-preservation" "${fixture}/deploy/prod"
 cp "${ROOT}/scripts/prod/render-and-apply-prod.sh" "${fixture}/scripts/prod/"
 cp "${ROOT}/scripts/prod/production_image_refs.py" "${fixture}/scripts/prod/"
 cp "${ROOT}/scripts/ci/staging-image-catalog.json" "${fixture}/scripts/ci/"
+cp "${ROOT}/scripts/staging/nats-rollout-preservation/release_policy_wiring.py" "${fixture}/scripts/staging/nats-rollout-preservation/"
+cp "${ROOT}/deploy/prod/services.yaml" "${fixture}/deploy/prod/services.base.yaml"
+cp "${ROOT}/src/backend/pkg/releasepolicy/testdata/free-invite-alpha.json" "${fixture}/policy-fixture.json"
 cp "${ROOT}/scripts/staging/rollout-subset.sh" "${fixture}/scripts/staging/"
 for file in prod/load-prod-domains.sh prod/map-prod-env.sh staging/rollout-helpers.sh; do
   printf ':\n' > "${fixture}/scripts/${file}"
@@ -36,6 +40,27 @@ export VOICE_APPLY_OBSERVABILITY=false
 export CALLS="${fixture}/calls"
 run() {
   : > "${CALLS}"
+  # Supply the real mandatory preflight with explicitly synthetic alpha input.
+  # Namespace forwarding is a fixture contract, not live TLS/image qualification.
+  python3 - "${fixture}" "${VOICE_K8S_NAMESPACE}" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+root, namespace = Path(sys.argv[1]), sys.argv[2]
+raw = (root / 'policy-fixture.json').read_text()
+policy = json.loads(raw)
+descriptor = {'profile': 'free-invite-alpha', 'source_sha': policy['source_sha'],
+    'policy_sha256': hashlib.sha256(raw.encode()).hexdigest(),
+    'policy_object': {'apiVersion': 'v1', 'kind': 'ConfigMap',
+        'metadata': {'name': 'voice-fixture-policy', 'namespace': namespace},
+        'immutable': True, 'data': {'policy.json': raw}},
+    'owners': {name: {'policy_directory': '/etc/fixture-' + name,
+                      'snapshot_file': '/tmp/fixture-' + name + '.json'}
+               for name in ('auth', 'user', 'notification', 'realtime')}}
+(root / 'input.json').write_text(json.dumps(descriptor))
+text = (root / 'deploy/prod/services.base.yaml').read_text(encoding='utf-8-sig')
+(root / 'deploy/prod/services.yaml').write_text(text.replace('namespace: voice-prod', 'namespace: ' + namespace))
+PY
+  export VOICE_RELEASE_POLICY_INPUT="${fixture}/input.json"
   local status=0
   bash "${fixture}/scripts/prod/render-and-apply-prod.sh" > "${fixture}/output" 2>&1 || status=$?
   if [ "${status}" -ne 0 ]; then cat "${fixture}/output" >&2; fi
@@ -94,3 +119,4 @@ test "${result}" -ne 0
 test ! -s "${CALLS}"
 echo 'PASS real image preflight rejects invalid tag before effects'
 echo 'Production User/Space rollout: 7 cases passed (isolated shell fixture).'
+python3 "${ROOT}/scripts/prod/policy-owner-images-only_test.py"

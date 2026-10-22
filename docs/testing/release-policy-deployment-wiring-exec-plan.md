@@ -116,6 +116,55 @@ historical source validation, archive hash or allowlist check is weakened.
 
 ## Risks and follow-ups
 
+### Production selective policy-owner correction (496 c17 / parent c37-c38)
+
+Authoring source fd68ec9b1921089b95689e5813f0f2b000792dc3 validates a valid S1
+descriptor before dispatch but images-only discards its rendered bindings. The
+actual selective child changes images only, leaving a healthy S0 policy/env/CM
+on a new S1 owner image. Strict compiled-source equality correctly rejects that
+combination. Missing live qualification is not the cause of this source defect.
+
+Owner 273 accepted c37/c38 and received supported return e27 plus a fresh lease
+before writes. The bounded correction is to reject production images-only for
+auth/user/notification/realtime in the existing closed `changed_scope` preflight,
+before any child/cluster effect. Unknown, duplicate and ambiguous selection stays
+closed; nonowner images-only and existing full/app-only dispatch stay supported.
+No new atomic rollout framework, equality relaxation, runtime fallback or shared
+staging selective rewrite is in scope.
+
+Write the regression first against the real production entrypoint and real
+deploy-changed child with fixture jq/catalog lookup and a recorded kubectl
+adapter. A valid synthetic S1 descriptor plus modeled S0 bindings must reproduce
+an actual image-set command with unchanged S0 policy on RED; rejection must have
+zero child/cluster effects on GREEN. Include all four owners, mixed selections,
+malformed/unknown/duplicate selections, allowed nonowner selective updates and
+full/app-only dispatch controls. The existing production dispatch CI fixture
+must supply the now-required real release helper/template and explicitly
+synthetic descriptor; no dummy preflight replacement or assertion weakening.
+
+- [x] Actual S0-to-S1 selective entrypoint causal RED on untouched fd68: nine
+  failing subcases (seven owner/mixed entrypoint selections and two JSON owner
+  selections). Actual deploy-changed emitted image-set S1 while the recorded
+  S0 policy/object/hash stayed unchanged. Both S0/S1 fixture descriptors are
+  validated by the real strict release validator before the counterexample.
+- [x] Minimal two-line changed_scope owner rejection is GREEN: five focused
+  unittest methods, zero skips. Includes seven owner/mixed, eleven malformed
+  CSV, six JSON CLI cases, two full/app dispatch controls and a nonowner actual
+  selective-child control. No atomic install/runtime readiness claim.
+- [x] Existing CI dispatch fixture now supplies real required helper/template
+  and synthetic descriptor (old fixture failed missing helper before its first
+  control). All seven old controls and the five new methods pass through its
+  existing ci-script-tests hook; no dummy validator or weakened assertions.
+- [ ] Freeze portable source/proof and offer independent 485 CODE recheck before
+  121 publication. Prior nine static/capture proof is reused where unchanged;
+  three inherited failures and all live NULL/HOLD fields remain unchanged.
+
+Only production_image_refs.py, the new focused test, that existing fixture and
+the two owning documents change. The production guard rejects before existing
+outer dispatch; deploy-changed, runtime equality, manifests, TLS/NATS, protected
+staging and capture modules are untouched. Prior static/capture checks are
+reused with their original limits, not relabeled as current whole-suite/CI PASS.
+
 Qualified source/image tuples, actual immutable policy mounts, writable private
 snapshot readbacks and an authorized rollout/resource owner remain absent.
 Static GREEN cannot claim startup/runtime/18-group/deployment readiness.

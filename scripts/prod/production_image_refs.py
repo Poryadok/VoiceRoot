@@ -91,6 +91,8 @@ def changed_scope(catalog, mode, value, json_value=None):
         raise ValueError("changed services contain duplicate, unknown or nonproduction image names")
     if mode == "images-only" and not names:
         raise ValueError("images-only requires nonempty changed services")
+    if mode == "images-only" and set(names) & {"auth", "user", "notification", "realtime"}:
+        raise ValueError("images-only cannot update release-policy owners; use a reviewed full/app-only template rollout")
     return ",".join(names)
 
 

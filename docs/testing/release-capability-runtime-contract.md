@@ -92,6 +92,20 @@ actual immutable objects/mounts, snapshot readbacks and an authorized rollout
 owner/resource claim remain separate requirements. Static GREEN closes only
 the missing source wiring finding; it cannot attest the 18 qualification groups.
 
+Production `images-only` rejects any selection containing Auth, User,
+Notification or Realtime before child helpers or cluster effects, including
+mixed owner/nonowner selections. The existing closed CSV/JSON selector rejects
+unknown, duplicate, whitespace-ambiguous and malformed names before dispatch.
+A valid new descriptor alone cannot make an image-only change coherent: that
+route does not install the new environment, hash or ConfigMap mount. Exact
+policy/source equality is retained. Nonowner images-only and existing full /
+app-only template dispatch remain supported; the latter still require qualified
+coherent image/policy bindings before actual use. This is not a new atomic
+rollout framework or a live qualification claim. The real entrypoint and
+selective child have offline effect-recording regressions in
+`scripts/prod/policy-owner-images-only_test.py`, invoked by the existing
+production dispatch fixture in `ci-script-tests`.
+
 ## Required owners and qualification
 
 | Capability | Required enforcement owners / preserved behavior |
