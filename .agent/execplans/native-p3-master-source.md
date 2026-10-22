@@ -1179,3 +1179,38 @@ forgery and real loader/argv0/output/exit) in5.713s/exit0, logfe0c7bb0. Harness
 to the prior12/12 source; only the fixed manifest hash constant and metadata LF
 bytes changed. Full namespace/capability/qualifier execution is still forbidden
 until independent frozen CODE review, and no such execution is claimed here.
+
+### Utility mismatch diagnostics (PR875-F13-UTILITY-DIAGNOSTICS, 2026-10-22)
+
+Hosted b1c run39692636762/job119542441878 stopped with SETUP2 at
+`pinned_Git_private_utility_view`; raw log SHAac3fba6b contains no actual utility
+mapping. HARNESS c46 therefore remains an unknown-input STOP, not a proven
+utility defect. Diagnostic task c1/c2/e3 and pre-write schema c3 authorize only
+bounded observation at that existing predicate; WT19a2d7 remains owned by416.
+
+The driver caches the original entry list and conditionally evaluated expected
+map, preserving short-circuit and exception order. Only a false result emits
+best-effort JSON before the unchanged require/SETUP2. No utility inventory,
+PATH, permission, capability equality, producer, authority or guard is changed.
+Known public tool names/relative public paths are allowlisted; unknown names,
+paths and resolved targets become digests and lengths. Output contains bounded
+counts/access flags/numeric UID-GID-groups, at most32 entries and16384 bytes,
+never environment values, file contents or exception text. Output failure cannot
+mask the original setup rejection; successful verification remains silent.
+
+The actual verify_pinned_git logging-seam positive first failed because JSON
+was absent (one synthetic test, exit1, stderr ecb92ca2), then passed after the
+diagnostic addition (one test, exit0, stderr2d97d356). This is logging RED/GREEN,
+not a replay or diagnosis of the hosted mapping and not the F13 shared-guard RED.
+Final unprivileged Linux component group passes19/19 in21.192s, exit0/noOOM,
+stderr d1827abe0e18c2dce80feb3c84d57c7c1871346d15848d694d3f92fc0a6fb823,
+driver f720a481/test2230c79d. Seven added cases cover mismatch/silent success,
+short-circuit and exception order, secret/name/path redaction, empty/access
+metadata, truncation and diagnostic-write failure. Twelve old tests remain.
+The runner used pinned989 image, UID1000, networknone/no ports, capdropALL,
+rootfs/source RO and private component tmpfs; no namespace/fullcap/qualifier.
+
+Freeze source, parity and terminal receipts for original418 independent CODE/
+security review before121 publishes a new hosted head. Actual hosted mappings
+remain UNKNOWN, actual F13 RED UNOBSERVED and all54 transition oracles PLANNED;
+no full producer, CI, GitHub, production/native/runtime/R-K grant is inferred.

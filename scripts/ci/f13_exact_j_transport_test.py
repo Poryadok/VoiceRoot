@@ -1,5 +1,7 @@
 """Real fixture materialization regression; never a F13 guard/producer RED."""
 import hashlib
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -14,6 +16,149 @@ import f13_exact_j_historical_red_test as harness
 
 
 class HistoricalJTransport(unittest.TestCase):
+    def test_utility_mismatch_emits_redacted_diagnostic_without_changing_failure(self):
+        # Synthetic output/invariance regression, NOT the actual hosted cause.
+        with tempfile.TemporaryDirectory(prefix='f13-diag-') as folder:
+            root = Path(folder)
+            base = harness.materialize_pinned_git(root)
+            link = base / 'util/sha256sum'
+            (base / 'util').chmod(0o755)
+            link.unlink()
+            secret = '/home/private/HOST_SECRET_SENTINEL'
+            link.symlink_to(secret)
+            (base / 'util').chmod(0o555)
+            before = {p.name: str(p.readlink()) for p in (base / 'util').iterdir()}
+            output = io.StringIO()
+            with contextlib.redirect_stderr(output):
+                with self.assertRaisesRegex(harness.SetupFailure, '^pinned_Git_private_utility_view$'):
+                    harness.verify_pinned_git(root)
+            receipts = [json.loads(line) for line in output.getvalue().splitlines()]
+            self.assertEqual(len(receipts), 1, 'original mismatch must emit a bounded diagnostic')
+            self.assertEqual(receipts[0]['kind'], 'F13_UTILITY_VIEW_DIAGNOSTIC_v1')
+            self.assertNotIn(secret, output.getvalue())
+            self.assertEqual(before, {p.name: str(p.readlink()) for p in (base / 'util').iterdir()})
+
+    def test_utility_success_is_silent_and_empty_metadata_is_bounded(self):
+        with tempfile.TemporaryDirectory(prefix='f13-success-') as folder:
+            root = Path(folder)
+            base = harness.materialize_pinned_git(root)
+            output = io.StringIO()
+            with mock.patch.object(harness, 'expected_utilities', wraps=harness.expected_utilities) as expected:
+                with contextlib.redirect_stderr(output):
+                    harness.verify_pinned_git(root)
+                self.assertEqual(expected.call_count, 1)
+            self.assertEqual(output.getvalue(), '')
+            empty = harness.utility_view_diagnostic(base, {}, {}, 0)
+            self.assertEqual(empty['counts'], dict(expected=0, actual=0, entries=0, non_symlink=0,
+                                                  missing=0, extra=0, changed=0))
+            self.assertEqual(empty['entries'], [])
+            self.assertFalse(empty['truncated'])
+
+    def test_non_symlink_short_circuit_and_diagnostic_errors_preserve_failure(self):
+        with tempfile.TemporaryDirectory(prefix='f13-short-') as folder:
+            root = Path(folder)
+            base = harness.materialize_pinned_git(root)
+            (base / 'util').chmod(0o755)
+            regular = base / 'util/UNKNOWN_SECRET_NAME'
+            regular.write_bytes(b'synthetic private content must not be read')
+            (base / 'util').chmod(0o555)
+            output = io.StringIO()
+            with mock.patch.object(harness, 'expected_utilities', side_effect=RuntimeError('must remain unevaluated')) as expected:
+                with contextlib.redirect_stderr(output):
+                    with self.assertRaisesRegex(harness.SetupFailure, '^pinned_Git_private_utility_view$'):
+                        harness.verify_pinned_git(root)
+                self.assertEqual(expected.call_count, 0)
+            value = json.loads(output.getvalue())
+            self.assertEqual(value['expected_status'], 'not_evaluated_short_circuit')
+            self.assertIsNone(value['counts']['expected'])
+            self.assertEqual(value['counts']['non_symlink'], 1)
+            self.assertEqual(value['entries'][0]['difference'], 'not_in_actual_symlink_snapshot')
+            self.assertFalse(value['entries'][0]['slot']['is_symlink'])
+            self.assertNotIn('UNKNOWN_SECRET_NAME', output.getvalue())
+            output = io.StringIO()
+            with mock.patch.object(harness, 'utility_view_diagnostic', side_effect=OSError('DO_NOT_LEAK_EXCEPTION_SECRET')):
+                with contextlib.redirect_stderr(output):
+                    with self.assertRaisesRegex(harness.SetupFailure, '^pinned_Git_private_utility_view$'):
+                        harness.verify_pinned_git(root)
+            self.assertEqual(json.loads(output.getvalue())['status'], 'diagnostic_unavailable')
+            self.assertNotIn('DO_NOT_LEAK', output.getvalue())
+            self.assertEqual(regular.read_bytes(), b'synthetic private content must not be read')
+
+    def test_utility_metadata_redacts_unknown_names_paths_and_environment(self):
+        # Deliberately hostile synthetic logging inputs, not hosted mappings.
+        secret = 'SECRET_SENTINEL_token_123'
+        actual = {'python3': '/home/' + secret, secret + '\n\0': '/usr/bin/python3/../' + secret}
+        expected = {'python3': '/usr/bin/python3', 'sha256sum': '/usr/bin/sha256sum'}
+        before = json.dumps([actual, expected], sort_keys=True)
+        output = io.StringIO()
+        with mock.patch.dict(os.environ, {'AWS_SECRET_ACCESS_KEY': secret}):
+            with mock.patch.object(os, 'getgroups', return_value=[0, 1000, secret]):
+                with contextlib.redirect_stderr(output):
+                    harness.emit_utility_view_diagnostic(Path('/nonexistent'), actual, expected, 2)
+        raw = output.getvalue()
+        self.assertNotIn(secret, raw)
+        self.assertNotIn('AWS_', raw)
+        value = json.loads(raw)
+        self.assertEqual(value['groups'], [0, 1000])
+        self.assertEqual(value['groups_invalid'], 1)
+        self.assertEqual(value['counts']['missing'], 1)
+        self.assertEqual(value['counts']['extra'], 1)
+        self.assertEqual(value['counts']['changed'], 1)
+        self.assertEqual(harness.utility_diagnostic_token('/usr/bin/python3'), {'root': '/usr/bin', 'relative': 'python3'})
+        for path in ('/usr/bin/../' + secret, '/usr/bin/python3/' + secret, '/opt/' + secret, secret, ''):
+            self.assertEqual(set(harness.utility_diagnostic_token(path)), {'sha256', 'utf8_bytes'})
+        self.assertEqual(json.dumps([actual, expected], sort_keys=True), before)
+
+    def test_utility_diagnostic_truncation_entry_and_byte_bounds(self):
+        secret = 'MUST_NOT_APPEAR'
+        actual = {secret + str(i): '/private/' + secret + ('x' * 5000) for i in range(1000)}
+        expected = {secret + str(i): '/other/' + secret + ('y' * 5000) for i in range(1000)}
+        output = io.StringIO()
+        with contextlib.redirect_stderr(output):
+            harness.emit_utility_view_diagnostic(Path('/absent'), actual, expected, 1000)
+        self.assertLessEqual(len(output.getvalue().encode()), harness.UTILITY_DIAGNOSTIC_BYTES)
+        self.assertNotIn(secret, output.getvalue())
+        value = json.loads(output.getvalue())
+        self.assertLessEqual(len(value['entries']), harness.UTILITY_DIAGNOSTIC_ENTRIES)
+        self.assertTrue(value['truncated'])
+        self.assertEqual(value['omitted'] + len(value['entries']), 1000)
+
+    def test_utility_access_metadata_does_not_expose_paths_or_contents(self):
+        with tempfile.TemporaryDirectory(prefix='f13-access-') as folder:
+            path = Path(folder) / 'SECRET_FILENAME'
+            content = b'SECRET_FILE_CONTENT'
+            path.write_bytes(content)
+            path.chmod(0o600)
+            link = Path(folder) / 'link'
+            link.symlink_to(path)
+            value = harness.utility_diagnostic_access(str(link))
+            self.assertTrue(value['is_symlink'])
+            self.assertTrue(value['is_file'])
+            self.assertFalse(value['executable'])
+            self.assertNotIn('SECRET', json.dumps(value))
+            self.assertEqual(path.read_bytes(), content)
+            self.assertEqual(harness.utility_diagnostic_access('relative/secret'), {'status': 'not_inspected'})
+
+    def test_utility_predicate_exception_and_output_error_order_unchanged(self):
+        with tempfile.TemporaryDirectory(prefix='f13-order-') as folder:
+            root = Path(folder)
+            base = harness.materialize_pinned_git(root)
+            output = io.StringIO()
+            with mock.patch.object(harness, 'expected_utilities', side_effect=RuntimeError('original_error')):
+                with contextlib.redirect_stderr(output):
+                    with self.assertRaisesRegex(RuntimeError, '^original_error$'):
+                        harness.verify_pinned_git(root)
+            self.assertEqual(output.getvalue(), '')
+            (base / 'util').chmod(0o755)
+            (base / 'util/regular').write_bytes(b'no mutation')
+            (base / 'util').chmod(0o555)
+            class BrokenOutput(io.StringIO):
+                def write(self, text):
+                    raise OSError('private output error')
+            with contextlib.redirect_stderr(BrokenOutput()):
+                with self.assertRaisesRegex(harness.SetupFailure, '^pinned_Git_private_utility_view$'):
+                    harness.verify_pinned_git(root)
+
     def test_actual_materializer_installs_pinned_Git(self):
         with tempfile.TemporaryDirectory(prefix='f13-pinned-') as folder:
             root = Path(folder)
