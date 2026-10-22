@@ -17,6 +17,53 @@ LOCK = ('held-lock', '20', 'held-operation')
 
 
 class PersistentMetricLogTests(unittest.TestCase):
+    def test_replace_enabled_rejects_readiness_loss_after_precheck(self):
+        class ReadinessDrift(console_test.Fake):
+            def call(self, *args, body=None):
+                result = super().call(*args, body=body)
+                if args[:2] == ('get', 'pod'):
+                    self.sts['status']['readyReplicas'] = 0
+                    self.pod['status']['containerStatuses'][0]['ready'] = False
+                    self.pod['metadata']['resourceVersion'] = '19'
+                return result
+
+        client = ReadinessDrift()
+        client.config['data'] = persist.persistent_data()
+        client.lock = held_lock()
+        client.sts['status']['readyReplicas'] = 1
+        client.pod['status']['containerStatuses'][0]['ready'] = True
+        client.pod['status']['containerStatuses'][0]['lastState'] = {}
+        with self.assertRaisesRegex(RuntimeError, 'Ready'):
+            persist.replace(client, console_test.PINS, LOCK, enabled=True, apply=True)
+        self.assertFalse(any(args[0] in ('delete', 'patch', 'create')
+                             for args, _ in client.calls))
+        self.assertEqual(client.pod['metadata']['uid'], 'oom-pod')
+        self.assertEqual(client.lock, held_lock())
+
+    def test_replace_enabled_rejects_readiness_loss_before_final_snapshot(self):
+        class ReadinessDrift(console_test.Fake):
+            def call(self, *args, body=None):
+                result = super().call(*args, body=body)
+                if args[0] == 'delete' and 'dryRun=All' in args[1]:
+                    # Keep RV stable so the Ready predicate itself must refuse.
+                    self.sts['status']['readyReplicas'] = 0
+                    self.pod['status']['containerStatuses'][0]['ready'] = False
+                return result
+
+        client = ReadinessDrift()
+        client.config['data'] = persist.persistent_data()
+        client.lock = held_lock()
+        client.sts['status']['readyReplicas'] = 1
+        client.pod['status']['containerStatuses'][0]['ready'] = True
+        client.pod['status']['containerStatuses'][0]['lastState'] = {}
+        with self.assertRaisesRegex(RuntimeError, 'Ready'):
+            persist.replace(client, console_test.PINS, LOCK, enabled=True, apply=True)
+        deletes = [args for args, _ in client.calls if args[0] == 'delete']
+        self.assertEqual(len(deletes), 1)
+        self.assertIn('dryRun=All', deletes[0][1])
+        self.assertEqual(client.pod['metadata']['uid'], 'oom-pod')
+        self.assertEqual(client.lock, held_lock())
+
     def test_xml_changes_only_metric_log_settings(self):
         old = ET.fromstring(persist.console_data()[persist.FILE])
         new = ET.fromstring(persist.persistent_data()[persist.FILE])

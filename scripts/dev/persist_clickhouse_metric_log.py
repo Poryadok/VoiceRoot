@@ -76,7 +76,8 @@ def replace(client, pins, lock_pins, enabled, apply=False):
                 pod['status']['containerStatuses'][0].get('ready') is not True):
             raise RuntimeError('DEV metric_log enable requires a Ready current Pod')
     replace_after_config(client, pins, lock_pins, apply=apply,
-                         expected_data=expected_data, require_oom=False)
+                         expected_data=expected_data, require_oom=False,
+                         require_ready=enabled)
 
 
 def main():
