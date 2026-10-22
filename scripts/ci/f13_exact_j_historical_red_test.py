@@ -243,9 +243,47 @@ def public_catalog_from_lists(lists):
     return result
 
 
-def read_public_utility_catalog():
+_PUBLIC_CONTEXT_FAILURE_REASONS = (
+    'catalog_open_failed', 'catalog_permissions_or_acl_failed',
+    'catalog_directory_limit', 'catalog_list_open_failed',
+    'catalog_list_trust_failed', 'catalog_list_bytes_or_changed',
+    'catalog_canonical_failed', 'catalog_changed',
+    'catalog_descriptor_exhausted', 'context_snapshot_failed',
+    'context_snapshot_limit', 'context_build_failed',
+    'context_catalog_unavailable',
+)
+
+
+def record_public_context_failure(failure, reason, preserve=False):
+    """Private optional observation only; never inspect exception text or paths."""
+    try:
+        if type(failure) is not dict or type(reason) is not str or reason not in _PUBLIC_CONTEXT_FAILURE_REASONS:
+            return
+        old = failure.get('reason')
+        if preserve and type(old) is str and old in _PUBLIC_CONTEXT_FAILURE_REASONS:
+            return
+        failure['reason'] = reason
+    except Exception:
+        pass  # Recording cannot change an original result or exception.
+
+
+def emit_public_context_failure(status, failure):
+    """Only a fixed source-site observation after the existing owned mismatch gate."""
+    try:
+        if type(status) is not str or status != 'context_unavailable' or type(failure) is not dict:
+            return
+        reason = failure.get('reason')
+        if type(reason) is not str or reason not in _PUBLIC_CONTEXT_FAILURE_REASONS:
+            return
+        sys.stderr.buffer.write(diagnostic_json(dict(kind='F13_PUBLIC_UTILITY_CONTEXT_FAILURE_v1', reason=reason)) + b'\n')
+    except Exception:
+        pass  # Optional output never changes the original guard result.
+
+
+def read_public_utility_catalog(failure=None):
     """Observed installed-package catalog; no caller path or exception output."""
     descriptors, snapshots, files = [], [], []
+    phase = 'catalog_open_failed'
     def checked(fd, directory):
         info = os.fstat(fd)
         if info.st_uid != 0 or info.st_mode & 0o022 or not (stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode)):
@@ -265,27 +303,36 @@ def read_public_utility_catalog():
         flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
         fd = os.open('/', flags | os.O_DIRECTORY)
         descriptors.append(fd)
+        phase = 'catalog_permissions_or_acl_failed'
         snapshots.append(checked(fd, True))
         for name in ('var', 'lib', 'dpkg', 'info'):
+            phase = 'catalog_open_failed'
             fd = os.open(name, flags | os.O_DIRECTORY, dir_fd=fd)
             descriptors.append(fd)
+            phase = 'catalog_permissions_or_acl_failed'
             snapshots.append(checked(fd, True))
+        phase = 'catalog_open_failed'
         names = []
         with os.scandir(fd) as entries:
             for entry in entries:
                 names.append(entry.name)
                 if len(names) > 4096:
+                    phase = 'catalog_directory_limit'
                     raise ValueError('catalog_bound')
         def lists():
+            nonlocal phase
             total = 0
             for name in sorted(names):
                 if not name.endswith('.list'):
                     continue
                 # NONBLOCK avoids blocking a raced FIFO before fstat rejection.
+                phase = 'catalog_list_open_failed'
                 item = os.open(name, flags | os.O_NONBLOCK, dir_fd=fd)
                 files.append((item, None))
+                phase = 'catalog_list_trust_failed'
                 before = checked(item, False)
                 files[-1] = (item, before)
+                phase = 'catalog_list_bytes_or_changed'
                 chunks, size = [], 0
                 while size <= 1048576 and total + size <= 33554432:
                     chunk = os.read(item, min(65536, 1048577 - size, 33554433 - total - size))
@@ -296,14 +343,23 @@ def read_public_utility_catalog():
                 total += size
                 if size > 1048576 or total > 33554432 or before != checked(item, False):
                     raise ValueError('catalog_bound_or_changed')
+                phase = 'catalog_canonical_failed'
                 yield b''.join(chunks)
+        phase = 'catalog_canonical_failed'
         result = public_catalog_from_lists(lists())
+        phase = 'catalog_changed'
         if any(before != checked(item, True) for item, before in zip(descriptors, snapshots)):
             raise ValueError('catalog_changed')
         if any(before != checked(item, False) for item, before in files):
             raise ValueError('catalog_changed')
         return result
-    except Exception:
+    except Exception as error:
+        try:
+            if phase in ('catalog_open_failed', 'catalog_list_open_failed') and isinstance(error, OSError) and error.errno in (errno.EMFILE, errno.ENFILE):
+                phase = 'catalog_descriptor_exhausted'
+        except Exception:
+            pass
+        record_public_context_failure(failure, phase)
         return None
     finally:
         for fd, _ in reversed(files):
@@ -337,25 +393,32 @@ def public_diagnostic_context(catalog, actual, identity):
                 actual_sha256=sha(diagnostic_json(actual)), actual_count=len(actual), paths=paths, names=names)
 
 
-def prepare_public_diagnostic_context(root, identity):
+def prepare_public_diagnostic_context(root, identity, failure=None):
+    phase = 'context_catalog_unavailable'
     try:
-        catalog = read_public_utility_catalog()
+        catalog = read_public_utility_catalog() if failure is None else read_public_utility_catalog(failure)
         if catalog is None:
+            record_public_context_failure(failure, 'context_catalog_unavailable', preserve=True)
             return None
+        phase = 'context_snapshot_failed'
         base = root / 'historical-git' / 'util'
         actual = {}
         encoded_bytes = 2
         for count, path in enumerate(base.iterdir(), 1):
             if count > 8192:
+                record_public_context_failure(failure, 'context_snapshot_limit')
                 return None
             if path.is_symlink():
                 target = str(path.readlink())
                 encoded_bytes += len(diagnostic_json({path.name: target})) - 2 + bool(actual)
                 if encoded_bytes > 2097152:
+                    record_public_context_failure(failure, 'context_snapshot_limit')
                     return None
                 actual[path.name] = target
+        phase = 'context_build_failed'
         return public_diagnostic_context(catalog, actual, identity)
     except Exception:
+        record_public_context_failure(failure, phase)
         return None
 
 
@@ -856,7 +919,8 @@ def namespace_main():
         root = Path(folder) / 'root'
         root.mkdir()
         materialize(root)
-        diagnostic_context = prepare_public_diagnostic_context(root, json.loads(harness_identity))
+        context_failure = {}
+        diagnostic_context = prepare_public_diagnostic_context(root, json.loads(harness_identity), context_failure)
         for name in ('repo', 'harness', 'tmp', 'dev', 'proc'):
             (root / name).mkdir(exist_ok=True)
         # The runner's already-installed toolchain is mounted read-only. No pull,
@@ -893,6 +957,7 @@ def namespace_main():
             except Exception:
                 pass  # Optional output never changes the original guard result.
         emit_coarse_public_diagnostic_status(coarse_public_diagnostic_status(stdout, stderr, diagnostic_context, public_receipt))
+        emit_public_context_failure(coarse_public_diagnostic_status(stdout, stderr, diagnostic_context, public_receipt), context_failure)
         receipts = []
         for line in stdout.splitlines():
             try:
