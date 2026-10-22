@@ -73,6 +73,209 @@ retains that lock on uncertain mutation/rollout. No force unlock, rollback,
 table deletion, broad apply, pool tuning or Preservation service operation is
 provided. Keep the TT resource window through independent verification;
 neither the lock nor TT fences unrelated external kubectl operations.
+The 4Gi rollout can still OOM while the ClickHouse server uses the image's
+default `max_server_memory_usage_to_ram_ratio=0.9`. The separate
+`mitigate_clickhouse_memory.py` is an opt-in DEV-only trial for that exact
+partially completed operation. It requires the retained updater lock UID and
+operation marker plus the StatefulSet, current 4Gi Pod, and Bound PVC UIDs.
+Preview creates nothing and server-dry-runs a create-only ConfigMap and a
+UID/resourceVersion/full-spec-guarded StatefulSet patch. `--apply` creates only
+`voice-clickhouse-memory-policy` with `clickhouse-memory-0.8.xml`, then mounts
+one file read-only via `subPath` under `config.d`; this preserves the image's
+existing `docker_related_config.xml`. The image digest, 4Gi container cap,
+256Mi request, PVC and other workload fields stay fixed. The script retains
+the original lock on any uncertain result and releases it only after a new
+Ready Pod, unchanged PVC/image/spec, parsed ratio `0.8`, and a startup log
+reporting the derived 3.20GiB server cap. The ratio is a reversible trial,
+not proof that startup OOM will stop. Keep the TT DEV claim/window until
+independent smoke and resource readback; do not rerun the initial repair,
+force-delete a pod, or remove a retained lock on timeout.
+If independent stability verification finds that the same 0.8-policy pod is
+again OOMKilled, `expose_clickhouse_errors.py` is a separate DEV-only diagnostic
+step. It keeps ratio `0.8`, the 4Gi cap and all data/storage fields fixed, and
+adds only `logger.console=1` with `console_log_level=error` to the existing
+ConfigMap. The exact ClickHouse 24.8 image parses both settings and emits
+application errors to container stdout. Because the file is mounted via
+read-only `subPath`, the command requires a fresh Pod to consume the update.
+Its preview verifies the failed Pod, StatefulSet revision, ConfigMap, PVC/PV
+identities and quota, and server-dry-runs both the ConfigMap CAS patch and a
+graceful delete of that one Pod with UID/resourceVersion preconditions. After
+fresh TT DEV deploy admission, `--apply` acquires the shared updater lock,
+rechecks the target, patches the ConfigMap and submits only that exact Pod
+delete. It always retains the lock for operator readback, including after a
+successful submission; inspect the controller-created Pod and `kubectl logs`
+before any separately reviewed repair or lock disposition. This diagnostic
+step is not a ClickHouse availability fix and does not imply product PASS.
+When the Pod UID changes and its deleting actor cannot be established,
+`--config-only` is the narrower reviewed mode. It omits
+`--expected-pod-uid`, pins the same StatefulSet revision, image, 4Gi cap,
+ConfigMap UID/data, PVC/PV and quota, and performs only the server-dry-run and
+UID/resourceVersion/data CAS patch of the existing ConfigMap under a new shared
+updater lock. It never reads, patches or deletes a Pod or StatefulSet. Keep the
+lock and TT window while observing whether a later natural Pod replacement
+actually loads the fragment; a successful ConfigMap patch alone is no proof of
+startup recovery or log visibility.
+If the old `subPath` Pod persists after the ConfigMap-only patch, use a separate
+`--replace-after-config` preview with pinned OOM Pod UID, console ConfigMap UID,
+StatefulSet revision/generation, PVC/PV UIDs and the retained lock UID,
+resourceVersion and operation. This mode server-dry-runs and then gracefully
+deletes only that exact Pod with UID/resourceVersion preconditions. It does not
+patch ConfigMap or StatefulSet or create/release a lock. Read the new Pod and
+its logs immediately; preserve the lock and TT window on uncertain outcome.
+For a bounded read-only investigation of the failing background merge, the
+separate `diagnose_clickhouse_merges.py` offers `--mode pause`,
+`replace-paused`, `restore`, and `replace-restored`. It preserves the existing
+4Gi cap, ratio `0.8`, error-only console logger, image, StatefulSet and PVC.
+The pause XML sets the global MergeTree
+`max_bytes_to_merge_at_max_space_in_pool=1` and
+`max_bytes_to_merge_at_min_space_in_pool=1`; v24.8
+[`getMaxSourcePartsSizeForMerge`](https://github.com/ClickHouse/ClickHouse/blob/v24.8.14.39-lts/src/Storages/MergeTree/MergeTreeDataMergerMutator.cpp)
+can interpolate between those caps as pool entries are occupied. An isolated run of the exact
+24.8 image kept five small MergeTree parts separate while a control instance
+merged them. A per-table override may defeat the global setting. This pauses
+only automatic background merges; manual `OPTIMIZE` can still merge, so do not
+run `OPTIMIZE` during this diagnostic window. This is a diagnostic, not an
+availability fix. Do not use it until the four modes, exact
+ConfigMap and Pod identities, shared lock, source digest, and return procedure
+have independent review.
+Under the held DEV TT claim/window and updater lock, preview then apply `pause`
+(ConfigMap UID/resourceVersion/data CAS only); preview then apply
+`replace-paused` against the current exact NotReady OOM Pod UID/RV. Both
+replacement modes server-dry-run and delete only that single pinned Pod with
+UID/RV API preconditions, leaving the StatefulSet controller to recreate it.
+Observe the new Pod, verify the effective global **and table** settings and
+query only metadata in `system.parts`/`system.merges`. Bound the SQL readback
+window to three minutes from the paused Pod becoming Ready. The operator must
+enforce this deadline; the CLI has no timer. Abort the SQL readback earlier on
+`Too many parts`, write errors, OOM, wrong table setting, or failed identity
+checks. Immediately preview/apply
+`restore` to the prior ratio `0.8` plus console XML, then preview/apply
+`replace-restored` against that paused Pod's exact UID/RV and verify the next
+Pod's effective configuration. ConfigMap restore alone cannot undo a `subPath`
+mount already held by the current Pod. If either mutation or readback fails,
+retain the updater lock and TT window; do not claim restored behavior until a
+replacement Pod confirms it. Never treat the paused Pod as repaired.
+
+The separately reviewed `alter_clickhouse_metric_log.py` is an **experimental**
+next step, not a proven OOM fix. Do not apply it from the current crashloop:
+first complete the guarded pause/replacement above and obtain live read-only
+`system.tables`, `system.parts`, `system.merges`, and log evidence. Bind the
+failing UUID from the OOM log to exactly one `system.metric_log` or
+`system.metric_log_N` row, record its full `SHOW CREATE`/engine, target partition
+part names, rows, bytes and `hash_of_all_files`; the prior failed merge must be
+absent from `system.merges`. A `metric_log` config fragment with a per-table
+setting is **not** a fix for existing parts: exact 24.8 isolated startup renamed
+the old table to `metric_log_0` with its original setting and created a new
+empty `metric_log`. The synthetic 19-part fixture (332,082 rows/48.47 MB)
+merged at 4Gi with only about 572 MiB cgroup peak, so it does not reproduce
+DEV's sparse-column OOM and cannot establish efficacy.
+
+For an independently accepted causal trial only, obtain a fresh TT/lock/Pod/
+PVC/PV/quota readback and effective pause timestamp. Run the ALTER helper in
+read-only `--inventory-file` mode with the exact failing table UUID and
+partition. The JSON file contains the full create query and each active part's
+name, rows, bytes and file hash; stdout supplies the table name and DDL/part
+SHA-256 pins. Compare this evidence with the OOM task and prior SQL observation
+before an ALTER preview. Produce a **new inventory in each effective pause
+window**; an earlier window's file is stale even if the table UUID is unchanged.
+Pass that file as `--baseline-file` together with those three pins for both
+preview and apply. The helper checks its DDL/parts self-hashes, target partition,
+Pod UID, ConfigMap UID/resourceVersion, lock pins and pause-start timestamp.
+The guard allows only added
+active parts: every baseline `(partition, name, rows, bytes_on_disk,
+hash_of_all_files)` must remain identical, even if `metric_log` inserts more
+parts while paused. Missing/changed baseline parts, UUID/DDL/cap drift, or an
+active merge/DDL aborts; it repeats this check immediately before ALTER and
+after readback. Use `--apply` only while the
+paused Pod is Ready and fewer than 180 seconds have elapsed. It refuses active
+target merges or DDL, changed K8s identities/lock/DDL/parts, global forced
+merge age above zero, any explicit target-table merge-cap or forced-merge
+override, and either global merge cap other than 1. On success it requires the
+same UUID and parts with explicit `merge_max_block_size=1024`; it does not touch
+other tables, data, ConfigMap,
+Pod, StatefulSet, or updater lock. ClickHouse has no atomic UUID precondition
+for `ALTER TABLE name`, so a rename between final readback and ALTER remains a
+race; any ambiguity retains the lock and requires operator investigation.
+The reviewer must accept this exact limitation before any DEV ALTER.
+All helper modes require `--effective-pause-start-utc` from the first Ready Pod
+readback confirming effective pause=1, plus exact StatefulSet/Pod/PVC/PV/
+ConfigMap/revision/generation and updater-lock UID/RV/operation pins. The
+180-second timer guards inventory, preview and ALTER; the operator still owns
+the immediate reviewed restore, including when the helper aborts. Never run
+`--apply` solely from stale inventory output.
+
+Immediately restore the original ratio-0.8/console ConfigMap and replace the
+exact paused Pod under the reviewed UID guard. Resolve the original UUID again
+after restart: it may now be `metric_log_N`. Verify that its 1024 override and
+at least the original active row count remain, the current `metric_log` has
+the baseline setting, and both global merge caps have returned to their
+pre-pause values. In the isolated exact v24.8.14.39 image, the original defaults
+were `max_bytes_to_merge_at_max_space_in_pool=161061273600` (150 GiB) and
+`max_bytes_to_merge_at_min_space_in_pool=1048576` (1 MiB); the pause fragment
+read back as `1/1`, and restoring the console fragment read back as those
+defaults. Pin the actual DEV pre-pause values separately; do not infer a live
+restore solely from these isolated defaults or the ConfigMap data. Require
+the restored max cap to exceed the candidate merge source bytes. If the Pod
+crashloops before effective SQL readback, retain the claim and updater lock
+and report restore as unverified. Observe only natural
+automatic merges; never run `OPTIMIZE`. Watch cgroup peak, OOM, Ready/SQL,
+merge backlog and write errors. On inconclusive/failure, re-enter a newly
+reviewed bounded pause and use the helper's `--reset-setting` against that
+same UUID, then restore again. Exact-image isolation confirmed `RESET SETTING`
+returns the old table DDL without changing its UUID or rows. No health claim
+or updater-lock release precedes sustained Ready/SQL and independent verify.
+
+`persist_clickhouse_metric_log.py` is a separate DEV-only candidate for **future**
+`system.metric_log` tables after the old failing UUID has been guardedly ALTERed.
+Its `clickhouse-memory-metric-log-1024.xml` adds only
+`<metric_log><settings>merge_max_block_size=1024</settings></metric_log>` to the
+ratio-0.8/error-console policy. It leaves global `merge_tree` settings, 4Gi,
+image and storage unchanged. In an isolated exact 24.8.14.39 image, enabling
+this fragment renamed a current default-setting `metric_log` to `metric_log_0`
+with the **same UUID and rows**, then created a new current UUID with explicit
+`merge_max_block_size=1024`; restarting with the same fragment did not create
+another suffix. A separate isolated `ALTER` of the current table itself also
+caused a rollover, so pre-ALTER is not a way to avoid it. This is a config and
+continuity test, not a reproduction of the DEV OOM or proof of large-merge
+efficacy. The previously altered DEV UUID may already be `metric_log_0`; do not
+assume which `_N` suffix the next rollover selects.
+
+Before any reviewed trial, under the current TT DEV claim and retained updater
+lock, capture `system.tables` name/UUID/full create query for **all**
+`metric_log` and `metric_log_N` tables, plus active part names, rows, bytes and
+`hash_of_all_files` by UUID. Capture current Pod/StatefulSet/ConfigMap/PVC/PV
+UIDs, revision/generation, quota, cgroup and OOM state. Confirm the old failing
+UUID still has 1024 and remains intact. Preview `--mode enable` with exact
+Kubernetes and lock pins, then apply only after independent acceptance and a
+fresh server dry-run. The command changes ConfigMap data by UID/resourceVersion
+CAS and retains the lock. Because the file is mounted by `subPath`, preview and
+apply `--mode replace-enabled` against the **current exact Ready Pod UID/RV**;
+it uses only a graceful, UID/RV-preconditioned Pod delete. Do not run a broad
+selector delete or touch the StatefulSet/PVC. Any drift or uncertain result
+requires readback under the retained lock, never a blind retry.
+
+After controller recreation, verify the same StatefulSet owner, revision,
+image, 4Gi cgroup cap, PVC/PV UIDs and Bound state, quota, Ready/SQL and no
+new OOM. Query all `metric_log*` UUIDs/DDL/active parts: every prior UUID must
+still exist, with its prior data/part identity or a documented natural merge;
+the new canonical `metric_log` must have explicit 1024; the prior current table
+should be a distinct `_N` with its original UUID and no lost rows. Verify
+global max/min automatic-merge caps remain at the pre-trial values (DEV
+previously read 150GiB/1MiB), rather than the diagnostic `1/1`. Repeated
+restart should not roll over again while the fragment is unchanged. Do not run
+`OPTIMIZE` or force a large merge to manufacture a PASS. Observe natural merges,
+parts backlog, write errors, OOM and cgroup peak over a separately agreed
+window; Ready/SQL and small-part consolidation alone do not resolve e25.
+
+The reviewed inverse is `--mode rollback` (same ConfigMap CAS) followed by
+`--mode replace-rollback` for the exact current Pod. Rolling the fragment back
+can itself create another `metric_log_N` at startup; compare the full UUID/parts
+inventory again and retain all historical tables. If rollback or SQL readback
+is uncertain, keep the updater lock and TT window; do not declare healthy or
+release either. Focused offline checks:
+`python3 -m unittest -v persist_clickhouse_metric_log_test diagnose_clickhouse_merges_test expose_clickhouse_errors_test alter_clickhouse_metric_log_test`
+from `scripts/dev` in Linux/Docker.
+
 Schema-changing builds need separately reviewed dev migrations from the same
 source before image updates. Migrations use `migrate up` / Flyway `migrate`;
 Flyway repair is not automatic.
