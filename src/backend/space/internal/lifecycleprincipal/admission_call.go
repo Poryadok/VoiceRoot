@@ -150,7 +150,7 @@ func RequireEntryPolicySet(ctx context.Context, request proto.Message) (*Verifie
 	return requireAdmissionCall(ctx, admissionRPCPrefix+"SetEntryPolicy", request)
 }
 
-// These exact moderation envelopes authenticate only their own RPC/body;
+// RequireModerationBan authenticates only its exact RPC and request body;
 // MemberBan permission and the separate protected User capture remain required.
 func RequireModerationBan(ctx context.Context, request proto.Message) (*VerifiedAdmissionCall, error) {
 	return requireAdmissionCall(ctx, admissionRPCPrefix+"BanMember", request)

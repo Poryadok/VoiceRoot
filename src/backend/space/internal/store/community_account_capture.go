@@ -188,7 +188,6 @@ func (s *SpaceStore) recordCommunityAccountProjection(ctx context.Context, in Co
 	}
 	for _, result := range c.response.GetResults() {
 		profile := uuid.MustParse(result.Entry.ProfileId)
-		entry := result.Entry
 		var generation, owner uint64
 		var episode uuid.UUID
 		err := s.tx.QueryRow(ctx, `SELECT generation,owner_generation,episode_id FROM space_community_member_heads WHERE space_id=$1 AND profile_id=$2 AND state='ACTIVE'`, in.SpaceID, profile).Scan(&generation, &owner, &episode)
@@ -198,7 +197,7 @@ func (s *SpaceStore) recordCommunityAccountProjection(ctx context.Context, in Co
 		if err != nil {
 			return err
 		}
-		entry = &userv1.SpaceAccountCaptureEntry{ProfileId: profile.String(), Source: &userv1.SpaceAccountCaptureEntry_Community{Community: &userv1.SpaceCommunityPublicationIdentity{OwnerGeneration: owner, MemberGeneration: generation, EpisodeId: episode.String()}}}
+		entry := &userv1.SpaceAccountCaptureEntry{ProfileId: profile.String(), Source: &userv1.SpaceAccountCaptureEntry_Community{Community: &userv1.SpaceCommunityPublicationIdentity{OwnerGeneration: owner, MemberGeneration: generation, EpisodeId: episode.String()}}}
 		_, err = s.tx.Exec(ctx, `INSERT INTO space_account_qualifications(space_id,source_bytes,profile_id,account_id,association_id,association_revision,owner_receipt_digest,result_bytes,operation_id)
  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(space_id,source_bytes) DO NOTHING`, in.SpaceID, deterministicBanBytes(entry), profile, result.AccountId, result.AssociationId, result.AssociationRevision, result.OwnerReceiptDigest, deterministicBanBytes(result), in.OperationID)
 		if err != nil {

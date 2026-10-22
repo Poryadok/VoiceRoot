@@ -275,7 +275,7 @@ func (s *SpaceStore) commitModerationIntent(ctx context.Context, in *moderationI
 	return nil
 }
 
-// Retention cleanup is a bounded maintenance entrypoint, not a replay fallback.
+// CleanupExpiredAccountBanIntents is bounded maintenance, not a replay fallback.
 // Deletion ends server reuse detection; clients must never reuse expired IDs.
 func (s *SpaceStore) CleanupExpiredAccountBanIntents(ctx context.Context, space uuid.UUID, limit int) (int64, error) {
 	if limit < 1 || limit > 256 {
@@ -297,7 +297,7 @@ func (s *SpaceStore) CleanupExpiredAccountBanIntents(ctx context.Context, space 
 	return removed, err
 }
 
-// Selection is a bounded maintenance hint, never deletion authority. The per-
+// ListExpiredAccountBanIntentSpaces returns bounded hints, never deletion authority. The per-
 // Space worker must repeat the guarded catalog/fence/expiry checks when deleting.
 func (s *SpaceStore) ListExpiredAccountBanIntentSpaces(ctx context.Context, limit int) ([]uuid.UUID, error) {
 	if s == nil || s.Pool == nil || s.tx != nil || limit < 1 || limit > 256 {
