@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	rolev1 "voice.app/voice/role/v1"
 	spacev1 "voice.app/voice/space/v1"
+	userv1 "voice.app/voice/user/v1"
 	"voice/backend/pkg/memberadmission"
 )
 
@@ -234,6 +235,13 @@ func readOrdinaryMemberAuthority(ctx context.Context, tx pgx.Tx, space, profile 
 	if err != nil || operation == uuid.Nil || r.HeadGeneration > math.MaxInt64 || r.RetiredThrough > r.HeadGeneration {
 		return nil, ErrMemberAuthorityUnavailable
 	}
+	if state == "ACTIVE" || state == "PREPARING" {
+		entry := &userv1.SpaceAccountCaptureEntry{ProfileId: profile.String(), Source: &userv1.SpaceAccountCaptureEntry_Ordinary{Ordinary: &userv1.SpaceOrdinaryPublicationIdentity{Generation: r.HeadGeneration, PublicationId: operation.String()}}}
+		account, err = readQualifiedSourceAccount(ctx, tx, space, entry, account)
+		if err != nil {
+			return nil, ErrMemberAuthorityUnavailable
+		}
+	}
 	if account != nil {
 		var banned bool
 		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_bans WHERE space_id=$1 AND account_id=$2)`, space, *account).Scan(&banned); err != nil {
@@ -365,6 +373,21 @@ func readCommunityMemberAuthority(ctx context.Context, tx pgx.Tx, space, profile
 	}
 	if state != "ACTIVE" {
 		return nil, ErrMemberAuthorityUnavailable
+	}
+	entry := &userv1.SpaceAccountCaptureEntry{ProfileId: profile.String(), Source: &userv1.SpaceAccountCaptureEntry_Community{Community: &userv1.SpaceCommunityPublicationIdentity{OwnerGeneration: owner, MemberGeneration: generation, EpisodeId: episode.String()}}}
+	account, err := readQualifiedSourceAccount(ctx, tx, space, entry, nil)
+	if err != nil {
+		return nil, ErrMemberAuthorityUnavailable
+	}
+	if account != nil {
+		var banned bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_bans WHERE space_id=$1 AND account_id=$2)`, space, *account).Scan(&banned); err != nil {
+			return nil, ErrMemberAuthorityUnavailable
+		}
+		if banned {
+			r.State = spacev1.MemberAdmissionSourceState_MEMBER_ADMISSION_SOURCE_STATE_RETIRED
+			return r, nil
+		}
 	}
 	var remaining time.Duration
 	err = tx.QueryRow(ctx, `SELECT m.source_revision,(EXTRACT(EPOCH FROM (LEAST(m.lease_expires_at,a.roster_lease_expires_at)-$4::timestamptz))*1000000000)::bigint

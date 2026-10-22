@@ -30,18 +30,19 @@ type CommunityRosterInput struct {
 }
 
 type CommunityRosterReceipt struct {
-	OperationID       uuid.UUID
-	SpaceID           uuid.UUID
-	OwnerGeneration   int64
-	SourceRevision    int64
-	SnapshotSHA256    []byte
-	RequestSHA256     []byte
-	ReceiptID         uuid.UUID
-	MemberCount       int32
-	Replayed          bool
-	Current           bool
-	ProfileIDs        []uuid.UUID
-	RemovedProfileIDs []uuid.UUID
+	OperationID         uuid.UUID
+	SpaceID             uuid.UUID
+	OwnerGeneration     int64
+	SourceRevision      int64
+	SnapshotSHA256      []byte
+	RequestSHA256       []byte
+	ReceiptID           uuid.UUID
+	MemberCount         int32
+	Replayed            bool
+	Current             bool
+	ProfileIDs          []uuid.UUID
+	RemovedProfileIDs   []uuid.UUID
+	EffectiveProfileIDs []uuid.UUID
 }
 
 // ApplyCommunityRoster replaces only the game-owned source membership. It
@@ -54,7 +55,19 @@ func (s *SpaceStore) ApplyCommunityRoster(ctx context.Context, in CommunityRoste
 		return CommunityRosterReceipt{}, errors.New("invalid community roster projection")
 	}
 	if s.tx == nil {
+		in.ProfileIDs = append([]uuid.UUID(nil), in.ProfileIDs...)
+		receipt, err := withOwnershipScopeValue(s, ctx, []uuid.UUID{in.SpaceID}, func(scoped *SpaceStore) (CommunityRosterReceipt, error) {
+			return scoped.ApplyCommunityRoster(ctx, in)
+		})
+		if !errors.Is(err, errCommunityAccountCaptureRequired) {
+			return receipt, err
+		}
+		capture, err := s.prepareCommunityAccountCapture(ctx, in)
+		if err != nil {
+			return CommunityRosterReceipt{}, err
+		}
 		return withOwnershipScopeValue(s, ctx, []uuid.UUID{in.SpaceID}, func(scoped *SpaceStore) (CommunityRosterReceipt, error) {
+			scoped.communityAccountCapture = capture
 			return scoped.ApplyCommunityRoster(ctx, in)
 		})
 	}
@@ -94,6 +107,11 @@ func (s *SpaceStore) ApplyCommunityRoster(ctx context.Context, in CommunityRoste
 		if savedSpace != in.SpaceID || !bytes.Equal(savedDigest, in.SnapshotSHA256) || !bytes.Equal(savedHash, requestHash[:]) {
 			return CommunityRosterReceipt{}, ErrCommunityRosterConflict
 		}
+		receipt.OperationID = in.OperationID
+		receipt.SpaceID = savedSpace
+		if err := s.loadCommunityAccountProjection(ctx, &receipt); err != nil {
+			return CommunityRosterReceipt{}, err
+		}
 		if queryErr := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM community_owner_authority WHERE space_id=$1 AND status='active'
 			AND owner_generation=$2 AND roster_source_revision=$3 AND roster_sha256=$4 AND roster_lease_expires_at>clock_timestamp())`,
 			savedSpace, receipt.OwnerGeneration, receipt.SourceRevision, savedDigest).Scan(&receipt.Current); queryErr != nil {
@@ -104,7 +122,7 @@ func (s *SpaceStore) ApplyCommunityRoster(ctx context.Context, in CommunityRoste
 		}
 		return CommunityRosterReceipt{OperationID: in.OperationID, SpaceID: savedSpace, OwnerGeneration: receipt.OwnerGeneration,
 			SourceRevision: receipt.SourceRevision, SnapshotSHA256: savedDigest, RequestSHA256: savedHash, ReceiptID: receipt.ReceiptID,
-			MemberCount: receipt.MemberCount, Replayed: true, Current: receipt.Current, ProfileIDs: receipt.ProfileIDs, RemovedProfileIDs: receipt.RemovedProfileIDs}, nil
+			MemberCount: receipt.MemberCount, Replayed: true, Current: receipt.Current, ProfileIDs: receipt.ProfileIDs, RemovedProfileIDs: receipt.RemovedProfileIDs, EffectiveProfileIDs: receipt.EffectiveProfileIDs}, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return CommunityRosterReceipt{}, err
@@ -147,12 +165,29 @@ func (s *SpaceStore) ApplyCommunityRoster(ctx context.Context, in CommunityRoste
 		if !activeLease {
 			return CommunityRosterReceipt{}, ErrCommunityRosterConflict
 		}
+		if err := s.loadCommunityAccountProjection(ctx, &prior); err != nil {
+			return CommunityRosterReceipt{}, err
+		}
 		if err = tx.Commit(ctx); err != nil {
 			return CommunityRosterReceipt{}, err
 		}
 		prior.Replayed = true
 		prior.Current = true
 		return prior, nil
+	}
+	requestedProfiles := append([]uuid.UUID(nil), profiles...)
+	var schema int64
+	if err = tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&schema); err != nil {
+		return CommunityRosterReceipt{}, ErrAccountBanUnavailable
+	}
+	if schema == 50 {
+		if s.communityAccountCapture == nil {
+			return CommunityRosterReceipt{}, errCommunityAccountCaptureRequired
+		}
+		profiles, err = s.filterQualifiedCommunityProfiles(ctx, in)
+		if err != nil {
+			return CommunityRosterReceipt{}, err
+		}
 	}
 	var receiptID uuid.UUID
 	leaseExpiry := in.LeaseExpiresAt.UTC()
@@ -232,8 +267,13 @@ func (s *SpaceStore) ApplyCommunityRoster(ctx context.Context, in CommunityRoste
 	if _, err = tx.Exec(ctx, `INSERT INTO community_roster_operations(operation_id,space_id,application_id,environment_id,corporation_key,
 		owner_generation,source_revision,snapshot_sha256,request_hash,receipt_id,member_count,profile_ids,removed_profile_ids)
 		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, in.OperationID, in.SpaceID, in.ApplicationID, in.EnvironmentID,
-		in.CorporationKey, generation, in.SourceRevision, in.SnapshotSHA256, requestHash[:], receiptID, len(profiles), profiles, removed); err != nil {
+		in.CorporationKey, generation, in.SourceRevision, in.SnapshotSHA256, requestHash[:], receiptID, len(requestedProfiles), requestedProfiles, removed); err != nil {
 		return CommunityRosterReceipt{}, err
+	}
+	if schema == 50 {
+		if err = scoped.recordCommunityAccountProjection(ctx, in, profiles); err != nil {
+			return CommunityRosterReceipt{}, err
+		}
 	}
 	if capture != nil {
 		if err = scoped.finishEffectiveMemberMutations(ctx, capture); err != nil {
@@ -254,6 +294,9 @@ func (s *SpaceStore) ApplyCommunityRoster(ctx context.Context, in CommunityRoste
 	if !current {
 		return CommunityRosterReceipt{}, ErrCommunityRosterConflict
 	}
+	if schema == 50 && time.Since(s.communityAccountCapture.started) >= 5*time.Second {
+		return CommunityRosterReceipt{}, ErrAccountBanUnavailable
+	}
 	if capture != nil {
 		if finished.Before(capture.started) || !finished.Before(capture.started.Add(5*time.Second)) {
 			return CommunityRosterReceipt{}, ErrEffectiveEpisodeUnavailable
@@ -270,7 +313,7 @@ func (s *SpaceStore) ApplyCommunityRoster(ctx context.Context, in CommunityRoste
 	}
 	return CommunityRosterReceipt{OperationID: in.OperationID, SpaceID: in.SpaceID, OwnerGeneration: generation,
 		SourceRevision: in.SourceRevision, SnapshotSHA256: append([]byte(nil), in.SnapshotSHA256...), RequestSHA256: append([]byte(nil), requestHash[:]...), ReceiptID: receiptID,
-		MemberCount: int32(len(profiles)), Current: true, ProfileIDs: profiles, RemovedProfileIDs: removed}, nil
+		MemberCount: int32(len(requestedProfiles)), Current: true, ProfileIDs: requestedProfiles, RemovedProfileIDs: removed, EffectiveProfileIDs: profiles}, nil
 }
 
 func (s *SpaceStore) RevokeExpiredCommunityRosterMemberships(ctx context.Context) (int64, error) {

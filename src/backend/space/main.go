@@ -146,6 +146,7 @@ func main() {
 	var outboxRuntime *ownershipOutboxRuntime
 	var recoveryRuntime *ownershipRecoveryRuntime
 	var deletionRuntime *lifecycleRuntime
+	var banRetentionRuntime *accountBanRetentionRuntime
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
 		pool, err := postgres.NewPool(ctx, dbURL)
@@ -173,6 +174,8 @@ func main() {
 		defer mutationLockPool.Close()
 
 		spaceStore := &store.SpaceStore{Pool: pool}
+		banRetentionRuntime = startAccountBanRetentionRuntime(runCtx, spaceStore, logger)
+		defer banRetentionRuntime.Stop()
 		if targetEnabled {
 			runtime, err := roleoverrideprincipal.New(runCtx, targetConfig)
 			if err != nil {
@@ -533,6 +536,7 @@ func main() {
 	select {
 	case err := <-errCh:
 		runCancel()
+		banRetentionRuntime.Stop()
 		outboxRuntime.Stop()
 		recoveryRuntime.Stop()
 		deletionRuntime.Stop()
@@ -541,6 +545,7 @@ func main() {
 		}
 	case <-stop:
 		runCancel()
+		banRetentionRuntime.Stop()
 		outboxRuntime.Stop()
 		recoveryRuntime.Stop()
 		deletionRuntime.Stop()
