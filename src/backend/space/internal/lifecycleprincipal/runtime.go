@@ -190,6 +190,20 @@ func (r *Runtime) checkEpoch(ctx context.Context, account string, epoch int64) e
 func (r *Runtime) ServerOptions() []grpc.ServerOption {
 	return []grpc.ServerOption{grpc.Creds(r.credentials), grpc.ChainUnaryInterceptor(r.verifier.Unary())}
 }
+
+// CreatorDependencies must come from the durable Gateway nonce ledger and
+// Auth's protected Space session-floor client. Legacy Redis callbacks cannot
+// activate Creator. Missing dependencies leave the method unavailable.
+type CreatorDependencies struct {
+	Epoch  principal.SessionEpochChecker
+	Replay principal.ReplayGuard
+}
+
+func (r *Runtime) ServerOptionsWithCreator(dependencies CreatorDependencies) []grpc.ServerOption {
+	v := r.verifier
+	v.CreatorEpoch, v.CreatorReplay = dependencies.Epoch, dependencies.Replay
+	return []grpc.ServerOption{grpc.Creds(r.credentials), grpc.ChainUnaryInterceptor(v.Unary())}
+}
 func (r *Runtime) Close() error {
 	if r == nil {
 		return nil
