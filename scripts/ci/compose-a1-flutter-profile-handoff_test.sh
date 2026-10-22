@@ -39,6 +39,17 @@ assert_full_port_env() {
   done
 }
 
+assert_overlay_order() {
+  local line="$1" file
+  local -a files
+  mapfile -t files < <(grep -oE '<-f> <[^>]+>' <<<"$line" | sed 's/^<-f> <//;s/>$//')
+  assert_eq "${#files[@]}" 3
+  assert_eq "${files[0]}" "${ROOT}/docker-compose.yml"
+  assert_eq "${files[1]}" "${ROOT}/docker-compose.voice-space-media.yml"
+  assert_eq "${files[2]}" "${ROOT}/docker-compose.phase0.yml"
+  for file in "${files[@]}"; do assert_abs "$file"; done
+}
+
 assert_isolated_make_target() {
   local output_file="${TEST_TMP}/make-profile-handoff.out" rc count
   set +e
@@ -365,6 +376,7 @@ assert_eq "$flutter_count" 0
 
 echo '== every Compose path is absolute and disposable media fixture is wired =='
 compose_line="$(grep -m1 '^docker <compose> ' "${case_dir}/commands.log")"
+assert_overlay_order "$compose_line"
 env_file="$(sed -n 's/.* <--env-file> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
 compose_dir="$(sed -n 's/.* <--project-directory> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
 compose_file="$(sed -n 's/.* <-f> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
@@ -405,6 +417,7 @@ assert_abs "$cleanup_env_file"; assert_abs "$cleanup_directory"; assert_abs "$cl
 [[ "$cleanup_project" != voice ]] || fail 'cleanup must never target the shared voice project'
 assert_eq "$cleanup_profile" app
 while IFS= read -r compose_identity_line; do
+  assert_overlay_order "$compose_identity_line"
   identity_env_file="$(sed -n 's/.* <--env-file> <\([^>]*\)> .*/\1/p' <<<"$compose_identity_line")"
   identity_project="$(sed -n 's/.* <--project-name> <\([^>]*\)> .*/\1/p' <<<"$compose_identity_line")"
   identity_directory="$(sed -n 's/.* <--project-directory> <\([^>]*\)> .*/\1/p' <<<"$compose_identity_line")"
