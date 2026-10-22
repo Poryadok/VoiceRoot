@@ -130,3 +130,89 @@ ownership. Exact GET returned authoritative404; identical intended task create
 and relation succeeded. An uncertain claim was read back AVAILABLE/unowned,
 then supported claim e2 and fresh GET confirmed owner/assignee Isaac-5 on
 PR875-F13-SAME-FINAL-VIEW-0EDFE. Parent DIAG custody remains Isaac-2.
+
+## Successor: exact pinned clone entropy endpoint
+
+Source baseline75e851e03c0428faa6c3aa830746041b6ecbd95f (normal fast-forward
+from observed739b; same driver/test blobs). Consumer2 specifically ACKed the
+root-selected private fixed endpoint extension. Independent9 design memo
+REVIEW-F13-FINALVIEW-E109A6AB c2 attachment970d92c8f25717a66be15accaddf6b8d,
+SHA577a0508757de70a01997a2bcaa1664af59cde84661a807028642ce674e9c3e3,
+is finite design ALLOW, not implementation acceptance. Existing task remains
+actual ownerIsaac-5; freshWT31 leaseddb3de5e1f1e6f3caf495bb1384699093,
+holderIsaac-5-F13-clone-pack. Prior13b8 lease was already returned and untouched.
+
+Observed739b saved logSHA1a8e3080bdbad1088e776976ec326bbdc0659e188473a17a1a643d62b89fa6df
+fails clone before guard on absent kernel entropy. Isolated own-child syscall
+proof99ce9d0 gives unchanged pinned clone[0,128,0]: observe, deny ONLY urandom
+openENOENT, observe. Parent exists throughout; denied case exactly reproduces
+random-byte errors and tmp_pack/index-pack failure. This is component failure
+injection, not an actual hosted syscall trace. Taskc3/attachment
+1e2e1bacb1e9f488ac70f98fb7073236 preserves the causal proof.
+
+Selected extension: bounded private/dev tmpfs root0:0 mode0555,64KiB/8inodes,
+nosuid/noexec/device-enabled; fixed private urandom c1:9 root0444, preserve
+original null source bind via private placeholder; remount SAME tmpfsRO before
+prepare. No host device inode chmod, host-dev tree bind, new caps or root Python.
+RO mount alone is not character-device write protection: ordinary DAC, anchored
+mountpoint and checked denied O_WRONLY/O_RDWR provide the selected boundary.
+
+TDD: first generated namespace script must lack the selected device route (RED),
+then add minimal shell setup and a bounded ordinary verifier before prepare and
+inside dispatch. Verifier checks exact mountinfo/permount+filesystemflags/bounds,
+root/type/rdev/mode/entries/ACL/caps0; O_NOFOLLOW/CLOEXEC read32+fstat/close/discard;
+write opens must deny, unexpected successful FD closes without write and rejects.
+Negative mocks cover shape/permission/flag/FD failures; unsealed local/dev must
+reject. Preserve original5AST and exact real guard/cap/J/receipt logic. Existing
+prepare/dispatch component fixtures will mock the new independent verifier and
+assert its order; old predicate/security cases remain. Full transport suite and
+exact source/AST/encoding/diff proof, normal commit/push, independent9 WHOLEsource
+review then actual2 intake are required. No private node creation/mount privilege
+is available in permitted localcapdropLinux: actual node DAC/path mutation/seal,
+groups/FD/cap and full namespace/clone/fullJ/guard receipts stay hosted obligations.
+
+- [x] Exact source/log/task/ownlease and causal[0,128,0] proof.
+- [x] Explicit root/2 extension scope and independent9 frozen design ALLOW.
+- [x] Namespace-device RED1test0.229s, selected route absent; focused7tests
+  GREEN0.174s after fixing only a Path.open fixture binding with autospec.
+- [x] Full71 transport tests OK14.577s, actualsession88562/terminal08c987 exit0.
+  New8 tests include generated-shell setup failures, strict dispatch/verifier,
+  metadata/ACL/capability/type/FD/read/write-open denial and actual unsealed/dev
+  rejection. Exactly2 old fixture methods adapt for new dispatch and absolute
+  setup commands; remaining61 old test ASTs unchanged.
+- [ ] Full component/source proof and independent exact successor review.
+- [ ] Supported consumer handoff and separate physical lease return.
+
+## Final entropy source proof and limits
+
+The exact unchanged originalfive functions and prepare remain AST-identical.
+Existing namespace_main and main change only the selected private device setup
+and verifier dispatch; one new verify_private_devices function is added. Whole
+old module is AST-equal after replacing precisely those2 functions with baseline
+and removing the added helper. Every old captured input/source/archive/ELF/
+capability/full-J/shared-guard/receipt gate is preserved; no raw utility identity
+or random bytes are emitted. Both source files retain baseline UTF8/LF/no-BOM.
+
+The first broader verifier fixture failure was a mock Path.open binding error:
+without autospec its side effect saw mode rb rather than the Path receiver and
+returned status data as mount metadata. Product parser correctly rejected it.
+Corrected only that new fixture; all denial/FD assertions remain. Intermediate
+failure log preserved, no product RED claim for fixture errors.
+
+Verifier opens only fixed /dev endpoints with O_NOFOLLOW/CLOEXEC. It checks
+bounded exact /dev tmpfs mount/permount and filesystem flags, statvfs limits,
+root0555 directory/two entries, no unexpected ACL, zero Eff/Prm/Inh/Amb caps,
+root0444 c1:9 and original root0666 null c1:3. Read/fstat binds inode metadata,
+reads32 without retaining/logging data, always closes; both writable opens must
+deny with EACCES/EPERM/EROFS. Unexpected opens close without writing and reject.
+Null is probed only with empty read/write semantics; original stdio is untouched.
+The promise is no ordinary writable entropy opens, not a blanket ioctl ban.
+
+Actual local causal prototype uses unchanged pinned ELF/launcher/captured bundle
+and own-child tracing, not a new namespace. Actual private tmpfs/node creation,
+mountpoint mutation/DAC/RO/group/FD/capability positive and full J/guard receipt
+remain unexecuted locally because available ordinary capdrop containers lack
+mount/mknod privileges and none may be added. Generated shell fakes prove order
+and setup aborts only. The exact reviewed hosted owning route must discharge
+these obligations; new failure must remain SETUP2, never fabricated guard RED1.
+Normal source freeze/push and independent9 final code review remain required.
