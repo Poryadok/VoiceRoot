@@ -185,6 +185,9 @@ def guarded_alter(kube, ch, pins, lock_pins, target_uuid, partition,
             again['merge_cap'] != 1 or again['merge_min_cap'] != 1 or
             not parts_subset(before['parts'], again['parts'])):
         raise RuntimeError('metric_log target drifted immediately before ALTER')
+    elapsed = (datetime.now(timezone.utc) - pause_start).total_seconds()
+    if elapsed < 0 or elapsed >= 180:
+        raise RuntimeError('three-minute effective pause window expired; restore now')
     ch.alter(again['name'], reset=reset)
     after = inspect(ch, target_uuid, partition)
     kube_check()
