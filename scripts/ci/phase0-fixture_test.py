@@ -1029,6 +1029,49 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(summary["services_seen"], [])
         self.assertEqual(first["result"], "no_error_marker")
 
+    def test_space_static_startup_markers_are_scoped_redacted_and_keep_unknowns(self):
+        source = (ROOT / "src/backend/space/main.go").read_text(encoding="utf-8")
+        prefixes = {literal.split("%", 1)[0].rstrip()
+                    for literal in re.findall(r'log\.Fatalf?\("([^"\n]+)"', source)}
+        expected = {
+            "Space authority source activation:": "space_authority_source_activation",
+            "Space Chat composite runtime:": "space_chat_composite_runtime",
+            "postgres:": "space_postgres",
+        }
+        self.assertTrue(set(expected).issubset(prefixes))
+        secret = "private-space-endpoint-password-sentinel"
+        stamp = "2026-10-22T19:00:00.123Z 2026/10/22 19:00:00 "
+        for prefix in sorted(prefixes):
+            with self.subTest(prefix=prefix):
+                raw = ("private-project-space-1 | " + stamp + prefix + " " + secret + "\n").encode()
+                summary, first = startup_diagnostics.sanitize_logs(raw, "complete", ("space",))
+                self.assertEqual(first["result"], "observed_in_bounded_window")
+                self.assertEqual(first["service"], "space")
+                self.assertTrue(first["startup_category"].startswith("space_"))
+                if prefix in expected:
+                    self.assertEqual(first["startup_category"], expected[prefix])
+                self.assertEqual(first["startup_detail"], "unknown")
+                self.assertEqual(first["error_code"], "unknown")
+                self.assertEqual(first["causal_order"], "not_established")
+                self.assertEqual(summary["services_seen"], ["space"])
+                serialized = json.dumps({"summary": summary, "first": first})
+                self.assertNotIn(secret, serialized)
+                self.assertNotIn("private-project", serialized)
+        unknown = (
+            ("voice", "Space authority source activation: " + secret, "complete", "\n"),
+            ("space", "unrecognized " + secret, "complete", "\n"),
+            ("space", "credential=Space authority source activation: " + secret, "complete", "\n"),
+            ("space", "Space authority source activat", "complete", "\n"),
+            ("space", "Space authority source activation: " + secret, "byte_limit", ""),
+        )
+        for service, message, result, ending in unknown:
+            with self.subTest(service=service, result=result, message=message[:24]):
+                raw = (service + "-1 | " + stamp + message + ending).encode()
+                _, first = startup_diagnostics.sanitize_logs(raw, result, (service,))
+                self.assertEqual(first["startup_category"], "unknown")
+                self.assertEqual(first["service"], "unknown")
+                self.assertNotIn(secret, json.dumps(first))
+
     def test_t31_matchmaking_startup_marker_is_service_scoped_and_redacted(self):
         secret = "private-jwks-url-and-password-sentinel"
         raw = ("matchmaking-1 | level=error error_code=UNAVAILABLE "

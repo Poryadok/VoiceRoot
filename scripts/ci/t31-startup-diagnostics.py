@@ -117,6 +117,79 @@ VOICE_STARTUP_PREFIXES = (
     ("Space requires an incarnation-fenced projection store", "voice_space_incarnation_projection_required"),
     ("P3 requires lifecycle-fenced Redis projection", "voice_p3_projection_fence_required"),
 )
+# Static log.Fatal[f] prefixes from Space main.go; dynamic suffixes are never
+# projected into the record. Bare log.Fatal(err) messages remain unclassified.
+SPACE_STARTUP_PREFIXES = (
+    ("AUTH_PRINCIPAL_GRPC_ADDR is required with Auth ownership TLS settings", "space_auth_principal_grpc_addr_is_required_with_auth_ownership_tls_settings"),
+    ("ROLE_PRINCIPAL_GRPC_ADDR is required with Role ownership TLS settings", "space_role_principal_grpc_addr_is_required_with_role_ownership_tls_settings"),
+    ("Role target listen:", "space_role_target_listen"),
+    ("Role target listener requires DATABASE_URL", "space_role_target_listener_requires_database_url"),
+    ("Role target principal config:", "space_role_target_principal_config"),
+    ("Role target principal runtime:", "space_role_target_principal_runtime"),
+    ("Role target serve:", "space_role_target_serve"),
+    ("Space Bot composite transport:", "space_bot_composite_transport"),
+    ("Space Chat composite config:", "space_chat_composite_config"),
+    ("Space Chat composite listen:", "space_chat_composite_listen"),
+    ("Space Chat composite requires DATABASE_URL and protected Gateway listener", "space_chat_composite_requires_database_url_and_protected_gateway_listener"),
+    ("Space Chat composite requires migrations 000028 and 000031", "space_chat_composite_requires_migrations_000028_and_000031"),
+    ("Space Chat composite requires protected Bot installation transport", "space_chat_composite_requires_protected_bot_installation_transport"),
+    ("Space Chat composite requires protected Role decision transport", "space_chat_composite_requires_protected_role_decision_transport"),
+    ("Space Chat composite runtime:", "space_chat_composite_runtime"),
+    ("Space Gateway lifecycle config:", "space_gateway_lifecycle_config"),
+    ("Space Gateway lifecycle listen:", "space_gateway_lifecycle_listen"),
+    ("Space Gateway lifecycle listener requires DATABASE_URL", "space_gateway_lifecycle_listener_requires_database_url"),
+    ("Space Gateway lifecycle runtime:", "space_gateway_lifecycle_runtime"),
+    ("Space audit listener requires DATABASE_URL", "space_audit_listener_requires_database_url"),
+    ("Space audit principal config:", "space_audit_principal_config"),
+    ("Space audit principal listen:", "space_audit_principal_listen"),
+    ("Space audit principal runtime:", "space_audit_principal_runtime"),
+    ("Space audit principal serve:", "space_audit_principal_serve"),
+    ("Space authority source activation:", "space_authority_source_activation"),
+    ("Space authority source config:", "space_authority_source_config"),
+    ("Space authority source listen:", "space_authority_source_listen"),
+    ("Space authority source requires DATABASE_URL", "space_authority_source_requires_database_url"),
+    ("Space authority source serve:", "space_authority_source_serve"),
+    ("Space communication authority config:", "space_communication_authority_config"),
+    ("Space communication authority requires DATABASE_URL", "space_communication_authority_requires_database_url"),
+    ("Space communication authority startup:", "space_communication_authority_startup"),
+    ("Space lifecycle config:", "space_lifecycle_config"),
+    ("Space lifecycle requires DATABASE_URL", "space_lifecycle_requires_database_url"),
+    ("Space lifecycle requires the protected Gateway listener", "space_lifecycle_requires_the_protected_gateway_listener"),
+    ("Space lifecycle runtime:", "space_lifecycle_runtime"),
+    ("Space principal issuer is required for Auth ownership transport", "space_principal_issuer_is_required_for_auth_ownership_transport"),
+    ("Space principal issuer is required for Role ownership transport", "space_principal_issuer_is_required_for_role_ownership_transport"),
+    ("auth ownership TLS:", "space_auth_ownership_tls"),
+    ("auth ownership grpc:", "space_auth_ownership_grpc"),
+    ("chat grpc:", "space_chat_grpc"),
+    ("grpc listen:", "space_grpc_listen"),
+    ("grpc serve:", "space_grpc_serve"),
+    ("nats jetstream bootstrap:", "space_nats_jetstream_bootstrap"),
+    ("nats jetstream publisher:", "space_nats_jetstream_publisher"),
+    ("postgres mutation lock config:", "space_postgres_mutation_lock_config"),
+    ("postgres mutation lock pool:", "space_postgres_mutation_lock_pool"),
+    ("postgres:", "space_postgres"),
+    ("role grpc dial:", "space_role_grpc_dial"),
+    ("role ownership TLS:", "space_role_ownership_tls"),
+    ("role ownership grpc:", "space_role_ownership_grpc"),
+    ("social grpc:", "space_social_grpc"),
+    ("space principal JWKS TLS:", "space_principal_jwks_tls"),
+    ("space principal issuer:", "space_principal_issuer"),
+    ("space privacy principal config:", "space_privacy_principal_config"),
+    ("space privacy principal listen:", "space_privacy_principal_listen"),
+    ("space privacy principal requires DATABASE_URL", "space_privacy_principal_requires_database_url"),
+    ("space privacy principal serve:", "space_privacy_principal_serve"),
+    ("space privacy principal:", "space_privacy_principal"),
+    ("space subscription consumer startup:", "space_subscription_consumer_startup"),
+    ("space subscription consumer stopped:", "space_subscription_consumer_stopped"),
+    ("user grpc dial:", "space_user_grpc_dial"),
+    ("user grpc:", "space_user_grpc"),
+    ("user grpc: unexpected shutdown", "space_user_grpc_unexpected_shutdown"),
+)
+_SPACE_STARTUP_BY_LENGTH = sorted(SPACE_STARTUP_PREFIXES, key=lambda item: len(item[0]), reverse=True)
+_SPACE_LOG_TIMESTAMPS = re.compile(
+    r"^(?:[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?Z )?"
+    r"(?:[0-9]{4}/[0-9]{2}/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)? )?"
+)
 VOICE_STARTUP_DETAILS = (
     ("voice MatchSquad member TLS identity unavailable", "voice_match_squad_member_tls_identity_unavailable"),
     ("voice MatchSquad member client CA unavailable", "voice_match_squad_member_client_ca_unavailable"),
@@ -406,7 +479,12 @@ def sanitize_logs(data: bytes, command_result: str, failed_services: tuple[str, 
         if service not in SERVICE_SET:
             continue
         seen.add(service)
-        if first_error is not None or not _ERROR_MARKER.search(message):
+        # Go log.Fatal does not add a FATAL token. Only source-verified Space
+        # prefixes at the start of the timestamp-stripped message are markers.
+        space_message = _SPACE_LOG_TIMESTAMPS.sub("", message, count=1) if service == "space" else ""
+        space_category = next((category for prefix, category in _SPACE_STARTUP_BY_LENGTH
+                               if space_message.startswith(prefix)), None)
+        if first_error is not None or (space_category is None and not _ERROR_MARKER.search(message)):
             continue
         code_match = _ERROR_CODE.search(message)
         code = code_match.group(1) if code_match and code_match.group(1) in ERROR_CODES else None
@@ -415,6 +493,9 @@ def sanitize_logs(data: bytes, command_result: str, failed_services: tuple[str, 
             startup_category = "phase0_matchmaking_jwks_readiness"
             observed_detail = readiness_match.group(1)
             startup_detail = observed_detail if observed_detail in READINESS_FAILURE_CATEGORIES else "unknown"
+        elif space_category is not None:
+            startup_category = space_category
+            startup_detail = "unknown"
         elif service == "matchmaking" and "Matchmaking Space principal runtime:" in message:
             startup_category = "matchmaking_space_principal_runtime"
             startup_detail = "unknown"
