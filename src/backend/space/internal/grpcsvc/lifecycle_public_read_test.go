@@ -2,9 +2,6 @@ package grpcsvc
 
 import (
 	"context"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -31,24 +28,9 @@ func TestPublicLifecycleReadLiveACLAndFrozenMinimalOwnerProjection(t *testing.T)
 		t.Skip("requires test-owned PostgreSQL")
 	}
 	ctx := context.Background()
-	pool := startSpacePostgresForTest(t, ctx)
-	dir := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db")
-	entries, err := os.ReadDir(dir)
-	require.NoError(t, err)
-	for _, entry := range entries {
-		if strings.HasSuffix(entry.Name(), ".up.sql") {
-			raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
-			require.NoError(t, err)
-			_, err = pool.Exec(ctx, string(raw))
-			require.NoError(t, err, entry.Name())
-		}
-	}
-	st := &store.SpaceStore{Pool: pool}
 	owner, member, outsider, account := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	row, err := st.CreateSpace(ctx, owner, "owner recovery", "private description", "private")
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, row.ID, member)
-	require.NoError(t, err)
+	pool, row := nativeAuditFixtureWithDescription(t, ctx, owner, member, "owner recovery", "private description")
+	st := &store.SpaceStore{Pool: pool}
 	service := &PublicLifecycleSpace{SpaceGRPC: &SpaceGRPC{Store: st}}
 	actorContext := func(actor uuid.UUID) context.Context {
 		md := metadata.Pairs(authctx.HeaderUserID, account.String(), authctx.HeaderProfileID, actor.String(), authctx.HeaderSessionEpoch, "7")
@@ -60,7 +42,7 @@ func TestPublicLifecycleReadLiveACLAndFrozenMinimalOwnerProjection(t *testing.T)
 		require.NoError(t, err)
 		require.Equal(t, "private description", resp.Space.Description)
 	}
-	_, err = service.GetSpace(actorContext(outsider), req)
+	_, err := service.GetSpace(actorContext(outsider), req)
 	require.Equal(t, codes.NotFound, status.Code(err))
 	_, err = st.ReserveLifecycleSchedule(ctx, account, owner, 7, &spacev1.DeleteSpaceRequest{SpaceId: row.ID.String(), OperationId: uuid.NewString(), ConfirmationName: row.Name, Proof: "test-owned opaque proof"})
 	require.NoError(t, err)
