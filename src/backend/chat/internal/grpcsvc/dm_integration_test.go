@@ -3,7 +3,6 @@ package grpcsvc
 import (
 	"context"
 	"log/slog"
-	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,17 +13,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/test/bufconn"
 	"voice/backend/pkg/integrationtest"
 
 	"voice/backend/chat/internal/authctx"
 	"voice/backend/chat/internal/chatevents"
 	"voice/backend/chat/internal/store"
+	"voice/backend/chat/testcreate"
 	"voice/backend/pkg/privacy"
 
 	chatv1 "voice.app/voice/chat/v1"
@@ -176,9 +173,6 @@ func startChatGRPCTestServer(t *testing.T, pool *pgxpool.Pool, profiles UserProf
 	if blocks == nil {
 		blocks = stubBlocks{}
 	}
-	const bufSize = 1 << 20
-	lis := bufconn.Listen(bufSize)
-	srv := grpc.NewServer()
 	svc := &ChatGRPC{
 		DM:              &store.DMStore{Pool: pool},
 		Profiles:        profiles,
@@ -193,24 +187,7 @@ func startChatGRPCTestServer(t *testing.T, pool *pgxpool.Pool, profiles UserProf
 	if svc.Privacy == nil {
 		svc.Privacy = allowDMPrivacyChecker{}
 	}
-	chatv1.RegisterChatServiceServer(srv, svc)
-	go func() {
-		if err := srv.Serve(lis); err != nil {
-			t.Logf("grpc serve: %v", err)
-		}
-	}()
-	conn, err := grpc.NewClient("passthrough:///bufnet",
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-			return lis.Dial()
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	require.NoError(t, err)
-	cleanup := func() {
-		_ = conn.Close()
-		srv.Stop()
-	}
-	return chatv1.NewChatServiceClient(conn), cleanup
+	return testcreate.NewClient(t, svc)
 }
 
 // TestCreateDM_GetDM_NoFriendshipRequired documents PLAN app stack: DM without friendship; only blocks gate.

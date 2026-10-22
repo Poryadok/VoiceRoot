@@ -12,8 +12,8 @@ import (
 )
 
 type chatThreadSettings struct {
-	ThreadsEnabled      bool
-	AllowUserMainFeed   bool
+	ThreadsEnabled    bool
+	AllowUserMainFeed bool
 }
 
 func readChatThreadSettings(t *testing.T, ctx context.Context, pool *pgxpool.Pool, chatID string) chatThreadSettings {
@@ -64,11 +64,11 @@ func TestCreateChat_channelThreadDefaults(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	name := "Announcements"
-	spaceID := uuid.New().String()
+	// Standalone creation exercises the public RPC; Space defaults are checked
+	// on an explicit owner-store seed in TestCreateChannel_SpaceChannel_NoChatMembers.
 	resp, err := client.CreateChat(ctxFor(t, profiles, owner), &chatv1.CreateChatRequest{
-		Type:    chatv1.ChatType_CHAT_TYPE_CHANNEL,
-		Name:    &name,
-		SpaceId: &spaceID,
+		Type: chatv1.ChatType_CHAT_TYPE_CHANNEL,
+		Name: &name,
 	})
 	require.NoError(t, err)
 
