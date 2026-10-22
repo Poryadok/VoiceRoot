@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"voice/backend/chat/internal/chatcreation"
 	"voice/backend/chat/internal/chatevents"
 	"voice/backend/chat/internal/gisprincipal"
 	grpcsvc "voice/backend/chat/internal/grpcsvc"
@@ -479,7 +480,7 @@ func main() {
 			log.Fatalf("grpc listen: %v", err)
 		}
 		ordinaryOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
-		ordinaryOptions = append(ordinaryOptions, grpc.ChainUnaryInterceptor(roleoverrideprincipal.OrdinaryUnaryInterceptor("chat")))
+		ordinaryOptions = append(ordinaryOptions, grpc.ChainUnaryInterceptor(roleoverrideprincipal.OrdinaryUnaryInterceptor("chat"), chatcreation.OrdinaryCreateUnary()))
 		grpcSrv = grpc.NewServer(ordinaryOptions...)
 		listEnrichmentFailures := grpcsvc.NewListEnrichmentFailuresCounter(metricsReg)
 		chatv1.RegisterChatServiceServer(grpcSrv, &grpcsvc.ChatGRPC{

@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/chat/internal/chatcreation"
 	"voice/backend/pkg/correlation"
 	"voice/backend/pkg/natslog"
 )
@@ -163,6 +164,27 @@ func (p *JetStreamPublisher) PublishChatCreated(ctx context.Context, chatID, cha
 		},
 	}
 	return p.publishProto(ctx, subjectChatCreated, env)
+}
+
+// PublishChatCreatedBytes delivers the immutable composite effect and returns
+// only after JetStream's PubAck. Retries use its original stable event ID.
+func (p *JetStreamPublisher) PublishChatCreatedBytes(ctx context.Context, eventID string, wire []byte) error {
+	env := new(eventsv1.ChatStreamEvent)
+	if len(wire) == 0 || proto.Unmarshal(wire, env) != nil || chatcreation.HasUnknown(env) || env.EventId != eventID ||
+		env.GetChatCreated() == nil || env.OccurredAt == nil || env.OccurredAt.CheckValid() != nil {
+		return fmt.Errorf("invalid composite chat-created envelope")
+	}
+	if _, err := chatcreation.CanonicalID(eventID); err != nil {
+		return err
+	}
+	created := env.GetChatCreated()
+	if _, err := chatcreation.CanonicalID(created.ChatId); err != nil {
+		return err
+	}
+	if created.Type != "group" && created.Type != "channel" {
+		return fmt.Errorf("invalid composite chat-created type")
+	}
+	return p.publishBytesWithMsgID(ctx, subjectChatCreated, env, wire, eventID)
 }
 
 // PublishChatUpdated emits the fields changed by one successful UpdateChat request.

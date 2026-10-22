@@ -75,7 +75,7 @@ func (s *SpaceLifecycleStore) PrepareSpaceDeletionManifest(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := beginSpaceComposite(ctx, &DMStore{Pool: s.Pool})
 	if err != nil {
 		return nil, err
 	}
@@ -106,14 +106,50 @@ func (s *SpaceLifecycleStore) PrepareSpaceDeletionManifest(ctx context.Context, 
 
 	var currentGeneration int64
 	var state string
-	err = tx.QueryRow(ctx, `SELECT generation,state FROM chat_space_lifecycle_fences WHERE space_id=$1 FOR UPDATE`, spaceID).Scan(&currentGeneration, &state)
+	var draining bool
+	err = tx.QueryRow(ctx, `SELECT generation,state,draining_composites FROM chat_space_lifecycle_fences WHERE space_id=$1 FOR UPDATE`, spaceID).Scan(&currentGeneration, &state, &draining)
 	if errors.Is(err, pgx.ErrNoRows) {
 		currentGeneration, state = 0, "LIVE"
 	} else if err != nil {
 		return nil, err
 	}
-	if state != "LIVE" || req.GetScheduleGeneration() > math.MaxInt64 || int64(req.GetScheduleGeneration()) != currentGeneration+1 {
+	if req.GetScheduleGeneration() > math.MaxInt64 ||
+		(!draining && (state != "LIVE" || int64(req.GetScheduleGeneration()) != currentGeneration+1)) ||
+		(draining && (state != "FROZEN" || int64(req.GetScheduleGeneration()) != currentGeneration)) {
 		return nil, ErrSpaceLifecycleState
+	}
+	if draining {
+		var original []byte
+		if err = tx.QueryRow(ctx, "SELECT request_bytes FROM chat_space_composite_drains WHERE space_id=$1", spaceID).Scan(&original); err != nil {
+			return nil, err
+		}
+		if !bytes.Equal(original, requestBytes) {
+			return nil, ErrSpaceLifecycleConflict
+		}
+	}
+	var pending bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM chat_space_composite_operations WHERE space_id=$1 AND state='PREPARED')
+		OR EXISTS(SELECT 1 FROM chat_space_composite_outbox o JOIN chat_space_composite_operations p USING(operation_id)
+		WHERE p.space_id=$1 AND o.eligibility='HELD')`, spaceID).Scan(&pending); err != nil {
+		return nil, err
+	}
+	if pending {
+		if !draining {
+			if _, err = tx.Exec(ctx, `INSERT INTO chat_space_lifecycle_fences(space_id,deletion_operation_id,generation,state,schedule_generation,draining_composites)
+				VALUES($1,$2,$3,'FROZEN',$3,true) ON CONFLICT(space_id) DO UPDATE SET deletion_operation_id=$2,generation=$3,state='FROZEN',schedule_generation=$3,
+				draining_composites=true,manifest_id=NULL,manifest_sha256=NULL,manifest_item_count=NULL,
+				source_manifest_id=NULL,source_manifest_sha256=NULL,source_manifest_item_count=NULL,updated_at=clock_timestamp()`, spaceID, operationID, req.GetScheduleGeneration()); err != nil {
+				return nil, err
+			}
+			if _, err = tx.Exec(ctx, `INSERT INTO chat_space_composite_drains(space_id,deletion_operation_id,schedule_generation,request_bytes,request_sha256)
+				VALUES($1,$2,$3,$4,$5)`, spaceID, operationID, req.GetScheduleGeneration(), requestBytes, requestHash[:]); err != nil {
+				return nil, err
+			}
+		}
+		if err = tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		return nil, ErrSpaceCompositeDrain
 	}
 
 	rows, err := tx.Query(ctx, `SELECT id FROM chats WHERE space_id=$1 ORDER BY uuid_send(id)`, spaceID)
@@ -166,11 +202,17 @@ func (s *SpaceLifecycleStore) PrepareSpaceDeletionManifest(ctx context.Context, 
 		VALUES($1,$2,$3,'FROZEN',$3,$4,$5,$6,$4,$5,$6)
 		ON CONFLICT(space_id) DO UPDATE SET deletion_operation_id=EXCLUDED.deletion_operation_id,
 		generation=EXCLUDED.generation,state=EXCLUDED.state,schedule_generation=EXCLUDED.schedule_generation,
+		draining_composites=false,
 		manifest_id=EXCLUDED.manifest_id,manifest_sha256=EXCLUDED.manifest_sha256,manifest_item_count=EXCLUDED.manifest_item_count,
 		source_manifest_id=EXCLUDED.source_manifest_id,source_manifest_sha256=EXCLUDED.source_manifest_sha256,source_manifest_item_count=EXCLUDED.source_manifest_item_count,
 		updated_at=clock_timestamp()
-		WHERE chat_space_lifecycle_fences.state='LIVE' AND chat_space_lifecycle_fences.generation=$3-1`,
+		WHERE (chat_space_lifecycle_fences.state='LIVE' AND chat_space_lifecycle_fences.generation=$3-1)
+		OR (chat_space_lifecycle_fences.state='FROZEN' AND chat_space_lifecycle_fences.draining_composites AND chat_space_lifecycle_fences.generation=$3
+		AND chat_space_lifecycle_fences.deletion_operation_id=$2)`,
 		spaceID, operationID, req.GetScheduleGeneration(), manifestID, manifestHash[:], len(chatIDs)); err != nil {
+		return nil, err
+	}
+	if _, err = tx.Exec(ctx, "DELETE FROM chat_space_composite_drains WHERE space_id=$1", spaceID); err != nil {
 		return nil, err
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO chat_space_lifecycle_operations(
@@ -410,7 +452,7 @@ func (s *SpaceLifecycleStore) PurgeSpace(ctx context.Context, req *chatv1.PurgeS
 	if err != nil {
 		return nil, err
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := beginSpaceComposite(ctx, &DMStore{Pool: s.Pool})
 	if err != nil {
 		return nil, err
 	}
@@ -434,6 +476,9 @@ func (s *SpaceLifecycleStore) PurgeSpace(ctx context.Context, req *chatv1.PurgeS
 		return response, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+	if err = checkSpaceCompositePurgeReady(ctx, tx, spaceID); err != nil {
 		return nil, err
 	}
 	var state string
@@ -484,6 +529,11 @@ func (s *SpaceLifecycleStore) PurgeSpace(ctx context.Context, req *chatv1.PurgeS
 		return nil, err
 	}
 	completedAt = completedAt.UTC()
+	if _, err = tx.Exec(ctx, `UPDATE chat_space_composite_operations SET deletion_operation_id=$2,purge_generation=$3,
+		local_purge_completed_at=$4,full_evidence_expires_at=$4::timestamptz+interval '30 days'
+		WHERE space_id=$1 AND state<>'PREPARED' AND local_purge_completed_at IS NULL`, spaceID, operationID, purge.GetGeneration(), completedAt); err != nil {
+		return nil, err
+	}
 	for _, chatID := range ids {
 		eventID := uuid.NewSHA1(operationID, []byte(fmt.Sprintf("voice.chat.events.v1.ChatDeleted/%s/%d/%s", spaceID, purge.GetGeneration(), chatID)))
 		envelope := &eventsv1.ChatStreamEvent{
@@ -603,7 +653,7 @@ func (s *SpaceLifecycleStore) ValidateSpacePurgeRequest(ctx context.Context, req
 	if err != nil {
 		return err
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := beginSpaceComposite(ctx, &DMStore{Pool: s.Pool})
 	if err != nil {
 		return err
 	}
@@ -620,6 +670,9 @@ func (s *SpaceLifecycleStore) ValidateSpacePurgeRequest(ctx context.Context, req
 		return tx.Commit(ctx)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	if err = checkSpaceCompositePurgeReady(ctx, tx, spaceID); err != nil {
 		return err
 	}
 	var state string
