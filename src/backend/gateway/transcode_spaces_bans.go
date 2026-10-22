@@ -69,6 +69,9 @@ func readSpaceBanJSON(r *http.Request, req proto.Message, pathIDs map[string]str
 func writeSpaceBanError(w http.ResponseWriter, err error) {
 	st := status.Convert(err)
 	code := st.Code()
+	if code == codes.DeadlineExceeded {
+		code = codes.Unavailable
+	}
 	httpCode := grpcCodeToHTTP(code)
 	message := map[codes.Code]string{
 		codes.InvalidArgument: "invalid moderation request", codes.NotFound: "space not found",

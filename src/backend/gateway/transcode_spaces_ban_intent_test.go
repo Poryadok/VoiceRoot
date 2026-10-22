@@ -320,6 +320,7 @@ func TestSpaceBanIntentErrorMapping(t *testing.T) {
 		{"wrong reason", codes.FailedPrecondition, "voice.space.moderation.v1", "OTHER", 412},
 		{"wrong code", codes.PermissionDenied, "voice.space.moderation.v1", "INTENT_IN_PROGRESS", 403},
 		{"changed body", codes.AlreadyExists, "", "", 409}, {"unavailable", codes.Unavailable, "", "", 503},
+		{"transport timeout", codes.DeadlineExceeded, "", "", 503},
 	} {
 		for _, method := range []string{http.MethodPost, http.MethodDelete} {
 			t.Run(method+"/"+tc.name, func(t *testing.T) {
@@ -343,7 +344,11 @@ func TestSpaceBanIntentErrorMapping(t *testing.T) {
 				require.NotContains(t, w.Body.String(), "private backend detail")
 				var response map[string]string
 				require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
-				require.Equal(t, grpcCodeToErrorCode(tc.code), response["error_code"])
+				expectedCode := tc.code
+				if expectedCode == codes.DeadlineExceeded {
+					expectedCode = codes.Unavailable
+				}
+				require.Equal(t, grpcCodeToErrorCode(expectedCode), response["error_code"])
 			})
 		}
 	}
@@ -353,4 +358,7 @@ func TestSpaceBanIntentErrorMapping(t *testing.T) {
 	w := httptest.NewRecorder()
 	writeGRPCError(w, st.Err())
 	require.Equal(t, 412, w.Code)
+	w = httptest.NewRecorder()
+	writeGRPCError(w, status.Error(codes.DeadlineExceeded, "unrelated timeout"))
+	require.Equal(t, 500, w.Code, "moderation normalization must not alter the global mapper")
 }
