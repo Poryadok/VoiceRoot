@@ -1,0 +1,4 @@
+<clickhouse>
+    <max_server_memory_usage_to_ram_ratio>0.8</max_server_memory_usage_to_ram_ratio>
+    <logger><console>1</console><console_log_level>error</console_log_level></logger>
+</clickhouse>

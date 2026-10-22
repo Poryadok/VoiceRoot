@@ -96,6 +96,39 @@ request и PVC не меняются. При неопределённом apply 
 TT claim необходимо удерживать до независимой проверки; TT сам по себе не
 останавливает внешние kubectl-процессы. Готовность rollout не заменяет проверку
 стабильности restartCount/OOM, доступа к ClickHouse и прикладным таблицам.
+Если новый pod уже на 4Gi, но продолжает OOMKilled, допускается отдельный
+DEV-only пробный `scripts/dev/mitigate_clickhouse_memory.py`. Он требует точные
+UID удержанного updater lock, StatefulSet, текущего pod и PVC вместе с
+operation marker. Без `--apply` команда проверяет цель и server-side dry-run;
+после свежего TT claim/readback `--apply` добавляет только ConfigMap с
+`max_server_memory_usage_to_ram_ratio=0.8` и read-only single-file mount в
+`config.d`. Штатный файл образа в этом каталоге сохраняется, лимит контейнера
+остаётся 4Gi. Скрипт требует Ready на новой revision, тот же image/PVC,
+эффективный config `0.8` и startup log с вычисленным пределом 3.20GiB перед
+снятием updater lock. При OOM или неопределённом результате lock и TT окно
+сохраняются; не удалять pod и не менять память/таблицы вне reviewed flow.
+Если независимая проверка затем обнаружила OOM у того же pod, отдельная
+диагностическая процедура `scripts/dev/expose_clickhouse_errors.py` может
+направить сообщения уровня error в stdout. Она сохраняет ratio `0.8`, 4Gi,
+образ и PVC, меняет только существующий DEV ConfigMap под UID/RV CAS и
+пересоздаёт единственный pinned OOM pod через graceful DELETE с UID/RV
+preconditions после server-side dry-run. `subPath` требует новой инкарнации
+pod для чтения файла. Процедура атомарно занимает общий updater lock и всегда
+оставляет его для сверки результата; нельзя считать это исправлением OOM или
+освобождать TT окно до фактической проверки логов и нового pod.
+Если UID pod меняется между preview и apply без установленного источника,
+вариант `--config-only` не привязывается к pod: он сверяет ту же StatefulSet,
+ConfigMap, PVC/PV и quota, затем только CAS-обновляет существующий ConfigMap
+под новым updater lock. Он не читает, не изменяет и не удаляет pod/StatefulSet.
+Новый pod получит fragment лишь при следующем естественном пересоздании;
+сохранить lock и TT окно до readback логов и состояния, не считать патч
+исправлением OOM.
+Если старый pod с `subPath` остаётся после обновления ConfigMap, отдельный
+`--replace-after-config` проверяет UID/RV/operation сохранённого updater lock,
+текущую console-конфигурацию, exact OOM pod/owner/revision, PVC/PV и quota.
+После server dry-run он делает graceful DELETE только pod с UID/RV preconditions;
+ConfigMap/StatefulSet/lock не изменяет. После появления нового pod немедленно
+сверить stdout и те же PVC/PV, сохраняя окно и lock при сомнительном результате.
 
 Четыре независимых static PV имеют storage class `voice-dev-local` и reclaim
 policy `Retain`:
