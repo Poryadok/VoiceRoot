@@ -5,6 +5,7 @@ provenance failure has exit2 and can never stand in for the assertion RED(exit1)
 Execution requires independent CODE review and the caller's explicit test stage.
 """
 import hashlib
+import errno
 import importlib.util
 import json
 import os
@@ -18,6 +19,9 @@ import sys
 import tempfile
 import tarfile
 import zipfile
+
+OPAQUE_UTILITY_PREFIX = b'F13_OPAQUE_UTILITY_OBSERVATION_v1 '
+OPAQUE_UTILITY_NAMESPACE = b'F13_OPAQUE_UTILITY_'
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / 'scripts/ci/testdata/f13-exact-j-547'
@@ -187,6 +191,329 @@ def emit_utility_view_diagnostic(base, actual, expected, entry_count, entry_name
         sys.stderr.write(line + '\n')
     except Exception:
         pass  # Output failure must not mask the original require/SETUP2 below.
+
+    # Only the original source-checked inner invocation carries this binding.
+    # Unknown names/paths remain opaque here; new disclosure belongs to outer.
+    try:
+        identity = json.loads(os.environ['F13_HARNESS_IDENTITY'])
+        raw = encode_opaque_observation(opaque_utility_observation(
+            base, actual, expected, entry_count, entry_names, identity))
+        sys.stderr.write(raw.decode('ascii'))
+    except Exception:
+        pass
+
+
+def diagnostic_json(value):
+    return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True).encode('ascii')
+
+
+def diagnostic_units(value):
+    """Count metadata/entry/mapping/closure/token objects, not just tool rows."""
+    if isinstance(value, dict):
+        return 1 + sum(diagnostic_units(item) for item in value.values())
+    if isinstance(value, list):
+        return sum(diagnostic_units(item) for item in value)
+    return 0
+
+
+def opaque_utility_token(value):
+    raw = value.encode('utf-8', errors='surrogatepass')
+    return dict(sha256=sha(raw), utf8_bytes=len(raw))
+
+
+def public_catalog_from_lists(lists):
+    """Pure bounded parser; filesystem authority is checked by the reader."""
+    paths, total, count = set(), 0, 0
+    for raw in lists:
+        count += 1
+        total += len(raw)
+        if count > 4096 or len(raw) > 1048576 or total > 33554432 or b'\0' in raw:
+            raise ValueError('catalog_bound')
+        text = raw.decode('utf-8')
+        if raw and not raw.endswith(b'\n'):
+            raise ValueError('catalog_truncated')
+        for path in text.split('\n'):
+            if re.fullmatch(r'/(?:usr/bin|bin|usr/sbin|sbin)/[A-Za-z0-9][A-Za-z0-9+_.-]{0,95}', path):
+                paths.add(path)
+        if len(paths) > 8192:
+            raise ValueError('catalog_bound')
+    result = tuple(sorted(paths))
+    if len(('\n'.join(result) + ('\n' if result else '')).encode('ascii')) > 131072:
+        raise ValueError('catalog_bound')
+    return result
+
+
+def read_public_utility_catalog():
+    """Observed installed-package catalog; no caller path or exception output."""
+    descriptors, snapshots, files = [], [], []
+    def checked(fd, directory):
+        info = os.fstat(fd)
+        if info.st_uid != 0 or info.st_mode & 0o022 or not (stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode)):
+            raise ValueError('catalog_permissions')
+        # Unknown ACL semantics/errors fail closed; do not infer absent ACL.
+        for attribute in ('system.posix_acl_access', 'system.posix_acl_default') if directory else ('system.posix_acl_access',):
+            try:
+                os.getxattr(fd, attribute)
+            except OSError as error:
+                if error.errno != errno.ENODATA:
+                    raise
+            else:
+                raise ValueError('catalog_acl')
+        return (info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_gid,
+                info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+    try:
+        flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+        fd = os.open('/', flags | os.O_DIRECTORY)
+        descriptors.append(fd)
+        snapshots.append(checked(fd, True))
+        for name in ('var', 'lib', 'dpkg', 'info'):
+            fd = os.open(name, flags | os.O_DIRECTORY, dir_fd=fd)
+            descriptors.append(fd)
+            snapshots.append(checked(fd, True))
+        names = []
+        with os.scandir(fd) as entries:
+            for entry in entries:
+                names.append(entry.name)
+                if len(names) > 4096:
+                    raise ValueError('catalog_bound')
+        def lists():
+            total = 0
+            for name in sorted(names):
+                if not name.endswith('.list'):
+                    continue
+                # NONBLOCK avoids blocking a raced FIFO before fstat rejection.
+                item = os.open(name, flags | os.O_NONBLOCK, dir_fd=fd)
+                files.append((item, None))
+                before = checked(item, False)
+                files[-1] = (item, before)
+                chunks, size = [], 0
+                while size <= 1048576 and total + size <= 33554432:
+                    chunk = os.read(item, min(65536, 1048577 - size, 33554433 - total - size))
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                    size += len(chunk)
+                total += size
+                if size > 1048576 or total > 33554432 or before != checked(item, False):
+                    raise ValueError('catalog_bound_or_changed')
+                yield b''.join(chunks)
+        result = public_catalog_from_lists(lists())
+        if any(before != checked(item, True) for item, before in zip(descriptors, snapshots)):
+            raise ValueError('catalog_changed')
+        if any(before != checked(item, False) for item, before in files):
+            raise ValueError('catalog_changed')
+        return result
+    except Exception:
+        return None
+    finally:
+        for fd, _ in reversed(files):
+            os.close(fd)
+        for fd in reversed(descriptors):
+            os.close(fd)
+
+
+def public_diagnostic_context(catalog, actual, identity):
+    """Private same-run outer record, never populated from candidate fields."""
+    canonical = ('\n'.join(catalog) + ('\n' if catalog else '')).encode('ascii')
+    if len(catalog) > 8192 or len(canonical) > 131072 or len(actual) > 8192 or len(diagnostic_json(actual)) > 2097152:
+        raise ValueError('snapshot_bound')
+    if tuple(sorted(set(catalog))) != tuple(catalog) or public_catalog_from_lists([canonical]) != tuple(catalog):
+        raise ValueError('catalog_schema')
+    paths, names = {}, {}
+    def add(index, text):
+        token = opaque_utility_token(text)
+        key = (token['sha256'], token['utf8_bytes'])
+        index.setdefault(key, set()).add(text)
+    for path in catalog:
+        add(paths, path)
+        add(names, path.rsplit('/', 1)[1])
+    # Preserve only the already-reviewed fixed allowlist's exact disclosures.
+    for name in UTILITY_DIAGNOSTIC_NAMES:
+        add(names, name)
+        for root in UTILITY_DIAGNOSTIC_ROOTS:
+            add(paths, root + '/' + name)
+    return dict(nonce=os.urandom(32).hex(), source_sha256=sha(diagnostic_json(identity)),
+                catalog_sha256=sha(canonical), catalog_bytes=len(canonical), catalog_count=len(catalog),
+                actual_sha256=sha(diagnostic_json(actual)), actual_count=len(actual), paths=paths, names=names)
+
+
+def prepare_public_diagnostic_context(root, identity):
+    try:
+        catalog = read_public_utility_catalog()
+        if catalog is None:
+            return None
+        base = root / 'historical-git' / 'util'
+        actual = {}
+        encoded_bytes = 2
+        for count, path in enumerate(base.iterdir(), 1):
+            if count > 8192:
+                return None
+            if path.is_symlink():
+                target = str(path.readlink())
+                encoded_bytes += len(diagnostic_json({path.name: target})) - 2 + bool(actual)
+                if encoded_bytes > 2097152:
+                    return None
+                actual[path.name] = target
+        return public_diagnostic_context(catalog, actual, identity)
+    except Exception:
+        return None
+
+
+def opaque_utility_closure(value):
+    edges, visited, current = [], set(), value
+    for _ in range(8):
+        if current in visited:
+            return dict(edges=edges, status='loop')
+        visited.add(current)
+        if not current.startswith('/') or len(current) > 4096 or '\0' in current:
+            return dict(edges=edges, status='not_inspected')
+        try:
+            info = os.lstat(current)
+            if not stat.S_ISLNK(info.st_mode):
+                return dict(edges=edges, status='complete')
+            target = os.readlink(current)
+        except OSError:
+            return dict(edges=edges, status='unavailable')
+        edges.append(opaque_utility_token(target))
+        current = target if target.startswith('/') else os.path.dirname(current) + '/' + target
+    return dict(edges=edges, status='limit')
+
+
+def opaque_utility_observation(base, actual, expected, entry_count, entry_names, identity):
+    keys = set(expected) if expected is not None else set()
+    missing = keys - set(actual) if expected is not None else set()
+    extra = set(actual) - keys if expected is not None else set()
+    changed = {key for key in keys & set(actual) if expected[key] != actual[key]}
+    unmatched = set(entry_names) - set(actual)
+    differences = sorted(missing | extra | changed | unmatched)
+    result = dict(source_sha256=sha(diagnostic_json(identity)), actual_sha256=sha(diagnostic_json(actual)),
+                  actual_count=len(actual), entry_count=entry_count,
+                  expected_status='evaluated' if expected is not None else 'not_evaluated_short_circuit',
+                  entries=[], omitted=len(differences))
+    units = 1  # Root metadata is included in the global structural budget.
+    for key in differences:
+        item = dict(tool=opaque_utility_token(key), difference='missing' if key in missing else
+                    'extra' if key in extra else 'changed' if key in changed else 'not_in_actual_symlink_snapshot')
+        for label, mapping in (('actual', actual), ('expected', expected)):
+            if mapping is not None and key in mapping:
+                closure = opaque_utility_closure(mapping[key])
+                item[label] = dict(target=opaque_utility_token(mapping[key]), closure=closure)
+        size = diagnostic_units(item)
+        if units + size > 32:
+            break
+        trial = dict(result, entries=result['entries'] + [item], omitted=result['omitted'] - 1)
+        if len(OPAQUE_UTILITY_PREFIX) + len(diagnostic_json(trial)) + 1 > 16384:
+            break
+        result = trial
+        units += size
+    return result
+
+
+def encode_opaque_observation(value):
+    raw = OPAQUE_UTILITY_PREFIX + diagnostic_json(value) + b'\n'
+    if len(raw) > 16384:
+        raise ValueError('observation_bound')
+    return raw
+
+
+def resolve_owned_utility_output(stdout, stderr, context):
+    """Called only on the owning invocation's captured result, before forwarding."""
+    candidates = []
+    def suppress(raw):
+        kept = []
+        for line in raw.splitlines(keepends=True):
+            if line.startswith(OPAQUE_UTILITY_NAMESPACE):
+                candidates.append(line)
+            else:
+                kept.append(line)
+        return b''.join(kept)
+    stdout, stderr = suppress(stdout), suppress(stderr)
+    try:
+        if context is None or len(candidates) != 1:
+            return stdout, stderr, None
+        raw = candidates[0]
+        if not raw.startswith(OPAQUE_UTILITY_PREFIX) or not raw.endswith(b'\n') or len(raw) > 16384:
+            raise ValueError('framing')
+        def pairs(items):
+            result = {}
+            for key, value in items:
+                if key in result:
+                    raise ValueError('duplicate_key')
+                result[key] = value
+            return result
+        value = json.loads(raw[len(OPAQUE_UTILITY_PREFIX):].decode('ascii'), object_pairs_hook=pairs)
+        if encode_opaque_observation(value) != raw:
+            raise ValueError('noncanonical_observation')
+        if diagnostic_units(value) > 32:
+            raise ValueError('entry_bound')
+        def exact(obj, keys):
+            if not isinstance(obj, dict) or set(obj) != set(keys):
+                raise ValueError('schema')
+        def number(number, limit):
+            if type(number) is not int or not 0 <= number <= limit:
+                raise ValueError('number')
+        def digest(text):
+            if not isinstance(text, str) or not re.fullmatch('[0-9a-f]{64}', text):
+                raise ValueError('digest')
+        exact(value, ('source_sha256', 'actual_sha256', 'actual_count', 'entry_count', 'expected_status', 'entries', 'omitted'))
+        for key in ('source_sha256', 'actual_sha256'):
+            digest(value[key])
+            if value[key] != context[key]:
+                raise ValueError('binding')
+        for key in ('actual_count', 'entry_count', 'omitted'):
+            number(value[key], 8192)
+        if value['actual_count'] != context['actual_count'] or value['entry_count'] < value['actual_count']:
+            raise ValueError('binding')
+        if value['expected_status'] not in ('evaluated', 'not_evaluated_short_circuit') or not isinstance(value['entries'], list):
+            raise ValueError('schema')
+        units = 0
+        def token(item, name=False):
+            nonlocal units
+            exact(item, ('sha256', 'utf8_bytes'))
+            digest(item['sha256'])
+            number(item['utf8_bytes'], 16777216)
+            units += 1
+            if units > 32:
+                raise ValueError('entry_bound')
+            result = dict(item)
+            matches = context['names' if name else 'paths'].get((item['sha256'], item['utf8_bytes']), set())
+            if len(matches) == 1:
+                result['basename' if name else 'path'] = next(iter(matches))
+                result['qualification'] = 'OUTER_CATALOG_RESOLUTION_OF_CHILD_TOKEN'
+            return result
+        entries = []
+        for entry in value['entries']:
+            if not isinstance(entry, dict) or not {'tool', 'difference'} <= set(entry) or not set(entry) <= {'tool', 'difference', 'actual', 'expected'}:
+                raise ValueError('schema')
+            if entry['difference'] not in ('missing', 'extra', 'changed', 'not_in_actual_symlink_snapshot'):
+                raise ValueError('difference')
+            result = dict(tool=token(entry['tool'], True), difference=entry['difference'])
+            for label in ('actual', 'expected'):
+                if label in entry:
+                    data = entry[label]
+                    exact(data, ('target', 'closure'))
+                    closure = data['closure']
+                    exact(closure, ('edges', 'status'))
+                    if closure['status'] not in ('loop', 'complete', 'not_inspected', 'unavailable', 'limit') or not isinstance(closure['edges'], list) or len(closure['edges']) > 8:
+                        raise ValueError('closure')
+                    result[label] = dict(target=token(data['target']), closure=dict(
+                        edges=[token(edge) for edge in closure['edges']], status=closure['status'],
+                        observation='subsequent_metadata_not_predicate_snapshot'))
+            entries.append(result)
+        receipt = dict(kind='F13_PUBLIC_UTILITY_OUTER_RESOLUTION_RECEIPT_v1', origin='owned_outer_child',
+                       nonce=context['nonce'], source_sha256=context['source_sha256'],
+                       catalog_sha256=context['catalog_sha256'], catalog_bytes=context['catalog_bytes'], catalog_count=context['catalog_count'],
+                       post_materialization_actual_sha256=context['actual_sha256'], actual_count=context['actual_count'],
+                       observation_sha256=sha(raw), expected_status=value['expected_status'], entry_count=value['entry_count'],
+                       entries=entries, omitted=value['omitted'])
+        while (len(diagnostic_json(receipt)) + 1 > 16384 or diagnostic_units(receipt) > 32) and receipt['entries']:
+            receipt['entries'].pop()
+            receipt['omitted'] += 1
+        if len(diagnostic_json(receipt)) + 1 > 16384 or diagnostic_units(receipt) > 32:
+            raise ValueError('receipt_bound')
+        return stdout, stderr, receipt
+    except Exception:
+        return stdout, stderr, None
 
 
 def verify_pinned_git(root, runtime=True):
@@ -475,6 +802,7 @@ def namespace_main():
         root = Path(folder) / 'root'
         root.mkdir()
         materialize(root)
+        diagnostic_context = prepare_public_diagnostic_context(root, json.loads(harness_identity))
         for name in ('repo', 'harness', 'tmp', 'dev', 'proc'):
             (root / name).mkdir(exist_ok=True)
         # The runner's already-installed toolchain is mounted read-only. No pull,
@@ -502,10 +830,16 @@ def namespace_main():
         # User/mount/network/pid isolation is fixture infrastructure only. There
         # is no listener, published port, engine start, DEV or STAGING operation.
         result = subprocess.run(['sudo', '-n', 'unshare', '--mount', '--net', '--pid', '--fork', 'bash', '-c', script], capture_output=True)
-        sys.stdout.buffer.write(result.stdout)
-        sys.stderr.buffer.write(result.stderr)
+        stdout, stderr, public_receipt = resolve_owned_utility_output(result.stdout, result.stderr, diagnostic_context)
+        sys.stdout.buffer.write(stdout)
+        sys.stderr.buffer.write(stderr)
+        if public_receipt is not None:
+            try:
+                sys.stderr.buffer.write(diagnostic_json(public_receipt) + b'\n')
+            except Exception:
+                pass  # Optional output never changes the original guard result.
         receipts = []
-        for line in result.stdout.splitlines():
+        for line in stdout.splitlines():
             try:
                 value = json.loads(line)
             except ValueError:

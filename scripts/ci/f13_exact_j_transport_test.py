@@ -15,6 +15,240 @@ import zipfile
 import f13_exact_j_historical_red_test as harness
 
 
+class OuterPublicResolution(unittest.TestCase):
+    """Synthetic diagnostic/privacy proof, never actual F13 guard RED."""
+    def setUp(self):
+        self.identity = {'commit': 'a' * 40, 'files': {'driver': 'b' * 64}}
+        self.actual = {'publictool': '/usr/bin/publictool', 'private': '/private/SECRET'}
+        self.catalog = ('/usr/bin/publictool',)
+        self.context = harness.public_diagnostic_context(self.catalog, self.actual, self.identity)
+
+    def observation(self):
+        return harness.opaque_utility_observation(Path('/nonexistent'), self.actual, {}, 2,
+                                                 tuple(self.actual), self.identity)
+
+    def test_public_basename_never_qualifies_private_target(self):
+        self.actual = {'publictool': '/private/SECRET'}
+        context = harness.public_diagnostic_context(self.catalog, self.actual, self.identity)
+        observation = self.observation()
+        raw = harness.encode_opaque_observation(observation)
+        out, err, receipt = harness.resolve_owned_utility_output(b'original\n', raw, context)
+        self.assertEqual((out, err), (b'original\n', b''))
+        self.assertIsNotNone(receipt)
+        self.assertEqual(receipt['entries'][0]['tool']['basename'], 'publictool')
+        self.assertNotIn('path', receipt['entries'][0]['actual']['target'])
+        self.assertNotIn('SECRET', json.dumps(receipt))
+
+    def test_cached_map_source_and_union_duplicate_reject(self):
+        raw = harness.encode_opaque_observation(self.observation())
+        for stdout, stderr in ((raw, raw), (b'', raw + raw)):
+            out, err, receipt = harness.resolve_owned_utility_output(stdout, stderr, self.context)
+            self.assertEqual((out, err, receipt), (b'', b'', None))
+        for field in ('actual_sha256', 'source_sha256'):
+            candidate = self.observation()
+            candidate[field] = '0' * 64
+            _, _, receipt = harness.resolve_owned_utility_output(b'', harness.encode_opaque_observation(candidate), self.context)
+            self.assertIsNone(receipt)
+
+    def test_both_stream_malformed_prefix_suppression_preserves_unrelated_bytes(self):
+        raw = b'F13_OPAQUE_UTILITY_BROKEN SECRET\r\n'
+        out, err, receipt = harness.resolve_owned_utility_output(b'guard\r\n' + raw, b'err\n' + raw[:-2], self.context)
+        self.assertEqual((out, err, receipt), (b'guard\r\n', b'err\n', None))
+
+    def test_opaque_child_never_emits_new_raw_names_or_targets(self):
+        raw = harness.encode_opaque_observation(self.observation())
+        self.assertNotIn(b'publictool', raw)
+        self.assertNotIn(b'SECRET', raw)
+        self.assertLessEqual(len(raw), 16384)
+
+    def test_namespace_owner_integrates_resolution_without_stdin_or_exec_growth(self):
+        import types
+        outputs = (io.BytesIO(), io.BytesIO())
+        calls = []
+        def command(args):
+            if args[-2:] == ['rev-parse', 'HEAD']:
+                return b'a' * 40 + b'\n'
+            return (harness.ROOT / args[-1].split(':', 1)[1]).read_bytes()
+        def materialize(root):
+            (root / 'historical-git/util').mkdir(parents=True)
+            (root / 'historical-git/util/publictool').symlink_to('/usr/bin/publictool')
+        def spawn(args, **kwargs):
+            calls.append((args, kwargs))
+            self.assertEqual(set(kwargs), {'capture_output'})
+            self.assertTrue(kwargs['capture_output'])
+            identity = dict(commit='a' * 40, files={name: harness.sha((harness.ROOT / name).read_bytes())
+                                                  for name in harness.HARNESS_SOURCE_PATHS})
+            observation = harness.opaque_utility_observation(Path('/absent'), {'publictool': '/usr/bin/publictool'}, {}, 1,
+                                                            ('publictool',), identity)
+            guard = b'{"kind":"FAITHFUL_HISTORICAL_SHARED_GUARD","guard_observed":1,"contract_expected":0}\n'
+            return subprocess.CompletedProcess(args, 1, guard, harness.encode_opaque_observation(observation))
+        with mock.patch.object(harness.os, 'geteuid', return_value=1000), \
+             mock.patch.object(harness.shutil, 'which', return_value='/trusted/tool'), \
+             mock.patch.object(harness, 'run', side_effect=command), \
+             mock.patch.object(harness, 'materialize', side_effect=materialize), \
+             mock.patch.object(harness, 'read_public_utility_catalog', return_value=self.catalog), \
+             mock.patch.object(harness.subprocess, 'run', side_effect=spawn), \
+             mock.patch.object(harness.sys, 'stdout', types.SimpleNamespace(buffer=outputs[0])), \
+             mock.patch.object(harness.sys, 'stderr', types.SimpleNamespace(buffer=outputs[1])):
+            self.assertEqual(harness.namespace_main(), 1)
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn('F13_OPAQUE', calls[0][0][-1])
+        self.assertNotIn('F13_PUBLIC', calls[0][0][-1])
+        self.assertIn(b'F13_PUBLIC_UTILITY_OUTER_RESOLUTION_RECEIPT_v1', outputs[1].getvalue())
+        self.assertNotIn(b'F13_OPAQUE_UTILITY_', outputs[1].getvalue())
+
+    def test_catalog_parser_canonical_lexical_and_bounds(self):
+        self.assertEqual(harness.public_catalog_from_lists([b'/usr/bin/z\n/bin/a\n/usr/bin/../private\n/usr/local/bin/secret\n']),
+                         ('/bin/a', '/usr/bin/z'))
+        for raw in (b'/usr/bin/x', b'/usr/bin/x\0\n', b'x' * 1048577):
+            with self.assertRaises((ValueError, UnicodeError)):
+                harness.public_catalog_from_lists([raw])
+        with self.assertRaises(ValueError):
+            harness.public_catalog_from_lists([b''] * 4097)
+
+    def test_schema_cleartext_duplicate_keys_types_and_relative_edges_reject(self):
+        value = self.observation()
+        for mutate in (lambda x: x.update(entry_count=True), lambda x: x.update(private='/SECRET'),
+                       lambda x: x['entries'][0]['tool'].update(basename='SECRET')):
+            candidate = json.loads(json.dumps(value))
+            mutate(candidate)
+            self.assertIsNone(harness.resolve_owned_utility_output(b'', harness.encode_opaque_observation(candidate), self.context)[2])
+        raw = harness.encode_opaque_observation(value).replace(b'{', b'{"actual_count":2,', 1)
+        self.assertIsNone(harness.resolve_owned_utility_output(b'', raw, self.context)[2])
+
+    def test_real_installed_catalog_or_closed_unavailability_and_acl_errors(self):
+        catalog = harness.read_public_utility_catalog()
+        if catalog is not None:
+            self.assertIn('/usr/bin/dpkg', catalog)
+            self.assertEqual(catalog, tuple(sorted(set(catalog))))
+        with mock.patch.object(harness.os, 'getxattr', return_value=b'extended_acl'):
+            self.assertIsNone(harness.read_public_utility_catalog())
+        with mock.patch.object(harness.os, 'getxattr', side_effect=OSError(13, 'SECRET')):
+            self.assertIsNone(harness.read_public_utility_catalog())
+
+    def test_each_closure_edge_relative_unknown_and_surrogate_tokens(self):
+        with tempfile.TemporaryDirectory() as folder:
+            private = Path(folder) / 'PRIVATE_SECRET'
+            private.write_bytes(b'contents not read')
+            alias = Path(folder) / 'alias'
+            alias.symlink_to(private)
+            relative = Path(folder) / 'relative'
+            relative.symlink_to('PRIVATE_SECRET')
+            self.assertEqual(harness.opaque_utility_closure(str(alias))['edges'], [harness.opaque_utility_token(str(private))])
+            self.assertEqual(harness.opaque_utility_closure(str(relative))['edges'], [harness.opaque_utility_token('PRIVATE_SECRET')])
+            self.assertNotIn('PRIVATE_SECRET', json.dumps(harness.opaque_utility_closure(str(relative))))
+        candidate = self.observation()
+        candidate['entries'][0]['actual']['closure'] = dict(edges=[harness.opaque_utility_token('publictool'),
+            harness.opaque_utility_token('/usr/bin/publictool')], status='complete')
+        receipt = harness.resolve_owned_utility_output(b'', harness.encode_opaque_observation(candidate), self.context)[2]
+        edges = receipt['entries'][0]['actual']['closure']['edges']
+        self.assertNotIn('path', edges[0], 'basename must never qualify a relative edge')
+        self.assertEqual(edges[1]['path'], '/usr/bin/publictool')
+        token = harness.opaque_utility_token('\udcff')
+        self.assertEqual(token['utf8_bytes'], 3)
+        self.assertEqual(token, harness.utility_diagnostic_token('\udcff'))
+
+    def test_catalog_canonical_max_and_plus_one_and_snapshot_bounds(self):
+        # 8192 direct-child public paths with <=131072 canonical bytes.
+        raw = b''.join(('/bin/a%04x\n' % i).encode() for i in range(8192))
+        self.assertEqual(len(harness.public_catalog_from_lists([raw])), 8192)
+        with self.assertRaises(ValueError):
+            harness.public_catalog_from_lists([raw + b'/bin/new\n'])
+        self.assertEqual(harness.public_catalog_from_lists([b'/usr/bin/publictool\r\n']), ())
+        with self.assertRaises(ValueError):
+            harness.public_diagnostic_context(self.catalog, {str(i): 'x' for i in range(8193)}, self.identity)
+        with self.assertRaises(ValueError):
+            harness.public_diagnostic_context(self.catalog, {'x': 'x' * 2097153}, self.identity)
+        exact = b''.join(('/bin/a%09x\n' % i).encode() for i in range(8192))
+        self.assertEqual(len(exact), 131072)
+        self.assertEqual(len(harness.public_catalog_from_lists([exact])), 8192)
+        with self.assertRaises(ValueError):
+            harness.public_catalog_from_lists([exact.replace(b'/bin/a000000000\n', b'/bin/aa000000000\n')])
+        file_max = b'x' * 1048575 + b'\n'
+        self.assertEqual(harness.public_catalog_from_lists([file_max] * 32), ())
+        with self.assertRaises(ValueError):
+            harness.public_catalog_from_lists([file_max] * 32 + [b'\n'])
+
+    def test_candidate_and_expanded_receipt_token_budgets_and_loop(self):
+        with tempfile.TemporaryDirectory() as folder:
+            links = [Path(folder) / str(i) for i in range(10)]
+            for index in range(9):
+                links[index].symlink_to(links[index + 1])
+            self.assertEqual(harness.opaque_utility_closure(str(links[0]))['status'], 'limit')
+            links[9].symlink_to(links[8])
+            self.assertEqual(harness.opaque_utility_closure(str(links[8]))['status'], 'loop')
+        actual = {'unknown' + str(i): '/private/' + str(i) for i in range(40)}
+        candidate = harness.opaque_utility_observation(Path('/absent'), actual, {}, 40, tuple(actual), self.identity)
+        self.assertEqual(len(candidate['entries']) + candidate['omitted'], 40)
+        self.assertGreater(candidate['omitted'], 0)
+        raw = harness.encode_opaque_observation(candidate)
+        context = harness.public_diagnostic_context(self.catalog, actual, self.identity)
+        receipt = harness.resolve_owned_utility_output(b'', raw, context)[2]
+        self.assertIsNotNone(receipt)
+        self.assertLessEqual(len(harness.diagnostic_json(receipt)) + 1, 16384)
+        # Structural metadata now also consumes global32; force the independent
+        # byte bound regardless of the smaller admitted original row count.
+        candidate['entries'] *= 100
+        with self.assertRaises(ValueError):
+            harness.encode_opaque_observation(candidate)
+
+    def test_catalog_unavailability_context_failure_and_token_ambiguity_omit(self):
+        with mock.patch.object(harness, 'read_public_utility_catalog', return_value=None):
+            self.assertIsNone(harness.prepare_public_diagnostic_context(Path('/absent'), self.identity))
+        value = self.observation()
+        key = harness.opaque_utility_token('/usr/bin/publictool')
+        self.context['paths'][(key['sha256'], key['utf8_bytes'])] = {'/usr/bin/publictool', '/bin/another'}
+        receipt = harness.resolve_owned_utility_output(b'', harness.encode_opaque_observation(value), self.context)[2]
+        self.assertNotIn('path', receipt['entries'][1]['actual']['target'] if receipt['entries'][1]['tool'].get('basename') == 'publictool'
+                         else receipt['entries'][0]['actual']['target'])
+
+    def test_expanded_receipt_recounts_bytes_and_extra_tokens_reject(self):
+        paths = tuple('/usr/bin/a' + str(i).zfill(3) + 'x' * 80 for i in range(60))
+        actual = {path.rsplit('/', 1)[1]: path for path in paths}
+        context = harness.public_diagnostic_context(paths, actual, self.identity)
+        observation = harness.opaque_utility_observation(Path('/absent'), actual, {}, len(actual), tuple(actual), self.identity)
+        raw = harness.encode_opaque_observation(observation)
+        receipt = harness.resolve_owned_utility_output(b'', raw, context)[2]
+        self.assertIsNotNone(receipt)
+        self.assertLessEqual(len(harness.diagnostic_json(receipt)) + 1, 16384)
+        self.assertEqual(len(receipt['entries']) + receipt['omitted'], 60)
+        many = self.observation()
+        many['entries'] = [many['entries'][0]] * 17  # 2 tokens per entry exceeds global32.
+        self.assertIsNone(harness.resolve_owned_utility_output(b'', harness.encode_opaque_observation(many), self.context)[2])
+
+    def test_original_mismatch_seam_emits_opaque_cached_short_circuit_once(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            base = harness.materialize_pinned_git(root)
+            (base / 'util').chmod(0o755)
+            (base / 'util/publictool').write_bytes(b'content must not be read')
+            (base / 'util').chmod(0o555)
+            actual = {p.name: str(p.readlink()) for p in (base / 'util').iterdir() if p.is_symlink()}
+            context = harness.public_diagnostic_context(self.catalog, actual, self.identity)
+            output = io.StringIO()
+            with mock.patch.dict(os.environ, {'F13_HARNESS_IDENTITY': json.dumps(self.identity)}), \
+                 mock.patch.object(harness, 'expected_utilities', side_effect=RuntimeError('must not evaluate')) as expected, \
+                 contextlib.redirect_stderr(output):
+                with self.assertRaisesRegex(harness.SetupFailure, '^pinned_Git_private_utility_view$'):
+                    harness.verify_pinned_git(root)
+                self.assertEqual(expected.call_count, 0)
+            _, stderr, receipt = harness.resolve_owned_utility_output(b'', output.getvalue().encode(), context)
+            self.assertIsNotNone(receipt)
+            self.assertEqual(receipt['expected_status'], 'not_evaluated_short_circuit')
+            self.assertEqual(receipt['entries'][0]['tool']['basename'], 'publictool')
+            self.assertNotIn('actual', receipt['entries'][0], 'regular slot is not part of the cached symlink map')
+            self.assertNotIn(b'F13_OPAQUE_UTILITY_', stderr)
+            self.assertIn(b'F13_UTILITY_VIEW_DIAGNOSTIC_v1', stderr)
+
+    def test_catalog_handles_closed_before_existing_spawn_even_on_acl_error(self):
+        before = set(os.listdir('/proc/self/fd'))
+        harness.read_public_utility_catalog()
+        self.assertEqual(set(os.listdir('/proc/self/fd')), before)
+        with mock.patch.object(harness.os, 'getxattr', side_effect=OSError(95, 'unknown_acl_semantics')):
+            self.assertIsNone(harness.read_public_utility_catalog())
+        self.assertEqual(set(os.listdir('/proc/self/fd')), before)
+
+
 class HistoricalJTransport(unittest.TestCase):
     def test_utility_mismatch_emits_redacted_diagnostic_without_changing_failure(self):
         # Synthetic output/invariance regression, NOT the actual hosted cause.
