@@ -128,8 +128,8 @@ func (t *transcoder) serveSpacesBans(w http.ResponseWriter, r *http.Request, res
 		return true
 	}
 
-	switch {
-	case r.Method == http.MethodPost:
+	switch r.Method {
+	case http.MethodPost:
 		req := &spacev1.BanMemberRequest{}
 		if err := readSpaceBanJSON(r, req, map[string]string{"space_id": spaceID, "spaceId": spaceID}); err != nil {
 			writeSpaceBanError(w, err)
@@ -157,7 +157,7 @@ func (t *transcoder) serveSpacesBans(w http.ResponseWriter, r *http.Request, res
 		w.WriteHeader(http.StatusNoContent)
 		return true
 
-	case r.Method == http.MethodDelete:
+	case http.MethodDelete:
 		req := &spacev1.UnbanMemberRequest{}
 		if err := readSpaceBanJSON(r, req, map[string]string{"space_id": spaceID, "spaceId": spaceID, "account_id": parts[2], "accountId": parts[2]}); err != nil {
 			writeSpaceBanError(w, err)
