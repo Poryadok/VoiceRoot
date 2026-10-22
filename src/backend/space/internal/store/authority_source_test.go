@@ -18,7 +18,7 @@ func spaceSourceStore(t *testing.T) (context.Context, *SpaceStore) {
 	t.Helper()
 	ctx := context.Background()
 	database := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/space_db"))
-	database.Run(true, "up")
+	database.Run(true, "goto", "34")
 	return ctx, &SpaceStore{Pool: database.Pool}
 }
 
