@@ -34,26 +34,6 @@ type effectiveHead struct {
 	bridgeUntil time.Time
 }
 
-// cutoverEffectiveEpisode is used only by the explicit owner-local cutover
-// under the all-writer barrier, after native source validation. It is never a
-// reader repair and never derives entry time from an existing active source.
-func cutoverEffectiveEpisode(sources effectiveSources, sampled time.Time, freshID uuid.UUID) (effectiveHead, error) {
-	if sampled.IsZero() || !sources.valid() || !sources.equal(sources.at(sampled)) {
-		return effectiveHead{}, ErrEffectiveEpisodeUnavailable
-	}
-	head := effectiveHead{Revision: 1, ObservedAt: sampled, Sources: sources}
-	if sources.active() {
-		if freshID == uuid.Nil {
-			return effectiveHead{}, ErrEffectiveEpisodeUnavailable
-		}
-		head.Generation, head.EpisodeID, head.Active = 1, freshID, true
-	}
-	if !head.valid() {
-		return effectiveHead{}, ErrEffectiveEpisodeUnavailable
-	}
-	return head, nil
-}
-
 func (s effectiveSources) valid() bool {
 	return (!s.Legacy || s.Ordinary != "") && ((s.Community == "") == s.CommunityUntil.IsZero())
 }

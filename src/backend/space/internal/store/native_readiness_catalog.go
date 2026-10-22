@@ -40,14 +40,6 @@ const nativeReadinessStructureSHA = "6b43c9f367207020eee053cd3ab6eb4e057238df4c5
 // wrapper may trust its private epoch seal. The seal subsequently detects any
 // table, column, constraint, trigger, function or private ACL change. It is not
 // a caller-selected hash or permission to reseal an arbitrary current catalog.
-func checkNativeReadinessCatalog(ctx context.Context, tx pgx.Tx) error {
-	var version int64
-	if err := tx.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil {
-		return ErrMemberAuthorityUnavailable
-	}
-	return checkNativeReadinessCatalogVersion(ctx, tx, version)
-}
-
 func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version int64) error {
 	var serverVersion int
 	if err := tx.QueryRow(ctx, `SELECT current_setting('server_version_num')::integer`).Scan(&serverVersion); err != nil {
