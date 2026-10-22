@@ -218,6 +218,7 @@
                 <include>voice/common/v1/space_lifecycle.proto</include>
                 <include>voice/chat/v1/chat.proto</include>
                 <include>voice/user/v1/user.proto</include>
+                <include>voice/user/v1/space_account_capture.proto</include>
                 <include>voice/authority/v1/authority.proto</include>
               </includes>
             </configuration>
