@@ -170,8 +170,8 @@ services:
     user: "0:0"
     expose: ["9443", "9444", "8444"]
     environment:
-      BOT_PRINCIPAL_PRIVATE_KEY_FILE: /run/phase0/bot/current.pem
-      BOT_PRINCIPAL_KEY_ID: current
+      BOT_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/bot
+      BOT_PRINCIPAL_ACTIVE_KID: current
       BOT_PRINCIPAL_JWKS_LISTEN: :8444
       BOT_PRINCIPAL_TLS_CERT_FILE: /run/phase0/bot-game-event.crt
       BOT_PRINCIPAL_TLS_KEY_FILE: /run/phase0/bot-game-event.key

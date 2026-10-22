@@ -609,6 +609,22 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(self.source_at("space", space[prefix + "CLIENT_CERT_FILE"]), "tls/space-lifecycle-client.crt")
         self.assertEqual(self.source_at("bot", bot["BOT_SPACE_LIFECYCLE_CLIENT_CA_FILE"]), "ca/space-lifecycle-client-ca.crt")
 
+    def test_bot_jwks_uses_canonical_generated_rotation_pair(self):
+        bot = self.merged["bot"]["environment"]
+        self.assertEqual(bot["BOT_PRINCIPAL_ACTIVE_KID"], "current")
+        self.assertNotIn("BOT_PRINCIPAL_PRIVATE_KEY_FILE", bot)
+        self.assertNotIn("BOT_PRINCIPAL_KEY_ID", bot)
+        self.assertEqual(self.source_at("bot", bot["BOT_PRINCIPAL_SIGNING_KEYS_DIR"]), "bot")
+        keys = self.fixture / "bot"
+        self.assertEqual({p.name for p in keys.iterdir()}, {"current.pem", "next.pem"})
+        public = set()
+        for kid in ("current", "next"):
+            key = keys / f"{kid}.pem"
+            self.assertTrue(key.is_file() and not key.is_symlink())
+            self.assertTrue(key.read_text().startswith("-----BEGIN PRIVATE KEY-----"))
+            public.add(require_success(run("openssl", "pkey", "-in", key, "-pubout")))
+        self.assertEqual(len(public), 2, "Bot current and next signer keys must be distinct")
+
     def test_lifecycle_overlay_keeps_media_listener_and_gateway_target_distinct(self):
         command = ["docker", "compose", "--env-file", self.empty_env,
                    "--profile", "*", "-f", ROOT / "docker-compose.yml",
