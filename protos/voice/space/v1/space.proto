@@ -370,11 +370,15 @@ message BanMemberRequest {
   string account_id = 2;
   optional string reason = 3;
   optional string profile_id = 4;
+  // Caller-chosen stable intent UUID, retained across retries; not a transport ID.
+  string operation_id = 5;
 }
 
 message UnbanMemberRequest {
   string space_id = 1;
   string account_id = 2;
+  // Caller-chosen stable intent UUID, retained across retries; not a transport ID.
+  string operation_id = 3;
 }
 
 message ListMembersRequest {

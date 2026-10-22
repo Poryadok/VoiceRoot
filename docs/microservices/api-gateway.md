@@ -691,6 +691,66 @@ protected internal contract documented by Space.
 
 ### Retry and activation
 
+#### Ban and Unban stable intent contract
+
+`POST /api/v1/spaces/{space_id}/bans` requires JSON
+`{account_id,operation_id}` with optional `reason`, `profile_id` and matching
+`space_id`. `DELETE /api/v1/spaces/{space_id}/bans/{account_id}` requires JSON
+`{operation_id}`; matching body `space_id`/`account_id` are optional. Both return
+`204` without a body. This Ban-specific refinement requires the caller's body
+`operation_id` even though other non-lifecycle targets below permit an optional key.
+It is a canonical lowercase, hyphenated, nonnil UUID, retained with the exact
+request across retries/restarts; a genuinely new intent uses a new ID. Gateway
+never generates a replacement intent after an ambiguous response.
+
+An optional `Idempotency-Key` is redundant: exactly one canonical value must
+equal the required body ID; header-only, empty, duplicate or mismatch is `400`.
+Strict protobuf JSON accepts snake_case/lowerCamel names but rejects duplicate
+aliases, unknown fields, query, empty/oversized body and invalid UUIDs. Path
+Space/account IDs bind the final request; supplied body IDs must match. POST
+`account_id` is required; optional `profile_id` must be a nonempty canonical UUID
+when present. Optional `reason`/`profile_id` presence remains part of the binding.
+
+The verified JWT actor supplies account/profile/session identity. Gateway signs
+the final deterministic protobuf including `operation_id`, using the configured
+protected Space lifecycle mTLS client, with a fresh transport request UUID and
+JTI on every dispatch. These transport IDs are distinct from the stable intent.
+Missing protected signer/client fails `503`; there is no ordinary-client, proxy
+or automatic retry fallback. Reusing admission transport grants no moderation
+permission: native Ban/Unban retain their existing MemberBan, membership, owner,
+account-type and privacy checks.
+
+The native root key is `(verified actor_profile_id,operation_id)`. Its immutable
+binding includes verified actor account, RPC and the full canonical request.
+Changed method/Space/account/reason/profile presence within the same actor root
+is `409 already_exists`, including a changed retained expired request. Another
+verified actor cannot recover/select that root; its own same UUID is a separate
+key subject to current ACL. Completed exact replay returns only saved outcome,
+without new effects or renewed owner/member requirements, after authenticated
+binding and native catalog/permanent lifecycle-fence checks.
+
+Malformed input is `400 invalid_argument`; immutable binding conflict is `409
+already_exists`; dependency/incomplete-cohort failure is `503 unavailable`.
+Active matching execution uses gRPC `FAILED_PRECONDITION` with typed
+`google.rpc.ErrorInfo` domain `voice.space.moderation.v1`, reason
+`INTENT_IN_PROGRESS`: only Ban/Unban map this exact combination to `409
+failed_precondition`, with safe coarse text. Messages are not discriminants.
+Owner Ban retains characterized generic `412 failed_precondition`; unrelated
+typed details/methods keep their existing mapping. Separately owned lifecycle,
+hidden-resource and permission disclosure rules remain authoritative.
+
+Completed outcome retention uses strict database wall time `< completed_at + 30
+days`; equality expires. An authenticated exact matching retained expired intent
+returns `412 failed_precondition`, without saved response, new effect or root
+recreation. This expiry status is an explicit technical refinement. Clients never
+reuse expired IDs and reconcile unknown outcomes with reads. This does not
+authorize perpetual raw intent retention or guarantee reuse detection after
+lawful erasure; canonical P3 erases private raw links regardless of this window.
+
+The producer contract does not activate an unfinished native receiver or certify
+replay/retention/cleanup. Caller cutover and same-SHA negative transport proof
+remain required before activation; generated Dart fields alone prove no UI flow.
+
 The implemented legacy direct/invite join transport uses the configured
 `GATEWAY_SPACE_LIFECYCLE_*` mTLS client and a fresh Gateway delegated-user
 credential bound to the final protobuf, method and server-generated UUID

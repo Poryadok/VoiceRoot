@@ -18,7 +18,12 @@ type spaceStoreDB interface {
 // SpaceStore persists spaces and memberships in space_db.
 type SpaceStore struct {
 	Pool *pgxpool.Pool
-	tx   pgx.Tx
+
+	// AccountCaptures is the purpose-specific protected User owner transport.
+	// Ordinary admission/current-pair clients cannot satisfy this dependency.
+	AccountCaptures         SpaceAccountCaptureClient
+	communityAccountCapture *communityAccountCapture
+	tx                      pgx.Tx
 
 	// legacyOwnershipLease is restricted to the disabled private v1 handler,
 	// which already holds the same Space advisory key as a session lock.

@@ -3,7 +3,6 @@ package grpcsvc
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -13,6 +12,7 @@ import (
 
 	"voice/backend/role/permissions"
 	"voice/backend/space/internal/authctx"
+	"voice/backend/space/internal/lifecycleprincipal"
 	"voice/backend/space/internal/store"
 
 	spacev1 "voice.app/voice/space/v1"
@@ -31,73 +31,49 @@ func (s *SpaceGRPC) BanMember(ctx context.Context, req *spacev1.BanMemberRequest
 	if err != nil {
 		return nil, err
 	}
-	release, err := s.lockSpaceMutation(ctx, spaceID)
-	if err != nil {
-		return nil, err
-	}
-	defer release()
 	accountID, err := parseUUIDField("account_id", req.GetAccountId())
 	if err != nil {
 		return nil, err
 	}
-	caller, ok := authctx.ProfileID(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing profile")
-	}
-	if err := s.requireSpacePermission(ctx, spaceID, permissions.MemberBan); err != nil {
+	call, err := lifecycleprincipal.RequireModerationBan(ctx, req)
+	if err != nil {
 		return nil, err
 	}
-	row, err := s.Store.GetSpace(ctx, spaceID)
-	if err != nil || row == nil {
-		return nil, status.Error(codes.NotFound, "space not found")
+	actor, err := call.ActorFor(req)
+	if err != nil {
+		return nil, err
 	}
-	if s.ProfileAccounts != nil {
-		ownerAcct, err := s.ProfileAccounts.AccountIDByProfileID(ctx, row.OwnerProfileID)
-		if err == nil && ownerAcct == accountID {
-			return nil, status.Error(codes.FailedPrecondition, "cannot ban space owner")
-		}
-	} else if caller == row.OwnerProfileID {
-		callerAcct, ok := authctx.AccountID(ctx)
-		if ok && callerAcct == accountID {
-			return nil, status.Error(codes.FailedPrecondition, "cannot ban space owner")
-		}
+	caller := uuid.MustParse(actor.ProfileID)
+	// The store first resolves authenticated completed replay. Only fresh work
+	// invokes current Role authorization, outside every Space mutation fence.
+	authorize := func(permissionCtx context.Context) error {
+		return s.requireSpacePermissionForProfile(permissionCtx, spaceID, caller, permissions.MemberBan)
 	}
-
-	var evictProfile *uuid.UUID
-	if req.ProfileId != nil && strings.TrimSpace(req.GetProfileId()) != "" {
-		pid, err := parseUUIDField("profile_id", req.GetProfileId())
+	var hint *uuid.UUID
+	if req.ProfileId != nil {
+		id, err := parseUUIDField("profile_id", req.GetProfileId())
 		if err != nil {
 			return nil, err
 		}
-		evictProfile = &pid
-	} else if s.ProfileAccounts != nil {
-		members, _, err := s.Store.ListSpaceMembersPage(ctx, spaceID, 100, "")
-		if err != nil {
-			return nil, mapSpaceStoreError(err)
-		}
-		for _, m := range members {
-			acct, err := s.ProfileAccounts.AccountIDByProfileID(ctx, m.ProfileID)
-			if err == nil && acct == accountID {
-				pid := m.ProfileID
-				evictProfile = &pid
-				break
-			}
-		}
+		hint = &id
 	}
-
 	var reason *string
 	if req.Reason != nil {
-		r := req.GetReason()
-		reason = &r
+		value := req.GetReason()
+		reason = &value
 	}
-	if err := s.Store.BanMember(ctx, spaceID, accountID, caller, reason, evictProfile); err != nil {
-		if errors.Is(err, store.ErrCannotBanOwner) {
-			return nil, status.Error(codes.FailedPrecondition, err.Error())
+	err = s.Store.BanAccount(ctx, store.AccountBanInput{SpaceID: spaceID, AccountID: accountID, ActorProfileID: caller, Reason: reason, ProfileHint: hint, InitiatingCall: call, Request: req, Authorize: authorize})
+	if errors.Is(err, store.ErrCannotBanOwner) {
+		return nil, status.Error(codes.FailedPrecondition, "cannot ban space owner")
+	}
+	if errors.Is(err, store.ErrAccountBanUnavailable) {
+		return nil, status.Error(codes.Unavailable, "complete account ban authority unavailable")
+	}
+	if err != nil {
+		if status.Code(err) != codes.Unknown {
+			return nil, err
 		}
 		return nil, mapSpaceStoreError(err)
-	}
-	if evictProfile != nil {
-		s.revokeAllMemberRoles(ctx, spaceID, *evictProfile)
 	}
 	return &spacev1.BanMemberResponse{}, nil
 }
@@ -110,25 +86,30 @@ func (s *SpaceGRPC) UnbanMember(ctx context.Context, req *spacev1.UnbanMemberReq
 	if err != nil {
 		return nil, err
 	}
-	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if _, err := parseUUIDField("account_id", req.GetAccountId()); err != nil {
+		return nil, err
+	}
+	call, err := lifecycleprincipal.RequireModerationUnban(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	defer release()
-	accountID, err := parseUUIDField("account_id", req.GetAccountId())
+	actor, err := call.ActorFor(req)
 	if err != nil {
 		return nil, err
 	}
-	caller, ok := authctx.ProfileID(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	caller := uuid.MustParse(actor.ProfileID)
+	authorize := func(permissionCtx context.Context) error {
+		return s.requireSpacePermissionForProfile(permissionCtx, spaceID, caller, permissions.MemberBan)
 	}
-	if err := s.requireSpacePermission(ctx, spaceID, permissions.MemberBan); err != nil {
-		return nil, err
-	}
-	if err := s.Store.UnbanMember(ctx, spaceID, accountID, caller); err != nil {
+	if err := s.Store.UnbanAccount(ctx, call, req, authorize); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "ban not found")
+		}
+		if status.Code(err) != codes.Unknown {
+			return nil, err
+		}
+		if errors.Is(err, store.ErrAccountBanUnavailable) {
+			return nil, status.Error(codes.Unavailable, "complete account ban authority unavailable")
 		}
 		return nil, mapSpaceStoreError(err)
 	}

@@ -449,17 +449,21 @@ func TestSpaceStore_ModerationAuditDetailsUseAllowlistedCanonicalFields(t *testi
 	_, err = st.Pool.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, space.ID, member)
 	require.NoError(t, err)
 	reason := "repeated spam"
-	require.NoError(t, st.BanMember(ctx, space.ID, account, owner, &reason, nil))
+	// This legacy fixture cannot create a verified moderation intent or a full
+	// User capture. Positive Ban audit details are asserted by the qualified
+	// native50 scenario, through the signed receiver and complete source cohort.
+	require.ErrorIs(t, st.BanMember(ctx, space.ID, account, owner, &reason, nil), ErrAccountBanUnavailable)
 	require.NoError(t, st.SetMemberTimeout(ctx, space.ID, member, owner, 600, &reason))
 
-	var banDetails, timeoutDetails string
-	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT details::text FROM audit_log WHERE space_id=$1 AND action='member_banned'`, space.ID).Scan(&banDetails))
+	var bans int
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE space_id=$1 AND action='member_banned'`, space.ID).Scan(&bans))
+	require.Zero(t, bans)
+	var timeoutDetails string
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT details::text FROM audit_log WHERE space_id=$1 AND action='member_timed_out'`, space.ID).Scan(&timeoutDetails))
-	require.JSONEq(t, `{"reason":"repeated spam"}`, banDetails)
 	require.JSONEq(t, `{"duration_seconds":600,"reason":"repeated spam"}`, timeoutDetails)
 	var outbox int
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM audit_outbox WHERE space_id=$1`, space.ID).Scan(&outbox))
-	require.Equal(t, 2, outbox)
+	require.Equal(t, 1, outbox)
 }
 
 func TestSpaceStore_AuditOutboxClaimFailureRetryAndDelivery(t *testing.T) {
