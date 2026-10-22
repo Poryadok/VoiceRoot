@@ -202,6 +202,8 @@ def emit_utility_view_diagnostic(base, actual, expected, entry_count, entry_name
     except Exception:
         pass
 
+    emit_paired_utility_observation(base, actual, expected, entry_count, entry_names)
+
 
 def diagnostic_json(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True).encode('ascii')
@@ -420,6 +422,234 @@ def prepare_public_diagnostic_context(root, identity, failure=None):
     except Exception:
         record_public_context_failure(failure, phase)
         return None
+
+
+PAIRED_UTILITY_PREFIX = b'F13_PAIRED_UTILITY_OBSERVATION_v1 '
+PAIRED_UTILITY_NAMESPACE = b'F13_PAIRED_UTILITY_'
+
+
+def paired_credentials():
+    groups = sorted(os.getgroups())
+    if len(groups) > 32:
+        raise ValueError('credential_bound')
+    return sha(diagnostic_json([os.getuid(), os.getgid(), groups]))
+
+
+def paired_referent_observation(value):
+    """Subsequent metadata only; no raw paths/errors or predicate substitution."""
+    current, visited = value, set()
+    result = dict(state='not_inspected', error='NONE', path=None, metadata_sha256=None, executable=None)
+    for _ in range(8):
+        if type(current) is not str or not current.startswith('/') or len(current) > 4096 or '\0' in current:
+            return result
+        result['path'] = opaque_utility_token(current)
+        if current in visited:
+            return dict(result, state='loop')
+        visited.add(current)
+        try:
+            info = os.lstat(current)
+            if stat.S_ISLNK(info.st_mode):
+                target = os.readlink(current)
+                current = target if target.startswith('/') else os.path.dirname(current) + '/' + target
+                continue
+            metadata = [info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_gid,
+                        info.st_size, info.st_mtime_ns, info.st_ctime_ns]
+            return dict(result, state='regular' if stat.S_ISREG(info.st_mode) else 'non_regular',
+                        metadata_sha256=sha(diagnostic_json(metadata)), executable=os.access(current, os.X_OK))
+        except OSError as error:
+            codes = {errno.ENOENT: ('missing', 'ENOENT'), errno.EACCES: ('denied', 'EACCES'),
+                     errno.EPERM: ('denied', 'EPERM'), errno.ENOTDIR: ('not_directory', 'ENOTDIR'),
+                     errno.ELOOP: ('loop', 'ELOOP'), errno.EIO: ('io_error', 'EIO')}
+            state, code = codes.get(error.errno, ('unavailable', 'OTHER'))
+            return dict(result, state=state, error=code)
+        except Exception:
+            return dict(result, state='unavailable', error='OTHER')
+    return dict(result, state='limit')
+
+
+def prepare_paired_utility_context(root, identity):
+    """Private same-run POST snapshot, independent of optional public catalog."""
+    try:
+        actual, probes, encoded = {}, {}, 2
+        entry_count = 0
+        for entry_count, path in enumerate((root / 'historical-git' / 'util').iterdir(), 1):
+            if entry_count > 8192:
+                return None
+            if path.is_symlink():
+                target = str(path.readlink())
+                encoded += len(diagnostic_json({path.name: target})) - 2 + bool(actual)
+                if encoded > 2097152:
+                    return None
+                actual[path.name] = target
+        probe_bytes = 2
+        for name, target in actual.items():
+            probe = paired_referent_observation(target)
+            probe_bytes += len(diagnostic_json({name: probe})) - 2 + bool(probes)
+            if encoded + probe_bytes > 2097152:
+                return None
+            probes[name] = probe
+        result = dict(actual=actual, probes=probes, actual_sha256=sha(diagnostic_json(actual)),
+                      actual_count=len(actual), entry_count=entry_count,
+                      source_sha256=sha(diagnostic_json(identity)), credential_sha256=paired_credentials())
+        return result if len(diagnostic_json(result)) <= 2097152 else None
+    except Exception:
+        return None
+
+
+def paired_utility_observation(base, actual, expected, entry_count, entry_names, identity):
+    if len(actual) > 8192 or (expected is not None and len(expected) > 8192) or len(diagnostic_json(actual)) > 2097152:
+        raise ValueError('snapshot_bound')
+    original = opaque_utility_observation(base, actual, expected, entry_count, entry_names, identity)
+    index = {}
+    for name in actual:
+        token = opaque_utility_token(name)
+        index.setdefault((token['sha256'], token['utf8_bytes']), []).append(name)
+    result = {key: original[key] for key in ('source_sha256', 'actual_sha256', 'actual_count', 'entry_count')}
+    result.update(credential_sha256=paired_credentials(), entries=[], omitted=original['omitted'] + len(original['entries']))
+    for old in original['entries']:
+        names = index.get((old['tool']['sha256'], old['tool']['utf8_bytes']), [])
+        if len(names) != 1 or 'actual' not in old:
+            continue
+        name = names[0]
+        entry = dict(tool=old['tool'], target=old['actual']['target'], difference=old['difference'],
+                     probe=paired_referent_observation(actual[name]))
+        trial = dict(result, entries=result['entries'] + [entry], omitted=result['omitted'] - 1)
+        if diagnostic_units(trial) > 32 or len(PAIRED_UTILITY_PREFIX) + len(diagnostic_json(trial)) + 1 > 16384:
+            break
+        result = trial
+    return result
+
+
+def encode_paired_utility_observation(value):
+    raw = PAIRED_UTILITY_PREFIX + diagnostic_json(value) + b'\n'
+    if len(raw) > 16384 or diagnostic_units(value) > 32:
+        raise ValueError('paired_bound')
+    return raw
+
+
+def emit_paired_utility_observation(base, actual, expected, entry_count, entry_names):
+    try:
+        identity = json.loads(os.environ['F13_HARNESS_IDENTITY'])
+        value = paired_utility_observation(base, actual, expected, entry_count, entry_names, identity)
+        sys.stderr.write(encode_paired_utility_observation(value).decode('ascii'))
+    except Exception:
+        pass  # Optional opaque output cannot change original failure semantics.
+
+
+def resolve_owned_paired_output(stdout, stderr, context):
+    """Only owning result streams; remove this NEW namespace before old resolver."""
+    candidates = []
+    def suppress(raw):
+        kept = []
+        for line in raw.splitlines(keepends=True):
+            if line.startswith(PAIRED_UTILITY_NAMESPACE):
+                candidates.append(line)
+            else:
+                kept.append(line)
+        return b''.join(kept)
+    stdout, stderr = suppress(stdout), suppress(stderr)
+    try:
+        if context is None or len(candidates) != 1 or coarse_public_diagnostic_status(stdout, stderr, None, None) is None:
+            return stdout, stderr, None
+        raw = candidates[0]
+        if not raw.startswith(PAIRED_UTILITY_PREFIX) or not raw.endswith(b'\n') or len(raw) > 16384:
+            raise ValueError('framing')
+        def unique(items):
+            result = {}
+            for key, value in items:
+                if key in result:
+                    raise ValueError('duplicate')
+                result[key] = value
+            return result
+        value = json.loads(raw[len(PAIRED_UTILITY_PREFIX):].decode('ascii'), object_pairs_hook=unique)
+        if encode_paired_utility_observation(value) != raw:
+            raise ValueError('canonical')
+        def exact(obj, keys):
+            if type(obj) is not dict or set(obj) != set(keys):
+                raise ValueError('schema')
+        def number(n, limit):
+            if type(n) is not int or not 0 <= n <= limit:
+                raise ValueError('number')
+        def digest(text):
+            if type(text) is not str or not re.fullmatch('[0-9a-f]{64}', text):
+                raise ValueError('digest')
+        def token(item):
+            exact(item, ('sha256', 'utf8_bytes'))
+            digest(item['sha256'])
+            number(item['utf8_bytes'], 16777216)
+            return item['sha256'], item['utf8_bytes']
+        def probe(item):
+            exact(item, ('state', 'error', 'path', 'metadata_sha256', 'executable'))
+            if item['state'] not in ('not_inspected', 'regular', 'non_regular', 'missing', 'denied', 'not_directory', 'loop', 'io_error', 'unavailable', 'limit'):
+                raise ValueError('state')
+            if item['error'] not in ('NONE', 'ENOENT', 'EACCES', 'EPERM', 'ENOTDIR', 'ELOOP', 'EIO', 'OTHER'):
+                raise ValueError('errno')
+            if item['path'] is not None:
+                token(item['path'])
+            if item['metadata_sha256'] is not None:
+                digest(item['metadata_sha256'])
+            if item['executable'] is not None and type(item['executable']) is not bool:
+                raise ValueError('access')
+            allowed = {'not_inspected': ('NONE',), 'regular': ('NONE',), 'non_regular': ('NONE',),
+                       'missing': ('ENOENT',), 'denied': ('EACCES', 'EPERM'), 'not_directory': ('ENOTDIR',),
+                       'loop': ('NONE', 'ELOOP'), 'io_error': ('EIO',), 'unavailable': ('OTHER',), 'limit': ('NONE',)}
+            if item['error'] not in allowed[item['state']]:
+                raise ValueError('state_errno')
+            if item['state'] in ('regular', 'non_regular'):
+                if item['metadata_sha256'] is None or type(item['executable']) is not bool or item['path'] is None:
+                    raise ValueError('metadata')
+            elif item['metadata_sha256'] is not None or item['executable'] is not None:
+                raise ValueError('unavailable_metadata')
+            if item['state'] != 'not_inspected' and item['path'] is None:
+                raise ValueError('path')
+        exact(value, ('source_sha256', 'actual_sha256', 'actual_count', 'entry_count', 'credential_sha256', 'entries', 'omitted'))
+        for key in ('source_sha256', 'actual_sha256'):
+            digest(value[key])
+            if value[key] != context[key]:
+                raise ValueError('binding')
+        digest(value['credential_sha256'])
+        for key in ('actual_count', 'entry_count'):
+            number(value[key], 8192)
+            if value[key] != context[key]:
+                raise ValueError('binding')
+        number(value['omitted'], 8192)
+        if type(value['entries']) is not list:
+            raise ValueError('entries')
+        index = {}
+        for name in context['actual']:
+            key = token(opaque_utility_token(name))
+            index.setdefault(key, []).append(name)
+        entries, seen = [], set()
+        for entry in value['entries']:
+            exact(entry, ('tool', 'target', 'difference', 'probe'))
+            key = token(entry['tool'])
+            names = index.get(key, [])
+            if key in seen or len(names) != 1:
+                raise ValueError('slot')
+            seen.add(key)
+            name = names[0]
+            if token(entry['target']) != token(opaque_utility_token(context['actual'][name])):
+                raise ValueError('target')
+            if entry['difference'] not in ('extra', 'changed'):
+                raise ValueError('difference')
+            probe(entry['probe'])
+            outer = context['probes'][name]
+            probe(outer)
+            entries.append(dict(tool=entry['tool'], target=entry['target'], difference=entry['difference'],
+                                outer=outer, inner=entry['probe']))
+        receipt = dict(kind='F13_PAIRED_UTILITY_CONTEXT_RECEIPT_v1', source_sha256=context['source_sha256'],
+                       post_materialization_actual_sha256=context['actual_sha256'], actual_count=context['actual_count'],
+                       observation_sha256=sha(raw), outer_observation='POST_MATERIALIZATION_METADATA',
+                       inner_observation='SUBSEQUENT_MISMATCH_METADATA', credentials_equal=context['credential_sha256'] == value['credential_sha256'],
+                       entries=entries, omitted=value['omitted'])
+        while receipt['entries'] and (diagnostic_units(receipt) > 32 or len(diagnostic_json(receipt)) + 1 > 16384):
+            receipt['entries'].pop()
+            receipt['omitted'] += 1
+        if diagnostic_units(receipt) > 32 or len(diagnostic_json(receipt)) + 1 > 16384:
+            raise ValueError('receipt_bound')
+        return stdout, stderr, receipt
+    except Exception:
+        return stdout, stderr, None
 
 
 def opaque_utility_closure(value):
@@ -919,6 +1149,7 @@ def namespace_main():
         root = Path(folder) / 'root'
         root.mkdir()
         materialize(root)
+        paired_context = prepare_paired_utility_context(root, json.loads(harness_identity))
         context_failure = {}
         diagnostic_context = prepare_public_diagnostic_context(root, json.loads(harness_identity), context_failure)
         for name in ('repo', 'harness', 'tmp', 'dev', 'proc'):
@@ -948,7 +1179,8 @@ def namespace_main():
         # User/mount/network/pid isolation is fixture infrastructure only. There
         # is no listener, published port, engine start, DEV or STAGING operation.
         result = subprocess.run(['sudo', '-n', 'unshare', '--mount', '--net', '--pid', '--fork', 'bash', '-c', script], capture_output=True)
-        stdout, stderr, public_receipt = resolve_owned_utility_output(result.stdout, result.stderr, diagnostic_context)
+        paired_stdout, paired_stderr, paired_receipt = resolve_owned_paired_output(result.stdout, result.stderr, paired_context)
+        stdout, stderr, public_receipt = resolve_owned_utility_output(paired_stdout, paired_stderr, diagnostic_context)
         sys.stdout.buffer.write(stdout)
         sys.stderr.buffer.write(stderr)
         if public_receipt is not None:
@@ -958,6 +1190,11 @@ def namespace_main():
                 pass  # Optional output never changes the original guard result.
         emit_coarse_public_diagnostic_status(coarse_public_diagnostic_status(stdout, stderr, diagnostic_context, public_receipt))
         emit_public_context_failure(coarse_public_diagnostic_status(stdout, stderr, diagnostic_context, public_receipt), context_failure)
+        if paired_receipt is not None:
+            try:
+                sys.stderr.buffer.write(diagnostic_json(paired_receipt) + b'\n')
+            except Exception:
+                pass  # Optional opaque receipt cannot change original guard acceptance.
         receipts = []
         for line in stdout.splitlines():
             try:
