@@ -19,6 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	UserService_CaptureSpaceMemberAccountBindings_FullMethodName   = "/voice.user.v1.UserService/CaptureSpaceMemberAccountBindings"
 	UserService_EnsurePrimaryProfile_FullMethodName                = "/voice.user.v1.UserService/EnsurePrimaryProfile"
 	UserService_ListProfileIDsForAccount_FullMethodName            = "/voice.user.v1.UserService/ListProfileIDsForAccount"
 	UserService_ResolveAccountIDForProfile_FullMethodName          = "/voice.user.v1.UserService/ResolveAccountIDForProfile"
@@ -67,6 +68,8 @@ const (
 //
 // User Service — profiles, privacy, presence. HTTP: /api/v1/users/**.
 type UserServiceClient interface {
+	// Space-only protected capture. Not registered on the ordinary User listener.
+	CaptureSpaceMemberAccountBindings(ctx context.Context, in *CaptureSpaceMemberAccountBindingsRequest, opts ...grpc.CallOption) (*CaptureSpaceMemberAccountBindingsResponse, error)
 	// S2S bootstrap from Auth: ensure one primary profile per account before JWT is issued.
 	// Target: called only from trusted Auth; not exposed via public Gateway REST in v1 DM scope.
 	EnsurePrimaryProfile(ctx context.Context, in *EnsurePrimaryProfileRequest, opts ...grpc.CallOption) (*EnsurePrimaryProfileResponse, error)
@@ -141,6 +144,16 @@ type userServiceClient struct {
 
 func NewUserServiceClient(cc grpc.ClientConnInterface) UserServiceClient {
 	return &userServiceClient{cc}
+}
+
+func (c *userServiceClient) CaptureSpaceMemberAccountBindings(ctx context.Context, in *CaptureSpaceMemberAccountBindingsRequest, opts ...grpc.CallOption) (*CaptureSpaceMemberAccountBindingsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CaptureSpaceMemberAccountBindingsResponse)
+	err := c.cc.Invoke(ctx, UserService_CaptureSpaceMemberAccountBindings_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *userServiceClient) EnsurePrimaryProfile(ctx context.Context, in *EnsurePrimaryProfileRequest, opts ...grpc.CallOption) (*EnsurePrimaryProfileResponse, error) {
@@ -549,6 +562,8 @@ func (c *userServiceClient) GetSearchProfileCheckpoint(ctx context.Context, in *
 //
 // User Service — profiles, privacy, presence. HTTP: /api/v1/users/**.
 type UserServiceServer interface {
+	// Space-only protected capture. Not registered on the ordinary User listener.
+	CaptureSpaceMemberAccountBindings(context.Context, *CaptureSpaceMemberAccountBindingsRequest) (*CaptureSpaceMemberAccountBindingsResponse, error)
 	// S2S bootstrap from Auth: ensure one primary profile per account before JWT is issued.
 	// Target: called only from trusted Auth; not exposed via public Gateway REST in v1 DM scope.
 	EnsurePrimaryProfile(context.Context, *EnsurePrimaryProfileRequest) (*EnsurePrimaryProfileResponse, error)
@@ -625,6 +640,9 @@ type UserServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedUserServiceServer struct{}
 
+func (UnimplementedUserServiceServer) CaptureSpaceMemberAccountBindings(context.Context, *CaptureSpaceMemberAccountBindingsRequest) (*CaptureSpaceMemberAccountBindingsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CaptureSpaceMemberAccountBindings not implemented")
+}
 func (UnimplementedUserServiceServer) EnsurePrimaryProfile(context.Context, *EnsurePrimaryProfileRequest) (*EnsurePrimaryProfileResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method EnsurePrimaryProfile not implemented")
 }
@@ -764,6 +782,24 @@ func RegisterUserServiceServer(s grpc.ServiceRegistrar, srv UserServiceServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&UserService_ServiceDesc, srv)
+}
+
+func _UserService_CaptureSpaceMemberAccountBindings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CaptureSpaceMemberAccountBindingsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).CaptureSpaceMemberAccountBindings(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_CaptureSpaceMemberAccountBindings_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).CaptureSpaceMemberAccountBindings(ctx, req.(*CaptureSpaceMemberAccountBindingsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _UserService_EnsurePrimaryProfile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -1493,6 +1529,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "voice.user.v1.UserService",
 	HandlerType: (*UserServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "CaptureSpaceMemberAccountBindings",
+			Handler:    _UserService_CaptureSpaceMemberAccountBindings_Handler,
+		},
 		{
 			MethodName: "EnsurePrimaryProfile",
 			Handler:    _UserService_EnsurePrimaryProfile_Handler,
