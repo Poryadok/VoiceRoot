@@ -149,13 +149,16 @@ def dry_run_delete(client, pod):
 
 
 def replace_after_config(client, pins, lock_pins, apply=False, expected_data=None,
-                         require_oom=True):
+                         require_oom=True, require_ready=False):
     lock_uid, lock_rv, lock_operation = lock_pins
     expected_lock = {'metadata': {'uid': lock_uid, 'resourceVersion': lock_rv},
                      'data': {'operation': lock_operation}}
     cm, sts, pod = snapshot(client, pins, console=True, expected_data=expected_data,
                             require_oom=require_oom,
                             require_not_ready=require_oom)
+    if require_ready and (sts['status'].get('readyReplicas') != 1 or
+                          pod['status']['containerStatuses'][0].get('ready') is not True):
+        raise RuntimeError('DEV ClickHouse replacement requires a Ready current Pod')
     verify_retained_lock(client, expected_lock)
     dry_run_delete(client, pod)
     print('DEV_CLICKHOUSE_CONSOLE_REPLACE_PREVIEW pod_uid=' + pins[1] +
@@ -167,6 +170,9 @@ def replace_after_config(client, pins, lock_pins, apply=False, expected_data=Non
                                                  expected_data=expected_data,
                                                  require_oom=require_oom,
                                                  require_not_ready=require_oom)
+        if require_ready and (check_sts['status'].get('readyReplicas') != 1 or
+                              check_pod['status']['containerStatuses'][0].get('ready') is not True):
+            raise RuntimeError('DEV ClickHouse replacement requires a Ready current Pod')
         if (check_cm != cm or
                 (require_oom and check_sts['metadata']['resourceVersion'] !=
                  sts['metadata']['resourceVersion']) or
