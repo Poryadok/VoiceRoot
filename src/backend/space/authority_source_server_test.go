@@ -26,7 +26,9 @@ func TestSpaceAuthoritySourceActualMigratorProtectedFactory(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	database := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join("..", "migrations", "space_db"))
-	database.Run(true, "up")
+	// SPACE-SOURCE-CATALOG-34-v1 qualifies this reader at the actual cut34,
+	// independently of later native membership migrations.
+	database.Run(true, "goto", "34")
 	reader := &store.SpaceStore{Pool: database.Pool}
 	owner, member := uuid.New(), uuid.New()
 	space, err := reader.CreateSpace(ctx, owner, "actual source", "", "private")
