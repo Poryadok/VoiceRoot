@@ -20,10 +20,13 @@ Plan frozen before runtime:
    check no partial system roles/Owner survive, then ordinary signed retry works.
 7. Preserve exact executed archive/before/after source hashes and raw results.
 
-Private resource constraints: own named Docker-in-Docker engine and Go runner,
-no host published ports/listeners; runner shares only its own engine network
-namespace/socket. Testcontainers PG/Redis/migrator belong to that private engine
-and are terminated by cleanup; explicit outer teardown even on failure. No
+Private resource constraints CORRECTION before runtime: no privileged DinD,
+Docker socket, daemon or added capabilities. Proposed NEW test-only DSN seam:
+ordinary owned PG16/Redis7/Go containers on an isolated named network, no host
+published ports. Ordinary official pinned migrator container uses exact source
+migrations through20 before Go; test verifies clean version20 and actual Store
+catalog. Fixture credentials stay private and are not printed. Explicit outer
+container/network teardown even on failure. No
 shared DEV/STAGING resource or peer runtime is acquired or borrowed. No Graph,
 GHCI/deployment, producer source changes or duplicate Space186 database test.
 
@@ -31,4 +34,5 @@ If actual canonical qualification requires absent Space publication/current
 identity/contribution evidence, report the exact gap and stop before production
 changes. A durable Role20 Owner result is not full native45/public Creator proof.
 
-Execution pending; no runtime started at plan freeze.
+Execution pending; no runtime started. Exact DSN/resource seam acceptance
+requested121 before any start; earlier DinD plan is superseded and was not run.
