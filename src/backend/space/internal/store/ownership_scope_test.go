@@ -62,7 +62,16 @@ func newR20ScopeFixture(t *testing.T, st *SpaceStore, state string) r20ScopeFixt
 	require.NoError(t, err)
 	require.NoError(t, st.UpsertSpaceSubscription(context.Background(), f.binding.SpaceID, f.account, "active"))
 	existingBot := uuid.New()
-	require.NoError(t, st.AddBotMember(context.Background(), f.binding.SpaceID, existingBot))
+	// These scope tests inspect pre-existing legacy membership, not a current
+	// Bot installation. The raw Bot API intentionally cannot create that state.
+	seedTx, err := st.Pool.Begin(context.Background())
+	require.NoError(t, err)
+	defer func() { _ = seedTx.Rollback(context.Background()) }()
+	_, err = seedTx.Exec(context.Background(), `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, f.binding.SpaceID, existingBot)
+	require.NoError(t, err)
+	_, err = seedTx.Exec(context.Background(), `UPDATE spaces SET member_count=member_count+1,updated_at=now() WHERE id=$1`, f.binding.SpaceID)
+	require.NoError(t, err)
+	require.NoError(t, seedTx.Commit(context.Background()))
 	f.joiner = existingBot
 
 	if state == "" {
