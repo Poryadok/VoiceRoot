@@ -450,7 +450,7 @@ func (s *DMStore) PrepareSpaceComposite(ctx context.Context, req *chatv1.CreateC
 		return nil, err
 	}
 	chat := &chatv1.Chat{Id: chatID.String(), Type: req.GetType(), SpaceId: proto.String(space.String()), Name: proto.String(name), Topic: topic,
-		CreatorProfileId: initiator.ProfileID.String(), CreatedAt: timestamppb.New(now), UpdatedAt: timestamppb.New(now), ThreadsEnabled: kind == "channel"}
+		CreatorProfileId: initiator.ProfileID.String(), CreatedAt: timestamppb.New(now), UpdatedAt: timestamppb.New(now), ThreadsEnabled: kind == "channel", AllowUserMainFeed: kind == "group"}
 	binding := &spacev1.SpaceChatCreationBinding{ProtocolVersion: 1, OperationId: operation.String(), CreatorProfileId: initiator.ProfileID.String(),
 		SpaceId: space.String(), ChatId: chatID.String(), ChatType: req.GetType(), NodeId: nodeID.String(), AuditEventId: auditID.String(), CreateRequestSha256: digest[:]}
 	if initiator.User != nil {
@@ -538,7 +538,7 @@ func loadSpaceComposite(ctx context.Context, tx pgx.Tx, operation uuid.UUID, for
 	_, _, _, _, _, normalized, err := compositeNormalization(&chatv1.CreateChatRequest{Type: c.Type, SpaceId: c.SpaceId, Name: c.Name, Topic: c.Topic})
 	if err != nil || !bytes.Equal(normalized[:], b.CreateRequestSha256) || !proto.Equal(c.CreatedAt, timestamppb.New(createdAt)) ||
 		!proto.Equal(c.UpdatedAt, c.CreatedAt) || c.ThreadsEnabled != (kind == "channel") || c.AvatarUrl != nil || c.LastMessageAt != nil ||
-		c.SlowModeSeconds != 0 || c.AllowUserMainFeed || c.E2EEnabled || c.AllowGuests {
+		c.SlowModeSeconds != 0 || c.AllowUserMainFeed != (kind == "group") || c.E2EEnabled || c.AllowGuests {
 		return nil, ErrSpaceCompositeEvidence
 	}
 	return &SpaceCompositeOperation{State: state, FailureCode: codes.Code(code), Binding: b, Response: r}, nil
@@ -712,13 +712,13 @@ func (s *DMStore) resolveSpaceComposite(ctx context.Context, operation uuid.UUID
 			kind = "channel"
 		}
 		_, err = tx.Exec(ctx, `INSERT INTO chats(id,type,space_id,name,topic,creator_profile_id,created_at,updated_at,threads_enabled,allow_user_main_feed)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$7,$8,false)`, c.Id, kind, space, c.Name, c.Topic, c.CreatorProfileId, c.CreatedAt.AsTime(), c.ThreadsEnabled)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$7,$8,$9)`, c.Id, kind, space, c.Name, c.Topic, c.CreatorProfileId, c.CreatedAt.AsTime(), c.ThreadsEnabled, c.AllowUserMainFeed)
 		if err != nil {
 			return nil, err
 		}
 		if key != nil {
 			row := ChatRow{ID: uuid.MustParse(c.Id), Type: kind, SpaceID: &space, Name: c.Name, Topic: c.Topic,
-				CreatorProfileID: uuid.MustParse(c.CreatorProfileId), CreatedAt: c.CreatedAt.AsTime(), UpdatedAt: c.UpdatedAt.AsTime(), ThreadsEnabled: c.ThreadsEnabled}
+				CreatorProfileID: uuid.MustParse(c.CreatorProfileId), CreatedAt: c.CreatedAt.AsTime(), UpdatedAt: c.UpdatedAt.AsTime(), ThreadsEnabled: c.ThreadsEnabled, AllowUserMainFeed: c.AllowUserMainFeed}
 			result, err := json.Marshal(&row)
 			if err != nil {
 				return nil, err
