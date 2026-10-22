@@ -1133,6 +1133,113 @@ def materialize(root):
     return m
 
 
+def verify_private_devices():
+    """Validate only the fixed sealed kernel endpoints; never retain RNG bytes."""
+    try:
+        require(sys.platform == 'linux' and ROOT == Path('/harness'), 'private_device_namespace')
+        require(os.geteuid() != 0 and os.getuid() == os.geteuid() and
+                os.getgid() == os.getegid(), 'private_device_identity')
+
+        def bounded(path, limit):
+            with Path(path).open('rb') as stream:
+                raw = stream.read(limit + 1)
+            require(len(raw) <= limit, 'private_device_metadata_bound')
+            return raw.decode('ascii')
+
+        mounts = bounded('/proc/self/mountinfo', 131072).splitlines()
+        require(len(mounts) <= 4096, 'private_device_mount_bound')
+        selected = []
+        for line in mounts:
+            fields = line.split()
+            require(len(fields) >= 10 and fields.count('-') == 1, 'private_device_mount_shape')
+            separator = fields.index('-')
+            require(separator >= 6 and len(fields) == separator + 4, 'private_device_mount_shape')
+            if fields[4] == '/dev':
+                selected.append((fields, separator))
+        require(len(selected) == 1, 'private_device_exact_mount')
+        fields, separator = selected[0]
+        mount_flags = set(fields[5].split(','))
+        fs_flags = set(fields[separator + 3].split(','))
+        require(fields[3] == '/' and fields[separator + 1] == 'tmpfs' and
+                fields[separator + 2] == 'f13-private-dev' and
+                {'ro', 'nosuid', 'noexec'} <= mount_flags and 'ro' in fs_flags and
+                not {'rw', 'nodev'} & (mount_flags | fs_flags), 'private_device_mount_flags')
+        vfs = os.statvfs('/dev')
+        require(vfs.f_flag & os.ST_RDONLY and vfs.f_flag & os.ST_NOSUID and
+                vfs.f_flag & os.ST_NOEXEC and not vfs.f_flag & os.ST_NODEV and
+                0 < vfs.f_blocks * vfs.f_frsize <= 65536 and
+                0 < vfs.f_files <= 8, 'private_device_filesystem')
+        directory = os.lstat('/dev')
+        require(stat.S_ISDIR(directory.st_mode) and directory.st_uid == 0 and
+                directory.st_gid == 0 and stat.S_IMODE(directory.st_mode) == 0o555,
+                'private_device_directory')
+        names = set()
+        with os.scandir('/dev') as entries:
+            for index, entry in enumerate(entries):
+                require(index < 2, 'private_device_entry_bound')
+                names.add(entry.name)
+        require(names == {'null', 'urandom'}, 'private_device_entries')
+        for path in ('/dev', '/dev/null', '/dev/urandom'):
+            for attribute in ('system.posix_acl_access', 'system.posix_acl_default'):
+                try:
+                    os.getxattr(path, attribute, follow_symlinks=False)
+                except OSError as error:
+                    require(error.errno in (errno.ENODATA, errno.ENOTSUP, errno.EOPNOTSUPP),
+                            'private_device_acl_inspection')
+                else:
+                    raise SetupFailure('private_device_unexpected_acl')
+        capabilities = {}
+        for line in bounded('/proc/self/status', 16384).splitlines():
+            key, separator, value = line.partition(':')
+            if key in ('CapEff', 'CapPrm', 'CapInh', 'CapAmb'):
+                value = value.strip()
+                require(separator and key not in capabilities and
+                        re.fullmatch('[0-9a-fA-F]{1,16}', value), 'private_device_capability_shape')
+                capabilities[key] = int(value, 16)
+        require(set(capabilities) == {'CapEff', 'CapPrm', 'CapInh', 'CapAmb'} and
+                not any(capabilities.values()), 'private_device_capabilities')
+        node = os.lstat('/dev/urandom')
+        require(stat.S_ISCHR(node.st_mode) and node.st_rdev == os.makedev(1, 9) and
+                node.st_uid == 0 and node.st_gid == 0 and
+                stat.S_IMODE(node.st_mode) == 0o444, 'private_device_entropy_node')
+        null = os.lstat('/dev/null')
+        require(stat.S_ISCHR(null.st_mode) and null.st_rdev == os.makedev(1, 3) and
+                null.st_uid == 0 and null.st_gid == 0 and
+                stat.S_IMODE(null.st_mode) == 0o666, 'private_device_null_node')
+        flags = os.O_NOFOLLOW | os.O_CLOEXEC
+        descriptor = os.open('/dev/urandom', os.O_RDONLY | flags)
+        try:
+            opened = os.fstat(descriptor)
+            attributes = ('st_dev', 'st_ino', 'st_mode', 'st_rdev', 'st_uid', 'st_gid')
+            require(all(getattr(opened, key) == getattr(node, key) for key in attributes),
+                    'private_device_open_identity')
+            require(len(os.read(descriptor, 32)) == 32, 'private_device_entropy_read')
+        finally:
+            os.close(descriptor)
+        for access in (os.O_WRONLY, os.O_RDWR):
+            try:
+                descriptor = os.open('/dev/urandom', access | flags)
+            except OSError as error:
+                require(error.errno in (errno.EACCES, errno.EPERM, errno.EROFS),
+                        'private_device_write_denial')
+            else:
+                os.close(descriptor)
+                raise SetupFailure('private_device_writable_entropy')
+        descriptor = os.open('/dev/null', os.O_RDWR | flags)
+        try:
+            opened = os.fstat(descriptor)
+            require(all(getattr(opened, key) == getattr(null, key) for key in attributes),
+                    'private_device_null_identity')
+            require(os.read(descriptor, 1) == b'' and os.write(descriptor, b'') == 0,
+                    'private_device_null_semantics')
+        finally:
+            os.close(descriptor)
+    except SetupFailure:
+        raise
+    except Exception:
+        raise SetupFailure('private_device_inspection') from None
+
+
 def prepare():
     """Pure-Python fixture construction in the final ordinary-user chroot."""
     require(sys.platform == 'linux' and ROOT == Path('/harness'), 'private_namespace_required')
@@ -1180,8 +1287,16 @@ def namespace_main():
         for source, target in mounts:
             script += 'mount --bind ' + shlex.quote(source) + ' ' + shlex.quote(target) + '\n'
             script += 'mount -o remount,bind,ro ' + shlex.quote(target) + '\n'
-        (root / 'dev/null').touch()
-        script += 'mount --bind /dev/null ' + shlex.quote(str(root / 'dev/null')) + '\n'
+        devices = shlex.quote(str(root / 'dev'))
+        entropy = shlex.quote(str(root / 'dev/urandom'))
+        null = shlex.quote(str(root / 'dev/null'))
+        # New bounded private filesystem: root DAC, not RO alone, denies device writes.
+        script += '/usr/bin/mount -t tmpfs -o size=64k,nr_inodes=8,mode=0555,uid=0,gid=0,nosuid,noexec,dev f13-private-dev ' + devices + '\n'
+        script += '/usr/bin/mknod -m 0444 ' + entropy + ' c 1 9\n'
+        script += '/usr/bin/chown 0:0 ' + entropy + '\n'
+        script += ': > ' + null + '\n'
+        script += 'mount --bind /dev/null ' + null + '\n'
+        script += '/usr/bin/mount -o remount,ro,nosuid,noexec,dev ' + devices + '\n'
         script += 'mount -t proc proc ' + shlex.quote(str(root / 'proc')) + '\n'
         executable = '/harness/scripts/ci/f13_exact_j_historical_red_test.py'
         invocation = 'chroot --userspec=' + str(os.getuid()) + ':' + str(os.getgid()) + ' ' + shlex.quote(str(root))
@@ -1405,8 +1520,10 @@ def main():
     arguments = sys.argv[1:]
     require(arguments in ([], ['--prepare'], ['--inside']), 'explicit_harness_mode')
     if arguments == ['--prepare']:
+        verify_private_devices()
         return prepare()
     if arguments == ['--inside']:
+        verify_private_devices()
         return inside()
     return namespace_main()
 

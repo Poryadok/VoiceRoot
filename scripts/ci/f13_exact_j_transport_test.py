@@ -17,6 +17,188 @@ import f13_exact_j_historical_red_test as harness
 
 
 
+class PrivateEntropyContract(unittest.TestCase):
+    """Fixed endpoint component tests; real private mount/DAC remains hosted."""
+    def test_namespace_constructs_private_sealed_entropy_endpoint_before_preparation(self):
+        _, _, spawn, _ = SameFinalViewContract().capture_namespace()
+        script = spawn.call_args.args[0][-1]
+        self.assertIn('/usr/bin/mount -t tmpfs -o size=64k,nr_inodes=8,mode=0555,uid=0,gid=0,nosuid,noexec,dev f13-private-dev ',script)
+        self.assertIn('/usr/bin/mknod -m 0444 ',script)
+        self.assertIn(' c 1 9\n',script)
+        self.assertIn('/usr/bin/chown 0:0 ',script)
+        tmpfs = script.index('/usr/bin/mount -t tmpfs ')
+        node = script.index('/usr/bin/mknod ')
+        null = script.index('mount --bind /dev/null ')
+        seal = script.index('/usr/bin/mount -o remount,ro,nosuid,noexec,dev ')
+        prepare = script.index(' --prepare\n')
+        self.assertLess(tmpfs,node)
+        self.assertLess(node,null)
+        self.assertLess(null,seal)
+        self.assertLess(seal,prepare)
+        self.assertNotIn('mount --bind /dev/urandom',script)
+        self.assertNotIn('/dev/random',script)
+
+
+    @contextlib.contextmanager
+    def device_fixture(self):
+        import errno
+        import stat
+        import types
+        fixture = types.SimpleNamespace()
+        fixture.mount = b'44 1 0:55 / /dev ro,nosuid,noexec - tmpfs f13-private-dev ro,size=64k,nr_inodes=8\n'
+        fixture.status = b'CapEff:\t0000000000000000\nCapPrm:\t0\nCapInh:\t0\nCapAmb:\t0\n'
+        def metadata(mode, rdev=0):
+            return types.SimpleNamespace(st_mode=mode,st_rdev=rdev,st_uid=0,st_gid=0,st_dev=55,st_ino=rdev+1)
+        fixture.nodes = {'/dev':metadata(stat.S_IFDIR|0o555),
+                         '/dev/urandom':metadata(stat.S_IFCHR|0o444,os.makedev(1,9)),
+                         '/dev/null':metadata(stat.S_IFCHR|0o666,os.makedev(1,3))}
+        fixture.entries = ['null','urandom']
+        class Entries:
+            def __enter__(self): return iter(types.SimpleNamespace(name=n) for n in fixture.entries)
+            def __exit__(self,*_): return False
+        def metadata_stream(path,*args,**kwargs):
+            raw = fixture.mount if str(path)=='/proc/self/mountinfo' else fixture.status
+            return io.BytesIO(raw)
+        def open_device(path,flags):
+            if path=='/dev/null': return 42
+            if flags & os.O_ACCMODE == os.O_RDONLY: return 41
+            raise PermissionError(errno.EACCES,'PRIVATE_SECRET')
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(mock.patch.object(harness,'ROOT',Path('/harness')))
+            for name in ('getuid','geteuid','getgid','getegid'):
+                stack.enter_context(mock.patch.object(harness.os,name,return_value=1000))
+            stack.enter_context(mock.patch.object(Path,'open',autospec=True,side_effect=metadata_stream))
+            stack.enter_context(mock.patch.object(harness.os,'statvfs',return_value=types.SimpleNamespace(
+                f_flag=os.ST_RDONLY|os.ST_NOSUID|os.ST_NOEXEC,f_blocks=16,f_frsize=4096,f_files=8)))
+            stack.enter_context(mock.patch.object(harness.os,'lstat',side_effect=lambda path:fixture.nodes[path]))
+            stack.enter_context(mock.patch.object(harness.os,'scandir',side_effect=lambda _:Entries()))
+            fixture.acl=stack.enter_context(mock.patch.object(harness.os,'getxattr',side_effect=OSError(errno.ENODATA,'PRIVATE_SECRET')))
+            fixture.open=stack.enter_context(mock.patch.object(harness.os,'open',side_effect=open_device))
+            fixture.fstat=stack.enter_context(mock.patch.object(harness.os,'fstat',side_effect=lambda fd:fixture.nodes['/dev/urandom' if fd==41 else '/dev/null']))
+            fixture.read=stack.enter_context(mock.patch.object(harness.os,'read',side_effect=lambda fd,n:b'x'*32 if fd==41 else b''))
+            fixture.write=stack.enter_context(mock.patch.object(harness.os,'write',return_value=0))
+            fixture.close=stack.enter_context(mock.patch.object(harness.os,'close'))
+            yield fixture
+
+    def test_bounded_device_verifier_closes_fds_and_never_writes_entropy(self):
+        out, err = io.StringIO(), io.StringIO()
+        with self.device_fixture() as f, contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            self.assertIsNone(harness.verify_private_devices())
+            self.assertEqual(f.close.call_args_list,[mock.call(41),mock.call(42)])
+            self.assertEqual(f.write.call_args_list,[mock.call(42,b'')])
+            self.assertEqual(f.open.call_count,4)
+            for call in f.open.call_args_list:
+                self.assertTrue(call.args[1] & os.O_NOFOLLOW)
+                self.assertTrue(call.args[1] & os.O_CLOEXEC)
+            self.assertEqual([c.args[1] & os.O_ACCMODE for c in f.open.call_args_list],
+                             [os.O_RDONLY,os.O_WRONLY,os.O_RDWR,os.O_RDWR])
+        self.assertEqual((out.getvalue(),err.getvalue()),('',''))
+
+    def test_mount_metadata_shape_bounds_and_privilege_reject_before_device_open(self):
+        bad_mounts=[b'',b'x\n',b'x'*131073,
+                    b'44 1 0:55 / /dev rw,nosuid,noexec - tmpfs f13-private-dev ro\n',
+                    b'44 1 0:55 / /dev ro,nosuid,noexec,nodev - tmpfs f13-private-dev ro\n',
+                    b'44 1 0:55 / /dev ro,nosuid - tmpfs f13-private-dev ro\n',
+                    b'44 1 0:55 / /dev ro,nosuid,noexec - tmpfs f13-private-dev rw\n',
+                    b'44 1 0:55 / /dev ro,nosuid,noexec - ext4 f13-private-dev ro\n',
+                    b'44 1 0:55 / /other/dev ro,nosuid,noexec - tmpfs f13-private-dev ro\n']
+        with self.device_fixture() as f:
+            bad_mounts.append(f.mount+f.mount)
+        for raw in bad_mounts:
+            with self.subTest(mount=raw[:60]), self.device_fixture() as f:
+                f.mount=raw
+                with self.assertRaises(harness.SetupFailure):harness.verify_private_devices()
+                f.open.assert_not_called()
+        for raw in (b'CapEff:1\nCapPrm:0\nCapInh:0\nCapAmb:0\n',b'CapEff:0\n',
+                    b'CapEff:0\nCapPrm:0\nCapInh:0\nCapAmb:0\nCapEff:0\n',b'Z'*16385):
+            with self.device_fixture() as f:
+                f.status=raw
+                with self.assertRaises(harness.SetupFailure):harness.verify_private_devices()
+                f.open.assert_not_called()
+
+    def test_node_directory_acl_and_entry_rejections_are_fail_closed(self):
+        import errno
+        import stat
+        cases=[('/dev','st_uid',1000),('/dev','st_mode',stat.S_IFDIR|0o755),
+               ('/dev/urandom','st_mode',stat.S_IFREG|0o444),('/dev/urandom','st_mode',stat.S_IFLNK|0o777),
+               ('/dev/urandom','st_mode',stat.S_IFCHR|0o666),('/dev/urandom','st_rdev',os.makedev(1,8)),
+               ('/dev/urandom','st_uid',1000),('/dev/urandom','st_gid',1000),
+               ('/dev/null','st_rdev',os.makedev(1,9))]
+        for path,field,value in cases:
+            with self.subTest(path=path,field=field),self.device_fixture() as f:
+                setattr(f.nodes[path],field,value)
+                with self.assertRaises(harness.SetupFailure):harness.verify_private_devices()
+                f.open.assert_not_called()
+        for entries in (['null'],['null','urandom','unexpected']):
+            with self.device_fixture() as f:
+                f.entries=entries
+                with self.assertRaises(harness.SetupFailure):harness.verify_private_devices()
+                f.open.assert_not_called()
+        for failure in (b'ACL',OSError(errno.EACCES,'PRIVATE_SECRET')):
+            with self.device_fixture() as f:
+                f.acl.side_effect=None if isinstance(failure,bytes) else failure
+                f.acl.return_value=failure
+                with self.assertRaises(harness.SetupFailure) as caught:harness.verify_private_devices()
+                self.assertNotIn('PRIVATE_SECRET',str(caught.exception))
+                f.open.assert_not_called()
+
+    def test_read_identity_failure_and_writable_open_close_without_entropy_write(self):
+        import errno
+        import types
+        for kind in ('identity','short','read_error','writable','wrong_denial'):
+            with self.subTest(kind=kind),self.device_fixture() as f:
+                if kind=='identity':
+                    data=vars(f.nodes['/dev/urandom']).copy();data['st_ino']+=1
+                    f.fstat.side_effect=None;f.fstat.return_value=types.SimpleNamespace(**data)
+                elif kind=='short':f.read.side_effect=None;f.read.return_value=b'x'
+                elif kind=='read_error':f.read.side_effect=OSError(errno.EIO,'PRIVATE_SECRET')
+                elif kind=='writable':f.open.side_effect=[41,73]
+                elif kind=='wrong_denial':f.open.side_effect=[41,OSError(errno.EMFILE,'PRIVATE_SECRET')]
+                with self.assertRaises(harness.SetupFailure) as caught:harness.verify_private_devices()
+                self.assertNotIn('PRIVATE_SECRET',str(caught.exception))
+                f.write.assert_not_called()
+                self.assertEqual(f.close.call_args_list,[mock.call(41),mock.call(73)] if kind=='writable' else [mock.call(41)])
+
+    def test_dispatch_verifies_before_each_ordinary_entry_and_failure_stops_both(self):
+        events=[]
+        with mock.patch.object(harness,'verify_private_devices',side_effect=lambda:events.append('verify')) as verify, \
+             mock.patch.object(harness,'prepare',side_effect=lambda:events.append('prepare')) as prepare, \
+             mock.patch.object(harness,'inside',side_effect=lambda:events.append('inside')) as inside:
+            for mode in ('--prepare','--inside'):
+                with mock.patch.object(harness.sys,'argv',['driver',mode]):harness.main()
+            self.assertEqual(events,['verify','prepare','verify','inside'])
+            prepare.reset_mock();inside.reset_mock()
+            verify.side_effect=harness.SetupFailure('fixed_device_failure')
+            for mode in ('--prepare','--inside'):
+                with mock.patch.object(harness.sys,'argv',['driver',mode]),self.assertRaisesRegex(harness.SetupFailure,'fixed_device_failure'):
+                    harness.main()
+            prepare.assert_not_called();inside.assert_not_called()
+
+    def test_existing_unsealed_device_namespace_rejects_without_opening_entropy(self):
+        with mock.patch.object(harness,'ROOT',Path('/harness')),mock.patch.object(harness.os,'open') as opened:
+            with self.assertRaises(harness.SetupFailure):harness.verify_private_devices()
+            opened.assert_not_called()
+
+
+    def test_private_device_setup_failures_stop_before_preparation_or_inside(self):
+        _,_,spawn,_=SameFinalViewContract().capture_namespace()
+        script=spawn.call_args.args[0][-1].replace('exec chroot ','chroot ')
+        script=script.replace('/usr/bin/mount ','mount ').replace('/usr/bin/mknod ','mknod ').replace('/usr/bin/chown ','chown ')
+        script='\n'.join(':' if line.startswith(': > ') else line for line in script.splitlines())+'\n'
+        prefix='set -eu\n'
+        prefix+='mount() { if [ "$FAILURE" = tmpfs ] && [ "$1" = -t ] && [ "$2" = tmpfs ]; then return 40; fi; '
+        prefix+='if [ "$FAILURE" = null ] && [ "$1" = --bind ] && [ "$2" = /dev/null ]; then return 40; fi; '
+        prefix+='if [ "$FAILURE" = seal ] && [ "$1" = -o ] && [ "${3##*/}" = dev ]; then return 40; fi; return 0; }\n'
+        prefix+='mknod() { if [ "$FAILURE" = node ]; then return 40; fi; return 0; }\n'
+        prefix+='chown() { if [ "$FAILURE" = owner ]; then return 40; fi; return 0; }\n'
+        prefix+='chroot() { printf "UNEXPECTED_ORDINARY_ENTRY\\n"; return 0; }\n'
+        for failure in ('tmpfs','node','owner','null','seal'):
+            with self.subTest(failure=failure):
+                result=subprocess.run(['bash','-c',prefix+script],capture_output=True,env=dict(os.environ,FAILURE=failure))
+                self.assertEqual(result.returncode,40)
+                self.assertNotIn(b'UNEXPECTED_ORDINARY_ENTRY',result.stdout)
+
+
 class SameFinalViewContract(unittest.TestCase):
     """Preparation component proof; real namespace and actual guard remain separate."""
     def capture_namespace(self, result=None):
@@ -98,7 +280,8 @@ class SameFinalViewContract(unittest.TestCase):
     def test_dispatch_is_exact_and_does_not_fall_back_to_namespace_for_unknown_modes(self):
         main = getattr(harness, 'main', None)
         self.assertTrue(callable(main))
-        with mock.patch.object(harness, 'prepare', return_value=0) as prepare, \
+        with mock.patch.object(harness, 'verify_private_devices'), \
+             mock.patch.object(harness, 'prepare', return_value=0) as prepare, \
              mock.patch.object(harness, 'inside', return_value=1) as inside, \
              mock.patch.object(harness, 'namespace_main', return_value=2) as outer:
             for argv, expected in (([],2), (['--prepare'],0), (['--inside'],1)):
@@ -115,6 +298,8 @@ class SameFinalViewContract(unittest.TestCase):
         # This proves ordering/fail-closed shell semantics, not actual mount privileges.
         _, _, spawn, _ = self.capture_namespace()
         script = spawn.call_args.args[0][-1].replace('exec chroot ', 'chroot ')
+        script = script.replace('/usr/bin/mount ', 'mount ').replace('/usr/bin/mknod ', 'mknod ').replace('/usr/bin/chown ', 'chown ')
+        script = '\n'.join(':' if line.startswith(': > ') else line for line in script.splitlines()) + '\n'
         for failure in ('none', 'prepare', 'seal'):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as folder:
                 trace = Path(folder)/'trace'
@@ -125,6 +310,7 @@ class SameFinalViewContract(unittest.TestCase):
                 prefix += 'if [ "$last" = --prepare ] && [ "$FAILURE" = prepare ]; then return 41; fi; }\n'
                 # Test-only directory predicates accept the sealed private target.
                 prefix += 'test() { return 0; }\n'
+                prefix += 'mknod() { return 0; }; chown() { return 0; }\n'
                 result = subprocess.run(['bash','-c',prefix+script], capture_output=True,
                                         env=dict(os.environ,TRACE=str(trace),FAILURE=failure))
                 events = trace.read_text().splitlines()
