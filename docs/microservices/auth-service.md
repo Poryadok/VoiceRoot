@@ -38,6 +38,15 @@ does not establish assembled admission runtime or authorize activation.
 **Фреймворк**: Spring Boot 3.5, Spring Security 6
 **БД**: PostgreSQL `auth_db`
 
+Auth keeps `org.springframework.web` and `io.grpc.netty.shaded.io.grpc.netty`
+at `INFO` even when `LOG_LEVEL` enables application `DEBUG` or `TRACE`.
+These framework diagnostics can include HTTP request/response bodies and gRPC
+HTTP/2 DATA or authorization headers. Their `INFO`/`WARN`/`ERROR` messages remain
+available, as do the metadata-only `HttpAccessLogFilter` records (request ID,
+method, path, status and duration). Do not enable payload diagnostics to inspect
+credentials. This policy covers these framework logger namespaces; it is not
+a general redaction filter for arbitrary application log messages.
+
 ## Ответственность
 
 - Регистрация (email, телефон, гостевой аккаунт)
