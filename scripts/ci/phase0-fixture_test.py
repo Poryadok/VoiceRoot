@@ -578,6 +578,7 @@ class ComposeTests(unittest.TestCase):
             "social": "https://social:8443/.well-known/jwks.json",
             "role": "https://role:8443/.well-known/jwks.json",
             "chat": "https://chat:8443/.well-known/jwks.json",
+            "voice": "https://voice:8443/internal/v1/principal/jwks.json",
         })
         self.assertEqual(space["environment"]["S2S_JWKS_CA_FILE"], "/run/phase0/jwks-ca/ca.crt")
         helper = self.merged["phase0-space-jwks-ca"]
@@ -1852,6 +1853,40 @@ class ComposeTests(unittest.TestCase):
         self.assertTrue(combined_ca["read_only"])
         self.assertEqual(combined["space"]["environment"]["SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE"],
                          self.merged["space"]["environment"]["SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE"])
+
+    def test_ci_space_voice_communication_keeps_its_required_issuer_and_trust(self):
+        # Use the actual CI order: root, media, then complete Phase0.
+        space = self.ci_merged["space"]
+        env = space["environment"]
+        self.assertEqual(json.loads(env["S2S_JWKS_URLS_JSON"]), {
+            "social": "https://social:8443/.well-known/jwks.json",
+            "role": "https://role:8443/.well-known/jwks.json",
+            "chat": "https://chat:8443/.well-known/jwks.json",
+            "voice": "https://voice:8443/internal/v1/principal/jwks.json",
+        })
+        prefix = "SPACE_VOICE_COMMUNICATION_"
+        expected = {
+            "GRPC_LISTEN": ":9094",
+            "REPLAY_REDIS_ADDR": "redis:6379",
+            "TLS_CERT_FILE": "/run/phase0/space-lifecycle.crt",
+            "TLS_KEY_FILE": "/run/phase0/space-lifecycle.key",
+            "CLIENT_CA_FILE": "/run/phase0/ca.crt",
+            "JWKS_CA_FILE": "/run/phase0/ca.crt",
+            "JWKS_CLIENT_CERT_FILE": "/run/phase0/space-client.crt",
+            "JWKS_CLIENT_KEY_FILE": "/run/phase0/space-client.key",
+        }
+        for suffix, value in expected.items():
+            self.assertEqual(env[prefix + suffix], value)
+            if suffix.endswith("_FILE"):
+                mount = next(v for v in space["volumes"] if v["target"] == value)
+                self.assertEqual(mount["type"], "bind")
+                self.assertTrue(mount["read_only"])
+                self.assertTrue(Path(mount["source"]).is_relative_to(self.fixture))
+        self.assertEqual(env["S2S_JWKS_CA_FILE"], "/run/phase0/jwks-ca/ca.crt")
+        self.assertEqual(env["SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN"], ":9096")
+        self.assertEqual(env["SPACE_CHAT_COMPOSITE_GRPC_LISTEN"], ":9097")
+        self.assertEqual(env["SPACE_AUDIT_PRINCIPAL_GRPC_LISTEN"], ":9098")
+        self.assertFalse(space.get("ports"))
 
     def test_combined_phase0_media_listeners_have_distinct_ports_and_matching_caller(self):
         # Match the CI stack's effective order: the complete Phase0 overlay
