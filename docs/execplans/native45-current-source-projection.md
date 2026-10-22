@@ -124,3 +124,33 @@ projection, Role source, new authority or stopped-core implementation is present
 
 No new tests are requested for this freeze. Independent review via121 precedes
 source publication or any activation; developer GREEN is not feature acceptance.
+
+## Corrective generated closure (c215)
+
+Independent review c32 found both Go grpc mirrors omitted eight canonical RPCs.
+Source-bound canonical-client/server/ServiceDesc regression reproduced this in
+both SDKs. Pinned Buf1.50.0/Go1.36.5/grpc1.5.1 generation restores only those
+two files; both are byte-exact accepted1a01 outputs. Current full generation
+compares142Go and126Dart files without drift. Buflint/format and breaking against
+exactdd4cf71c8e99c154639713a7a352fd3b0ab989bb passed. Dart25 generation is unchanged.
+Standalone SDK compile initially failed SETUP due absent pinned module cache;
+normal authenticated-checksum download restored cache. The canonical import of
+Role also requires the existing reviewed9b2 SDK require/local replace; that
+metadata was explicitly approvedc219/acceptedc220 and restored byte-exact9b2;
+no Role source or dependency upgrade was performed.
+The previous PG18 semantic proof remains bound170fd2/source63f92, not a blanket
+proof of this updated generated tree. No new runtime test or activation.
+
+
+Final corrective evidence: exactly two Go grpc outputs changed after pinned
+generation, byte-exact1a01. Source-bound regression reads canonical Space RPCs
+and checks both client/server interfaces, ServiceDesc and method constants.
+Full canonical generation parity is142Go/126Dart with zero drift. Current
+Buflint/format/breaking against exactdd4 are all0. Offline compilecache miss
+is preserved as SETUP; the one authorized HTTPS/default-checksum/read-only
+module invocation passed standalone Space SDK, User Space mirror and all Space
+test-package compilation (ZERO runtime tests), Space vet/build. No PG rerun.
+All82 previously qualified backend source payloads are unchanged from170fd2;
+its PG18 proof remains scoped to that source, not blanket updated-head proof.
+This correction does not add handlers, main registration or public authority.
+Same423 independent recheck is required before source publication/intake.

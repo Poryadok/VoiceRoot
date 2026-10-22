@@ -806,6 +806,26 @@
       "byte_exact_origin": true
     },
     {
+      "path": "src/backend/user/pb/voice/space/v1/space_grpc.pb.go",
+      "source": "1a01d0914932dee614c874472b7a5a96fe63089c",
+      "source_blob": "c88e5c7f0469fc4cc8149ad87f894c5b38caf12c",
+      "sha256": "000bde600c4e52613092aafccbbd15fc6eb72c9b52fa98b68c269ae7fac14ee0",
+      "projected_sha256": "000bde600c4e52613092aafccbbd15fc6eb72c9b52fa98b68c269ae7fac14ee0",
+      "byte_exact_origin": true,
+      "reason": "c215 actual pinned canonical generation restores omitted existing grpc client/server/ServiceDesc mirror",
+      "changes_base": true
+    },
+    {
+      "path": "src/backend/voice/pb/voice/space/go.mod",
+      "source": "9b2f1bce00caf7a40cf0a3ba489e3ad60ec61ff0",
+      "source_blob": "ccd57e3b778c7e1a8ba5bb795158639be0cbfc3c",
+      "sha256": "34cb408e75395a439c4646944a2c84769a0223b7d3f2a2411866974c5f0d2f5d",
+      "projected_sha256": "34cb408e75395a439c4646944a2c84769a0223b7d3f2a2411866974c5f0d2f5d",
+      "byte_exact_origin": true,
+      "changes_base": true,
+      "reason": "c219 exact necessary local Role SDK require/replace for alreadycanonical generated import; no Role source upgrade"
+    },
+    {
       "path": "src/backend/voice/pb/voice/space/v1/member_admission.pb.go",
       "source": "1a01d0914932dee614c874472b7a5a96fe63089c",
       "source_blob": "5f5f3588f0f834fa9f3d4643dd1603411881a295",
@@ -824,6 +844,16 @@
       "changes_base": true,
       "projected_sha256": "0840c85060d7c36687058d9508798812ee41e6b071d79baeac4cbd9e0ac693fb",
       "byte_exact_origin": true
+    },
+    {
+      "path": "src/backend/voice/pb/voice/space/v1/space_grpc.pb.go",
+      "source": "1a01d0914932dee614c874472b7a5a96fe63089c",
+      "source_blob": "c88e5c7f0469fc4cc8149ad87f894c5b38caf12c",
+      "sha256": "000bde600c4e52613092aafccbbd15fc6eb72c9b52fa98b68c269ae7fac14ee0",
+      "projected_sha256": "000bde600c4e52613092aafccbbd15fc6eb72c9b52fa98b68c269ae7fac14ee0",
+      "byte_exact_origin": true,
+      "reason": "c215 actual pinned canonical generation restores omitted existing grpc client/server/ServiceDesc mirror",
+      "changes_base": true
     },
     {
       "path": "src/frontend/lib/gen/voice/space/v1/member_admission.pb.dart",
@@ -901,5 +931,20 @@
     "reason": "same fixed M44 serving role restriction before BORN first INSERT; genuine owner-session RED25.876 to focused GREEN23.896",
     "sql_migrations_changed_from_origin": false
   },
-  "status": "Creator component source/proof offer only; full current application activation HOLD"
+  "status": "Creator component source/proof offer only; full current application activation HOLD",
+  "generated_closure": {
+    "parent": "170fd2bb1dfbce8392d93a383af766f79e758518",
+    "go": "v1.36.5",
+    "grpc": "v1.5.1",
+    "buf": "1.50.0",
+    "dart": "protoc_plugin25.0.0",
+    "Go_full_sync_files": 142,
+    "Dart_full_sync_files": 126,
+    "drift": 0,
+    "breaking_against": "dd4cf71c8e99c154639713a7a352fd3b0ab989bb",
+    "sdk_module_metadata": "c219 approved/c220 accepted exact9b2 requireRolev0.0.0/localreplace",
+    "affected_compile": "c219 single HTTPS/default checksums/-mod=readonly; standalone Voice SDK/User mirror/Space ZEROtests compile, Space vet/build AND terminal0",
+    "affected_compile_source_sha256": "846016b32106a17dc4a0e00ea8c90ef2c163e6ae9c6335e1868d9dfd193f07a1",
+    "prior_PG_proof": "170fd2/source63f92 only; prior82 backend payloads unchanged, not wholeupdatedhead PG PASS"
+  }
 }
