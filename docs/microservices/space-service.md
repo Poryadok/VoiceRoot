@@ -166,6 +166,16 @@ domain wrapper also requires the verified principal. An ordinary 9090 call with
 a raw Social marker is rejected; other existing callers migrate separately.
 See [deployment and rotation](../DEPLOYMENT.md#social-privacy-principals).
 
+The Gateway lifecycle transport has a separate typed Creator boundary. Ordinary
+listener `CreateSpace` calls are denied. A configured lifecycle runtime accepts
+Creator only with explicitly supplied Creator epoch and replay callbacks;
+`ServerOptions()` alone keeps it unavailable. The verified capability binds the
+exact request and explicit regular account and repeats the fresh Auth floor
+observation before the write boundary. This transport component does not enable
+the production Creator handler or authorize native membership activation. Its
+main/config assembly still requires the qualified native catalog/writers,
+durable Gateway replay ledger and actual protected Role Owner bootstrap.
+
 ```protobuf
 service SpaceService {
   // Пространства

@@ -100,7 +100,7 @@ func TestLifecycleListenersDenyRawAndUnlistedMethodsBeforeHandler(t *testing.T) 
 		})
 		require.Equal(t, codes.PermissionDenied, status.Code(err))
 	}
-	_, err := (Verifier{}).Unary()(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: spacev1.SpaceService_CreateSpace_FullMethodName}, func(context.Context, any) (any, error) { t.Fatal("unlisted mutation reached handler"); return nil, nil })
+	_, err := (Verifier{}).Unary()(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: spacev1.SpaceService_ListMySpaces_FullMethodName}, func(context.Context, any) (any, error) { t.Fatal("unlisted method reached handler"); return nil, nil })
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
