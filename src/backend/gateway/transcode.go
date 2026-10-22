@@ -398,7 +398,7 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		}
 		return t.serveFriends(w, r, rest)
 	case "chats":
-		if t.clients.chat == nil {
+		if t.clients.chat == nil && !isChatCreationRequest(r) {
 			return false
 		}
 		return t.serveChats(w, r, rest)

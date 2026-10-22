@@ -1863,6 +1863,17 @@ class ComposeTests(unittest.TestCase):
             self.assertEqual(self.source_at(PROXY, match.group(1)), source)
 
 
+class A1InvocationTests(unittest.TestCase):
+    def test_a1_consumes_the_complete_phase0_overlay_after_media(self):
+        script = (ROOT / "scripts/ci/compose-a1-multi-account-proof.sh").read_text(encoding="utf-8")
+        compose = script.split("compose() {", 1)[1].split("\n}", 1)[0]
+        files = re.findall(r'-f\s+"([^"\n]+)"', compose)
+        self.assertEqual(files, ["$COMPOSE_FILE_PATH",
+                                 "${ROOT}/docker-compose.voice-space-media.yml",
+                                 "${ROOT}/docker-compose.phase0.yml"])
+        self.assertIn("PHASE0_FIXTURE_DIR", script)
+
+
 class RestorerPathTests(unittest.TestCase):
     def test_owner_restorer_accepts_only_declared_generated_fixture_locations(self):
         with tempfile.TemporaryDirectory(prefix="phase0-restorer-paths-") as tmp:

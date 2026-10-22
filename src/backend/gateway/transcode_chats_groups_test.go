@@ -88,23 +88,22 @@ func TestTranscodeChatsCreateGroup(t *testing.T) {
 	conn, cleanup := startBufconnChatConn(t, grpcRec)
 	t.Cleanup(cleanup)
 
+	f := newCreatorFixture(t)
 	proxyCalled := false
-	h := newGatewayForContract(t, gatewayTestOptions{
-		tokenClaims: map[string]tokenClaims{
-			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
-		},
-		transcoder: &transcoder{clients: grpcClients{chat: chatv1.NewChatServiceClient(conn)}},
-		restUpstreams: map[string]http.Handler{
-			"chats": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				proxyCalled = true
-				w.WriteHeader(http.StatusAccepted)
-			}),
-		},
-	})
+	cfg := f.config(nil)
+	cfg.transcoder.clients.chat = chatv1.NewChatServiceClient(conn)
+	cfg.transcoder.clients.chatAudit = chatv1.NewChatServiceClient(conn)
+	cfg.restUpstreams = map[string]http.Handler{
+		"chats": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			proxyCalled = true
+			w.WriteHeader(http.StatusAccepted)
+		}),
+	}
+	h := newGateway(cfg)
 
 	body := `{"type":"CHAT_TYPE_GROUP","name":"Friday squad"}`
 	resp := performRequest(h, http.MethodPost, "/api/v1/chats", body, map[string]string{
-		"Authorization": "Bearer valid-user-token",
+		"Authorization": "Bearer " + signConfigJWT(t, "creator-key", f.key, f.payload),
 	})
 	if resp.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%q", resp.Code, http.StatusOK, resp.Body.String())

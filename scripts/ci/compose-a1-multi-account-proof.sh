@@ -147,6 +147,7 @@ compose() {
     --project-directory "$ROOT" \
     -f "$COMPOSE_FILE_PATH" \
     -f "${ROOT}/docker-compose.voice-space-media.yml" \
+    -f "${ROOT}/docker-compose.phase0.yml" \
     --profile app \
     "$@"
 }

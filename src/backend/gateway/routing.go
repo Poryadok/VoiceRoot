@@ -129,6 +129,10 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 		writeGRPCError(w, status.Error(codes.Unavailable, "Story consent transport unavailable"))
 		return
 	}
+	if isChatCreationRequest(r) {
+		writeGRPCError(w, status.Error(codes.Unavailable, "protected Chat creation transport unavailable"))
+		return
+	}
 	upstream, ok := g.config.restUpstreams[namespace]
 	if !ok {
 		traceMatchFoundTransport("rest-upstream-missing")
