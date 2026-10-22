@@ -16,6 +16,11 @@ services:
     environment:
       GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/gateway
       GATEWAY_PRINCIPAL_ACTIVE_KID: current
+      GATEWAY_SPACE_LIFECYCLE_GRPC_ADDR: space:9096
+      GATEWAY_SPACE_LIFECYCLE_TLS_CA_FILE: /run/phase0/ca.crt
+      GATEWAY_SPACE_LIFECYCLE_TLS_SERVER_NAME: space
+      GATEWAY_SPACE_LIFECYCLE_CLIENT_CERT_FILE: /run/phase0/gateway-client.crt
+      GATEWAY_SPACE_LIFECYCLE_CLIENT_KEY_FILE: /run/phase0/gateway-client.key
       GATEWAY_CHAT_AUDIT_GRPC_ADDR: chat:9094
       GATEWAY_CHAT_AUDIT_TLS_CA_FILE: /run/phase0/ca.crt
       GATEWAY_CHAT_AUDIT_TLS_SERVER_NAME: chat

@@ -626,6 +626,40 @@ class ComposeTests(unittest.TestCase):
             public.add(require_success(run("openssl", "pkey", "-in", key, "-pubout")))
         self.assertEqual(len(public), 2, "Bot current and next signer keys must be distinct")
 
+    def test_ci_gateway_space_lifecycle_caller_matches_existing_protected_listener(self):
+        gateway = self.ci_merged["gateway"]["environment"]
+        space = self.ci_merged["space"]["environment"]
+        prefix = "GATEWAY_SPACE_LIFECYCLE_"
+        expected = {
+            "GRPC_ADDR": "space:9096",
+            "TLS_CA_FILE": "/run/phase0/ca.crt",
+            "TLS_SERVER_NAME": "space",
+            "CLIENT_CERT_FILE": "/run/phase0/gateway-client.crt",
+            "CLIENT_KEY_FILE": "/run/phase0/gateway-client.key",
+        }
+        self.assertEqual({key: gateway.get(prefix + key) for key in expected}, expected)
+        self.assertEqual(space["SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN"], ":9096")
+        self.assertEqual(gateway[prefix + "GRPC_ADDR"],
+                         "space" + space["SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN"])
+        for suffix, source in (("TLS_CA_FILE", "ca/ca.crt"),
+                               ("CLIENT_CERT_FILE", "tls/gateway-client.crt"),
+                               ("CLIENT_KEY_FILE", "tls/gateway-client.key")):
+            self.assertEqual(self.media_source_at("gateway", gateway[prefix + suffix],
+                                                  self.ci_merged), source)
+        listener = "SPACE_GATEWAY_LIFECYCLE_"
+        for suffix, source in (("CLIENT_CA_FILE", "ca/ca.crt"),
+                               ("TLS_CERT_FILE", "tls/space-lifecycle.crt"),
+                               ("TLS_KEY_FILE", "tls/space-lifecycle.key")):
+            self.assertEqual(self.media_source_at("space", space[listener + suffix],
+                                                  self.ci_merged), source)
+        self.assertEqual(gateway["GATEWAY_SESSION_EPOCH_STRICT"], "true")
+        self.assertEqual(gateway["GATEWAY_PRINCIPAL_ACTIVE_KID"], "current")
+        self.assertEqual(self.media_source_at("gateway", gateway["GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR"],
+                                              self.ci_merged), "gateway")
+        self.assertNotIn("SPACE_LIFECYCLE_ENABLED", space)
+        self.assertNotEqual(space[listener + "GRPC_LISTEN"],
+                            space["SPACE_VOICE_COMMUNICATION_GRPC_LISTEN"])
+
     def test_lifecycle_overlay_keeps_media_listener_and_gateway_target_distinct(self):
         command = ["docker", "compose", "--env-file", self.empty_env,
                    "--profile", "*", "-f", ROOT / "docker-compose.yml",
