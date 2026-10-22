@@ -56,3 +56,10 @@ at setup only: nats-server/v2 v2.10.24 was not cached and the offline runner
 could not fetch it. Other affected package results passed, but no whole-short
 PASS is claimed. Its guard did not run vet/build. Raw FAIL is retained; no rerun
 was performed. This is a verification limitation, not a hidden actual-PG failure.
+
+Coordinator c125 explicitly allowed one separate dependency-enabled static
+invocation. Exact source was mounted read-only, pinned dependencies resolved
+through HTTPS/checksum with -mod=readonly; `go test ./... -run '^$'` compiled
+all packages with ZERO tests, followed by vet/build, terminal0. Both source
+manifests match. This closes compile/vet/build evidence; it does not turn the
+earlier short setup FAIL into a short PASS or repeat the PG/runtime matrix.
