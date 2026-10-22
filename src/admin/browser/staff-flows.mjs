@@ -8,8 +8,98 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 import { bodyTextIncludesExpression } from './text-readiness.mjs';
 
+const CHROMIUM_STARTUP_TIMEOUT_MS = 20000;
+const CHROMIUM_STARTUP_FAILURE = 'Chromium startup did not become ready';
+const SAFE_SIGNALS = new Set(['SIGABRT', 'SIGBUS', 'SIGFPE', 'SIGILL', 'SIGINT', 'SIGKILL', 'SIGSEGV', 'SIGTERM']);
+
+function safeSpawnError(error) {
+  if (error?.code === 'ENOENT') return 'not_found';
+  if (error?.code === 'EACCES' || error?.code === 'EPERM') return 'permission_denied';
+  if (['EAGAIN', 'EMFILE', 'ENFILE'].includes(error?.code)) return 'resource_exhausted';
+  return 'unknown';
+}
+
+function safeSignal(signal) {
+  if (signal === 'unknown') return 'unknown';
+  if (signal === null) return 'none';
+  if (typeof signal !== 'string') return 'unknown';
+  return SAFE_SIGNALS.has(signal) ? signal : 'other';
+}
+
+function safeExit(code) {
+  if (code === 0) return 'zero';
+  if (Number.isInteger(code)) return 'nonzero';
+  return 'unknown';
+}
+
+function startupDiagnostic(state, startedAt, now, { code = null, signal = null, spawnError = 'none' } = {}) {
+  return {
+    state,
+    elapsedMs: Math.max(0, Math.round(now() - startedAt)),
+    exit: safeExit(code),
+    signal: safeSignal(signal),
+    spawnError,
+  };
+}
+
+export async function launchChromium(binary, args, profile, dependencies = {}) {
+  const now = dependencies.now ?? Date.now;
+  const sleep = dependencies.sleep ?? delay;
+  const spawnProcess = dependencies.spawnProcess ?? spawn;
+  const readPort = dependencies.readPort ?? (async () => {
+    try { return (await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0] || null; }
+    catch { return null; }
+  });
+  const startedAt = now();
+  let child;
+  try {
+    child = spawnProcess(binary, args, { stdio: 'ignore' });
+  } catch (error) {
+    return { child: undefined, port: undefined, diagnostic: startupDiagnostic(
+      'spawn_failed', startedAt, now, { signal: 'unknown', spawnError: safeSpawnError(error) }) };
+  }
+
+  let spawnError = 'none';
+  let didExit = false;
+  let exitCode = null;
+  let signalCode = null;
+  child.on('error', error => { spawnError = safeSpawnError(error); });
+  child.on('exit', (code, signal) => { didExit = true; exitCode = code; signalCode = signal; });
+
+  const failed = () => {
+    if (spawnError !== 'none') {
+      return startupDiagnostic('spawn_failed', startedAt, now, { signal: 'unknown', spawnError });
+    }
+    const code = child.exitCode ?? exitCode;
+    const signal = child.signalCode ?? signalCode;
+    if (didExit || code !== null && code !== undefined || signal !== null && signal !== undefined) {
+      return startupDiagnostic('early_exit', startedAt, now, { code, signal });
+    }
+    return null;
+  };
+
+  const deadline = startedAt + CHROMIUM_STARTUP_TIMEOUT_MS;
+  while (now() < deadline) {
+    const failure = failed();
+    if (failure) return { child, port: undefined, diagnostic: failure };
+    const port = await readPort();
+    const afterReadFailure = failed();
+    if (afterReadFailure) return { child, port: undefined, diagnostic: afterReadFailure };
+    if (port) return { child, port, diagnostic: startupDiagnostic('ready', startedAt, now) };
+    await sleep(Math.min(100, Math.max(0, deadline - now())));
+  }
+  const failure = failed();
+  return {
+    child,
+    port: undefined,
+    diagnostic: failure ?? startupDiagnostic('port_missing', startedAt, now),
+  };
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 const root = resolve('dist');
 const output = resolve(process.env.ADMIN_BROWSER_OUTPUT ?? '../../tmp/admin-browser');
 await mkdir(output, { recursive: true });
@@ -160,17 +250,14 @@ try {
     evidence.bundle.push({ file, sha256: createHash('sha256').update(await readFile(join(root, file))).digest('hex') });
   }
   const profile = await mkdtemp(join(tmpdir(), 'voice-admin-browser-'));
-  chrome = spawn(process.env.CHROME_BIN ?? 'google-chrome', ['--headless=new', '--no-sandbox',
+  const startup = await launchChromium(process.env.CHROME_BIN ?? 'google-chrome', ['--headless=new', '--no-sandbox',
     '--disable-dev-shm-usage', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0',
     '--disable-extensions', '--disable-background-networking', '--disable-sync', '--no-proxy-server',
-    `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });
-  let launchError;
-  chrome.on('error', err => { launchError = err; });
-  const port = await until('Chromium startup', async () => {
-    if (launchError) throw launchError;
-    if (chrome.exitCode !== null) throw new Error(`Chromium exited ${chrome.exitCode}`);
-    try { return (await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]; } catch { return null; }
-  });
+    `--user-data-dir=${profile}`, 'about:blank'], profile);
+  chrome = startup.child;
+  evidence.browserStartup = startup.diagnostic;
+  if (startup.diagnostic.state !== 'ready') throw new Error(CHROMIUM_STARTUP_FAILURE);
+  const port = startup.port;
   evidence.browser = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
   const socket = new WebSocket(evidence.browser.webSocketDebuggerUrl);
   await new Promise((done, reject) => { socket.addEventListener('open', done, { once: true }); socket.addEventListener('error', reject, { once: true }); });
@@ -237,7 +324,8 @@ try {
   evidence.passed = true;
   console.log(`PASS ${evidence.checks.length} Admin browser checks (${evidence.sourceSha})`);
 } catch (err) {
-  evidence.error = err.stack ?? String(err); process.exitCode = 1; console.error(evidence.error);
+  evidence.error = err.message === CHROMIUM_STARTUP_FAILURE ? err.message : err.stack ?? String(err);
+  process.exitCode = 1; console.error(evidence.error);
   try { await screenshot?.('failure'); } catch { /* preserve original failure */ }
 } finally {
   await writeFile(join(output, 'evidence.json'), `${JSON.stringify(evidence, null, 2)}\n`);
@@ -247,4 +335,5 @@ try {
   }
   if (chrome && chrome.exitCode === null && chrome.pid) chrome.kill();
   server.closeAllConnections(); await new Promise(done => server.close(done));
+}
 }
