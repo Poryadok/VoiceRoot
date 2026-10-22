@@ -54,6 +54,13 @@ GIT_MANIFEST_SHA = '2450a593c024b8ce6d03ed97c5db6c60b397b90ec5c57d3e8d5c5a9287bf
 GIT_COMMANDS = ('cat-file', 'checkout', 'clone', 'config', 'diff', 'diff-tree', 'hash-object',
                 'index-pack', 'ls-tree', 'merge-base', 'merge-tree', 'rev-list', 'rev-parse', 'show', 'version')
 UTILITY_DIRS = ('/usr/local/bin', '/usr/bin', '/bin')
+UTILITY_DIAGNOSTIC_NAMES = frozenset(('python', 'python3', 'python3.11', 'python3.12', 'python3.13',
+    'bash', 'sh', 'env', 'sudo', 'unshare', 'mount', 'umount', 'chroot', 'cat', 'cut', 'tr', 'sed',
+    'awk', 'grep', 'sort', 'head', 'tail', 'wc', 'sha256sum', 'readlink', 'realpath', 'find', 'xargs',
+    'dirname', 'basename', 'printf', 'stat', 'id', 'groups', 'cp', 'mkdir', 'git', 'git-index-pack', 'git-rev-list'))
+UTILITY_DIAGNOSTIC_ROOTS = ('/usr/bin', '/usr/local/bin', '/bin')
+UTILITY_DIAGNOSTIC_BYTES = 16384
+UTILITY_DIAGNOSTIC_ENTRIES = 32
 
 
 class SetupFailure(Exception):
@@ -95,6 +102,93 @@ def expected_utilities():
     return utilities
 
 
+def utility_diagnostic_token(value, name=False):
+    if not isinstance(value, str):
+        return {'status': 'invalid_type'}
+    if name and value in UTILITY_DIAGNOSTIC_NAMES:
+        return {'name': value}
+    if not name:
+        for root in UTILITY_DIAGNOSTIC_ROOTS:
+            relative = value[len(root) + 1:] if value.startswith(root + '/') else ''
+            if relative in UTILITY_DIAGNOSTIC_NAMES:
+                return {'root': root, 'relative': relative}
+    raw = value.encode('utf-8', errors='surrogatepass')
+    return {'sha256': sha(raw), 'utf8_bytes': len(raw)}
+
+
+def utility_diagnostic_access(value):
+    if not isinstance(value, str) or not value.startswith('/') or '\0' in value or len(value) > 4096:
+        return {'status': 'not_inspected'}
+    try:
+        path = Path(value)
+        return dict(status='inspected', is_symlink=path.is_symlink(), is_file=path.is_file(),
+                    executable=os.access(path, os.X_OK), resolved=utility_diagnostic_token(str(path.resolve())))
+    except Exception:
+        # Exception text may contain an arbitrary pathname; never serialize it.
+        return {'status': 'metadata_unavailable'}
+
+
+def utility_view_diagnostic(base, actual, expected, entry_count, entry_names=()):
+    """Output-only observation of cached predicate inputs, never authority."""
+    encode = lambda value: json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True).encode()
+    expected_keys = set(expected) if expected is not None else set()
+    missing = expected_keys - set(actual) if expected is not None else set()
+    extra = set(actual) - expected_keys if expected is not None else set()
+    changed = {key for key in expected_keys & set(actual) if expected[key] != actual[key]}
+    unmatched_slots = set(entry_names) - set(actual)
+    groups = os.getgroups()
+    numeric_groups = sorted(value for value in groups if type(value) is int and 0 <= value <= 4294967295)
+    report = dict(kind='F13_UTILITY_VIEW_DIAGNOSTIC_v1', status='mismatch',
+                  expected_status='evaluated' if expected is not None else 'not_evaluated_short_circuit',
+                  counts=dict(expected=len(expected) if expected is not None else None, actual=len(actual),
+                              entries=entry_count, non_symlink=entry_count - len(actual),
+                              missing=len(missing) if expected is not None else None,
+                              extra=len(extra) if expected is not None else None,
+                              changed=len(changed) if expected is not None else None),
+                  mappings=dict(actual_sha256=sha(encode(actual)),
+                                expected_sha256=sha(encode(expected)) if expected is not None else None),
+                  uid=os.getuid(), gid=os.getgid(), groups=numeric_groups[:16],
+                  groups_total=len(groups), groups_invalid=len(groups) - len(numeric_groups),
+                  entries=[], truncated=False, omitted=0)
+    differences = sorted(missing | extra | changed | unmatched_slots)
+    for key in differences[:UTILITY_DIAGNOSTIC_ENTRIES]:
+        item = dict(tool=utility_diagnostic_token(key, name=True),
+                    difference='missing' if key in missing else 'extra' if key in extra else
+                    'changed' if key in changed else 'not_in_actual_symlink_snapshot')
+        for label, mapping in [('expected', expected), ('actual', actual)]:
+            if mapping is not None and key in mapping:
+                item[label] = dict(target=utility_diagnostic_token(mapping[key]), access=utility_diagnostic_access(mapping[key]))
+        # Name is only used for a direct child metadata lookup when it is a
+        # valid filesystem basename. It is never interpolated into output.
+        if isinstance(key, str) and key not in ('', '.', '..') and '/' not in key and '\0' not in key and len(key) <= 255:
+            try:
+                slot = base / 'util' / key
+                item['slot'] = dict(is_symlink=slot.is_symlink(), is_file=slot.is_file(),
+                                    executable=os.access(slot, os.X_OK))
+            except Exception:
+                item['slot'] = {'status': 'metadata_unavailable'}
+        candidate = dict(report, entries=report['entries'] + [item])
+        if len(encode(candidate)) > UTILITY_DIAGNOSTIC_BYTES - 256:
+            break
+        report['entries'].append(item)
+    report['omitted'] = len(differences) - len(report['entries'])
+    report['truncated'] = report['omitted'] > 0
+    require(len(encode(report)) < UTILITY_DIAGNOSTIC_BYTES, 'utility_diagnostic_bound')
+    return report
+
+
+def emit_utility_view_diagnostic(base, actual, expected, entry_count, entry_names=()):
+    try:
+        value = utility_view_diagnostic(base, actual, expected, entry_count, entry_names)
+        line = json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True)
+    except Exception:
+        line = '{"kind":"F13_UTILITY_VIEW_DIAGNOSTIC_v1","status":"diagnostic_unavailable"}'
+    try:
+        sys.stderr.write(line + '\n')
+    except Exception:
+        pass  # Output failure must not mask the original require/SETUP2 below.
+
+
 def verify_pinned_git(root, runtime=True):
     base = root / 'historical-git'
     require(not base.is_symlink(), 'pinned_Git_root_path')
@@ -120,7 +214,13 @@ def verify_pinned_git(root, runtime=True):
                 require(not path.is_symlink() and path.read_bytes() == git_launcher().encode() and
                         stat.S_IMODE(path.stat().st_mode) == 0o555, 'pinned_Git_launcher_bytes')
         actual = {p.name: str(p.readlink()) for p in (base / 'util').iterdir() if p.is_symlink()}
-        require(len(list((base / 'util').iterdir())) == len(actual) and actual == expected_utilities(), 'pinned_Git_private_utility_view')
+        utility_entries = list((base / 'util').iterdir())
+        entry_count = len(utility_entries)
+        expected = None
+        valid_view = entry_count == len(actual) and actual == (expected := expected_utilities())
+        if not valid_view:
+            emit_utility_view_diagnostic(base, actual, expected, entry_count, [p.name for p in utility_entries])
+        require(valid_view, 'pinned_Git_private_utility_view')
         require(not any((base / 'templates').iterdir()), 'pinned_Git_empty_templates')
     return base
 
