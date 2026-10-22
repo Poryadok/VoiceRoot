@@ -340,6 +340,31 @@ binding is returned until both sides agree.
 
 ## Публикуемые события (→ NATS)
 
+### Service-principal signer rotation
+
+The protected Bot principal runtime supports the canonical issuer configuration
+from `ARCHITECTURE_REQUIREMENTS.md`: configure both
+`BOT_PRINCIPAL_SIGNING_KEYS_DIR` and `BOT_PRINCIPAL_ACTIVE_KID`. The directory
+contains exactly two top-level `<kid>.pem` unencrypted PKCS#8 RSA keys of at
+least 2048 bits with distinct moduli. The active kid must name one of those
+files; kids match `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`. Resolved key files must
+remain inside the configured directory. Keys are loaded once at startup.
+
+`/.well-known/principal-jwks.json` publishes both public keys, in stable kid
+order, through the existing HTTPS listener requiring a trusted client
+certificate. Only the configured active key signs credentials. Publish the peer
+before activating it, and retain the old public key for at least 30 seconds
+after stopping its signatures, as required by the shared rotation contract.
+
+For existing deployments, the prior `BOT_PRINCIPAL_PRIVATE_KEY_FILE` and
+`BOT_PRINCIPAL_KEY_ID` pair retains its single-key behavior when both canonical
+settings are absent. It cannot satisfy consumers requiring a complete two-key
+set, including Chat creation. To migrate, replace that pair with the canonical
+directory/active-kid pair and keep the existing TLS, replay and listener settings.
+Partial canonical configuration, mixing signer modes, missing/extra/invalid
+keys or equal RSA moduli fail startup. An entirely unconfigured runtime stays
+disabled. This changes issuer key publication, not Bot feature activation.
+
 Доменный поток JetStream: **`bot.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
 
 | Событие                 | Данные                               |
