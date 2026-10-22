@@ -516,6 +516,60 @@ def resolve_owned_utility_output(stdout, stderr, context):
         return stdout, stderr, None
 
 
+def coarse_public_diagnostic_status(stdout, stderr, context, public_receipt):
+    """Fixed outer observation only; never infer mismatch from an absent receipt."""
+    try:
+        def unique_fields(items):
+            result = {}
+            for key, value in items:
+                if key in result:
+                    raise ValueError('duplicate_field')
+                result[key] = value
+            return result
+        mismatch = False
+        for stream in (stdout, stderr):
+            for line in stream.splitlines():
+                if len(line) > 16384:
+                    continue
+                try:
+                    value = json.loads(line.decode('ascii'), object_pairs_hook=unique_fields)
+                except (ValueError, UnicodeError):
+                    continue
+                if isinstance(value, dict) and value.get('kind') == 'F13_UTILITY_VIEW_DIAGNOSTIC_v1' and value.get('status') == 'mismatch':
+                    mismatch = True
+        if not mismatch:
+            return None
+        if context is None:
+            return 'context_unavailable'
+        if public_receipt is None:
+            return 'candidate_rejected_or_not_selected'
+        if (not isinstance(public_receipt, dict) or
+                public_receipt.get('kind') != 'F13_PUBLIC_UTILITY_OUTER_RESOLUTION_RECEIPT_v1' or
+                not isinstance(public_receipt.get('entries'), list) or
+                diagnostic_units(public_receipt) > 32 or len(diagnostic_json(public_receipt)) + 1 > 16384):
+            return None
+        def qualified(value):
+            if isinstance(value, dict):
+                if (value.get('qualification') == 'OUTER_CATALOG_RESOLUTION_OF_CHILD_TOKEN' and
+                        any(isinstance(value.get(key), str) for key in ('basename', 'path'))):
+                    return True
+                return any(qualified(item) for item in value.values())
+            if isinstance(value, list):
+                return any(qualified(item) for item in value)
+            return False
+        return None if qualified(public_receipt['entries']) else 'catalog_match_failed'
+    except Exception:
+        return None
+
+
+def emit_coarse_public_diagnostic_status(status):
+    try:
+        if type(status) is str and status in ('context_unavailable', 'candidate_rejected_or_not_selected', 'catalog_match_failed'):
+            sys.stderr.buffer.write(diagnostic_json(dict(kind='F13_PUBLIC_UTILITY_DIAGNOSTIC_STATUS_v1', status=status)) + b'\n')
+    except Exception:
+        pass  # Optional fixed metadata cannot mask the original guard result.
+
+
 def verify_pinned_git(root, runtime=True):
     base = root / 'historical-git'
     require(not base.is_symlink(), 'pinned_Git_root_path')
@@ -838,6 +892,7 @@ def namespace_main():
                 sys.stderr.buffer.write(diagnostic_json(public_receipt) + b'\n')
             except Exception:
                 pass  # Optional output never changes the original guard result.
+        emit_coarse_public_diagnostic_status(coarse_public_diagnostic_status(stdout, stderr, diagnostic_context, public_receipt))
         receipts = []
         for line in stdout.splitlines():
             try:

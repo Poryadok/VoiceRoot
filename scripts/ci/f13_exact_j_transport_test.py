@@ -15,6 +15,100 @@ import zipfile
 import f13_exact_j_historical_red_test as harness
 
 
+class CoarseStatusContract(unittest.TestCase):
+    """Optional observation status, never guard/admission evidence."""
+    def fixture(self, public=False):
+        actual = {'publictool': '/usr/bin/publictool'} if public else {'PRIVATE_SECRET': '/private/PRIVATE_SECRET'}
+        identity = {'commit': 'a' * 40, 'files': {'driver': 'b' * 64}}
+        context = harness.public_diagnostic_context(('/usr/bin/publictool',), actual, identity)
+        observation = harness.opaque_utility_observation(Path('/absent'), actual, {}, 1, tuple(actual), identity)
+        receipt = harness.resolve_owned_utility_output(b'', harness.encode_opaque_observation(observation), context)[2]
+        self.assertIsNotNone(receipt)
+        mismatch = harness.diagnostic_json(harness.utility_view_diagnostic(Path('/absent'), actual, {}, 1, tuple(actual))) + b'\n'
+        return mismatch, context, receipt
+
+    def test_context_unavailable(self):
+        mismatch, _, _ = self.fixture()
+        self.assertEqual(harness.coarse_public_diagnostic_status(b'', mismatch, None, None), 'context_unavailable')
+
+    def test_candidate_rejected_or_not_selected(self):
+        mismatch, context, _ = self.fixture()
+        self.assertEqual(harness.coarse_public_diagnostic_status(mismatch, b'', context, None), 'candidate_rejected_or_not_selected')
+
+    def test_no_catalog_match(self):
+        mismatch, context, receipt = self.fixture()
+        self.assertEqual(harness.coarse_public_diagnostic_status(b'', mismatch, context, receipt), 'catalog_match_failed')
+
+    def test_qualified_match_stays_quiet(self):
+        mismatch, context, receipt = self.fixture(public=True)
+        self.assertIsNone(harness.coarse_public_diagnostic_status(b'', mismatch, context, receipt))
+
+    def test_no_original_mismatch_stays_quiet(self):
+        for raw in (b'', b'F13_HISTORICAL_SETUP_FAILURE\n', b'{"kind":"F13_UTILITY_VIEW_DIAGNOSTIC_v1","status":"diagnostic_unavailable"}\n'):
+            self.assertIsNone(harness.coarse_public_diagnostic_status(raw, b'', None, None))
+
+    def test_malformed_and_overbudget_stay_quiet(self):
+        for raw in (b'{PRIVATE_SECRET\n', b'\xff\n', b'x' * 16385,
+                    json.dumps({'kind': 'PRIVATE_SECRET', 'status': 'mismatch'}).encode()):
+            self.assertIsNone(harness.coarse_public_diagnostic_status(b'', raw, None, None))
+
+    def test_qualified_closure_match_and_malformed_receipt(self):
+        mismatch, context, receipt = self.fixture()
+        for invalid in ({}, {'kind': receipt['kind'], 'entries': 'PRIVATE_SECRET'}):
+            self.assertIsNone(harness.coarse_public_diagnostic_status(b'', mismatch, context, invalid))
+        token = receipt['entries'][0]['actual']['target']
+        receipt['entries'][0]['actual']['closure']['edges'] = [dict(token, path='/usr/bin/publictool',
+            qualification='OUTER_CATALOG_RESOLUTION_OF_CHILD_TOKEN')]
+        self.assertIsNone(harness.coarse_public_diagnostic_status(b'', mismatch, context, receipt))
+
+    def test_fixed_emission_only_and_output_failure_contained(self):
+        import types
+        output = io.BytesIO()
+        with mock.patch.object(harness.sys, 'stderr', types.SimpleNamespace(buffer=output)):
+            for value in ('context_unavailable', 'candidate_rejected_or_not_selected', 'catalog_match_failed',
+                          None, 'PRIVATE_SECRET', {'path': '/PRIVATE_SECRET'}):
+                harness.emit_coarse_public_diagnostic_status(value)
+        records = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual([item['status'] for item in records],
+                         ['context_unavailable', 'candidate_rejected_or_not_selected', 'catalog_match_failed'])
+        self.assertTrue(all(set(item) == {'kind', 'status'} for item in records))
+        self.assertNotIn(b'PRIVATE_SECRET', output.getvalue())
+        broken = mock.Mock()
+        broken.write.side_effect = OSError('PRIVATE_SECRET')
+        with mock.patch.object(harness.sys, 'stderr', types.SimpleNamespace(buffer=broken)):
+            harness.emit_coarse_public_diagnostic_status('context_unavailable')
+
+    def test_namespace_setup_failure_preserved_with_coarse_context_status(self):
+        import types
+        mismatch, _, _ = self.fixture()
+        original_out = b'original stdout\n'
+        original_err = mismatch + b'F13_HISTORICAL_SETUP_FAILURE: pinned_Git_private_utility_view\n'
+        outputs = (io.BytesIO(), io.BytesIO())
+        def command(args):
+            if args[-2:] == ['rev-parse', 'HEAD']:
+                return b'a' * 40 + b'\n'
+            return (harness.ROOT / args[-1].split(':', 1)[1]).read_bytes()
+        def materialize(root):
+            (root / 'historical-git').mkdir()
+        with mock.patch.object(harness.os, 'geteuid', return_value=1000), \
+             mock.patch.object(harness.shutil, 'which', return_value='/trusted/tool'), \
+             mock.patch.object(harness, 'run', side_effect=command), \
+             mock.patch.object(harness, 'materialize', side_effect=materialize), \
+             mock.patch.object(harness, 'prepare_public_diagnostic_context', return_value=None), \
+             mock.patch.object(harness.subprocess, 'run', return_value=subprocess.CompletedProcess([], 2, original_out, original_err)) as spawn, \
+             mock.patch.object(harness.sys, 'stdout', types.SimpleNamespace(buffer=outputs[0])), \
+             mock.patch.object(harness.sys, 'stderr', types.SimpleNamespace(buffer=outputs[1])):
+            with self.assertRaisesRegex(harness.SetupFailure, '^namespace_must_return_actual_guard_receipt_not_setup_exit$'):
+                harness.namespace_main()
+        self.assertEqual(spawn.call_count, 1)
+        self.assertEqual(spawn.call_args.kwargs, {'capture_output': True}, 'stdin/env/invocation unchanged')
+        self.assertEqual(outputs[0].getvalue(), original_out)
+        raw = outputs[1].getvalue()
+        self.assertTrue(raw.startswith(original_err))
+        self.assertEqual(json.loads(raw[len(original_err):]),
+                         dict(kind='F13_PUBLIC_UTILITY_DIAGNOSTIC_STATUS_v1', status='context_unavailable'))
+
+
 class OuterPublicResolution(unittest.TestCase):
     """Synthetic diagnostic/privacy proof, never actual F13 guard RED."""
     def setUp(self):
