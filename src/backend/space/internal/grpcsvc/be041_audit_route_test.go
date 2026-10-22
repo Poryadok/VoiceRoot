@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -74,30 +75,19 @@ func TestBE041AuditRealGatewayRoute(t *testing.T) {
 	}
 	ctx := context.Background()
 	dir := t.TempDir()
-	pool := startSpacePostgresForTest(t, ctx)
-	entries, err := os.ReadDir(filepath.Join(repoRoot(t), "src/backend/migrations/space_db"))
-	require.NoError(t, err)
-	for _, entry := range entries {
-		if strings.HasSuffix(entry.Name(), ".up.sql") {
-			raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/space_db", entry.Name()))
-			require.NoError(t, err)
-			_, err = pool.Exec(ctx, string(raw))
-			require.NoError(t, err, entry.Name())
-		}
+	owner, member, outsider, account := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	pool, row := nativeAuditFixture(t, ctx, owner, member, "typed audit fixture")
+	redisAddr := os.Getenv("VOICE_SPACE_AUDIT_REDIS_ADDR")
+	if redisAddr == "" {
+		rc, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{ContainerRequest: testcontainers.ContainerRequest{Image: "redis:7-alpine", ExposedPorts: []string{"6379/tcp"}, WaitingFor: wait.ForLog("Ready to accept connections")}, Started: true})
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, rc.Terminate(context.Background())) })
+		redisAddr, err = rc.Endpoint(ctx, "")
+		require.NoError(t, err)
 	}
-	rc, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{ContainerRequest: testcontainers.ContainerRequest{Image: "redis:7-alpine", ExposedPorts: []string{"6379/tcp"}, WaitingFor: wait.ForLog("Ready to accept connections")}, Started: true})
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, rc.Terminate(context.Background())) })
-	redisAddr, err := rc.Endpoint(ctx, "")
-	require.NoError(t, err)
 	rdb := redis.NewClient(&redis.Options{Addr: redisAddr, MaxRetries: -1})
 	defer rdb.Close()
 	st := &store.SpaceStore{Pool: pool}
-	owner, member, outsider, account := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	row, err := st.CreateSpace(ctx, owner, "typed audit fixture", "private", "private")
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, row.ID, member)
-	require.NoError(t, err)
 	for i := 0; i < 2; i++ {
 		insertSpaceAuditEntry(t, ctx, pool, row.ID, uuid.New(), owner, "member_banned", "account", `{}`, time.Now().UTC().Add(time.Duration(-i)*time.Second))
 	}
@@ -127,6 +117,7 @@ func TestBE041AuditRealGatewayRoute(t *testing.T) {
 	roles := &auditPermissionRoleStub{allowed: true}
 	service := &PublicLifecycleSpace{SpaceGRPC: &SpaceGRPC{Store: st, Roles: roles, AuditCursorKey: []byte(strings.Repeat("a", 32))}}
 	var admitted atomic.Int64
+	var permissionMu sync.RWMutex
 	options := runtime.ServerOptions()
 	options = append(options, grpc.ChainUnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		md, _ := metadata.FromIncomingContext(ctx)
@@ -138,6 +129,8 @@ func TestBE041AuditRealGatewayRoute(t *testing.T) {
 		if _, err := principal.RequireDelegatedUser(ctx, "space", info.FullMethod, req.(*spacev1.GetAuditLogRequest)); err != nil {
 			return nil, status.Error(codes.Internal, "typed identity missing")
 		}
+		permissionMu.RLock()
+		defer permissionMu.RUnlock()
 		admitted.Add(1)
 		return handler(ctx, req)
 	}))
@@ -165,18 +158,24 @@ func TestBE041AuditRealGatewayRoute(t *testing.T) {
 	t.Run("owner member pagination and viewer binding", func(t *testing.T) { run(t, "normal", 5) })
 	t.Run("real transport admission negatives", func(t *testing.T) { run(t, "admission", 1) })
 	t.Run("owner only without Roles", func(t *testing.T) {
+		permissionMu.Lock()
 		service.Roles = nil
-		defer func() { service.Roles = roles }()
+		permissionMu.Unlock()
+		defer func() { permissionMu.Lock(); service.Roles = roles; permissionMu.Unlock() }()
 		run(t, "owner-only", 2)
 	})
 	t.Run("explicit Role deny", func(t *testing.T) {
+		permissionMu.Lock()
 		roles.allowed = false
-		defer func() { roles.allowed = true }()
+		permissionMu.Unlock()
+		defer func() { permissionMu.Lock(); roles.allowed = true; permissionMu.Unlock() }()
 		run(t, "role-deny", 1)
 	})
 	t.Run("Role dependency failure", func(t *testing.T) {
+		permissionMu.Lock()
 		roles.permissionErr = status.Error(codes.Unavailable, "private dependency error")
-		defer func() { roles.permissionErr = nil }()
+		permissionMu.Unlock()
+		defer func() { permissionMu.Lock(); roles.permissionErr = nil; permissionMu.Unlock() }()
 		run(t, "role-outage", 1)
 	})
 	for _, tc := range []struct{ mode, value string }{{"stale", "8"}, {"floor-missing", ""}, {"floor-corrupt", "07"}} {
