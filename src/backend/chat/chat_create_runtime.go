@@ -46,20 +46,22 @@ func startChatCreation(ctx context.Context, cfg chatcreation.CreateConfig, enabl
 			_ = closeFloor()
 		}
 	}()
-	values := make([]string, 5)
-	for i, name := range []string{"GRPC_ADDR", "TLS_CA_FILE", "TLS_SERVER_NAME", "CLIENT_CERT_FILE", "CLIENT_KEY_FILE"} {
-		values[i] = strings.TrimSpace(os.Getenv("CHAT_CREATE_SPACE_" + name))
-		if values[i] == "" {
-			return nil, errors.New("complete Chat creation Space mTLS transport required")
-		}
-	}
-	conn, err := dialSpacePurgeOwner(values[0], values[1], values[2], values[3], values[4])
+	conn, err := dialChatCreationOwnerFromEnv("CHAT_CREATE_SPACE_")
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
 		if failed {
 			_ = conn.Close()
+		}
+	}()
+	auditConn, err := dialChatCreationOwnerFromEnv("CHAT_CREATE_AUDIT_")
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if failed {
+			_ = auditConn.Close()
 		}
 	}()
 	runtime, err := chatcreation.NewCreateRuntime(ctx, cfg, floor.CheckSessionEpoch)
@@ -75,8 +77,8 @@ func startChatCreation(ctx context.Context, cfg chatcreation.CreateConfig, enabl
 	if err != nil {
 		return nil, err
 	}
-	remote := &grpcsvc.SignedSpaceCompositeRemote{Client: spacev1.NewSpaceServiceClient(conn), Issuer: issuer, Chats: dm}
-	coordinator := &grpcsvc.SpaceCompositeCoordinator{Store: dm, Remote: remote, Public: remote, Effects: &grpcsvc.SignedSpaceCompositeEffects{Audit: remote.Client, Issuer: issuer, Created: publisher}, Logger: logger}
+	client := spacev1.NewSpaceServiceClient(conn)
+	coordinator := newChatCreationCoordinator(dm, client, spacev1.NewSpaceServiceClient(auditConn), issuer, publisher, logger)
 	server := grpc.NewServer(runtime.ServerOptions()...)
 	chatv1.RegisterChatServiceServer(server, &grpcsvc.ChatGRPC{DM: dm, Composite: coordinator, ChatEvents: publisher, Logger: logger})
 	workerCtx, cancel := context.WithCancel(ctx)
@@ -95,6 +97,23 @@ func startChatCreation(ctx context.Context, cfg chatcreation.CreateConfig, enabl
 		<-done
 		_ = runtime.Close()
 		_ = conn.Close()
+		_ = auditConn.Close()
 		_ = closeFloor()
 	}, nil
+}
+
+func newChatCreationCoordinator(dm *store.DMStore, composite, audit spacev1.SpaceServiceClient, issuer *principal.Issuer, publisher *chatevents.JetStreamPublisher, logger *slog.Logger) *grpcsvc.SpaceCompositeCoordinator {
+	remote := &grpcsvc.SignedSpaceCompositeRemote{Client: composite, Issuer: issuer, Chats: dm}
+	return &grpcsvc.SpaceCompositeCoordinator{Store: dm, Remote: remote, Public: remote, Effects: &grpcsvc.SignedSpaceCompositeEffects{Audit: audit, Issuer: issuer, Created: publisher}, Logger: logger}
+}
+
+func dialChatCreationOwnerFromEnv(prefix string) (*grpc.ClientConn, error) {
+	values := make([]string, 5)
+	for i, name := range []string{"GRPC_ADDR", "TLS_CA_FILE", "TLS_SERVER_NAME", "CLIENT_CERT_FILE", "CLIENT_KEY_FILE"} {
+		values[i] = strings.TrimSpace(os.Getenv(prefix + name))
+		if values[i] == "" {
+			return nil, errors.New("complete " + prefix + " mTLS transport required")
+		}
+	}
+	return dialSpacePurgeOwner(values[0], values[1], values[2], values[3], values[4])
 }

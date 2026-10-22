@@ -281,11 +281,14 @@ together with complete `CHAT_CREATE_*` configuration: `GRPC_LISTEN`,
 `PRINCIPAL_JWKS_CLIENT_CERT_FILE`, `PRINCIPAL_JWKS_CLIENT_KEY_FILE`,
 `PRINCIPAL_REDIS_ADDR` and optional `PRINCIPAL_REDIS_PASSWORD`. Both HTTPS JWKS
 endpoints require distinct current/next RSA keys. `CHAT_CREATE_AUTH_*` and
-`CHAT_CREATE_SPACE_*` each require `GRPC_ADDR`, `TLS_CA_FILE`, `TLS_SERVER_NAME`,
+`CHAT_CREATE_SPACE_*` and `CHAT_CREATE_AUDIT_*` each require `GRPC_ADDR`, `TLS_CA_FILE`, `TLS_SERVER_NAME`,
 `CLIENT_CERT_FILE` and `CLIENT_KEY_FILE`. The runtime additionally requires Chat
 signing keys, composite schema and JetStream publisher. Partial configuration
 stops startup; the ordinary listener always denies CreateChat. This source
 composition does not prove deployment secret configuration or activation.
+`CHAT_CREATE_SPACE_*` targets Space's commit/outcome listener;
+`CHAT_CREATE_AUDIT_*` targets its distinct protected audit-ingestion listener.
+The composite method allowlist is never widened to deliver audit facts.
 Legacy snapshots without a Space composite receipt fail closed on this public
 path pending separate legacy reconciliation; replay cannot invent a receipt or
 historical audit.
