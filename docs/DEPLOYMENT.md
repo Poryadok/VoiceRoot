@@ -1,5 +1,20 @@
 # Окружения и выкат
 
+## User identity keyset input (library stage)
+
+The User identity-association key reader accepts an explicitly supplied JSON
+manifest and a directory of mounted User-only version secrets. The manifest has
+`purpose: "voice.user.identity-association.v1"`, positive `revision`,
+`active_version`, and a `versions` array of `{version, sha256, file}` entries.
+Each `sha256` is the lowercase hex SHA-256 of the exact secret file bytes; every
+retained version, including inactive versions needed for old reservations, must
+be supplied. Secret bytes remain outside SQL and source control.
+
+This library helper is not wired into User startup. Independently pinned source
+lineage, a live catalog/tail check, complete writer baseline, and protected
+capture registration remain separate activation requirements. Test-only fresh
+receipts and generated keys cannot establish production recovery provenance.
+
 ## Realtime P3 metadata and protected transport prerequisites
 
 The Realtime admission binary requires its own migrated `realtime_db`; the

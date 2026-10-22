@@ -1,5 +1,11 @@
 # User Service
 
+The read-only `LoadProductionKeyset` helper accepts a mounted User-purpose
+version manifest and every referenced secret file. It checks the independent
+fingerprints before constructing a keyset; it does not create keys, establish
+source lineage, qualify a writer baseline, or activate capture. The private
+fresh-source fixture is not a production key provider.
+
 ## Canonical identity association and Space capture
 
 Due raw erasure is independent of User selector-key availability. The cleanup

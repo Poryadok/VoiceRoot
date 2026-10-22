@@ -1,5 +1,10 @@
 # Хранилища данных по микросервисам
 
+The User identity key reader checks every mounted retained version against an
+independent User-purpose fingerprint manifest. A matching SQL catalog alone
+does not establish source lineage or restore currentness. Missing keys remain
+unavailable; the reader does not repair or initialize `user_db`.
+
 Canonical User identity storage is one `user_db` owner source: keyset version/
 fingerprint metadata, opaque association/selector aliases, optional Auth parent,
 finite committed change journal/cut, and separately retainable used-profile HMAC
