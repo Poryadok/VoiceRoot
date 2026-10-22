@@ -24,10 +24,10 @@ import (
 )
 
 var (
-	ErrSpaceCompositeEvidence = errors.New("Space composite binding or outcome conflicts")
+	ErrSpaceCompositeEvidence = errors.New("space composite binding or outcome conflicts")
 	ErrSpaceCompositeExpired  = errors.New("COMPOSITE_RESULT_EXPIRED")
-	ErrSpaceCompositeDrain    = errors.New("Space composite drain is incomplete")
-	ErrSpaceCompositeLease    = errors.New("Space composite worker lease lost")
+	ErrSpaceCompositeDrain    = errors.New("space composite drain is incomplete")
+	ErrSpaceCompositeLease    = errors.New("space composite worker lease lost")
 )
 
 func checkSpaceCompositePurgeReady(ctx context.Context, tx pgx.Tx, space uuid.UUID) error {
@@ -222,7 +222,7 @@ func (s *DMStore) minimizeSpaceComposite(ctx context.Context, id uuid.UUID) (boo
 	return true, nil
 }
 
-// Claim only coordinates autonomous workers. An expired lease never changes
+// ClaimSpaceComposite only coordinates autonomous workers. An expired lease never changes
 // domain state and never authorizes cancellation of a prepared operation.
 func (s *DMStore) ClaimSpaceComposite(ctx context.Context, lease time.Duration) (*SpaceCompositeClaim, error) {
 	if lease <= 0 || lease > 5*time.Minute {

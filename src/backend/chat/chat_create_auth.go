@@ -36,10 +36,10 @@ func newChatCreateAuthCheckerFromEnv(issuer *principal.Issuer) (*chatcreation.Au
 		}
 	}
 	if issuer == nil {
-		return nil, nil, errors.New("Chat principal issuer required for Auth floor")
+		return nil, nil, errors.New("chat principal issuer required for Auth floor")
 	}
 	if _, _, err := net.SplitHostPort(values[0]); err != nil {
-		return nil, nil, errors.New("Chat Create Auth address must be host:port")
+		return nil, nil, errors.New("chat Create Auth address must be host:port")
 	}
 	ca, err := os.ReadFile(values[1])
 	if err != nil {

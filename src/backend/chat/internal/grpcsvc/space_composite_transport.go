@@ -72,7 +72,7 @@ func (r *SignedSpaceCompositeRemote) Check(ctx context.Context, actor chatcreati
 
 func ownCompositePrincipal(ctx context.Context, issuer *principal.Issuer, method, id string, request proto.Message) (context.Context, error) {
 	if issuer == nil {
-		return nil, errors.New("Chat signing issuer unavailable")
+		return nil, errors.New("chat signing issuer unavailable")
 	}
 	hash, err := principal.RequestHash(request)
 	if err != nil {
@@ -123,12 +123,12 @@ func (s *SignedSpaceCompositeEffects) Deliver(ctx context.Context, e *store.Spac
 	switch e.Kind {
 	case "CHAT_CREATED":
 		if s.Created == nil {
-			return errors.New("Chat created publisher unavailable")
+			return errors.New("chat created publisher unavailable")
 		}
 		return s.Created.PublishChatCreatedBytes(ctx, e.EventID.String(), e.Payload)
 	case "AUDIT":
 		if s.Audit == nil {
-			return errors.New("Space audit receiver unavailable")
+			return errors.New("space audit receiver unavailable")
 		}
 		req := new(spacev1.AppendAuditEventRequest)
 		if proto.Unmarshal(e.Payload, req) != nil || chatcreation.HasUnknown(req) || req.AuditEventId != e.EventID.String() {
@@ -148,7 +148,7 @@ func (s *SignedSpaceCompositeEffects) Deliver(ctx context.Context, e *store.Spac
 			return err
 		}
 		if response == nil {
-			return errors.New("Space audit acknowledgement absent")
+			return errors.New("space audit acknowledgement absent")
 		}
 		return nil
 	default:
