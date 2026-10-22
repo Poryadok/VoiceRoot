@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/status"
 	messagingv1 "voice.app/voice/messaging/v1"
 	"voice/backend/messaging/internal/store"
+	"voice/backend/pkg/spacecommunication"
 )
 
 // This consumes observed rows from the actual Chat composite PG test. The SQL
@@ -41,7 +42,9 @@ func TestSpaceCompositeObservedMainFeedProjectionSendMessage(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)
 	applyThreadMessagingMigrations(t, ctx, pool)
-	client, stop := startMessagingServerWired(t, pool, messagingWire{RolePermissions: testRolePerms{allowed: true}})
+	client, stop := startMessagingServerWired(t, pool, messagingWire{
+		RolePermissions: testRolePerms{allowed: true}, CommunicationStates: &communicationStateStub{state: spacecommunication.Clear},
+	})
 	defer stop()
 	for _, row := range input.Chats {
 		t.Run(row.Type, func(t *testing.T) {
