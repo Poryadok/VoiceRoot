@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -238,10 +239,13 @@ func TestChatAuthActualJavaInteroperability(t *testing.T) {
 	incoming := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer not-forwarded-ingress", "x-request-id", op))
 	require.NoError(t, checker.CheckSessionEpoch(incoming, ready.Account, ready.Floor))
 	require.Positive(t, fetches.Load(), "actual Go request caused Java HTTPS JWKS fetch")
-	require.NoError(t, checker.CheckSessionEpoch(incoming, ready.Account, ready.Floor+1))
-	require.ErrorIs(t, checker.CheckSessionEpoch(incoming, ready.Account, ready.Floor-1), chatcreation.ErrInitiator)
-	for _, account := range []string{ready.Unknown, ready.Deleted} {
-		require.ErrorIs(t, checker.CheckSessionEpoch(incoming, account, ready.Floor), chatcreation.ErrInitiator)
+	twoNegativesOnly := os.Getenv("BE131_AUTH_TWO_NEGATIVES") == "true"
+	if !twoNegativesOnly {
+		require.NoError(t, checker.CheckSessionEpoch(incoming, ready.Account, ready.Floor+1))
+		require.ErrorIs(t, checker.CheckSessionEpoch(incoming, ready.Account, ready.Floor-1), chatcreation.ErrInitiator)
+		for _, account := range []string{ready.Unknown, ready.Deleted} {
+			require.ErrorIs(t, checker.CheckSessionEpoch(incoming, account, ready.Floor), chatcreation.ErrInitiator)
+		}
 	}
 	// Actual Go->Java caller controls, using the same mTLS credentials but fresh
 	// exact service signatures except the intentionally repeated credential.
@@ -263,18 +267,111 @@ func TestChatAuthActualJavaInteroperability(t *testing.T) {
 	}
 	client := authv1.NewAuthServiceClient(dial(true))
 	req := &authv1.GetChatSessionEpochFloorRequest{AccountId: ready.Account}
-	sign := func(i *principal.Issuer, r *authv1.GetChatSessionEpochFloorRequest) context.Context {
+	signBinding := func(i *principal.Issuer, r *authv1.GetChatSessionEpochFloorRequest, rpc string) context.Context {
 		hash, e := principal.RequestHash(r)
 		require.NoError(t, e)
-		token, e := i.IssueService(principal.ServiceInput{Audience: "auth", RPC: ready.RPC, RequestID: op, RequestHash: hash})
+		token, e := i.IssueService(principal.ServiceInput{Audience: "auth", RPC: rpc, RequestID: op, RequestHash: hash})
 		require.NoError(t, e)
 		return metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token, "x-request-id", op))
+	}
+	sign := func(i *principal.Issuer, r *authv1.GetChatSessionEpochFloorRequest) context.Context {
+		return signBinding(i, r, ready.RPC)
 	}
 	call := func(ctx context.Context, r *authv1.GetChatSessionEpochFloorRequest) error {
 		ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 		defer cancel()
 		_, e := client.GetChatSessionEpochFloor(ctx, r)
 		return e
+	}
+	checkClosed := func() {
+		stop()
+		closed, e := os.ReadFile(filepath.Join(out, "closed.json"))
+		require.NoError(t, e)
+		var receipt map[string]any
+		require.NoError(t, json.Unmarshal(closed, &receipt))
+		require.Equal(t, runID, receipt["run_id"])
+		for _, k := range []string{"server_terminated", "ready_removed", "clients_closed"} {
+			require.Equal(t, true, receipt[k])
+		}
+	}
+	// These are receiver negatives, not constructor/precheck substitutes. Preserve
+	// status and safe certificate evidence before a semantic assertion can fail.
+	report := map[string]any{"run_id": runID, "actual_rpc": ready.RPC, "signed_rpc": ready.RPC + "/wrong-binding", "certificate_policy": "Chat client-chain CA trust; no Chat URI-SAN selector in reviewed908"}
+	writeReport := func() {
+		b, e := json.MarshalIndent(report, "", "  ")
+		require.NoError(t, e)
+		if dir := os.Getenv("BE131_AUTH_PROOF_DIR"); dir != "" {
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "two-negatives.json"), b, 0600))
+		}
+	}
+	require.NoError(t, call(sign(issuer, req), req), "same actual Java receiver valid baseline before wrong RPC")
+	report["valid_control_before_rpc"] = "OK"
+	wrongRPCError := call(signBinding(issuer, req, ready.RPC+"/wrong-binding"), req)
+	report["wrong_rpc_expected"] = codes.Unauthenticated.String()
+	report["wrong_rpc_actual"] = status.Code(wrongRPCError).String()
+	writeReport()
+	require.Equal(t, codes.Unauthenticated, status.Code(wrongRPCError), "correct Chat signature/body/audience with wrong RPC must reach actual Java denial")
+	require.NoError(t, call(sign(issuer, req), req), "same receiver valid baseline before wrong client identity")
+	report["valid_control_before_certificate"] = "OK"
+	wrongCA, wrongCAKey := filepath.Join(root, "wrong-ca.pem"), filepath.Join(root, "wrong-ca.key")
+	wrongCert, wrongKey := filepath.Join(root, "wrong-client.pem"), filepath.Join(root, "wrong-client.key")
+	command("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=untrusted-fixture-ca", "-addext", "basicConstraints=critical,CA:TRUE", "-keyout", wrongCAKey, "-out", wrongCA)
+	command("openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=wrong-service", "-keyout", wrongKey, "-out", filepath.Join(root, "wrong-client.csr"))
+	wrongExt := filepath.Join(root, "wrong-client.ext")
+	require.NoError(t, os.WriteFile(wrongExt, []byte("basicConstraints=CA:FALSE\nkeyUsage=digitalSignature\nextendedKeyUsage=clientAuth\nsubjectAltName=URI:urn:voice:test:wrong-service\n"), 0600))
+	command("openssl", "x509", "-req", "-in", filepath.Join(root, "wrong-client.csr"), "-CA", wrongCA, "-CAkey", wrongCAKey, "-set_serial", "45", "-days", "1", "-extfile", wrongExt, "-out", wrongCert)
+	wrongIdentity, err := tls.LoadX509KeyPair(wrongCert, wrongKey)
+	require.NoError(t, err)
+	wrongLeaf, err := x509.ParseCertificate(wrongIdentity.Certificate[0])
+	require.NoError(t, err)
+	wrongRoots := x509.NewCertPool()
+	wrongCABytes, err := os.ReadFile(wrongCA)
+	require.NoError(t, err)
+	require.True(t, wrongRoots.AppendCertsFromPEM(wrongCABytes))
+	_, err = wrongLeaf.Verify(x509.VerifyOptions{Roots: wrongRoots, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}})
+	require.NoError(t, err, "wrong identity is a valid clientAuth certificate under its own CA")
+	_, err = wrongLeaf.Verify(x509.VerifyOptions{Roots: roots, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}})
+	var unknownCA x509.UnknownAuthorityError
+	require.ErrorAs(t, err, &unknownCA, "actual intended rejection boundary is Auth client-chain CA trust")
+	certificateFacts := func(der []byte) map[string]any {
+		leaf, e := x509.ParseCertificate(der)
+		require.NoError(t, e)
+		return map[string]any{"der_sha256": fmt.Sprintf("%x", sha256.Sum256(der)), "subject": leaf.Subject.String(), "issuer": leaf.Issuer.String(), "serial": leaf.SerialNumber.String(), "uri_sans": leaf.URIs, "extended_key_usage": leaf.ExtKeyUsage, "not_after": leaf.NotAfter}
+	}
+	report["valid_client_certificate"] = certificateFacts(clientIdentity.Certificate[0])
+	report["wrong_client_certificate"] = certificateFacts(wrongIdentity.Certificate[0])
+	report["server_ca_unchanged"] = true
+	report["expected_boundary"] = "actual Java TLS client-chain trust, not an asserted Chat service URI binding"
+	var selected, verifiedServer atomic.Int64
+	badTLS := &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: ready.Name,
+		// Force the wrong certificate to be presented even when the server's CA
+		// list would make Go silently omit it. This is not the missing-cert case.
+		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			selected.Add(1)
+			return &wrongIdentity, nil
+		},
+		VerifyConnection: func(tls.ConnectionState) error { verifiedServer.Add(1); return nil }}
+	badConnection, err := grpc.NewClient(fmt.Sprintf("localhost:%d", ready.Port), grpc.WithTransportCredentials(credentials.NewTLS(badTLS)))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = badConnection.Close() })
+	badContext, badCancel := context.WithTimeout(sign(issuer, req), 4*time.Second)
+	_, wrongCertificateError := authv1.NewAuthServiceClient(badConnection).GetChatSessionEpochFloor(badContext, req)
+	badCancel()
+	report["wrong_certificate_expected"] = codes.Unavailable.String()
+	report["wrong_certificate_actual"] = status.Code(wrongCertificateError).String()
+	report["wrong_certificate_selected"] = selected.Load()
+	report["correct_server_verified"] = verifiedServer.Load()
+	writeReport()
+	require.Positive(t, selected.Load(), "wrong certificate was actually selected, not silently omitted")
+	require.Positive(t, verifiedServer.Load(), "correct server CA/name validation succeeded")
+	require.Equal(t, codes.Unavailable, status.Code(wrongCertificateError), "actual Java TLS rejects the present untrusted client identity")
+	require.NoError(t, call(sign(issuer, req), req), "valid identity still succeeds after actual wrong-certificate denial")
+	report["valid_control_after_negatives"] = "OK"
+	writeReport()
+	if twoNegativesOnly {
+		checkClosed()
+		t.Log("actual Java wrong-signed-RPC Unauthenticated and PRESENT wrong-client-chain Unavailable; valid controls OK; Chat URI binding not claimed")
+		return
 	}
 	repeated := sign(issuer, req)
 	require.NoError(t, call(repeated, req))
@@ -319,15 +416,7 @@ func TestChatAuthActualJavaInteroperability(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	require.Equal(t, codes.Unavailable, status.Code(call(sign(outage, req), req)))
 	require.Greater(t, fetches.Load(), before, "actual HTTPS outage reached by Java")
-	stop()
-	closed, err := os.ReadFile(filepath.Join(out, "closed.json"))
-	require.NoError(t, err)
-	var receipt map[string]any
-	require.NoError(t, json.Unmarshal(closed, &receipt))
-	require.Equal(t, runID, receipt["run_id"])
-	for _, k := range []string{"server_terminated", "ready_removed", "clients_closed"} {
-		require.Equal(t, true, receipt[k])
-	}
+	checkClosed()
 	require.Equal(t, codes.Unavailable, status.Code(createCall(ready.Floor)))
 	require.Equal(t, 1, effects, "endpoint outage denies before receiver effects")
 	t.Logf("actual Go->Java max=%d/%d=%d, equality/lower/absent/malformed/body/issuer/replay/mTLS/JWKS and receiver-outage cases passed; synthetic ingress peer only", durable, retained, ready.Floor)
