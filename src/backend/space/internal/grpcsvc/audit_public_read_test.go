@@ -2,8 +2,6 @@ package grpcsvc
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -31,24 +29,9 @@ func TestPublicAuditReadFiltersACLAndFrozenDisclosure(t *testing.T) {
 		t.Skip("requires PostgreSQL")
 	}
 	ctx := context.Background()
-	pool := startSpacePostgresForTest(t, ctx)
-	dir := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db")
-	entries, err := os.ReadDir(dir)
-	require.NoError(t, err)
-	for _, entry := range entries {
-		if strings.HasSuffix(entry.Name(), ".up.sql") {
-			raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
-			require.NoError(t, err)
-			_, err = pool.Exec(ctx, string(raw))
-			require.NoError(t, err, entry.Name())
-		}
-	}
-	st := &store.SpaceStore{Pool: pool}
 	owner, member, outsider, account := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	row, err := st.CreateSpace(ctx, owner, "audit public", "private", "private")
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, row.ID, member)
-	require.NoError(t, err)
+	pool, row := nativeAuditFixture(t, ctx, owner, member, "audit public")
+	st := &store.SpaceStore{Pool: pool}
 	roles := &auditPermissionRoleStub{allowed: true}
 	service := &PublicLifecycleSpace{SpaceGRPC: &SpaceGRPC{Store: st, Roles: roles, AuditCursorKey: []byte(strings.Repeat("k", 32))}}
 	auditID := uuid.New()

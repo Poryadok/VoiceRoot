@@ -107,6 +107,12 @@ func (s *SpaceStore) ReserveLifecycleSchedule(ctx context.Context, accountID, ac
 	} else if !errors.Is(loadErr, pgx.ErrNoRows) {
 		return nil, loadErr
 	}
+	scoped := *s
+	scoped.tx = tx
+	membershipCapture, err := scoped.captureLifecycleScheduleMutation(ctx, spaceID, actorProfileID, operationID)
+	if err != nil {
+		return nil, err
+	}
 
 	command, err := tx.Exec(ctx, `INSERT INTO space_lifecycle_operations(
 		operation_id,account_id,actor_profile_id,space_id,session_epoch,method,
@@ -131,6 +137,11 @@ func (s *SpaceStore) ReserveLifecycleSchedule(ctx context.Context, accountID, ac
 	}
 	if err := persistLifecycleSnapshot(ctx, tx, aggregate.Snapshot()); err != nil {
 		return nil, err
+	}
+	if membershipCapture != nil {
+		if err := scoped.finishEffectiveMemberMutations(ctx, membershipCapture); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err

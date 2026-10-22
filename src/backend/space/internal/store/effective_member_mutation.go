@@ -20,13 +20,14 @@ type effectiveMemberMutation struct {
 // This transaction-local capability cannot be supplied by a caller or reused
 // with another transaction. No remote owner call belongs between these hooks.
 type effectiveMemberMutations struct {
-	tx         pgx.Tx
-	space      uuid.UUID
-	started    time.Time
-	profiles   []effectiveMemberMutation
-	dbMutation *nativeMembershipDBMutation
-	purpose    effectiveMutationPurpose
-	used       bool
+	tx                pgx.Tx
+	space             uuid.UUID
+	started           time.Time
+	profiles          []effectiveMemberMutation
+	dbMutation        *nativeMembershipDBMutation
+	purpose           effectiveMutationPurpose
+	scheduleOperation uuid.UUID
+	used              bool
 }
 
 type effectiveMutationPurpose uint8
@@ -34,6 +35,7 @@ type effectiveMutationPurpose uint8
 const (
 	effectiveMutationPositive effectiveMutationPurpose = iota
 	effectiveMutationCandidateRetirement
+	effectiveMutationLifecycleSchedule
 )
 
 // Only the Creator's already verified, preallocated new identity enters here.
@@ -331,6 +333,8 @@ func (s *SpaceStore) finishEffectiveMemberMutations(ctx context.Context, capture
 		scopeErr = s.effectiveMutationScope(ctx, capture.space)
 	case effectiveMutationCandidateRetirement:
 		scopeErr = s.memberAdmissionRetirementScope(ctx, capture.space)
+	case effectiveMutationLifecycleSchedule:
+		scopeErr = s.lifecycleScheduleMutationScope(ctx, capture)
 	default:
 		return ErrEffectiveEpisodeUnavailable
 	}
