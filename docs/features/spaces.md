@@ -204,6 +204,15 @@ and durable same-operation receipt; Space same-body replay and changed-body
 member RPCs reject `Owner` mutation while the trusted protocol-2
 Prepare/decision/Finalize-or-Abort path reaches one matching terminal outcome.
 - **Бан участника**: забаненный не может зайти в спейс; его сообщения остаются (не удаляются); публичный контент спейса — не видит (как Discord)
+  Ban и Unban используют обязательный клиентский UUID `operation_id` в JSON,
+  включая DELETE разбана. Клиент сохраняет ID и точное тело для повторов после
+  потери ответа/перезапуска; новое действие получает новый ID. Повтор завершённого
+  действия возвращает сохранённый результат без новых эффектов; изменение тела в
+  том же ключе действующего профиля конфликтует. После 30 дней клиент не повторно
+  использует ключ, а сверяет неизвестный результат чтением. Точный signed transport,
+  path/header binding, `409` выполняющегося и `412` истёкшего сохранённого действия
+  определены в [Gateway](../microservices/api-gateway.md#ban-and-unban-stable-intent-contract).
+  Это не меняет права модерации и не подтверждает готовность native replay/UI.
 - **Slow mode для текстовых чатов** (`group` \| `channel`): настраиваемый интервал 5 сек – 6 ч (настраивается из rate limiting)
 - **Шаблоны при создании**: выбор темы — "Игровое" / "Рабочее" / "Общение"; влияет на дефолтные каналы и структуру, не на функциональность
 

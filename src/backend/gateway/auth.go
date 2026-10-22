@@ -74,7 +74,7 @@ func (v chainedTokenValidator) Validate(r *http.Request) (tokenClaims, string) {
 func (g *gateway) authenticate(r *http.Request) (tokenClaims, string) {
 	validator := g.tokenValidator
 	creator := isSpaceCreateRequest(r)
-	delegating := creator || isSpaceJoinRequest(r) || isStoryConsentRequest(r) || isSpaceChatCreationRequest(r)
+	delegating := creator || isSpaceJoinRequest(r) || isSpaceBanMutationRequest(r) || isStoryConsentRequest(r) || isSpaceChatCreationRequest(r)
 	var claims tokenClaims
 	var code string
 	if delegating {

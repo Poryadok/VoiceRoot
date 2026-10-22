@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -110,16 +111,19 @@ func TestTranscodeSpacesModeration_KickMember(t *testing.T) {
 func TestTranscodeSpacesModeration_BanMember(t *testing.T) {
 	t.Parallel()
 	rec := &recordingSpaceModeration{}
-	h := newModerationContractGateway(t, rec)
+	client, cleanup := startBufconnSpaceModerationClient(t, rec)
+	t.Cleanup(cleanup)
+	f := newCreatorFixture(t)
+	h := newGateway(f.config(client))
+	space, account, op := uuid.NewString(), uuid.NewString(), uuid.NewString()
 
-	body := `{"account_id":"account-b","reason":"spam"}`
-	resp := performRequest(h, http.MethodPost, "/api/v1/spaces/space-1/bans", body, map[string]string{
-		"Authorization": "Bearer valid-user-token",
-	})
+	body := `{"account_id":"` + account + `","reason":"spam","operation_id":"` + op + `"}`
+	resp := banIntentRequest(t, h, f, http.MethodPost, "/api/v1/spaces/"+space+"/bans", body, nil)
 	require.Equal(t, http.StatusNoContent, resp.Code)
 	require.NotNil(t, rec.lastBan)
-	require.Equal(t, "space-1", rec.lastBan.GetSpaceId())
-	require.Equal(t, "account-b", rec.lastBan.GetAccountId())
+	require.Equal(t, space, rec.lastBan.GetSpaceId())
+	require.Equal(t, account, rec.lastBan.GetAccountId())
+	require.Equal(t, op, rec.lastBan.GetOperationId())
 	require.Equal(t, "spam", rec.lastBan.GetReason())
 }
 
@@ -127,14 +131,18 @@ func TestTranscodeSpacesModeration_BanMember(t *testing.T) {
 func TestTranscodeSpacesModeration_UnbanMember(t *testing.T) {
 	t.Parallel()
 	rec := &recordingSpaceModeration{}
-	h := newModerationContractGateway(t, rec)
+	client, cleanup := startBufconnSpaceModerationClient(t, rec)
+	t.Cleanup(cleanup)
+	f := newCreatorFixture(t)
+	h := newGateway(f.config(client))
+	space, account, op := uuid.NewString(), uuid.NewString(), uuid.NewString()
 
-	resp := performRequest(h, http.MethodDelete, "/api/v1/spaces/space-1/bans/account-b", "", map[string]string{
-		"Authorization": "Bearer valid-user-token",
-	})
+	resp := banIntentRequest(t, h, f, http.MethodDelete, "/api/v1/spaces/"+space+"/bans/"+account, `{"operation_id":"`+op+`"}`, nil)
 	require.Equal(t, http.StatusNoContent, resp.Code)
 	require.NotNil(t, rec.lastUnban)
-	require.Equal(t, "account-b", rec.lastUnban.GetAccountId())
+	require.Equal(t, account, rec.lastUnban.GetAccountId())
+	require.Equal(t, space, rec.lastUnban.GetSpaceId())
+	require.Equal(t, op, rec.lastUnban.GetOperationId())
 }
 
 // TestTranscodeSpacesModeration_ListBans documents GET /api/v1/spaces/{spaceId}/bans.
@@ -143,12 +151,14 @@ func TestTranscodeSpacesModeration_ListBans(t *testing.T) {
 	rec := &recordingSpaceModeration{}
 	h := newModerationContractGateway(t, rec)
 
-	resp := performRequest(h, http.MethodGet, "/api/v1/spaces/space-9/bans", "", map[string]string{
-		"Authorization": "Bearer valid-user-token",
-	})
-	require.Equal(t, http.StatusOK, resp.Code)
-	require.NotNil(t, rec.lastListBans)
-	require.Equal(t, "space-9", rec.lastListBans.GetSpaceId())
+	for _, path := range []string{"/api/v1/spaces/space-9/bans", "/api/v1/spaces/space-9/bans/"} {
+		resp := performRequest(h, http.MethodGet, path, "", map[string]string{
+			"Authorization": "Bearer valid-user-token",
+		})
+		require.Equal(t, http.StatusOK, resp.Code)
+		require.NotNil(t, rec.lastListBans)
+		require.Equal(t, "space-9", rec.lastListBans.GetSpaceId())
+	}
 }
 
 // TestTranscodeSpacesModeration_TimeoutMember documents POST /api/v1/spaces/{spaceId}/members/{profileId}/timeout.
