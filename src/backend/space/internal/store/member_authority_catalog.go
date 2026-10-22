@@ -136,11 +136,12 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 		var body, volatility string
 		language := "plpgsql"
 		signature := "public." + function.Name + "()"
-		if function.Name == "space_voice_access_bump" {
+		switch function.Name {
+		case "space_voice_access_bump":
 			signature = "public.space_voice_access_bump(uuid,uuid,uuid)"
-		} else if function.Name == "space_membership_terminal_cleanup_allowed" {
+		case "space_membership_terminal_cleanup_allowed":
 			signature = "public.space_membership_terminal_cleanup_allowed(uuid)"
-		} else if function.Name == "space_terminal_purge_ready" {
+		case "space_terminal_purge_ready":
 			signature = "public.space_terminal_purge_ready(uuid)"
 			language = "sql"
 		}

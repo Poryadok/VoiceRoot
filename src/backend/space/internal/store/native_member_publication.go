@@ -158,7 +158,7 @@ func validateCommunityRecoveryNativeProof(ctx context.Context, tx pgx.Tx, b *spa
 	return nil
 }
 
-// Historical bootstrap replay may recover Role's original owner baseline only
+// IsCommunityBootstrapPublicationCurrent permits historical bootstrap replay to recover Role's original owner baseline only
 // while that exact native member and owner are still current. It never repairs
 // membership after leave, transfer or purge.
 func (s *SpaceStore) IsCommunityBootstrapPublicationCurrent(ctx context.Context, operation, space uuid.UUID) (bool, error) {

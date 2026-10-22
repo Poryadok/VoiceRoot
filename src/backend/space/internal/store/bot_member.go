@@ -5,7 +5,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Raw callers have no installation journal or source-removal authority.
+// AddBotMember rejects raw callers without installation journal or source-removal authority.
 func (s *SpaceStore) AddBotMember(context.Context, uuid.UUID, uuid.UUID) error {
 	return ErrMemberAuthorityUnavailable
 }

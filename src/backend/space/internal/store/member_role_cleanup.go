@@ -51,7 +51,7 @@ func (s *SpaceStore) ListPendingMemberRoleRemovals(ctx context.Context, limit in
 	return result, rows.Err()
 }
 
-// The Role call and exact receipt validation precede this short transaction.
+// MarkMemberRoleRemovalCompleted follows the Role call and exact receipt validation.
 // P3 shares the Space fence; a missing or changed intent never counts as ACK.
 func (s *SpaceStore) MarkMemberRoleRemovalCompleted(ctx context.Context, binding memberadmission.RemoveBinding, receipt []byte) error {
 	if s == nil || s.Pool == nil || s.tx != nil || memberadmission.ValidateRemove(binding) != nil {
