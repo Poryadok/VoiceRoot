@@ -542,24 +542,16 @@ func TestCreateGroup_SpaceGroup_NoChatMembers(t *testing.T) {
 	owner := uuidKey(profiles)
 	pool := startChatPostgresForTest(t, context.Background())
 	applyChatMigration(t, context.Background(), pool)
-	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
-	t.Cleanup(cleanup)
-
 	name := "Space raid"
 	spaceID := uuid.New().String()
-	resp, err := client.CreateChat(ctxFor(t, profiles, owner), &chatv1.CreateChatRequest{
-		Type:    chatv1.ChatType_CHAT_TYPE_GROUP,
-		Name:    &name,
-		SpaceId: &spaceID,
-	})
-	require.NoError(t, err)
-	require.Equal(t, spaceID, resp.GetChat().GetSpaceId())
-	require.Equal(t, name, resp.GetChat().GetName())
+	chat := seedSpaceChatForPolicyTest(t, pool, owner, spaceID, chatv1.ChatType_CHAT_TYPE_GROUP, name)
+	require.Equal(t, spaceID, chat.GetSpaceId())
+	require.Equal(t, name, chat.GetName())
 
 	var memberCount int
-	err = pool.QueryRow(context.Background(), `
+	err := pool.QueryRow(context.Background(), `
 SELECT COUNT(*) FROM chat_members WHERE chat_id = $1
-`, resp.GetChat().GetId()).Scan(&memberCount)
+`, chat.GetId()).Scan(&memberCount)
 	require.NoError(t, err)
 	require.Zero(t, memberCount, "space groups inherit members from space_members, not chat_members")
 }

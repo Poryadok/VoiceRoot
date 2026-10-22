@@ -18,25 +18,19 @@ func TestCreateChannel_SpaceChannel_NoChatMembers(t *testing.T) {
 	owner := uuidKey(profiles)
 	pool := startChatPostgresForTest(t, context.Background())
 	applyChatMigration(t, context.Background(), pool)
-	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
-	t.Cleanup(cleanup)
-
 	name := "Announcements"
 	spaceID := uuid.New().String()
-	resp, err := client.CreateChat(ctxFor(t, profiles, owner), &chatv1.CreateChatRequest{
-		Type:    chatv1.ChatType_CHAT_TYPE_CHANNEL,
-		Name:    &name,
-		SpaceId: &spaceID,
-	})
-	require.NoError(t, err)
-	require.Equal(t, chatv1.ChatType_CHAT_TYPE_CHANNEL, resp.GetChat().GetType())
-	require.Equal(t, spaceID, resp.GetChat().GetSpaceId())
-	require.Equal(t, name, resp.GetChat().GetName())
+	chat := seedSpaceChatForPolicyTest(t, pool, owner, spaceID, chatv1.ChatType_CHAT_TYPE_CHANNEL, name)
+	require.Equal(t, chatv1.ChatType_CHAT_TYPE_CHANNEL, chat.GetType())
+	require.Equal(t, spaceID, chat.GetSpaceId())
+	require.Equal(t, name, chat.GetName())
+	require.True(t, chat.GetThreadsEnabled(), "Space channel defaults remain covered without a fake public receipt")
+	require.False(t, chat.GetAllowUserMainFeed())
 
 	var memberCount int
-	err = pool.QueryRow(context.Background(), `
+	err := pool.QueryRow(context.Background(), `
 SELECT COUNT(*) FROM chat_members WHERE chat_id = $1
-`, resp.GetChat().GetId()).Scan(&memberCount)
+`, chat.GetId()).Scan(&memberCount)
 	require.NoError(t, err)
 	require.Zero(t, memberCount, "space channels inherit members from space_members, not chat_members")
 }

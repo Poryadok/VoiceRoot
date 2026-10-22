@@ -24,13 +24,8 @@ func TestSpaceSlowMode_SetTenSecondsOnSpaceChannel(t *testing.T) {
 
 	spaceID := uuid.New().String()
 	name := "announcements"
-	created, err := client.CreateChat(ctxFor(t, profiles, owner), &chatv1.CreateChatRequest{
-		Type:    chatv1.ChatType_CHAT_TYPE_GROUP,
-		Name:    &name,
-		SpaceId: &spaceID,
-	})
-	require.NoError(t, err)
-	chatID := created.GetChat().GetId()
+	chat := seedSpaceChatForPolicyTest(t, pool, owner, spaceID, chatv1.ChatType_CHAT_TYPE_GROUP, name)
+	chatID := chat.GetId()
 	chatUUID, err := uuid.Parse(chatID)
 	require.NoError(t, err)
 	_, err = pool.Exec(context.Background(), `
