@@ -20,7 +20,7 @@ import (
 
 // Audit fixtures represent existing legacy membership, not a new public
 // admission. Establish that real baseline before native migration, then run
-// every audit assertion against the actual qualified current schema.
+// every audit assertion against the explicitly qualified native45 component.
 func nativeAuditFixture(t *testing.T, ctx context.Context, owner, member uuid.UUID, name string) (*pgxpool.Pool, *store.SpaceRow) {
 	t.Helper()
 	return nativeAuditFixtureWithDescription(t, ctx, owner, member, name, "private")
@@ -36,7 +36,7 @@ func nativeAuditFixtureWithDescription(t *testing.T, ctx context.Context, owner,
 	require.NoError(t, err)
 	_, err = db.Pool.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, row.ID, member)
 	require.NoError(t, err)
-	db.Run(true, "up")
+	db.Run(true, "goto", "45")
 	var version int64
 	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version))
 	require.EqualValues(t, 45, version)
