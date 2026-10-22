@@ -59,7 +59,7 @@ services:
       SPACE_AUDIT_PRINCIPAL_TLS_KEY_FILE: /run/phase0/space-audit-grpc.key
       SPACE_AUDIT_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
       SPACE_AUDIT_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
-      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","role":"https://role:8443/.well-known/jwks.json","chat":"https://chat:8443/.well-known/jwks.json"}'
+      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","role":"https://role:8443/.well-known/jwks.json","chat":"https://chat:8443/.well-known/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json"}'
       S2S_JWKS_CA_FILE: /run/phase0/jwks-ca/ca.crt
       S2S_JWKS_CLIENT_CERT_FILE: /run/phase0/space-role-client.crt
       S2S_JWKS_CLIENT_KEY_FILE: /run/phase0/space-role-client.key
