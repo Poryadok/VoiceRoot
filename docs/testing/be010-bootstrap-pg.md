@@ -49,3 +49,10 @@ bind that exact typed committed Space/owner before dispatch. A fresh transport
 UUID is not a durable native-operation ID or receipt. No absent predicate is
 invented or repaired by Store/core/DDL changes. Prepared-role ownership fencing
 is tested; broader existing retirement tests are not relabelled as this run.
+
+Separate default-selection control passed with the expected explicit fixture
+SKIP when environment inputs are absent. Additional Role-short attempt failed
+at setup only: nats-server/v2 v2.10.24 was not cached and the offline runner
+could not fetch it. Other affected package results passed, but no whole-short
+PASS is claimed. Its guard did not run vet/build. Raw FAIL is retained; no rerun
+was performed. This is a verification limitation, not a hidden actual-PG failure.
