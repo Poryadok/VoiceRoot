@@ -19,6 +19,7 @@ require (
 	voice.app/voice/messaging v0.0.0
 	voice.app/voice/search v0.0.0
 	voice.app/voice/social v0.0.0
+	voice.app/voice/role v0.0.0 // indirect
 	voice.app/voice/space v0.0.0
 	voice.app/voice/user v0.0.0
 	voice/backend/pkg v0.0.0

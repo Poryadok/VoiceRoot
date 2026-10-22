@@ -9,6 +9,7 @@ COPY subscription/go.mod ./subscription/
 COPY analytics/pb/voice/analytics/go.mod ./analytics/pb/voice/analytics/
 COPY voice/pb/voice/subscription/go.mod ./voice/pb/voice/subscription/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
+COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
 COPY file/pb/voice/file/go.mod ./file/pb/voice/file/
 COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
@@ -23,6 +24,7 @@ COPY user/pb/voice/common ./user/pb/voice/common
 COPY user/pb/voice/user ./user/pb/voice/user
 COPY chat/pb/voice/chat ./chat/pb/voice/chat
 COPY voice/pb/voice/space ./voice/pb/voice/space
+COPY role/pb/voice/role ./role/pb/voice/role
 COPY file/pb/voice/file ./file/pb/voice/file
 COPY voice/pb/voice/story ./voice/pb/voice/story
 COPY voice/pb/voice/subscription ./voice/pb/voice/subscription

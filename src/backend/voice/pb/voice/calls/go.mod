@@ -7,6 +7,7 @@ require (
 	google.golang.org/protobuf v1.36.5
 	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
+	voice.app/voice/role v0.0.0 // indirect
 	voice.app/voice/space v0.0.0
 )
 
@@ -31,3 +32,5 @@ replace voice.app/voice/common => ../../../../user/pb/voice/common
 replace voice.app/voice/story => ../story
 
 replace voice.app/voice/events => ../../../../messaging/pb/voice/events
+
+replace voice.app/voice/role => ../../../../role/pb/voice/role

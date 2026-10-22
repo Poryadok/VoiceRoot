@@ -19,6 +19,7 @@ require (
 	voice.app/voice/events v0.0.0
 	voice.app/voice/matchmaking v0.0.0
 	voice.app/voice/social v0.0.0
+	voice.app/voice/role v0.0.0 // indirect
 	voice.app/voice/space v0.0.0
 	voice.app/voice/user v0.0.0
 	voice/backend/pkg v0.0.0
@@ -114,3 +115,5 @@ replace voice.app/voice/events => ../messaging/pb/voice/events
 replace voice.app/voice/file => ../file/pb/voice/file
 
 replace voice.app/voice/story => ../voice/pb/voice/story
+
+replace voice.app/voice/role => ../role/pb/voice/role
