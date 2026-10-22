@@ -23,7 +23,11 @@ void main() {
         authorization: owner.authorizationHeader,
         name: 'T107 Group A',
       );
-      expect(createdA, isA<ChatsApiOk<VoiceChat>>(), reason: '$createdA');
+      expect(
+        createdA,
+        isA<ChatsApiOk<VoiceChat>>(),
+        reason: _createGroupFailureReason(createdA),
+      );
       final groupA = (createdA as ChatsApiOk<VoiceChat>).data;
       expect(groupA.isGroup, isTrue);
       expect(groupA.creatorProfileId, owner.activeProfileId);
@@ -187,6 +191,36 @@ void main() {
         ? null
         : 'Opt in with --dart-define=VOICE_RUN_LIVE_INTEGRATION=true',
   );
+}
+
+String _createGroupFailureReason(ChatsApiResult<VoiceChat> result) {
+  if (result is! ChatsApiFailure) return 'createGroup result';
+  // Gateway strings can contain server or transport details. Only these exact
+  // public literals may enter the test log; unknown values stay redacted.
+  const publicCodes = {
+    'invalid_argument',
+    'not_found',
+    'already_exists',
+    'permission_denied',
+    'unauthenticated',
+    'failed_precondition',
+    'resource_exhausted',
+    'unavailable',
+    'internal',
+  };
+  const publicMessages = {
+    'protected initiating transport unavailable',
+    'initiating credential unavailable',
+    'internal error',
+  };
+  final code = publicCodes.contains(result.errorCode)
+      ? result.errorCode
+      : '[redacted]';
+  final message = publicMessages.contains(result.message)
+      ? result.message
+      : '[redacted]';
+  return 'createGroup: ChatsApiFailure(statusCode=${result.statusCode}, '
+      'errorCode=$code, message=$message)';
 }
 
 Future<void> _expectOwnerOnlyGroup(
