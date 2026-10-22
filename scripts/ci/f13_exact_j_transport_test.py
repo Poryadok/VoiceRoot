@@ -16,6 +16,252 @@ import f13_exact_j_historical_red_test as harness
 
 
 
+
+class PairedResolutionContract(unittest.TestCase):
+    """Opaque function proof; no actual hosted cause, guard or ownership claim."""
+    def test_real_closure_loss_keeps_rejection_and_pairs_fixed_missing_observation(self):
+        self.assertNotEqual(os.geteuid(), 0)
+        with tempfile.TemporaryDirectory(prefix='f13-paired-') as folder:
+            workspace = Path(folder)
+            root = workspace / 'root'
+            root.mkdir()
+            utilities = workspace / 'fixture-bin'
+            utilities.mkdir()
+            closure = workspace / 'fixture-closure'
+            closure.mkdir()
+            program = closure / 'program'
+            program.write_text('#!/bin/sh\nexit 0\n')
+            program.chmod(0o555)
+            for name in ('fixture_alpha', 'fixture_beta'):
+                (utilities / name).symlink_to(program)
+            identity = dict(commit='a' * 40, files={'driver': 'b' * 64})
+            with mock.patch.object(harness, 'UTILITY_DIRS', (str(utilities),)):
+                base = harness.materialize_pinned_git(root)
+                harness.verify_pinned_git(root)
+                actual = {p.name: str(p.readlink()) for p in (base / 'util').iterdir()}
+                self.assertEqual(len(actual), 2)
+                prepare = getattr(harness, 'prepare_paired_utility_context', lambda *_:None)
+                context = prepare(root, identity)
+                closure.rename(workspace / 'fixture-hidden')
+                original = io.StringIO()
+                with contextlib.redirect_stderr(original), self.assertRaisesRegex(harness.SetupFailure, '^pinned_Git_private_utility_view$'):
+                    harness.verify_pinned_git(root)
+                expected = harness.expected_utilities()
+                self.assertEqual(expected, {})
+                legacy = json.loads(original.getvalue().splitlines()[0])
+                self.assertEqual(legacy['counts']['extra'], 2)
+                self.assertEqual(legacy['counts']['changed'], 0)
+                for entry in legacy['entries']:
+                    self.assertEqual(entry['slot'], dict(is_symlink=True, is_file=False, executable=False))
+                observe = getattr(harness, 'paired_utility_observation', lambda *_:None)
+                observation = observe(base, actual, expected, 2, tuple(actual), identity)
+                encode = getattr(harness, 'encode_paired_utility_observation', lambda _:b'')
+                raw = encode(observation) if observation is not None else b''
+                resolve = getattr(harness, 'resolve_owned_paired_output', lambda out,err,ctx:(out,err,None))
+                legacy_bytes = original.getvalue().encode()
+                stdout, stderr, receipt = resolve(b'original stdout\n', raw+legacy_bytes+b'original stderr\n', context)
+                self.assertIsNotNone(receipt, 'original mismatch still rejects; desired paired diagnostic is absent on baseline')
+                self.assertEqual(stdout, b'original stdout\n')
+                self.assertEqual(stderr, legacy_bytes+b'original stderr\n')
+                self.assertEqual(receipt['kind'], 'F13_PAIRED_UTILITY_CONTEXT_RECEIPT_v1')
+                self.assertTrue(receipt['credentials_equal'])
+                self.assertEqual(len(receipt['entries']), 2)
+                for entry in receipt['entries']:
+                    self.assertEqual(entry['outer']['state'], 'regular')
+                    self.assertEqual(entry['inner']['state'], 'missing')
+                    self.assertEqual(entry['inner']['error'], 'ENOENT')
+                self.assertNotIn(b'fixture_alpha', harness.diagnostic_json(receipt))
+                self.assertNotIn(str(workspace).encode(), harness.diagnostic_json(receipt))
+
+
+    def paired_fixture(self):
+        folder = tempfile.TemporaryDirectory(prefix='f13-paired-schema-')
+        self.addCleanup(folder.cleanup)
+        root = Path(folder.name)
+        base = root / 'historical-git'
+        (base / 'util').mkdir(parents=True)
+        target = root / 'PRIVATE_PATH_SENTINEL'
+        target.write_text('PRIVATE_CONTENT_SENTINEL')
+        target.chmod(0o555)
+        (base / 'util' / 'PRIVATE_NAME_SENTINEL').symlink_to(target)
+        actual = {'PRIVATE_NAME_SENTINEL': str(target)}
+        identity = dict(commit='a' * 40, files={'driver': 'b' * 64})
+        context = harness.prepare_paired_utility_context(root, identity)
+        observation = harness.paired_utility_observation(base, actual, {}, 1, tuple(actual), identity)
+        mismatch = harness.diagnostic_json(harness.utility_view_diagnostic(base, actual, {}, 1, tuple(actual))) + b'\n'
+        return root, base, target, actual, identity, context, observation, mismatch
+
+    def test_probe_real_denied_not_directory_loop_limit_and_metadata_change(self):
+        with tempfile.TemporaryDirectory(prefix='f13-paired-probe-') as folder:
+            root = Path(folder)
+            denied = root / 'denied'
+            denied.mkdir()
+            (denied / 'program').write_text('PRIVATE_CONTENT_SENTINEL')
+            denied.chmod(0)
+            try:
+                observation = harness.paired_referent_observation(str(denied / 'program'))
+                self.assertEqual((observation['state'], observation['error']), ('denied', 'EACCES'))
+            finally:
+                denied.chmod(0o700)
+            regular = root / 'program'
+            regular.write_text('PRIVATE_CONTENT_SENTINEL')
+            regular.chmod(0o555)
+            before = harness.paired_referent_observation(str(regular))
+            self.assertEqual(before['state'], 'regular')
+            self.assertTrue(before['executable'])
+            regular.chmod(0o755)
+            regular.write_text('different private contents and size')
+            regular.chmod(0o555)
+            after = harness.paired_referent_observation(str(regular))
+            self.assertNotEqual(before['metadata_sha256'], after['metadata_sha256'])
+            self.assertEqual(harness.paired_referent_observation(str(regular / 'child'))['error'], 'ENOTDIR')
+            (root / 'loop-a').symlink_to('loop-b')
+            (root / 'loop-b').symlink_to('loop-a')
+            self.assertEqual(harness.paired_referent_observation(str(root / 'loop-a'))['state'], 'loop')
+            for index in range(9):
+                (root / ('edge' + str(index))).symlink_to('edge' + str(index+1))
+            self.assertEqual(harness.paired_referent_observation(str(root / 'edge0'))['state'], 'limit')
+            self.assertEqual(harness.paired_referent_observation('relative/PRIVATE_PATH')['state'], 'not_inspected')
+            self.assertNotIn(b'PRIVATE', harness.diagnostic_json(before))
+
+    def test_same_context_no_catalog_dependency_and_opaque_only(self):
+        root, base, target, actual, identity, context, observation, mismatch = self.paired_fixture()
+        with mock.patch.object(harness, 'read_public_utility_catalog', side_effect=AssertionError('must not inspect catalog')):
+            self.assertIsNotNone(harness.prepare_paired_utility_context(root, identity))
+        raw = harness.encode_paired_utility_observation(observation)
+        out, err, receipt = harness.resolve_owned_paired_output(b'', mismatch+raw, context)
+        self.assertEqual((out, err), (b'', mismatch))
+        self.assertIsNotNone(receipt)
+        self.assertEqual(receipt['entries'][0]['outer'], receipt['entries'][0]['inner'])
+        self.assertTrue(receipt['credentials_equal'])
+        for secret in (b'PRIVATE_NAME', b'PRIVATE_PATH', b'PRIVATE_CONTENT', str(root).encode()):
+            self.assertNotIn(secret, raw)
+            self.assertNotIn(secret, harness.diagnostic_json(receipt))
+        self.assertIsNone(harness.resolve_owned_paired_output(b'', mismatch+raw, None)[2])
+        self.assertIsNone(harness.resolve_owned_paired_output(b'', raw, context)[2], 'no original mismatch cannot authorize a paired record')
+
+    def test_pair_strict_source_map_tokens_schema_and_negative_shapes(self):
+        root, base, target, actual, identity, context, value, mismatch = self.paired_fixture()
+        mutations = []
+        def changed(path, replacement):
+            item = json.loads(json.dumps(value))
+            cursor = item
+            for key in path[:-1]:
+                cursor = cursor[key]
+            cursor[path[-1]] = replacement
+            mutations.append(item)
+        for field in ('source_sha256', 'actual_sha256'):
+            changed((field,), '0' * 64)
+        changed(('entry_count',), 2)
+        changed(('omitted',), True)
+        changed(('credential_sha256',), 'PRIVATE_SECRET')
+        changed(('entries', 0, 'target', 'sha256'), '0' * 64)
+        changed(('entries', 0, 'tool', 'utf8_bytes'), True)
+        changed(('entries', 0, 'probe', 'state'), 'PRIVATE_SECRET')
+        changed(('entries', 0, 'probe', 'path'), {'path': '/PRIVATE_SECRET'})
+        changed(('entries', 0, 'probe', 'error'), 'ENOENT')  # incompatible with regular metadata
+        changed(('entries',), value['entries'] * 2)
+        for item in mutations:
+            with self.subTest(item=item):
+                raw = harness.encode_paired_utility_observation(item)
+                self.assertIsNone(harness.resolve_owned_paired_output(b'', mismatch+raw, context)[2])
+        raw = harness.encode_paired_utility_observation(value)
+        duplicated = raw.replace(b'{"actual_count":1,', b'{"actual_count":1,"actual_count":1,', 1)
+        self.assertNotEqual(raw, duplicated)
+        self.assertIsNone(harness.resolve_owned_paired_output(b'', mismatch+duplicated, context)[2])
+
+    def test_new_prefix_suppression_preserves_old_resolver_and_unrelated_bytes(self):
+        root, base, target, actual, identity, context, value, mismatch = self.paired_fixture()
+        raw = harness.encode_paired_utility_observation(value)
+        old = harness.encode_opaque_observation(harness.opaque_utility_observation(base, actual, {}, 1, tuple(actual), identity))
+        public = harness.public_diagnostic_context((), actual, identity)
+        expected = harness.resolve_owned_utility_output(b'guard\r\n', mismatch+old+b'unrelated\n', public)
+        out, err, receipt = harness.resolve_owned_paired_output(b'guard\r\n', mismatch+old+raw+b'unrelated\n', context)
+        self.assertIsNotNone(receipt)
+        self.assertEqual(harness.resolve_owned_utility_output(out, err, public), expected)
+        broken = b'F13_PAIRED_UTILITY_BROKEN PRIVATE_SECRET\n'
+        for first, second in ((broken, broken[:-1]), (raw, raw), (b'', raw+raw),
+                              (b'', harness.PAIRED_UTILITY_PREFIX+b'x'*16385+b'\n')):
+            out, err, receipt = harness.resolve_owned_paired_output(b'out\n'+first, mismatch+second, context)
+            self.assertEqual((out, err, receipt), (b'out\n', mismatch, None))
+
+    def test_paired_bounds_truthful_omission_and_failure_containment(self):
+        root, base, target, actual, identity, context, value, mismatch = self.paired_fixture()
+        many = {'PRIVATE_NAME_'+str(i): str(target) for i in range(100)}
+        observed = harness.paired_utility_observation(base, many, {}, 100, tuple(many), identity)
+        self.assertEqual(len(observed['entries'])+observed['omitted'], 100)
+        self.assertGreater(observed['omitted'], 0)
+        self.assertLessEqual(harness.diagnostic_units(observed), 32)
+        self.assertLessEqual(len(harness.encode_paired_utility_observation(observed)), 16384)
+        with self.assertRaises(ValueError):
+            harness.encode_paired_utility_observation({'entries': [{} for _ in range(33)]})
+        with mock.patch.object(harness.os, 'getgroups', return_value=list(range(33))):
+            self.assertIsNone(harness.prepare_paired_utility_context(root, identity))
+        with mock.patch.object(harness.os, 'lstat', side_effect=OSError(5, 'PRIVATE_SECRET')):
+            observed = harness.paired_referent_observation(str(target))
+            self.assertEqual((observed['state'], observed['error']), ('io_error', 'EIO'))
+        class Broken(io.StringIO):
+            def write(self, text):
+                raise OSError('PRIVATE_SECRET')
+        with mock.patch.dict(os.environ, {'F13_HARNESS_IDENTITY': json.dumps(identity)}), contextlib.redirect_stderr(Broken()):
+            harness.emit_paired_utility_observation(base, actual, {}, 1, tuple(actual))
+
+
+    def test_namespace_pairs_owned_output_without_spawn_growth_or_setup_waiver(self):
+        import types
+        for broken_output in (False, True):
+            with self.subTest(broken_output=broken_output):
+                holder = {}
+                class Output(io.BytesIO):
+                    def write(self, raw):
+                        if broken_output and b'F13_PAIRED_UTILITY_CONTEXT_RECEIPT_v1' in raw:
+                            raise OSError('PRIVATE_OUTPUT_SECRET')
+                        return super().write(raw)
+                outputs = (io.BytesIO(), Output())
+                def command(args):
+                    if args[-2:] == ['rev-parse', 'HEAD']:
+                        return b'a' * 40+b'\n'
+                    return (harness.ROOT / args[-1].split(':', 1)[1]).read_bytes()
+                def materialize(root):
+                    program = root / 'PRIVATE_PROGRAM'
+                    program.write_text('private data')
+                    program.chmod(0o555)
+                    (root / 'historical-git' / 'util').mkdir(parents=True)
+                    (root / 'historical-git' / 'util' / 'PRIVATE_TOOL').symlink_to(program)
+                    holder.update(root=root, program=program)
+                def spawn(args, **kwargs):
+                    root = holder['root']
+                    actual = {'PRIVATE_TOOL': str(holder['program'])}
+                    holder['program'].unlink()
+                    identity = dict(commit='a' * 40, files={name:harness.sha((harness.ROOT / name).read_bytes())
+                                                          for name in harness.HARNESS_SOURCE_PATHS})
+                    value = harness.paired_utility_observation(root/'historical-git', actual, {}, 1, tuple(actual), identity)
+                    mismatch = harness.diagnostic_json(harness.utility_view_diagnostic(root/'historical-git', actual, {}, 1, tuple(actual)))+b'\n'
+                    return subprocess.CompletedProcess(args, 2, b'unchanged stdout\n', mismatch+harness.encode_paired_utility_observation(value))
+                with mock.patch.object(harness.os, 'geteuid', return_value=1000), \
+                     mock.patch.object(harness.shutil, 'which', return_value='/trusted/tool'), \
+                     mock.patch.object(harness, 'run', side_effect=command), \
+                     mock.patch.object(harness, 'materialize', side_effect=materialize), \
+                     mock.patch.object(harness, 'prepare_public_diagnostic_context', return_value=None), \
+                     mock.patch.object(harness.subprocess, 'run', side_effect=spawn) as child, \
+                     mock.patch.object(harness.sys, 'stdout', types.SimpleNamespace(buffer=outputs[0])), \
+                     mock.patch.object(harness.sys, 'stderr', types.SimpleNamespace(buffer=outputs[1])):
+                    with self.assertRaisesRegex(harness.SetupFailure, '^namespace_must_return_actual_guard_receipt_not_setup_exit$'):
+                        harness.namespace_main()
+                self.assertEqual(child.call_count, 1)
+                self.assertEqual(child.call_args.kwargs, {'capture_output':True})
+                self.assertEqual(outputs[0].getvalue(), b'unchanged stdout\n')
+                raw = outputs[1].getvalue()
+                self.assertFalse(any(line.startswith(harness.PAIRED_UTILITY_NAMESPACE) for line in raw.splitlines()))
+                records = [json.loads(line) for line in raw.splitlines()]
+                pairs = [r for r in records if r.get('kind')=='F13_PAIRED_UTILITY_CONTEXT_RECEIPT_v1']
+                self.assertEqual(len(pairs), 0 if broken_output else 1)
+                if pairs:
+                    self.assertEqual(pairs[0]['entries'][0]['outer']['state'], 'regular')
+                    self.assertEqual(pairs[0]['entries'][0]['inner']['error'], 'ENOENT')
+                self.assertNotIn(b'PRIVATE_PROGRAM', raw)
+                self.assertNotIn(b'PRIVATE_TOOL', raw)
+
 class ContextFailureContract(unittest.TestCase):
     """Parent-only failure observation; never hosted cause or guard proof."""
     def test_real_descriptor_failure_keeps_none_and_emits_only_fixed_reason(self):
