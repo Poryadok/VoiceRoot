@@ -160,6 +160,37 @@ fail startup. The ordinary listener rejects both methods, and the legacy
 
 ## API (gRPC)
 
+### Ban and Unban operation identity
+
+`BanMemberRequest.operation_id` (string tag 5) and
+`UnbanMemberRequest.operation_id` (string tag 3) carry a required canonical nonnil
+UUID chosen once by the caller per intent. The exact HTTP body/path/header and
+status contract is [Ban and Unban stable intent](api-gateway.md#ban-and-unban-stable-intent-contract).
+This additive wire does not change either RPC method or existing moderation ACL.
+The receiver must qualify the exact protected Gateway method and full signed
+protobuf; raw identity headers or the ordinary listener are no alternative.
+
+Durable identity is `(verified actor_profile_id,operation_id)` with immutable
+verified account, RPC and exact full request binding. Same-root changed binding
+is `ALREADY_EXISTS`, including before retained-expiry handling. Separate verified
+actors have separate keys and cannot select one another's outcome. Transport
+request UUID/JTI is fresh per dispatch and never replaces logical intent.
+Completed exact replay returns saved outcome without new effects/current
+owner/member requirements, after current authenticated binding, qualified native
+catalog and permanent P3 fence checks. New/pending work retains current ACL.
+
+A live matching execution returns `FAILED_PRECONDITION` with typed ErrorInfo
+domain `voice.space.moderation.v1`, reason `INTENT_IN_PROGRESS` (Gateway Ban-local
+409); owner Ban retains generic `FAILED_PRECONDITION` (412). An exact matching
+retained expired record returns `FAILED_PRECONDITION` without that retry detail
+(412), no saved response/effect/root recreation. This expiry mapping is a new
+explicit technical refinement. Strict DB wall time `< completed_at + 30 days`
+bounds saved-outcome replay; equality expires and execution renewal cannot extend
+it. Client no-reuse does not authorize eternal raw identity retention or prove
+detection after lawful erasure. P3 erases raw private links and defeats late replies
+regardless of public replay window. Actual bounded cleanup and receiver cutover
+remain native verification requirements, not inferred from generated fields.
+
 The additive [ListThreads membership source contract](../testing/listthreads-versioned-readmodel-exec-plan.md#effective-membership-contract-v1)
 requires Space-scoped transactional membership/lifecycle revisions, revocation
 counters, exact replay/outbox records and complete pinned snapshots/head

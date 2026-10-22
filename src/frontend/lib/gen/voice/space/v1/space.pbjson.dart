@@ -1160,6 +1160,7 @@ const BanMemberRequest$json = {
       '10': 'profileId',
       '17': true
     },
+    {'1': 'operation_id', '3': 5, '4': 1, '5': 9, '10': 'operationId'},
   ],
   '8': [
     {'1': '_reason'},
@@ -1171,8 +1172,8 @@ const BanMemberRequest$json = {
 final $typed_data.Uint8List banMemberRequestDescriptor = $convert.base64Decode(
     'ChBCYW5NZW1iZXJSZXF1ZXN0EhkKCHNwYWNlX2lkGAEgASgJUgdzcGFjZUlkEh0KCmFjY291bn'
     'RfaWQYAiABKAlSCWFjY291bnRJZBIbCgZyZWFzb24YAyABKAlIAFIGcmVhc29uiAEBEiIKCnBy'
-    'b2ZpbGVfaWQYBCABKAlIAVIJcHJvZmlsZUlkiAEBQgkKB19yZWFzb25CDQoLX3Byb2ZpbGVfaW'
-    'Q=');
+    'b2ZpbGVfaWQYBCABKAlIAVIJcHJvZmlsZUlkiAEBEiEKDG9wZXJhdGlvbl9pZBgFIAEoCVILb3'
+    'BlcmF0aW9uSWRCCQoHX3JlYXNvbkINCgtfcHJvZmlsZV9pZA==');
 
 @$core.Deprecated('Use unbanMemberRequestDescriptor instead')
 const UnbanMemberRequest$json = {
@@ -1180,13 +1181,15 @@ const UnbanMemberRequest$json = {
   '2': [
     {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
     {'1': 'account_id', '3': 2, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
   ],
 };
 
 /// Descriptor for `UnbanMemberRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List unbanMemberRequestDescriptor = $convert.base64Decode(
     'ChJVbmJhbk1lbWJlclJlcXVlc3QSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQSHQoKYWNjb3'
-    'VudF9pZBgCIAEoCVIJYWNjb3VudElk');
+    'VudF9pZBgCIAEoCVIJYWNjb3VudElkEiEKDG9wZXJhdGlvbl9pZBgDIAEoCVILb3BlcmF0aW9u'
+    'SWQ=');
 
 @$core.Deprecated('Use listMembersRequestDescriptor instead')
 const ListMembersRequest$json = {

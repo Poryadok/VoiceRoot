@@ -3020,12 +3020,14 @@ class BanMemberRequest extends $pb.GeneratedMessage {
     $core.String? accountId,
     $core.String? reason,
     $core.String? profileId,
+    $core.String? operationId,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
     if (accountId != null) result.accountId = accountId;
     if (reason != null) result.reason = reason;
     if (profileId != null) result.profileId = profileId;
+    if (operationId != null) result.operationId = operationId;
     return result;
   }
 
@@ -3046,6 +3048,7 @@ class BanMemberRequest extends $pb.GeneratedMessage {
     ..aOS(2, _omitFieldNames ? '' : 'accountId')
     ..aOS(3, _omitFieldNames ? '' : 'reason')
     ..aOS(4, _omitFieldNames ? '' : 'profileId')
+    ..aOS(5, _omitFieldNames ? '' : 'operationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3102,16 +3105,28 @@ class BanMemberRequest extends $pb.GeneratedMessage {
   $core.bool hasProfileId() => $_has(3);
   @$pb.TagNumber(4)
   void clearProfileId() => $_clearField(4);
+
+  /// Caller-chosen stable intent UUID, retained across retries; not a transport ID.
+  @$pb.TagNumber(5)
+  $core.String get operationId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set operationId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasOperationId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearOperationId() => $_clearField(5);
 }
 
 class UnbanMemberRequest extends $pb.GeneratedMessage {
   factory UnbanMemberRequest({
     $core.String? spaceId,
     $core.String? accountId,
+    $core.String? operationId,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
     if (accountId != null) result.accountId = accountId;
+    if (operationId != null) result.operationId = operationId;
     return result;
   }
 
@@ -3130,6 +3145,7 @@ class UnbanMemberRequest extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
     ..aOS(2, _omitFieldNames ? '' : 'accountId')
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3168,6 +3184,16 @@ class UnbanMemberRequest extends $pb.GeneratedMessage {
   $core.bool hasAccountId() => $_has(1);
   @$pb.TagNumber(2)
   void clearAccountId() => $_clearField(2);
+
+  /// Caller-chosen stable intent UUID, retained across retries; not a transport ID.
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
 }
 
 class ListMembersRequest extends $pb.GeneratedMessage {
