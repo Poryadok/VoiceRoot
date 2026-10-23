@@ -50,11 +50,21 @@ SELECT 1 FROM space_bans WHERE space_id = $1 AND account_id = $2 LIMIT 1
 
 // BanMember cannot manufacture authenticated public intent from raw UUIDs.
 func (s *SpaceStore) BanMember(ctx context.Context, spaceID, accountID, bannedBy uuid.UUID, reason *string, evictProfileID *uuid.UUID) error {
+	if s != nil && s.Pool != nil {
+		return s.withOwnershipScope(ctx, []uuid.UUID{spaceID}, func(*SpaceStore) error {
+			return ErrAccountBanUnavailable
+		})
+	}
 	return ErrAccountBanUnavailable
 }
 
-// UnbanMember removes a ban record.
+// UnbanMember cannot manufacture authenticated public intent from raw UUIDs.
 func (s *SpaceStore) UnbanMember(ctx context.Context, spaceID, accountID, actor uuid.UUID) error {
+	if s != nil && s.Pool != nil {
+		return s.withOwnershipScope(ctx, []uuid.UUID{spaceID}, func(*SpaceStore) error {
+			return ErrAccountBanUnavailable
+		})
+	}
 	return ErrAccountBanUnavailable
 }
 
