@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"io"
 	"net"
 	"os"
 	"strings"
@@ -35,7 +36,7 @@ func LoadConfig(lookup func(string) (string, bool)) (Config, bool, error) {
 			}
 		}
 	}
-	for _, name := range []string{"BOT_SPACE_MEMBERSHIP_SOURCE_GENERATION", "BOT_SPACE_MEMBERSHIP_SOURCE_KIND"} {
+	for _, name := range []string{"BOT_SPACE_MEMBERSHIP_SOURCE_GENERATION", "BOT_SPACE_MEMBERSHIP_SOURCE_FILE", "BOT_SPACE_MEMBERSHIP_SOURCE_KIND"} {
 		if _, ok := lookup(name); ok {
 			enabled = true
 		}
@@ -60,7 +61,22 @@ func LoadConfig(lookup func(string) (string, bool)) (Config, bool, error) {
 	if err != nil {
 		return Config{}, true, err
 	}
-	raw, _ := lookup("BOT_SPACE_MEMBERSHIP_SOURCE_GENERATION")
+	raw, direct := lookup("BOT_SPACE_MEMBERSHIP_SOURCE_GENERATION")
+	if path, present := lookup("BOT_SPACE_MEMBERSHIP_SOURCE_FILE"); present {
+		if direct || path == "" || strings.TrimSpace(path) != path {
+			return Config{}, true, ErrUnavailable
+		}
+		file, e := os.Open(path)
+		if e != nil {
+			return Config{}, true, ErrUnavailable
+		}
+		body, e := io.ReadAll(io.LimitReader(file, 38))
+		_ = file.Close()
+		if e != nil || len(body) > 37 {
+			return Config{}, true, ErrUnavailable
+		}
+		raw = strings.TrimSuffix(string(body), "\n")
+	}
 	cfg.SourceGeneration, err = uuid.Parse(raw)
 	if err != nil || cfg.SourceGeneration == uuid.Nil || cfg.SourceGeneration.String() != raw {
 		return Config{}, true, ErrUnavailable

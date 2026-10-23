@@ -137,6 +137,14 @@ baseline_version() {
 migrate_db() {
   db="$1"
   dir="${MIGRATIONS_DIR}/${db}"
+  if [ "$db" = bot_db ]; then
+    # Must precede generic baseline/force branches. Only an empty database may
+    # establish new custody; retained databases require the original artifact.
+    python3 /usr/local/bin/provision-bot-membership-source.py \
+      /native-bot-evidence/source.uuid -- \
+      migrate -path "$dir" -database "$(dsn "$db")" up
+    return $?
+  fi
   if [ "$db" = space_db ]; then
     if [ -z "${SPACE_DB_PASSWORD:-}" ]; then
       echo "ERROR: SPACE_DB_PASSWORD must be configured" >&2

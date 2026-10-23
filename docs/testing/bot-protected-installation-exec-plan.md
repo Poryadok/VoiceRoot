@@ -40,6 +40,13 @@ Outbound prefixes: BOT_SPACE_MEMBERSHIP_, BOT_INSTALL_ROLE_, BOT_INSTALL_CHAT_,
 BOT_INSTALL_MESSAGING_, BOT_INSTALL_AUTH_. Each requires GRPC_ADDR, TLS_CA_FILE,
 TLS_CERT_FILE, TLS_KEY_FILE; optional TLS_SERVER_NAME defaults to endpoint host.
 BOT_SPACE_MEMBERSHIP_SOURCE_GENERATION must match retained migration008 source.
+Alternatively BOT_SPACE_MEMBERSHIP_SOURCE_FILE reads a canonical UUID from the
+original external artifact; configuring both forms is rejected. Compose uses
+the project-scoped bot_membership_source volume at /native-bot-evidence/source.uuid.
+The same helper runs from CLI migration and compose-db-init. It qualifies a new
+source only from an empty database before migration, then publishes the exact
+new identity atomically. Retained starts verify the original artifact and never
+recapture a missing file from the database. Interrupted provisioning fails closed.
 BOT_SPACE_MEMBERSHIP_SOURCE_KIND is OWNED_FRESH or KNOWN_RETAINED. Partial/blank
 configuration fails startup. Startup closes owned listeners, clients and Redis;
 server failure terminates the process. Lazy JWKS fetch avoids publisher cycles,
