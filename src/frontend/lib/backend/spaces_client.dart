@@ -430,7 +430,6 @@ class VoiceSpacesClient {
     final result = await _gateway.postProto(
       uri: _gateway.resolve('/api/v1/invites/$code/join'),
       authorization: authorization,
-      body: space_pb.JoinByInviteRequest(code: code),
       createEmpty: space_pb.JoinByInviteResponse.create,
     );
     return _map(
