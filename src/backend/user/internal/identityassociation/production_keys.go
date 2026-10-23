@@ -80,7 +80,7 @@ func localKeyFilename(name string) bool {
 		return false
 	}
 	for _, r := range name {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.') {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' && r != '_' && r != '.' {
 			return false
 		}
 	}
@@ -92,9 +92,13 @@ func readBoundedKeyFile(path string, maxBytes int64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	return readBoundedKeyReader(file, maxBytes)
+}
+
+func readBoundedKeyReader(file io.ReadCloser, maxBytes int64) ([]byte, error) {
 	data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
-	if err != nil || int64(len(data)) > maxBytes {
+	closeErr := file.Close()
+	if err != nil || closeErr != nil || int64(len(data)) > maxBytes {
 		return nil, ErrKeysetIncomplete
 	}
 	return data, nil
