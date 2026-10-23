@@ -189,9 +189,10 @@ func (s *RoleGRPC) CheckPermission(ctx context.Context, req *rolev1.CheckPermiss
 		if err := principalgrpc.RequireChatCurrentACL(ctx, req); err != nil {
 			return nil, err
 		}
-		response, err := ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.CheckPermissionResponse, error) {
+		ctx = context.WithValue(ctx, nativeMemberChatScopeKey{}, nativeMemberChatScope{profile: req.GetProfileId(), chat: req.GetChat().GetId(), voicePresent: req.VoiceRoomId != nil})
+		response, err := ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(ctx context.Context, scoped *RoleGRPC) (*rolev1.CheckPermissionResponse, error) {
 			return scoped.checkPermission(ctx, req)
-		})
+		}, req.GetProfileId())
 		if err != nil {
 			return nil, err
 		}

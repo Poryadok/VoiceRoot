@@ -171,4 +171,11 @@ func TestChatCurrentACLActualPGFenceAndExpiry(t *testing.T) {
 	require.True(t, tracer.fresh.Load())
 	require.EqualValues(t, 1, tracer.calls.Load())
 	decision(true)
+
+	// Native catalogs must fetch the decision subject's current Space authority;
+	// the service principal itself supplies no actor profile.
+	f.Run(true, "goto", "25")
+	_, err = client.CheckPermission(chatACLContext(t, key, req, nil), req)
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.Contains(t, status.Convert(err).Message(), "native membership authority unavailable")
 }
