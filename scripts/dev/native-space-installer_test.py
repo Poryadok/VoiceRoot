@@ -4,6 +4,8 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 import os
+import json
+import copy
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -47,6 +49,38 @@ class NativeSpaceAdapters(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "completed source/image-bound"):
                 migrations.apply_space(ROOT, "postgres:18-alpine", lambda _: self.fail("unknown SQL Job cannot be adopted"), run, get)
         self.assertFalse(any("delete" in row for row in calls))
+
+
+    def test_completed_evidence_requires_actual_successor_chain(self):
+        image = "example.invalid/installer@sha256:" + "a" * 64
+        expected = migrations.space_input_digest(ROOT, image)
+        job = {"metadata": {"uid": "owned-job", "annotations": {"voice.io/native-input-hash": expected}},
+               "status": {"succeeded": 1}, "spec": {"template": {"spec": {"containers": [{"name": "migrate", "image": image}]}}}}
+        pod = {"metadata": {"ownerReferences": [{"uid": "owned-job"}]},
+               "spec": {"containers": [{"name": "migrate", "image": image}]},
+               "status": {"containerStatuses": [{"name": "migrate", "imageID": image}]}}
+        receipt = {"created": True, "source_sha256": migrations.space_source_digest(ROOT),
+                   "creation": {"database_name": "space_db"}, "trusted44": {"version": 44},
+                   "transition45": {"Changed": True}, "transition50": {"Changed": True},
+                   "trusted50": {"version": 50}, "transition51": {"profile": "native_catalog_rowjson_51"},
+                   "final": {"version": 51}}
+        for kind in ("valid51", "old50", "missing transition51", "wrong profile"):
+            with self.subTest(kind=kind):
+                candidate = copy.deepcopy(receipt)
+                if kind == "old50":
+                    candidate["final"]["version"] = 50
+                elif kind == "missing transition51":
+                    del candidate["transition51"]
+                elif kind == "wrong profile":
+                    candidate["transition51"]["profile"] = "native_catalog_50"
+                log = json.dumps({"event": "complete", "receipt": candidate})
+                if kind == "valid51":
+                    evidence = migrations.space_evidence(ROOT, "voice-dev", image, job, [pod], log)
+                    self.assertEqual(log, evidence["data"]["prior.jsonl"])
+                    self.assertEqual(expected, evidence["metadata"]["annotations"]["voice.io/native-input-hash"])
+                else:
+                    with self.assertRaisesRegex(ValueError, "complete linked installer output"):
+                        migrations.space_evidence(ROOT, "voice-dev", image, job, [pod], log)
 
 
 if __name__ == "__main__":

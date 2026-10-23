@@ -56,7 +56,7 @@ func (s *SpaceStore) captureLifecycleProofReceiptMutation(ctx context.Context, o
 		}
 		return nil, nil // no effective-history storage on these qualified profiles
 	}
-	if version != 41 && version != 42 && version != 44 && version != 45 && version != 50 {
+	if version != 41 && version != 42 && version != 44 && version != 45 && version != 50 && version != 51 {
 		return nil, ErrEffectiveEpisodeUnavailable
 	}
 	bound := &effectiveMemberMutations{space: operation.spaceID, scheduleOperation: operation.operationID}

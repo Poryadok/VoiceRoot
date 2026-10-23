@@ -488,17 +488,22 @@ func completedFixture() *Receipt {
 	q.OldSealSHA256 = p.NewSealSHA256
 	q.NewSealSHA256 = strings.Repeat("c", 64)
 	end := *f
-	end.Version = 50
-	end.SealSHA256 = q.NewSealSHA256
+	end.Version = 51
+	end.SealSHA256 = strings.Repeat("9", 64)
+	trusted50 := *f
+	trusted50.Version, trusted50.SealSHA256 = 50, q.NewSealSHA256
+	t51 := store.NativeMembershipCatalog45Receipt(q)
+	t51.OldSealSHA256, t51.NewSealSHA256, t51.MigrationSHA256 = q.NewSealSHA256, end.SealSHA256, store.NativeCatalog51MigrationSHA256
+	transition51 := &store.NativeMembershipCatalog51Receipt{NativeMembershipCatalog45Receipt: t51, Profile: store.NativeCatalogRowJSONProfile, Engine: "github.com/golang-migrate/migrate/v4@v4.18.1"}
 	created := *f
 	created.Version = 0
 	created.Epoch = ""
 	created.SealSHA256 = ""
-	return &Receipt{RunID: uuid.NewString(), SourceRevision: strings.Repeat("d", 40), SourceSHA256: strings.Repeat("e", 64), ExecutableSHA256: strings.Repeat("f", 64), MigratorSHA256: strings.Repeat("a", 64), InventorySHA256: InventorySHA256, Created: true, Creation: &created, Trusted44: f, Transition45: p, Transition50: &q, Final: &end}
+	return &Receipt{RunID: uuid.NewString(), SourceRevision: strings.Repeat("d", 40), SourceSHA256: strings.Repeat("e", 64), ExecutableSHA256: strings.Repeat("f", 64), MigratorSHA256: strings.Repeat("a", 64), InventorySHA256: InventorySHA256, Created: true, Creation: &created, Trusted44: f, Transition45: p, Transition50: &q, Trusted50: &trusted50, Transition51: transition51, Final: &end}
 }
 
 func TestRetainedEvidenceMustBeActualCompleteLinkedChain(t *testing.T) {
-	for _, kind := range []string{"valid", "different target", "wrong parent seal", "not50", "notcreated", "verified only", "incomplete", "duplicate"} {
+	for _, kind := range []string{"valid", "different target", "wrong parent seal", "not51", "notcreated", "verified only", "incomplete", "duplicate", "old50 only", "foreign51 parent", "wrong51 profile"} {
 		t.Run(kind, func(t *testing.T) {
 			r := completedFixture()
 			name := "complete"
@@ -507,8 +512,15 @@ func TestRetainedEvidenceMustBeActualCompleteLinkedChain(t *testing.T) {
 				r.Final.DatabaseOID++
 			case "wrong parent seal":
 				r.Transition50.OldSealSHA256 = strings.Repeat("d", 64)
-			case "not50":
+			case "not51":
 				r.Final.Version = 45
+			case "old50 only":
+				r.Final.Version = 50
+				r.Transition51 = nil
+			case "foreign51 parent":
+				r.Transition51.OldSealSHA256 = strings.Repeat("0", 64)
+			case "wrong51 profile":
+				r.Transition51.Profile = "native_catalog_50"
 			case "notcreated":
 				r.Created = false
 			case "verified only":
@@ -545,6 +557,17 @@ func TestRetainedEvidenceRejectsOverflowBeyondValidPrefix(t *testing.T) {
 		require.Error(t, err, "overflow cannot hide a second complete record beyond the parsing bound")
 		require.Nil(t, got)
 	}
+}
+
+func TestNative51QualifiedSourceStillRequiresDeploymentBinding(t *testing.T) {
+	oldRevision, oldSource, oldMigrate := SourceRevision, BuildSourceSHA256, MigrateSHA256
+	t.Cleanup(func() { SourceRevision, BuildSourceSHA256, MigrateSHA256 = oldRevision, oldSource, oldMigrate })
+	SourceRevision, BuildSourceSHA256, MigrateSHA256 = "", strings.Repeat("a", 64), strings.Repeat("b", 64)
+	var out bytes.Buffer
+	require.NoError(t, store.RequireNativeCatalog51Admission())
+	err := Run(context.Background(), Config{AdminURL: "postgres://installer@127.0.0.1:1/postgres?sslmode=disable", Mode: "provision", Output: &out, MigrationsDir: "/unavailable", RequiredBuildSHA256: strings.Repeat("c", 64)})
+	require.ErrorContains(t, err, "selected deployment source does not match installer build", "a source proof cannot replace deployment identity before inventory, connections and CREATE")
+	require.Empty(t, out.String())
 }
 
 func TestSelectedSQLRejectsMissingExtraModifiedAndSymlink(t *testing.T) {

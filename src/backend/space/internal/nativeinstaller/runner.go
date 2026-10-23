@@ -14,10 +14,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
 
+	migrateengine "github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -240,6 +243,12 @@ func Run(ctx context.Context, c Config) (err error) {
 	if c.RequiredBuildSHA256 != "" && c.RequiredBuildSHA256 != BuildSourceSHA256 {
 		return errors.New("selected deployment source does not match installer build")
 	}
+	if err := store.RequireNativeCatalog51Admission(); err != nil {
+		return errors.New("HOLD: current native51 source/session qualification is not admitted")
+	}
+	if !native51EngineSourceBound() {
+		return errors.New("HOLD: pinned native51 migration engine source unavailable")
+	}
 	inventory, err := ValidateSources(c.MigrationsDir)
 	if err != nil {
 		return err
@@ -316,20 +325,20 @@ func Run(ctx context.Context, c Config) (err error) {
 	}
 	defer pool.Close()
 	s := &store.SpaceStore{Pool: pool}
-	checkWindow := func() error {
+	checkWindow := func(windowCtx context.Context) error {
 		var ok bool
-		if err := admin.QueryRow(ctx, `SELECT pg_backend_pid()=$1 AND session_user=$2 AND current_user=session_user AND EXISTS(SELECT 1 FROM pg_locks WHERE pid=pg_backend_pid() AND locktype='advisory' AND granted) AND NOT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname='space_db' AND application_name<>$3)`, pid, role, cfg.RuntimeParams["application_name"]).Scan(&ok); err != nil || !ok {
+		if err := admin.QueryRow(windowCtx, `SELECT pg_backend_pid()=$1 AND session_user=$2 AND current_user=session_user AND EXISTS(SELECT 1 FROM pg_locks WHERE pid=pg_backend_pid() AND locktype='advisory' AND granted) AND NOT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname='space_db' AND application_name<>$3)`, pid, role, cfg.RuntimeParams["application_name"]).Scan(&ok); err != nil || !ok {
 			return errors.New("HOLD: exclusive owning maintenance window lost")
 		}
 		if r.Created {
 			var oid uint32
-			if err := admin.QueryRow(ctx, `SELECT oid FROM pg_database WHERE datname='space_db'`).Scan(&oid); err != nil || oid != r.Creation.DatabaseOID {
+			if err := admin.QueryRow(windowCtx, `SELECT oid FROM pg_database WHERE datname='space_db'`).Scan(&oid); err != nil || oid != r.Creation.DatabaseOID {
 				return errors.New("HOLD: created target identity changed")
 			}
 		}
 		return nil
 	}
-	if err = checkWindow(); err != nil {
+	if err = checkWindow(ctx); err != nil {
 		return err
 	}
 	if c.Mode == "verify" {
@@ -337,9 +346,9 @@ func Run(ctx context.Context, c Config) (err error) {
 		if prior.SourceRevision != r.SourceRevision || prior.SourceSHA256 != r.SourceSHA256 || prior.ExecutableSHA256 != r.ExecutableSHA256 || prior.MigratorSHA256 != r.MigratorSHA256 || prior.InventorySHA256 != r.InventorySHA256 {
 			return errors.New("HOLD: retained build/source identity changed")
 		}
-		facts, err := s.InspectNativeInstallerSource(ctx, 50)
+		facts, err := s.InspectNativeInstallerSource(ctx, 51)
 		if err != nil {
-			return errors.New("HOLD: current50 source verification failed")
+			return errors.New("HOLD: current51 source verification failed")
 		}
 		if !sameTarget(prior.Final, facts) || prior.Final.SealSHA256 != facts.SealSHA256 {
 			return errors.New("HOLD: retained target identity or seal changed")
@@ -351,7 +360,7 @@ func Run(ctx context.Context, c Config) (err error) {
 	q.Set("application_name", cfg.RuntimeParams["application_name"])
 	childURL.RawQuery = q.Encode()
 	migrate := func(version int) error {
-		if err := checkWindow(); err != nil {
+		if err := checkWindow(ctx); err != nil {
 			return err
 		}
 		if _, err := ValidateSources(c.MigrationsDir); err != nil {
@@ -366,7 +375,7 @@ func Run(ctx context.Context, c Config) (err error) {
 		if err := runMigration(ctx, cmd, version); err != nil {
 			return err
 		}
-		if err := checkWindow(); err != nil {
+		if err := checkWindow(ctx); err != nil {
 			return err
 		}
 		return emit("migrated" + strconv.Itoa(version))
@@ -414,14 +423,82 @@ func Run(ctx context.Context, c Config) (err error) {
 	if err = emit("trusted50"); err != nil {
 		return err
 	}
-	r.Final, err = s.InspectNativeInstallerSource(ctx, 50)
-	if err != nil || r.Final.SealSHA256 != r.Transition50.NewSealSHA256 || !sameTarget(r.Trusted44, r.Final) {
-		return errors.New("final full native50 verification failed")
+	r.Trusted50, err = s.InspectNativeInstallerSource(ctx, 50)
+	if err != nil || r.Trusted50.SealSHA256 != r.Transition50.NewSealSHA256 || !sameTarget(r.Trusted44, r.Trusted50) {
+		return errors.New("full native50 prerequisite verification failed")
 	}
-	if err = checkWindow(); err != nil {
+	// No child goto51: the actual real engine/file-source adapter owns a single
+	// transaction for exact51 SQL, full qualification, epoch CAS and history.
+	r.Transition51, err = runNativeCatalog51(ctx, s, r.Trusted50, c.MigrationsDir, checkWindow)
+	if err != nil {
+		return errors.New("native51 atomic migration failed")
+	}
+	if !matchesTransition(r.Trusted50, &r.Transition51.NativeMembershipCatalog45Receipt) || r.Transition51.Profile != store.NativeCatalogRowJSONProfile {
+		return errors.New("native51 receipt linkage failed")
+	}
+	if err = emit("trusted51"); err != nil {
+		return err
+	}
+	r.Final, err = s.InspectNativeInstallerSource(ctx, 51)
+	if err != nil || r.Final.SealSHA256 != r.Transition51.NewSealSHA256 || !sameTarget(r.Trusted44, r.Final) {
+		return errors.New("final full native51 verification failed")
+	}
+	if err = checkWindow(ctx); err != nil {
 		return err
 	}
 	return emit("complete")
+}
+
+func runNativeCatalog51(ctx context.Context, s *store.SpaceStore, prior *store.NativeInstallerSourceFacts, migrationsDir string, window func(context.Context) error) (receipt *store.NativeMembershipCatalog51Receipt, err error) {
+	driver, err := s.NewNativeCatalog51Migration(ctx, prior, window)
+	if err != nil {
+		return nil, err
+	}
+	// Cleanup is required even when the source driver fails before an engine
+	// instance exists. Close rolls back unfinished work and never commits.
+	defer func() {
+		if closeErr := driver.Close(); closeErr != nil {
+			receipt = nil
+			err = errors.Join(err, cleanupFailure{message: "native51 migration cleanup failed", cause: closeErr})
+		}
+	}()
+	abs, err := filepath.Abs(migrationsDir)
+	if err != nil {
+		return nil, errors.New("native51 source path unavailable")
+	}
+	sourceURL := (&url.URL{Scheme: "file", Path: filepath.ToSlash(abs)}).String()
+	engine, err := migrateengine.NewWithDatabaseInstance(sourceURL, "native51-transaction", driver)
+	if err != nil {
+		return nil, errors.New("native51 migration source unavailable")
+	}
+	defer func() {
+		sourceErr, databaseErr := engine.Close()
+		if sourceErr != nil || databaseErr != nil {
+			receipt = nil
+			err = errors.Join(err, cleanupFailure{message: "native51 migration engine close failed", cause: errors.Join(sourceErr, databaseErr)})
+		}
+	}()
+	// Unlock cannot prove engine success: source/control errors may originate
+	// outside the adapter. Only this explicit outer call can confirm commit.
+	engineErr := engine.Migrate(51)
+	receipt, err = driver.CommitQualified(engineErr)
+	if err != nil {
+		return nil, errors.New("native51 migration transaction rejected")
+	}
+	return receipt, nil
+}
+
+func native51EngineSourceBound() bool {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return false
+	}
+	for _, dep := range info.Deps {
+		if dep.Path == "github.com/golang-migrate/migrate/v4" {
+			return dep.Replace == nil && dep.Version == "v4.18.1" && dep.Sum == "h1:JML/k+t4tpHCpQTCAD62Nu43NUFzHY4CV3uAuvHGC+Y="
+		}
+	}
+	return false
 }
 
 // installerConnections resolves one finite connection contract before mutation.

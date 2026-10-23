@@ -24,7 +24,7 @@ type NativeInstallerSourceFacts struct {
 // profile and actual retained seal. It never writes an epoch, runs a transition
 // or proves installation provenance. Only the owning installer consumes it.
 func (s *SpaceStore) InspectNativeInstallerSource(ctx context.Context, version int64) (*NativeInstallerSourceFacts, error) {
-	if s == nil || s.Pool == nil || s.tx != nil || ctx == nil || ctx.Err() != nil || (version != 44 && version != 45 && version != 50) {
+	if s == nil || s.Pool == nil || s.tx != nil || ctx == nil || ctx.Err() != nil || (version != 44 && version != 45 && version != 50 && version != 51) {
 		return nil, ErrMemberAuthorityUnavailable
 	}
 	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted, AccessMode: pgx.ReadOnly})

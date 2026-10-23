@@ -217,7 +217,7 @@ func (s *SpaceStore) loadCommunityAccountProjection(ctx context.Context, receipt
 	if err := s.db().QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil {
 		return ErrAccountBanUnavailable
 	}
-	if version != 50 {
+	if version != 50 && version != 51 {
 		receipt.EffectiveProfileIDs = append([]uuid.UUID(nil), receipt.ProfileIDs...)
 		return nil
 	}

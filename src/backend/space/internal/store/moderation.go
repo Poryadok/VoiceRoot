@@ -63,7 +63,7 @@ func (s *SpaceStore) unbanAccountWithOutcome(ctx context.Context, spaceID, accou
 		return ErrAccountBanUnavailable
 	}
 	var version int64
-	if err := s.tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || version != 50 {
+	if err := s.tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || version != 50 && version != 51 {
 		return ErrAccountBanUnavailable
 	}
 	if err := checkMemberAuthorityCatalog(ctx, s.tx); err != nil {

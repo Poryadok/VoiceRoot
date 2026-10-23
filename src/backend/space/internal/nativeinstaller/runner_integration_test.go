@@ -10,6 +10,7 @@ import (
 	"os"
 	"testing"
 	"time"
+	"voice/backend/space/internal/store"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
@@ -42,9 +43,12 @@ func TestProductionFreshChainAndRetainedVerify(t *testing.T) {
 		require.NoError(t, err)
 	})
 	require.EqualValues(t, 44, prior.Trusted44.Version)
-	require.EqualValues(t, 50, prior.Final.Version)
+	require.EqualValues(t, 51, prior.Final.Version)
 	require.True(t, prior.Transition45.Changed)
 	require.True(t, prior.Transition50.Changed)
+	require.EqualValues(t, 50, prior.Trusted50.Version)
+	require.True(t, prior.Transition51.Changed)
+	require.Equal(t, store.NativeCatalogRowJSONProfile, prior.Transition51.Profile)
 	out.Reset()
 	c.Mode = "verify"
 	c.Prior = prior
@@ -93,7 +97,7 @@ func TestCommittedPhaseFailureNeverAutoResumes(t *testing.T) {
 	cases := []struct {
 		event   string
 		version int64
-	}{{"created", 0}, {"migrated44", 44}, {"trusted44", 44}, {"migrated45", 45}, {"trusted45", 45}, {"migrated50", 50}, {"trusted50", 50}, {"complete", 50}}
+	}{{"created", 0}, {"migrated44", 44}, {"trusted44", 44}, {"migrated45", 45}, {"trusted45", 45}, {"migrated50", 50}, {"trusted50", 50}, {"trusted51", 51}, {"complete", 51}}
 	for _, test := range cases {
 		t.Run(test.event, func(t *testing.T) {
 			w := &failedEvidenceWriter{at: test.event}
