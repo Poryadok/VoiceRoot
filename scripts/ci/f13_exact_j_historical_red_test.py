@@ -1364,6 +1364,24 @@ def successor_replay_module(repo, harness_identity):
     return successor, provenance
 
 
+def original_guard_context(frame, operation, incoming, nested):
+    """Recover collector dynamic scope without importing qualification rows."""
+    require(frame['partition_source_history'] == 'false' and operation['classification'] == 'merge',
+            'original_unpartitioned_merge_context')
+    require(operation['commit'] == OPERATION.split('/')[1] and len(incoming) == 8 and
+            incoming[0] == PATH and incoming[1] in ('true', 'false') and
+            incoming[2:6] == [operation['commit'], operation['first_parent'],
+                              operation['boundary'], operation['source_head']],
+            'original_incoming_operation_binding')
+    require(len(nested) == 8 and nested[0] == PATH, 'original_qualification_child_path')
+    # SOURCE547 only populates nested_map when partition_source_history=true.
+    # This child's independently validated ledger is qualification history, not
+    # the source of the unpartitioned parent's dynamic guard variables.
+    return dict(nested_owner_commit=operation['commit'], nested_base=operation['boundary'],
+                nested_head=operation['source_head'], guarded_entry_commit=operation['commit'],
+                trigger=incoming[1])
+
+
 def inside():
     require(sys.platform == 'linux' and ROOT == Path('/harness'), 'private_namespace_required')
     harness_identity = json.loads(os.environ['F13_HARNESS_IDENTITY'])
@@ -1440,9 +1458,9 @@ def inside():
     require(pending['payload']['prior']['sha256'] == 'bdcd1df8603081f14a80d5627616466f7ede36439915a193e62345d177af8ee1' and
         pending['payload']['incoming']['sha256'] == '51a6d356845a23ab3b4f1e7d362075a284d55aea9d3fb907e7d0ec00a62fb13d', 'c69_literal_actual_eight_field_rows')
     require([r for r in folded['rows'] if r.split('\t')[0] == PATH] == [pending['payload']['prior']['raw']], 'complete_prior_rows')
-    require(incoming[4:6] == nested[4:6] and incoming[1] == nested[1], 'original_child_flags_source')
     frame = next(x['context'] for x in reconstructed['frame_ancestry'] if x['frame'] == 'F5')
     op = reconstructed['operation_binding']
+    guard_context = original_guard_context(frame, op, incoming, nested)
     require(op['classification'] == 'merge' and frame['partition_source_history'] == 'false' and
         frame['allow_direct_followup'] == 'true' and frame['base'] == h.AUTHOR_HISTORICAL_SCOPE['base'] and
         frame['target'] == h.AUTHOR_HISTORICAL_SCOPE['target'], 'actual_outer_F5_merge_partition')
@@ -1464,7 +1482,7 @@ def inside():
     require(all(values[k] == v for k, v in expected['values'].items()), 'same_independent_authority_values')
     values.update(repo='/repo', path=PATH, output=str(source_map), base=frame['base'], target=frame['target'],
         commit=op['commit'], first_parent=op['first_parent'], source_base=op['boundary'], source_head=op['source_head'],
-        nested_owner_commit=nested[2], nested_base=nested[4], nested_head=nested[5], source_entry=entry(op['source_head']),
+        nested_owner_commit=guard_context['nested_owner_commit'], nested_base=guard_context['nested_base'], nested_head=guard_context['nested_head'], source_entry=entry(op['source_head']),
         content_base=incoming[6], source_base_candidates=','.join(op['candidates']), trigger=incoming[1],
         allow_direct_followup=frame['allow_direct_followup'], is_direct='false', ordinary_guarded_merge='false',
         source_lineage='false', guarded_correction_allowed='false', role_duplicate_allowed='false', space_audit_allowed='false',
@@ -1505,7 +1523,7 @@ def inside():
         require(re.fullmatch('[A-Za-z_][A-Za-z0-9_]*', key), 'closed_variable_name')
         script += 'local ' + key + '=' + shlex.quote(value) + '\n'
     script += 'local -A owners owner_triggers owner_content_bases owner_source_heads owner_source_entries guarded_entries guarded_entry_commits checkpoint_merge_outcomes\n'
-    for key, value in dict(owners=prior[2],owner_triggers=prior[1],owner_content_bases=prior[6],owner_source_heads=prior[5],owner_source_entries=entry(prior[5]),guarded_entries=entry(op['source_head']),guarded_entry_commits=nested[2],checkpoint_merge_outcomes='unverified').items():
+    for key, value in dict(owners=prior[2],owner_triggers=prior[1],owner_content_bases=prior[6],owner_source_heads=prior[5],owner_source_entries=entry(prior[5]),guarded_entries=entry(op['source_head']),guarded_entry_commits=guard_context['guarded_entry_commit'],checkpoint_merge_outcomes='unverified').items():
         script += key + '[' + shlex.quote(PATH) + ']=' + shlex.quote(value) + '\n'
     script += 'f13_path_is_guarded "$path" || return 90\n'
     script += 'f13_evaluate_guarded_owner_qualifiers "$repo" "$path" "$output" || return 91\n'

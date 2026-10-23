@@ -55,6 +55,36 @@ class SuccessorReplayBinding(unittest.TestCase):
 
 
 
+class OriginalGuardContextContract(unittest.TestCase):
+    def fixture(self):
+        commit = harness.OPERATION.split('/')[1]
+        operation = dict(commit=commit, classification='merge', first_parent='a' * 40,
+                         boundary='b' * 40, source_head='c' * 40)
+        incoming = [harness.PATH, 'true', commit, operation['first_parent'],
+                    operation['boundary'], operation['source_head'], 'd' * 40, operation['boundary']]
+        # A qualification child has its own owner/source/trigger. An
+        # unpartitioned parent never imports this row into nested_map.
+        nested = [harness.PATH, 'false', 'e' * 40, 'f' * 40, '1' * 40, '2' * 40, '3' * 40, '1' * 40]
+        return dict(partition_source_history='false'), operation, incoming, nested
+
+    def test_unpartitioned_merge_uses_original_operation_not_qualification_child(self):
+        frame, op, incoming, nested = self.fixture()
+        self.assertEqual(harness.original_guard_context(frame, op, incoming, nested),
+                         dict(nested_owner_commit=op['commit'], nested_base=op['boundary'],
+                              nested_head=op['source_head'], guarded_entry_commit=op['commit'], trigger='true'))
+
+    def test_unexpected_partition_or_incoming_binding_is_rejected(self):
+        for field in ('partition', 'commit', 'classification', 'path', 'trigger', 'parent', 'base', 'head'):
+            with self.subTest(field=field):
+                frame, op, incoming, nested = self.fixture()
+                if field == 'partition': frame['partition_source_history'] = 'true'
+                elif field == 'commit': op['commit'] = '4' * 40
+                elif field == 'classification': op['classification'] = 'direct'
+                else: incoming[{'path': 0, 'trigger': 1, 'parent': 3, 'base': 4, 'head': 5}[field]] = 'wrong'
+                with self.assertRaises(harness.SetupFailure):
+                    harness.original_guard_context(frame, op, incoming, nested)
+
+
 class PrivateEntropyContract(unittest.TestCase):
     """Fixed endpoint component tests; real private mount/DAC remains hosted."""
     def test_namespace_constructs_private_sealed_entropy_endpoint_before_preparation(self):
