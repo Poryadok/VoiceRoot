@@ -103,6 +103,12 @@ migrate_db() {
   if [[ "$db" == bot_db ]]; then
     # The same project-scoped volume and helper serve CLI and app bootstrap.
     # Never recapture an already-migrated source into a newly missing artifact.
+    # Compose also mounts Space evidence for this one-off initializer. Create
+    # its host directory as the caller before Docker can create it as root.
+    local evidence_dir
+    evidence_dir="${SPACE_NATIVE_EVIDENCE_DIR:-${ROOT}/tmp/native-space-installer}"
+    mkdir -p "$evidence_dir"
+    chmod 700 "$evidence_dir"
     docker compose --profile app run --rm --no-deps --build \
       --entrypoint python3 compose-db-init \
       /usr/local/bin/provision-bot-membership-source.py /native-bot-evidence/source.uuid -- \
