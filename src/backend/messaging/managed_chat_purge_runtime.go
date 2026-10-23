@@ -27,6 +27,7 @@ type managedChatPurgeRuntime struct {
 	Issuer      *principal.Issuer
 	Coordinator *grpcsvc.ManagedChatPurgeCoordinator
 	JWKS        *http.Server
+	RoleJWKS    *http.Server
 	Connections []*grpc.ClientConn
 }
 
@@ -37,6 +38,9 @@ func (r *managedChatPurgeRuntime) Close() {
 	if r.JWKS != nil {
 		_ = r.JWKS.Close()
 	}
+	if r.RoleJWKS != nil {
+		_ = r.RoleJWKS.Close()
+	}
 	for _, conn := range r.Connections {
 		_ = conn.Close()
 	}
@@ -44,12 +48,16 @@ func (r *managedChatPurgeRuntime) Close() {
 
 func newManagedChatPurgeRuntime(ctx context.Context, pool *pgxpool.Pool) (*managedChatPurgeRuntime, error) {
 	config := managedChatPurgeRuntimeConfigFromEnv(os.Getenv)
+	roleJWKSConfig, roleJWKSEnabled, err := loadRolePrincipalJWKSConfig(os.LookupEnv)
+	if err != nil {
+		return nil, err
+	}
 	issuer, handler, enabled, err := loadManagedChatPurgePrincipal()
 	if err != nil {
 		return nil, err
 	}
 	if !enabled {
-		if config.configured() {
+		if config.configured() || roleJWKSEnabled {
 			return nil, errors.New("managed chat purge TLS/owner configuration requires the signing-key configuration")
 		}
 		return nil, nil
@@ -91,6 +99,13 @@ func newManagedChatPurgeRuntime(ctx context.Context, pool *pgxpool.Pool) (*manag
 			fmt.Fprintf(os.Stderr, "messaging purge JWKS server exited: %v\n", serveErr)
 		}
 	}()
+	if roleJWKSEnabled {
+		runtime.RoleJWKS, err = roleJWKSConfig.start(handler)
+		if err != nil {
+			runtime.Close()
+			return nil, err
+		}
+	}
 	if !config.ownersConfigured() {
 		return runtime, nil
 	}

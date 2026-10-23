@@ -880,6 +880,16 @@ profile and chat remain decision data; no actor mutation authority is conferred.
 There is no plaintext or forwarded-user credential fallback. Messaging's global
 permission helper is unavailable: this caller is limited to chat-scoped decisions.
 
+When Role uses a separate TLS trust domain, the optional
+`MESSAGING_ROLE_JWKS_LISTEN`, `MESSAGING_ROLE_JWKS_TLS_CERT_FILE`,
+`MESSAGING_ROLE_JWKS_TLS_KEY_FILE` and `MESSAGING_ROLE_JWKS_CLIENT_CA_FILE`
+configuration publishes the same existing Messaging current/next public keys at
+`/.well-known/principal-jwks.json` on a second HTTPS listener. All four variables
+must be supplied together with the existing signing runtime; partial or empty
+configuration fails startup. This listener requires verified client certificates
+from its configured CA. It does not replace the lifecycle JWKS listener, its CA,
+or any signing keys. Both listeners close with the Messaging runtime.
+
 ## Масштабирование
 
 При >100M сообщений — шардинг PostgreSQL по `chat_id` (consistent hashing). Каждый шард содержит все сообщения одного чата → локальные запросы без cross-shard joins.
