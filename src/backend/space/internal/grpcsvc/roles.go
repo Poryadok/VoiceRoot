@@ -212,13 +212,18 @@ func (s *SpaceGRPC) revokeCommunityMemberRole(ctx context.Context, spaceID, prof
 }
 
 func (s *SpaceGRPC) memberRoleNames(ctx context.Context, spaceID, profileID uuid.UUID) []string {
-	if s.Roles == nil {
+	if s.OwnershipRoles == nil || s.PrincipalIssuer == nil {
 		return nil
 	}
-	resp, err := s.Roles.GetMemberRoles(ctx, &rolev1.GetMemberRolesRequest{
+	req := &rolev1.GetMemberRolesRequest{
 		SpaceId:   spaceID.String(),
 		ProfileId: profileID.String(),
-	})
+	}
+	signed, err := s.ownershipRoleContext(ctx, req, rolev1.RoleService_GetMemberRoles_FullMethodName, uuid.New())
+	if err != nil {
+		return nil
+	}
+	resp, err := s.OwnershipRoles.GetMemberRoles(signed, req)
 	if err != nil {
 		return nil
 	}

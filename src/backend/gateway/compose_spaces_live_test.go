@@ -140,7 +140,9 @@ func TestComposeMultiProfileSpaceMembership_live(t *testing.T) {
 	require.NotEqual(t, sess.ProfileID, altProfileID)
 	allowComposeChatSpaceInvitesEveryone(t, client, base, altToken)
 
-	joinComposeSpaceByInvite(t, client, base, altToken, invite.Code)
+	joined := joinComposeSpaceByInvite(t, client, base, altToken, invite.Code)
+	require.Equal(t, altProfileID, joined.GetProfileId())
+	require.Equal(t, spaceID, joined.GetSpaceId())
 
 	switchBackResp := composePostJSON(t, client, base+"/api/v1/auth/switch-profile", altToken,
 		`{"profile_id":"`+sess.ProfileID+`"}`)

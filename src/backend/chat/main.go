@@ -281,6 +281,11 @@ func main() {
 			defer func() { _ = rconn.Close() }()
 			roleClient = rolev1.NewRoleServiceClient(rconn)
 		}
+		roleClient, closeRoleDecision, roleDecisionErr := newChatRoleDecisionClientFromEnv(roleClient, chatPrincipalIssuer)
+		if roleDecisionErr != nil {
+			log.Fatalf("Chat Role decision transport: %v", roleDecisionErr)
+		}
+		defer func() { _ = closeRoleDecision() }()
 
 		var listEnrich grpcsvc.ListChatsEnrichment
 		var e2ePreKeyGate grpcsvc.E2EPreKeyGate

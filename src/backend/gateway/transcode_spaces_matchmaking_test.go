@@ -90,21 +90,15 @@ func TestTranscodeSpacesMatchmakingConfig(t *testing.T) {
 	spaceConn, spaceCleanup := startBufconnSpaceConn(t, spaceRec)
 	t.Cleanup(spaceCleanup)
 
-	h := newGatewayForContract(t, gatewayTestOptions{
-		tokenClaims: map[string]tokenClaims{
-			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
-		},
-		transcoder: &transcoder{clients: grpcClients{
-			space: spacev1.NewSpaceServiceClient(spaceConn),
-		}},
-	})
+	f := newCreatorFixture(t)
+	h := newGateway(f.config(spacev1.NewSpaceServiceClient(spaceConn)))
 
 	body := `{"mmConfigJson":"{\"enabled\":true}"}`
-	resp := performRequest(h, http.MethodPatch, "/api/v1/spaces/space-9/matchmaking/config", body, map[string]string{
-		"Authorization": "Bearer valid-user-token",
+	resp := performRequest(h, http.MethodPatch, "/api/v1/spaces/11111111-1111-4111-8111-111111111111/matchmaking/config", body, map[string]string{
+		"Authorization": "Bearer " + signConfigJWT(t, "creator-key", f.key, f.payload),
 	})
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NotNil(t, spaceRec.last)
-	require.Equal(t, "space-9", spaceRec.last.GetSpaceId())
+	require.Equal(t, "11111111-1111-4111-8111-111111111111", spaceRec.last.GetSpaceId())
 	require.Equal(t, `{"enabled":true}`, spaceRec.last.GetMmConfigJson())
 }

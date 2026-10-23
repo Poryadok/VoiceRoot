@@ -16,6 +16,7 @@ import (
 	"voice/backend/pkg/guestguard"
 	"voice/backend/role/permissions"
 	"voice/backend/space/internal/authctx"
+	"voice/backend/space/internal/lifecycleprincipal"
 	"voice/backend/space/internal/store"
 
 	spacev1 "voice.app/voice/space/v1"
@@ -117,6 +118,14 @@ func (s *SpaceGRPC) CreateCommunityBootstrap(ctx context.Context, req *spacev1.C
 }
 
 func (s *SpaceGRPC) UpdateSpace(ctx context.Context, req *spacev1.UpdateSpaceRequest) (*spacev1.UpdateSpaceResponse, error) {
+	call, err := lifecycleprincipal.RequireSettingsUpdate(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	actor, err := call.ActorFor(req)
+	if err != nil {
+		return nil, err
+	}
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
 	}
@@ -124,24 +133,33 @@ func (s *SpaceGRPC) UpdateSpace(ctx context.Context, req *spacev1.UpdateSpaceReq
 	if err != nil {
 		return nil, err
 	}
+	if spaceID.String() != req.SpaceId {
+		return nil, status.Error(codes.InvalidArgument, "canonical space_id required")
+	}
+	remaining, err := call.Remaining(req)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, remaining)
+	defer cancel()
+	// Role observes Space authority, so call it before taking the mutation gate.
+	if req.MmConfigJson != nil {
+		if err := s.requireSettingsPermission(ctx, spaceID, uuid.MustParse(actor.ProfileID), permissions.SpaceManageMatchmaking); err != nil {
+			return nil, err
+		}
+	}
+	if req.MmConfigJson == nil || req.Name != nil || req.Description != nil || req.IconUrl != nil || req.BannerUrl != nil || req.Visibility != nil || req.EntryRequirement != nil || req.EntryQuestionsJson != nil || req.AllowGuests != nil {
+		if err := s.requireSettingsPermission(ctx, spaceID, uuid.MustParse(actor.ProfileID), permissions.SpaceManageSettings); err != nil {
+			return nil, err
+		}
+	}
 	release, err := s.lockSpaceMutation(ctx, spaceID)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
-	// Matchmaking configuration has its own delegated Space capability. A
-	// request which also changes ordinary Space settings must satisfy both
-	// capabilities, so a matchmaking manager cannot use this general endpoint
-	// to modify unrelated fields.
-	if req.MmConfigJson != nil {
-		if err := s.requireSpacePermission(ctx, spaceID, permissions.SpaceManageMatchmaking); err != nil {
-			return nil, err
-		}
-	}
-	if req.MmConfigJson == nil || req.Name != nil || req.Description != nil || req.IconUrl != nil || req.BannerUrl != nil || req.Visibility != nil || req.EntryRequirement != nil || req.EntryQuestionsJson != nil || req.AllowGuests != nil {
-		if err := s.requireSpacePermission(ctx, spaceID, permissions.SpaceManageSettings); err != nil {
-			return nil, err
-		}
+	if _, err := call.ActorFor(req); err != nil {
+		return nil, err
 	}
 
 	var in store.UpdateSpaceInput
@@ -197,6 +215,14 @@ func (s *SpaceGRPC) UpdateSpace(ctx context.Context, req *spacev1.UpdateSpaceReq
 }
 
 func (s *SpaceGRPC) UpdateSpaceMmConfig(ctx context.Context, req *spacev1.UpdateSpaceMmConfigRequest) (*spacev1.UpdateSpaceMmConfigResponse, error) {
+	call, err := lifecycleprincipal.RequireMatchmakingSettingsUpdate(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	actor, err := call.ActorFor(req)
+	if err != nil {
+		return nil, err
+	}
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
 	}
@@ -204,12 +230,24 @@ func (s *SpaceGRPC) UpdateSpaceMmConfig(ctx context.Context, req *spacev1.Update
 	if err != nil {
 		return nil, err
 	}
+	if spaceID.String() != req.SpaceId {
+		return nil, status.Error(codes.InvalidArgument, "canonical space_id required")
+	}
+	remaining, err := call.Remaining(req)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, remaining)
+	defer cancel()
+	if err := s.requireSettingsPermission(ctx, spaceID, uuid.MustParse(actor.ProfileID), permissions.SpaceManageMatchmaking); err != nil {
+		return nil, err
+	}
 	release, err := s.lockSpaceMutation(ctx, spaceID)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
-	if err := s.requireSpacePermission(ctx, spaceID, permissions.SpaceManageMatchmaking); err != nil {
+	if _, err := call.ActorFor(req); err != nil {
 		return nil, err
 	}
 	cfg := req.GetMmConfigJson()
