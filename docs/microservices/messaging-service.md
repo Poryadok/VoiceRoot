@@ -867,6 +867,19 @@ allows a member to remove their own reaction after losing add permission.
 - **File Service** — привязка вложений
 - **Realtime Service** — (через NATS) уведомление о новых сообщениях для WebSocket fan-out
 
+Messaging sends these decisions to Role's protected mTLS listener using its
+existing service signer and protected JWKS publisher. `ROLE_GRPC_ADDR` requires
+`MESSAGING_ROLE_TLS_CA_FILE`, `MESSAGING_ROLE_TLS_SERVER_NAME`,
+`MESSAGING_ROLE_CLIENT_CERT_FILE` and `MESSAGING_ROLE_CLIENT_KEY_FILE` together;
+partial transport configuration or an unavailable signer stops startup. Each
+`CheckPermission` call replaces incoming/outgoing identity metadata with a fresh
+`service:messaging` credential for audience `role`, the exact RPC and full
+deterministic request hash, plus a fresh request UUID. The caller budget is at
+most five seconds and preserves any shorter parent deadline. The explicit
+profile and chat remain decision data; no actor mutation authority is conferred.
+There is no plaintext or forwarded-user credential fallback. Messaging's global
+permission helper is unavailable: this caller is limited to chat-scoped decisions.
+
 ## Масштабирование
 
 При >100M сообщений — шардинг PostgreSQL по `chat_id` (consistent hashing). Каждый шард содержит все сообщения одного чата → локальные запросы без cross-shard joins.
