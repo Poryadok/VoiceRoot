@@ -133,6 +133,12 @@ def validate_exact_conservation(item, operation, receipt):
     if expected:
         require(receipt['exact_unit_supersession'] == item['exact_unit_supersession'],
                 'conservation_consumes_exact_supersession_not_unused_sidecar')
+    expected_J = 'exact_J_owner_permission' in item
+    require(('exact_J_owner_permission' in receipt) == expected_J,
+            'conservation_exact_J_permission_presence_iff_pending')
+    if expected_J:
+        require(receipt['exact_J_owner_permission'] == item['exact_J_owner_permission'],
+                'conservation_consumes_distinct_exact_J_permission')
 
 
 def sha(data): return hashlib.sha256(data).hexdigest()
@@ -336,7 +342,7 @@ def append(path, kind, frame, operation, repo, values):
     elif kind in ('complete_ledger_conserved','range_I_ledger_conserved','range_J_ledger_conserved'):
         name,receipt=values
         payload=dict(path=name,receipt=json.loads(Path(receipt).read_bytes()),policy_result=None,admission=False)
-    elif kind == 'exact_unit_supersession':
+    elif kind in ('exact_unit_supersession', 'exact_J_owner_permission'):
         name,receipt=values
         payload=dict(path=name,receipt=json.loads(Path(receipt).read_bytes()),admission=False)
     elif kind in ('master_entry','master_wrapper_result'):
@@ -763,6 +769,97 @@ def build_3071_J_ready(state, prefix):
         qualification='HOLD',admission=False,runtime_pass=False)
 
 
+EXACT_J_AUDIT_PATH = 'src/backend/space/internal/grpcsvc/audit.go'
+EXACT_J_AUDIT_PRIOR = '\t'.join((EXACT_J_AUDIT_PATH, 'false',
+    '2445e81de07681cfd5f1491e4c793aaac747f571', '5cc425b35bc71738d86261c1cf4772c7babd4519',
+    'e3dc9ba836100707a9c4313d83bea1872f1f9016', 'c14f59c1a43b486d48322d62e7c5baa2816e1253',
+    'c6225ae5b968345b04a2c7d410875fe7d370b300', 'e3dc9ba836100707a9c4313d83bea1872f1f9016'))
+EXACT_J_AUDIT_INCOMING = '\t'.join((EXACT_J_AUDIT_PATH, 'true', J3071, J3071_P1,
+    J3071_O, J3071_P2, 'c6225ae5b968345b04a2c7d410875fe7d370b300', ','.join(J3071_BASES)))
+
+
+def exact_J_audit_source_unit(repo):
+    # The executable's reviewed source unit is separate from a replay's ROOT.
+    source = Path(__file__).resolve().parent/'testdata/f13-exact-j-547/source-unit.json'
+    raw = source.read_bytes()
+    require(sha(raw) == 'e8fce2a60ae0975ddcaee47db3cf36a51e57744194f5885bb8953ee2406a8f02',
+            'exact_J_frozen_full_source_unit')
+    unit = json.loads(raw)
+    require(unit['path'] == EXACT_J_AUDIT_PATH and len(unit['versions']) == 12 and len(unit['edges']) == 6,
+            'exact_J_complete_versions_and_edges')
+    for version in unit['versions'].values():
+        require(git(repo, 'ls-tree', '-z', version['ref'], '--', EXACT_J_AUDIT_PATH).decode() == version['tree_record'],
+                'exact_J_actual_serialized_tree_record')
+        content = git(repo, 'show', version['ref']+':'+EXACT_J_AUDIT_PATH)
+        require(file_digest(content) == dict(bytes=version['bytes'], sha256=version['sha256']),
+                'exact_J_full_historical_source_bytes')
+        require(git(repo, 'rev-list', '--parents', '-n', '1', version['ref']).decode().split()[1:] == version['ordered_parents'],
+                'exact_J_source_ordered_parents')
+    for edge in unit['edges'].values():
+        require(sha(git(repo, 'diff', '--raw', '-z', '--no-abbrev', '--no-renames', edge['from'], edge['to'], '--', EXACT_J_AUDIT_PATH)) == edge['raw_sha256']
+            and sha(git(repo, 'diff', '--no-ext-diff', '--no-renames', '--abbrev=9', edge['from'], edge['to'], '--', EXACT_J_AUDIT_PATH)) == edge['patch_sha256'],
+            'exact_J_complete_source_parent_edge')
+    git(repo, 'merge-base', '--is-ancestor', EXACT_J_AUDIT_PRIOR.split('\t')[2], J3071_P1)
+    git(repo, 'merge-base', '--is-ancestor', EXACT_J_AUDIT_PRIOR.split('\t')[5], J3071_P2)
+    return dict(sha256=sha(raw), source_unit=unit)
+
+
+def exact_J_owner_evidence(repo, capability, ready, events, prefix, actual_map):
+    """Pure permission constructor, called only with independently folded state.
+
+    Both the pending checkpoint and permission event verifier reconstruct all
+    earlier events and J_ready before calling this function. A ready JSON alone
+    is deliberately not a public constructor input.
+    """
+    require(capability['type'] == 'F54_FIXED3071_CURRENT_AUTHOR_CAPABILITIES', 'exact_J_AUTHOR_only')
+    before = events[-1]
+    require(before['kind'] == 'row_before' and before['operation'] == ready['operation']
+        and before['frame'] == ready['frame'] and ready['operation'].split('/')[1:] == [J3071, '2'],
+        'exact_J_actual_pending_operation')
+    value = before['payload']
+    require(value['path'] == EXACT_J_AUDIT_PATH and value['incoming'] == raw_binding(EXACT_J_AUDIT_INCOMING)
+        and value['prior_rows'] == [raw_binding(EXACT_J_AUDIT_PRIOR)]
+        and value['prior'] == raw_binding(EXACT_J_AUDIT_PRIOR), 'exact_J_complete_fixed_raw_rows')
+    require(value['map_before'] == file_digest(actual_map)
+        and [x for x in actual_map.decode().splitlines() if x.split('\t')[0] == EXACT_J_AUDIT_PATH] == [EXACT_J_AUDIT_PRIOR],
+        'exact_J_independently_folded_complete_map')
+    require(ready['capability_sha256'] == sha(canonical(capability))
+        and ready['composition']['whole'] == manual_3071_composition(repo), 'exact_J_current_capability_whole_composition')
+    require(ready['required_qualification'][EXACT_J_AUDIT_PATH]['aggregate'] is True,
+            'exact_J_complete_retained_true_obligation')
+    # Keep the actual prior writer references, not just an equal endpoint blob.
+    prior_commits = [e for e in events if e['kind'] == 'row_committed'
+                    and e['payload']['row'] == raw_binding(EXACT_J_AUDIT_PRIOR) and e['frame'] == before['frame']]
+    require(len(prior_commits) == 1, 'exact_J_one_actual_prior_writer')
+    prior_op = prior_commits[0]['operation']
+    references = [e['digest'] for e in events if e['operation'] == prior_op
+                  and (e['kind'] in ('operation_begin', 'classification') or
+                       (e['kind'] in ('row_after', 'row_committed') and e['payload'].get('path') == EXACT_J_AUDIT_PATH))]
+    require(references, 'exact_J_actual_prior_operation_references')
+    return dict(type='F54_EXACT_J_AUDIT_OWNER_TRANSITION_AUTHOR_v1',
+        source_unit=exact_J_audit_source_unit(repo), capability_sha256=sha(canonical(capability)),
+        operation=ready['operation'], frame=ready['frame'], frame_ancestry=ready['frame_ancestry'],
+        operation_binding=ready['operation_binding'], prior_operation=prior_op, prior_references=references,
+        prior_rows=value['prior_rows'], incoming=value['incoming'], composition=ready['composition'],
+        ledger_prefix=ready['prefix'], ledger_sha256=sha(canonical(ready)), map_before=file_digest(actual_map),
+        obligations=ready['required_qualification'][EXACT_J_AUDIT_PATH], aggregate=True,
+        trace_prefix=prefix, pending_digest=before['digest'], source_rebind=False, admission=False)
+
+
+def qualify_exact_J_owner(repo, capability_path, ledger_path, ledger_sha, trace_path, name, actual_map, incoming):
+    raw = Path(trace_path).read_bytes()
+    result = validate_trace(repo, trace_path, sha(raw), exact_J_checkpoint='pending')
+    receipt = result['exact_J_permission']
+    require(name == EXACT_J_AUDIT_PATH and incoming == EXACT_J_AUDIT_INCOMING
+        and receipt['map_before'] == file_digest(actual_map), 'exact_J_caller_exact_pending_binding')
+    ledger = Path(ledger_path).read_bytes()
+    require(sha(ledger) == ledger_sha and sha(canonical(json.loads(ledger))) == receipt['ledger_sha256'],
+            'exact_J_caller_complete_reconstructed_ledger')
+    require(sha(canonical(verified_3071_capabilities(repo, capability_path))) == receipt['capability_sha256'],
+            'exact_J_caller_current_AUTHOR_capability')
+    return receipt
+
+
 def qualified_J_native_normalization(value, events, before, name, actual_map, prior, incoming, after):
     """Reconstruct the existing clean-zero shell transition, never a new grant."""
     previous='0'*64
@@ -858,8 +955,17 @@ def consume_3071_J_path(ready_path, expected_sha, trace_path, name, actual_map, 
     aggregate=value['required_qualification'][name]['aggregate'] or any(row(x)[1]=='true' for x in prior) or incoming[1]=='true' or after[1]=='true'
     require(transition in ('append','replace') and (transition!='replace' or prior),'fixed3071_J_actual_transition')
     require((transition=='append' and after==incoming) or (transition=='replace' and (after[1]==incoming[1] or (after[1]=='true' and aggregate))),'fixed3071_J_raw_append_conserved_reduction')
+    exact_permission=None
+    if before['payload']['incoming']==raw_binding(EXACT_J_AUDIT_INCOMING) and normalization is None:
+        require(transition=='replace' and after_raw==EXACT_J_AUDIT_INCOMING,
+                'exact_J_consumer_preserves_whole_incoming_identity')
+        checked=validate_trace(ROOT,trace_path,sha(trace),exact_J_checkpoint='permitted')
+        exact_permission=checked['exact_J_permission']
+        require(exact_permission['ledger_sha256']==sha(canonical(value))
+            and exact_permission['map_before']==file_digest(actual_map), 'exact_J_consumer_current_full_binding')
     output=([x for x in rows if x.split('\t')[0]!=name] if transition=='replace' else rows)+[after_raw]
     return dict(path=name,ledger_sha256=sha(canonical(value)),incoming=before['payload']['incoming'],after_gate_row=raw_binding(after_raw),
+        **(dict(exact_J_owner_permission=exact_permission) if exact_permission else {}),
         **(dict(native_normalization=normalization) if normalization else {}),
         prior_rows=prior,map_before=file_digest(actual_map),transition=transition,expected_post_map=file_digest(('\n'.join(output)+'\n').encode()),
         aggregate=aggregate,obligations=value['required_qualification'][name],policy_result=None,admission=False)
@@ -2318,7 +2424,7 @@ def validate_router(repo, seal_path, seal_sha, map_path, context_path, sidecar_p
         failures=[v for v in receipts if v['status']!=0],qualification='HOLD',admission=False,runtime_pass=False)
 
 
-def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, range_checkpoint=None, I_checkpoint=None, deletion_checkpoint=None, manual_checkpoint=False, manual_end_checkpoint=None, manual_append_checkpoint=None, J_history_checkpoint=None, J_checkpoint=None, sealed_prefix=None):
+def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, range_checkpoint=None, I_checkpoint=None, deletion_checkpoint=None, manual_checkpoint=False, manual_end_checkpoint=None, manual_append_checkpoint=None, J_history_checkpoint=None, J_checkpoint=None, sealed_prefix=None, exact_J_checkpoint=None):
     global _TRACE_USED
     _TRACE_USED = True
     raw=Path(path).read_bytes()
@@ -2822,6 +2928,15 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             expected=dict(expected,trace_prefix=dict(bytes=len(prefix_raw),sha256=sha(prefix_raw)))
             require(receipt==expected and v['admission'] is False,'independent_exact_supersession_actual_history_binding')
             item['exact_unit_supersession']=receipt;continue
+        if kind=='exact_J_owner_permission':
+            item=require_pending_operation(pending,key,op)
+            require(op in J_ready and 'exact_J_owner_permission' not in item and not item['removed']
+                and 'conservation' not in item and not failures, 'exact_J_permission_before_guard_and_mutation')
+            prefix_raw=b''.join(raw.splitlines(keepends=True)[:sequence-1])
+            expected=exact_J_owner_evidence(repo,J_capabilities[op],J_ready[op],events[:sequence-1],
+                file_digest(prefix_raw),''.join('\t'.join(x)+'\n' for x in maps[frame]).encode())
+            require(v['receipt']==expected and v['admission'] is False,'exact_J_independently_reconstructed_permission')
+            item['exact_J_owner_permission']=expected;continue
         if kind in ('complete_ledger_conserved','range_I_ledger_conserved','range_J_ledger_conserved'):
             ready_table={'complete_ledger_conserved':M_ready,'range_I_ledger_conserved':I_ready,'range_J_ledger_conserved':J_ready}[kind]
             consumed_table={'complete_ledger_conserved':M_consumed,'range_I_ledger_conserved':I_consumed,'range_J_ledger_conserved':J_consumed}[kind]
@@ -2836,6 +2951,8 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             aggregate=cumulative[key] or ready_table[op]['required_qualification'][v['path']]['aggregate']
             require(type(receipt['aggregate']) is bool and receipt['aggregate']==aggregate,'M_consumer_must_keep_full_aggregate_or')
             require(v['policy_result'] is None and receipt['policy_result'] is None,'conservation_is_not_policy_admission')
+            if kind=='range_J_ledger_conserved' and '\t'.join(item['incoming'])==EXACT_J_AUDIT_INCOMING and 'rebind' not in item:
+                require('exact_J_owner_permission' in item,'exact_J_permission_required_before_conservation')
             validate_exact_conservation(item,op,receipt)
             consumed_table.setdefault(op,[]).append(v['path']);item['conservation']=receipt
             continue
@@ -2934,7 +3051,22 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
     J_history_state=J_prefix_state(J_history_checkpoint) if J_history_checkpoint else None
     J_state=J_checkpoint_state(J_checkpoint,events) if J_checkpoint else None
     deletion_state_value=deletion_state(deletion_checkpoint,file_digest(raw)) if deletion_checkpoint else None
-    checkpoint_state=M_checkpoint_state(checkpoint,events) if checkpoint else range_state or I_state or J_history_state or J_state or deletion_state_value or manual_state or manual_end_value or manual_append_value
+    exact_J_permission=None
+    if exact_J_checkpoint is not None:
+        require(exact_J_checkpoint in ('pending','permitted') and not failures and len(pending)==1,
+                'exact_J_one_live_pending_checkpoint')
+        (frame,name),item=next(iter(pending.items()));op=item['op']
+        require(stack and stack[-1]==frame and op in J_ready and not item['removed'] and 'conservation' not in item,
+                'exact_J_checkpoint_before_mutation')
+        if exact_J_checkpoint=='pending':
+            require('exact_J_owner_permission' not in item,'exact_J_no_replayed_permission')
+            exact_J_permission=exact_J_owner_evidence(repo,J_capabilities[op],J_ready[op],events,
+                file_digest(raw),''.join('\t'.join(x)+'\n' for x in maps[frame]).encode())
+        else:
+            require(events[-1]['kind']=='exact_J_owner_permission' and 'exact_J_owner_permission' in item,
+                    'exact_J_consumer_exact_permission_position')
+            exact_J_permission=item['exact_J_owner_permission']
+    checkpoint_state=M_checkpoint_state(checkpoint,events) if checkpoint else range_state or I_state or J_history_state or J_state or deletion_state_value or manual_state or manual_end_value or manual_append_value or exact_J_permission
     require(not stack or checkpoint_state is not None,'closed_frames')
     require(checkpoint_state is not None or master_entry is None or failures or master_wrapper is not None,'successful_master_collection_requires_actual_wrapper_result')
     coverage=dag_dispositions(repo,events) if complete else []
@@ -2947,6 +3079,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         I_checkpoint=I_state,I_ready=I_ready,I_consumed=I_consumed,deletion_checkpoint=deletion_state_value,
         J_history_checkpoint=J_history_state,J_checkpoint=J_state,J_ready=J_ready,J_consumed=J_consumed,J_prior_spans=J_prior_spans,
         terminal_dispositions=terminal_dispositions(ledger),manual_checkpoint=manual_state,manual_end_checkpoint=manual_end_value,manual_append_checkpoint=manual_append_value,manual_result_operations=manual_operations(ledger),
+        exact_J_permission=exact_J_permission,
         observed_qualification='COMPLETE' if complete else 'OBSERVED_PREFIX_ONLY',admission=False)
 
 
@@ -3007,6 +3140,9 @@ def main():
         if command=='3071-J-prior-origin':print(json.dumps(prepare_J_prior_origin(*args)));return 0
         if command=='3071-J-prior-receipt':print(json.dumps(prepare_J_prior_span(*args)));return 0
         if command=='3071-J-ledger':print(json.dumps(prepare_3071_J_ledger(*args)));return 0
+        if command=='3071-J-owner-permission':
+            repo,capability,ledger,digest,trace,name,map_path,incoming=args
+            print(json.dumps(qualify_exact_J_owner(repo,capability,ledger,digest,trace,name,Path(map_path).read_bytes(),incoming)));return 0
         if command=='3071-J-consume':
             ready,digest,trace,name,map_path,incoming,transition=args
             print(json.dumps(consume_3071_J_path(ready,digest,trace,name,Path(map_path).read_bytes(),incoming,transition)));return 0

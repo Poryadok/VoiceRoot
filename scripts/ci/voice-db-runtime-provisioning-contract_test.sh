@@ -3978,6 +3978,18 @@ f13_guarded_correction_qualified() {
   printf 'CI_DIAG stage=f13-guarded-correction qualification=%s\n' "${receipt}" >&2
 }
 
+f13_f54_exact_J_owner_permission() {
+  local repo="$1" path="$2" output="$3" incoming="$4" receipt
+  [[ "${path}" == src/backend/space/internal/grpcsvc/audit.go &&
+    -n "${f13_f54_frame:-}" && "${f13_f54_operation:-}" == "${f13_f54_frame}/3071ddad390443de4119c796cdad9899ff08f7fd/2" &&
+    "${f13_f54_operation}" == "${f13_f54_J_operation:-}" && -n "${f13_f54_3071_capability_file:-}" ]] || return 1
+  receipt="${TMP_DIR}/f54-exact-J-owner-permission.json"
+  python3 "${f13_f54_observer}" 3071-J-owner-permission "${repo}" \
+    "${f13_f54_3071_capability_file}" "${f13_f54_J_ledger}" "${f13_f54_J_ledger_sha}" \
+    "${f13_f54_trace_file}" "${path}" "${output}" "${incoming}" >"${receipt}" || return 1
+  f13_f54_trace_event exact_J_owner_permission "${repo}" "${path}" "${receipt}"
+}
+
 f13_evaluate_guarded_owner_qualifiers() {
   local repo="$1" path="$2" output="$3"
   incremental_merge=false
@@ -4078,13 +4090,23 @@ f13_evaluate_guarded_owner_qualifiers() {
       exact_unit_supersession=true
     fi
   fi
+  exact_J_owner_permission=false
+  if [[ "${allow_direct_followup}" == true && "${is_direct}" != true && "${incremental_merge}" != true &&
+    "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true &&
+    "${space_audit_allowed}" != true && "${exact_unit_supersession}" != true ]]; then
+    if f13_f54_exact_J_owner_permission "${repo}" "${path}" "${output}" \
+      "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")"; then
+      exact_J_owner_permission=true
+    fi
+  fi
   return 0
 }
 
 f13_guarded_owner_transition_allowed() {
   local guarded_correction_allowed="$1" role_duplicate_allowed="$2" space_audit_allowed="$3"
   local exact_unit_supersession="$4" allow_direct_followup="$5" is_direct="$6" incremental_merge="$7"
-  if [[ "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && "${space_audit_allowed}" != true && "${exact_unit_supersession}" != true && \
+  local exact_J_owner_permission="${8:-false}"
+  if [[ "${exact_J_owner_permission}" != true && "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && "${space_audit_allowed}" != true && "${exact_unit_supersession}" != true && \
     ( "${allow_direct_followup}" != true || \
     ( "${is_direct}" != true && "${incremental_merge}" != true ) ) ]]; then
     return 1
@@ -4470,7 +4492,7 @@ f13_collect_develop_contributions() {
         fi
       fi
       native_supersession_status=1
-      local exact_unit_supersession=false
+      local exact_unit_supersession=false exact_J_owner_permission=false
       if [[ -n "${owners[${path}]+present}" ]] && f13_path_is_guarded "${path}"; then
         # A release PR may directly correct a guarded path imported by an
         # earlier merge, or re-import its exact descendant source in a later
@@ -4480,7 +4502,7 @@ f13_collect_develop_contributions() {
         f13_evaluate_guarded_owner_qualifiers "${repo}" "${path}" "${output}" || return 1
         if ! f13_guarded_owner_transition_allowed "${guarded_correction_allowed}" \
           "${role_duplicate_allowed}" "${space_audit_allowed}" "${exact_unit_supersession}" \
-          "${allow_direct_followup}" "${is_direct}" "${incremental_merge}"; then
+          "${allow_direct_followup}" "${is_direct}" "${incremental_merge}" "${exact_J_owner_permission}"; then
           f13_emit_guarded_failure_diagnostic duplicate_guarded_owner "${path}" \
             "${commit}" "${game_checkpoint_aggregate_head:-}" "${owners[${path}]:-}" \
             "${nested_head:-}" "${guarded_entries[${path}]:-}" "${source_entry}" \
