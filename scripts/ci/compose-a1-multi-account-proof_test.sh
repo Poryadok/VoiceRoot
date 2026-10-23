@@ -114,9 +114,20 @@ if [[ "${1:-}" == compose ]]; then
     previous="$arg"
   done
   [[ "$line" == *' config '* ]] && exit 0
-  [[ "$line" == *' up '* ]] && exit 0
+  [[ "$line" == *' up '* ]] && exit "${FAKE_UP_RC:-0}"
   [[ "$line" == *' ps -q '* ]] && { echo fake-container; exit 0; }
-  [[ "$line" == *' logs '* ]] && { echo fake diagnostic log; exit "${FAKE_LOGS_RC:-0}"; }
+  [[ "$line" == *' logs '* ]] && {
+    if [[ "$line" == *'compose-db-init'* && "${FAKE_LOGS_HANG:-0}" == 1 ]]; then
+      trap '' TERM
+      command -p sleep 30
+    fi
+    if [[ "$line" == *'compose-db-init'* ]]; then
+      printf '%s\n' "${FAKE_STARTUP_LOG:-fake startup diagnostic}"
+    else
+      echo fake diagnostic log
+    fi
+    exit "${FAKE_LOGS_RC:-0}"
+  }
   [[ "$line" == *' ps '* ]] && { echo fake compose ps; exit 0; }
   [[ "$line" == *' down '* ]] && exit "${FAKE_DOWN_RC:-0}"
   exit 0
@@ -127,6 +138,10 @@ EOF
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == */scripts/ci/e2e_manifest.py ]]; then
+  if [[ -n "${FAKE_E2E_MANIFEST_OUTPUT:-}" ]]; then
+    printf '%s\n' "$FAKE_E2E_MANIFEST_OUTPUT"
+    exit 0
+  fi
   exec "${REAL_PYTHON3:?REAL_PYTHON3 required}" "$@"
 fi
 log="${FAKE_LOG:?FAKE_LOG required}"
@@ -181,6 +196,10 @@ run_runner() {
     cd "${work}/tmp with spaces"
     env PATH="${work}/bin:${PATH}" FAKE_LOG="${work}/commands.log" \
       FAKE_DOCKER_MODE="${FAKE_DOCKER_MODE:-}" FAKE_GO_RC="${FAKE_GO_RC:-0}" \
+      FAKE_UP_RC="${FAKE_UP_RC:-0}" FAKE_LOGS_RC="${FAKE_LOGS_RC:-0}" \
+      FAKE_STARTUP_LOG="${FAKE_STARTUP_LOG:-}" \
+      FAKE_LOGS_HANG="${FAKE_LOGS_HANG:-0}" \
+      FAKE_E2E_MANIFEST_OUTPUT="${FAKE_E2E_MANIFEST_OUTPUT:-}" \
       TMPDIR="${work}/tmp with spaces" VOICE_A1_MULTI_ACCOUNT_PORT_BASE=25000 \
       VOICE_RUN_LIVE_COMPOSE=true "$@" bash "$SCRIPT" >"${work}/stdout" 2>"${work}/stderr"
   )
@@ -193,6 +212,51 @@ run_runner() {
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/a1-runner-tests.XXXXXXXX")"
 trap 'rm -rf -- "$TEST_TMP"' EXIT
 assert_file "$SCRIPT"
+
+echo '== startup failure emits bounded safe db-init evidence and preserves cleanup/status =='
+case_dir="$(new_case startup-failure)"
+startup_secret='A1_STARTUP_SECRET_SENTINEL'
+startup_log="migration stage 44 failed SQLSTATE 55000: password authentication failed; DSN=postgresql://sensitive:${startup_secret}@private-host/voice"
+startup_manifest=$'TestComposeA1TwoAccountsFoundation_live\nTestComposeA1DailyMessagingREST_live\nTestComposeA1GroupReadIsolation_live\nTestComposeA1ChannelReadIsolation_live\nTestComposeA1BlockDMDenyBothDirections_live\nTestComposeA1SessionEpochRealtime_live\nTestComposeThreadsDMReply_live'
+FAKE_UP_RC=23 FAKE_LOGS_RC=47 FAKE_STARTUP_LOG="$startup_log" \
+  FAKE_E2E_MANIFEST_OUTPUT="$startup_manifest" \
+  VOICE_A1_MULTI_ACCOUNT_CLEANUP=true run_runner "$case_dir"
+if [[ "$(cat "${case_dir}/rc")" != 23 ]]; then
+  cat "${case_dir}/commands.log" "${case_dir}/stderr" >&2
+fi
+assert_eq "$(cat "${case_dir}/rc")" 23
+assert_contains "${case_dir}/stderr" 'category=authentication_failed'
+assert_contains "${case_dir}/stderr" 'migration_stage=44'
+assert_contains "${case_dir}/stderr" 'sqlstate=55000'
+assert_not_contains "${case_dir}/stdout" "$startup_secret"
+assert_not_contains "${case_dir}/stderr" "$startup_secret"
+assert_not_contains "${case_dir}/stdout" 'password authentication failed|migration stage 44 failed|SQLSTATE 55000'
+assert_not_contains "${case_dir}/stderr" 'password authentication failed|migration stage 44 failed|SQLSTATE 55000'
+assert_not_contains "${case_dir}/stdout" 'sensitive:.*private-host'
+assert_not_contains "${case_dir}/stderr" 'sensitive:.*private-host'
+assert_contains "${case_dir}/commands.log" 'compose.*<logs> <--tail> <80> <--no-color> <--timestamps> <compose-db-init>'
+assert_contains "${case_dir}/commands.log" 'compose.*<down> <--remove-orphans>'
+startup_up_line="$(grep -n 'compose.*<up> <-d> <--build>' "${case_dir}/commands.log" | head -1 | cut -d: -f1)"
+startup_logs_line="$(grep -n 'compose.*<logs> <--tail> <80>' "${case_dir}/commands.log" | head -1 | cut -d: -f1)"
+startup_down_line="$(grep -n 'compose.*<down> <--remove-orphans>' "${case_dir}/commands.log" | head -1 | cut -d: -f1)"
+[[ "$startup_up_line" =~ ^[0-9]+$ && "$startup_logs_line" =~ ^[0-9]+$ && "$startup_down_line" =~ ^[0-9]+$ ]] || fail 'missing startup/log/cleanup order entries'
+(( startup_up_line < startup_logs_line && startup_logs_line < startup_down_line )) || fail 'startup diagnostics must precede existing cleanup'
+[[ -z "$(find "${case_dir}/tmp with spaces" -type d -name phase0-fixture -print -quit)" ]] || fail 'startup failure must retain opt-in cleanup behavior'
+
+echo '== hanging startup log collector is killed at five seconds and preserves startup status =='
+case_dir="$(new_case startup-log-timeout)"
+FAKE_UP_RC=23 FAKE_LOGS_HANG=1 FAKE_E2E_MANIFEST_OUTPUT="$startup_manifest" \
+  VOICE_A1_MULTI_ACCOUNT_CLEANUP=true run_runner "$case_dir"
+assert_eq "$(cat "${case_dir}/rc")" 23
+assert_contains "${case_dir}/stderr" 'bounded compose-db-init diagnostics follow'
+assert_contains "${case_dir}/stderr" 'category=unclassified'
+assert_contains "${case_dir}/commands.log" 'compose.*<logs> <--tail> <80> <--no-color> <--timestamps> <compose-db-init>'
+assert_contains "${case_dir}/commands.log" 'compose.*<down> <--remove-orphans>'
+
+if [[ "${1:-}" == --startup-diagnostics-only ]]; then
+  echo 'Focused startup diagnostics regression passed.'
+  exit 0
+fi
 
 echo '== A1 regex matches exactly the seven current tests =='
 for test_name in \
