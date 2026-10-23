@@ -117,13 +117,15 @@ func (s *PublicLifecycleSpace) joinNonInteractive(ctx context.Context, request p
 		return nil, mapInviteStoreErr(store.ErrAccountBanned)
 	}
 	member, err := s.Store.GetMembership(ctx, input.SpaceID, input.ProfileID)
-	if err == nil {
+	if err == nil && member != nil {
 		if _, err = call.ActorFor(request); err != nil {
 			return nil, err
 		}
 		return membershipRowToProto(member), nil
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
+	// GetMembership represents absence as (nil, nil), not pgx.ErrNoRows.
+	// Only a concrete row can satisfy the idempotent existing-member path.
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, mapSpaceStoreError(err)
 	}
 	intent, err := s.Store.FindCurrent(ctx, input.SpaceID, input.ProfileID)

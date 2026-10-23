@@ -643,6 +643,14 @@ is retained with the media grant. `VOICE_ROLE_GRPC_ADDR` and its complete
 provisioning. Incomplete settings fail startup; there is no ordinary-listener
 fallback.
 
+The same private Role client carries `CheckPermission` for `VOICE_JOIN`,
+`VOICE_SPEAK`, `VOICE_SCREEN_SHARE`, `VOICE_MUTE_OTHERS`, and
+`VOICE_MOVE_OTHERS`. Each call signs the canonical Space, profile, room and exact
+permission with a fresh request ID, replacing incoming authority metadata.
+The two-second client budget remains bounded by the original caller deadline;
+an expired call or missing decision cannot grant permission. The ordinary
+`ROLE_GRPC_ADDR` client is not used for these decisions.
+
 The user-principal listener validates local TLS configuration and replay Redis
 before startup, but starts with an empty Gateway JWKS cache. Gateway waits for
 this listener before serving its own key endpoint, so requiring an initial key

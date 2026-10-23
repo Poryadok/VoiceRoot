@@ -181,8 +181,10 @@ func TestCheckPermission_MentionPermissions(t *testing.T) {
 	}
 }
 
-// TestCheckPermission_SpaceScope documents CheckPermission for SPACE_MANAGE_INVITES.
-func TestCheckPermission_SpaceScope(t *testing.T) {
+// The legacy policy fixture cannot replace current membership authority, even
+// for a signed Space decision. Native owner/member outcomes are covered by
+// TestMemberAdmissionRole25ProtectedReceipt with the actual Space authority.
+func TestCheckPermission_SpaceScopeRequiresSignatureAndNativeAuthority(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -203,13 +205,16 @@ func TestCheckPermission_SpaceScope(t *testing.T) {
 		}
 	}
 
-	resp, err := client.CheckPermission(context.Background(), &rolev1.CheckPermissionRequest{
+	request := &rolev1.CheckPermissionRequest{
 		SpaceId:        spaceID.String(),
 		ProfileId:      memberID.String(),
 		PermissionName: permissions.SpaceManageInvites,
-	})
-	require.NoError(t, err)
-	require.False(t, resp.GetAllowed())
+	}
+	_, err = client.CheckPermission(context.Background(), request)
+	require.Equal(t, codes.Unauthenticated, status.Code(err), "raw callers cannot request protected Space decisions")
+	resp, err := signedSpaceDecision(t, &RoleGRPC{Store: s}, request)
+	require.Equal(t, codes.Unavailable, status.Code(err), "signed calls still require current membership authority")
+	require.Nil(t, resp)
 }
 
 // TestSetChatOverride_CheckPermission documents chat-scoped deny override.

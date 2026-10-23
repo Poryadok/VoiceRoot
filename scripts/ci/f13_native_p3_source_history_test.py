@@ -92,6 +92,7 @@ class NativeHistory(unittest.TestCase):
         self.write(native.VERIFIER_PATH, code)
         self.write(native.SHELL_PATH, SCRIPT.read_text())
         self.target = self.commit('later private verifier carrier')
+        self.verifier_code = code
 
     def collect(self, source=None, target=None, event='push', ref='refs/heads/develop', before=None):
         out = self.folder / ('run-' + str(len(list(self.folder.iterdir()))))
@@ -99,6 +100,15 @@ class NativeHistory(unittest.TestCase):
         source = source or self.target
         target = target or source
         git(self.repo, 'checkout', '-q', target)
+        # Older negative targets predate the carrier. Run the same pinned
+        # verifier there too, so rejection is semantic, not a missing script.
+        verifier_missing = not (self.repo / native.VERIFIER_PATH).exists()
+        self.write(native.VERIFIER_PATH, self.verifier_code)
+        # These guards still inspect checkpoint inputs when the aggregate is
+        # inactive. Use the private base tree (never the approved H contents)
+        # and an empty inactive aggregate projection, as real fixture inputs.
+        (out / 'game-checkpoint-tree').write_text(git(self.repo, 'ls-tree', '-r', self.base) + '\n')
+        (out / 'game-checkpoint-paths').write_text('')
         # Only function definitions are imported; production authority constants
         # and files remain unchanged. Fixture R/K pins live solely in its repo.
         selected = {
@@ -115,6 +125,8 @@ class NativeHistory(unittest.TestCase):
             'f13_collect_master_release_pr_contributions', 'f13_collect_master_push_contributions',
             'f13_master_merge_push_enabled', 'f13_master_push_before_matches', 'game_checkpoint_aggregate_authorized',
             'f13_migration_alias_reconciles_guarded_path', 'f13_migration_alias_record_load',
+            'f13_evaluate_guarded_owner_qualifiers', 'f13_guarded_owner_transition_allowed',
+            'f13_f54_exact_J_owner_permission',
         }
         source_functions = SCRIPT.read_text() + '\n' + (ROOT / 'scripts/ci/voice-r22-runtime-scope.sh').read_text()
         funcs = '\n'.join(m.group(0) for m in re.finditer(
@@ -128,7 +140,7 @@ class NativeHistory(unittest.TestCase):
                   'native_p3_paths': '', 'native_p3_binding': '', 'native_p3_paths_hash': '', 'native_p3_binding_hash': '',
                   'native_p3_snapshot': '', 'game_checkpoint_aggregate_active': 'false',
                   'game_checkpoint_snapshot_base': '', 'game_checkpoint_snapshot_head': '', 'game_checkpoint_snapshot_record': '',
-                  'game_checkpoint_aggregate_head': '', 'game_checkpoint_aggregate_paths': '', 'game_checkpoint_aggregate_record': '',
+                  'game_checkpoint_aggregate_head': '', 'game_checkpoint_aggregate_paths': str(out / 'game-checkpoint-paths'), 'game_checkpoint_aggregate_record': '',
                   'game_checkpoint_aggregate_map': '', 'game_checkpoint_aggregate_alias_map': ''}
         program += '\n'.join(k + '=' + shlex.quote(v) for k, v in values.items()) + '\n'
         program += 'native_p3_prepare\n'
@@ -142,6 +154,10 @@ class NativeHistory(unittest.TestCase):
         harness = out / 'harness.sh'
         harness.write_text(program)
         r = subprocess.run(['bash', str(harness)], capture_output=True, text=True)
+        if verifier_missing:
+            (self.repo / native.VERIFIER_PATH).unlink()
+        self.assertNotIn('command not found', r.stderr)
+        self.assertNotIn("python3: can't open file", r.stderr)
         rows = (out / 'f13-contributions').read_text().splitlines() if (out / 'f13-contributions').exists() else []
         return r, rows, out
 

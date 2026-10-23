@@ -1099,8 +1099,14 @@ func TestTransferOwnership_AuditFailure_BlocksConcurrentSpaceMutation(t *testing
 		blockAuditInsert:    make(chan struct{}),
 		cancelOnAuditInsert: cancelTransfer,
 	}
+	var releaseOnce sync.Once
+	releaseAudit := func() { releaseOnce.Do(func() { close(tracer.blockAuditInsert) }) }
+	defer releaseAudit()
+	settingsFixture := newInviteIngressFixture(t)
 	tracedPool := tracedSpacePool(t, pool, tracer)
 	svc := &SpaceGRPC{allowLegacyOwnershipTransferForTest: true, Store: &store.SpaceStore{Pool: tracedPool}}
+	svc.PrincipalIssuer = settingsFixture.space
+	svc.OwnershipRoles = settingsOwnershipFixture{RoleServiceClient: setupRoles, decision: legacySettingsRoleFixture{svc: svc, fixture: settingsFixture}}
 	transferResult := make(chan error, 1)
 	go func() {
 		_, err := svc.TransferOwnership(transferCtx, &spacev1.TransferOwnershipRequest{
@@ -1119,13 +1125,13 @@ func TestTransferOwnership_AuditFailure_BlocksConcurrentSpaceMutation(t *testing
 	mutationCtx, cancelMutation := context.WithTimeout(memberCtx, 150*time.Millisecond)
 	defer cancelMutation()
 	description := "must not persist during ownership transfer"
-	_, mutationErr := svc.UpdateSpace(mutationCtx, &spacev1.UpdateSpaceRequest{
+	_, mutationErr := settingsFixtureUpdateWithFixture(t, settingsFixture, mutationCtx, svc, &spacev1.UpdateSpaceRequest{
 		SpaceId:     spaceID,
 		Description: &description,
 	})
 	require.Equal(t, codes.DeadlineExceeded, status.Code(mutationErr), "concurrent write must wait for ownership saga completion")
 
-	close(tracer.blockAuditInsert)
+	releaseAudit()
 	transferErr := requireTransferResult(t, transferResult)
 	require.Equal(t, codes.Internal, status.Code(transferErr))
 
@@ -1552,11 +1558,12 @@ func TestUpdateSpace_CrossInstance_WaitsThroughTransferAuditRollback(t *testing.
 		}
 	}()
 
+	settingsFixture := newInviteIngressFixture(t)
 	memberCtx := directServerContext(withAccountProfileCtx(ctx, uuid.New(), member))
 	updateCtx, cancelUpdate := context.WithTimeout(memberCtx, 200*time.Millisecond)
 	defer cancelUpdate()
 	description := "must not observe the temporary owner"
-	_, updateErr := svcB.UpdateSpace(updateCtx, &spacev1.UpdateSpaceRequest{
+	_, updateErr := settingsFixtureUpdateWithFixture(t, settingsFixture, updateCtx, svcB, &spacev1.UpdateSpaceRequest{
 		SpaceId:     spaceID.String(),
 		Description: &description,
 	})

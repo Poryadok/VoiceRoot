@@ -176,6 +176,25 @@ func (s *RoleGRPC) GetMemberRoles(ctx context.Context, req *rolev1.GetMemberRole
 }
 
 func (s *RoleGRPC) CheckPermission(ctx context.Context, req *rolev1.CheckPermissionRequest) (*rolev1.CheckPermissionResponse, error) {
+	if p, verified := principal.FromContext(ctx); verified && (p.Issuer == "messaging" || p.Issuer == "voice") {
+		if err := principalgrpc.RequireWorkloadDecision(ctx, req); err != nil {
+			return nil, err
+		}
+		ctx = context.WithValue(ctx, nativeMemberDecisionReadKey{}, true)
+		if req.Chat != nil {
+			ctx = context.WithValue(ctx, nativeMemberChatScopeKey{}, nativeMemberChatScope{profile: req.ProfileId, chat: req.Chat.Id})
+		}
+		response, err := ordinarySpaceRPC(ctx, s, req.SpaceId, func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.CheckPermissionResponse, error) {
+			return scoped.checkPermission(callCtx, req)
+		}, req.ProfileId)
+		if err != nil {
+			return nil, err
+		}
+		if ctx.Err() != nil || !p.ExpiresAt.After(time.Now()) {
+			return nil, status.Error(codes.Unavailable, "workload decision expired")
+		}
+		return response, nil
+	}
 	if req.GetPermissionName() == "SPACE_MANAGE_INVITES" {
 		return s.checkQualifiedInvites(ctx, req)
 	}
@@ -187,6 +206,20 @@ func (s *RoleGRPC) CheckPermission(ctx context.Context, req *rolev1.CheckPermiss
 	}
 	if req.GetPermissionName() == "SPACE_MANAGE_SETTINGS" {
 		return s.checkQualifiedSettings(ctx, req)
+	}
+	if req.GetPermissionName() == "SPACE_MANAGE_MATCHMAKING" {
+		if err := principalgrpc.RequireMatchmakingPermission(ctx, req); err != nil {
+			return nil, err
+		}
+		response, err := s.checkQualifiedSpaceDecision(ctx, req, "SPACE_MANAGE_MATCHMAKING")
+		if err != nil {
+			return nil, err
+		}
+		p, _ := principal.FromContext(ctx)
+		if ctx.Err() != nil || !p.ExpiresAt.After(time.Now()) {
+			return nil, status.Error(codes.Unavailable, "matchmaking permission expired")
+		}
+		return response, nil
 	}
 	if p, verified := principal.FromContext(ctx); verified && (p.Issuer == "chat" || req.GetPermissionName() == "TEXT_CHAT_VIEW") {
 		if err := principalgrpc.RequireChatCurrentACL(ctx, req); err != nil {
