@@ -37,7 +37,7 @@ func loadUserCaptureRuntimeConfig(getenv func(string) string, publicEnabled bool
 		}
 	}
 	if strings.TrimSpace(getenv("DATABASE_URL")) == "" || !publicEnabled {
-		return userCaptureRuntimeConfig{}, false, errors.New("Space User capture requires DATABASE_URL and protected Gateway listener")
+		return userCaptureRuntimeConfig{}, false, errors.New("space user capture requires DATABASE_URL and protected Gateway listener")
 	}
 	return userCaptureRuntimeConfig{address: values[0], caFile: values[1], serverName: values[2], certFile: values[3], keyFile: values[4]}, true, nil
 }
@@ -46,23 +46,23 @@ func loadUserCaptureRuntimeConfig(getenv func(string) string, publicEnabled bool
 // no identity provider, signing-key fallback or ordinary User transport.
 func newUserCaptureRuntime(ctx context.Context, c userCaptureRuntimeConfig, issuer *principal.Issuer) (*userCaptureRuntime, error) {
 	if ctx == nil || issuer == nil {
-		return nil, errors.New("Space User capture requires context and Space principal issuer")
+		return nil, errors.New("space user capture requires context and Space principal issuer")
 	}
 	ca, err := os.ReadFile(c.caFile)
 	if err != nil {
-		return nil, fmt.Errorf("Space User capture CA: %w", err)
+		return nil, fmt.Errorf("space user capture CA: %w", err)
 	}
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(ca) {
-		return nil, errors.New("Space User capture CA contains no certificates")
+		return nil, errors.New("space user capture CA contains no certificates")
 	}
 	identity, err := tls.LoadX509KeyPair(c.certFile, c.keyFile)
 	if err != nil {
-		return nil, fmt.Errorf("Space User capture identity: %w", err)
+		return nil, fmt.Errorf("space user capture identity: %w", err)
 	}
 	client, conn, err := usercapture.New(usercapture.TransportConfig{Address: c.address, ServerName: c.serverName, Roots: roots, Certificate: identity}, issuer)
 	if err != nil {
-		return nil, fmt.Errorf("Space User capture transport: %w", err)
+		return nil, fmt.Errorf("space user capture transport: %w", err)
 	}
 	conn.Connect()
 	readyCtx, cancel := context.WithTimeout(ctx, grpcclient.DialTimeoutFromEnv())
@@ -70,7 +70,7 @@ func newUserCaptureRuntime(ctx context.Context, c userCaptureRuntimeConfig, issu
 	cancel()
 	if err != nil {
 		_ = conn.Close()
-		return nil, fmt.Errorf("Space User capture readiness: %w", err)
+		return nil, fmt.Errorf("space user capture readiness: %w", err)
 	}
 	return &userCaptureRuntime{client: client, conn: conn}, nil
 }
