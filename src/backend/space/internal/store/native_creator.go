@@ -106,7 +106,7 @@ func (s *SpaceStore) CreateSpaceWithCreator(ctx context.Context, creator *lifecy
 		return nil, err
 	}
 	var effective *effectiveMemberMutations
-	if schema == 44 || schema == 45 {
+	if schema == 44 || schema == 45 || schema == 50 || schema == 51 {
 		// BORN has no registry row yet, so the ordinary COMPLETE getter cannot
 		// be used here. Enforce its serving-role restriction before any source
 		// INSERT; installer privileges authorize cutover, not public creation.
@@ -123,7 +123,7 @@ func (s *SpaceStore) CreateSpaceWithCreator(ctx context.Context, creator *lifecy
 	if err != nil {
 		return nil, err
 	}
-	if schema != 44 && schema != 45 {
+	if schema != 44 && schema != 45 && schema != 50 && schema != 51 {
 		effective, err = scoped.captureNativeEffectiveMemberMutation(ctx, w.space, []uuid.UUID{w.profile})
 		if err != nil {
 			return nil, err
