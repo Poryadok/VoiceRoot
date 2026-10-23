@@ -117,8 +117,8 @@ func TestNewRoleGRPCServersLegacyDeniesOwnershipWhenRuntimeAbsent(t *testing.T) 
 	}
 	require.Zero(t, service.ownershipCalls.Load())
 	_, err = client.ListRoles(ctx, &rolev1.ListRolesRequest{})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), service.listCalls.Load())
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	require.Zero(t, service.listCalls.Load())
 }
 
 func TestNewRoleGRPCServers_ConfiguredRuntimeEnforcesListenerMatrix(t *testing.T) {
@@ -187,7 +187,7 @@ func TestNewRoleGRPCServers_ConfiguredRuntimeEnforcesListenerMatrix(t *testing.T
 	_, err = protectedClient.CompensateOwnershipTransfer(ctx, &rolev1.CompensateOwnershipTransferRequest{})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	_, err = protectedClient.ListRoles(ctx, &rolev1.ListRolesRequest{})
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
 
 	v2Calls := []struct {
 		method string

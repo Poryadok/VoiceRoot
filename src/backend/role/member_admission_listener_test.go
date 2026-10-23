@@ -33,6 +33,9 @@ func admissionListenerStore(t *testing.T) (context.Context, *store.RoleStore) {
 
 func admissionListenerStoreVersion(t *testing.T, version string) (context.Context, *store.RoleStore) {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("requires disposable PostgreSQL and migration containers")
+	}
 	integrationtest.ConfigureDockerTesting()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	t.Cleanup(cancel)

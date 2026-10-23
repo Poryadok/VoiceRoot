@@ -92,14 +92,20 @@ per-profile membership generation plus a never-reused membership episode UUID;
 roster revision or row replacement is not episode identity. Generic Revoke pins
 a finite set of legal contribution IDs, never a wildcard against future joins.
 
-This is an implementation target. The current bounded artifact freezes additive
-request/receipt protobufs, the receipt fingerprint codec and ordinary-listener
-denies only. No Role20 schema/receiver, Space authority/head, qualified legacy
-read/write/export cutover or reconciliation is activated. Those remain open
-delivery work after the current finish-and-develop directive. Consumers are the
-future Space admission/publication and Role lifecycle slices; the current Space
-author did not release its planned authority API. No P3/GIS/Voice capability is
-activated here.
+The native21/25 implementation supplies protected admission receivers, durable
+inert receipts and floors, qualified permission/hierarchy/Voice reads and
+explicit state2 exports. Its consumer is Space's admission/publication flow.
+Configure the fresh owner client with `ROLE_SPACE_MEMBER_AUTHORITY_GRPC_ADDR`,
+`ROLE_SPACE_MEMBER_AUTHORITY_TLS_CA_FILE`,
+`ROLE_SPACE_MEMBER_AUTHORITY_TLS_SERVER_NAME`,
+`ROLE_SPACE_MEMBER_AUTHORITY_CLIENT_CERT_FILE` and
+`ROLE_SPACE_MEMBER_AUTHORITY_CLIENT_KEY_FILE`, plus Role's signing identity.
+Missing owner authority remains unavailable. Ordinary listeners reject protected
+admission and raw actor calls. Generic Assign/Revoke at the qualified catalog
+remain unavailable until their durable operation protocol is implemented;
+unknown legacy grants are not reclassified. Bot actor mutation routes remain
+closed. Component evidence does not establish deployment or complete
+cross-service acceptance.
 
 For the BE-131 composite vertical, the existing dedicated Role principal
 listener additionally accepts signed `service:space` `CheckPermission` for
