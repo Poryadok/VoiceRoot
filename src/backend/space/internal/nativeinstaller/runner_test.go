@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"io"
 	"math/big"
 	"net/url"
@@ -20,10 +21,126 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 	"voice/backend/space/internal/store"
 )
+
+type cleanupReadCloser struct {
+	io.Reader
+	closeErr error
+	closes   int
+}
+
+func (r *cleanupReadCloser) Close() error { r.closes++; return r.closeErr }
+
+type failingHashReader struct{ err error }
+
+func (r failingHashReader) Read([]byte) (int, error) { return 0, r.err }
+
+func TestHashReaderAndClosePreservesBothFailures(t *testing.T) {
+	readErr := errors.New("input read failed")
+	closeErr := errors.New("postgres://secret-cleanup-fixture@invalid/hash")
+	for _, tc := range []struct {
+		name              string
+		readErr, closeErr error
+	}{
+		{"success", nil, nil}, {"close failure", nil, closeErr},
+		{"read failure", readErr, nil}, {"read and close failure", readErr, closeErr},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var reader io.Reader = strings.NewReader("abc")
+			if tc.readErr != nil {
+				reader = failingHashReader{tc.readErr}
+			}
+			input := &cleanupReadCloser{Reader: reader, closeErr: tc.closeErr}
+			got, err := hashReaderAndClose(input)
+			require.Equal(t, 1, input.closes)
+			if tc.readErr == nil && tc.closeErr == nil {
+				require.NoError(t, err)
+				require.Equal(t, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", got)
+				return
+			}
+			require.Error(t, err)
+			require.Empty(t, got)
+			if tc.readErr != nil {
+				require.ErrorIs(t, err, tc.readErr)
+			}
+			if tc.closeErr != nil {
+				require.ErrorIs(t, err, tc.closeErr)
+				require.ErrorContains(t, err, "input close failed")
+			}
+			require.NotContains(t, err.Error(), "secret-cleanup-fixture")
+		})
+	}
+}
+
+type cleanupAdminStub struct {
+	unlockErr, closeErr error
+	operations          []string
+}
+
+func (a *cleanupAdminStub) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	a.operations = append(a.operations, "unlock")
+	if ctx.Err() != nil || sql != `SELECT pg_advisory_unlock(hashtextextended('voice-space-native-installer',0))` || len(args) != 0 {
+		return pgconn.CommandTag{}, errors.New("unexpected cleanup invocation")
+	}
+	return pgconn.CommandTag{}, a.unlockErr
+}
+func (a *cleanupAdminStub) Close(ctx context.Context) error {
+	a.operations = append(a.operations, "close")
+	if ctx.Err() != nil {
+		return errors.New("canceled cleanup context")
+	}
+	return a.closeErr
+}
+
+func TestCleanupAdminPreservesPrimaryAndBothCleanupFailures(t *testing.T) {
+	primary := errors.New("migration stage 44 failed")
+	unlockErr := errors.New("postgres://secret-cleanup-fixture@invalid/unlock")
+	closeErr := errors.New("postgres://secret-cleanup-fixture@invalid/close")
+	for _, tc := range []struct {
+		name                         string
+		held                         bool
+		primary, unlockErr, closeErr error
+	}{
+		{"unlocked success", false, nil, nil, nil},
+		{"unlocked close failure", false, primary, unlockErr, closeErr},
+		{"locked success", true, nil, nil, nil},
+		{"primary only", true, primary, nil, nil},
+		{"unlock failure", true, nil, unlockErr, nil},
+		{"close failure", true, nil, nil, closeErr},
+		{"all failures", true, primary, unlockErr, closeErr},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			admin := &cleanupAdminStub{unlockErr: tc.unlockErr, closeErr: tc.closeErr}
+			err := cleanupAdmin(tc.primary, admin, tc.held)
+			want := []string{"close"}
+			if tc.held {
+				want = []string{"unlock", "close"}
+			}
+			require.Equal(t, want, admin.operations)
+			if tc.primary == nil && (!tc.held || tc.unlockErr == nil) && tc.closeErr == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			if tc.primary != nil {
+				require.ErrorIs(t, err, tc.primary)
+			}
+			if tc.held && tc.unlockErr != nil {
+				require.ErrorIs(t, err, tc.unlockErr)
+				require.ErrorContains(t, err, "installer advisory unlock failed")
+			}
+			if tc.closeErr != nil {
+				require.ErrorIs(t, err, tc.closeErr)
+				require.ErrorContains(t, err, "administrative connection close failed")
+			}
+			require.NotContains(t, err.Error(), "secret-cleanup-fixture")
+		})
+	}
+}
 
 func TestAdminConfigurationRejectsKeywordDSNBeforeAnySourceOrDBWork(t *testing.T) {
 	t.Setenv("PGHOST", "127.0.0.1")

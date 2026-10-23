@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -29,8 +31,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "retained evidence unavailable")
 			os.Exit(1)
 		}
-		c.Prior, err = nativeinstaller.ReadReceipt(f)
-		f.Close()
+		c.Prior, err = readReceiptAndClose(f)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -44,4 +45,19 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+type evidenceCloseFailure struct{ cause error }
+
+func (e evidenceCloseFailure) Error() string { return "retained evidence close failed" }
+func (e evidenceCloseFailure) Unwrap() error { return e.cause }
+
+func readReceiptAndClose(in io.ReadCloser) (receipt *nativeinstaller.Receipt, err error) {
+	defer func() {
+		if closeErr := in.Close(); closeErr != nil {
+			err = errors.Join(err, evidenceCloseFailure{cause: closeErr})
+			receipt = nil
+		}
+	}()
+	return nativeinstaller.ReadReceipt(in)
 }
