@@ -125,6 +125,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("space principal issuer: %v", err)
 	}
+	captureConfig, captureEnabled, err := loadUserCaptureRuntimeConfig(os.Getenv, publicEnabled)
+	if err != nil {
+		log.Fatalf("Space User capture config: %v", err)
+	}
+	if captureEnabled && principalIssuer == nil {
+		log.Fatal("Space User capture requires Space principal issuer")
+	}
 	metricsReg := prometheus.NewRegistry()
 	ownershipOutboxAlertGauge := newOwnershipOutboxDeliveryAlertGauge(metricsReg)
 	runCtx, runCancel := context.WithCancel(context.Background())
@@ -174,6 +181,14 @@ func main() {
 		defer mutationLockPool.Close()
 
 		spaceStore := &store.SpaceStore{Pool: pool}
+		if captureEnabled {
+			captureRuntime, err := newUserCaptureRuntime(runCtx, captureConfig, principalIssuer)
+			if err != nil {
+				log.Fatalf("Space User capture runtime: %v", err)
+			}
+			defer func() { _ = captureRuntime.Close() }()
+			spaceStore.AccountCaptures = captureRuntime.client
+		}
 		banRetentionRuntime = startAccountBanRetentionRuntime(runCtx, spaceStore, logger)
 		defer banRetentionRuntime.Stop()
 		if targetEnabled {
