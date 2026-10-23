@@ -107,11 +107,13 @@ func New(ctx context.Context, c Config) (*Runtime, error) {
 		_ = r.Close()
 		return nil, fmt.Errorf("botmembership replay dependency: %w", err)
 	}
-	refreshCtx, refreshCancel := context.WithTimeout(ctx, 2*time.Second)
-	defer refreshCancel()
-	if err := resolver.Refresh(refreshCtx, "bot"); err != nil {
-		_ = r.Close()
-		return nil, fmt.Errorf("botmembership JWKS readiness: %w", err)
+	if !c.DeferInitialJWKS {
+		refreshCtx, refreshCancel := context.WithTimeout(ctx, 2*time.Second)
+		defer refreshCancel()
+		if err := resolver.Refresh(refreshCtx, "bot"); err != nil {
+			_ = r.Close()
+			return nil, fmt.Errorf("botmembership JWKS readiness: %w", err)
+		}
 	}
 	r.verifier = Verifier{Keys: resolver.Resolve, Replay: r.recordReplay}
 	return r, nil

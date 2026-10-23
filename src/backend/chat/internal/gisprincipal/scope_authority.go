@@ -25,6 +25,7 @@ func ScopeAuthorityConfigFromEnv(issuer string) (Config, string, bool, error) {
 		ReplayAddr: get("REPLAY_REDIS_ADDR"), ReplayPassword: os.Getenv(prefix + "REPLAY_REDIS_PASSWORD")}
 	if issuer == "bot" {
 		cfg.AllowedMethods = []string{BotScopeAuthorityMethod}
+		cfg.DeferInitialJWKS = true
 	}
 	configured := false
 	for _, key := range []string{"GRPC_LISTEN", "TLS_CERT_FILE", "TLS_KEY_FILE", "CLIENT_CA_FILE", "JWKS_URL", "JWKS_CA_FILE", "JWKS_CLIENT_CERT_FILE", "JWKS_CLIENT_KEY_FILE", "REPLAY_REDIS_ADDR", "REPLAY_REDIS_PASSWORD"} {

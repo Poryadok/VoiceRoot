@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,6 +47,7 @@ func TestBotScopeAuthorityConfigIsSeparateAndMethodExclusive(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, enabled)
 	require.Equal(t, "bot", cfg.Issuer)
+	require.True(t, cfg.DeferInitialJWKS)
 	require.Equal(t, []string{method}, cfg.AllowedMethods)
 	_, err = configuredMethods("bot", cfg.AllowedMethods)
 	require.NoError(t, err)
@@ -54,6 +56,16 @@ func TestBotScopeAuthorityConfigIsSeparateAndMethodExclusive(t *testing.T) {
 	for _, issuer := range []string{"role", "space", "search", Issuer, "realtime"} {
 		_, err := configuredMethods(issuer, []string{method})
 		require.Error(t, err, issuer+" cannot borrow the Bot read")
+	}
+	for _, issuer := range []string{"role", "space"} {
+		prefix := "CHAT_SCOPE_" + strings.ToUpper(issuer) + "_"
+		for _, key := range []string{"GRPC_LISTEN", "TLS_CERT_FILE", "TLS_KEY_FILE", "CLIENT_CA_FILE", "JWKS_URL", "JWKS_CA_FILE", "REPLAY_REDIS_ADDR"} {
+			t.Setenv(prefix+key, "fixture")
+		}
+		cfg, _, enabled, err := ScopeAuthorityConfigFromEnv(issuer)
+		require.NoError(t, err)
+		require.True(t, enabled)
+		require.False(t, cfg.DeferInitialJWKS)
 	}
 }
 
