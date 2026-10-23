@@ -26,6 +26,8 @@ func TestBotMessageAuthorityNativeInstallation(t *testing.T) {
 	req := &spacev1.GetMemberAdmissionAuthorityRequest{ProtocolVersion: 1, SpaceId: in.SpaceId, ProfileId: in.ActorProfileId, ChatId: &chat, BotMessageSendBinding: binding}
 	response, err := f.store.ReadMemberAdmissionAuthority(ctx, req)
 	require.NoError(t, err)
+	require.Equal(t, spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_LIVE, response.GetLifecycle().GetState())
+	require.Zero(t, response.GetLifecycle().GetGeneration(), "fresh native installation has no lifecycle history; membership generation remains independently positive")
 	require.True(t, proto.Equal(binding, response.GetBotMessageSendBinding()), "exact current native Bot binding must be echoed")
 	ordinary := proto.Clone(req).(*spacev1.GetMemberAdmissionAuthorityRequest)
 	ordinary.BotMessageSendBinding = nil

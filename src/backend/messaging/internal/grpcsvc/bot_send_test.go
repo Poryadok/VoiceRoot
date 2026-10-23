@@ -41,7 +41,9 @@ func botSendBinding() *commonv1.BotMessageSendBinding {
 	return &commonv1.BotMessageSendBinding{ProtocolVersion: 1, BotId: uuid.NewString(), ActorProfileId: uuid.NewString(), SpaceId: uuid.NewString(), InstallationId: uuid.NewString(), InstallOperationId: uuid.NewString(), InstallationGeneration: 7, ChatId: uuid.NewString()}
 }
 func botSendObservation(b *commonv1.BotMessageSendBinding) *spacev1.GetMemberAdmissionAuthorityResponse {
-	return &spacev1.GetMemberAdmissionAuthorityResponse{ProtocolVersion: 1, SpaceId: b.SpaceId, ProfileId: b.ActorProfileId, SpaceAuthorityRevision: 9, BotMessageSendBinding: proto.Clone(b).(*commonv1.BotMessageSendBinding), Lifecycle: &spacev1.MemberAdmissionLifecycleAuthority{Generation: 1, State: spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_LIVE}, Ownership: &spacev1.MemberAdmissionOwnershipAuthority{Generation: 1, State: spacev1.MemberAdmissionOwnershipState_MEMBER_ADMISSION_OWNERSHIP_STATE_AVAILABLE}, Ordinary: &spacev1.MemberAdmissionOrdinaryAuthority{HeadGeneration: 3, State: spacev1.MemberAdmissionSourceState_MEMBER_ADMISSION_SOURCE_STATE_ACTIVE, PublicationKind: spacev1.MemberAdmissionPublicationKind_MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_BOT_INSTALL, NativePublication: &spacev1.MemberAdmissionNativePublicationProof{Kind: spacev1.MemberAdmissionPublicationKind_MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_BOT_INSTALL, OperationId: b.InstallOperationId, BindingSha256: make([]byte, 32)}, PublishedBinding: &rolev1.MembershipBinding{Source: &rolev1.MembershipBinding_Ordinary{Ordinary: &rolev1.OrdinaryMembershipBinding{MembershipGeneration: 3, PublicationIdentity: b.InstallOperationId}}}}, TreeRelation: &spacev1.MemberAdmissionTreeRelationAuthority{ChatId: b.ChatId, Present: true, Revision: 1}, ValidityRemaining: durationpb.New(5 * time.Second)}
+	// Space's readMemberLifecycle authenticates a fresh Space with no lifecycle
+	// history/fences as LIVE generation zero. This is not membership generation.
+	return &spacev1.GetMemberAdmissionAuthorityResponse{ProtocolVersion: 1, SpaceId: b.SpaceId, ProfileId: b.ActorProfileId, SpaceAuthorityRevision: 9, BotMessageSendBinding: proto.Clone(b).(*commonv1.BotMessageSendBinding), Lifecycle: &spacev1.MemberAdmissionLifecycleAuthority{State: spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_LIVE}, Ownership: &spacev1.MemberAdmissionOwnershipAuthority{Generation: 1, State: spacev1.MemberAdmissionOwnershipState_MEMBER_ADMISSION_OWNERSHIP_STATE_AVAILABLE}, Ordinary: &spacev1.MemberAdmissionOrdinaryAuthority{HeadGeneration: 3, State: spacev1.MemberAdmissionSourceState_MEMBER_ADMISSION_SOURCE_STATE_ACTIVE, PublicationKind: spacev1.MemberAdmissionPublicationKind_MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_BOT_INSTALL, NativePublication: &spacev1.MemberAdmissionNativePublicationProof{Kind: spacev1.MemberAdmissionPublicationKind_MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_BOT_INSTALL, OperationId: b.InstallOperationId, BindingSha256: make([]byte, 32)}, PublishedBinding: &rolev1.MembershipBinding{Source: &rolev1.MembershipBinding_Ordinary{Ordinary: &rolev1.OrdinaryMembershipBinding{MembershipGeneration: 3, PublicationIdentity: b.InstallOperationId}}}}, TreeRelation: &spacev1.MemberAdmissionTreeRelationAuthority{ChatId: b.ChatId, Present: true, Revision: 1}, ValidityRemaining: durationpb.New(5 * time.Second)}
 }
 func TestBotSendAuthorityExactIndependentOwners(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -80,11 +82,14 @@ func TestBotSendAuthorityExactIndependentOwners(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(metadata.NewOutgoingContext(t.Context(), metadata.Pairs("x-voice-profile-id", "forged")), 5*time.Second)
 	defer cancel()
-	_, expires, err := a.Check(ctx, b)
-	require.NoError(t, err)
-	deadline, _ := ctx.Deadline()
-	require.False(t, expires.After(deadline))
-	for _, name := range []string{"revoked", "reinstall", "foreign_chat", "retired", "frozen", "wrong_native_operation", "missing_native", "wrong_binding", "expired", "unknown"} {
+	for _, generation := range []uint64{0, 1} {
+		observation.Lifecycle.Generation = generation
+		_, expires, checkErr := a.Check(ctx, b)
+		require.NoError(t, checkErr, "LIVE lifecycle generation %d", generation)
+		deadline, _ := ctx.Deadline()
+		require.False(t, expires.After(deadline))
+	}
+	for _, name := range []string{"revoked", "reinstall", "foreign_chat", "retired", "frozen", "missing_lifecycle", "unspecified_lifecycle", "purge_decided", "retired_lifecycle", "zero_ownership", "zero_membership", "wrong_native_operation", "missing_native", "wrong_binding", "expired", "unknown"} {
 		t.Run(name, func(t *testing.T) {
 			observation = botSendObservation(b)
 			allowed = true
@@ -99,6 +104,18 @@ func TestBotSendAuthorityExactIndependentOwners(t *testing.T) {
 				observation.Ordinary.RetiredThrough = 3
 			case "frozen":
 				observation.Lifecycle.State = spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_FROZEN
+			case "missing_lifecycle":
+				observation.Lifecycle = nil
+			case "unspecified_lifecycle":
+				observation.Lifecycle.State = spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_UNSPECIFIED
+			case "purge_decided":
+				observation.Lifecycle.State = spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_PURGE_DECIDED
+			case "retired_lifecycle":
+				observation.Lifecycle.State = spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_RETIRED
+			case "zero_ownership":
+				observation.Ownership.Generation = 0
+			case "zero_membership":
+				observation.Ordinary.HeadGeneration = 0
 			case "wrong_native_operation":
 				observation.Ordinary.NativePublication.OperationId = uuid.NewString()
 			case "missing_native":
