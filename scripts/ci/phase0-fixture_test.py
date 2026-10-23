@@ -2253,6 +2253,51 @@ class A1InvocationTests(unittest.TestCase):
 
 
 class RestorerPathTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "posix" and os.geteuid() == 0,
+                         "requires Linux root to exercise real service and caller UIDs")
+    def test_cleanup_restores_service_owned_fixture_for_real_caller_uid(self):
+        with tempfile.TemporaryDirectory(prefix="phase0-owner-cleanup-") as tmp:
+            base = Path(tmp)
+            base.chmod(0o755)
+            for prefix in ("voice-a1-flutter-profile-handoff.", "voice-a1-multi-account-proof.",
+                           "voice-file-restart-proof."):
+                with self.subTest(prefix=prefix):
+                    parent = base / (prefix + "abcdefgh")
+                    parent.mkdir()
+                    os.chown(parent, 1000, 1000)
+                    dest = parent / "phase0-fixture"
+                    env = {**os.environ, "PHASE0_MATCHSQUAD_FIXTURE_UID": "65532"}
+                    require_success(run(sys.executable, GENERATOR, dest, env=env))
+                    service_paths = [p for p in dest.rglob("*") if p.stat().st_uid == 65532]
+                    for path in (dest, *dest.rglob("*")):
+                        if path.stat().st_uid != 65532:
+                            os.chown(path, 1000, 1000)
+                    # An unrelated file must not be swept into ownership repair.
+                    foreign = dest / "unrelated.pem"
+                    foreign.write_text("fixture-only")
+                    foreign.chmod(0o600)
+                    os.chown(foreign, 65532, 65532)
+                    program = (
+                        "import importlib.util,os,pathlib,shutil,stat,sys\n"
+                        "spec=importlib.util.spec_from_file_location('restorer',sys.argv[1])\n"
+                        "mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)\n"
+                        "root=pathlib.Path(sys.argv[2]);os.environ['PHASE0_FIXTURE_DIR']=str(root)\n"
+                        "paths=[root / p for p in sys.argv[3:]]\n"
+                        "modes={p:stat.S_IMODE(p.stat().st_mode) for p in paths}\n"
+                        "os.setregid(1000,0);os.setreuid(1000,0)\n"
+                        "mod.restore(root)\n"
+                        "for p in paths:\n"
+                        " assert (p.stat().st_uid,p.stat().st_gid)==(1000,1000),p.name\n"
+                        " assert stat.S_IMODE(p.stat().st_mode)==modes[p],p.name\n"
+                        "foreign=root/'unrelated.pem';assert foreign.stat().st_uid==65532\n"
+                        "foreign.unlink()\n"
+                        "os.setgroups([]);os.setgid(1000);os.setuid(1000)\n"
+                        "shutil.rmtree(root);assert not root.exists()\n"
+                    )
+                    result = run(sys.executable, "-c", program, FIXTURE_RESTORER, dest,
+                                 *(p.relative_to(dest) for p in service_paths))
+                    self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_owner_restorer_accepts_only_declared_generated_fixture_locations(self):
         with tempfile.TemporaryDirectory(prefix="phase0-restorer-paths-") as tmp:
             base = Path(tmp)
