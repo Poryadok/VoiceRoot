@@ -7,13 +7,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	messagingv1 "voice.app/voice/messaging/v1"
 )
 
-// TestUnpinMessagesBySenderInChats_unpinsBotMessagesOnly documents uninstall cleanup:
-// bot-authored pinned messages are unpinned; other senders' pins remain.
-func TestUnpinMessagesBySenderInChats_unpinsBotMessagesOnly(t *testing.T) {
+// Ordinary identity metadata cannot authorize the protected Bot cleanup effect.
+func TestUnpinMessagesBySenderInChats_rejectsLegacyCleanupWithoutEffects(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
@@ -58,7 +59,7 @@ func TestUnpinMessagesBySenderInChats_unpinsBotMessagesOnly(t *testing.T) {
 		SenderProfileId: botProfile.String(),
 		ChatIds:         []string{chatA.String(), chatB.String()},
 	})
-	require.NoError(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 
 	var botPinCount int
 	err = pool.QueryRow(ctx, `
@@ -66,7 +67,7 @@ SELECT COUNT(*) FROM pins p
 JOIN messages m ON m.id = p.message_id
 WHERE m.sender_profile_id = $1`, botProfile).Scan(&botPinCount)
 	require.NoError(t, err)
-	require.Equal(t, 0, botPinCount, "bot pins must be removed")
+	require.Equal(t, 2, botPinCount, "legacy cleanup must not remove bot pins")
 
 	var humanPinCount int
 	err = pool.QueryRow(ctx, `

@@ -27,7 +27,8 @@ type PinRow struct {
 
 // PinsStore persists chat message pins.
 type PinsStore struct {
-	Pool *pgxpool.Pool
+	Pool            *pgxpool.Pool
+	BotPinChatScope BotPinChatScopeLoader
 }
 
 // UpsertPin pins a message; duplicate (chat, message) updates pinned_by and pinned_at.
@@ -92,6 +93,9 @@ func (s *PinsStore) MutatePinWithOutbox(ctx context.Context, chatID, spaceID, me
 		return err
 	}
 	if pin {
+		if err := requirePinCleanupObservation(ctx, tx, chatID, messageID); err != nil {
+			return err
+		}
 		var exists bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pins WHERE chat_id=$1 AND message_id=$2)`, chatID, messageID).Scan(&exists); err != nil {
 			return err

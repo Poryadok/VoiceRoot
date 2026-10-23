@@ -60,7 +60,7 @@ room-привязки. WS `call_started` допускает additive `room_type`
 | Bot | Space | `AddBotMember` / `RemoveBotMember` | install / `UninstallBotFromSpace` |
 | Bot | Role | `DeleteRolesCreatedByProfile` | `UninstallBotFromSpace` — удаляет custom-роли с `created_by_profile_id = bot.actor_profile_id` |
 | Bot | Role | `GetMemberRoles`, `RevokeRole` | `UninstallBotFromSpace` — снимает роли, назначенные боту в спейсе |
-| Bot | Messaging | `UnpinMessagesBySenderInChats` | `UninstallBotFromSpace` — открепляет pins сообщений бота в whitelisted чатах |
+| Bot | Messaging | `ApplyBotChatPinRemoval` | Protected installation-bound per-chat cleanup with durable receipt; legacy `UnpinMessagesBySenderInChats` denies calls |
 | Bot | Role | `AssignRole` / `RevokeRole` | `AssignBotRole` / `RevokeBotRole` (scope `MEMBER_ASSIGN_ROLES`) |
 | Bot | Messaging | (send/edit) | `SendBotMessage`, `EditBotMessage` |
 
