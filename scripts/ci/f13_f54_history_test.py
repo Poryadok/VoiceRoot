@@ -3,11 +3,16 @@ import hashlib
 import ast
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import shlex
 import subprocess
+import socket
+import sys
 import tempfile
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -24,6 +29,86 @@ def module():
     spec = importlib.util.spec_from_file_location('f54', HELPER)
     value = importlib.util.module_from_spec(spec); spec.loader.exec_module(value)
     return value
+
+
+class CollectionTraceIndexContract(unittest.TestCase):
+    def test_ready_marker_is_invisible_until_complete_atomic_publication(self):
+        m=module();entered=threading.Event();release=threading.Event();errors=[]
+        with tempfile.TemporaryDirectory() as folder:
+            path=str(Path(folder)/'s');session='a'*64;link=os.link
+            def paused_link(source,target):
+                self.assertEqual(Path(source).read_text(),session+'\n')
+                self.assertFalse(Path(target).exists());entered.set()
+                if not release.wait(5):raise AssertionError('publication release missing')
+                link(source,target)
+            def serve():
+                try:m.router_worker(path,session,'unused','unused','unused','unused','unused')
+                except Exception as error:errors.append(error)
+            with patch.object(m.os,'link',paused_link):
+                thread=threading.Thread(target=serve);thread.start()
+                try:
+                    self.assertTrue(entered.wait(5));self.assertFalse(Path(path+'.ready').exists())
+                    release.set()
+                    for _ in range(200):
+                        if Path(path+'.ready').exists():break
+                        time.sleep(.01)
+                    self.assertEqual(Path(path+'.ready').read_text(),session+'\n')
+                    self.assertEqual(m.router_worker_request(path,session,'stop',''),(0,''))
+                finally:release.set();thread.join(timeout=5)
+            self.assertFalse(thread.is_alive());self.assertEqual(errors,[])
+            self.assertFalse(Path(path).exists());self.assertFalse(Path(path+'.ready').exists())
+
+    def test_exact_raw_bytes_and_fresh_decoded_results(self):
+        m=module()
+        events=[dict(kind=kind,payload={'value':'a'}) for kind in
+                ('row_before','manual_F_end','reviewed_F_deletion','range_I_ledger_ready','range_J_ledger_ready')]
+        raw=b'\n'.join(json.dumps(e).encode() for e in events)+b'\n'
+        expected=events[1:]
+        self.assertEqual(m.collection_trace_events(raw),expected)
+        mutated=m.collection_trace_events(raw);mutated[0]['payload']['value']='poison'
+        self.assertEqual(m.collection_trace_events(raw),expected)
+        changed=raw.replace(b'"a"',b'"b"')
+        self.assertEqual(len(changed),len(raw))
+        self.assertNotEqual(m.collection_trace_events(changed),expected)
+        self.assertEqual(m._collection_trace_index.cache_info().currsize,1)
+        self.assertEqual(m.collection_trace_events(raw),expected)
+
+    def test_irrelevant_malformed_event_is_not_skipped(self):
+        m=module()
+        for raw in (b'{"kind":"row_before"}\n{bad}\n',b'{"payload":{}}\n'):
+            with self.subTest(raw=raw), self.assertRaises((ValueError,KeyError)):
+                m.collection_trace_events(raw)
+
+    def test_cached_prefix_does_not_replace_fresh_hash_validation(self):
+        m=module();raw=b'{"kind":"row_before","payload":"a"}\n'
+        prefix=dict(bytes=len(raw),sha256=m.sha(raw))
+        m.collection_trace_events(raw)
+        for validate in (m.manual_operations_in_prefix,m.terminal_dispositions_in_prefix):
+            with self.subTest(validate=validate.__name__),self.assertRaises(m.Rejected):
+                validate({},raw.replace(b'"a"',b'"b"'),prefix)
+
+    def test_worker_client_rejects_wrong_identity_shape_eof_and_trailing_frames(self):
+        m=module()
+        for change in ('nonce','session','command','path','extra','status','eof','trailing'):
+            with self.subTest(change=change),tempfile.TemporaryDirectory() as folder:
+                path=str(Path(folder)/'s')
+                with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as server:
+                    server.bind(path);server.listen(1)
+                    def reply():
+                        connection,_=server.accept()
+                        with connection:
+                            request=m._router_socket_read(connection,65536)
+                            response=dict(request,status=0,output='')
+                            if change in request:response[change]='wrong'
+                            elif change=='extra':response['extra']=True
+                            elif change=='status':response['status']=False
+                            if change!='eof':connection.sendall(json.dumps(response).encode()+(b'{}' if change=='trailing' else b''))
+                    thread=threading.Thread(target=reply);thread.start()
+                    with self.assertRaises((m.Rejected,ValueError)):
+                        m.router_worker_request(path,'a'*64,'bind','some/path')
+                    thread.join(timeout=5);self.assertFalse(thread.is_alive())
+        with tempfile.TemporaryDirectory() as folder,self.assertRaises(OSError):
+            m.router_worker_request(str(Path(folder)/'missing'),'a'*64,'bind','path')
 
 
 class ReplayConservationContract(unittest.TestCase):
@@ -1428,6 +1513,81 @@ f13_retained_history_row() { return 1; }
         seal_file=out/'private-seal.json';seal_file.write_bytes(m.canonical(seal));seal_sha=m.sha(seal_file.read_bytes())
         bound=m.router_binding(self.repo,seal_file,seal_sha,actual_map,context_file,name)
         self.assertTrue(bound['aggregate']);self.assertTrue(bound['obligations']['evidence'])
+        # Exercise the real private worker against this same transport fixture.
+        # It remains deliberately ineligible for successful M collection sealing.
+        with tempfile.TemporaryDirectory(prefix='f54-ipc-') as ipc:
+            socket_path=str(Path(ipc)/'s');session='a'*64
+            worker=[sys.executable,str(HELPER),'router-worker',socket_path,session,str(self.repo),
+                    str(seal_file),seal_sha,str(actual_map),str(context_file)]
+            client=[sys.executable,str(HELPER),'router-request',socket_path,session]
+            script='\n'.join([shlex.join(worker)+' &', 'child=$!',
+                'trap \'kill "$child" 2>/dev/null || true; wait "$child" 2>/dev/null || true\' EXIT',
+                'for i in {1..100}; do [[ ! -f '+shlex.quote(socket_path+'.ready')+' ]] || break; sleep .02; done',
+                'value="$('+shlex.join(client+['runtime',name])+')"', '[[ "$value" == true ]]',
+                shlex.join(client+['stop','']), 'wait "$child"', 'trap - EXIT'])
+            result=subprocess.run(['bash','-euc',script],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertFalse(Path(socket_path).exists())
+            for artifact in (trace,actual_map,context_file,collection_file,seal_file):
+                with self.subTest(worker_tamper=artifact.name):
+                    original=artifact.read_bytes();stat=artifact.stat()
+                    proc=subprocess.Popen(worker,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+                    try:
+                        for _ in range(200):
+                            if Path(socket_path+'.ready').exists() or proc.poll() is not None:break
+                            time.sleep(.01)
+                        status,output=m.router_worker_request(socket_path,session,'bind',name)
+                        self.assertEqual(status,0);self.assertEqual(json.loads(output),bound)
+                        # Same length and restored mtime must still invalidate.
+                        changed=bytearray(original);changed[len(changed)//2]^=1
+                        artifact.write_bytes(changed);os.utime(artifact,ns=(stat.st_atime_ns,stat.st_mtime_ns))
+                        with self.assertRaises((m.Rejected,ValueError,OSError)):
+                            m.router_worker_request(socket_path,session,'bind',name)
+                        proc.communicate(timeout=10);self.assertNotEqual(proc.returncode,0)
+                    finally:
+                        artifact.write_bytes(original)
+                        if proc.poll() is None:proc.kill()
+                        proc.communicate(timeout=10)
+            # An abandoned client is a failed invocation, never stale success.
+            proc=subprocess.Popen(worker,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+            try:
+                for _ in range(200):
+                    if Path(socket_path+'.ready').exists() or proc.poll() is not None:break
+                    time.sleep(.01)
+                with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as abandoned:
+                    abandoned.connect(socket_path)
+                proc.communicate(timeout=10);self.assertNotEqual(proc.returncode,0)
+            finally:
+                if proc.poll() is None:proc.kill()
+                proc.communicate(timeout=10)
+            for mutation in ('event','source','dead-worker'):
+                with self.subTest(worker_freshness=mutation):
+                    original_context=context_file.read_bytes();head=git(self.repo,'rev-parse','HEAD')
+                    proc=subprocess.Popen(worker,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+                    try:
+                        for _ in range(200):
+                            if Path(socket_path+'.ready').exists() or proc.poll() is not None:break
+                            time.sleep(.01)
+                        self.assertEqual(m.router_worker_request(socket_path,session,'bind',name)[0],0)
+                        if mutation=='event':
+                            changed=json.loads(original_context);changed['event']['GITHUB_SHA']='f'*40
+                            context_file.write_bytes(m.canonical(changed))
+                        elif mutation=='source':
+                            self.write('future-source.txt','future source changes the tree\n')
+                            self.commit('private future source must invalidate worker')
+                        else:
+                            proc.kill();proc.communicate(timeout=10)
+                        with self.assertRaises((m.Rejected,ValueError,OSError)):
+                            m.router_worker_request(socket_path,session,'bind',name)
+                        proc.communicate(timeout=10);self.assertNotEqual(proc.returncode,0)
+                    finally:
+                        context_file.write_bytes(original_context)
+                        if mutation=='source':git(self.repo,'checkout','-q',head)
+                        if proc.poll() is None:proc.kill()
+                        proc.communicate(timeout=10)
+                        # SIGKILL cannot perform the owned socket cleanup.
+                        Path(socket_path).unlink(missing_ok=True)
+                        Path(socket_path+'.ready').unlink(missing_ok=True)
         actual=m.execute_original_router(context,bound)
         self.assertEqual((actual['gate'],actual['status']),('native_p3_path_allowed_for_provenance',0))
         # The unchanged original native predicate alone still accepts its row;

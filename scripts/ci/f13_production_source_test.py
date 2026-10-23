@@ -165,11 +165,105 @@ class ProductionSourceTest(unittest.TestCase):
 
     def test_successor_is_distinct_from_historical_source(self):
         value=source.qualify(ROOT)
-        self.assertEqual(value['type'],'F13-PRODUCTION-SOURCE-v3')
-        self.assertEqual(value['reviewed_source'],source.SUCCESSOR_SOURCE)
+        current=source.TRANSPORT_SOURCE is not None
+        self.assertEqual(value['type'],source.TRANSPORT_VERSION if current else 'F13-PRODUCTION-SOURCE-v3')
+        self.assertEqual(value['reviewed_source'],source.TRANSPORT_SOURCE if current else source.SUCCESSOR_SOURCE)
         self.assertEqual(value['historical_validation_source'],self.record['source'])
         self.assertNotEqual(value['historical_validation_source'],value['reviewed_source'])
-        self.assertEqual(value['predecessor_record'],source.PINNED_RECORD_COMMIT)
+        self.assertEqual(value['predecessor_record'],source.SUCCESSOR_RECORD_COMMIT if current else source.PINNED_RECORD_COMMIT)
+
+    def test_transport_retains_exact_native_authority(self):
+        value=source.qualify(ROOT)
+        self.assertEqual(value['type'],source.TRANSPORT_VERSION)
+        record,prior,old=source.load_transport(ROOT)
+        binding=native.qualify(ROOT,source.EVENT_BASE,self.original,self.target,'pull_request',
+            'refs/pull/875/merge',self.target,'','master')
+        self.assertEqual(binding['record'],source.SUCCESSOR_RECORD_COMMIT)
+        self.assertEqual(binding['snapshot'],source.SUCCESSOR_SOURCE)
+        self.assertNotEqual(binding['record'],value['record'])
+        self.assertNotIn(source.TRANSPORT_ADDITION['path'],binding['paths'])
+        self.assertEqual(record['addition'],source.TRANSPORT_ADDITION)
+
+    def test_transport_unpinned_never_falls_back(self):
+        with patch.object(source,'TRANSPORT_RECORD_COMMIT',None),self.assertRaisesRegex(ValueError,'production_transport_not_pinned'):
+            source.qualify(ROOT)
+
+    def test_transport_added_evidence_cannot_change_or_expand(self):
+        for name in (source.TRANSPORT_ADDITION['path'],source.TRANSPORT_RECORD_PATH,
+                     'docs/testing/native-p3-source-v2-evidence/another-companion.json'):
+            for data,mode in ((None,'100644'),(b'changed','100644'),(b'changed','100755')):
+                if data is None and name.endswith('/another-companion.json'):
+                    continue  # Removing an absent path makes no source change.
+                self.changed(name,data,mode)
+                with self.subTest(name=name,data=data,mode=mode),self.assertRaisesRegex(ValueError,'production_only_reviewed_carrier_delta'):
+                    source.qualify(ROOT)
+
+    def transport_record_fixture(self,record,changes=(),source_revision=None):
+        raw=(json.dumps(record)+'\n').encode()
+        with tempfile.TemporaryDirectory() as folder:
+            env=dict(os.environ,GIT_INDEX_FILE=str(Path(folder)/'index'))
+            git('read-tree',source.TRANSPORT_RECORD_COMMIT,env=env)
+            for name,data in ((source.TRANSPORT_RECORD_PATH,raw),*changes):
+                if data is None:
+                    git('update-index','--force-remove',name,env=env)
+                    continue
+                blob=git('hash-object','-w','--stdin',data=data)
+                git('update-index','--add','--cacheinfo','100644,'+blob+','+name,env=env)
+            revision=self.commit(git('write-tree',env=env),[source_revision or source.TRANSPORT_SOURCE])
+        return revision,hashlib.sha256(raw).hexdigest()
+
+    def test_transport_record_preserves_predecessor_and_exact_parent(self):
+        record=json.loads(git('show',source.TRANSPORT_RECORD_COMMIT+':'+source.TRANSPORT_RECORD_PATH))
+        for data in (None,b'changed pinned review'):
+            revision,digest=self.transport_record_fixture(record,
+                [('docs/testing/native-p3-source-v2-evidence/role-space-review.md',data)])
+            with patch.object(source,'TRANSPORT_RECORD_COMMIT',revision),patch.object(source,'TRANSPORT_RECORD_SHA256',digest),self.assertRaisesRegex(ValueError,'production_transport_immutable_predecessor'):
+                source.load_transport(ROOT)
+        revision=self.commit(git('rev-parse',source.TRANSPORT_RECORD_COMMIT+'^{tree}'),[source.TRANSPORT_PREDECESSOR])
+        with patch.object(source,'TRANSPORT_RECORD_COMMIT',revision),self.assertRaisesRegex(ValueError,'production_transport_record_parent'):
+            source.load_transport(ROOT)
+        changed=self.commit(git('rev-parse',source.TRANSPORT_SOURCE+'^{tree}'),[source.SUCCESSOR_RECORD_COMMIT])
+        record['source']=changed
+        revision,digest=self.transport_record_fixture(record,source_revision=changed)
+        with patch.object(source,'TRANSPORT_SOURCE',changed),patch.object(source,'TRANSPORT_RECORD_COMMIT',revision),patch.object(source,'TRANSPORT_RECORD_SHA256',digest),self.assertRaisesRegex(ValueError,'production_transport_source_parent'):
+            source.load_transport(ROOT)
+
+    def test_transport_record_semantics_not_only_hash(self):
+        original=json.loads(git('show',source.TRANSPORT_RECORD_COMMIT+':'+source.TRANSPORT_RECORD_PATH))
+        for alteration,code in (('inventory','production_transport_complete_inventory'),
+            ('native','production_transport_retained_native_tuple'),('addition','production_transport_exact_addition'),
+            ('review','production_transport_review')):
+            record=json.loads(json.dumps(original));changes=[]
+            if alteration=='inventory':
+                name=record['current_inputs']['path']
+                inventory=json.loads(git('show',source.TRANSPORT_RECORD_COMMIT+':'+name));inventory['entries'].pop()
+                raw=(json.dumps(inventory)+'\n').encode();record['current_inputs']['sha256']=hashlib.sha256(raw).hexdigest()
+                changes=[(name,raw)]
+            elif alteration=='native':record['native_record']['commit']=source.TRANSPORT_RECORD_COMMIT
+            elif alteration=='addition':record['addition']['bytes']-=1
+            else:record['review']=[True]
+            revision,digest=self.transport_record_fixture(record,changes)
+            with patch.object(source,'TRANSPORT_RECORD_COMMIT',revision),patch.object(source,'TRANSPORT_RECORD_SHA256',digest),self.subTest(alteration=alteration),self.assertRaisesRegex(ValueError,code):
+                source.load_transport(ROOT)
+
+    def test_transport_source_is_exact_addition_not_doc_allowlist(self):
+        original=json.loads(git('show',source.TRANSPORT_RECORD_COMMIT+':'+source.TRANSPORT_RECORD_PATH))
+        for name,data,mode,code in (
+            ('docs/testing/another-review.json',b'{}','100644','production_transport_only_missing_companion'),
+            ('docs/testing/native-p3-source-v2-evidence/role-space-review.md',b'changed','100644','production_transport_only_missing_companion'),
+            (source.TRANSPORT_ADDITION['path'],b'changed','100644','production_transport_companion_bytes'),
+            (source.TRANSPORT_ADDITION['path'],(ROOT/source.TRANSPORT_ADDITION['path']).read_bytes(),'100755','production_transport_companion_bytes')):
+            with tempfile.TemporaryDirectory() as folder:
+                env=dict(os.environ,GIT_INDEX_FILE=str(Path(folder)/'index'))
+                git('read-tree',source.TRANSPORT_SOURCE,env=env)
+                blob=git('hash-object','-w','--stdin',data=data)
+                git('update-index','--add','--cacheinfo',mode+','+blob+','+name,env=env)
+                tree=git('write-tree',env=env)
+                changed=self.commit(tree,[source.TRANSPORT_PREDECESSOR])
+            record=json.loads(json.dumps(original));record.update(source=changed,source_tree=tree)
+            revision,digest=self.transport_record_fixture(record,source_revision=changed)
+            with patch.object(source,'TRANSPORT_SOURCE',changed),patch.object(source,'TRANSPORT_RECORD_COMMIT',revision),patch.object(source,'TRANSPORT_RECORD_SHA256',digest),self.subTest(name=name,mode=mode),self.assertRaisesRegex(ValueError,code):
+                source.load_transport(ROOT)
 
     def test_successor_record_missing_changed_or_mode_changed(self):
         for name in (source.SUCCESSOR_RECORD_PATH,'docs/testing/f13-production-successor-closure-v3.json'):
