@@ -156,7 +156,7 @@ func (s *SpaceStore) RecordLifecycleDeletionProofReceipt(ctx context.Context, ac
 	if lifecycleHash("voice.auth.v1.ConsumeSpaceDeletionProofResponse", receiptBytes) != receiptHash {
 		return nil, ErrLifecycleEvidenceInvalid
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}
@@ -171,6 +171,14 @@ func (s *SpaceStore) RecordLifecycleDeletionProofReceipt(ctx context.Context, ac
 	if err := lockLifecycleSpace(ctx, tx, operation.spaceID); err != nil {
 		return nil, err
 	}
+	lockedSpace := operation.spaceID
+	operation, err = loadLifecycleOperation(ctx, tx, operationID)
+	if err != nil {
+		return nil, err
+	}
+	if operation.spaceID != lockedSpace || operation.method != "DELETE" || operation.actorProfileID != actorProfileID {
+		return nil, ErrLifecycleConflict
+	}
 	if err := operation.validate(); err != nil {
 		return nil, err
 	}
@@ -182,6 +190,12 @@ func (s *SpaceStore) RecordLifecycleDeletionProofReceipt(ctx context.Context, ac
 			return nil, ErrLifecycleConflict
 		}
 	} else {
+		scoped := *s
+		scoped.tx = tx
+		capture, err := scoped.captureLifecycleProofReceiptMutation(ctx, operation)
+		if err != nil {
+			return nil, err
+		}
 		command, updateErr := tx.Exec(ctx, `UPDATE space_lifecycle_operations
 			SET auth_receipt_bytes=$2,auth_receipt_sha256=$3
 			WHERE operation_id=$1 AND auth_receipt_bytes IS NULL`, operationID, receiptBytes, receiptHash[:])
@@ -190,6 +204,11 @@ func (s *SpaceStore) RecordLifecycleDeletionProofReceipt(ctx context.Context, ac
 		}
 		if command.RowsAffected() != 1 {
 			return nil, ErrLifecycleConflict
+		}
+		if capture != nil {
+			if err := scoped.finishEffectiveMemberMutations(ctx, capture); err != nil {
+				return nil, err
+			}
 		}
 	}
 	aggregate, err := loadLifecycle(ctx, tx, operation.spaceID, false)
