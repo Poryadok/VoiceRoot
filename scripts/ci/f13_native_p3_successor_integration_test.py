@@ -28,6 +28,24 @@ class RealGitSuccessorTest(unittest.TestCase):
     def setUpClass(cls):
         cls.source = git('rev-parse', 'HEAD')
         cls.record = successor.load_record(ROOT)
+        # This suite preserves the v2 unit's unchanged predicates after a
+        # separately reviewed v3 documentation source exists. Restore only the
+        # exact v2 document in a private Git tree; never alter the checkout or
+        # treat the resulting fixture as current production source authority.
+        document = 'docs/microservices/space-service.md'
+        expected = next(row['after'] for row in cls.record['projection'] if row['path'] == document)
+        if legacy.entry(ROOT, cls.source, document) != expected:
+            legacy.require(authority.documentation is not None, 'v2_fixture_unknown_document_source')
+            current = authority.documentation.load_record(ROOT)
+            reviewed = next(row['after'] for row in current['projection'] if row['path'] == document)
+            legacy.require(legacy.entry(ROOT, cls.source, document) == reviewed,
+                           'v2_fixture_unreviewed_document_source')
+            with tempfile.TemporaryDirectory() as directory:
+                env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+                git('read-tree', cls.source, env=env)
+                git('update-index', '--add', '--cacheinfo',
+                    expected['mode'] + ',' + expected['oid'] + ',' + document, env=env)
+                cls.source = cls.commit(git('write-tree', env=env), [cls.source])
         cls.context_path = next(row['path'] for row in cls.record['context']
                                 if row['path'].startswith('src/backend/voice/internal/store/')
                                 and row['path'].endswith('.go'))

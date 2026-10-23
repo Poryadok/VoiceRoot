@@ -455,6 +455,9 @@ python3 "${ROOT}/scripts/ci/f13_space_audit_test.py"
 if [[ -f "${ROOT}/scripts/ci/f13_production_source_test.py" ]]; then
   python3 "${ROOT}/scripts/ci/f13_production_source_test.py"
 fi
+if [[ -f "${ROOT}/scripts/ci/f13_native_p3_documentation_test.py" ]]; then
+  python3 "${ROOT}/scripts/ci/f13_native_p3_documentation_test.py"
+fi
 base_sha="${VOICE_R22_BASE_SHA:-$(git -C "${ROOT}" merge-base HEAD origin/master)}"
 # The later Game sprint authorizes the verified opt-in runtime checkpoint, not
 # arbitrary future runtime or deployment changes. Exempt only its exact paths

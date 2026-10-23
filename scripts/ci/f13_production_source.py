@@ -1,6 +1,7 @@
 """Pinned production applicability; historical facts never grant runtime paths."""
 import argparse
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -30,6 +31,16 @@ CARRIER_PATHS=(VERIFIER_PATH,'scripts/ci/f13_production_source_test.py',
     'scripts/ci/f13_f54_history.py','scripts/ci/f13_f54_history_test.py',
     'scripts/ci/voice-db-runtime-provisioning-contract_test.sh',
     '.agent/execplans/pr875-current-native-source.md')
+SUCCESSOR_SOURCE='e409cd05c40e857b61109513eb2154f968970c02'
+SUCCESSOR_PREDECESSOR='3b53b0a9c761f340d20d23ed36f64a0ad18af33f'
+SUCCESSOR_RECORD_PATH='docs/testing/f13-production-source-v3.json'
+SUCCESSOR_RECORD_COMMIT='f87ee933aa1f599284e1932e44bf32b4e2af48ba'
+SUCCESSOR_RECORD_SHA256='adf1d0cf60f2e1f81c22d112bf26243961bbaac7f4b25f142487264d86e14c8f'
+SUCCESSOR_PATHS=('src/frontend/lib/backend/spaces_client.dart',
+    'src/frontend/test/spaces_client_invites_test.dart','src/frontend/test/support/bot_live_harness.dart')
+SUCCESSOR_CARRIERS=(*CARRIER_PATHS,'scripts/ci/f13_native_p3_authority.py',
+    'scripts/ci/f13_native_p3_successor_integration_test.py',
+    'scripts/ci/f13_native_p3_documentation.py','scripts/ci/f13_native_p3_documentation_test.py')
 require=gitutil.require
 git=gitutil.git
 
@@ -125,6 +136,8 @@ def load_record(repo):
 
 def qualify(repo):
     require(Path(repo).resolve()==ROOT.resolve(),'production_actual_root')
+    if git(repo,'merge-base',SUCCESSOR_SOURCE,'HEAD').decode().strip()==SUCCESSOR_SOURCE:
+        return qualify_successor(repo)
     record=load_record(repo)
     target=git(repo,'rev-parse','HEAD').decode().strip()
     event={k:os.environ.get(k,'') for k in ('GITHUB_EVENT_NAME','GITHUB_REF','GITHUB_SHA','GITHUB_BASE_REF','VOICE_CI_PUSH_BEFORE_SHA')}
@@ -153,6 +166,142 @@ def qualify(repo):
         admission=False,runtime_pass=False,current_or_future_path_authority=False)
 
 
+def load_successor(repo):
+    old=load_record(repo)
+    require(SUCCESSOR_RECORD_COMMIT is not None and SUCCESSOR_RECORD_SHA256 is not None,
+            'production_successor_not_pinned')
+    raw=fixed_artifact(repo,SUCCESSOR_RECORD_COMMIT,dict(path=SUCCESSOR_RECORD_PATH,sha256=SUCCESSOR_RECORD_SHA256))
+    record=json.loads(raw,object_pairs_hook=gitutil.pairs)
+    require(set(record)=={'version','status','predecessor','source','source_tree','source_edges','reference','event_base',
+        'historical_scope','native_content_base','change_summary','current_inputs','successor_closure',
+        'native_record','manual_supplement','manual_derivation','evidence','review','runtime_pass','activation_authority','current_or_future_path_authority'},'production_successor_shape')
+    require(record['version']=='F13-PRODUCTION-SOURCE-v3' and record['status']=='SOURCE_CONSUMPTION_CONTRACT_CLEAR',
+            'production_successor_status')
+    require(all(record[k] is False for k in ('runtime_pass','activation_authority','current_or_future_path_authority')),
+            'production_successor_no_path_grant')
+    require(record['source']==SUCCESSOR_SOURCE and record['predecessor']==dict(record=PINNED_RECORD_COMMIT,
+        path=RECORD_PATH,sha256=PINNED_RECORD_SHA256,carrier=SUCCESSOR_PREDECESSOR,
+        carrier_tree=git(repo,'rev-parse',SUCCESSOR_PREDECESSOR+'^{tree}').decode().strip()),'production_successor_lineage')
+    for key in ('reference','event_base','historical_scope','native_content_base'):
+        require(record[key]==old[key],'production_successor_fixed_boundaries')
+    require(isinstance(record['change_summary'],str) and record['change_summary'],'production_successor_summary')
+    edges=[]
+    for commit in git(repo,'rev-list','--reverse','--ancestry-path',SUCCESSOR_PREDECESSOR+'..'+SUCCESSOR_SOURCE).decode().splitlines():
+        parents=git(repo,'rev-list','--parents','-n','1',commit).decode().split()[1:]
+        require(len(parents)==1,'production_successor_source_parent')
+        edges.append(dict(commit=commit,parent=parents[0],raw_diff_sha256=sha(git(repo,'diff','--raw','--no-abbrev','--no-renames',parents[0],commit))))
+    require(record['source_edges']==edges and len(edges)==2,'production_successor_complete_source_edges')
+    require(git(repo,'rev-list','--parents','-n','1',SUCCESSOR_RECORD_COMMIT).decode().split()==
+            [SUCCESSOR_RECORD_COMMIT,SUCCESSOR_SOURCE],'production_successor_record_parent')
+    require(record['source_tree']==git(repo,'rev-parse',SUCCESSOR_SOURCE+'^{tree}').decode().strip(),
+            'production_successor_source_tree')
+    git(repo,'merge-base','--is-ancestor',PINNED_RECORD_COMMIT,SUCCESSOR_PREDECESSOR)
+    require(set(git(repo,'diff','--name-only',PINNED_RECORD_COMMIT,SUCCESSOR_PREDECESSOR).decode().splitlines())<=set(CARRIER_PATHS),
+            'production_successor_predecessor_carrier')
+    before,after,reference=entries(repo,SUCCESSOR_PREDECESSOR),entries(repo,SUCCESSOR_SOURCE),entries(repo,REFERENCE)
+    changed=git(repo,'diff','--name-only',SUCCESSOR_PREDECESSOR,SUCCESSOR_SOURCE).decode().splitlines()
+    require(len(changed)==24 and all(p in changed for p in SUCCESSOR_PATHS),'production_successor_exact_delta')
+    require(all(before.get(p)==after.get(p) for p in set(before)|set(after) if p not in changed),
+            'production_successor_complete_outside_equality')
+    closure=json.loads(fixed_artifact(repo,SUCCESSOR_RECORD_COMMIT,record['successor_closure']),object_pairs_hook=gitutil.pairs)
+    native=json.loads(git(repo,'show',SUCCESSOR_PREDECESSOR+':docs/testing/native-p3-source-v2.json'),object_pairs_hook=gitutil.pairs)
+    role=json.loads(git(repo,'show',SUCCESSOR_PREDECESSOR+':docs/testing/role-checkpermission-historical-source-v2.json'),object_pairs_hook=gitutil.pairs)
+    groups={'corrected_F':sorted(old['corrected_F']['current_bindings']),
+        'native_participating':sorted(x['path'] for x in native['projection']+native['context']),
+        'native_compiled':sorted(native['compiled_closure']),
+        'role_participating':sorted(x['path'] for x in role['required_current_source']+role['context'])}
+    require(closure==dict(predecessor=SUCCESSOR_PREDECESSOR,source=SUCCESSOR_SOURCE,
+        complete_delta_sha256=sha(git(repo,'diff','--raw','--no-abbrev','--no-renames',SUCCESSOR_PREDECESSOR,SUCCESSOR_SOURCE)),
+        entries=[dict(path=p,before=before.get(p,''),after=after.get(p,''),classification='REVIEWED_NATIVE_DOCUMENT_ONLY_NO_BACKEND_PATH_AUTHORITY' if p=='docs/microservices/space-service.md' else 'ORIGINAL_CONTRIBUTION_GATES_REQUIRED') for p in changed],
+        participating={key:[dict(path=p,entry=after.get(p,'')) for p in paths] for key,paths in groups.items()},
+        closure_manifests={p:after[p] for p in ['docs/testing/native-p3-source-v2-closure.json','docs/testing/role-checkpermission-source-v2-closure.json']},
+        outside_delta_tree_entries_equal=True),'production_successor_complete_closure')
+    import f13_native_p3_documentation as documentation
+    require(documentation.PINNED_RECORD_COMMIT==SUCCESSOR_RECORD_COMMIT and documentation.PINNED_SOURCE==SUCCESSOR_SOURCE,
+            'production_successor_native_same_record')
+    native_ref=record['native_record']
+    require(native_ref==dict(path=documentation.RECORD_PATH,sha256=documentation.PINNED_RECORD_SHA256,
+        scope='SAME_RECORD_COMMIT'),'production_successor_native_reference')
+    current_native=documentation.load_record(repo)
+    require([r['path'] for r in current_native['projection']]==[r['path'] for r in native['projection']],
+            'production_successor_native_no_new_paths')
+    for key,paths in groups.items():
+        require(all(before.get(p)==after.get(p) for p in paths if p!=documentation.DOCUMENT),
+                'production_successor_participating_drift')
+    validate_manual_supplement(repo,record)
+    inventory=json.loads(fixed_artifact(repo,SUCCESSOR_RECORD_COMMIT,record['current_inputs']),object_pairs_hook=gitutil.pairs)
+    require(inventory==dict(source=SUCCESSOR_SOURCE,reference=REFERENCE,
+        delta_sha256=sha(git(repo,'diff','--raw','--no-abbrev','--no-renames',REFERENCE,SUCCESSOR_SOURCE)),
+        entries=[dict(path=p,reference_entry=reference.get(p,''),current_entry=after.get(p,''),disposition='ORIGINAL_CONTRIBUTION_GATES_REQUIRED')
+            for p in git(repo,'diff','--name-only',REFERENCE,SUCCESSOR_SOURCE).decode().splitlines()]),'production_successor_complete_inventory')
+    require(isinstance(record['evidence'],list) and record['evidence'],'production_successor_evidence')
+    names=[]
+    for proof in record['evidence']:
+        fixed_artifact(repo,SUCCESSOR_RECORD_COMMIT,proof);names.append(proof['path'])
+    require(names==sorted(set(names)) and isinstance(record['review'],list) and record['review'] and
+        all(isinstance(p,str) and p in names for p in record['review']),'production_successor_review')
+    permitted={SUCCESSOR_RECORD_PATH,record['current_inputs']['path'],record['successor_closure']['path'],documentation.RECORD_PATH,*names,
+        '.agent/execplans/pr875-current-native-source.md'}
+    require(set(git(repo,'diff','--name-only',SUCCESSOR_SOURCE,SUCCESSOR_RECORD_COMMIT).decode().splitlines())<=permitted,
+            'production_successor_evidence_only_record')
+    return record,old
+
+
+def qualify_successor(repo):
+    record,old=load_successor(repo)
+    target=git(repo,'rev-parse','HEAD').decode().strip()
+    event={k:os.environ.get(k,'') for k in ('GITHUB_EVENT_NAME','GITHUB_REF','GITHUB_SHA','GITHUB_BASE_REF','VOICE_CI_PUSH_BEFORE_SHA')}
+    pr=event['GITHUB_EVENT_NAME']=='pull_request' and re.fullmatch(r'refs/pull/[1-9][0-9]*/merge',event['GITHUB_REF']) and event['GITHUB_BASE_REF']=='master'
+    push=event['GITHUB_EVENT_NAME']=='push' and event['GITHUB_REF']=='refs/heads/master' and event['VOICE_CI_PUSH_BEFORE_SHA']==EVENT_BASE
+    require(event['GITHUB_SHA']==target and (pr or push),'production_actual_master_event')
+    parents=git(repo,'rev-list','--parents','-n','1',target).decode().split()
+    require(len(parents)==3 and parents[1]==EVENT_BASE,'production_actual_ordered_parents')
+    source=parents[2];git(repo,'merge-base','--is-ancestor',SUCCESSOR_RECORD_COMMIT,source)
+    require(source!=SUCCESSOR_RECORD_COMMIT,'production_later_carrier')
+    require(git(repo,'rev-parse',source+'^{tree}')==git(repo,'rev-parse',target+'^{tree}'),'production_source_result_tree')
+    require(set(git(repo,'diff','--name-only',SUCCESSOR_RECORD_COMMIT,source).decode().splitlines())<=set(SUCCESSOR_CARRIERS),
+            'production_only_reviewed_carrier_delta')
+    for name in SUCCESSOR_CARRIERS:
+        meta=gitutil.entry(repo,source,name)
+        require(meta['mode']=='100644' and meta['type']=='blob','production_carrier_mode')
+        require(git(repo,'cat-file','blob',meta['oid'])==(ROOT/name).read_bytes(),'production_executed_carrier')
+    for revision,names in ((PINNED_RECORD_COMMIT,[RECORD_PATH,old['current_inputs']['path'],*[p['path'] for p in old['evidence']]]),
+        (SUCCESSOR_RECORD_COMMIT,[SUCCESSOR_RECORD_PATH,record['current_inputs']['path'],record['successor_closure']['path'],record['native_record']['path'],*[p['path'] for p in record['evidence']]])):
+        for name in names:
+            require(tree_entry(repo,target,name)==tree_entry(repo,revision,name),'production_artifact_drift')
+    gitutil.actual_entry(repo,target,ARCHIVE_PATH,old['archive']['entry'])
+    return dict(type=record['version'],record=SUCCESSOR_RECORD_COMMIT,record_sha256=SUCCESSOR_RECORD_SHA256,
+        predecessor_record=PINNED_RECORD_COMMIT,historical_validation_source=old['source'],
+        reviewed_source=record['source'],reviewed_tree=record['source_tree'],base=EVENT_BASE,source=source,target=target,
+        historical_collector=HISTORICAL_SCOPE,native_content_baseline=NATIVE_CONTENT_BASE,
+        current_inputs_sha256=record['current_inputs']['sha256'],event=event,
+        admission=False,runtime_pass=False,current_or_future_path_authority=False)
+
+
+def validate_manual_supplement(repo,record):
+    """Preserve the original facts predicate and verify its complete closure."""
+    raw=fixed_artifact(repo,SUCCESSOR_RECORD_COMMIT,record['manual_supplement'])
+    derivation=json.loads(fixed_artifact(repo,SUCCESSOR_RECORD_COMMIT,record['manual_derivation']),object_pairs_hook=gitutil.pairs)
+    with zipfile.ZipFile(ROOT/ARCHIVE_PATH) as archive:
+        facts_raw=archive.read('objects/0b1d6efdf6441ca3bece84d968d72ab464f4dba378aecbfcd370813ee3e5148f')
+    require(sha(facts_raw)=='0b1d6efdf6441ca3bece84d968d72ab464f4dba378aecbfcd370813ee3e5148f',
+            'production_original_manual_facts')
+    facts=json.loads(facts_raw,object_pairs_hook=gitutil.pairs)
+    require(derivation['facts_sha256']==sha(facts_raw) and derivation['bindings']==facts['bindings'] and
+        derivation['original_archive_unchanged'] is True and derivation['original_facts_unchanged'] is True,
+        'production_manual_derivation_bindings')
+    require(len(facts['bindings'])==11,'production_complete_manual_binding_count')
+    result={}
+    with zipfile.ZipFile(io.BytesIO(raw)) as supplement:
+        require(sorted(supplement.namelist())==sorted(facts['bindings']),'production_exact_manual_supplement_members')
+        for name,expected in facts['bindings'].items():
+            require(Path(name).name==name and '\\' not in name,'production_manual_supplement_path')
+            data=supplement.read(name)
+            require(dict(bytes=len(data),sha256=sha(data))==expected,'production_manual_supplement_bytes')
+            result[name]=data
+    return result
+
+
 def materialize(repo,destination):
     binding=qualify(repo);record=load_record(repo)
     folder=Path(destination)
@@ -171,6 +320,13 @@ def materialize(repo,destination):
             data=archive.read('objects/'+item['sha256'])
             require(len(data)==item['bytes'] and sha(data)==item['sha256'],'production_materialized_historical_hash')
             path=folder/name.lstrip('/');path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
+    if binding['type']=='F13-PRODUCTION-SOURCE-v3':
+        current,_=load_successor(repo)
+        supplemental=validate_manual_supplement(repo,current)
+        destination=folder/'fixed3071-unit/manual'
+        for name,data in supplemental.items():
+            require(not (destination/name).exists(),'production_manual_supplement_no_overwrite')
+            (destination/name).write_bytes(data)
     return binding
 
 

@@ -312,3 +312,25 @@ production carriers plus the Native dispatcher and two named Nativev3 helper/tes
 files. Every constructor/consumer reconstructs the current v3 tuple, and the real
 event/collection/router checks remain required. A fresh actual-head producer run
 and hosted CI still determine terminal success.
+
+K additionally names the existing Nativev2 integration-test driver as its tenth
+carrier. Its19 mandatory v2 oracles now construct a private old-document tree
+only after independently verifying that the actual document equals the exact
+reviewed v3 entry. The fixture retains current executable carriers and changes
+no checkout/ref. This preserves v2 coverage rather than relabeling it v3; the
+separate v3 real-Git suite validates the actual current source and document.
+
+Combined K pins actual root R f87ee933aa1f599284e1932e44bf32b4e2af48ba,
+whose sole parent is source e409cd05c40e857b61109513eb2154f968970c02.
+Independent final pin-only code review is CLEAR. Provisional Linux verification
+passed 22 production, 7 Nativev3 and 56 F54 tests; the unchanged legacy suites
+passed 9 source, 5 history, 15 structural and 19 real-Git v2 tests. After the
+fixture adjustment, the full M/J/F constructor and all 7 v3 tests passed again.
+The actual-R candidate verification and fresh actual producer are separate
+evidence; no constructor, bounded replay or synthetic fixture is terminal
+production admission.
+
+Actual published-R Linux candidate verification: 22 production tests PASS
+(128.338s), 7 Nativev3 tests PASS (5.294s), Python compilation and Bash syntax
+PASS. The disposable candidate uses the actual f87 record and a synthetic K
+commit only for tests; the real event producer remains outstanding.
