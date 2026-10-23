@@ -25,7 +25,7 @@ func TestUserAuthoritySourceActualMigratorProtectedFactory(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	database := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join("..", "migrations", "user_db"))
-	database.Run(true, "up")
+	database.Run(true, "goto", "21")
 	reader := store.NewProfileStore(database.Pool)
 	account, profile := uuid.NewString(), uuid.NewString()
 	_, err := database.Pool.Exec(ctx, `INSERT INTO profiles(id,account_id,username,discriminator,display_name) VALUES($1,$2,'factory','0001','private')`, profile, account)

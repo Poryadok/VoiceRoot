@@ -22,7 +22,8 @@ func userSourceStore(t *testing.T) (context.Context, *ProfileStore) {
 	}
 	ctx := context.Background()
 	fixture := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(userModuleRepoRoot(t), "src", "backend", "migrations", "user_db"))
-	fixture.Run(true, "up")
+	// This source contract qualifies exact21, not the independent identity schema.
+	fixture.Run(true, "goto", "21")
 	return ctx, NewProfileStore(fixture.Pool)
 }
 
@@ -92,7 +93,7 @@ func TestUserSourceAdditive21PreservesQualifiedCatalog(t *testing.T) {
 	beforeDDL := userSourceCatalogDDL(t, ctx, st)
 	var beforeRevision uint64
 	require.NoError(t, st.pool.QueryRow(ctx, `SELECT revision FROM user_authority_revision WHERE singleton`).Scan(&beforeRevision))
-	fixture.Run(true, "up")
+	fixture.Run(true, "goto", "21")
 	var version int64
 	var dirty bool
 	require.NoError(t, st.pool.QueryRow(ctx, `SELECT version,dirty FROM schema_migrations`).Scan(&version, &dirty))

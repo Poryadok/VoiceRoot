@@ -16,7 +16,7 @@ func TestUserSourceActualMigrationPreservesAuthorityFences(t *testing.T) {
 	}
 	ctx := context.Background()
 	fixture := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(userModuleRepoRoot(t), "src", "backend", "migrations", "user_db"))
-	fixture.Run(true, "up")
+	fixture.Run(true, "goto", "21")
 	pool := fixture.Pool
 	var version int64
 	var dirty bool
