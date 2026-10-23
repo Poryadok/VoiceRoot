@@ -162,6 +162,20 @@ fail startup. The ordinary listener rejects both methods, and the legacy
 
 ### Ban and Unban operation identity
 
+Space constructs the protected User account-capture client when all five
+`SPACE_USER_CAPTURE_GRPC_ADDR`, `SPACE_USER_CAPTURE_TLS_CA_FILE`,
+`SPACE_USER_CAPTURE_TLS_SERVER_NAME`, `SPACE_USER_CAPTURE_CLIENT_CERT_FILE` and
+`SPACE_USER_CAPTURE_CLIENT_KEY_FILE` are supplied. It uses the existing loaded
+Space principal issuer, explicit caller-owned CA and workload identity; no
+ordinary `USER_GRPC_ADDR` fallback supplies capture authority. Partial or invalid
+configuration, missing issuer, `DATABASE_URL` or protected Gateway listener fails
+startup. The configured mTLS connection must become ready within the shared dial
+timeout before the client is assigned to the production store and Space starts
+serving; Space owns and closes the connection on shutdown. With no capture
+configuration the client remains absent and fresh Ban fails closed. Transport
+readiness alone does not qualify User identity facts, lineage, Native readiness,
+complete Ban outcomes or B15; those remain separately owned prerequisites.
+
 `BanMemberRequest.operation_id` (string tag 5) and
 `UnbanMemberRequest.operation_id` (string tag 3) carry a required canonical nonnil
 UUID chosen once by the caller per intent. The exact HTTP body/path/header and
