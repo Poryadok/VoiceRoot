@@ -205,6 +205,13 @@ func TestNativeMembershipTypedCleanupLostReplyAndMalformedReceipt(t *testing.T) 
 		t.Fatal(e)
 	}
 	q := &botv1.InstallBotInSpaceRequest{BotId: bot.ID.String(), SpaceId: uuid.NewString(), AllowedChats: []*chatv1.ChatRef{{Id: uuid.NewString()}}}
+	if _, e = db.Exec(ctx, `UPDATE bots SET scopes='["TEXT_CHAT_READ_HISTORY"]'::jsonb WHERE id=$1`, bot.ID); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = st.PrepareInstall(ctx, source, effectsAdmin(t, q, botv1.BotService_InstallBotInSpace_FullMethodName), q); e == nil {
+		t.Fatal("privileged scope installed without explicit acknowledgement")
+	}
+	q.AcknowledgePrivilegedScopes = true
 	a := effectsAdmin(t, q, botv1.BotService_InstallBotInSpace_FullMethodName)
 	r, e := st.PrepareInstall(ctx, source, a, q)
 	if e != nil {
