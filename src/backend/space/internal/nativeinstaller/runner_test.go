@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -35,21 +36,78 @@ func diagnosticCommand(ctx context.Context, stderr, stdout string, exit string) 
 	return cmd
 }
 
+// This fixture is the public v4.18.1 CLI source's complete usage block, not
+// captured process output. The footer order may vary with the driver registry.
+const pinnedMigrateUsageFixture = "Usage: migrate OPTIONS COMMAND [arg...]\n       migrate [ -version | -help ]\n\nOptions:\n  -source          Location of the migrations (driver://url)\n  -path            Shorthand for -source=file://path\n  -database        Run migrations against this database (driver://url)\n  -prefetch N      Number of migrations to load in advance before executing (default 10)\n  -lock-timeout N  Allow N seconds to acquire database lock (default 15)\n  -verbose         Print verbose logging\n  -version         Print version\n  -help            Print usage\n\nCommands:\n  create [-ext E] [-dir D] [-seq] [-digits N] [-format] [-tz] NAME\n\t   Create a set of timestamped up/down migrations titled NAME, in directory D with extension E.\n\t   Use -seq option to generate sequential up/down migrations with N digits.\n\t   Use -format option to specify a Go time format string. Note: migrations with the same time cause \"duplicate migration version\" error.\n           Use -tz option to specify the timezone that will be used when generating non-sequential migrations (defaults: UTC).\n\n  goto V       Migrate to version V\n  up [N]       Apply all or N up migrations\n  down [N] [-all]    Apply all or N down migrations\n\tUse -all to apply all down migrations\n  drop [-f]    Drop everything inside database\n\tUse -f to bypass confirmation\n  force V      Set version V but don't run migration (ignores dirty state)\n  version      Print current migration version\n\nSource drivers: file\nDatabase drivers: postgres, postgresql\n"
+
+func TestRunMigrationPinnedClassification(t *testing.T) {
+	const secret = "SYNTHETIC_SECRET_SENTINEL"
+	const query = "SYNTHETIC_QUERY_SENTINEL"
+	database := "error: migration failed: SELECT '" + query + "', '" + secret + "' (details: pq: denied)\n"
+	for _, tc := range []struct {
+		name, stderr, stdout, category string
+		exit                           int
+	}{
+		{"complete usage", pinnedMigrateUsageFixture, "", "cli_usage", 2},
+		{"exact bounded usage", strings.Repeat(" ", migrationDiagnosticLimit-len(pinnedMigrateUsageFixture)) + pinnedMigrateUsageFixture, "", "cli_usage", 2},
+		{"flag error then complete usage", "flag provided but not defined: -synthetic\n" + pinnedMigrateUsageFixture, "", "cli_usage", 2},
+		{"postgres prefix", database, "", "postgres_statement", 1},
+		{"usage wrong status", pinnedMigrateUsageFixture, "", "driver_exit_unknown", 1},
+		{"migration wrong status two", database, "", "driver_exit_unknown", 2},
+		{"migration wrong status seven", database, "", "driver_exit_unknown", 7},
+		{"arbitrary status two", secret + query, "", "driver_exit_unknown", 2},
+		{"usage header only", "Usage: migrate OPTIONS COMMAND [arg...]\n", "", "driver_exit_unknown", 2},
+		{"truncated usage", pinnedMigrateUsageFixture[:len(pinnedMigrateUsageFixture)-1], "", "driver_exit_unknown", 2},
+		{"changed usage option", strings.Replace(pinnedMigrateUsageFixture, "default 10", "default 11", 1), "", "driver_exit_unknown", 2},
+		{"missing driver footer", strings.Split(pinnedMigrateUsageFixture, "Database drivers:")[0], "", "driver_exit_unknown", 2},
+		{"invalid driver footer", strings.Replace(pinnedMigrateUsageFixture, "postgres, postgresql", "postgres; "+secret, 1), "", "driver_exit_unknown", 2},
+		{"panic status two", "panic: " + secret + "\n" + pinnedMigrateUsageFixture, "", "driver_exit_unknown", 2},
+		{"fatal status two", "FATAL ERROR: " + secret + "\n" + pinnedMigrateUsageFixture, "", "driver_exit_unknown", 2},
+		{"stack status two", "runtime stack:\n" + secret + pinnedMigrateUsageFixture, "", "driver_exit_unknown", 2},
+		{"goroutine status two", "goroutine 1 [running]:\n" + pinnedMigrateUsageFixture, "", "driver_exit_unknown", 2},
+		{"usage stdout only", "", pinnedMigrateUsageFixture, "driver_exit_unknown", 2},
+		{"usage mixed output", pinnedMigrateUsageFixture, secret, "driver_exit_unknown", 2},
+		{"usage overflow", pinnedMigrateUsageFixture + strings.Repeat("x", migrationDiagnosticLimit), "", "driver_exit_unknown", 2},
+		{"postgres mixed output", database, secret, "driver_exit_unknown", 1},
+		{"postgres overflow", database + strings.Repeat("x", migrationDiagnosticLimit), "", "driver_exit_unknown", 1},
+		{"multiple postgres errors", database + "error: " + secret, "", "driver_exit_unknown", 1},
+		{"unanchored postgres", secret + database, "", "driver_exit_unknown", 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			err := runMigration(ctx, diagnosticCommand(ctx, tc.stderr, tc.stdout, strconv.Itoa(tc.exit)), 44)
+			require.EqualError(t, err, "migration stage 44 failed (category="+tc.category+", exit_code="+strconv.Itoa(tc.exit)+")")
+			var primary *exec.ExitError
+			require.ErrorAs(t, err, &primary)
+			require.Equal(t, tc.exit, primary.ExitCode())
+			require.Empty(t, primary.Stderr, "raw diagnostics must not survive in the process error")
+			unlock, closeErr := errors.New(secret+"/unlock"), errors.New(secret+"/close")
+			joined := cleanupAdmin(err, &cleanupAdminStub{unlockErr: unlock, closeErr: closeErr}, true)
+			require.ErrorIs(t, joined, primary)
+			require.ErrorIs(t, joined, unlock)
+			require.ErrorIs(t, joined, closeErr)
+			for _, forbidden := range []string{secret, query, "SELECT", "Usage:", "postgres://", "flag provided", "panic:", "FATAL", "goroutine", "runtime stack"} {
+				require.NotContains(t, joined.Error(), forbidden)
+			}
+		})
+	}
+}
+
 func TestRunMigrationSafeDiagnosticsAndCleanup(t *testing.T) {
 	const secret = "postgres://synthetic-user:credential-sentinel@invalid/secret-query"
 	database := "error: migration failed: permission denied in line 0: SELECT '" + secret + "' (details: pq: permission denied)\n"
 	for _, tc := range []struct {
 		name, stderr, stdout, category string
 	}{
-		{"pinned database format", database, "", "database"},
-		{"unknown credential output", secret, "", "driver_exit"},
-		{"forged SQLSTATE", "error: " + secret + " SQLSTATE 42501", "", "driver_exit"},
-		{"SQLSTATE inside query", database + "SELECT 'SQLSTATE 28P01';", "", "database"},
-		{"mixed streams", database, secret, "driver_exit"},
-		{"mixed terminal errors", database + "error: " + secret, "", "driver_exit"},
-		{"oversized stderr", database + strings.Repeat("x", 16*1024), "", "driver_exit"},
-		{"oversized stdout", database, strings.Repeat("x", 16*1024), "driver_exit"},
-		{"unanchored prefix", secret + database, "", "driver_exit"},
+		{"migration format wrong status", database, "", "driver_exit_unknown"},
+		{"unknown credential output", secret, "", "driver_exit_unknown"},
+		{"forged SQLSTATE", "error: " + secret + " SQLSTATE 42501", "", "driver_exit_unknown"},
+		{"SQLSTATE inside query wrong status", database + "SELECT 'SQLSTATE 28P01';", "", "driver_exit_unknown"},
+		{"mixed streams", database, secret, "driver_exit_unknown"},
+		{"mixed terminal errors", database + "error: " + secret, "", "driver_exit_unknown"},
+		{"oversized stderr", database + strings.Repeat("x", 16*1024), "", "driver_exit_unknown"},
+		{"oversized stdout", database, strings.Repeat("x", 16*1024), "driver_exit_unknown"},
+		{"unanchored prefix", secret + database, "", "driver_exit_unknown"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := runMigration(context.Background(), diagnosticCommand(context.Background(), tc.stderr, tc.stdout, "7"), 44)
@@ -93,7 +151,7 @@ func TestRunMigrationContextStartAndSuccess(t *testing.T) {
 		})
 	}
 	err := runMigration(context.Background(), exec.Command("/missing/credential-sentinel"), 50)
-	require.EqualError(t, err, "migration stage 50 failed (category=start, exit_code=-1)")
+	require.EqualError(t, err, "migration stage 50 failed (category=driver_exit_unknown, exit_code=-1)")
 	var pathError *os.PathError
 	require.ErrorAs(t, err, &pathError)
 	require.NoError(t, runMigration(context.Background(), diagnosticCommand(context.Background(), "secret-success", "secret-success", "0"), 50))
@@ -107,7 +165,7 @@ func TestMigrationDiagnosticStreamsBoundAndDrain(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, len(chunk), n)
 	}
-	require.Equal(t, "database", output.category())
+	require.Equal(t, "postgres_statement", output.category(1))
 	remaining := migrationDiagnosticLimit - output.seen
 	n, err := stderr.Write(bytes.Repeat([]byte{'x'}, remaining))
 	require.NoError(t, err)
@@ -120,7 +178,7 @@ func TestMigrationDiagnosticStreamsBoundAndDrain(t *testing.T) {
 	require.True(t, output.overflow)
 	require.Zero(t, output.size)
 	require.Equal(t, [migrationDiagnosticLimit]byte{}, output.stderr)
-	require.Equal(t, "driver_exit", output.category())
+	require.Equal(t, "driver_exit_unknown", output.category(1))
 	n, err = stderr.Write(bytes.Repeat([]byte{'x'}, migrationDiagnosticLimit*2))
 	require.NoError(t, err)
 	require.Equal(t, migrationDiagnosticLimit*2, n)
