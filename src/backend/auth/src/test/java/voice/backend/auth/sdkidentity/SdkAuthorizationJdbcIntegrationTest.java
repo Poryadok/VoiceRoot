@@ -625,7 +625,12 @@ class SdkAuthorizationJdbcIntegrationTest {
       "regular_email_verification_pending=TRUE", "session_epoch=8"})
   void currentTargetDatabaseStateOverridesRegularClaimsAtApproval(String mutation) throws Exception {
     var request = start(authorization(), UUID.randomUUID(), REDIRECT, STATE, SCOPES);
-    jdbc.update("UPDATE accounts SET " + mutation + " WHERE id=:id", Map.of("id", targetAccount));
+    if (mutation.equals("status='deleted'")) {
+      new voice.backend.auth.repository.JdbcAccountRepository(jdbc)
+          .markDeleted(targetAccount, Instant.now());
+    } else {
+      jdbc.update("UPDATE accounts SET " + mutation + " WHERE id=:id", Map.of("id", targetAccount));
+    }
     assertThatThrownBy(() -> authorization().approve(request.requestId(), VOICE_BEARER, secondaryProfile, 3))
         .isInstanceOf(SdkIdentityDeniedException.class);
   }

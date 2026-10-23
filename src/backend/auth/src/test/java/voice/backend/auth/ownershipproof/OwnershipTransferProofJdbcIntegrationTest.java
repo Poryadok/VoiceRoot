@@ -21,6 +21,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import voice.backend.auth.repository.JdbcBackupCodeRepository;
+import voice.backend.auth.repository.JdbcAccountRepository;
 import voice.backend.auth.security.BCryptPasswordHasher;
 import voice.backend.auth.service.BackupCodeService;
 import voice.backend.auth.service.TotpService;
@@ -155,7 +156,6 @@ class OwnershipTransferProofJdbcIntegrationTest {
       "totp_enabled=TRUE|totp_enabled=FALSE",
       "totp_secret=decode('01','hex')|totp_secret=NULL",
       "status='suspended'|status='active'",
-      "deleted_at=CURRENT_TIMESTAMP|deleted_at=NULL",
       "session_epoch=8|session_epoch=7",
       "type='guest'|type='regular'",
       "email='changed@example.com'|email=NULL",
@@ -166,6 +166,19 @@ class OwnershipTransferProofJdbcIntegrationTest {
     var issued = service().issue(binding, "correct", "", "");
     update(change);
     update(revert);
+    assertThatThrownBy(() -> service().consume(binding, issued.proof())).isInstanceOf(ProofDeniedException.class);
+    assertThat(store.withAccount(account, session -> session.find(binding.operationId()).orElseThrow()).consumedAt()).isNull();
+  }
+
+  @Test void deleteAndConditionalRestorePermanentlyRevokesUnconsumedProof() {
+    var issued = service().issue(binding, "correct", "", "");
+    var accounts = new JdbcAccountRepository(jdbc);
+    accounts.markDeleted(account, Instant.now());
+    assertThat(accounts.restoreDeleted(account)).isTrue();
+    assertThat(accounts.findById(account.toString())).get()
+        .extracting(voice.backend.auth.repository.Account::status,
+            voice.backend.auth.repository.Account::deletedAt)
+        .containsExactly("active", null);
     assertThatThrownBy(() -> service().consume(binding, issued.proof())).isInstanceOf(ProofDeniedException.class);
     assertThat(store.withAccount(account, session -> session.find(binding.operationId()).orElseThrow()).consumedAt()).isNull();
   }

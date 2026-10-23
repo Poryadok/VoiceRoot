@@ -21,8 +21,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -72,14 +71,16 @@ class RegistrationSessionEpochJdbcIntegrationTest {
       JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK);
 
   @Container
-  static final PostgreSQLContainer<?> POSTGRES =
+  final PostgreSQLContainer<?> POSTGRES =
       new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
           .withDatabaseName("auth_registration")
           .withUsername("voice")
           .withPassword("voice");
 
-  @BeforeAll
-  static void migrate() {
+  // Each method owns a fully migrated database; container disposal is fixture
+  // cleanup, not a request to erase still-active production accounts.
+  @BeforeEach
+  void migrate() {
     Flyway.configure()
         .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
         .locations(
@@ -88,13 +89,6 @@ class RegistrationSessionEpochJdbcIntegrationTest {
                     .resolve("src/main/resources/db/migration"))
         .load()
         .migrate();
-  }
-
-  @AfterEach
-  void clear() {
-    jdbc().getJdbcTemplate().update("DELETE FROM backup_codes");
-    jdbc().getJdbcTemplate().update("DELETE FROM refresh_tokens");
-    jdbc().getJdbcTemplate().update("DELETE FROM accounts");
   }
 
   @Test
@@ -513,7 +507,7 @@ class RegistrationSessionEpochJdbcIntegrationTest {
     return service;
   }
 
-  private static DriverManagerDataSource dataSource() {
+  private DriverManagerDataSource dataSource() {
     return new DriverManagerDataSource(
         POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
   }
@@ -626,7 +620,7 @@ class RegistrationSessionEpochJdbcIntegrationTest {
     }
   }
 
-  private static final class RecordingProfiles implements PrimaryProfileProvisioner {
+  private final class RecordingProfiles implements PrimaryProfileProvisioner {
     final boolean fail;
     int calls;
     boolean sawCommittedPositiveEpoch;

@@ -33,8 +33,9 @@ class OwnershipTransferReceiptLookupJdbcIntegrationTest {
   @Container static final PostgreSQLContainer<?> postgres =
       new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
           .withDatabaseName("auth_db").withUsername("voice").withPassword("voice");
-  private final Instant now = Instant.parse("2026-09-10T10:00:00.123456789Z");
+  private Instant now = Instant.parse("2026-09-10T10:00:00.123456789Z");
   private final ProofBinding binding = new ProofBinding(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), 7);
+  private PostgreSQLContainer<?> selectedPostgres = postgres;
   private NamedParameterJdbcTemplate jdbc;
   private JdbcOwnershipTransferProofStore store;
   private OwnershipTransferProofService service;
@@ -55,7 +56,8 @@ class OwnershipTransferReceiptLookupJdbcIntegrationTest {
   }
 
   private DriverManagerDataSource source() {
-    return new DriverManagerDataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+    return new DriverManagerDataSource(
+        selectedPostgres.getJdbcUrl(), selectedPostgres.getUsername(), selectedPostgres.getPassword());
   }
 
   private OwnershipTransferProofService issuingService(OwnershipTransferProofStore target) {
@@ -78,27 +80,81 @@ class OwnershipTransferReceiptLookupJdbcIntegrationTest {
   }
 
   @Test void committedReceiptSurvivesSecurityChangesAndPhysicalAccountRemovalExactly() throws Exception {
-    var issued = service.issue(binding, "correct", "", "");
-    var original = service.consume(binding, issued.proof());
-    String digest = digest(issued.proof());
-    assertThat(original.consumedAt()).isEqualTo(now.truncatedTo(java.time.temporal.ChronoUnit.MICROS));
-    assertThat(restarted().lookup(binding, digest)).isEqualTo(original);
-    jdbc.update("""
-        UPDATE accounts SET password_hash='new-password',totp_enabled=TRUE,totp_secret=decode('01','hex'),
-          session_epoch=8,status='deleted',deleted_at=CURRENT_TIMESTAMP WHERE id=:id
-        """, Map.of("id", binding.accountId()));
-    var changed = snapshot();
-    assertThat(restarted().lookup(binding, digest)).isEqualTo(original);
-    var currentEpoch = new ProofBinding(binding.accountId(), binding.profileId(), binding.spaceId(),
-        binding.newOwnerProfileId(), binding.operationId(), 8);
-    assertThatThrownBy(() -> restarted().lookup(currentEpoch, digest)).isInstanceOf(ProofDeniedException.class);
-    assertThat(snapshot()).isEqualTo(changed);
-    jdbc.update("DELETE FROM accounts WHERE id=:id", Map.of("id", binding.accountId()));
-    var erased = snapshot();
-    assertThat(restarted().lookup(binding, digest)).isEqualTo(original);
-    assertThat(restarted().lookup(binding, digest)).isEqualTo(original);
-    assertThat(snapshot()).isEqualTo(erased);
-    assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts WHERE id=:id", Map.of("id", binding.accountId()), Long.class)).isZero();
+    // A due account is real historical input to the real V28 backfill. Never
+    // backdate an existing guarded deletion cycle or manufacture owner history.
+    try (var historical = new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
+        .withDatabaseName("auth_receipt_history").withUsername("voice").withPassword("voice")) {
+      historical.start();
+      Flyway.configure().dataSource(historical.getJdbcUrl(), historical.getUsername(), historical.getPassword())
+          .locations("classpath:db/migration").target("26").load().migrate();
+      selectedPostgres = historical;
+      var source = source();
+      jdbc = new NamedParameterJdbcTemplate(source);
+      store = new JdbcOwnershipTransferProofStore(jdbc, new DataSourceTransactionManager(source));
+      now = jdbc.queryForObject("SELECT clock_timestamp() - interval '31 days'", Map.of(), java.sql.Timestamp.class).toInstant();
+      jdbc.update("""
+          INSERT INTO accounts(id,password_hash,type,status,session_epoch,created_at)
+          VALUES(:id,'hash','regular','active',7,:createdAt)
+          """, Map.of("id", binding.accountId(), "createdAt", java.sql.Timestamp.from(now.minusSeconds(3600))));
+      new BackupCodeService(new JdbcBackupCodeRepository(jdbc)).generateAndStore(binding.accountId());
+      service = issuingService(store);
+      var issued = service.issue(binding, "correct", "", "");
+      var original = service.consume(binding, issued.proof());
+      String digest = digest(issued.proof());
+      assertThat(original.consumedAt()).isEqualTo(now.truncatedTo(java.time.temporal.ChronoUnit.MICROS));
+      assertThat(restarted().lookup(binding, digest)).isEqualTo(original);
+      jdbc.update("""
+          UPDATE accounts SET password_hash='new-password',totp_enabled=TRUE,totp_secret=decode('01','hex'),
+            session_epoch=8 WHERE id=:id
+          """, Map.of("id", binding.accountId()));
+      new voice.backend.auth.repository.JdbcAccountRepository(jdbc)
+          .markDeleted(binding.accountId(), now.plusSeconds(1));
+
+      // Full actual upgrade derives the terminal lifetime and its baseline.
+      Flyway.configure().dataSource(historical.getJdbcUrl(), historical.getUsername(), historical.getPassword())
+          .locations("classpath:db/migration").load().migrate();
+      UUID handle = jdbc.queryForObject("SELECT role_identity_handle FROM accounts WHERE id=:id",
+          Map.of("id", binding.accountId()), UUID.class);
+      assertThat(jdbc.queryForObject("""
+          SELECT state='TERMINAL' AND NOT eligible AND erase_at <= clock_timestamp()
+          FROM role_identity_lifetimes WHERE owner_handle=:handle
+          """, Map.of("handle", handle), Boolean.class)).isTrue();
+      assertThat(jdbc.queryForObject("""
+          SELECT count(*) FROM role_identity_owner_journal WHERE owner_handle=:handle AND event_kind='RAW_ERASURE'
+          """, Map.of("handle", handle), Long.class)).isZero();
+      var changed = snapshot();
+      assertThat(restarted().lookup(binding, digest)).isEqualTo(original);
+      var currentEpoch = new ProofBinding(binding.accountId(), binding.profileId(), binding.spaceId(),
+          binding.newOwnerProfileId(), binding.operationId(), 8);
+      assertThatThrownBy(() -> restarted().lookup(currentEpoch, digest)).isInstanceOf(ProofDeniedException.class);
+      assertThat(snapshot()).isEqualTo(changed);
+      jdbc.update("DELETE FROM accounts WHERE id=:id", Map.of("id", binding.accountId()));
+      var erased = snapshot();
+      assertThat(restarted().lookup(binding, digest)).isEqualTo(original);
+      assertThat(restarted().lookup(binding, digest)).isEqualTo(original);
+      assertThat(snapshot()).isEqualTo(erased);
+      assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts WHERE id=:id", Map.of("id", binding.accountId()), Long.class)).isZero();
+      assertThat(jdbc.queryForObject("""
+          SELECT count(*) FROM role_identity_owner_journal
+          WHERE owner_handle=:handle AND event_kind='RAW_ERASURE' AND state='TERMINAL'
+          """, Map.of("handle", handle), Long.class)).isEqualTo(1L);
+    }
+  }
+
+  @Test void activeAndRecoverableAccountsCannotBePhysicallyErased() {
+    assertPrematureErasureRejected();
+    new voice.backend.auth.repository.JdbcAccountRepository(jdbc).markDeleted(binding.accountId(), Instant.now());
+    assertPrematureErasureRejected();
+  }
+
+  private void assertPrematureErasureRejected() {
+    var before = snapshot();
+    var refusal = org.junit.jupiter.api.Assertions.assertThrows(org.springframework.dao.DataAccessException.class,
+        () -> jdbc.update("DELETE FROM accounts WHERE id=:id", Map.of("id", binding.accountId())));
+    assertThat(refusal.getMostSpecificCause()).isInstanceOf(java.sql.SQLException.class)
+        .hasMessageContaining("account erasure boundary not reached");
+    assertThat(((java.sql.SQLException) refusal.getMostSpecificCause()).getSQLState()).isEqualTo("P0001");
+    assertThat(snapshot()).isEqualTo(before);
   }
 
   @Test void missingUnconsumedAndWrongTupleOrDigestNeverWriteAnything() throws Exception {

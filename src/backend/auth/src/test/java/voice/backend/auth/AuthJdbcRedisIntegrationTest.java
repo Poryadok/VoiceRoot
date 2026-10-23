@@ -186,25 +186,31 @@ class AuthJdbcRedisIntegrationTest {
   }
 
   @Test
-  void jdbcConditionalRestoreRejectsInconsistentDeletedState() throws Exception {
+  void jdbcDeletionGuardRejectsMissingBoundaryAndNormalizesDeletedStatus() throws Exception {
     Account missingDeletedAt =
         accounts.create("jdbc-restore-missing-at@example.com", null, "hash", "regular");
-    accounts.setStatus(missingDeletedAt.id(), "deleted");
+    var refusal = org.junit.jupiter.api.Assertions.assertThrows(
+        org.springframework.dao.DataAccessException.class,
+        () -> accounts.setStatus(missingDeletedAt.id(), "deleted"));
+    assertThat(refusal.getMostSpecificCause())
+        .isInstanceOf(java.sql.SQLException.class)
+        .hasMessageContaining("identity deletion boundary missing");
+    assertThat(((java.sql.SQLException) refusal.getMostSpecificCause()).getSQLState()).isEqualTo("P0001");
+    assertThat(conditionalRestore(missingDeletedAt.id())).isFalse();
+    assertThat(accounts.findById(missingDeletedAt.id().toString()))
+        .get().extracting(Account::status, Account::deletedAt).containsExactly("active", null);
+
     Account missingDeletedStatus =
         accounts.create("jdbc-restore-missing-status@example.com", null, "hash", "regular");
-    accounts.markDeleted(missingDeletedStatus.id(), Instant.parse("2026-05-01T10:00:00Z"));
+    Instant deletedAt = Instant.now().minus(Duration.ofDays(1)).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+    accounts.markDeleted(missingDeletedStatus.id(), deletedAt);
     accounts.setStatus(missingDeletedStatus.id(), "active");
-
-    assertThat(conditionalRestore(missingDeletedAt.id())).isFalse();
-    assertThat(conditionalRestore(missingDeletedStatus.id())).isFalse();
-    assertThat(accounts.findById(missingDeletedAt.id().toString()))
-        .get()
-        .extracting(Account::status, Account::deletedAt)
-        .containsExactly("deleted", null);
     assertThat(accounts.findById(missingDeletedStatus.id().toString()))
-        .get()
-        .extracting(Account::status, Account::deletedAt)
-        .containsExactly("active", Instant.parse("2026-05-01T10:00:00Z"));
+        .get().extracting(Account::status, Account::deletedAt).containsExactly("deleted", deletedAt);
+    assertThat(conditionalRestore(missingDeletedStatus.id())).isTrue();
+    assertThat(accounts.findById(missingDeletedStatus.id().toString()))
+        .get().extracting(Account::status, Account::deletedAt).containsExactly("active", null);
+    assertThat(conditionalRestore(missingDeletedStatus.id())).isFalse();
   }
 
   @Test
