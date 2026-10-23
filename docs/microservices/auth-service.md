@@ -10,6 +10,32 @@
 > history uses the existing Flyway/canonical mode without synthetic rows. See
 > [source ExecPlan](../testing/auth-identity-current444-source-plan.md).
 
+## User parent identity protected registration
+
+`AuthIdentityAuthorityGrpcServer` registers the real store-backed
+`AuthParentIdentityGrpcAdapter` with BOTH `ResolveAccountHandle` and
+`ObserveAccountHandles` on its dedicated mutual-TLS serving set. It registers
+no Role or ordinary Auth service and does not change Chat/Bot floor policy.
+`AUTH_IDENTITY_AUTHORITY_ENABLED=false` leaves this set disabled. Enabling it
+requires the existing owner-store bean/JDBC selector configuration and a shared
+`StringRedisTemplate` with a connection factory; no memory replay fallback exists.
+Existing `AUTH_IDENTITY_AUTHORITY_GRPC_LISTEN`, `_TLS_CERT_FILE`, `_TLS_KEY_FILE`,
+`_TLS_CLIENT_CA_FILE` and optional `_JWKS_CA_FILE` configure this set. Its existing
+`S2S_JWKS_URLS_JSON` requires BOTH `role` and `user` HTTPS entries and retains the
+existing refresh/hard-expiry/cooldown policy. Deployment owns actual values.
+
+The listener uses `IdentityAuthorityTransport.configure` (required client
+certificate, TLS1.2/1.3), the closed identity principal policy and Redis replay
+admission. Missing configured dependencies or construction/bind failure fails
+startup. JWKS is fetched lazily; `isRunning` reports transport startup only,
+not usable JWKS, Redis reachability, installed catalog readiness or domain
+acceptance. Each request still fails closed on unavailable dependencies.
+Shutdown closes only this server, its JWKS HTTP client and its replay executor;
+it does not destroy shared Redis/template/factory beans. Recovery observations
+remain UNAVAILABLE; registration provides no independent CURRENT authority.
+The pure lifecycle/descriptor test opens no listener or database. Native P1,
+real protected transport and coupled all-birth acceptance remain separate gates.
+
 ## Space admission owner observation (SPACE-ADMISSION-IDENTITY-v1)
 
 `ObserveSpaceAdmissionSubject` is an additive read-only RPC on the existing
