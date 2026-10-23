@@ -1350,6 +1350,20 @@ def historical_module():
     return h
 
 
+def successor_replay_module(repo, harness_identity):
+    """Keep executable validator provenance separate from historical observations."""
+    name = 'scripts/ci/f13_f54_history.py'
+    raw = (ROOT / name).read_bytes()
+    require(sha(raw) == harness_identity['files'][name], 'successor_validator_frozen_source')
+    spec = importlib.util.spec_from_file_location('f13_successor_replay', ROOT / name)
+    successor = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(successor)
+    context = successor.bind_verified_replay_root(repo, SOURCE, dict(OUTER_SOURCE_HASHES))
+    require(context['executable_sha256'] == sha(raw), 'successor_loaded_same_executable_bytes')
+    provenance = dict(harness_commit=harness_identity['commit'], **dict(context))
+    return successor, provenance
+
+
 def inside():
     require(sys.platform == 'linux' and ROOT == Path('/harness'), 'private_namespace_required')
     harness_identity = json.loads(os.environ['F13_HARNESS_IDENTITY'])
@@ -1404,12 +1418,13 @@ def inside():
                               total=len(differences), captured_sha256=sha(cap_raw), captured_bytes=len(cap_raw),
                               actual_sha256=sha(h.canonical(actual_cap)), actual_bytes=len(h.canonical(actual_cap)))))
     require(cap == actual_cap and not differences, 'fixed3071_complete_current_capability_binding')
-    checked = h.validate_trace(repo, trace, prefix['sha256'], J_checkpoint=OPERATION, sealed_prefix=prefix)
+    replay, replay_provenance = successor_replay_module(repo, harness_identity)
+    checked = replay.validate_trace(repo, trace, prefix['sha256'], J_checkpoint=OPERATION, sealed_prefix=prefix)
     reconstructed = h.build_3071_J_ready(checked['J_checkpoint'], prefix)
     require(h.canonical(reconstructed) == h.canonical(captured), 'independent_complete_J_not_trusted_import')
     # Fold the complete original failed trace to prove all prior transitions and
     # the exact final map, not just the old J checkpoint or its selected row.
-    terminal = h.validate_trace(repo, trace, TRACE_SHA)
+    terminal = replay.validate_trace(repo, trace, TRACE_SHA)
     require(terminal['failures'] and terminal['master_wrapper'] is None, 'old_failure_not_success')
     folded = terminal['ledger']['F5']
     map_raw = ''.join(row + '\n' for row in folded['rows']).encode()
@@ -1508,7 +1523,7 @@ def inside():
     print(json.dumps(dict(kind='FAITHFUL_HISTORICAL_SHARED_GUARD',historical_source=SOURCE,target=TARGET,event_base=BASE,
         pending_sequence=10645,pending_prefix_sha256=PENDING_SHA,map_sha256=MAP_SHA,ledger_sha256=LEDGER_SHA,
         guard_observed=observed,contract_expected=0,source_hashes={p:sha((ROOT/p).read_bytes())for p in OUTER_SOURCE_HASHES},
-        harness_identity=harness_identity,archive_sha256=ARCHIVE_SHA,
+        harness_identity=harness_identity,replay_validator_provenance=replay_provenance,archive_sha256=ARCHIVE_SHA,
         producer_executed=False,full_F13='NOT_RUN',admission=False)))
     if observed != 0:
         print('ASSERTION RED: accepted exact-J contract expects qualified transition; unchanged shared production guard refused', file=sys.stderr)

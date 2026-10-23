@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 from functools import lru_cache
+from types import MappingProxyType
 
 M = 'f54bcadab4aa19969281d7d35d76ebad91553d4d'
 P1 = '0a0024900b5bb3ba2f6fee391615f0f4fa0864e3'
@@ -27,6 +28,8 @@ TREE = '4c24a19991d52acb2507590d4c95ff19c983d359'
 SOURCE = 'd38b699d3d3d641fe2415ed7f841dfe1f7360bc1'
 SCHEMA = 'F54-PRODUCER-OBSERVATION-v2'
 ROOT = Path(__file__).resolve().parents[2]
+_REPLAY_ROOT_BINDING = None
+_TRACE_USED = False
 PRODUCTION_AUTHORITY = False
 PROTOTYPE_BASE = '6d1f60f955a79e0378a3532750d209e3a11c8f23'
 AUTHOR_REFERENCE = 'd6ac6d2f4b85eb691a00f729eb2192e63ae0091f'
@@ -91,6 +94,45 @@ class Rejected(ValueError): pass
 
 def require(value, reason):
     if not value: raise Rejected(reason)
+
+
+def bind_verified_replay_root(repo, source, source_hashes):
+    """Configure only this new successor instance's historical observation root.
+
+    Executable source identity is separate from the historical carrier files.
+    The caller must independently bind this module to its frozen harness source.
+    """
+    global ROOT, _REPLAY_ROOT_BINDING
+    require(_REPLAY_ROOT_BINDING is None and not _TRACE_USED, 'replay_root_bind_once_before_use')
+    root = Path(repo)
+    require(root.is_absolute() and root == root.resolve() and root.is_dir(), 'replay_absolute_observation_root')
+    require(type(source) is str and re.fullmatch('[0-9a-f]{40}', source), 'replay_full_historical_source')
+    require(type(source_hashes) is dict and set(source_hashes) == set(AUTHOR_SOURCE_PATHS), 'replay_complete_historical_carriers')
+    for name, digest in source_hashes.items():
+        require(type(digest) is str and re.fullmatch('[0-9a-f]{64}', digest), 'replay_historical_digest_shape')
+        raw = (root / name).read_bytes()
+        require(sha(raw) == digest and raw == git(root, 'show', source + ':' + name), 'replay_historical_carrier_bytes')
+    identity = dict(observation_root=str(root), historical_source=source,
+                    historical_carriers=tuple(sorted(source_hashes.items())),
+                    executable_sha256=sha(Path(__file__).read_bytes()),
+                    validator='validate_trace')
+    ROOT = root
+    _REPLAY_ROOT_BINDING = MappingProxyType(identity)
+    return _REPLAY_ROOT_BINDING
+
+
+def require_pending_operation(pending, key, operation):
+    require(key in pending and pending[key]['op'] == operation, 'exact_pending_operation_ownership')
+    return pending[key]
+
+
+def validate_exact_conservation(item, operation, receipt):
+    require(item['op'] == operation, 'exact_pending_operation_ownership')
+    expected = 'exact_unit_supersession' in item
+    require(('exact_unit_supersession' in receipt) == expected, 'conservation_exact_supersession_presence_iff_pending')
+    if expected:
+        require(receipt['exact_unit_supersession'] == item['exact_unit_supersession'],
+                'conservation_consumes_exact_supersession_not_unused_sidecar')
 
 
 def sha(data): return hashlib.sha256(data).hexdigest()
@@ -2277,6 +2319,8 @@ def validate_router(repo, seal_path, seal_sha, map_path, context_path, sidecar_p
 
 
 def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, range_checkpoint=None, I_checkpoint=None, deletion_checkpoint=None, manual_checkpoint=False, manual_end_checkpoint=None, manual_append_checkpoint=None, J_history_checkpoint=None, J_checkpoint=None, sealed_prefix=None):
+    global _TRACE_USED
+    _TRACE_USED = True
     raw=Path(path).read_bytes()
     if sealed_prefix is not None:
         require(isinstance(sealed_prefix,dict) and set(sealed_prefix)=={'bytes','sha256'},'trace_sealed_prefix_shape')
@@ -2287,7 +2331,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
     events=[json.loads(v) for v in raw.splitlines()];require(events,'nonempty_producer_trace')
     previous='0'*64;frames={};stack=[];operations={};attempts={};classified={};pending={};cumulative={};child_flags={};child_rows={};frame_rows={};carry={};failures=[];observed=set()
     expected_operations={};seen_operations={};visited={};committed={};maps={};children={};obligations={};native_bindings={}
-    M_capabilities={};M_compositions={};M_ready={};M_consumed={};M_supersessions={};master_entry=None;master_wrapper=None
+    M_capabilities={};M_compositions={};M_ready={};M_consumed={};master_entry=None;master_wrapper=None
     J_prior_spans={};J_ready={};J_consumed={}
     J_capabilities={};J_compositions={};F_compositions={};range_branches={};frame_results={};I_ready={};I_consumed={}
     terminal={};final_gates={};manual_specs={};manual_gates={};manual_associations={};manual_closed={}
@@ -2770,13 +2814,14 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             require(op in M_capabilities and key in pending and v['admission'] is False,'explicit_M_consumer_pending_without_mutation')
             require(v['map_before']==map_binding(frame),'pending_M_map_is_unchanged');continue
         if kind=='exact_unit_supersession':
-            require(op in M_ready and key in pending and key not in M_supersessions and not pending[key]['removed'],'exact_supersession_before_mutation')
+            item=require_pending_operation(pending,key,op)
+            require(op in M_ready and 'exact_unit_supersession' not in item and not item['removed'],'exact_supersession_before_mutation')
             item=pending[key];receipt=v['receipt'];prefix_raw=b''.join(raw.splitlines(keepends=True)[:sequence-1])
             expected=supersession_evidence(repo,M_capabilities[op],M_ready[op],events[:sequence-1],v['path'],
                 ''.join('\t'.join(x)+'\n' for x in maps[frame]).encode(),'\t'.join(item['incoming']),M_compositions[op].get(v['path']))
             expected=dict(expected,trace_prefix=dict(bytes=len(prefix_raw),sha256=sha(prefix_raw)))
             require(receipt==expected and v['admission'] is False,'independent_exact_supersession_actual_history_binding')
-            M_supersessions[key]=receipt;continue
+            item['exact_unit_supersession']=receipt;continue
         if kind in ('complete_ledger_conserved','range_I_ledger_conserved','range_J_ledger_conserved'):
             ready_table={'complete_ledger_conserved':M_ready,'range_I_ledger_conserved':I_ready,'range_J_ledger_conserved':J_ready}[kind]
             consumed_table={'complete_ledger_conserved':M_consumed,'range_I_ledger_conserved':I_consumed,'range_J_ledger_conserved':J_consumed}[kind]
@@ -2791,8 +2836,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             aggregate=cumulative[key] or ready_table[op]['required_qualification'][v['path']]['aggregate']
             require(type(receipt['aggregate']) is bool and receipt['aggregate']==aggregate,'M_consumer_must_keep_full_aggregate_or')
             require(v['policy_result'] is None and receipt['policy_result'] is None,'conservation_is_not_policy_admission')
-            if key in M_supersessions:
-                require(receipt.get('exact_unit_supersession')==M_supersessions[key], 'conservation_consumes_exact_supersession_not_unused_sidecar')
+            validate_exact_conservation(item,op,receipt)
             consumed_table.setdefault(op,[]).append(v['path']);item['conservation']=receipt
             continue
         if kind=='native_rebind_gate':
@@ -2862,7 +2906,8 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
                     require(parts[1]==pending[key]['incoming'][1] or (parts[1]=='true' and cumulative[key]),'no_fabricated_reduction_flag')
                 pending[key]['after']=parts;carry[op]=parts[1]=='true'
         elif kind=='row_committed':
-            require(key in pending and pending[key]['after']==row(v['row']),'actual_committed_row')
+            require_pending_operation(pending,key,op)
+            require(pending[key]['after']==row(v['row']),'actual_committed_row')
             frame_rows[key]=row(v['row'])
             maps[frame].append(row(v['row']))
             require(v['map_after']==map_binding(frame) and [row(x) for x in v['retained_rows']]==[x for x in maps[frame] if x[0]==v['path']],'conserved_committed_map')

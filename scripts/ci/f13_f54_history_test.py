@@ -26,6 +26,109 @@ def module():
     return value
 
 
+class ReplayConservationContract(unittest.TestCase):
+    """Transition controls; full historical replay remains a separate gate."""
+    def setUp(self):
+        self.m = module()
+        self.op = 'F5/first/2'
+        self.key = ('F5', PROTO)
+        self.exact = dict(operation=self.op, path=PROTO, evidence='qualified-private-control')
+
+    def test_same_transition_requires_exact_receipt_presence_and_value(self):
+        item = dict(op=self.op, exact_unit_supersession=self.exact)
+        self.m.validate_exact_conservation(item, self.op, dict(exact_unit_supersession=self.exact))
+        for receipt in ({}, dict(exact_unit_supersession=None), dict(exact_unit_supersession={}),
+                        dict(exact_unit_supersession=dict(self.exact, operation='F5/other/2'))):
+            with self.subTest(receipt=receipt), self.assertRaises(self.m.Rejected):
+                self.m.validate_exact_conservation(item, self.op, receipt)
+
+    def test_later_operation_rejects_any_unrequested_exact_receipt_field(self):
+        later = dict(op='F5/later/2')
+        self.m.validate_exact_conservation(later, later['op'], {})
+        for stale in (self.exact, None, {}, False):
+            with self.subTest(stale=stale), self.assertRaises(self.m.Rejected):
+                self.m.validate_exact_conservation(later, later['op'], dict(exact_unit_supersession=stale))
+
+    def test_pending_operation_ownership_is_required_for_registration_and_commit(self):
+        pending = {self.key: dict(op=self.op)}
+        self.assertIs(self.m.require_pending_operation(pending, self.key, self.op), pending[self.key])
+        for key, operation in ((self.key, 'F5/other/2'), (('F6', PROTO), self.op)):
+            with self.assertRaises(self.m.Rejected):
+                self.m.require_pending_operation(pending, key, operation)
+        self.assertEqual(pending, {self.key: dict(op=self.op)})
+
+    def test_frozen_trace_supersession_is_consumed_before_unrelated_J_transition(self):
+        import zipfile
+        with zipfile.ZipFile(ROOT/'scripts/ci/testdata/f13-exact-j-547/historical-inputs.zip') as archive:
+            raw = archive.read('objects/08259a181aca2a185a3310aa2f745f663fc6a0baddc458418136b02da02e4fe8')
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), '08259a181aca2a185a3310aa2f745f663fc6a0baddc458418136b02da02e4fe8')
+        events = [json.loads(line) for line in raw.splitlines()]
+        exact, conserved, committed, later = [events[n-1] for n in (6665, 6666, 6669, 10293)]
+        self.assertEqual(exact['operation'], conserved['operation'])
+        self.assertEqual(committed['operation'], exact['operation'])
+        self.assertNotEqual(later['operation'], exact['operation'])
+        self.assertEqual(exact['payload']['path'], later['payload']['path'])
+        self.assertEqual(conserved['payload']['receipt']['exact_unit_supersession'], exact['payload']['receipt'])
+        first = dict(op=exact['operation'], exact_unit_supersession=exact['payload']['receipt'])
+        self.m.validate_exact_conservation(first, exact['operation'], conserved['payload']['receipt'])
+        # Isolate the real receipt boundary, without claiming an admitted frame.
+        next_item = dict(op=later['operation'])
+        self.m.validate_exact_conservation(next_item, later['operation'], later['payload']['receipt'])
+        stale = dict(later['payload']['receipt'], exact_unit_supersession=exact['payload']['receipt'])
+        with self.assertRaises(self.m.Rejected):
+            self.m.validate_exact_conservation(next_item, later['operation'], stale)
+
+    def test_successor_binding_checks_git_disk_hashes_and_binds_once(self):
+        with tempfile.TemporaryDirectory() as folder:
+            repo = Path(folder).resolve()
+            git(repo, 'init', '-q')
+            git(repo, 'config', 'user.name', 'Private fixture')
+            git(repo, 'config', 'user.email', 'private@example.invalid')
+            for name in self.m.AUTHOR_SOURCE_PATHS:
+                path = repo/name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(('private historical carrier '+name+'\n').encode())
+            git(repo, 'add', '.')
+            git(repo, 'commit', '-qm', 'private historical carrier')
+            source = git(repo, 'rev-parse', 'HEAD')
+            hashes = {name:self.m.sha((repo/name).read_bytes()) for name in self.m.AUTHOR_SOURCE_PATHS}
+            original = module()
+            original_root = original.ROOT
+            original_globals = dict(vars(original))
+            for change in ('missing', 'hash', 'source', 'disk'):
+                successor = module()
+                wrong = dict(hashes)
+                ref = source
+                if change == 'missing': wrong.pop(next(iter(wrong)))
+                if change == 'hash': wrong[next(iter(wrong))] = '0'*64
+                if change == 'source': ref = 'not-a-full-commit'
+                path = repo/next(iter(hashes))
+                before = path.read_bytes()
+                if change == 'disk': path.write_bytes(before+b'changed')
+                try:
+                    with self.subTest(change=change), self.assertRaises(successor.Rejected):
+                        successor.bind_verified_replay_root(repo, ref, wrong)
+                    self.assertIsNone(successor._REPLAY_ROOT_BINDING)
+                finally:
+                    path.write_bytes(before)
+            successor = module()
+            identity = successor.bind_verified_replay_root(repo, source, hashes)
+            self.assertEqual(successor.ROOT, repo)
+            self.assertEqual(identity['historical_source'], source)
+            self.assertEqual(identity['executable_sha256'], self.m.sha(HELPER.read_bytes()))
+            self.assertEqual(identity['historical_carriers'], tuple(sorted(hashes.items())))
+            with self.assertRaises(TypeError): identity['historical_source'] = 'changed'
+            with self.assertRaises(successor.Rejected): successor.bind_verified_replay_root(repo, source, hashes)
+            self.assertEqual(original.ROOT, original_root)
+            self.assertEqual(vars(original), original_globals)
+            used = module()
+            trace = repo/'empty-trace'
+            trace.write_bytes(b'')
+            try: used.validate_trace(repo, trace, used.sha(b''))
+            except used.Rejected: pass
+            with self.assertRaises(used.Rejected): used.bind_verified_replay_root(repo, source, hashes)
+
+
 class ProducerTrace(unittest.TestCase):
     def current_author_J_fixture(self, native_only=False):
         # Complete private historical DAG plus genuine old/current native

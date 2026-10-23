@@ -15,6 +15,44 @@ import zipfile
 import f13_exact_j_historical_red_test as harness
 
 
+class SuccessorReplayBinding(unittest.TestCase):
+    def test_loader_imports_distinct_source_bound_successor_with_historical_root(self):
+        import importlib.util
+        helper = harness.ROOT/'scripts/ci/f13_f54_history.py'
+        spec = importlib.util.spec_from_file_location('private_untouched_historical', helper)
+        historical = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(historical)
+        before = dict(vars(historical))
+        with tempfile.TemporaryDirectory() as folder:
+            repo = Path(folder).resolve()
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(repo), *args]).decode().strip()
+            git('init', '-q')
+            git('config', 'user.name', 'Private replay fixture')
+            git('config', 'user.email', 'private@example.invalid')
+            for name in harness.OUTER_SOURCE_HASHES:
+                path = repo/name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(('private historical '+name+'\n').encode())
+            git('add', '.')
+            git('commit', '-qm', 'private historical carrier')
+            source = git('rev-parse', 'HEAD')
+            hashes = {name:harness.sha((repo/name).read_bytes()) for name in harness.OUTER_SOURCE_HASHES}
+            identity = dict(commit='1'*40, files={'scripts/ci/f13_f54_history.py':harness.sha(helper.read_bytes())})
+            with mock.patch.multiple(harness, SOURCE=source, OUTER_SOURCE_HASHES=hashes):
+                successor, provenance = harness.successor_replay_module(repo, identity)
+                again, other = harness.successor_replay_module(repo, identity)
+                self.assertIsNot(successor, again)
+                self.assertEqual(provenance, other)
+                self.assertEqual(successor.ROOT, repo)
+                self.assertEqual(provenance['historical_source'], source)
+                self.assertEqual(provenance['harness_commit'], identity['commit'])
+                self.assertEqual(provenance['executable_sha256'], harness.sha(helper.read_bytes()))
+                wrong = dict(identity, files={'scripts/ci/f13_f54_history.py':'0'*64})
+                with self.assertRaises(harness.SetupFailure): harness.successor_replay_module(repo, wrong)
+        self.assertEqual(vars(historical), before)
+
+
 
 
 class PrivateEntropyContract(unittest.TestCase):
