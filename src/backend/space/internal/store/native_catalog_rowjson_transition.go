@@ -247,7 +247,7 @@ func (d *NativeCatalog51Migration) qualifyAndCAS() error {
 	}
 	projection := strings.Replace(nativeCatalog51ParentExpression, needle, "jsonb_build_array(p.oid,CASE WHEN p.oid=$1::oid THEN $2::text ELSE pg_get_functiondef(p.oid) END,p.proowner,p.proacl)", 1)
 	var parent, current, retained []byte
-	if err = d.tx.QueryRow(d.ctx, projection, oid, parentDefinition).Scan(&parent); err != nil {
+	if err = d.tx.QueryRow(d.ctx, nativeCatalog51DigestSQL(projection), oid, parentDefinition).Scan(&parent); err != nil {
 		return ErrMemberAuthorityUnavailable
 	}
 	var equal bool

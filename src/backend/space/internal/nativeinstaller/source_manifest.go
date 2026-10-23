@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-const InventorySHA256 = "44e53479d6fd4fa1fc0b73adf77a0c28d07e023aeb116e0b91e28f37b0720100"
+const InventorySHA256 = "ceddc7e7f98c535148b2a455b7e0660b4080a3581be1a4fbae598e738d4d7b9a"
 
 var selectedSQL = map[string]string{
 	"000001_init.down.sql":                           "e2054e9782c6a5db73112aff5e803ec9fef8ab8834c55b5b53db0b4517de6789",
@@ -99,7 +99,7 @@ var selectedSQL = map[string]string{
 	"000050_account_ban_coverage.down.sql":           "c7661be49a646d7f76ef97e866ae12a1f88221344e738759b4a9f9f2cc64bcd8",
 	"000050_account_ban_coverage.up.sql":             "d52240e13e70eead705db61cf462cefc860957d40f7f52bb0bf40962c73dc3f3",
 	"000051_native_catalog_rowjson.down.sql":         "251e4a91303b568d7257cf880363f91898a3b9d50d736d1f5448e3bfd2679ae5",
-	"000051_native_catalog_rowjson.up.sql":           "23b70cc0ad088e03ef928a70fce5177c4d7d21c89efa6c0368d0aea98814bbaf",
+	"000051_native_catalog_rowjson.up.sql":           "9271fe4135719a204a57e6b0c868f81038d4f320b03ada228f4c5b9fca40da47",
 }
 
 // ValidateSources rejects a changed selected release inventory before any DDL.

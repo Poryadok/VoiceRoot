@@ -100,6 +100,19 @@ the genuinely admitted51 candidate; old7996.396s remains separately labeled RED.
 - Actual finite type-probe PG16/18 PASS and independent11 CLEAR reported; binding
   exact final evidence and production candidate remains part of implementation.
 - No rawN current-candidate stability or performance result exists.
+- Actual R0v4 on77f1384 returned PG16 test FAIL; the retained assertion identity
+  and after-failure catalog state are UNKNOWN. No rollback claim follows from
+  cleanup. Independent normalized oracle PASS does not qualify the Go test.
+- Read-only diagnosis found a raw-preimage/digest contract mismatch: bare source
+  assets were treated as wrapped digest SQL, including the candidate RETURN,
+  reconstructed old50 parent and proof oracle. Two offline Linux contract tests
+  fail on77f source (tree348371b4); this is a separate proven regression, not a
+  reconstruction of the discarded R0 failure. The correction uses explicit raw
+  preimages and UTF8 SHA256 envelopes without changing the complete projections.
+- R0 assertions now emit fixed check/session/error enums without DSN, SQL, raw
+  errors or catalog values. All11 session controls and semantic/narrowed/raw
+  stability checks remain; actual digest/oracle length32 is additionally checked.
+  No new PG/R0 run is authorized by these source changes.
 - Independent11 found the pinned engine's unjoined timeout in f1816572. That
   immutable packet is retained. The successor owns cancellation/join and adds
   an actual pinned-engine timeout negative blocked at real pgxpool acquisition,
