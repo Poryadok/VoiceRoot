@@ -495,6 +495,14 @@ sys.exit(code)
                 f"(category={category})")
 
 
+class RoleListenerParityTests(unittest.TestCase):
+    def test_media_role_has_complete_phase0_security_profile(self):
+        phase0 = yaml.safe_load(OVERLAY.read_text(encoding="utf-8"))["services"]["role"]
+        media = yaml.safe_load(MEDIA_OVERLAY.read_text(encoding="utf-8"))["services"]["role"]
+        for section in ("environment", "volumes", "depends_on", "expose", "user"):
+            self.assertEqual(media[section], phase0[section], section)
+
+
 class ComposeTests(unittest.TestCase):
 
     def test_role_member_authority_uses_protected_space_target(self):

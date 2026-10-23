@@ -206,12 +206,31 @@ services:
     user: "0:0"
     expose: ["9091"]
     environment:
+      ROLE_AUTH_SESSION_FLOOR_CLIENT_KEY_FILE: /run/phase0/role-client.key
+      ROLE_AUTH_SESSION_FLOOR_CLIENT_CERT_FILE: /run/phase0/role-client.crt
+      ROLE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME: auth
+      ROLE_AUTH_SESSION_FLOOR_TLS_CA_FILE: /run/phase0/ca.crt
+      ROLE_AUTH_SESSION_FLOOR_GRPC_ADDR: auth:9092
+      S2S_JWKS_CLIENT_KEY_FILE: /run/phase0/role-client.key
+      S2S_JWKS_CLIENT_CERT_FILE: /run/phase0/role-client.crt
+      ROLE_BOT_LIFECYCLE_ENABLED: "true"
+      ROLE_DELEGATED_USER_ENABLED: "true"
       ROLE_PRINCIPAL_GRPC_LISTEN: :9091
+      ROLE_SPACE_MEMBER_AUTHORITY_GRPC_ADDR: space:9099
+      ROLE_SPACE_MEMBER_AUTHORITY_TLS_CA_FILE: /run/phase0/ca.crt
+      ROLE_SPACE_MEMBER_AUTHORITY_TLS_SERVER_NAME: space
+      ROLE_SPACE_MEMBER_AUTHORITY_CLIENT_CERT_FILE: /run/phase0/role-client.crt
+      ROLE_SPACE_MEMBER_AUTHORITY_CLIENT_KEY_FILE: /run/phase0/role-client.key
       ROLE_PRINCIPAL_TLS_CERT_FILE: /run/phase0/role.crt
       ROLE_PRINCIPAL_TLS_KEY_FILE: /run/phase0/role.key
       ROLE_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
       ROLE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
-      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json","gameintegration":"https://gameintegration:8443/internal/v1/principal/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json","gateway":"https://phase0-jwks:8443/gateway-bootstrap/jwks.json","chat":"https://chat:8443/.well-known/jwks.json","bot":"https://bot:8444/.well-known/principal-jwks.json"}'
+      ROLE_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/role
+      ROLE_PRINCIPAL_ACTIVE_KID: current
+      ROLE_PRINCIPAL_JWKS_TLS_CERT_FILE: /run/phase0/role.crt
+      ROLE_PRINCIPAL_JWKS_TLS_KEY_FILE: /run/phase0/role.key
+      ROLE_PRINCIPAL_JWKS_HTTPS_LISTEN: :8443
+      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json","gameintegration":"https://gameintegration:8443/internal/v1/principal/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json","gateway":"https://phase0-jwks:8443/gateway-bootstrap/jwks.json","bot":"https://bot:8444/.well-known/principal-jwks.json","chat":"https://chat:8443/.well-known/jwks.json"}'
       S2S_JWKS_CA_FILE: /run/phase0/ca.crt
     depends_on:
       redis:
@@ -221,8 +240,10 @@ services:
     volumes:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/role.crt:/run/phase0/role.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/role.key:/run/phase0/role.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/role-client.crt:/run/phase0/role-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/role-client.key:/run/phase0/role-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/role:/run/phase0/role:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
-
   phase0-jwks:
     profiles: ["app"]
     image: nginx:1.28-alpine
