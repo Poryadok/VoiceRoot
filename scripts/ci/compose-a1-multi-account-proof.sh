@@ -152,6 +152,55 @@ compose() {
     "$@"
 }
 
+report_startup_diagnostic() {
+  # Bound both the collection time and the bytes passed to the classifier. The
+  # second reader drains the rest of the pipe so a verbose Docker CLI cannot
+  # block while EXIT cleanup is waiting.
+  timeout --signal=KILL 5s docker compose \
+    --env-file "$compose_env" \
+    --project-name "$project" \
+    --project-directory "$ROOT" \
+    -f "$COMPOSE_FILE_PATH" \
+    -f "${ROOT}/docker-compose.voice-space-media.yml" \
+    -f "${ROOT}/docker-compose.phase0.yml" \
+    --profile app \
+    logs --tail 80 --no-color --timestamps compose-db-init 2>/dev/null |
+    { head -c 65536; cat >/dev/null; } |
+    awk '
+      {
+        line = tolower($0)
+        if (category == "" && line ~ /password authentication failed|authentication failed/) category = "authentication_failed"
+        else if (category == "" && line ~ /database .* does not exist/) category = "database_missing"
+        else if (category == "" && line ~ /role .* does not exist/) category = "role_missing"
+        else if (category == "" && line ~ /connection refused|could not connect/) category = "connection_failed"
+        else if (category == "" && line ~ /permission denied/) category = "permission_denied"
+        else if (category == "" && line ~ /deadlock detected|lock not available/) category = "lock_conflict"
+        else if (category == "" && line ~ /syntax error/) category = "sql_syntax_error"
+        else if (category == "" && line ~ /migration stage [0-9][0-9]?[0-9]? failed/) category = "migration_stage_failed"
+
+        if (sqlstate == "" && match($0, /(^|[^[:alnum:]_])SQLSTATE[[:space:]]+[A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9]([^[:alnum:]_]|$)/)) {
+          token = substr($0, RSTART, RLENGTH)
+          sub(/^.*SQLSTATE[[:space:]]+/, "", token)
+          sub(/[^A-Z0-9].*$/, "", token)
+          if (length(token) == 5) sqlstate = token
+        }
+        if (migration_stage == "" && match(line, /migration stage [0-9][0-9]?[0-9]? failed/)) {
+          token = substr(line, RSTART, RLENGTH)
+          sub(/^migration stage /, "", token)
+          sub(/ failed$/, "", token)
+          migration_stage = token
+        }
+      }
+      END {
+        if (category == "") category = "unclassified"
+        printf "A1 startup diagnostic category=%s", category
+        if (migration_stage != "") printf " migration_stage=%s", migration_stage
+        if (sqlstate != "") printf " sqlstate=%s", sqlstate
+        printf "\n"
+      }
+    '
+}
+
 wait_healthy() {
   local service="$1"
   local deadline=$((SECONDS + 180))
@@ -186,7 +235,14 @@ wait_gateway() {
 echo "A1 multi-account proof project=${project} gateway=${VOICE_API_BASE_URL}"
 compose config --quiet
 compose_started=true
-compose up -d --build
+if compose up -d --build; then
+  :
+else
+  startup_status=$?
+  echo "A1 multi-account Compose startup failed with status ${startup_status}; bounded compose-db-init diagnostics follow" >&2
+  report_startup_diagnostic >&2 || true
+  exit "$startup_status"
+fi
 wait_healthy gateway
 wait_healthy file
 wait_gateway
