@@ -145,7 +145,14 @@ commands:
       authorization: member.authorizationHeader,
       code: (invited as SpacesApiOk<SpaceInvite>).data.code,
     );
-    expect(joined, isA<SpacesApiOk<SpaceMembershipData>>());
+    expect(
+      joined,
+      isA<SpacesApiOk<SpaceMembershipData>>(),
+      reason: joined is SpacesApiFailure
+          ? 'join failed: HTTP ${joined.statusCode}, '
+              '${joined.errorCode}: ${joined.message}'
+          : null,
+    );
     final membership = (joined as SpacesApiOk<SpaceMembershipData>).data;
     expect(membership.spaceId, spaceId);
     expect(membership.profileId, member.activeProfileId);
