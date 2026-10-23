@@ -18,8 +18,10 @@ import (
 // TransportConfig contains caller-owned, already acquired workload credentials.
 // It supplies no deployment key bootstrap, environment defaults or grants.
 type TransportConfig struct {
-	Address     string
-	ServerName  string
+	Address    string
+	ServerName string
+	// Roots must be explicitly supplied and nonempty. Caller-provided system
+	// pools are allowed; the constructor never acquires fallback system trust.
 	Roots       *x509.CertPool
 	Certificate tls.Certificate
 }
@@ -31,7 +33,7 @@ func New(config TransportConfig, issuer *principal.Issuer) (*Client, *grpc.Clien
 }
 
 func newTransport(config TransportConfig, issuer *principal.Issuer, dialer func(context.Context, string) (net.Conn, error)) (*Client, *grpc.ClientConn, error) {
-	if issuer == nil || config.Address == "" || config.Address != strings.TrimSpace(config.Address) || config.ServerName == "" || config.ServerName != strings.TrimSpace(config.ServerName) || config.Roots == nil || len(config.Roots.Subjects()) == 0 || len(config.Certificate.Certificate) == 0 || config.Certificate.PrivateKey == nil {
+	if issuer == nil || config.Address == "" || config.Address != strings.TrimSpace(config.Address) || config.ServerName == "" || config.ServerName != strings.TrimSpace(config.ServerName) || config.Roots == nil || config.Roots.Equal(x509.NewCertPool()) || len(config.Certificate.Certificate) == 0 || config.Certificate.PrivateKey == nil {
 		return nil, nil, ErrUnavailable
 	}
 	signer, ok := config.Certificate.PrivateKey.(crypto.Signer)

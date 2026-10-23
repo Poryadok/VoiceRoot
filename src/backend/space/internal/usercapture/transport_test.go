@@ -153,6 +153,31 @@ func TestTransportFailsClosedForMissingInputs(t *testing.T) {
 	require.Nil(t, conn)
 }
 
+func TestTransportRejectsEmptyExplicitRoots(t *testing.T) {
+	issuer, _ := testIssuer(t, "space")
+	pki := newTestPKI(t)
+	c, conn, err := New(TransportConfig{Address: "user:443", ServerName: "capture.user.test", Roots: x509.NewCertPool(), Certificate: pki.client}, issuer)
+	require.ErrorIs(t, err, ErrUnavailable)
+	require.Nil(t, c)
+	require.Nil(t, conn)
+}
+
+func TestTransportAcceptsExplicitCallerSystemRoots(t *testing.T) {
+	issuer, _ := testIssuer(t, "space")
+	pki := newTestPKI(t)
+	roots, err := x509.SystemCertPool()
+	require.NoError(t, err)
+	require.NotNil(t, roots)
+	require.False(t, roots.Equal(x509.NewCertPool()), "this fixture requires actual nonempty system trust")
+	// The caller acquires this pool. New does not acquire system trust itself;
+	// constructor acceptance is not a successful TLS/owner-authority proof.
+	c, conn, err := New(TransportConfig{Address: "user:443", ServerName: "capture.user.test", Roots: roots, Certificate: pki.client}, issuer)
+	require.NoError(t, err)
+	require.NotNil(t, c)
+	require.NotNil(t, conn)
+	require.NoError(t, conn.Close())
+}
+
 func TestTransportRejectsWrongServerTrustAndIssuer(t *testing.T) {
 	issuer, key := testIssuer(t, "space")
 	wrongIssuer, _ := testIssuer(t, "role")
