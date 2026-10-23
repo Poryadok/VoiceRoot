@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	MessagingService_SendGameEventMessage_FullMethodName         = "/voice.messaging.v1.MessagingService/SendGameEventMessage"
+	MessagingService_SendBotMessage_FullMethodName               = "/voice.messaging.v1.MessagingService/SendBotMessage"
 	MessagingService_SendMessage_FullMethodName                  = "/voice.messaging.v1.MessagingService/SendMessage"
 	MessagingService_ApplyGameMessage_FullMethodName             = "/voice.messaging.v1.MessagingService/ApplyGameMessage"
 	MessagingService_TombstoneGameMessage_FullMethodName         = "/voice.messaging.v1.MessagingService/TombstoneGameMessage"
@@ -70,6 +71,8 @@ const (
 type MessagingServiceClient interface {
 	// @voice.security=protected;callers=service:bot
 	SendGameEventMessage(ctx context.Context, in *SendGameEventMessageRequest, opts ...grpc.CallOption) (*SendGameEventMessageResponse, error)
+	// @voice.security=protected;callers=service:bot
+	SendBotMessage(ctx context.Context, in *SendBotMessageRequest, opts ...grpc.CallOption) (*SendBotMessageResponse, error)
 	SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
 	// @voice.security=protected;callers=service:gateway
 	// T15 internal ingress: the exact device-signed compact JWS and Auth
@@ -145,6 +148,16 @@ func (c *messagingServiceClient) SendGameEventMessage(ctx context.Context, in *S
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SendGameEventMessageResponse)
 	err := c.cc.Invoke(ctx, MessagingService_SendGameEventMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingServiceClient) SendBotMessage(ctx context.Context, in *SendBotMessageRequest, opts ...grpc.CallOption) (*SendBotMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendBotMessageResponse)
+	err := c.cc.Invoke(ctx, MessagingService_SendBotMessage_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -523,6 +536,8 @@ func (c *messagingServiceClient) ImportSpacePurgeManifestPage(ctx context.Contex
 type MessagingServiceServer interface {
 	// @voice.security=protected;callers=service:bot
 	SendGameEventMessage(context.Context, *SendGameEventMessageRequest) (*SendGameEventMessageResponse, error)
+	// @voice.security=protected;callers=service:bot
+	SendBotMessage(context.Context, *SendBotMessageRequest) (*SendBotMessageResponse, error)
 	SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error)
 	// @voice.security=protected;callers=service:gateway
 	// T15 internal ingress: the exact device-signed compact JWS and Auth
@@ -596,6 +611,9 @@ type UnimplementedMessagingServiceServer struct{}
 
 func (UnimplementedMessagingServiceServer) SendGameEventMessage(context.Context, *SendGameEventMessageRequest) (*SendGameEventMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendGameEventMessage not implemented")
+}
+func (UnimplementedMessagingServiceServer) SendBotMessage(context.Context, *SendBotMessageRequest) (*SendBotMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendBotMessage not implemented")
 }
 func (UnimplementedMessagingServiceServer) SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendMessage not implemented")
@@ -740,6 +758,24 @@ func _MessagingService_SendGameEventMessage_Handler(srv interface{}, ctx context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServiceServer).SendGameEventMessage(ctx, req.(*SendGameEventMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessagingService_SendBotMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendBotMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).SendBotMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_SendBotMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).SendBotMessage(ctx, req.(*SendBotMessageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1402,6 +1438,10 @@ var MessagingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendGameEventMessage",
 			Handler:    _MessagingService_SendGameEventMessage_Handler,
+		},
+		{
+			MethodName: "SendBotMessage",
+			Handler:    _MessagingService_SendBotMessage_Handler,
 		},
 		{
 			MethodName: "SendMessage",
