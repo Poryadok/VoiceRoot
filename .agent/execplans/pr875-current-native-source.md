@@ -154,3 +154,91 @@ Receipts distinguish those targets, retain exact prior/incoming rows and runtime
 flags, and preserve144c69 HOLD. The record/evidence R is integrated by root before
 K pins its actual ancestor commit; unpinned code remains fail-closed. Negative
 real-Git fixtures and independent code review precede the next actual producer.
+
+Root integrated Role R asd739c1f514eba722d3fd13c08983c954b286b018, whose record
+raw SHA256 is967753244e8a72983df5a1b58bc9bdde3bee90d39633a658cf81e6711eeb721a.
+The subsequent carrier pins that actual ancestor. It also preserves the v1
+record and both verifier files at the actual target. Twenty-four real-Git tests
+pass in30.019 seconds; all five original Role tests pass in3.858 seconds. Shell
+syntax passes. The fixtures use an isolated Linux clone and detached synthetic
+commits, never modify the actual producer repository, and do not claim actual
+producer acceptance. Final code review and actual collector retry remain.
+
+## F54 production caller contract proposal
+
+The actual0a72 PR collector accepts Role v2, then rejects source_base at exact
+M=f54bcadab4aa19969281d7d35d76ebad91553d4d. The ordinary entrypoint deliberately
+has no M/J/F capability. Existing AUTHOR facts and exact-J private live tests do
+not authorize production: the four-file AUTHOR guard and all original archive
+bytes remain unchanged. User-authorized CI completion requires a distinct
+reviewed production record R and subsequent caller/verifier K.
+
+The proposed record pins a complete current input source H, actual PR event base,
+immutable historical-inputs.zip/transport manifest, all177 M artifact identities,
+fixed3071/J facts, corrected-F complete33 manual paths and34 unique current
+bindings including all four nonempty repair files, original trace/native facts,
+and independent current-correction applicability evidence. Historical traversal
+698d4f..53f75f, actual event B/S/T and native content baseline8191a remain distinct.
+All H changes relative to the fixed AUTHOR reference are inventoried as current
+inputs requiring original contribution gates, never granted path authority.
+
+An exact independently qualified production caller materializes only checksum-
+bound historical data into its private work directory, then creates fresh finite
+M/3071/F capabilities and an empty append-only trace for the actual wrapper.
+Constructors reconstruct actual parents, complete bases/DAG, automatic/manual
+whole composition and original/current source units. Consumers independently
+reconstruct the same typed production applicability. The old AUTHOR/prototype
+branches retain their original predicates and receipt types. Production exact-J
+permission has a distinct typed receipt and the same complete ledger/map/row/OR
+and pre-mutation conservation obligations; a caller-supplied success bit cannot
+select it. No environment-provided record, tuple, archive hash or source alias
+grants a capability.
+
+Corrected-F historical validation first preserves the complete original unit at
+its fixed accepted comparison source, then separately binds all current repair
+and manual entries plus their reviewed dependency closure. New Native source
+authority is not a replacement for whole historical composition. The existing
+reviewed-F deletion obligation remains exact, with no inferred deletion waiver.
+
+The genuine collector must finish its original recursive operations and retain
+all source rows/taint/dispositions. It must emit a valid collection seal and run
+the original router with independently reconstructed context/seals. Only actual
+terminal success is success: no synthetic fixture stop, archived partial trace,
+path-list shortcut, replayed completion or aggregate allowlist substitutes for
+this run. Negatives must reject changed source/event/record/artifact/unit,
+incomplete33/177/current bindings, mixed AUTHOR/production capabilities, altered
+pending rows, missing/reordered transition or conservation, lost OR/history,
+and changed collection/router context at the first applicable real validator.
+
+Delivery order: immutable source/evidence R after independent CONTRACT/source
+review; separately pinned K and focused real-Git/consumer tests after independent
+CODE review; actual PR collector and hosted exact-head CI. Full terminal evidence
+is not claimed by a source record or by private exact-J replay tests.
+
+Independent CONTRACT/source review accepts the frozen Hd172 source packet:
+930 complete current-input entries retain original contribution gates;192
+selected historical data files are exact within the independently audited
+227-object/246-logical-binding archive and its177 M artifacts. Corrected-F has
+34 unique current bindings (33 manual plus4 repair with3 overlaps); only Voice
+documentation and protected Role transport wiring differ from its old comparison.
+The existing Native R binds participating dependency closure and fresh factory
+proofs. All evidence/review bytes are included in this separate source record.
+Partial production initialization or a partial trace must propagate failure,
+never silently fall back to ordinary/aggregate routing. Archived synthetic tails
+or replayed completion are explicitly invalid as production terminal evidence.
+
+Independent contract addendum accepts the exact master-push analogue of the PR
+event: push onrefs/heads/master with before equal the fixed288e6a4 event base,
+actual HEAD equal GITHUB_SHA, the same two ordered base/source parents and source
+tree equal result tree. Other pushes/refs/bases remain rejected. R pins the event
+base and current source unit, not a PR-only event type; this adds no path or
+runtime permission and prevents an intentionally broken postmerge master gate.
+
+The production R was integrated as0aaed85d16f94d75bb70481ab660ea5b63f55e62;
+K pins its exact record and source/evidence entries. Linux Docker verification
+passed15 production real-Git cases (22.338s),3 focused consumer/failure cases
+(6.813s), and all56 F54 regression cases (154.291s), plus Python compilation
+and shell syntax. The production J seam test exercises the real consumer and
+conservation while mocking only its qualification boundary; complete M/J/F
+constructors are separately exercised against the frozen artifacts. These
+checks do not claim actual production collection/router terminal success.

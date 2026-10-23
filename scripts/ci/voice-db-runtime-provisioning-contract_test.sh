@@ -448,7 +448,13 @@ python3 "${ROOT}/scripts/ci/f13_guarded_merge_test.py"
 python3 "${ROOT}/scripts/ci/f13_reviewed_test_merge_test.py"
 python3 "${ROOT}/scripts/ci/f13_historical_composition_test.py"
 python3 "${ROOT}/scripts/ci/f13_role_conditional_test.py"
+if [[ -f "${ROOT}/scripts/ci/f13_role_conditional_successor_test.py" ]]; then
+  python3 "${ROOT}/scripts/ci/f13_role_conditional_successor_test.py"
+fi
 python3 "${ROOT}/scripts/ci/f13_space_audit_test.py"
+if [[ -f "${ROOT}/scripts/ci/f13_production_source_test.py" ]]; then
+  python3 "${ROOT}/scripts/ci/f13_production_source_test.py"
+fi
 base_sha="${VOICE_R22_BASE_SHA:-$(git -C "${ROOT}" merge-base HEAD origin/master)}"
 # The later Game sprint authorizes the verified opt-in runtime checkpoint, not
 # arbitrary future runtime or deployment changes. Exempt only its exact paths
@@ -3337,13 +3343,38 @@ f13_f54_collect_current_author_master_unit() {
   f13_f54_collect_master_author_impl current-author-capabilities "$@"
 }
 
+f13_f54_production_applicable() {
+  # Ancestry selects a mandatory verifier, never a permission or fallback.
+  git -C "${ROOT}" merge-base --is-ancestor d1727a21dbe7aa72385228b21be6465eac66da50 HEAD
+}
+
+f13_f54_collect_production_master_unit() {
+  local repo="$1" base="$2" target="$3" output="$4" category="$5"
+  local inputs="${TMP_DIR}/f13-production-inputs"
+  [[ "${repo}" == "${ROOT}" && "${native_p3_active:-false}" == true && ! -e "${inputs}" ]] || return 1
+  f13_f54_observer="${ROOT}/scripts/ci/f13_f54_history.py"
+  f13_f54_trace_file="${TMP_DIR}/f13-production-trace.jsonl"
+  [[ ! -e "${f13_f54_trace_file}" ]] || return 1
+  python3 "${ROOT}/scripts/ci/f13_production_source.py" materialize "${repo}" "${inputs}" \
+    >"${TMP_DIR}/f13-production-applicability.json" || return 1
+  f13_f54_collect_master_author_impl production-capabilities "${repo}" "${base}" "${target}" \
+    "${output}" "${category}" "${inputs}/unit" "${inputs}/original/observed/trace.jsonl" \
+    "${inputs}/original/baseline/f13-native-p3-binding.json" "${native_p3_binding}" "${inputs}/fixed3071-unit"
+}
+
 f13_f54_collect_master_author_impl() {
   local capability_command="$1"
   shift
-  [[ "${capability_command}" == capabilities || "${capability_command}" == current-author-capabilities ]] || return 1
+  [[ "${capability_command}" == capabilities || "${capability_command}" == current-author-capabilities ||
+     "${capability_command}" == production-capabilities ]] || return 1
   local J_capability_command=3071-capabilities
+  local F_capability_command=corrected-F-capability
   if [[ "${capability_command}" == current-author-capabilities ]]; then
     J_capability_command=3071-current-author-capabilities
+  fi
+  if [[ "${capability_command}" == production-capabilities ]]; then
+    J_capability_command=3071-production-capabilities
+    F_capability_command=corrected-F-production-capability
   fi
   local repo="$1" base="$2" target="$3" output="$4" category="$5" unit="$6"
   local f13_f54_original_trace="$7" f13_f54_original_native="$8" f13_f54_current_native="$9"
@@ -3353,7 +3384,7 @@ f13_f54_collect_master_author_impl() {
   local f13_f54_J_operation='' f13_f54_J_ledger="${TMP_DIR}/fixed3071-J-ledger.json" f13_f54_J_ledger_sha=''
   local f13_f54_capability_file="${TMP_DIR}/f54-exact-source-capabilities.json"
   local f13_f54_span_author_capability=''
-  if [[ "${capability_command}" == current-author-capabilities ]]; then
+  if [[ "${capability_command}" == current-author-capabilities || "${capability_command}" == production-capabilities ]]; then
     f13_f54_span_author_capability="${f13_f54_capability_file}"
   fi
   local f13_f54_M_operation='' f13_f54_M_child_map="${TMP_DIR}/f54-actual-M-child-map"
@@ -3375,7 +3406,7 @@ f13_f54_collect_master_author_impl() {
     if [[ -f "${fixed3071_unit}/corrected-F/source-unit.json" ]]; then
       f13_f54_F_capability_file="${TMP_DIR}/corrected-F-capability.json"
       [[ ! -e "${f13_f54_F_capability_file}" ]] || return 1
-      python3 "${f13_f54_observer}" corrected-F-capability "${repo}" \
+      python3 "${f13_f54_observer}" "${F_capability_command}" "${repo}" \
         "${fixed3071_unit}/corrected-F/source-unit.json" >"${f13_f54_F_capability_file}" || return 1
     fi
   fi
@@ -3929,12 +3960,16 @@ f13_historical_composition_qualified() {
 }
 
 f13_role_conditional_qualified() {
-  local repo="$1" map="$2" path="$3" incoming_row="$4" prior_row receipt target
+  local repo="$1" map="$2" path="$3" incoming_row="$4" prior_row receipt target qualifier
   [[ "${repo}" == "${ROOT}" ]] || return 1
   [[ "$(awk -F '\t' -v p="${path}" '$1 == p { n++ } END { print n+0 }' "${map}")" == 1 ]] || return 1
   prior_row="$(awk -F '\t' -v p="${path}" '$1 == p { print $0 }' "${map}")" || return 1
   target="$(git -C "${ROOT}" rev-parse HEAD)" || return 1
-  receipt="$(python3 "${ROOT}/scripts/ci/f13_role_conditional.py" --repo "${repo}" \
+  qualifier="${ROOT}/scripts/ci/f13_role_conditional.py"
+  if [[ -f "${ROOT}/scripts/ci/f13_role_conditional_successor.py" ]]; then
+    qualifier="${ROOT}/scripts/ci/f13_role_conditional_successor.py"
+  fi
+  receipt="$(python3 "${qualifier}" --repo "${repo}" \
     --target "${target}" --prior-row="${prior_row}" --incoming-row="${incoming_row}" 2>/dev/null)" || return 1
   # Retain actual producer arguments and both original runtime flags before
   # normal replacement. The final map still retains the strongest trigger.
@@ -3960,6 +3995,9 @@ f13_space_audit_qualified() {
 
 f13_guarded_merge_state_fingerprint() {
   local state_file
+  if [[ -f "${ROOT}/scripts/ci/f13_role_conditional_successor.py" ]]; then
+    git -C "${ROOT}" hash-object -- "${ROOT}/scripts/ci/f13_role_conditional_successor.py" || return 1
+  fi
   for state_file in "${ROOT}/scripts/ci/f13_reviewed_test_merge.py" \
     "${ROOT}/scripts/ci/f13_historical_composition.py" "${TMP_DIR}/f13-historical-composition.jsonl" \
     "${ROOT}/scripts/ci/f13_role_conditional.py" "${TMP_DIR}/f13-role-conditional-history.tsv" \
@@ -6155,9 +6193,12 @@ if f13_master_merge_push_enabled \
   "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_REF:-}"; then
   f13_master_merge_push=true
 fi
-if [[ "${f13_master_release_pr}" == true || "${f13_master_merge_push}" == true || "${native_p3_master_pr}" == true ]] || \
+if f13_f54_production_applicable || [[ "${f13_master_release_pr}" == true || "${f13_master_merge_push}" == true || "${native_p3_master_pr}" == true ]] || \
   f13_develop_aggregate_enabled "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_REF:-}"; then
-  if [[ "${f13_master_release_pr}" == true || "${f13_master_merge_push}" == true || "${native_p3_master_pr}" == true ]]; then
+  if f13_f54_production_applicable; then
+    f13_f54_collect_production_master_unit "${ROOT}" "${VOICE_R22_BASE_SHA:-}" HEAD \
+      "${TMP_DIR}/f13-contributions" "${TMP_DIR}/f13-failure-category" || f13_collect_status=$?
+  elif [[ "${f13_master_release_pr}" == true || "${f13_master_merge_push}" == true || "${native_p3_master_pr}" == true ]]; then
     if [[ "${f13_master_merge_push}" == true ]]; then
       f13_collect_master_push_contributions \
         "${ROOT}" "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_REF:-}" \
