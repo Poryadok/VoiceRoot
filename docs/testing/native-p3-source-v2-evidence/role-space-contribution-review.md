@@ -1,0 +1,35 @@
+# Exact 9df contribution evidence supplement
+
+Audited source: 9df1fa83e2cb8741c7fdfc1003658131ccc267b7. Read-only audit; no runtime executed, no Auth/Chat stopped scenario resumed. This supplements f13-9df-role-space-inventory.json and WT49's 9df-auth-user-space-wire-audit.md. It is not a new Native projection or blanket outside-record admission.
+
+## Five existing Space request extensions
+
+* BanMember.operation_id(5), UnbanMember.operation_id(3): canonical contribution 11b6e7916018e157ef1f4d6abe372646936360da; corrected producer 6aa6586653f8626a88c095f7e7c5ad3ddc760d3a. tmp/swarm/isaac-13-ban-intent/final-custody.md records independent ISAAC11-BAN-PRODUCER-SOURCE c2 SOURCE/SCOPED COMPONENT CLEAR, attachment474db67319e223bae5608496d1d3ea62. Existing c8 proof retained. Exact corrected Gateway writer to9df differs only switch-expression syntax; focused test unchanged. That receipt explicitly deferred compatible Native receiver/full qualification: do not promote it to complete current Ban acceptance.
+* AddBotMember.installation_intent(3), RemoveBotMember.installation_intent(3)/install_operation_id(4): canonical afb5e734f71d0deb12193e93db321e5e84340a69. Current receiver uses durable native installation identity, not ordinary generation. Session actual PG18 TestBotInstallationScopeTypedAddAndExactPriorInstallationRemove PASS31.571s is retained at tmp/pr875-repair/bot-message-space/green-botinstallation.log; exact receiver/store compared5eb311240→9df unchanged (prior inventory). This is install/remove component proof, not global retirement or Voice authority.
+* GetSpaceChatCreationOutcome.public_actor(3): contribution8fba2761974296b133b8d4290bc116dd4cf0d416, preserves old fields while qualifying public composite outcome disclosure by current ACL. tmp/swarm/swarm-isaac.md records assigned independent Isaac10 review, but final review receipt was not located in this bounded audit. Treat runtime acceptance evidence as a gap, not inferred from generated compatibility.
+
+`git grep` on exact9df Voice source excluding pb found no calls to any of these five RPCs, or CaptureSpaceMemberAccountBindings. They enter Voice through generated declaration closure, not a new executable caller. Existing fields/methods remain compatible per WT49 descriptor inventory; absent new fields can intentionally fail at their owning receivers.
+
+## Lifecycle / User capture and purge
+
+* ReserveLifecycleSchedule capture placement: 3ce883c66a80d8c1bd58d06e6325e2137711e23e. tmp/swarm/swarm-isaac.md records exact treef7c55b8c5291b6c56ebf1b3cca139c24a9540e31, nine Gateway modes PG18/Redis7/mTLS/race PASS12.081s/zero skips +vet/build, proof ZIP SHA256 b91e46d73cde342c6d39641cb095ab69b3a27920267e396449044f1bf2a872c0; TTc3 attachment999561736b0100f241ddf7479bab3aaa. That checkpoint had independent review pending; this audit does not manufacture its final verdict.
+* RecordLifecycleDeletionProofReceipt capture: 22e01e2ec50db4a2469bf6aa8a7ff27cac32b6b4. tmp/swarm/isaac-26-lifecycle-proof-native50/source-offer.md binds actual PG18 four focused tests +two recovery subtests PASS17.938s, compile/vet0; proof SHA256 cc88458ba75ed2015164abe5717d462c2b298fd4a72c2a3019e8c87ffcb86e66. Independent REVIEW-LIFECYCLE-CAPTURE-d1c33e79 c1 SOURCE/RECORDED COMPONENT CLEAR; final supplement SHA25609bea88f57a45121c0cbbb4abdecd75ec2c855240be56b382802bb802da2af89. lifecycle.go unchanged22e→9df. Helper delta adds schema51 to accepted versions: old Native50 runtime proof does NOT alone prove lifecycle51 transition behavior.
+* Terminal purge frame: d410305b2e74993966e07aca5a486c16766d9e9a; lifecycle_finalize.go byte-identical to9df. tmp/swarm/rudeus410-native45-continuity-decision.md binds original native44-owner-packet.json SHA2562a9317e50dfde0870f7cbab94070801af2b201733caadddc056d8c8662fbe5ab. tmp/swarm/handoff-rudeus-master-history-20261019T1629-6efb6957ab67.md records scoped independent CLEAR and actual full11/empty P3 RED/GREEN fixture proof, explicitly not eleven remote services. Source captures before permanent fence and validates real same-transaction terminal receipt; no new retirement decision authority inferred.
+* User capture wire/validator source a22f7cfecb195d14d492102de4c1f5ba522aa77a. Structural User association/provenance response is not current membership/privilege. Original full User producer/provider evidence is not closed by this audit.
+* Space User transport client eedac38dfc04bffa034ad7e177db24b5f3fbe3a3 plus efb4e2f36931c320daa9aba57d163908d91d38e5. Entire internal/usercapture package identical efb4→9df. tmp/swarm/isaac-17-usercapture/CLOSEOUT.md and isaac-17-usercapture-lint/CLOSEOUT.md bind independent ISAAC11-USERCAPTURE-CLIENT-REVIEW c1 and REVIEW-USERCAPTURE-LINT-efb4e2f c1 CLEAR. Latter proof SHA25632f007f673c521a3c3cb6b85964f468cd101b4b5b31a4a20414d5adb5f505e12: 11 race tests, actual TLS/principal contract receiver, vet0. Expressly excludes actual User provider/retained lineage/main injection/all writers/Auth birth/full Native/B15. No stronger claim here.
+
+## Current exact blob identities
+
+* protos/voice/space/v1/space.proto: 0205700dc081df4afdbc603b53ae6ffffec5fb21
+* src/backend/gateway/transcode_spaces_bans.go: 7192c336fb990154fe3197edfc452e5d0edbdebd
+* src/backend/space/internal/store/lifecycle.go: f12df726b2370f9841cd7ad348c005b19b6f0cf8
+* src/backend/space/internal/store/lifecycle_finalize.go: 5d0847698098308152c6aff22898533be48500e0
+* src/backend/space/internal/store/lifecycle_schedule_capture.go: 077d3177aa1a0ca3427ac472720f4f0721406428
+* src/backend/space/internal/usercapture/client.go: b73b69be273bcb86659aec9de8814489f7abbfc2
+* src/backend/space/internal/usercapture/transport.go: 59fdcf1502d7a48f6d2318f49ce406d9ae664181
+
+## Additional compiled shared dependency context
+
+The requested eight files under pkg/authoritysource (postgres_integration_test.go, qualified_scope_test.go, role_state_v2.go, role_state_v2_test.go) and pkg/memberadmission (membership.go, membership_test.go, receipt.go, receipt_test.go) are byte-identical6313cc6e5→9df. They are context dependencies, not Native projection authority. RoleStateV2 validates canonical source state, unresolved evidence, exact observation freshness/member binding/receipt/floors, protected owner/community policy before folding masks. memberadmission validates exact ordinary/community incarnation and domain-separated receipt fingerprints; fingerprints explicitly do not prove live permission. Existing session native25+Space51 PASS69.513s exercises actual qualified decisions using this fold. Tests are evidence dependencies; compilation alone does not claim their execution at9df. No Voice A3 relay or retirement mutation activation follows from these definitions.
+
+Remaining limitations are explicit: public_actor final original review receipt, schedule-capture final original review receipt, User producer/provider provenance, and Native50→51 lifecycle-specific applicability are not blanket closed by Bot/native25 proofs. The source qualifier may retain these as declaration/context only if its actual dependency/taint semantics justify that; it must not silently convert missing evidence into runtime authority.
