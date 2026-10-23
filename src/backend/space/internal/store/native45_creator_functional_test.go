@@ -85,7 +85,7 @@ func TestNative45ProjectedCreatorPG18(t *testing.T) {
 	ctx := context.Background()
 	db := integrationtest.NewSourceMigrationFixtureWithImage(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/space_db"), "postgres:18-alpine")
 	db.Run(true, "goto", "34")
-	db.Run(true, "up")
+	db.Run(true, "goto", "45")
 	var version int64
 	require.NoError(t, db.Pool.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version))
 	require.EqualValues(t, 45, version)
