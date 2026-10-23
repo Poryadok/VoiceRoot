@@ -52,7 +52,7 @@ services:
     environment:
       # Disposable local/CI credential for the existing canonical resolver.
       SPACE_VOICE_S2S_TOKEN: phase0-space-voice-fixture
-      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json"}'
+      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","role":"https://role:8443/.well-known/jwks.json","chat":"https://chat:8443/.well-known/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json"}'
       SPACE_VOICE_COMMUNICATION_GRPC_LISTEN: :9094
       SPACE_VOICE_COMMUNICATION_REPLAY_REDIS_ADDR: redis:6379
       SPACE_VOICE_COMMUNICATION_TLS_CERT_FILE: /run/phase0/space-lifecycle.crt

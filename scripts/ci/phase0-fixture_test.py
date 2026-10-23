@@ -1944,6 +1944,33 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(combined["space"]["environment"]["SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE"],
                          self.merged["space"]["environment"]["SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE"])
 
+    def test_t31_final_composition_preserves_all_space_principal_issuers(self):
+        # Match T31's actual order, including its final acceptance-only overlay.
+        # Values below satisfy config interpolation only; no service is started.
+        env = dict(self.env)
+        env.update({name: "compose-contract-placeholder" for name in (
+            "T31_APPLICATION_ID", "T31_ENVIRONMENT_ID", "T31_GAME_SERVER_CREDENTIAL",
+            "T31_OTHER_APPLICATION_ID", "T31_OTHER_ENVIRONMENT_ID",
+            "T31_OTHER_GAME_SERVER_CREDENTIAL", "T31_EXPECTED_EVENT_ID",
+            "T31_ACCEPTANCE_PHASE",
+        )})
+        env["T31_E2E_TLS_DIR"] = str(self.fixture.resolve())
+        env["T31_E2E_STATE_DIR"] = str(self.fixture.resolve())
+        command = ["docker", "compose", "--env-file", self.empty_env,
+                   "--profile", "*", "-f", ROOT / "docker-compose.yml",
+                   "-f", OVERLAY, "-f", MEDIA_OVERLAY,
+                   "-f", ROOT / "docker-compose.t31-session-events-e2e.yml",
+                   "config", "--format", "json"]
+        space = json.loads(require_success(run(*command, env=env)))["services"]["space"]["environment"]
+        self.assertEqual(json.loads(space["S2S_JWKS_URLS_JSON"]), {
+            "social": "https://social:8443/.well-known/jwks.json",
+            "role": "https://role:8443/.well-known/jwks.json",
+            "chat": "https://chat:8443/.well-known/jwks.json",
+            "voice": "https://voice:8443/internal/v1/principal/jwks.json",
+        })
+        self.assertEqual(space["SPACE_AUDIT_PRINCIPAL_GRPC_LISTEN"], ":9098")
+
+
     def test_ci_space_voice_communication_keeps_its_required_issuer_and_trust(self):
         # Use the actual CI order: root, media, then complete Phase0.
         space = self.ci_merged["space"]
