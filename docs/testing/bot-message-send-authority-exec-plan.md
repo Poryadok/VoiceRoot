@@ -46,8 +46,9 @@ guard acquisition and the entire RPC; no transaction survives that bounded call.
 
 ## Owners and verification
 
-- Bot/Space author WT35: wire/generated types, producer, current Bot callback,
-  exact Space observation branch, scoped tests and docs.
+- Bot author WT35: wire/generated types, producer and current Bot callback.
+- Space author WT47: exact Space observation branch and protected issuer/config
+  boundary, scoped tests and docs.
 - Messaging author WT49: protected receiver, independent observations, typed
   internal authorization, persistence/cancellation fence, scoped tests and docs.
 - Root: integration/configuration; f13: independent protocol/source review.
@@ -59,7 +60,7 @@ guard acquisition and the entire RPC; no transaction survives that bounded call.
 ## Progress
 
 - [x] Source diagnosis and protocol boundary agreed with root.
-- [ ] Publish additive wire and generated types for the receiver consumer.
+- [x] Publish additive wire and generated types for the receiver consumer.
 - [ ] Bot producer/current authority and Space exact observation RED/GREEN.
 - [ ] Messaging receiver and cancellation-fence RED/GREEN (WT49).
 - [ ] Independent review, scoped verification and integration.

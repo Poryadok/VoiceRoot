@@ -7,6 +7,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"time"
 	"voice/backend/pkg/principal"
 )
 
@@ -28,6 +29,11 @@ func StrictUnaryInterceptor(target string, verifier Verifier) grpc.UnaryServerIn
 		message, ok := req.(proto.Message)
 		if !ok || message == nil || !message.ProtoReflect().IsValid() || len(message.ProtoReflect().GetUnknown()) != 0 {
 			return nil, status.Error(codes.InvalidArgument, "invalid target request")
+		}
+		if target == "space" && info.FullMethod == MemberAdmissionAuthorityMethod && hasBotMessageBinding(message) {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
 		}
 		if _, err := CanonicalID(transport.RequestID); err != nil {
 			return nil, status.Error(codes.Unauthenticated, "invalid principal binding")

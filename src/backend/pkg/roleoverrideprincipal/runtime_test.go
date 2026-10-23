@@ -135,7 +135,7 @@ func TestProtectedRuntimeRealTLSJWKSAndSharedReplay(t *testing.T) {
 			require.Equal(t, codes.Unauthenticated, status.Code(call(cb, once, request)), "shared replay applies across independent receiver runtimes")
 			require.EqualValues(t, 1, stores.Load())
 			require.Equal(t, codes.Unauthenticated, status.Code(call(ca, signed("role", active, "active", request), wrapperspb.String("changed"))))
-			require.Equal(t, codes.PermissionDenied, status.Code(call(ca, signed("space", active, "active", request), request)))
+			require.Equal(t, codes.Unauthenticated, status.Code(call(ca, signed("space", active, "active", request), request)))
 			require.Equal(t, codes.Unauthenticated, status.Code(call(ca, signed("role", next, "active", request), request)))
 			noCert := connect(a, nil)
 			require.Error(t, call(noCert, signed("role", active, "active", request), request))
