@@ -169,6 +169,7 @@ def generate(destination):
             ]
             scoped_clients.append(("gateway-client", "gateway", ca_cert, ca_key))
             scoped_clients.append(("space-lifecycle-client", "space", lifecycle_ca_cert, lifecycle_ca_key))
+            scoped_clients.append(("messaging-bot-authority-client", "messaging", lifecycle_ca_cert, lifecycle_ca_key))
             # Chat's Gateway/Bot JWKS HTTP transport has its own identity. Bot's
             # existing protected JWKS endpoint trusts the GIS client CA; owner
             # RPCs use the independent root-CA Chat identity above.
@@ -180,7 +181,9 @@ def generate(destination):
                 client_extensions.write_text(
                     "basicConstraints=critical,CA:FALSE\n"
                     "keyUsage=critical,digitalSignature\n"
-                    "extendedKeyUsage=clientAuth\n", encoding="ascii")
+                    "extendedKeyUsage=clientAuth\n"
+                    + ("subjectAltName=URI:spiffe://voice.local/phase0/messaging\n"
+                       if leaf == "messaging-bot-authority-client" else ""), encoding="ascii")
                 command("openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes",
                         "-keyout", client_key, "-out", client_csr, "-subj", f"/CN={service}")
                 command("openssl", "x509", "-req", "-in", client_csr, "-CA", client_ca_cert,

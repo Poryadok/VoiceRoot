@@ -168,7 +168,7 @@ commands:
 	chatID := uuid.New()
 	botUUID, _ := uuid.Parse(botID)
 	profile, _ := authProfile(ctx)
-	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
@@ -253,7 +253,7 @@ commands:
 	chatID := uuid.New()
 	botUUID, _ := uuid.Parse(botID)
 	profile, _ := authProfile(ctx)
-	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
 
 	botCtx := withBotToken(context.Background(), botToken)
@@ -356,7 +356,7 @@ func installBotInSpaceWithPresence(
 	chats []uuid.UUID,
 ) {
 	t.Helper()
-	_, err := st.InstallInSpace(ctx, botID, spaceID, profile, chats)
+	_, err := installSendFixture(t, st, ctx, botID, spaceID, profile, chats)
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botID))
 }

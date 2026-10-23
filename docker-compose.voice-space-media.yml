@@ -13,6 +13,10 @@ services:
     environment:
       ROLE_GRPC_ADDR: role:9091
       MESSAGING_ROLE_TLS_CA_FILE: /run/phase0/ca.crt
+      MESSAGING_SPACE_COMMUNICATION_GRPC_ADDR: space:9101
+      MESSAGING_SPACE_COMMUNICATION_TLS_CA_FILE: /run/phase0/ca.crt
+      MESSAGING_SPACE_COMMUNICATION_CLIENT_CERT_FILE: /run/phase0/messaging-client.crt
+      MESSAGING_SPACE_COMMUNICATION_CLIENT_KEY_FILE: /run/phase0/messaging-client.key
       MESSAGING_ROLE_TLS_SERVER_NAME: role
       MESSAGING_ROLE_CLIENT_CERT_FILE: /run/phase0/messaging-client.crt
       MESSAGING_ROLE_CLIENT_KEY_FILE: /run/phase0/messaging-client.key
@@ -116,9 +120,19 @@ services:
       SPACE_ROLE_OVERRIDE_PRINCIPAL_TLS_KEY_FILE: /run/phase0/space-lifecycle.key
       SPACE_ROLE_OVERRIDE_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
       SPACE_ROLE_OVERRIDE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_CLIENT_CERT_FILE: /run/phase0/space-client.crt
+      S2S_JWKS_CLIENT_KEY_FILE: /run/phase0/space-client.key
       # Disposable local/CI credential for the existing canonical resolver.
       SPACE_VOICE_S2S_TOKEN: phase0-space-voice-fixture
-      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","role":"https://role:8443/.well-known/jwks.json","chat":"https://chat:8443/.well-known/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json","bot":"https://bot:8444/.well-known/principal-jwks.json"}'
+      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","role":"https://role:8443/.well-known/jwks.json","chat":"https://chat:8443/.well-known/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json","bot":"https://bot:8444/.well-known/principal-jwks.json","messaging":"https://messaging:8445/.well-known/principal-jwks.json"}'
+      SPACE_MESSAGING_COMMUNICATION_GRPC_LISTEN: :9101
+      SPACE_MESSAGING_COMMUNICATION_REPLAY_REDIS_ADDR: redis:6379
+      SPACE_MESSAGING_COMMUNICATION_TLS_CERT_FILE: /run/phase0/space-lifecycle.crt
+      SPACE_MESSAGING_COMMUNICATION_TLS_KEY_FILE: /run/phase0/space-lifecycle.key
+      SPACE_MESSAGING_COMMUNICATION_CLIENT_CA_FILE: /run/phase0/ca.crt
+      SPACE_MESSAGING_COMMUNICATION_JWKS_CA_FILE: /run/phase0/ca.crt
+      SPACE_MESSAGING_COMMUNICATION_JWKS_CLIENT_CERT_FILE: /run/phase0/space-client.crt
+      SPACE_MESSAGING_COMMUNICATION_JWKS_CLIENT_KEY_FILE: /run/phase0/space-client.key
       SPACE_VOICE_COMMUNICATION_GRPC_LISTEN: :9094
       SPACE_VOICE_COMMUNICATION_REPLAY_REDIS_ADDR: redis:6379
       SPACE_VOICE_COMMUNICATION_TLS_CERT_FILE: /run/phase0/space-lifecycle.crt

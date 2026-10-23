@@ -44,6 +44,8 @@ type BotGRPC struct {
 	PrincipalIssuer         *principal.Issuer
 	InstallationScopeReader BotInstallationScopeReader
 	MembershipCoordinator   SpaceMembershipCoordinator
+	MessageAuthorityReader  BotMessageAuthorityReader
+	ProtectedMessaging      messagingv1.MessagingServiceClient
 }
 
 // BotEventPublisher publishes bot lifecycle events (optional NATS).

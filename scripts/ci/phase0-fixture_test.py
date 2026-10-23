@@ -292,6 +292,19 @@ class FixtureTests(unittest.TestCase):
         self.assertIn("TLS Web Client Authentication", eku)
         self.assertNotIn("TLS Web Server Authentication", eku)
 
+    def test_messaging_bot_authority_client_has_dedicated_identity_and_ca(self):
+        cert = self.dest / "tls/messaging-bot-authority-client.crt"
+        self.openssl("verify", "-CAfile", self.dest / "ca/space-lifecycle-client-ca.crt",
+                     "-purpose", "sslclient", cert)
+        for foreign_ca in ("ca.crt", "gameintegration-client-ca.crt"):
+            self.assertNotEqual(run("openssl", "verify", "-CAfile", self.dest / "ca" / foreign_ca,
+                                    "-purpose", "sslclient", cert).returncode, 0)
+        self.assertIn("URI:spiffe://voice.local/phase0/messaging",
+                      self.openssl("x509", "-in", cert, "-noout", "-ext", "subjectAltName"))
+        self.assertNotEqual(run("openssl", "verify", "-CAfile",
+                                self.dest / "ca/space-lifecycle-client-ca.crt", "-purpose", "sslclient",
+                                self.dest / "tls/messaging-client.crt").returncode, 0)
+
     def test_certificate_serials_are_distinct_within_each_issuer(self):
         issued = set()
         for cert in (self.dest / "tls").glob("*.crt"):
@@ -499,15 +512,79 @@ sys.exit(code)
                 f"(category={category})")
 
 
-class RoleListenerParityTests(unittest.TestCase):
-    def test_media_role_has_complete_phase0_security_profile(self):
-        phase0 = yaml.safe_load(OVERLAY.read_text(encoding="utf-8"))["services"]["role"]
-        media = yaml.safe_load(MEDIA_OVERLAY.read_text(encoding="utf-8"))["services"]["role"]
-        for section in ("environment", "volumes", "depends_on", "expose", "user"):
-            self.assertEqual(media[section], phase0[section], section)
-
-
 class ComposeTests(unittest.TestCase):
+
+    def test_bot_send_authority_uses_complete_protected_phase0_topology(self):
+        for services in (self.merged, self.ci_merged):
+            bot = services["bot"]["environment"]
+            messaging = services["messaging"]["environment"]
+            self.assertEqual(bot["BOT_MESSAGE_SEND_GRPC_ADDR"],
+                             "messaging" + messaging["MESSAGING_BOT_SEND_GRPC_LISTEN"])
+            self.assertEqual(messaging["MESSAGING_BOT_SEND_AUTHORITY_GRPC_ADDR"],
+                             "bot" + bot["BOT_SPACE_LIFECYCLE_GRPC_LISTEN"])
+            self.assertEqual(messaging["MESSAGING_BOT_SEND_SPACE_GRPC_ADDR"],
+                             "space" + services["space"]["environment"]["SPACE_ROLE_OVERRIDE_PRINCIPAL_GRPC_LISTEN"])
+            self.assertEqual(bot["BOT_MESSAGE_AUTHORITY_MESSAGING_URI_SAN"],
+                             "spiffe://voice.local/phase0/messaging")
+            self.assertEqual(bot["BOT_MESSAGE_AUTHORITY_MESSAGING_JWKS_URL"],
+                             "https://messaging:8445/.well-known/principal-jwks.json")
+            for service, prefix, expected in (
+                ("bot", "BOT_MESSAGE_SEND_", {
+                    "TLS_CA_FILE": "ca/ca.crt", "CLIENT_CERT_FILE": "tls/bot-client.crt",
+                    "CLIENT_KEY_FILE": "tls/bot-client.key",
+                }),
+                ("bot", "BOT_MESSAGE_AUTHORITY_MESSAGING_", {
+                    "JWKS_CA_FILE": "ca/ca.crt", "JWKS_CLIENT_CERT_FILE": "tls/bot-client.crt",
+                    "JWKS_CLIENT_KEY_FILE": "tls/bot-client.key",
+                }),
+                ("messaging", "MESSAGING_BOT_SEND_", {
+                    "TLS_CERT_FILE": "tls/messaging-gameintegration-grpc.crt",
+                    "TLS_KEY_FILE": "tls/messaging-gameintegration-grpc.key",
+                    "CLIENT_CA_FILE": "ca/ca.crt",
+                }),
+                ("messaging", "MESSAGING_BOT_SEND_AUTHORITY_", {
+                    "TLS_CA_FILE": "ca/ca.crt",
+                    "CLIENT_CERT_FILE": "tls/messaging-bot-authority-client.crt",
+                    "CLIENT_KEY_FILE": "tls/messaging-bot-authority-client.key",
+                }),
+                ("messaging", "MESSAGING_BOT_SEND_SPACE_", {
+                    "TLS_CA_FILE": "ca/ca.crt", "CLIENT_CERT_FILE": "tls/messaging-client.crt",
+                    "CLIENT_KEY_FILE": "tls/messaging-client.key",
+                }),
+            ):
+                for suffix, source in expected.items():
+                    self.assertEqual(self.media_source_at(
+                        service, services[service]["environment"][prefix + suffix], services), source)
+
+    def test_messaging_space_communication_is_enabled_in_all_profiles(self):
+        for services in (self.merged, self.media_merged, self.ci_merged):
+            messaging = services["messaging"]["environment"]
+            space = services["space"]["environment"]
+            client = "MESSAGING_SPACE_COMMUNICATION_"
+            server = "SPACE_MESSAGING_COMMUNICATION_"
+            self.assertEqual(messaging[client + "GRPC_ADDR"], "space:9101")
+            self.assertEqual(space[server + "GRPC_LISTEN"], ":9101")
+            self.assertEqual(space[server + "REPLAY_REDIS_ADDR"], "redis:6379")
+            self.assertEqual(json.loads(space["S2S_JWKS_URLS_JSON"])["messaging"],
+                             "https://messaging:8445/.well-known/principal-jwks.json")
+            for service, prefix, expected in (
+                ("messaging", client, {
+                    "TLS_CA_FILE": "ca/ca.crt",
+                    "CLIENT_CERT_FILE": "tls/messaging-client.crt",
+                    "CLIENT_KEY_FILE": "tls/messaging-client.key",
+                }),
+                ("space", server, {
+                    "TLS_CERT_FILE": "tls/space-lifecycle.crt",
+                    "TLS_KEY_FILE": "tls/space-lifecycle.key",
+                    "CLIENT_CA_FILE": "ca/ca.crt",
+                    "JWKS_CA_FILE": "ca/ca.crt",
+                    "JWKS_CLIENT_CERT_FILE": "tls/space-client.crt",
+                    "JWKS_CLIENT_KEY_FILE": "tls/space-client.key",
+                }),
+            ):
+                for suffix, source in expected.items():
+                    self.assertEqual(self.media_source_at(
+                        service, services[service]["environment"][prefix + suffix], services), source)
 
     def test_role_decision_jwks_and_messaging_trust_domains(self):
         for services in (self.merged, self.media_merged, self.ci_merged):
@@ -679,6 +756,7 @@ class ComposeTests(unittest.TestCase):
     def test_space_jwks_bundle_preserves_social_trust_without_private_material(self):
         space = self.merged["space"]
         self.assertEqual(json.loads(space["environment"]["S2S_JWKS_URLS_JSON"]), {
+            "messaging": "https://messaging:8445/.well-known/principal-jwks.json",
             "bot": "https://bot:8444/.well-known/principal-jwks.json",
             "social": "https://social:8443/.well-known/jwks.json",
             "role": "https://role:8443/.well-known/jwks.json",
@@ -775,6 +853,7 @@ class ComposeTests(unittest.TestCase):
         environment = space["environment"]
         communication = environment["SPACE_VOICE_COMMUNICATION_GRPC_LISTEN"]
         lifecycle = environment["SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN"]
+        self.assertNotEqual(lifecycle, environment["SPACE_MESSAGING_COMMUNICATION_GRPC_LISTEN"])
         self.assertNotEqual(lifecycle, communication,
                             "both protected servers run in the same Space process")
         self.assertEqual(communication, ":9094")
@@ -881,6 +960,7 @@ class ComposeTests(unittest.TestCase):
         provider = space["environment"]
         voice = self.media_merged["voice"]["environment"]
         self.assertEqual(json.loads(provider["S2S_JWKS_URLS_JSON"]), {
+            "messaging": "https://messaging:8445/.well-known/principal-jwks.json",
             "bot": "https://bot:8444/.well-known/principal-jwks.json",
             "role": "https://role:8443/.well-known/jwks.json",
             "chat": "https://chat:8443/.well-known/jwks.json",
@@ -901,7 +981,7 @@ class ComposeTests(unittest.TestCase):
         self.assertIn("9094", space["expose"])
         self.assertNotIn("user", space, "Space keeps its existing nonroot image identity")
         self.assertNotIn("voice", space.get("depends_on", {}), "startup graph must stay acyclic")
-        self.assertFalse(any(k.startswith("SPACE_MESSAGING_COMMUNICATION_") for k in provider))
+        self.assertEqual(provider["SPACE_MESSAGING_COMMUNICATION_GRPC_LISTEN"], ":9101")
         self.assertEqual(voice["VOICE_SPACE_COMMUNICATION_GRPC_ADDR"], "space:9094")
         for suffix, leaf in (("TLS_CA_FILE", "ca/ca.crt"),
                              ("CLIENT_CERT_FILE", "tls/voice-client.crt"),
@@ -1775,6 +1855,7 @@ class ComposeTests(unittest.TestCase):
         allowed["phase0-jwks"] = {"jwks/matchmaking/jwks.json", "jwks/gateway/jwks.json",
                                    "tls/proxy.crt", "tls/proxy.key", "ca/ca.crt"}
         allowed["messaging"] = {"tls/gameintegration-messaging-client.crt", "tls/gameintegration-messaging-client.key",
+                                "tls/messaging-bot-authority-client.crt", "tls/messaging-bot-authority-client.key",
                                 "tls/messaging-client.crt", "tls/messaging-client.key",
                                 "tls/messaging-gameintegration-grpc.crt", "tls/messaging-gameintegration-grpc.key",
                                 "tls/gameintegration-client.crt", "tls/gameintegration-client.key",
@@ -1863,6 +1944,15 @@ class ComposeTests(unittest.TestCase):
                          "proxy differs only in fixture JWKS inputs, Space CA and initialization dependency")
         expected_environment = {
             "space": {"SPACE_VOICE_S2S_TOKEN", "SPACE_VOICE_COMMUNICATION_GRPC_LISTEN",
+                      "S2S_JWKS_CLIENT_CERT_FILE", "S2S_JWKS_CLIENT_KEY_FILE",
+                      "SPACE_MESSAGING_COMMUNICATION_GRPC_LISTEN",
+                      "SPACE_MESSAGING_COMMUNICATION_REPLAY_REDIS_ADDR",
+                      "SPACE_MESSAGING_COMMUNICATION_TLS_CERT_FILE",
+                      "SPACE_MESSAGING_COMMUNICATION_TLS_KEY_FILE",
+                      "SPACE_MESSAGING_COMMUNICATION_CLIENT_CA_FILE",
+                      "SPACE_MESSAGING_COMMUNICATION_JWKS_CA_FILE",
+                      "SPACE_MESSAGING_COMMUNICATION_JWKS_CLIENT_CERT_FILE",
+                      "SPACE_MESSAGING_COMMUNICATION_JWKS_CLIENT_KEY_FILE",
                       "SPACE_ROLE_OVERRIDE_PRINCIPAL_GRPC_LISTEN", "SPACE_ROLE_OVERRIDE_PRINCIPAL_TLS_CERT_FILE",
                       "SPACE_ROLE_OVERRIDE_PRINCIPAL_TLS_KEY_FILE", "SPACE_ROLE_OVERRIDE_PRINCIPAL_CLIENT_CA_FILE",
                       "SPACE_ROLE_OVERRIDE_PRINCIPAL_REPLAY_REDIS_ADDR",
@@ -2111,6 +2201,7 @@ class ComposeTests(unittest.TestCase):
                    "config", "--format", "json"]
         space = json.loads(require_success(run(*command, env=env)))["services"]["space"]["environment"]
         self.assertEqual(json.loads(space["S2S_JWKS_URLS_JSON"]), {
+            "messaging": "https://messaging:8445/.well-known/principal-jwks.json",
             "bot": "https://bot:8444/.well-known/principal-jwks.json",
             "social": "https://social:8443/.well-known/jwks.json",
             "role": "https://role:8443/.well-known/jwks.json",
@@ -2125,6 +2216,7 @@ class ComposeTests(unittest.TestCase):
         space = self.ci_merged["space"]
         env = space["environment"]
         self.assertEqual(json.loads(env["S2S_JWKS_URLS_JSON"]), {
+            "messaging": "https://messaging:8445/.well-known/principal-jwks.json",
             "bot": "https://bot:8444/.well-known/principal-jwks.json",
             "social": "https://social:8443/.well-known/jwks.json",
             "role": "https://role:8443/.well-known/jwks.json",

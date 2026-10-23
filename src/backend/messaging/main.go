@@ -683,6 +683,22 @@ func main() {
 			gameMessagePermitProcessor.CommunicationAdmission = messagingService.BeginCommunicationAction
 		}
 		messagingv1.RegisterMessagingServiceServer(grpcSrv, messagingService)
+		var botSendIssuer *principal.Issuer
+		if managedChatPurge != nil {
+			botSendIssuer = managedChatPurge.Issuer
+		}
+		botSend, err := newBotSendRuntime(os.Getenv, messagingService, botPrincipal, botSendIssuer)
+		if err != nil {
+			log.Fatalf("Messaging protected Bot send: %v", err)
+		}
+		if botSend != nil {
+			defer botSend.Close()
+			go func() {
+				if serveErr := <-botSend.errors; serveErr != nil && !errors.Is(serveErr, grpc.ErrServerStopped) {
+					log.Fatalf("Messaging Bot send listener stopped: %v", serveErr)
+				}
+			}()
+		}
 		botPinCleanup, err := grpcsvc.StartBotPinCleanupServer(context.Background(), grpcsvc.BotPinCleanupConfigFromEnv(os.Getenv), messagingService.Pins)
 		if err != nil {
 			log.Fatalf("Messaging private Bot pin cleanup: %v", err)

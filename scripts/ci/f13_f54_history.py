@@ -431,6 +431,38 @@ def validate_3071_packet(repo, directory):
 
 def current_author_J_native_applicability(repo, native, historical, current):
     """Preserve old reviewed facts; independently derive current source authority."""
+    if current.get('version') == 'NATIVE-P3-SOURCE-v2':
+        # First run the unchanged v1 historical reconstruction, then bridge only
+        # its exact fixed predecessor to the independently pinned successor.
+        require(hasattr(native,'verified_record'),'current_author_J_successor_dispatcher')
+        verifier,new=native.verified_record(repo,current)
+        require(verifier is native.successor,'current_author_J_successor_identity')
+        previous=native.legacy.load_record(repo)
+        predecessor=dict(current,version=previous['version'],content_base=previous['base'],
+            snapshot=previous['source'],record=native.legacy.PINNED_RECORD_COMMIT,
+            record_sha256=native.legacy.PINNED_RECORD_SHA256,
+            paths=[row['path'] for row in previous['projection']])
+        preserved=current_author_J_native_applicability(repo,native.legacy,historical,predecessor)
+        require(current['content_base']==new['base'] and current['snapshot']==new['source']
+            and current['paths']==[row['path'] for row in new['projection']],
+            'current_author_J_successor_complete_binding')
+        require(set(predecessor['paths'])<=set(current['paths']),
+            'current_author_J_successor_preserves_projection')
+        git(repo,'merge-base','--is-ancestor',predecessor['record'],new['source'])
+        git(repo,'merge-base','--is-ancestor',current['record'],current['source'])
+        raw=git(repo,'show',current['record']+':'+verifier.RECORD_PATH)
+        require(sha(raw)==current['record_sha256'],'current_author_J_successor_record_hash')
+        old_paths=historical['paths']
+        return dict(type='F54_CURRENT_AUTHOR_J_NATIVE_SOURCE_APPLICABILITY',
+            historical=preserved['historical'],
+            current=dict(**{k:current[k] for k in ('base','content_base','snapshot','record','record_sha256','paths')},
+                classification=new['classification'],record_raw=raw_binding(raw)),
+            predecessor=preserved['current'],successor_lineage=new['predecessor'],
+            added_paths=sorted(set(current['paths'])-set(old_paths)),
+            path_entries=[dict(path=name,historical_entry=entry_binding(repo,historical['snapshot'],name),
+                current_entry=entry_binding(repo,current['snapshot'],name),
+                membership='HISTORICAL_AND_CURRENT' if name in old_paths else 'CURRENT_RECORD_ONLY; ORIGINAL_GATES_REQUIRED')
+                for name in current['paths']],admission=False,runtime_pass=False)
     require(historical['content_base']==current['content_base']==AUTHOR_NATIVE_CONTENT_BASE,
         'current_author_J_same_native_content_baseline')
     old_raw=git(repo,'show',historical['record']+':'+native.RECORD_PATH)
@@ -470,10 +502,24 @@ def current_author_J_native_applicability(repo, native, historical, current):
             for name in current['paths']],admission=False,runtime_pass=False)
 
 
-def prepare_3071_capabilities(repo, directory, native_path, author_applicability=None):
+def production_module():
+    spec=importlib.util.spec_from_file_location('f13_fixed_production',ROOT/'scripts/ci/f13_production_source.py')
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    return module
+
+
+def production_applicability(repo):
+    return production_module().qualify(repo)
+
+
+def prepare_3071_capabilities(repo, directory, native_path, author_applicability=None, production=None):
+    require(author_applicability is None or production is None,'fixed3071_no_mixed_authority')
     packet=validate_3071_packet(repo,directory);target=git(repo,'rev-parse','HEAD').decode().strip()
     allowed={'scripts/ci/f13_f54_history.py','scripts/ci/f13_f54_history_test.py','scripts/ci/voice-db-runtime-provisioning-contract_test.sh','.agent/execplans/native-p3-master-source.md'}
-    if author_applicability is None:
+    if production is not None:
+        require(production==production_applicability(repo),'production_J_independent_complete_applicability')
+        require(packet['original_caller']==AUTHOR_HISTORICAL_SCOPE,'production_J_original_historical_caller')
+    elif author_applicability is None:
         require(set(git(repo,'diff','--name-only',J3071_PROTOTYPE_BASE,target).decode().splitlines())<=allowed,'fixed3071_current_carrier_only_four_owned_paths')
     else:
         require(author_applicability==current_author_applicability(repo),'current_author_J_independent_complete_applicability')
@@ -481,23 +527,29 @@ def prepare_3071_capabilities(repo, directory, native_path, author_applicability
     sources=['scripts/ci/f13_f54_history.py','scripts/ci/voice-db-runtime-provisioning-contract_test.sh','scripts/ci/voice-r22-runtime-scope.sh']
     require(all((ROOT/name).read_bytes()==git(repo,'show',target+':'+name) for name in sources),'fixed3071_actual_source_carrier')
     native_raw=Path(native_path).read_bytes();binding=json.loads(native_raw);original=json.loads(packet['original_native_binding']['raw'])
-    if author_applicability is None:
+    if author_applicability is None and production is None:
         require(all(binding[k]==original[k] for k in ('base','content_base','snapshot','record','record_sha256','paths')),'fixed3071_no_borrowed_new_native_authority')
     context={k:os.environ.get(k,'') for k in ('GITHUB_EVENT_NAME','GITHUB_REF','GITHUB_SHA','VOICE_CI_PUSH_BEFORE_SHA','GITHUB_BASE_REF')}
-    spec=importlib.util.spec_from_file_location('fixed3071_native',ROOT/'scripts/ci/f13_native_p3_source.py')
+    spec=importlib.util.spec_from_file_location('fixed3071_native',ROOT/('scripts/ci/f13_native_p3_authority.py' if (ROOT/'scripts/ci/f13_native_p3_authority.py').is_file() else 'scripts/ci/f13_native_p3_source.py'))
     native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
     try:
         actual=native.qualify(repo,binding['base'],binding['source'],binding['target'],context['GITHUB_EVENT_NAME'],context['GITHUB_REF'],context['GITHUB_SHA'],context['VOICE_CI_PUSH_BEFORE_SHA'],context['GITHUB_BASE_REF'])
     except native.Rejected as error:raise Rejected('fixed3071_native_'+str(error)) from error
     require(actual==binding and binding['target']==target,'fixed3071_actual_native_context_independently_qualified')
     current_fields={}
+    if production is not None:
+        require(binding['consumer']=='MASTER-SOURCE-v1' and binding['base']==production['base']
+                and binding['source']==production['source'],'production_J_actual_master_event')
+        current_fields=dict(production_applicability=production,historical_native_binding=packet['original_native_binding'],
+            native_applicability=current_author_J_native_applicability(repo,native,original,binding))
     if author_applicability is not None:
         require(binding['consumer']=='MASTER-SOURCE-v1' and binding['base']==AUTHOR_EVENT_BASE,
             'current_author_J_actual_master_event_base')
         git(repo,'merge-base','--is-ancestor',AUTHOR_REFERENCE,binding['source'])
         current_fields=dict(author_applicability=author_applicability,historical_native_binding=packet['original_native_binding'],
             native_applicability=current_author_J_native_applicability(repo,native,original,binding))
-    return dict(type='F54_FIXED3071_CURRENT_AUTHOR_CAPABILITIES' if author_applicability is not None else 'F54_FIXED3071_STRUCTURAL_CAPABILITIES_PROTOTYPE',
+    return dict(type='F54_FIXED3071_PRODUCTION_CAPABILITIES_v1' if production is not None else
+        ('F54_FIXED3071_CURRENT_AUTHOR_CAPABILITIES' if author_applicability is not None else 'F54_FIXED3071_STRUCTURAL_CAPABILITIES_PROTOTYPE'),
         **current_fields,directory=str(Path(directory).resolve()),packet_sha256=J3071_PACKET_SHA,
         tuple=exact_3071_boundary(repo,J3071,J3071_P1,J3071_P2),native_path=str(native_path),native_binding=raw_binding(native_raw),context=context,
         source_context=router_source_context(repo),caller=packet['original_caller'],git_version=git(repo,'--version').decode().strip(),
@@ -508,8 +560,16 @@ def prepare_3071_author_capabilities(repo, directory, native_path):
     return prepare_3071_capabilities(repo,directory,native_path,current_author_applicability(repo))
 
 
+def prepare_3071_production_capabilities(repo,directory,native_path):
+    return prepare_3071_capabilities(repo,directory,native_path,production=production_applicability(repo))
+
+
 def checked_3071_capability_value(repo, cap):
-    prepare=prepare_3071_author_capabilities if cap.get('type')=='F54_FIXED3071_CURRENT_AUTHOR_CAPABILITIES' else prepare_3071_capabilities
+    choices={'F54_FIXED3071_CURRENT_AUTHOR_CAPABILITIES':prepare_3071_author_capabilities,
+        'F54_FIXED3071_STRUCTURAL_CAPABILITIES_PROTOTYPE':prepare_3071_capabilities,
+        'F54_FIXED3071_PRODUCTION_CAPABILITIES_v1':prepare_3071_production_capabilities}
+    require(cap.get('type') in choices,'fixed3071_distinct_capability_type')
+    prepare=choices[cap['type']]
     require(cap==prepare(repo,cap['directory'],cap['native_path']),'fixed3071_complete_current_capability_binding')
     return cap
 
@@ -989,7 +1049,12 @@ def exact_J_owner_evidence(repo, capability, ready, events, prefix, actual_map):
     earlier events and J_ready before calling this function. A ready JSON alone
     is deliberately not a public constructor input.
     """
-    require(capability['type'] == 'F54_FIXED3071_CURRENT_AUTHOR_CAPABILITIES', 'exact_J_AUTHOR_only')
+    if capability['type']=='F54_FIXED3071_PRODUCTION_CAPABILITIES_v1':
+        checked_3071_capability_value(repo,capability)
+        permission_type='F54_EXACT_J_AUDIT_OWNER_TRANSITION_PRODUCTION_v1'
+    else:
+        require(capability['type'] == 'F54_FIXED3071_CURRENT_AUTHOR_CAPABILITIES', 'exact_J_AUTHOR_only')
+        permission_type='F54_EXACT_J_AUDIT_OWNER_TRANSITION_AUTHOR_v1'
     before = events[-1]
     require(before['kind'] == 'row_before' and before['operation'] == ready['operation']
         and before['frame'] == ready['frame'] and ready['operation'].split('/')[1:] == [J3071, '2'],
@@ -1014,7 +1079,7 @@ def exact_J_owner_evidence(repo, capability, ready, events, prefix, actual_map):
                   and (e['kind'] in ('operation_begin', 'classification') or
                        (e['kind'] in ('row_after', 'row_committed') and e['payload'].get('path') == EXACT_J_AUDIT_PATH))]
     require(references, 'exact_J_actual_prior_operation_references')
-    return dict(type='F54_EXACT_J_AUDIT_OWNER_TRANSITION_AUTHOR_v1',
+    return dict(type=permission_type,
         source_unit=exact_J_audit_source_unit(repo), capability_sha256=sha(canonical(capability)),
         operation=ready['operation'], frame=ready['frame'], frame_ancestry=ready['frame_ancestry'],
         operation_binding=ready['operation_binding'], prior_operation=prior_op, prior_references=references,
@@ -1091,7 +1156,7 @@ def qualified_J_native_normalization(value, events, before, name, actual_map, pr
     binding=gate['binding'];require(binding==raw_binding(binding['raw']),'fixed3071_J_native_binding_raw_hash')
     require(events[0]['kind']=='master_entry' and events[0]['payload']['native_binding']==binding
         and events[0]['payload']['context']==gate['context'],'fixed3071_J_native_original_master_context')
-    spec=importlib.util.spec_from_file_location('f54_J_native_rebind',ROOT/'scripts/ci/f13_native_p3_source.py')
+    spec=importlib.util.spec_from_file_location('f54_J_native_rebind',ROOT/('scripts/ci/f13_native_p3_authority.py' if (ROOT/'scripts/ci/f13_native_p3_authority.py').is_file() else 'scripts/ci/f13_native_p3_source.py'))
     native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
     bound=json.loads(binding['raw']);context=gate['context']
     try:
@@ -1358,13 +1423,47 @@ def prepare_corrected_F_capability(repo, unit_path):
         unit_sha256=F_CORRECTED_UNIT_SHA,whole=whole,source_context=router_source_context(repo),context=context,admission=False)
 
 
+def prepare_corrected_F_production_capability(repo,unit_path):
+    module=production_module();binding=module.qualify(repo);record=module.load_record(repo)
+    target=git(repo,'rev-parse','HEAD').decode().strip()
+    historical=corrected_F_whole(repo,unit_path,F_CORRECTED_TUPLE['current'])
+    fixed=record['corrected_F']
+    require(set(fixed)=={'unit_sha256','historical_comparison','current_bindings','historical_gap'}
+        and fixed['unit_sha256']==F_CORRECTED_UNIT_SHA and fixed['historical_comparison']==F_CORRECTED_TUPLE['current']
+        and fixed['historical_gap']==historical['historical_gap'],'production_F_exact_predecessor')
+    require(set(fixed['current_bindings'])==set(historical['current_bindings']),'production_F_complete34')
+    require(all(value==tree_entry(repo,record['source'],name)==tree_entry(repo,target,name)
+        and (name not in F_CORRECTED_REPAIR_PATHS or value.startswith('100644 blob '))
+        for name,value in fixed['current_bindings'].items()),'production_F_current_repair_bindings')
+    spec=importlib.util.spec_from_file_location('production_F_native',ROOT/'scripts/ci/f13_native_p3_authority.py')
+    native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
+    event=binding['event']
+    current=native.qualify(repo,binding['base'],binding['source'],binding['target'],event['GITHUB_EVENT_NAME'],
+        event['GITHUB_REF'],event['GITHUB_SHA'],event['VOICE_CI_PUSH_BEFORE_SHA'],event['GITHUB_BASE_REF'])
+    verifier,native_record=native.verified_record(repo,current)
+    require(record['native_record']==dict(commit=current['record'],path=verifier.RECORD_PATH,
+        sha256=current['record_sha256']),'production_F_exact_reviewed_dependency_closure')
+    whole=dict(historical,type='F54_CORRECTED_HISTORICAL_PRODUCTION_WHOLE_v1',
+        historical_validation_target=F_CORRECTED_TUPLE['current'],current_target=target,
+        historical_current_bindings=historical['current_bindings'],current_bindings=fixed['current_bindings'],
+        production_applicability=binding,native_dependency_binding=current)
+    return dict(type='F54_CORRECTED_HISTORICAL_PRODUCTION_CAPABILITY_v1',unit_path=str(Path(unit_path).resolve()),
+        unit_sha256=F_CORRECTED_UNIT_SHA,whole=whole,source_context=router_source_context(repo),context=event,admission=False)
+
+
+def checked_corrected_F_capability(repo,cap):
+    prepare=prepare_corrected_F_production_capability if cap.get('type')=='F54_CORRECTED_HISTORICAL_PRODUCTION_CAPABILITY_v1' else prepare_corrected_F_capability
+    require(cap==prepare(repo,cap['unit_path']),'corrected_F_complete_current_capability')
+    return cap
+
+
 def corrected_F_composition(repo, capability_path, merge, boundary, first, source, name, result):
     return corrected_F_receipt(repo,json.loads(Path(capability_path).read_bytes()),merge,boundary,first,source,name,result)
 
 
 def corrected_F_receipt(repo, cap, merge, boundary, first, source, name, result):
     f=F_CORRECTED_TUPLE
-    require(cap==prepare_corrected_F_capability(repo,cap['unit_path']),'corrected_F_complete_current_capability')
+    checked_corrected_F_capability(repo,cap)
     require([merge,boundary,first,source]==[f['merge'],f['base'],f['first'],f['source']],'corrected_F_actual_call')
     require(name in git(repo,'diff','--name-only',f['base'],f['source']).decode().splitlines(),'corrected_F_actual_source_path_not_future')
     require(result==tree_entry(repo,f['merge'],name).rstrip('\0'),'corrected_F_actual_result_entry')
@@ -1401,7 +1500,7 @@ def manual_authority_expected(repo, context):
     require(len(parents)==3 and all(event.get(k,'')==os.environ.get(k,'') for k in event), 'manual_F_authority_actual_master_event')
     base,source=parents[1:];temporary=context['values']['TMP_DIR']
     require(event['GITHUB_SHA']==target and context['values']['ROOT']==str(Path(repo).resolve()), 'manual_F_authority_actual_root_target')
-    native_spec=importlib.util.spec_from_file_location('manual_F_native_authority',ROOT/'scripts/ci/f13_native_p3_source.py')
+    native_spec=importlib.util.spec_from_file_location('manual_F_native_authority',ROOT/('scripts/ci/f13_native_p3_authority.py' if (ROOT/'scripts/ci/f13_native_p3_authority.py').is_file() else 'scripts/ci/f13_native_p3_source.py'))
     native=importlib.util.module_from_spec(native_spec);native_spec.loader.exec_module(native)
     binding=native.qualify(repo,base,source,target,event['GITHUB_EVENT_NAME'],event['GITHUB_REF'],event['GITHUB_SHA'],
         event.get('VOICE_CI_PUSH_BEFORE_SHA',''),event.get('GITHUB_BASE_REF',''))
@@ -1461,7 +1560,7 @@ def validate_manual_authority(context, expected):
 def manual_F_spec(repo, capability, frame_context, actual_map, gate_context):
     """Real result-parent edge; diagnostic AUTO is never a commit ancestor."""
     f=F_CORRECTED_TUPLE
-    require(capability==prepare_corrected_F_capability(repo,capability['unit_path']), 'manual_F_complete_unit_current_repair')
+    checked_corrected_F_capability(repo,capability)
     require([frame_context[k] for k in ('base','target','allow_direct_followup','partition_source_history')]
         ==[J3071_RANGE['base'],f['correction'],'true','false'], 'manual_F_exact_same_state_frame')
     require(gate_context['source_context']==capability['source_context'] and gate_context['values']['ROOT']==str(Path(repo).resolve()), 'manual_F_original_gate_source_context')
@@ -1617,7 +1716,7 @@ def reviewed_F_deletion_value(repo, cap, state, ruling_path):
     """A terminal-state obligation, never a replacement contribution or flag."""
     f=F_CORRECTED_TUPLE;name=F_DELETION_PATH
     require(sha(Path(ruling_path).read_bytes())==F_DELETION_RULING_SHA,'reviewed_F_deletion_exact_ruling')
-    require(cap==prepare_corrected_F_capability(repo,cap['unit_path']),'reviewed_F_deletion_complete_current_capability')
+    checked_corrected_F_capability(repo,cap)
     frame=state['frame_context'];operation=state['F_operation'];binding=state['operation_binding']
     require(state['source_context']==cap['source_context'],'reviewed_F_deletion_actual_carrier_context')
     guard=state['original_guard']
@@ -1810,20 +1909,25 @@ def current_author_applicability(repo):
         event_base=AUTHOR_EVENT_BASE,admission=False,runtime_pass=False)
 
 
-def prepare_capabilities(repo, directory, author_applicability=None):
+def prepare_capabilities(repo, directory, author_applicability=None, production=None):
     """Two independently checked source capabilities for the finite prototype.
 
     Constants select the question. Complete immutable source facts, actual Git
     parents/bases/entries/DAG and whole-parent merge computation answer it.
     This entrypoint grants no production R/K, native or runtime authority.
     """
+    require(author_applicability is None or production is None,'production_no_mixed_M_authority')
     facts=load_unit(repo,directory);folder=Path(directory)
     packet=json.loads((folder/'proposal.json').read_bytes())
     contract=json.loads((folder/'contract-PROPOSAL.json').read_bytes())
     producer_sources=['scripts/ci/'+name for name in ('f13_f54_history.py','voice-db-runtime-provisioning-contract_test.sh','voice-r22-runtime-scope.sh')]
     # The nine historical versions remain exact. A new verifier implementation
     # is a separate current carrier, not a replacement historical source fact.
-    if author_applicability is None:
+    if production is not None:
+        require(production==production_applicability(repo),'production_M_independent_complete_applicability')
+        require(dict(base=packet['traversal_base'],target=packet['recursive_target'],allow_direct_followup='true',partition_source_history='false')==AUTHOR_HISTORICAL_SCOPE,
+            'production_M_exact_historical_collector_scope')
+    elif author_applicability is None:
         require(all(name in producer_sources for name in facts['changed_source_context_paths']),'unchanged_historical_candidate_product_context')
     else:
         require(author_applicability==current_author_applicability(repo),'current_author_independent_complete_applicability')
@@ -1843,12 +1947,14 @@ def prepare_capabilities(repo, directory, author_applicability=None):
         dag.append(dict(node=node,ordered_parents=parents,parent_deltas=[dict(parent=p,delta=raw_binding(git(repo,'diff','--name-only',p,node))) for p in parents]))
     target=git(repo,'rev-parse','HEAD').decode().strip()
     allowed={'scripts/ci/f13_f54_history.py','scripts/ci/f13_f54_history_test.py','scripts/ci/voice-db-runtime-provisioning-contract_test.sh','.agent/execplans/native-p3-master-source.md'}
-    if author_applicability is None:
+    if author_applicability is None and production is None:
         require(set(git(repo,'diff','--name-only',PROTOTYPE_BASE,target).decode().splitlines())<=allowed,'exact_prototype_source_context')
     for path in producer_sources:
         require((ROOT/path).read_bytes()==git(repo,'show',target+':'+path),'actual_capability_source_carrier')
-    return dict(type='F54_FIXED_CURRENT_AUTHOR_CAPABILITIES' if author_applicability is not None else 'F54_FIXED_COMPLETE_SOURCE_CAPABILITIES_PROTOTYPE',phase='SOURCE_PROVENANCE_ONLY',
+    return dict(type='F54_FIXED_PRODUCTION_CAPABILITIES_v1' if production is not None else
+        ('F54_FIXED_CURRENT_AUTHOR_CAPABILITIES' if author_applicability is not None else 'F54_FIXED_COMPLETE_SOURCE_CAPABILITIES_PROTOTYPE'),phase='SOURCE_PROVENANCE_ONLY',
         **(dict(author_applicability=author_applicability) if author_applicability is not None else {}),
+        **(dict(production_applicability=production) if production is not None else {}),
         unit_directory=str(folder.resolve()),source_facts=facts,prepared_at_target=target,
         producer_binding=classifier_binding(),observer_sha256=sha((ROOT/'scripts/ci/f13_f54_history.py').read_bytes()),
         history_boundary=dict(actual,type='F54_EXACT_HISTORY_BOUNDARY_CAPABILITY'),
@@ -1866,9 +1972,16 @@ def prepare_author_capabilities(repo, directory):
     return prepare_capabilities(repo,directory,current_author_applicability(repo))
 
 
+def prepare_production_capabilities(repo,directory):
+    return prepare_capabilities(repo,directory,production=production_applicability(repo))
+
+
 def checked_capability_value(repo, value):
-    require(value['type'] in ('F54_FIXED_CURRENT_AUTHOR_CAPABILITIES','F54_FIXED_COMPLETE_SOURCE_CAPABILITIES_PROTOTYPE'),'distinct_fixed_capability_type')
-    prepare=prepare_author_capabilities if value['type']=='F54_FIXED_CURRENT_AUTHOR_CAPABILITIES' else prepare_capabilities
+    choices={'F54_FIXED_CURRENT_AUTHOR_CAPABILITIES':prepare_author_capabilities,
+        'F54_FIXED_COMPLETE_SOURCE_CAPABILITIES_PROTOTYPE':prepare_capabilities,
+        'F54_FIXED_PRODUCTION_CAPABILITIES_v1':prepare_production_capabilities}
+    require(value['type'] in choices,'distinct_fixed_capability_type')
+    prepare=choices[value['type']]
     require(value==prepare(repo,value['unit_directory']),'complete_exact_capability_binding')
     return value
 
@@ -1878,7 +1991,7 @@ def verified_capabilities(repo, path):
 
 
 def current_author_frame_scope(value, collector_base, collector_target):
-    if value['type']=='F54_FIXED_CURRENT_AUTHOR_CAPABILITIES':
+    if value['type'] in ('F54_FIXED_CURRENT_AUTHOR_CAPABILITIES','F54_FIXED_PRODUCTION_CAPABILITIES_v1'):
         require([collector_base,collector_target]==[value['collector_scope']['base'],value['collector_scope']['target']],
             'current_author_only_bound_historical_frame')
 
@@ -1906,7 +2019,7 @@ def composition_capability(repo, path, merge, boundary, first, source, name, res
 
 def master_context(repo, capability, binding_raw, context):
     """Bind the original B/S/T entry; M capability remains nested H53-only."""
-    spec=importlib.util.spec_from_file_location('f54_master_native',ROOT/'scripts/ci/f13_native_p3_source.py')
+    spec=importlib.util.spec_from_file_location('f54_master_native',ROOT/('scripts/ci/f13_native_p3_authority.py' if (ROOT/'scripts/ci/f13_native_p3_authority.py').is_file() else 'scripts/ci/f13_native_p3_source.py'))
     native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
     binding=json.loads(binding_raw)
     try:
@@ -1915,6 +2028,7 @@ def master_context(repo, capability, binding_raw, context):
     except native.Rejected as error:raise Rejected('master_native_'+str(error)) from error
     require(actual==binding and binding['target']==git(repo,'rev-parse','HEAD').decode().strip(),'actual_master_native_B_S_T_context')
     author_roles=None
+    production_roles=None
     if capability.get('type')=='F54_FIXED_CURRENT_AUTHOR_CAPABILITIES':
         require(capability['author_applicability']==current_author_applicability(repo)
             and capability['prepared_at_target']==binding['target'],'current_author_same_exact_carrier')
@@ -1926,6 +2040,17 @@ def master_context(repo, capability, binding_raw, context):
         git(repo,'merge-base','--is-ancestor',AUTHOR_NATIVE_CONTENT_BASE,AUTHOR_HISTORICAL_SCOPE['target'])
         author_roles=dict(historical_collector=dict(AUTHOR_HISTORICAL_SCOPE),native_content_baseline=AUTHOR_NATIVE_CONTENT_BASE,
             actual_event_base=binding['base'],reference=AUTHOR_REFERENCE)
+    elif capability.get('type')=='F54_FIXED_PRODUCTION_CAPABILITIES_v1':
+        current=production_applicability(repo)
+        require(capability['production_applicability']==current and capability['prepared_at_target']==binding['target'],
+                'production_same_exact_current_carrier')
+        require(capability['collector_scope']==AUTHOR_HISTORICAL_SCOPE
+                and binding['base']==current['base'] and binding['source']==current['source']
+                and binding['content_base']==current['native_content_baseline'],'production_separate_event_native_history')
+        git(repo,'merge-base','--is-ancestor',AUTHOR_HISTORICAL_SCOPE['base'],binding['base'])
+        git(repo,'merge-base','--is-ancestor',AUTHOR_NATIVE_CONTENT_BASE,AUTHOR_HISTORICAL_SCOPE['target'])
+        production_roles=dict(historical_collector=dict(AUTHOR_HISTORICAL_SCOPE),native_content_baseline=AUTHOR_NATIVE_CONTENT_BASE,
+            actual_event_base=binding['base'],record=current['record'],reviewed_source=current['reviewed_source'])
     else:
         require(binding['base']==capability['collector_scope']['base'],'master_actual_original_base')
     git(repo,'merge-base','--is-ancestor',capability['collector_scope']['target'],binding['source'])
@@ -1935,8 +2060,10 @@ def master_context(repo, capability, binding_raw, context):
     require(source_delta==git(repo,'diff','--name-only',binding['base'],binding['target']),'actual_master_source_result_delta_parity')
     entries={name:entry_binding(repo,binding['source'],name) for name in source_delta.decode().splitlines()}
     require(all(entry_binding(repo,binding['target'],name)==value for name,value in entries.items()),'actual_master_source_result_entry_parity')
-    return dict(type='F54_EXPLICIT_MASTER_CURRENT_AUTHOR_ENTRY' if author_roles is not None else 'F54_EXPLICIT_MASTER_PROTOTYPE_ENTRY',
+    return dict(type='F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1' if production_roles is not None else
+        ('F54_EXPLICIT_MASTER_CURRENT_AUTHOR_ENTRY' if author_roles is not None else 'F54_EXPLICIT_MASTER_PROTOTYPE_ENTRY'),
         **(dict(author_base_roles=author_roles) if author_roles is not None else {}),native_binding=raw_binding(binding_raw),context=context,
+        **(dict(production_base_roles=production_roles) if production_roles is not None else {}),
         capability=raw_binding(canonical(capability)),base=binding['base'],source=binding['source'],target=binding['target'],
         source_delta=raw_binding(source_delta),entries=entries,source_context=router_source_context(repo),admission=False)
 
@@ -2018,11 +2145,14 @@ def span_origin(repo, original_path, original_native_path, current_native_path, 
     else:
         capability_raw=Path(author_capability_path).read_bytes()
         capability=verified_capabilities(repo,author_capability_path)
-        require(capability['type']=='F54_FIXED_CURRENT_AUTHOR_CAPABILITIES','current_author_span_explicit_capability_type')
+        is_production=capability['type']=='F54_FIXED_PRODUCTION_CAPABILITIES_v1'
+        if not is_production:
+            require(capability['type']=='F54_FIXED_CURRENT_AUTHOR_CAPABILITIES','current_author_span_explicit_capability_type')
         context={key:os.environ.get(key,'') for key in ('GITHUB_EVENT_NAME','GITHUB_REF','GITHUB_SHA','VOICE_CI_PUSH_BEFORE_SHA','GITHUB_BASE_REF')}
         entry=master_context(repo,capability,current_raw,context)
-        require(entry['type']=='F54_EXPLICIT_MASTER_CURRENT_AUTHOR_ENTRY','current_author_span_actual_master_entry')
-        spec=importlib.util.spec_from_file_location('current_author_span_native',ROOT/'scripts/ci/f13_native_p3_source.py')
+        require(entry['type']==('F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1' if is_production else
+            'F54_EXPLICIT_MASTER_CURRENT_AUTHOR_ENTRY'),'current_author_span_actual_master_entry')
+        spec=importlib.util.spec_from_file_location('current_author_span_native',ROOT/('scripts/ci/f13_native_p3_authority.py' if (ROOT/'scripts/ci/f13_native_p3_authority.py').is_file() else 'scripts/ci/f13_native_p3_source.py'))
         native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
         native_applicability=current_author_J_native_applicability(repo,native,old,current)
         # Reconstruct full authority before sealing it. Do not duplicate large
@@ -2043,7 +2173,8 @@ def span_origin(repo, original_path, original_native_path, current_native_path, 
         require(set(git(repo,'diff','--name-only',PROTOTYPE_BASE,current['source']).decode().splitlines())<=allowed,'no_foreign_context_or_pin_drift')
     retained=[e for e in events if e['kind']=='row_committed' and e['operation']==reference]
     require([e['payload']['path'] for e in retained]==value['paths'],'original_aggregate_all_committed_paths')
-    return dict(type='F54_FIXED_CURRENT_AUTHOR_AGGREGATE_SPAN_OBSERVATION' if author_capability_path is not None else 'F54_FIXED_AGGREGATE_SPAN_OBSERVATION',
+    return dict(type=('F54_FIXED_PRODUCTION_AGGREGATE_SPAN_OBSERVATION_v1' if is_production else
+        'F54_FIXED_CURRENT_AUTHOR_AGGREGATE_SPAN_OBSERVATION') if author_capability_path is not None else 'F54_FIXED_AGGREGATE_SPAN_OBSERVATION',
         **author_fields,original_trace_sha256=ORIGINAL_TRACE_SHA,
         original_operation=operation,original_frame=frame,original_classification=classified,
         original_committed=retained,original_native_sha256=ORIGINAL_NATIVE_SHA,current_native=current,
@@ -2061,8 +2192,9 @@ def validate_aggregate_span(repo, original_path, span_path, span_sha, original_n
     events=[json.loads(v) for v in raw.splitlines()]
     require(events and events[0]['kind']=='span_link','supplemental_origin_first_link')
     supplied=events[0]['payload']
-    author_path=supplied.get('author_capability_path') if supplied.get('type')=='F54_FIXED_CURRENT_AUTHOR_AGGREGATE_SPAN_OBSERVATION' else None
-    if supplied.get('type')=='F54_FIXED_CURRENT_AUTHOR_AGGREGATE_SPAN_OBSERVATION':
+    scoped_span=supplied.get('type') in ('F54_FIXED_CURRENT_AUTHOR_AGGREGATE_SPAN_OBSERVATION','F54_FIXED_PRODUCTION_AGGREGATE_SPAN_OBSERVATION_v1')
+    author_path=supplied.get('author_capability_path') if scoped_span else None
+    if scoped_span:
         require(isinstance(author_path,str) and bool(author_path),'current_author_span_explicit_capability_path')
     origin=span_origin(repo,original_path,original_native_path,current_native_path,author_path)
     require(events and events[0]['kind']=='span_link' and events[0]['payload']==origin,'exact_observed_aggregate_link')
@@ -2457,7 +2589,7 @@ def seal_router(repo, collection_path, collection_sha, map_path, context_path):
         require(values['native_p3_active']=='true','observed_native_obligations_cannot_be_disabled')
         binding_path=values['native_p3_binding'];binding_raw=Path(binding_path).read_bytes()
         require(all(e['binding']==raw_binding(binding_raw) and e['context']=={k:context['event'].get(k,'') for k in e['context']} for e in observed),'same_actual_native_context_reaches_router')
-        spec=importlib.util.spec_from_file_location('f54_router_native',ROOT/'scripts/ci/f13_native_p3_source.py')
+        spec=importlib.util.spec_from_file_location('f54_router_native',ROOT/('scripts/ci/f13_native_p3_authority.py' if (ROOT/'scripts/ci/f13_native_p3_authority.py').is_file() else 'scripts/ci/f13_native_p3_source.py'))
         native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
         binding=json.loads(binding_raw);event=context['event']
         actual=native.qualify(repo,binding['base'],binding['source'],binding['target'],event['GITHUB_EVENT_NAME'],event['GITHUB_REF'],event['GITHUB_SHA'],event['VOICE_CI_PUSH_BEFORE_SHA'],event['GITHUB_BASE_REF'])
@@ -3144,7 +3276,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             binding=v['binding'];require(binding==raw_binding(binding['raw']),'native_binding_raw_hash')
             context=v['context'];cache=sha(canonical(dict(binding=binding,context=context)))
             if cache not in native_bindings:
-                spec=importlib.util.spec_from_file_location('f54_native_rebind',ROOT/'scripts/ci/f13_native_p3_source.py')
+                spec=importlib.util.spec_from_file_location('f54_native_rebind',ROOT/('scripts/ci/f13_native_p3_authority.py' if (ROOT/'scripts/ci/f13_native_p3_authority.py').is_file() else 'scripts/ci/f13_native_p3_source.py'))
                 native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
                 b=json.loads(binding['raw'])
                 require(b['target']==git(repo,'rev-parse','HEAD').decode().strip(),'native_receipt_actual_current_target')
@@ -3220,7 +3352,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         actual=(''.join('\t'.join(x)+'\n' for x in maps[frame])).encode()
         # Whole unit/context is rechecked before each actual append. Prior rows
         # are independently conserved by the fold; no append may erase them.
-        require(manual_specs[op]['capability']==prepare_corrected_F_capability(repo,manual_specs[op]['capability']['unit_path']), 'manual_F_preappend_current_unit')
+        checked_corrected_F_capability(repo,manual_specs[op]['capability'])
         manual_append_value=dict(map_before=file_digest(actual),operation=op,path=name,admission=False)
     manual_end_value=manual_end_state(manual_end_checkpoint) if manual_end_checkpoint else None
     manual_state=manual_checkpoint_state() if manual_checkpoint else None
@@ -3289,10 +3421,12 @@ def main():
         if command=='unit':print(json.dumps(load_unit(*args)));return 0
         if command=='capabilities':print(json.dumps(prepare_capabilities(*args)));return 0
         if command=='current-author-capabilities':print(json.dumps(prepare_author_capabilities(*args)));return 0
+        if command=='production-capabilities':print(json.dumps(prepare_production_capabilities(*args)));return 0
         if command=='cap-boundary':print(json.dumps(boundary_capability(*args)));return 0
         if command=='cap-entry':print(json.dumps(entry_capability(*args)));return 0
         if command=='cap-composition':print(json.dumps(composition_capability(*args)));return 0
         if command=='corrected-F-capability':print(json.dumps(prepare_corrected_F_capability(*args)));return 0
+        if command=='corrected-F-production-capability':print(json.dumps(prepare_corrected_F_production_capability(*args)));return 0
         if command=='corrected-F-composition':print(json.dumps(corrected_F_composition(*args)));return 0
         if command=='manual-F-context':
             repo,map_path,*pairs=args;print(json.dumps(snapshot_manual_F_context(repo,map_path,pairs)));return 0
@@ -3308,6 +3442,7 @@ def main():
         if command=='reviewed-F-deletion':print(json.dumps(prepare_reviewed_F_deletion(*args)));return 0
         if command=='3071-capabilities':print(json.dumps(prepare_3071_capabilities(*args)));return 0
         if command=='3071-current-author-capabilities':print(json.dumps(prepare_3071_author_capabilities(*args)));return 0
+        if command=='3071-production-capabilities':print(json.dumps(prepare_3071_production_capabilities(*args)));return 0
         if command=='3071-boundary':print(json.dumps(boundary_3071_capability(*args)));return 0
         if command=='3071-composition':print(json.dumps(composition_3071_capability(*args)));return 0
         if command=='3071-range-origin':

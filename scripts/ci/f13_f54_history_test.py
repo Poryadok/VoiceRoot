@@ -986,7 +986,7 @@ f13_retained_history_row() { return 1; }
         # not manufactured by this fixture.
         m=module();trace=self.folder/'original-main.jsonl';prefix=b'private sealed collection\n'
         trace.write_bytes(prefix+b'later events are outside this seal\n')
-        bound=m.file_digest(prefix);cap=dict(directory='private-unit',native_path='private-native')
+        bound=m.file_digest(prefix);cap=dict(type='F54_FIXED3071_STRUCTURAL_CAPABILITIES_PROTOTYPE',directory='private-unit',native_path='private-native')
         operation='private/J/2';state=dict(private_original_range=True)
         origin=dict(capability=cap,main_trace=str(trace),prefix=bound,J_operation=operation)
         expected=dict(origin);calls=[]
@@ -1126,6 +1126,69 @@ f13_retained_history_row() { return 1; }
             ledger.write_bytes(m.canonical(value))
             with self.subTest(error=error),self.assertRaises(m.Rejected):
                 m.consume_3071_J_path(ledger,m.sha(ledger.read_bytes()),trace,PROTO,actual,after,'append')
+
+    def test_private_production_J_permission_roundtrip_before_mutation(self):
+        # Private transport fixture only: real temporary collector maps and
+        # history below are not the fixed production J source qualification.
+        # The independent capability boundary is tested with real Git in
+        # f13_production_source_test; this isolates its distinct receipt at the
+        # actual J pre-mutation consumer and conservation validator.
+        m=module();m.ROOT=self.repo;self.hidden_runtime();middle=self.head
+        prior_run,prior=self.collect(target=middle,partition=False)
+        self.assertEqual(prior_run.returncode,0,prior_run.stderr)
+        prior_raw=(prior/'trace.jsonl').read_bytes()
+        prior_state=m.validate_trace(self.repo,prior/'trace.jsonl',m.sha(prior_raw))
+        prior_ledger=prior_state['ledger'][prior_state['root_frame']]
+        actual=(prior/'map').read_bytes()
+        self.write(PROTO,'production receipt private transport\n');tail=self.commit('private pending replacement')
+        run,out=self.collect(target=tail,partition=False);self.assertEqual(run.returncode,0,run.stderr)
+        raw=(out/'trace.jsonl').read_bytes();events=[json.loads(x) for x in raw.splitlines()]
+        before=next(e for e in reversed(events) if e['kind']=='row_before' and e['payload']['path']==PROTO)
+        original_op=before['operation']
+        binding=next(e['payload'] for e in events if e['kind']=='operation_begin' and e['operation']==original_op)
+        classification=next(e['payload'] for e in events if e['kind']=='classification' and e['operation']==original_op)
+        self.assertEqual(before['payload']['map_before'],m.file_digest(actual))
+        incoming=before['payload']['incoming']['raw'];m.J3071=tail;m.EXACT_J_AUDIT_INCOMING=incoming
+        before['operation']='private/'+tail+'/2'
+        prefix=b''.join(raw.splitlines(keepends=True)[:before['sequence']-1])
+        trace=self.folder/'production-J-private-trace';trace.write_bytes(prefix+json.dumps(before,sort_keys=True).encode()+b'\n')
+        span=dict(ledger=prior_ledger,trace_sha256=m.sha(prior_raw),actual_operations=[e['operation'] for e in map(json.loads,prior_raw.splitlines()) if e['kind']=='operation_begin'])
+        state=dict(frame=before['frame'],operation=before['operation'],operation_binding=binding,classification=classification,
+            capability_sha256='PRIVATE_PRODUCTION_TRANSPORT_ONLY',frame_ancestry=[],ledger={before['frame']:prior_ledger},
+            coverage=[],prior_span=span,M_ready={},I_ready={},composition={})
+        ready=m.build_3071_J_ready(state,m.file_digest(prefix))
+        ledger=self.folder/'production-J-private-ledger';ledger.write_bytes(m.canonical(ready));digest=m.sha(ledger.read_bytes())
+        permission=dict(type='F54_EXACT_J_AUDIT_OWNER_TRANSITION_PRODUCTION_v1',ledger_sha256=digest,
+                        map_before=m.file_digest(actual),operation=before['operation'])
+        calls=[]
+        def independently_qualified_transport(repo,path,trace_sha,**options):
+            self.assertEqual(options,dict(exact_J_checkpoint='permitted'))
+            self.assertEqual(repo,self.repo);self.assertEqual(Path(path),trace)
+            self.assertEqual(trace_sha,m.sha(trace.read_bytes()));calls.append(path)
+            return dict(exact_J_permission=permission)
+        m.validate_trace=independently_qualified_transport
+        receipt=m.consume_3071_J_path(ledger,digest,trace,PROTO,actual,incoming,'replace')
+        self.assertEqual(calls,[trace]);self.assertEqual(receipt['exact_J_owner_permission'],permission)
+        self.assertEqual((prior/'map').read_bytes(),actual)
+        pending=dict(op=before['operation'],exact_J_owner_permission=permission)
+        m.validate_exact_conservation(pending,before['operation'],receipt)
+        changed=dict(receipt,exact_J_owner_permission=dict(permission,type='F54_EXACT_J_AUDIT_OWNER_TRANSITION_AUTHOR_v1'))
+        with self.assertRaises(m.Rejected):m.validate_exact_conservation(pending,before['operation'],changed)
+        permission['ledger_sha256']='0'*64
+        with self.assertRaisesRegex(m.Rejected,'exact_J_consumer_current_full_binding'):
+            m.consume_3071_J_path(ledger,digest,trace,PROTO,actual,incoming,'replace')
+        self.assertEqual((prior/'map').read_bytes(),actual)
+
+    def test_generic_or_synthetic_stop_is_not_production_completion(self):
+        m=module();self.hidden_runtime();run,out=self.collect(partition=False)
+        self.assertEqual(run.returncode,0,run.stderr)
+        # A genuinely complete ordinary trace is not an M/J/F production run.
+        with self.assertRaisesRegex(m.Rejected,'successful_exact_M_collection_required'):
+            m.finalize_collection(self.repo,out/'trace.jsonl',out/'map')
+        events=[json.loads(x) for x in (out/'trace.jsonl').read_bytes().splitlines()]
+        events[-1]['payload']['exit']=1
+        stopped=self.folder/'synthetic-stopped-trace';m.write_events(stopped,events)
+        with self.assertRaises(m.Rejected):m.finalize_collection(self.repo,stopped,out/'map')
 
     def test_private_I_consumer_keeps_actual_side_true_and_raw_false_main_row(self):
         # Private transport/oracles only. These are real temporary collector

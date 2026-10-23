@@ -55,7 +55,7 @@ func TestSlashInteractionRejectsFailedDurableEnqueueBeforeWebhook(t *testing.T) 
 	require.NoError(t, err)
 	botID := uuid.MustParse(reg.GetBot().GetId())
 	chatID := uuid.New()
-	_, err = st.InstallInSpace(ctx, botID, uuid.New(), uuid.New(), []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botID, uuid.New(), uuid.New(), []uuid.UUID{chatID})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botID))
 	_, err = st.Pool.Exec(ctx, `CREATE FUNCTION reject_slash_enqueue() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.event_type = 'interaction' THEN RAISE EXCEPTION 'enqueue unavailable'; END IF; RETURN NEW; END $$`)
@@ -79,7 +79,7 @@ func TestSlashOutboxWorkerRecoversAcceptedWebhookAfterRestart(t *testing.T) {
 	bot, _, err := st.CreateBot(ctx, uuid.New(), "DurableBot", "", `["TEXT_CHAT_SEND_MESSAGES"]`, uuid.New())
 	require.NoError(t, err)
 	chatID := uuid.New()
-	_, err = st.InstallInSpace(ctx, bot.ID, uuid.New(), uuid.New(), []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, bot.ID, uuid.New(), uuid.New(), []uuid.UUID{chatID})
 	require.NoError(t, err)
 	var calls atomic.Int32
 	var receivedMu sync.Mutex

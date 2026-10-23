@@ -216,6 +216,14 @@ func (s *MessagesStore) InsertMessageWithPreparedReferencesAndOutbox(ctx context
 	if err = lockMessageMutation(ctx, commit, row.ChatID, space, &row.ID); err != nil {
 		return nil, err
 	}
+	if row.BotSendAdmission != nil {
+		var cancel context.CancelFunc
+		ctx, cancel, err = row.BotSendAdmission(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer cancel()
+	}
 	if err = s.reconcileMusicInsert(ctx, commit, &row); err != nil {
 		return nil, err
 	}

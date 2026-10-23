@@ -125,6 +125,14 @@ func main() {
 		authorityBots = st
 		hub := dispatch.NewHub()
 		svc := grpcsvc.NewBotGRPC(st, hub)
+		if principalConfig.MessagingJWKSURL != "" {
+			reader, err := store.NewMessageAuthorityStore(context.Background(), pool)
+			if err != nil {
+				fatalf("Bot message authority database: %v", err)
+			}
+			defer reader.Pool.Close()
+			svc.MessageAuthorityReader = reader
+		}
 		if botPrincipalRuntime != nil {
 			svc.PrincipalIssuer = botPrincipalRuntime.Issuer()
 			tlsConfig, err := botPrincipalRuntime.GameEventServerTLSConfig()
@@ -176,6 +184,13 @@ func main() {
 			}
 		}
 		wireDownstream(svc, logger)
+		messageSender, err := wireProtectedMessageSender(svc)
+		if err != nil {
+			fatalf("Bot protected message sender: %v", err)
+		}
+		if messageSender != nil {
+			defer func() { _ = messageSender.Close() }()
+		}
 		if installationEnabled {
 			if err := ownedInstallation.construct(func(ctx context.Context) (*installationRuntime, error) {
 				return newInstallationRuntime(ctx, installationConfig, adminConfig, installationAuth, botPrincipalRuntime, pool, svc)
