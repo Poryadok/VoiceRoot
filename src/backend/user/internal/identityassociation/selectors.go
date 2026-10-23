@@ -1,0 +1,99 @@
+// Package identityassociation is the single User-owned lifetime association and
+// nonreuse authority. Selector material never leaves User purpose adapters.
+package identityassociation
+
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"errors"
+	"github.com/google/uuid"
+	"math"
+	"sort"
+)
+
+var ErrKeysetIncomplete = errors.New("identity association keyset incomplete")
+var ErrConflict = errors.New("identity association conflict")
+var ErrIncomplete = errors.New("identity association evidence incomplete")
+
+type KeysetSnapshot struct {
+	Revision      uint64
+	ActiveVersion uint32
+	Versions      map[uint32][32]byte
+}
+type Keyset struct {
+	snapshot KeysetSnapshot
+	keys     map[uint32][]byte
+}
+type selectorAlias struct {
+	version          uint32
+	account, profile [32]byte
+}
+type PreparedSelectors struct {
+	profileID, accountID uuid.UUID
+	snapshot             KeysetSnapshot
+	aliases              []selectorAlias
+}
+
+func NewKeyset(snapshot KeysetSnapshot, secrets map[uint32][]byte) (*Keyset, error) {
+	if snapshot.Revision == 0 || snapshot.Revision > math.MaxInt64 || snapshot.ActiveVersion == 0 || len(snapshot.Versions) == 0 || len(snapshot.Versions) != len(secrets) {
+		return nil, ErrKeysetIncomplete
+	}
+	if _, ok := snapshot.Versions[snapshot.ActiveVersion]; !ok {
+		return nil, ErrKeysetIncomplete
+	}
+	k := &Keyset{snapshot: KeysetSnapshot{Revision: snapshot.Revision, ActiveVersion: snapshot.ActiveVersion, Versions: map[uint32][32]byte{}}, keys: map[uint32][]byte{}}
+	for version, fingerprint := range snapshot.Versions {
+		secret, ok := secrets[version]
+		if version == 0 || !ok || len(secret) < 32 || sha256.Sum256(secret) != fingerprint {
+			return nil, ErrKeysetIncomplete
+		}
+		k.snapshot.Versions[version] = fingerprint
+		k.keys[version] = append([]byte(nil), secret...)
+	}
+	return k, nil
+}
+
+func selector(key []byte, kind string, id uuid.UUID) [32]byte {
+	h := hmac.New(sha256.New, key)
+	h.Write([]byte("voice.user.identity-association.v1\x00" + kind + "\x00"))
+	h.Write(id[:])
+	var result [32]byte
+	copy(result[:], h.Sum(nil))
+	return result
+}
+
+func (k *Keyset) PrepareSelectors(profile, account uuid.UUID) (PreparedSelectors, error) {
+	if k == nil || profile == uuid.Nil || account == uuid.Nil || len(k.keys) == 0 {
+		return PreparedSelectors{}, ErrIncomplete
+	}
+	p := PreparedSelectors{profileID: profile, accountID: account, snapshot: k.Snapshot()}
+	versions := make([]uint32, 0, len(k.keys))
+	for version := range k.keys {
+		versions = append(versions, version)
+	}
+	sort.Slice(versions, func(i, j int) bool { return versions[i] < versions[j] })
+	for _, version := range versions {
+		p.aliases = append(p.aliases, selectorAlias{version: version, account: selector(k.keys[version], "ACCOUNT", account), profile: selector(k.keys[version], "PROFILE", profile)})
+	}
+	return p, nil
+}
+
+func (k *Keyset) Snapshot() KeysetSnapshot {
+	if k == nil {
+		return KeysetSnapshot{}
+	}
+	s := KeysetSnapshot{Revision: k.snapshot.Revision, ActiveVersion: k.snapshot.ActiveVersion, Versions: map[uint32][32]byte{}}
+	for v, f := range k.snapshot.Versions {
+		s.Versions[v] = f
+	}
+	return s
+}
+
+func (p PreparedSelectors) valid() bool {
+	return p.profileID != uuid.Nil && p.accountID != uuid.Nil && p.snapshot.Revision > 0 && len(p.aliases) > 0 && len(p.aliases) == len(p.snapshot.Versions)
+}
+
+func (*Keyset) String() string             { return "User identity keyset [redacted]" }
+func (*Keyset) GoString() string           { return "User identity keyset [redacted]" }
+func (PreparedSelectors) String() string   { return "User identity prepared selectors [redacted]" }
+func (PreparedSelectors) GoString() string { return "User identity prepared selectors [redacted]" }
