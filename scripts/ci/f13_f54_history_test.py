@@ -69,6 +69,16 @@ class ReplayConservationContract(unittest.TestCase):
             self.m.validate_exact_conservation(dict(op=self.op), self.op,
                                                dict(exact_J_owner_permission=self.exact))
 
+    def test_exact_J_source_unit_is_frozen_inside_four_file_carrier(self):
+        self.assertEqual(self.m.EXACT_J_SOURCE_UNIT_RAW,
+                         (ROOT/'scripts/ci/testdata/f13-exact-j-547/source-unit.json').read_bytes())
+        for old, new in ((b'100644 blob', b'100755 blob'), (b'100644 blob', b'100644 tree'),
+                         (b'd24e08d221c42661e8b1431defe61d742b23e8d9', b'0'*40)):
+            with self.subTest(change=new), patch.object(self.m, 'EXACT_J_SOURCE_UNIT_RAW',
+                    self.m.EXACT_J_SOURCE_UNIT_RAW.replace(old, new, 1)):
+                with self.assertRaisesRegex(self.m.Rejected, 'exact_J_frozen_full_source_unit'):
+                    self.m.exact_J_audit_source_unit(ROOT)
+
     def test_exact_J_rejects_every_changed_raw_row_field_without_mutation(self):
         import copy
         import zipfile
