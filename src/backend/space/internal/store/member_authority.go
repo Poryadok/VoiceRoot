@@ -27,6 +27,19 @@ func (s *SpaceStore) ReadMemberAdmissionAuthority(ctx context.Context, req *spac
 	if s == nil || s.Pool == nil || s.tx != nil || req == nil || req.GetProtocolVersion() != 1 || len(req.ProtoReflect().GetUnknown()) != 0 {
 		return nil, ErrMemberAuthorityUnavailable
 	}
+	if err := validateBotMessageSelector(req); err != nil {
+		return nil, err
+	}
+	var botDeadline time.Time
+	if req.GetBotMessageSendBinding() != nil {
+		botDeadline = time.Now().Add(5 * time.Second)
+		if earlier, ok := ctx.Deadline(); ok && earlier.Before(botDeadline) {
+			botDeadline = earlier
+		}
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, botDeadline)
+		defer cancel()
+	}
 	space, err := canonicalLifecycleUUID(req.GetSpaceId())
 	if err != nil {
 		return nil, ErrMemberAuthorityUnavailable
@@ -109,6 +122,11 @@ func (s *SpaceStore) ReadMemberAdmissionAuthority(ctx context.Context, req *spac
 		response.TreeRelation = &spacev1.MemberAdmissionTreeRelationAuthority{ChatId: *req.ChatId, Present: present, Revision: revision}
 	}
 	// Detect a noncanonical unscoped writer rather than returning mixed snapshots.
+	if binding := req.GetBotMessageSendBinding(); binding != nil {
+		if err = qualifyBotMessageAuthority(ctx, tx, binding, response); err != nil {
+			return nil, err
+		}
+	}
 	last, err := spaceSourceRevision(ctx, tx, space.String())
 	if err != nil || last != revision {
 		return nil, ErrMemberAuthorityUnavailable
@@ -118,12 +136,24 @@ func (s *SpaceStore) ReadMemberAdmissionAuthority(ctx context.Context, req *spac
 		return nil, ErrMemberAuthorityUnavailable
 	}
 	remaining := response.ValidityRemaining.AsDuration() - finished.Sub(sampled)
+	if !botDeadline.IsZero() && time.Until(botDeadline) < remaining {
+		remaining = time.Until(botDeadline)
+	}
 	if remaining <= 0 || remaining > 5*time.Second {
 		return nil, ErrMemberAuthorityUnavailable
 	}
 	response.ValidityRemaining = durationpb.New(remaining)
 	if err = tx.Commit(ctx); err != nil {
 		return nil, ErrMemberAuthorityUnavailable
+	}
+	if !botDeadline.IsZero() {
+		remaining = time.Until(botDeadline)
+		if ctx.Err() != nil || remaining <= 0 {
+			return nil, ErrMemberAuthorityUnavailable
+		}
+		if remaining < response.ValidityRemaining.AsDuration() {
+			response.ValidityRemaining = durationpb.New(remaining)
+		}
 	}
 	return response, nil
 }

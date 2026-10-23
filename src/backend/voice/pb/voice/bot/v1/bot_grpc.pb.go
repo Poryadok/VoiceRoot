@@ -19,49 +19,50 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	BotService_PublishGameEvent_FullMethodName          = "/voice.bot.v1.BotService/PublishGameEvent"
-	BotService_RegisterBot_FullMethodName               = "/voice.bot.v1.BotService/RegisterBot"
-	BotService_UpdateBot_FullMethodName                 = "/voice.bot.v1.BotService/UpdateBot"
-	BotService_DeleteBot_FullMethodName                 = "/voice.bot.v1.BotService/DeleteBot"
-	BotService_GetBot_FullMethodName                    = "/voice.bot.v1.BotService/GetBot"
-	BotService_GetBotBySlug_FullMethodName              = "/voice.bot.v1.BotService/GetBotBySlug"
-	BotService_ListBots_FullMethodName                  = "/voice.bot.v1.BotService/ListBots"
-	BotService_RegenerateToken_FullMethodName           = "/voice.bot.v1.BotService/RegenerateToken"
-	BotService_RegenerateWebhookSecret_FullMethodName   = "/voice.bot.v1.BotService/RegenerateWebhookSecret"
-	BotService_RegisterCommands_FullMethodName          = "/voice.bot.v1.BotService/RegisterCommands"
-	BotService_GetCommands_FullMethodName               = "/voice.bot.v1.BotService/GetCommands"
-	BotService_SetWebhookURL_FullMethodName             = "/voice.bot.v1.BotService/SetWebhookURL"
-	BotService_GetWebhookURL_FullMethodName             = "/voice.bot.v1.BotService/GetWebhookURL"
-	BotService_SetChatWhitelist_FullMethodName          = "/voice.bot.v1.BotService/SetChatWhitelist"
-	BotService_GetChatWhitelist_FullMethodName          = "/voice.bot.v1.BotService/GetChatWhitelist"
-	BotService_SendBotMessage_FullMethodName            = "/voice.bot.v1.BotService/SendBotMessage"
-	BotService_EditBotMessage_FullMethodName            = "/voice.bot.v1.BotService/EditBotMessage"
-	BotService_SendEphemeral_FullMethodName             = "/voice.bot.v1.BotService/SendEphemeral"
-	BotService_DeferResponse_FullMethodName             = "/voice.bot.v1.BotService/DeferResponse"
-	BotService_PollEvents_FullMethodName                = "/voice.bot.v1.BotService/PollEvents"
-	BotService_ValidateManifest_FullMethodName          = "/voice.bot.v1.BotService/ValidateManifest"
-	BotService_ApplyManifest_FullMethodName             = "/voice.bot.v1.BotService/ApplyManifest"
-	BotService_GetManifest_FullMethodName               = "/voice.bot.v1.BotService/GetManifest"
-	BotService_InstallBotInSpace_FullMethodName         = "/voice.bot.v1.BotService/InstallBotInSpace"
-	BotService_UninstallBotFromSpace_FullMethodName     = "/voice.bot.v1.BotService/UninstallBotFromSpace"
-	BotService_ListInstalledBots_FullMethodName         = "/voice.bot.v1.BotService/ListInstalledBots"
-	BotService_ListBotsInChat_FullMethodName            = "/voice.bot.v1.BotService/ListBotsInChat"
-	BotService_SetBotChatEnabled_FullMethodName         = "/voice.bot.v1.BotService/SetBotChatEnabled"
-	BotService_CheckBotInstallationScope_FullMethodName = "/voice.bot.v1.BotService/CheckBotInstallationScope"
-	BotService_ExecuteSlashInteraction_FullMethodName   = "/voice.bot.v1.BotService/ExecuteSlashInteraction"
-	BotService_ListSlashCommandsForChat_FullMethodName  = "/voice.bot.v1.BotService/ListSlashCommandsForChat"
-	BotService_CompleteInteraction_FullMethodName       = "/voice.bot.v1.BotService/CompleteInteraction"
-	BotService_AutocompleteSlashOption_FullMethodName   = "/voice.bot.v1.BotService/AutocompleteSlashOption"
-	BotService_TouchPresence_FullMethodName             = "/voice.bot.v1.BotService/TouchPresence"
-	BotService_AssignBotRole_FullMethodName             = "/voice.bot.v1.BotService/AssignBotRole"
-	BotService_RevokeBotRole_FullMethodName             = "/voice.bot.v1.BotService/RevokeBotRole"
-	BotService_ListSpaceMembersForBot_FullMethodName    = "/voice.bot.v1.BotService/ListSpaceMembersForBot"
-	BotService_CreateBotChat_FullMethodName             = "/voice.bot.v1.BotService/CreateBotChat"
-	BotService_GetChatMessagesForBot_FullMethodName     = "/voice.bot.v1.BotService/GetChatMessagesForBot"
-	BotService_CreateBotRole_FullMethodName             = "/voice.bot.v1.BotService/CreateBotRole"
-	BotService_CompleteAutocomplete_FullMethodName      = "/voice.bot.v1.BotService/CompleteAutocomplete"
-	BotService_ApplySpaceLifecycleFence_FullMethodName  = "/voice.bot.v1.BotService/ApplySpaceLifecycleFence"
-	BotService_PurgeSpace_FullMethodName                = "/voice.bot.v1.BotService/PurgeSpace"
+	BotService_PublishGameEvent_FullMethodName             = "/voice.bot.v1.BotService/PublishGameEvent"
+	BotService_RegisterBot_FullMethodName                  = "/voice.bot.v1.BotService/RegisterBot"
+	BotService_UpdateBot_FullMethodName                    = "/voice.bot.v1.BotService/UpdateBot"
+	BotService_DeleteBot_FullMethodName                    = "/voice.bot.v1.BotService/DeleteBot"
+	BotService_GetBot_FullMethodName                       = "/voice.bot.v1.BotService/GetBot"
+	BotService_GetBotBySlug_FullMethodName                 = "/voice.bot.v1.BotService/GetBotBySlug"
+	BotService_ListBots_FullMethodName                     = "/voice.bot.v1.BotService/ListBots"
+	BotService_RegenerateToken_FullMethodName              = "/voice.bot.v1.BotService/RegenerateToken"
+	BotService_RegenerateWebhookSecret_FullMethodName      = "/voice.bot.v1.BotService/RegenerateWebhookSecret"
+	BotService_RegisterCommands_FullMethodName             = "/voice.bot.v1.BotService/RegisterCommands"
+	BotService_GetCommands_FullMethodName                  = "/voice.bot.v1.BotService/GetCommands"
+	BotService_SetWebhookURL_FullMethodName                = "/voice.bot.v1.BotService/SetWebhookURL"
+	BotService_GetWebhookURL_FullMethodName                = "/voice.bot.v1.BotService/GetWebhookURL"
+	BotService_SetChatWhitelist_FullMethodName             = "/voice.bot.v1.BotService/SetChatWhitelist"
+	BotService_GetChatWhitelist_FullMethodName             = "/voice.bot.v1.BotService/GetChatWhitelist"
+	BotService_SendBotMessage_FullMethodName               = "/voice.bot.v1.BotService/SendBotMessage"
+	BotService_EditBotMessage_FullMethodName               = "/voice.bot.v1.BotService/EditBotMessage"
+	BotService_SendEphemeral_FullMethodName                = "/voice.bot.v1.BotService/SendEphemeral"
+	BotService_DeferResponse_FullMethodName                = "/voice.bot.v1.BotService/DeferResponse"
+	BotService_PollEvents_FullMethodName                   = "/voice.bot.v1.BotService/PollEvents"
+	BotService_ValidateManifest_FullMethodName             = "/voice.bot.v1.BotService/ValidateManifest"
+	BotService_ApplyManifest_FullMethodName                = "/voice.bot.v1.BotService/ApplyManifest"
+	BotService_GetManifest_FullMethodName                  = "/voice.bot.v1.BotService/GetManifest"
+	BotService_InstallBotInSpace_FullMethodName            = "/voice.bot.v1.BotService/InstallBotInSpace"
+	BotService_UninstallBotFromSpace_FullMethodName        = "/voice.bot.v1.BotService/UninstallBotFromSpace"
+	BotService_ListInstalledBots_FullMethodName            = "/voice.bot.v1.BotService/ListInstalledBots"
+	BotService_ListBotsInChat_FullMethodName               = "/voice.bot.v1.BotService/ListBotsInChat"
+	BotService_SetBotChatEnabled_FullMethodName            = "/voice.bot.v1.BotService/SetBotChatEnabled"
+	BotService_CheckBotInstallationScope_FullMethodName    = "/voice.bot.v1.BotService/CheckBotInstallationScope"
+	BotService_CheckBotMessageSendAuthority_FullMethodName = "/voice.bot.v1.BotService/CheckBotMessageSendAuthority"
+	BotService_ExecuteSlashInteraction_FullMethodName      = "/voice.bot.v1.BotService/ExecuteSlashInteraction"
+	BotService_ListSlashCommandsForChat_FullMethodName     = "/voice.bot.v1.BotService/ListSlashCommandsForChat"
+	BotService_CompleteInteraction_FullMethodName          = "/voice.bot.v1.BotService/CompleteInteraction"
+	BotService_AutocompleteSlashOption_FullMethodName      = "/voice.bot.v1.BotService/AutocompleteSlashOption"
+	BotService_TouchPresence_FullMethodName                = "/voice.bot.v1.BotService/TouchPresence"
+	BotService_AssignBotRole_FullMethodName                = "/voice.bot.v1.BotService/AssignBotRole"
+	BotService_RevokeBotRole_FullMethodName                = "/voice.bot.v1.BotService/RevokeBotRole"
+	BotService_ListSpaceMembersForBot_FullMethodName       = "/voice.bot.v1.BotService/ListSpaceMembersForBot"
+	BotService_CreateBotChat_FullMethodName                = "/voice.bot.v1.BotService/CreateBotChat"
+	BotService_GetChatMessagesForBot_FullMethodName        = "/voice.bot.v1.BotService/GetChatMessagesForBot"
+	BotService_CreateBotRole_FullMethodName                = "/voice.bot.v1.BotService/CreateBotRole"
+	BotService_CompleteAutocomplete_FullMethodName         = "/voice.bot.v1.BotService/CompleteAutocomplete"
+	BotService_ApplySpaceLifecycleFence_FullMethodName     = "/voice.bot.v1.BotService/ApplySpaceLifecycleFence"
+	BotService_PurgeSpace_FullMethodName                   = "/voice.bot.v1.BotService/PurgeSpace"
 )
 
 // BotServiceClient is the client API for BotService service.
@@ -104,6 +105,9 @@ type BotServiceClient interface {
 	// Current exact installation/scope decision for composite Space creation.
 	// @voice.security=protected;callers=service:space
 	CheckBotInstallationScope(ctx context.Context, in *CheckBotInstallationScopeRequest, opts ...grpc.CallOption) (*CheckBotInstallationScopeResponse, error)
+	// Current exact send-only authority; no ordinary visibility grant.
+	// @voice.security=protected;callers=service:messaging
+	CheckBotMessageSendAuthority(ctx context.Context, in *CheckBotMessageSendAuthorityRequest, opts ...grpc.CallOption) (*CheckBotMessageSendAuthorityResponse, error)
 	// Client slash interactions.
 	ExecuteSlashInteraction(ctx context.Context, in *ExecuteSlashInteractionRequest, opts ...grpc.CallOption) (*ExecuteSlashInteractionResponse, error)
 	ListSlashCommandsForChat(ctx context.Context, in *ListSlashCommandsForChatRequest, opts ...grpc.CallOption) (*ListSlashCommandsForChatResponse, error)
@@ -431,6 +435,16 @@ func (c *botServiceClient) CheckBotInstallationScope(ctx context.Context, in *Ch
 	return out, nil
 }
 
+func (c *botServiceClient) CheckBotMessageSendAuthority(ctx context.Context, in *CheckBotMessageSendAuthorityRequest, opts ...grpc.CallOption) (*CheckBotMessageSendAuthorityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckBotMessageSendAuthorityResponse)
+	err := c.cc.Invoke(ctx, BotService_CheckBotMessageSendAuthority_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *botServiceClient) ExecuteSlashInteraction(ctx context.Context, in *ExecuteSlashInteractionRequest, opts ...grpc.CallOption) (*ExecuteSlashInteractionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ExecuteSlashInteractionResponse)
@@ -611,6 +625,9 @@ type BotServiceServer interface {
 	// Current exact installation/scope decision for composite Space creation.
 	// @voice.security=protected;callers=service:space
 	CheckBotInstallationScope(context.Context, *CheckBotInstallationScopeRequest) (*CheckBotInstallationScopeResponse, error)
+	// Current exact send-only authority; no ordinary visibility grant.
+	// @voice.security=protected;callers=service:messaging
+	CheckBotMessageSendAuthority(context.Context, *CheckBotMessageSendAuthorityRequest) (*CheckBotMessageSendAuthorityResponse, error)
 	// Client slash interactions.
 	ExecuteSlashInteraction(context.Context, *ExecuteSlashInteractionRequest) (*ExecuteSlashInteractionResponse, error)
 	ListSlashCommandsForChat(context.Context, *ListSlashCommandsForChatRequest) (*ListSlashCommandsForChatResponse, error)
@@ -725,6 +742,9 @@ func (UnimplementedBotServiceServer) SetBotChatEnabled(context.Context, *SetBotC
 }
 func (UnimplementedBotServiceServer) CheckBotInstallationScope(context.Context, *CheckBotInstallationScopeRequest) (*CheckBotInstallationScopeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckBotInstallationScope not implemented")
+}
+func (UnimplementedBotServiceServer) CheckBotMessageSendAuthority(context.Context, *CheckBotMessageSendAuthorityRequest) (*CheckBotMessageSendAuthorityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CheckBotMessageSendAuthority not implemented")
 }
 func (UnimplementedBotServiceServer) ExecuteSlashInteraction(context.Context, *ExecuteSlashInteractionRequest) (*ExecuteSlashInteractionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExecuteSlashInteraction not implemented")
@@ -1304,6 +1324,24 @@ func _BotService_CheckBotInstallationScope_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BotService_CheckBotMessageSendAuthority_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckBotMessageSendAuthorityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).CheckBotMessageSendAuthority(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_CheckBotMessageSendAuthority_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).CheckBotMessageSendAuthority(ctx, req.(*CheckBotMessageSendAuthorityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _BotService_ExecuteSlashInteraction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ExecuteSlashInteractionRequest)
 	if err := dec(in); err != nil {
@@ -1674,6 +1712,10 @@ var BotService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CheckBotInstallationScope",
 			Handler:    _BotService_CheckBotInstallationScope_Handler,
+		},
+		{
+			MethodName: "CheckBotMessageSendAuthority",
+			Handler:    _BotService_CheckBotMessageSendAuthority_Handler,
 		},
 		{
 			MethodName: "ExecuteSlashInteraction",

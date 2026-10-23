@@ -5,6 +5,7 @@ package voice.messaging.v1;
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
 import "voice/chat/v1/chat_scope_authority.proto";
+import "voice/common/v1/bot_message.proto";
 import "voice/common/v1/common.proto";
 import "voice/common/v1/space_lifecycle.proto";
 import "voice/gameintegration/v1/game_event.proto";
@@ -129,6 +130,8 @@ message ApplyBotChatPinRemovalResponse {
 service MessagingService {
   // @voice.security=protected;callers=service:bot
   rpc SendGameEventMessage(SendGameEventMessageRequest) returns (SendGameEventMessageResponse);
+  // @voice.security=protected;callers=service:bot
+  rpc SendBotMessage(SendBotMessageRequest) returns (SendBotMessageResponse);
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
   // @voice.security=protected;callers=service:gateway
   // T15 internal ingress: the exact device-signed compact JWS and Auth
@@ -250,6 +253,16 @@ enum SharedMediaKind {
   SHARED_MEDIA_KIND_LINKS = 3; // URLs from message content
   SHARED_MEDIA_KIND_VOICE = 4; // audio + voice_message attachments
   SHARED_MEDIA_KIND_STICKERS = 5; // sticker attachments
+}
+
+// @voice.unknown_fields=reject
+message SendBotMessageRequest {
+  SendMessageRequest message = 1;
+  voice.common.v1.BotMessageSendBinding binding = 2;
+}
+
+message SendBotMessageResponse {
+  Message message = 1;
 }
 
 message SendMessageRequest {

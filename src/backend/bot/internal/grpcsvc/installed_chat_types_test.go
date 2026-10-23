@@ -42,7 +42,7 @@ func TestListInstalledBots_ActualChatTypes(t *testing.T) {
 	}
 	bot, _, err := st.CreateBot(ctx, uuid.New(), "TypedBot", "", `[]`, uuid.New())
 	require.NoError(t, err)
-	_, err = st.InstallInSpace(ctx, bot.ID, space, profile, ids)
+	_, err = installSendFixture(t, st, ctx, bot.ID, space, profile, ids)
 	require.NoError(t, err)
 	svc := grpcsvc.NewBotGRPC(st, dispatch.NewHub())
 	request := &botv1.ListInstalledBotsRequest{SpaceId: space.String()}
@@ -108,7 +108,7 @@ func TestListInstalledBots_ActualChatTypes(t *testing.T) {
 	}
 	second, _, err := st.CreateBot(ctx, uuid.New(), "SharedChatBot", "", `[]`, uuid.New())
 	require.NoError(t, err)
-	_, err = st.InstallInSpace(ctx, second.ID, space, profile, ids[:1])
+	_, err = installSendFixture(t, st, ctx, second.ID, space, profile, ids[:1])
 	require.NoError(t, err)
 	lookupCalls = make(map[string]int)
 	got, err := svc.ListInstalledBots(ctx, request)

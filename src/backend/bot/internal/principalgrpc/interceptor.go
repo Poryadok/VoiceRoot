@@ -7,6 +7,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"time"
 	botv1 "voice.app/voice/bot/v1"
 	"voice/backend/pkg/principal"
 )
@@ -21,6 +22,10 @@ type SpaceVerifier interface {
 	VerifySpace(context.Context, string, string, string, string) (principal.Principal, error)
 }
 
+type MessagingVerifier interface {
+	VerifyMessaging(context.Context, string, string, string, string) (principal.Principal, error)
+}
+
 func Unavailable(err error) error {
 	if err == nil {
 		return status.Error(codes.Unavailable, "principal authority unavailable")
@@ -33,7 +38,7 @@ func isSpaceLifecycleMethod(method string) bool {
 }
 
 func isProtectedServiceMethod(method string) bool {
-	return method == botv1.BotService_PublishGameEvent_FullMethodName || isSpaceLifecycleMethod(method)
+	return method == botv1.BotService_PublishGameEvent_FullMethodName || method == botv1.BotService_CheckBotMessageSendAuthority_FullMethodName || isSpaceLifecycleMethod(method)
 }
 
 // OrdinaryUnaryInterceptor keeps Space lifecycle administration off the Bot's
@@ -51,7 +56,12 @@ func OrdinaryUnaryInterceptor() grpc.UnaryServerInterceptor {
 // and binds the signed service principal to exact protobuf request bytes.
 func SpaceLifecycleUnaryInterceptor(verifier SpaceVerifier) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if !isSpaceLifecycleMethod(info.FullMethod) {
+		if info.FullMethod == botv1.BotService_CheckBotMessageSendAuthority_FullMethodName {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+		}
+		if !isSpaceLifecycleMethod(info.FullMethod) && info.FullMethod != botv1.BotService_CheckBotMessageSendAuthority_FullMethodName {
 			return nil, status.Error(codes.Unimplemented, "Bot method is not exposed on the Space lifecycle listener")
 		}
 		transport, err := principal.IncomingMetadata(ctx)
@@ -66,15 +76,32 @@ func SpaceLifecycleUnaryInterceptor(verifier SpaceVerifier) grpc.UnaryServerInte
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, "invalid Space lifecycle request")
 		}
-		verified, err := verifier.VerifySpace(ctx, transport.BearerToken, info.FullMethod, transport.RequestID, hash)
+		issuer := "space"
+		verify := verifier.VerifySpace
+		if info.FullMethod == botv1.BotService_CheckBotMessageSendAuthority_FullMethodName {
+			messaging, ok := verifier.(MessagingVerifier)
+			if !ok {
+				return nil, status.Error(codes.Unavailable, "Messaging principal authority unavailable")
+			}
+			issuer, verify = "messaging", messaging.VerifyMessaging
+		}
+		verified, err := verify(ctx, transport.BearerToken, info.FullMethod, transport.RequestID, hash)
 		if err != nil {
 			if status.Code(err) == codes.Unavailable || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 				return nil, status.Error(codes.Unavailable, "Space principal authority unavailable")
 			}
 			return nil, status.Error(codes.Unauthenticated, "invalid Space service principal")
 		}
-		if verified.Kind != "service" || verified.Issuer != "space" || verified.Subject != "service:space" || verified.Audience != "bot" || verified.RPC != info.FullMethod || verified.RequestID != transport.RequestID || verified.RequestHash != hash || verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 {
+		if verified.Kind != "service" || verified.Issuer != issuer || verified.Subject != "service:"+issuer || verified.Audience != "bot" || verified.RPC != info.FullMethod || verified.RequestID != transport.RequestID || verified.RequestHash != hash || verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 {
 			return nil, status.Error(codes.PermissionDenied, "Space service principal required")
+		}
+		if info.FullMethod == botv1.BotService_CheckBotMessageSendAuthority_FullMethodName {
+			if !verified.ExpiresAt.After(time.Now()) {
+				return nil, status.Error(codes.Unauthenticated, "expired Messaging principal")
+			}
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithDeadline(ctx, verified.ExpiresAt)
+			defer cancel()
 		}
 		return handler(principal.WithVerified(ctx, verified), request)
 	}

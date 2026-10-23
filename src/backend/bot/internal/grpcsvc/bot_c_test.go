@@ -223,7 +223,7 @@ func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceCli
 		if deps.msg != nil {
 			ml := bufconn.Listen(1024)
 			ms := grpc.NewServer()
-			messagingv1.RegisterMessagingServiceServer(ms, deps.msg)
+			messagingv1.RegisterMessagingServiceServer(ms, protectedMessagingFixture(t, svc, deps.msg))
 			go func() { _ = ms.Serve(ml) }()
 			mconn, err := grpc.NewClient("passthrough:///bufnet",
 				grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return ml.Dial() }),
@@ -231,6 +231,7 @@ func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceCli
 			)
 			require.NoError(t, err)
 			svc.Messaging = messagingv1.NewMessagingServiceClient(mconn)
+			svc.ProtectedMessaging = svc.Messaging
 		}
 		if deps.chat != nil {
 			cl := bufconn.Listen(1024)
@@ -309,7 +310,7 @@ func setupBotCCommandBot(
 	chatID := uuid.New()
 	botUUID, err := uuid.Parse(botID)
 	require.NoError(t, err)
-	_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 	return ctx, botID, botToken, chatID, spaceID

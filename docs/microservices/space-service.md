@@ -1,5 +1,18 @@
 # Space Service
 
+Protected Bot send observations use `GetMemberAdmissionAuthority` with the exact
+`bot_message_send_binding` selector. Only `service:messaging` may supply that
+selector; the nil-binding Role route retains its existing semantics. Space echoes
+the tuple only after verifying the current native Bot publication and installation
+head (including installation generation and add operation), eligible membership,
+LIVE lifecycle, available ownership and exact text-chat tree relation. This is
+send evidence, not a Role grant or chat visibility capability. The original caller,
+credential and maximum five-second budget includes lock waiting and commit.
+The existing `SPACE_ROLE_OVERRIDE_PRINCIPAL_*` listener accepts the optional
+`messaging` endpoint from `S2S_JWKS_URLS_JSON` only for this RPC. Optional paired
+`S2S_JWKS_CLIENT_CERT_FILE` / `S2S_JWKS_CLIENT_KEY_FILE` configure its JWKS client
+identity. See [send protocol](../testing/bot-message-send-authority-exec-plan.md).
+
 ## Protected settings and membership reads
 
 `UpdateSpace` and `UpdateSpaceMmConfig` accept only the existing lifecycle

@@ -729,6 +729,13 @@ func chatTypePtr(t chatv1.ChatType) *chatv1.ChatType {
 }
 
 func (s *BotGRPC) postMessage(ctx context.Context, botRow *store.BotRow, chat *chatv1.ChatRef, content, threadParentID string) (*messagingv1.Message, error) {
+	if !chatRefIsDM(chat) {
+		req := &messagingv1.SendMessageRequest{Chat: chat, Content: content}
+		if threadParentID != "" {
+			req.ThreadParentId = &threadParentID
+		}
+		return s.postSpaceBotMessage(ctx, botRow, req)
+	}
 	if s.Messaging == nil {
 		return nil, status.Error(codes.FailedPrecondition, "messaging client not configured")
 	}
@@ -748,10 +755,17 @@ func (s *BotGRPC) postMessage(ctx context.Context, botRow *store.BotRow, chat *c
 }
 
 func (s *BotGRPC) postInteractionMessage(ctx context.Context, botRow *store.BotRow, chat *chatv1.ChatRef, token, content, threadParentID string) (*messagingv1.Message, error) {
+	clientMessageID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("bot-interaction:"+botRow.ID.String()+":"+token)).String()
+	if !chatRefIsDM(chat) {
+		req := &messagingv1.SendMessageRequest{Chat: chat, Content: content, ClientMessageId: &clientMessageID}
+		if threadParentID != "" {
+			req.ThreadParentId = &threadParentID
+		}
+		return s.postSpaceBotMessage(ctx, botRow, req)
+	}
 	if s.Messaging == nil {
 		return nil, status.Error(codes.FailedPrecondition, "messaging client not configured")
 	}
-	clientMessageID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("bot-interaction:"+botRow.ID.String()+":"+token)).String()
 	ctx = metadata.AppendToOutgoingContext(ctx,
 		authctx.HeaderProfileID, botRow.ActorProfileID.String(),
 		authctx.HeaderUserID, botRow.OwnerAccountID.String(),

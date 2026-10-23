@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"google.golang.org/protobuf/proto"
 	"log/slog"
 	"reflect"
 	"strings"
@@ -125,6 +126,10 @@ func (s *MessagingGRPC) threadPolicyDeps() threadPolicyDeps {
 }
 
 func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMessageRequest) (*messagingv1.SendMessageResponse, error) {
+	return s.sendMessage(ctx, req, nil)
+}
+
+func (s *MessagingGRPC) sendMessage(ctx context.Context, req *messagingv1.SendMessageRequest, bot *botSendAdmission) (*messagingv1.SendMessageResponse, error) {
 	// P-008 establishes the wire contract first. Until the schedule handler slice
 	// owns durable creation, reject a populated arm so it cannot silently take
 	// the existing immediate insert/event path.
@@ -135,6 +140,12 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		return nil, status.Error(codes.FailedPrecondition, "messaging persistence not configured")
 	}
 	profileID, ok := authctx.ProfileID(ctx)
+	if bot != nil {
+		if bot.proof.Validate(bot.request) != nil || !proto.Equal(req, bot.request.Message) {
+			return nil, status.Error(codes.Unauthenticated, "invalid Bot send admission")
+		}
+		profileID, ok = uuid.MustParse(bot.request.Binding.ActorProfileId), true
+	}
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
@@ -145,9 +156,9 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	if err := validateChatRefMessaging(req.GetChat()); err != nil {
 		return nil, err
 	}
-	if isNilDependency(s.ChatGuard) {
+	if bot == nil && isNilDependency(s.ChatGuard) {
 		return nil, status.Error(codes.Unavailable, "chat membership unavailable")
-	} else {
+	} else if bot == nil {
 		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
 			if errors.Is(err, store.ErrNotChatMember) {
 				return nil, status.Error(codes.PermissionDenied, "not a chat member")
@@ -155,7 +166,12 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
-	chatType, err := s.resolveAuthoritativeChatType(ctx, chatID, profileID)
+	var chatType chatv1.ChatType
+	if bot != nil {
+		chatType = bot.chatType
+	} else {
+		chatType, err = s.resolveAuthoritativeChatType(ctx, chatID, profileID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -168,8 +184,10 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	if err := s.checkDMPrivacyForSend(ctx, chatType, chatID, profileID); err != nil {
 		return nil, err
 	}
-	if err := s.checkSpaceSendPermission(ctx, chatID, profileID); err != nil {
-		return nil, err
+	if bot == nil {
+		if err := s.checkSpaceSendPermission(ctx, chatID, profileID); err != nil {
+			return nil, err
+		}
 	}
 
 	isE2E := req.IsE2E != nil && *req.IsE2E
@@ -187,10 +205,19 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	}
 
 	postedAsChat := req.GetPostedAsChat()
-	if err := s.threadPolicyDeps().validateSend(ctx, chatID, profileID, threadParent, postedAsChat); err != nil {
+	threadDeps := s.threadPolicyDeps()
+	if bot != nil {
+		threadDeps.RolePerms = botSendRoleChecker{admission: bot, ordinary: threadDeps.RolePerms}
+	}
+	if err := threadDeps.validateSend(ctx, chatID, profileID, threadParent, postedAsChat); err != nil {
 		return nil, err
 	}
 	requestHash, err := sendRequestFingerprint(req, chatID, chatType, threadParent)
+	requestRPC := messagingv1.MessagingService_SendMessage_FullMethodName
+	if bot != nil && err == nil {
+		requestHash, err = principal.RequestHash(bot.request)
+		requestRPC = messagingv1.MessagingService_SendBotMessage_FullMethodName
+	}
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "send request cannot be bound")
 	}
@@ -199,13 +226,15 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		if err != nil {
 			return nil, err
 		}
-		saved, err := s.Messages.GetExactSendReceipt(ctx, chatID, profileID, clientID, messagingv1.MessagingService_SendMessage_FullMethodName, requestHash)
+		saved, err := s.Messages.GetExactSendReceipt(ctx, chatID, profileID, clientID, requestRPC, requestHash)
 		if err == nil {
 			if saved.DeletedAt != nil {
 				return nil, status.Error(codes.NotFound, "message not found")
 			}
-			if err := s.requireMessageReadEntitlement(ctx, chatID, profileID, saved.CreatedAt); err != nil {
-				return nil, err
+			if bot == nil {
+				if err := s.requireMessageReadEntitlement(ctx, chatID, profileID, saved.CreatedAt); err != nil {
+					return nil, err
+				}
 			}
 			return &messagingv1.SendMessageResponse{Message: messageRowToProto(saved, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, "", false)}, nil
 		}
@@ -333,7 +362,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	}
 	row := store.MessageRow{
 		AdmissionRequestHash: requestHash,
-		AdmissionRequestRPC:  messagingv1.MessagingService_SendMessage_FullMethodName,
+		AdmissionRequestRPC:  requestRPC,
 		ID:                   msgID,
 		ChatID:               chatID,
 		ChatType:             chatTypeName,
@@ -351,6 +380,9 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		IsE2E:                isE2E,
 		ContentType:          contentType,
 		SendSilent:           req.GetSendSilent(),
+	}
+	if bot != nil {
+		row.BotSendAdmission = bot.beforeWrite
 	}
 	var outboxEvents []messageevents.OutboxEvent
 	if !ghostOnly {

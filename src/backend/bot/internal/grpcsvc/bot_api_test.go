@@ -179,7 +179,7 @@ commands:
 
 	chatID := uuid.New()
 	botUUID, _ := uuid.Parse(botID)
-	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
@@ -233,7 +233,7 @@ commands:
 
 	chatID := uuid.New()
 	botUUID, _ := uuid.Parse(botID)
-	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
@@ -276,7 +276,7 @@ commands:
 	require.NoError(t, err)
 
 	chatID := uuid.New()
-	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
@@ -310,7 +310,7 @@ func TestRawUninstallPreservesInstalledBots(t *testing.T) {
 	botUUID, _ := uuid.Parse(botID)
 	spaceID := uuid.New()
 	chatID := uuid.New()
-	_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 

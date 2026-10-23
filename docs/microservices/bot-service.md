@@ -1,5 +1,38 @@
 # Bot Service
 
+### Protected immediate Space message publication
+
+Space replies from builtin slash commands, public Bot sends and deferred
+interaction completion use `Messaging.SendBotMessage`. The request carries an
+exact protocol1 Bot/actor/Space/chat/installation/installation-generation/add-operation
+binding and a service:bot credential over the complete wrapper. This send-only
+route requires the declared `TEXT_CHAT_SEND_MESSAGES` scope; it grants no
+`TEXT_CHAT_VIEW`, history or member-list access. DM publication retains its
+existing interaction and scope checks.
+
+Bot holds its shared Space guard, then Bot and whitelist rows `FOR SHARE`, through
+the actual Messaging RPC. The original maximum five-second deadline includes
+guard acquisition and all callbacks. Disable and uninstall use the existing
+conflicting guards. Messaging independently checks the current Bot tuple via
+`Bot.CheckBotMessageSendAuthority` and Space's current native publication/tree
+observation. The Bot callback uses one MVCC statement on a separate bounded
+two-connection read pool, so saturated producer transactions cannot starve their
+own callbacks. The callback itself bounds verification/read time by five seconds
+and the verified credential expiry, and rechecks the deadline before replying.
+Revocation denies new attempts; an already admitted attempt may overlap a
+concurrent cancellation within its original deadline. This is not a distributed
+hard post-acknowledgement exclusion guarantee.
+
+The callback is exposed only on the existing Bot lifecycle mTLS listener with
+exact service:messaging, method/body/request binding, replay prevention and the
+configured Messaging URI SAN. Full/phase0 deployments use the dedicated
+`messaging-bot-authority-client` leaf signed by the lifecycle client CA, URI
+`spiffe://voice.local/phase0/messaging`; the CA trust set is not widened.
+Initial Messaging JWKS retrieval is lazy to avoid a startup cycle, while every
+callback fails closed until verified keys are available. Scheduled delivery,
+send-when-online and posted-as-chat are not accepted on the immediate route;
+deferred Bot completion starts a fresh bounded attempt when it actually runs.
+
 `SPACE_PRINCIPAL_JWKS_URL` accepts the canonical Space provider path
 `/.well-known/jwks.json` and the existing dedicated-provider alias
 `/space/jwks.json`. Both require exact HTTPS URLs without credentials, query,
