@@ -154,3 +154,12 @@ Receipts distinguish those targets, retain exact prior/incoming rows and runtime
 flags, and preserve144c69 HOLD. The record/evidence R is integrated by root before
 K pins its actual ancestor commit; unpinned code remains fail-closed. Negative
 real-Git fixtures and independent code review precede the next actual producer.
+
+Root integrated Role R asd739c1f514eba722d3fd13c08983c954b286b018, whose record
+raw SHA256 is967753244e8a72983df5a1b58bc9bdde3bee90d39633a658cf81e6711eeb721a.
+The subsequent carrier pins that actual ancestor. It also preserves the v1
+record and both verifier files at the actual target. Twenty-four real-Git tests
+pass in30.019 seconds; all five original Role tests pass in3.858 seconds. Shell
+syntax passes. The fixtures use an isolated Linux clone and detached synthetic
+commits, never modify the actual producer repository, and do not claim actual
+producer acceptance. Final code review and actual collector retry remain.
