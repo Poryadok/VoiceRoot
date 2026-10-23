@@ -348,6 +348,13 @@ func TestOwnershipScope_OrdinaryFixtureCallsWithoutPendingJournal(t *testing.T) 
 	st := ownershipScopeStoreFixture(t)
 	for _, tc := range r20OrdinaryScopeCases() {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.name == "AddBotMember" || tc.name == "RemoveBotMember" {
+				// A positive Bot operation needs a real installation capability,
+				// qualified native catalog and, on removal, its exact prior add.
+				// Raw freeze/uncertainty cases in the shared inventory stay intact.
+				requireBotInstallationScopePositive(t, tc.name == "RemoveBotMember")
+				return
+			}
 			f := newR20ScopeFixture(t, st, "")
 			// Raw UUID APIs no longer provide the qualified authority required
 			// by these mutations, even when no ownership journal is pending.
