@@ -996,3 +996,37 @@ The child uses the existing T33 `PurgeManagedChatContent` protocol:
 its service-principal request binding. The P3 adapter verifies that digest;
 it does not replace the saved child evidence with the parent's message-name
 domain. The Space participant request/receipt remains domain-separated P3.
+
+### Private Bot pin cleanup
+
+The legacy `UnpinMessagesBySenderInChats` method is denied because its body
+cannot bind an installation or durable operation. The protected replacement
+preserves messages and unrelated senders' pins. Cleanup persists immutable
+request/response receipts and attachment coverage in the same transaction as
+pin deletion. Exact retries and already-covered attachment batches do not
+repeat deletion. Pin admission captures the sender's cleanup revision before
+external checks and rechecks it under the mutation lock: stale requests retry,
+while freshly authorized human repins remain allowed.
+
+`ApplyBotChatPinRemoval` is exposed only by the dedicated Bot cleanup listener.
+It requires mTLS and an exact pure `service:bot` JWT bound to Messaging, method,
+full deterministic request hash and `operation_id`, with fresh replay-protected
+JTI. Ordinary Messaging and generic identity context cannot mint its private
+capability. The capability retains owned request bytes and is rechecked after
+database/source waits and before commit; an expired request can retry the same
+immutable operation with a fresh credential.
+
+The listener is enabled only with all nine `MESSAGING_BOT_PIN_CLEANUP_` settings:
+`GRPC_LISTEN`, `TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, `JWKS_URL`,
+`JWKS_CA_FILE`, `JWKS_CLIENT_CERT_FILE`, `JWKS_CLIENT_KEY_FILE`, and
+`REPLAY_REDIS_URL`. An incomplete set or missing current Chat datasource fails
+startup. No address or ordinary caller fallback is inferred. Current source
+qualification uses the existing authorized `CHAT_DATABASE_URL` read datasource,
+including Chat's permanent scope head/incarnation and lifecycle fence. A deleted
+chat requires an actual retained matching head; missing rows alone cannot prove
+completion. Exact completed replay and qualified historical coverage preserve
+later human repins without requiring a fresh live read.
+
+This receiver implements the c49/c50 one-effect per-chat attachment batch and
+c64 incarnation check. It does not supply Bot owner decisions, producer delivery,
+recovery orchestration, P3 covering receipts or a post-30-day proof provider.
