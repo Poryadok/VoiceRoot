@@ -550,6 +550,77 @@ Secret reference. The runner reuses a completed Job only when the stored hash
 matches the current SQL files; otherwise it applies the service's migration
 ConfigMap and waits for the replacement Job before continuing.
 
+### Space native installer
+
+Space is the explicit exception to generic SQL-only migration Job reuse.
+`src/backend/space/Dockerfile.native-migrate` builds the production installer
+from the repository-root context, with compiled exact SQL inventory and
+qualifier/transition source identity plus pinned migrate4.18.1 executable.
+Its Dockerfile-specific ignore excludes checkout state, worktrees and artifacts.
+The bootstrap image compiles the same command; no serving RPC, worker or provider
+invokes installer-only transitions.
+
+Before a fresh run, the owning deployment controller retains the actual build
+source/SCM identity and output image digest, chooses that platform digest as
+`SPACE_NATIVE_INSTALLER_IMAGE`, and owns the administrative Postgres credential
+already referenced by `POSTGRES_USER`/`POSTGRES_PASSWORD`. No registry tag is
+invented by the migration script. Image publication and selection belong to the
+release owner; supplying an arbitrary environment label is not image provenance.
+The rendered Job also tightens selection to the exact compiled source SHA from
+this deployment checkout; it cannot override any fixed SQL/catalog validation.
+
+Administrative configuration accepts a TCP PostgreSQL URI in
+`SPACE_NATIVE_ADMIN_URL`, or the existing `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`
+environment. Keyword DSNs, service indirection, connection-selector query
+aliases and duplicate query keys HOLD before any database mutation. URI queries
+accept only `sslmode`, `sslrootcert`, `sslcert`, `sslkey`, `connect_timeout` and
+`application_name`. TLS settings are normalized once for both actual drivers;
+the default is `require`, and supported explicit modes are `disable`, `require`,
+`verify-ca`, `verify-full`. The verified modes require an explicit CA file.
+Ambient TLS settings cannot replace stronger explicit URI settings. The admin
+and migration database paths are fixed to `postgres` and `space_db`; inherited
+password-file or query aliases cannot select another migration target.
+
+Drain applications and privileged DDL competitors and retain exclusive
+maintenance custody through actual fresh database creation, real migrate44,
+full44 source/M44 seal verification, real45/Transition45 receipt, real50/
+Transition50 receipt, and final full clean50 verification. M50's initial
+trusted45 prerequisite and the existing transition's original45 projection
+equality remain mandatory. Missing46–49 are not synthesized. Return success
+only after final complete evidence; no ordinary enrollment/new serving grants
+or provider activation occurs in this command.
+
+The new Space Job has zero retries: interruption or output persistence failure
+can leave committed44/45/50 stages, and a later run must HOLD rather than infer
+provenance or resume from endpoint state. Retain partial output and original
+target/source identity, then use a separately qualified recovery procedure.
+Do not clear dirty markers, use force, rewrite SQL/pins, manually update epoch
+or execute a transition against an unknown historical installation.
+
+The controller captures actual Job UID/spec, the selected matching Pod/runtime
+platform image digest, and complete JSON-lines output into immutable
+`voice-space-native-installer-evidence`. Retain and protect this artifact with
+the deployment's existing authenticated controller custody; it is not a new
+bearer receipt, key authority or database receipt service. Completed Job/SQL
+hash alone never grants readiness. Every known repeat launches a new read-only
+full50 verifier against original creation/source/executable/migrator/inventory/
+target/seal evidence. A source/image change or database replacement/drift HOLDs;
+read-only `verified` output does not invent new transition/install receipts.
+Retained JSON-lines input is explicitly limited to1MiB; overflow rejects the
+whole artifact rather than treating a truncated prefix as completed evidence.
+
+Local Compose uses the same distinction. The standalone controller saves actual
+successful output (0600) and observed image ID under ignored
+`tmp/native-space-installer/`; the init image mounts it read-only. The two builds
+must share `SOURCE_REVISION` when it is supplied. Direct Compose bootstrap can
+produce fresh evidence in Docker logs, but an existing50 target without retained
+authenticated controller evidence remains HOLD. There is no automatic historical
+adoption or cross-crash evidence reconstruction in this first stage.
+
+Installer qualification does not close full Native initialization/Ban budgets,
+all-writer/provider assembly, P3, runtime activation, hosted CI or release
+acceptance. Those remain separate required gates.
+
 Before a lifecycle schema release, backup `voice_db` together with the other service-owned PostgreSQL databases.
 For recovery, restore `voice_db` into an isolated database,
 validate migrations through `000002_redis_divergence`, all seven lifecycle tables,

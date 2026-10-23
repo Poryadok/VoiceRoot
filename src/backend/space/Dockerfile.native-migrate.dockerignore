@@ -1,0 +1,8 @@
+**
+!src/
+!src/backend/
+!src/backend/**
+**/.git
+**/.treehouse
+**/tmp
+**/.env

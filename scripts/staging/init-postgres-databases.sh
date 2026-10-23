@@ -9,7 +9,7 @@ PG_USER="${POSTGRES_USER:-voice}"
 PG_DB="${POSTGRES_DB:-voice}"
 
 databases=(
-  auth_db user_db social_db chat_db messaging_db file_db space_db role_db
+  auth_db user_db social_db chat_db messaging_db file_db role_db
   notification_db realtime_db matchmaking_db gateway_db search_db subscription_db
   moderation_db bot_db story_db voice_db
 )

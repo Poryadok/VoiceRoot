@@ -137,6 +137,16 @@ baseline_version() {
 migrate_db() {
   db="$1"
   dir="${MIGRATIONS_DIR}/${db}"
+  if [ "$db" = space_db ]; then
+    # This must precede every generic marker/dirty/baseline branch. Existing
+    # targets HOLD unless the owning controller supplies actual retained logs.
+    if [ -n "${SPACE_NATIVE_PRIOR_EVIDENCE:-}" ] && [ -f "$SPACE_NATIVE_PRIOR_EVIDENCE" ]; then
+      native-migrate --mode=verify --prior-evidence="$SPACE_NATIVE_PRIOR_EVIDENCE" --migrations-dir="$dir" --migrate=/usr/local/bin/native-space-migrate-driver
+    else
+      native-migrate --mode=provision --migrations-dir="$dir" --migrate=/usr/local/bin/native-space-migrate-driver
+    fi
+    return $?
+  fi
   if [ ! -d "$dir" ]; then
     echo "==> skip ${db}: no migrations directory"
     return 0

@@ -471,8 +471,10 @@ services:
   compose-db-init:
     profiles: ["app"]
     build:
-      context: ./docker/postgres
-      dockerfile: Dockerfile.compose-db-init
+      context: .
+      dockerfile: docker/postgres/Dockerfile.compose-db-init
+      args:
+        SOURCE_REVISION: ${SOURCE_REVISION:-}
     restart: "no"
     environment:
       PGHOST: postgres
@@ -481,9 +483,11 @@ services:
       GAME_INTEGRATION_DB_PASSWORD: ${GAME_INTEGRATION_DB_PASSWORD:-voice-compose-gameintegration-runtime}
       SCHEMA_DIR: /schema
       MIGRATIONS_DIR: /migrations
+      SPACE_NATIVE_PRIOR_EVIDENCE: /native-install-evidence/prior.jsonl
     volumes:
       - ./docker/postgres:/schema:ro
       - ./src/backend/migrations:/migrations:ro
+      - ${SPACE_NATIVE_EVIDENCE_DIR:-./tmp/native-space-installer}:/native-install-evidence:ro
     depends_on:
       postgres:
         condition: service_healthy

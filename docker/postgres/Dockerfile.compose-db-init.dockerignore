@@ -1,0 +1,12 @@
+**
+!src/
+!src/backend/
+!src/backend/**
+!docker/
+!docker/postgres/
+!docker/postgres/ensure-compose-schema.sh
+!docker/postgres/compose-migrate-dbs.sh
+**/.git
+**/.treehouse
+**/tmp
+**/.env
