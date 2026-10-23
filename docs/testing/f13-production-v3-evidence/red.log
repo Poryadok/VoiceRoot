@@ -1,0 +1,13 @@
+[rtk] /!\ No hook installed — run `rtk init -g` for automatic token savings
+00:00 +0: loading D:/Git/Voice/.treehouse/Voice-451d38/35/Voice/src/frontend/test/spaces_client_invites_test.dart
+00:00 +0: joinByInvite posts empty body and decodes membership
+00:00 +0 -1: joinByInvite posts empty body and decodes membership [E]
+  Expected: empty
+    Actual: [123, 34, 99, 111, 100, 101, 34, 58, 34, 115, 101, 99, 114, 101, 116, 34, 125]
+  Gateway derives the invite code from the route
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test\spaces_client_invites_test.dart 174:5          main.<fn>
+  
+00:00 +0 -1: Some tests failed.

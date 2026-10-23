@@ -1,0 +1,151 @@
+{
+  "commit": "f4db5563f06a3719a61f34f9b848bb85c43a7fb7",
+  "base": "e8db2e99ae9bf07d57e28663b261a0feb998763b",
+  "files": [
+    {
+      "path": "docs/microservices/space-service.md",
+      "blob_oid": "ff81e287a15cd249ca3eb9605e4318e6bd5e738c",
+      "sha256": "9fbafafd7dc2d543d713c0806cda768e507a1e0e4973393f201847ddee1a584f"
+    },
+    {
+      "path": "docs/testing/voice-room-create-protected-exec-plan.md",
+      "blob_oid": "16072d4ff42d55395a004c1bd8aa87d2d78b2b49",
+      "sha256": "fb516db8739f656a2741133b89c697f0aa7c634130c4086833528884b4d56d9f"
+    },
+    {
+      "path": "src/backend/gateway/auth.go",
+      "blob_oid": "68aabdcd466fa02594b40324c5db00ac3569fb0d",
+      "sha256": "1edff5e04cf1c5641a4855775af3393f181243d5cf485f8971be43a8149d4475"
+    },
+    {
+      "path": "src/backend/gateway/routing.go",
+      "blob_oid": "094c6f3b4841108498f6d338172a2f2e57313689",
+      "sha256": "8b3ed3295854b45ab8d13fbaa894ecb546623ef486fda9e277199f64f88ff07a"
+    },
+    {
+      "path": "src/backend/gateway/space_join_test.go",
+      "blob_oid": "0f2f76d08555e70e9fa48b40143e851251068a01",
+      "sha256": "3dabf24562264b6d95c83955785b81440b82430167856089825304ec38e453b8"
+    },
+    {
+      "path": "src/backend/gateway/space_voice_create.go",
+      "blob_oid": "64da854d0adc35a817b8528f326ba6a6779aea07",
+      "sha256": "1fffb2ee0de145f162e054cf7411bc72790594cda8b13989a794b85529b0c6ee"
+    },
+    {
+      "path": "src/backend/gateway/space_voice_create_test.go",
+      "blob_oid": "b15ac5360a5abf964e0c78e3e513797082935dfc",
+      "sha256": "11c73b594a6c5ace152dbadd7c2a02ad89beb8408db436cdc7975d5cda7f655f"
+    },
+    {
+      "path": "src/backend/gateway/transcode.go",
+      "blob_oid": "9df4a95449732a55778c78ddad8b7cf6edb121e7",
+      "sha256": "64eb055a0ca670934dc669b4a64219983a56dca9b598dd71500fdbf6e7a5d7c6"
+    },
+    {
+      "path": "src/backend/gateway/transcode_spaces_tree.go",
+      "blob_oid": "ac181c15f876761d5895312327c4d66f5807466d",
+      "sha256": "875008a6dc9497c2f62ad24b8103b9fea49bb26bb340f2f1e498dc1427ca506b"
+    },
+    {
+      "path": "src/backend/gateway/transcode_spaces_tree_test.go",
+      "blob_oid": "78e8f53f71c9dce5d36e1e8c741a8345c6fd6d1b",
+      "sha256": "dbdbb0a3f8a934b3f326d2e11b682a3a700c4e85ef1422e32862561b5fb6068e"
+    },
+    {
+      "path": "src/backend/space/internal/grpcsvc/settings_fixture_test.go",
+      "blob_oid": "948cc83e66f9f5ff14e6463358754daf8da65547",
+      "sha256": "a4bf15f92ca2be002ae3e462d224add1b6ecf99a8480e0b8c47019a0c784e44e"
+    },
+    {
+      "path": "src/backend/space/internal/grpcsvc/space_integration_test.go",
+      "blob_oid": "d08388e64a3cd5b4ebe56dc0e3bccd958ac2847f",
+      "sha256": "8182b8c1f84187ff86e05f26faded053442685b76d0757d855d8d9599ab8c3eb"
+    },
+    {
+      "path": "src/backend/space/internal/grpcsvc/tree.go",
+      "blob_oid": "24674d6dfb6ce6b6294af1750f02314069111dc1",
+      "sha256": "65e9e72a6ad92ac732d50079261633de0c30b04007c338f5f490b76ff826f665"
+    },
+    {
+      "path": "src/backend/space/internal/grpcsvc/voice_create_native_test.go",
+      "blob_oid": "6cb152a58488594e8015ba7a424605d4d3a89a5e",
+      "sha256": "78e2ce00adde92dbbaea55e9b6b8e2af109f962111bf1264009c4bac281ada65"
+    },
+    {
+      "path": "src/backend/space/internal/grpcsvc/voice_create_permission.go",
+      "blob_oid": "9613d3dfa4db8e0d663ddb25bffcad7d7329dd15",
+      "sha256": "a9880a658e0a6c9899250e70eacbd4991b0ccf350940dbf809598081e6ace6a3"
+    },
+    {
+      "path": "src/backend/space/internal/grpcsvc/voice_create_principal_test.go",
+      "blob_oid": "4ff908ee8faf08b2563b81cbe93e61970f8cf6f9",
+      "sha256": "bd3ee3b470fdb432564406880b7de8aecd2f32ad47722c44aa1a62c637a37ca8"
+    },
+    {
+      "path": "src/backend/space/internal/grpcsvc/voice_room_access_contract_test.go",
+      "blob_oid": "bfb3eea64f13d433e996f06ab4df6d157772cf21",
+      "sha256": "3633cf90ed2262d67eecf914ea649dd74e0da6d7fc10efa3e3cc9b24becd65b2"
+    },
+    {
+      "path": "src/backend/space/internal/lifecycleprincipal/admission_call.go",
+      "blob_oid": "9dfdb87080e4eee407926b1b1d93234cabed2e73",
+      "sha256": "0e5ac0129d8222271049e0258a4c0e65f1cbb34c57e2b3cb308a843b6b429445"
+    },
+    {
+      "path": "src/backend/space/internal/lifecycleprincipal/interceptor.go",
+      "blob_oid": "f1802aab2b65f33590cfdadd07ad9bb0e4b8f1c6",
+      "sha256": "cbf6c6e79cdf122ac426bc74bab63dfbc10b70332413a98a7e06a5848e27f2d6"
+    },
+    {
+      "path": "src/backend/space/internal/lifecycleprincipal/voice_create_transport_test.go",
+      "blob_oid": "67b4bc63c76689d8fb13321459ecf98be1cec20e",
+      "sha256": "f9f15d42994aa838e05f17799e9488e5b81582de42f354b2817e1f3fd1791789"
+    },
+    {
+      "path": "src/backend/space/internal/store/tree.go",
+      "blob_oid": "dd4f5d1b300e8091e50c261e80398541ad511382",
+      "sha256": "7cba44cf6a97bb803aed7ca4a36757b15f38a0b8f36a62b6b82ea716c48d217d"
+    }
+  ],
+  "proof_logs_sha256": {
+    "gateway-golangci-v3.log": "e9e5430fc0fb198d1e5ed3cf3a0201dc6d199c70f8221e6aee815a5c55edc087",
+    "gateway-green-short-final.log": "ff32be1765d4f7b58ca60e0add8bb5923dc43b66ce9805715b1cb25903d07d93",
+    "gateway-green-short-missing-root.log": "a280c0419d5c9db1e738f5d2822a2b952310e1f2ea4fc0694cc699ae54d4a6e1",
+    "gateway-green-short-v2.log": "2e7d1f07ee85a794f487f26e83c8b63e27dc2bab2b2a101475e58fcf6402be43",
+    "gateway-green-short.log": "35a6e53acbe4986f7fcf371ac304b7480f74fe4b58d4f2945bb9de5600b324ec",
+    "gateway-red.log": "9d627e3cd056f5f8e7a290be6bc77ee9d969a787107867b25cbf4fecfeb62042",
+    "golangci-v2.6.1-ci-command.log": "d3bd323394475a5f9520ab86682d51e246b68faba59759ea98e0163a1c4ad7c2",
+    "golangci-v2.6.1-provenance.log": "c330e236d3741423c663e5fc1f366533372881d6ff0707db954f16f14933a782",
+    "principalruntime-green.log": "66af17ec5af7e541784dd6d09d526786ad58888bc6f164184ca234e364d723ae",
+    "space-golangci-v3.log": "e9e5430fc0fb198d1e5ed3cf3a0201dc6d199c70f8221e6aee815a5c55edc087",
+    "space-green-short-final.log": "acf69bc1e265c7d237dda2b0fcac68052f5329fd94b3b8c45045c34e0fc3df54",
+    "space-green-short-v2.log": "4920380a2bc8d8ecc07807a87dfd209e12652ea661a0e4a07a79f5b19ca0f8b4",
+    "space-green-short.log": "fe50ec0bc05204d508b45658c085daf22cc785153fed1e0611f705e30659691b",
+    "space-native51-pg-crlf.log": "19e3fe7d5735ba5353d293e87048266b7d05ed248d081a2ad07f221dd554c9f8",
+    "space-native51-pg.log": "57953545e07b558f5254d0946e27cf452fff8cb5bc8868ec440f94628d211c20",
+    "space-red.log": "778189194f00a8559145cbdd473c52c2057d62656ab251e2bce222f0f774cb52",
+    "voice-access-native-pg-rerun.log": "9788d24db4aceba18632f48bdde8a8b9ebb2ef3a99ea391f91c6749c3dff5187"
+  },
+  "tested_gateway_space_go_aggregate_sha256": "745e2f873ef7ed802b3462af0133d1f0242f02c671527a800157d89e237de49c",
+  "independent_reviewer": "/root/bot_installation",
+  "review": "CLEAR including signed resolver fixture follow-up",
+  "limits": [
+    "No local full Compose run",
+    "Native51 handler proof uses controlled Role decision; unchanged actual Role mTLS creation listener tested separately"
+  ],
+  "canonical_lint": {
+    "version": "v2.6.1",
+    "go": "go1.26.5",
+    "module_sum": "h1:yTYVG6BJ4eG9QE815BAQDrC2xBbTB8lW11jg+YQ0b1c=",
+    "binary_sha256": "bf44279ebeb853f479227ff1374d94645d6c9f369325c799244e6508b057a2a2",
+    "command": "golangci-lint run ./...",
+    "modules": [
+      "src/backend/gateway",
+      "src/backend/space"
+    ],
+    "result": "0 issues each",
+    "provenance_log": "golangci-v2.6.1-provenance.log",
+    "result_log": "golangci-v2.6.1-ci-command.log"
+  }
+}

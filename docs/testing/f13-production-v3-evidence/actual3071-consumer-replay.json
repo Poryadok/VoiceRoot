@@ -1,0 +1,182 @@
+{
+  "actual_target": "39d85c14b11d11a937069712744e5b6fdaac3efb",
+  "green": {
+    "admission": false,
+    "arguments": [
+      "merge-tree",
+      "--write-tree",
+      "--name-only",
+      "-z",
+      "--no-messages",
+      "a45862ca7e2e885ae4e36afc758c9e9fe39ca86c",
+      "140f6612e2f9df22aa9ac0c60744d5d41fe7fbcd"
+    ],
+    "auto_tree": "73eb0ec068685e8f69ea1c119c4bc4754e2ff932",
+    "best_bases": [
+      "68927e5912ebc218050fcc9daf4b76cf4a9e3c86",
+      "e020da4b4edcded41bde9785615262beb1946ad2"
+    ],
+    "capability_sha256": "ddf61ed332bb44396c57ae29182033f46a1e6f41eb139893c096630bdc7bc47d",
+    "complete_conflict_paths": [
+      "docs/DEPLOYMENT.md"
+    ],
+    "complete_difference_paths": [
+      "docs/DEPLOYMENT.md"
+    ],
+    "composition": "REVIEWED_MANUAL_WHOLE",
+    "document_entries": {
+      "AUTO": "100644 blob ffb31b64dc889a616a90be7073fbe2cdca444cc4\tdocs/DEPLOYMENT.md\u0000",
+      "J": "100644 blob 64b197ec4e2d811fa5516ad17aa1c6523262331c\tdocs/DEPLOYMENT.md\u0000",
+      "O": "100644 blob d66b3db53db02d2df5d548ff1cca47cfb3dd80f1\tdocs/DEPLOYMENT.md\u0000",
+      "P1": "100644 blob 173f87eec759f2b7228454fd8c21ed3efef4591f\tdocs/DEPLOYMENT.md\u0000",
+      "P2": "100644 blob 90b7060f52156e96e0cf4f01da0534c3b1ff336d\tdocs/DEPLOYMENT.md\u0000",
+      "bestA": "100644 blob d66b3db53db02d2df5d548ff1cca47cfb3dd80f1\tdocs/DEPLOYMENT.md\u0000",
+      "bestB": "100644 blob d66b3db53db02d2df5d548ff1cca47cfb3dd80f1\tdocs/DEPLOYMENT.md\u0000"
+    },
+    "git_outcome": "CONFLICT",
+    "git_version": "git version 2.39.5",
+    "history_boundary": "7bd7dfba7e8f85bc0572617c6ef3af4a15e59172",
+    "merge": "3071ddad390443de4119c796cdad9899ff08f7fd",
+    "merge_tree_exit": 1,
+    "messages": {
+      "bytes": 482,
+      "raw": "73eb0ec068685e8f69ea1c119c4bc4754e2ff932\u0000100644 d66b3db53db02d2df5d548ff1cca47cfb3dd80f1 1\tdocs/DEPLOYMENT.md\u0000100644 173f87eec759f2b7228454fd8c21ed3efef4591f 2\tdocs/DEPLOYMENT.md\u0000100644 90b7060f52156e96e0cf4f01da0534c3b1ff336d 3\tdocs/DEPLOYMENT.md\u0000\u00001\u0000docker-compose.yml\u0000Auto-merging\u0000Auto-merging docker-compose.yml\n\u00001\u0000docs/DEPLOYMENT.md\u0000Auto-merging\u0000Auto-merging docs/DEPLOYMENT.md\n\u00001\u0000docs/DEPLOYMENT.md\u0000CONFLICT (contents)\u0000CONFLICT (content): Merge conflict in docs/DEPLOYMENT.md\n\u0000",
+      "sha256": "11e08612d3f266710b5390cf341bc89bffd61bff61b2f4e9a2d2331a6ae3aefc"
+    },
+    "packet_sha256": "0b1d6efdf6441ca3bece84d968d72ab464f4dba378aecbfcd370813ee3e5148f",
+    "parents": [
+      "a45862ca7e2e885ae4e36afc758c9e9fe39ca86c",
+      "140f6612e2f9df22aa9ac0c60744d5d41fe7fbcd"
+    ],
+    "patch": {
+      "bytes": 1238,
+      "raw": "diff --git a/docs/DEPLOYMENT.md b/docs/DEPLOYMENT.md\nindex ffb31b64d..64b197ec4 100644\n--- a/docs/DEPLOYMENT.md\n+++ b/docs/DEPLOYMENT.md\n@@ -1,6 +1,5 @@\n # \u041e\u043a\u0440\u0443\u0436\u0435\u043d\u0438\u044f \u0438 \u0432\u044b\u043a\u0430\u0442\n \n-<<<<<<< a45862ca7e2e885ae4e36afc758c9e9fe39ca86c\n ## Realtime P3 metadata and protected transport prerequisites\n \n The Realtime admission binary requires its own migrated `realtime_db`; the\n@@ -42,7 +41,7 @@ neither timeout nor an operator boolean settles it. Rollback must preserve these\n tickets and permanent denies and cannot reintroduce an unguarded older writer.\n Shared DEV/STAGING operations still require the current TT resource protocol;\n these source templates do not claim a stand or appoint a tester.\n-=======\n+\n ## Owner capability policy\n \n The [runtime capability contract](testing/release-capability-runtime-contract.md)\n@@ -53,7 +52,6 @@ policy/digest and a private fresh snapshot target before rollout. Legacy configs\n do not qualify; all other owners, full negative runners and deployment acceptance\n remain required. The local Compose Notification fixture explicitly uses the\n nonqualifying development profile.\n->>>>>>> 140f6612e2f9df22aa9ac0c60744d5d41fe7fbcd\n \n ## Explicit provisional staging (implementation contract)\n \n",
+      "sha256": "78ebeaf659af962865b25a662045825e2bf9c06549fca4d64e6fc762e42358ea"
+    },
+    "path": "protos/voice/auth/v1/auth.proto",
+    "path_composition": "DETERMINISTIC_UNCONFLICTED_ENTRY_IN_REVIEWED_WHOLE",
+    "raw_difference": {
+      "bytes": 118,
+      "raw": ":100644 100644 ffb31b64dc889a616a90be7073fbe2cdca444cc4 64b197ec4e2d811fa5516ad17aa1c6523262331c M\u0000docs/DEPLOYMENT.md\u0000",
+      "sha256": "9f7f1689717879d2877428fae2834a6f69385c118a9d533bbc0b8ed2a8fa0920"
+    },
+    "result_entry": {
+      "bytes": 84,
+      "raw": "100644 blob dc582ce970c52bd585a0a4ac045009867958734f\tprotos/voice/auth/v1/auth.proto",
+      "sha256": "a24b7cfb9b29de7d6017058d3a9d8caf0be256d3d9f6a3c8ad094b51e38c7640"
+    },
+    "result_tree": "9b60a7639f0108c61da3c7808d05e7ea1421faaa",
+    "review_sha256": "d5da0faab44ab7b76f319fe23e316c57ffc4fed06d2817cb587e1b4e4517214d",
+    "reviewed_equation": {
+      "offset": 39,
+      "parent_insertions": [
+        {
+          "bytes": 2844,
+          "raw": "Realtime P3 metadata and protected transport prerequisites\n\nThe Realtime admission binary requires its own migrated `realtime_db`; the\nCompose, DEV and staging migration catalogs include it. Staging/prod examples\nreference `REALTIME_DATABASE_URL`. Provision the database/login and restoreable\nbackup using the existing environment process before upgrading the binary;\nconfiguration changes alone are not migration or rollout evidence.\n\nThe deployment templates require these environment-scoped external assets:\n`voice-realtime-principal-signing` (only `current.pem`, `next.pem`, PKCS#8),\n`voice-p3-principal-public` (public `realtime.json` derived from exactly that\ngeneration), `voice-realtime-p3-tls`, `voice-chat-realtime-p3-tls`,\n`voice-p3-principal-jwks-tls`, `voice-p3-principal-replay` (`password`) and\n`voice-p3-principal-trust` (`chat-server-ca.crt`, `space-client-ca.crt`,\n`space-jwks-ca.crt`, `realtime-client-ca.crt`, `realtime-jwks-ca.crt`). Consumer\nmounts project only their trust roots; private signer keys mount only in Realtime.\nThe independent publisher mounts the public document and its own HTTPS identity,\nnever issuer keys. Its TCP probe is transport availability only; Chat verifies\nthe HTTPS issuer set before serving its native resolver. Certificate SANs match\nthe exact service DNS configured in the templates; the Realtime leaf supports\noutbound client authentication as well as its protected Space server identity.\nNo real secret material is committed or generated by deployment templates.\n\nLocal Compose derives public Space/Realtime sets in its existing isolated\ninitializer before starting their independent HTTPS publisher. Existing partial\nor old principal volumes fail closed. Do not reset shared volumes or overwrite\nidentities: reconcile an owned stopped project, preserve database/admission/\nterminal-fence state, and prepare a scoped replacement principal generation.\nStatic publication supports a switch to an already published next signing key;\nhot key replacement needs a separate coherent generation and overlap procedure.\nPhase0's opt-in overlay consumes the actual fixture Space issuer instead of the\nbase initializer's distinct Space keys. This does not qualify whole-stack startup.\n\nGlobal P3 activation remains separate: prove every old/new writer covered or\nterminated, all eleven participants present, metadata restored safely, and a\nqualified recovery/rollback package. This implementation supports cooperative\nclosure only. A dead incarnation with unresolved admissions stays pending;\nneither timeout nor an operator boolean settles it. Rollback must preserve these\ntickets and permanent denies and cannot reintroduce an unguarded older writer.\nShared DEV/STAGING operations still require the current TT resource protocol;\nthese source templates do not claim a stand or appoint a tester.\n\n## ",
+          "sha256": "4dd4d04a9699ea1ffd28b7b8e3ca471784941bcbe68c444c31ee7152f67c9793"
+        },
+        {
+          "bytes": 626,
+          "raw": "Owner capability policy\n\nThe [runtime capability contract](testing/release-capability-runtime-contract.md)\ndefines the immutable v2 policy, owner guards, effective snapshot and qualification\nboundary. Notification now consumes that policy at bootstrap and its final push\nboundary. Its alpha image needs independently bound compiled source, mounted\npolicy/digest and a private fresh snapshot target before rollout. Legacy configs\ndo not qualify; all other owners, full negative runners and deployment acceptance\nremain required. The local Compose Notification fixture explicitly uses the\nnonqualifying development profile.\n\n## ",
+          "sha256": "285dad0f5994b4acb2b044beff212cbc1f445f91d7c96ba41526346aa540b212"
+        }
+      ],
+      "result_sha256": "342b0f63411e327250676c20e2853455701ce3787656cdfa6e40b2394b986b53"
+    },
+    "stderr": {
+      "bytes": 0,
+      "raw": "",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "stdout": {
+      "bytes": 60,
+      "raw": "73eb0ec068685e8f69ea1c119c4bc4754e2ff932\u0000docs/DEPLOYMENT.md\u0000",
+      "sha256": "38bc67a0b198edea2572b8eff09555484ea8089225bbeb70a8e031fc5851e14f"
+    },
+    "type": "F54_FIXED3071_REVIEWED_MANUAL_WHOLE_PROTOTYPE"
+  },
+  "last_observed_event": {
+    "digest": "79b7a6288912a250ba1fb0ea1758ce0584b2bb7c9dab40658456c11eed166380",
+    "frame": "F5",
+    "kind": "path_gate_before",
+    "operation": "F5/3071ddad390443de4119c796cdad9899ff08f7fd/2",
+    "payload": {
+      "incoming": null,
+      "map_before": {
+        "bytes": 430837,
+        "sha256": "7cf0a9611885c6694022c820e93ffee2c35681eedda8d4eeec0a90a17c3a280b"
+      },
+      "path": "protos/voice/auth/v1/auth.proto",
+      "phase": "before_qualification",
+      "prior": {
+        "bytes": 323,
+        "raw": "protos/voice/auth/v1/auth.proto\ttrue\tf54bcadab4aa19969281d7d35d76ebad91553d4d\t0a0024900b5bb3ba2f6fee391615f0f4fa0864e3\t4d943fac27fd247d136d84ae145440e54485d3ab\tf15d718b2d20837ae5503dc049134b66592b3675\t6aea8282a0c284dbfe01cfbaf0c7f761cd881355\tf3feccef198b444699e66c960b84dc9c77ba4bc0,516e6d9d92f477bbf09b2c66ef2476b6956a9b15",
+        "sha256": "8adea4507370b43345446187ac59fcd00bb9db5f4a30477e5d20a22cb5f08f03"
+      },
+      "prior_rows": [
+        {
+          "bytes": 323,
+          "raw": "protos/voice/auth/v1/auth.proto\ttrue\tf54bcadab4aa19969281d7d35d76ebad91553d4d\t0a0024900b5bb3ba2f6fee391615f0f4fa0864e3\t4d943fac27fd247d136d84ae145440e54485d3ab\tf15d718b2d20837ae5503dc049134b66592b3675\t6aea8282a0c284dbfe01cfbaf0c7f761cd881355\tf3feccef198b444699e66c960b84dc9c77ba4bc0,516e6d9d92f477bbf09b2c66ef2476b6956a9b15",
+          "sha256": "8adea4507370b43345446187ac59fcd00bb9db5f4a30477e5d20a22cb5f08f03"
+        }
+      ]
+    },
+    "previous": "906a44e90e9f0fdff470df9cdbb23d4533cdf820746e87b272d0b568f4b105f1",
+    "schema": "F54-PRODUCER-OBSERVATION-v2",
+    "sequence": 9933
+  },
+  "negative": [
+    {
+      "name": "AUTO.docs-DEPLOYMENT.md",
+      "rejection": "fixed3071_all_manual_evidence_bindings"
+    },
+    {
+      "name": "J.docs-DEPLOYMENT.md",
+      "rejection": "fixed3071_all_manual_evidence_bindings"
+    },
+    {
+      "name": "O.docs-DEPLOYMENT.md",
+      "rejection": "fixed3071_all_manual_evidence_bindings"
+    },
+    {
+      "name": "P1.docs-DEPLOYMENT.md",
+      "rejection": "fixed3071_all_manual_evidence_bindings"
+    },
+    {
+      "name": "P2.docs-DEPLOYMENT.md",
+      "rejection": "fixed3071_all_manual_evidence_bindings"
+    },
+    {
+      "name": "bestA.docs-DEPLOYMENT.md",
+      "rejection": "fixed3071_all_manual_evidence_bindings"
+    },
+    {
+      "name": "bestB.docs-DEPLOYMENT.md",
+      "rejection": "fixed3071_all_manual_evidence_bindings"
+    },
+    {
+      "name": "merge-tree.messages.stderr",
+      "rejection": "fixed3071_all_manual_evidence_bindings"
+    },
+    {
+      "name": "merge-tree.messages.stdout",
+      "rejection": "fixed3071_all_manual_evidence_bindings"
+    },
+    {
+      "name": "whole-auto-to-committed.patch",
+      "rejection": "fixed3071_all_manual_evidence_bindings"
+    },
+    {
+      "name": "whole-auto-to-committed.raw",
+      "rejection": "fixed3071_all_manual_evidence_bindings"
+    }
+  ],
+  "note": "Original production code at exact observed merge HEAD. Fresh private extraction/capability reconstruction with same actual Native binding and final observed J/path arguments. Preserved trace is read-only, never appended, resumed, sealed or counted as terminal success.",
+  "original_facts_sha256": "0b1d6efdf6441ca3bece84d968d72ab464f4dba378aecbfcd370813ee3e5148f",
+  "original_native_binding_sha256": "4e16a60a6f10672f251dc8bc32f789f5c4d19373d69b63e8f18b507c032dd437",
+  "reconstructed_capability_sha256": "f3982d55b1bcaffc2c28c49fa4d0edd06891288312bfc1f25b864bb9734e8e16",
+  "red": "fixed3071_all_manual_evidence_bindings",
+  "scope": "ONE_ACTUAL_FAILED_CONSUMER_REPLAY_NOT_PRODUCER_COMPLETION",
+  "supplement_sha256": "33942d6fb7a00ad600c68f6f86c6d34d1cabf4fc292109f752daa0c4c6cac07d",
+  "trace_sha256": "2d3adcf9a27b1634418556156cb38ffea37bab009b92bfefdbc8142c2ce4b26d"
+}
