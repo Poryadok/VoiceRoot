@@ -132,6 +132,13 @@ func main() {
 	if captureEnabled && principalIssuer == nil {
 		log.Fatal("Space User capture requires Space principal issuer")
 	}
+	creatorConfig, creatorEnabled, err := loadCreatorRuntimeConfig(os.Getenv, publicEnabled)
+	if err != nil {
+		log.Fatalf("Space Gateway lifecycle config: Creator Auth transport: %v", err)
+	}
+	if creatorEnabled && principalIssuer == nil {
+		log.Fatal("space principal issuer: Creator requires a configured Space issuer")
+	}
 	metricsReg := prometheus.NewRegistry()
 	ownershipOutboxAlertGauge := newOwnershipOutboxDeliveryAlertGauge(metricsReg)
 	runCtx, runCancel := context.WithCancel(context.Background())
@@ -153,6 +160,7 @@ func main() {
 	var outboxRuntime *ownershipOutboxRuntime
 	var recoveryRuntime *ownershipRecoveryRuntime
 	var deletionRuntime *lifecycleRuntime
+	creatorAuthority := &creatorRuntimeOwner{}
 	var banRetentionRuntime *accountBanRetentionRuntime
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
@@ -294,7 +302,7 @@ func main() {
 			defer sourceServer.Stop()
 			go func() {
 				if err := sourceServer.Serve(sourceListener); err != nil {
-					log.Fatalf("Space authority source serve: %v", err)
+					failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("Space authority source serve: %v", cause) })
 				}
 			}()
 		}
@@ -375,7 +383,7 @@ func main() {
 			defer entitlementConsumer.Close()
 			go func() {
 				if err := entitlementConsumer.Run(runCtx); err != nil && runCtx.Err() == nil {
-					log.Fatalf("space subscription consumer stopped: %v", err)
+					failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("space subscription consumer stopped: %v", cause) })
 				}
 			}()
 			logger.Info("space subscription entitlement consumer enabled")
@@ -464,7 +472,7 @@ func main() {
 			go func() {
 				logger.Info("audit principal listener started", slog.String("addr", auditConfig.ListenAddr))
 				if err := auditServer.Serve(listener); err != nil {
-					log.Fatalf("Space audit principal serve: %v", err)
+					failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("Space audit principal serve: %v", cause) })
 				}
 			}()
 		}
@@ -483,21 +491,40 @@ func main() {
 			if err != nil {
 				log.Fatalf("Space Gateway lifecycle listen: %v", err)
 			}
-			options := append([]grpc.ServerOption{}, sharedOptions...)
-			options = append(options, publicRuntime.ServerOptions()...)
-			publicServer = grpc.NewServer(options...)
-			spacev1.RegisterSpaceServiceServer(publicServer, &grpcsvc.PublicLifecycleSpace{SpaceGRPC: spaceSvc, Composite: compositeService})
-			go func() {
-				logger.Info("Gateway lifecycle principal listener started", slog.String("addr", publicConfig.Listen))
-				if err := publicServer.Serve(publicListener); err != nil {
-					logger.Error("Gateway lifecycle principal listener stopped", slog.String("error", err.Error()))
+			var creatorServiceRuntime *creatorRuntime
+			if creatorEnabled {
+				creatorServiceRuntime, err = creatorAuthority.construct(runCtx, func(startup context.Context) (*creatorRuntime, error) {
+					return newCreatorRuntime(runCtx, startup, creatorConfig, principalIssuer, spaceStore)
+				})
+				if err != nil {
+					failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("Space Gateway lifecycle runtime: Creator Auth transport: %v", cause) })
 				}
-			}()
+				defer func() { _ = creatorAuthority.Close() }()
+			}
+			if err := creatorAuthority.publish(func() {
+				dependencies := lifecycleprincipal.CreatorDependencies{}
+				if creatorServiceRuntime != nil {
+					dependencies = creatorServiceRuntime.dependencies
+				}
+				options := append([]grpc.ServerOption{}, sharedOptions...)
+				options = append(options, publicRuntime.ServerOptionsWithCreator(dependencies)...)
+				publicServer = grpc.NewServer(options...)
+				spacev1.RegisterSpaceServiceServer(publicServer, &grpcsvc.PublicLifecycleSpace{SpaceGRPC: spaceSvc, Composite: compositeService})
+				go func() {
+					logger.Info("Gateway lifecycle principal listener started", slog.String("addr", publicConfig.Listen))
+					if err := publicServer.Serve(publicListener); err != nil {
+						logger.Error("Gateway lifecycle principal listener stopped", slog.String("error", err.Error()))
+					}
+				}()
+			}); err != nil {
+				_ = publicListener.Close()
+				failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("Space Gateway lifecycle runtime: Creator publication: %v", cause) })
+			}
 		}
 		if privacyRuntime != nil {
 			privacyListener, err := net.Listen("tcp", principalConfig.ListenAddr)
 			if err != nil {
-				log.Fatalf("space privacy principal listen: %v", err)
+				failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("space privacy principal listen: %v", cause) })
 			}
 			privacyOptions := append([]grpc.ServerOption{}, sharedOptions...)
 			privacyOptions = append(privacyOptions, privacyRuntime.ServerOptions()...)
@@ -506,14 +533,14 @@ func main() {
 			defer privacyServer.Stop()
 			go func() {
 				if err := privacyServer.Serve(privacyListener); err != nil {
-					log.Fatalf("space privacy principal serve: %v", err)
+					failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("space privacy principal serve: %v", cause) })
 				}
 			}()
 		}
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))
 			if err := grpcSrv.Serve(lis); err != nil {
-				log.Fatalf("grpc serve: %v", err)
+				failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("grpc serve: %v", cause) })
 			}
 		}()
 	} else {
@@ -530,7 +557,7 @@ func main() {
 	if len(publicJWKS.Keys) > 0 {
 		certificate, err := tls.LoadX509KeyPair(strings.TrimSpace(os.Getenv("SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE")), strings.TrimSpace(os.Getenv("SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE")))
 		if err != nil {
-			log.Fatalf("space principal JWKS TLS: %v", err)
+			failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("space principal JWKS TLS: %v", cause) })
 		}
 		jwksAddr := strings.TrimSpace(os.Getenv("SPACE_PRINCIPAL_JWKS_HTTPS_LISTEN"))
 		if jwksAddr == "" {
@@ -556,7 +583,7 @@ func main() {
 		recoveryRuntime.Stop()
 		deletionRuntime.Stop()
 		if err != nil && err != http.ErrServerClosed {
-			log.Fatal(err)
+			failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatal(cause) })
 		}
 	case <-stop:
 		runCancel()
@@ -579,11 +606,11 @@ func main() {
 			sourceServer.Stop()
 		}
 		if err := server.Shutdown(ctx); err != nil {
-			log.Fatal(err)
+			failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatal(cause) })
 		}
 		if jwksServer != nil {
 			if err := jwksServer.Shutdown(ctx); err != nil {
-				log.Fatal(err)
+				failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatal(cause) })
 			}
 		}
 	}

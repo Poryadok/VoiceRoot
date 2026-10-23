@@ -50,6 +50,11 @@ services:
       SPACE_GATEWAY_PRINCIPAL_JWKS_URL: https://phase0-jwks:8443/gateway/jwks.json
       SPACE_GATEWAY_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
       SPACE_GATEWAY_PRINCIPAL_REDIS_ADDR: redis:6379
+      SPACE_CREATOR_AUTH_GRPC_ADDR: auth:9092
+      SPACE_CREATOR_AUTH_TLS_CA_FILE: /run/phase0/ca.crt
+      SPACE_CREATOR_AUTH_TLS_SERVER_NAME: auth
+      SPACE_CREATOR_AUTH_CLIENT_CERT_FILE: /run/phase0/space-role-client.crt
+      SPACE_CREATOR_AUTH_CLIENT_KEY_FILE: /run/phase0/space-role-client.key
       SPACE_CHAT_COMPOSITE_GRPC_LISTEN: :9097
       SPACE_CHAT_COMPOSITE_TLS_CERT_FILE: /run/phase0/space-chat-composite-grpc.crt
       SPACE_CHAT_COMPOSITE_TLS_KEY_FILE: /run/phase0/space-chat-composite-grpc.key

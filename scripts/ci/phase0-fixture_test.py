@@ -544,6 +544,27 @@ class ComposeTests(unittest.TestCase):
                     mounts.append((source.relative_to(self.fixture).as_posix(), volume))
         return mounts
 
+    def test_ci_creator_uses_the_existing_auth_session_floor_mtls_surface(self):
+        space = self.ci_merged["space"]["environment"]
+        auth = self.ci_merged["auth"]["environment"]
+        prefix = "SPACE_CREATOR_AUTH_"
+        expected = {
+            "GRPC_ADDR": "auth:9092",
+            "TLS_CA_FILE": "/run/phase0/ca.crt",
+            "TLS_SERVER_NAME": "auth",
+            "CLIENT_CERT_FILE": "/run/phase0/space-role-client.crt",
+            "CLIENT_KEY_FILE": "/run/phase0/space-role-client.key",
+        }
+        self.assertEqual({key: space.get(prefix + key) for key in expected}, expected)
+        self.assertEqual(space[prefix + "GRPC_ADDR"],
+                         "auth:" + auth["AUTH_SESSION_FLOOR_GRPC_PORT"])
+        self.assertNotEqual(auth["AUTH_SESSION_FLOOR_GRPC_PORT"], auth["AUTH_PRINCIPAL_GRPC_PORT"])
+        self.assertEqual(self.source_at("space", space[prefix + "TLS_CA_FILE"]), "ca/ca.crt")
+        self.assertEqual(self.source_at("space", space[prefix + "CLIENT_CERT_FILE"]), "tls/space-client.crt")
+        self.assertEqual(self.source_at("space", space[prefix + "CLIENT_KEY_FILE"]), "tls/space-client.key")
+        self.assertEqual(self.source_at("auth", auth["AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE"]), "ca/ca.crt")
+        self.assertEqual(space["SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN"], ":9096")
+
     def test_chat_creation_uses_real_owner_transports_and_separate_audit(self):
         for service, prefix, address, peer in (
                 ("gateway", "GATEWAY_CHAT_AUDIT_", "chat:9094", "chat"),
