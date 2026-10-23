@@ -6,11 +6,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.UUID;
+import java.time.Duration;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.containers.BindMode;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
+import org.testcontainers.containers.startupcheck.OneShotStartupCheckStrategy;
 import org.testcontainers.utility.DockerImageName;
 import voice.backend.auth.authoritysource.AuthAuthorityReader;
 
@@ -20,12 +25,15 @@ class AuthAuthoritySourceReaderJdbcIntegrationTest {
   }
 
   @Test
-  void actualOwningDatabaseMatchesSharedJavaGoGoldenForEveryGroup() throws Exception {
+  void historical26OwningDatabaseMatchesSharedJavaGoGoldenForEveryGroup() throws Exception {
     try(var postgres=database()) {
       postgres.start();
       var source=new DriverManagerDataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword());
-      Flyway.configure().dataSource(source).locations("classpath:db/migration").load().migrate();
+      // The shared codec frame describes the actual pre-V28 source clock.
+      // Preserve that historical real-loader fixture, not a rewritten frame.
+      Flyway.configure().dataSource(source).locations("classpath:db/migration").target("26").load().migrate();
       var jdbc=new JdbcTemplate(source);
+      assertThat(jdbc.queryForObject("SELECT revision FROM auth_authority_revision WHERE singleton",Long.class)).isEqualTo(1);
       UUID a=fixture(1),sdk=fixture(2),missing=fixture(3),actor=fixture(4),app=fixture(5),env=fixture(6),device=fixture(7),key=fixture(8),request=fixture(9),binding=fixture(10),profile=fixture(11),conversion=fixture(12),grant=fixture(13);
       jdbc.update("INSERT INTO accounts(id,password_hash,type,status) VALUES(?,'private-password','regular','active')",a);
       jdbc.update("INSERT INTO sdk_identities(account_id,actor_id,application_id,environment_id,issuer,provider_subject,created_at) VALUES(?,?,?,?,'fixture','private-subject',now())",sdk,actor,app,env);
@@ -57,6 +65,63 @@ class AuthAuthoritySourceReaderJdbcIntegrationTest {
         jdbc.update("UPDATE sdk_game_message_grants SET environment_id=? WHERE grant_id=?",app,grant);
         assertThatThrownBy(()->reader.snapshot(List.of(a.toString(),sdk.toString(),missing.toString()))).isInstanceOf(IllegalStateException.class);
       }
+    }
+  }
+
+  @Test
+  void currentFlywayProfileRetainsTheRealMigrationStatementClock() throws Exception {
+    try(var postgres=database()) {
+      postgres.start();
+      var source=new DriverManagerDataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword());
+      Flyway.configure().dataSource(source).locations("classpath:db/migration").load().migrate();
+      var jdbc=new JdbcTemplate(source);
+      // V26 creates 1; V28's real UPDATE statement advances it even on an
+      // empty account table. Neither migration nor reader may reset that fact.
+      assertThat(jdbc.queryForObject("SELECT revision FROM auth_authority_revision WHERE singleton",Long.class)).isEqualTo(2);
+      try(var reader=new AuthAuthorityReader(source)) {
+        var initial=reader.snapshot(List.of());
+        assertThat(initial.revision()).isEqualTo(2);
+        assertThat(new ObjectMapper().readTree(initial.canonicalState()).get("revision").longValue()).isEqualTo(2);
+        jdbc.update("UPDATE accounts SET status=status WHERE false");
+        assertThat(reader.revision(List.of())).isEqualTo(3);
+        assertThat(jdbc.queryForObject("SELECT revision FROM auth_authority_revision WHERE singleton",Long.class)).isEqualTo(3);
+      }
+    }
+  }
+
+  @Test
+  void actualPinnedCanonicalProfilesKeepBothForwardOnlyFloorsFailClosed() {
+    for(int target:List.of(27,32)) {
+      try(var network=Network.newNetwork();var postgres=database().withNetwork(network).withNetworkAliases("auth-reader-profile")) {
+        postgres.start();
+        migrateCanonical(postgres,network,"goto",Integer.toString(target));
+        var source=new DriverManagerDataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword());
+        var jdbc=new JdbcTemplate(source);
+        long initial=target==27?1:2;
+        try(var reader=new AuthAuthorityReader(source)) {
+          assertThat(reader.snapshot(List.of()).revision()).isEqualTo(initial);
+          assertThatThrownBy(()->migrateCanonical(postgres,network,"down","1"))
+              .isInstanceOf(org.testcontainers.containers.ContainerLaunchException.class);
+          assertThat(jdbc.queryForObject("SELECT version FROM schema_migrations WHERE dirty",Long.class))
+              .isEqualTo(target==27?26L:29L);
+          assertThat(jdbc.queryForObject("SELECT revision FROM auth_authority_revision WHERE singleton",Long.class)).isEqualTo(initial);
+          assertThatThrownBy(reader::checkSchema).isInstanceOf(IllegalStateException.class);
+        }
+      }
+    }
+  }
+
+  private static void migrateCanonical(PostgreSQLContainer<?> postgres,Network network,String... command) {
+    var args=new java.util.ArrayList<String>();
+    args.addAll(List.of("-path","/migrations","-database",
+        "postgres://fixture:fixture@auth-reader-profile:5432/auth_source?sslmode=disable"));
+    args.addAll(List.of(command));
+    try(var loader=new GenericContainer<>(DockerImageName.parse("migrate/migrate:v4.18.1"))
+        .withNetwork(network).withFileSystemBind(AuthMigrationCatalogContractTest.golangDirectory().toAbsolutePath().toString(),"/migrations",BindMode.READ_ONLY)
+        .withCommand(args.toArray(String[]::new))
+        .withStartupCheckStrategy(new OneShotStartupCheckStrategy().withTimeout(Duration.ofSeconds(45)))
+        .withReuse(false).withLabel("voice.task","auth-source-reader-profile")) {
+      loader.start();
     }
   }
 
@@ -136,7 +201,21 @@ class AuthAuthoritySourceReaderJdbcIntegrationTest {
       jdbc.execute("CREATE OR REPLACE FUNCTION public.auth_authority_changed() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$");
       assertThatThrownBy(reader::checkSchema).isInstanceOf(IllegalStateException.class);
       jdbc.execute("CREATE OR REPLACE FUNCTION public.auth_authority_changed() RETURNS trigger LANGUAGE plpgsql AS $$"+body+"$$");
-      jdbc.execute("UPDATE flyway_schema_history SET success=false WHERE version='26'");
+      String script=jdbc.queryForObject("SELECT script FROM flyway_schema_history WHERE version='28'",String.class);
+      Integer checksum=jdbc.queryForObject("SELECT checksum FROM flyway_schema_history WHERE version='28'",Integer.class);
+      jdbc.update("UPDATE flyway_schema_history SET script='unexpected.sql' WHERE version='28'");
+      assertThatThrownBy(reader::checkSchema).isInstanceOf(IllegalStateException.class);
+      jdbc.update("UPDATE flyway_schema_history SET script=?,checksum=checksum+1 WHERE version='28'",script);
+      assertThatThrownBy(reader::checkSchema).isInstanceOf(IllegalStateException.class);
+      jdbc.update("UPDATE flyway_schema_history SET checksum=?,version='30' WHERE version='28'",checksum);
+      assertThatThrownBy(reader::checkSchema).isInstanceOf(IllegalStateException.class);
+      jdbc.update("UPDATE flyway_schema_history SET version='28' WHERE version='30'");
+      reader.checkSchema();
+      // A second engine, even with no fabricated accepting rows, is mixed.
+      jdbc.execute("CREATE TABLE schema_migrations(version bigint,dirty boolean)");
+      assertThatThrownBy(reader::checkSchema).isInstanceOf(IllegalStateException.class);
+      jdbc.execute("DROP TABLE schema_migrations");
+      jdbc.execute("UPDATE flyway_schema_history SET success=false WHERE version='31'");
       assertThatThrownBy(reader::checkSchema).isInstanceOf(IllegalStateException.class);
     }
   }
