@@ -23,6 +23,7 @@ COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
 COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
 COPY voice/pb/voice/search/go.mod ./voice/pb/voice/search/
 COPY voice/pb/voice/auth/go.mod ./voice/pb/voice/auth/
+COPY voice/pb/voice/bot/go.mod ./voice/pb/voice/bot/
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh messaging
 COPY pkg ./pkg
 COPY user/pb ./user/pb
@@ -33,6 +34,7 @@ COPY voice/pb/voice/space ./voice/pb/voice/space
 COPY voice/pb/voice/story ./voice/pb/voice/story
 COPY voice/pb/voice/search ./voice/pb/voice/search
 COPY voice/pb/voice/auth ./voice/pb/voice/auth
+COPY voice/pb/voice/bot ./voice/pb/voice/bot
 COPY role/permissions ./role/permissions
 COPY role ./role
 COPY messaging/pb ./messaging/pb

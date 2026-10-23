@@ -42,7 +42,8 @@ func Require(ctx context.Context, target string, req proto.Message) error {
 	return requireMethod(ctx, target, Method(target), req)
 }
 
-// RequireMemberAdmissionAuthority grants only a Role-owned Space observation.
+// RequireMemberAdmissionAuthority grants a Role observation or the exact
+// installation-bound Messaging send observation selected by the request.
 // It is not a user membership capability or permission decision.
 func RequireMemberAdmissionAuthority(ctx context.Context, req proto.Message) error {
 	return requireMethod(ctx, "space", MemberAdmissionAuthorityMethod, req)
@@ -53,7 +54,11 @@ func requireMethod(ctx context.Context, target, method string, req proto.Message
 	if !ok {
 		return status.Error(codes.Unauthenticated, "verified Role principal required")
 	}
-	if p.Kind != "service" || p.Issuer != "role" || p.Subject != "service:role" {
+	issuer := "role"
+	if target == "space" && method == MemberAdmissionAuthorityMethod && hasBotMessageBinding(req) {
+		issuer = "messaging"
+	}
+	if p.Kind != "service" || p.Issuer != issuer || p.Subject != "service:"+issuer {
 		return status.Error(codes.PermissionDenied, "Role principal required")
 	}
 	if req == nil || !req.ProtoReflect().IsValid() || len(req.ProtoReflect().GetUnknown()) != 0 {
@@ -61,8 +66,23 @@ func requireMethod(ctx context.Context, target, method string, req proto.Message
 	}
 	hash, err := principal.RequestHash(req)
 	_, idErr := CanonicalID(p.RequestID)
-	if err != nil || idErr != nil || !allowsMethod(target, method) || p.Audience != target || p.RPC != method || p.RequestHash != hash || p.AccountID != "" || p.ProfileID != "" || p.SessionEpoch != 0 {
+	if err != nil || idErr != nil || !allowsMethod(target, method) || p.Audience != target || p.RPC != method || p.RequestHash != hash || p.AccountID != "" || p.ProfileID != "" || p.SessionEpoch != 0 || p.AccountType != "" || p.ActorProfileID != "" || p.BotID != "" || p.SpaceID != "" || p.InstallationID != "" || p.BotScope != "" {
 		return status.Error(codes.Unauthenticated, "invalid Role principal binding")
 	}
 	return nil
+}
+
+// Reflection keeps the transport package independent of the Space wire module.
+// The Space domain validates the complete selector; no other request shape can
+// select Messaging as an issuer on this listener.
+func hasBotMessageBinding(req proto.Message) bool {
+	if req == nil || !req.ProtoReflect().IsValid() {
+		return false
+	}
+	m := req.ProtoReflect()
+	if m.Descriptor().FullName() != "voice.space.v1.GetMemberAdmissionAuthorityRequest" {
+		return false
+	}
+	f := m.Descriptor().Fields().ByName("bot_message_send_binding")
+	return f != nil && m.Has(f)
 }

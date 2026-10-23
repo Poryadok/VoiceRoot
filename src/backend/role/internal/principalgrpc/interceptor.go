@@ -50,10 +50,22 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 		}
 		var verified principal.Principal
 		chatACL := false
+		workloadIssuer := ""
+		if req, ok := message.(*rolev1.CheckPermissionRequest); ok && info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
+			workloadIssuer = WorkloadDecisionIssuer(req.GetPermissionName())
+		}
 		if req, ok := message.(*rolev1.CheckPermissionRequest); ok && info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName && req.GetPermissionName() == "TEXT_CHAT_VIEW" {
 			chatACL = true
 		}
-		if chatACL {
+		if workloadIssuer != "" {
+			workloadVerifier, ok := verifier.(interface {
+				VerifyWorkloadDecision(context.Context, string, string, string, string, string) (principal.Principal, error)
+			})
+			if !ok {
+				return nil, status.Error(codes.Unavailable, "workload decision verifier unavailable")
+			}
+			verified, err = workloadVerifier.VerifyWorkloadDecision(ctx, transport.BearerToken, info.FullMethod, transport.RequestID, requestHash, workloadIssuer)
+		} else if chatACL {
 			chatVerifier, ok := verifier.(interface {
 				VerifyChatCurrentACL(context.Context, string, string, string, string) (principal.Principal, error)
 			})
@@ -97,7 +109,9 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 		}
 		if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
 			var decisionErr error
-			if req, ok := message.(*rolev1.CheckPermissionRequest); ok && chatACL {
+			if req, ok := message.(*rolev1.CheckPermissionRequest); ok && workloadIssuer != "" {
+				decisionErr = RequireWorkloadDecision(principal.WithVerified(ctx, verified), req)
+			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && chatACL {
 				decisionErr = RequireChatCurrentACL(principal.WithVerified(ctx, verified), req)
 			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceManageBots {
 				decisionErr = RequireBotManagementPermission(principal.WithVerified(ctx, verified), req)
@@ -105,6 +119,8 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 				decisionErr = RequireJoinApprovalPermission(principal.WithVerified(ctx, verified), req)
 			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceManageSettings {
 				decisionErr = RequireSettingsPermission(principal.WithVerified(ctx, verified), req)
+			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceManageMatchmaking {
+				decisionErr = RequireMatchmakingPermission(principal.WithVerified(ctx, verified), req)
 			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceManageInvites {
 				decisionErr = RequireInvitePermission(principal.WithVerified(ctx, verified), req)
 			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.MemberManageNicknames {
@@ -151,7 +167,10 @@ func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 		}
 
 		if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
-			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceManageInvites {
+			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && WorkloadDecisionIssuer(req.GetPermissionName()) != "" {
+				return nil, status.Error(codes.Unavailable, "protected workload decision listener required")
+			}
+			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && (req.GetPermissionName() == permissions.SpaceManageInvites || req.GetPermissionName() == permissions.SpaceManageMatchmaking) {
 				return nil, status.Error(codes.PermissionDenied, "protected invite decision listener required")
 			}
 			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && (req.GetPermissionName() == permissions.SpaceApproveJoinRequests || req.GetPermissionName() == permissions.SpaceManageSettings || req.GetPermissionName() == permissions.SpaceManageBots) {

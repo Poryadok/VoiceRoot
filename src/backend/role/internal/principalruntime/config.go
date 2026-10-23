@@ -128,6 +128,9 @@ func (c Config) validate() error {
 	if _, configured := c.JWKSURLs["chat"]; configured {
 		allowedIssuers["chat"] = struct{}{}
 	}
+	if _, configured := c.JWKSURLs["messaging"]; configured {
+		allowedIssuers["messaging"] = struct{}{}
+	}
 	if c.AuthoritySourceEnabled {
 		allowedIssuers["federation"] = struct{}{}
 	}

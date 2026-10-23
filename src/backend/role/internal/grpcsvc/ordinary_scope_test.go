@@ -205,32 +205,32 @@ func ordinaryHandlerCases() []ordinaryHandlerCase {
 
 type ordinaryUnimplementedCase struct {
 	name        string
+	directCode  codes.Code
 	direct      func(ordinaryHandlerFixture) (any, error)
 	networkCode codes.Code
 	network     func(context.Context, rolev1.RoleServiceClient, ordinaryHandlerFixture) (any, error)
 }
 
-// These methods are inherited generated stubs in the current candidate. The
-// ordinary interceptor explicitly drains admission, while the Bot wire methods
-// reach the default Unimplemented stub. Neither result is implemented authority.
+// Protected receivers reject direct and ordinary-network calls without their
+// verified authority. Global terminal registration remains an unimplemented stub.
 func ordinaryUnimplementedCases() []ordinaryUnimplementedCase {
 	return []ordinaryUnimplementedCase{
-		{"EnsureDefaultMemberRole", func(f ordinaryHandlerFixture) (any, error) {
+		{"EnsureDefaultMemberRole", codes.Unauthenticated, func(f ordinaryHandlerFixture) (any, error) {
 			return f.svc.EnsureDefaultMemberRole(f.ctx, &rolev1.EnsureDefaultMemberRoleRequest{})
 		}, codes.Unavailable, func(ctx context.Context, client rolev1.RoleServiceClient, _ ordinaryHandlerFixture) (any, error) {
 			return client.EnsureDefaultMemberRole(ctx, &rolev1.EnsureDefaultMemberRoleRequest{})
 		}},
-		{"RemoveMemberRoles", func(f ordinaryHandlerFixture) (any, error) {
+		{"RemoveMemberRoles", codes.Unauthenticated, func(f ordinaryHandlerFixture) (any, error) {
 			return f.svc.RemoveMemberRoles(f.ctx, &rolev1.RemoveMemberRolesRequest{})
 		}, codes.Unavailable, func(ctx context.Context, client rolev1.RoleServiceClient, _ ordinaryHandlerFixture) (any, error) {
 			return client.RemoveMemberRoles(ctx, &rolev1.RemoveMemberRolesRequest{})
 		}},
-		{"ApplyBotInstallationRemoval", func(f ordinaryHandlerFixture) (any, error) {
+		{"ApplyBotInstallationRemoval", codes.PermissionDenied, func(f ordinaryHandlerFixture) (any, error) {
 			return f.svc.ApplyBotInstallationRemoval(f.ctx, &rolev1.ApplyBotInstallationRemovalRequest{ProtocolVersion: 1, BotId: uuid.NewString(), SpaceId: f.space.String(), ActorProfileId: f.owner.String()})
-		}, codes.Unimplemented, func(ctx context.Context, client rolev1.RoleServiceClient, f ordinaryHandlerFixture) (any, error) {
+		}, codes.Unavailable, func(ctx context.Context, client rolev1.RoleServiceClient, f ordinaryHandlerFixture) (any, error) {
 			return client.ApplyBotInstallationRemoval(ctx, &rolev1.ApplyBotInstallationRemovalRequest{ProtocolVersion: 1, BotId: uuid.NewString(), SpaceId: f.space.String(), ActorProfileId: f.owner.String()})
 		}},
-		{"RegisterBotGlobalTerminal", func(f ordinaryHandlerFixture) (any, error) {
+		{"RegisterBotGlobalTerminal", codes.Unimplemented, func(f ordinaryHandlerFixture) (any, error) {
 			return f.svc.RegisterBotGlobalTerminal(f.ctx, &rolev1.RegisterBotGlobalTerminalRequest{ProtocolVersion: 1, BotId: uuid.NewString(), DecisionId: uuid.NewString()})
 		}, codes.Unimplemented, func(ctx context.Context, client rolev1.RoleServiceClient, _ ordinaryHandlerFixture) (any, error) {
 			return client.RegisterBotGlobalTerminal(ctx, &rolev1.RegisterBotGlobalTerminalRequest{ProtocolVersion: 1, BotId: uuid.NewString(), DecisionId: uuid.NewString()})
@@ -300,7 +300,7 @@ func TestOrdinaryHandlerFences(t *testing.T) {
 				forged := f
 				forged.ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(authctx.HeaderProfileID, f.owner.String(), "authorization", "Bearer forged", "x-request-id", uuid.NewString()))
 				response, err = tc.direct(forged)
-				require.Equal(t, codes.Unimplemented, status.Code(err), "generated stub is not implemented authority")
+				require.Equal(t, tc.directCode, status.Code(err), "unverified direct call cannot exercise authority")
 				require.Nil(t, response)
 				require.Equal(t, before, ordinaryHandlerSnapshot(t, ctx, pool))
 				count, visibilityErrors := f.events.snapshot()

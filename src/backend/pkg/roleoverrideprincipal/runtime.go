@@ -26,6 +26,7 @@ import (
 const dependencyTimeout = 2 * time.Second
 
 type Config struct {
+	JWKSClientCertFile, JWKSClientKeyFile                                                             string
 	Target, ListenAddr, TLSCertFile, TLSKeyFile, ClientCAFile, JWKSCAFile, ReplayAddr, ReplayPassword string
 	JWKSURLs                                                                                          map[string]string
 	RefreshAfter, HardExpiry, UnknownKIDCooldown                                                      time.Duration
@@ -44,6 +45,8 @@ func LoadFromEnv(target string) (Config, bool, error) {
 		return Config{}, false, nil
 	}
 	cfg := Config{Target: target, ListenAddr: strings.TrimSpace(os.Getenv(prefix + "GRPC_LISTEN")), TLSCertFile: strings.TrimSpace(os.Getenv(prefix + "TLS_CERT_FILE")), TLSKeyFile: strings.TrimSpace(os.Getenv(prefix + "TLS_KEY_FILE")), ClientCAFile: strings.TrimSpace(os.Getenv(prefix + "CLIENT_CA_FILE")), JWKSCAFile: strings.TrimSpace(os.Getenv("S2S_JWKS_CA_FILE")), ReplayAddr: strings.TrimSpace(os.Getenv(prefix + "REPLAY_REDIS_ADDR")), ReplayPassword: os.Getenv(prefix + "REPLAY_REDIS_PASSWORD")}
+	cfg.JWKSClientCertFile = strings.TrimSpace(os.Getenv("S2S_JWKS_CLIENT_CERT_FILE"))
+	cfg.JWKSClientKeyFile = strings.TrimSpace(os.Getenv("S2S_JWKS_CLIENT_KEY_FILE"))
 	if err := json.Unmarshal([]byte(os.Getenv("S2S_JWKS_URLS_JSON")), &cfg.JWKSURLs); err != nil {
 		return Config{}, true, errors.New("invalid target principal JWKS configuration")
 	}
@@ -76,6 +79,9 @@ func envDuration(name string, fallback time.Duration) (time.Duration, error) {
 }
 
 func (c Config) validate() error {
+	if (c.JWKSClientCertFile == "") != (c.JWKSClientKeyFile == "") {
+		return errors.New("target JWKS client certificate and key must be paired")
+	}
 	if Method(c.Target) == "" || c.ListenAddr == "" || c.TLSCertFile == "" || c.TLSKeyFile == "" || c.ClientCAFile == "" || c.ReplayAddr == "" {
 		return errors.New("complete target principal listener, mTLS and replay configuration required")
 	}
@@ -135,10 +141,19 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
+	if cfg.JWKSClientCertFile != "" {
+		clientCert, err := tls.LoadX509KeyPair(cfg.JWKSClientCertFile, cfg.JWKSClientKeyFile)
+		if err != nil {
+			return nil, errors.New("target JWKS client identity unavailable")
+		}
+		transport.TLSClientConfig.Certificates = []tls.Certificate{clientCert}
+	}
 	client := &http.Client{Transport: transport, Timeout: dependencyTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("target JWKS redirects forbidden") }}
 	endpoints := make(map[string]string, len(cfg.JWKSURLs))
 	for issuer, endpoint := range cfg.JWKSURLs {
-		endpoints[issuer] = endpoint
+		if issuer == "role" || (cfg.Target == "space" && issuer == "messaging") {
+			endpoints[issuer] = endpoint
+		}
 	}
 	fetch := func(ctx context.Context, issuer string) ([]byte, error) {
 		endpoint, ok := endpoints[issuer]
@@ -202,7 +217,9 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 			case <-refreshCtx.Done():
 				return
 			case <-ticker.C:
-				_ = resolver.Refresh(refreshCtx, "role")
+				for issuer := range endpoints {
+					_ = resolver.Refresh(refreshCtx, issuer)
+				}
 			}
 		}
 	}()
@@ -230,7 +247,8 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash str
 	if err := json.Unmarshal(payload, &claims); err != nil {
 		return principal.Principal{}, err
 	}
-	if r.endpoints[claims.Issuer] == "" {
+	trusted := claims.Issuer == "role" || (r.target == "space" && method == MemberAdmissionAuthorityMethod && claims.Issuer == "messaging")
+	if r.endpoints[claims.Issuer] == "" || !trusted {
 		return principal.Principal{}, errors.New("untrusted target principal issuer")
 	}
 	return principal.VerifyService(ctx, token, principal.VerifyConfig{ExpectedIssuer: claims.Issuer, ExpectedAudience: r.target, ExpectedRPC: method, ExpectedRequestID: requestID, ExpectedRequestHash: hash, KeyResolver: r.resolver.Resolve, ReplayGuard: r.recordReplay})

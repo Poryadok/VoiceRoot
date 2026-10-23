@@ -33,6 +33,7 @@ import (
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
 	"voice/backend/pkg/postgres"
+	"voice/backend/pkg/principal"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
 	"voice/backend/pkg/spacecommunication"
@@ -42,7 +43,6 @@ import (
 	filev1 "voice.app/voice/file/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	moderationv1 "voice.app/voice/moderation/v1"
-	rolev1 "voice.app/voice/role/v1"
 	socialv1 "voice.app/voice/social/v1"
 	spacev1 "voice.app/voice/space/v1"
 	userv1 "voice.app/voice/user/v1"
@@ -501,12 +501,15 @@ func main() {
 			spaceCoMembership = s2s.NewGRPCSpaceCoMembership(spconn)
 		}
 
-		var rolePerms *s2s.GRPCRolePermissions
-		if roleAddr := strings.TrimSpace(os.Getenv("ROLE_GRPC_ADDR")); roleAddr != "" {
-			rconn, err := grpc.NewClient(grpcclient.DialTarget(roleAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
-			if err != nil {
-				log.Fatalf("role grpc: %v", err)
-			}
+		var roleIssuer *principal.Issuer
+		if managedChatPurge != nil {
+			roleIssuer = managedChatPurge.Issuer
+		}
+		rolePerms, rconn, err := newRolePermissionsClient(os.Getenv, roleIssuer)
+		if err != nil {
+			log.Fatalf("role grpc: %v", err)
+		}
+		if rconn != nil {
 			defer func() { _ = rconn.Close() }()
 			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
 			if err := waitForGRPCReady(waitCtx, rconn); err != nil {
@@ -514,7 +517,6 @@ func main() {
 				log.Fatalf("role grpc dial: %v", err)
 			}
 			waitCancel()
-			rolePerms = &s2s.GRPCRolePermissions{Client: rolev1.NewRoleServiceClient(rconn)}
 		}
 
 		var files grpcsvc.FileMetadataLookup
@@ -681,6 +683,22 @@ func main() {
 			gameMessagePermitProcessor.CommunicationAdmission = messagingService.BeginCommunicationAction
 		}
 		messagingv1.RegisterMessagingServiceServer(grpcSrv, messagingService)
+		var botSendIssuer *principal.Issuer
+		if managedChatPurge != nil {
+			botSendIssuer = managedChatPurge.Issuer
+		}
+		botSend, err := newBotSendRuntime(os.Getenv, messagingService, botPrincipal, botSendIssuer)
+		if err != nil {
+			log.Fatalf("Messaging protected Bot send: %v", err)
+		}
+		if botSend != nil {
+			defer botSend.Close()
+			go func() {
+				if serveErr := <-botSend.errors; serveErr != nil && !errors.Is(serveErr, grpc.ErrServerStopped) {
+					log.Fatalf("Messaging Bot send listener stopped: %v", serveErr)
+				}
+			}()
+		}
 		botPinCleanup, err := grpcsvc.StartBotPinCleanupServer(context.Background(), grpcsvc.BotPinCleanupConfigFromEnv(os.Getenv), messagingService.Pins)
 		if err != nil {
 			log.Fatalf("Messaging private Bot pin cleanup: %v", err)

@@ -17,7 +17,8 @@ done
 cp -R "$ROLE_NATIVE_SPACE_SOURCE_ROOT/src/backend/migrations/space_db" "$source_root/src/backend/migrations/space_db"
 echo "Native Space fixture source: $ROLE_NATIVE_SPACE_SOURCE_ROOT (current checkout snapshot)" >&2
 mkdir -p "$source_root/src/backend/space/cmd/role-native-fixture"
-cp /workspace/src/backend/role/testdata/native_space_fixture/*.go "$source_root/src/backend/space/cmd/role-native-fixture/"
+fixture_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+cp "$fixture_dir"/native_space_fixture/*.go "$source_root/src/backend/space/cmd/role-native-fixture/"
 cd "$source_root/src/backend/space"
 go build -o /tmp/role-native-space-fixture ./cmd/role-native-fixture
 # The actual migrator fixture needs the same immutable migration set, copied

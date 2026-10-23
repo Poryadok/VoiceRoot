@@ -82,7 +82,7 @@ func (c legacySettingsRoleFixture) CheckPermission(ctx context.Context, r *rolev
 		return nil, mapSpaceStoreError(err)
 	}
 	if c.RoleServiceClient != nil {
-		result, err := c.RoleServiceClient.GetEffectivePermissions(metadata.NewOutgoingContext(ctx, metadata.MD{}), &rolev1.GetEffectivePermissionsRequest{SpaceId: r.SpaceId, ProfileId: r.ProfileId})
+		result, err := c.GetEffectivePermissions(metadata.NewOutgoingContext(ctx, metadata.MD{}), &rolev1.GetEffectivePermissionsRequest{SpaceId: r.SpaceId, ProfileId: r.ProfileId})
 		if err != nil {
 			return nil, err
 		}

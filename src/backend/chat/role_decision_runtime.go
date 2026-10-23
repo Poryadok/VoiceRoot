@@ -62,7 +62,7 @@ func newChatRoleDecisionClientFromEnv(ordinary rolev1.RoleServiceClient, issuer 
 		return client, func() error { return nil }, nil
 	}
 	if issuer == nil {
-		return nil, nil, errors.New("Chat Role decision transport requires Chat signing identity")
+		return nil, nil, errors.New("chat Role decision transport requires Chat signing identity")
 	}
 	conn, err := dialChatCreationOwnerFromEnv("CHAT_ROLE_DECISION_")
 	if err != nil {

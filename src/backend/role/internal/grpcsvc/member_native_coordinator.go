@@ -18,6 +18,7 @@ import (
 var errNativeAuthorityChanged = errors.New("native Role authority changed")
 
 type nativeMemberChatScopeKey struct{}
+type nativeMemberDecisionReadKey struct{}
 
 // This is only the server's copy of the already bound request selector. It is
 // not an observation or authorization and never comes from request metadata.
@@ -168,7 +169,8 @@ func withNativeOrdinary(ctx context.Context, s *RoleGRPC, space uuid.UUID, targe
 		// transaction, so Store-level checks precede this outer COMMIT. Recheck
 		// the same immutable vector after it completes; never use this rule to
 		// reinterpret a successfully committed mutation as a failed mutation.
-		if err == nil && scopedChat {
+		decisionRead, _ := ctx.Value(nativeMemberDecisionReadKey{}).(bool)
+		if err == nil && (scopedChat || decisionRead) {
 			for _, o := range second {
 				if !o.Available(time.Now()) {
 					return store.ErrScopeUnavailable

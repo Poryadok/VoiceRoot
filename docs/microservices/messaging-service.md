@@ -867,6 +867,29 @@ allows a member to remove their own reaction after losing add permission.
 - **File Service** — привязка вложений
 - **Realtime Service** — (через NATS) уведомление о новых сообщениях для WebSocket fan-out
 
+Messaging sends these decisions to Role's protected mTLS listener using its
+existing service signer and protected JWKS publisher. `ROLE_GRPC_ADDR` requires
+`MESSAGING_ROLE_TLS_CA_FILE`, `MESSAGING_ROLE_TLS_SERVER_NAME`,
+`MESSAGING_ROLE_CLIENT_CERT_FILE` and `MESSAGING_ROLE_CLIENT_KEY_FILE` together;
+partial transport configuration or an unavailable signer stops startup. Each
+`CheckPermission` call replaces incoming/outgoing identity metadata with a fresh
+`service:messaging` credential for audience `role`, the exact RPC and full
+deterministic request hash, plus a fresh request UUID. The caller budget is at
+most five seconds and preserves any shorter parent deadline. The explicit
+profile and chat remain decision data; no actor mutation authority is conferred.
+There is no plaintext or forwarded-user credential fallback. Messaging's global
+permission helper is unavailable: this caller is limited to chat-scoped decisions.
+
+When Role uses a separate TLS trust domain, the optional
+`MESSAGING_ROLE_JWKS_LISTEN`, `MESSAGING_ROLE_JWKS_TLS_CERT_FILE`,
+`MESSAGING_ROLE_JWKS_TLS_KEY_FILE` and `MESSAGING_ROLE_JWKS_CLIENT_CA_FILE`
+configuration publishes the same existing Messaging current/next public keys at
+`/.well-known/principal-jwks.json` on a second HTTPS listener. All four variables
+must be supplied together with the existing signing runtime; partial or empty
+configuration fails startup. This listener requires verified client certificates
+from its configured CA. It does not replace the lifecycle JWKS listener, its CA,
+or any signing keys. Both listeners close with the Messaging runtime.
+
 ## Масштабирование
 
 При >100M сообщений — шардинг PostgreSQL по `chat_id` (consistent hashing). Каждый шард содержит все сообщения одного чата → локальные запросы без cross-shard joins.
@@ -996,6 +1019,51 @@ The child uses the existing T33 `PurgeManagedChatContent` protocol:
 its service-principal request binding. The P3 adapter verifies that digest;
 it does not replace the saved child evidence with the parent's message-name
 domain. The Space participant request/receipt remains domain-separated P3.
+
+### Protected Bot Space sends
+
+`Messaging.SendBotMessage` is an immediate, send-only internal route on the
+dedicated `MESSAGING_BOT_SEND_GRPC_LISTEN` mTLS listener (Phase0 port 9095).
+Its service descriptor exposes no ordinary message/history methods. The ordinary
+`SendMessage` route retains its existing membership and Role checks.
+
+The pure `service:bot` JWT binds audience `messaging`, the exact RPC, a fresh
+canonical request UUID, and the complete wrapper body. Mixed user metadata,
+unknown nested protobuf fields, deferred delivery and `posted_as_chat` are denied.
+The wrapper binds Bot, actor, Space, installation UUID, install operation,
+installation generation and chat. Messaging obtains a fresh signed
+`Bot.CheckBotMessageSendAuthority` decision for current SEND scope, whitelist and
+LIVE installation, then independently calls Space's protected
+`GetMemberAdmissionAuthority` with the same binding. Space must echo the exact
+currently published native Bot tuple and current chat-tree relation. Installation
+and ordinary membership generations are distinct counters.
+
+Only after both observations does a private request-bound admission replace the
+generic membership/VIEW and `TEXT_CHAT_SEND_MESSAGES` gates for this exact send.
+It grants no history, forward, edit, impersonation, mention or thread privileges.
+Existing content/File validation, Space communication timeout, moderation,
+slowmode and transactional message/outbox behavior remain in the shared send
+pipeline. Exact send retries use the Bot wrapper hash and distinct RPC receipt;
+they return the actor's own receipt without granting history access. Changing the
+installation tuple or message at an existing client key is a conflict.
+
+The original maximum five-second attempt is also bounded by the inbound JWT
+expiry and Space's remaining observation validity. After local mutation locks,
+both the text insert and attachment-finalization transactions repeat owner/native
+checks and revalidate the original proof before writing, without renewing the
+deadline. Bot holds its existing shared Space, Bot and whitelist guards through
+the synchronous RPC; disabling/uninstalling takes the corresponding exclusive
+guards. Unknown commit outcomes retain the existing idempotency semantics; this
+does not claim a cross-database atomic commit.
+
+Listener TLS uses `MESSAGING_BOT_SEND_TLS_CERT_FILE`, `_TLS_KEY_FILE` and
+`_CLIENT_CA_FILE`. Owner clients use prefixes `MESSAGING_BOT_SEND_AUTHORITY_`
+(Bot) and `MESSAGING_BOT_SEND_SPACE_` (Space), each with `GRPC_ADDR`,
+`TLS_CA_FILE`, `TLS_SERVER_NAME`, `CLIENT_CERT_FILE`, `CLIENT_KEY_FILE`.
+Activation requires all listener/client fields, the existing Bot principal
+verifier and Messaging signer. Bot's lifecycle callback client leaf may use a
+different CA from the Space observer leaf. Messaging's existing protected JWKS
+publisher at port 8445 publishes the same signing keys for both observers.
 
 ### Private Bot pin cleanup
 

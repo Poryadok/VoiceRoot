@@ -873,6 +873,13 @@ jobs:
         env:
           CGO_ENABLED: "0"
         run: go test -short ./...
+      - name: Role native membership authority and invite decisions
+        if: matrix.service == 'role'
+        working-directory: src/backend/role
+        env:
+          CGO_ENABLED: "0"
+          ROLE_NATIVE_SPACE_SOURCE_ROOT: ${{ github.workspace }}
+        run: go test -tags role_space_native -run '^TestMemberAdmissionRole25ProtectedReceipt$' -count=1 -timeout=10m .
       - name: Gateway race detector
         if: matrix.service == 'gateway'
         working-directory: src/backend/gateway

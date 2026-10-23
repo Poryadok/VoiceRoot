@@ -43,18 +43,7 @@ func (t *transcoder) serveSpaces(w http.ResponseWriter, r *http.Request, rest st
 		return true
 
 	case r.Method == http.MethodPatch && rest != "" && !strings.Contains(rest, "/"):
-		req := &spacev1.UpdateSpaceRequest{}
-		if err := readProtoJSON(r, req); err != nil {
-			writeGRPCError(w, err)
-			return true
-		}
-		req.SpaceId = rest
-		resp, err := t.clients.space.UpdateSpace(ctx, req)
-		if err != nil {
-			writeGRPCError(w, err)
-			return true
-		}
-		writeProtoJSON(w, http.StatusOK, resp)
+		t.serveSpaceUpdate(w, r)
 		return true
 
 	default:

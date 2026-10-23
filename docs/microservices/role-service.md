@@ -494,6 +494,28 @@ interceptor ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md));
 | `bot` service | `CheckPermission`, `GetMemberRoles`, `RevokeRole`, `DeleteRolesCreatedByProfile` | only signed `service:bot` lifecycle/decision calls below; no actor-mutation authority; cleanup cannot touch `Owner` or system roles |
 | `bot` signed `bot_actor` capability | `CreateRole`, `AssignRole`, `RevokeRole` | only the exact scope and claim-bound space below; no generic Gateway principal or metadata fallback; `Owner` and every system-role mutation are rejected |
 
+### Scoped Messaging and Voice decisions
+
+The protected listener accepts signed `service:messaging` decisions only for
+`TEXT_CHAT_SEND_MESSAGES`, `TEXT_CHAT_PIN_MESSAGES`, `TEXT_CHAT_ADD_REACTIONS`,
+`TEXT_CHAT_MENTION_ALL_IN_CHAT`, `TEXT_CHAT_MENTION_ALL_ONLINE`,
+`TEXT_CHAT_CREATE_THREADS`, and `TEXT_CHAT_SEND_IN_THREADS`. Each request requires
+canonical Space/profile/chat IDs, an explicit GROUP or CHANNEL type, and no voice
+room. Configuring the `messaging` HTTPS endpoint in `S2S_JWKS_URLS_JSON` enables
+only this closed decision surface; it adds no actor or mutation authority.
+
+Signed `service:voice` decisions accept only `VOICE_JOIN`, `VOICE_SPEAK`,
+`VOICE_SCREEN_SHARE`, `VOICE_MUTE_OTHERS`, and `VOICE_MOVE_OTHERS`, with explicit
+canonical Space/profile/voice-room IDs and no chat. Voice remains responsible for
+the asserted room's ownership. Both services bind audience `role`, exact
+`CheckPermission` RPC, fresh UUID request ID and deterministic full request hash.
+The permission selector chooses one verifier without issuer fallback. Unknown
+fields, mixed identity and node scopes, expired credentials and replay deny.
+The native reader obtains current Space membership outside Role locks; Messaging
+also requires the exact current Space-tree chat observation. It rechecks the
+original observation vector and credential after the owning read transaction
+commits. Ordinary listener calls do not provide this authority.
+
 ### Space `CheckPermission` decision contract
 
 The protected Bot installation decision is a separate exact branch: only
@@ -515,12 +537,14 @@ service JWT whose `principal_type=service`, `iss=space`, `sub=service:space`,
 The verified Space principal may request only these global permission names:
 `SPACE_VIEW_AUDIT_LOG`, `SPACE_MANAGE_BOTS`, `SPACE_MANAGE_INVITES`,
 `MEMBER_KICK`, `MEMBER_BAN`, `MODERATION_TIMEOUT_MEMBERS`,
-`SPACE_MANAGE_SETTINGS`, `SPACE_APPROVE_JOIN_REQUESTS`, and
+`SPACE_MANAGE_SETTINGS`, `SPACE_MANAGE_MATCHMAKING`, `SPACE_APPROVE_JOIN_REQUESTS`, and
 `TEXT_CHAT_CREATE_IN_SPACE`. This is the accepted target allowlist. The current
 protected runtime's narrow `CheckPermission` routing supports
-`TEXT_CHAT_CREATE_IN_SPACE`; adding an allowlist name here does not expand that
-listener. Admission must explicitly add and test the exact signed decision
-before depending on `SPACE_APPROVE_JOIN_REQUESTS`. `profile_id` remains
+`TEXT_CHAT_CREATE_IN_SPACE`, `SPACE_APPROVE_JOIN_REQUESTS`,
+`SPACE_MANAGE_SETTINGS`, `SPACE_MANAGE_MATCHMAKING`, and `SPACE_MANAGE_INVITES`;
+adding an allowlist name here does not expand that listener. Matchmaking-only
+Space updates request `SPACE_MANAGE_MATCHMAKING`; mixed updates require both
+settings and matchmaking decisions. `profile_id` remains
 decision data asserted by verified Space; it is never identity authority derived
 from request metadata.
 

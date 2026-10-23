@@ -146,7 +146,7 @@ def generate(destination):
                         "-extfile", extensions, "-out", root / f"tls/{leaf}.crt")
                 csr.unlink()
             extensions.unlink()
-            for serial, service in enumerate(("space", "gameintegration", "voice", "matchmaking", "chat", "auth-jwks", "role", "bot"), 100):
+            for serial, service in enumerate(("space", "gameintegration", "voice", "matchmaking", "chat", "auth-jwks", "role", "bot", "messaging"), 100):
                 client_key = root / f"tls/{service}-client.key"
                 client_csr = root / f"tls/{service}-client.csr"
                 client_extensions = root / "client.ext"
@@ -169,6 +169,7 @@ def generate(destination):
             ]
             scoped_clients.append(("gateway-client", "gateway", ca_cert, ca_key))
             scoped_clients.append(("space-lifecycle-client", "space", lifecycle_ca_cert, lifecycle_ca_key))
+            scoped_clients.append(("messaging-bot-authority-client", "messaging", lifecycle_ca_cert, lifecycle_ca_key))
             # Chat's Gateway/Bot JWKS HTTP transport has its own identity. Bot's
             # existing protected JWKS endpoint trusts the GIS client CA; owner
             # RPCs use the independent root-CA Chat identity above.
@@ -180,7 +181,9 @@ def generate(destination):
                 client_extensions.write_text(
                     "basicConstraints=critical,CA:FALSE\n"
                     "keyUsage=critical,digitalSignature\n"
-                    "extendedKeyUsage=clientAuth\n", encoding="ascii")
+                    "extendedKeyUsage=clientAuth\n"
+                    + ("subjectAltName=URI:spiffe://voice.local/phase0/messaging\n"
+                       if leaf == "messaging-bot-authority-client" else ""), encoding="ascii")
                 command("openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes",
                         "-keyout", client_key, "-out", client_csr, "-subj", f"/CN={service}")
                 command("openssl", "x509", "-req", "-in", client_csr, "-CA", client_ca_cert,
@@ -217,6 +220,12 @@ def generate(destination):
                     raise ValueError("unsupported MatchSquad fixture owner")
                 owned_paths = [
                     root / "matchmaking",
+                    root / "chat",
+                    root / "space",
+                    root / "tls/chat-client.crt",
+                    root / "tls/chat-client.key",
+                    root / "tls/chat-jwks.crt",
+                    root / "tls/chat-jwks.key",
                     root / "tls/chat-match-squad-grpc.crt",
                     root / "tls/chat-match-squad-grpc.key",
                     root / "tls/voice-match-squad-grpc.crt",
@@ -242,13 +251,13 @@ def generate(destination):
                     path.chmod(0o711)
                 if os.geteuid() == 0:
                     for path in owned_paths:
-                        entries = (path, *path.rglob("*")) if path == root / "matchmaking" else (path,)
+                        entries = (path, *path.rglob("*")) if path in (root / "matchmaking", root / "chat", root / "space") else (path,)
                         for entry in entries:
                             os.chown(entry, 65532, 65532)
                 else:
                     for path in owned_paths:
                         command_args = ["sudo", "-n", "chown"]
-                        if path == root / "matchmaking":
+                        if path in (root / "matchmaking", root / "chat", root / "space"):
                             command_args.append("-R")
                         command_args.extend(("65532:65532", str(path)))
                         result = subprocess.run(

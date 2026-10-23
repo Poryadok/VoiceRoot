@@ -10,16 +10,25 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	messagingv1 "voice.app/voice/messaging/v1"
 	"voice/backend/pkg/integrationtest"
 )
 
-func newBotPinRemovalFixture(t *testing.T) (*PinsStore, *messagingv1.ApplyBotChatPinRemovalRequest, uuid.UUID) {
+func newBotPinRemovalFixture(t *testing.T, maxConns ...int32) (*PinsStore, *messagingv1.ApplyBotChatPinRemovalRequest, uuid.UUID) {
 	t.Helper()
 	ctx := t.Context()
 	pool := startPostgresForStoreTest(t, ctx)
+	if len(maxConns) != 0 {
+		config := pool.Config()
+		config.MaxConns = maxConns[0]
+		pool.Close()
+		var err error
+		pool, err = pgxpool.NewWithConfig(ctx, config)
+		require.NoError(t, err)
+	}
 	t.Cleanup(pool.Close)
 	seedMessagingSchema(t, ctx, pool)
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000035_bot_pin_removal.up.sql"))
@@ -32,12 +41,28 @@ func newBotPinRemovalFixture(t *testing.T) (*PinsStore, *messagingv1.ApplyBotCha
 	return s, request, message
 }
 
+func TestBotPinCleanupSingleMessagingConnectionCompletes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real PostgreSQL pool ownership")
+	}
+	s, request, _ := newBotPinRemovalFixture(t, 1)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	response, err := s.ApplyBotChatPinRemoval(ctx, request)
+	require.NoError(t, err, "Chat source must not acquire the Messaging transaction's sole connection")
+	require.EqualValues(t, 1, response.GetReceipt().GetRemovedPinCount())
+	replay, err := s.ApplyBotChatPinRemoval(ctx, request)
+	require.NoError(t, err)
+	require.True(t, proto.Equal(response, replay))
+}
+
 func TestBotPinCleanupFaultRollbackConcurrentReceiptAndConflictingAuthority(t *testing.T) {
 	if testing.Short() {
 		t.Skip("real PostgreSQL participant journal")
 	}
 	s, request, message := newBotPinRemovalFixture(t)
-	ctx := t.Context()
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
 	_, err := s.Pool.Exec(ctx, `ALTER TABLE bot_pin_removal_receipts ADD CONSTRAINT injected_receipt_failure CHECK(false)`)
 	require.NoError(t, err)
 	_, err = s.ApplyBotChatPinRemoval(ctx, request)
@@ -66,7 +91,12 @@ func TestBotPinCleanupFaultRollbackConcurrentReceiptAndConflictingAuthority(t *t
 	}
 	var first *messagingv1.ApplyBotChatPinRemovalResponse
 	for range 8 {
-		r := <-results
+		var r result
+		select {
+		case r = <-results:
+		case <-ctx.Done():
+			t.Fatal("concurrent cleanup did not finish within its bounded fixture context")
+		}
 		require.NoError(t, r.err)
 		if first == nil {
 			first = r.response

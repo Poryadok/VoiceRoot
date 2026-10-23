@@ -129,6 +129,14 @@ func (s *MessagesStore) InsertMessageWithOutbox(ctx context.Context, row Message
 	if err := lockMessageMutation(ctx, tx, row.ChatID, spaceID, &row.ID); err != nil {
 		return nil, false, err
 	}
+	if row.BotSendAdmission != nil {
+		var cancel context.CancelFunc
+		ctx, cancel, err = row.BotSendAdmission(ctx)
+		if err != nil {
+			return nil, false, err
+		}
+		defer cancel()
+	}
 	if err := insertForwardCommentaryDB(ctx, tx, row); err != nil {
 		return nil, false, err
 	}

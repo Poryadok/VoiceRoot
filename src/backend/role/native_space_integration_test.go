@@ -76,6 +76,7 @@ func (b *nativeFixtureLog) String() string {
 type nativeTrackedObserver struct {
 	client *memberauthority.Client
 	calls  atomic.Int64
+	t      *testing.T
 }
 
 type nativeCommitSQLKey struct{}
@@ -105,7 +106,12 @@ func (d *nativeChatCommitExpiry) TraceQueryEnd(ctx context.Context, _ *pgx.Conn,
 
 func (o *nativeTrackedObserver) ObserveMember(ctx context.Context, req *spacev1.GetMemberAdmissionAuthorityRequest) (memberauthority.Observation, error) {
 	o.calls.Add(1)
-	return o.client.ObserveMember(ctx, req)
+	started := time.Now()
+	observation, err := o.client.ObserveMember(ctx, req)
+	if err != nil {
+		o.t.Logf("native member observation failed: elapsed=%s grpc_code=%s context_error=%v", time.Since(started), status.Code(err), ctx.Err())
+	}
+	return observation, err
 }
 
 func nativeServiceContext(t *testing.T, key *rsa.PrivateKey, method string, request proto.Message) context.Context {
@@ -227,12 +233,12 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "role", KeyID: "current", PrivateKey: current})
 	require.NoError(t, err)
 	authority := &memberauthority.Client{Space: spacev1.NewSpaceServiceClient(spaceConn), Issuer: issuer}
-	trackedAuthority := &nativeTrackedObserver{client: authority}
+	trackedAuthority := &nativeTrackedObserver{client: authority, t: t}
 	require.NoError(t, roles.BootstrapSpaceRoles(ctx, space, owner))
 	ownerAccount := uuid.NewString()
 	var floor atomic.Int64
 	floor.Store(7)
-	runtime, err := principalruntime.NewWithSessionEpochChecker(ctx, principalruntime.Config{ListenAddr: "127.0.0.1:0", TLSCertFile: certFile, TLSKeyFile: keyFile, ClientCAFile: clientCA, ReplayAddr: redisAddress, JWKSCAFile: certFile, JWKSURLs: map[string]string{"space": jwks.URL, "voice": jwks.URL, "gameintegration": jwks.URL, "gateway": jwks.URL, "bot": jwks.URL}, BotLifecycleEnabled: true, DelegatedUserEnabled: true, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: time.Second}, func(_ context.Context, observedAccount string, epoch int64) error {
+	runtime, err := principalruntime.NewWithSessionEpochChecker(ctx, principalruntime.Config{ListenAddr: "127.0.0.1:0", TLSCertFile: certFile, TLSKeyFile: keyFile, ClientCAFile: clientCA, ReplayAddr: redisAddress, JWKSCAFile: certFile, JWKSURLs: map[string]string{"space": jwks.URL, "voice": jwks.URL, "gameintegration": jwks.URL, "gateway": jwks.URL, "bot": jwks.URL, "messaging": jwks.URL}, BotLifecycleEnabled: true, DelegatedUserEnabled: true, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: time.Second}, func(_ context.Context, observedAccount string, epoch int64) error {
 		if (observedAccount != ownerAccount && observedAccount != account.String()) || epoch < floor.Load() {
 			return errors.New("stale session")
 		}
@@ -291,6 +297,22 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	inviteResponse, err := client.CheckPermission(nativeWorkloadContext(t, current, "space", rolev1.RoleService_CheckPermission_FullMethodName, inviteDecision), inviteDecision)
 	require.NoError(t, err, "CreateInvite decision must collect current protected Space authority in native25")
 	require.True(t, inviteResponse.GetAllowed())
+	settingsDecision := &rolev1.CheckPermissionRequest{SpaceId: b.SpaceID, ProfileId: owner.String(), PermissionName: "SPACE_MANAGE_SETTINGS"}
+	settingsResponse, err := client.CheckPermission(nativeWorkloadContext(t, current, "space", rolev1.RoleService_CheckPermission_FullMethodName, settingsDecision), settingsDecision)
+	require.NoError(t, err)
+	require.True(t, settingsResponse.GetAllowed(), "current qualified Owner can update Space settings")
+	settingsDecision.ProfileId = b.ProfileID
+	settingsResponse, err = client.CheckPermission(nativeWorkloadContext(t, current, "space", rolev1.RoleService_CheckPermission_FullMethodName, settingsDecision), settingsDecision)
+	require.NoError(t, err)
+	require.False(t, settingsResponse.GetAllowed(), "default Member cannot update Space settings")
+	matchmakingDecision := &rolev1.CheckPermissionRequest{SpaceId: b.SpaceID, ProfileId: owner.String(), PermissionName: "SPACE_MANAGE_MATCHMAKING"}
+	matchmakingResponse, err := client.CheckPermission(nativeWorkloadContext(t, current, "space", rolev1.RoleService_CheckPermission_FullMethodName, matchmakingDecision), matchmakingDecision)
+	require.NoError(t, err)
+	require.True(t, matchmakingResponse.GetAllowed(), "qualified Owner can manage matchmaking")
+	matchmakingDecision.ProfileId = b.ProfileID
+	matchmakingResponse, err = client.CheckPermission(nativeWorkloadContext(t, current, "space", rolev1.RoleService_CheckPermission_FullMethodName, matchmakingDecision), matchmakingDecision)
+	require.NoError(t, err)
+	require.False(t, matchmakingResponse.GetAllowed(), "default Member cannot manage matchmaking")
 	inviteDecision.ProfileId = b.ProfileID
 	inviteResponse, err = client.CheckPermission(nativeWorkloadContext(t, current, "space", rolev1.RoleService_CheckPermission_FullMethodName, inviteDecision), inviteDecision)
 	require.NoError(t, err)
@@ -348,6 +370,18 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	var attached nativeSpaceReply
 	require.NoError(t, decoder.Decode(&attached), stderr.String())
 	require.NotEmpty(t, attached.NodeID)
+	for _, permission := range []string{"TEXT_CHAT_SEND_MESSAGES", "TEXT_CHAT_PIN_MESSAGES", "TEXT_CHAT_ADD_REACTIONS", "TEXT_CHAT_MENTION_ALL_IN_CHAT", "TEXT_CHAT_MENTION_ALL_ONLINE", "TEXT_CHAT_CREATE_THREADS", "TEXT_CHAT_SEND_IN_THREADS"} {
+		request := &rolev1.CheckPermissionRequest{SpaceId: b.SpaceID, ProfileId: owner.String(), PermissionName: permission, Chat: &chatv1.ChatRef{Id: chat.String(), Type: chatv1.ChatType_CHAT_TYPE_GROUP.Enum()}}
+		response, err := client.CheckPermission(nativeWorkloadContext(t, current, "messaging", rolev1.RoleService_CheckPermission_FullMethodName, request), request)
+		require.NoError(t, err, permission)
+		require.True(t, response.GetAllowed(), permission)
+	}
+	for _, permission := range []string{"VOICE_JOIN", "VOICE_SPEAK", "VOICE_SCREEN_SHARE", "VOICE_MUTE_OTHERS", "VOICE_MOVE_OTHERS"} {
+		request := &rolev1.CheckPermissionRequest{SpaceId: b.SpaceID, ProfileId: owner.String(), PermissionName: permission, VoiceRoomId: &room}
+		response, err := client.CheckPermission(nativeWorkloadContext(t, current, "voice", rolev1.RoleService_CheckPermission_FullMethodName, request), request)
+		require.NoError(t, err, permission)
+		require.True(t, response.GetAllowed(), permission)
+	}
 	view, err := permissions.MaskFor(permissions.TextChatView)
 	require.NoError(t, err)
 	globalRequest := &rolev1.GetEffectivePermissionsRequest{SpaceId: b.SpaceID, ProfileId: b.ProfileID}
@@ -380,6 +414,19 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	require.True(t, delay.fresh.Load(), "original observation fresh at successful outer COMMIT completion")
 	require.Error(t, staleErr, "expired original vector cannot return a permission after outer COMMIT")
 	if response, ok := staleResponse.(*rolev1.GetEffectivePermissionsResponse); ok {
+		require.Nil(t, response)
+	}
+	voiceDecision := &rolev1.CheckPermissionRequest{SpaceId: b.SpaceID, ProfileId: b.ProfileID, PermissionName: "VOICE_JOIN", VoiceRoomId: &room}
+	voiceCall := nativeWorkloadContext(t, current, "voice", rolev1.RoleService_CheckPermission_FullMethodName, voiceDecision)
+	voiceMD, ok := metadata.FromOutgoingContext(voiceCall)
+	require.True(t, ok)
+	staleResponse, staleErr = principalgrpc.StrictUnaryInterceptor(runtime)(metadata.NewIncomingContext(ctx, voiceMD), voiceDecision, &grpc.UnaryServerInfo{FullMethod: rolev1.RoleService_CheckPermission_FullMethodName}, func(callCtx context.Context, req any) (any, error) {
+		return tracedHandler.CheckPermission(callCtx, req.(*rolev1.CheckPermissionRequest))
+	})
+	require.EqualValues(t, 2, delay.calls.Load())
+	require.True(t, delay.fresh.Load(), "Voice observation was fresh before post-COMMIT delay")
+	require.Error(t, staleErr, "Voice cannot disclose a decision after its original membership vector expires")
+	if response, ok := staleResponse.(*rolev1.CheckPermissionResponse); ok {
 		require.Nil(t, response)
 	}
 	for _, invalid := range []struct {
