@@ -754,8 +754,9 @@ func cleanupT16GISUnavailableFixture(t *testing.T, fixture t16GISUnavailableFixt
 	require.NoError(t, err)
 	_, err = authDB.Exec(ctx, `DELETE FROM sdk_identities WHERE application_id=$1 AND environment_id=$2`, fixture.AppID, fixture.EnvID)
 	require.NoError(t, err)
-	_, err = authDB.Exec(ctx, `DELETE FROM accounts WHERE id IN ($1,$2)`, fixture.SourceAccountID, fixture.TargetAccountID)
-	require.NoError(t, err)
+	// Keep these two unique per-run Auth accounts until the owning T16 workflow
+	// tears down its disposable database volumes. Active accounts have not reached
+	// the real 30-day erasure boundary and must not be physically deleted here.
 	require.NoError(t, os.Remove(fixturePath))
 }
 
