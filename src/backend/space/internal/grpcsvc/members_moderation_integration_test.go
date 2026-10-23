@@ -105,11 +105,6 @@ func profileFixtureFromCtx(ctx context.Context) (profileID, accountID uuid.UUID)
 	return profileID, accountID
 }
 
-func accountFromCtx(ctx context.Context) uuid.UUID {
-	_, accountID := profileFixtureFromCtx(ctx)
-	return accountID
-}
-
 // TestSpaceModeration_KickMember_ModeratorCanKick documents spaces.md: moderator with MEMBER_KICK removes member.
 func TestSpaceModeration_KickMember_ModeratorCanKick(t *testing.T) {
 	if testing.Short() {
@@ -212,158 +207,59 @@ func TestSpaceModeration_KickMember_NotFound(t *testing.T) {
 	require.Equal(t, codes.NotFound, status.Code(err))
 }
 
-// TestSpaceModeration_BanMember_RemovesMember documents ban evicts member from roster.
+// Ban and Unban use the protected receiver and the actual native50 catalog.
 func TestSpaceModeration_BanMember_RemovesMember(t *testing.T) {
-	if testing.Short() {
-		t.Skip()
+	f := newNativeModerationFixture(t)
+	require.NoError(t, f.ban(t, f.targetAccount, strPtr("spam")))
+	members, err := f.ordinary.ListMembers(withAccountProfileCtx(context.Background(), f.ownerAccount, f.owner), &spacev1.ListMembersRequest{SpaceId: f.space.String()})
+	require.NoError(t, err)
+	require.NotEmpty(t, members.GetSpaceMemberList().GetMembers())
+	for _, member := range members.GetSpaceMemberList().GetMembers() {
+		require.NotEqual(t, f.target.String(), member.GetProfileId())
 	}
-	spaceClient, _, ownerProfile, ownerCtx, cleanup := startSpaceModerationFixture(t)
-	t.Cleanup(cleanup)
-
-	targetAccount, targetProfile := uuid.New(), uuid.New()
-	targetCtx := moderationCtx(targetAccount, targetProfile)
-
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Ban evict"})
-	require.NoError(t, err)
-	spaceID := created.GetSpace().GetId()
-	joinSpaceViaInvite(t, spaceClient, ownerCtx, targetCtx, spaceID)
-
-	_, err = spaceClient.BanMember(ownerCtx, &spacev1.BanMemberRequest{
-		SpaceId:   spaceID,
-		AccountId: targetAccount.String(),
-		Reason:    strPtr("spam"),
-	})
-	require.NoError(t, err)
-
-	members, err := spaceClient.ListMembers(ownerCtx, &spacev1.ListMembersRequest{SpaceId: spaceID})
-	require.NoError(t, err)
-	for _, m := range members.GetSpaceMemberList().GetMembers() {
-		require.NotEqual(t, targetProfile.String(), m.GetProfileId())
-	}
-	_ = ownerProfile
 }
 
-// TestSpaceModeration_BanMember_BannedCannotJoin documents banned account cannot rejoin via invite.
 func TestSpaceModeration_BanMember_BannedCannotJoin(t *testing.T) {
-	if testing.Short() {
-		t.Skip()
-	}
-	spaceClient, _, _, ownerCtx, cleanup := startSpaceModerationFixture(t)
-	t.Cleanup(cleanup)
-
-	targetAccount, targetProfile := uuid.New(), uuid.New()
-	targetCtx := moderationCtx(targetAccount, targetProfile)
-
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Ban rejoin"})
-	require.NoError(t, err)
-	spaceID := created.GetSpace().GetId()
-	joinSpaceViaInvite(t, spaceClient, ownerCtx, targetCtx, spaceID)
-
-	_, err = spaceClient.BanMember(ownerCtx, &spacev1.BanMemberRequest{
-		SpaceId:   spaceID,
-		AccountId: targetAccount.String(),
-	})
-	require.NoError(t, err)
-
-	inv, err := spaceClient.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID})
-	require.NoError(t, err)
-	_, err = spaceClient.JoinByInvite(targetCtx, &spacev1.JoinByInviteRequest{Code: inv.GetInvite().GetCode()})
+	f := newNativeModerationFixture(t)
+	code := f.invite(t)
+	require.NoError(t, f.ban(t, f.targetAccount, nil))
+	_, err := f.ordinary.JoinByInvite(withAccountProfileCtx(context.Background(), f.targetAccount, f.target), &spacev1.JoinByInviteRequest{Code: code})
 	require.Error(t, err)
-	require.True(t, status.Code(err) == codes.PermissionDenied || status.Code(err) == codes.FailedPrecondition,
-		"banned user must not join, got %v", err)
-	_ = targetProfile
+	require.True(t, status.Code(err) == codes.PermissionDenied || status.Code(err) == codes.FailedPrecondition, "banned account cannot rejoin: %v", err)
 }
 
-// TestSpaceModeration_UnbanMember_RestoresJoin documents unban allows invite join again.
-func TestSpaceModeration_UnbanMember_RestoresJoin(t *testing.T) {
-	if testing.Short() {
-		t.Skip()
-	}
-	spaceClient, _, _, ownerCtx, cleanup := startSpaceModerationFixture(t)
-	t.Cleanup(cleanup)
-
-	targetAccount, targetProfile := uuid.New(), uuid.New()
-	targetCtx := moderationCtx(targetAccount, targetProfile)
-
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Unban"})
+func TestSpaceModeration_UnbanMember_AllowsNewAdmission(t *testing.T) {
+	f := newNativeModerationFixture(t)
+	code := f.invite(t)
+	require.NoError(t, f.ban(t, f.targetAccount, nil))
+	require.NoError(t, f.unban(t))
+	member, err := f.st.IsSpaceMember(context.Background(), f.space, f.target)
 	require.NoError(t, err)
-	spaceID := created.GetSpace().GetId()
-	joinSpaceViaInvite(t, spaceClient, ownerCtx, targetCtx, spaceID)
-
-	_, err = spaceClient.BanMember(ownerCtx, &spacev1.BanMemberRequest{
-		SpaceId:   spaceID,
-		AccountId: targetAccount.String(),
-	})
+	require.False(t, member, "Unban cannot revive retired membership")
+	f.admitAgain(t, code)
+	joined, err := f.ordinary.JoinByInvite(withAccountProfileCtx(context.Background(), f.targetAccount, f.target), &spacev1.JoinByInviteRequest{Code: code})
 	require.NoError(t, err)
-	_, err = spaceClient.UnbanMember(ownerCtx, &spacev1.UnbanMemberRequest{
-		SpaceId:   spaceID,
-		AccountId: targetAccount.String(),
-	})
-	require.NoError(t, err)
-
-	inv, err := spaceClient.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID})
-	require.NoError(t, err)
-	_, err = spaceClient.JoinByInvite(targetCtx, &spacev1.JoinByInviteRequest{Code: inv.GetInvite().GetCode()})
-	require.NoError(t, err)
-	_ = targetProfile
+	require.Equal(t, f.target.String(), joined.GetSpaceMembership().GetProfileId())
 }
 
-// TestSpaceModeration_ListBans_IncludesBan documents ListBans returns active bans.
 func TestSpaceModeration_ListBans_IncludesBan(t *testing.T) {
-	if testing.Short() {
-		t.Skip()
-	}
-	spaceClient, _, _, ownerCtx, cleanup := startSpaceModerationFixture(t)
-	t.Cleanup(cleanup)
-
-	targetAccount, targetProfile := uuid.New(), uuid.New()
-	targetCtx := moderationCtx(targetAccount, targetProfile)
-
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "List bans"})
-	require.NoError(t, err)
-	spaceID := created.GetSpace().GetId()
-	joinSpaceViaInvite(t, spaceClient, ownerCtx, targetCtx, spaceID)
-
+	f := newNativeModerationFixture(t)
 	reason := "abuse"
-	_, err = spaceClient.BanMember(ownerCtx, &spacev1.BanMemberRequest{
-		SpaceId:   spaceID,
-		AccountId: targetAccount.String(),
-		Reason:    &reason,
-	})
+	require.NoError(t, f.ban(t, f.targetAccount, &reason))
+	bans, err := f.ordinary.ListBans(withAccountProfileCtx(context.Background(), f.ownerAccount, f.owner), &spacev1.ListBansRequest{SpaceId: f.space.String()})
 	require.NoError(t, err)
-
-	bans, err := spaceClient.ListBans(ownerCtx, &spacev1.ListBansRequest{SpaceId: spaceID})
-	require.NoError(t, err)
-	require.NotEmpty(t, bans.GetBanList().GetBans())
-	found := false
-	for _, b := range bans.GetBanList().GetBans() {
-		if b.GetAccountId() == targetAccount.String() {
-			found = true
-			require.Equal(t, reason, b.GetReason())
-		}
-	}
-	require.True(t, found, "ban list must include banned account")
+	require.Len(t, bans.GetBanList().GetBans(), 1)
+	require.Equal(t, f.targetAccount.String(), bans.GetBanList().GetBans()[0].GetAccountId())
+	require.Equal(t, reason, bans.GetBanList().GetBans()[0].GetReason())
 }
 
-// TestSpaceModeration_BanMember_CannotBanOwner documents owner cannot be banned.
 func TestSpaceModeration_BanMember_CannotBanOwner(t *testing.T) {
-	if testing.Short() {
-		t.Skip()
-	}
-	spaceClient, _, ownerProfile, ownerCtx, cleanup := startSpaceModerationFixture(t)
-	t.Cleanup(cleanup)
-
-	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Ban owner"})
-	require.NoError(t, err)
-	spaceID := created.GetSpace().GetId()
-	ownerAccount := accountFromCtx(ownerCtx)
-
-	_, err = spaceClient.BanMember(ownerCtx, &spacev1.BanMemberRequest{
-		SpaceId:   spaceID,
-		AccountId: ownerAccount.String(),
-	})
+	f := newNativeModerationFixture(t)
+	err := f.ban(t, f.ownerAccount, nil)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
-	_ = ownerProfile
+	banned, err := f.st.IsAccountBanned(context.Background(), f.space, f.ownerAccount)
+	require.NoError(t, err)
+	require.False(t, banned)
 }
 
 // TestSpaceModeration_TimeoutMember_ModeratorCanSet documents MODERATION_TIMEOUT_MEMBERS gate.

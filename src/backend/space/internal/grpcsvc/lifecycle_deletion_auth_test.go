@@ -129,6 +129,10 @@ func TestSpaceDeletionProofConsumedResponsePersistsInRealStore(t *testing.T) {
 // trusted45->50 transition must precede enrollment and serving grants; a
 // qualified audit45 component alone cannot establish this current fixture.
 func nativeLifecycleProofFixture(t *testing.T, ctx context.Context, owner uuid.UUID, name string) (*pgxpool.Pool, *store.SpaceRow) {
+	return nativeLifecycleProofFixtureWithSeed(t, ctx, owner, name, nil, false)
+}
+
+func nativeLifecycleProofFixtureWithSeed(t *testing.T, ctx context.Context, owner uuid.UUID, name string, seed func(*store.SpaceStore, *store.SpaceRow), currentCatalog bool) (*pgxpool.Pool, *store.SpaceRow) {
 	t.Helper()
 	directory := filepath.Join(repoRoot(t), "src/backend/migrations/space_db")
 	db := auditMigrationFixture(t, ctx, directory)
@@ -136,6 +140,9 @@ func nativeLifecycleProofFixture(t *testing.T, ctx context.Context, owner uuid.U
 	installer := &store.SpaceStore{Pool: db.Pool}
 	row, err := installer.CreateSpace(ctx, owner, name, "", "private")
 	require.NoError(t, err)
+	if seed != nil {
+		seed(installer, row)
+	}
 	db.Run(true, "goto", "44")
 	f44, err := installer.InspectNativeInstallerSource(ctx, 44)
 	require.NoError(t, err, "full44 source and the real M44-created seal are required")
@@ -174,6 +181,9 @@ func nativeLifecycleProofFixture(t *testing.T, ctx context.Context, owner uuid.U
 	final, err := installer.InspectNativeInstallerSource(ctx, 50)
 	require.NoError(t, err)
 	require.Equal(t, f50, final, "enrollment cannot replace the catalog seal or target")
+	if currentCatalog {
+		db.Pool = migrateModerationFixture51(t, ctx, db.Pool, directory)
+	}
 	role := "proof_serve_" + uuid.New().String()[:8]
 	_, err = db.Pool.Exec(ctx, "CREATE ROLE "+pgx.Identifier{role}.Sanitize()+" LOGIN PASSWORD 'isolated-proof-serving'")
 	require.NoError(t, err)
@@ -196,7 +206,7 @@ func nativeLifecycleProofFixture(t *testing.T, ctx context.Context, owner uuid.U
 	var created int
 	require.NoError(t, serving.QueryRow(ctx, `SELECT count(*) FROM spaces WHERE name=$1`, unframedName).Scan(&created))
 	require.Zero(t, created)
-	t.Logf("qualified native50 lifecycle fixture database=%s oid=%d epoch=%s old45=%s new50=%s COMPLETE=true frames=0 serving=%s rawCreate=55000/no-effect", final.DatabaseName, final.DatabaseOID, final.Epoch, r50.OldSealSHA256, r50.NewSealSHA256, role)
+	t.Logf("qualified native50 base database=%s oid=%d epoch=%s old45=%s new50=%s upgraded51=%t COMPLETE=true frames=0 serving=%s rawCreate=55000/no-effect", final.DatabaseName, final.DatabaseOID, final.Epoch, r50.OldSealSHA256, r50.NewSealSHA256, currentCatalog, role)
 	return serving, row
 }
 
