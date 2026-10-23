@@ -348,6 +348,13 @@ func TestOwnershipScope_OrdinaryFixtureCallsAreValidWithoutPendingJournal(t *tes
 	st := ownershipScopeStoreFixture(t)
 	for _, tc := range r20OrdinaryScopeCases() {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.name == "AddBotMember" || tc.name == "RemoveBotMember" {
+				// A positive Bot operation needs a real installation capability,
+				// qualified native catalog and, on removal, its exact prior add.
+				// Raw freeze/uncertainty cases in the shared inventory stay intact.
+				requireBotInstallationScopePositive(t, tc.name == "RemoveBotMember")
+				return
+			}
 			f := newR20ScopeFixture(t, st, "")
 			require.NoError(t, tc.call(st, f), "fixture must exercise a normally valid path")
 		})
