@@ -19,15 +19,7 @@ void main() {
 
       final member = await ctx.registerUser('p16-eph-member');
       final harness = await BotLiveHarness.setup(ctx: ctx, prefix: 'p16-eph');
-      final addMemberResp = await harness.httpClient.post(
-        Uri.parse('${ctx.config.baseUrl}/api/v1/chats/${harness.chatId}/members'),
-        headers: {
-          'Authorization': harness.owner.authorizationHeader,
-          'Content-Type': 'application/json',
-        },
-        body: '{"profile_ids":["${member.activeProfileId}"]}',
-      );
-      expect(addMemberResp.statusCode, 204, reason: addMemberResp.body);
+      await harness.joinSpaceMember(member);
 
       final bot = await harness.registerPollingBot(
         'EphBot-${DateTime.now().microsecondsSinceEpoch}',
