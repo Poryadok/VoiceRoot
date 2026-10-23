@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -103,6 +104,65 @@ func TestNative51FixtureCommitTrusted50(t *testing.T) {
 	err = pool.QueryRow(ctx, `SELECT 'native_membership_guard.catalog()'::regprocedure::oid`).Scan(&newOID)
 	native51FullCheck(t, "CATALOG_OID_RETAINED", err == nil && newOID == oldOID, err)
 	native51FullCheck(t, "BODY_SEAL_HISTORY_COMMITTED", after.version == 51 && !after.dirty && after.definition != before.definition && after.epoch == before.epoch && string(after.seal) == string(after.catalog) && string(after.seal) != string(before.seal), nil)
+}
+
+// A separate, genuinely qualified old50 fixture supplies the actual parent.
+// Only copied EXPECTED facts are stale; no database seal, epoch, body or marker
+// is changed to manufacture a failure or successful adoption authority.
+func TestNative51StaleExpectedParentCannotCommit(t *testing.T) {
+	ctx, pool := native51FullPool(t)
+	cfg := pool.Config().Copy()
+	pool.Close()
+	app := "native51-stale-parent-" + uuid.NewString()
+	cfg.ConnConfig.RuntimeParams["application_name"] = app
+	cfg.MaxConns = 2
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	native51FullCheck(t, "STALE_WINDOW_POOL", err == nil, err)
+	t.Cleanup(pool.Close)
+	st := &SpaceStore{Pool: pool}
+	prior, err := st.InspectNativeInstallerSource(ctx, 50)
+	native51FullCheck(t, "STALE_TRUSTED_50", err == nil, err)
+	before := native51Snapshot(t, ctx, pool)
+	window := func(windowCtx context.Context) error {
+		var exclusive bool
+		err := pool.QueryRow(windowCtx, `SELECT current_user=session_user AND NOT pg_is_in_recovery() AND NOT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND backend_type='client backend' AND application_name<>$1)`, app).Scan(&exclusive)
+		if err != nil || !exclusive {
+			return ErrMemberAuthorityUnavailable
+		}
+		return nil
+	}
+	dir, err := filepath.Abs(filepath.Join(repoRoot(t), "src/backend/migrations/space_db"))
+	native51FullCheck(t, "STALE_FILE_SOURCE", err == nil, err)
+	for _, field := range []string{"epoch", "seal"} {
+		t.Run(field, func(t *testing.T) {
+			expected := *prior
+			if field == "epoch" {
+				expected.Epoch = uuid.NewString()
+			} else {
+				first := "0"
+				if expected.SealSHA256[:1] == first {
+					first = "1"
+				}
+				expected.SealSHA256 = first + expected.SealSHA256[1:]
+			}
+			driver, err := st.NewNativeCatalog51Migration(ctx, &expected, window)
+			native51FullCheck(t, "STALE_REAL_DRIVER", err == nil, err)
+			t.Cleanup(func() { native51FullCheck(t, "STALE_DRIVER_CLOSE", driver.Close() == nil, nil) })
+			engine, err := migrateengine.NewWithDatabaseInstance((&url.URL{Scheme: "file", Path: filepath.ToSlash(dir)}).String(), "native51-stale-parent", driver)
+			native51FullCheck(t, "STALE_REAL_ENGINE", err == nil, err)
+			t.Cleanup(func() {
+				sourceErr, closeErr := engine.Close()
+				native51FullCheck(t, "STALE_ENGINE_CLOSE", sourceErr == nil && closeErr == nil, errors.Join(sourceErr, closeErr))
+			})
+			engineErr := engine.Migrate(51)
+			receipt, commitErr := driver.CommitQualified(engineErr)
+			native51FullCheck(t, "STALE_PARENT_REJECTED", errors.Is(engineErr, ErrMemberAuthorityUnavailable) && errors.Is(commitErr, ErrMemberAuthorityUnavailable) && receipt == nil && driver.receipt == nil && driver.state.phase != catalog51Committed, commitErr)
+			native51FullCheck(t, "STALE_RELEASE", driver.Close() == nil, nil)
+			afterFacts, err := st.InspectNativeInstallerSource(ctx, 50)
+			native51FullCheck(t, "STALE_FRESH_50_UNCHANGED", err == nil && reflect.DeepEqual(prior, afterFacts), err)
+			native51FullCheck(t, "STALE_BODY_SEAL_HISTORY_UNCHANGED", reflect.DeepEqual(before, native51Snapshot(t, ctx, pool)), nil)
+		})
+	}
 }
 
 // TestNative51FixtureFailedOver100Capture leaves ONLY the genuine failed
