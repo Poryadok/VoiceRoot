@@ -431,6 +431,38 @@ def validate_3071_packet(repo, directory):
 
 def current_author_J_native_applicability(repo, native, historical, current):
     """Preserve old reviewed facts; independently derive current source authority."""
+    if current.get('version') == 'NATIVE-P3-SOURCE-v2':
+        # First run the unchanged v1 historical reconstruction, then bridge only
+        # its exact fixed predecessor to the independently pinned successor.
+        require(hasattr(native,'verified_record'),'current_author_J_successor_dispatcher')
+        verifier,new=native.verified_record(repo,current)
+        require(verifier is native.successor,'current_author_J_successor_identity')
+        previous=native.legacy.load_record(repo)
+        predecessor=dict(current,version=previous['version'],content_base=previous['base'],
+            snapshot=previous['source'],record=native.legacy.PINNED_RECORD_COMMIT,
+            record_sha256=native.legacy.PINNED_RECORD_SHA256,
+            paths=[row['path'] for row in previous['projection']])
+        preserved=current_author_J_native_applicability(repo,native.legacy,historical,predecessor)
+        require(current['content_base']==new['base'] and current['snapshot']==new['source']
+            and current['paths']==[row['path'] for row in new['projection']],
+            'current_author_J_successor_complete_binding')
+        require(set(predecessor['paths'])<=set(current['paths']),
+            'current_author_J_successor_preserves_projection')
+        git(repo,'merge-base','--is-ancestor',predecessor['record'],new['source'])
+        git(repo,'merge-base','--is-ancestor',current['record'],current['source'])
+        raw=git(repo,'show',current['record']+':'+verifier.RECORD_PATH)
+        require(sha(raw)==current['record_sha256'],'current_author_J_successor_record_hash')
+        old_paths=historical['paths']
+        return dict(type='F54_CURRENT_AUTHOR_J_NATIVE_SOURCE_APPLICABILITY',
+            historical=preserved['historical'],
+            current=dict(**{k:current[k] for k in ('base','content_base','snapshot','record','record_sha256','paths')},
+                classification=new['classification'],record_raw=raw_binding(raw)),
+            predecessor=preserved['current'],successor_lineage=new['predecessor'],
+            added_paths=sorted(set(current['paths'])-set(old_paths)),
+            path_entries=[dict(path=name,historical_entry=entry_binding(repo,historical['snapshot'],name),
+                current_entry=entry_binding(repo,current['snapshot'],name),
+                membership='HISTORICAL_AND_CURRENT' if name in old_paths else 'CURRENT_RECORD_ONLY; ORIGINAL_GATES_REQUIRED')
+                for name in current['paths']],admission=False,runtime_pass=False)
     require(historical['content_base']==current['content_base']==AUTHOR_NATIVE_CONTENT_BASE,
         'current_author_J_same_native_content_baseline')
     old_raw=git(repo,'show',historical['record']+':'+native.RECORD_PATH)
@@ -484,7 +516,7 @@ def prepare_3071_capabilities(repo, directory, native_path, author_applicability
     if author_applicability is None:
         require(all(binding[k]==original[k] for k in ('base','content_base','snapshot','record','record_sha256','paths')),'fixed3071_no_borrowed_new_native_authority')
     context={k:os.environ.get(k,'') for k in ('GITHUB_EVENT_NAME','GITHUB_REF','GITHUB_SHA','VOICE_CI_PUSH_BEFORE_SHA','GITHUB_BASE_REF')}
-    spec=importlib.util.spec_from_file_location('fixed3071_native',ROOT/'scripts/ci/f13_native_p3_source.py')
+    spec=importlib.util.spec_from_file_location('fixed3071_native',ROOT/('scripts/ci/f13_native_p3_authority.py' if (ROOT/'scripts/ci/f13_native_p3_authority.py').is_file() else 'scripts/ci/f13_native_p3_source.py'))
     native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
     try:
         actual=native.qualify(repo,binding['base'],binding['source'],binding['target'],context['GITHUB_EVENT_NAME'],context['GITHUB_REF'],context['GITHUB_SHA'],context['VOICE_CI_PUSH_BEFORE_SHA'],context['GITHUB_BASE_REF'])
@@ -1091,7 +1123,7 @@ def qualified_J_native_normalization(value, events, before, name, actual_map, pr
     binding=gate['binding'];require(binding==raw_binding(binding['raw']),'fixed3071_J_native_binding_raw_hash')
     require(events[0]['kind']=='master_entry' and events[0]['payload']['native_binding']==binding
         and events[0]['payload']['context']==gate['context'],'fixed3071_J_native_original_master_context')
-    spec=importlib.util.spec_from_file_location('f54_J_native_rebind',ROOT/'scripts/ci/f13_native_p3_source.py')
+    spec=importlib.util.spec_from_file_location('f54_J_native_rebind',ROOT/('scripts/ci/f13_native_p3_authority.py' if (ROOT/'scripts/ci/f13_native_p3_authority.py').is_file() else 'scripts/ci/f13_native_p3_source.py'))
     native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
     bound=json.loads(binding['raw']);context=gate['context']
     try:
@@ -1401,7 +1433,7 @@ def manual_authority_expected(repo, context):
     require(len(parents)==3 and all(event.get(k,'')==os.environ.get(k,'') for k in event), 'manual_F_authority_actual_master_event')
     base,source=parents[1:];temporary=context['values']['TMP_DIR']
     require(event['GITHUB_SHA']==target and context['values']['ROOT']==str(Path(repo).resolve()), 'manual_F_authority_actual_root_target')
-    native_spec=importlib.util.spec_from_file_location('manual_F_native_authority',ROOT/'scripts/ci/f13_native_p3_source.py')
+    native_spec=importlib.util.spec_from_file_location('manual_F_native_authority',ROOT/('scripts/ci/f13_native_p3_authority.py' if (ROOT/'scripts/ci/f13_native_p3_authority.py').is_file() else 'scripts/ci/f13_native_p3_source.py'))
     native=importlib.util.module_from_spec(native_spec);native_spec.loader.exec_module(native)
     binding=native.qualify(repo,base,source,target,event['GITHUB_EVENT_NAME'],event['GITHUB_REF'],event['GITHUB_SHA'],
         event.get('VOICE_CI_PUSH_BEFORE_SHA',''),event.get('GITHUB_BASE_REF',''))
@@ -1906,7 +1938,7 @@ def composition_capability(repo, path, merge, boundary, first, source, name, res
 
 def master_context(repo, capability, binding_raw, context):
     """Bind the original B/S/T entry; M capability remains nested H53-only."""
-    spec=importlib.util.spec_from_file_location('f54_master_native',ROOT/'scripts/ci/f13_native_p3_source.py')
+    spec=importlib.util.spec_from_file_location('f54_master_native',ROOT/('scripts/ci/f13_native_p3_authority.py' if (ROOT/'scripts/ci/f13_native_p3_authority.py').is_file() else 'scripts/ci/f13_native_p3_source.py'))
     native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
     binding=json.loads(binding_raw)
     try:
@@ -2022,7 +2054,7 @@ def span_origin(repo, original_path, original_native_path, current_native_path, 
         context={key:os.environ.get(key,'') for key in ('GITHUB_EVENT_NAME','GITHUB_REF','GITHUB_SHA','VOICE_CI_PUSH_BEFORE_SHA','GITHUB_BASE_REF')}
         entry=master_context(repo,capability,current_raw,context)
         require(entry['type']=='F54_EXPLICIT_MASTER_CURRENT_AUTHOR_ENTRY','current_author_span_actual_master_entry')
-        spec=importlib.util.spec_from_file_location('current_author_span_native',ROOT/'scripts/ci/f13_native_p3_source.py')
+        spec=importlib.util.spec_from_file_location('current_author_span_native',ROOT/('scripts/ci/f13_native_p3_authority.py' if (ROOT/'scripts/ci/f13_native_p3_authority.py').is_file() else 'scripts/ci/f13_native_p3_source.py'))
         native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
         native_applicability=current_author_J_native_applicability(repo,native,old,current)
         # Reconstruct full authority before sealing it. Do not duplicate large
@@ -2457,7 +2489,7 @@ def seal_router(repo, collection_path, collection_sha, map_path, context_path):
         require(values['native_p3_active']=='true','observed_native_obligations_cannot_be_disabled')
         binding_path=values['native_p3_binding'];binding_raw=Path(binding_path).read_bytes()
         require(all(e['binding']==raw_binding(binding_raw) and e['context']=={k:context['event'].get(k,'') for k in e['context']} for e in observed),'same_actual_native_context_reaches_router')
-        spec=importlib.util.spec_from_file_location('f54_router_native',ROOT/'scripts/ci/f13_native_p3_source.py')
+        spec=importlib.util.spec_from_file_location('f54_router_native',ROOT/('scripts/ci/f13_native_p3_authority.py' if (ROOT/'scripts/ci/f13_native_p3_authority.py').is_file() else 'scripts/ci/f13_native_p3_source.py'))
         native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
         binding=json.loads(binding_raw);event=context['event']
         actual=native.qualify(repo,binding['base'],binding['source'],binding['target'],event['GITHUB_EVENT_NAME'],event['GITHUB_REF'],event['GITHUB_SHA'],event['VOICE_CI_PUSH_BEFORE_SHA'],event['GITHUB_BASE_REF'])
@@ -3144,7 +3176,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             binding=v['binding'];require(binding==raw_binding(binding['raw']),'native_binding_raw_hash')
             context=v['context'];cache=sha(canonical(dict(binding=binding,context=context)))
             if cache not in native_bindings:
-                spec=importlib.util.spec_from_file_location('f54_native_rebind',ROOT/'scripts/ci/f13_native_p3_source.py')
+                spec=importlib.util.spec_from_file_location('f54_native_rebind',ROOT/('scripts/ci/f13_native_p3_authority.py' if (ROOT/'scripts/ci/f13_native_p3_authority.py').is_file() else 'scripts/ci/f13_native_p3_source.py'))
                 native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
                 b=json.loads(binding['raw'])
                 require(b['target']==git(repo,'rev-parse','HEAD').decode().strip(),'native_receipt_actual_current_target')

@@ -1,0 +1,40 @@
+{
+  "purpose": "Fresh Role protected-listener evidence for conditional record",
+  "source": {
+    "commit": "84a354f191b19cb5a95d17a8831fc4885a2713de",
+    "checkout": "Detached clean Linux worktree copied from the prepared full-history Linux object volume; core.autocrlf=false; no source edits",
+    "creation_test_file": "src/backend/role/internal/principalruntime/creation_listener_test.go",
+    "creation_test_blob": "3b71aa563570477675708784637025b63a3bcccd",
+    "nickname_test_file": "src/backend/role/internal/principalruntime/nickname_listener_test.go",
+    "nickname_test_blob": "0efa2cfc9510007874c73340e2fc1488284d77e7"
+  },
+  "runner": {
+    "image": "golang:1.26.5-bookworm",
+    "toolchain": "go1.26.5 linux/amd64",
+    "limits": "2 CPU, 4 GiB memory",
+    "module_workdir": "/workspace/src/backend/role",
+    "environment": {
+      "GOWORK": "off",
+      "DOCKER_HOST": "unix:///var/run/docker.sock",
+      "TESTCONTAINERS_HOST_OVERRIDE": "host.docker.internal"
+    }
+  },
+  "command": "go test -json -v -count=1 -timeout=120s ./internal/principalruntime -run \"^(TestRuntimeListenerCreationPermissionExactSignedBranch|TestRuntimeListenerNicknamePermissionExactSignedBranch)$\"",
+  "tests": [
+    "TestRuntimeListenerCreationPermissionExactSignedBranch",
+    "TestRuntimeListenerNicknamePermissionExactSignedBranch"
+  ],
+  "fixture": "Real local TLS/gRPC listeners and locally served JWKS with RSA signing keys; Redis protocol fixture is miniredis (not a standalone Redis service). No PostgreSQL or Testcontainers resources required.",
+  "result": {
+    "exit_code": 0,
+    "package": "voice/backend/role/internal/principalruntime",
+    "package_elapsed_seconds": 0.285,
+    "json_pass_events_including_subtests": 20,
+    "skip_events": 0,
+    "fail_events": 0
+  },
+  "log": {
+    "file": "protected-listener-json.log",
+    "sha256": "134bd8da8cb30e98521f9b755f81aa3d5d515539473e5f2d26d33133f01ee2c5"
+  }
+}

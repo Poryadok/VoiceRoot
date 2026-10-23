@@ -118,7 +118,9 @@ func (a *BotSendAuthority) Check(ctx context.Context, b *commonv1.BotMessageSend
 		return deny()
 	}
 	life, owner, ordinary, tree := observation.GetLifecycle(), observation.GetOwnership(), observation.GetOrdinary(), observation.GetTreeRelation()
-	if life.GetGeneration() == 0 || life.GetState() != spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_LIVE || owner.GetGeneration() == 0 || owner.GetState() != spacev1.MemberAdmissionOwnershipState_MEMBER_ADMISSION_OWNERSHIP_STATE_AVAILABLE || ordinary.GetState() != spacev1.MemberAdmissionSourceState_MEMBER_ADMISSION_SOURCE_STATE_ACTIVE || ordinary.GetExplicitLegacy() || ordinary.GetHeadGeneration() == 0 || ordinary.GetHeadGeneration() <= ordinary.GetRetiredThrough() || ordinary.GetPublicationKind() != spacev1.MemberAdmissionPublicationKind_MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_BOT_INSTALL || tree.GetChatId() != b.ChatId || !tree.GetPresent() || tree.GetRevision() == 0 {
+	// Space authenticates a fresh LIVE lifecycle as generation zero.
+	// Ownership and native membership generations remain independently positive.
+	if life.GetState() != spacev1.MemberAdmissionLifecycleState_MEMBER_ADMISSION_LIFECYCLE_STATE_LIVE || owner.GetGeneration() == 0 || owner.GetState() != spacev1.MemberAdmissionOwnershipState_MEMBER_ADMISSION_OWNERSHIP_STATE_AVAILABLE || ordinary.GetState() != spacev1.MemberAdmissionSourceState_MEMBER_ADMISSION_SOURCE_STATE_ACTIVE || ordinary.GetExplicitLegacy() || ordinary.GetHeadGeneration() == 0 || ordinary.GetHeadGeneration() <= ordinary.GetRetiredThrough() || ordinary.GetPublicationKind() != spacev1.MemberAdmissionPublicationKind_MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_BOT_INSTALL || tree.GetChatId() != b.ChatId || !tree.GetPresent() || tree.GetRevision() == 0 {
 		return deny()
 	}
 	native := ordinary.GetNativePublication()
