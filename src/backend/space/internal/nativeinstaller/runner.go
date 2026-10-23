@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"voice/backend/space/internal/store"
 )
@@ -43,7 +44,25 @@ func fileSHA(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	return hashReaderAndClose(f)
+}
+
+// Error text stays safe for the CLI; Unwrap retains cleanup identity for callers.
+type cleanupFailure struct {
+	message string
+	cause   error
+}
+
+func (e cleanupFailure) Error() string { return e.message }
+func (e cleanupFailure) Unwrap() error { return e.cause }
+
+func hashReaderAndClose(f io.ReadCloser) (sum string, err error) {
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			err = errors.Join(err, cleanupFailure{message: "input close failed", cause: closeErr})
+			sum = ""
+		}
+	}()
 	h := sha256.New()
 	if _, err = io.Copy(h, f); err != nil {
 		return "", err
@@ -51,7 +70,24 @@ func fileSHA(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func Run(ctx context.Context, c Config) error {
+type adminCleanupConn interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Close(context.Context) error
+}
+
+func cleanupAdmin(primary error, admin adminCleanupConn, locked bool) error {
+	if locked {
+		if _, err := admin.Exec(context.Background(), `SELECT pg_advisory_unlock(hashtextextended('voice-space-native-installer',0))`); err != nil {
+			primary = errors.Join(primary, cleanupFailure{message: "installer advisory unlock failed", cause: err})
+		}
+	}
+	if err := admin.Close(context.Background()); err != nil {
+		primary = errors.Join(primary, cleanupFailure{message: "administrative connection close failed", cause: err})
+	}
+	return primary
+}
+
+func Run(ctx context.Context, c Config) (err error) {
 	if c.Output == nil || (c.Mode != "provision" && c.Mode != "verify") {
 		return errors.New("explicit provision or verify mode and evidence output required")
 	}
@@ -87,12 +123,13 @@ func Run(ctx context.Context, c Config) error {
 	if err != nil {
 		return errors.New("administrative database unavailable")
 	}
-	defer admin.Close(context.Background())
+	lockAcquired := false
+	defer func() { err = cleanupAdmin(err, admin, lockAcquired) }()
 	var locked bool
 	if err = admin.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtextextended('voice-space-native-installer',0))`).Scan(&locked); err != nil || !locked {
 		return errors.New("another installer owns the provisioning window")
 	}
-	defer admin.Exec(context.Background(), `SELECT pg_advisory_unlock(hashtextextended('voice-space-native-installer',0))`)
+	lockAcquired = true
 	var role string
 	var pid int32
 	if err = admin.QueryRow(ctx, `SELECT session_user,pg_backend_pid() WHERE current_user=session_user`).Scan(&role, &pid); err != nil {
