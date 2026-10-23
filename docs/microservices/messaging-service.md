@@ -1037,6 +1037,10 @@ LIVE installation, then independently calls Space's protected
 `GetMemberAdmissionAuthority` with the same binding. Space must echo the exact
 currently published native Bot tuple and current chat-tree relation. Installation
 and ordinary membership generations are distinct counters.
+Space may report `LIVE` lifecycle generation zero only after its owner validates
+a fresh Space with no lifecycle history or terminal fences. Messaging accepts
+that canonical observation; ownership and native membership generations must
+still be positive, and all exact installation/publication checks still apply.
 
 Only after both observations does a private request-bound admission replace the
 generic membership/VIEW and `TEXT_CHAT_SEND_MESSAGES` gates for this exact send.
