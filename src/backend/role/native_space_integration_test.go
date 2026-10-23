@@ -214,7 +214,9 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	var created nativeSpaceReply
 	require.NoError(t, decoder.Decode(&created), stderr.String())
 	space := uuid.MustParse(created.SpaceID)
-	fixture.Run(true, "up")
+	// The producer performs its real qualified45/50/51 installer sequence.
+	// Release this connection before its exclusive native51 migration window.
+	fixture.Pool.Close()
 	require.NoError(t, encoder.Encode(map[string]string{"Action": "prepare"}))
 	var preparing nativeSpaceReply
 	require.NoError(t, decoder.Decode(&preparing), stderr.String())

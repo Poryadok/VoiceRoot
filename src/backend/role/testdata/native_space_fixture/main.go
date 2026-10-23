@@ -44,7 +44,13 @@ func run() error {
 	if err := input.Decode(&init); err != nil {
 		return err
 	}
-	pool, err := pgxpool.New(ctx, init.DSN)
+	poolConfig, err := pgxpool.ParseConfig(init.DSN)
+	if err != nil {
+		return err
+	}
+	poolConfig.ConnConfig.RuntimeParams["application_name"] = "role-native-space-" + uuid.NewString()
+	poolConfig.MaxConns = 2
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		return err
 	}
@@ -65,6 +71,9 @@ func run() error {
 	}
 	if next.Action != "prepare" {
 		return fmt.Errorf("prepare required")
+	}
+	if err := installCurrentCatalog(ctx, st, init.DSN, space.ID); err != nil {
+		return fmt.Errorf("install current Space catalog: %w", err)
 	}
 	intent, err := st.PrepareMemberAdmission(ctx, store.MemberAdmissionInput{OperationID: init.Operation, SpaceID: space.ID, AccountID: init.Account, ProfileID: init.Profile})
 	if err != nil {
