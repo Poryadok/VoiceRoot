@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package voice.space.v1;
 
+import "voice/common/v1/bot_message.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "voice/role/v1/member_admission.proto";
@@ -17,6 +18,8 @@ message GetMemberAdmissionAuthorityRequest {
   optional uint64 expected_generation = 4;
   optional string expected_admission_operation_id = 5;
   optional string chat_id = 6; // exact current Space-tree relation only
+  // Messaging-only exact native Bot observation; forbids expected generation/op.
+  optional voice.common.v1.BotMessageSendBinding bot_message_send_binding = 7;
 }
 
 enum MemberAdmissionLifecycleState {
@@ -144,4 +147,6 @@ message GetMemberAdmissionAuthorityResponse {
   // Role starts its monotonic deadline BEFORE dispatch and subtracts the full
   // roundtrip/elapsed time. Missing/expired/unknown bounds fail closed.
   google.protobuf.Duration validity_remaining = 11;
+  // Present only after exact current native Bot tuple and Chat tree validation.
+  optional voice.common.v1.BotMessageSendBinding bot_message_send_binding = 12;
 }

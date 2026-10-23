@@ -139,11 +139,22 @@ const GetMemberAdmissionAuthorityRequest$json = {
       '10': 'chatId',
       '17': true
     },
+    {
+      '1': 'bot_message_send_binding',
+      '3': 7,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.BotMessageSendBinding',
+      '9': 3,
+      '10': 'botMessageSendBinding',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_expected_generation'},
     {'1': '_expected_admission_operation_id'},
     {'1': '_chat_id'},
+    {'1': '_bot_message_send_binding'},
   ],
 };
 
@@ -154,8 +165,11 @@ final $typed_data.Uint8List getMemberAdmissionAuthorityRequestDescriptor = $conv
     'cm9maWxlX2lkGAMgASgJUglwcm9maWxlSWQSNAoTZXhwZWN0ZWRfZ2VuZXJhdGlvbhgEIAEoBE'
     'gAUhJleHBlY3RlZEdlbmVyYXRpb26IAQESSgofZXhwZWN0ZWRfYWRtaXNzaW9uX29wZXJhdGlv'
     'bl9pZBgFIAEoCUgBUhxleHBlY3RlZEFkbWlzc2lvbk9wZXJhdGlvbklkiAEBEhwKB2NoYXRfaW'
-    'QYBiABKAlIAlIGY2hhdElkiAEBQhYKFF9leHBlY3RlZF9nZW5lcmF0aW9uQiIKIF9leHBlY3Rl'
-    'ZF9hZG1pc3Npb25fb3BlcmF0aW9uX2lkQgoKCF9jaGF0X2lk');
+    'QYBiABKAlIAlIGY2hhdElkiAEBEmQKGGJvdF9tZXNzYWdlX3NlbmRfYmluZGluZxgHIAEoCzIm'
+    'LnZvaWNlLmNvbW1vbi52MS5Cb3RNZXNzYWdlU2VuZEJpbmRpbmdIA1IVYm90TWVzc2FnZVNlbm'
+    'RCaW5kaW5niAEBQhYKFF9leHBlY3RlZF9nZW5lcmF0aW9uQiIKIF9leHBlY3RlZF9hZG1pc3Np'
+    'b25fb3BlcmF0aW9uX2lkQgoKCF9jaGF0X2lkQhsKGV9ib3RfbWVzc2FnZV9zZW5kX2JpbmRpbm'
+    'c=');
 
 @$core.Deprecated('Use nativeMembershipPublicationBindingDescriptor instead')
 const NativeMembershipPublicationBinding$json = {
@@ -644,9 +658,20 @@ const GetMemberAdmissionAuthorityResponse$json = {
       '6': '.google.protobuf.Duration',
       '10': 'validityRemaining'
     },
+    {
+      '1': 'bot_message_send_binding',
+      '3': 12,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.BotMessageSendBinding',
+      '9': 1,
+      '10': 'botMessageSendBinding',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_tree_relation'},
+    {'1': '_bot_message_send_binding'},
   ],
 };
 
@@ -665,4 +690,7 @@ final $typed_data.Uint8List getMemberAdmissionAuthorityResponseDescriptor = $con
     'djEuTWVtYmVyQWRtaXNzaW9uVHJlZVJlbGF0aW9uQXV0aG9yaXR5SABSDHRyZWVSZWxhdGlvbo'
     'gBARI5CgpzYW1wbGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFIJc2Ft'
     'cGxlZEF0EkgKEnZhbGlkaXR5X3JlbWFpbmluZxgLIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdX'
-    'JhdGlvblIRdmFsaWRpdHlSZW1haW5pbmdCEAoOX3RyZWVfcmVsYXRpb24=');
+    'JhdGlvblIRdmFsaWRpdHlSZW1haW5pbmcSZAoYYm90X21lc3NhZ2Vfc2VuZF9iaW5kaW5nGAwg'
+    'ASgLMiYudm9pY2UuY29tbW9uLnYxLkJvdE1lc3NhZ2VTZW5kQmluZGluZ0gBUhVib3RNZXNzYW'
+    'dlU2VuZEJpbmRpbmeIAQFCEAoOX3RyZWVfcmVsYXRpb25CGwoZX2JvdF9tZXNzYWdlX3NlbmRf'
+    'YmluZGluZw==');

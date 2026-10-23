@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package voice.common.v1;
+
+option java_multiple_files = true;
+option java_package = "app.voice.common.v1";
+
+option go_package = "voice.app/voice/common/v1;commonv1";
+
+// Exact send-only installation incarnation. This is an authenticated selector,
+// never portable authority or a grant to read history/member lists.
+// @voice.unknown_fields=reject
+message BotMessageSendBinding {
+  uint32 protocol_version = 1; // exactly 1
+  string bot_id = 2;
+  string actor_profile_id = 3;
+  string space_id = 4;
+  string installation_id = 5;
+  string install_operation_id = 6;
+  uint64 installation_generation = 7; // positive, <= signed int64 max
+  string chat_id = 8;
+}

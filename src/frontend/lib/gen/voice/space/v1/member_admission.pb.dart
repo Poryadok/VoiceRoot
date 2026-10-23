@@ -15,11 +15,12 @@ import 'dart:core' as $core;
 import 'package:fixnum/fixnum.dart' as $fixnum;
 import 'package:protobuf/protobuf.dart' as $pb;
 import 'package:protobuf/well_known_types/google/protobuf/duration.pb.dart'
-    as $2;
+    as $3;
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart'
-    as $0;
+    as $1;
 
-import '../../role/v1/member_admission.pb.dart' as $1;
+import '../../common/v1/bot_message.pb.dart' as $0;
+import '../../role/v1/member_admission.pb.dart' as $2;
 import 'member_admission.pbenum.dart';
 
 export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
@@ -36,6 +37,7 @@ class GetMemberAdmissionAuthorityRequest extends $pb.GeneratedMessage {
     $fixnum.Int64? expectedGeneration,
     $core.String? expectedAdmissionOperationId,
     $core.String? chatId,
+    $0.BotMessageSendBinding? botMessageSendBinding,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -46,6 +48,8 @@ class GetMemberAdmissionAuthorityRequest extends $pb.GeneratedMessage {
     if (expectedAdmissionOperationId != null)
       result.expectedAdmissionOperationId = expectedAdmissionOperationId;
     if (chatId != null) result.chatId = chatId;
+    if (botMessageSendBinding != null)
+      result.botMessageSendBinding = botMessageSendBinding;
     return result;
   }
 
@@ -72,6 +76,9 @@ class GetMemberAdmissionAuthorityRequest extends $pb.GeneratedMessage {
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..aOS(5, _omitFieldNames ? '' : 'expectedAdmissionOperationId')
     ..aOS(6, _omitFieldNames ? '' : 'chatId')
+    ..aOM<$0.BotMessageSendBinding>(
+        7, _omitFieldNames ? '' : 'botMessageSendBinding',
+        subBuilder: $0.BotMessageSendBinding.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -150,6 +157,19 @@ class GetMemberAdmissionAuthorityRequest extends $pb.GeneratedMessage {
   $core.bool hasChatId() => $_has(5);
   @$pb.TagNumber(6)
   void clearChatId() => $_clearField(6);
+
+  /// Messaging-only exact native Bot observation; forbids expected generation/op.
+  @$pb.TagNumber(7)
+  $0.BotMessageSendBinding get botMessageSendBinding => $_getN(6);
+  @$pb.TagNumber(7)
+  set botMessageSendBinding($0.BotMessageSendBinding value) =>
+      $_setField(7, value);
+  @$pb.TagNumber(7)
+  $core.bool hasBotMessageSendBinding() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearBotMessageSendBinding() => $_clearField(7);
+  @$pb.TagNumber(7)
+  $0.BotMessageSendBinding ensureBotMessageSendBinding() => $_ensure(6);
 }
 
 /// Persisted private canonical bytes. SHA256 is domain-separated by
@@ -178,7 +198,7 @@ class NativeMembershipPublicationBinding extends $pb.GeneratedMessage {
     $fixnum.Int64? resultOwnerGeneration,
     $core.String? botId,
     $core.String? installationId,
-    $0.Timestamp? publishedAt,
+    $1.Timestamp? publishedAt,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -261,8 +281,8 @@ class NativeMembershipPublicationBinding extends $pb.GeneratedMessage {
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..aOS(20, _omitFieldNames ? '' : 'botId')
     ..aOS(21, _omitFieldNames ? '' : 'installationId')
-    ..aOM<$0.Timestamp>(22, _omitFieldNames ? '' : 'publishedAt',
-        subBuilder: $0.Timestamp.create)
+    ..aOM<$1.Timestamp>(22, _omitFieldNames ? '' : 'publishedAt',
+        subBuilder: $1.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -479,15 +499,15 @@ class NativeMembershipPublicationBinding extends $pb.GeneratedMessage {
   void clearInstallationId() => $_clearField(21);
 
   @$pb.TagNumber(22)
-  $0.Timestamp get publishedAt => $_getN(21);
+  $1.Timestamp get publishedAt => $_getN(21);
   @$pb.TagNumber(22)
-  set publishedAt($0.Timestamp value) => $_setField(22, value);
+  set publishedAt($1.Timestamp value) => $_setField(22, value);
   @$pb.TagNumber(22)
   $core.bool hasPublishedAt() => $_has(21);
   @$pb.TagNumber(22)
   void clearPublishedAt() => $_clearField(22);
   @$pb.TagNumber(22)
-  $0.Timestamp ensurePublishedAt() => $_ensure(21);
+  $1.Timestamp ensurePublishedAt() => $_ensure(21);
 }
 
 class MemberAdmissionNativePublicationProof extends $pb.GeneratedMessage {
@@ -742,9 +762,9 @@ class MemberAdmissionOrdinaryAuthority extends $pb.GeneratedMessage {
     $fixnum.Int64? retiredThrough,
     MemberAdmissionSourceState? state,
     $core.bool? explicitLegacy,
-    $1.MembershipBinding? publishedBinding,
+    $2.MembershipBinding? publishedBinding,
     $core.List<$core.int>? roleReceiptSha256,
-    $1.MembershipBinding? preparingBinding,
+    $2.MembershipBinding? preparingBinding,
     $core.List<$core.int>? preparingAdmissionBindingSha256,
     MemberAdmissionPublicationKind? publicationKind,
     MemberAdmissionNativePublicationProof? nativePublication,
@@ -787,12 +807,12 @@ class MemberAdmissionOrdinaryAuthority extends $pb.GeneratedMessage {
     ..aE<MemberAdmissionSourceState>(3, _omitFieldNames ? '' : 'state',
         enumValues: MemberAdmissionSourceState.values)
     ..aOB(4, _omitFieldNames ? '' : 'explicitLegacy')
-    ..aOM<$1.MembershipBinding>(5, _omitFieldNames ? '' : 'publishedBinding',
-        subBuilder: $1.MembershipBinding.create)
+    ..aOM<$2.MembershipBinding>(5, _omitFieldNames ? '' : 'publishedBinding',
+        subBuilder: $2.MembershipBinding.create)
     ..a<$core.List<$core.int>>(
         6, _omitFieldNames ? '' : 'roleReceiptSha256', $pb.PbFieldType.OY)
-    ..aOM<$1.MembershipBinding>(7, _omitFieldNames ? '' : 'preparingBinding',
-        subBuilder: $1.MembershipBinding.create)
+    ..aOM<$2.MembershipBinding>(7, _omitFieldNames ? '' : 'preparingBinding',
+        subBuilder: $2.MembershipBinding.create)
     ..a<$core.List<$core.int>>(
         8,
         _omitFieldNames ? '' : 'preparingAdmissionBindingSha256',
@@ -865,15 +885,15 @@ class MemberAdmissionOrdinaryAuthority extends $pb.GeneratedMessage {
   void clearExplicitLegacy() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $1.MembershipBinding get publishedBinding => $_getN(4);
+  $2.MembershipBinding get publishedBinding => $_getN(4);
   @$pb.TagNumber(5)
-  set publishedBinding($1.MembershipBinding value) => $_setField(5, value);
+  set publishedBinding($2.MembershipBinding value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasPublishedBinding() => $_has(4);
   @$pb.TagNumber(5)
   void clearPublishedBinding() => $_clearField(5);
   @$pb.TagNumber(5)
-  $1.MembershipBinding ensurePublishedBinding() => $_ensure(4);
+  $2.MembershipBinding ensurePublishedBinding() => $_ensure(4);
 
   @$pb.TagNumber(6)
   $core.List<$core.int> get roleReceiptSha256 => $_getN(5);
@@ -886,15 +906,15 @@ class MemberAdmissionOrdinaryAuthority extends $pb.GeneratedMessage {
 
   /// PREPARING is inert; this identifies the current candidate for Ensure only.
   @$pb.TagNumber(7)
-  $1.MembershipBinding get preparingBinding => $_getN(6);
+  $2.MembershipBinding get preparingBinding => $_getN(6);
   @$pb.TagNumber(7)
-  set preparingBinding($1.MembershipBinding value) => $_setField(7, value);
+  set preparingBinding($2.MembershipBinding value) => $_setField(7, value);
   @$pb.TagNumber(7)
   $core.bool hasPreparingBinding() => $_has(6);
   @$pb.TagNumber(7)
   void clearPreparingBinding() => $_clearField(7);
   @$pb.TagNumber(7)
-  $1.MembershipBinding ensurePreparingBinding() => $_ensure(6);
+  $2.MembershipBinding ensurePreparingBinding() => $_ensure(6);
 
   @$pb.TagNumber(8)
   $core.List<$core.int> get preparingAdmissionBindingSha256 => $_getN(7);
@@ -935,10 +955,10 @@ class MemberAdmissionOrdinaryAuthority extends $pb.GeneratedMessage {
 class MemberAdmissionCommunityAuthority extends $pb.GeneratedMessage {
   factory MemberAdmissionCommunityAuthority({
     MemberAdmissionSourceState? state,
-    $1.MembershipBinding? binding,
+    $2.MembershipBinding? binding,
     $fixnum.Int64? retiredThrough,
     $fixnum.Int64? rosterSourceRevision,
-    $2.Duration? validityRemaining,
+    $3.Duration? validityRemaining,
   }) {
     final result = create();
     if (state != null) result.state = state;
@@ -966,16 +986,16 @@ class MemberAdmissionCommunityAuthority extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aE<MemberAdmissionSourceState>(1, _omitFieldNames ? '' : 'state',
         enumValues: MemberAdmissionSourceState.values)
-    ..aOM<$1.MembershipBinding>(2, _omitFieldNames ? '' : 'binding',
-        subBuilder: $1.MembershipBinding.create)
+    ..aOM<$2.MembershipBinding>(2, _omitFieldNames ? '' : 'binding',
+        subBuilder: $2.MembershipBinding.create)
     ..a<$fixnum.Int64>(
         3, _omitFieldNames ? '' : 'retiredThrough', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..a<$fixnum.Int64>(
         4, _omitFieldNames ? '' : 'rosterSourceRevision', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
-    ..aOM<$2.Duration>(5, _omitFieldNames ? '' : 'validityRemaining',
-        subBuilder: $2.Duration.create)
+    ..aOM<$3.Duration>(5, _omitFieldNames ? '' : 'validityRemaining',
+        subBuilder: $3.Duration.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1011,15 +1031,15 @@ class MemberAdmissionCommunityAuthority extends $pb.GeneratedMessage {
   void clearState() => $_clearField(1);
 
   @$pb.TagNumber(2)
-  $1.MembershipBinding get binding => $_getN(1);
+  $2.MembershipBinding get binding => $_getN(1);
   @$pb.TagNumber(2)
-  set binding($1.MembershipBinding value) => $_setField(2, value);
+  set binding($2.MembershipBinding value) => $_setField(2, value);
   @$pb.TagNumber(2)
   $core.bool hasBinding() => $_has(1);
   @$pb.TagNumber(2)
   void clearBinding() => $_clearField(2);
   @$pb.TagNumber(2)
-  $1.MembershipBinding ensureBinding() => $_ensure(1);
+  $2.MembershipBinding ensureBinding() => $_ensure(1);
 
   @$pb.TagNumber(3)
   $fixnum.Int64 get retiredThrough => $_getI64(2);
@@ -1041,15 +1061,15 @@ class MemberAdmissionCommunityAuthority extends $pb.GeneratedMessage {
 
   /// Minimum of current owner and member leases, sampled after the Space fence.
   @$pb.TagNumber(5)
-  $2.Duration get validityRemaining => $_getN(4);
+  $3.Duration get validityRemaining => $_getN(4);
   @$pb.TagNumber(5)
-  set validityRemaining($2.Duration value) => $_setField(5, value);
+  set validityRemaining($3.Duration value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasValidityRemaining() => $_has(4);
   @$pb.TagNumber(5)
   void clearValidityRemaining() => $_clearField(5);
   @$pb.TagNumber(5)
-  $2.Duration ensureValidityRemaining() => $_ensure(4);
+  $3.Duration ensureValidityRemaining() => $_ensure(4);
 }
 
 class MemberAdmissionTreeRelationAuthority extends $pb.GeneratedMessage {
@@ -1148,8 +1168,9 @@ class GetMemberAdmissionAuthorityResponse extends $pb.GeneratedMessage {
     MemberAdmissionOrdinaryAuthority? ordinary,
     MemberAdmissionCommunityAuthority? community,
     MemberAdmissionTreeRelationAuthority? treeRelation,
-    $0.Timestamp? sampledAt,
-    $2.Duration? validityRemaining,
+    $1.Timestamp? sampledAt,
+    $3.Duration? validityRemaining,
+    $0.BotMessageSendBinding? botMessageSendBinding,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -1164,6 +1185,8 @@ class GetMemberAdmissionAuthorityResponse extends $pb.GeneratedMessage {
     if (treeRelation != null) result.treeRelation = treeRelation;
     if (sampledAt != null) result.sampledAt = sampledAt;
     if (validityRemaining != null) result.validityRemaining = validityRemaining;
+    if (botMessageSendBinding != null)
+      result.botMessageSendBinding = botMessageSendBinding;
     return result;
   }
 
@@ -1203,10 +1226,13 @@ class GetMemberAdmissionAuthorityResponse extends $pb.GeneratedMessage {
     ..aOM<MemberAdmissionTreeRelationAuthority>(
         9, _omitFieldNames ? '' : 'treeRelation',
         subBuilder: MemberAdmissionTreeRelationAuthority.create)
-    ..aOM<$0.Timestamp>(10, _omitFieldNames ? '' : 'sampledAt',
-        subBuilder: $0.Timestamp.create)
-    ..aOM<$2.Duration>(11, _omitFieldNames ? '' : 'validityRemaining',
-        subBuilder: $2.Duration.create)
+    ..aOM<$1.Timestamp>(10, _omitFieldNames ? '' : 'sampledAt',
+        subBuilder: $1.Timestamp.create)
+    ..aOM<$3.Duration>(11, _omitFieldNames ? '' : 'validityRemaining',
+        subBuilder: $3.Duration.create)
+    ..aOM<$0.BotMessageSendBinding>(
+        12, _omitFieldNames ? '' : 'botMessageSendBinding',
+        subBuilder: $0.BotMessageSendBinding.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1328,29 +1354,42 @@ class GetMemberAdmissionAuthorityResponse extends $pb.GeneratedMessage {
   MemberAdmissionTreeRelationAuthority ensureTreeRelation() => $_ensure(8);
 
   @$pb.TagNumber(10)
-  $0.Timestamp get sampledAt => $_getN(9);
+  $1.Timestamp get sampledAt => $_getN(9);
   @$pb.TagNumber(10)
-  set sampledAt($0.Timestamp value) => $_setField(10, value);
+  set sampledAt($1.Timestamp value) => $_setField(10, value);
   @$pb.TagNumber(10)
   $core.bool hasSampledAt() => $_has(9);
   @$pb.TagNumber(10)
   void clearSampledAt() => $_clearField(10);
   @$pb.TagNumber(10)
-  $0.Timestamp ensureSampledAt() => $_ensure(9);
+  $1.Timestamp ensureSampledAt() => $_ensure(9);
 
   /// Owner-selected observation bound, <=5s and no greater than any leased input.
   /// Role starts its monotonic deadline BEFORE dispatch and subtracts the full
   /// roundtrip/elapsed time. Missing/expired/unknown bounds fail closed.
   @$pb.TagNumber(11)
-  $2.Duration get validityRemaining => $_getN(10);
+  $3.Duration get validityRemaining => $_getN(10);
   @$pb.TagNumber(11)
-  set validityRemaining($2.Duration value) => $_setField(11, value);
+  set validityRemaining($3.Duration value) => $_setField(11, value);
   @$pb.TagNumber(11)
   $core.bool hasValidityRemaining() => $_has(10);
   @$pb.TagNumber(11)
   void clearValidityRemaining() => $_clearField(11);
   @$pb.TagNumber(11)
-  $2.Duration ensureValidityRemaining() => $_ensure(10);
+  $3.Duration ensureValidityRemaining() => $_ensure(10);
+
+  /// Present only after exact current native Bot tuple and Chat tree validation.
+  @$pb.TagNumber(12)
+  $0.BotMessageSendBinding get botMessageSendBinding => $_getN(11);
+  @$pb.TagNumber(12)
+  set botMessageSendBinding($0.BotMessageSendBinding value) =>
+      $_setField(12, value);
+  @$pb.TagNumber(12)
+  $core.bool hasBotMessageSendBinding() => $_has(11);
+  @$pb.TagNumber(12)
+  void clearBotMessageSendBinding() => $_clearField(12);
+  @$pb.TagNumber(12)
+  $0.BotMessageSendBinding ensureBotMessageSendBinding() => $_ensure(11);
 }
 
 const $core.bool _omitFieldNames =

@@ -45,6 +45,14 @@ class MessagingServiceClient extends $grpc.Client {
     return $createUnaryCall(_$sendGameEventMessage, request, options: options);
   }
 
+  /// @voice.security=protected;callers=service:bot
+  $grpc.ResponseFuture<$0.SendBotMessageResponse> sendBotMessage(
+    $0.SendBotMessageRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$sendBotMessage, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.SendMessageResponse> sendMessage(
     $0.SendMessageRequest request, {
     $grpc.CallOptions? options,
@@ -349,6 +357,11 @@ class MessagingServiceClient extends $grpc.Client {
       '/voice.messaging.v1.MessagingService/SendGameEventMessage',
       ($0.SendGameEventMessageRequest value) => value.writeToBuffer(),
       $0.SendGameEventMessageResponse.fromBuffer);
+  static final _$sendBotMessage =
+      $grpc.ClientMethod<$0.SendBotMessageRequest, $0.SendBotMessageResponse>(
+          '/voice.messaging.v1.MessagingService/SendBotMessage',
+          ($0.SendBotMessageRequest value) => value.writeToBuffer(),
+          $0.SendBotMessageResponse.fromBuffer);
   static final _$sendMessage =
       $grpc.ClientMethod<$0.SendMessageRequest, $0.SendMessageResponse>(
           '/voice.messaging.v1.MessagingService/SendMessage',
@@ -552,6 +565,15 @@ abstract class MessagingServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.SendGameEventMessageRequest.fromBuffer(value),
         ($0.SendGameEventMessageResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.SendBotMessageRequest,
+            $0.SendBotMessageResponse>(
+        'SendBotMessage',
+        sendBotMessage_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.SendBotMessageRequest.fromBuffer(value),
+        ($0.SendBotMessageResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.SendMessageRequest, $0.SendMessageResponse>(
             'SendMessage',
@@ -880,6 +902,15 @@ abstract class MessagingServiceBase extends $grpc.Service {
 
   $async.Future<$0.SendGameEventMessageResponse> sendGameEventMessage(
       $grpc.ServiceCall call, $0.SendGameEventMessageRequest request);
+
+  $async.Future<$0.SendBotMessageResponse> sendBotMessage_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.SendBotMessageRequest> $request) async {
+    return sendBotMessage($call, await $request);
+  }
+
+  $async.Future<$0.SendBotMessageResponse> sendBotMessage(
+      $grpc.ServiceCall call, $0.SendBotMessageRequest request);
 
   $async.Future<$0.SendMessageResponse> sendMessage_Pre($grpc.ServiceCall $call,
       $async.Future<$0.SendMessageRequest> $request) async {
