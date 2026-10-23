@@ -31,7 +31,7 @@ func protectedMutation(method string) bool {
 	if method == spacev1.SpaceService_CreateInvite_FullMethodName {
 		return true
 	}
-	if moderationMethod(method) {
+	if moderationMethod(method) || nonInteractiveJoinMethod(method) {
 		return true
 	}
 	if method == spacev1.SpaceService_CreateSpace_FullMethodName {
@@ -59,7 +59,7 @@ func (v Verifier) Unary() grpc.UnaryServerInterceptor {
 		if info.FullMethod == spacev1.SpaceService_CreateInvite_FullMethodName {
 			return v.verifyModerationCall(ctx, req, info, handler)
 		}
-		if moderationMethod(info.FullMethod) {
+		if moderationMethod(info.FullMethod) || nonInteractiveJoinMethod(info.FullMethod) {
 			return v.verifyModerationCall(ctx, req, info, handler)
 		}
 		if info.FullMethod == spacev1.SpaceService_CreateSpace_FullMethodName {

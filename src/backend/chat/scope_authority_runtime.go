@@ -20,8 +20,8 @@ type chatScopeListenerConfig struct {
 }
 
 func loadChatScopeAuthorityConfigs() ([]chatScopeListenerConfig, error) {
-	configs := make([]chatScopeListenerConfig, 0, 2)
-	for _, issuer := range []string{"role", "space"} {
+	configs := make([]chatScopeListenerConfig, 0, 3)
+	for _, issuer := range []string{"role", "space", "bot"} {
 		cfg, listen, enabled, err := gisprincipal.ScopeAuthorityConfigFromEnv(issuer)
 		if err != nil {
 			return nil, err
@@ -56,7 +56,11 @@ func startChatScopeAuthorityListeners(ctx context.Context, pool *pgxpool.Pool, c
 			return func() {}, err
 		}
 		server := grpc.NewServer(runtime.ServerOptions()...)
-		chatv1.RegisterChatScopeAuthorityServiceServer(server, &grpcsvc.SpaceChatScopeAuthorityGRPC{Store: &store.DMStore{Pool: pool}})
+		if cfg.Principal.Issuer == "bot" {
+			chatv1.RegisterChatScopeAuthorityServiceServer(server, &grpcsvc.BotChatScopeAuthorityGRPC{Store: &store.DMStore{Pool: pool}})
+		} else {
+			chatv1.RegisterChatScopeAuthorityServiceServer(server, &grpcsvc.SpaceChatScopeAuthorityGRPC{Store: &store.DMStore{Pool: pool}})
+		}
 		cleanups = append(cleanups, func() { server.Stop(); _ = runtime.Close() })
 		go func() {
 			if err := server.Serve(listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {

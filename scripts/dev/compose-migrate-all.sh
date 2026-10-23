@@ -100,6 +100,22 @@ migrate_db() {
   echo "==> golang-migrate up: ${db}"
   local dsn
   dsn="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${MIGRATE_PG_HOST}:${POSTGRES_PORT}/${db}?sslmode=disable"
+  if [[ "$db" == bot_db ]]; then
+    # The same project-scoped volume and helper serve CLI and app bootstrap.
+    # Never recapture an already-migrated source into a newly missing artifact.
+    # Compose also mounts Space evidence for this one-off initializer. Create
+    # its host directory as the caller before Docker can create it as root.
+    local evidence_dir
+    evidence_dir="${SPACE_NATIVE_EVIDENCE_DIR:-${ROOT}/tmp/native-space-installer}"
+    mkdir -p "$evidence_dir"
+    chmod 700 "$evidence_dir"
+    docker compose --profile app run --rm --no-deps --build \
+      --entrypoint python3 compose-db-init \
+      /usr/local/bin/provision-bot-membership-source.py /native-bot-evidence/source.uuid -- \
+      migrate -path /migrations/bot_db \
+      -database "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/bot_db?sslmode=disable" up
+    return
+  fi
   docker run --rm "${MIGRATE_DOCKER_HOST_ARGS[@]}" \
     -v "${ROOT}/src/backend/migrations/${db}:/migrations" migrate/migrate \
     -path /migrations \

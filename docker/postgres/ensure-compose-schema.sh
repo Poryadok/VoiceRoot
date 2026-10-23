@@ -54,7 +54,7 @@ apply_if_exists matchmaking_db incremental_matchmaking_db.sql.snippet search_ses
 apply_if_exists story_db incremental_story_db.sql.snippet stories
 apply_if_exists file_db incremental_file_db.sql.snippet files
 apply_if_exists file_db file_db_premium_upload.sql.snippet files
-apply_if_exists bot_db incremental_bot_db.sql.snippet bots
+# Bot's original source artifact is qualified before any migration or adoption.
 apply_if_exists moderation_db incremental_moderation_db.sql.snippet reports
 apply_if_exists search_db search_db_verification.sql.snippet profile_search_documents
 

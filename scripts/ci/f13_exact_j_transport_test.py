@@ -231,13 +231,13 @@ class PrivateEntropyContract(unittest.TestCase):
         events=[]
         with mock.patch.object(harness,'verify_private_devices',side_effect=lambda:events.append('verify')) as verify, \
              mock.patch.object(harness,'prepare',side_effect=lambda:events.append('prepare')) as prepare, \
-             mock.patch.object(harness,'inside',side_effect=lambda:events.append('inside')) as inside:
-            for mode in ('--prepare','--inside'):
+             mock.patch.object(harness,'inside',side_effect=lambda **kw:events.append('inside-live' if kw.get('live') else 'inside')) as inside:
+            for mode in ('--prepare','--inside','--inside-live'):
                 with mock.patch.object(harness.sys,'argv',['driver',mode]):harness.main()
-            self.assertEqual(events,['verify','prepare','verify','inside'])
+            self.assertEqual(events,['verify','prepare','verify','inside','verify','inside-live'])
             prepare.reset_mock();inside.reset_mock()
             verify.side_effect=harness.SetupFailure('fixed_device_failure')
-            for mode in ('--prepare','--inside'):
+            for mode in ('--prepare','--inside','--inside-live'):
                 with mock.patch.object(harness.sys,'argv',['driver',mode]),self.assertRaisesRegex(harness.SetupFailure,'fixed_device_failure'):
                     harness.main()
             prepare.assert_not_called();inside.assert_not_called()

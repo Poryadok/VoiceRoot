@@ -19,10 +19,6 @@ var _ authoritysource.Reader = (*RoleStore)(nil)
 // mask-fold tests. It adds two guarded clock inputs, not a new state projection.
 // This read selects a fixed catalog, never authorizes from an unlocked hint:
 // BeginRead repeats the exact version/dirty/catalog proof under schema locks.
-func beginRoleAuthorityRead(ctx context.Context, pool *pgxpool.Pool) (pgx.Tx, error) {
-	return beginRoleAuthorityReadSchema(ctx, pool, authoritysource.SchemaVersion)
-}
-
 func beginRoleAuthorityReadSchema(ctx context.Context, pool *pgxpool.Pool, schema uint32) (pgx.Tx, error) {
 	if pool == nil {
 		return nil, errors.New("role source pool unavailable")

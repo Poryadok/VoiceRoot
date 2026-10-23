@@ -17,6 +17,10 @@ func moderationMethod(method string) bool {
 	return method == spacev1.SpaceService_BanMember_FullMethodName || method == spacev1.SpaceService_UnbanMember_FullMethodName
 }
 
+func nonInteractiveJoinMethod(method string) bool {
+	return method == spacev1.SpaceService_JoinSpace_FullMethodName || method == spacev1.SpaceService_JoinByInvite_FullMethodName
+}
+
 // Public operation identity is part of the signed body. Transport request ID
 // and JTI remain fresh for each dispatch, including an identical intent retry.
 func (v Verifier) verifyModerationCall(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {

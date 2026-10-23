@@ -17,9 +17,9 @@ import (
 
 var (
 	ErrBotRemovalInvalid  = errors.New("invalid Bot removal request")
-	ErrBotRemovalConflict = errors.New("Bot removal operation conflicts")
-	ErrBotRemovalDenied   = errors.New("Bot removal binding denied")
-	ErrBotRemovalBlocked  = errors.New("Bot has forbidden Owner authority")
+	ErrBotRemovalConflict = errors.New("bot removal operation conflicts")
+	ErrBotRemovalDenied   = errors.New("bot removal binding denied")
+	ErrBotRemovalBlocked  = errors.New("bot has forbidden Owner authority")
 )
 
 type botRemovalBinding struct {

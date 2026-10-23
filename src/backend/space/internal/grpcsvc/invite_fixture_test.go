@@ -124,7 +124,7 @@ func (c legacyInviteRoleFixture) CheckPermission(ctx context.Context, r *rolev1.
 	if r.PermissionName != permissions.SpaceManageInvites {
 		return c.RoleServiceClient.CheckPermission(ctx, r, opts...)
 	}
-	result, err := c.RoleServiceClient.GetEffectivePermissions(metadata.NewOutgoingContext(ctx, metadata.MD{}), &rolev1.GetEffectivePermissionsRequest{SpaceId: r.SpaceId, ProfileId: r.ProfileId})
+	result, err := c.GetEffectivePermissions(metadata.NewOutgoingContext(ctx, metadata.MD{}), &rolev1.GetEffectivePermissionsRequest{SpaceId: r.SpaceId, ProfileId: r.ProfileId})
 	if err != nil {
 		return nil, err
 	}

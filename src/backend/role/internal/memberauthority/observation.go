@@ -18,7 +18,7 @@ import (
 	"voice/backend/role/internal/memberbinding"
 )
 
-var ErrUnavailable = errors.New("Space membership authority unavailable")
+var ErrUnavailable = errors.New("space membership authority unavailable")
 
 type Observation struct {
 	space, profile           string

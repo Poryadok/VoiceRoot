@@ -14,6 +14,8 @@ import (
 var botmembershipEnvNames = []string{"SPACE_BOT_MEMBERSHIP_GRPC_LISTEN", "SPACE_BOT_MEMBERSHIP_TLS_CERT_FILE", "SPACE_BOT_MEMBERSHIP_TLS_KEY_FILE", "SPACE_BOT_MEMBERSHIP_CLIENT_CA_FILE", "SPACE_BOT_MEMBERSHIP_REPLAY_REDIS_ADDR", "SPACE_BOT_MEMBERSHIP_REPLAY_REDIS_PASSWORD"}
 
 type Config struct {
+	// DeferInitialJWKS allows Bot to start after Space; request verification remains fail closed.
+	DeferInitialJWKS                                                                                                           bool
 	ListenAddr, CertFile, KeyFile, ClientCAFile, ReplayAddr, ReplayPassword, JWKSCAFile, JWKSClientCertFile, JWKSClientKeyFile string
 	JWKSURLs                                                                                                                   map[string]string
 	RefreshAfter, HardExpiry, UnknownKIDCooldown                                                                               time.Duration
@@ -31,7 +33,7 @@ func LoadFromEnv() (Config, bool, error) {
 	if !enabled {
 		return Config{}, false, nil
 	}
-	c := Config{ListenAddr: ":9098", CertFile: os.Getenv("SPACE_BOT_MEMBERSHIP_TLS_CERT_FILE"), KeyFile: os.Getenv("SPACE_BOT_MEMBERSHIP_TLS_KEY_FILE"),
+	c := Config{DeferInitialJWKS: true, ListenAddr: ":9098", CertFile: os.Getenv("SPACE_BOT_MEMBERSHIP_TLS_CERT_FILE"), KeyFile: os.Getenv("SPACE_BOT_MEMBERSHIP_TLS_KEY_FILE"),
 		ClientCAFile: os.Getenv("SPACE_BOT_MEMBERSHIP_CLIENT_CA_FILE"), ReplayAddr: os.Getenv("SPACE_BOT_MEMBERSHIP_REPLAY_REDIS_ADDR"),
 		ReplayPassword: os.Getenv("SPACE_BOT_MEMBERSHIP_REPLAY_REDIS_PASSWORD"), JWKSCAFile: os.Getenv("S2S_JWKS_CA_FILE"),
 		JWKSClientCertFile: os.Getenv("S2S_JWKS_CLIENT_CERT_FILE"), JWKSClientKeyFile: os.Getenv("S2S_JWKS_CLIENT_KEY_FILE")}

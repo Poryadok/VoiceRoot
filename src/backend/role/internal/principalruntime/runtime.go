@@ -91,6 +91,13 @@ func NewWithSessionEpochChecker(ctx context.Context, config Config, checker prin
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
+	if config.JWKSClientCertFile != "" {
+		clientCert, err := tls.LoadX509KeyPair(config.JWKSClientCertFile, config.JWKSClientKeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("principal JWKS client TLS: %w", err)
+		}
+		transport.TLSClientConfig.Certificates = []tls.Certificate{clientCert}
+	}
 	client := &http.Client{Transport: transport, Timeout: dependencyTimeout, CheckRedirect: func(*http.Request, []*http.Request) error {
 		return errors.New("principal JWKS redirects are forbidden")
 	}}
@@ -314,10 +321,10 @@ func (r *Runtime) recordReplay(ctx context.Context, issuer, jwtID string, expire
 // or conversion of a Chat-audience credential into another service authority.
 func (r *Runtime) VerifyChatCurrentACL(ctx context.Context, token, method, requestID, hash string) (principal.Principal, error) {
 	if r == nil || !r.chatCurrentACLEnabled || r.resolver == nil || r.replay == nil {
-		return principal.Principal{}, principalgrpc.Unavailable(errors.New("Chat ACL verifier unavailable"))
+		return principal.Principal{}, principalgrpc.Unavailable(errors.New("chat ACL verifier unavailable"))
 	}
 	if method != rolev1.RoleService_CheckPermission_FullMethodName {
-		return principal.Principal{}, errors.New("Chat ACL method not allowed")
+		return principal.Principal{}, errors.New("chat ACL method not allowed")
 	}
 	return principal.VerifyService(ctx, token, principal.VerifyConfig{ExpectedIssuer: "chat", ExpectedAudience: "role", ExpectedRPC: method, ExpectedRequestID: requestID, ExpectedRequestHash: hash, KeyResolver: r.resolver.Resolve, ReplayGuard: r.recordReplay})
 }

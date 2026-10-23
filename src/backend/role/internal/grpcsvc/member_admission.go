@@ -18,7 +18,7 @@ type MemberAuthorityObserver interface {
 	ObserveMember(context.Context, *spacev1.GetMemberAdmissionAuthorityRequest) (memberauthority.Observation, error)
 }
 
-// These entrypoints deliberately bypass ordinarySpaceRPC: owner RPCs must
+// EnsureDefaultMemberRole deliberately bypasses ordinarySpaceRPC: owner RPCs must
 // finish before any local operation/Space lock. The protected interceptor must
 // still authenticate exact service:space before this handler boundary check.
 func (s *RoleGRPC) EnsureDefaultMemberRole(ctx context.Context, req *rolev1.EnsureDefaultMemberRoleRequest) (*rolev1.EnsureDefaultMemberRoleResponse, error) {

@@ -580,7 +580,7 @@ func TestGetBot_notFound(t *testing.T) {
 	require.Equal(t, codes.NotFound, status.Code(err))
 }
 
-func TestInstallBotInSpace_acceptsPrivilegedScopesWithAck(t *testing.T) {
+func TestRawInstallRejectsPrivilegedScopesEvenWithAck(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -607,7 +607,7 @@ func TestInstallBotInSpace_acceptsPrivilegedScopesWithAck(t *testing.T) {
 		},
 		AcknowledgePrivilegedScopes: true,
 	})
-	require.NoError(t, err)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
 }
 
 func TestListBotsInChat_deniedWithoutManageBotsPermission(t *testing.T) {
@@ -689,7 +689,7 @@ func TestCompleteInteraction_afterPollDelivery(t *testing.T) {
 	require.Equal(t, "polled", reply.Content)
 }
 
-func TestUninstallBotFromSpace_removesSpaceMember(t *testing.T) {
+func TestRawUninstallDoesNotRemoveSpaceMember(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -704,8 +704,8 @@ func TestUninstallBotFromSpace_removesSpaceMember(t *testing.T) {
 		BotId:   botID,
 		SpaceId: spaceID.String(),
 	})
-	require.NoError(t, err)
-	require.Equal(t, 1, spaceFake.removeCalls)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	require.Zero(t, spaceFake.removeCalls)
 }
 
 func TestSetBotChatEnabled_notFoundForUnknownBot(t *testing.T) {
@@ -848,7 +848,7 @@ func TestExecuteSlashInteraction_unknownCommand(t *testing.T) {
 	require.Equal(t, codes.NotFound, status.Code(err))
 }
 
-func TestInstallBotInSpace_groupAddsChatMembers(t *testing.T) {
+func TestRawInstallDoesNotAddGroupMembers(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -874,8 +874,8 @@ func TestInstallBotInSpace_groupAddsChatMembers(t *testing.T) {
 			{Id: chatID.String(), Type: &chatType},
 		},
 	})
-	require.NoError(t, err)
-	require.Equal(t, 1, chatFake.addMembersCalls)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	require.Zero(t, chatFake.addMembersCalls)
 }
 
 func TestCompleteInteraction_defersViaHub(t *testing.T) {
@@ -1711,7 +1711,7 @@ func TestRegisterCommands_rejectsInvalidJSON(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
-func TestInstallBotInSpace_deniedWithoutManageBotsPermission(t *testing.T) {
+func TestRawInstallRejectedBeforeManageBotsPermission(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -1734,10 +1734,10 @@ func TestInstallBotInSpace_deniedWithoutManageBotsPermission(t *testing.T) {
 		},
 	})
 	require.Error(t, err)
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
 }
 
-func TestUninstallBotFromSpace_deniedWithoutManageBotsPermission(t *testing.T) {
+func TestRawUninstallRejectedBeforeManageBotsPermission(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -1752,7 +1752,7 @@ func TestUninstallBotFromSpace_deniedWithoutManageBotsPermission(t *testing.T) {
 		SpaceId: spaceID.String(),
 	})
 	require.Error(t, err)
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
 }
 
 func TestExecuteSlashInteraction_webhookEphemeralResponse(t *testing.T) {

@@ -111,15 +111,16 @@ func readMemberRoleState(ctx context.Context, db scopeExecutor, space string) (a
 		if err != nil || !bytes.Equal(raw, canonical) {
 			return ErrScopeUnavailable
 		}
-		if source == "ORDINARY" {
+		switch source {
+		case "ORDINARY":
 			if b.Ordinary == nil || b.Ordinary.MembershipGeneration != generation || ownerGeneration != 0 {
 				return ErrScopeUnavailable
 			}
-		} else if source == "COMMUNITY" {
+		case "COMMUNITY":
 			if b.Community == nil || b.Community.MembershipGeneration != generation || b.Community.OwnerGeneration != ownerGeneration {
 				return ErrScopeUnavailable
 			}
-		} else {
+		default:
 			return ErrScopeUnavailable
 		}
 		c.Origin = "INTERACTIVE"

@@ -293,7 +293,7 @@ SELECT delivery_status FROM bot_event_log WHERE bot_id = $1 ORDER BY created_at 
 	require.Equal(t, "pending", status)
 }
 
-func TestUninstallAndListInstalledBots(t *testing.T) {
+func TestRawUninstallPreservesInstalledBots(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -321,9 +321,9 @@ func TestUninstallAndListInstalledBots(t *testing.T) {
 	_, err = client.UninstallBotFromSpace(ctx, &botv1.UninstallBotFromSpaceRequest{
 		BotId: botID, SpaceId: spaceID.String(),
 	})
-	require.NoError(t, err)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
 
 	list, err = client.ListInstalledBots(ctx, &botv1.ListInstalledBotsRequest{SpaceId: spaceID.String()})
 	require.NoError(t, err)
-	require.Empty(t, list.GetInstalledBots())
+	require.Len(t, list.GetInstalledBots(), 1)
 }

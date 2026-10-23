@@ -462,9 +462,6 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		}
 		return t.serveInvites(w, r, rest)
 	case "roles":
-		if t.clients.role == nil {
-			return false
-		}
 		return t.serveRoles(w, r, rest)
 	case "notifications":
 		if t.clients.notification == nil {
@@ -492,9 +489,6 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 	case "subscription":
 		return t.serveSubscription(w, r, rest)
 	case "bots":
-		if t.clients.bot == nil {
-			return false
-		}
 		return t.serveBots(w, r, rest)
 	case "stories":
 		return t.serveStories(w, r, rest)

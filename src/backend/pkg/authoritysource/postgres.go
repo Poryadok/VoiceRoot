@@ -55,7 +55,7 @@ func BeginRead(ctx context.Context, pool *pgxpool.Pool, catalog Catalog) (pgx.Tx
 	return tx, nil
 }
 
-// CheckCatalog validates the same fixed owner contract inside an existing
+// ValidateTx validates the same fixed owner contract inside an existing
 // native transaction. Callers must already hold their complete domain fence.
 func ValidateTx(ctx context.Context, tx pgx.Tx, catalog Catalog) error {
 	return CheckCatalog(ctx, tx, catalog)
@@ -92,6 +92,8 @@ func CheckCatalog(ctx context.Context, tx pgx.Tx, catalog Catalog) error {
 	// Validate complete fixed sets in two roundtrips. Per-item roundtrips made
 	// the native two-stage protocol exhaust its existing5s budget under load;
 	// all table/type/namespace/argument/body predicates remain mandatory.
+	// Cast declared identifiers to PostgreSQL name, preserving the server's
+	// identifier truncation used by the former individually typed parameters.
 	if len(catalog.Triggers) > 0 {
 		n := len(catalog.Triggers)
 		tables, names, functions := make([]string, n), make([]string, n), make([]string, n)
@@ -103,10 +105,13 @@ func CheckCatalog(ctx context.Context, tx pgx.Tx, catalog Catalog) error {
 			}
 		}
 		err = tx.QueryRow(ctx, `SELECT count(*)=$6 FROM unnest($1::text[],$2::text[],$3::text[],$4::smallint[],$5::bytea[]) e(table_name,trigger_name,function_name,trigger_type,arguments)
- JOIN pg_trigger t ON t.tgrelid=to_regclass(format('public.%I',e.table_name)) AND t.tgname=e.trigger_name
+ JOIN pg_trigger t ON t.tgrelid=to_regclass(format('public.%I',e.table_name)) AND t.tgname=e.trigger_name::name
  JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace n ON n.oid=p.pronamespace
- WHERE NOT t.tgisinternal AND t.tgenabled='O' AND t.tgtype=e.trigger_type AND n.nspname='public' AND p.proname=e.function_name AND t.tgargs=e.arguments`, tables, names, functions, types, args, n).Scan(&valid)
-		if err != nil || !valid {
+ WHERE NOT t.tgisinternal AND t.tgenabled='O' AND t.tgtype=e.trigger_type AND n.nspname='public' AND p.proname=e.function_name::name AND t.tgargs=e.arguments`, tables, names, functions, types, args, n).Scan(&valid)
+		if err != nil {
+			return fmt.Errorf("owner source trigger unavailable: %w", err)
+		}
+		if !valid {
 			return errors.New("owner source trigger unavailable")
 		}
 	}
@@ -117,8 +122,8 @@ func CheckCatalog(ctx context.Context, tx pgx.Tx, catalog Catalog) error {
 		for i, f := range catalog.Functions {
 			names[i], returns[i], hashes[i], arguments[i] = f.Name, f.ReturnType, f.BodySHA256, f.Arguments
 		}
-		rows, err := tx.Query(ctx, `SELECT e.body_hash,p.prosrc FROM unnest($1::text[],$2::smallint[],$3::text[],$4::text[]) e(name,arguments,return_type,body_hash)
- JOIN pg_proc p ON p.proname=e.name AND p.pronargs=e.arguments AND p.prorettype=to_regtype(e.return_type)
+		rows, err := tx.Query(ctx, `SELECT e.ordinal,e.body_hash,p.prosrc FROM unnest($1::text[],$2::smallint[],$3::text[],$4::text[]) WITH ORDINALITY e(name,arguments,return_type,body_hash,ordinal)
+ JOIN pg_proc p ON p.proname=e.name::name AND p.pronargs=e.arguments AND p.prorettype=to_regtype(e.return_type)
  JOIN pg_namespace n ON n.oid=p.pronamespace JOIN pg_language l ON l.oid=p.prolang
  WHERE n.nspname='public' AND NOT p.prosecdef AND p.provolatile='v' AND l.lanname='plpgsql'`, names, arguments, returns, hashes)
 		if err != nil {
@@ -126,11 +131,17 @@ func CheckCatalog(ctx context.Context, tx pgx.Tx, catalog Catalog) error {
 		}
 		defer rows.Close()
 		count := 0
+		seen := make([]bool, n)
 		for rows.Next() {
+			var ordinal int64
 			var expected, body string
-			if err := rows.Scan(&expected, &body); err != nil {
+			if err := rows.Scan(&ordinal, &expected, &body); err != nil {
 				return err
 			}
+			if ordinal < 1 || ordinal > int64(n) || seen[ordinal-1] {
+				return errors.New("owner source function ambiguous")
+			}
+			seen[ordinal-1] = true
 			hash := sha256.Sum256([]byte(body))
 			if hex.EncodeToString(hash[:]) != expected {
 				return errors.New("owner source function changed")

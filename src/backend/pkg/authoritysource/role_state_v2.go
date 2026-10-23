@@ -69,7 +69,7 @@ type RoleMembershipFloor struct {
 	RetiredThrough uint64 `json:"retired_through"`
 }
 
-// Implemented by authenticated native observations and source2's independently
+// MemberRoleObservation is implemented by authenticated native observations and source2's independently
 // authenticated/freshness-bounded Space adapter. Neither transport is replaced
 // by accepting a client's JSON or treating a binding as grant authorization.
 type MemberRoleObservation interface {

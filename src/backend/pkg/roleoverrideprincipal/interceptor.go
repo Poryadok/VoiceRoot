@@ -18,7 +18,7 @@ var ErrUnavailable = errors.New("role target principal dependency unavailable")
 
 func StrictUnaryInterceptor(target string, verifier Verifier) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if Method(target) == "" || info.FullMethod != Method(target) {
+		if !allowsMethod(target, info.FullMethod) {
 			return nil, status.Error(codes.PermissionDenied, "method unavailable on target listener")
 		}
 		transport, err := principal.IncomingMetadata(ctx)
@@ -47,7 +47,7 @@ func StrictUnaryInterceptor(target string, verifier Verifier) grpc.UnaryServerIn
 			return nil, status.Error(codes.Unauthenticated, "invalid principal")
 		}
 		verified := principal.WithVerified(ctx, p)
-		if err := Require(verified, target, message); err != nil {
+		if err := requireMethod(verified, target, info.FullMethod, message); err != nil {
 			return nil, err
 		}
 		return handler(verified, req)
@@ -56,7 +56,7 @@ func StrictUnaryInterceptor(target string, verifier Verifier) grpc.UnaryServerIn
 
 func OrdinaryUnaryInterceptor(target string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if info.FullMethod == Method(target) {
+		if allowsMethod(target, info.FullMethod) {
 			return nil, status.Error(codes.Unavailable, "protected target listener required")
 		}
 		return handler(ctx, req)

@@ -2,6 +2,8 @@ package grpcsvc_test
 
 import (
 	"context"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"testing"
 
 	"github.com/google/uuid"
@@ -109,7 +111,7 @@ func TestInstalledBot_protoHasOnlineField(t *testing.T) {
 	requireBotProtoField(t, "InstalledBot", "online")
 }
 
-func TestUninstallBotFromSpace_invokesRoleDeleteAndMessagingUnpin(t *testing.T) {
+func TestRawUninstallDoesNotInvokeLegacyCleanup(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -140,17 +142,15 @@ func TestUninstallBotFromSpace_invokesRoleDeleteAndMessagingUnpin(t *testing.T) 
 		BotId:   botID,
 		SpaceId: spaceID.String(),
 	})
-	require.NoError(t, err)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
 
-	require.Equal(t, 1, roleSpy.deleteRolesCalls,
-		"UninstallBotFromSpace must call Role.DeleteRolesCreatedByProfile (BOT-B)")
-	require.Equal(t, spaceID.String(), roleSpy.lastSpaceID)
-	require.Equal(t, actorProfileID, roleSpy.lastProfileID)
-
-	require.Equal(t, 1, msgSpy.unpinCalls,
-		"UninstallBotFromSpace must call Messaging.UnpinMessagesBySenderInChats (BOT-B)")
-	require.Equal(t, actorProfileID, msgSpy.lastSenderID)
-	require.Contains(t, msgSpy.lastChatIDs, chatID.String())
+	require.Zero(t, roleSpy.deleteRolesCalls)
+	require.Empty(t, roleSpy.lastSpaceID)
+	require.Empty(t, roleSpy.lastProfileID)
+	require.Zero(t, msgSpy.unpinCalls)
+	require.Empty(t, msgSpy.lastSenderID)
+	require.Empty(t, msgSpy.lastChatIDs)
+	require.NotEmpty(t, actorProfileID)
 	require.NotEmpty(t, msgSpy.preservedBodies,
 		"uninstall cleanup must not delete message bodies (BOT-B)")
 }

@@ -659,6 +659,15 @@ candidate, receipt and outbox data. Existing published-only readers, Chat's
 legacy direct readers and community unions must be tested with candidate plus
 published fixtures; do not introduce new cross-database reads.
 
+Implemented runtime slice: protected noninteractive `JoinSpace` and
+`JoinByInvite` use verified typed ingress and the original finite call budget,
+prepare the durable candidate, obtain the exact protected Role receipt, and
+publish through the native membership fence. `GetMemberAdmissionAuthority`
+serves the corresponding Role callback without a recursive Role request.
+The current Role 25 / Space 51 integration fixture exercises this cross-service
+receipt path. This slice does not complete interactive admission or composable
+join policy.
+
 ### Phase-0 S2S decision callers (target)
 
 `AreCoMembers`, subscription sync и новые internal decision RPC не получают actor

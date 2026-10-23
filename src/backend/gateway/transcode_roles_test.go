@@ -5,7 +5,9 @@ import (
 	"net"
 	"net/http"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -110,11 +112,12 @@ func newRolesContractGateway(t *testing.T, rec *recordingRoleService) http.Handl
 	t.Helper()
 	roleClient, cleanup := startBufconnRoleConn(t, rec)
 	t.Cleanup(cleanup)
+	f := newCreatorFixture(t)
 	return newGatewayForContract(t, gatewayTestOptions{
 		tokenClaims: map[string]tokenClaims{
-			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+			"valid-user-token": {UserID: uuid.NewString(), ProfileID: uuid.NewString(), SessionEpoch: 7, AuthenticatedAccountType: "regular", ExpiresAt: time.Now().Add(time.Minute)},
 		},
-		transcoder: &transcoder{clients: grpcClients{role: roleClient}},
+		transcoder: &transcoder{clients: grpcClients{role: roleClient, roleAudit: roleClient}, lifecycleIssuer: f.issuer},
 		restUpstreams: map[string]http.Handler{
 			"roles": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) }),
 		},

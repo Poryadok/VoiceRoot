@@ -14,7 +14,7 @@ import (
 var (
 	ErrMemberAdmissionConflict    = errors.New("member admission operation binding changed")
 	ErrMemberAdmissionStale       = errors.New("member admission generation retired or superseded")
-	ErrMemberAdmissionDefaultRole = errors.New("Owner cannot be the member admission default")
+	ErrMemberAdmissionDefaultRole = errors.New("owner cannot be the member admission default")
 )
 
 // MemberAdmissionReceipt is historical evidence, never a current permission.

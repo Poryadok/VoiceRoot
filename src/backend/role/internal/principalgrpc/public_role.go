@@ -28,7 +28,7 @@ func IsSpaceRoleRead(method string) bool {
 	return method == rolev1.RoleService_ListRoles_FullMethodName || method == rolev1.RoleService_GetMemberRoles_FullMethodName || method == rolev1.RoleService_GetDefaultJoinRole_FullMethodName
 }
 
-// The handler still owns target ACLs and membership proof. Request profile_id
+// RequirePublicRole checks the principal; the handler owns target ACLs and membership proof. Request profile_id
 // never replaces the principal's actor, and metadata cannot supply authority.
 func RequirePublicRole(ctx context.Context, request proto.Message, method string) error {
 	p, ok := principal.FromContext(ctx)

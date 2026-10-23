@@ -45,6 +45,8 @@ func spaceLifecycleMethods() []string {
 }
 
 type Config struct {
+	// DeferInitialJWKS breaks the Bot scope bootstrap cycle; requests still require verified keys.
+	DeferInitialJWKS   bool
 	Issuer             string
 	Audience           string
 	AllowedMethods     []string
@@ -179,6 +181,9 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	if len(cfg.AllowedMethods) == 0 {
 		cfg.AllowedMethods = []string{ProvisionMethod, SyncMembersMethod}
 	}
+	if cfg.DeferInitialJWKS && (cfg.Issuer != "bot" || cfg.Audience != Audience || len(cfg.AllowedMethods) != 1 || cfg.AllowedMethods[0] != BotScopeAuthorityMethod) {
+		return nil, errors.New("deferred initial JWKS is restricted to Bot scope authority")
+	}
 	if strings.TrimSpace(cfg.Issuer) == "" || strings.TrimSpace(cfg.Audience) == "" {
 		return nil, errors.New("chat principal issuer and audience are required")
 	}
@@ -285,10 +290,12 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		transport.CloseIdleConnections()
 		return nil, errors.New("principal replay Redis unavailable")
 	}
-	if err := resolver.Refresh(startup, cfg.Issuer); err != nil {
-		_ = replay.Close()
-		transport.CloseIdleConnections()
-		return nil, fmt.Errorf("principal JWKS unavailable: %w", err)
+	if !cfg.DeferInitialJWKS {
+		if err := resolver.Refresh(startup, cfg.Issuer); err != nil {
+			_ = replay.Close()
+			transport.CloseIdleConnections()
+			return nil, fmt.Errorf("principal JWKS unavailable: %w", err)
+		}
 	}
 	refreshCtx, stop := context.WithCancel(ctx)
 	runtime.stop = stop
@@ -311,6 +318,8 @@ func configuredMethods(issuer string, allowed []string) (map[string]struct{}, er
 		approved[GetManifestPageMethod] = struct{}{}
 	case "role":
 		approved[ScopeAuthorityMethod] = struct{}{}
+	case "bot":
+		approved[BotScopeAuthorityMethod] = struct{}{}
 	case "realtime":
 		approved[ResolveRealtimeLifecycleMethod] = struct{}{}
 	default:

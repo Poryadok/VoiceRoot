@@ -17,6 +17,7 @@ type Config struct {
 	JWKSURLs                                          map[string]string
 	RefreshAfter, HardExpiry, UnknownKIDCooldown      time.Duration
 	ReplayAddr, ReplayPassword, JWKSCAFile            string
+	JWKSClientCertFile, JWKSClientKeyFile             string
 	TLSCertFile, TLSKeyFile, ClientCAFile, ListenAddr string
 	AuthoritySourceEnabled                            bool
 	DelegatedUserEnabled                              bool
@@ -29,6 +30,7 @@ var issuerPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 func LoadFromEnv() (Config, bool, error) {
 	names := []string{"S2S_JWKS_URLS_JSON", "S2S_JWKS_REFRESH_AFTER", "S2S_JWKS_HARD_EXPIRY", "S2S_UNKNOWN_KID_COOLDOWN", "S2S_JWKS_CA_FILE", "ROLE_PRINCIPAL_REPLAY_REDIS_ADDR", "ROLE_PRINCIPAL_REPLAY_REDIS_PASSWORD", "ROLE_PRINCIPAL_TLS_CERT_FILE", "ROLE_PRINCIPAL_TLS_KEY_FILE", "ROLE_PRINCIPAL_CLIENT_CA_FILE", "ROLE_PRINCIPAL_GRPC_LISTEN"}
 	enabled := false
+	names = append(names, "S2S_JWKS_CLIENT_CERT_FILE", "S2S_JWKS_CLIENT_KEY_FILE")
 	if _, present := os.LookupEnv("ROLE_AUTHORITY_SOURCE_ENABLED"); present {
 		enabled = true
 	}
@@ -47,6 +49,8 @@ func LoadFromEnv() (Config, bool, error) {
 		return Config{}, false, nil
 	}
 	cfg := Config{ReplayAddr: strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_REPLAY_REDIS_ADDR")), ReplayPassword: os.Getenv("ROLE_PRINCIPAL_REPLAY_REDIS_PASSWORD"), JWKSCAFile: strings.TrimSpace(os.Getenv("S2S_JWKS_CA_FILE")), TLSCertFile: strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_TLS_CERT_FILE")), TLSKeyFile: strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_TLS_KEY_FILE")), ClientCAFile: strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_CLIENT_CA_FILE")), ListenAddr: ":9091"}
+	cfg.JWKSClientCertFile = strings.TrimSpace(os.Getenv("S2S_JWKS_CLIENT_CERT_FILE"))
+	cfg.JWKSClientKeyFile = strings.TrimSpace(os.Getenv("S2S_JWKS_CLIENT_KEY_FILE"))
 	if value, ok := os.LookupEnv("ROLE_PRINCIPAL_GRPC_LISTEN"); ok {
 		cfg.ListenAddr = strings.TrimSpace(value)
 	}
@@ -101,6 +105,9 @@ func envDuration(name string, fallback time.Duration) (time.Duration, error) {
 	return value, nil
 }
 func (c Config) validate() error {
+	if (c.JWKSClientCertFile == "") != (c.JWKSClientKeyFile == "") {
+		return errors.New("principal JWKS client certificate and key must be configured together")
+	}
 	if c.RefreshAfter <= 0 || c.HardExpiry < c.RefreshAfter || c.UnknownKIDCooldown <= 0 {
 		return errors.New("invalid principal cache policy")
 	}

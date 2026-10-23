@@ -2,6 +2,8 @@ package grpcsvc_test
 
 import (
 	"context"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"testing"
 
 	"github.com/google/uuid"
@@ -72,7 +74,7 @@ commands:
 	require.True(t, inChat.GetBots()[0].GetWhitelisted())
 }
 
-func TestUninstallFromSpace_clearsWhitelist(t *testing.T) {
+func TestRawUninstallPreservesWhitelist(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -98,11 +100,11 @@ func TestUninstallFromSpace_clearsWhitelist(t *testing.T) {
 		BotId:   botID,
 		SpaceId: spaceID.String(),
 	})
-	require.NoError(t, err)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
 
 	allowed, err := st.IsChatWhitelisted(ctx, botUUID, chatID)
 	require.NoError(t, err)
-	require.False(t, allowed)
+	require.True(t, allowed)
 }
 
 func TestSetBotChatEnabled_enablesWhitelistForNewChat(t *testing.T) {

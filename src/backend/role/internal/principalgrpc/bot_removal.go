@@ -9,7 +9,7 @@ import (
 	"voice/backend/pkg/principal"
 )
 
-// Only the Bot owner service may assert its persisted cleanup decision. The
+// RequireBotRemoval permits only the Bot owner service to assert its persisted cleanup decision. The
 // handler independently validates the complete native/legacy/orphan evidence.
 func RequireBotRemoval(ctx context.Context, req *rolev1.ApplyBotInstallationRemovalRequest) error {
 	if req == nil || unknownRoleRequest(req.ProtoReflect(), 0) || !publicRoleUUID(req.GetOperationId()) {

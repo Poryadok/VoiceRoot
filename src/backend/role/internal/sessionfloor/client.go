@@ -106,7 +106,7 @@ func ConfigFromEnv() (Config, bool, error) {
 	}
 	config := Config{Address: values[0], CAFile: values[1], ServerName: values[2], ClientCertFile: values[3], ClientKeyFile: values[4]}
 	if !config.complete() {
-		return Config{}, true, errors.New("Role Auth session-floor TLS configuration is incomplete")
+		return Config{}, true, errors.New("role Auth session-floor TLS configuration is incomplete")
 	}
 	return config, true, nil
 }
@@ -122,23 +122,23 @@ func (c Config) complete() bool {
 
 func (c Config) Dial(issuer *principal.Issuer) (*Client, *grpc.ClientConn, error) {
 	if issuer == nil || !c.complete() {
-		return nil, nil, errors.New("Role Auth session-floor client configuration is incomplete")
+		return nil, nil, errors.New("role Auth session-floor client configuration is incomplete")
 	}
 	caPEM, err := os.ReadFile(c.CAFile)
 	if err != nil {
-		return nil, nil, errors.New("Role Auth session-floor CA unavailable")
+		return nil, nil, errors.New("role Auth session-floor CA unavailable")
 	}
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(caPEM) {
-		return nil, nil, errors.New("Role Auth session-floor CA invalid")
+		return nil, nil, errors.New("role Auth session-floor CA invalid")
 	}
 	cert, err := tls.LoadX509KeyPair(c.ClientCertFile, c.ClientKeyFile)
 	if err != nil {
-		return nil, nil, errors.New("Role Auth session-floor client certificate unavailable")
+		return nil, nil, errors.New("role Auth session-floor client certificate unavailable")
 	}
 	conn, err := grpc.NewClient(grpcclient.DialTarget(c.Address), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: c.ServerName, Certificates: []tls.Certificate{cert}})))
 	if err != nil {
-		return nil, nil, errors.New("Role Auth session-floor transport unavailable")
+		return nil, nil, errors.New("role Auth session-floor transport unavailable")
 	}
 	return New(authv1.NewAuthServiceClient(conn), issuer), conn, nil
 }

@@ -31,7 +31,7 @@ func loadMemberAuthorityClient(issuer *principal.Issuer) (*memberauthority.Clien
 		return nil, noop, nil
 	}
 	if issuer == nil {
-		return nil, noop, errors.New("Role member authority signing identity required")
+		return nil, noop, errors.New("role member authority signing identity required")
 	}
 	for _, value := range values {
 		if value == "" {
@@ -40,11 +40,11 @@ func loadMemberAuthorityClient(issuer *principal.Issuer) (*memberauthority.Clien
 	}
 	certificate, err := tls.LoadX509KeyPair(values["CLIENT_CERT_FILE"], values["CLIENT_KEY_FILE"])
 	if err != nil {
-		return nil, noop, errors.New("Role member authority client identity unavailable")
+		return nil, noop, errors.New("role member authority client identity unavailable")
 	}
 	ca, err := os.ReadFile(values["TLS_CA_FILE"])
 	if err != nil {
-		return nil, noop, errors.New("Space member authority CA unavailable")
+		return nil, noop, errors.New("space member authority CA unavailable")
 	}
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(ca) {
