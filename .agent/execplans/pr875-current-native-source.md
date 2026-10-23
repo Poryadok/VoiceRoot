@@ -226,3 +226,19 @@ proofs. All evidence/review bytes are included in this separate source record.
 Partial production initialization or a partial trace must propagate failure,
 never silently fall back to ordinary/aggregate routing. Archived synthetic tails
 or replayed completion are explicitly invalid as production terminal evidence.
+
+Independent contract addendum accepts the exact master-push analogue of the PR
+event: push onrefs/heads/master with before equal the fixed288e6a4 event base,
+actual HEAD equal GITHUB_SHA, the same two ordered base/source parents and source
+tree equal result tree. Other pushes/refs/bases remain rejected. R pins the event
+base and current source unit, not a PR-only event type; this adds no path or
+runtime permission and prevents an intentionally broken postmerge master gate.
+
+The production R was integrated as0aaed85d16f94d75bb70481ab660ea5b63f55e62;
+K pins its exact record and source/evidence entries. Linux Docker verification
+passed15 production real-Git cases (22.338s),3 focused consumer/failure cases
+(6.813s), and all56 F54 regression cases (154.291s), plus Python compilation
+and shell syntax. The production J seam test exercises the real consumer and
+conservation while mocking only its qualification boundary; complete M/J/F
+constructors are separately exercised against the frozen artifacts. These
+checks do not claim actual production collection/router terminal success.
