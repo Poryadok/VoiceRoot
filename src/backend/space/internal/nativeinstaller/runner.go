@@ -129,15 +129,77 @@ func (w migrationDiagnosticStream) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (d *migrationDiagnostics) category() string {
+func (d *migrationDiagnostics) category(exitCode int) string {
 	// Pinned migrate4.18.1's postgres driver starts these failures with this
 	// prefix. pq1.10.9 omits SQLSTATE in Error(), so never parse code-shaped SQL
 	// or arbitrary message text as a database code or a more specific cause.
 	data := d.stderr[:d.size]
-	if !d.overflow && !d.mixed && bytes.HasPrefix(data, []byte("error: migration failed: ")) && !bytes.Contains(data, []byte("\nerror:")) {
-		return "database"
+	if !d.overflow && !d.mixed {
+		if exitCode == 1 && bytes.HasPrefix(data, []byte("error: migration failed: ")) && !bytes.Contains(data, []byte("\nerror:")) {
+			return "postgres_statement"
+		}
+		if exitCode == 2 && pinnedMigrationUsage(data) {
+			return "cli_usage"
+		}
 	}
-	return "driver_exit"
+	return "driver_exit_unknown"
+}
+
+// This digest covers v4.18.1 internal/cli.Main's complete public usage block,
+// expanding create/goto/up/down/drop/forceUsage through "Source drivers: ".
+// Driver registries are unordered maps, so only their complete footer syntax
+// is checked separately. A partial help marker is never sufficient.
+const migrateUsageV4181SHA256 = "a90dd653fc52aea7be51aff59412e0d1f0dd1b764b599163a52ee3a3c592d5a3"
+
+func pinnedMigrationUsage(data []byte) bool {
+	// Inspect the bounded buffer in place, without copying raw child output.
+	for _, marker := range []string{"panic", "fatal", "stack", "goroutine"} {
+		for i := 0; i+len(marker) <= len(data); i++ {
+			if bytes.EqualFold(data[i:i+len(marker)], []byte(marker)) {
+				return false
+			}
+		}
+	}
+	start := bytes.Index(data, []byte("Usage: migrate OPTIONS COMMAND [arg...]\n"))
+	if start < 0 {
+		return false
+	}
+	usage := data[start:]
+	driverMarker := []byte("\nSource drivers: ")
+	end := bytes.Index(usage, driverMarker)
+	if end < 0 {
+		return false
+	}
+	end += len(driverMarker)
+	sum := sha256.Sum256(usage[:end])
+	if hex.EncodeToString(sum[:]) != migrateUsageV4181SHA256 {
+		return false
+	}
+	sources, rest, ok := bytes.Cut(usage[end:], []byte("\nDatabase drivers: "))
+	if !ok || !migrationDriverList(sources) {
+		return false
+	}
+	databases, suffix, ok := bytes.Cut(rest, []byte("\n"))
+	return ok && len(suffix) == 0 && migrationDriverList(databases)
+}
+
+func migrationDriverList(data []byte) bool {
+	for len(data) != 0 {
+		name, rest, more := bytes.Cut(data, []byte(", "))
+		if len(name) == 0 {
+			return false
+		}
+		for _, c := range name {
+			if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '_' && c != '-' && c != '+' && c != '.' {
+				return false
+			}
+		}
+		if !more {
+			return true
+		}
+		data = rest
+	}
+	return false
 }
 
 func runMigration(ctx context.Context, cmd *exec.Cmd, version int) error {
@@ -149,10 +211,10 @@ func runMigration(ctx context.Context, cmd *exec.Cmd, version int) error {
 	if err == nil {
 		return nil
 	}
-	category, exitCode := "start", -1
+	category, exitCode := "driver_exit_unknown", -1
 	if cmd.ProcessState != nil {
 		exitCode = cmd.ProcessState.ExitCode()
-		category = diagnostics.category()
+		category = diagnostics.category(exitCode)
 	}
 	if errors.Is(err, context.Canceled) || (exitCode == -1 && errors.Is(ctx.Err(), context.Canceled)) {
 		category = "canceled"
