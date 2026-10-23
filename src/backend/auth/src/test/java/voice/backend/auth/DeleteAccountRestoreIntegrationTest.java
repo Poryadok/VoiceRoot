@@ -54,7 +54,9 @@ class DeleteAccountRestoreIntegrationTest {
   @Autowired ObjectMapper objectMapper;
   @Autowired AuthService authService;
   @Autowired AccountRepository accounts;
-  @Autowired AccountDeletionOperationRepository deletionOperations;
+  @org.springframework.boot.test.mock.mockito.SpyBean AccountDeletionOperationRepository deletionOperations;
+  @org.springframework.boot.test.mock.mockito.SpyBean voice.backend.auth.mail.MailSender deletionMailSender;
+  @Autowired voice.backend.auth.service.AccountDeletionPendingEventWorker deletionEventWorker;
   @MockBean SessionEpochFloorStore sessionEpochFloors;
   @MockBean AuthEventPublisher authEventPublisher;
   @MockBean AccountDeletionEventPublisher deletionEventPublisher;
@@ -78,6 +80,55 @@ class DeleteAccountRestoreIntegrationTest {
             });
     when(deletionEventPublisher.publishAccountDeleted(any(), any(), any()))
         .thenReturn(new GuestConversionPublishAck("user_events", 1L));
+  }
+
+  @Test
+  void requestWaitsForCompetingWorkersDurableAcknowledgement() throws Exception {
+    String email = "delete-worker-race@example.com";
+    JsonNode registered = session(postJson("/api/v1/auth/register",
+        "{\"email\":\"" + email + "\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
+    String token = registered.get("access_token").asText();
+    Account before = accounts.findByEmail(email).orElseThrow();
+    var publishing = new java.util.concurrent.CountDownLatch(1);
+    var requestSawLease = new java.util.concurrent.CountDownLatch(1);
+    var releaseAck = new java.util.concurrent.CountDownLatch(1);
+    var worker = new java.util.concurrent.atomic.AtomicReference<java.util.concurrent.Future<?>>();
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    when(deletionEventPublisher.publishAccountDeleted(any(), any(), any())).thenAnswer(call -> {
+      publishing.countDown();
+      assertThat(releaseAck.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      return new GuestConversionPublishAck("user_events", 1L);
+    });
+    org.mockito.Mockito.doAnswer(call -> {
+      var operation = deletionOperations.findByAccountAndEpoch(before.id(), before.sessionEpoch() + 1).orElseThrow();
+      worker.set(executor.submit(() -> deletionEventWorker.recoverOperation(
+          operation.operationId(), java.time.Duration.ofSeconds(30))));
+      assertThat(publishing.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      return null;
+    }).when(deletionMailSender).sendOtpEmail(eq(email), eq("Restore your Voice account"), any());
+    org.mockito.Mockito.doAnswer(call -> {
+      @SuppressWarnings("unchecked")
+      var result = (java.util.Optional<voice.backend.auth.repository.AccountDeletionOperation>) call.callRealMethod();
+      if (result.isPresent() && result.get().lockedUntil() != null
+          && result.get().state() == voice.backend.auth.repository.AccountDeletionState.PENDING_EVENT) {
+        requestSawLease.countDown();
+      }
+      return result;
+    }).when(deletionOperations).findByAccountAndEpoch(before.id(), before.sessionEpoch() + 1);
+    try {
+      var request = executor.submit(() -> authService.deleteAccount("Bearer " + token, "Correct horse battery staple"));
+      assertThat(requestSawLease.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      releaseAck.countDown();
+      assertThat(request.get(10, java.util.concurrent.TimeUnit.SECONDS).restoreToken()).isNotBlank();
+      worker.get().get(10, java.util.concurrent.TimeUnit.SECONDS);
+      assertThat(deletionOperations.findByAccountAndEpoch(before.id(), before.sessionEpoch() + 1).orElseThrow().state())
+          .isEqualTo(voice.backend.auth.repository.AccountDeletionState.COMPLETED);
+      verify(deletionEventPublisher, times(1)).publishAccountDeleted(any(), any(), any());
+    } finally {
+      releaseAck.countDown();
+      executor.shutdownNow();
+      assertThat(executor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+    }
   }
 
   @Test

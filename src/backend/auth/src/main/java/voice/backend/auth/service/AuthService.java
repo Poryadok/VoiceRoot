@@ -954,6 +954,8 @@ public class AuthService {
     if (operation.state() == AccountDeletionState.PENDING_FLOOR) {
       deletionFloorWorker.recoverOperation(operation.operationId(), Duration.ofSeconds(30));
       operation = operationForDeletedAccount(account);
+      operation = AccountDeletionCompletion.awaitConcurrentWorker(
+          operation, () -> operationForDeletedAccount(account), Duration.ofSeconds(2), clock);
       if (operation.state() == AccountDeletionState.PENDING_FLOOR) {
         throw new SessionEpochFloorUnavailableException("account deletion epoch floor is not durably sealed");
       }
@@ -971,6 +973,8 @@ public class AuthService {
     if (operation.state() == AccountDeletionState.PENDING_EVENT) {
       deletionEventWorker.recoverOperation(operation.operationId(), Duration.ofSeconds(30));
       operation = operationForDeletedAccount(account);
+      operation = AccountDeletionCompletion.awaitConcurrentWorker(
+          operation, () -> operationForDeletedAccount(account), Duration.ofSeconds(2), clock);
       if (operation.state() != AccountDeletionState.COMPLETED) {
         throw new IllegalStateException("account deletion event has not been durably acknowledged");
       }

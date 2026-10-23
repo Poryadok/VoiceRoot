@@ -1,5 +1,12 @@
 # Auth Service
 
+When an account-deletion request races scheduled recovery, it observes the same
+durable operation for at most two seconds per pending stage while another worker
+holds its lease. It neither steals that lease nor infers success from a timeout:
+the epoch floor must be sealed and the deletion event durably acknowledged before
+returning success. Interruption preserves cancellation; an unlocked failed stage
+returns its existing unavailable/error result immediately.
+
 > Original172 current444 source stage: roleidentityauthority consumes a direct
 > transaction-held DDL barrier before gate/history/object validation. Relation
 > locks alone do not stabilize checked function bodies. The selected V31/000032
