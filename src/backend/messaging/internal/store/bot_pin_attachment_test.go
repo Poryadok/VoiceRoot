@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	chatv1 "voice.app/voice/chat/v1"
@@ -30,7 +31,15 @@ CREATE TABLE IF NOT EXISTS chat_match_squad_operations(chat_id UUID);`)
 	require.NoError(t, err)
 	_, err = s.Pool.Exec(ctx, `INSERT INTO chat_scope_authority_heads(chat_id,space_id,scope_incarnation,revision,present) SELECT id,space_id,scope_incarnation,1,true FROM chats WHERE id=$1 ON CONFLICT DO NOTHING`, request.ChatId)
 	require.NoError(t, err)
-	loader := &SQLChatThreadPolicy{Pool: s.Pool}
+	// Production reads Chat through its independent CHAT_DATABASE_URL pool.
+	// Sharing the Messaging pool here would require a second connection while
+	// cleanup owns one and other cleanups wait on its advisory lock. Keep these
+	// controlled Chat tables in the disposable database, but model the actual
+	// independent datasource ownership even with one Messaging connection.
+	chatPool, err := pgxpool.NewWithConfig(ctx, s.Pool.Config())
+	require.NoError(t, err)
+	t.Cleanup(chatPool.Close)
+	loader := &SQLChatThreadPolicy{Pool: chatPool}
 	s.BotPinChatScope = loader
 	scope, err := loader.LoadBotPinChatScope(ctx, uuid.MustParse(request.ChatId), uuid.MustParse(request.SpaceId))
 	require.NoError(t, err)
