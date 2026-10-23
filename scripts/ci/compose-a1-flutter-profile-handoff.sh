@@ -94,6 +94,38 @@ compose() {
     "$@"
 }
 
+report_startup_diagnostic() {
+  # The hard deadline also kills an uncooperative collector. Only a bounded
+  # prefix reaches the classifier; drain the rest without printing raw logs.
+  timeout --signal=KILL 5s docker compose \
+    --env-file "$compose_env" \
+    --project-name "$project" \
+    --project-directory "$ROOT" \
+    -f "$COMPOSE_FILE_PATH" \
+    -f "${ROOT}/docker-compose.voice-space-media.yml" \
+    -f "${ROOT}/docker-compose.phase0.yml" \
+    --profile app \
+    logs --tail 80 --no-color --timestamps compose-db-init 2>/dev/null |
+    { head -c 65536; cat >/dev/null; } |
+    awk '
+      {
+        line = tolower($0)
+        if (category == "" && line ~ /password authentication failed|authentication failed/) category = "authentication_failed"
+        else if (category == "" && line ~ /database .* does not exist/) category = "database_missing"
+        else if (category == "" && line ~ /role .* does not exist/) category = "role_missing"
+        else if (category == "" && line ~ /connection refused|could not connect/) category = "connection_failed"
+        else if (category == "" && line ~ /permission denied/) category = "permission_denied"
+        else if (category == "" && line ~ /deadlock detected|lock not available/) category = "lock_conflict"
+        else if (category == "" && line ~ /syntax error/) category = "sql_syntax_error"
+        else if (category == "" && line ~ /migration stage [0-9][0-9]?[0-9]? failed/) category = "migration_stage_failed"
+      }
+      END {
+        if (category == "") category = "unclassified"
+        printf "A1 Flutter startup diagnostic category=%s\n", category
+      }
+    '
+}
+
 cleanup() {
   local status=$?
   local compose_down_succeeded=true
@@ -237,7 +269,14 @@ export GATEWAY_RATE_LIMIT_RULES_JSON='{"Auth":{"limit":0,"window":"15m"},"OTP":{
 echo "A1 Flutter profile-handoff project=${project} gateway=${VOICE_API_BASE_URL} tests=${flutter_tests[*]}"
 compose config --quiet
 compose_started=true
-compose up -d --build
+if compose up -d --build; then
+  :
+else
+  startup_status=$?
+  echo "A1 Flutter Compose startup failed with status ${startup_status}; bounded compose-db-init diagnostics follow" >&2
+  report_startup_diagnostic >&2 || true
+  exit "$startup_status"
+fi
 wait_healthy realtime
 wait_healthy gateway
 wait_gateway
