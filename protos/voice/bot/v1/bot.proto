@@ -4,6 +4,7 @@ package voice.bot.v1;
 
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
+import "voice/common/v1/bot_message.proto";
 import "voice/common/v1/space_lifecycle.proto";
 import "voice/gameintegration/v1/game_event.proto";
 import "voice/messaging/v1/messaging.proto";
@@ -64,6 +65,10 @@ service BotService {
   // @voice.security=protected;callers=service:space
   rpc CheckBotInstallationScope(CheckBotInstallationScopeRequest) returns (CheckBotInstallationScopeResponse);
 
+  // Current exact send-only authority; no ordinary visibility grant.
+  // @voice.security=protected;callers=service:messaging
+  rpc CheckBotMessageSendAuthority(CheckBotMessageSendAuthorityRequest) returns (CheckBotMessageSendAuthorityResponse);
+
   // Client slash interactions.
   rpc ExecuteSlashInteraction(ExecuteSlashInteractionRequest) returns (ExecuteSlashInteractionResponse);
   rpc ListSlashCommandsForChat(ListSlashCommandsForChatRequest) returns (ListSlashCommandsForChatResponse);
@@ -104,6 +109,16 @@ message CheckBotInstallationScopeResponse {
   string actor_profile_id = 4;
   string installation_id = 5;
   string bot_scope = 6;
+}
+
+// @voice.unknown_fields=reject
+message CheckBotMessageSendAuthorityRequest {
+  voice.common.v1.BotMessageSendBinding binding = 1;
+}
+
+message CheckBotMessageSendAuthorityResponse {
+  voice.common.v1.BotMessageSendBinding binding = 1;
+  bool allowed = 2;
 }
 
 message PublishGameEventRequest {

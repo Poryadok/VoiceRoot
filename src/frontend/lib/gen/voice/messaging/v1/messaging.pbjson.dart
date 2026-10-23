@@ -673,6 +673,56 @@ final $typed_data.Uint8List sendGameEventMessageResponseDescriptor =
         'dhbWVpbnRlZ3JhdGlvbi52MS5HYW1lRXZlbnRQdWJsaWNhdGlvblN0YXR1c1IGc3RhdHVzEiIK'
         'Cm1lc3NhZ2VfaWQYAiABKAlIAFIJbWVzc2FnZUlkiAEBQg0KC19tZXNzYWdlX2lk');
 
+@$core.Deprecated('Use sendBotMessageRequestDescriptor instead')
+const SendBotMessageRequest$json = {
+  '1': 'SendBotMessageRequest',
+  '2': [
+    {
+      '1': 'message',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.messaging.v1.SendMessageRequest',
+      '10': 'message'
+    },
+    {
+      '1': 'binding',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.BotMessageSendBinding',
+      '10': 'binding'
+    },
+  ],
+};
+
+/// Descriptor for `SendBotMessageRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List sendBotMessageRequestDescriptor = $convert.base64Decode(
+    'ChVTZW5kQm90TWVzc2FnZVJlcXVlc3QSQAoHbWVzc2FnZRgBIAEoCzImLnZvaWNlLm1lc3NhZ2'
+    'luZy52MS5TZW5kTWVzc2FnZVJlcXVlc3RSB21lc3NhZ2USQAoHYmluZGluZxgCIAEoCzImLnZv'
+    'aWNlLmNvbW1vbi52MS5Cb3RNZXNzYWdlU2VuZEJpbmRpbmdSB2JpbmRpbmc=');
+
+@$core.Deprecated('Use sendBotMessageResponseDescriptor instead')
+const SendBotMessageResponse$json = {
+  '1': 'SendBotMessageResponse',
+  '2': [
+    {
+      '1': 'message',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.messaging.v1.Message',
+      '10': 'message'
+    },
+  ],
+};
+
+/// Descriptor for `SendBotMessageResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List sendBotMessageResponseDescriptor =
+    $convert.base64Decode(
+        'ChZTZW5kQm90TWVzc2FnZVJlc3BvbnNlEjUKB21lc3NhZ2UYASABKAsyGy52b2ljZS5tZXNzYW'
+        'dpbmcudjEuTWVzc2FnZVIHbWVzc2FnZQ==');
+
 @$core.Deprecated('Use sendMessageRequestDescriptor instead')
 const SendMessageRequest$json = {
   '1': 'SendMessageRequest',
