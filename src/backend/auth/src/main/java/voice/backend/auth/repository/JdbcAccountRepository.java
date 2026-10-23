@@ -8,6 +8,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import voice.backend.auth.roleidentityauthority.RoleIdentitySelectors;
 
 public class JdbcAccountRepository implements AccountRepository {
   private static final RowMapper<Account> ROW_MAPPER =
@@ -28,9 +29,16 @@ public class JdbcAccountRepository implements AccountRepository {
                   : rs.getTimestamp("deleted_at").toInstant());
 
   private final NamedParameterJdbcTemplate jdbc;
+  private final RoleIdentitySelectors identitySelectors;
 
   public JdbcAccountRepository(NamedParameterJdbcTemplate jdbc) {
     this.jdbc = jdbc;
+    this.identitySelectors = null;
+  }
+
+  public JdbcAccountRepository(NamedParameterJdbcTemplate jdbc, RoleIdentitySelectors selectors) {
+    this.jdbc = java.util.Objects.requireNonNull(jdbc);
+    this.identitySelectors = java.util.Objects.requireNonNull(selectors);
   }
 
   @Override
@@ -42,6 +50,9 @@ public class JdbcAccountRepository implements AccountRepository {
             .addValue("passwordHash", passwordHash)
             .addValue("type", type);
     try {
+      if (identitySelectors != null) {
+        return createCaptured(email, phone, passwordHash, type, false);
+      }
       return jdbc.queryForObject(
           """
           INSERT INTO accounts (email, phone, password_hash, type, status)
@@ -58,6 +69,9 @@ public class JdbcAccountRepository implements AccountRepository {
   @Override
   public Account createRegularEmailPending(String email, String passwordHash) {
     try {
+      if (identitySelectors != null) {
+        return createCaptured(email, null, passwordHash, "guest", true);
+      }
       return jdbc.queryForObject(
           """
           INSERT INTO accounts (email, password_hash, type, status, regular_email_verification_pending)
@@ -69,6 +83,34 @@ public class JdbcAccountRepository implements AccountRepository {
     } catch (DuplicateKeyException ex) {
       throw new IllegalArgumentException("duplicate account identifier", ex);
     }
+  }
+
+  private Account createCaptured(String email, String phone, String passwordHash,
+      String type, boolean emailPending) {
+    // Keys are already loaded in an immutable local keyset. No key/owner RPC
+    // occurs while the INSERT and its trigger commit the birth and journal.
+    UUID id = UUID.randomUUID();
+    MapSqlParameterSource params = new MapSqlParameterSource()
+        .addValue("id", id)
+        .addValue("email", email)
+        .addValue("phone", phone)
+        .addValue("passwordHash", passwordHash)
+        .addValue("type", type)
+        .addValue("emailPending", emailPending)
+        .addValue("identityHandle", UUID.randomUUID())
+        .addValue("selectorVersion", identitySelectors.activeVersion())
+        .addValue("accountSelector", identitySelectors.activeAccount(id))
+        .addValue("keysetRevision", identitySelectors.keysetRevision());
+    return jdbc.queryForObject(
+        """
+        INSERT INTO accounts (id, email, phone, password_hash, type, status,
+          regular_email_verification_pending, role_identity_handle,
+          role_identity_selector_version, role_identity_account_selector, role_identity_keyset_revision)
+        VALUES (:id, :email, :phone, :passwordHash, :type, 'active', :emailPending,
+          :identityHandle, :selectorVersion, :accountSelector, :keysetRevision)
+        RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, session_epoch, created_at, deleted_at
+        """,
+        params, ROW_MAPPER);
   }
 
   @Override

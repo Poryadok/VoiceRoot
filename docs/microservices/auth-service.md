@@ -1,5 +1,15 @@
 # Auth Service
 
+> Original172 current444 source stage: roleidentityauthority consumes a direct
+> transaction-held DDL barrier before gate/history/object validation. Relation
+> locks alone do not stabilize checked function bodies. The selected V31/000032
+> installer, exact metadata and fixed one-transaction maintenance source are
+> subject to native D01-D10 and independent review. No installed gate, complete
+> registration, independent CURRENT recovery or all-birth qualification is claimed.
+> Trusted schema owner is explicit (`AUTH_IDENTITY_SCHEMA_OWNER`); migration
+> history uses the existing Flyway/canonical mode without synthetic rows. See
+> [source ExecPlan](../testing/auth-identity-current444-source-plan.md).
+
 ## Space admission owner observation (SPACE-ADMISSION-IDENTITY-v1)
 
 `ObserveSpaceAdmissionSubject` is an additive read-only RPC on the existing
