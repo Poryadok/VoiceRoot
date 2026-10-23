@@ -2,6 +2,7 @@ package integrationtest
 
 import (
 	"context"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -74,6 +75,16 @@ func NewSourceMigrationFixtureWithImage(t *testing.T, ctx context.Context, direc
 		require.True(t, err == nil, "start and wait for pinned source migrator")
 		state, err := process.State(ctx)
 		require.True(t, err == nil, "read pinned migrator result")
+		if wantSuccess && state.ExitCode != 0 {
+			logs, logErr := process.Logs(ctx)
+			if logErr == nil {
+				body, _ := io.ReadAll(io.LimitReader(logs, 64<<10))
+				_ = logs.Close()
+				message := strings.ReplaceAll(string(body), privateURL.String(), "[private fixture database]")
+				message = strings.ReplaceAll(message, "fixture_only", "[fixture password]")
+				t.Logf("pinned migrator failed (%v): %s", args, message)
+			}
+		}
 		if wantSuccess {
 			require.Equal(t, 0, state.ExitCode)
 		} else {

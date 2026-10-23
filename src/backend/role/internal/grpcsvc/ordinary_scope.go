@@ -3,12 +3,13 @@ package grpcsvc
 import (
 	"context"
 	"errors"
+	"time"
 
-	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	rolev1 "voice.app/voice/role/v1"
+	"voice/backend/pkg/principal"
 	"voice/backend/role/internal/principalgrpc"
 	"voice/backend/role/internal/roleevents"
 	"voice/backend/role/internal/store"
@@ -91,7 +92,7 @@ func ordinaryStoreError(err error) error {
 	return status.Error(codes.Internal, err.Error())
 }
 
-func ordinarySpaceRPC[T any](ctx context.Context, s *RoleGRPC, rawSpaceID string, call func(*RoleGRPC) (T, error)) (T, error) {
+func ordinarySpaceRPC[T any](ctx context.Context, s *RoleGRPC, rawSpaceID string, call func(context.Context, *RoleGRPC) (T, error), targets ...string) (T, error) {
 	var zero T
 	if s == nil || s.Store == nil {
 		return zero, status.Error(codes.FailedPrecondition, "role persistence not configured")
@@ -105,10 +106,12 @@ func ordinarySpaceRPC[T any](ctx context.Context, s *RoleGRPC, rawSpaceID string
 	}
 	buffer := &ordinaryEventBuffer{target: s.Events}
 	var response T
-	err = s.Store.WithinSpaces(ctx, []uuid.UUID{spaceID}, func(scopedStore *store.RoleStore) error {
-		scoped := &RoleGRPC{Store: scopedStore, Events: buffer}
+	err = withNativeOrdinary(ctx, s, spaceID, targets, func(callCtx context.Context, scopedStore *store.RoleStore) error {
+		scoped := *s
+		scoped.Store = scopedStore
+		scoped.Events = buffer
 		var callErr error
-		response, callErr = call(scoped)
+		response, callErr = call(callCtx, &scoped)
 		return callErr
 	})
 	if err != nil {
@@ -118,78 +121,99 @@ func ordinarySpaceRPC[T any](ctx context.Context, s *RoleGRPC, rawSpaceID string
 	return response, nil
 }
 
-func ordinaryRoleRPC[T any](ctx context.Context, s *RoleGRPC, rawRoleID string, call func(*RoleGRPC) (T, error)) (T, error) {
+func ordinaryRoleRPC[T any](ctx context.Context, s *RoleGRPC, rawRoleID string, call func(context.Context, *RoleGRPC) (T, error)) (T, error) {
 	var zero T
 	if s == nil || s.Store == nil {
-		return zero, status.Error(codes.FailedPrecondition, "role persistence not configured")
-	}
-	if s.Store.Pool == nil {
-		return zero, status.Error(codes.Internal, "role persistence not configured")
+		return zero, status.Error(codes.Unavailable, "Role persistence unavailable")
 	}
 	roleID, err := parseUUIDField("role_id", rawRoleID)
 	if err != nil {
 		return zero, err
 	}
-	buffer := &ordinaryEventBuffer{target: s.Events}
-	var response T
-	err = s.Store.WithinRole(ctx, roleID, func(scopedStore *store.RoleStore) error {
-		scoped := &RoleGRPC{Store: scopedStore, Events: buffer}
-		var callErr error
-		response, callErr = call(scoped)
-		return callErr
-	})
+	role, err := s.Store.GetRoleByID(ctx, roleID)
 	if err != nil {
 		return zero, ordinaryScopeError(err)
 	}
-	buffer.flush()
-	return response, nil
+	if role == nil {
+		return zero, status.Error(codes.NotFound, "role not found")
+	}
+	return ordinarySpaceRPC(ctx, s, role.SpaceID.String(), call)
 }
-
 func (s *RoleGRPC) BootstrapSpaceRoles(ctx context.Context, req *rolev1.BootstrapSpaceRolesRequest) (*rolev1.BootstrapSpaceRolesResponse, error) {
-	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.BootstrapSpaceRolesResponse, error) {
-		return scoped.bootstrapSpaceRoles(ctx, req)
+	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.BootstrapSpaceRolesResponse, error) {
+		return scoped.bootstrapSpaceRoles(callCtx, req)
 	})
 }
 
 func (s *RoleGRPC) ListRoles(ctx context.Context, req *rolev1.ListRolesRequest) (*rolev1.ListRolesResponse, error) {
-	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.ListRolesResponse, error) {
-		return scoped.listRoles(ctx, req)
+	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.ListRolesResponse, error) {
+		return scoped.listRoles(callCtx, req)
 	})
 }
 
 func (s *RoleGRPC) CreateRole(ctx context.Context, req *rolev1.CreateRoleRequest) (*rolev1.CreateRoleResponse, error) {
-	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.CreateRoleResponse, error) {
-		return scoped.createRole(ctx, req)
+	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.CreateRoleResponse, error) {
+		return scoped.createRole(callCtx, req)
 	})
 }
 
 func (s *RoleGRPC) AssignRole(ctx context.Context, req *rolev1.AssignRoleRequest) (*rolev1.AssignRoleResponse, error) {
-	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.AssignRoleResponse, error) {
-		return scoped.assignRole(ctx, req)
-	})
+	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.AssignRoleResponse, error) {
+		return scoped.assignRole(callCtx, req)
+	}, req.GetProfileId())
 }
 
 func (s *RoleGRPC) RevokeRole(ctx context.Context, req *rolev1.RevokeRoleRequest) (*rolev1.RevokeRoleResponse, error) {
-	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.RevokeRoleResponse, error) {
-		return scoped.revokeRole(ctx, req)
-	})
+	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.RevokeRoleResponse, error) {
+		return scoped.revokeRole(callCtx, req)
+	}, req.GetProfileId())
 }
 
 func (s *RoleGRPC) GetMemberRoles(ctx context.Context, req *rolev1.GetMemberRolesRequest) (*rolev1.GetMemberRolesResponse, error) {
-	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.GetMemberRolesResponse, error) {
-		return scoped.getMemberRoles(ctx, req)
-	})
+	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.GetMemberRolesResponse, error) {
+		return scoped.getMemberRoles(callCtx, req)
+	}, req.GetProfileId())
 }
 
 func (s *RoleGRPC) CheckPermission(ctx context.Context, req *rolev1.CheckPermissionRequest) (*rolev1.CheckPermissionResponse, error) {
+	if req.GetPermissionName() == "SPACE_MANAGE_INVITES" {
+		return s.checkQualifiedInvites(ctx, req)
+	}
+	if req.GetPermissionName() == "SPACE_MANAGE_BOTS" {
+		return s.checkQualifiedBotManagement(ctx, req)
+	}
+	if req.GetPermissionName() == "SPACE_APPROVE_JOIN_REQUESTS" {
+		return s.checkQualifiedJoinApproval(ctx, req)
+	}
+	if req.GetPermissionName() == "SPACE_MANAGE_SETTINGS" {
+		return s.checkQualifiedSettings(ctx, req)
+	}
+	if p, verified := principal.FromContext(ctx); verified && (p.Issuer == "chat" || req.GetPermissionName() == "TEXT_CHAT_VIEW") {
+		if err := principalgrpc.RequireChatCurrentACL(ctx, req); err != nil {
+			return nil, err
+		}
+		ctx = context.WithValue(ctx, nativeMemberChatScopeKey{}, nativeMemberChatScope{profile: req.GetProfileId(), chat: req.GetChat().GetId(), voicePresent: req.VoiceRoomId != nil})
+		response, err := ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(ctx context.Context, scoped *RoleGRPC) (*rolev1.CheckPermissionResponse, error) {
+			return scoped.checkPermission(ctx, req)
+		}, req.GetProfileId())
+		if err != nil {
+			return nil, err
+		}
+		// Read only: after the owning COMMIT, the original credential must still
+		// be live. This never reinterprets a committed mutation or recovery fact.
+		if ctx.Err() != nil || !p.ExpiresAt.After(time.Now()) {
+			return nil, status.Error(codes.Unavailable, "Chat ACL decision expired")
+		}
+		return response, nil
+	}
 	if req.GetPermissionName() == "MEMBER_MANAGE_NICKNAMES" {
 		if err := principalgrpc.RequireNicknamePermission(ctx, req); err != nil {
 			return nil, err
 		}
 	}
-	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.CheckPermissionResponse, error) {
-		return scoped.checkPermission(ctx, req)
-	})
+	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.CheckPermissionResponse, error) {
+		return scoped.checkPermission(callCtx, req)
+	}, req.GetProfileId())
 }
 
 func (s *RoleGRPC) SetChatOverride(ctx context.Context, req *rolev1.SetChatOverrideRequest) (*rolev1.SetChatOverrideResponse, error) {
@@ -209,8 +233,8 @@ func (s *RoleGRPC) SetChatOverride(ctx context.Context, req *rolev1.SetChatOverr
 	if ctx.Err() != nil {
 		return nil, status.FromContextError(ctx.Err()).Err()
 	}
-	response, err := ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.SetChatOverrideResponse, error) {
-		return scoped.setChatOverride(ctx, req)
+	response, err := ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.SetChatOverrideResponse, error) {
+		return scoped.setChatOverride(callCtx, req)
 	})
 	if err != nil && ctx.Err() != nil {
 		return nil, status.FromContextError(ctx.Err()).Err()
@@ -219,38 +243,41 @@ func (s *RoleGRPC) SetChatOverride(ctx context.Context, req *rolev1.SetChatOverr
 }
 
 func (s *RoleGRPC) GetEffectivePermissions(ctx context.Context, req *rolev1.GetEffectivePermissionsRequest) (*rolev1.GetEffectivePermissionsResponse, error) {
-	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.GetEffectivePermissionsResponse, error) {
-		return scoped.getEffectivePermissions(ctx, req)
-	})
+	if chat := req.GetChat(); chat != nil {
+		ctx = context.WithValue(ctx, nativeMemberChatScopeKey{}, nativeMemberChatScope{profile: req.GetProfileId(), chat: chat.GetId(), voicePresent: req.VoiceRoomId != nil})
+	}
+	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.GetEffectivePermissionsResponse, error) {
+		return scoped.getEffectivePermissions(callCtx, req)
+	}, req.GetProfileId())
 }
 
 func (s *RoleGRPC) UpdateRole(ctx context.Context, req *rolev1.UpdateRoleRequest) (*rolev1.UpdateRoleResponse, error) {
-	return ordinaryRoleRPC(ctx, s, req.GetRoleId(), func(scoped *RoleGRPC) (*rolev1.UpdateRoleResponse, error) {
-		return scoped.updateRole(ctx, req)
+	return ordinaryRoleRPC(ctx, s, req.GetRoleId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.UpdateRoleResponse, error) {
+		return scoped.updateRole(callCtx, req)
 	})
 }
 
 func (s *RoleGRPC) DeleteRole(ctx context.Context, req *rolev1.DeleteRoleRequest) (*rolev1.DeleteRoleResponse, error) {
-	return ordinaryRoleRPC(ctx, s, req.GetRoleId(), func(scoped *RoleGRPC) (*rolev1.DeleteRoleResponse, error) {
-		return scoped.deleteRole(ctx, req)
+	return ordinaryRoleRPC(ctx, s, req.GetRoleId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.DeleteRoleResponse, error) {
+		return scoped.deleteRole(callCtx, req)
 	})
 }
 
 func (s *RoleGRPC) ReorderRoles(ctx context.Context, req *rolev1.ReorderRolesRequest) (*rolev1.ReorderRolesResponse, error) {
-	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.ReorderRolesResponse, error) {
-		return scoped.reorderRoles(ctx, req)
+	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.ReorderRolesResponse, error) {
+		return scoped.reorderRoles(callCtx, req)
 	})
 }
 
 func (s *RoleGRPC) RemoveChatOverride(ctx context.Context, req *rolev1.RemoveChatOverrideRequest) (*rolev1.RemoveChatOverrideResponse, error) {
-	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.RemoveChatOverrideResponse, error) {
-		return scoped.removeChatOverride(ctx, req)
+	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.RemoveChatOverrideResponse, error) {
+		return scoped.removeChatOverride(callCtx, req)
 	})
 }
 
 func (s *RoleGRPC) GetChatOverrides(ctx context.Context, req *rolev1.GetChatOverridesRequest) (*rolev1.GetChatOverridesResponse, error) {
-	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.GetChatOverridesResponse, error) {
-		return scoped.getChatOverrides(ctx, req)
+	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.GetChatOverridesResponse, error) {
+		return scoped.getChatOverrides(callCtx, req)
 	})
 }
 
@@ -271,8 +298,8 @@ func (s *RoleGRPC) SetVoiceRoomOverride(ctx context.Context, req *rolev1.SetVoic
 	if ctx.Err() != nil {
 		return nil, status.FromContextError(ctx.Err()).Err()
 	}
-	response, err := ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.SetVoiceRoomOverrideResponse, error) {
-		return scoped.setVoiceRoomOverride(ctx, req)
+	response, err := ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.SetVoiceRoomOverrideResponse, error) {
+		return scoped.setVoiceRoomOverride(callCtx, req)
 	})
 	if err != nil && ctx.Err() != nil {
 		return nil, status.FromContextError(ctx.Err()).Err()
@@ -281,31 +308,31 @@ func (s *RoleGRPC) SetVoiceRoomOverride(ctx context.Context, req *rolev1.SetVoic
 }
 
 func (s *RoleGRPC) RemoveVoiceRoomOverride(ctx context.Context, req *rolev1.RemoveVoiceRoomOverrideRequest) (*rolev1.RemoveVoiceRoomOverrideResponse, error) {
-	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.RemoveVoiceRoomOverrideResponse, error) {
-		return scoped.removeVoiceRoomOverride(ctx, req)
+	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.RemoveVoiceRoomOverrideResponse, error) {
+		return scoped.removeVoiceRoomOverride(callCtx, req)
 	})
 }
 
 func (s *RoleGRPC) GetVoiceRoomOverrides(ctx context.Context, req *rolev1.GetVoiceRoomOverridesRequest) (*rolev1.GetVoiceRoomOverridesResponse, error) {
-	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.GetVoiceRoomOverridesResponse, error) {
-		return scoped.getVoiceRoomOverrides(ctx, req)
+	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.GetVoiceRoomOverridesResponse, error) {
+		return scoped.getVoiceRoomOverrides(callCtx, req)
 	})
 }
 
 func (s *RoleGRPC) SetDefaultJoinRole(ctx context.Context, req *rolev1.SetDefaultJoinRoleRequest) (*rolev1.SetDefaultJoinRoleResponse, error) {
-	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.SetDefaultJoinRoleResponse, error) {
-		return scoped.setDefaultJoinRole(ctx, req)
+	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.SetDefaultJoinRoleResponse, error) {
+		return scoped.setDefaultJoinRole(callCtx, req)
 	})
 }
 
 func (s *RoleGRPC) GetDefaultJoinRole(ctx context.Context, req *rolev1.GetDefaultJoinRoleRequest) (*rolev1.GetDefaultJoinRoleResponse, error) {
-	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.GetDefaultJoinRoleResponse, error) {
-		return scoped.getDefaultJoinRole(ctx, req)
+	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.GetDefaultJoinRoleResponse, error) {
+		return scoped.getDefaultJoinRole(callCtx, req)
 	})
 }
 
 func (s *RoleGRPC) DeleteRolesCreatedByProfile(ctx context.Context, req *rolev1.DeleteRolesCreatedByProfileRequest) (*rolev1.DeleteRolesCreatedByProfileResponse, error) {
-	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(scoped *RoleGRPC) (*rolev1.DeleteRolesCreatedByProfileResponse, error) {
-		return scoped.deleteRolesCreatedByProfile(ctx, req)
+	return ordinarySpaceRPC(ctx, s, req.GetSpaceId(), func(callCtx context.Context, scoped *RoleGRPC) (*rolev1.DeleteRolesCreatedByProfileResponse, error) {
+		return scoped.deleteRolesCreatedByProfile(callCtx, req)
 	})
 }

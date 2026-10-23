@@ -46,8 +46,10 @@ func targetTLS(t *testing.T) (tls.Certificate, []byte, []byte) {
 }
 
 func TestProtectedRuntimeRealTLSJWKSAndSharedReplay(t *testing.T) {
-	for _, target := range []string{"chat", "space"} {
-		t.Run(target, func(t *testing.T) {
+	for _, route := range []struct{ target, name string }{{"chat", "ValidateRoleOverrideTarget"}, {"space", "ValidateRoleOverrideTarget"}, {"space", "GetMemberAdmissionAuthority"}} {
+		t.Run(route.target+"/"+route.name, func(t *testing.T) {
+			target := route.target
+			method := "/voice." + target + ".v1." + map[string]string{"chat": "ChatService", "space": "SpaceService"}[target] + "/" + route.name
 			ctx := context.Background()
 			cert, certPEM, keyPEM := targetTLS(t)
 			dir := t.TempDir()
@@ -85,13 +87,13 @@ func TestProtectedRuntimeRealTLSJWKSAndSharedReplay(t *testing.T) {
 				require.NoError(t, err)
 				server := grpc.NewServer(runtime.ServerOptions()...)
 				serviceName := "voice." + target + ".v1." + map[string]string{"chat": "ChatService", "space": "SpaceService"}[target]
-				server.RegisterService(&grpc.ServiceDesc{ServiceName: serviceName, HandlerType: (*interface{})(nil), Methods: []grpc.MethodDesc{{MethodName: "ValidateRoleOverrideTarget", Handler: func(srv any, ctx context.Context, decode func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
+				server.RegisterService(&grpc.ServiceDesc{ServiceName: serviceName, HandlerType: (*interface{})(nil), Methods: []grpc.MethodDesc{{MethodName: route.name, Handler: func(srv any, ctx context.Context, decode func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
 					request := new(wrapperspb.StringValue)
 					if err := decode(request); err != nil {
 						return nil, err
 					}
-					return interceptor(ctx, request, &grpc.UnaryServerInfo{FullMethod: Method(target)}, func(ctx context.Context, _ any) (any, error) {
-						if err := Require(ctx, target, request); err != nil {
+					return interceptor(ctx, request, &grpc.UnaryServerInfo{FullMethod: method}, func(ctx context.Context, _ any) (any, error) {
+						if err := requireMethod(ctx, target, method, request); err != nil {
 							return nil, err
 						}
 						stores.Add(1)
@@ -119,14 +121,14 @@ func TestProtectedRuntimeRealTLSJWKSAndSharedReplay(t *testing.T) {
 				hash, err := principal.RequestHash(body)
 				require.NoError(t, err)
 				id := uuid.NewString()
-				token, err := signer.IssueService(principal.ServiceInput{Audience: target, RPC: Method(target), RequestID: id, RequestHash: hash})
+				token, err := signer.IssueService(principal.ServiceInput{Audience: target, RPC: method, RequestID: id, RequestHash: hash})
 				require.NoError(t, err)
 				return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token, "x-request-id", id))
 			}
 			call := func(conn *grpc.ClientConn, ctx context.Context, body proto.Message) error {
 				bounded, cancel := context.WithTimeout(ctx, time.Second)
 				defer cancel()
-				return conn.Invoke(bounded, Method(target), body, new(emptypb.Empty))
+				return conn.Invoke(bounded, method, body, new(emptypb.Empty))
 			}
 			once := signed("role", active, "active", request)
 			require.NoError(t, call(ca, once, request))

@@ -146,14 +146,16 @@ def generate(destination):
                         "-extfile", extensions, "-out", root / f"tls/{leaf}.crt")
                 csr.unlink()
             extensions.unlink()
-            for serial, service in enumerate(("space", "gameintegration", "voice", "matchmaking", "chat", "auth-jwks"), 100):
+            for serial, service in enumerate(("space", "gameintegration", "voice", "matchmaking", "chat", "auth-jwks", "role", "bot"), 100):
                 client_key = root / f"tls/{service}-client.key"
                 client_csr = root / f"tls/{service}-client.csr"
                 client_extensions = root / "client.ext"
                 client_extensions.write_text(
                     "basicConstraints=critical,CA:FALSE\n"
                     "keyUsage=critical,digitalSignature\n"
-                    "extendedKeyUsage=clientAuth\n", encoding="ascii")
+                    "extendedKeyUsage=clientAuth\n"
+                    + ("subjectAltName=URI:spiffe://voice.local/phase0/bot\n" if service == "bot" else ""),
+                    encoding="ascii")
                 command("openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes",
                         "-keyout", client_key, "-out", client_csr, "-subj", f"/CN={service}")
                 command("openssl", "x509", "-req", "-in", client_csr, "-CA", ca_cert,
@@ -192,6 +194,10 @@ def generate(destination):
                     "-inkey", root / "tls/auth-jwks-client.key",
                     "-in", root / "tls/auth-jwks-client.crt", "-certfile", ca_cert,
                     "-out", root / "auth-jwks-client.p12", "-passout", "pass:phase0-fixture")
+            # Bot publishes keys to both the existing GIS consumers and the
+            # native Space/Role/Auth installation consumers. RPC listener CA
+            # scopes remain independent; this bundle is only for JWKS HTTPS.
+            (root / "ca/bot-jwks-client-ca.crt").write_bytes(ca_cert.read_bytes() + gis_ca_cert.read_bytes())
             ca_key.unlink()
             gis_ca_key.unlink()
             lifecycle_ca_key.unlink()

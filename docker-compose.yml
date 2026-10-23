@@ -487,6 +487,7 @@ services:
       MIGRATIONS_DIR: /migrations
       SPACE_NATIVE_PRIOR_EVIDENCE: /native-install-evidence/prior.jsonl
     volumes:
+      - bot_membership_source:/native-bot-evidence
       - ./docker/postgres:/schema:ro
       - ./src/backend/migrations:/migrations:ro
       - ${SPACE_NATIVE_EVIDENCE_DIR:-./tmp/native-space-installer}:/native-install-evidence:ro
@@ -1572,6 +1573,7 @@ services:
       start_period: 30s
 
 volumes:
+  bot_membership_source:
   realtime_principal_keys:
   realtime_principal_tls:
   chat_realtime_principal_tls:

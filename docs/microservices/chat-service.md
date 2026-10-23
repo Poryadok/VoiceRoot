@@ -94,6 +94,33 @@ do not register this service. Federation-only authority remains unchanged.
 Serving this producer is not activation of the downstream permission/admission
 vertical or permission to deploy.
 
+`GetBotChatScopeAuthority` is a separate Bot-only read under BE170. Its dedicated
+request has the same four scope fields/tags and returns `scope` plus the raw32 SHA256 of the deterministic
+complete request. Only `service:bot` may call this exact method through its own
+`CHAT_SCOPE_BOT_*` configuration, using the same mTLS/JWKS/replay configuration
+keys above. Bot cannot call the Role/Space read; their listeners cannot call the
+Bot read. No user, bot-actor or mixed identity supplies this authority.
+
+The Bot read may also return a retained head whose chat row is absent,
+`present=false`, last Space matches and incarnation/revision remain valid.
+Such a response has `exists=false`, `live=false` and unspecified type/managed
+kind; the head does not retain those historical facts. Missing/foreign/DM or
+standalone resources yield indistinguishable NotFound. Contradictory head or
+lifecycle state yields Unavailable. Current resource liveness reports the
+independent lifecycle state; managed kind remains an explicit separate fact.
+No new schema, source mutation, public reparent or identity reuse API is added.
+
+This is a point-in-time observation, not a reservation or cleanup receipt. Bot
+must persist exact request/response bytes and source tuple before newly adding
+or enabling whitelist targets, retaining existing owner/manageBots decisions.
+New targets require a present matching group/channel and LIVE lifecycle. A
+retired observation can qualify historical cleanup scope, never prove effects
+completed. Messaging independently validates current native scope through its
+existing authorized Chat data source before first cleanup; exact completed
+replays preserve their original result and later human repins. Source revision
+changes require fresh qualification while preserving original evidence. A read
+does not serialize unsupported concurrent cross-database parent/identity rewrites.
+
 **Effective-membership revision/export target.**
 
 The [ListThreads effective-membership contract v1](../testing/listthreads-versioned-readmodel-exec-plan.md#effective-membership-contract-v1)

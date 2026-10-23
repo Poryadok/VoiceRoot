@@ -23,9 +23,11 @@ import (
 	"voice/backend/bot/internal/dispatch"
 	"voice/backend/bot/internal/gameintegrationproof"
 	grpcsvc "voice/backend/bot/internal/grpcsvc"
+	"voice/backend/bot/internal/installprincipal"
 	"voice/backend/bot/internal/principalgrpc"
 	"voice/backend/bot/internal/principalruntime"
 	"voice/backend/bot/internal/ratelimit"
+	"voice/backend/bot/internal/spacemembership"
 	"voice/backend/bot/internal/store"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
@@ -46,6 +48,26 @@ import (
 const serviceName = "bot"
 
 func main() {
+	ownedInstallation := &installationOwner{}
+	defer ownedInstallation.Close()
+	fatalf := func(format string, args ...any) { ownedInstallation.Close(); log.Fatalf(format, args...) }
+	installationFailures := make(chan error, 1)
+	installationConfig, installationEnabled, configErr := spacemembership.LoadConfig(os.LookupEnv)
+	if configErr != nil {
+		fatalf("Bot installation config: %v", configErr)
+	}
+	adminConfig, adminEnabled, configErr := installprincipal.LoadConfig(os.LookupEnv)
+	if configErr != nil || adminEnabled != installationEnabled {
+		fatalf("Bot installation administrator config is incomplete: %v", configErr)
+	}
+	var installationAuth spacemembership.Endpoint
+	if installationEnabled {
+		installationAuth, configErr = spacemembership.LoadEndpoint(os.LookupEnv, "BOT_INSTALL_AUTH_")
+		if configErr != nil {
+			fatalf("Bot installation Auth config: %v", configErr)
+		}
+	}
+
 	logger := httpserver.NewLogger(serviceName)
 	metricsReg := prometheus.NewRegistry()
 	addr := ":8080"
@@ -58,7 +80,13 @@ func main() {
 	}
 	principalConfig, principalEnabled, err := principalruntime.ConfigFromEnv(os.Getenv)
 	if err != nil {
-		log.Fatalf("Bot service-principal configuration: %v", err)
+		fatalf("Bot service-principal configuration: %v", err)
+	}
+	if installationEnabled {
+		if !principalEnabled || principalConfig.BotSigningKeysDir == "" || principalConfig.BotActiveKID == "" {
+			fatalf("Bot installation requires canonical two-key signer")
+		}
+		principalConfig.DeferSpaceJWKS = true
 	}
 	var botPrincipalRuntime *principalruntime.Runtime
 	if principalEnabled {
@@ -69,7 +97,7 @@ func main() {
 		botPrincipalRuntime, err = principalruntime.New(ctx, principalConfig)
 		cancel()
 		if err != nil {
-			log.Fatalf("Bot service-principal runtime: %v", err)
+			fatalf("Bot service-principal runtime: %v", err)
 		}
 		defer func() { _ = botPrincipalRuntime.Close() }()
 	}
@@ -85,13 +113,13 @@ func main() {
 		pool, err := postgres.NewPool(ctx, dbURL)
 		cancel()
 		if err != nil {
-			log.Fatalf("postgres: %v", err)
+			fatalf("postgres: %v", err)
 		}
 		defer pool.Close()
 
 		lis, err := net.Listen("tcp", grpcAddr)
 		if err != nil {
-			log.Fatalf("grpc listen: %v", err)
+			fatalf("grpc listen: %v", err)
 		}
 		st := &store.BotStore{Pool: pool}
 		authorityBots = st
@@ -101,49 +129,61 @@ func main() {
 			svc.PrincipalIssuer = botPrincipalRuntime.Issuer()
 			tlsConfig, err := botPrincipalRuntime.GameEventServerTLSConfig()
 			if err != nil {
-				log.Fatalf("Bot game-event TLS: %v", err)
+				fatalf("Bot game-event TLS: %v", err)
 			}
 			listener, err := net.Listen("tcp", principalConfig.BotGameEventListen)
 			if err != nil {
-				log.Fatalf("Bot game-event listen: %v", err)
+				fatalf("Bot game-event listen: %v", err)
 			}
 			gameEventGRPC = grpc.NewServer(grpc.InTapHandle(grpcsvc.PollEventsTransportTap()), grpc.Creds(credentials.NewTLS(tlsConfig)), grpc.UnaryInterceptor(principalgrpc.GameEventUnaryInterceptor(botPrincipalRuntime)))
 			botv1.RegisterBotServiceServer(gameEventGRPC, svc)
 			go func() {
 				if err := gameEventGRPC.Serve(listener); err != nil {
-					log.Fatalf("Bot game-event grpc serve: %v", err)
+					fatalf("Bot game-event grpc serve: %v", err)
 				}
 			}()
 			botPrincipalJWKS, err = botPrincipalRuntime.JWKSHTTPServer()
 			if err != nil {
-				log.Fatalf("Bot principal JWKS: %v", err)
+				fatalf("Bot principal JWKS: %v", err)
+			}
+			jwksListener, err := net.Listen("tcp", botPrincipalJWKS.Addr)
+			if err != nil {
+				fatalf("Bot principal JWKS listen: %v", err)
 			}
 			go func() {
-				if err := botPrincipalJWKS.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-					log.Fatalf("Bot principal JWKS serve: %v", err)
+				if err := botPrincipalJWKS.ServeTLS(jwksListener, "", ""); err != nil && err != http.ErrServerClosed {
+					fatalf("Bot principal JWKS serve: %v", err)
 				}
 			}()
 			logger.Info("Bot game-event mTLS listener and principal JWKS enabled", slog.String("grpc_addr", principalConfig.BotGameEventListen), slog.String("jwks_addr", principalConfig.BotJWKSListen))
 			if principalConfig.SpaceLifecycleEnabled() {
 				lifecycleTLS, err := botPrincipalRuntime.SpaceLifecycleServerTLSConfig()
 				if err != nil {
-					log.Fatalf("Bot Space lifecycle TLS: %v", err)
+					fatalf("Bot Space lifecycle TLS: %v", err)
 				}
 				lifecycleListener, err := net.Listen("tcp", botPrincipalRuntime.SpaceLifecycleListenAddr())
 				if err != nil {
-					log.Fatalf("Bot Space lifecycle listen: %v", err)
+					fatalf("Bot Space lifecycle listen: %v", err)
 				}
 				spaceLifecycleGRPC = grpc.NewServer(grpc.InTapHandle(grpcsvc.PollEventsTransportTap()), grpc.Creds(credentials.NewTLS(lifecycleTLS)), grpc.UnaryInterceptor(principalgrpc.SpaceLifecycleUnaryInterceptor(botPrincipalRuntime)))
 				botv1.RegisterBotServiceServer(spaceLifecycleGRPC, svc)
 				go func() {
 					if err := spaceLifecycleGRPC.Serve(lifecycleListener); err != nil {
-						log.Fatalf("Bot Space lifecycle grpc serve: %v", err)
+						fatalf("Bot Space lifecycle grpc serve: %v", err)
 					}
 				}()
 				logger.Info("Bot Space lifecycle mTLS listener enabled", slog.String("grpc_addr", principalConfig.BotSpaceLifecycleListen))
 			}
 		}
 		wireDownstream(svc, logger)
+		if installationEnabled {
+			if err := ownedInstallation.construct(func(ctx context.Context) (*installationRuntime, error) {
+				return newInstallationRuntime(ctx, installationConfig, adminConfig, installationAuth, botPrincipalRuntime, pool, svc)
+			}); err != nil {
+				fatalf("Bot installation startup: %v", err)
+			}
+			ownedInstallation.start(installationFailures)
+		}
 		svc.RehydrateDeferred(context.Background())
 		startDeferredTTLSweeper(svc, logger)
 		slashWorkerCtx, stopSlashWorker := context.WithCancel(context.Background())
@@ -154,10 +194,10 @@ func main() {
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			pub, err := botevents.NewJetStreamPublisher(natsURL)
 			if err != nil {
-				log.Fatalf("nats bot events: %v", err)
+				fatalf("nats bot events: %v", err)
 			}
 			if err := pub.Validate(); err != nil {
-				log.Fatalf("nats bot events bootstrap: %v", err)
+				fatalf("nats bot events bootstrap: %v", err)
 			}
 			pub.Logger = logger
 			svc.Events = pub
@@ -167,7 +207,7 @@ func main() {
 			msgHandler := &consumer.MessageHandler{Store: st, Client: http.DefaultClient, Logger: logger}
 			stopConsumer, err := consumer.StartMessageEventsConsumer(context.Background(), msgHandler, natsURL, logger)
 			if err != nil {
-				log.Fatalf("bot message consumer bind: %v", err)
+				fatalf("bot message consumer bind: %v", err)
 			}
 			defer stopConsumer()
 			logger.Info("bot message consumer enabled")
@@ -187,7 +227,7 @@ func main() {
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcAddr))
 			if err := grpcSrv.Serve(lis); err != nil {
-				log.Fatalf("grpc serve: %v", err)
+				fatalf("grpc serve: %v", err)
 			}
 		}()
 	} else {
@@ -196,7 +236,7 @@ func main() {
 
 	proofKey, err := gameintegrationproof.DecodeWorkloadKey(os.Getenv("GAME_INTEGRATION_BOT_WORKLOAD_KEY_B64"))
 	if err != nil {
-		log.Fatalf("Bot authority proof configuration: %v", err)
+		fatalf("Bot authority proof configuration: %v", err)
 	}
 	var proofNonces workloadproof.NonceStore
 	var proofRedis *redis.Client
@@ -227,9 +267,12 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	select {
+	case err := <-installationFailures:
+		ownedInstallation.Close()
+		fatalf("%v", err)
 	case err := <-errCh:
 		if err != nil && err != http.ErrServerClosed {
-			log.Fatal(err)
+			fatalf("%v", err)
 		}
 	case <-stop:
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
@@ -245,11 +288,11 @@ func main() {
 		}
 		if botPrincipalJWKS != nil {
 			if err := botPrincipalJWKS.Shutdown(ctx); err != nil {
-				log.Fatal(err)
+				fatalf("%v", err)
 			}
 		}
 		if err := server.Shutdown(ctx); err != nil {
-			log.Fatal(err)
+			fatalf("%v", err)
 		}
 	}
 }

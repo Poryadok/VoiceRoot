@@ -21,6 +21,7 @@ import (
 )
 
 type Config struct {
+	DeferSpaceJWKS                                                                                  bool
 	GISJWKSURL, GISTLSCert, GISTLSKey, GISCAFile, ReplayRedisURL                                    string
 	BotPrivateKeyFile, BotKeyID, BotJWKSListen, BotTLSCert, BotTLSKey                               string
 	BotSigningKeysDir, BotActiveKID                                                                 string
@@ -224,13 +225,15 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 			spaceTransport.CloseIdleConnections()
 			return nil, err
 		}
-		warmCtx, warmCancel := context.WithTimeout(ctx, 2*time.Second)
-		err = spaceResolver.Refresh(warmCtx, "space")
-		warmCancel()
-		if err != nil {
-			_ = redisClient.Close()
-			spaceTransport.CloseIdleConnections()
-			return nil, fmt.Errorf("initial Space principal JWKS refresh: %w", err)
+		if !cfg.DeferSpaceJWKS {
+			warmCtx, warmCancel := context.WithTimeout(ctx, 2*time.Second)
+			err = spaceResolver.Refresh(warmCtx, "space")
+			warmCancel()
+			if err != nil {
+				_ = redisClient.Close()
+				spaceTransport.CloseIdleConnections()
+				return nil, fmt.Errorf("initial Space principal JWKS refresh: %w", err)
+			}
 		}
 		spaceCert, err := tls.LoadX509KeyPair(cfg.BotSpaceLifecycleCert, cfg.BotSpaceLifecycleKey)
 		if err != nil {

@@ -32,6 +32,7 @@ import (
 	"voice/backend/pkg/socialprincipal"
 	"voice/backend/space/internal/auditprincipal"
 	"voice/backend/space/internal/authctx"
+	"voice/backend/space/internal/botmembershipprincipal"
 	"voice/backend/space/internal/chatcreation"
 	grpcsvc "voice/backend/space/internal/grpcsvc"
 	"voice/backend/space/internal/lifecycleprincipal"
@@ -54,6 +55,13 @@ const (
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	botConfig, botEnabled, botErr := botmembershipprincipal.LoadFromEnv()
+	if botErr != nil {
+		log.Fatalf("Bot membership principal config: %v", botErr)
+	}
+	if botEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+		log.Fatal("Bot membership listener requires DATABASE_URL")
+	}
 	targetConfig, targetEnabled, targetErr := roleoverrideprincipal.LoadFromEnv("space")
 	if targetErr != nil {
 		log.Fatalf("Role target principal config: %v", targetErr)
@@ -162,6 +170,7 @@ func main() {
 	var deletionRuntime *lifecycleRuntime
 	creatorAuthority := &creatorRuntimeOwner{}
 	var banRetentionRuntime *accountBanRetentionRuntime
+	var spaceStore *store.SpaceStore
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
 		pool, err := postgres.NewPool(ctx, dbURL)
@@ -188,7 +197,7 @@ func main() {
 		}
 		defer mutationLockPool.Close()
 
-		spaceStore := &store.SpaceStore{Pool: pool}
+		spaceStore = &store.SpaceStore{Pool: pool}
 		if captureEnabled {
 			captureRuntime, err := newUserCaptureRuntime(runCtx, captureConfig, principalIssuer)
 			if err != nil {
@@ -572,12 +581,28 @@ func main() {
 	go func() {
 		errCh <- server.ListenAndServe()
 	}()
+	// Start only after local JWKS server startup and all earlier startup checks.
+	// Its cancellation/Stop path owns the listener, replay client and resolver.
+	var botRuntime *botMembershipRuntime
+	if botEnabled {
+		botRuntime, err = newBotMembershipRuntime(runCtx, botConfig, spaceStore)
+		if err != nil {
+			failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("Bot membership runtime: %v", cause) })
+		}
+		defer botRuntime.Stop()
+		go func() {
+			if cause, ok := <-botRuntime.Errors(); ok && cause != nil {
+				errCh <- cause
+			}
+		}()
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	select {
 	case err := <-errCh:
 		runCancel()
+		botRuntime.Stop()
 		banRetentionRuntime.Stop()
 		outboxRuntime.Stop()
 		recoveryRuntime.Stop()
@@ -587,6 +612,7 @@ func main() {
 		}
 	case <-stop:
 		runCancel()
+		botRuntime.Stop()
 		banRetentionRuntime.Stop()
 		outboxRuntime.Stop()
 		recoveryRuntime.Stop()

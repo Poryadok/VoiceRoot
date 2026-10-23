@@ -52,7 +52,7 @@ services:
     environment:
       # Disposable local/CI credential for the existing canonical resolver.
       SPACE_VOICE_S2S_TOKEN: phase0-space-voice-fixture
-      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","role":"https://role:8443/.well-known/jwks.json","chat":"https://chat:8443/.well-known/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json"}'
+      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","role":"https://role:8443/.well-known/jwks.json","chat":"https://chat:8443/.well-known/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json","bot":"https://bot:8444/.well-known/principal-jwks.json"}'
       SPACE_VOICE_COMMUNICATION_GRPC_LISTEN: :9094
       SPACE_VOICE_COMMUNICATION_REPLAY_REDIS_ADDR: redis:6379
       SPACE_VOICE_COMMUNICATION_TLS_CERT_FILE: /run/phase0/space-lifecycle.crt
@@ -77,8 +77,9 @@ services:
       AUTH_GRPC_TLS_CERT_FILE: /run/phase0/auth.crt
       AUTH_GRPC_TLS_KEY_FILE: /run/phase0/auth.key
       AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE: /run/phase0/ca.crt
-      S2S_JWKS_URLS_JSON: '{"gateway":"https://phase0-jwks:8443/gateway/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json"}'
-      JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/run/phase0/truststore.p12 -Djavax.net.ssl.trustStorePassword=phase0-fixture -Djavax.net.ssl.trustStoreType=PKCS12
+      AUTH_BOT_SESSION_FLOOR_ALLOWED_CLIENT_URI_SAN: spiffe://voice.local/phase0/bot
+      S2S_JWKS_URLS_JSON: '{"gateway":"https://phase0-jwks:8443/gateway/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json","chat":"https://chat:8443/.well-known/jwks.json","role":"https://role:8443/.well-known/jwks.json","bot":"https://bot:8444/.well-known/principal-jwks.json"}'
+      JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/run/phase0/truststore.p12 -Djavax.net.ssl.trustStorePassword=phase0-fixture -Djavax.net.ssl.trustStoreType=PKCS12 -Djavax.net.ssl.keyStore=/run/phase0/auth-jwks-client.p12 -Djavax.net.ssl.keyStorePassword=phase0-fixture -Djavax.net.ssl.keyStoreType=PKCS12
     depends_on:
       phase0-jwks:
         condition: service_started
@@ -87,6 +88,7 @@ services:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/auth.key:/run/phase0/auth.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/truststore.p12:/run/phase0/truststore.p12:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/auth-jwks-client.p12:/run/phase0/auth-jwks-client.p12:ro
 
   gateway:
     user: "0:0"
@@ -209,7 +211,7 @@ services:
       ROLE_PRINCIPAL_TLS_KEY_FILE: /run/phase0/role.key
       ROLE_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
       ROLE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
-      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json","gameintegration":"https://gameintegration:8443/internal/v1/principal/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json"}'
+      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json","gameintegration":"https://gameintegration:8443/internal/v1/principal/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json","gateway":"https://phase0-jwks:8443/gateway-bootstrap/jwks.json","chat":"https://chat:8443/.well-known/jwks.json","bot":"https://bot:8444/.well-known/principal-jwks.json"}'
       S2S_JWKS_CA_FILE: /run/phase0/ca.crt
     depends_on:
       redis:

@@ -133,6 +133,14 @@ func (s *RoleGRPC) assignRole(ctx context.Context, req *rolev1.AssignRoleRequest
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
+	if native, err := s.Store.NativeMembershipRequired(ctx); err != nil {
+		return nil, ordinaryStoreError(err)
+	} else if native {
+		// ROLE-MUTATION-OPERATION-v1 c5: compatibility is an invocation of the
+		// SAME qualified durable core with a new receiver-owned operation ID.
+		// Until that core is assembled, never ACK an unresolved raw tuple.
+		return nil, status.Error(codes.Unavailable, "qualified Role mutation core not assembled")
+	}
 	actor, ok := authctx.ProfileID(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
@@ -178,6 +186,11 @@ func (s *RoleGRPC) assignRole(ctx context.Context, req *rolev1.AssignRoleRequest
 func (s *RoleGRPC) revokeRole(ctx context.Context, req *rolev1.RevokeRoleRequest) (*rolev1.RevokeRoleResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
+	}
+	if native, err := s.Store.NativeMembershipRequired(ctx); err != nil {
+		return nil, ordinaryStoreError(err)
+	} else if native {
+		return nil, status.Error(codes.Unavailable, "qualified Role mutation core not assembled")
 	}
 	actor, ok := authctx.ProfileID(ctx)
 	if !ok {
@@ -235,7 +248,7 @@ func (s *RoleGRPC) getMemberRoles(ctx context.Context, req *rolev1.GetMemberRole
 	}
 	rows, err := s.Store.GetMemberRoles(ctx, spaceID, profileID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, ordinaryStoreError(err)
 	}
 	out := make([]*rolev1.Role, 0, len(rows))
 	for i := range rows {
@@ -273,7 +286,7 @@ func (s *RoleGRPC) checkPermission(ctx context.Context, req *rolev1.CheckPermiss
 	}
 	mask, err := s.Store.GetEffectiveMask(ctx, spaceID, profileID, chatID, voiceRoomID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, ordinaryStoreError(err)
 	}
 	allowed, err := permissions.HasPermission(mask, req.GetPermissionName())
 	if err != nil {
@@ -353,7 +366,7 @@ func (s *RoleGRPC) getEffectivePermissions(ctx context.Context, req *rolev1.GetE
 	}
 	mask, err := s.Store.GetEffectiveMask(ctx, spaceID, profileID, chatID, voiceRoomID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, ordinaryStoreError(err)
 	}
 	return &rolev1.GetEffectivePermissionsResponse{
 		PermissionSet: &rolev1.PermissionSet{

@@ -36,6 +36,16 @@ func main() {
 	if issuerErr != nil {
 		log.Fatalf("Role principal issuer: %v", issuerErr)
 	}
+	memberAuthority, closeMemberAuthority, memberAuthorityErr := loadMemberAuthorityClient(roleIssuer)
+	if memberAuthorityErr != nil {
+		log.Fatalf("Role membership authority: %v", memberAuthorityErr)
+	}
+	defer closeMemberAuthority()
+	sessionFloor, closeSessionFloor, sessionFloorErr := loadRoleSessionFloor(roleIssuer)
+	if sessionFloorErr != nil {
+		log.Fatalf("Role Auth session floor: %v", sessionFloorErr)
+	}
+	defer closeSessionFloor()
 	targetClients, closeTargets, targetErr := loadOverrideTargetClients(roleIssuer)
 	if targetErr != nil {
 		log.Fatalf("Role target clients: %v", targetErr)
@@ -60,6 +70,9 @@ func main() {
 	}
 	if principalEnabled && dbURL == "" {
 		log.Fatal("principal listener requires DATABASE_URL")
+	}
+	if (memberAuthority != nil || sessionFloor != nil) && !principalEnabled {
+		log.Fatal("Role authority clients require protected principal listener")
 	}
 	var grpcSrv, principalSrv *grpc.Server
 	if dbURL != "" {
@@ -103,7 +116,7 @@ func main() {
 		}
 		var principal *principalruntime.Runtime
 		if principalEnabled {
-			principal, err = principalruntime.New(context.Background(), principalConfig)
+			principal, err = principalruntime.NewWithSessionEpochChecker(context.Background(), principalConfig, sessionFloor)
 			if err != nil {
 				log.Fatalf("principal runtime: %v", err)
 			}
@@ -115,7 +128,7 @@ func main() {
 			}
 		}
 		// Construct shared metrics once; both listeners use the same collectors.
-		grpcSrv, principalSrv = newRoleGRPCServers(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg)), &grpcsvc.RoleGRPC{Store: roleStore, Events: events, OverrideTargets: targetClients}, principal)
+		grpcSrv, principalSrv = newRoleGRPCServers(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg)), &grpcsvc.RoleGRPC{Store: roleStore, Events: events, OverrideTargets: targetClients, MemberAuthority: memberAuthority}, principal)
 		if principalSrv != nil {
 			protectedListener, err := net.Listen("tcp", principalConfig.ListenAddr)
 			if err != nil {

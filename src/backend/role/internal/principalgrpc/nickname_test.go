@@ -12,7 +12,7 @@ import (
 )
 
 func TestOrdinaryRoleListenerNicknameDeniedOtherPermissionPreserved(t *testing.T) {
-	for _, permission := range []string{"MEMBER_MANAGE_NICKNAMES", "SPACE_MANAGE_INVITES"} {
+	for _, permission := range []string{"MEMBER_MANAGE_NICKNAMES", "SPACE_MANAGE_ROLES"} {
 		called := false
 		req := &rolev1.CheckPermissionRequest{SpaceId: uuid.NewString(), ProfileId: uuid.NewString(), PermissionName: permission}
 		_, err := OwnershipUnaryInterceptor(nil)(context.Background(), req, &grpc.UnaryServerInfo{FullMethod: rolev1.RoleService_CheckPermission_FullMethodName}, func(context.Context, any) (any, error) { called = true; return nil, nil })

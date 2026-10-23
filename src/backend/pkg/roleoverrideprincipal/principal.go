@@ -22,6 +22,12 @@ func Method(target string) string {
 	}
 }
 
+const MemberAdmissionAuthorityMethod = "/voice.space.v1.SpaceService/GetMemberAdmissionAuthority"
+
+func allowsMethod(target, method string) bool {
+	return Method(target) != "" && (method == Method(target) || (target == "space" && method == MemberAdmissionAuthorityMethod))
+}
+
 func CanonicalID(raw string) (uuid.UUID, error) {
 	id, err := uuid.Parse(raw)
 	if err != nil || id == uuid.Nil || id.String() != raw {
@@ -33,6 +39,16 @@ func CanonicalID(raw string) (uuid.UUID, error) {
 // Require repeats the verified workload and complete body binding at the
 // domain boundary, including direct calls that do not traverse an interceptor.
 func Require(ctx context.Context, target string, req proto.Message) error {
+	return requireMethod(ctx, target, Method(target), req)
+}
+
+// RequireMemberAdmissionAuthority grants only a Role-owned Space observation.
+// It is not a user membership capability or permission decision.
+func RequireMemberAdmissionAuthority(ctx context.Context, req proto.Message) error {
+	return requireMethod(ctx, "space", MemberAdmissionAuthorityMethod, req)
+}
+
+func requireMethod(ctx context.Context, target, method string, req proto.Message) error {
 	p, ok := principal.FromContext(ctx)
 	if !ok {
 		return status.Error(codes.Unauthenticated, "verified Role principal required")
@@ -45,7 +61,7 @@ func Require(ctx context.Context, target string, req proto.Message) error {
 	}
 	hash, err := principal.RequestHash(req)
 	_, idErr := CanonicalID(p.RequestID)
-	if err != nil || idErr != nil || Method(target) == "" || p.Audience != target || p.RPC != Method(target) || p.RequestHash != hash || p.AccountID != "" || p.ProfileID != "" || p.SessionEpoch != 0 {
+	if err != nil || idErr != nil || !allowsMethod(target, method) || p.Audience != target || p.RPC != method || p.RequestHash != hash || p.AccountID != "" || p.ProfileID != "" || p.SessionEpoch != 0 {
 		return status.Error(codes.Unauthenticated, "invalid Role principal binding")
 	}
 	return nil

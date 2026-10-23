@@ -113,16 +113,28 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 			authoritysource.CatalogTrigger{Table: "space_bot_installation_cancellations", Name: "bot_installation_cancellation_truncate", Function: "space_bot_installation_cancellation_guard", Type: 34},
 			authoritysource.CatalogTrigger{Table: "spaces", Name: "zzzz_space_bot_installation_terminal_cleanup", Function: "space_bot_installation_terminal_cleanup", Type: 9})
 	}
+	// Preserve every catalog predicate while sending independent reads in one
+	// round trip. Per-trigger network waits otherwise consume the finite native
+	// membership observation before the transaction can publish its result.
+	triggerBatch := &pgx.Batch{}
 	for _, trigger := range triggers {
 		arguments := []byte{}
 		if trigger.Argument != "" {
 			arguments = []byte(trigger.Argument + "\x00")
 		}
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace n ON n.oid=p.pronamespace
+		triggerBatch.Queue(`SELECT EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace n ON n.oid=p.pronamespace
 	 WHERE t.tgrelid=to_regclass($1) AND t.tgname=$2 AND NOT t.tgisinternal AND t.tgenabled='O' AND NOT t.tgdeferrable AND NOT t.tginitdeferred AND t.tgtype=$3
-	 AND n.nspname='public' AND p.proname=$4 AND p.pronargs=0 AND p.prorettype='trigger'::regtype AND t.tgargs=$5)`, "public."+trigger.Table, trigger.Name, trigger.Type, trigger.Function, arguments).Scan(&valid); err != nil || !valid {
+	 AND n.nspname='public' AND p.proname=$4 AND p.pronargs=0 AND p.prorettype='trigger'::regtype AND t.tgargs=$5)`, "public."+trigger.Table, trigger.Name, trigger.Type, trigger.Function, arguments)
+	}
+	triggerResults := tx.SendBatch(ctx, triggerBatch)
+	for range triggers {
+		if err := triggerResults.QueryRow().Scan(&valid); err != nil || !valid {
+			_ = triggerResults.Close()
 			return ErrMemberAuthorityUnavailable
 		}
+	}
+	if err := triggerResults.Close(); err != nil {
+		return ErrMemberAuthorityUnavailable
 	}
 	functions := append([]authoritysource.CatalogFunction{}, spaceAuthorityCatalog.Functions...)
 	functions = append(functions, memberAuthorityFunctions...)
@@ -132,8 +144,8 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 	if version == 42 || version == 44 || version == 45 || (version == 50 || version == 51) {
 		functions = append(functions, botInstallationAuthorityFunctions...)
 	}
+	functionBatch := &pgx.Batch{}
 	for _, function := range functions {
-		var body, volatility string
 		language := "plpgsql"
 		signature := "public." + function.Name + "()"
 		switch function.Name {
@@ -145,8 +157,14 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 			signature = "public.space_terminal_purge_ready(uuid)"
 			language = "sql"
 		}
-		if err := tx.QueryRow(ctx, `SELECT p.prosrc,p.provolatile::text FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace JOIN pg_language l ON l.oid=p.prolang
-	 WHERE n.nspname='public' AND p.proname=$1 AND p.pronargs=$2 AND NOT p.prosecdef AND p.proconfig IS NULL AND l.lanname=$5 AND p.prorettype=to_regtype($3) AND p.oid=to_regprocedure($4)`, function.Name, function.Arguments, function.ReturnType, signature, language).Scan(&body, &volatility); err != nil {
+		functionBatch.Queue(`SELECT p.prosrc,p.provolatile::text FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace JOIN pg_language l ON l.oid=p.prolang
+	 WHERE n.nspname='public' AND p.proname=$1 AND p.pronargs=$2 AND NOT p.prosecdef AND p.proconfig IS NULL AND l.lanname=$5 AND p.prorettype=to_regtype($3) AND p.oid=to_regprocedure($4)`, function.Name, function.Arguments, function.ReturnType, signature, language)
+	}
+	functionResults := tx.SendBatch(ctx, functionBatch)
+	for _, function := range functions {
+		var body, volatility string
+		if err := functionResults.QueryRow().Scan(&body, &volatility); err != nil {
+			_ = functionResults.Close()
 			return ErrMemberAuthorityUnavailable
 		}
 		expectedVolatility := "v"
@@ -155,8 +173,12 @@ func checkMemberAuthorityCatalog(ctx context.Context, tx pgx.Tx) error {
 		}
 		digest := sha256.Sum256([]byte(body))
 		if volatility != expectedVolatility || hex.EncodeToString(digest[:]) != function.BodySHA256 {
+			_ = functionResults.Close()
 			return ErrMemberAuthorityUnavailable
 		}
+	}
+	if err := functionResults.Close(); err != nil {
+		return ErrMemberAuthorityUnavailable
 	}
 	if version == 44 || version == 45 || (version == 50 || version == 51) {
 		return checkNativeReadinessCatalogVersion(ctx, tx, version)

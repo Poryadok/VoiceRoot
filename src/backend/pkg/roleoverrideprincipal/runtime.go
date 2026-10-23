@@ -213,7 +213,7 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash str
 	if r == nil || r.resolver == nil || r.replay == nil {
 		return principal.Principal{}, ErrUnavailable
 	}
-	if method != Method(r.target) {
+	if !allowsMethod(r.target, method) {
 		return principal.Principal{}, errors.New("invalid target method")
 	}
 	parts := strings.Split(token, ".")

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -9,6 +10,25 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
+
+func TestInvite_ExpiredBeforeWriteLeavesNoInvite(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startSpacePostgresForStoreTest(t, ctx)
+	applySpaceMigrationForStoreTest(t, ctx, pool)
+	st := &SpaceStore{Pool: pool}
+	owner := uuid.New()
+	space, err := st.CreateSpace(ctx, owner, "Expired invite call", "", "private")
+	require.NoError(t, err)
+	expired := errors.New("original verified call expired")
+	_, err = st.CreateInvite(ctx, CreateInviteInput{SpaceID: space.ID, CreatorProfileID: owner, BeforeWrite: func(context.Context) error { return expired }})
+	require.ErrorIs(t, err, expired)
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM invites WHERE space_id=$1`, space.ID).Scan(&count))
+	require.Zero(t, count)
+}
 
 func TestInvite_Create_List_Revoke(t *testing.T) {
 	ctx := context.Background()

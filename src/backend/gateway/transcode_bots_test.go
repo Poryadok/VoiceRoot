@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -19,8 +20,8 @@ import (
 
 type fakeBotClient struct {
 	botv1.BotServiceClient
-	lastInstallReq      *botv1.InstallBotInSpaceRequest
-	chatMessageBodies   map[string]string // msg id -> content; bots (docs/features/bots.md) maps to response messages[]
+	lastInstallReq    *botv1.InstallBotInSpaceRequest
+	chatMessageBodies map[string]string // msg id -> content; bots (docs/features/bots.md) maps to response messages[]
 }
 
 func (f *fakeBotClient) InstallBotInSpace(ctx context.Context, in *botv1.InstallBotInSpaceRequest, _ ...grpc.CallOption) (*botv1.InstallBotInSpaceResponse, error) {
@@ -316,9 +317,11 @@ func TestServeBots_setBotChatEnabledRouteRegistered(t *testing.T) {
 
 func TestServeBots_installPassesAcknowledgePrivilegedScopes(t *testing.T) {
 	bot := &fakeBotClient{}
-	tc := newTranscoder(&grpcClients{bot: bot})
+	tc := newTranscoder(&grpcClients{bot: bot, botAuditAdmin: bot})
+	tc.lifecycleIssuer = newCreatorFixture(t).issuer
 	body := `{"allowed_chats":[{"id":"chat-1","type":"CHAT_TYPE_GROUP"}],"acknowledge_privileged_scopes":true}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/bots/bot-1/spaces/space-1/install", strings.NewReader(body))
+	applyClaims(req, tokenClaims{UserID: "00000000-0000-0000-0000-000000000001", ProfileID: "00000000-0000-0000-0000-000000000002", SessionEpoch: 7, AuthenticatedAccountType: "regular", ExpiresAt: time.Now().Add(time.Minute)})
 	req.Header.Set("Authorization", "Bearer token")
 	req.Header.Set("X-Voice-User-Id", "00000000-0000-0000-0000-000000000001")
 	req.Header.Set("X-Voice-Profile-Id", "00000000-0000-0000-0000-000000000002")

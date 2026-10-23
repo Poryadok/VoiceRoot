@@ -41,6 +41,9 @@ type CreateInviteInput struct {
 	CreatorProfileID uuid.UUID
 	MaxUses          *int32
 	ExpiresAt        *time.Time
+	// BeforeWrite rechecks the authenticated call after the owning transaction
+	// acquires its fences. It must not perform remote authorization calls.
+	BeforeWrite func(context.Context) error
 }
 
 func generateInviteCode() (string, error) {
@@ -80,6 +83,11 @@ func (s *SpaceStore) CreateInvite(ctx context.Context, in CreateInviteInput) (*I
 		return nil, errors.New("max_uses must be at least 1")
 	}
 	for attempt := 0; attempt < 5; attempt++ {
+		if in.BeforeWrite != nil {
+			if err := in.BeforeWrite(ctx); err != nil {
+				return nil, err
+			}
+		}
 		code, err := generateInviteCode()
 		if err != nil {
 			return nil, err

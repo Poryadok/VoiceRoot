@@ -38,9 +38,13 @@ type Runtime struct {
 	closeOnce                     sync.Once
 	closeErr                      error
 	ownershipV2CapabilitiesActive atomic.Bool
+	delegatedUserEnabled          bool
+	botLifecycleEnabled           bool
+	sessionEpochChecker           principal.SessionEpochChecker
 	authoritySourceEnabled        bool
 	authoritySourceServer         *authoritysource.Server
 	authoritySourceInterceptor    grpc.UnaryServerInterceptor
+	chatCurrentACLEnabled         bool
 }
 
 type OwnershipV2Activation struct {
@@ -50,6 +54,13 @@ type OwnershipV2Activation struct {
 }
 
 func New(ctx context.Context, config Config) (*Runtime, error) {
+	return NewWithSessionEpochChecker(ctx, config, nil)
+}
+
+func NewWithSessionEpochChecker(ctx context.Context, config Config, checker principal.SessionEpochChecker) (*Runtime, error) {
+	if config.DelegatedUserEnabled && checker == nil {
+		return nil, errors.New("delegated Role requires current Auth session checker")
+	}
 	if err := config.validate(); err != nil {
 		return nil, err
 	}
@@ -80,6 +91,13 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
+	if config.JWKSClientCertFile != "" {
+		clientCert, err := tls.LoadX509KeyPair(config.JWKSClientCertFile, config.JWKSClientKeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("principal JWKS client TLS: %w", err)
+		}
+		transport.TLSClientConfig.Certificates = []tls.Certificate{clientCert}
+	}
 	client := &http.Client{Transport: transport, Timeout: dependencyTimeout, CheckRedirect: func(*http.Request, []*http.Request) error {
 		return errors.New("principal JWKS redirects are forbidden")
 	}}
@@ -136,6 +154,10 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 		MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs,
 	})}
 	runtime.authoritySourceEnabled = config.AuthoritySourceEnabled
+	runtime.delegatedUserEnabled = config.DelegatedUserEnabled
+	runtime.botLifecycleEnabled = config.BotLifecycleEnabled
+	runtime.sessionEpochChecker = checker
+	_, runtime.chatCurrentACLEnabled = config.JWKSURLs["chat"]
 	startup, cancel := context.WithTimeout(ctx, dependencyTimeout)
 	defer cancel()
 	if err := replay.Ping(startup).Err(); err != nil {
@@ -191,6 +213,9 @@ func isOwnershipMethod(method string) bool {
 }
 
 func isTrustedServiceMethod(method string) bool {
+	if method == rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName || method == rolev1.RoleService_RemoveMemberRoles_FullMethodName {
+		return true
+	}
 	if method == rolev1.RoleService_CheckPermission_FullMethodName || method == rolev1.RoleService_BootstrapSpaceRoles_FullMethodName {
 		return true
 	}
@@ -224,8 +249,26 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash str
 	if r == nil || r.resolver == nil || r.replay == nil {
 		return principal.Principal{}, principalgrpc.Unavailable(errors.New("principal runtime unavailable"))
 	}
+	if principalgrpc.IsDelegatedRoleMethod(method) {
+		return r.verifyPublicRole(ctx, token, method, requestID, hash)
+	}
+	if r.botLifecycleEnabled && method == rolev1.RoleService_CheckPermission_FullMethodName {
+		verified, err := principal.VerifyService(ctx, token, principal.VerifyConfig{ExpectedIssuer: "bot", ExpectedAudience: "role", ExpectedRPC: method, ExpectedRequestID: requestID, ExpectedRequestHash: hash, KeyResolver: r.resolver.Resolve, ReplayGuard: r.recordReplay})
+		if err == nil {
+			return verified, nil
+		}
+		if principalgrpc.IsUnavailable(err) {
+			return principal.Principal{}, err
+		}
+	}
 	issuer := ""
 	switch method {
+	case rolev1.RoleService_ApplyBotInstallationRemoval_FullMethodName:
+		if r.botLifecycleEnabled {
+			issuer = "bot"
+		}
+	case rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName, rolev1.RoleService_RemoveMemberRoles_FullMethodName:
+		issuer = "space"
 	case rolev1.RoleService_CheckPermission_FullMethodName, rolev1.RoleService_BootstrapSpaceRoles_FullMethodName:
 		issuer = "space"
 	case rolev1.RoleService_ApplyGameSessionGrants_FullMethodName, rolev1.RoleService_RevokeGameSessionGrants_FullMethodName:
@@ -274,6 +317,18 @@ func (r *Runtime) recordReplay(ctx context.Context, issuer, jwtID string, expire
 	return nil
 }
 
+// VerifyChatCurrentACL has one explicit issuer; no token-claim-selected fallback
+// or conversion of a Chat-audience credential into another service authority.
+func (r *Runtime) VerifyChatCurrentACL(ctx context.Context, token, method, requestID, hash string) (principal.Principal, error) {
+	if r == nil || !r.chatCurrentACLEnabled || r.resolver == nil || r.replay == nil {
+		return principal.Principal{}, principalgrpc.Unavailable(errors.New("chat ACL verifier unavailable"))
+	}
+	if method != rolev1.RoleService_CheckPermission_FullMethodName {
+		return principal.Principal{}, errors.New("chat ACL method not allowed")
+	}
+	return principal.VerifyService(ctx, token, principal.VerifyConfig{ExpectedIssuer: "chat", ExpectedAudience: "role", ExpectedRPC: method, ExpectedRequestID: requestID, ExpectedRequestHash: hash, KeyResolver: r.resolver.Resolve, ReplayGuard: r.recordReplay})
+}
+
 // Remote JWKS is intentionally lazy: Space startup depends on Role process
 // health. Requests without a complete trusted set still fail closed.
 func (r *Runtime) refreshLoop(ctx context.Context, interval time.Duration) {
@@ -287,6 +342,9 @@ func (r *Runtime) refreshLoop(ctx context.Context, interval time.Duration) {
 		case <-ticker.C:
 			// A failed refresh retains last-good only until the resolver's hard expiry.
 			_ = r.resolver.Refresh(ctx, "space")
+			if r.chatCurrentACLEnabled {
+				_ = r.resolver.Refresh(ctx, "chat")
+			}
 		}
 	}
 }
