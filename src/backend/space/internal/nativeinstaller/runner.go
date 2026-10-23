@@ -1,6 +1,7 @@
 package nativeinstaller
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -15,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -85,6 +87,81 @@ func cleanupAdmin(primary error, admin adminCleanupConn, locked bool) error {
 		primary = errors.Join(primary, cleanupFailure{message: "administrative connection close failed", cause: err})
 	}
 	return primary
+}
+
+const migrationDiagnosticLimit = 16 * 1024
+
+// Child output may contain SQL and credentials. Retain at most this fixed buffer
+// transiently; stdout, multiple terminal errors, or overflow veto classification.
+// Writers always drain successfully so diagnostics cannot change the child exit.
+type migrationDiagnostics struct {
+	sync.Mutex
+	stderr          [migrationDiagnosticLimit]byte
+	size, seen      int
+	mixed, overflow bool
+}
+
+type migrationDiagnosticStream struct {
+	diagnostics *migrationDiagnostics
+	stdout      bool
+}
+
+func (w migrationDiagnosticStream) Write(p []byte) (int, error) {
+	d := w.diagnostics
+	d.Lock()
+	defer d.Unlock()
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if w.stdout {
+		d.mixed = true
+	}
+	if d.overflow || len(p) > migrationDiagnosticLimit-d.seen {
+		d.overflow = true
+		clear(d.stderr[:])
+		d.size = 0
+		return len(p), nil
+	}
+	d.seen += len(p)
+	if !w.stdout {
+		d.size += copy(d.stderr[d.size:], p)
+	}
+	return len(p), nil
+}
+
+func (d *migrationDiagnostics) category() string {
+	// Pinned migrate4.18.1's postgres driver starts these failures with this
+	// prefix. pq1.10.9 omits SQLSTATE in Error(), so never parse code-shaped SQL
+	// or arbitrary message text as a database code or a more specific cause.
+	data := d.stderr[:d.size]
+	if !d.overflow && !d.mixed && bytes.HasPrefix(data, []byte("error: migration failed: ")) && !bytes.Contains(data, []byte("\nerror:")) {
+		return "database"
+	}
+	return "driver_exit"
+}
+
+func runMigration(ctx context.Context, cmd *exec.Cmd, version int) error {
+	var diagnostics migrationDiagnostics
+	defer func() { clear(diagnostics.stderr[:]) }()
+	cmd.Stdout = migrationDiagnosticStream{diagnostics: &diagnostics, stdout: true}
+	cmd.Stderr = migrationDiagnosticStream{diagnostics: &diagnostics}
+	err := cmd.Run()
+	if err == nil {
+		return nil
+	}
+	category, exitCode := "start", -1
+	if cmd.ProcessState != nil {
+		exitCode = cmd.ProcessState.ExitCode()
+		category = diagnostics.category()
+	}
+	if errors.Is(err, context.Canceled) || (exitCode == -1 && errors.Is(ctx.Err(), context.Canceled)) {
+		category = "canceled"
+		err = errors.Join(err, context.Canceled)
+	} else if errors.Is(err, context.DeadlineExceeded) || (exitCode == -1 && errors.Is(ctx.Err(), context.DeadlineExceeded)) {
+		category = "deadline"
+		err = errors.Join(err, context.DeadlineExceeded)
+	}
+	return cleanupFailure{message: fmt.Sprintf("migration stage %d failed (category=%s, exit_code=%d)", version, category, exitCode), cause: err}
 }
 
 func Run(ctx context.Context, c Config) (err error) {
@@ -223,10 +300,9 @@ func Run(ctx context.Context, c Config) (err error) {
 		}
 		cmd := exec.CommandContext(ctx, c.MigratePath, "-path", filepath.Clean(c.MigrationsDir), "-database", childURL.String(), "goto", strconv.Itoa(version))
 		cmd.Env = migrationEnvironment(cfg, childURL)
-		// Child diagnostics can contain its credential-bearing DSN. Retain only the
-		// bounded stage/error class; driver failure remains a hard failure.
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("migration stage %d failed", version)
+		// Child output stays transient and bounded; only fixed metadata is exposed.
+		if err := runMigration(ctx, cmd, version); err != nil {
+			return err
 		}
 		if err := checkWindow(); err != nil {
 			return err

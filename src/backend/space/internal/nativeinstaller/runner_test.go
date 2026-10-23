@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,6 +27,116 @@ import (
 	"github.com/stretchr/testify/require"
 	"voice/backend/space/internal/store"
 )
+
+// These children exercise only the process/reporting boundary, never migrate or a database.
+func diagnosticCommand(ctx context.Context, stderr, stdout string, exit string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "sh", "-c", `printf '%s' "$OUT"; printf '%s' "$ERR" >&2; exit "$CODE"`)
+	cmd.Env = []string{"OUT=" + stdout, "ERR=" + stderr, "CODE=" + exit}
+	return cmd
+}
+
+func TestRunMigrationSafeDiagnosticsAndCleanup(t *testing.T) {
+	const secret = "postgres://synthetic-user:credential-sentinel@invalid/secret-query"
+	database := "error: migration failed: permission denied in line 0: SELECT '" + secret + "' (details: pq: permission denied)\n"
+	for _, tc := range []struct {
+		name, stderr, stdout, category string
+	}{
+		{"pinned database format", database, "", "database"},
+		{"unknown credential output", secret, "", "driver_exit"},
+		{"forged SQLSTATE", "error: " + secret + " SQLSTATE 42501", "", "driver_exit"},
+		{"SQLSTATE inside query", database + "SELECT 'SQLSTATE 28P01';", "", "database"},
+		{"mixed streams", database, secret, "driver_exit"},
+		{"mixed terminal errors", database + "error: " + secret, "", "driver_exit"},
+		{"oversized stderr", database + strings.Repeat("x", 16*1024), "", "driver_exit"},
+		{"oversized stdout", database, strings.Repeat("x", 16*1024), "driver_exit"},
+		{"unanchored prefix", secret + database, "", "driver_exit"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := runMigration(context.Background(), diagnosticCommand(context.Background(), tc.stderr, tc.stdout, "7"), 44)
+			require.EqualError(t, err, "migration stage 44 failed (category="+tc.category+", exit_code=7)")
+			var primary *exec.ExitError
+			require.ErrorAs(t, err, &primary)
+			require.Equal(t, 7, primary.ExitCode())
+			require.Empty(t, primary.Stderr, "exec error must not retain raw diagnostics")
+			unlock := errors.New(secret + "/unlock")
+			closeErr := errors.New(secret + "/close")
+			admin := &cleanupAdminStub{unlockErr: unlock, closeErr: closeErr}
+			joined := cleanupAdmin(err, admin, true)
+			require.ErrorIs(t, joined, primary)
+			require.ErrorIs(t, joined, unlock)
+			require.ErrorIs(t, joined, closeErr)
+			require.Equal(t, []string{"unlock", "close"}, admin.operations)
+			for _, value := range []string{secret, "credential-sentinel", "SQLSTATE", "42501", "28P01", "SELECT", "permission denied"} {
+				require.NotContains(t, joined.Error(), value)
+			}
+		})
+	}
+}
+
+func TestRunMigrationContextStartAndSuccess(t *testing.T) {
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	deadline, stop := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer stop()
+	for _, tc := range []struct {
+		name, category string
+		ctx            context.Context
+		cause          error
+	}{
+		{"canceled", "canceled", canceled, context.Canceled},
+		{"deadline", "deadline", deadline, context.DeadlineExceeded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := runMigration(tc.ctx, diagnosticCommand(tc.ctx, "", "", "0"), 45)
+			require.EqualError(t, err, "migration stage 45 failed (category="+tc.category+", exit_code=-1)")
+			require.ErrorIs(t, err, tc.cause)
+		})
+	}
+	err := runMigration(context.Background(), exec.Command("/missing/credential-sentinel"), 50)
+	require.EqualError(t, err, "migration stage 50 failed (category=start, exit_code=-1)")
+	var pathError *os.PathError
+	require.ErrorAs(t, err, &pathError)
+	require.NoError(t, runMigration(context.Background(), diagnosticCommand(context.Background(), "secret-success", "secret-success", "0"), 50))
+}
+
+func TestMigrationDiagnosticStreamsBoundAndDrain(t *testing.T) {
+	var output migrationDiagnostics
+	stderr := migrationDiagnosticStream{diagnostics: &output}
+	for _, chunk := range []string{"error: migra", "tion failed: ", "synthetic credential"} {
+		n, err := stderr.Write([]byte(chunk))
+		require.NoError(t, err)
+		require.Equal(t, len(chunk), n)
+	}
+	require.Equal(t, "database", output.category())
+	remaining := migrationDiagnosticLimit - output.seen
+	n, err := stderr.Write(bytes.Repeat([]byte{'x'}, remaining))
+	require.NoError(t, err)
+	require.Equal(t, remaining, n)
+	require.Equal(t, migrationDiagnosticLimit, output.size)
+	require.False(t, output.overflow)
+	n, err = stderr.Write([]byte("overflow credential"))
+	require.NoError(t, err)
+	require.Equal(t, len("overflow credential"), n)
+	require.True(t, output.overflow)
+	require.Zero(t, output.size)
+	require.Equal(t, [migrationDiagnosticLimit]byte{}, output.stderr)
+	require.Equal(t, "driver_exit", output.category())
+	n, err = stderr.Write(bytes.Repeat([]byte{'x'}, migrationDiagnosticLimit*2))
+	require.NoError(t, err)
+	require.Equal(t, migrationDiagnosticLimit*2, n)
+	require.Equal(t, [migrationDiagnosticLimit]byte{}, output.stderr)
+}
+
+func TestRunMigrationStartedDeadlineRetainsExitError(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	err := runMigration(ctx, exec.CommandContext(ctx, "sleep", "10"), 44)
+	require.EqualError(t, err, "migration stage 44 failed (category=deadline, exit_code=-1)")
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	var primary *exec.ExitError
+	require.ErrorAs(t, err, &primary)
+	require.Equal(t, -1, primary.ExitCode())
+}
 
 type cleanupReadCloser struct {
 	io.Reader
