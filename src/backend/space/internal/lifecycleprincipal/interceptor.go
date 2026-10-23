@@ -28,6 +28,9 @@ type Verifier struct {
 }
 
 func protectedMutation(method string) bool {
+	if method == spacev1.SpaceService_CreateInvite_FullMethodName {
+		return true
+	}
 	if moderationMethod(method) {
 		return true
 	}
@@ -53,6 +56,9 @@ func canonicalID(value string) bool {
 
 func (v Verifier) Unary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if info.FullMethod == spacev1.SpaceService_CreateInvite_FullMethodName {
+			return v.verifyModerationCall(ctx, req, info, handler)
+		}
 		if moderationMethod(info.FullMethod) {
 			return v.verifyModerationCall(ctx, req, info, handler)
 		}

@@ -105,6 +105,8 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 				decisionErr = RequireJoinApprovalPermission(principal.WithVerified(ctx, verified), req)
 			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceManageSettings {
 				decisionErr = RequireSettingsPermission(principal.WithVerified(ctx, verified), req)
+			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceManageInvites {
+				decisionErr = RequireInvitePermission(principal.WithVerified(ctx, verified), req)
 			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.MemberManageNicknames {
 				decisionErr = RequireNicknamePermission(principal.WithVerified(ctx, verified), req)
 			} else {
@@ -149,6 +151,9 @@ func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 		}
 
 		if info.FullMethod == rolev1.RoleService_CheckPermission_FullMethodName {
+			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceManageInvites {
+				return nil, status.Error(codes.PermissionDenied, "protected invite decision listener required")
+			}
 			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && (req.GetPermissionName() == permissions.SpaceApproveJoinRequests || req.GetPermissionName() == permissions.SpaceManageSettings || req.GetPermissionName() == permissions.SpaceManageBots) {
 				return nil, status.Error(codes.PermissionDenied, "protected approval decision listener required")
 			}

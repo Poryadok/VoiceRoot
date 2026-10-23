@@ -80,11 +80,13 @@ func applySpaceMigrationsThrough7(t *testing.T, ctx context.Context, pool *pgxpo
 }
 
 func withAccountProfileCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
+	ctx = context.WithValue(ctx, inviteFixtureActorKey{}, inviteFixtureActor{accountID, profileID})
 	ctx = metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountID.String())
 	return metadata.AppendToOutgoingContext(ctx, authctx.HeaderProfileID, profileID.String())
 }
 
 func withAccountProfileSessionCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
+	ctx = context.WithValue(ctx, inviteFixtureActorKey{}, inviteFixtureActor{accountID, profileID})
 	return metadata.NewOutgoingContext(ctx, metadata.Pairs(
 		authctx.HeaderUserID, accountID.String(),
 		authctx.HeaderProfileID, profileID.String(),
@@ -242,9 +244,14 @@ func startSpaceGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...spaceSer
 	t.Helper()
 	const bufSize = 1 << 20
 	lis := bufconn.Listen(bufSize)
+	inviteFixture := newInviteIngressFixture(t)
+	var svc *SpaceGRPC
 	// Legacy ledger fixtures explicitly inject a request-bound verified actor for
 	// the migrated audit method. This is not a production admission interceptor.
 	srv := grpc.NewServer(grpc.UnaryInterceptor(func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if info.FullMethod == spacev1.SpaceService_CreateInvite_FullMethodName {
+			return inviteFixture.serve(ctx, request, info, svc)
+		}
 		if info.FullMethod == spacev1.SpaceService_GetAuditLog_FullMethodName {
 			account, accountOK := authctx.AccountID(ctx)
 			profile, profileOK := authctx.ProfileID(ctx)
@@ -255,7 +262,7 @@ func startSpaceGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...spaceSer
 		return handler(ctx, request)
 	}))
 	// Legacy saga coverage opts in only inside this package; production cannot enable it.
-	svc := &SpaceGRPC{
+	svc = &SpaceGRPC{
 		allowLegacyOwnershipTransferForTest: true,
 		Store:                               &store.SpaceStore{Pool: pool},
 		AuditCursorKey:                      bytes.Repeat([]byte{0xa7}, 32),
@@ -288,7 +295,7 @@ func startSpaceGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...spaceSer
 		_ = conn.Close()
 		srv.Stop()
 	}
-	return spacev1.NewSpaceServiceClient(conn), cleanup
+	return inviteFixtureClient{SpaceServiceClient: spacev1.NewSpaceServiceClient(conn), fixture: inviteFixture}, cleanup
 }
 
 func profileFixture(t *testing.T) (owner, account uuid.UUID, ctx context.Context) {

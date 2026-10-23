@@ -20,6 +20,10 @@ func RequireSettingsPermission(ctx context.Context, req *rolev1.CheckPermissionR
 	return requireSpaceGlobalDecision(ctx, req, permissions.SpaceManageSettings)
 }
 
+func RequireInvitePermission(ctx context.Context, req *rolev1.CheckPermissionRequest) error {
+	return requireSpaceGlobalDecision(ctx, req, permissions.SpaceManageInvites)
+}
+
 func requireSpaceGlobalDecision(ctx context.Context, req *rolev1.CheckPermissionRequest, permission string) error {
 	return requireServiceGlobalDecision(ctx, req, permission, "space")
 }

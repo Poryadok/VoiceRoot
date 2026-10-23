@@ -24,7 +24,8 @@ func startSharedRoleClient(t *testing.T) (rolev1.RoleServiceClient, func()) {
 	ctx := context.Background()
 	pool := roletest.StartRoleDB(t, ctx)
 	roletest.ApplyRoleMigrations(t, ctx, pool)
-	return roletest.StartRoleGRPC(t, pool)
+	client, cleanup := roletest.StartRoleGRPC(t, pool)
+	return legacyInviteRoleFixture{RoleServiceClient: client}, cleanup
 }
 
 // TestCreateSpace_BootstrapSystemRoles documents spaces.md: CreateSpace seeds role hierarchy via Role Service.

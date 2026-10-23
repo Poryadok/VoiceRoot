@@ -287,6 +287,14 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	require.NotZero(t, voiceResponse.GetPolicyEpoch())
 	require.True(t, voiceResponse.GetGrants().GetCanJoin(), "published default Member's qualified Voice grant remains usable")
 	botDecision := &rolev1.CheckPermissionRequest{SpaceId: b.SpaceID, ProfileId: owner.String(), PermissionName: "SPACE_MANAGE_BOTS"}
+	inviteDecision := &rolev1.CheckPermissionRequest{SpaceId: b.SpaceID, ProfileId: owner.String(), PermissionName: "SPACE_MANAGE_INVITES"}
+	inviteResponse, err := client.CheckPermission(nativeWorkloadContext(t, current, "space", rolev1.RoleService_CheckPermission_FullMethodName, inviteDecision), inviteDecision)
+	require.NoError(t, err, "CreateInvite decision must collect current protected Space authority in native25")
+	require.True(t, inviteResponse.GetAllowed())
+	inviteDecision.ProfileId = b.ProfileID
+	inviteResponse, err = client.CheckPermission(nativeWorkloadContext(t, current, "space", rolev1.RoleService_CheckPermission_FullMethodName, inviteDecision), inviteDecision)
+	require.NoError(t, err)
+	require.False(t, inviteResponse.GetAllowed(), "default Member cannot create invitations")
 	botContext := nativeWorkloadContext(t, current, "bot", rolev1.RoleService_CheckPermission_FullMethodName, botDecision)
 	botResponse, err := client.CheckPermission(botContext, botDecision)
 	require.NoError(t, err, "exact Bot installation decision must use the protected qualified receiver")
