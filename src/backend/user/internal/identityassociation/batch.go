@@ -70,7 +70,7 @@ func (s *Store) CaptureProfiles(ctx context.Context, ids []uuid.UUID) (CaptureBa
 	if err != nil {
 		return CaptureBatchResult{}, err
 	}
-	defer tx.Rollback(context.Background())
+	defer func() { _ = tx.Rollback(context.Background()) }()
 	out, err := s.captureBatchTx(bounded, tx, prepared)
 	if err != nil {
 		return CaptureBatchResult{}, err

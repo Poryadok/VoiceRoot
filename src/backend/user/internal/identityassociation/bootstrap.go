@@ -20,7 +20,7 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(context.Background())
+	defer func() { _ = tx.Rollback(context.Background()) }()
 	if revision != 0 {
 		if err = s.checkKeyset(ctx, tx); err != nil {
 			return err
@@ -109,7 +109,7 @@ func (s *Store) ActivateGuards(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(context.Background())
+	defer func() { _ = tx.Rollback(context.Background()) }()
 	if err = s.checkKeyset(ctx, tx); err != nil {
 		return err
 	}

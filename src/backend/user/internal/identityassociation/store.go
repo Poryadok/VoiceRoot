@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-var ErrUnknownProfile = errors.New("User profile association unknown")
+var ErrUnknownProfile = errors.New("user profile association unknown")
 
 type Origin string
 

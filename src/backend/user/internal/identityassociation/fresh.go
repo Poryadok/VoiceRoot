@@ -29,7 +29,7 @@ func NewFreshStore(ctx context.Context, pool *pgxpool.Pool, keys *Keyset, pin Fr
 	if err != nil {
 		return nil, ErrIncomplete
 	}
-	defer tx.Rollback(context.Background())
+	defer func() { _ = tx.Rollback(context.Background()) }()
 	var pristine bool
 	err = tx.SQL().QueryRow(ctx, `SELECT user_source_generation=$1 AND history_generation=$2
 		AND history_head=0 AND retained_floor=0 AND keyset_revision=0 AND active_key_version IS NULL
