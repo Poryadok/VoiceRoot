@@ -15,7 +15,7 @@ type BotPinCleanupStore interface {
 	ApplyVerifiedBotChatPinRemoval(context.Context, botpinprincipal.VerifiedCleanup) (*messagingv1.ApplyBotChatPinRemovalResponse, error)
 }
 
-// This handler is registered only on the dedicated signed Bot/mTLS listener.
+// BotPinCleanupGRPC is registered only on the dedicated signed Bot/mTLS listener.
 // Ordinary MessagingGRPC intentionally retains no alternate cleanup method.
 type BotPinCleanupGRPC struct {
 	messagingv1.UnimplementedMessagingServiceServer

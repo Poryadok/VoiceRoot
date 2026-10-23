@@ -659,6 +659,15 @@ candidate, receipt and outbox data. Existing published-only readers, Chat's
 legacy direct readers and community unions must be tested with candidate plus
 published fixtures; do not introduce new cross-database reads.
 
+Implemented runtime slice: protected noninteractive `JoinSpace` and
+`JoinByInvite` use verified typed ingress and the original finite call budget,
+prepare the durable candidate, obtain the exact protected Role receipt, and
+publish through the native membership fence. `GetMemberAdmissionAuthority`
+serves the corresponding Role callback without a recursive Role request.
+The current Role 25 / Space 51 integration fixture exercises this cross-service
+receipt path. This slice does not complete interactive admission or composable
+join policy.
+
 ### Phase-0 S2S decision callers (target)
 
 `AreCoMembers`, subscription sync и новые internal decision RPC не получают actor
@@ -689,12 +698,22 @@ projection. The current ordinary Space-to-Role decision transport is a separate
 BE-181 residual; this cutover does not claim its S2S authorization or production
 PKI rollout. See the [BE-041 execution plan](../testing/be041-verified-audit-identity-exec-plan.md).
 
-**Invite permissions:** shipped `CreateInvite`, `RevokeInvite` and `ListInvites`
-handlers use the exact `SPACE_MANAGE_INVITES` decision. An unavailable configured
-Role Service fails closed. While Role is intentionally unwired, the shared
-`requireSpacePermission` compatibility path permits only the current Space owner;
-the A2 target does not retain this fallback after signed Role integration is
-required.
+**Invite creation:** `CreateInvite` accepts only the private lifecycle listener's
+request-bound Gateway delegated-user proof. Gateway routes POST
+`/api/v1/spaces/{space_id}/invites` through that listener using verified client
+claims, including account type. Ordinary ingress and missing protected transport
+fail closed. Space sends the exact global `SPACE_MANAGE_INVITES` decision as
+`service:space` to protected Role before taking Space fences; native Role obtains
+fresh membership/Owner authority from Space. Space rechecks the original typed
+call budget after its local gate and inside the owning invite transaction before
+writing. Configured Role failure has no owner-only production fallback.
+
+`RevokeInvite` and `ListInvites` retain their separately unmigrated ordinary
+decision path. Their compatibility fallback while Role is unwired is limited to
+the current Space owner; this is not a signed native authorization claim.
+Legacy component fixtures explicitly supply a signed test actor and controlled
+legacy Role permission dependency; current Role25/Space51 acceptance separately checks
+the native invitation decision for Owner and ordinary Member.
 
 <a id="phase-0-space-audit-ledger-target-not-implemented"></a>
 <a id="phase-0-space-audit-ledger-accepted-target-runtime-not-implemented"></a>

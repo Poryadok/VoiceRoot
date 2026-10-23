@@ -31,7 +31,7 @@ WHERE h.chat_id=$1 AND h.space_id=$2`, chatID, spaceID).Scan(&incarnation, &revi
 		return nil, err
 	}
 	if incarnation == uuid.Nil || revision <= 0 || generation < 0 || present != (rowID != nil) || (rowID != nil && (rowSpace == nil || *rowSpace != spaceID || rowIncarnation == nil || *rowIncarnation != incarnation || kind == nil || (*kind != "group" && *kind != "channel"))) {
-		return nil, errors.New("Bot pin Chat source is inconsistent")
+		return nil, errors.New("bot pin Chat source is inconsistent")
 	}
 	response := &chatv1.GetSpaceChatScopeAuthorityResponse{ProtocolVersion: 1, ChatId: chatID.String(), ExpectedSpaceId: spaceID.String(), ActualSpaceId: spaceID.String(), ChatScopeIncarnation: incarnation.String(), ChatAuthorityRevision: uint64(revision), LifecycleGeneration: uint64(generation), Exists: rowID != nil}
 	switch state {
@@ -44,7 +44,7 @@ WHERE h.chat_id=$1 AND h.space_id=$2`, chatID, spaceID).Scan(&incarnation, &revi
 	case "PURGED":
 		response.LifecycleState = chatv1.ChatScopeLifecycleState_CHAT_SCOPE_LIFECYCLE_STATE_PURGED
 	default:
-		return nil, errors.New("Bot pin Chat lifecycle is inconsistent")
+		return nil, errors.New("bot pin Chat lifecycle is inconsistent")
 	}
 	if rowID != nil {
 		response.Live = state == "LIVE"

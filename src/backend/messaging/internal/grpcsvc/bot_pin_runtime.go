@@ -52,15 +52,15 @@ func StartBotPinCleanupServer(ctx context.Context, config BotPinCleanupConfig, p
 	}
 	certificate, err := tls.LoadX509KeyPair(config.TLSCertFile, config.TLSKeyFile)
 	if err != nil {
-		return nil, errors.New("Bot pin cleanup server certificate unavailable")
+		return nil, errors.New("bot pin cleanup server certificate unavailable")
 	}
 	caPEM, err := os.ReadFile(config.ClientCAFile)
 	if err != nil {
-		return nil, errors.New("Bot pin cleanup client CA unavailable")
+		return nil, errors.New("bot pin cleanup client CA unavailable")
 	}
 	clientRoots := x509.NewCertPool()
 	if !clientRoots.AppendCertsFromPEM(caPEM) {
-		return nil, errors.New("Bot pin cleanup client CA invalid")
+		return nil, errors.New("bot pin cleanup client CA invalid")
 	}
 	verifier, err := principalruntime.NewForIssuer(ctx, principalruntime.Config{JWKSURL: config.JWKSURL, TLSCertFile: config.JWKSClientCertFile, TLSKeyFile: config.JWKSClientKeyFile, CAFile: config.JWKSCAFile, RedisURL: config.ReplayRedisURL}, "bot")
 	if err != nil {
@@ -69,7 +69,7 @@ func StartBotPinCleanupServer(ctx context.Context, config BotPinCleanupConfig, p
 	listener, err := net.Listen("tcp", config.ListenAddr)
 	if err != nil {
 		_ = verifier.Close()
-		return nil, errors.New("Bot pin cleanup listener unavailable")
+		return nil, errors.New("bot pin cleanup listener unavailable")
 	}
 	server := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientRoots})), grpc.UnaryInterceptor(botpinprincipal.UnaryServerInterceptor(verifier)), grpc.StreamInterceptor(botpinprincipal.DenyStreams))
 	service := messagingv1.MessagingService_ServiceDesc

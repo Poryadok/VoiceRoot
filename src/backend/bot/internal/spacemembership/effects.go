@@ -49,7 +49,7 @@ func (c *Client) ValidateChats(ctx context.Context, r store.MembershipRecord, re
 	return nil
 }
 
-// Receipt validators below are unchanged ports of the reviewed native cleanup
+// Cleanup uses receipt validators ported unchanged from the reviewed native cleanup
 // protocol. Only space_uninstall/native is constructed here; legacy/global
 // evidence never acquires authority by passing through this producer.
 func (c *Client) Cleanup(ctx context.Context, r store.MembershipRecord, _ []uuid.UUID) error {

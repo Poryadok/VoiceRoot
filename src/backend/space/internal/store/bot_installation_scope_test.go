@@ -5,12 +5,16 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"errors"
+	"net/url"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
+	migrateengine "github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -37,7 +41,11 @@ func newBotInstallationScopeFixture(t *testing.T) *botInstallationScopeFixture {
 	transition, err := (&SpaceStore{Pool: db.Pool}).TransitionNativeMembershipCatalog45(ctx)
 	require.NoError(t, err, "actual trusted Native45 transition; no marker or seal is fabricated")
 	require.True(t, transition.Changed)
-	st := &SpaceStore{Pool: projectionServingLogin(t, ctx, db.Pool)}
+	db.Run(true, "goto", "50")
+	_, err = (&SpaceStore{Pool: db.Pool}).TransitionNativeMembershipCatalog50(ctx)
+	require.NoError(t, err)
+	current := migrateBotFixture51(t, ctx, db.Pool, filepath.Join(repoRoot(t), "src/backend/migrations/space_db"))
+	st := &SpaceStore{Pool: projectionServingLogin(t, ctx, current)}
 	create, _, ownerProfile := signedProjectionCreator(t, st, &spacev1.CreateSpaceRequest{Name: "typed Bot installation scope", Visibility: "private"})
 	space, err := create()
 	require.NoError(t, err, "real private Creator proof publishes the Native Space before Bot installation")
@@ -61,6 +69,54 @@ func newBotInstallationScopeFixture(t *testing.T) *botInstallationScopeFixture {
 		return nil
 	}}
 	return f
+}
+
+// Use the actual qualified migration driver, matching production's current
+// catalog. Repeated catalog45 scans can exhaust the finite caller observation.
+func migrateBotFixture51(t *testing.T, ctx context.Context, old *pgxpool.Pool, directory string) *pgxpool.Pool {
+	t.Helper()
+	prior, err := (&SpaceStore{Pool: old}).InspectNativeInstallerSource(ctx, 50)
+	require.NoError(t, err)
+	config := old.Config().Copy()
+	old.Close()
+	app := "bot-fixture51-" + uuid.NewString()
+	config.ConnConfig.RuntimeParams["application_name"] = app
+	config.MaxConns = 2
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+	window := func(ctx context.Context) error {
+		var exclusive bool
+		err := pool.QueryRow(ctx, `SELECT current_user=session_user AND NOT pg_is_in_recovery()
+		 AND NOT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database()
+		 AND backend_type='client backend' AND application_name<>$1)`, app).Scan(&exclusive)
+		if err != nil || !exclusive {
+			return ErrMemberAuthorityUnavailable
+		}
+		return nil
+	}
+	st := &SpaceStore{Pool: pool}
+	driver, err := st.NewNativeCatalog51Migration(ctx, prior, window)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, driver.Close()) })
+	path, err := filepath.Abs(directory)
+	require.NoError(t, err)
+	engine, err := migrateengine.NewWithDatabaseInstance((&url.URL{Scheme: "file", Path: filepath.ToSlash(path)}).String(), "bot-native51", driver)
+	require.NoError(t, err)
+	t.Cleanup(func() { sourceErr, dbErr := engine.Close(); require.NoError(t, sourceErr); require.NoError(t, dbErr) })
+	migrationErr := engine.Migrate(51)
+	receipt, err := driver.CommitQualified(migrationErr)
+	require.NoError(t, migrationErr)
+	require.NoError(t, err)
+	require.True(t, receipt.Changed)
+	require.Equal(t, prior.SealSHA256, receipt.OldSealSHA256)
+	require.NoError(t, driver.Close())
+	current, err := st.InspectNativeInstallerSource(ctx, 51)
+	require.NoError(t, err)
+	require.Equal(t, receipt.NewSealSHA256, current.SealSHA256)
+	require.Equal(t, prior.DatabaseOID, current.DatabaseOID)
+	require.Equal(t, prior.Epoch, current.Epoch)
+	return pool
 }
 
 // Every attempt passes the real private-capability verifier with a fresh signed
@@ -150,7 +206,7 @@ func requireBotInstallationScopePositive(t *testing.T, remove bool) {
 
 func TestBotInstallationScopeTypedAddAndExactPriorInstallationRemove(t *testing.T) {
 	if testing.Short() {
-		t.Skip("requires real migrated Native45 PostgreSQL fixture")
+		t.Skip("requires real migrated Native51 PostgreSQL fixture")
 	}
 	for _, remove := range []bool{false, true} {
 		name := "add"
@@ -163,7 +219,7 @@ func TestBotInstallationScopeTypedAddAndExactPriorInstallationRemove(t *testing.
 
 func TestBotInstallationScopeCancelBeforeAddPreservesTombstone(t *testing.T) {
 	if testing.Short() {
-		t.Skip("requires real migrated Native45 PostgreSQL fixture")
+		t.Skip("requires real migrated Native51 PostgreSQL fixture")
 	}
 	f := newBotInstallationScopeFixture(t)
 	cancel := botScopeCancel(f.add)

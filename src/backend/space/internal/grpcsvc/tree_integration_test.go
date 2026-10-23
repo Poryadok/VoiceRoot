@@ -425,7 +425,11 @@ func TestSpaceTree_AuditInsertFailureRollsBackUpsert(t *testing.T) {
 	require.NoError(t, err)
 	spaceID := uuid.MustParse(created.GetSpace().GetId())
 
-	_, err = pool.Exec(ctx, `CREATE FUNCTION fail_tree_audit_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action LIKE 'tree_%' THEN RAISE EXCEPTION 'injected tree audit failure'; END IF; RETURN NEW; END $$;
+	const removeAuditFailure = `DROP TRIGGER IF EXISTS fail_tree_audit_insert ON audit_log;
+DROP FUNCTION IF EXISTS fail_tree_audit_insert(); DROP SEQUENCE IF EXISTS test_tree_audit_attempts`
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), removeAuditFailure) })
+	_, err = pool.Exec(ctx, `CREATE SEQUENCE test_tree_audit_attempts;
+CREATE FUNCTION fail_tree_audit_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action LIKE 'tree_%' THEN PERFORM nextval('test_tree_audit_attempts'); RAISE EXCEPTION 'injected tree audit failure'; END IF; RETURN NEW; END $$;
 CREATE TRIGGER fail_tree_audit_insert BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION fail_tree_audit_insert()`)
 	require.NoError(t, err)
 	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
@@ -433,6 +437,13 @@ CREATE TRIGGER fail_tree_audit_insert BEFORE INSERT ON audit_log FOR EACH ROW EX
 		SpaceId: spaceID.String(), Kind: "text_chat", LinkedChat: &chatv1.ChatRef{Id: uuid.NewString(), Type: &chatType},
 	})
 	require.Error(t, err, "audit insertion failure must fail the tree mutation")
+	var auditAttempted bool
+	require.NoError(t, pool.QueryRow(ctx, `SELECT is_called FROM test_tree_audit_attempts`).Scan(&auditAttempted))
+	require.True(t, auditAttempted, "the failure must reach audit INSERT rather than an earlier authorization guard")
+	// Sequence increments survive rollback. Remove the injected catalog change
+	// before checking the result through the qualified public membership reader.
+	_, err = pool.Exec(ctx, removeAuditFailure)
+	require.NoError(t, err)
 
 	tree, err := client.ListSpaceTree(ownerCtx, &spacev1.ListSpaceTreeRequest{SpaceId: spaceID.String()})
 	require.NoError(t, err)

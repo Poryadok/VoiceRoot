@@ -24,10 +24,6 @@ import (
 	rolev1 "voice.app/voice/role/v1"
 )
 
-func chatRefIsChannel(ref *chatv1.ChatRef) bool {
-	return ref != nil && ref.Type != nil && *ref.Type == chatv1.ChatType_CHAT_TYPE_CHANNEL
-}
-
 func chatRefIsDM(ref *chatv1.ChatRef) bool {
 	return ref != nil && ref.Type != nil && *ref.Type == chatv1.ChatType_CHAT_TYPE_DM
 }

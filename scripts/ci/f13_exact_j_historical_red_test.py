@@ -1252,7 +1252,7 @@ def prepare():
     return 0
 
 
-def namespace_main():
+def namespace_main(live=False):
     """Mounts exist only in the isolated child's namespace; no Docker/service."""
     require(sys.platform == 'linux', 'Linux_only_no_Windows_test')
     require(os.geteuid() != 0, 'ordinary_runner_uid_required')
@@ -1308,7 +1308,7 @@ def namespace_main():
         script += 'test -d ' + toolchain + '\ntest ! -L ' + toolchain + '\n'
         script += 'mount --bind ' + toolchain + ' ' + toolchain + '\n'
         script += 'mount -o remount,bind,ro ' + toolchain + '\n'
-        script += 'exec ' + invocation + ' --inside\n'
+        script += 'exec ' + invocation + (' --inside-live\n' if live else ' --inside\n')
         # User/mount/network/pid isolation is fixture infrastructure only. There
         # is no listener, published port, engine start, DEV or STAGING operation.
         result = subprocess.run(['sudo', '-n', 'unshare', '--mount', '--net', '--pid', '--fork', 'bash', '-c', script], capture_output=True)
@@ -1382,7 +1382,7 @@ def original_guard_context(frame, operation, incoming, nested):
                 trigger=incoming[1])
 
 
-def inside():
+def inside(live=False):
     require(sys.platform == 'linux' and ROOT == Path('/harness'), 'private_namespace_required')
     harness_identity = json.loads(os.environ['F13_HARNESS_IDENTITY'])
     require(re.fullmatch('[0-9a-f]{40}', harness_identity['commit']), 'explicit_frozen_testhead')
@@ -1531,6 +1531,26 @@ def inside():
     script += 'printf "F13_SHARED_GUARD_STATUS=%s\\n" "$status"\n}\nfixture_call\n'
     before = {p: sha((OBSERVED / p).read_bytes()) for p in ['trace.jsonl', 'fixed3071-J-ledger.json', source_map.name]}
     before_files = {str(p):sha(p.read_bytes()) for p in OBSERVED.rglob('*') if p.is_file()}
+    # Reconstruct the NEW distinct permission with the bound successor, while
+    # retaining the source547 failure and every original byte. This is the real
+    # production semantic constructor at the exact pending boundary, not an
+    # invented live frame or a caller-supplied qualification bit.
+    pending_prefix = b''.join(raw.splitlines(keepends=True)[:10645])
+    permission = replay.validate_trace(repo, trace, PENDING_SHA,
+        sealed_prefix=dict(bytes=len(pending_prefix), sha256=PENDING_SHA),
+        exact_J_checkpoint='pending')['exact_J_permission']
+    require(permission['type'] == 'F54_EXACT_J_AUDIT_OWNER_TRANSITION_AUTHOR_v1'
+        and permission['operation'] == OPERATION and permission['incoming'] == pending['payload']['incoming']
+        and permission['map_before'] == h.file_digest(map_raw) and permission['source_rebind'] is False
+        and permission['admission'] is False, 'real_distinct_exact_J_permission')
+    # The original seven predicates must still refuse; the eighth result comes
+    # only from the independently reconstructed prospective permission above.
+    original_call = 'status=0; f13_guarded_owner_transition_allowed "$guarded_correction_allowed" "$role_duplicate_allowed" "$space_audit_allowed" "$exact_unit_supersession" "$allow_direct_followup" "$is_direct" "$incremental_merge" || status=$?\n'
+    require(script.count(original_call) == 1, 'one_original_shared_guard_call')
+    live_script = script
+    script = script.replace(original_call, original_call +
+        '[[ "$status" == 1 ]] || return 93\n' +
+        'status=0; f13_guarded_owner_transition_allowed "$guarded_correction_allowed" "$role_duplicate_allowed" "$space_audit_allowed" "$exact_unit_supersession" "$allow_direct_followup" "$is_direct" "$incremental_merge" true || status=$?\n')
     result = subprocess.run(['bash'], input=script.encode(), capture_output=True)
     require(result.returncode == 0 and not Path(values['diagnostic_file']).exists(), 'shared_dispatch_setup:' + result.stderr.decode(errors='replace')[-2000:])
     require(all(sha((OBSERVED / name).read_bytes()) == digest for name, digest in before.items()), 'no_trace_ledger_map_write')
@@ -1542,23 +1562,123 @@ def inside():
         pending_sequence=10645,pending_prefix_sha256=PENDING_SHA,map_sha256=MAP_SHA,ledger_sha256=LEDGER_SHA,
         guard_observed=observed,contract_expected=0,source_hashes={p:sha((ROOT/p).read_bytes())for p in OUTER_SOURCE_HASHES},
         harness_identity=harness_identity,replay_validator_provenance=replay_provenance,archive_sha256=ARCHIVE_SHA,
+        exact_J_permission_sha256=sha(h.canonical(permission)), historical_guard_observed=1,
         producer_executed=False,full_F13='NOT_RUN',admission=False)))
     if observed != 0:
         print('ASSERTION RED: accepted exact-J contract expects qualified transition; unchanged shared production guard refused', file=sys.stderr)
         return 1
+    if live:
+        private_live_transition(repo, replay, harness_identity, trace, pending_prefix, source_map,
+                                map_raw, permission, live_script, original_call, terminal)
     return 0
+
+
+def private_live_transition(repo, replay, harness_identity, trace, prefix, source_map,
+                            map_raw, permission, script, original_call, old_terminal):
+    """A fresh --live namespace owns these working copies, never the archive.
+
+    The synthetic failure tail closes a deliberately bounded fixture. It is
+    not original producer completion, a successful source disposition or F13.
+    """
+    trace.write_bytes(prefix)
+    fixture = Path('/tmp/exact-J-private-live')
+    fixture.mkdir()
+    ledger = OBSERVED/'fixed3071-J-ledger.json'
+    negatives = []
+    def refused(label, call):
+        before_trace, before_map = trace.read_bytes(), source_map.read_bytes()
+        try:
+            call()
+        except replay.Rejected:
+            require(trace.read_bytes() == before_trace and source_map.read_bytes() == before_map,
+                    'live_negative_no_mutation:'+label)
+            negatives.append(label)
+        else:
+            raise SetupFailure('live_negative_unexpected_permission:'+label)
+    refused('permission_absent', lambda: replay.consume_3071_J_path(ledger, LEDGER_SHA,
+        trace, PATH, map_raw, replay.EXACT_J_AUDIT_INCOMING, 'replace'))
+    launcher = fixture/'observer.py'
+    launcher.write_text('import importlib.util, json, sys\nfrom pathlib import Path\n'
+        'spec=importlib.util.spec_from_file_location("live_successor", "/harness/scripts/ci/f13_f54_history.py")\n'
+        'm=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)\n'
+        'm.require(m.sha(Path(m.__file__).read_bytes())==' + repr(harness_identity['files']['scripts/ci/f13_f54_history.py']) + ',"live_frozen_successor")\n'
+        'm.bind_verified_replay_root(Path("/repo"),' + repr(SOURCE) + ',' + repr(OUTER_SOURCE_HASHES) + ')\n'
+        'sys.exit(m.main())\n')
+    # Real production dispatcher, constructor, append helper and eighth result.
+    # No successful result or supplied receipt is injected into this call.
+    script = script.replace('fixture_call() {\n', 'fixture_call() {\nlocal f13_f54_frame=F5\nlocal TMP_DIR=' + shlex.quote(str(fixture)) + '\n')
+    script = script.replace('local f13_f54_observer=/repo/scripts/ci/f13_f54_history.py\n',
+                            'local f13_f54_observer=' + shlex.quote(str(launcher)) + '\n')
+    require(str(launcher) in script, 'live_bound_successor_launcher')
+    script = script.replace(original_call, original_call.replace(' || status=$?', ' "$exact_J_owner_permission" || status=$?'))
+    result = subprocess.run(['bash'], input=script.encode(), capture_output=True)
+    require(result.returncode == 0 and b'F13_SHARED_GUARD_STATUS=0' in result.stdout,
+            'live_actual_dispatch_guard:' + result.stderr.decode(errors='replace')[-2000:])
+    require(source_map.read_bytes() == map_raw, 'live_permission_has_no_map_effect')
+    permitted = replay.validate_trace(repo, trace, sha(trace.read_bytes()), exact_J_checkpoint='permitted')['exact_J_permission']
+    require(permitted == permission, 'live_same_independently_reconstructed_permission')
+    refused('wrong_ledger_hash', lambda: replay.consume_3071_J_path(ledger, '0'*64,
+        trace, PATH, map_raw, replay.EXACT_J_AUDIT_INCOMING, 'replace'))
+    refused('unrelated_before_map_row_lost', lambda: replay.consume_3071_J_path(ledger, LEDGER_SHA,
+        trace, PATH, b'\n'.join(map_raw.split(b'\n')[1:]), replay.EXACT_J_AUDIT_INCOMING, 'replace'))
+    refused('incoming_true_lost', lambda: replay.consume_3071_J_path(ledger, LEDGER_SHA,
+        trace, PATH, map_raw, replay.EXACT_J_AUDIT_INCOMING.replace('\ttrue\t', '\tfalse\t', 1), 'replace'))
+    permitted_trace = trace.read_bytes()
+    receipt_path = fixture/'permission-replay.json'
+    receipt_path.write_bytes(replay.canonical(permission))
+    replay.append(trace, 'exact_J_owner_permission', 'F5', OPERATION, repo, [PATH, str(receipt_path)])
+    refused('permission_replayed', lambda: replay.consume_3071_J_path(ledger, LEDGER_SHA,
+        trace, PATH, map_raw, replay.EXACT_J_AUDIT_INCOMING, 'replace'))
+    trace.write_bytes(permitted_trace)
+    # A valid permission cannot substitute for consumed conservation.
+    replay.append(trace, 'row_remove', 'F5', OPERATION, repo, [PATH, replay.EXACT_J_AUDIT_INCOMING, 'negative_missing_conservation'])
+    refused('conservation_absent', lambda: replay.validate_trace(repo, trace, sha(trace.read_bytes())))
+    trace.write_bytes(permitted_trace)
+    receipt = replay.consume_3071_J_path(ledger, LEDGER_SHA, trace, PATH, map_raw,
+                                       replay.EXACT_J_AUDIT_INCOMING, 'replace')
+    receipt_path = fixture/'conservation.json'
+    receipt_path.write_bytes(replay.canonical(receipt))
+    replay.append(trace, 'range_J_ledger_conserved', 'F5', OPERATION, repo, [PATH, str(receipt_path)])
+    replay.append(trace, 'row_remove', 'F5', OPERATION, repo, [PATH, replay.EXACT_J_AUDIT_INCOMING, 'guarded_owner_replacement'])
+    rows = [line for line in map_raw.decode().splitlines() if line.split('\t')[0] != PATH]
+    source_map.write_text(''.join(line+'\n' for line in rows))
+    replay.append(trace, 'row_after', 'F5', OPERATION, repo, [PATH, replay.EXACT_J_AUDIT_INCOMING, 'guarded_owner_replacement'])
+    source_map.write_text(source_map.read_text()+replay.EXACT_J_AUDIT_INCOMING+'\n')
+    replay.append(trace, 'row_committed', 'F5', OPERATION, repo, [PATH, str(source_map)])
+    require(replay.file_digest(source_map.read_bytes()) == receipt['expected_post_map'], 'live_actual_full_postmap')
+    category = fixture/'category'
+    category.write_text('SYNTHETIC_PRIVATE_FIXTURE_STOP_AFTER_EXACT_J_TRANSITION')
+    replay.append(trace, 'failure', 'F5', OPERATION, repo, [category.read_text(), str(source_map)])
+    for frame in ('F5', 'F2'):
+        output = source_map
+        if frame != 'F5':
+            output = fixture/(frame+'-map')
+            output.write_text(''.join(line+'\n' for line in old_terminal['ledger'][frame]['rows']))
+        replay.append(trace, 'frame_exit', frame, OPERATION if frame == 'F5' else '', repo,
+                      ['1', str(output), str(category)])
+    folded = replay.validate_trace(repo, trace, sha(trace.read_bytes()))
+    require(folded['ledger']['F5']['map_binding'] == receipt['expected_post_map']
+        and folded['J_consumed'][OPERATION].count(PATH) == 1
+        and folded['failures'] and folded['master_wrapper'] is None, 'live_complete_transition_fold_with_explicit_fixture_stop')
+    print(json.dumps(dict(kind='PRIVATE_LIVE_EXACT_J_TRANSITION', permission_sha256=sha(replay.canonical(permission)),
+        map_after=receipt['expected_post_map'], pre_mutation_negatives=negatives,
+        synthetic_tail=True, original_producer_completed=False,
+        full_F13='NOT_RUN', admission=False)))
 
 
 def main():
     arguments = sys.argv[1:]
-    require(arguments in ([], ['--prepare'], ['--inside']), 'explicit_harness_mode')
+    require(arguments in ([], ['--prepare'], ['--inside'], ['--live'], ['--inside-live']), 'explicit_harness_mode')
     if arguments == ['--prepare']:
         verify_private_devices()
         return prepare()
     if arguments == ['--inside']:
         verify_private_devices()
         return inside()
-    return namespace_main()
+    if arguments == ['--inside-live']:
+        verify_private_devices()
+        return inside(live=True)
+    return namespace_main(live=True) if arguments == ['--live'] else namespace_main()
 
 
 if __name__ == '__main__':

@@ -21,7 +21,7 @@ type Config struct {
 	SourceKind                   string
 }
 
-// Presence is observed separately from value: a present blank field is invalid,
+// LoadConfig observes presence separately from value: a present blank field is invalid,
 // never an instruction to fall back to ordinary SPACE_GRPC_ADDR/ROLE_GRPC_ADDR.
 func LoadConfig(lookup func(string) (string, bool)) (Config, bool, error) {
 	if lookup == nil {

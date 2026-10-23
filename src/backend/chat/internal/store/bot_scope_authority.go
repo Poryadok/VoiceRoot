@@ -13,7 +13,7 @@ import (
 // attachment in one statement snapshot. It never changes the permanent head.
 func (s *DMStore) GetBotChatScopeAuthority(ctx context.Context, chatID, spaceID uuid.UUID) (*chatv1.GetSpaceChatScopeAuthorityResponse, error) {
 	if s == nil || s.Pool == nil {
-		return nil, errors.New("Chat Bot scope authority unavailable")
+		return nil, errors.New("chat Bot scope authority unavailable")
 	}
 	var incarnation uuid.UUID
 	var rowID, rowSpace, rowIncarnation *uuid.UUID
@@ -34,7 +34,7 @@ func (s *DMStore) GetBotChatScopeAuthority(ctx context.Context, chatID, spaceID 
 		return nil, pgx.ErrNoRows
 	}
 	if incarnation == uuid.Nil || revision <= 0 || generation < 0 || present != (rowID != nil) || (rowID != nil && (rowIncarnation == nil || *rowIncarnation != incarnation)) {
-		return nil, errors.New("Chat Bot scope authority inconsistent")
+		return nil, errors.New("chat Bot scope authority inconsistent")
 	}
 	response := &chatv1.GetSpaceChatScopeAuthorityResponse{ProtocolVersion: 1, ChatId: chatID.String(), ExpectedSpaceId: spaceID.String(), ActualSpaceId: spaceID.String(), Exists: rowID != nil, ChatScopeIncarnation: incarnation.String(), ChatAuthorityRevision: uint64(revision), LifecycleGeneration: uint64(generation)}
 	switch state {
@@ -47,7 +47,7 @@ func (s *DMStore) GetBotChatScopeAuthority(ctx context.Context, chatID, spaceID 
 	case "PURGED":
 		response.LifecycleState = chatv1.ChatScopeLifecycleState_CHAT_SCOPE_LIFECYCLE_STATE_PURGED
 	default:
-		return nil, errors.New("Chat Bot lifecycle authority inconsistent")
+		return nil, errors.New("chat Bot lifecycle authority inconsistent")
 	}
 	if rowID != nil {
 		response.Live = state == "LIVE"

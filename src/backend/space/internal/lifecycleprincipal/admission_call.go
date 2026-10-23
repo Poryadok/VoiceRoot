@@ -14,6 +14,9 @@ import (
 const admissionRPCPrefix = "/voice.space.v1.SpaceService/"
 
 func admissionMethod(method string) bool {
+	if method == admissionRPCPrefix+"CreateInvite" {
+		return true
+	}
 	switch method {
 	case admissionRPCPrefix + "StartJoinAttempt", admissionRPCPrefix + "GetJoinAttempt", admissionRPCPrefix + "SubmitJoinAttempt", admissionRPCPrefix + "ListJoinRequests", admissionRPCPrefix + "GetJoinRequest", admissionRPCPrefix + "ApproveJoinRequest", admissionRPCPrefix + "JoinSpace", admissionRPCPrefix + "JoinByInvite", admissionRPCPrefix + "SetEntryPolicy", admissionRPCPrefix + "BanMember", admissionRPCPrefix + "UnbanMember":
 		return true
@@ -121,6 +124,10 @@ func requireAdmissionCall(ctx context.Context, method string, request proto.Mess
 
 func RequireAdmissionStart(ctx context.Context, request proto.Message) (*VerifiedAdmissionCall, error) {
 	return requireAdmissionCall(ctx, admissionRPCPrefix+"StartJoinAttempt", request)
+}
+
+func RequireInviteCreate(ctx context.Context, request proto.Message) (*VerifiedAdmissionCall, error) {
+	return requireAdmissionCall(ctx, admissionRPCPrefix+"CreateInvite", request)
 }
 func RequireAdmissionAttemptRead(ctx context.Context, request proto.Message) (*VerifiedAdmissionCall, error) {
 	return requireAdmissionCall(ctx, admissionRPCPrefix+"GetJoinAttempt", request)

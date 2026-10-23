@@ -26,13 +26,12 @@ func TestComposeBotsSlash_live(t *testing.T) {
 	base := liveGatewayBaseURL()
 	n := time.Now().UnixNano()
 
-	sessB := registerComposeUser(t, client, base, formatComposeEmail("p16-member-b", n), "VoiceQaTest1!")
-	sessC := registerComposeUser(t, client, base, formatComposeEmail("p16-member-c", n), "VoiceQaTest1!")
 	sess := registerComposeUser(t, client, base, formatComposeEmail("p16-owner", n), "VoiceQaTest1!")
 	spaceID := createComposeSpace(t, client, base, sess.AccessToken, fmt.Sprintf("Bots E2E %d", n), "phase16")
-	chatID := createComposeGroup(t, client, base, sess.AccessToken, fmt.Sprintf("bots-%d", n))
-	addComposeGroupMembersForInvitees(t, client, base, sess.AccessToken, chatID, sessB, sessC)
-	require.NotEmpty(t, chatID, "expected group chat id")
+	// A Space installation's whitelist must name a chat owned by that Space.
+	// Standalone group membership is a different authority and cannot qualify it.
+	chatID := createComposeSpaceTextChat(t, client, base, sess.AccessToken, spaceID, fmt.Sprintf("bots-%d", n), "CHAT_TYPE_GROUP")
+	require.NotEmpty(t, chatID, "expected Space group chat id")
 
 	botID, botToken := registerComposeBot(t, client, base, sess.AccessToken, fmt.Sprintf("PingBot-%d", n))
 	applyComposeBotManifestPolling(t, client, base, sess.AccessToken, botID)

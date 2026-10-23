@@ -121,7 +121,11 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 		traceMatchFoundTransport("rest-transcoder-unhandled")
 	}
 
-	if isSpaceCreateRequest(r) || isSpaceJoinRequest(r) || isSpaceBanMutationRequest(r) {
+	if isProtectedRoleOrBotRequest(r) {
+		writeGRPCError(w, status.Error(codes.Unavailable, "protected Role or Bot transport unavailable"))
+		return
+	}
+	if isSpaceCreateRequest(r) || isSpaceJoinRequest(r) || isSpaceBanMutationRequest(r) || isSpaceInviteCreateRequest(r) {
 		writeGRPCError(w, status.Error(codes.Unavailable, "Space creator transport unavailable"))
 		return
 	}

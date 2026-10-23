@@ -17,8 +17,8 @@ import (
 	"voice/backend/messaging/internal/botpinprincipal"
 )
 
-var ErrBotPinRemovalBinding = errors.New("Bot pin-removal binding is invalid")
-var ErrBotPinRemovalConflict = errors.New("Bot pin-removal operation conflicts with retained authority")
+var ErrBotPinRemovalBinding = errors.New("bot pin-removal binding is invalid")
+var ErrBotPinRemovalConflict = errors.New("bot pin-removal operation conflicts with retained authority")
 var ErrPinCleanupStale = errors.New("pin admission predates Bot cleanup")
 
 type PinCleanupObservation struct {

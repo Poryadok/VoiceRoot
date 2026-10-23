@@ -299,10 +299,10 @@ func (s *SpaceStore) captureEffectiveMemberMutationFacts(ctx context.Context, sp
 			}
 		} else if sources.active() {
 			// A missing old head is not an implicit UNKNOWN cutover or entry.
-			return nil, ErrEffectiveEpisodeUnavailable
+			return nil, fmt.Errorf("active source without effective head: %w", ErrEffectiveEpisodeUnavailable)
 		}
 		if !item.head.Sources.at(capture.started).equal(sources) {
-			return nil, ErrEffectiveEpisodeUnavailable
+			return nil, fmt.Errorf("effective head source mismatch: %w", ErrEffectiveEpisodeUnavailable)
 		}
 		capture.profiles = append(capture.profiles, item)
 	}
@@ -312,7 +312,7 @@ func (s *SpaceStore) captureEffectiveMemberMutationFacts(ctx context.Context, sp
 	}
 	var finished time.Time
 	if err := s.tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&finished); err != nil || finished.Before(capture.started) || !finished.Before(capture.started.Add(5*time.Second)) {
-		return nil, ErrEffectiveEpisodeUnavailable
+		return nil, fmt.Errorf("effective capture observation expired after %s: %w", finished.Sub(capture.started), ErrEffectiveEpisodeUnavailable)
 	}
 	for _, item := range capture.profiles {
 		if !item.before.equal(item.before.at(finished)) {
@@ -353,11 +353,11 @@ func (s *SpaceStore) finishEffectiveMemberMutations(ctx context.Context, capture
 	for index, item := range capture.profiles {
 		after, err := s.readEffectiveMemberSources(ctx, capture.space, item.profile, sampled)
 		if err != nil {
-			return err
+			return fmt.Errorf("effective final source: %w", err)
 		}
 		next[index], err = advanceEffectiveEpisode(item.head, item.before, after, capture.started, sampled, uuid.New())
 		if err != nil {
-			return err
+			return fmt.Errorf("effective episode transition: %w", err)
 		}
 		if err = saveEffectiveHead(ctx, s.tx, capture.space, item.profile, item.cutover, item.head.Revision, next[index]); err != nil {
 			return err
@@ -371,7 +371,7 @@ func (s *SpaceStore) finishEffectiveMemberMutations(ctx context.Context, capture
 	}
 	var finished time.Time
 	if err := s.tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&finished); err != nil || finished.Before(sampled) || !finished.Before(capture.started.Add(5*time.Second)) {
-		return ErrEffectiveEpisodeUnavailable
+		return fmt.Errorf("effective final observation expired after %s: %w", finished.Sub(capture.started), ErrEffectiveEpisodeUnavailable)
 	}
 	for _, head := range next {
 		if !head.Sources.equal(head.Sources.at(finished)) || (!head.bridgeUntil.IsZero() && !finished.Before(head.bridgeUntil)) {

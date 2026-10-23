@@ -120,6 +120,12 @@ VOICE_STARTUP_PREFIXES = (
 # Static log.Fatal[f] prefixes from Space main.go; dynamic suffixes are never
 # projected into the record. Bare log.Fatal(err) messages remain unclassified.
 SPACE_STARTUP_PREFIXES = (
+    ("Bot membership listener requires DATABASE_URL", "space_bot_membership_requires_database_url"),
+    ("Bot membership principal config:", "space_bot_membership_config"),
+    ("Bot membership runtime:", "space_bot_membership_runtime"),
+    ("Space User capture config:", "space_user_capture_config"),
+    ("Space User capture requires Space principal issuer", "space_user_capture_requires_issuer"),
+    ("Space User capture runtime:", "space_user_capture_runtime"),
     ("AUTH_PRINCIPAL_GRPC_ADDR is required with Auth ownership TLS settings", "space_auth_principal_grpc_addr_is_required_with_auth_ownership_tls_settings"),
     ("ROLE_PRINCIPAL_GRPC_ADDR is required with Role ownership TLS settings", "space_role_principal_grpc_addr_is_required_with_role_ownership_tls_settings"),
     ("Role target listen:", "space_role_target_listen"),

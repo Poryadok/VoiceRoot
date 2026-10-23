@@ -11,10 +11,20 @@ unchanged SDK revision, and compares the executed snapshot fold with native
 GetEffectiveMask. The original source DDL/function hashes remain unchanged;
 catalog20 additionally guards both new SpaceChat clock inputs and four triggers.
 This projection does not represent the separate binding-aware SpaceChat policy
-decision or activate admission RPCs. EnsureDefaultMemberRole/RemoveMemberRoles
-remain unimplemented; ordinary network calls and the protected allowlist deny.
+decision. The separate development native21/source2 cohort implements protected EnsureDefaultMemberRole/RemoveMemberRoles with fresh Space authority, immutable receipts and generation floors; ordinary listeners deny these methods. Component transport/RolePG/SpacePG proof does not establish complete all-writer cutover, current owner-channel readiness or full runtime activation.
 
 ### Admission readiness target (ADMISSION-ROLE-READINESS-v1)
+
+The development native/state2 cohort also qualifies exact clean25 through the
+same native21 membership facts and pure mask fold. Its additional Bot removal
+tables and immutable guards are mandatory catalog inputs, not permission grants
+or membership sources. Cleanup removes typed contributions/preparations before
+definitions and invalidates the existing Role revision; the independent SDK
+revision is unchanged. State1 is never served for21 or25. Intermediate22-24,
+future/dirty schemas and altered guards remain unavailable. Qualified admission
+receipts are guarded by the same exact catalog inside their operation/Space
+transaction. Bot actor mutation readiness and the durable Assign/Revoke core
+remain separate gates; these component proofs do not activate them.
 
 Accepted BE-010 c12/c13 separates the ordinary membership incarnation from an
 independent community source. Space stores pending admission outside
@@ -82,14 +92,20 @@ per-profile membership generation plus a never-reused membership episode UUID;
 roster revision or row replacement is not episode identity. Generic Revoke pins
 a finite set of legal contribution IDs, never a wildcard against future joins.
 
-This is an implementation target. The current bounded artifact freezes additive
-request/receipt protobufs, the receipt fingerprint codec and ordinary-listener
-denies only. No Role20 schema/receiver, Space authority/head, qualified legacy
-read/write/export cutover or reconciliation is activated. Those remain open
-delivery work after the current finish-and-develop directive. Consumers are the
-future Space admission/publication and Role lifecycle slices; the current Space
-author did not release its planned authority API. No P3/GIS/Voice capability is
-activated here.
+The native21/25 implementation supplies protected admission receivers, durable
+inert receipts and floors, qualified permission/hierarchy/Voice reads and
+explicit state2 exports. Its consumer is Space's admission/publication flow.
+Configure the fresh owner client with `ROLE_SPACE_MEMBER_AUTHORITY_GRPC_ADDR`,
+`ROLE_SPACE_MEMBER_AUTHORITY_TLS_CA_FILE`,
+`ROLE_SPACE_MEMBER_AUTHORITY_TLS_SERVER_NAME`,
+`ROLE_SPACE_MEMBER_AUTHORITY_CLIENT_CERT_FILE` and
+`ROLE_SPACE_MEMBER_AUTHORITY_CLIENT_KEY_FILE`, plus Role's signing identity.
+Missing owner authority remains unavailable. Ordinary listeners reject protected
+admission and raw actor calls. Generic Assign/Revoke at the qualified catalog
+remain unavailable until their durable operation protocol is implemented;
+unknown legacy grants are not reclassified. Bot actor mutation routes remain
+closed. Component evidence does not establish deployment or complete
+cross-service acceptance.
 
 For the BE-131 composite vertical, the existing dedicated Role principal
 listener additionally accepts signed `service:space` `CheckPermission` for
@@ -479,6 +495,15 @@ interceptor ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md));
 | `bot` signed `bot_actor` capability | `CreateRole`, `AssignRole`, `RevokeRole` | only the exact scope and claim-bound space below; no generic Gateway principal or metadata fallback; `Owner` and every system-role mutation are rejected |
 
 ### Space `CheckPermission` decision contract
+
+The protected Bot installation decision is a separate exact branch: only
+`service:bot`, `SPACE_MANAGE_BOTS`, canonical Space/profile IDs and no chat/voice
+node. `ROLE_BOT_LIFECYCLE_ENABLED=true` adds only the configured `bot` HTTPS JWKS
+issuer to the closed listener trust set. Missing/partial configuration fails
+closed; the ordinary listener rejects this decision. This branch uses current
+native membership qualification, never a raw Owner/Admin label. Cleanup RPC
+activation additionally requires its durable participant adapter and fences;
+enabling the decision flag alone does not establish cleanup readiness.
 
 Space may call only `/voice.role.v1.RoleService/CheckPermission` with a signed
 service JWT whose `principal_type=service`, `iss=space`, `sub=service:space`,

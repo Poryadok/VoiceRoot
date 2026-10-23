@@ -1,5 +1,37 @@
 # Native/P3 source qualification for master
 
+## PR875 exact-J implementation checkpoint (2026-10-23)
+
+Independent CONTRACT review by `/root/f13_review` accepts the bounded exact-J
+extension below. The review read the complete twelve-version/six-edge frozen
+source unit, the bound audit implementation and canonical410 decision5862f23d.
+That decision preserves the old denial and permits separate adjudication of the
+actual transition; it did not itself grant J supersession. User-authorized PR875
+repair supplies the implementation scope. This acceptance is not code review,
+execution evidence, current-carrier applicability or production admission.
+
+Implementation uses `F54_EXACT_J_AUDIT_OWNER_TRANSITION_AUTHOR_v1`, a separate
+append-only permission event and eighth local guard result. It never aliases an
+existing M/native/Game/Role/Space/incremental qualifier. The constructor and
+event verifier reconstruct the whole actual prefix/J ledger/map before checking
+the exact rows, current AUTHOR capability, whole composition and frozen source
+unit. J conservation consumes that same permission before any remove/commit.
+
+The historical test keeps source547's complete failed trace/archive immutable
+and verifies its original seven-argument refusal. The successor reconstructs
+the prospective permission at the explicitly sealed pending row10645. The
+separate `--live` mode creates a fresh private namespace and exercises actual
+dispatcher/append/guard/conservation/mutation/final-fold seams on its owned
+working copy. Its explicit synthetic failure tail is only fixture termination,
+never a successful original operation disposition, full producer or F13 result.
+
+Required oracle matrix remains the complete positive/negative list below.
+Focused checks cover distinct receipt consumption, every prior/incoming raw
+field and foreign operation refusal. Historical causal GREEN, private live
+sequence, affected full history checks and independent CODE review are required
+before claiming this implementation verified. No existing archive/hash, stopped
+operation, original router order or current-source qualification is relaxed.
+
 ## Exact-J audit owner transition: c119 CONTRACT PROPOSAL
 
 Status: PROPOSED, not an implemented or accepted duplicate permission. The

@@ -191,7 +191,7 @@ class FixtureTests(unittest.TestCase):
     def test_ca_signed_leaf_keys_hostname_and_short_lifetime(self):
         ca = self.dest / "ca/ca.crt"
         self.assertEqual({p.name for p in ca.parent.iterdir()},
-                         {"ca.crt", "gameintegration-client-ca.crt", "space-lifecycle-client-ca.crt"},
+                         {"ca.crt", "gameintegration-client-ca.crt", "space-lifecycle-client-ca.crt", "bot-jwks-client-ca.crt"},
                          "CA signing key must not survive issuance")
         for leaf, hostname in (("role", "role"), ("auth", "auth"), ("proxy", PROXY),
                                ("matchmaking-complete-grpc", "matchmaking"),
@@ -223,7 +223,7 @@ class FixtureTests(unittest.TestCase):
                 self.assertLessEqual(lifetime, 2 * 86400 + 60)
 
     def test_service_client_leaves_are_ca_signed_and_client_auth_only(self):
-        for service in ("space", "gameintegration", "voice", "matchmaking", "chat", "auth-jwks"):
+        for service in ("space", "gameintegration", "voice", "matchmaking", "chat", "auth-jwks", "role", "bot"):
             with self.subTest(service=service):
                 cert = self.dest / f"tls/{service}-client.crt"
                 self.openssl("verify", "-CAfile", self.dest / "ca/ca.crt", "-purpose", "sslclient", cert)
@@ -238,6 +238,24 @@ class FixtureTests(unittest.TestCase):
                     normalized_subject,
                     rf"(?:^|[,/])CN={re.escape(service)}(?:$|[,/])",
                 )
+
+    def test_bot_jwks_ca_accepts_native_and_existing_gis_consumers(self):
+        bundle = self.dest / "ca/bot-jwks-client-ca.crt"
+        self.assertEqual(bundle.read_bytes(), (self.dest / "ca/ca.crt").read_bytes()
+                         + (self.dest / "ca/gameintegration-client-ca.crt").read_bytes())
+        for leaf in ("space-client", "role-client", "auth-jwks-client", "chat-jwks-client", "gameintegration-messaging-client"):
+            self.openssl("verify", "-CAfile", bundle, "-purpose", "sslclient", self.dest / f"tls/{leaf}.crt")
+        self.assertNotEqual(run("openssl", "verify", "-CAfile", bundle, "-purpose", "sslclient",
+                                self.dest / "tls/space-lifecycle-client.crt").returncode, 0)
+
+    def test_bot_session_floor_identity_is_bound_to_only_bot_client(self):
+        for service in ("bot", "role", "space", "chat", "auth-jwks"):
+            san = self.openssl("x509", "-in", self.dest / f"tls/{service}-client.crt",
+                               "-noout", "-ext", "subjectAltName")
+            if service == "bot":
+                self.assertIn("URI:spiffe://voice.local/phase0/bot", san)
+            else:
+                self.assertNotIn("spiffe://voice.local/phase0/bot", san)
 
     def test_gateway_voice_media_client_leaf_is_root_ca_client_only(self):
         cert = self.dest / "tls/gateway-client.crt"
@@ -478,6 +496,19 @@ sys.exit(code)
 
 
 class ComposeTests(unittest.TestCase):
+
+    def test_role_member_authority_uses_protected_space_target(self):
+        role = self.ci_merged["role"]["environment"]
+        space = self.ci_merged["space"]["environment"]
+        self.assertEqual(role.get("ROLE_SPACE_MEMBER_AUTHORITY_GRPC_ADDR"), "space:9099")
+        self.assertEqual(space.get("SPACE_ROLE_OVERRIDE_PRINCIPAL_GRPC_LISTEN"), ":9099")
+        self.assertEqual(role.get("ROLE_SPACE_MEMBER_AUTHORITY_TLS_SERVER_NAME"), "space")
+        for suffix, source in (("CLIENT_CERT_FILE", "tls/role-client.crt"),
+                               ("CLIENT_KEY_FILE", "tls/role-client.key"),
+                               ("TLS_CA_FILE", "ca/ca.crt")):
+            self.assertEqual(self.source_at("role", role["ROLE_SPACE_MEMBER_AUTHORITY_" + suffix]), source)
+        self.assertEqual(self.source_at("space", space["SPACE_ROLE_OVERRIDE_PRINCIPAL_CLIENT_CA_FILE"]), "ca/ca.crt")
+
     @classmethod
     def setUpClass(cls):
         if not OVERLAY.is_file():
@@ -596,6 +627,7 @@ class ComposeTests(unittest.TestCase):
     def test_space_jwks_bundle_preserves_social_trust_without_private_material(self):
         space = self.merged["space"]
         self.assertEqual(json.loads(space["environment"]["S2S_JWKS_URLS_JSON"]), {
+            "bot": "https://bot:8444/.well-known/principal-jwks.json",
             "social": "https://social:8443/.well-known/jwks.json",
             "role": "https://role:8443/.well-known/jwks.json",
             "chat": "https://chat:8443/.well-known/jwks.json",
@@ -797,6 +829,9 @@ class ComposeTests(unittest.TestCase):
         provider = space["environment"]
         voice = self.media_merged["voice"]["environment"]
         self.assertEqual(json.loads(provider["S2S_JWKS_URLS_JSON"]), {
+            "bot": "https://bot:8444/.well-known/principal-jwks.json",
+            "role": "https://role:8443/.well-known/jwks.json",
+            "chat": "https://chat:8443/.well-known/jwks.json",
             "social": "https://social:8443/.well-known/jwks.json",
             "voice": "https://voice:8443/internal/v1/principal/jwks.json",
         })
@@ -1574,6 +1609,9 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(role["ROLE_PRINCIPAL_GRPC_LISTEN"], ":9091")
         self.assertEqual(role["ROLE_PRINCIPAL_REPLAY_REDIS_ADDR"], "redis:6379")
         self.assertEqual(json.loads(role["S2S_JWKS_URLS_JSON"]), {
+            "bot": "https://bot:8444/.well-known/principal-jwks.json",
+            "chat": "https://chat:8443/.well-known/jwks.json",
+            "gateway": "https://phase0-jwks:8443/gateway-bootstrap/jwks.json",
             "space": URLS["space"],
             "gameintegration": "https://gameintegration:8443/internal/v1/principal/jwks.json",
             "voice": "https://voice:8443/internal/v1/principal/jwks.json",
@@ -1600,6 +1638,8 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(auth["AUTH_PRINCIPAL_GRPC_PORT"], "9091")
         self.assertEqual(json.loads(auth["S2S_JWKS_URLS_JSON"]), {
             **URLS, "voice": "https://voice:8443/internal/v1/principal/jwks.json",
+            "bot": "https://bot:8444/.well-known/principal-jwks.json",
+            "role": "https://role:8443/.well-known/jwks.json",
             "chat": "https://chat:8443/.well-known/jwks.json",
         })
         self.assertNotIn("S2S_JWKS_CA_FILE", auth)
@@ -1663,6 +1703,7 @@ class ComposeTests(unittest.TestCase):
                                 "tls/chat-client.crt", "tls/chat-client.key",
                                 "tls/chat-jwks-client.crt", "tls/chat-jwks-client.key"})
         allowed["role"].add("role")
+        allowed["role"].update({"tls/role-client.crt", "tls/role-client.key"})
         allowed["auth"].add("auth-jwks-client.p12")
         allowed["phase0-space-jwks-ca"] = {"ca/ca.crt"}
         allowed["gameintegration"].update({"tls/gameintegration-messaging-client.crt",
@@ -1670,6 +1711,7 @@ class ComposeTests(unittest.TestCase):
         allowed["voice"].add("ca/space-lifecycle-client-ca.crt")
         allowed["realtime"] = {"ca/ca.crt"}
         allowed["bot"] = {"bot", "tls/bot-game-event.crt", "tls/bot-game-event.key",
+                          "tls/bot-client.crt", "tls/bot-client.key", "ca/bot-jwks-client-ca.crt",
                           "tls/gameintegration-messaging-client.crt", "tls/gameintegration-messaging-client.key",
                           "ca/ca.crt", "ca/gameintegration-client-ca.crt", "ca/space-lifecycle-client-ca.crt"}
         allowed["notification"] = {"tls/notification-lifecycle.crt", "tls/notification-lifecycle.key",
@@ -1775,6 +1817,7 @@ class ComposeTests(unittest.TestCase):
                 "AUTH_PRINCIPAL_GRPC_PORT", "AUTH_SESSION_FLOOR_GRPC_PORT",
                 "AUTH_GRPC_TLS_CERT_FILE", "AUTH_GRPC_TLS_KEY_FILE",
                 "AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE",
+                "AUTH_BOT_SESSION_FLOOR_ALLOWED_CLIENT_URI_SAN",
                 "S2S_JWKS_URLS_JSON", "JAVA_TOOL_OPTIONS",
             },
             "gateway": {
@@ -1839,8 +1882,14 @@ class ComposeTests(unittest.TestCase):
             self.assertEqual(actual - baseline, expected,
                              f"unexpected {service} media-overlay environment additions")
         auth_env = self.media_merged["auth"]["environment"]
-        self.assertEqual(auth_env["S2S_JWKS_URLS_JSON"],
-                         '{"gateway":"https://phase0-jwks:8443/gateway/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json"}')
+        self.assertEqual(json.loads(auth_env["S2S_JWKS_URLS_JSON"]), {
+            "gateway": "https://phase0-jwks:8443/gateway/jwks.json",
+            "space": "https://phase0-jwks:8443/space/jwks.json",
+            "voice": "https://voice:8443/internal/v1/principal/jwks.json",
+            "chat": "https://chat:8443/.well-known/jwks.json",
+            "role": "https://role:8443/.well-known/jwks.json",
+            "bot": "https://bot:8444/.well-known/principal-jwks.json",
+        })
         self.assertEqual(auth_env["AUTH_SESSION_FLOOR_GRPC_PORT"], "9092")
         self.assertEqual(auth_env["AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE"], "/run/phase0/ca.crt")
         gateway_env = self.media_merged["gateway"]["environment"]
@@ -1899,6 +1948,9 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(role_env["ROLE_PRINCIPAL_CLIENT_CA_FILE"], "/run/phase0/ca.crt")
         self.assertEqual(role_env["ROLE_PRINCIPAL_REPLAY_REDIS_ADDR"], "redis:6379")
         self.assertEqual(json.loads(role_env["S2S_JWKS_URLS_JSON"]), {
+            "bot": "https://bot:8444/.well-known/principal-jwks.json",
+            "chat": "https://chat:8443/.well-known/jwks.json",
+            "gateway": "https://phase0-jwks:8443/gateway-bootstrap/jwks.json",
             "space": "https://phase0-jwks:8443/space/jwks.json",
             "gameintegration": "https://gameintegration:8443/internal/v1/principal/jwks.json",
             "voice": "https://voice:8443/internal/v1/principal/jwks.json",
@@ -1984,6 +2036,7 @@ class ComposeTests(unittest.TestCase):
                    "config", "--format", "json"]
         space = json.loads(require_success(run(*command, env=env)))["services"]["space"]["environment"]
         self.assertEqual(json.loads(space["S2S_JWKS_URLS_JSON"]), {
+            "bot": "https://bot:8444/.well-known/principal-jwks.json",
             "social": "https://social:8443/.well-known/jwks.json",
             "role": "https://role:8443/.well-known/jwks.json",
             "chat": "https://chat:8443/.well-known/jwks.json",
@@ -1997,6 +2050,7 @@ class ComposeTests(unittest.TestCase):
         space = self.ci_merged["space"]
         env = space["environment"]
         self.assertEqual(json.loads(env["S2S_JWKS_URLS_JSON"]), {
+            "bot": "https://bot:8444/.well-known/principal-jwks.json",
             "social": "https://social:8443/.well-known/jwks.json",
             "role": "https://role:8443/.well-known/jwks.json",
             "chat": "https://chat:8443/.well-known/jwks.json",
@@ -2027,6 +2081,17 @@ class ComposeTests(unittest.TestCase):
         self.assertFalse(space.get("ports"))
 
     def test_combined_phase0_media_listeners_have_distinct_ports_and_matching_caller(self):
+        for services in (self.merged, self.media_merged, self.ci_merged):
+            self.assertEqual(services["auth"]["environment"]["AUTH_BOT_SESSION_FLOOR_ALLOWED_CLIENT_URI_SAN"],
+                             "spiffe://voice.local/phase0/bot")
+            options = services["auth"]["environment"]["JAVA_TOOL_OPTIONS"]
+            self.assertIn("-Djavax.net.ssl.keyStore=/run/phase0/auth-jwks-client.p12", options)
+            self.assertIn("-Djavax.net.ssl.keyStorePassword=phase0-fixture", options)
+            self.assertIn("-Djavax.net.ssl.keyStoreType=PKCS12", options)
+            mounts = [v for v in services["auth"]["volumes"]
+                      if v["target"] == "/run/phase0/auth-jwks-client.p12"]
+            self.assertEqual(len(mounts), 1)
+            self.assertTrue(mounts[0]["read_only"])
         # Match the CI stack's effective order: the complete Phase0 overlay
         # must override the media-only Gateway JWKS bootstrap URL.
         combined = self.ci_merged
@@ -2043,6 +2108,8 @@ class ComposeTests(unittest.TestCase):
         auth = combined["auth"]["environment"]
         self.assertEqual(json.loads(auth["S2S_JWKS_URLS_JSON"]), {
             "gateway": "https://phase0-jwks:8443/gateway/jwks.json",
+            "bot": "https://bot:8444/.well-known/principal-jwks.json",
+            "role": "https://role:8443/.well-known/jwks.json",
             "space": "https://phase0-jwks:8443/space/jwks.json",
             "voice": "https://voice:8443/internal/v1/principal/jwks.json",
             "chat": "https://chat:8443/.well-known/jwks.json",
@@ -2060,7 +2127,7 @@ class ComposeTests(unittest.TestCase):
         allowed = {
             "space": {"tls/space-lifecycle.crt", "tls/space-lifecycle.key", "tls/space-client.crt",
                       "tls/space-client.key", "ca/ca.crt"},
-            "auth": {"tls/auth.crt", "tls/auth.key", "truststore.p12", "ca/ca.crt"},
+            "auth": {"tls/auth.crt", "tls/auth.key", "truststore.p12", "auth-jwks-client.p12", "ca/ca.crt"},
             "gateway": {"gateway/current.pem", "gateway/next.pem", "tls/gateway-client.crt", "tls/gateway-client.key", "ca/ca.crt"},
             "voice": {"voice/current.pem", "voice/next.pem", "tls/voice-jwks.crt", "tls/voice-jwks.key",
                       "tls/voice-game-grpc.crt", "tls/voice-game-grpc.key", "tls/voice-client.crt",

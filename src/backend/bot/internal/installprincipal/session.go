@@ -39,7 +39,7 @@ func (c *SessionChecker) Check(ctx context.Context, account string, epoch int64)
 	call = metadata.NewOutgoingContext(call, metadata.Pairs("authorization", "Bearer "+token, "x-request-id", requestID))
 	resp, err := c.Client.GetBotSessionEpochFloor(call, req)
 	if err != nil || resp == nil || len(resp.ProtoReflect().GetUnknown()) != 0 || resp.GetSessionEpochFloor() <= 0 {
-		return errors.New("Bot session floor unavailable")
+		return errors.New("bot session floor unavailable")
 	}
 	if epoch < resp.GetSessionEpochFloor() {
 		return ErrAdministrator

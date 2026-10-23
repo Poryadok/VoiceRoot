@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/protobuf/proto"
@@ -69,7 +70,7 @@ func (s *SpaceStore) mutateBotInstallation(ctx context.Context, proof *botmember
 	scoped := *s
 	scoped.tx = tx
 	if err = scoped.effectiveMutationScope(ctx, in.SpaceID); err != nil {
-		return err
+		return fmt.Errorf("bot installation scope: %w", err)
 	}
 	if _, err = proof.Check(request); err != nil {
 		return err
@@ -100,7 +101,7 @@ func (s *SpaceStore) mutateBotInstallation(ctx context.Context, proof *botmember
 	if mutatesSource || version == 44 || version == 45 || (version == 50 || version == 51) {
 		capture, err = scoped.captureNativeEffectiveMemberMutation(ctx, in.SpaceID, []uuid.UUID{in.ProfileID})
 		if err != nil {
-			return err
+			return fmt.Errorf("bot installation capture: %w", err)
 		}
 	}
 	if remove {
@@ -118,7 +119,7 @@ func (s *SpaceStore) mutateBotInstallation(ctx context.Context, proof *botmember
 	}
 	if capture != nil {
 		if err = scoped.finishEffectiveMemberMutations(ctx, capture); err != nil {
-			return err
+			return fmt.Errorf("bot installation finalize: %w", err)
 		}
 	}
 	if _, err = proof.Check(request); err != nil {

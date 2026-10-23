@@ -11,7 +11,7 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 )
 
-var ErrChatScopeObservation = errors.New("Chat source observation is invalid")
+var ErrChatScopeObservation = errors.New("chat source observation is invalid")
 
 // ChatScopeObservation contains facts obtained by the authenticated private Chat
 // caller. It is not a transferable capability or a reservation over Chat state.

@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -13,9 +15,6 @@ import (
 
 func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest string) bool {
 	ctx := withGRPCMetadata(r.Context(), r)
-	if t.clients.role == nil {
-		return false
-	}
 
 	switch {
 	case r.Method == http.MethodGet && rest == "members":
@@ -23,7 +22,12 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 			SpaceId:   queryFirst(r, "space_id"),
 			ProfileId: queryFirst(r, "profile_id"),
 		}
-		resp, err := t.clients.role.GetMemberRoles(ctx, req)
+		ctx, err := t.auditInitiatingContext(r, req, rolev1.RoleService_GetMemberRoles_FullMethodName, uuid.NewString())
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.roleAudit.GetMemberRoles(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -42,6 +46,10 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 		}
 		if voiceRoomID := queryFirst(r, "voice_room_id"); voiceRoomID != "" {
 			req.VoiceRoomId = &voiceRoomID
+		}
+		if t.clients.role == nil {
+			writeGRPCError(w, status.Error(codes.Unavailable, "Role decision transport unavailable"))
+			return true
 		}
 		resp, err := t.clients.role.CheckPermission(ctx, req)
 		if err != nil {
@@ -62,7 +70,12 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 		if voiceRoomID := queryFirst(r, "voice_room_id"); voiceRoomID != "" {
 			req.VoiceRoomId = &voiceRoomID
 		}
-		resp, err := t.clients.role.GetEffectivePermissions(ctx, req)
+		ctx, err := t.auditInitiatingContext(r, req, rolev1.RoleService_GetEffectivePermissions_FullMethodName, uuid.NewString())
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.roleAudit.GetEffectivePermissions(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -71,9 +84,13 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 		return true
 
 	case r.Method == http.MethodGet && rest == "default-join":
-		resp, err := t.clients.role.GetDefaultJoinRole(ctx, &rolev1.GetDefaultJoinRoleRequest{
-			SpaceId: queryFirst(r, "space_id"),
-		})
+		req := &rolev1.GetDefaultJoinRoleRequest{SpaceId: queryFirst(r, "space_id")}
+		ctx, err := t.auditInitiatingContext(r, req, rolev1.RoleService_GetDefaultJoinRole_FullMethodName, uuid.NewString())
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.roleAudit.GetDefaultJoinRole(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -86,7 +103,12 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 		if chatID := queryFirst(r, "chat_id"); chatID != "" {
 			req.FilterChat = &chatv1.ChatRef{Id: chatID}
 		}
-		resp, err := t.clients.role.GetChatOverrides(ctx, req)
+		ctx, err := t.auditInitiatingContext(r, req, rolev1.RoleService_GetChatOverrides_FullMethodName, uuid.NewString())
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.roleAudit.GetChatOverrides(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -99,7 +121,12 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 		if voiceRoomID := queryFirst(r, "voice_room_id"); voiceRoomID != "" {
 			req.VoiceRoomId = &voiceRoomID
 		}
-		resp, err := t.clients.role.GetVoiceRoomOverrides(ctx, req)
+		ctx, err := t.auditInitiatingContext(r, req, rolev1.RoleService_GetVoiceRoomOverrides_FullMethodName, uuid.NewString())
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.roleAudit.GetVoiceRoomOverrides(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -113,7 +140,13 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 			writeGRPCError(w, status.Error(codes.InvalidArgument, "space_id is required"))
 			return true
 		}
-		resp, err := t.clients.role.ListRoles(ctx, &rolev1.ListRolesRequest{SpaceId: spaceID})
+		req := &rolev1.ListRolesRequest{SpaceId: spaceID}
+		ctx, err := t.auditInitiatingContext(r, req, rolev1.RoleService_ListRoles_FullMethodName, uuid.NewString())
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.roleAudit.ListRoles(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -127,7 +160,12 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 			writeGRPCError(w, err)
 			return true
 		}
-		resp, err := t.clients.role.CreateRole(ctx, req)
+		ctx, err := t.auditInitiatingContext(r, req, rolev1.RoleService_CreateRole_FullMethodName, uuid.NewString())
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.roleAudit.CreateRole(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -141,7 +179,12 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 			writeGRPCError(w, err)
 			return true
 		}
-		resp, err := t.clients.role.RevokeRole(ctx, req)
+		ctx, err := t.auditInitiatingContext(r, req, rolev1.RoleService_RevokeRole_FullMethodName, uuid.NewString())
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.roleAudit.RevokeRole(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -155,7 +198,12 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 			writeGRPCError(w, err)
 			return true
 		}
-		resp, err := t.clients.role.AssignRole(ctx, req)
+		ctx, err := t.auditInitiatingContext(r, req, rolev1.RoleService_AssignRole_FullMethodName, uuid.NewString())
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.roleAudit.AssignRole(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -169,7 +217,12 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 			writeGRPCError(w, err)
 			return true
 		}
-		resp, err := t.clients.role.ReorderRoles(ctx, req)
+		ctx, err := t.auditInitiatingContext(r, req, rolev1.RoleService_ReorderRoles_FullMethodName, uuid.NewString())
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.roleAudit.ReorderRoles(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -183,7 +236,12 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 			writeGRPCError(w, err)
 			return true
 		}
-		resp, err := t.clients.role.SetChatOverride(ctx, req)
+		ctx, err := t.auditInitiatingContext(r, req, rolev1.RoleService_SetChatOverride_FullMethodName, uuid.NewString())
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.roleAudit.SetChatOverride(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -197,7 +255,12 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 			writeGRPCError(w, err)
 			return true
 		}
-		resp, err := t.clients.role.SetVoiceRoomOverride(ctx, req)
+		ctx, err := t.auditInitiatingContext(r, req, rolev1.RoleService_SetVoiceRoomOverride_FullMethodName, uuid.NewString())
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.roleAudit.SetVoiceRoomOverride(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -211,7 +274,12 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 			writeGRPCError(w, err)
 			return true
 		}
-		resp, err := t.clients.role.SetDefaultJoinRole(ctx, req)
+		ctx, err := t.auditInitiatingContext(r, req, rolev1.RoleService_SetDefaultJoinRole_FullMethodName, uuid.NewString())
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.roleAudit.SetDefaultJoinRole(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -227,7 +295,12 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 		if chatID := queryFirst(r, "chat_id"); chatID != "" {
 			req.Chat = &chatv1.ChatRef{Id: chatID}
 		}
-		resp, err := t.clients.role.RemoveChatOverride(ctx, req)
+		ctx, err := t.auditInitiatingContext(r, req, rolev1.RoleService_RemoveChatOverride_FullMethodName, uuid.NewString())
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.roleAudit.RemoveChatOverride(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -242,7 +315,12 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 			RoleId:  queryFirst(r, "role_id"),
 		}
 		req.VoiceRoomId = voiceRoomID
-		resp, err := t.clients.role.RemoveVoiceRoomOverride(ctx, req)
+		ctx, err := t.auditInitiatingContext(r, req, rolev1.RoleService_RemoveVoiceRoomOverride_FullMethodName, uuid.NewString())
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.roleAudit.RemoveVoiceRoomOverride(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -257,7 +335,12 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 			return true
 		}
 		req.RoleId = rest
-		resp, err := t.clients.role.UpdateRole(ctx, req)
+		ctx, err := t.auditInitiatingContext(r, req, rolev1.RoleService_UpdateRole_FullMethodName, uuid.NewString())
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.roleAudit.UpdateRole(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -266,7 +349,13 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 		return true
 
 	case r.Method == http.MethodDelete && rest != "" && !strings.Contains(rest, "/"):
-		resp, err := t.clients.role.DeleteRole(ctx, &rolev1.DeleteRoleRequest{RoleId: rest})
+		req := &rolev1.DeleteRoleRequest{RoleId: rest}
+		ctx, err := t.auditInitiatingContext(r, req, rolev1.RoleService_DeleteRole_FullMethodName, uuid.NewString())
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.roleAudit.DeleteRole(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
