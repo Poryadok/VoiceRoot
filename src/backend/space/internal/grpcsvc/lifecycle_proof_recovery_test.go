@@ -3,9 +3,6 @@ package grpcsvc
 import (
 	"context"
 	"crypto/sha256"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -26,26 +23,13 @@ func TestRecoverLifecycleProofPersistsExactLookupReceipt(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
-			pool := startSpacePostgresForTest(t, ctx)
-			dir := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db")
-			entries, err := os.ReadDir(dir)
-			require.NoError(t, err)
-			for _, entry := range entries {
-				if strings.HasSuffix(entry.Name(), ".up.sql") {
-					raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
-					require.NoError(t, err)
-					_, err = pool.Exec(ctx, string(raw))
-					require.NoError(t, err, entry.Name())
-				}
-			}
-			st := &store.SpaceStore{Pool: pool}
 			account, owner, operation := uuid.New(), uuid.New(), uuid.New()
-			row, err := st.CreateSpace(ctx, owner, "recover consumed deletion proof", "", "private")
-			require.NoError(t, err)
+			pool, row := nativeLifecycleProofFixture(t, ctx, owner, "recover consumed deletion proof")
+			st := &store.SpaceStore{Pool: pool}
 			const epoch = int64(7)
 			const proof = "test-owned opaque consumed proof"
 			req := &spacev1.DeleteSpaceRequest{SpaceId: row.ID.String(), OperationId: operation.String(), ConfirmationName: row.Name, Proof: proof}
-			_, err = st.ReserveLifecycleSchedule(ctx, account, owner, epoch, req)
+			_, err := st.ReserveLifecycleSchedule(ctx, account, owner, epoch, req)
 			require.NoError(t, err)
 			response := validDeletionProofResponse(account, owner, epoch, row.ID, operation, row.Name, proof)
 			if changedBinding {
