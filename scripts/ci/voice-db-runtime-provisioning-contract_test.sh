@@ -266,6 +266,7 @@ grep -Eq '^[ ]+exec:[[:space:]]*$' "${TMP_DIR}/f10-bad-readiness" || {
 printf '%s\n' '== F05-F06: local provisioning and migration entrypoints =='
 expect_word_count 'docker/postgres/initdb.d/01-init-databases.sh' 'voice_db' 1 F05
 compose_service compose-db-init >"${TMP_DIR}/compose-db-init"
+grep -Eq '^      PGSSLMODE:[[:space:]]*disable[[:space:]]*$' "${TMP_DIR}/compose-db-init" || fail 'F05: local compose-db-init must explicitly use the PostgreSQL service TLS mode'
 indented_block depends_on "${TMP_DIR}/compose-db-init" 4 >"${TMP_DIR}/compose-db-init-depends"
 grep -Eq '^      postgres:[[:space:]]*$' "${TMP_DIR}/compose-db-init-depends" || fail 'F05: compose-db-init must depend on PostgreSQL'
 indented_block postgres "${TMP_DIR}/compose-db-init-depends" 6 >"${TMP_DIR}/compose-db-init-postgres"

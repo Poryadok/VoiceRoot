@@ -480,6 +480,7 @@ services:
       PGHOST: postgres
       PGUSER: ${POSTGRES_USER:-voice}
       PGPASSWORD: ${POSTGRES_PASSWORD:-voice}
+      PGSSLMODE: disable
       GAME_INTEGRATION_DB_PASSWORD: ${GAME_INTEGRATION_DB_PASSWORD:-voice-compose-gameintegration-runtime}
       SCHEMA_DIR: /schema
       MIGRATIONS_DIR: /migrations
