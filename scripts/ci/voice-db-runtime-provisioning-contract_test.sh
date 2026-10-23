@@ -5,7 +5,21 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd -P)"
 TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "${TMP_DIR}"' EXIT
+f13_cleanup() {
+  local status=$? child
+  if [[ -n "${f13_router_worker_pid:-}" ]]; then
+    # Signal only our still-running shell job; never a recycled numeric PID.
+    while IFS= read -r child; do
+      [[ "${child}" != "${f13_router_worker_pid}" ]] || kill "${child}" 2>/dev/null || true
+    done < <(jobs -pr)
+    wait "${f13_router_worker_pid}" 2>/dev/null || true
+  fi
+  rm -rf "${TMP_DIR}"
+  return "${status}"
+}
+trap f13_cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 failures=0
 
@@ -3460,7 +3474,35 @@ f13_f54_router_prepare() {
     "${TMP_DIR}/f13-contributions" "${context}" >"${f13_f54_router_seal}" || return 1
   f13_f54_router_seal_sha="$(python3 -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "${f13_f54_router_seal}")" || return 1
   f13_f54_router_observation="${TMP_DIR}/f54-original-router.jsonl"
-  [[ ! -e "${f13_f54_router_observation}" ]]
+  [[ ! -e "${f13_f54_router_observation}" ]] || return 1
+  f13_router_worker_socket="${TMP_DIR}/router.sock"
+  f13_router_worker_session="$(python3 -c 'import secrets;print(secrets.token_hex(32))')" || return 1
+  python3 "${f13_f54_observer}" router-worker "${f13_router_worker_socket}" "${f13_router_worker_session}" \
+    "${ROOT}" "${f13_f54_router_seal}" "${f13_f54_router_seal_sha}" "${TMP_DIR}/f13-contributions" \
+    "${TMP_DIR}/f54-current-policy-context.json" &
+  f13_router_worker_pid=$!
+  local attempt
+  for ((attempt=0; attempt<100; attempt++)); do
+    if [[ -f "${f13_router_worker_socket}.ready" ]]; then
+      [[ "$(<"${f13_router_worker_socket}.ready")" == "${f13_router_worker_session}" ]] || return 1
+      return 0
+    fi
+    kill -0 "${f13_router_worker_pid}" 2>/dev/null || return 1
+    sleep 0.05
+  done
+  return 1
+}
+
+f13_f54_router_request() {
+  [[ -n "${f13_router_worker_pid:-}" && -S "${f13_router_worker_socket:-}" ]] || return 1
+  python3 "${f13_f54_observer}" router-request "${f13_router_worker_socket}" "${f13_router_worker_session}" "$1" "$2"
+}
+
+f13_f54_router_stop() {
+  [[ -n "${f13_f54_collection_file:-}" ]] || return 0
+  f13_f54_router_request stop '' || return 1
+  wait "${f13_router_worker_pid}" || return 1
+  f13_router_worker_pid=''
 }
 
 f13_f54_router_begin() {
@@ -3469,8 +3511,7 @@ f13_f54_router_begin() {
   [[ -n "${f13_f54_router_seal:-}" ]] || return 1
   f13_f54_policy_context "${TMP_DIR}/f54-current-policy-context.json" || return 1
   f13_f54_router_receipt="${TMP_DIR}/f54-current-router-receipt.json"
-  python3 "${f13_f54_observer}" router-bind "${ROOT}" "${f13_f54_router_seal}" "${f13_f54_router_seal_sha}" \
-    "${TMP_DIR}/f13-contributions" "${TMP_DIR}/f54-current-policy-context.json" "${path}" >"${f13_f54_router_receipt}" || return 1
+  f13_f54_router_request bind "${path}" >"${f13_f54_router_receipt}" || return 1
   python3 "${f13_f54_observer}" router-append "${f13_f54_router_observation}" before "${f13_f54_router_receipt}"
 }
 
@@ -6275,8 +6316,7 @@ fi
 f13_runtime_for_path() {
   local path="$1" f54_status=0 f54_value
   if [[ -n "${f13_f54_collection_file:-}" ]]; then
-    f54_value="$(python3 "${f13_f54_observer}" router-runtime "${ROOT}" "${f13_f54_router_seal}" "${f13_f54_router_seal_sha}" \
-      "${TMP_DIR}/f13-contributions" "${TMP_DIR}/f54-current-policy-context.json" "${path}")" || f54_status=$?
+    f54_value="$(f13_f54_router_request runtime "${path}")" || f54_status=$?
     if [[ "${f54_status}" == 0 ]]; then printf '%s\n' "${f54_value}"; return 0; fi
     [[ "${f54_status}" == 3 ]] || return 2
   fi
@@ -6292,15 +6332,14 @@ f13_retained_history_row() {
   local repo="$1" map="$2" path="$3"
   [[ -n "${f13_f54_collection_file:-}" && "${repo}" == "${ROOT}" &&
     "${map}" == "${TMP_DIR}/f13-contributions" ]] || return 1
-  python3 "${f13_f54_observer}" router-history-row "${repo}" "${f13_f54_router_seal}" \
-    "${f13_f54_router_seal_sha}" "${map}" "${TMP_DIR}/f54-current-policy-context.json" "${path}"
+  f13_f54_router_request history "${path}"
 }
 
 f13_f54_manual_delta_for_path() {
   local repo="$1" map="$2" path="$3"
   [[ -n "${f13_f54_collection_file:-}" && "${map}" == "${TMP_DIR}/f13-contributions" ]] || return 2
-  python3 "${f13_f54_observer}" router-manual-delta "${repo}" "${f13_f54_router_seal}" \
-    "${f13_f54_router_seal_sha}" "${map}" "${TMP_DIR}/f54-current-policy-context.json" "${path}" >"${TMP_DIR}/f13-current-delta" || return 2
+  [[ "${repo}" == "${ROOT}" ]] || return 2
+  f13_f54_router_request manual "${path}" >"${TMP_DIR}/f13-current-delta" || return 2
   printf '%s\n' "${TMP_DIR}/f13-current-delta"
 }
 
@@ -6903,6 +6942,8 @@ while IFS= read -r file; do
       ;;
   esac
 done <"${TMP_DIR}/changed-files"
+
+f13_f54_router_stop || exit 2
 
 if ((failures > 0)); then
   printf 'Voice DB RED-F contract: %d failure(s)\n' "${failures}" >&2

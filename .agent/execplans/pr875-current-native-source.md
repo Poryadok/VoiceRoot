@@ -413,3 +413,14 @@ preserves commands, exact candidate hashes and synthetic/incomplete-trace limits
 Independent CODE review is CLEAR. The real EXIT cleanup was also checked to
 retain status7 while reaping its owned child. Graphify update completed; actual
 H/R pins and a fresh complete production run remain outstanding.
+
+Final productionv4 K pins published H54e6271806e6f95e229f2d2244f9464ead61f067
+and its direct evidence-only child Raf6dd22b23b9bfad060ef43cf7eb8703cabd4e07,
+record SHA058e0d873a7dcb5315f03e35c59edc7b4c34353a9e72f541aba21d8e409cf751.
+Independent actual-R pin review is CLEAR. A separate Linux checkout of that
+actual R with the exact candidate carriers passed28 production and7 Nativev3
+tests, compilation and Bash syntax, exit0 after214s. Receipt SHA256
+ac21482c24ecbf86ea425f42d8d14a50cd94ac82e9ebcf508e2826cd5edcc464
+binds this result. The unchanged performance carrier bytes retain their61-test
+proof. This closes bounded source/code verification, not the mandatory fresh
+actual collector/router or hosted CI completion.

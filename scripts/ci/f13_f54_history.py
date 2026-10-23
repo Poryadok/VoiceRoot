@@ -13,6 +13,8 @@ import os
 from pathlib import Path
 import re
 import shlex
+import socket
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -1465,7 +1467,12 @@ def prepare_corrected_F_production_capability(repo,unit_path):
     current=native.qualify(repo,binding['base'],binding['source'],binding['target'],event['GITHUB_EVENT_NAME'],
         event['GITHUB_REF'],event['GITHUB_SHA'],event['VOICE_CI_PUSH_BEFORE_SHA'],event['GITHUB_BASE_REF'])
     verifier,native_record=native.verified_record(repo,current)
-    if binding['type']=='F13-PRODUCTION-SOURCE-v3':
+    if binding['type']=='F13-PRODUCTION-SOURCE-v4':
+        transport,_,_=module.load_transport(repo)
+        require(transport['native_record']==dict(version=current['version'],commit=current['record'],
+            source=current['snapshot'],path=verifier.RECORD_PATH,sha256=current['record_sha256']),
+            'production_F_exact_retained_dependency_closure')
+    elif binding['type']=='F13-PRODUCTION-SOURCE-v3':
         successor,_=module.load_successor(repo)
         require(current['version']=='NATIVE-P3-SOURCE-v3' and current['record']==module.SUCCESSOR_RECORD_COMMIT and
             successor['native_record']==dict(path=verifier.RECORD_PATH,sha256=current['record_sha256'],scope='SAME_RECORD_COMMIT'),
@@ -1652,9 +1659,29 @@ def manual_result_reference(operation, spec):
         complete_delta_sha256=spec['delta']['sha256'])
 
 
+@lru_cache(maxsize=1)
+def _collection_trace_index(raw):
+    """Pure extraction only: one exact-byte snapshot, no validated authority.
+
+    Retain serialized selected events rather than the full decoded trace. Every
+    caller still checks fresh bytes, bindings and source/policy context. Returning
+    immutable bytes prevents callers from poisoning later validation requests.
+    """
+    kinds={'manual_F_end','reviewed_F_deletion','range_I_ledger_ready','range_J_ledger_ready'}
+    selected=[]
+    for line in raw.splitlines():
+        event=json.loads(line)
+        if event['kind'] in kinds:selected.append(line)
+    return b'\n'.join(selected)
+
+
+def collection_trace_events(raw):
+    return [json.loads(line) for line in _collection_trace_index(raw).splitlines()]
+
+
 def manual_operations_in_prefix(ledger, trace, prefix):
     require(len(trace)>=prefix['bytes'] and sha(trace[:prefix['bytes']])==prefix['sha256'], 'manual_F_sealed_prefix')
-    events=[json.loads(v) for v in trace[:prefix['bytes']].splitlines()]
+    events=collection_trace_events(trace[:prefix['bytes']])
     actual=[dict(frame=e['frame'],operation=e['operation'],receipt=e['payload']['receipt'])
         for e in events if e['kind']=='manual_F_end']
     expected=manual_operations(ledger)
@@ -1825,7 +1852,7 @@ def terminal_dispositions(ledger):
 def terminal_dispositions_in_prefix(ledger, trace, prefix):
     require(len(trace)>=prefix['bytes'] and sha(trace[:prefix['bytes']])==prefix['sha256'],
         'reviewed_F_deletion_consumed_with_exact_complete_prefix')
-    events=[json.loads(v) for v in trace[:prefix['bytes']].splitlines()]
+    events=collection_trace_events(trace[:prefix['bytes']])
     actual=[]
     for event in events:
         if event['kind']=='reviewed_F_deletion':
@@ -2548,7 +2575,7 @@ def load_collection(repo, path, expected_sha, map_path):
     require(value['terminal_dispositions']==terminal_dispositions_in_prefix(value['ledger'],trace,seal),
         'collection_requires_all_typed_terminal_dispositions')
     require(value.get('manual_result_operations',[])==manual_operations_in_prefix(value['ledger'],trace,seal), 'manual_F_collection_complete_operations')
-    events=[json.loads(x) for x in trace.splitlines()]
+    events=collection_trace_events(trace)
     tables=[]
     for kind,field in (('range_I_ledger_ready','I_ledgers'),('range_J_ledger_ready','J_ledgers')):
         expected={}
@@ -2572,6 +2599,85 @@ def load_collection(repo, path, expected_sha, map_path):
             and not git(repo,'rev-list','--full-history',F_CORRECTED_TUPLE['merge']+'..'+value['source_context']['target'],'--',name).strip(),
             'reviewed_F_deletion_no_stale_obligation_after_later_writer')
     return value
+
+
+def _router_socket_read(connection, limit):
+    chunks=[];size=0
+    while True:
+        chunk=connection.recv(min(65536,limit-size+1))
+        if not chunk:break
+        size+=len(chunk);require(size<=limit,'router_worker_frame_limit')
+        chunks.append(chunk)
+    return json.loads(b''.join(chunks))
+
+
+def router_worker(socket_path, session, repo, seal, digest, map_path, context_path):
+    """Private invocation transport; each request runs the original validator."""
+    path=Path(socket_path)
+    ready=Path(socket_path+'.ready')
+    pending=Path(socket_path+'.pending')
+    require(not path.exists() and not path.is_symlink(),'router_worker_fresh_socket')
+    require(not ready.exists() and not ready.is_symlink(),'router_worker_fresh_readiness')
+    require(not pending.exists() and not pending.is_symlink(),'router_worker_fresh_pending')
+    require(path.parent.stat().st_mode & 0o077==0,'router_worker_private_directory')
+    require(re.fullmatch('[0-9a-f]{64}',session) is not None,'router_worker_session')
+    with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as server:
+        server.set_inheritable(False);server.bind(str(path));os.chmod(path,0o600);server.listen(1)
+        try:
+            descriptor=os.open(pending,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+            with os.fdopen(descriptor,'w') as signal:signal.write(session+'\n')
+            # Publish complete bytes atomically without replacing another inode.
+            os.link(pending,ready);pending.unlink()
+            while True:
+                connection,_=server.accept()
+                with connection:
+                    connection.set_inheritable(False);connection.settimeout(60)
+                    request=_router_socket_read(connection,65536)
+                    require(set(request)=={'session','nonce','command','path'},'router_worker_request_shape')
+                    require(request['session']==session and re.fullmatch('[0-9a-f]{64}',request['nonce']) is not None,
+                            'router_worker_request_identity')
+                    command=request['command'];name=request['path']
+                    require(command in ('bind','runtime','history','manual','stop') and isinstance(name,str)
+                            and '\x00' not in name and '\n' not in name,'router_worker_request_command')
+                    status=0;output=''
+                    if command=='stop':require(name=='','router_worker_stop_path')
+                    else:
+                        value=router_binding(repo,seal,digest,map_path,context_path,name)
+                        if command=='bind':output=json.dumps(value)+'\n'
+                        elif command=='runtime':
+                            if not value['covered']:status=3
+                            else:output=('true' if value['aggregate'] else 'false')+'\n'
+                        elif command=='history':
+                            row=retained_row_for_binding(value)
+                            if row is None:status=3
+                            else:output=row+'\n'
+                        else:output=manual_delta_for_binding(value)
+                    response=dict(request,status=status,output=output)
+                    encoded=json.dumps(response).encode()
+                    require(len(encoded)<=64*1024*1024,'router_worker_response_limit')
+                    connection.sendall(encoded)
+                if command=='stop':return
+        finally:
+            pending.unlink(missing_ok=True)
+            ready.unlink(missing_ok=True)
+            path.unlink(missing_ok=True)
+
+
+def router_worker_request(socket_path, session, command, name):
+    request=dict(session=session,nonce=secrets.token_hex(32),command=command,path=name)
+    encoded=json.dumps(request).encode();require(len(encoded)<=65536,'router_worker_request_limit')
+    with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as connection:
+        connection.set_inheritable(False);connection.settimeout(300)
+        connection.connect(socket_path);connection.sendall(encoded);connection.shutdown(socket.SHUT_WR)
+        response=_router_socket_read(connection,64*1024*1024)
+    require(isinstance(response,dict) and set(response)==set(request)|{'status','output'}
+            and all(response[k]==v for k,v in request.items()),'router_worker_response_identity')
+    require(type(response['status']) is int and response['status'] in (0,3)
+            and isinstance(response['output'],str),'router_worker_response_shape')
+    require(response['status']!=3 or command in ('runtime','history') and response['output']=='',
+            'router_worker_response_status')
+    if command=='stop':require(response['status']==0 and response['output']=='','router_worker_stop_ack')
+    return response['status'],response['output']
 
 
 def policy_context(repo, map_path, pairs, require_runtime=True):
@@ -3503,6 +3609,9 @@ def main():
         if command=='policy-context':
             repo,map_path,*pairs=args;print(json.dumps(policy_context(repo,map_path,pairs)));return 0
         if command=='router-seal':print(json.dumps(seal_router(*args)));return 0
+        if command=='router-worker':router_worker(*args);return 0
+        if command=='router-request':
+            status,output=router_worker_request(*args);print(output,end='');return status
         if command=='router-validate':print(json.dumps(validate_router(*args)));return 0
         if command=='router-bind':print(json.dumps(router_binding(*args)));return 0
         if command=='router-append':
