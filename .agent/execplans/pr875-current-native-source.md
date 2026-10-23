@@ -242,3 +242,28 @@ and shell syntax. The production J seam test exercises the real consumer and
 conservation while mocking only its qualification boundary; complete M/J/F
 constructors are separately exercised against the frozen artifacts. These
 checks do not claim actual production collection/router terminal success.
+
+## Fixed Flutter source successor
+
+H2 is73531c1e48d63fb100ab279930c98f67c9e97241, directly following the accepted
+production carrier3b53b0a9c761f340d20d23ed36f64a0ad18af33f. Its three-path
+change fixes the production Flutter joinByInvite request to send Gateway's
+required empty body, tests the actual HTTP body and decoded response, and adds
+status/message diagnostics to the Bot harness. This is a client behavior fix,
+not merely a fixture adjustment or new backend authority.
+
+A separate immutable R2 records the complete exact predecessor-to-H2 delta
+and D6-to-H2 input inventory. Full tree equality outside those three paths
+preserves all participating files and detects added/removed dependency paths;
+explicit F34, Native571/481 and Role274 entries and closure manifests remain
+equal. All new current inputs still require original contribution gates.
+The predecessor R, source contract, evidence, archive and old K predicate stay
+immutable. A separately pinned successor K reconstructs both records and the
+exact reviewed edge; no future edit to these frontend paths is authorized.
+
+The real event base, ordered parents, source/result tree equality and six
+carrier-only paths after R2 remain mandatory. Missing or invalid applicable
+R2 fails closed without v1 fallback. Historical byte-identical inputs can reuse
+their original evidence, but the actual H2 collector/router must run with a
+fresh trace; the ongoing3b53 run cannot supply H2 terminal success. Independent
+source review and final K code review are separate required handoffs.

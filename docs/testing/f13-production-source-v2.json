@@ -1,0 +1,68 @@
+{
+  "activation_authority": false,
+  "change_summary": "Flutter joinByInvite sends the Gateway-required empty HTTP body; regression decodes the response and harness reports failing status/message.",
+  "current_inputs": {
+    "path": "docs/testing/f13-production-current-inputs-v2.json",
+    "sha256": "f2324cd457796408f14b1833b27f58426ad4f4626dfb81b26596fd75f6fbc3dc"
+  },
+  "current_or_future_path_authority": false,
+  "event_base": "288e6a4fb963b3d5775f885e14ecfda1b603a4ff",
+  "evidence": [
+    {
+      "path": "docs/testing/f13-production-v2-evidence/analyze.log",
+      "sha256": "a4de1fbc005396e12bb5a54954f1082271508a7d6ff8098e37782e446e35939d"
+    },
+    {
+      "path": "docs/testing/f13-production-v2-evidence/capture.py",
+      "sha256": "e578012908d78f9c659b46dc046fa85782caf2422f27e16997358612d7177c24"
+    },
+    {
+      "path": "docs/testing/f13-production-v2-evidence/frontend-independent-review.md",
+      "sha256": "0a22904674f4b5bc82a9fe140a37510aa5bb2536df41705ccea2cb9ca4f82794"
+    },
+    {
+      "path": "docs/testing/f13-production-v2-evidence/green.log",
+      "sha256": "46262ead368d3e0610ccfc4d5934a8f2b51c177ddd4c79733eb652fc0ab1be36"
+    },
+    {
+      "path": "docs/testing/f13-production-v2-evidence/independent-source-review.md",
+      "sha256": "f0df63e20ebe76c5c3c47036fce42d2a821830b6b7abe69e4a5d85fb3de3c472"
+    },
+    {
+      "path": "docs/testing/f13-production-v2-evidence/receipt.json",
+      "sha256": "d705b9fe69292bed1deaea8cadaf298fc0cab9a9b4bf3515b7482d2b46a36a21"
+    },
+    {
+      "path": "docs/testing/f13-production-v2-evidence/red.log",
+      "sha256": "ad06f8af7a25cd2d2929967c0b3fbd54d9b8e903364d209606d310f2a27a549e"
+    }
+  ],
+  "historical_scope": {
+    "allow_direct_followup": "true",
+    "base": "698d4f064f032ea74abf3ede2017100b26c8ee69",
+    "partition_source_history": "false",
+    "target": "53f75f74523735ac594e21582bea659f567a7288"
+  },
+  "native_content_base": "8191a36ca3bea7d053df0dd25963ca5133284b41",
+  "predecessor": {
+    "carrier": "3b53b0a9c761f340d20d23ed36f64a0ad18af33f",
+    "carrier_tree": "68a981771081167efc3897fff68c5acfe31a1c58",
+    "path": "docs/testing/f13-production-source-v1.json",
+    "record": "0aaed85d16f94d75bb70481ab660ea5b63f55e62",
+    "sha256": "bde38ddd6495b5bf309f89638adb5471c906fb0f35a60d01c653cf27334fe16e"
+  },
+  "reference": "d6ac6d2f4b85eb691a00f729eb2192e63ae0091f",
+  "review": [
+    "docs/testing/f13-production-v2-evidence/frontend-independent-review.md",
+    "docs/testing/f13-production-v2-evidence/independent-source-review.md"
+  ],
+  "runtime_pass": false,
+  "source": "73531c1e48d63fb100ab279930c98f67c9e97241",
+  "source_tree": "7c888a446c2208ab5708cad90ad8f4e748362d05",
+  "status": "SOURCE_CONSUMPTION_CONTRACT_CLEAR",
+  "successor_closure": {
+    "path": "docs/testing/f13-production-successor-closure-v2.json",
+    "sha256": "d922cfff2cb86780eb01a97014a375f1465876e9cc5d283d6a41b0654fd2569b"
+  },
+  "version": "F13-PRODUCTION-SOURCE-v2"
+}
