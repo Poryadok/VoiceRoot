@@ -138,6 +138,10 @@ migrate_db() {
   db="$1"
   dir="${MIGRATIONS_DIR}/${db}"
   if [ "$db" = space_db ]; then
+    if [ -z "${SPACE_DB_PASSWORD:-}" ]; then
+      echo "ERROR: SPACE_DB_PASSWORD must be configured" >&2
+      return 1
+    fi
     # This must precede every generic marker/dirty/baseline branch. Existing
     # targets HOLD unless the owning controller supplies actual retained logs.
     if [ -n "${SPACE_NATIVE_PRIOR_EVIDENCE:-}" ] && [ -f "$SPACE_NATIVE_PRIOR_EVIDENCE" ]; then
@@ -145,6 +149,10 @@ migrate_db() {
     else
       native-migrate --mode=provision --migrations-dir="$dir" --migrate=/usr/local/bin/native-space-migrate-driver
     fi
+    # The installer owns the catalog; public BORN creation requires a separate
+    # non-owner login. Apply grants only after successful native qualification.
+    psql -v ON_ERROR_STOP=1 --dbname space_db \
+      -f "${SCHEMA_DIR}/provision-space-runtime-role.sql"
     return $?
   fi
   if [ ! -d "$dir" ]; then
