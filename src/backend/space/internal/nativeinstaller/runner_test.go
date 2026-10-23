@@ -450,13 +450,14 @@ func TestRetainedEvidenceRejectsOverflowBeyondValidPrefix(t *testing.T) {
 	}
 }
 
-func TestNative51UnqualifiedSourceCannotCreateOrComplete(t *testing.T) {
+func TestNative51QualifiedSourceStillRequiresDeploymentBinding(t *testing.T) {
 	oldRevision, oldSource, oldMigrate := SourceRevision, BuildSourceSHA256, MigrateSHA256
 	t.Cleanup(func() { SourceRevision, BuildSourceSHA256, MigrateSHA256 = oldRevision, oldSource, oldMigrate })
 	SourceRevision, BuildSourceSHA256, MigrateSHA256 = "", strings.Repeat("a", 64), strings.Repeat("b", 64)
 	var out bytes.Buffer
-	err := Run(context.Background(), Config{AdminURL: "postgres://installer@127.0.0.1:1/postgres?sslmode=disable", Mode: "provision", Output: &out, MigrationsDir: "/unavailable"})
-	require.ErrorContains(t, err, "HOLD: current native51 source/session qualification", "current stability HOLD precedes SQL inventory, connections and CREATE")
+	require.NoError(t, store.RequireNativeCatalog51Admission())
+	err := Run(context.Background(), Config{AdminURL: "postgres://installer@127.0.0.1:1/postgres?sslmode=disable", Mode: "provision", Output: &out, MigrationsDir: "/unavailable", RequiredBuildSHA256: strings.Repeat("c", 64)})
+	require.ErrorContains(t, err, "selected deployment source does not match installer build", "a source proof cannot replace deployment identity before inventory, connections and CREATE")
 	require.Empty(t, out.String())
 }
 

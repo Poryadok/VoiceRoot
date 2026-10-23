@@ -34,8 +34,10 @@ full cohort/effects, monotonic<5s and owner<=2s remain mandatory.
 - [x] Implement real migrate4.18.1/file-source adapter and atomic51 transition.
 - [x] Connect genuine production44→45→50→51 receipts and restart HOLD.
 - [ ] Freeze exact source; independent review before any runtime request.
-- [ ] Separately qualify current candidate raw stability/type/transition/installer
-      on PG16/18, then unchanged full107/307/retry under original resources.
+- [x] Qualify corrected983 raw stability on PG16/18 and bind independent19's
+      recorded rollback-only component proof to the unchanged compiled sources.
+- [ ] Qualify actual51 transition/installer on PG16/18, then unchanged
+      full107/307/retry under original resources.
 - [ ] Independent final review, normal feature commit/push and integration offer.
 
 ## Detailed Steps
@@ -99,7 +101,8 @@ the genuinely admitted51 candidate; old7996.396s remains separately labeled RED.
   retention tests authored. These are implementation milestones, not test PASS.
 - Actual finite type-probe PG16/18 PASS and independent11 CLEAR reported; binding
   exact final evidence and production candidate remains part of implementation.
-- No rawN current-candidate stability or performance result exists.
+- Corrected983 rollback-only rawN/session evidence is recorded and independently
+  reviewed; actual51 transition/installer/full-Ban performance results are pending.
 - Actual R0v4 on77f1384 returned PG16 test FAIL; the retained assertion identity
   and after-failure catalog state are UNKNOWN. No rollback claim follows from
   cleanup. Independent normalized oracle PASS does not qualify the Go test.
@@ -119,6 +122,15 @@ the genuinely admitted51 candidate; old7996.396s remains separately labeled RED.
   plus a Close-before-Lock negative; neither creates a connection or native proof.
 
 ## Decisions
+
+The exact corrected983 R0 rollback-only proof passed on PG16/18 and independent19
+review363ab1ed. Its complete recorded result/manifest/review bytes are embedded in
+catalog-rowjson-stability-proof.json, pinned by actual artifact SHA9461a493. The
+compiled validator binds these bytes to the unchanged definition/preimage/type
+sources. No caller-supplied proof, external loader or runtime flag can open it.
+This satisfies the source stability prerequisite; actual51 transaction/installer,
+unchanged full107/307/retry performance and deployment acceptance remain pending.
+Live full catalog observations are never replaced by the immutable proof check.
 
 One PostgreSQL transaction is required for51 DDL/epoch/history; the superseded
 split goto51/postinstall CAS is not implemented. Source/file/real engine history

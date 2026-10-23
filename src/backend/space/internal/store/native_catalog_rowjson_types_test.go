@@ -16,6 +16,18 @@ func TestNativeCatalogRowJSONQualificationRequiresExactEvidence(t *testing.T) {
 	require.Error(t, q.validate(), "raw candidate/session stability is independently required")
 	q.StabilitySHA256 = "caller-selected"
 	require.Error(t, q.validate())
+	q.StabilitySHA256 = nativeCatalogRowJSONStabilityProofSHA256
+	require.NoError(t, q.validate(), "only exact compiled reviewed source evidence qualifies")
+	q.DefinitionSHA256 = nativeSourceBodySHA("changed definition")
+	require.Error(t, q.validate())
+}
+
+func TestNativeCatalogRowJSONRecordedStabilityIsBoundToCompiledSource(t *testing.T) {
+	require.NoError(t, validateNativeCatalogRecordedStability(nativeCatalogRowJSONStabilityProof))
+	require.NoError(t, requireNativeCatalogRowJSONAdmission())
+	for _, raw := range [][]byte{nil, []byte(`{"schema":"caller-selected"}`), append(append([]byte{}, nativeCatalogRowJSONStabilityProof...), '\n')} {
+		require.ErrorIs(t, validateNativeCatalogRecordedStability(raw), ErrMemberAuthorityUnavailable)
+	}
 }
 
 func TestNativeCatalogRowJSONTypesAreFiniteByEngine(t *testing.T) {
