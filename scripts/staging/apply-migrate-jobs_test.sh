@@ -42,6 +42,16 @@ require_migration_target() {
     echo "FAIL: staging migration template for ${db} does not use the application Secret" >&2
     return 1
   }
+  if [ "$db" = space_db ]; then
+    grep -Fq 'native-migrate --mode=provision' "$template"
+    grep -Fq 'native-migrate --mode=verify' "$template"
+    grep -Fq 'key: POSTGRES_PASSWORD' "$template"
+    grep -Fq 'backoffLimit: 0' "$template"
+    if grep -Fq -- '-database=$(DATABASE_URL)' "$template"; then
+      echo 'FAIL: Space cannot render generic migrate up' >&2; return 1
+    fi
+    return 0
+  fi
   grep -Fq -- '-database=$(DATABASE_URL)' "${template}" || {
     echo "FAIL: staging migration template for ${db} does not consume DATABASE_URL" >&2
     return 1
@@ -53,7 +63,7 @@ require_migration_target chat_db voice-migrate-chat-db CHAT_DATABASE_URL
 require_migration_target realtime_db voice-migrate-realtime-db REALTIME_DATABASE_URL
 require_migration_target messaging_db voice-migrate-messaging-db MESSAGING_DATABASE_URL
 require_migration_target file_db voice-migrate-file-db FILE_DATABASE_URL
-require_migration_target space_db voice-migrate-space-db SPACE_DATABASE_URL
+require_migration_target space_db voice-migrate-space-db POSTGRES_PASSWORD
 require_migration_target role_db voice-migrate-role-db ROLE_DATABASE_URL
 require_migration_target notification_db voice-migrate-notification-db NOTIFICATION_DATABASE_URL
 require_migration_target matchmaking_db voice-migrate-matchmaking-db MATCHMAKING_DATABASE_URL

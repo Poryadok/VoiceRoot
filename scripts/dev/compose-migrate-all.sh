@@ -57,6 +57,46 @@ wait_postgres_tcp() {
 
 migrate_db() {
   local db="$1"
+  if [[ "$db" == space_db ]]; then
+    # Build from this checkout, never guess a published installer tag. The
+    # resulting image includes exact compiled SQL and native source identities.
+    local source_revision installer_image
+    source_revision="$(git rev-parse HEAD)"
+    installer_image="voice-native-space-installer:local-${source_revision}"
+    docker build --build-arg "SOURCE_REVISION=${SOURCE_REVISION:-}" \
+      -f src/backend/space/Dockerfile.native-migrate -t "$installer_image" .
+    local evidence_dir prior_file run_log image_id
+    evidence_dir="${SPACE_NATIVE_EVIDENCE_DIR:-${ROOT}/tmp/native-space-installer}"
+    mkdir -p "$evidence_dir"
+    chmod 700 "$evidence_dir"
+    prior_file="${SPACE_NATIVE_PRIOR_EVIDENCE:-${evidence_dir}/prior.jsonl}"
+    local prior_args=() prior_mount=()
+    if [[ -f "$prior_file" ]]; then
+      prior_args=(--mode=verify --prior-evidence=/evidence/prior.jsonl)
+      prior_mount=(--mount "type=bind,source=${prior_file},target=/evidence/prior.jsonl,readonly")
+    fi
+    run_log="$(umask 077; mktemp "${evidence_dir}/run.XXXXXX.jsonl")"
+    if PGHOST="$MIGRATE_PG_HOST" PGPORT="$POSTGRES_PORT" PGUSER="$POSTGRES_USER" PGPASSWORD="$POSTGRES_PASSWORD" PGSSLMODE=disable \
+      docker run --rm "${MIGRATE_DOCKER_HOST_ARGS[@]}" "${prior_mount[@]}" \
+      -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGSSLMODE "$installer_image" "${prior_args[@]}" >"$run_log"; then
+      cat "$run_log"
+      if [[ ! -f "$prior_file" ]]; then
+        # Only the successful fresh command can produce this original artifact.
+        # Verify output never overwrites creation/transition evidence.
+        cp "$run_log" "${prior_file}.next"
+        chmod 600 "${prior_file}.next"
+        mv "${prior_file}.next" "$prior_file"
+        image_id="$(docker image inspect "$installer_image" --format '{{.Id}}')"
+        printf '{"image_id":"%s","source_revision":"%s"}\n' "$image_id" "${SOURCE_REVISION:-}" >"${evidence_dir}/image.json"
+        chmod 600 "${evidence_dir}/image.json"
+      fi
+    else
+      local failure=$?
+      cat "$run_log"
+      return "$failure"
+    fi
+    return
+  fi
   echo "==> golang-migrate up: ${db}"
   local dsn
   dsn="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${MIGRATE_PG_HOST}:${POSTGRES_PORT}/${db}?sslmode=disable"

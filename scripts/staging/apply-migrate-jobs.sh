@@ -148,12 +148,72 @@ migration_content_hash() {
   find "${dir}" -type f -name '*.sql' -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}'
 }
 
+# Retain the original authenticated Job/Pod/log observations, not a DB marker.
+retain_space_native_evidence() {
+  local image="$1" work
+  mkdir -p "${ROOT}/tmp/native-space-installer"
+  work="$(mktemp -d "${ROOT}/tmp/native-space-installer/kube.XXXXXX")"
+  chmod 700 "$work"
+  kubectl get job voice-migrate-space-db -n "$NS" -o json >"$work/job.json"
+  kubectl get pods -n "$NS" -l job-name=voice-migrate-space-db -o json >"$work/pods.json"
+  kubectl logs job/voice-migrate-space-db -n "$NS" >"$work/output.jsonl"
+  python3 "${ROOT}/scripts/dev/migrations.py" native-space-evidence "$ROOT" "$NS" "$image" \
+    "$work/job.json" "$work/pods.json" "$work/output.jsonl" >"$work/evidence.json"
+  kubectl apply -f "$work/evidence.json"
+  rm -rf -- "$work"
+}
+
+apply_space_native_migrate() {
+  local dir="$1" template="$2" image="${SPACE_NATIVE_INSTALLER_IMAGE:-}"
+  if [[ ! "$image" =~ ^[A-Za-z0-9._/:\-]+@sha256:[a-f0-9]{64}$ ]]; then
+    echo 'HOLD: select the actual source-bound SPACE_NATIVE_INSTALLER_IMAGE digest' >&2
+    return 1
+  fi
+  local input_hash source_hash evidence_hash mode=provision active
+  input_hash="$(python3 "${ROOT}/scripts/dev/migrations.py" native-space-input "$ROOT" "$image")"
+  source_hash="$(python3 "${ROOT}/scripts/dev/migrations.py" native-space-source "$ROOT")"
+  evidence_hash="$(kubectl get configmap voice-space-native-installer-evidence -n "$NS" -o jsonpath='{.metadata.annotations.voice\.io/native-input-hash}' 2>/dev/null || true)"
+  if [ -n "$evidence_hash" ]; then
+    if [ "$evidence_hash" != "$input_hash" ]; then
+      echo 'HOLD: retained Space source/image/inventory changed; explicit recovery qualification required' >&2
+      return 1
+    fi
+    mode=verify
+  fi
+  if kubectl get job voice-migrate-space-db -n "$NS" >/dev/null 2>&1; then
+    active="$(kubectl get job voice-migrate-space-db -n "$NS" -o jsonpath='{.status.active}' 2>/dev/null || echo 0)"
+    if [ "${active:-0}" != 0 ]; then echo 'HOLD: Space installer Job is active' >&2; return 1; fi
+    if [ "$mode" = provision ]; then
+      # SQL-only or incomplete Jobs fail validation before deletion/mutation.
+      retain_space_native_evidence "$image"
+      mode=verify
+    fi
+    kubectl delete job voice-migrate-space-db -n "$NS" --wait=true
+  fi
+  kubectl_apply_configmap voice-space-db-migrations "$NS" --from-file="$dir"
+  sed -e "s|__K_NAMESPACE__|${NS}|g" \
+      -e "s|__SPACE_NATIVE_INSTALLER_IMAGE__|$(escape_sed_replacement "$image")|g" \
+      -e "s|__SPACE_NATIVE_INPUT_HASH__|${input_hash}|g" \
+      -e "s|__SPACE_NATIVE_SOURCE_SHA256__|${source_hash}|g" \
+      -e "s|__SPACE_NATIVE_INSTALLER_MODE__|${mode}|g" "$template" | kubectl apply -f -
+  if ! kubectl wait --for=condition=complete job/voice-migrate-space-db -n "$NS" --timeout=600s; then
+    dump_migrate_job_logs voice-migrate-space-db
+    return 1
+  fi
+  if [ "$mode" = provision ]; then retain_space_native_evidence "$image"; fi
+}
+
 apply_migrate() {
   local db_key="$1"
   local migrations_dir="$2"
   local template="$3"
   local job_name="$4"
   local cm_name="$5"
+
+  if [ "$db_key" = space_db ]; then
+    apply_space_native_migrate "$migrations_dir" "$template"
+    return
+  fi
 
   if [ ! -d "${migrations_dir}" ]; then
     echo "skip migrate ${db_key}: missing ${migrations_dir}"

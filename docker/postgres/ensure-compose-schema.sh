@@ -39,7 +39,7 @@ apply_if_exists() {
   psql -v ON_ERROR_STOP=1 --dbname "$db" -f "${SCHEMA_DIR}/${file}"
 }
 
-for db in auth_db user_db social_db chat_db messaging_db file_db space_db role_db \
+for db in auth_db user_db social_db chat_db messaging_db file_db role_db \
   notification_db matchmaking_db gateway_db search_db subscription_db moderation_db bot_db story_db voice_db realtime_db game_integration_db federation_db; do
   ensure_database "$db"
 done
@@ -50,7 +50,7 @@ apply_if_exists messaging_db incremental_messaging_db.sql.snippet messages
 apply_if_exists user_db incremental_user_db.sql.snippet profiles
 apply_if_exists role_db incremental_role_db.sql.snippet roles
 apply_if_exists matchmaking_db incremental_matchmaking_db.sql.snippet search_sessions
-apply_if_exists space_db incremental_space_db.sql.snippet spaces
+# Space is exclusively provisioned by native-migrate; no legacy patch/adoption.
 apply_if_exists story_db incremental_story_db.sql.snippet stories
 apply_if_exists file_db incremental_file_db.sql.snippet files
 apply_if_exists file_db file_db_premium_upload.sql.snippet files
