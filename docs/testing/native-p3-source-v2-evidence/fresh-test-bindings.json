@@ -1,0 +1,208 @@
+{
+  "classification": "Scoped current evidence; not complete F13 or runtime admission",
+  "proofs": [
+    {
+      "name": "voice-ordinary-down.jsonl",
+      "sha256": "ac60b8611d1cfa33c21ba63c9003c8e43eb2302613ffe72ae3d6f2b606630790",
+      "bytes": 4638,
+      "terminal_events": [
+        {
+          "Time": "2026-10-23T15:59:07.682441249Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice/internal/ordinarycall",
+          "Test": "TestOrdinaryDownRetainsConcurrentFirstWriter/journal",
+          "Elapsed": 15.28
+        },
+        {
+          "Time": "2026-10-23T15:59:15.495414979Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice/internal/ordinarycall",
+          "Test": "TestOrdinaryDownRetainsConcurrentFirstWriter/snapshot",
+          "Elapsed": 7.81
+        },
+        {
+          "Time": "2026-10-23T15:59:15.495431001Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice/internal/ordinarycall",
+          "Test": "TestOrdinaryDownRetainsConcurrentFirstWriter",
+          "Elapsed": 23.09
+        },
+        {
+          "Time": "2026-10-23T15:59:24.099417865Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice/internal/ordinarycall",
+          "Test": "TestOrdinaryDownRejectsInheritedSnapshot",
+          "Elapsed": 8.6
+        },
+        {
+          "Time": "2026-10-23T15:59:32.150918219Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice/internal/ordinarycall",
+          "Test": "TestOrdinaryEmptyDownUp",
+          "Elapsed": 8.05
+        },
+        {
+          "Time": "2026-10-23T15:59:32.153245466Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice/internal/ordinarycall",
+          "Elapsed": 39.762
+        }
+      ],
+      "source": "9df1fa83e2cb8741c7fdfc1003658131ccc267b7"
+    },
+    {
+      "name": "voice-ordinary-stale-leave.jsonl",
+      "sha256": "c55fb3fe6fdd7eadb9eec0862f8a848c91581dcb458f56a31edc8d427be15324",
+      "bytes": 1409,
+      "terminal_events": [
+        {
+          "Time": "2026-10-23T15:58:41.814243674Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice/internal/grpcsvc",
+          "Test": "TestOrdinaryDelayedLeaveCannotRemoveReplacementGeneration",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-23T15:58:41.81577298Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice/internal/grpcsvc",
+          "Elapsed": 0.013
+        }
+      ],
+      "source": "9df1fa83e2cb8741c7fdfc1003658131ccc267b7"
+    },
+    {
+      "name": "rolegrant-permission-test.json.log",
+      "sha256": "8463f70d3d409cafc278a389314ada6b9d2b1fca41db84d37d9a9defabfb4da3",
+      "bytes": 1544,
+      "terminal_events": [
+        {
+          "Time": "2026-10-23T15:59:17.264353864Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice/internal/rolegrant",
+          "Test": "TestVoicePermissionDecisionsBindSubjectNodeAndReplaceMetadata",
+          "Elapsed": 0.02
+        },
+        {
+          "Time": "2026-10-23T15:59:17.266123714Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice/internal/rolegrant",
+          "Elapsed": 0.029
+        }
+      ],
+      "source": "9df1fa83e2cb8741c7fdfc1003658131ccc267b7"
+    },
+    {
+      "name": "voice-native-restart.json.log",
+      "sha256": "45c5bd8b98376175b87ffad43b14861bd51cb07ebc990f183d2d74bb4af5eb22",
+      "bytes": 3185,
+      "terminal_events": [
+        {
+          "Time": "2026-10-23T16:05:22.465375519Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice",
+          "Test": "TestProductionSpaceMediaFactoryKeepsNativeRosterDormant/space_enabled_false",
+          "Elapsed": 2.11
+        },
+        {
+          "Time": "2026-10-23T16:05:29.248477308Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice",
+          "Test": "TestProductionSpaceMediaFactoryKeepsNativeRosterDormant/space_enabled_true",
+          "Elapsed": 6.78
+        },
+        {
+          "Time": "2026-10-23T16:05:29.248504367Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice",
+          "Test": "TestProductionSpaceMediaFactoryKeepsNativeRosterDormant",
+          "Elapsed": 8.89
+        },
+        {
+          "Time": "2026-10-23T16:05:29.250253028Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice",
+          "Elapsed": 8.907
+        }
+      ],
+      "source": "9df1fa83e2cb8741c7fdfc1003658131ccc267b7"
+    },
+    {
+      "name": "voice-runtime-tests.json.log",
+      "sha256": "98ab70b19f13fb3330257df3c9f6fa11c95e59804ee4011c03429c615b10eeeb",
+      "bytes": 8759,
+      "terminal_events": [
+        {
+          "Time": "2026-10-23T15:57:57.471067745Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice",
+          "Test": "TestProductionRootKeepsUnqualifiedRosterRelayDormant",
+          "Elapsed": 0
+        },
+        {
+          "Time": "2026-10-23T15:58:12.484447009Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice",
+          "Test": "TestProductionSpaceMediaFactoryPreservesLiveAdmissionThroughBothStartupPasses/PREPARED",
+          "Elapsed": 15.02
+        },
+        {
+          "Time": "2026-10-23T15:58:22.663042329Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice",
+          "Test": "TestProductionSpaceMediaFactoryPreservesLiveAdmissionThroughBothStartupPasses/FENCED",
+          "Elapsed": 10.18
+        },
+        {
+          "Time": "2026-10-23T15:58:33.972599039Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice",
+          "Test": "TestProductionSpaceMediaFactoryPreservesLiveAdmissionThroughBothStartupPasses/COMMITTED",
+          "Elapsed": 11.31
+        },
+        {
+          "Time": "2026-10-23T15:58:33.972613894Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice",
+          "Test": "TestProductionSpaceMediaFactoryPreservesLiveAdmissionThroughBothStartupPasses",
+          "Elapsed": 36.5
+        },
+        {
+          "Time": "2026-10-23T15:58:42.739721887Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice",
+          "Test": "TestProductionSpaceMediaFactoryKeepsNativeRosterDormant/space_enabled_false",
+          "Elapsed": 8.77
+        },
+        {
+          "Time": "2026-10-23T15:58:54.752144038Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice",
+          "Test": "TestProductionSpaceMediaFactoryKeepsNativeRosterDormant/space_enabled_true",
+          "Elapsed": 12.01
+        },
+        {
+          "Time": "2026-10-23T15:58:54.752160285Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice",
+          "Test": "TestProductionSpaceMediaFactoryKeepsNativeRosterDormant",
+          "Elapsed": 20.78
+        },
+        {
+          "Time": "2026-10-23T15:59:08.20128672Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice",
+          "Test": "TestProductionSpaceMediaFactoryP3WithoutNATSUsesRestrictiveGate",
+          "Elapsed": 13.45
+        },
+        {
+          "Time": "2026-10-23T15:59:08.204969367Z",
+          "Action": "pass",
+          "Package": "voice/backend/voice",
+          "Elapsed": 70.756
+        }
+      ],
+      "source": "9df1fa83e2cb8741c7fdfc1003658131ccc267b7"
+    }
+  ]
+}
