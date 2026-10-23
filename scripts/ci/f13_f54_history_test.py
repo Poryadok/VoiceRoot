@@ -57,6 +57,47 @@ class ReplayConservationContract(unittest.TestCase):
                 self.m.require_pending_operation(pending, key, operation)
         self.assertEqual(pending, {self.key: dict(op=self.op)})
 
+    def test_exact_J_permission_is_distinct_and_consumed_without_M_alias(self):
+        item = dict(op=self.op, exact_J_owner_permission=self.exact)
+        self.m.validate_exact_conservation(item, self.op, dict(exact_J_owner_permission=self.exact))
+        for receipt in ({}, dict(exact_unit_supersession=self.exact),
+                        dict(exact_J_owner_permission=None),
+                        dict(exact_J_owner_permission=dict(self.exact, operation='other'))):
+            with self.subTest(receipt=receipt), self.assertRaises(self.m.Rejected):
+                self.m.validate_exact_conservation(item, self.op, receipt)
+        with self.assertRaises(self.m.Rejected):
+            self.m.validate_exact_conservation(dict(op=self.op), self.op,
+                                               dict(exact_J_owner_permission=self.exact))
+
+    def test_exact_J_rejects_every_changed_raw_row_field_without_mutation(self):
+        import copy
+        import zipfile
+        with zipfile.ZipFile(ROOT/'scripts/ci/testdata/f13-exact-j-547/historical-inputs.zip') as archive:
+            raw = archive.read('objects/08259a181aca2a185a3310aa2f745f663fc6a0baddc458418136b02da02e4fe8')
+            actual_map = archive.read('objects/f088e093d271ea39b5394be0dd217d1d17f99782b8f7349d39be5eac0dde9e45')
+        before = json.loads(raw.splitlines()[10644])
+        ready = dict(operation=before['operation'], frame=before['frame'])
+        cap = dict(type='F54_FIXED3071_CURRENT_AUTHOR_CAPABILITIES')
+        frozen = self.m.sha(actual_map)
+        # These are refusal-only controls. No fabricated ready record is used
+        # for a positive grant; actual-prefix positive is the separate harness.
+        for field in ('prior', 'incoming'):
+            for index in range(8):
+                changed = copy.deepcopy(before)
+                parts = changed['payload'][field]['raw'].split('\t')
+                parts[index] += '-changed'
+                changed['payload'][field] = self.m.raw_binding('\t'.join(parts))
+                if field == 'prior':
+                    changed['payload']['prior_rows'] = [changed['payload']['prior']]
+                with self.subTest(field=field, index=index), self.assertRaisesRegex(self.m.Rejected, 'exact_J_complete_fixed_raw_rows'):
+                    self.m.exact_J_owner_evidence(ROOT, cap, ready, [changed], self.m.file_digest(raw), actual_map)
+                self.assertEqual(self.m.sha(actual_map), frozen)
+        for operation in ('F5/'+self.m.M+'/2', 'F5/'+self.m.J3071+'/1', 'F6/third/2'):
+            changed = copy.deepcopy(before)
+            changed['operation'] = operation
+            with self.subTest(operation=operation), self.assertRaises(self.m.Rejected):
+                self.m.exact_J_owner_evidence(ROOT, cap, ready, [changed], self.m.file_digest(raw), actual_map)
+
     def test_frozen_trace_supersession_is_consumed_before_unrelated_J_transition(self):
         import zipfile
         with zipfile.ZipFile(ROOT/'scripts/ci/testdata/f13-exact-j-547/historical-inputs.zip') as archive:
