@@ -126,6 +126,15 @@ compose_service() {
   ' "${ROOT}/docker-compose.yml"
 }
 
+compose_migration_docs_block() {
+  local file="$1"
+  awk '
+    /^\*\*Compose \(all Go-owned DBs\):\*\*/ { in_block=1; next }
+    in_block && /^### / { exit }
+    in_block { print }
+  ' "${file}"
+}
+
 indented_block() {
   local key="$1"
   local file="$2"
@@ -387,11 +396,17 @@ expect_fixed 'src/backend/migrations/README.md' 'compose-migrate-voice' F12
 expect_fixed 'src/backend/migrations/README.md' 'compose-db-init' F12
 expect_regex 'src/backend/migrations/README.md' 'compose-db-init.*(кажд|every|startup|запуск)' F12
 expect_regex 'src/backend/migrations/README.md' '(DOWN|down).*(refus|отказ|запрещ|не удал)' F12
-compose_migration_docs="$(awk '
-  /^\*\*Compose \(all Go-owned DBs\):\*\*/ { in_block=1; next }
-  in_block && /^\*\*E2E encryption/ { exit }
-  in_block { print }
-' "${ROOT}/src/backend/migrations/README.md")"
+compose_migration_docs="$(compose_migration_docs_block "${ROOT}/src/backend/migrations/README.md")"
+cat >"${TMP_DIR}/compose-migration-docs-duplicate.md" <<'EOF'
+**Compose (all Go-owned DBs):**
+space_db space_db
+
+### Space Native44/45/50 provisioning
+space_db
+EOF
+duplicate_block="$(compose_migration_docs_block "${TMP_DIR}/compose-migration-docs-duplicate.md")"
+duplicate_space_count="$({ grep -Eow 'space_db' <<<"${duplicate_block}" || true; } | wc -l | tr -d '[:space:]')"
+[[ "${duplicate_space_count}" == '2' ]] || fail 'F12: the Compose list parser must count duplicate list entries while excluding the following Native section'
 for db in chat_db messaging_db bot_db story_db user_db social_db file_db space_db role_db notification_db matchmaking_db search_db moderation_db gateway_db subscription_db voice_db; do
   count="$({ grep -Eow "${db}" <<<"${compose_migration_docs}" || true; } | wc -l | tr -d '[:space:]')"
   [[ "${count}" == '1' ]] || fail "F12: Compose Go-owned migration list must contain ${db} exactly once, got ${count}"
