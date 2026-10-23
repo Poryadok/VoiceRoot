@@ -73,8 +73,13 @@ class AuthMigrationCatalogJdbcIntegrationTest {
     try (var network = Network.newNetwork(); var postgres = postgres(network)) {
       postgres.start();
       var loader = flyway(postgres, "classpath:db/migration");
-      assertThat(loader.migrate().migrationsExecuted).isEqualTo(26);
-      assertThat(loader.info().current().getVersion().getVersion()).isEqualTo("26");
+      assertThat(loader.migrate().migrationsExecuted).isEqualTo(28);
+      assertThat(java.util.Arrays.stream(loader.info().applied())
+          .map(migration -> migration.getVersion().getVersion()).toList())
+          .containsExactlyElementsOf(java.util.stream.Stream.concat(
+              java.util.stream.IntStream.rangeClosed(1, 26).mapToObj(version -> Integer.toString(version)),
+              java.util.stream.Stream.of("28", "31")).toList());
+      assertThat(loader.info().current().getVersion().getVersion()).isEqualTo("31");
       flywayCatalog = authorizationCatalog(jdbc(postgres));
       assertThat(loader.migrate().migrationsExecuted).isZero();
     }
@@ -82,13 +87,14 @@ class AuthMigrationCatalogJdbcIntegrationTest {
       postgres.start();
       migrate(postgres, network, AuthMigrationCatalogContractTest.golangDirectory(), "up");
       var database = jdbc(postgres);
-      assertThat(database.queryForObject("SELECT version FROM schema_migrations WHERE NOT dirty", Long.class)).isEqualTo(27);
+      assertThat(database.queryForObject("SELECT version FROM schema_migrations WHERE NOT dirty", Long.class)).isEqualTo(32);
       assertThat(authorizationCatalog(database)).isEqualTo(flywayCatalog);
       migrate(postgres, network, AuthMigrationCatalogContractTest.golangDirectory(), "up");
       try(var reader=new voice.backend.auth.authoritysource.AuthAuthorityReader(
           new DriverManagerDataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword()))) {
         reader.checkSchema();
-        assertThat(reader.snapshot(java.util.List.of()).revision()).isEqualTo(1);
+        // V28's zero-row accounts UPDATE advances V26's statement-level clock.
+        assertThat(reader.snapshot(java.util.List.of()).revision()).isEqualTo(2);
         database.execute("UPDATE schema_migrations SET dirty=true");
         assertThatThrownBy(reader::checkSchema).isInstanceOf(IllegalStateException.class);
       }
@@ -188,16 +194,52 @@ class AuthMigrationCatalogJdbcIntegrationTest {
   }
 
   @Test
-  void sdkDowngradeRefusesWithDirtyMaintenanceStateAndRetainsAllEvidence() {
+  void historicalAuthorityFloorDowngradeRefusesWithDirtyMaintenanceStateAndRetainsAllEvidence() {
     try (var network = Network.newNetwork(); var postgres = postgres(network)) {
       postgres.start();
-      migrate(postgres, network, AuthMigrationCatalogContractTest.golangDirectory(), "up");
+      migrate(postgres, network, AuthMigrationCatalogContractTest.golangDirectory(), "goto", "27");
       var database = jdbc(postgres);
+      assertThat(database.queryForObject("SELECT version FROM schema_migrations WHERE NOT dirty", Long.class)).isEqualTo(27);
       var before = seedEvidence(database);
+      String guards = protectionCatalog(database);
       assertThatThrownBy(() -> migrate(postgres, network, AuthMigrationCatalogContractTest.golangDirectory(), "down", "1"))
           .isInstanceOf(org.testcontainers.containers.ContainerLaunchException.class);
       assertThat(database.queryForObject("SELECT version FROM schema_migrations WHERE dirty", Long.class)).isEqualTo(26);
       assertThat(evidence(database).equals(before)).as("refused downgrade must retain all authority and protected receipt bytes").isTrue();
+      assertThat(protectionCatalog(database)).isEqualTo(guards);
     }
+  }
+
+  @Test
+  void currentIdentityGateDowngradeRefusesWithDirtyMaintenanceStateAndRetainsAllEvidence() {
+    try (var network = Network.newNetwork(); var postgres = postgres(network)) {
+      postgres.start();
+      migrate(postgres, network, AuthMigrationCatalogContractTest.golangDirectory(), "up");
+      var database = jdbc(postgres);
+      assertThat(database.queryForObject("SELECT version FROM schema_migrations WHERE NOT dirty", Long.class)).isEqualTo(32);
+      var before = seedEvidence(database);
+      String guards = protectionCatalog(database);
+      assertThatThrownBy(() -> migrate(postgres, network, AuthMigrationCatalogContractTest.golangDirectory(), "down", "1"))
+          .isInstanceOf(org.testcontainers.containers.ContainerLaunchException.class);
+      // Canonical31 is intentionally absent;32 DOWN marks its real predecessor29 dirty.
+      assertThat(database.queryForObject("SELECT version FROM schema_migrations WHERE dirty", Long.class)).isEqualTo(29);
+      assertThat(evidence(database).equals(before)).as("refused gate downgrade retains all authority and protected receipt bytes").isTrue();
+      assertThat(protectionCatalog(database)).isEqualTo(guards);
+    }
+  }
+
+  /** Catalog/body snapshots and the clock must survive both distinct forward-only refusals. */
+  private static String protectionCatalog(JdbcTemplate jdbc) {
+    return jdbc.queryForObject("""
+        SELECT jsonb_build_object(
+          'clock', (SELECT revision FROM auth_authority_revision WHERE singleton),
+          'triggers', (SELECT jsonb_agg(jsonb_build_array(c.relname,t.tgname,t.tgenabled,
+                          pg_get_triggerdef(t.oid),pg_get_functiondef(t.tgfoid)) ORDER BY c.relname,t.tgname)
+            FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+            WHERE n.nspname='public' AND NOT t.tgisinternal),
+          'identity_barrier', to_regclass('public.auth_identity_ddl_barrier')::text,
+          'ddl_gate', (SELECT jsonb_agg(jsonb_build_array(evtname,evtenabled,pg_get_functiondef(evtfoid)) ORDER BY evtname)
+            FROM pg_event_trigger WHERE evtname='auth_identity_ddl_gate'))::text
+        """, String.class);
   }
 }
