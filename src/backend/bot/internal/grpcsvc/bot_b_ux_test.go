@@ -40,7 +40,7 @@ commands:
 	spaceID := uuid.New()
 	chatID := uuid.New()
 	botUUID, _ := uuid.Parse(botID)
-	_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
@@ -92,7 +92,7 @@ func TestRawUninstallPreservesWhitelist(t *testing.T) {
 	spaceID := uuid.New()
 	chatID := uuid.New()
 	botUUID, _ := uuid.Parse(botID)
-	_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
@@ -126,7 +126,7 @@ func TestSetBotChatEnabled_enablesWhitelistForNewChat(t *testing.T) {
 	chatA := uuid.New()
 	chatB := uuid.New()
 	botUUID, _ := uuid.Parse(botID)
-	_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatA})
+	_, err = installSendFixture(t, st, ctx, botUUID, spaceID, profile, []uuid.UUID{chatA})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 

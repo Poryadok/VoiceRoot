@@ -21,6 +21,8 @@ import (
 )
 
 type Config struct {
+	MessagingURISAN                                                                                 string
+	MessagingJWKSURL, MessagingJWKSCAFile, MessagingJWKSClientCert, MessagingJWKSClientKey          string
 	DeferSpaceJWKS                                                                                  bool
 	GISJWKSURL, GISTLSCert, GISTLSKey, GISCAFile, ReplayRedisURL                                    string
 	BotPrivateKeyFile, BotKeyID, BotJWKSListen, BotTLSCert, BotTLSKey                               string
@@ -31,24 +33,26 @@ type Config struct {
 }
 
 type Runtime struct {
-	issuer           *principal.Issuer
-	resolver         *principal.JWKSResolver
-	redis            *redis.Client
-	http             *http.Client
-	spaceHTTP        *http.Client
-	config           Config
-	publicKeys       []principal.JWKSKey
-	jwksCertificate  tls.Certificate
-	spaceResolver    *principal.JWKSResolver
-	spaceCertificate tls.Certificate
-	replayGuard      principal.ReplayGuard
+	messagingResolver *principal.JWKSResolver
+	messagingHTTP     *http.Client
+	issuer            *principal.Issuer
+	resolver          *principal.JWKSResolver
+	redis             *redis.Client
+	http              *http.Client
+	spaceHTTP         *http.Client
+	config            Config
+	publicKeys        []principal.JWKSKey
+	jwksCertificate   tls.Certificate
+	spaceResolver     *principal.JWKSResolver
+	spaceCertificate  tls.Certificate
+	replayGuard       principal.ReplayGuard
 }
 
 func ConfigFromEnv(getenv func(string) string) (Config, bool, error) {
 	if getenv == nil {
 		return Config{}, false, errors.New("environment reader is required")
 	}
-	cfg := Config{GISJWKSURL: strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_JWKS_URL")),
+	cfg := Config{MessagingURISAN: strings.TrimSpace(getenv("BOT_MESSAGE_AUTHORITY_MESSAGING_URI_SAN")), MessagingJWKSURL: strings.TrimSpace(getenv("BOT_MESSAGE_AUTHORITY_MESSAGING_JWKS_URL")), MessagingJWKSCAFile: strings.TrimSpace(getenv("BOT_MESSAGE_AUTHORITY_MESSAGING_JWKS_CA_FILE")), MessagingJWKSClientCert: strings.TrimSpace(getenv("BOT_MESSAGE_AUTHORITY_MESSAGING_JWKS_CLIENT_CERT_FILE")), MessagingJWKSClientKey: strings.TrimSpace(getenv("BOT_MESSAGE_AUTHORITY_MESSAGING_JWKS_CLIENT_KEY_FILE")), GISJWKSURL: strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_JWKS_URL")),
 		GISTLSCert: strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_TLS_CERT_FILE")), GISTLSKey: strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_TLS_KEY_FILE")),
 		GISCAFile: strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_TLS_CA_FILE")), ReplayRedisURL: strings.TrimSpace(getenv("BOT_PRINCIPAL_REPLAY_REDIS_URL")),
 		BotPrivateKeyFile: strings.TrimSpace(getenv("BOT_PRINCIPAL_PRIVATE_KEY_FILE")), BotKeyID: strings.TrimSpace(getenv("BOT_PRINCIPAL_KEY_ID")),
@@ -78,6 +82,9 @@ func ConfigFromEnv(getenv func(string) string) (Config, bool, error) {
 		}
 	}
 	if count == 0 {
+		if cfg.MessagingURISAN != "" || cfg.MessagingJWKSURL != "" || cfg.MessagingJWKSCAFile != "" || cfg.MessagingJWKSClientCert != "" || cfg.MessagingJWKSClientKey != "" {
+			return Config{}, true, errors.New("messaging authority requires Bot principal runtime")
+		}
 		return Config{}, false, nil
 	}
 	if count != len(values) {
@@ -101,6 +108,9 @@ func ConfigFromEnv(getenv func(string) string) (Config, bool, error) {
 		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.RawPath != "" || (parsed.Path != "/.well-known/jwks.json" && parsed.Path != "/space/jwks.json") {
 			return Config{}, true, errors.New("space principal JWKS URL must use the HTTPS Space JWKS endpoint")
 		}
+	}
+	if err := cfg.validateMessagingAuthority(); err != nil {
+		return Config{}, true, err
 	}
 	return cfg, true, nil
 }
@@ -243,6 +253,10 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		}
 		runtime.spaceResolver, runtime.spaceCertificate, runtime.spaceHTTP = spaceResolver, spaceCert, spaceClient
 	}
+	if err = runtime.initMessagingAuthority(); err != nil {
+		_ = runtime.Close()
+		return nil, err
+	}
 	return runtime, nil
 }
 
@@ -384,6 +398,9 @@ func (r *Runtime) Close() error {
 	}
 	if r.http != nil {
 		r.http.CloseIdleConnections()
+	}
+	if r.messagingHTTP != nil {
+		r.messagingHTTP.CloseIdleConnections()
 	}
 	if r.spaceHTTP != nil {
 		r.spaceHTTP.CloseIdleConnections()
