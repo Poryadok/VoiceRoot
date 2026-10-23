@@ -1,5 +1,25 @@
 # Space Service
 
+## Protected settings and membership reads
+
+`UpdateSpace` and `UpdateSpaceMmConfig` accept only the existing lifecycle
+listener's verified Gateway delegated-user principal, bound to the exact RPC,
+canonical request ID and complete protobuf request hash. Ordinary ingress and
+raw actor headers cannot authorize either mutation. Space requests signed
+`service:space` Role decisions: `SPACE_MANAGE_SETTINGS` for ordinary settings,
+`SPACE_MANAGE_MATCHMAKING` for matchmaking, and both for mixed `UpdateSpace`
+requests. Each global decision binds canonical Space/profile IDs and absence
+of Chat/Voice scope. Role calls finish before Space takes its mutation gate;
+the original five-second ingress observation budget bounds the calls and gate
+wait, and Space rechecks the same verified request before writing. Existing
+ownership/lifecycle store fences remain required.
+
+Membership role-name enrichment uses the protected signed Space
+`GetMemberRoles` read, without an ordinary-client fallback. Native join retries
+return success only for a concrete existing membership row. The store's
+`(nil, nil)` absent-row result continues through admission preparation and the
+real Role receipt protocol; it cannot produce an empty successful join response.
+
 ## Composite Chat creation (accepted implementation contract)
 
 `CommitSpaceChatCreation` admits only a freshly authenticated `service:chat`
