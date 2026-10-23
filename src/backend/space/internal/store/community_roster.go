@@ -175,7 +175,7 @@ func (s *SpaceStore) ApplyCommunityRoster(ctx context.Context, in CommunityRoste
 		prior.Current = true
 		return prior, nil
 	}
-	requestedProfiles := append([]uuid.UUID(nil), profiles...)
+	requestedProfiles := append([]uuid.UUID{}, profiles...)
 	var schema int64
 	if err = tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&schema); err != nil {
 		return CommunityRosterReceipt{}, ErrAccountBanUnavailable

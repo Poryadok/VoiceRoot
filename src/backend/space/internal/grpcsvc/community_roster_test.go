@@ -55,8 +55,7 @@ func (s *communityRosterRoleStub) RevokeRole(_ context.Context, req *rolev1.Revo
 
 func TestApplyCommunityRosterFencesSpaceAndProjectsOnlyBaselineRole(t *testing.T) {
 	ctx := context.Background()
-	pool := startSpacePostgresForTest(t, ctx)
-	applySpaceMigration(t, ctx, pool)
+	pool := communityPublicationFixture(t, ctx)
 	st := &store.SpaceStore{Pool: pool}
 	app, env, ownerAccount, ownerProfile := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	space, _, err := st.CreateCommunityBootstrapSpace(ctx, store.CommunityBootstrapSpaceInput{OperationID: uuid.New(), ApplicationID: app, EnvironmentID: env, OwnerAccountID: ownerAccount, OwnerProfileID: ownerProfile, CorporationKey: "corp-rpc", TemplateID: "guild-default"})

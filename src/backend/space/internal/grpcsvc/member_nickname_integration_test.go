@@ -14,13 +14,12 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 	"net"
-	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 	rolev1 "voice.app/voice/role/v1"
 	spacev1 "voice.app/voice/space/v1"
+	"voice/backend/pkg/integrationtest"
 	"voice/backend/pkg/principal"
 	roletest "voice/backend/role/testutil"
 	"voice/backend/space/internal/lifecycleprincipal"
@@ -32,18 +31,11 @@ func TestMemberNickname_ProtectedRPCAndActualRoleStore(t *testing.T) {
 		t.Skip("requires test-owned PostgreSQL")
 	}
 	ctx := context.Background()
-	pool := startSpacePostgresForTest(t, ctx)
 	dir := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db")
-	entries, err := os.ReadDir(dir)
-	require.NoError(t, err)
-	for _, entry := range entries {
-		if strings.HasSuffix(entry.Name(), ".up.sql") {
-			raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
-			require.NoError(t, err)
-			_, err = pool.Exec(ctx, string(raw))
-			require.NoError(t, err, entry.Name())
-		}
-	}
+	db := integrationtest.NewSourceMigrationFixture(t, ctx, dir)
+	// This contract exercises nickname migration26, not native catalog cutover.
+	db.Run(true, "goto", "26")
+	pool := db.Pool
 	st := &store.SpaceStore{Pool: pool}
 	owner, actor, target, account := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	space, err := st.CreateSpace(ctx, owner, "Signed nickname", "", "private")
