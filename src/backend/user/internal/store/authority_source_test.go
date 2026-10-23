@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 	"voice/backend/pkg/authoritysource"
 	"voice/backend/pkg/integrationtest"
@@ -23,6 +24,30 @@ func userSourceStore(t *testing.T) (context.Context, *ProfileStore) {
 	fixture := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(userModuleRepoRoot(t), "src", "backend", "migrations", "user_db"))
 	fixture.Run(true, "up")
 	return ctx, NewProfileStore(fixture.Pool)
+}
+
+func TestUserSourceValidateTxKeepsCallerReadCommittedTransaction(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires owning PostgreSQL authority source")
+	}
+	ctx := context.Background()
+	fixture := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(userModuleRepoRoot(t), "src", "backend", "migrations", "user_db"))
+	fixture.Run(true, "goto", "21")
+	tx, err := fixture.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted, AccessMode: pgx.ReadWrite})
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var isolation, access string
+	require.NoError(t, tx.QueryRow(ctx, `SHOW transaction_isolation`).Scan(&isolation))
+	require.Equal(t, "read committed", isolation)
+	require.NoError(t, tx.QueryRow(ctx, `SHOW transaction_read_only`).Scan(&access))
+	require.Equal(t, "off", access)
+
+	require.NoError(t, authoritysource.ValidateTx(ctx, tx, userAuthorityCatalog))
+	var usable int
+	require.NoError(t, tx.QueryRow(ctx, `SELECT 1`).Scan(&usable))
+	require.Equal(t, 1, usable)
+	require.NoError(t, tx.Rollback(ctx), "the caller retains transaction cleanup")
 }
 
 // Compare only the owning source catalog. Additive tables outside this cut do
