@@ -1,5 +1,35 @@
 # Auth identity P1 current444 source unit
 
+## Allocated protected User registration follow-up
+
+Accepted allocation: Isaac18 Auth parent binding decision SHA256
+1716816d5c2741c0da4f9bc3dd4dbef5a8f2479e0b2153471554ec8ab574d3be and
+User468 consumer ACK SHA256
+3ef136436ba90a809423d3fb0fc645c39537c7f2e76908136afcbd0a2d632fb3.
+Original172 authors only new Java lifecycle registration and corresponding
+unit/docs; User client/main is468, generated Go SDK is16, deployment values2.
+Base649 ancestry and earlier source proof are preserved. No owner-store,
+migration, SQL/DDL, event-trigger or public/Chat/Bot listener changes.
+
+Implement a dedicated SmartLifecycle component using the existing transport,
+JWKS, closed principal verifier/interceptor and real shared Redis replay guard.
+Bind both existing User methods via the actual store constructor. Missing
+enabled dependencies fail before bind. Owned resource cleanup must be complete
+on bind/start failure and idempotent stop; shared Redis is never destroyed.
+Verify with pure fake-server lifecycle and real descriptor checks in bounded
+private Linux, with no real socket/Redis/SQL/TLS server execution. Capture source
+hashes, raw child exits and resource cleanup in the task-owned artifact packet.
+Production registration source does not close native P1, CURRENT, protected
+transport or coupled all-birth gates. Running means only transport started.
+
+- [x] Fresh exact task/WT33 custody; decision/proposal/ABI pins read.
+- [x] Dedicated Java registration source, lifecycle/descriptor unit and docs authored.
+- [x] Linux javac exit0 and five pure lifecycle/descriptor methods passed; removal
+  of the mandatory replay connection-factory check produced assertion RED exit1.
+  Exact source/runner/log/cleanup receipts are in task-owned
+  `tmp/swarm/rudeus172-auth-parent-registration-20261023/` (private container removed).
+- [ ] Independent source review and Integrator2 forward composition.
+
 ## Purpose and context
 
 Compose original172's reviewed roleidentityauthority input on exact commit
