@@ -440,6 +440,10 @@ expect_regex 'deploy/staging/README.md' 'VOICE_DATABASE_URL.*voice-app-secrets|v
 printf '%s\n' '== F13/G7: source-disabled scope boundary =='
 python3 "${ROOT}/scripts/ci/f13_native_p3_source_test.py"
 python3 "${ROOT}/scripts/ci/f13_native_p3_source_history_test.py"
+if [[ -f "${ROOT}/scripts/ci/f13_native_p3_successor.py" ]]; then
+  python3 "${ROOT}/scripts/ci/f13_native_p3_successor_test.py"
+  python3 "${ROOT}/scripts/ci/f13_native_p3_successor_integration_test.py"
+fi
 python3 "${ROOT}/scripts/ci/f13_guarded_merge_test.py"
 python3 "${ROOT}/scripts/ci/f13_reviewed_test_merge_test.py"
 python3 "${ROOT}/scripts/ci/f13_historical_composition_test.py"
@@ -3804,6 +3808,8 @@ native_p3_path_bound() {
 
 native_p3_prepare() {
   local source target parent_line event="${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}"
+  local verifier="${ROOT}/scripts/ci/f13_native_p3_source.py"
+  [[ ! -f "${ROOT}/scripts/ci/f13_native_p3_authority.py" ]] || verifier="${ROOT}/scripts/ci/f13_native_p3_authority.py"
   local -a parents
   target="$(git -C "${ROOT}" rev-parse HEAD)" || return 1
   source="${target}"
@@ -3815,7 +3821,7 @@ native_p3_prepare() {
   fi
   native_p3_paths="${TMP_DIR}/f13-native-p3-paths"
   native_p3_binding="${TMP_DIR}/f13-native-p3-binding.json"
-  python3 "${ROOT}/scripts/ci/f13_native_p3_source.py" \
+  python3 "${verifier}" \
     --repo "${ROOT}" --base "${base_sha}" --source "${source}" --target "${target}" \
     --event "${event}" --ref="${GITHUB_REF:-}" --event-sha="${GITHUB_SHA:-}" \
     --before="${VOICE_CI_PUSH_BEFORE_SHA:-}" --base-ref="${GITHUB_BASE_REF:-}" \
@@ -3855,7 +3861,9 @@ native_p3_duplicate_owner_qualified() {
 native_p3_audit_map() {
   [[ "${native_p3_active}" == true ]] || return 0
   local event="${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}"
-  python3 "${ROOT}/scripts/ci/f13_native_p3_source.py" \
+  local verifier="${ROOT}/scripts/ci/f13_native_p3_source.py"
+  [[ ! -f "${ROOT}/scripts/ci/f13_native_p3_authority.py" ]] || verifier="${ROOT}/scripts/ci/f13_native_p3_authority.py"
+  python3 "${verifier}" \
     --repo "${ROOT}" --base "${base_sha}" --source "${native_p3_source}" --target "${native_p3_target}" \
     --event "${event}" --ref="${GITHUB_REF:-}" --event-sha="${GITHUB_SHA:-}" \
     --before="${VOICE_CI_PUSH_BEFORE_SHA:-}" --base-ref="${GITHUB_BASE_REF:-}" \

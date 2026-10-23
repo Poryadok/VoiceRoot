@@ -44,8 +44,8 @@ retain their original policy route; they are not promoted into native projection
 - [x] Derive current go-list dependency closure and classify seven new Voice paths.
 - [x] Review all changed docs/Makefile/shared/generated inputs and owning evidence.
 - [x] Independently accept the complete current source unit and all eight clauses.
-- [ ] Write fail-closed separate successor contract, record and later carrier tests.
-- [ ] Independently review exact frozen code; run scoped Linux positive/negative tests.
+- [x] Write fail-closed separate successor contract, record and later carrier tests.
+- [x] Independently review exact frozen code; run scoped Linux positive/negative tests.
 - [ ] Execute actual producer and unchanged final router, preserving any real denial.
 - [ ] Publish coherent commits and obtain actual integrated hosted CI results.
 
@@ -113,8 +113,20 @@ H ancestry after record review; the subsequent K pins that actual root R, never
 an isolated worktree commit. Until K exists, the successor loader rejects with
 successor_carrier_not_pinned even if a local draft contains PASS strings.
 
-The separate successor currently validates typed lineage, exact compiled closure
+The separate successor validates typed lineage, exact compiled closure
 manifest and artifact hashes, per-change references, full Voice coverage, exact
-event/result parity and conserved real collector map/history. The producer and
-F54 version dispatcher are not yet wired. Fifteen Linux structural negative
-tests pass; this does not claim real producer acceptance or hosted CI success.
+event/result parity and conserved real collector map/history. Root R is
+3ef197bc0fd6bde17a538581df4e4fe99a1765d4; the carrier pins its exact record bytes.
+All seven F54 reconstruction sites and both shell entrypoints use the same
+versioned verifier when present. Historical four-file archives retain v1.
+The successor bridge first executes the unchanged v1 historical predicate,
+then reconstructs the exact reviewed successor. Context never grants a path.
+
+Fifteen Linux structural and nineteen real-Git tests pass, including an actual
+importlib subprocess outside scripts/ci, exact predecessor bridge, historical
+tampering, event/merge-result drift, projection/context/mode/evidence drift and
+inherited runtime taint. Original nine source and five history tests pass.
+Independent K source review is clear. All 54 existing F54 regression tests pass
+in 147.964 seconds. Final-source structural and real-Git fixtures also pass.
+Actual producer checks remain pending. No actual producer acceptance or hosted
+CI success is claimed.
