@@ -14,7 +14,7 @@ import (
 	"voice/backend/pkg/spaceaccountcapture"
 )
 
-var ErrUnavailable = errors.New("User account capture unavailable")
+var ErrUnavailable = errors.New("user account capture unavailable")
 
 type rpcClient interface {
 	CaptureSpaceMemberAccountBindings(context.Context, *userv1.CaptureSpaceMemberAccountBindingsRequest, ...grpc.CallOption) (*userv1.CaptureSpaceMemberAccountBindingsResponse, error)
