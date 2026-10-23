@@ -448,6 +448,9 @@ python3 "${ROOT}/scripts/ci/f13_guarded_merge_test.py"
 python3 "${ROOT}/scripts/ci/f13_reviewed_test_merge_test.py"
 python3 "${ROOT}/scripts/ci/f13_historical_composition_test.py"
 python3 "${ROOT}/scripts/ci/f13_role_conditional_test.py"
+if [[ -f "${ROOT}/scripts/ci/f13_role_conditional_successor_test.py" ]]; then
+  python3 "${ROOT}/scripts/ci/f13_role_conditional_successor_test.py"
+fi
 python3 "${ROOT}/scripts/ci/f13_space_audit_test.py"
 base_sha="${VOICE_R22_BASE_SHA:-$(git -C "${ROOT}" merge-base HEAD origin/master)}"
 # The later Game sprint authorizes the verified opt-in runtime checkpoint, not
@@ -3929,12 +3932,16 @@ f13_historical_composition_qualified() {
 }
 
 f13_role_conditional_qualified() {
-  local repo="$1" map="$2" path="$3" incoming_row="$4" prior_row receipt target
+  local repo="$1" map="$2" path="$3" incoming_row="$4" prior_row receipt target qualifier
   [[ "${repo}" == "${ROOT}" ]] || return 1
   [[ "$(awk -F '\t' -v p="${path}" '$1 == p { n++ } END { print n+0 }' "${map}")" == 1 ]] || return 1
   prior_row="$(awk -F '\t' -v p="${path}" '$1 == p { print $0 }' "${map}")" || return 1
   target="$(git -C "${ROOT}" rev-parse HEAD)" || return 1
-  receipt="$(python3 "${ROOT}/scripts/ci/f13_role_conditional.py" --repo "${repo}" \
+  qualifier="${ROOT}/scripts/ci/f13_role_conditional.py"
+  if [[ -f "${ROOT}/scripts/ci/f13_role_conditional_successor.py" ]]; then
+    qualifier="${ROOT}/scripts/ci/f13_role_conditional_successor.py"
+  fi
+  receipt="$(python3 "${qualifier}" --repo "${repo}" \
     --target "${target}" --prior-row="${prior_row}" --incoming-row="${incoming_row}" 2>/dev/null)" || return 1
   # Retain actual producer arguments and both original runtime flags before
   # normal replacement. The final map still retains the strongest trigger.
@@ -3960,6 +3967,9 @@ f13_space_audit_qualified() {
 
 f13_guarded_merge_state_fingerprint() {
   local state_file
+  if [[ -f "${ROOT}/scripts/ci/f13_role_conditional_successor.py" ]]; then
+    git -C "${ROOT}" hash-object -- "${ROOT}/scripts/ci/f13_role_conditional_successor.py" || return 1
+  fi
   for state_file in "${ROOT}/scripts/ci/f13_reviewed_test_merge.py" \
     "${ROOT}/scripts/ci/f13_historical_composition.py" "${TMP_DIR}/f13-historical-composition.jsonl" \
     "${ROOT}/scripts/ci/f13_role_conditional.py" "${TMP_DIR}/f13-role-conditional-history.tsv" \
