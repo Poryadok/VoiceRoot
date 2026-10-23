@@ -332,6 +332,11 @@ func (s *BotStore) InstallInSpace(ctx context.Context, botID, spaceID, installer
 		return uuid.Nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if enabled, e := membershipJournalExists(ctx, tx); e != nil {
+		return uuid.Nil, e
+	} else if enabled {
+		return uuid.Nil, ErrMembershipSource
+	}
 	// Space guards always precede bot and whitelist row locks.
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,71431))`, spaceID.String()); err != nil {
 		return uuid.Nil, err
@@ -427,6 +432,11 @@ func (s *BotStore) UninstallFromSpace(ctx context.Context, botID, spaceID uuid.U
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if enabled, e := membershipJournalExists(ctx, tx); e != nil {
+		return e
+	} else if enabled {
+		return ErrMembershipSource
+	}
 	// Cleanup is allowed while frozen, but still serializes with guarded sends.
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,71431))`, spaceID.String()); err != nil {
 		return err
@@ -510,6 +520,13 @@ UPDATE bot_chat_whitelist SET enabled = $4 WHERE bot_id = $1 AND chat_id = $2 AN
 			return err
 		}
 	} else if enabled {
+		// New Space attachments require the protected installation coordinator's
+		// durable Chat authority observation. Existing entries can be toggled.
+		if present, e := membershipJournalExists(ctx, tx); e != nil {
+			return e
+		} else if present {
+			return ErrMembershipSource
+		}
 		var inserted int
 		err = tx.QueryRow(ctx, `
 INSERT INTO bot_chat_whitelist (bot_id, chat_id, space_id, enabled, added_by_profile_id)

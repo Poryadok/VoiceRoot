@@ -14,6 +14,7 @@ import (
 
 	"voice/backend/bot/internal/authctx"
 	"voice/backend/bot/internal/dispatch"
+	"voice/backend/bot/internal/installprincipal"
 	"voice/backend/bot/internal/s2s"
 	"voice/backend/bot/internal/store"
 
@@ -21,7 +22,6 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	rolev1 "voice.app/voice/role/v1"
-	spacev1 "voice.app/voice/space/v1"
 )
 
 func chatRefIsChannel(ref *chatv1.ChatRef) bool {
@@ -33,153 +33,25 @@ func chatRefIsDM(ref *chatv1.ChatRef) bool {
 }
 
 func (s *BotGRPC) InstallBotInSpace(ctx context.Context, req *botv1.InstallBotInSpaceRequest) (*botv1.InstallBotInSpaceResponse, error) {
-	botID, err := parseUUID("bot_id", req.GetBotId())
+	admin, err := installprincipal.Require(ctx, botv1.BotService_InstallBotInSpace_FullMethodName, req)
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.Unauthenticated, "verified administrator required")
 	}
-	spaceID, err := parseUUID("space_id", req.GetSpaceId())
-	if err != nil {
-		return nil, err
+	if s.MembershipCoordinator == nil {
+		return nil, status.Error(codes.Unavailable, "protected installation coordinator unavailable")
 	}
-	profile, ok := authctx.ProfileID(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing profile")
-	}
-	if s.Role != nil {
-		resp, err := s.Role.CheckPermission(ctx, &rolev1.CheckPermissionRequest{
-			SpaceId:        spaceID.String(),
-			ProfileId:      profile.String(),
-			PermissionName: "SPACE_MANAGE_BOTS",
-		})
-		if err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-		if !resp.GetAllowed() {
-			return nil, status.Error(codes.PermissionDenied, "SPACE_MANAGE_BOTS required")
-		}
-	}
-	chats := make([]uuid.UUID, 0, len(req.GetAllowedChats()))
-	for _, ref := range req.GetAllowedChats() {
-		cid, err := parseUUID("chat.id", ref.GetId())
-		if err != nil {
-			return nil, err
-		}
-		chats = append(chats, cid)
-	}
-	botRow, err := s.Store.GetBotByID(ctx, botID)
-	if err != nil {
-		return nil, mapStoreErr(err)
-	}
-	if store.HasPrivilegedScope(botRow.ScopesJSON) && !req.GetAcknowledgePrivilegedScopes() {
-		return nil, status.Error(codes.FailedPrecondition, "acknowledge_privileged_scopes required for privileged bot scopes")
-	}
-	if s.Space != nil {
-		spaceCtx := s2s.ForwardIncomingMetadata(ctx)
-		if _, err := s.Space.AddBotMember(spaceCtx, &spacev1.AddBotMemberRequest{
-			SpaceId:   spaceID.String(),
-			ProfileId: botRow.ActorProfileID.String(),
-		}); err != nil {
-			return nil, status.Errorf(codes.FailedPrecondition, "add bot to space: %v", err)
-		}
-	}
-	if s.Chat != nil {
-		actorID := botRow.ActorProfileID.String()
-		chatCtx := s2s.ForwardIncomingMetadata(ctx)
-		for _, ref := range req.GetAllowedChats() {
-			if chatRefIsChannel(ref) {
-				continue
-			}
-			cid, err := parseUUID("chat.id", ref.GetId())
-			if err != nil {
-				return nil, err
-			}
-			if _, err := s.Chat.AddMembers(chatCtx, &chatv1.AddMembersRequest{
-				ChatId:     cid.String(),
-				ProfileIds: []string{actorID},
-			}); err != nil {
-				return nil, status.Errorf(codes.FailedPrecondition, "add bot actor to chat: %v", err)
-			}
-		}
-	}
-	installID, err := s.Store.InstallInSpace(ctx, botID, spaceID, profile, chats)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	return &botv1.InstallBotInSpaceResponse{InstallationId: installID.String()}, nil
+	return s.MembershipCoordinator.Install(ctx, admin, req)
 }
 
 func (s *BotGRPC) UninstallBotFromSpace(ctx context.Context, req *botv1.UninstallBotFromSpaceRequest) (*botv1.UninstallBotFromSpaceResponse, error) {
-	botID, err := parseUUID("bot_id", req.GetBotId())
+	admin, err := installprincipal.Require(ctx, botv1.BotService_UninstallBotFromSpace_FullMethodName, req)
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.Unauthenticated, "verified administrator required")
 	}
-	spaceID, err := parseUUID("space_id", req.GetSpaceId())
-	if err != nil {
-		return nil, err
+	if s.MembershipCoordinator == nil {
+		return nil, status.Error(codes.Unavailable, "protected installation coordinator unavailable")
 	}
-	profile, ok := authctx.ProfileID(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing profile")
-	}
-	if s.Role != nil {
-		resp, err := s.Role.CheckPermission(ctx, &rolev1.CheckPermissionRequest{
-			SpaceId:        spaceID.String(),
-			ProfileId:      profile.String(),
-			PermissionName: "SPACE_MANAGE_BOTS",
-		})
-		if err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-		if !resp.GetAllowed() {
-			return nil, status.Error(codes.PermissionDenied, "SPACE_MANAGE_BOTS required")
-		}
-	}
-	botRow, err := s.Store.GetBotByID(ctx, botID)
-	if err != nil {
-		return nil, mapStoreErr(err)
-	}
-	chatIDs, _ := s.Store.ListWhitelistedChatIDs(ctx, botID, spaceID)
-	s2sCtx := s2s.ForwardIncomingMetadata(ctx)
-	if s.Role != nil {
-		_, _ = s.Role.DeleteRolesCreatedByProfile(s2sCtx, &rolev1.DeleteRolesCreatedByProfileRequest{
-			SpaceId:            spaceID.String(),
-			CreatedByProfileId: botRow.ActorProfileID.String(),
-		})
-		memberRoles, merr := s.Role.GetMemberRoles(s2sCtx, &rolev1.GetMemberRolesRequest{
-			SpaceId:   spaceID.String(),
-			ProfileId: botRow.ActorProfileID.String(),
-		})
-		if merr == nil {
-			for _, role := range memberRoles.GetRoleList().GetRoles() {
-				_, _ = s.Role.RevokeRole(s2sCtx, &rolev1.RevokeRoleRequest{
-					SpaceId:   spaceID.String(),
-					ProfileId: botRow.ActorProfileID.String(),
-					RoleId:    role.GetId(),
-				})
-			}
-		}
-	}
-	if s.Messaging != nil && len(chatIDs) > 0 {
-		ids := make([]string, 0, len(chatIDs))
-		for _, cid := range chatIDs {
-			ids = append(ids, cid.String())
-		}
-		_, _ = s.Messaging.UnpinMessagesBySenderInChats(s2sCtx, &messagingv1.UnpinMessagesBySenderInChatsRequest{
-			SenderProfileId: botRow.ActorProfileID.String(),
-			ChatIds:         ids,
-		})
-	}
-	if err := s.Store.UninstallFromSpace(ctx, botID, spaceID); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	if s.Space != nil {
-		spaceCtx := s2s.ForwardIncomingMetadata(ctx)
-		_, _ = s.Space.RemoveBotMember(spaceCtx, &spacev1.RemoveBotMemberRequest{
-			SpaceId:   spaceID.String(),
-			ProfileId: botRow.ActorProfileID.String(),
-		})
-	}
-	return &botv1.UninstallBotFromSpaceResponse{}, nil
+	return s.MembershipCoordinator.Uninstall(ctx, admin, req)
 }
 
 func (s *BotGRPC) ListInstalledBots(ctx context.Context, req *botv1.ListInstalledBotsRequest) (*botv1.ListInstalledBotsResponse, error) {
