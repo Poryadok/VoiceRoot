@@ -423,6 +423,10 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		}
 		return t.serveFiles(w, r, rest)
 	case "spaces":
+		if isSpaceVoiceCreateRequest(r) {
+			t.serveSpaceVoiceCreate(w, r)
+			return true
+		}
 		if isSpaceUpdateRequest(r) {
 			t.serveSpaceUpdate(w, r)
 			return true

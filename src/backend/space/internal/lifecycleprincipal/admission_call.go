@@ -14,7 +14,7 @@ import (
 const admissionRPCPrefix = "/voice.space.v1.SpaceService/"
 
 func admissionMethod(method string) bool {
-	if method == admissionRPCPrefix+"CreateInvite" || method == admissionRPCPrefix+"UpdateSpace" || method == admissionRPCPrefix+"UpdateSpaceMmConfig" {
+	if method == admissionRPCPrefix+"CreateVoiceRoom" || method == admissionRPCPrefix+"CreateInvite" || method == admissionRPCPrefix+"UpdateSpace" || method == admissionRPCPrefix+"UpdateSpaceMmConfig" {
 		return true
 	}
 	switch method {
@@ -124,6 +124,10 @@ func requireAdmissionCall(ctx context.Context, method string, request proto.Mess
 
 func RequireAdmissionStart(ctx context.Context, request proto.Message) (*VerifiedAdmissionCall, error) {
 	return requireAdmissionCall(ctx, admissionRPCPrefix+"StartJoinAttempt", request)
+}
+
+func RequireVoiceRoomCreate(ctx context.Context, request proto.Message) (*VerifiedAdmissionCall, error) {
+	return requireAdmissionCall(ctx, admissionRPCPrefix+"CreateVoiceRoom", request)
 }
 
 func RequireInviteCreate(ctx context.Context, request proto.Message) (*VerifiedAdmissionCall, error) {

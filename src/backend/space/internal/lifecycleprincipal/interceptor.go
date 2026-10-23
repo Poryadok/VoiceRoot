@@ -28,7 +28,7 @@ type Verifier struct {
 }
 
 func protectedMutation(method string) bool {
-	if method == spacev1.SpaceService_CreateInvite_FullMethodName || method == spacev1.SpaceService_UpdateSpace_FullMethodName || method == spacev1.SpaceService_UpdateSpaceMmConfig_FullMethodName {
+	if method == spacev1.SpaceService_CreateVoiceRoom_FullMethodName || method == spacev1.SpaceService_CreateInvite_FullMethodName || method == spacev1.SpaceService_UpdateSpace_FullMethodName || method == spacev1.SpaceService_UpdateSpaceMmConfig_FullMethodName {
 		return true
 	}
 	if moderationMethod(method) || nonInteractiveJoinMethod(method) {
@@ -56,7 +56,12 @@ func canonicalID(value string) bool {
 
 func (v Verifier) Unary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if info.FullMethod == spacev1.SpaceService_CreateInvite_FullMethodName || info.FullMethod == spacev1.SpaceService_UpdateSpace_FullMethodName || info.FullMethod == spacev1.SpaceService_UpdateSpaceMmConfig_FullMethodName {
+		if info.FullMethod == spacev1.SpaceService_CreateVoiceRoom_FullMethodName {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+		}
+		if info.FullMethod == spacev1.SpaceService_CreateVoiceRoom_FullMethodName || info.FullMethod == spacev1.SpaceService_CreateInvite_FullMethodName || info.FullMethod == spacev1.SpaceService_UpdateSpace_FullMethodName || info.FullMethod == spacev1.SpaceService_UpdateSpaceMmConfig_FullMethodName {
 			return v.verifyModerationCall(ctx, req, info, handler)
 		}
 		if moderationMethod(info.FullMethod) || nonInteractiveJoinMethod(info.FullMethod) {

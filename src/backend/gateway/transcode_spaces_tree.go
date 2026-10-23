@@ -44,21 +44,6 @@ func (t *transcoder) serveSpacesTree(w http.ResponseWriter, r *http.Request, res
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
-	case r.Method == http.MethodPost && sub == "voice-rooms":
-		req := &spacev1.CreateVoiceRoomRequest{}
-		if err := readProtoJSON(r, req); err != nil {
-			writeGRPCError(w, err)
-			return true
-		}
-		req.SpaceId = spaceID
-		resp, err := t.clients.space.CreateVoiceRoom(ctx, req)
-		if err != nil {
-			writeGRPCError(w, err)
-			return true
-		}
-		writeProtoJSON(w, http.StatusOK, resp)
-		return true
-
 	case r.Method == http.MethodPost && sub == "tree/nodes":
 		req := &spacev1.UpsertTreeNodeRequest{}
 		if err := readProtoJSON(r, req); err != nil {

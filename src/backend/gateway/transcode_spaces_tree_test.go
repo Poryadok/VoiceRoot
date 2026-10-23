@@ -163,7 +163,7 @@ func TestTranscodeSpacesCreateCategory(t *testing.T) {
 	require.Equal(t, "General", rec.lastCategory.GetName())
 }
 
-func TestTranscodeSpacesCreateVoiceRoom(t *testing.T) {
+func TestTranscodeSpacesCreateVoiceRoomRejectsLegacyUnsignedActor(t *testing.T) {
 	t.Parallel()
 	rec := &recordingSpaceTree{}
 	spaceClient, chatClient, cleanup := startBufconnSpaceTreeClients(t, rec, &recordingChatsForSpaceTree{})
@@ -180,8 +180,8 @@ func TestTranscodeSpacesCreateVoiceRoom(t *testing.T) {
 	resp := performRequest(h, http.MethodPost, "/api/v1/spaces/space-1/voice-rooms", body, map[string]string{
 		"Authorization": "Bearer valid-user-token",
 	})
-	require.Equal(t, http.StatusOK, resp.Code)
-	require.Equal(t, "Lobby", rec.lastVoiceRoom.GetName())
+	require.GreaterOrEqual(t, resp.Code, 400)
+	require.Nil(t, rec.lastVoiceRoom)
 }
 
 func TestTranscodeSpacesCreateChatRejectsLegacyOrchestration(t *testing.T) {

@@ -37,6 +37,14 @@ func (f *inviteIngressFixture) settingsContext(ctx context.Context, req proto.Me
 	}
 	return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token, "x-request-id", id)), nil
 }
+func (c inviteFixtureClient) CreateVoiceRoom(ctx context.Context, r *spacev1.CreateVoiceRoomRequest, opts ...grpc.CallOption) (*spacev1.CreateVoiceRoomResponse, error) {
+	ctx, err := c.fixture.settingsContext(ctx, r, spacev1.SpaceService_CreateVoiceRoom_FullMethodName)
+	if err != nil {
+		return nil, err
+	}
+	return c.SpaceServiceClient.CreateVoiceRoom(ctx, r, opts...)
+}
+
 func (c inviteFixtureClient) UpdateSpace(ctx context.Context, r *spacev1.UpdateSpaceRequest, opts ...grpc.CallOption) (*spacev1.UpdateSpaceResponse, error) {
 	ctx, err := c.fixture.settingsContext(ctx, r, spacev1.SpaceService_UpdateSpace_FullMethodName)
 	if err != nil {
@@ -74,7 +82,7 @@ func (c legacySettingsRoleFixture) CheckPermission(ctx context.Context, r *rolev
 	if err := c.verify(ctx, r, rolev1.RoleService_CheckPermission_FullMethodName); err != nil {
 		return nil, err
 	}
-	if r.Chat != nil || r.VoiceRoomId != nil || (r.PermissionName != permissions.SpaceManageSettings && r.PermissionName != permissions.SpaceManageMatchmaking) {
+	if r.Chat != nil || r.VoiceRoomId != nil || (r.PermissionName != permissions.TextChatCreateInSpace && r.PermissionName != permissions.SpaceManageSettings && r.PermissionName != permissions.SpaceManageMatchmaking) {
 		return nil, status.Error(codes.PermissionDenied, "wrong fixture purpose")
 	}
 	// Model the native Role owner's fresh Space qualification before legacy mask lookup.
@@ -127,6 +135,8 @@ func (f *inviteIngressFixture) serveSettings(ctx context.Context, r any, info *g
 			clone = svc
 		}
 		switch req := r.(type) {
+		case *spacev1.CreateVoiceRoomRequest:
+			return clone.CreateVoiceRoom(ctx, req)
 		case *spacev1.UpdateSpaceRequest:
 			return clone.UpdateSpace(ctx, req)
 		case *spacev1.UpdateSpaceMmConfigRequest:

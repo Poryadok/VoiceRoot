@@ -114,7 +114,7 @@ func TestSpaceJoinProtectedDispatch(t *testing.T) {
 func TestSpaceJoinAuthenticationFailures(t *testing.T) {
 	f := newCreatorFixture(t)
 	original := cloneConfigJWTPayload(f.payload)
-	for _, path := range []string{"/api/v1/spaces/" + uuid.NewString() + "/join", "/api/v1/invites/code/join"} {
+	for _, path := range []string{"/api/v1/spaces/" + uuid.NewString() + "/join", "/api/v1/invites/code/join", "/api/v1/spaces/" + uuid.NewString() + "/voice-rooms"} {
 		for _, mode := range []string{"missing jti", "stale epoch", "missing floor", "revoked", "missing profile", "expired", "wrong audience", "padded type"} {
 			t.Run(mode+path, func(t *testing.T) {
 				f.payload = cloneConfigJWTPayload(original)
@@ -144,7 +144,11 @@ func TestSpaceJoinAuthenticationFailures(t *testing.T) {
 					f.payload["account_type"] = " regular "
 					want = 403
 				}
-				w := joinRequest(t, newGateway(f.config(client)), f, path, "")
+				body := ""
+				if strings.HasSuffix(path, "/voice-rooms") {
+					body = `{"name":"Voice"}`
+				}
+				w := joinRequest(t, newGateway(f.config(client)), f, path, body)
 				require.Equal(t, want, w.Code, w.Body.String())
 				require.Zero(t, client.calls)
 			})

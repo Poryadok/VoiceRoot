@@ -731,6 +731,19 @@ projection. The current ordinary Space-to-Role decision transport is a separate
 BE-181 residual; this cutover does not claim its S2S authorization or production
 PKI rollout. See the [BE-041 execution plan](../testing/be041-verified-audit-identity-exec-plan.md).
 
+**Voice-room creation:** `CreateVoiceRoom` accepts only the private lifecycle
+listener's request-bound Gateway delegated-user proof. Gateway signs the final
+POST `/api/v1/spaces/{space_id}/voice-rooms` body using verified account/profile
+claims. Space requests only the existing global `TEXT_CHAT_CREATE_IN_SPACE`
+decision as signed `service:space` on its protected Role connection, before
+taking Space mutation fences. The original five-second ingress budget bounds
+authentication, the decision and persistence; the typed request and credential
+are rechecked after the local gate, after store ownership locks before writes,
+and before commit. Room/node creation remains atomic, with existing name and
+capacity checks and events. Ordinary ingress and unavailable protected transport
+have no fallback. This migration does not change other tree mutation methods or
+Role's exact creation permission allowlist.
+
 **Invite creation:** `CreateInvite` accepts only the private lifecycle listener's
 request-bound Gateway delegated-user proof. Gateway routes POST
 `/api/v1/spaces/{space_id}/invites` through that listener using verified client

@@ -249,7 +249,7 @@ func startSpaceGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...spaceSer
 	// Legacy ledger fixtures explicitly inject a request-bound verified actor for
 	// the migrated audit method. This is not a production admission interceptor.
 	srv := grpc.NewServer(grpc.UnaryInterceptor(func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if info.FullMethod == spacev1.SpaceService_UpdateSpace_FullMethodName || info.FullMethod == spacev1.SpaceService_UpdateSpaceMmConfig_FullMethodName {
+		if info.FullMethod == spacev1.SpaceService_CreateVoiceRoom_FullMethodName || info.FullMethod == spacev1.SpaceService_UpdateSpace_FullMethodName || info.FullMethod == spacev1.SpaceService_UpdateSpaceMmConfig_FullMethodName {
 			return inviteFixture.serveSettings(ctx, request, info, svc)
 		}
 		if info.FullMethod == spacev1.SpaceService_ListMembers_FullMethodName && svc.Roles != nil {
