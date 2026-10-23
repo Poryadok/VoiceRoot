@@ -130,3 +130,27 @@ Independent K source review is clear. All 54 existing F54 regression tests pass
 in 147.964 seconds. Final-source structural and real-Git fixtures also pass.
 Actual producer checks remain pending. No actual producer acceptance or hosted
 CI success is claimed.
+
+## Subsequent Role conditional correction
+
+The actual PR merge ec19a5945ee5985dd2cc6a7d7af3bb293ee9bb98 reached the
+historical collector, then correctly rejected the Role runtime duplicate at
+9dc0d50b65a2d1026059f978464612bd9d1350c9. Eight of the original eleven current
+correction bindings have changed; equal historical blobs cannot waive that
+condition. Native dependency context grants no Role path authority.
+
+The separate Role v2 record binds source84a354f191b19cb5a95d17a8831fc4885a2713de,
+all eleven correction entries and263 dependency entries. Linux go-list output
+determines24 repository package directories; complete immediate tracked-file
+inventories detect added source as well as changed or removed inputs. Fresh
+creation/nickname listener tests exercise real TLS/JWKS and miniredis:20 PASS
+events, zero skips/failures. Independent source review accepts only correction
+applicability, not arbitrary Role changes, historical runtime or activation.
+
+Preserve the old helper/record byte-for-byte. The successor must first execute
+that original predicate at its fixed accepted carrier8fc9e542acd8039a356c4149ccd0fd4a16f79564,
+then independently validate the reviewed current unit at the actual target.
+Receipts distinguish those targets, retain exact prior/incoming rows and runtime
+flags, and preserve144c69 HOLD. The record/evidence R is integrated by root before
+K pins its actual ancestor commit; unpinned code remains fail-closed. Negative
+real-Git fixtures and independent code review precede the next actual producer.
