@@ -330,7 +330,86 @@ The actual-R candidate verification and fresh actual producer are separate
 evidence; no constructor, bounded replay or synthetic fixture is terminal
 production admission.
 
+## Missing archived companion: bounded production v4 draft
+
+The separate documentation workflow found one broken relative link among all
+199 Markdown files: the immutable Nativev2 Role/Space review references its
+original inventory companion, omitted from the tracked evidence directory.
+The recovered original has184585 bytes and SHA256
+fee1fdda19f8245b1e97c39d771025764a912bff47a6186664a57aea9d4ffbc1.
+The repair adds exactly that file; it changes no old review, source, record,
+evidence bytes or checker configuration. The full Node24/checker3.12.2 overlay
+regression passes all199 documents. This is an evidence transport repair, not
+approval of the inventory's364 outside-unit paths or a new runtime claim.
+
+A distinct productionv4 record will bind the direct published predecessor/H/R,
+one exact addition (mode/type/length/hash), complete D6 input inventory and
+independent review. All pre-existing tree entries must remain identical at H;
+R may add only its finite new evidence metadata and update this ExecPlan.
+The original Nativev3 f87/e409 tuple is retained, independently loaded and
+requalified against the actual B/S/T at production and corrected-F seams.
+Nativev3 has no global post-R path subset; its exact participating files,
+complete dependency directories and immutable evidence remain protected.
+No companion is added to Native projection/context and no Nativev4 is needed.
+
+The original productionv1/v3 predicates, historical M/J/F packets, manual
+supplement and J lineage bridge remain unchanged. Future documentation additions
+or edits remain denied. Final fixed pins, immutable source review and real-Git
+negative checks are required before activation; a fresh actual producer remains
+required and no predecessor terminal result transfers to the new source.
+
 Actual published-R Linux candidate verification: 22 production tests PASS
 (128.338s), 7 Nativev3 tests PASS (5.294s), Python compilation and Bash syntax
 PASS. The disposable candidate uses the actual f87 record and a synthetic K
 commit only for tests; the real event producer remains outstanding.
+
+V4 provisional Linux fixture verification:28 real-Git production tests PASS
+(197.695s),7 unchanged Nativev3 tests PASS (5.343s),56 legacy F54 tests PASS
+(148.557s), Python compilation PASS. The one initial fixture failure expected
+a no-op deletion of an absent file to reject; only that false expectation was
+removed. Actual additions/mutations, source and record parent edges, old-review
+immutability, rehashed inventory omissions and retained Native tuple remain
+negative oracles. Synthetic H/R commits are explicitly fixtures, not final pins
+or actual producer completion. Published H/R verification is still required.
+
+## Bounded router performance repair
+
+The current hosted job approaches the six-hour runner limit. Read-only analysis
+found that each router path starts several Python processes and reparses the
+same completed trace three times inside load_collection. This repair does not
+cache authority, Git composition results, source qualification or policy results.
+It retains at most one exact raw-byte trace key and immutable serialized selected
+events; every consumption still reads and hashes fresh collection, trace, map,
+source and policy inputs, and receives newly decoded event objects.
+
+An invocation-private AF_UNIX worker binds its repository, seal, map and context
+paths at startup and calls the unchanged router_binding for each serial request.
+Requests carry only an allowlisted operation, path, session and random nonce;
+responses must match all fields and one complete bounded JSON object with EOF.
+The socket and atomic readiness marker are private to the script's temporary
+directory. Normal completion requires STOP acknowledgement and successful child
+wait; failure cleanup signals only the shell's owned running job and retains the
+original exit status. There is no TCP listener, disk cache, resumed session,
+fallback to stale receipts, or change to independent final reconstruction.
+
+Six focused Linux tests pass (10.005s), including deterministic readiness
+publication, command substitution and stop/wait, worker death/abandoned client,
+malformed identities/frames, exact raw-byte cache parity, source/tree and event
+changes, and same-size restored-mtime changes to trace/map/context/collection/seal.
+On the preserved incomplete85,281,357-byte trace, the original three parse passes
+plus read/hash measured1.347s versus0.488s for warm extraction plus read/hash;
+peak RSS was567260KiB. This is a bounded extraction comparison, not a complete
+router or job speedup prediction. Independent full-suite verification and review
+remain required. Historical Git reconstruction is deliberately not memoized.
+
+Independent frozen-candidate verification subsequently passed28 production tests
+(216.185s),61 F54 tests (161.936s), Python compilation and Bash syntax. The fair
+three-index-pass comparison measured0.8175s versus1.3919s for three original
+parse/filter passes, both with fresh reads and hashes; peak RSS562772KiB and
+canonical-byte parity for the3 selected events. This supersedes the earlier
+one-index-pass timing for comparative claims. Receipt SHA256
+10d447eafe7eb69727f03765e19d3ead1afeb885b4dea8f59caebac4b7637f9a
+preserves commands, exact candidate hashes and synthetic/incomplete-trace limits.
+Independent CODE review is CLEAR. The real EXIT cleanup was also checked to
+retain status7 while reaping its owned child. Graphify update completed; actual
+H/R pins and a fresh complete production run remain outstanding.
