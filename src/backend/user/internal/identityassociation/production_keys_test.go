@@ -3,12 +3,58 @@ package identityassociation
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestProductionKeyReaderCloseFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		readErr error
+		limit   int64
+	}{
+		{"successful read", nil, 64},
+		{"read failure", errors.New("private read path"), 64},
+		{"oversize", nil, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			file := &keyReadCloser{Reader: strings.NewReader("private key material"), readErr: tc.readErr, closeErr: errors.New("private close path")}
+			data, err := readBoundedKeyReader(file, tc.limit)
+			if data != nil || err != ErrKeysetIncomplete || file.closes != 1 {
+				t.Fatalf("close failure must discard bytes, redact error and close once: bytes=%d err=%v closes=%d", len(data), err, file.closes)
+			}
+		})
+	}
+	file := &keyReadCloser{Reader: strings.NewReader("complete")}
+	data, err := readBoundedKeyReader(file, 64)
+	if string(data) != "complete" || err != nil || file.closes != 1 {
+		t.Fatal("successful read and close rejected")
+	}
+}
+
+type keyReadCloser struct {
+	io.Reader
+	readErr  error
+	closeErr error
+	closes   int
+}
+
+func (f *keyReadCloser) Read(p []byte) (int, error) {
+	if f.readErr != nil {
+		return 0, f.readErr
+	}
+	return f.Reader.Read(p)
+}
+
+func (f *keyReadCloser) Close() error {
+	f.closes++
+	return f.closeErr
+}
 
 func TestProductionKeyReaderRetainsEveryVersion(t *testing.T) {
 	dir := t.TempDir()
