@@ -45,6 +45,7 @@ type Runtime struct {
 	authoritySourceServer         *authoritysource.Server
 	authoritySourceInterceptor    grpc.UnaryServerInterceptor
 	chatCurrentACLEnabled         bool
+	messagingDecisionsEnabled     bool
 }
 
 type OwnershipV2Activation struct {
@@ -158,6 +159,7 @@ func NewWithSessionEpochChecker(ctx context.Context, config Config, checker prin
 	runtime.botLifecycleEnabled = config.BotLifecycleEnabled
 	runtime.sessionEpochChecker = checker
 	_, runtime.chatCurrentACLEnabled = config.JWKSURLs["chat"]
+	_, runtime.messagingDecisionsEnabled = config.JWKSURLs["messaging"]
 	startup, cancel := context.WithTimeout(ctx, dependencyTimeout)
 	defer cancel()
 	if err := replay.Ping(startup).Err(); err != nil {
@@ -329,6 +331,18 @@ func (r *Runtime) VerifyChatCurrentACL(ctx context.Context, token, method, reque
 	return principal.VerifyService(ctx, token, principal.VerifyConfig{ExpectedIssuer: "chat", ExpectedAudience: "role", ExpectedRPC: method, ExpectedRequestID: requestID, ExpectedRequestHash: hash, KeyResolver: r.resolver.Resolve, ReplayGuard: r.recordReplay})
 }
 
+// VerifyWorkloadDecision is selected by the receiver's closed permission map.
+// It never retries another issuer when verification fails.
+func (r *Runtime) VerifyWorkloadDecision(ctx context.Context, token, method, requestID, hash, issuer string) (principal.Principal, error) {
+	if r == nil || r.resolver == nil || r.replay == nil || (issuer == "messaging" && !r.messagingDecisionsEnabled) {
+		return principal.Principal{}, principalgrpc.Unavailable(errors.New("workload decision verifier unavailable"))
+	}
+	if (issuer != "messaging" && issuer != "voice") || method != rolev1.RoleService_CheckPermission_FullMethodName {
+		return principal.Principal{}, errors.New("workload decision method or issuer not allowed")
+	}
+	return principal.VerifyService(ctx, token, principal.VerifyConfig{ExpectedIssuer: issuer, ExpectedAudience: "role", ExpectedRPC: method, ExpectedRequestID: requestID, ExpectedRequestHash: hash, KeyResolver: r.resolver.Resolve, ReplayGuard: r.recordReplay})
+}
+
 // Remote JWKS is intentionally lazy: Space startup depends on Role process
 // health. Requests without a complete trusted set still fail closed.
 func (r *Runtime) refreshLoop(ctx context.Context, interval time.Duration) {
@@ -344,6 +358,9 @@ func (r *Runtime) refreshLoop(ctx context.Context, interval time.Duration) {
 			_ = r.resolver.Refresh(ctx, "space")
 			if r.chatCurrentACLEnabled {
 				_ = r.resolver.Refresh(ctx, "chat")
+			}
+			if r.messagingDecisionsEnabled {
+				_ = r.resolver.Refresh(ctx, "messaging")
 			}
 		}
 	}
