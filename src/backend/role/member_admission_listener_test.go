@@ -31,13 +31,17 @@ func admissionListenerStore(t *testing.T) (context.Context, *store.RoleStore) {
 	return admissionListenerStoreVersion(t, "21")
 }
 
-func admissionListenerStoreVersion(t *testing.T, version string) (context.Context, *store.RoleStore) {
+func admissionListenerStoreVersion(t *testing.T, version string, timeouts ...time.Duration) (context.Context, *store.RoleStore) {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("requires disposable PostgreSQL and migration containers")
 	}
 	integrationtest.ConfigureDockerTesting()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	timeout := 2 * time.Minute
+	if len(timeouts) != 0 {
+		timeout = timeouts[0]
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	t.Cleanup(cancel)
 	pg, err := postgres.Run(ctx, integrationtest.PostgresImage, postgres.BasicWaitStrategies(), postgres.WithDatabase("admission"), postgres.WithUsername("fixture"), postgres.WithPassword("fixture_only"))
 	require.NoError(t, err)

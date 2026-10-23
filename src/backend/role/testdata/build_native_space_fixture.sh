@@ -1,14 +1,21 @@
 #!/bin/sh
 set -eu
-# The fixture's implementation and source are independently pinned. No peer
-# worktree, generated fake DTO, old catalog relabel, or mutable branch is used.
-source_pin=5e0fc4f551dd9dd4659d5a6da1b7393608cf0cff
+# The runner explicitly mounts the current integration checkout read-only.
+# Copy it into disposable storage; never build or generate into that checkout.
+: "${ROLE_NATIVE_SPACE_SOURCE_ROOT:?explicit current integration source required}"
+test -f "$ROLE_NATIVE_SPACE_SOURCE_ROOT/src/backend/space/go.mod"
 source_root="$(mktemp -d /tmp/role-native-space.XXXXXX)"
 trap 'rm -rf "$source_root"' EXIT
-# Windows worktree .git pointers are intentionally not resolved inside Linux.
-# Host preparation: rtk git archive --format=tar -o
-# tmp/swarm/native-space-$source_pin.tar $source_pin src/backend
-tar -xf "/workspace/tmp/swarm/native-space-$source_pin.tar" -C "$source_root"
+mkdir -p "$source_root/src/backend/migrations"
+for module in space pkg role; do
+    cp -R "$ROLE_NATIVE_SPACE_SOURCE_ROOT/src/backend/$module" "$source_root/src/backend/$module"
+done
+for service in user chat voice messaging file realtime analytics; do
+    mkdir -p "$source_root/src/backend/$service"
+    cp -R "$ROLE_NATIVE_SPACE_SOURCE_ROOT/src/backend/$service/pb" "$source_root/src/backend/$service/pb"
+done
+cp -R "$ROLE_NATIVE_SPACE_SOURCE_ROOT/src/backend/migrations/space_db" "$source_root/src/backend/migrations/space_db"
+echo "Native Space fixture source: $ROLE_NATIVE_SPACE_SOURCE_ROOT (current checkout snapshot)" >&2
 mkdir -p "$source_root/src/backend/space/cmd/role-native-fixture"
 cp /workspace/src/backend/role/testdata/native_space_fixture/main.go "$source_root/src/backend/space/cmd/role-native-fixture/main.go"
 cd "$source_root/src/backend/space"

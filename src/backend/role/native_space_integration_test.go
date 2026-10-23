@@ -141,7 +141,7 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 	if len(versions) != 0 {
 		version = versions[0]
 	}
-	ctx, roles := admissionListenerStoreVersion(t, version)
+	ctx, roles := admissionListenerStoreVersion(t, version, 5*time.Minute)
 	build := exec.CommandContext(ctx, "sh", "testdata/build_native_space_fixture.sh")
 	output, err := build.CombinedOutput()
 	require.NoError(t, err, string(output))
@@ -210,7 +210,7 @@ func runNativeMemberProtocol(t *testing.T, requireInteractive bool, versions ...
 		require.NoError(t, process.Wait(), stderr.String())
 	})
 	owner, profile, account, operation := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	require.NoError(t, encoder.Encode(map[string]any{"DSN": fixture.Pool.Config().ConnString(), "Owner": owner, "Profile": profile, "Account": account, "Operation": operation, "Config": map[string]any{"ListenAddr": "127.0.0.1:0", "CertFile": certFile, "KeyFile": keyFile, "ClientCAFile": clientCA, "ReplayAddr": redisAddress, "JWKSCAFile": certFile, "JWKSURLs": map[string]string{"role": jwks.URL}, "RefreshAfter": time.Minute, "HardExpiry": 2 * time.Minute, "UnknownKIDCooldown": time.Second}}))
+	require.NoError(t, encoder.Encode(map[string]any{"DSN": fixture.Pool.Config().ConnString(), "Owner": owner, "Profile": profile, "Account": account, "Operation": operation, "Config": map[string]any{"Target": "space", "ListenAddr": "127.0.0.1:0", "TLSCertFile": certFile, "TLSKeyFile": keyFile, "ClientCAFile": clientCA, "ReplayAddr": redisAddress, "JWKSCAFile": certFile, "JWKSURLs": map[string]string{"role": jwks.URL}, "RefreshAfter": time.Minute, "HardExpiry": 2 * time.Minute, "UnknownKIDCooldown": time.Second}}))
 	var created nativeSpaceReply
 	require.NoError(t, decoder.Decode(&created), stderr.String())
 	space := uuid.MustParse(created.SpaceID)

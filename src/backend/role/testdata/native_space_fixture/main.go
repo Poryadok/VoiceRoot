@@ -1,4 +1,4 @@
-// This executable is compiled inside the immutable Space producer source tree.
+// This executable is compiled in a disposable copy of the selected Space tree.
 // Its stdin protocol only drives actual stores; it never constructs authority
 // responses, signatures, READY receipts, or private verified capabilities.
 package main
@@ -12,16 +12,17 @@ import (
 	"google.golang.org/grpc"
 	"net"
 	"os"
+	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/pkg/memberadmission"
+	"voice/backend/pkg/roleoverrideprincipal"
 	"voice/backend/space/internal/grpcsvc"
-	"voice/backend/space/internal/memberauthorityprincipal"
 	"voice/backend/space/internal/store"
 )
 
 type setup struct {
 	DSN                                string
 	Owner, Profile, Account, Operation uuid.UUID
-	Config                             memberauthorityprincipal.Config
+	Config                             roleoverrideprincipal.Config
 }
 type reply struct {
 	SpaceID   string
@@ -69,7 +70,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	runtime, err := memberauthorityprincipal.New(ctx, init.Config)
+	runtime, err := roleoverrideprincipal.New(ctx, init.Config)
 	if err != nil {
 		return err
 	}
@@ -79,7 +80,7 @@ func run() error {
 		return err
 	}
 	server := grpc.NewServer(runtime.ServerOptions()...)
-	grpcsvc.RegisterMemberAuthorityServer(server, &grpcsvc.MemberAuthorityGRPC{Store: st})
+	spacev1.RegisterSpaceServiceServer(server, &grpcsvc.SpaceGRPC{Store: st})
 	served := make(chan error, 1)
 	go func() { served <- server.Serve(listener) }()
 	defer func() { server.Stop(); <-served }()
