@@ -501,12 +501,17 @@ func migrationEnvironment(cfg *pgx.ConnConfig, child *url.URL) []string {
 	bound := map[string]string{
 		"PGHOST": cfg.Host, "PGPORT": strconv.Itoa(int(cfg.Port)), "PGUSER": cfg.User,
 		"PGPASSWORD": cfg.Password, "PGDATABASE": "space_db", "PGPASSFILE": "/dev/null",
-		"PGSERVICE": "", "PGSERVICEFILE": "", "PGSSLMODE": q.Get("sslmode"),
+		"PGSSLMODE":     q.Get("sslmode"),
 		"PGSSLROOTCERT": q.Get("sslrootcert"), "PGSSLCERT": q.Get("sslcert"), "PGSSLKEY": q.Get("sslkey"),
 	}
 	env := make([]string, 0, len(os.Environ())+len(bound))
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
+		// pq rejects service keys by presence, even when their values are empty.
+		// Omit them entirely without allowing inherited service indirection.
+		if key == "PGSERVICE" || key == "PGSERVICEFILE" {
+			continue
+		}
 		if _, replace := bound[key]; !replace {
 			env = append(env, entry)
 		}

@@ -430,6 +430,57 @@ func TestAdminURIRejectsConnectionSelectorQueryBeforeAnySourceOrDBWork(t *testin
 	}
 }
 
+// This subprocess constructs pq's connector only; it never opens a connection.
+// Panic text and connection errors may contain secrets, so expose fixed exits only.
+func TestPQEnvironmentConstructorChild(t *testing.T) {
+	if os.Args[len(os.Args)-1] != "pq-environment-child" {
+		return
+	}
+	defer func() {
+		if recover() != nil {
+			os.Exit(31)
+		}
+	}()
+	connector, err := pq.NewConnector("host=127.0.0.1 port=1 user=installer dbname=space_db sslmode=disable")
+	if err != nil || connector == nil {
+		os.Exit(32)
+	}
+	os.Exit(0)
+}
+
+func TestMigrationEnvironmentPQConstructor(t *testing.T) {
+	const secret = "SYNTHETIC_SERVICE_SECRET"
+	cfg, err := pgx.ParseConfig("postgres://installer:fixture@127.0.0.1:1/postgres?sslmode=disable")
+	require.NoError(t, err)
+	child, err := url.Parse("postgres://installer:fixture@127.0.0.1:1/space_db?sslmode=disable")
+	require.NoError(t, err)
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	for _, ambient := range []string{"", secret} {
+		t.Run("ambient present empty="+strconv.FormatBool(ambient == ""), func(t *testing.T) {
+			t.Setenv("PGSERVICE", ambient)
+			t.Setenv("PGSERVICEFILE", ambient)
+			env := migrationEnvironment(cfg, child)
+			for _, poison := range []string{"", "PGSERVICE=", "PGSERVICEFILE=", "PGSERVICE=" + secret, "PGSERVICEFILE=" + secret} {
+				cmd := exec.Command(executable, "-test.run=^TestPQEnvironmentConstructorChild$", "--", "pq-environment-child")
+				cmd.Env = append([]string(nil), env...)
+				if poison != "" {
+					cmd.Env = append(cmd.Env, poison)
+				}
+				output, runErr := cmd.CombinedOutput()
+				require.True(t, len(output) == 0, "constructor child must emit no diagnostic or secret")
+				if poison == "" {
+					require.True(t, runErr == nil, "exact constructed environment must allow pq constructor")
+				} else {
+					var exit *exec.ExitError
+					require.ErrorAs(t, runErr, &exit)
+					require.Equal(t, 31, exit.ExitCode(), "presence, including empty value, must exercise real pq panic")
+				}
+			}
+		})
+	}
+}
+
 func completedFixture() *Receipt {
 	f := &store.NativeInstallerSourceFacts{Version: 44, DatabaseSystemID: "cluster", DatabaseName: "space_db", DatabaseOID: 42, InstallerRole: "installer", Epoch: "94db7e08-e958-44fa-94b2-988410ab0044", SealSHA256: strings.Repeat("a", 64)}
 	p := &store.NativeMembershipCatalog45Receipt{DatabaseSystemID: f.DatabaseSystemID, DatabaseName: f.DatabaseName, DatabaseOID: f.DatabaseOID, InstallerRole: f.InstallerRole, Epoch: f.Epoch, OldSealSHA256: f.SealSHA256, NewSealSHA256: strings.Repeat("b", 64), Changed: true}
