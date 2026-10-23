@@ -28,6 +28,18 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
   private final AuthPrincipalVerifier verifier;
   private final Runnable cleanup;
   private final String botPeerUri;
+  private Set<String> closedMethods;
+  static final Context.Key<String> REQUEST_ID_CONTEXT = Context.key("auth-verified-request-id");
+  public static String verifiedRequestId() { return REQUEST_ID_CONTEXT.get(); }
+  /** Dedicated listener policy. Legacy floor callers retain their original checks. */
+  public static AuthPrincipalServerInterceptor identityAuthority(AuthPrincipalVerifier verifier) {
+    var result = new AuthPrincipalServerInterceptor(java.util.Objects.requireNonNull(verifier));
+    result.closedMethods = Set.of(
+        "/voice.identityerasure.v1.AuthRoleIdentityAuthorityService/ObserveAccounts",
+        "/voice.identityerasure.v1.AuthUserIdentityAuthorityService/ResolveAccountHandle",
+        "/voice.identityerasure.v1.AuthUserIdentityAuthorityService/ObserveAccountHandles");
+    return result;
+  }
 
   public AuthPrincipalServerInterceptor(AuthPrincipalVerifier verifier) { this(verifier, () -> {}); }
   AuthPrincipalServerInterceptor(AuthPrincipalVerifier verifier, Runnable cleanup) {
@@ -44,7 +56,12 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
   @Override public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
       ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
     String rpc = "/" + call.getMethodDescriptor().getFullMethodName();
-    if (!ISSUE_RPC.equals(rpc) && !CONSUME_RPC.equals(rpc) && !LOOKUP_RPC.equals(rpc) && !SPACE_ADMISSION_RPC.equals(rpc)
+    if (closedMethods != null) {
+      if (!closedMethods.contains(rpc) || call.getMethodDescriptor().getType() != MethodDescriptor.MethodType.UNARY) {
+        call.close(Status.PERMISSION_DENIED.withDescription("principal caller not permitted"), new Metadata());
+        return new ServerCall.Listener<>() {};
+      }
+    } else if (!ISSUE_RPC.equals(rpc) && !CONSUME_RPC.equals(rpc) && !LOOKUP_RPC.equals(rpc) && !SPACE_ADMISSION_RPC.equals(rpc)
         && !VOICE_SESSION_FLOOR_RPC.equals(rpc)
         && !ROLE_SESSION_FLOOR_RPC.equals(rpc) && !SPACE_SESSION_FLOOR_RPC.equals(rpc) && !BOT_SESSION_FLOOR_RPC.equals(rpc) && !CHAT_SESSION_FLOOR_RPC.equals(rpc)
         && !SPACE_DELETE_CONSUME_RPC.equals(rpc) && !SPACE_DELETE_LOOKUP_RPC.equals(rpc)
@@ -93,7 +110,7 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
               : status.getCode() == Status.Code.PERMISSION_DENIED ? Status.PERMISSION_DENIED : Status.UNAUTHENTICATED);
           return;
         }
-        delegate = Contexts.interceptCall(parent.withValue(VerifiedPrincipal.CONTEXT, verified), call, headers, next);
+        delegate = Contexts.interceptCall(parent.withValue(VerifiedPrincipal.CONTEXT, verified).withValue(REQUEST_ID_CONTEXT, requestId), call, headers, next);
         delegate.onMessage(request);
         delegate.onHalfClose();
       }

@@ -1,5 +1,31 @@
 # SQL migrations (DATA_SCOPE v1)
 
+### Auth identity additive source profile (not applied/qualified)
+
+The original172 current444 author unit retains V1..26 / canonical1..27 and adds
+V28/000029 plus V31/000032. Reserved Mod V27,29,30 / canonical28,30,31 are not
+part of this unit; never fabricate their history or renumber published source.
+Both V28 UP bodies are identical. Flyway executes V31 in its actual migration
+transaction; canonical000032 explicitly wraps the same body in BEGIN/COMMIT.
+The source contract tests check the inventory and envelope, not actual loaders.
+Real two-loader equivalence and privileges remain a required native gate.
+
+Install the barrier/event trigger through the already authorized trusted
+maintenance channel before activating barrier-aware replicas. The runtime role
+stays non-superuser and cannot install event triggers. Future protected DDL must
+take the exclusive barrier FIRST in the SAME actual loader transaction and hold
+it through commit; a preflight connection is insufficient. Canonical000032 DOWN
+unconditionally refuses removal with55000 after exclusive entry. Restore uses a
+verified matching runtime/database, never forced marker repair.
+
+Event-trigger control is a PostgreSQL automatic-gate exception. The fixed-source
+`scripts/ops/auth-identity-maintenance.py` acquires exclusive access, checks the
+known preimage, recreates the exact trigger and verifies the enabled postimage in
+one transaction. Its exclusive lock drains/fences participating owner calls;
+old nonparticipating replicas must already be drained. Shared-role/database or
+unannounced privileged bypass is not covered. This stage executes no installer,
+maintenance, SQL or DDL and qualifies no environment.
+
 Per-database folders for the first migration wave ([docs/DATA_SCOPE_V1.md](../../../docs/DATA_SCOPE_V1.md)). Filenames follow [golang-migrate](https://github.com/golang-migrate/migrate) (`NNNNNN_name.up.sql` / `.down.sql`); use domain-based names, not phase numbers.
 
 | Directory | Database | Owner (typical) |

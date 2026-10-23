@@ -42,8 +42,9 @@ class AuthMigrationCatalogContractTest {
   @Test
   void flywayHasOneSourcePerVersionAndKeepsCanonicalRefreshAt15() throws Exception {
     var sources = catalog(flywayDirectory(), Pattern.compile("V(\\d+)__.*\\.sql"));
-    assertThat(sources).hasSize(26);
+    assertThat(sources).hasSize(28);
     for (int version = 1; version <= 26; version++) assertThat(sources).containsKey(version);
+    assertThat(sources).containsKeys(28,31).doesNotContainKeys(27,29,30);
     assertThat(sources.get(15).getFileName().toString()).isEqualTo("V15__refresh_tokens_profile_id.sql");
   }
 
@@ -51,9 +52,13 @@ class AuthMigrationCatalogContractTest {
   void golangHasOneUpAndDownPerVersionAndKeepsCanonicalRefreshAt16() throws Exception {
     var up = catalog(golangDirectory(), Pattern.compile("(\\d+)_.*\\.up\\.sql"));
     var down = catalog(golangDirectory(), Pattern.compile("(\\d+)_.*\\.down\\.sql"));
-    assertThat(up).hasSize(27);
-    assertThat(down).hasSize(27);
-    for (int version = 1; version <= 27; version++) {
+    assertThat(up).hasSize(29);
+    assertThat(down).hasSize(29);
+    var versions = new java.util.ArrayList<Integer>();
+    for (int version = 1; version <= 27; version++) versions.add(version);
+    versions.addAll(java.util.List.of(29,32));
+    assertThat(up).doesNotContainKeys(28,30,31);
+    for (int version : versions) {
       assertThat(up).containsKey(version);
       assertThat(down).containsKey(version);
       assertThat(up.get(version).getFileName().toString().replace(".up.sql", ""))
@@ -73,5 +78,30 @@ class AuthMigrationCatalogContractTest {
           .as("SDK DDL must match at Flyway %s and golang-migrate %s", version, version + 1)
           .isEqualTo(Files.readString(flyway.get(version), StandardCharsets.UTF_8).replace("\r\n", "\n"));
     }
+  }
+
+  @Test void identityPairsPreserveOwnedBytesAndCanonicalTransactionEnvelope() throws Exception {
+    var flyway = catalog(flywayDirectory(), Pattern.compile("V(\\d+)__.*\\.sql"));
+    var canonical = catalog(golangDirectory(), Pattern.compile("(\\d+)_.*\\.up\\.sql"));
+    String owner = Files.readString(flyway.get(28)).replace("\r\n", "\n");
+    assertThat(Files.readString(canonical.get(29)).replace("\r\n", "\n")).isEqualTo(owner);
+    String gate = Files.readString(flyway.get(31)).replace("\r\n", "\n");
+    assertThat(Files.readString(canonical.get(32)).replace("\r\n", "\n")).isEqualTo("BEGIN;\n" + gate + "COMMIT;\n");
+    assertThat(gate.indexOf("LOCK TABLE ONLY public.auth_identity_ddl_barrier IN ACCESS EXCLUSIVE MODE"))
+        .isLessThan(gate.indexOf("CREATE FUNCTION"));
+    assertThat(gate).contains("SECURITY INVOKER", "ACCESS EXCLUSIVE MODE NOWAIT", "CREATE EVENT TRIGGER");
+    assertThat(gate).doesNotContain("SECURITY DEFINER", "pg_proc SET", "flyway_schema_history", "schema_migrations");
+    assertThat(Files.readString(golangDirectory().resolve("000032_auth_identity_ddl_barrier.down.sql")))
+        .contains("ERRCODE='55000'").doesNotContain("DROP EVENT TRIGGER", "DROP TABLE");
+  }
+
+  public static void main(String[] args) throws Exception {
+    if (!System.getProperty("os.name").equals("Linux")) throw new AssertionError("Linux required");
+    var suite = new AuthMigrationCatalogContractTest();
+    suite.flywayHasOneSourcePerVersionAndKeepsCanonicalRefreshAt15();
+    suite.golangHasOneUpAndDownPerVersionAndKeepsCanonicalRefreshAt16();
+    suite.bothSupportedCatalogsContainTheSameEntireOrderedSdkDdl();
+    suite.identityPairsPreserveOwnedBytesAndCanonicalTransactionEnvelope();
+    System.out.println("PASS 4 migration source-catalog contracts; no loader or SQL execution");
   }
 }

@@ -1,5 +1,37 @@
 # Auth Service
 
+## Identity owner catalog source stage
+
+The current444 identity source profile adds original172 V28/000029 and
+V31/000032 without importing separately owned Mod slots. V28 bytes remain
+unchanged. V31 is a trusted pre-activation installation requiring the existing
+authorized event-trigger-capable maintenance role; runtime receives no added
+administrative capability. `AUTH_IDENTITY_SCHEMA_OWNER` pins that trusted owner.
+The guarded runtime requires a separate non-superuser identity and SELECT on the
+inert barrier; PUBLIC receives only SELECT there, not function execution or data.
+
+Each guarded owner transaction takes the direct shared barrier before checking
+gate metadata, exact selected-loader history and owned V28 objects. The existing
+`spring.flyway.enabled` setting selects mutually exclusive real histories;
+canonical mode never queries or manufactures Flyway rows. The canonical marker
+is not a checksum. Unknown/dirty/mixed histories or unaccepted gate metadata
+remain unavailable. No runtime lazy installation or repair exists.
+
+`scripts/ops/auth-identity-maintenance.py` is a fixed gate-control v1 source
+entrypoint: one fresh connection and READ COMMITTED transaction, exclusive
+barrier before metadata/DDL, exact preimage, fixed event-trigger recreation,
+verified postimage, commit or whole rollback. It accepts no SQL path or payload.
+Native execution is not qualified in this source stage. Initial activation must
+drain old replicas lacking the barrier; unannounced privileged event-trigger,
+role/database or catalog bypass is outside this protocol. Nontransactional
+maintenance is unsupported online. Do not execute installation or maintenance
+from this source-only evidence.
+
+Focused Java and Python connection-double checks prove source decisions and
+ordering only. D01-D10, both actual migration loaders, least privilege and native
+concurrency, production registration, independent CURRENT recovery and all-birth
+integration remain OPEN. See `docs/testing/auth-identity-current444-source-plan.md`.
+
 Java/Spring Boot service: register, login, refresh (rotation), logout, JWT validation, JWKS.
 
 ## Ports

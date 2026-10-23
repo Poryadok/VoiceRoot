@@ -25,6 +25,14 @@ public final class AuthPrincipalVerifier {
       .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
       .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
   private final KeyResolver keys;
+  private boolean identityAuthority;
+  /** Closed identity authority; never reuses delegated-user or legacy method grants. */
+  public static AuthPrincipalVerifier identityAuthority(KeyResolver keys, ReplayGuard replay, Clock clock) {
+    var result = new AuthPrincipalVerifier(keys,
+        account -> { throw new IllegalStateException("identity authority has no user epoch capability"); }, replay, clock);
+    result.identityAuthority = true;
+    return result;
+  }
   private final KeyResolver botFloorKeys;
   private final EpochLookup epochs;
   private final ReplayGuard replay;
@@ -67,7 +75,7 @@ public final class AuthPrincipalVerifier {
       if (!kid.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")) throw invalid();
       JsonNode claims = JSON.readTree(decoder.decode(parts[1]));
       String issuer = string(claims, "iss");
-      if (!Set.of("gateway", "space", "voice", "role", "bot", "chat").contains(issuer)) throw invalid();
+      if (!(identityAuthority ? Set.of("role", "user") : Set.of("gateway", "space", "voice", "role", "bot", "chat")).contains(issuer)) throw invalid();
       RSAPublicKey key = (AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC.equals(rpc) ? botFloorKeys : keys).resolve(issuer, kid);
       if (key == null || key.getModulus().bitLength() < 2048) throw invalid();
       var signature = Signature.getInstance("SHA256withRSA");
@@ -100,11 +108,11 @@ public final class AuthPrincipalVerifier {
           var names = claims.fieldNames();
           while (names.hasNext()) if (!CHAT_FLOOR_CLAIMS.contains(names.next())) throw invalid();
         }
-        if (AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC.equals(rpc)
+        if ((identityAuthority || AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC.equals(rpc))
             && (claims.has("account_id") || claims.has("profile_id") || claims.has("session_epoch"))) throw invalid();
         principal = new VerifiedPrincipal(kind, issuer, null, null, 0);
       } else if (VerifiedPrincipal.DELEGATED_USER.equals(kind)) {
-        if (!"gateway".equals(issuer) || !subject.equals(string(claims, "account_id"))) throw invalid();
+        if (identityAuthority || !"gateway".equals(issuer) || !subject.equals(string(claims, "account_id"))) throw invalid();
         UUID account = uuid(subject);
         UUID profile = uuid(string(claims, "profile_id"));
         long epoch = integer(claims, "session_epoch");
@@ -145,6 +153,14 @@ public final class AuthPrincipalVerifier {
         AuthPrincipalServerInterceptor.SPACE_DELETE_ACK_RPC).contains(rpc)
         && principal.kind().equals(VerifiedPrincipal.SERVICE)
         && principal.issuer().equals("space"));
+    if (identityAuthority) {
+      allowed = principal.kind().equals(VerifiedPrincipal.SERVICE)
+          && ((principal.issuer().equals("role")
+              && rpc.equals("/voice.identityerasure.v1.AuthRoleIdentityAuthorityService/ObserveAccounts"))
+              || (principal.issuer().equals("user") && Set.of(
+                  "/voice.identityerasure.v1.AuthUserIdentityAuthorityService/ResolveAccountHandle",
+                  "/voice.identityerasure.v1.AuthUserIdentityAuthorityService/ObserveAccountHandles").contains(rpc)));
+    }
     if (!allowed) throw Status.PERMISSION_DENIED.withDescription("principal caller not permitted").asRuntimeException();
     try {
       if (!expires.isAfter(clock.instant())) throw invalid();

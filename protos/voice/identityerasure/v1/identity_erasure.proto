@@ -1,0 +1,209 @@
+syntax = "proto3";
+
+package voice.identityerasure.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "voice.app/voice/identityerasure/v1;identityerasurev1";
+option java_multiple_files = true;
+option java_package = "voice.identityerasure.v1";
+
+// Private Role-purpose authority. No ordinary Auth/User listener exposes it.
+service AuthRoleIdentityAuthorityService {
+  // Only the verified service:role principal may call these methods.
+  rpc ObserveAccounts(ObserveAccountsRequest) returns (ObserveAccountsResponse);
+}
+
+service UserRoleIdentityAuthorityService {
+  // Only service:role. Current ineligibility is separate from irreversible proof.
+  rpc ObserveProfiles(ObserveProfilesRequest) returns (ObserveProfilesResponse);
+  // Matches the complete finite Role actor AND target inventory, including
+  // archived and previously removed profiles. It never enumerates raw IDs.
+  rpc ResolveHistoricalCoverage(ResolveHistoricalCoverageRequest) returns (ResolveHistoricalCoverageResponse);
+}
+
+// Distinct User-purpose capability: it does not grant User any Role method.
+service AuthUserIdentityAuthorityService {
+  // Called before User opens its birth transaction and outside Auth caller locks.
+  rpc ResolveAccountHandle(ResolveAccountHandleRequest) returns (ResolveAccountHandleResponse);
+  rpc ObserveAccountHandles(ObserveAccountHandlesRequest) returns (ObserveAccountHandlesResponse);
+}
+
+enum Eligibility {
+  ELIGIBILITY_UNSPECIFIED = 0;
+  ELIGIBILITY_ELIGIBLE = 1;
+  ELIGIBILITY_INELIGIBLE = 2;
+  ELIGIBILITY_UNAVAILABLE = 3;
+}
+
+enum ErasureDisposition {
+  ERASURE_DISPOSITION_UNSPECIFIED = 0;
+  ERASURE_DISPOSITION_NOT_IRREVERSIBLE = 1;
+  ERASURE_DISPOSITION_IRREVERSIBLE = 2;
+  ERASURE_DISPOSITION_INCOMPLETE = 3;
+}
+
+enum AccountLifecycleState {
+  ACCOUNT_LIFECYCLE_STATE_UNSPECIFIED = 0;
+  ACCOUNT_LIFECYCLE_STATE_ACTIVE = 1;
+  ACCOUNT_LIFECYCLE_STATE_RECOVERABLE = 2;
+  ACCOUNT_LIFECYCLE_STATE_TERMINAL = 3;
+}
+
+// Exact immutable owner journal cut. Digests frame compact selector/fence facts;
+// neither a digest nor complete=true alone establishes independent CURRENT.
+message OwnerCut {
+  string owner = 1;
+  string stream_id = 2;
+  string history_generation = 3;
+  uint64 through_revision = 4;
+  uint64 selector_keyset_revision = 5;
+  repeated string selector_key_versions = 6;
+  uint64 fact_count = 7;
+  bytes digest = 8;
+  bool complete = 9;
+}
+
+// Present for recovery. All fields are required together, and must match the
+// independently durable current Role cut; an old signed vector is insufficient.
+message RecoveryBinding {
+  string restore_target = 1;
+  string restore_generation = 2;
+  bytes challenge = 3;
+  string role_stream_id = 4;
+  uint64 role_through_revision = 5;
+  bytes role_checkpoint_digest = 6;
+  string role_keyset_revision = 7;
+  uint64 inventory_generation = 8;
+  bytes inventory_digest = 9;
+}
+
+message ObservationWindow {
+  google.protobuf.Timestamp observed_at = 1;
+  // Equality is expired. A consumer rechecks its transaction's DB time.
+  google.protobuf.Timestamp valid_until = 2;
+}
+
+// A distinct opaque Auth lifetime handle, never a Mod subject ID. A recoverable
+// cycle's fixed erase_at does not itself constitute an irreversible boundary.
+message AccountLifecycleFact {
+  string owner_handle = 1;
+  uint64 lifecycle_revision = 2;
+  AccountLifecycleState state = 3;
+  string deletion_cycle = 4;
+  google.protobuf.Timestamp erase_at = 5;
+  Eligibility eligibility = 6;
+  ErasureDisposition disposition = 7;
+  OwnerCut owner_cut = 8;
+}
+
+message AccountObservation {
+  // Echoes exactly one requested selector; never an account enumeration.
+  string account_id = 1;
+  AccountLifecycleFact lifecycle = 2;
+}
+
+message ObserveAccountsRequest {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  repeated string account_ids = 3;
+  RecoveryBinding recovery = 4;
+}
+
+message ObserveAccountsResponse {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  ObservationWindow window = 3;
+  repeated AccountObservation accounts = 4;
+  OwnerCut owner_cut = 5;
+  RecoveryBinding recovery = 6;
+}
+
+message ResolveAccountHandleRequest {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  string account_id = 3;
+}
+
+message ResolveAccountHandleResponse {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  string account_id = 3;
+  ObservationWindow window = 4;
+  AccountLifecycleFact lifecycle = 5;
+}
+
+message ObserveAccountHandlesRequest {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  repeated string owner_handles = 3;
+  OwnerCut required_auth_cut = 4;
+  RecoveryBinding recovery = 5;
+}
+
+message ObserveAccountHandlesResponse {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  ObservationWindow window = 3;
+  // One bound fact per input handle, including explicit unknown/incomplete.
+  repeated AccountLifecycleFact accounts = 4;
+  OwnerCut owner_cut = 5;
+  RecoveryBinding recovery = 6;
+}
+
+message ProfileObservation {
+  string profile_id = 1;
+  uint64 lifecycle_revision = 2;
+  Eligibility eligibility = 3;
+  ErasureDisposition disposition = 4;
+  google.protobuf.Timestamp erase_at = 5;
+  // Present only when canonical historical ownership is actually proven.
+  string parent_owner_handle = 6;
+  // Exact positive parent fact for derived account-terminal erasure, not an
+  // inferred account/profile UUID match or a deadline derived from an event.
+  AccountLifecycleFact terminal_parent = 7;
+  OwnerCut owner_cut = 8;
+}
+
+message ObserveProfilesRequest {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  repeated string profile_ids = 3;
+  RecoveryBinding recovery = 4;
+}
+
+message ObserveProfilesResponse {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  ObservationWindow window = 3;
+  repeated ProfileObservation profiles = 4;
+  OwnerCut owner_cut = 5;
+  RecoveryBinding recovery = 6;
+}
+
+message ResolveHistoricalCoverageRequest {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  repeated string profile_ids = 3;
+  // Exact positive account facts requested for account cleanup. No live-only
+  // listing, guessed parent binding or substituted Mod-purpose proof is valid.
+  repeated AccountLifecycleFact required_accounts = 4;
+  OwnerCut required_auth_cut = 5;
+  RecoveryBinding recovery = 6;
+  OwnerCut required_user_cut = 7;
+}
+
+message ResolveHistoricalCoverageResponse {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  ObservationWindow window = 3;
+  repeated ProfileObservation profiles = 4;
+  OwnerCut owner_cut = 5;
+  // User has causally imported the EXACT required Auth cut. The selected
+  // historical roster's count/digest covers archived/hard-deleted associations.
+  OwnerCut imported_auth_cut = 6;
+  uint64 matched_association_count = 7;
+  bytes association_digest = 8;
+  bool complete = 9;
+  RecoveryBinding recovery = 10;
+}
