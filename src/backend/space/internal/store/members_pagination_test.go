@@ -144,21 +144,22 @@ SELECT $1,gen_random_uuid() FROM generate_series(1,101)`, capped.ID)
 
 	t.Run("effective roster preserves eligibility and manual membership", func(t *testing.T) {
 		owner := uuid.MustParse("00000000-0000-0000-0000-000000000900")
-		community, _, err := st.CreateCommunityBootstrapSpace(ctx, CommunityBootstrapSpaceInput{
+		manual, managedA, managedB, expired := ids[2], ids[1], ids[0], ids[3]
+		st, community := legacyCommunityFixture(t, ctx, CommunityBootstrapSpaceInput{
 			OperationID: uuid.New(), ApplicationID: uuid.New(), EnvironmentID: uuid.New(),
 			OwnerAccountID: uuid.New(), OwnerProfileID: owner,
 			CorporationKey: "pagination-corp", TemplateID: "guild-default",
+		}, func(st *SpaceStore, community *SpaceRow) {
+			_, err := st.Pool.Exec(ctx, `UPDATE space_members SET joined_at=$2 WHERE space_id=$1`, community.ID, joined)
+			require.NoError(t, err)
+			_, err = st.Pool.Exec(ctx, `INSERT INTO space_members(space_id,profile_id,joined_at) VALUES($1,$2,$3)`, community.ID, manual, joined.Add(time.Hour))
+			require.NoError(t, err)
 		})
-		require.NoError(t, err)
+		pool := st.Pool
 		var applicationID, environmentID uuid.UUID
 		require.NoError(t, pool.QueryRow(ctx, `SELECT application_id,environment_id FROM community_owner_authority WHERE space_id=$1`, community.ID).Scan(&applicationID, &environmentID))
-		manual, managedA, managedB, expired := ids[2], ids[1], ids[0], ids[3]
 		revoked := uuid.MustParse("00000000-0000-0000-0000-000000000400")
-		_, err = pool.Exec(ctx, `UPDATE space_members SET joined_at=$2 WHERE space_id=$1`, community.ID, joined)
-		require.NoError(t, err)
-		_, err = pool.Exec(ctx, `INSERT INTO space_members(space_id,profile_id,joined_at) VALUES($1,$2,$3)`, community.ID, manual, joined.Add(time.Hour))
-		require.NoError(t, err)
-		_, err = st.ApplyCommunityRoster(ctx, CommunityRosterInput{
+		_, err := st.ApplyCommunityRoster(ctx, CommunityRosterInput{
 			OperationID: uuid.New(), ApplicationID: applicationID, EnvironmentID: environmentID,
 			CorporationKey: "pagination-corp", SpaceID: community.ID, OwnerGeneration: 1,
 			SourceRevision: 1, SnapshotSHA256: []byte("11111111111111111111111111111111"),

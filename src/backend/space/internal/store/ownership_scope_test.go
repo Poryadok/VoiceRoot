@@ -344,11 +344,26 @@ func TestOwnershipScope_EveryCanonicalOrdinaryMethodFailsClosedForEveryNontermin
 	}
 }
 
-func TestOwnershipScope_OrdinaryFixtureCallsAreValidWithoutPendingJournal(t *testing.T) {
+func TestOwnershipScope_OrdinaryFixtureCallsWithoutPendingJournal(t *testing.T) {
 	st := ownershipScopeStoreFixture(t)
 	for _, tc := range r20OrdinaryScopeCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newR20ScopeFixture(t, st, "")
+			// Raw UUID APIs no longer provide the qualified authority required
+			// by these mutations, even when no ownership journal is pending.
+			var unavailable error
+			switch tc.name {
+			case "BanMember", "UnbanMember":
+				unavailable = ErrAccountBanUnavailable
+			case "AddBotMember", "RemoveBotMember":
+				unavailable = ErrMemberAuthorityUnavailable
+			}
+			if unavailable != nil {
+				before := r20ScopeSnapshot(t, st, f.binding.SpaceID)
+				require.ErrorIs(t, tc.call(st, f), unavailable)
+				require.Equal(t, before, r20ScopeSnapshot(t, st, f.binding.SpaceID), "unqualified call cannot mutate state")
+				return
+			}
 			require.NoError(t, tc.call(st, f), "fixture must exercise a normally valid path")
 		})
 	}

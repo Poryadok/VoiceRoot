@@ -407,7 +407,7 @@ func compositionNATS(t *testing.T, ctx context.Context) string {
 	t.Helper()
 	url := os.Getenv("VOICE_COMPOSITION_TEST_NATS_URL")
 	if url == "" {
-		c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{ContainerRequest: testcontainers.ContainerRequest{Image: "nats:2.12-alpine", ExposedPorts: []string{"4222/tcp"}, Cmd: []string{"-js"}, WaitingFor: wait.ForListeningPort("4222/tcp")}, Started: true})
+		c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{ContainerRequest: testcontainers.ContainerRequest{Image: "nats:2.12-alpine", ExposedPorts: []string{"4222/tcp"}, Cmd: []string{"-js"}, WaitingFor: wait.ForAll(wait.ForLog("Server is ready"), wait.ForListeningPort("4222/tcp"))}, Started: true})
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, c.Terminate(context.Background())) })
 		host, err := c.Host(ctx)

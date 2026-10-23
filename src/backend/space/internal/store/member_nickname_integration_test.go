@@ -188,12 +188,10 @@ func TestMemberNickname_ConcurrentLeaveNeverRecreatesMembership(t *testing.T) {
 }
 
 func TestMemberNickname_ManagedRosterDoesNotCreateLocalOverride(t *testing.T) {
-	st := nicknameStoreFixture(t)
 	ctx := context.Background()
 	app, env, owner, account, target := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	space, _, err := st.CreateCommunityBootstrapSpace(ctx, CommunityBootstrapSpaceInput{OperationID: uuid.New(), ApplicationID: app, EnvironmentID: env, OwnerAccountID: account, OwnerProfileID: owner, CorporationKey: "nickname-corp", TemplateID: "guild-default"})
-	require.NoError(t, err)
-	_, err = st.ApplyCommunityRoster(ctx, CommunityRosterInput{OperationID: uuid.New(), ApplicationID: app, EnvironmentID: env, CorporationKey: "nickname-corp", SpaceID: space.ID, OwnerGeneration: 1, SourceRevision: 1, SnapshotSHA256: []byte("11111111111111111111111111111111"), LeaseExpiresAt: time.Now().Add(time.Minute), ProfileIDs: []uuid.UUID{target}})
+	st, space := legacyCommunityFixture(t, ctx, CommunityBootstrapSpaceInput{OperationID: uuid.New(), ApplicationID: app, EnvironmentID: env, OwnerAccountID: account, OwnerProfileID: owner, CorporationKey: "nickname-corp", TemplateID: "guild-default"}, nil)
+	_, err := st.ApplyCommunityRoster(ctx, CommunityRosterInput{OperationID: uuid.New(), ApplicationID: app, EnvironmentID: env, CorporationKey: "nickname-corp", SpaceID: space.ID, OwnerGeneration: 1, SourceRevision: 1, SnapshotSHA256: []byte("11111111111111111111111111111111"), LeaseExpiresAt: time.Now().Add(time.Minute), ProfileIDs: []uuid.UUID{target}})
 	require.NoError(t, err)
 	_, err = st.UpdateMemberNickname(ctx, space.ID, target, owner, "Must not override")
 	require.ErrorIs(t, err, ErrNicknameExternallyManaged)
