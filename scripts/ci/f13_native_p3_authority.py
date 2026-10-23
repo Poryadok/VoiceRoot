@@ -8,6 +8,12 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import f13_native_p3_source as legacy
 import f13_native_p3_successor as successor
+try:
+    import f13_native_p3_documentation as documentation
+except ModuleNotFoundError as error:
+    if error.name != 'f13_native_p3_documentation':
+        raise
+    documentation = None  # Historical extracted carriers have no v3 authority.
 
 Rejected = legacy.Rejected
 RECORD_PATH = legacy.RECORD_PATH
@@ -21,7 +27,12 @@ def qualify(*args):
         try:
             return successor.qualify(*args)
         except Rejected as new_error:
-            raise Rejected('v1=' + str(old_error) + ';v2=' + str(new_error)) from new_error
+            if documentation is None:
+                raise Rejected('v1=' + str(old_error) + ';v2=' + str(new_error)) from new_error
+            try:
+                return documentation.qualify(*args)
+            except Rejected as doc_error:
+                raise Rejected('v1=' + str(old_error) + ';v2=' + str(new_error) + ';v3=' + str(doc_error)) from doc_error
 
 
 def verified_record(repo, binding):
@@ -34,8 +45,15 @@ def verified_record(repo, binding):
     record = successor.load_record(repo)
     new_key = (successor.VERSION, record['base'], record['source'], successor.PINNED_RECORD_COMMIT,
                successor.PINNED_RECORD_SHA256)
-    legacy.require(key == new_key, 'native_unknown_authority_tuple')
-    return successor, record
+    if key == new_key:
+        return successor, record
+    legacy.require(documentation is not None, 'native_unknown_authority_tuple')
+    legacy.require(key[0] == documentation.VERSION, 'native_unknown_authority_tuple')
+    current = documentation.load_record(repo)
+    doc_key = (documentation.VERSION, current['base'], current['source'],
+               documentation.PINNED_RECORD_COMMIT, documentation.PINNED_RECORD_SHA256)
+    legacy.require(key == doc_key, 'native_unknown_authority_tuple')
+    return documentation, current
 
 
 def audit_map(repo, binding, map_path, history_path):

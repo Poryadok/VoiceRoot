@@ -12,6 +12,7 @@ from unittest.mock import patch
 import f13_production_source as source
 import f13_f54_history as history
 import f13_native_p3_authority as native
+import f13_native_p3_documentation as documentation
 
 ROOT=Path(__file__).resolve().parents[2]
 
@@ -161,6 +162,85 @@ class ProductionSourceTest(unittest.TestCase):
     def test_unpinned_source_refused(self):
         with patch.object(source,'PINNED_RECORD_COMMIT',None),self.assertRaisesRegex(ValueError,'production_record_not_pinned'):
             source.qualify(ROOT)
+
+    def test_successor_is_distinct_from_historical_source(self):
+        value=source.qualify(ROOT)
+        self.assertEqual(value['type'],'F13-PRODUCTION-SOURCE-v3')
+        self.assertEqual(value['reviewed_source'],source.SUCCESSOR_SOURCE)
+        self.assertEqual(value['historical_validation_source'],self.record['source'])
+        self.assertNotEqual(value['historical_validation_source'],value['reviewed_source'])
+        self.assertEqual(value['predecessor_record'],source.PINNED_RECORD_COMMIT)
+
+    def test_successor_record_missing_changed_or_mode_changed(self):
+        for name in (source.SUCCESSOR_RECORD_PATH,'docs/testing/f13-production-successor-closure-v3.json'):
+            for content,mode in ((None,'100644'),(b'{}','100644'),((ROOT/name).read_bytes(),'100755')):
+                self.changed(name,content,mode)
+                with self.subTest(name=name,mode=mode),self.assertRaisesRegex(ValueError,'production_only_reviewed_carrier_delta'):
+                    source.qualify(ROOT)
+
+    def test_successor_does_not_grant_future_frontend_changes(self):
+        for name in (*source.SUCCESSOR_PATHS,'src/frontend/lib/backend/new_unreviewed.dart'):
+            self.changed(name)
+            with self.subTest(name=name),self.assertRaisesRegex(ValueError,'production_only_reviewed_carrier_delta'):
+                source.qualify(ROOT)
+
+    def test_successor_unpinned_never_falls_back(self):
+        with patch.object(source,'SUCCESSOR_RECORD_COMMIT',None),self.assertRaisesRegex(ValueError,'production_successor_not_pinned'):
+            source.qualify(ROOT)
+
+    def test_successor_preserves_archive_and_old_evidence(self):
+        for name in (source.ARCHIVE_PATH,self.record['evidence'][0]['path'],
+                     'src/backend/voice/internal/new_unreviewed.go'):
+            self.changed(name)
+            with self.subTest(name=name),self.assertRaisesRegex(ValueError,'production_only_reviewed_carrier_delta'):
+                source.qualify(ROOT)
+
+    def test_successor_reconstructs_inventory_not_just_its_pin(self):
+        original=json.loads(git('show',source.SUCCESSOR_RECORD_COMMIT+':'+source.SUCCESSOR_RECORD_PATH))
+        for field,code in (('current_inputs','production_successor_complete_inventory'),
+                           ('successor_closure','production_successor_complete_closure')):
+            record=json.loads(json.dumps(original));name=record[field]['path']
+            artifact=json.loads(git('show',source.SUCCESSOR_RECORD_COMMIT+':'+name))
+            if field=='current_inputs':artifact['entries'].pop()
+            else:artifact['participating']['native_compiled'].pop()
+            raw=(json.dumps(artifact)+'\n').encode();record[field]['sha256']=hashlib.sha256(raw).hexdigest()
+            record_raw=(json.dumps(record)+'\n').encode()
+            with tempfile.TemporaryDirectory() as folder:
+                env=dict(os.environ,GIT_INDEX_FILE=str(Path(folder)/'index'))
+                git('read-tree',source.SUCCESSOR_RECORD_COMMIT,env=env)
+                for path,data in ((name,raw),(source.SUCCESSOR_RECORD_PATH,record_raw)):
+                    blob=git('hash-object','-w','--stdin',data=data)
+                    git('update-index','--add','--cacheinfo','100644,'+blob+','+path,env=env)
+                revision=self.commit(git('write-tree',env=env),[source.SUCCESSOR_SOURCE])
+            with patch.object(source,'SUCCESSOR_RECORD_COMMIT',revision),patch.object(documentation,'PINNED_RECORD_COMMIT',revision),patch.object(source,'SUCCESSOR_RECORD_SHA256',hashlib.sha256(record_raw).hexdigest()),self.assertRaisesRegex(ValueError,code):
+                source.load_successor(ROOT)
+
+    def test_actual_3071_composition_requires_all_eleven_manual_inputs(self):
+        with tempfile.TemporaryDirectory() as folder:
+            inputs=Path(folder)/'inputs';source.materialize(ROOT,inputs)
+            binding=native.qualify(ROOT,source.EVENT_BASE,self.original,self.target,'pull_request',
+                'refs/pull/875/merge',self.target,'','master')
+            native_path=Path(folder)/'native.json';native_path.write_text(json.dumps(binding))
+            cap=history.prepare_3071_production_capabilities(ROOT,inputs/'fixed3071-unit',native_path)
+            cap_path=Path(folder)/'cap.json';cap_path.write_text(json.dumps(cap))
+            manual=inputs/'fixed3071-unit/manual';facts=json.loads((manual/'facts.json').read_text())
+            data={name:(manual/name).read_bytes() for name in facts['bindings']}
+            self.assertEqual(len(data),11)
+            name='protos/voice/auth/v1/auth.proto'
+            args=(ROOT,cap_path,history.J3071,history.J3071_O,history.J3071_P1,history.J3071_P2,
+                  name,history.tree_entry(ROOT,history.J3071,name).rstrip('\0'))
+            for filename in data:(manual/filename).unlink()
+            with self.assertRaisesRegex(ValueError,'fixed3071_all_manual_evidence_bindings'):
+                history.composition_3071_capability(*args)
+            for filename,raw in data.items():(manual/filename).write_bytes(raw)
+            result=history.composition_3071_capability(*args)
+            self.assertEqual(result['composition'],'REVIEWED_MANUAL_WHOLE')
+            self.assertEqual(result['merge_tree_exit'],1)
+            for filename,raw in data.items():
+                (manual/filename).write_bytes(raw+b'altered')
+                with self.subTest(filename=filename),self.assertRaisesRegex(ValueError,'fixed3071_all_manual_evidence_bindings'):
+                    history.composition_3071_capability(*args)
+                (manual/filename).write_bytes(raw)
 
     def test_applicable_initialization_failure_never_falls_back(self):
         shell=(ROOT/'scripts/ci/voice-db-runtime-provisioning-contract_test.sh').read_text()

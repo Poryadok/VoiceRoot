@@ -431,6 +431,30 @@ def validate_3071_packet(repo, directory):
 
 def current_author_J_native_applicability(repo, native, historical, current):
     """Preserve old reviewed facts; independently derive current source authority."""
+    if current.get('version') == 'NATIVE-P3-SOURCE-v3':
+        require(hasattr(native,'verified_record'),'current_J_documentation_dispatcher')
+        verifier,new=native.verified_record(repo,current)
+        require(verifier is native.documentation,'current_J_documentation_identity')
+        previous=native.successor.load_record(repo)
+        predecessor=dict(current,version=previous['version'],content_base=previous['base'],
+            snapshot=previous['source'],record=native.successor.PINNED_RECORD_COMMIT,
+            record_sha256=native.successor.PINNED_RECORD_SHA256,
+            paths=[row['path'] for row in previous['projection']])
+        preserved=current_author_J_native_applicability(repo,native,historical,predecessor)
+        require(current['content_base']==new['base'] and current['snapshot']==new['source'] and
+            current['paths']==predecessor['paths'],'current_J_documentation_same_complete_projection')
+        git(repo,'merge-base','--is-ancestor',predecessor['record'],new['source'])
+        git(repo,'merge-base','--is-ancestor',current['record'],current['source'])
+        raw=git(repo,'show',current['record']+':'+verifier.RECORD_PATH)
+        require(sha(raw)==current['record_sha256'],'current_J_documentation_record_hash')
+        return dict(type='F54_CURRENT_AUTHOR_J_NATIVE_SOURCE_APPLICABILITY',historical=preserved['historical'],
+            current=dict(**{k:current[k] for k in ('base','content_base','snapshot','record','record_sha256','paths')},
+                classification=new['classification'],record_raw=raw_binding(raw)),
+            predecessor=preserved['current'],predecessor_applicability=preserved,successor_lineage=new['predecessor'],
+            added_paths=preserved['added_paths'],path_entries=[dict(path=name,
+                historical_entry=entry_binding(repo,historical['snapshot'],name),current_entry=entry_binding(repo,current['snapshot'],name),
+                membership='HISTORICAL_AND_CURRENT' if name in historical['paths'] else 'CURRENT_RECORD_ONLY; ORIGINAL_GATES_REQUIRED')
+                for name in current['paths']],admission=False,runtime_pass=False)
     if current.get('version') == 'NATIVE-P3-SOURCE-v2':
         # First run the unchanged v1 historical reconstruction, then bridge only
         # its exact fixed predecessor to the independently pinned successor.
@@ -1441,8 +1465,14 @@ def prepare_corrected_F_production_capability(repo,unit_path):
     current=native.qualify(repo,binding['base'],binding['source'],binding['target'],event['GITHUB_EVENT_NAME'],
         event['GITHUB_REF'],event['GITHUB_SHA'],event['VOICE_CI_PUSH_BEFORE_SHA'],event['GITHUB_BASE_REF'])
     verifier,native_record=native.verified_record(repo,current)
-    require(record['native_record']==dict(commit=current['record'],path=verifier.RECORD_PATH,
-        sha256=current['record_sha256']),'production_F_exact_reviewed_dependency_closure')
+    if binding['type']=='F13-PRODUCTION-SOURCE-v3':
+        successor,_=module.load_successor(repo)
+        require(current['version']=='NATIVE-P3-SOURCE-v3' and current['record']==module.SUCCESSOR_RECORD_COMMIT and
+            successor['native_record']==dict(path=verifier.RECORD_PATH,sha256=current['record_sha256'],scope='SAME_RECORD_COMMIT'),
+            'production_F_exact_reviewed_dependency_closure')
+    else:
+        require(record['native_record']==dict(commit=current['record'],path=verifier.RECORD_PATH,
+            sha256=current['record_sha256']),'production_F_exact_reviewed_dependency_closure')
     whole=dict(historical,type='F54_CORRECTED_HISTORICAL_PRODUCTION_WHOLE_v1',
         historical_validation_target=F_CORRECTED_TUPLE['current'],current_target=target,
         historical_current_bindings=historical['current_bindings'],current_bindings=fixed['current_bindings'],
