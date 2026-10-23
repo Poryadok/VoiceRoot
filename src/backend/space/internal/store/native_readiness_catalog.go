@@ -42,7 +42,8 @@ const nativeReadinessStructureSHA = "6b43c9f367207020eee053cd3ab6eb4e057238df4c5
 // a caller-selected hash or permission to reseal an arbitrary current catalog.
 func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version int64) error {
 	observer50 := version == 50
-	if observer50 {
+	rowjson51 := version == 51
+	if observer50 || rowjson51 {
 		if err := checkAccountBanCatalog(ctx, tx); err != nil {
 			return err
 		}
@@ -66,16 +67,24 @@ func checkNativeReadinessCatalogVersion(ctx context.Context, tx pgx.Tx, version 
 	} else if version != 44 {
 		return ErrMemberAuthorityUnavailable
 	}
-	if observer50 {
+	if observer50 || rowjson51 {
 		if _, _, err := requireNativeObserver50Definition(ctx, tx); err != nil {
 			return err
 		}
-		if _, _, err := requireNativeCatalog50Definition(ctx, tx); err != nil {
+		if rowjson51 {
+			if _, _, err := requireNativeCatalogRowJSONDefinition(ctx, tx); err != nil {
+				return err
+			}
+		} else if _, _, err := requireNativeCatalog50Definition(ctx, tx); err != nil {
 			return err
 		}
 		for i := range pins {
 			if pins[i].signature == "native_membership_guard.catalog()" {
 				pins[i].body = nativeCatalog50BodySHA
+				if rowjson51 {
+					pins[i].body = nativeCatalogRowJSONBodySHA256
+					pins[i].language = "plpgsql"
+				}
 			}
 			if pins[i].signature == "native_membership_guard.source_after()" {
 				pins[i].body = nativeObserver50BodySHA

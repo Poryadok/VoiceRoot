@@ -109,7 +109,7 @@ missing Go-owned databases and applies their migrations before dependent apps
 start, including existing Postgres volumes. The lifecycle migration DOWN refuses destructive teardown while evidence rows exist; archive or remove evidence through an
 explicit operator workflow before attempting destructive teardown.
 
-### Space Native44/45/50 provisioning
+### Space Native44/45/50/51 provisioning
 
 `space_db` exclusively uses Space's production `cmd/native-migrate`, built from
 the repository root with `src/backend/space/Dockerfile.native-migrate`. The
@@ -130,9 +130,35 @@ For an absent target, the administrative deployment run owns actual
 `CREATE DATABASE space_db`, validates its complete compiled SQL byte inventory,
 executes real migrate `goto44`, verifies the complete fixed44 source and actual
 M44-created epoch/seal, executes exact45 and the existing Go Transition45,
-then real50 and existing Transition50, and finally verifies full clean50.
+then real50 and existing Transition50, and verifies full clean50 as the genuine
+parent of the distinct51 stage below.
 Current inventory has no46–49; the command never fabricates markers or blindly
 applies a future migration. A changed inventory requires explicit qualification.
+
+The distinct `native_catalog_rowjson_51` successor is qualification-gated WIP:
+finite PG16/18 type evidence alone is not universal/custom/future admission or
+current-candidate raw digest stability. Without the compiled independently
+qualified source/session binding, the installer returns HOLD before creation
+and cannot emit complete. M44/M45/M50 SQL, source pins and Transition50's original
+byte-equality probe remain unchanged prerequisites.
+
+After genuine old50, the real pinned migrate4.18.1 Go engine and canonical file
+source drive51 through a transaction-bound driver. Exact51 SQL, full source/type
+qualification, genuine sameOID original50-parent epoch CAS and migration history
+commit in ONE PostgreSQL transaction. Framework Unlock never commits; the outer
+executor commits only after engine success and final fresh source/target/drain
+checks. Generic child `goto51`, manual marker/force and standalone postinstall
+reseal are unavailable. Any precommit failure rolls back body, epoch and marker
+together. Final51 verification and actual linked45/50/51 receipts are required
+before complete/readiness, ordinary enrollment or new serving grants.
+
+Unknown existing, partial or ambiguously committed installations remain HOLD.
+Provision cannot auto-resume an existing database; read-only verify requires the
+owning controller's original completed SAME image/source/executable/migrator/
+inventory/target evidence including51, followed by fresh full51 qualification.
+An old50 completed Job or DB-stored seal cannot manufacture that history.
+Full107/307/retry effects,325 fresh catalog observations and original5s/2s budgets
+remain separate mandatory gates; no successor performance PASS is asserted.
 
 The controller keeps applications and independent privileged DDL actors stopped
 throughout this window. The command checks its session, cooperating-installer

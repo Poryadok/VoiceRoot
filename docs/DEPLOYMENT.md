@@ -581,10 +581,35 @@ Ambient TLS settings cannot replace stronger explicit URI settings. The admin
 and migration database paths are fixed to `postgres` and `space_db`; inherited
 password-file or query aliases cannot select another migration target.
 
+The distinct `native_catalog_rowjson_51` successor is qualification-gated WIP:
+finite PG16/18 type evidence alone is not universal/custom/future admission or
+current-candidate raw digest stability. Without the compiled independently
+qualified source/session binding, the installer returns HOLD before creation
+and cannot emit complete. M44/M45/M50 SQL, source pins and Transition50's original
+byte-equality probe remain unchanged prerequisites.
+
+After genuine old50, the real pinned migrate4.18.1 Go engine and canonical file
+source drive51 through a transaction-bound driver. Exact51 SQL, full source/type
+qualification, genuine sameOID original50-parent epoch CAS and migration history
+commit in ONE PostgreSQL transaction. Framework Unlock never commits; the outer
+executor commits only after engine success and final fresh source/target/drain
+checks. Generic child `goto51`, manual marker/force and standalone postinstall
+reseal are unavailable. Any precommit failure rolls back body, epoch and marker
+together. Final51 verification and actual linked45/50/51 receipts are required
+before complete/readiness, ordinary enrollment or new serving grants.
+
+Unknown existing, partial or ambiguously committed installations remain HOLD.
+Provision cannot auto-resume an existing database; read-only verify requires the
+owning controller's original completed SAME image/source/executable/migrator/
+inventory/target evidence including51, followed by fresh full51 qualification.
+An old50 completed Job or DB-stored seal cannot manufacture that history.
+Full107/307/retry effects,325 fresh catalog observations and original5s/2s budgets
+remain separate mandatory gates; no successor performance PASS is asserted.
+
 Drain applications and privileged DDL competitors and retain exclusive
 maintenance custody through actual fresh database creation, real migrate44,
 full44 source/M44 seal verification, real45/Transition45 receipt, real50/
-Transition50 receipt, and final full clean50 verification. M50's initial
+Transition50 receipt, and full clean50 parent verification. M50's initial
 trusted45 prerequisite and the existing transition's original45 projection
 equality remain mandatory. Missing46–49 are not synthesized. Return success
 only after final complete evidence; no ordinary enrollment/new serving grants

@@ -36,8 +36,13 @@ func TestReadReceiptAndClosePreservesParseAndCloseFailures(t *testing.T) {
 	q := store.NativeMembershipCatalog50Receipt(*p)
 	q.OldSealSHA256, q.NewSealSHA256 = p.NewSealSHA256, strings.Repeat("c", 64)
 	end := *f
-	end.Version, end.SealSHA256 = 50, q.NewSealSHA256
-	r := &nativeinstaller.Receipt{Created: true, Creation: f, Trusted44: f, Transition45: p, Transition50: &q, Final: &end, SourceSHA256: strings.Repeat("d", 64), ExecutableSHA256: strings.Repeat("e", 64), MigratorSHA256: strings.Repeat("f", 64), InventorySHA256: strings.Repeat("a", 64)}
+	end.Version, end.SealSHA256 = 51, strings.Repeat("9", 64)
+	trusted50 := *f
+	trusted50.Version, trusted50.SealSHA256 = 50, q.NewSealSHA256
+	t51 := store.NativeMembershipCatalog45Receipt(q)
+	t51.OldSealSHA256, t51.NewSealSHA256, t51.MigrationSHA256 = q.NewSealSHA256, end.SealSHA256, store.NativeCatalog51MigrationSHA256
+	transition51 := &store.NativeMembershipCatalog51Receipt{NativeMembershipCatalog45Receipt: t51, Profile: store.NativeCatalogRowJSONProfile, Engine: "github.com/golang-migrate/migrate/v4@v4.18.1"}
+	r := &nativeinstaller.Receipt{Created: true, Creation: f, Trusted44: f, Transition45: p, Transition50: &q, Trusted50: &trusted50, Transition51: transition51, Final: &end, SourceSHA256: strings.Repeat("d", 64), ExecutableSHA256: strings.Repeat("e", 64), MigratorSHA256: strings.Repeat("f", 64), InventorySHA256: strings.Repeat("a", 64)}
 	valid, err := json.Marshal(map[string]any{"event": "complete", "receipt": r})
 	require.NoError(t, err)
 	closeErr := errors.New("postgres://secret-cleanup-fixture@invalid/retained")

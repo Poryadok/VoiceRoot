@@ -101,7 +101,7 @@ func (s *SpaceStore) withModerationIntentScope(ctx context.Context, in *moderati
 		return ErrAccountBanUnavailable
 	}
 	var version int64
-	if err = tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || version != 50 {
+	if err = tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || version != 50 && version != 51 {
 		return ErrAccountBanUnavailable
 	}
 	if err = scoped.RequireScopedNativeMembershipReadiness(ctx, in.space); err != nil {
@@ -304,7 +304,7 @@ func (s *SpaceStore) ListExpiredAccountBanIntentSpaces(ctx context.Context, limi
 		return nil, ErrAccountBanUnavailable
 	}
 	var version int64
-	if err := s.Pool.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || version != 50 {
+	if err := s.Pool.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || version != 50 && version != 51 {
 		return nil, ErrAccountBanUnavailable
 	}
 	rows, err := s.Pool.Query(ctx, `SELECT r.space_id FROM space_account_ban_operations r JOIN spaces s ON s.id=r.space_id

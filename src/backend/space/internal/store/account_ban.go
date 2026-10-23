@@ -64,7 +64,7 @@ func readQualifiedSourceAccount(ctx context.Context, tx pgx.Tx, space uuid.UUID,
 	if err := tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil {
 		return nil, err
 	}
-	if version != 50 {
+	if version != 50 && version != 51 {
 		return known, nil
 	}
 	var account uuid.UUID
@@ -144,7 +144,7 @@ func (s *SpaceStore) accountBanSnapshot(ctx context.Context, space, operation uu
 		return nil, ErrAccountBanUnavailable
 	}
 	var version int64
-	if err := s.tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || version != 50 {
+	if err := s.tx.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil || version != 50 && version != 51 {
 		return nil, ErrAccountBanUnavailable
 	}
 	if err := checkMemberAuthorityCatalog(ctx, s.tx); err != nil {

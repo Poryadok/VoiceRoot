@@ -67,9 +67,14 @@ def space_evidence(root, namespace, image, previous_job, pods, log):
     if len(log.encode()) > 128 * 1024:
         raise ValueError('HOLD: oversized installer evidence')
     completed = [row.get('receipt') for row in map(json.loads, log.splitlines()) if row.get('event') == 'complete']
-    if (len(completed) != 1 or not completed[0].get('created')
+    if (len(completed) != 1 or not isinstance(completed[0], dict)
+            or not completed[0].get('created')
             or completed[0].get('source_sha256') != space_source_digest(root)
-            or not all(completed[0].get(k) for k in ('creation', 'trusted44', 'transition45', 'transition50', 'final'))):
+            or not isinstance(completed[0].get('final'), dict)
+            or completed[0].get('final', {}).get('version') != 51
+            or not isinstance(completed[0].get('transition51'), dict)
+            or completed[0].get('transition51', {}).get('profile') != 'native_catalog_rowjson_51'
+            or not all(completed[0].get(k) for k in ('creation', 'trusted44', 'transition45', 'transition50', 'trusted50', 'transition51', 'final'))):
         raise ValueError('HOLD: actual complete linked installer output missing')
     return {'apiVersion': 'v1', 'kind': 'ConfigMap', 'immutable': True,
             'metadata': {'name': SPACE_EVIDENCE_CM, 'namespace': namespace,
