@@ -146,7 +146,7 @@ def generate(destination):
                         "-extfile", extensions, "-out", root / f"tls/{leaf}.crt")
                 csr.unlink()
             extensions.unlink()
-            for serial, service in enumerate(("space", "gameintegration", "voice", "matchmaking", "chat", "auth-jwks", "role", "bot"), 100):
+            for serial, service in enumerate(("space", "gameintegration", "voice", "matchmaking", "chat", "auth-jwks", "role", "bot", "messaging"), 100):
                 client_key = root / f"tls/{service}-client.key"
                 client_csr = root / f"tls/{service}-client.csr"
                 client_extensions = root / "client.ext"
@@ -217,6 +217,12 @@ def generate(destination):
                     raise ValueError("unsupported MatchSquad fixture owner")
                 owned_paths = [
                     root / "matchmaking",
+                    root / "chat",
+                    root / "space",
+                    root / "tls/chat-client.crt",
+                    root / "tls/chat-client.key",
+                    root / "tls/chat-jwks.crt",
+                    root / "tls/chat-jwks.key",
                     root / "tls/chat-match-squad-grpc.crt",
                     root / "tls/chat-match-squad-grpc.key",
                     root / "tls/voice-match-squad-grpc.crt",
@@ -242,13 +248,13 @@ def generate(destination):
                     path.chmod(0o711)
                 if os.geteuid() == 0:
                     for path in owned_paths:
-                        entries = (path, *path.rglob("*")) if path == root / "matchmaking" else (path,)
+                        entries = (path, *path.rglob("*")) if path in (root / "matchmaking", root / "chat", root / "space") else (path,)
                         for entry in entries:
                             os.chown(entry, 65532, 65532)
                 else:
                     for path in owned_paths:
                         command_args = ["sudo", "-n", "chown"]
-                        if path == root / "matchmaking":
+                        if path in (root / "matchmaking", root / "chat", root / "space"):
                             command_args.append("-R")
                         command_args.extend(("65532:65532", str(path)))
                         result = subprocess.run(
