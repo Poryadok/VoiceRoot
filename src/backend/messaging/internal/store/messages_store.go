@@ -23,6 +23,9 @@ import (
 
 // MessageRow is a persisted messaging_db.messages row (v1 DM).
 type MessageRow struct {
+	// BotSendAdmission is request-local, never persisted or reconstructed from
+	// caller data. Both insertion transactions recheck it after mutation locks.
+	BotSendAdmission func(context.Context) (context.Context, context.CancelFunc, error) `json:"-"`
 	// ForwardCommentary is a private, text-only companion in the same commit.
 	// Omission preserves historical attachment-intent identity bytes.
 	ForwardCommentary      *MessageRow             `json:",omitempty"`

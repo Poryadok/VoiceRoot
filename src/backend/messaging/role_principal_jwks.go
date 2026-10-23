@@ -28,11 +28,11 @@ func loadRolePrincipalJWKSConfig(lookup func(string) (string, bool)) (rolePrinci
 	}
 	for i, value := range values {
 		if value == "" {
-			return rolePrincipalJWKSConfig{}, true, fmt.Errorf("Messaging Role JWKS requires %s", names[i])
+			return rolePrincipalJWKSConfig{}, true, fmt.Errorf("messaging Role JWKS requires %s", names[i])
 		}
 	}
 	if _, _, err := net.SplitHostPort(values[0]); err != nil {
-		return rolePrincipalJWKSConfig{}, true, errors.New("Messaging Role JWKS listen address is invalid")
+		return rolePrincipalJWKSConfig{}, true, errors.New("messaging Role JWKS listen address is invalid")
 	}
 	return rolePrincipalJWKSConfig{values[0], values[1], values[2], values[3]}, true, nil
 }
@@ -41,28 +41,28 @@ func loadRolePrincipalJWKSConfig(lookup func(string) (string, bool)) (rolePrinci
 // separate transport trust domain; it never creates or reloads signing keys.
 func (c rolePrincipalJWKSConfig) start(handler http.Handler) (*http.Server, error) {
 	if handler == nil {
-		return nil, errors.New("Messaging Role JWKS requires the existing signing runtime")
+		return nil, errors.New("messaging Role JWKS requires the existing signing runtime")
 	}
 	cert, err := tls.LoadX509KeyPair(c.certFile, c.keyFile)
 	if err != nil {
-		return nil, fmt.Errorf("Messaging Role JWKS certificate: %w", err)
+		return nil, fmt.Errorf("messaging Role JWKS certificate: %w", err)
 	}
 	caPEM, err := os.ReadFile(c.clientCAFile)
 	if err != nil {
-		return nil, fmt.Errorf("Messaging Role JWKS client CA: %w", err)
+		return nil, fmt.Errorf("messaging Role JWKS client CA: %w", err)
 	}
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(caPEM) {
-		return nil, errors.New("Messaging Role JWKS client CA contains no certificates")
+		return nil, errors.New("messaging Role JWKS client CA contains no certificates")
 	}
 	listener, err := net.Listen("tcp", c.listen)
 	if err != nil {
-		return nil, fmt.Errorf("Messaging Role JWKS listen: %w", err)
+		return nil, fmt.Errorf("messaging Role JWKS listen: %w", err)
 	}
 	server := &http.Server{Addr: listener.Addr().String(), Handler: handler, ReadHeaderTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: roots}}
 	go func() {
 		if err := server.ServeTLS(listener, "", ""); err != nil && err != http.ErrServerClosed {
-			fmt.Fprintf(os.Stderr, "Messaging Role JWKS server exited: %v\n", err)
+			fmt.Fprintf(os.Stderr, "messaging Role JWKS server exited: %v\n", err)
 		}
 	}()
 	return server, nil

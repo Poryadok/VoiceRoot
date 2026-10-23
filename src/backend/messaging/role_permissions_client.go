@@ -26,11 +26,11 @@ func newRolePermissionsClient(getenv func(string) string, issuer *principal.Issu
 	}
 	for i, value := range values {
 		if value == "" {
-			return nil, nil, fmt.Errorf("Role permission client requires %s", names[i])
+			return nil, nil, fmt.Errorf("role permission client requires %s", names[i])
 		}
 	}
 	if issuer == nil {
-		return nil, nil, errors.New("Role permission client requires Messaging signing keys and protected JWKS publisher")
+		return nil, nil, errors.New("role permission client requires Messaging signing keys and protected JWKS publisher")
 	}
 	conn, err := dialManagedChatPurgeOwner(values[0], values[1], values[2], values[3], values[4])
 	if err != nil {
