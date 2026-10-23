@@ -132,6 +132,55 @@ This satisfies the source stability prerequisite; actual51 transaction/installer
 unchanged full107/307/retry performance and deployment acceptance remain pending.
 Live full catalog observations are never replaced by the immutable proof check.
 
+## Full-profile fixture bridge (source-only, runtime pending)
+
+Consumer Isaac-2 ACKed only the new
+`internal/store/native_catalog51_full_profile_integration_test.go` and this plan.
+The original `account_ban_large_integration_test.go` and its107/307/retry bodies
+remain byte-identical, as do all87 migration SQL files and production guards.
+
+`TestNative51FixtureCommitTrusted50` consumes a controller-owned populated
+historical fixture, after the genuine34→44→45/Transition45→50/Transition50
+chain. It authenticates full clean50 and its retained seal, fences other client
+sessions, and invokes the actual pinned migrate/file source with
+`NewNativeCatalog51Migration`, `Migrate(51)` and explicit `CommitQualified`.
+Receipt/parent/source/identity/OID assertions and a separate fresh full51
+inspection follow committed backend release. This test-only bridge never changes
+the production installer's refusal to adopt an existing database.
+
+On a separate fresh107 fixture,
+`TestNative51FixtureFailedOver100Capture` enrolls Space13 and executes a real
+signed Ban whose complete107-entry owner response arrives after2.1s. It requires
+the actual unavailable result, unchanged membership/no effects, zero accepted
+qualifications/response, drained frames and exactly the resulting CAPTURING
+logical intent. The controller then starts a new process running the unchanged
+`TestAccountBanOver100Retry50`, which reads that actual intent and obtains a
+fresh signed transport. No CAP rows, clocks, response receipts or completion
+markers are inserted/reset by test preparation.
+
+`TestNative51Over100BanOnlyCatalogCalls` runs on another fresh107 fixture. Its
+measurement baseline follows enrollment and serving-login construction. The
+window brackets only the real `nativeBanExecute`; all post-effect assertions
+follow the final counter read. Owned PostgreSQL starts with
+`track_functions=pl` (or all); missing capability fails instead of skipping.
+Every idle backend flushes builtin statistics before/after the call, with an
+additional roundtrip before reading. `pg_stat_user_functions` for the exact
+catalog OID supplies the delta; neither counter query invokes catalog(), and
+there are no statistics resets, extensions or extra role grants. Exact backend
+census rejects other client sessions during each read. The assertion requires
+325 actual invocations, full107 capture, committed104 matches and original final
+effects, plus an elapsed monotonic window below5s. Collection occurs outside
+that timer. Fixed check/error identities and bounded integer count/duration
+metadata provide safe evidence without SQL/DSN/raw errors.
+
+This counter proves function invocations during that Ban only. It does not by
+itself prove source completeness, semantic correctness, owner transport
+qualification or the other unchanged behavioral cases; those retain their
+separate source/protocol/full107/307/retry obligations. PostgreSQL statistics
+flush behavior follows the PG16/18 builtin implementation and cumulative
+statistics contract; no Native observation is cached or removed. Source checks
+and independent review precede a separately ACKed runtime manifest.
+
 One PostgreSQL transaction is required for51 DDL/epoch/history; the superseded
 split goto51/postinstall CAS is not implemented. Source/file/real engine history
 hooks provide canonical migration selection, not a manual metadata stamp.
