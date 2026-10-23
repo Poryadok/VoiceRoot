@@ -1,0 +1,55 @@
+{
+  "commit": "f81e989de096c1af20d7f21152a0a018a19a8822",
+  "note": "Controlled recapture, not the original development run. RED uses parent client with final regression; finally restores exact published working bytes.",
+  "runs": [
+    {
+      "name": "red",
+      "command": [
+        "rtk",
+        "proxy",
+        "flutter",
+        "test",
+        "--no-pub",
+        "test/spaces_client_invites_test.dart",
+        "--plain-name",
+        "joinByInvite posts empty body and decodes membership"
+      ],
+      "exit_code": 1,
+      "path": "D:\\Git\\Voice\\tmp\\pr875-repair\\bot-installation\\f81-evidence\\red.log",
+      "sha256": "ad06f8af7a25cd2d2929967c0b3fbd54d9b8e903364d209606d310f2a27a549e"
+    },
+    {
+      "name": "green",
+      "command": [
+        "rtk",
+        "proxy",
+        "flutter",
+        "test",
+        "--no-pub",
+        "test/spaces_client_invites_test.dart",
+        "test/spaces_client_tree_test.dart"
+      ],
+      "exit_code": 0,
+      "path": "D:\\Git\\Voice\\tmp\\pr875-repair\\bot-installation\\f81-evidence\\green.log",
+      "sha256": "46262ead368d3e0610ccfc4d5934a8f2b51c177ddd4c79733eb652fc0ab1be36"
+    },
+    {
+      "name": "analyze",
+      "command": [
+        "rtk",
+        "proxy",
+        "flutter",
+        "analyze",
+        "--no-pub",
+        "lib/backend/spaces_client.dart",
+        "test/spaces_client_invites_test.dart",
+        "test/support/bot_live_harness.dart"
+      ],
+      "exit_code": 0,
+      "path": "D:\\Git\\Voice\\tmp\\pr875-repair\\bot-installation\\f81-evidence\\analyze.log",
+      "sha256": "a4de1fbc005396e12bb5a54954f1082271508a7d6ff8098e37782e446e35939d"
+    }
+  ],
+  "red_client_sha256": "4b747958fbdb4ee0ad236e0acfe13b40e6f5c5138c40f366f048b5f535e1aa45",
+  "restored_client_sha256": "4f71dd27c5e2fe0b5464902cc6c66a5601f849bd12eb12018c0a19514eb0c431"
+}

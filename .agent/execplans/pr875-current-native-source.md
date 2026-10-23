@@ -242,3 +242,73 @@ and shell syntax. The production J seam test exercises the real consumer and
 conservation while mocking only its qualification boundary; complete M/J/F
 constructors are separately exercised against the frozen artifacts. These
 checks do not claim actual production collection/router terminal success.
+
+## Fixed Flutter source successor
+
+H2 is73531c1e48d63fb100ab279930c98f67c9e97241, directly following the accepted
+production carrier3b53b0a9c761f340d20d23ed36f64a0ad18af33f. Its three-path
+change fixes the production Flutter joinByInvite request to send Gateway's
+required empty body, tests the actual HTTP body and decoded response, and adds
+status/message diagnostics to the Bot harness. This is a client behavior fix,
+not merely a fixture adjustment or new backend authority.
+
+A separate immutable R2 records the complete exact predecessor-to-H2 delta
+and D6-to-H2 input inventory. Full tree equality outside those three paths
+preserves all participating files and detects added/removed dependency paths;
+explicit F34, Native571/481 and Role274 entries and closure manifests remain
+equal. All new current inputs still require original contribution gates.
+The predecessor R, source contract, evidence, archive and old K predicate stay
+immutable. A separately pinned successor K reconstructs both records and the
+exact reviewed edge; no future edit to these frontend paths is authorized.
+
+The real event base, ordered parents, source/result tree equality and six
+carrier-only paths after R2 remain mandatory. Missing or invalid applicable
+R2 fails closed without v1 fallback. Historical byte-identical inputs can reuse
+their original evidence, but the actual H2 collector/router must run with a
+fresh trace; the ongoing3b53 run cannot supply H2 terminal success. Independent
+source review and final K code review are separate required handoffs.
+
+## Combined Native documentation and production v3 source
+
+The H735 R2 packet above was published only on the author's branch and was
+never activated or integrated as a root source record. It is superseded for
+consumption by the fixed H=e409cd05c40e857b61109513eb2154f968970c02 packet.
+Compared with accepted carrier3b53, H contains the three Flutter paths plus21
+reviewed Gateway/Space paths for protected CreateVoiceRoom. Original backend
+contribution gates remain mandatory; source classification does not grant their
+runtime or path authority. The complete two-edge history and24-path before/after
+inventory, as well as the complete D6-to-H inventory, are independently bound.
+
+Only docs/microservices/space-service.md changes in Native's99 projection paths.
+The13-line addition describes request-bound delegated ingress, the existing Role
+creation predicate, finite budget and commit-boundary rechecks; it changes no
+Native roster, retirement, outbox, migration or media semantics. Nativev3 pins
+that one document entry and preserves all other projection/context/compiled
+entries, the complete Voice tree and every dependency-directory inventory.
+Role274 and corrected-F34 inputs remain identical. V1/v2 records and evidence
+remain immutable; the explicit v2-to-v3 bridge independently reconstructs the
+predecessor before current source qualification. No documentation wildcard or
+backend implementation permission is introduced.
+
+The actual3b53 collector failed at its first3071 manual composition consumer:
+the frozen facts.json binds11 sibling files absent from the original transport
+manifest. The original227-object/246-logical-file audit was accurate for listed
+members but did not establish this transitive closure. The original archive,
+facts and consumer predicate are preserved. A separate checksum-bound supplement
+reproduces all11 exact historical byte/length bindings from fixed Git refs and
+merge-tree/diff commands, including the original CONFLICT/EXIT1 outcome.
+
+A bounded replay used the unchanged production code at the exact observed merge
+39d85c14b11d11a937069712744e5b6fdaac3efb and the original Native binding/last
+observed trace event9933. The original missing packet reproduced RED; adding only
+the11 exact files made that same composition consumer GREEN, and each individual
+one-byte tamper was rejected. The preserved trace was read-only, never resumed
+or sealed. This is one-consumer repair evidence, not producer completion.
+
+One source R contains both Nativev3 and productionv3 records; the production
+record binds the Native record path/hash within the same R, and K later pins the
+actual root R commit for both. The exact carrier set comprises the original six
+production carriers plus the Native dispatcher and two named Nativev3 helper/test
+files. Every constructor/consumer reconstructs the current v3 tuple, and the real
+event/collection/router checks remain required. A fresh actual-head producer run
+and hosted CI still determine terminal success.
