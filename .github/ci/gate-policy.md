@@ -46,13 +46,26 @@ official Bake action uses `source: .` and loads every current image before
 `up --no-build`; all original smoke tests still execute. BuildKit content keys
 invalidate changed inputs, independently of cache scope names. Per-target
 `compose-e2e-*` writers cannot replace the existing `backend-*` cache objects;
-matching backend caches can be read. Export is optional and bounded to30s
-per target; build/load/test failures remain fatal.
+matching backend caches can be read. Exact matching local frontend recipes
+may also read the existing `web` and `developer-portal` scopes; those scopes
+are never written by Compose. Export is optional with a 30s transfer timeout
+per target, plus preparation time; build/load/test failures remain fatal.
+
+Compose E2E's host Go commands restore module downloads and compiled objects
+using the explicit Gateway, Notification and shared pkg `go.sum` paths.
+The monorepo has no root `go.sum`; the default setup-go path cannot restore
+this cache. All Go test invocations retain `-count=1`, so tests execute again
+against current source and the current Compose stack. See
+[setup-go monorepo cache inputs](https://github.com/actions/setup-go/blob/v5/README.md#caching-dependency-files-and-build-outputs).
+The first run with this explicit dependency key can be cold and seeds later
+restores; it does not establish warm host-cache performance. The isolated proof
+`python3 scripts/ci/compose_go_cache_integration.py` checks repeated execution
+with a warm compilation cache and failure after a source mutation.
 
 The network-free proof `python3 scripts/ci/compose_bake_cache_integration.py`
 checks the actual implicit tag, unchanged-input cache hit, and changed loaded
 image ID/content after mutating a `COPY` source. It needs Docker/Buildx and
-creates only disposable images/stopped containers. The seven offline plan
+creates only disposable images/stopped containers. The nine offline plan
 tests are part of `make ci-script-tests-pr`. This local proof does not assert
 a GHA cache hit or transport performance; hosted measurements establish those.
 See [native Bake Compose support](https://docs.docker.com/build/bake/compose-file/)

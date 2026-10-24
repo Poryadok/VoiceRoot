@@ -7,8 +7,9 @@ checkout; the caller loads every image before running all existing smoke tests.
 Docker documents native Compose input and per-image GHA scopes at:
 https://docs.docker.com/build/bake/compose-file/
 https://docs.docker.com/build/cache/backends/gha/
-The official bake-action supplies GHA runtime authentication. Export is optional
-and bounded to 30s per target; cache import never selects a prebuilt image.
+The official bake-action supplies GHA runtime authentication. Export is optional;
+its transfer timeout is 30s per target, plus cache preparation time. Cache import
+never selects a prebuilt image.
 """
 import argparse
 import copy
@@ -22,6 +23,28 @@ FILES = ("docker-compose.yml", "docker-compose.voice-space-media.yml",
          "docker-compose.phase0.yml")
 BUILD_KEYS = {"context", "dockerfile", "args", "target", "platforms"}
 TARGET_KEYS = {"context", "dockerfile", "args", "target", "platforms", "tags"}
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def frontend_reader(name, target):
+    """Share PR frontend layers only for the exact matching local build recipe."""
+    recipes = {
+        "web": ("frontend", {"VOICE_API_BASE_URL": "http://127.0.0.1:18080",
+                              "VOICE_LIVEKIT_URL": "ws://127.0.0.1:7880"}),
+        "developer-portal": ("developer-portal", {
+            "VITE_VOICE_API_BASE": "http://127.0.0.1:18080",
+            "VITE_OAUTH_CLIENT_ID": "voice-developer-portal",
+            "VITE_OAUTH_DISABLED": "false"}),
+    }
+    if name not in recipes:
+        return None
+    directory, args = recipes[name]
+    if (Path(target["context"]).resolve() == ROOT / "src" / directory
+            and target["dockerfile"] == "Dockerfile"
+            and target.get("args") == args
+            and not target.get("platforms") and not target.get("target")):
+        return f"type=gha,scope={name}"
+    return None
 
 
 def build_document(config):
@@ -80,6 +103,9 @@ def configure_plan(document, native):
             raise ValueError("build_identity")
         scope = f"compose-e2e-{name}"
         target["cache-from"] = [f"type=gha,scope={scope}"]
+        reader = frontend_reader(name, target)
+        if reader:
+            target["cache-from"].append(reader)
         dockerfile = Path(target["dockerfile"]).as_posix()
         if dockerfile in (f"{name}/Dockerfile", f"src/backend/{name}/Dockerfile"):
             target["cache-from"].append(f"type=gha,scope=backend-{name}")

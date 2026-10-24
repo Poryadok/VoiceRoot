@@ -94,8 +94,56 @@ class PlanTests(unittest.TestCase):
             self.assertEqual(str(error.exception), "COMPOSE_BAKE_PLAN=FAIL")
             self.assertFalse(output.exists())
 
+    def test_matching_frontend_recipes_import_only_read_scopes(self):
+        recipes = {
+            "web": {"VOICE_API_BASE_URL": "http://127.0.0.1:18080",
+                    "VOICE_LIVEKIT_URL": "ws://127.0.0.1:7880"},
+            "developer-portal": {"VITE_VOICE_API_BASE": "http://127.0.0.1:18080",
+                                 "VITE_OAUTH_CLIENT_ID": "voice-developer-portal",
+                                 "VITE_OAUTH_DISABLED": "false"},
+        }
+        for name, args in recipes.items():
+            config = {"name": "voice", "services": {name: {"build": {
+                "context": str(ROOT / "src" / ("frontend" if name == "web" else name)),
+                "dockerfile": "Dockerfile", "args": args}}}}
+            document = plan.build_document(config)
+            native = {"target": {name: {**document["services"][name]["build"],
+                                       "tags": [f"voice-{name}"]}}}
+            target = plan.configure_plan(document, native)["target"][name]
+            with self.subTest(name=name):
+                self.assertIn(f"type=gha,scope={name}", target["cache-from"])
+                self.assertEqual(target["cache-to"], [
+                    f"type=gha,scope=compose-e2e-{name},mode=max,timeout=30s,ignore-error=true"])
+                self.assertEqual(target["args"], args)
+            for key, value in (("args", {"CHANGED": "true"}), ("dockerfile", "other"),
+                               ("context", str(ROOT / "other")), ("platforms", ["linux/arm64"]),
+                               ("target", "different-stage")):
+                changed = copy.deepcopy(document)
+                changed["services"][name]["build"][key] = value
+                changed_native = {"target": {name: {
+                    **changed["services"][name]["build"], "tags": [f"voice-{name}"]}}}
+                result = plan.configure_plan(changed, changed_native)["target"][name]
+                with self.subTest(name=name, changed=key):
+                    self.assertNotIn(f"type=gha,scope={name}", result["cache-from"])
+                    self.assertTrue(all("compose-e2e-" in ref for ref in result["cache-to"]))
+
 
 class WorkflowTests(unittest.TestCase):
+    def test_host_go_build_cache_covers_real_modules_and_never_reuses_test_results(self):
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        job = workflow.split("  compose-e2e:\n", 1)[1].split("\n  a1-e2e:", 1)[0]
+        setup = job.split("      - uses: actions/setup-go@v5", 1)[1].split("      - ", 1)[0]
+        self.assertIn("cache: true", setup)
+        for module in ("gateway", "notification", "pkg"):
+            path = f"src/backend/{module}/go.sum"
+            self.assertIn(path, setup)
+            self.assertTrue((ROOT / path).is_file())
+        script = (ROOT / "scripts/ci/compose-e2e-smoke.sh").read_text(encoding="utf-8")
+        commands = [line for line in script.splitlines() if "go test " in line]
+        self.assertGreaterEqual(len(commands), 4)
+        self.assertTrue(all("-count=1" in line for line in commands))
+        self.assertIn("CGO_ENABLED=1 go test -tags=live -count=1", job)
+
     def test_current_checkout_is_built_and_loaded_before_no_build_start(self):
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         job = workflow.split("  compose-e2e:\n", 1)[1].split("\n  a1-e2e:", 1)[0]

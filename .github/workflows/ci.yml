@@ -2087,6 +2087,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            src/backend/gateway/go.sum
+            src/backend/notification/go.sum
+            src/backend/pkg/go.sum
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
