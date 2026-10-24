@@ -704,3 +704,35 @@ collector/final-fold/router terminal evidence is still required after integratio
 The complete isolated-run receipt is
 tmp/pr875-repair/bot-receivers/dc0-actual-r/receipt.json, SHA256
 ebe127f917919eb7fbe8256d72894a19f49bd1730fa8c52434ae4d2c3c83b3c7.
+
+## Finite Social subscription-readiness source successor
+
+Source Hbc8552fbec6432a36151ab9afe9f85fecb1ccd20 directly follows
+88856ee15a403e436b5f1d7f6d67e58d223e027b and changes only
+src/backend/social/internal/socialevents/jetstream_test.go: two acknowledged
+subscription flush barriers before construction of the independent publisher.
+Existing assertions, delivery deadlines and production sources are unchanged.
+The actual hosted timeout is retained as RED; the local baseline passed100
+iterations, so no local reproduction is claimed. Candidate target100,
+package20 and race10 checks passed with CPU1,2, and independent source review
+accepted the readiness-only semantics.
+
+Version7 is a separate fixed source tuple, not permission for test paths. It
+must recursively reconstruct version6 unchanged, bind the sole-parent source
+edge and exact before/after bytes/mode/OID, preserve every other tree entry,
+bind the full D6 inventory and raw source evidence, and retain all old records.
+The Native f87/e409 tuple and its complete input inventories are unchanged;
+actual event B/S/T requalification is still mandatory. R7 adds only named
+evidence/record metadata; K7 remains within the existing ten carrier paths.
+Explicit materializer and corrected-F version handling must retain the old
+archive/supplement checks and exact retained Native identity. Current full888
+producer evidence belongs only to888, and no new full run starts before K7.
+Actual root R7 pins, negative real-Git compatibility tests, independent CODE
+review and fresh actual producer completion remain subsequent gates.
+
+Independent R7 SOURCE review accepted the exact one-path edge and complete1044
+D6 inventory, all transported evidence bytes, immutable v6 record and retained
+Native tuple. The final record SHA256 is
+753a22d082aa11f7b6696ea7a08c7fea08897e553956b960b3a8c41cf5dc13ba.
+Source acceptance is not CODE or full-producer acceptance; actual root R7 must
+be supplied before activation pins and compatibility checks.
