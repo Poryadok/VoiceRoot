@@ -277,7 +277,7 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 | Auth (Java) | `cd src/backend/auth && mvn -B test` (как **`make auth-test-ci`** / CI); образ и smoke — Docker, см. CI ниже |
 | Developer Portal | `cd src/developer-portal && npm ci && npm test && npm run build` (как job **`developer-portal`** в CI) |
 
-Дополнительно: **`make build-all-breaking`** — то же + `buf breaking` против локальной ветки `master` (на PR в CI база другая — см. ниже). Хостовый buf: `make buf-lint`, `make buf-format`, `make buf-breaking`. После ручного прогона интеграционных тестов без `build-all`: **`make testcontainers-prune`** (удаляет только контейнеры с label `org.testcontainers`, не трогает `voice-*` compose). Контракт path-filter / promote matrix / **`ci-gate`**: **`make ci-script-tests`** (parity с job `staging-stack-lock` drift-check — **`make image-catalog-drift-check`**).
+Дополнительно: **`make build-all-breaking`** — то же + `buf breaking` против локальной ветки `master` (на PR в CI база другая — см. ниже). Хостовый buf: `make buf-lint`, `make buf-format`, `make buf-breaking`. После ручного прогона интеграционных тестов без `build-all`: **`make testcontainers-prune`** (удаляет только контейнеры с label `org.testcontainers`, не трогает `voice-*` compose). Контракт path-filter / promote matrix / **`ci-gate`**: **`make -j4 ci-script-tests-pr`** для текущих inputs; **`make ci-script-tests`** включает полный исторический аудит (parity с job `staging-stack-lock` drift-check — **`make image-catalog-drift-check`**). Проверка exact current merge запускается отдельно, команды ниже.
 
 ### Локальные грабли (Windows, compose E2E)
 
@@ -350,6 +350,53 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 
 Ручной запуск CI: **Actions → CI → Run workflow** — профиль `auto` (как PR по diff), `tier3-only` (ночной набор), `full` (все тиры).
 
+### Быстрый PR gate и исторический аудит
+
+`ci-script-tests` — четыре обязательных matrix job: `policy`, `runtime`,
+`staging`, `proofs`, с `fail-fast: false`. Они сохраняют все прежние команды;
+F05–F12 проверяются в `runtime`, а полный F13 replay вынесен в
+`voice-history-audit`. Отдельный `current-diff-contract` обязателен на каждом
+PR, включая docs-only: проверяет точные event base/head, два parent commit,
+полное дерево чистого merge, неизменность существующих SQL-миграций
+(blob/type/mode, включая удаление и rename) и source-disabled Voice scope
+текущего diff. Это ограниченный regression guard, не доказательство всей
+исторической цепочки или семантической безопасности произвольного Go-кода.
+Auth/ACL, protobuf, migration/runtime tests и выбранные E2E остаются в gate.
+
+`flutter` сохраняет analyze, codegen, a11y, browser proofs и captures.
+Полный unit/widget discovery выполняется в четырёх `flutter-unit-tests`
+через встроенные `--total-shards=4 --shard-index=0..3`; внутри каждого runner
+остаётся `--concurrency=1`. Gate требует успех всей matrix. Ни один результат
+валидатора не переиспользуется из кеша: новый base/head, diff или версия
+валидатора всегда проверяются заново. Toolchain/dependency caches не заменяют
+выполнение тестов.
+
+Локальный эквивалент быстрых CI-script checks (Linux/Git Bash, committed
+checkout; дополнительно запускаются component checks из этого документа):
+
+```bash
+python3 scripts/ci/current-diff-contract.py --base "$(git merge-base HEAD origin/master)"
+make -j4 ci-script-tests-pr
+```
+
+Для точного GitHub synthetic merge передайте также `--pr-head <event-head>`
+и `--target <event-merge-sha>`, используя `--base <event-base>`.
+Полный прогон — `make ci-script-tests`; отдельно replay —
+`VOICE_CONTRACT_PROFILE=full bash scripts/ci/voice-db-runtime-provisioning-contract_test.sh`.
+
+Полный аудит обязателен перед master release/staging acceptance: на каждом
+push в master `ci-gate` требует `voice-history-audit`. Также он выполняется
+ночью, при любом manual CI dispatch, в PR с изменением исторического
+валидатора/его scope/base helpers, в `codex/voice-master-release-*` и
+`codex/game-sdk-federation-docs`. Такие PR — явное исключение из быстрого
+пути, без исключения из latency-отчёта. Audit хранит SHA checkout и полный
+диагностический log на 14 дней, включая failure; текущая проверка хранит
+base/head/target, digest валидатора и diagnostics.
+
+Методика, baseline и повторяемый сбор очереди, execution, attempts, mean/p95 —
+[CI gate policy](../.github/ci/gate-policy.md). Цель около 10 минут требует
+hosted замеров; локальный PASS или длительность одного агрегатора её не доказывает.
+
 Отдельный Linux Compose gate T31 запускается workflow
 [`.github/workflows/t31-session-events-e2e.yml`](../.github/workflows/t31-session-events-e2e.yml)
 через `workflow_dispatch` на нужном ref или автоматически для затронутых
@@ -389,7 +436,7 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
   persistence before regular routing or bounded `PROMOTION_PENDING` recovery.
 - R22.3 D1 tests являются source-disabled storage tests, не public Voice/media
   E2E и не активируют handlers, coordinator или Redis bridge.
-- F13 analyzes every non-first parent of an ordinary integration merge as a separate source contribution, including octopus merges. Each source needs one unambiguous ancestor base; guarded source tree entries and ownership must survive the merge and final result. An octopus may not invent guarded result paths. The outer master release merge still requires the exact push-before first parent and two-parent shape. This provenance support does not authorize R22 runtime activation.
+- In the full `voice-history-audit`, F13 analyzes every non-first parent of an ordinary integration merge as a separate source contribution, including octopus merges. Each source needs one unambiguous ancestor base; guarded source tree entries and ownership must survive the merge and final result. An octopus may not invent guarded result paths. The outer master release merge still requires the exact push-before first parent and two-parent shape. Ordinary PRs use the bounded current-diff contract above; historical provenance remains a separate release/nightly obligation. Neither check authorizes R22 runtime activation.
 
 ### E2E по фичам
 

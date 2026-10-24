@@ -1,0 +1,802 @@
+{
+  "rows": [
+    {
+      "pr": 875,
+      "id": 40068145398,
+      "sha": "e981f8749aa7b9c67a1582d66bdac402bae4cec9",
+      "class": "CI/global+Flutter+Admin+Backend+DEV scripts",
+      "status": "in_progress",
+      "conclusion": null,
+      "attempt": 1,
+      "created": "2026-10-24T05:55:20Z",
+      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/40068145398",
+      "initial_queue_s": 37.0,
+      "run_api_start_queue_s": 0.0,
+      "workflow_wall_s": null,
+      "gate_wall_s": null,
+      "gate_execution_s": null,
+      "gate_conclusion": null,
+      "last_job": "flutter-windows",
+      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/40068145398/job/120799663713",
+      "longest_job": "flutter",
+      "longest_job_s": 1160.0,
+      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/40068145398/job/120795793199",
+      "slowest_steps": [
+        {
+          "name": "Flutter analyze and test",
+          "seconds": 814.0
+        },
+        {
+          "name": "Install buf CLI",
+          "seconds": 68.0
+        },
+        {
+          "name": "Help real Chrome external handoff (H/V)",
+          "seconds": 66.0
+        }
+      ],
+      "max_job_queue_s": 462.0
+    },
+    {
+      "pr": 875,
+      "id": 39971713562,
+      "sha": "b0291d839a2876265bf98fce3d5cb50fced0af07",
+      "class": "CI/global+Flutter+Admin+Backend+DEV scripts",
+      "status": "completed",
+      "conclusion": "failure",
+      "attempt": 1,
+      "created": "2026-10-23T14:40:59Z",
+      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39971713562",
+      "initial_queue_s": 85.0,
+      "run_api_start_queue_s": 0.0,
+      "workflow_wall_s": 3926.0,
+      "gate_wall_s": 3926.0,
+      "gate_execution_s": 3841.0,
+      "gate_conclusion": "failure",
+      "last_job": "ci-gate",
+      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39971713562/job/120508332365",
+      "longest_job": "ci-script-tests",
+      "longest_job_s": 3806.0,
+      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39971713562/job/120476690820",
+      "slowest_steps": [
+        {
+          "name": "CI script regression tests",
+          "seconds": 3795.0
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "seconds": 6.0
+        },
+        {
+          "name": "Run python3 -m pip install PyYAML==6.0.3",
+          "seconds": 2.0
+        }
+      ],
+      "max_job_queue_s": 473.0
+    },
+    {
+      "pr": 879,
+      "id": 39834373671,
+      "sha": "a6a8834c265f0c80300c12ed8de8385197e8c6fe",
+      "class": "DEV scripts",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "created": "2026-10-22T18:46:55Z",
+      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39834373671",
+      "initial_queue_s": 4.0,
+      "run_api_start_queue_s": 0.0,
+      "workflow_wall_s": 26.0,
+      "gate_wall_s": 26.0,
+      "gate_execution_s": 22.0,
+      "gate_conclusion": "success",
+      "last_job": "ci-gate",
+      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39834373671/job/120018796660",
+      "longest_job": "changes",
+      "longest_job_s": 11.0,
+      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39834373671/job/120018669911",
+      "slowest_steps": [
+        {
+          "name": "Run actions/checkout@v5",
+          "seconds": 5.0
+        },
+        {
+          "name": "Set up job",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run dorny/paths-filter@v4",
+          "seconds": 1.0
+        }
+      ],
+      "max_job_queue_s": 3.0
+    },
+    {
+      "pr": 878,
+      "id": 39570230609,
+      "sha": "5fbf6c53206fa465f71a221503c796ae4e079172",
+      "class": "DEV scripts",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "created": "2026-10-21T08:33:56Z",
+      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39570230609",
+      "initial_queue_s": 4.0,
+      "run_api_start_queue_s": 0.0,
+      "workflow_wall_s": 27.0,
+      "gate_wall_s": 26.0,
+      "gate_execution_s": 22.0,
+      "gate_conclusion": "success",
+      "last_job": "ci-gate",
+      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39570230609/job/119122361595",
+      "longest_job": "changes",
+      "longest_job_s": 11.0,
+      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39570230609/job/119122263581",
+      "slowest_steps": [
+        {
+          "name": "Run actions/checkout@v5",
+          "seconds": 5.0
+        },
+        {
+          "name": "Set up job",
+          "seconds": 1.0
+        },
+        {
+          "name": "Resolve Go service matrix",
+          "seconds": 1.0
+        }
+      ],
+      "max_job_queue_s": 3.0
+    },
+    {
+      "pr": 877,
+      "id": 39385343073,
+      "sha": "62a42fbb3f98239df038697a992cc6d4a546d698",
+      "class": "CI/global",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "created": "2026-10-20T07:15:35Z",
+      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39385343073",
+      "initial_queue_s": 3.0,
+      "run_api_start_queue_s": 0.0,
+      "workflow_wall_s": 1115.0,
+      "gate_wall_s": 1115.0,
+      "gate_execution_s": 1112.0,
+      "gate_conclusion": "success",
+      "last_job": "ci-gate",
+      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39385343073/job/118510252426",
+      "longest_job": "flutter",
+      "longest_job_s": 1091.0,
+      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39385343073/job/118503785035",
+      "slowest_steps": [
+        {
+          "name": "Flutter analyze and test",
+          "seconds": 808.0
+        },
+        {
+          "name": "Install buf CLI",
+          "seconds": 66.0
+        },
+        {
+          "name": "Help real Chrome external handoff (H/V)",
+          "seconds": 66.0
+        }
+      ],
+      "max_job_queue_s": 141.0
+    },
+    {
+      "pr": 876,
+      "id": 39296896416,
+      "sha": "1c5a1f1145481616f96fcb6f0518b77515f67196",
+      "class": "DEV scripts",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "created": "2026-10-19T17:45:47Z",
+      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39296896416",
+      "initial_queue_s": 3.0,
+      "run_api_start_queue_s": 0.0,
+      "workflow_wall_s": 28.0,
+      "gate_wall_s": 27.0,
+      "gate_execution_s": 24.0,
+      "gate_conclusion": "success",
+      "last_job": "ci-gate",
+      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39296896416/job/118211741509",
+      "longest_job": "changes",
+      "longest_job_s": 11.0,
+      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39296896416/job/118211630553",
+      "slowest_steps": [
+        {
+          "name": "Run actions/checkout@v5",
+          "seconds": 5.0
+        },
+        {
+          "name": "Set up job",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run dorny/paths-filter@v4",
+          "seconds": 1.0
+        }
+      ],
+      "max_job_queue_s": 3.0
+    },
+    {
+      "pr": 873,
+      "id": 39134424678,
+      "sha": "3301b4d9eda2bb04f9334eb6db380456514fd713",
+      "class": "Backend",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "created": "2026-10-18T14:05:28Z",
+      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134424678",
+      "initial_queue_s": 210.0,
+      "run_api_start_queue_s": 0.0,
+      "workflow_wall_s": 579.0,
+      "gate_wall_s": 579.0,
+      "gate_execution_s": 369.0,
+      "gate_conclusion": "success",
+      "last_job": "ci-gate",
+      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134424678/job/117697920689",
+      "longest_job": "golangci",
+      "longest_job_s": 182.0,
+      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134424678/job/117696722355",
+      "slowest_steps": [
+        {
+          "name": "Lint affected Go modules",
+          "seconds": 103.0
+        },
+        {
+          "name": "Install golangci-lint",
+          "seconds": 61.0
+        },
+        {
+          "name": "Go mod tidy (affected modules)",
+          "seconds": 8.0
+        }
+      ],
+      "max_job_queue_s": 145.0
+    },
+    {
+      "pr": 874,
+      "id": 39134304804,
+      "sha": "54be418ac0acb58792b70280fb192f79d85d1810",
+      "class": "Backend",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "created": "2026-10-18T14:03:52Z",
+      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134304804",
+      "initial_queue_s": 82.0,
+      "run_api_start_queue_s": 0.0,
+      "workflow_wall_s": 797.0,
+      "gate_wall_s": 796.0,
+      "gate_execution_s": 714.0,
+      "gate_conclusion": "success",
+      "last_job": "ci-gate",
+      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134304804/job/117698319831",
+      "longest_job": "a1-attachment-restart-proof",
+      "longest_job_s": 535.0,
+      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134304804/job/117695920531",
+      "slowest_steps": [
+        {
+          "name": "File attachment restart proof",
+          "seconds": 509.0
+        },
+        {
+          "name": "Build and validate official MinIO mc runtime",
+          "seconds": 14.0
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "seconds": 4.0
+        }
+      ],
+      "max_job_queue_s": 299.0
+    },
+    {
+      "pr": 872,
+      "id": 39134271064,
+      "sha": "4213d861b4d89a1019c07d74072576f96c448471",
+      "class": "CI/global+Backend",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "created": "2026-10-18T14:03:24Z",
+      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134271064",
+      "initial_queue_s": 100.0,
+      "run_api_start_queue_s": 0.0,
+      "workflow_wall_s": 1414.0,
+      "gate_wall_s": 1414.0,
+      "gate_execution_s": 1314.0,
+      "gate_conclusion": "success",
+      "last_job": "ci-gate",
+      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134271064/job/117700575064",
+      "longest_job": "flutter",
+      "longest_job_s": 1000.0,
+      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134271064/job/117695887239",
+      "slowest_steps": [
+        {
+          "name": "Flutter analyze and test",
+          "seconds": 731.0
+        },
+        {
+          "name": "Help real Chrome external handoff (H/V)",
+          "seconds": 62.0
+        },
+        {
+          "name": "Install buf CLI",
+          "seconds": 61.0
+        }
+      ],
+      "max_job_queue_s": 403.0
+    },
+    {
+      "pr": 866,
+      "id": 39134160821,
+      "sha": "cb3efbca4bd32a0c76c7bfa236d6781f76056204",
+      "class": "Backend",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "created": "2026-10-18T14:01:57Z",
+      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134160821",
+      "initial_queue_s": 117.0,
+      "run_api_start_queue_s": 0.0,
+      "workflow_wall_s": 721.0,
+      "gate_wall_s": 720.0,
+      "gate_execution_s": 603.0,
+      "gate_conclusion": "success",
+      "last_job": "ci-gate",
+      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134160821/job/117697543578",
+      "longest_job": "backend-go-integration-pr (role)",
+      "longest_job_s": 308.0,
+      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134160821/job/117696114992",
+      "slowest_steps": [
+        {
+          "name": "Go integration test (role)",
+          "seconds": 295.0
+        },
+        {
+          "name": "Go mod tidy (role)",
+          "seconds": 5.0
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "seconds": 4.0
+        }
+      ],
+      "max_job_queue_s": 134.0
+    },
+    {
+      "pr": 871,
+      "id": 39134124788,
+      "sha": "6b568d3cc5469a8a597e11f8e4acbcc6ad1d9df0",
+      "class": "Flutter",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "created": "2026-10-18T14:01:26Z",
+      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134124788",
+      "initial_queue_s": 40.0,
+      "run_api_start_queue_s": 0.0,
+      "workflow_wall_s": 1131.0,
+      "gate_wall_s": 1131.0,
+      "gate_execution_s": 1091.0,
+      "gate_conclusion": "success",
+      "last_job": "ci-gate",
+      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134124788/job/117699119022",
+      "longest_job": "flutter",
+      "longest_job_s": 1030.0,
+      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134124788/job/117695233809",
+      "slowest_steps": [
+        {
+          "name": "Flutter analyze and test",
+          "seconds": 776.0
+        },
+        {
+          "name": "Help real Chrome external handoff (H/V)",
+          "seconds": 56.0
+        },
+        {
+          "name": "Install buf CLI",
+          "seconds": 52.0
+        }
+      ],
+      "max_job_queue_s": 191.0
+    },
+    {
+      "pr": 870,
+      "id": 39134015670,
+      "sha": "f82af7d4c134c867b35bca9956b7d01e07a0e1e8",
+      "class": "Backend",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "created": "2026-10-18T14:00:08Z",
+      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134015670",
+      "initial_queue_s": 73.0,
+      "run_api_start_queue_s": 0.0,
+      "workflow_wall_s": 766.0,
+      "gate_wall_s": 766.0,
+      "gate_execution_s": 693.0,
+      "gate_conclusion": "success",
+      "last_job": "ci-gate",
+      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134015670/job/117697341093",
+      "longest_job": "a1-attachment-restart-proof",
+      "longest_job_s": 578.0,
+      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134015670/job/117695078605",
+      "slowest_steps": [
+        {
+          "name": "File attachment restart proof",
+          "seconds": 556.0
+        },
+        {
+          "name": "Build and validate official MinIO mc runtime",
+          "seconds": 13.0
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "seconds": 4.0
+        }
+      ],
+      "max_job_queue_s": 88.0
+    },
+    {
+      "pr": 867,
+      "id": 39133970729,
+      "sha": "ee13069f60e15559b269515df0a66e4eb802e159",
+      "class": "docs",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "created": "2026-10-18T13:59:34Z",
+      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133970729",
+      "initial_queue_s": 13.0,
+      "run_api_start_queue_s": 0.0,
+      "workflow_wall_s": 34.0,
+      "gate_wall_s": 33.0,
+      "gate_execution_s": 20.0,
+      "gate_conclusion": "success",
+      "last_job": "ci-gate",
+      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133970729/job/117694706651",
+      "longest_job": "changes",
+      "longest_job_s": 8.0,
+      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133970729/job/117694633308",
+      "slowest_steps": [
+        {
+          "name": "Run actions/checkout@v5",
+          "seconds": 3.0
+        },
+        {
+          "name": "Set up job",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run dorny/paths-filter@v4",
+          "seconds": 1.0
+        }
+      ],
+      "max_job_queue_s": 13.0
+    },
+    {
+      "pr": 869,
+      "id": 39133911729,
+      "sha": "e1795bd58c3efa2c47b9110e4fbaaf16c1d24353",
+      "class": "Admin",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "created": "2026-10-18T13:58:42Z",
+      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133911729",
+      "initial_queue_s": 56.0,
+      "run_api_start_queue_s": 0.0,
+      "workflow_wall_s": 229.0,
+      "gate_wall_s": 228.0,
+      "gate_execution_s": 172.0,
+      "gate_conclusion": "success",
+      "last_job": "ci-gate",
+      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133911729/job/117695108741",
+      "longest_job": "admin",
+      "longest_job_s": 91.0,
+      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133911729/job/117694675125",
+      "slowest_steps": [
+        {
+          "name": "Build admin image (PR verify)",
+          "seconds": 44.0
+        },
+        {
+          "name": "npm ci, lint, test, build",
+          "seconds": 22.0
+        },
+        {
+          "name": "Run docker/setup-buildx-action@v4",
+          "seconds": 8.0
+        }
+      ],
+      "max_job_queue_s": 55.0
+    },
+    {
+      "pr": 861,
+      "id": 39133782837,
+      "sha": "a72ec0b1f526ee452a4d4f957dee9bb5f7a7f490",
+      "class": "CI/global+Flutter",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "created": "2026-10-18T13:56:51Z",
+      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133782837",
+      "initial_queue_s": 3.0,
+      "run_api_start_queue_s": 0.0,
+      "workflow_wall_s": 1107.0,
+      "gate_wall_s": 1107.0,
+      "gate_execution_s": 1104.0,
+      "gate_conclusion": "success",
+      "last_job": "ci-gate",
+      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133782837/job/117697947030",
+      "longest_job": "flutter",
+      "longest_job_s": 1059.0,
+      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133782837/job/117694108557",
+      "slowest_steps": [
+        {
+          "name": "Flutter analyze and test",
+          "seconds": 778.0
+        },
+        {
+          "name": "Install buf CLI",
+          "seconds": 64.0
+        },
+        {
+          "name": "Help real Chrome external handoff (H/V)",
+          "seconds": 64.0
+        }
+      ],
+      "max_job_queue_s": 347.0
+    },
+    {
+      "pr": 868,
+      "id": 39133703787,
+      "sha": "d551d82f0a9f226117d634e2405e22de0430ee10",
+      "class": "Backend",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "created": "2026-10-18T13:55:46Z",
+      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133703787",
+      "initial_queue_s": 3.0,
+      "run_api_start_queue_s": 0.0,
+      "workflow_wall_s": 572.0,
+      "gate_wall_s": 571.0,
+      "gate_execution_s": 568.0,
+      "gate_conclusion": "success",
+      "last_job": "ci-gate",
+      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133703787/job/117695584704",
+      "longest_job": "backend-go-integration-pr (voice)",
+      "longest_job_s": 382.0,
+      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133703787/job/117694135838",
+      "slowest_steps": [
+        {
+          "name": "Go integration test (voice)",
+          "seconds": 365.0
+        },
+        {
+          "name": "Go mod tidy (voice)",
+          "seconds": 8.0
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "seconds": 3.0
+        }
+      ],
+      "max_job_queue_s": 77.0
+    },
+    {
+      "pr": 865,
+      "id": 39132998503,
+      "sha": "86c7e3e701662ed68d2b070dc8ff22a6060490fe",
+      "class": "docs",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "created": "2026-10-18T13:46:12Z",
+      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39132998503",
+      "initial_queue_s": 3.0,
+      "run_api_start_queue_s": 0.0,
+      "workflow_wall_s": 24.0,
+      "gate_wall_s": 23.0,
+      "gate_execution_s": 20.0,
+      "gate_conclusion": "success",
+      "last_job": "ci-gate",
+      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39132998503/job/117691848782",
+      "longest_job": "changes",
+      "longest_job_s": 10.0,
+      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39132998503/job/117691801258",
+      "slowest_steps": [
+        {
+          "name": "Run actions/checkout@v5",
+          "seconds": 4.0
+        },
+        {
+          "name": "Set up job",
+          "seconds": 3.0
+        },
+        {
+          "name": "Run dorny/paths-filter@v4",
+          "seconds": 1.0
+        }
+      ],
+      "max_job_queue_s": 3.0
+    },
+    {
+      "pr": 864,
+      "id": 39132371588,
+      "sha": "91101968496a746a40a2cfdf9efbb1222a44af0a",
+      "class": "docs",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "created": "2026-10-18T13:37:38Z",
+      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39132371588",
+      "initial_queue_s": 111.0,
+      "run_api_start_queue_s": 0.0,
+      "workflow_wall_s": 239.0,
+      "gate_wall_s": 238.0,
+      "gate_execution_s": 127.0,
+      "gate_conclusion": "success",
+      "last_job": "ci-gate",
+      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39132371588/job/117690398354",
+      "longest_job": "changes",
+      "longest_job_s": 9.0,
+      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39132371588/job/117689976977",
+      "slowest_steps": [
+        {
+          "name": "Run actions/checkout@v5",
+          "seconds": 4.0
+        },
+        {
+          "name": "Set up job",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run dorny/paths-filter@v4",
+          "seconds": 0.0
+        }
+      ],
+      "max_job_queue_s": 112.0
+    }
+  ],
+  "groups": {
+    "all_terminal": {
+      "gate_wall": {
+        "n": 17,
+        "mean_s": 748.5882352941177,
+        "p95_nearest_rank_s": 3926.0,
+        "min_s": 23.0,
+        "max_s": 3926.0
+      },
+      "execution_envelope": {
+        "n": 17,
+        "mean_s": 695.0588235294117,
+        "p95_nearest_rank_s": 3841.0,
+        "min_s": 20.0,
+        "max_s": 3841.0
+      },
+      "workflow_wall": {
+        "n": 17,
+        "mean_s": 749.1176470588235,
+        "p95_nearest_rank_s": 3926.0,
+        "min_s": 24.0,
+        "max_s": 3926.0
+      },
+      "initial_queue": {
+        "n": 17,
+        "mean_s": 53.529411764705884,
+        "p95_nearest_rank_s": 210.0,
+        "min_s": 3.0,
+        "max_s": 210.0
+      }
+    },
+    "successful": {
+      "gate_wall": {
+        "n": 16,
+        "mean_s": 550.0,
+        "p95_nearest_rank_s": 1414.0,
+        "min_s": 23.0,
+        "max_s": 1414.0
+      },
+      "execution_envelope": {
+        "n": 16,
+        "mean_s": 498.4375,
+        "p95_nearest_rank_s": 1314.0,
+        "min_s": 20.0,
+        "max_s": 1314.0
+      },
+      "workflow_wall": {
+        "n": 16,
+        "mean_s": 550.5625,
+        "p95_nearest_rank_s": 1414.0,
+        "min_s": 24.0,
+        "max_s": 1414.0
+      },
+      "initial_queue": {
+        "n": 16,
+        "mean_s": 51.5625,
+        "p95_nearest_rank_s": 210.0,
+        "min_s": 3.0,
+        "max_s": 210.0
+      }
+    },
+    "CI_global_successful": {
+      "gate_wall": {
+        "n": 3,
+        "mean_s": 1212.0,
+        "p95_nearest_rank_s": 1414.0,
+        "min_s": 1107.0,
+        "max_s": 1414.0
+      },
+      "execution_envelope": {
+        "n": 3,
+        "mean_s": 1176.6666666666667,
+        "p95_nearest_rank_s": 1314.0,
+        "min_s": 1104.0,
+        "max_s": 1314.0
+      },
+      "workflow_wall": {
+        "n": 3,
+        "mean_s": 1212.0,
+        "p95_nearest_rank_s": 1414.0,
+        "min_s": 1107.0,
+        "max_s": 1414.0
+      },
+      "initial_queue": {
+        "n": 3,
+        "mean_s": 35.333333333333336,
+        "p95_nearest_rank_s": 100.0,
+        "min_s": 3.0,
+        "max_s": 100.0
+      }
+    },
+    "non_global_successful": {
+      "gate_wall": {
+        "n": 13,
+        "mean_s": 397.2307692307692,
+        "p95_nearest_rank_s": 1131.0,
+        "min_s": 23.0,
+        "max_s": 1131.0
+      },
+      "execution_envelope": {
+        "n": 13,
+        "mean_s": 341.9230769230769,
+        "p95_nearest_rank_s": 1091.0,
+        "min_s": 20.0,
+        "max_s": 1091.0
+      },
+      "workflow_wall": {
+        "n": 13,
+        "mean_s": 397.9230769230769,
+        "p95_nearest_rank_s": 1131.0,
+        "min_s": 24.0,
+        "max_s": 1131.0
+      },
+      "initial_queue": {
+        "n": 13,
+        "mean_s": 55.30769230769231,
+        "p95_nearest_rank_s": 210.0,
+        "min_s": 3.0,
+        "max_s": 210.0
+      }
+    }
+  },
+  "history_conclusions": {
+    "incomplete": 1,
+    "cancelled": 190,
+    "failure": 38,
+    "success": 71
+  },
+  "history_attempts": {
+    "1": 299,
+    "2": 1
+  }
+}
