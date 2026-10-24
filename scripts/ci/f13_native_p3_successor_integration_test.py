@@ -46,6 +46,16 @@ class RealGitSuccessorTest(unittest.TestCase):
                 git('update-index', '--add', '--cacheinfo',
                     expected['mode'] + ',' + expected['oid'] + ',' + document, env=env)
                 cls.source = cls.commit(git('write-tree', env=env), [cls.source])
+        expected_makefile=next(r['entry'] for r in cls.record['context'] if r['path']=='Makefile')
+        if legacy.entry(ROOT,cls.source,'Makefile')!=expected_makefile:
+            current=authority.documentation.load_context_record(ROOT)
+            reviewed=next(r['entry'] for r in current['context'] if r['path']=='Makefile')
+            legacy.require(legacy.entry(ROOT,cls.source,'Makefile')==reviewed,'v2_fixture_unreviewed_makefile')
+            with tempfile.TemporaryDirectory() as directory:
+                env=dict(os.environ,GIT_INDEX_FILE=str(Path(directory)/'index'))
+                git('read-tree',cls.source,env=env)
+                git('update-index','--add','--cacheinfo',expected_makefile['mode']+','+expected_makefile['oid']+',Makefile',env=env)
+                cls.source=cls.commit(git('write-tree',env=env),[cls.source])
         cls.context_path = next(row['path'] for row in cls.record['context']
                                 if row['path'].startswith('src/backend/voice/internal/store/')
                                 and row['path'].endswith('.go'))

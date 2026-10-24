@@ -32,7 +32,11 @@ def qualify(*args):
             try:
                 return documentation.qualify(*args)
             except Rejected as doc_error:
-                raise Rejected('v1=' + str(old_error) + ';v2=' + str(new_error) + ';v3=' + str(doc_error)) from doc_error
+                try:
+                    return documentation.qualify_context(*args)
+                except Rejected as context_error:
+                    raise Rejected('v1=' + str(old_error) + ';v2=' + str(new_error) + ';v3=' + str(doc_error)
+                        + ';v4=' + str(context_error)) from context_error
 
 
 def verified_record(repo, binding):
@@ -48,6 +52,12 @@ def verified_record(repo, binding):
     if key == new_key:
         return successor, record
     legacy.require(documentation is not None, 'native_unknown_authority_tuple')
+    if key[0] == documentation.CONTEXT_VERSION:
+        current = documentation.load_context_record(repo)
+        expected = (documentation.CONTEXT_VERSION, current['base'], current['source'],
+            documentation.CONTEXT_RECORD_COMMIT, documentation.CONTEXT_RECORD_SHA256)
+        legacy.require(key == expected, 'native_unknown_authority_tuple')
+        return documentation, current
     legacy.require(key[0] == documentation.VERSION, 'native_unknown_authority_tuple')
     current = documentation.load_record(repo)
     doc_key = (documentation.VERSION, current['base'], current['source'],

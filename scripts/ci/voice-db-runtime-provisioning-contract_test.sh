@@ -772,6 +772,16 @@ f13_checkpoint_merge_tree_entry_matches() {
     >"${bases_file}" 2>/dev/null || return 1
   if [[ "$(wc -l <"${bases_file}" | tr -d '[:space:]')" != 1 ||
     "$(<"${bases_file}")" != "${expected_base}" ]]; then
+    if [[ "${exact_merge}" == 132437c43f6f0625fae8954542f8d9c2f6aa3037 &&
+      "${exact_observer}" == "${repo}/scripts/ci/f13_f54_history.py" ]]; then
+      exact_receipt="$(python3 "${exact_observer}" 132-composition "${repo}" "${exact_merge}" \
+        "${expected_base}" "${first_parent}" "${source_head}" "${path}" "${result_entry}" \
+        "${collector_base}" "${collector_target}")" || return 1
+      # Whole automatic-result evidence only. Existing Native owner/runtime
+      # checks remain mandatory and receive no permission from this receipt.
+      f13_f54_trace_event composition_132_capability "${repo}" "${exact_receipt}" || return 1
+      return 0
+    fi
     if [[ -n "${exact_3071_capability}" && "${exact_merge}" == 3071ddad390443de4119c796cdad9899ff08f7fd &&
       "${exact_observer}" == "${repo}/scripts/ci/f13_f54_history.py" ]] &&
       exact_receipt="$(python3 "${exact_observer}" 3071-composition "${repo}" "${exact_3071_capability}" \
@@ -3715,6 +3725,17 @@ f13_resolve_source_base() {
   if [[ "$(wc -l <<<"${bases}" | tr -d '[:space:]')" == 1 ]]; then
     canonical="${bases}"
   else
+    if [[ "${exact_merge}" == 132437c43f6f0625fae8954542f8d9c2f6aa3037 &&
+      "${exact_observer}" == "${repo}/scripts/ci/f13_f54_history.py" ]]; then
+      exact_receipt="$(python3 "${exact_observer}" 132-boundary "${repo}" "${exact_merge}" \
+        "${first_parent}" "${source_head}" "${collector_base}" "${collector_target}")" || return 1
+      canonical="$(python3 -c 'import json,sys;print(json.loads(sys.argv[1])["history_boundary"])' "${exact_receipt}")" || return 1
+      printf '%s\n' "${canonical}" >"${output_file}" || return 1
+      printf '%s\n' "${bases}" >"${output_file}.candidates" || return 1
+      printf '%s\n' "${exact_receipt}" >"${output_file}.132-capability" || return 1
+      f13_f54_trace_event history_132_capability "${repo}" "${exact_receipt}" || return 1
+      return 0
+    fi
     if [[ -n "${exact_3071_capability}" && "${exact_merge}" == 3071ddad390443de4119c796cdad9899ff08f7fd &&
       "${exact_observer}" == "${repo}/scripts/ci/f13_f54_history.py" ]] &&
       exact_receipt="$(python3 "${exact_observer}" 3071-boundary "${repo}" "${exact_3071_capability}" \
@@ -4089,6 +4110,17 @@ f13_guarded_correction_qualified() {
   printf 'CI_DIAG stage=f13-guarded-correction qualification=%s\n' "${receipt}" >&2
 }
 
+f13_f54_r23_132_owner_permission() {
+  local repo="$1" path="$2" output="$3" incoming="$4" receipt
+  [[ "${path}" == protos/voice/r23_contract_manifest.json ||
+     "${path}" == protos/voice/r23_contract_test/r23_contract_test.go ]] || return 1
+  [[ -n "${f13_f54_frame:-}" && "${f13_f54_operation:-}" == "${f13_f54_frame}/132437c43f6f0625fae8954542f8d9c2f6aa3037/2" ]] || return 1
+  receipt="${TMP_DIR}/f54-r23-132-owner-permission.json"
+  python3 "${f13_f54_observer}" 132-owner-permission "${repo}" "${f13_f54_trace_file}" \
+    "${path}" "${output}" "${incoming}" >"${receipt}" || return 1
+  f13_f54_trace_event r23_132_owner_permission "${repo}" "${path}" "${receipt}"
+}
+
 f13_f54_exact_J_owner_permission() {
   local repo="$1" path="$2" output="$3" incoming="$4" receipt
   [[ "${path}" == src/backend/space/internal/grpcsvc/audit.go &&
@@ -4237,6 +4269,15 @@ f13_evaluate_guarded_owner_qualifiers() {
       exact_unit_supersession=true
     fi
   fi
+  r23_132_owner_permission=false
+  if [[ "${allow_direct_followup}" == true && "${is_direct}" != true && "${incremental_merge}" != true &&
+    "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true &&
+    "${space_audit_allowed}" != true && "${exact_unit_supersession}" != true ]]; then
+    if f13_f54_r23_132_owner_permission "${repo}" "${path}" "${output}" \
+      "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")"; then
+      r23_132_owner_permission=true
+    fi
+  fi
   exact_J_owner_permission=false
   finite_J_owner_permission=false
   if [[ "${allow_direct_followup}" == true && "${is_direct}" != true && "${incremental_merge}" != true &&
@@ -4263,7 +4304,8 @@ f13_guarded_owner_transition_allowed() {
   local exact_unit_supersession="$4" allow_direct_followup="$5" is_direct="$6" incremental_merge="$7"
   local exact_J_owner_permission="${8:-false}"
   local finite_J_owner_permission="${9:-false}"
-  if [[ "${finite_J_owner_permission}" != true && "${exact_J_owner_permission}" != true && "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && "${space_audit_allowed}" != true && "${exact_unit_supersession}" != true && \
+  local r23_132_owner_permission="${10:-false}"
+  if [[ "${r23_132_owner_permission}" != true && "${finite_J_owner_permission}" != true && "${exact_J_owner_permission}" != true && "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && "${space_audit_allowed}" != true && "${exact_unit_supersession}" != true && \
     ( "${allow_direct_followup}" != true || \
     ( "${is_direct}" != true && "${incremental_merge}" != true ) ) ]]; then
     return 1
@@ -4651,7 +4693,7 @@ f13_collect_develop_contributions() {
         fi
       fi
       native_supersession_status=1
-      local exact_unit_supersession=false exact_J_owner_permission=false finite_J_owner_permission=false
+      local exact_unit_supersession=false exact_J_owner_permission=false finite_J_owner_permission=false r23_132_owner_permission=false
       if [[ -n "${owners[${path}]+present}" ]] && f13_path_is_guarded "${path}"; then
         # A release PR may directly correct a guarded path imported by an
         # earlier merge, or re-import its exact descendant source in a later
@@ -4661,7 +4703,7 @@ f13_collect_develop_contributions() {
         f13_evaluate_guarded_owner_qualifiers "${repo}" "${path}" "${output}" || return 1
         if ! f13_guarded_owner_transition_allowed "${guarded_correction_allowed}" \
           "${role_duplicate_allowed}" "${space_audit_allowed}" "${exact_unit_supersession}" \
-          "${allow_direct_followup}" "${is_direct}" "${incremental_merge}" "${exact_J_owner_permission}" "${finite_J_owner_permission}"; then
+          "${allow_direct_followup}" "${is_direct}" "${incremental_merge}" "${exact_J_owner_permission}" "${finite_J_owner_permission}" "${r23_132_owner_permission}"; then
           f13_emit_guarded_failure_diagnostic duplicate_guarded_owner "${path}" \
             "${commit}" "${game_checkpoint_aggregate_head:-}" "${owners[${path}]:-}" \
             "${nested_head:-}" "${guarded_entries[${path}]:-}" "${source_entry}" \
