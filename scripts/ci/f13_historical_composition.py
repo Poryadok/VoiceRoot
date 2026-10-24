@@ -182,7 +182,7 @@ def load_unit(repo, target):
             same_entry(repo, PINNED_SOURCE, name, item['current_h3_entry'])
             for label, rev in (('first-result', first), ('incoming-result', incoming)):
                 bind(prefix + label + '__' + name.replace('/', '__') + '.diff',
-                     git(repo, 'diff', '--no-ext-diff', rev, merge, '--', ':(literal)' + name))
+                     git(repo, 'diff', '--no-ext-diff', '--abbrev=9', rev, merge, '--', ':(literal)' + name))
             occurrences[key] = (first, base, incoming)
     require(len(occurrences) == 38, 'complete_thirty_eight_occurrences')
     proposal = copy.deepcopy(r)

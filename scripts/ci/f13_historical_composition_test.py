@@ -1,6 +1,7 @@
 """Complete private historical units; never mutate the production authority."""
 import copy
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -8,6 +9,7 @@ import shlex
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from f13_guarded_merge_test import definitions
 from f13_reviewed_test_merge_test import git
@@ -85,7 +87,7 @@ class Unit:
                         item['files'][label] = dict(name=name, sha256=hashlib.sha256(data).hexdigest())
                 for label, rev in (('first-result', first), ('incoming-result', incoming)):
                     self.artifacts[prefix + label + '__' + stem + '.diff'] = rawgit(
-                        repo, 'diff', '--no-ext-diff', rev, merge, '--', path).stdout
+                        repo, 'diff', '--no-ext-diff', '--abbrev=9', rev, merge, '--', path).stdout
                 row['guarded_resolutions'].append(item)
             self.rows.append(row)
         self.source = git(repo, 'rev-parse', 'HEAD')
@@ -214,6 +216,34 @@ class HistoricalCompositionTests(unittest.TestCase):
             self.assertEqual((proof['merges'], proof['occurrences'], proof['artifact_bindings']), (8, 38, 243))
             self.assertFalse(proof['runtime_pass'])
             self.assertTrue(proof['retain_runtime_and_content_taint'])
+
+    def test_frozen_diff_rendering_ignores_default_abbreviation(self):
+        h = self.fixture()
+        for width in ('7', '10', '40'):
+            with self.subTest(core_abbrev=width):
+                git(h.repo, 'config', 'core.abbrev', width)
+                result = h.run()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                proof = json.loads(result.stdout)
+                self.assertEqual(proof['artifact_bindings'], 243)
+                self.assertFalse(proof['runtime_pass'])
+                self.assertTrue(proof['retain_runtime_and_content_taint'])
+
+    def test_expanded_returned_prefix_still_rejects_frozen_artifact(self):
+        h = self.fixture()
+        spec = importlib.util.spec_from_file_location('private_historical', h.repo / HELPER)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        original = module.command
+        def expanded(repo, *args):
+            # Model Git's unique-prefix expansion with real ten-digit output;
+            # this transport oracle does not claim a manufactured SHA collision.
+            if args[0] == 'diff':
+                args = tuple('--abbrev=10' if v == '--abbrev=9' else v for v in args)
+            return original(repo, *args)
+        with patch.object(module, 'command', side_effect=expanded):
+            with self.assertRaisesRegex(module.Rejected, '^artifact_bytes$'):
+                module.load_unit(h.repo, h.target)
 
     def test_original_windows_proposal_and_record_raw_crlf_hashes_are_preserved(self):
         h = self.fixture()
