@@ -1,0 +1,32 @@
+test_every_fixture_bind_source_is_generated (__main__.ComposeTests.test_every_fixture_bind_source_is_generated) ... 
+  test_every_fixture_bind_source_is_generated (__main__.ComposeTests.test_every_fixture_bind_source_is_generated) (service='chat', source='chat') ... ERROR
+  test_every_fixture_bind_source_is_generated (__main__.ComposeTests.test_every_fixture_bind_source_is_generated) (service='space', source='space') ... ERROR
+
+======================================================================
+ERROR: test_every_fixture_bind_source_is_generated (__main__.ComposeTests.test_every_fixture_bind_source_is_generated) (service='chat', source='chat')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scripts/ci/phase0-fixture_test.py", line 1686, in test_every_fixture_bind_source_is_generated
+    self.assertTrue(any(path.iterdir()), "signer directory is empty")
+                    ^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1058, in iterdir
+    for name in os.listdir(self):
+                ^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/tmp/voice-phase0-compose-t6j37yqv/fixture/chat'
+
+======================================================================
+ERROR: test_every_fixture_bind_source_is_generated (__main__.ComposeTests.test_every_fixture_bind_source_is_generated) (service='space', source='space')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scripts/ci/phase0-fixture_test.py", line 1686, in test_every_fixture_bind_source_is_generated
+    self.assertTrue(any(path.iterdir()), "signer directory is empty")
+                    ^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1058, in iterdir
+    for name in os.listdir(self):
+                ^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/tmp/voice-phase0-compose-t6j37yqv/fixture/space'
+
+----------------------------------------------------------------------
+Ran 1 test in 12.825s
+
+FAILED (errors=2)
