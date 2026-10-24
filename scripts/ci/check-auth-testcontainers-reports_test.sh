@@ -72,7 +72,7 @@ auth_target="$(sed -n '/^auth-test-ci:/,/^auth-image-ci:/p' "${MAKEFILE}")"
   || fail "auth-test-ci must run the inventory regression after checking reports"
 grep -A 35 '^  backend-auth:' "${WORKFLOW}" | grep -F 'run: make auth-test-ci' >/dev/null || fail "backend-auth must use canonical auth-test-ci"
 grep -A 12 '^auth:' "${PATH_FILTERS}" | grep -Fx '  - src/backend/migrations/auth_db/**' >/dev/null || fail "Auth path filter must include auth_db migrations"
-ci_script_target="$(sed -n '/^ci-script-tests:/,/^generate-staging-services:/p' "${MAKEFILE}")"
+ci_script_target="$(make --no-print-directory -n -C "${ROOT}" ci-script-tests)"
 [[ "${ci_script_target}" == *"check-auth-testcontainers-reports_test.sh"* ]] || fail "ci-script-tests must run the Auth report gate fixture test"
 
 echo "== every disabledWithoutDocker suite has a required report and fixture =="

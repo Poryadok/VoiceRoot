@@ -39,6 +39,15 @@ class LatencyTests(unittest.TestCase):
         self.assertEqual(result['p95_seconds'], 19)
         self.assertEqual(result['mean_seconds'], 10.5)
 
+    def test_cancelled_and_skipped_gates_remain_visible_but_censored(self):
+        for conclusion in ('cancelled', 'skipped'):
+            with self.subTest(conclusion=conclusion):
+                run, attempts = self.fixture()
+                attempts[-1]['jobs'][0]['conclusion'] = conclusion
+                row = latency.summarize(run, attempts, 'CI/global')
+                self.assertEqual(row['gate_conclusion'], conclusion)
+                self.assertIsNone(row['gate_wall_seconds'])
+
 
 if __name__ == '__main__':
     unittest.main()

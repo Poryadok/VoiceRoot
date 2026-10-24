@@ -25,7 +25,8 @@ def summarize(run, attempts, scope):
     gates = [job for job in attempts[-1]['jobs'] if job['name'] == 'ci-gate']
     gate = gates[0] if len(gates) == 1 else None
     end = stamp(gate.get('completed_at')) if gate else None
-    terminal = run['status'] == 'completed' and end is not None
+    terminal = (run['status'] == 'completed' and end is not None and
+                gate.get('conclusion') not in (None, 'cancelled', 'skipped'))
     return {'run_id': run['id'], 'url': run['html_url'], 'head_sha': run['head_sha'],
             'scope': scope, 'status': run['status'], 'conclusion': run.get('conclusion'),
             'gate_conclusion': gate.get('conclusion') if gate else None,
@@ -86,7 +87,8 @@ def main(manifest_path, output):
               'successful': aggregate([r for r in rows if r['gate_conclusion'] == 'success'])}
     for scope in sorted({r['scope'] for r in rows}):
         groups[scope] = aggregate([r for r in rows if r['scope'] == scope])
-    report = {'method': 'created_at to last-attempt ci-gate completion, including retry gaps; '
+    report = {'repository': manifest['repository'], 'selection': manifest['samples'],
+              'method': 'created_at to last-attempt ci-gate completion, including retry gaps; '
               'nearest-rank p95; initial queue vs execution envelope; job waits include dependencies; '
               'attempt execution sums parallel jobs and is not wall-clock; incomplete/missing gates censored',
               'groups': groups, 'samples': rows}
