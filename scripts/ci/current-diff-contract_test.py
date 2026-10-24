@@ -9,6 +9,27 @@ import unittest
 CHECKER = Path(__file__).with_name('current-diff-contract.py')
 
 
+REVIEWED_FIXTURES = [('src/backend/voice/logger.go', None, '44ff46d26c9e4f9d7b067e84d4e7771a797290f3'),
+ ('src/backend/voice/main.go',
+  'b5434cfd21b94bd69ff25f912858f12f0aec6813',
+  '540a91513cfd19d1499183302b3880a578951d56'),
+ ('src/backend/voice/ordinary_runtime.go', None, 'b51436bec28c17c8ecb93cad68176564026802e3'),
+ ('src/backend/voice/party_outbox_runtime.go', None, 'e7c5eab30a054008d7d16862f622f5d92f5351f6'),
+ ('src/backend/voice/space_media_runtime.go', None, 'beff70aecd2d4dd42cbc21ba88691193caf4ac56'),
+ ('src/backend/migrations/auth_db/000009_guest_conversion_operations.down.sql',
+  'df7ab6deeb0e77de9a6b68a1803fcd660fc084c1',
+  '967c11f2f4a57ddc84e188d453f6da9db7a252f9'),
+ ('src/backend/migrations/messaging_db/000025_space_file_producer.down.sql',
+  'b2211787546381e4725ae65192e2afef8adeb3b2',
+  'f2be8b9e29165a15f791f62d7e27980ba6e0c5f4'),
+ ('src/backend/migrations/messaging_db/000026_attachment_send_intents.down.sql',
+  '338db36c8b247ffa8d6db7392633bc0e552fd0d8',
+  '01181fad12cbb8f202bbec16a3a8fece4ffd3a91'),
+ ('src/backend/migrations/role_db/000013_game_session_grants.down.sql',
+  'cec72a64a43e369be4199fb3b9056ee664c50ba7',
+  '3ca06b04b93ba22c830f99387d135fe17aeb179d')]
+
+
 class CurrentDiffTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -143,6 +164,72 @@ class CurrentDiffTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn('source_disabled', result.stderr)
 
+
+
+    def reviewed_fixture(self):
+        # Actual immutable reviewed blobs, copied into a disposable Git history.
+        for path, before, after in REVIEWED_FIXTURES:
+            if before:
+                self.write(path, subprocess.check_output(
+                    ["git", "-C", str(CHECKER.parents[2]), "cat-file", "blob", before]).decode())
+        self.base = self.commit("original reviewed transition inputs")
+        for path, before, after in REVIEWED_FIXTURES:
+            self.write(path, subprocess.check_output(
+                ["git", "-C", str(CHECKER.parents[2]), "cat-file", "blob", after]).decode())
+
+    def test_exact_reviewed_native_and_rollback_transitions_pass(self):
+        self.reviewed_fixture()
+        head = self.commit("reviewed Native and rollback repairs")
+        result = self.check(self.merge_commit(), head)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_reviewed_transition_does_not_allow_content_mode_or_path_drift(self):
+        self.reviewed_fixture()
+        good = self.commit("reviewed repairs")
+        for path, before, after in REVIEWED_FIXTURES:
+            for mutation in ("content", "mode", "rename", "delete"):
+                with self.subTest(path=path, mutation=mutation):
+                    self.git("checkout", "-q", good)
+                    target = self.repo / path
+                    if mutation == "content":
+                        self.write(path, target.read_text() + "\n// altered reviewed source\n")
+                    elif mutation == "mode":
+                        self.git("update-index", "--chmod=+x", path)
+                        target.chmod(0o755)
+                    elif mutation == "rename":
+                        self.git("mv", path, path + ".renamed")
+                    else:
+                        self.git("rm", path)
+                    if mutation != "mode": self.git("add", ".")
+                    self.git("commit", "-qm", mutation)
+                    result = self.check()
+                    self.assertNotEqual(result.returncode, 0, result.stdout)
+                    self.assertIn("reviewed_transition:", result.stderr)
+        self.git("checkout", "-q", good)
+
+    def test_reviewed_transitions_do_not_allow_wrong_before_or_sibling_activation(self):
+        self.reviewed_fixture()
+        good = self.commit("reviewed repairs")
+        for path, before, after in REVIEWED_FIXTURES:
+            with self.subTest(path=path):
+                self.git("checkout", "-q", self.base)
+                prior = (self.repo / path).read_text() if before else "package main\n"
+                self.write(path, prior + "\n// other input\n")
+                wrong = self.commit("unreviewed baseline")
+                for candidate, old_blob, new_blob in REVIEWED_FIXTURES:
+                    self.write(candidate, subprocess.check_output(
+                        ["git", "-C", str(CHECKER.parents[2]), "cat-file", "blob", new_blob]).decode())
+                self.commit("same output from wrong baseline")
+                result = self.check(base=wrong)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("reviewed_transition:", result.stderr)
+        self.git("checkout", "-q", good)
+        self.write("src/backend/voice/internal/roomlifecycle/worker.go",
+                   "package roomlifecycle\nfunc boot() { NewLifecycleWorker() }\n")
+        self.commit("sibling activation")
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("source_disabled_surface:", result.stderr)
 
 if __name__ == '__main__':
     unittest.main()
