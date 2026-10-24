@@ -82,6 +82,11 @@ fi
 
 # Some acceptance and broad Go jobs are selected even when CODE=false (for
 # example ci_global-only workflow edits). Validate them before the code guard.
+if [[ "${EVENT_NAME}" == pull_request ]]; then
+  require_job current-diff-contract "${JOB_CURRENT_DIFF_CONTRACT:-skipped}"
+fi
+check_if "${RUN_HISTORY_AUDIT:-false}" voice-history-audit
+check_if "${GLOBAL}" ci-script-tests
 check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" golangci
 check_if "$(or_true "${RUN_PKG}" "${GLOBAL}")" backend-go-pkg
 check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" backend-go
@@ -101,9 +106,9 @@ fi
 
 check_if "$(or_true "${PROTOS}" "${GLOBAL}")" protobuf
 check_if "$(or_true "${COMPOSE}" "${GLOBAL}")" compose-config
-check_if "${GLOBAL}" ci-script-tests
 check_if "${RUN_MATCH_SQUAD_OVERLAY:-false}" match-squad-overlay
 check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter
+check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter-unit-tests
 check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter-device-driver
 check_if "${RUN_WINDOWS_DESKTOP}" flutter-windows
 check_if "$(or_true "${RUN_WEB}" "${RUN_FLUTTER}" "${GLOBAL}")" web

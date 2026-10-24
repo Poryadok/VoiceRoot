@@ -44,12 +44,9 @@ awk '
 grep -Eq '^[[:space:]]*-[[:space:]]*scripts/ci/a1-attachment-restart-ci-reachability_test\.sh[[:space:]]*$' "$filter_file" || \
   fail "a1_e2e must include the attachment CI reachability contract"
 
-awk '
-  /^ci-script-tests:[[:space:]]*/ { capture = 1; print; next }
-  capture && /^[A-Za-z0-9_.-]+:[[:space:]]*/ { exit }
-  capture { print }
-' "$MAKEFILE" >"$make_target_file"
-grep -Eq '^[[:space:]]*\$\(BASH\)[[:space:]]+"\$\(ROOT\)/scripts/ci/a1-attachment-restart-ci-reachability_test\.sh"[[:space:]]*$' "$make_target_file" || \
+# Follow actual prerequisite edges without executing test recipes.
+make --no-print-directory -n -C "$ROOT" ci-script-tests >"$make_target_file"
+grep -Eq '^[^#].*/scripts/ci/a1-attachment-restart-ci-reachability_test\.sh"[[:space:]]*$' "$make_target_file" || \
   fail "ci-script-tests must run the attachment CI reachability contract"
 
 echo 'A1 attachment restart CI reachability contract passed.'

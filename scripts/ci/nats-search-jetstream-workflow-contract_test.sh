@@ -112,8 +112,8 @@ fi
 if PATH="$test_bin:$PATH" CURL_TEST_MODE=api-fails GITHUB_SHA=0123456789012345678901234567890123456789 bash "$CONNECTIVITY" >/dev/null 2>&1; then
   fail "required source API route failure must block acquisition"
 fi
-ci_target="$(sed -n '/^ci-script-tests:/,/^[[:alnum:]_.-]*:/p' "$MAKEFILE")"
-printf '%s\n' "$ci_target" | grep -Fq 'staging-source-acquisition-workflow-test' \
+ci_target="$(make --no-print-directory -n -C "${ROOT}" ci-script-tests)"
+printf '%s\n' "$ci_target" | grep -Fq 'staging-source-acquisition-workflow_test.sh' \
   || fail "CI script test target does not run source acquisition fixtures"
 printf '%s\n' "$probe" | grep -Fq "if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true" \
   || fail "diagnostic job gate is too broad"
@@ -160,7 +160,7 @@ for raw_output in \
   'printf "%s" "$stderr"'; do
   printf '%s\n' "$probe" | grep -Fq "$raw_output" && fail "diagnostic job may print raw output: $raw_output"
 done
-ci_target="$(sed -n '/^ci-script-tests:/,/^[[:alnum:]_.-]*:/p' "$MAKEFILE")"
+ci_target="$(make --no-print-directory -n -C "${ROOT}" ci-script-tests)"
 printf '%s\n' "$ci_target" | grep -Fq 'nats-search-jetstream-workflow-contract_test.sh' \
   || fail "CI script test target does not run workflow contract"
 grep -Fq "vars.STAGING_DEPLOY_ENABLED == 'true'" "$CI_WORKFLOW" \

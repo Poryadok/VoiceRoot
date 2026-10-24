@@ -25,6 +25,13 @@ ci_global:
   - .github/ci/**
   - scripts/ci/**
 
+# Changes to the historical validator require its complete fixtures on the PR.
+# The full audit is also mandatory for release branches and master pushes.
+history_audit:
+  - scripts/ci/voice-db-runtime-provisioning-contract_test.sh
+  - scripts/ci/voice-r22-runtime-scope*
+  - scripts/ci/resolve-voice-r22-base.sh
+
 # The DEV overlay applicator has its own focused required Linux contract job.
 match_squad_overlay:
   - scripts/dev/match_squad_overlay.py

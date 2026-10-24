@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Static reachability contract for the isolated T-055 Flutter profile handoff.
-# This intentionally parses only the local workflow text: it never invokes
+# This parses local workflow text and Make dry-run edges; it never executes
 # Docker, Flutter, a network client, or a YAML dependency.
 set -euo pipefail
 
@@ -88,15 +88,12 @@ for required in \
   has_filter "$required" || fail "a1_e2e filter is missing required path: $required"
 done
 
-awk '
-  /^ci-script-tests:[[:space:]]*/ { capture = 1; print; next }
-  capture && /^[A-Za-z0-9_.-]+:[[:space:]]*/ { exit }
-  capture { print }
-' "$MAKEFILE" >"$make_target_file"
+# Follow actual prerequisite edges without executing test recipes.
+make --no-print-directory -n -C "$ROOT" ci-script-tests >"$make_target_file"
 [[ -s "$make_target_file" ]] || fail "Makefile must define ci-script-tests"
-grep -Eq '^[[:space:]]*\$\(BASH\)[[:space:]]+"\$\(ROOT\)/scripts/ci/compose-a1-flutter-profile-handoff_test\.sh"[[:space:]]*$' "$make_target_file" || \
+grep -Eq '^[^#].*/scripts/ci/compose-a1-flutter-profile-handoff_test\.sh"[[:space:]]*$' "$make_target_file" || \
   fail "ci-script-tests must run the profile-handoff runner contract"
-grep -Eq '^[[:space:]]*\$\(BASH\)[[:space:]]+"\$\(ROOT\)/scripts/ci/a1-flutter-profile-handoff-ci-reachability_test\.sh"[[:space:]]*$' "$make_target_file" || \
+grep -Eq '^[^#].*/scripts/ci/a1-flutter-profile-handoff-ci-reachability_test\.sh"[[:space:]]*$' "$make_target_file" || \
   fail "ci-script-tests must run the profile-handoff reachability contract"
 
 echo 'A1 Flutter profile-handoff CI reachability contract passed.'

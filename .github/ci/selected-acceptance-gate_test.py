@@ -93,14 +93,16 @@ def run_gate(values, job=None, result=None):
 
 
 class SelectedAcceptanceGateTests(unittest.TestCase):
-    def test_substantive_jobs_stop_on_cancellation_and_preserve_failure_gating(self):
+    def test_independent_go_jobs_stop_on_cancellation_and_pkg_failure_still_blocks_gate(self):
         values = context('pull_request', code='true', run_go='true')
         values['needs.backend-go-pkg.result'] = 'skipped'
         condition = job_condition('backend-go')
         self.assertTrue(evaluate(condition, values))
 
         values['needs.backend-go-pkg.result'] = 'failure'
-        self.assertFalse(evaluate(condition, values))
+        self.assertTrue(evaluate(condition, values))
+        values['needs.changes.outputs.run_pkg'] = 'true'
+        self.assertNotEqual(run_gate(values, 'backend-go-pkg', 'failure').returncode, 0)
 
         values['needs.backend-go-pkg.result'] = 'success'
         values['workflow_not_cancelled'] = False
@@ -158,6 +160,10 @@ class SelectedAcceptanceGateTests(unittest.TestCase):
             values = context(event)
             env = gate_env(values)
             env.update({key: 'skipped' for key in env if key.startswith('JOB_')})
+            # Current merge validation is mandatory even for docs PRs;
+            # historical audit is a separate mandatory master release check.
+            env['JOB_CURRENT_DIFF_CONTRACT'] = 'success'
+            env['JOB_VOICE_HISTORY_AUDIT'] = 'success'
             actual = subprocess.run([bash(), str(ROOT / '.github/ci/verify-required-jobs.sh'),
                                      event, 'false', 'auto'], env=env,
                                     capture_output=True, text=True, timeout=10)
