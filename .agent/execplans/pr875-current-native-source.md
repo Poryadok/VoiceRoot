@@ -567,3 +567,36 @@ tmp/pr875-repair/bot-receivers/v5-actual-final-receipt.json; full log SHA256
 0af6de8ba20a5b9b91383558fca88d14011d226d3f042e6e66b9c34bc2fa2447.
 Graphify rebuilt115978 nodes/239868 edges; optional HTML exceeded its size cap.
 These are component/fixture results, not a full actual collector/router result.
+
+### Deterministic historical patch serialization (2026-10-24)
+
+The next actual producer stopped in the original production-source regression,
+before collection. Its raw manual3071 diff was the exact118-byte frozen input;
+only the text patch index abbreviation changed from nine to ten hexadecimal
+digits as Git selected its default width. The failed patch was1240 bytes instead
+of1238. A focused reproduction in the failed Git2.39.5 environment confirmed the
+failure; replacing only that index header for diagnostic comparison yielded the
+original frozen patch bytes. No historical artifact was rewritten.
+
+The exact manual3071 patch command now requests --abbrev=9. All full-OID tree,
+seven-entry, document-equation and immutable raw/patch digest checks remain.
+Git may still expand a unique prefix on collision: such returned bytes must fail
+the unchanged frozen digest, never be truncated. Real composition tests under
+core.abbrev7/10/40 were RED before the fix. A separate explicitly simulated
+expanded-return test retains that rejection. Other F patch generators and the
+archived derivation script are unchanged. Independent narrow CODE review is CLEAR.
+
+Linux Python3.12.15/Git2.39.5 validation passed the focused2/2 regressions and
+full F5478/78 in170.906s, plus Python compilation and Bash syntax. GREEN log
+SHA256 87129ed4fb2d2295bdb9ed2f3e0947c5bb3985055e7db97e3609a4f3fbb4e637;
+the retained pre-fix RED log SHA256 is
+44490bf26236473ba81e3a58eb334ac3aca314a9113954c7b47d7c8754e81354.
+
+The unchanged original failing production-source test then passed1/1 in106.077s
+in the same failed Git object database/environment, using clean private synthetic
+K3c5f143badb76947e8574bceef4fc313c9333666 above actual merge
+fcf9977912bd72b82346e0b103dc6bfc6ddba7dc. Its captured raw and patch bytes match
+both original frozen hashes. An earlier dirty helper overlay was correctly
+rejected by the executed-carrier guard; it is not counted as validation. No ROOT
+override or authority bypass was used. This verifies the serialization repair,
+not completion of the fresh full producer or hosted CI.

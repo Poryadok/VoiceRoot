@@ -33,6 +33,29 @@ def module():
     return value
 
 
+class Manual3071RenderingContract(unittest.TestCase):
+    def test_frozen_patch_is_independent_of_default_abbreviation(self):
+        m=module()
+        for width in ('7','10','40'):
+            with self.subTest(core_abbrev=width),patch.dict(os.environ,{
+                'GIT_CONFIG_COUNT':'1','GIT_CONFIG_KEY_0':'core.abbrev','GIT_CONFIG_VALUE_0':width}):
+                result=m.manual_3071_composition(ROOT)
+                self.assertEqual(result['raw_difference']['sha256'],'9f7f1689717879d2877428fae2834a6f69385c118a9d533bbc0b8ed2a8fa0920')
+                self.assertEqual(result['patch']['bytes'],1238)
+                self.assertEqual(result['patch']['sha256'],'78ebeaf659af962865b25a662045825e2bf9c06549fca4d64e6fc762e42358ea')
+
+    def test_expanded_git_prefix_is_rejected_not_truncated(self):
+        m=module();original=m.git
+        # Model Git returning a longer unique prefix using actual ten-digit Git
+        # output. This is a transport oracle, not a manufactured SHA collision.
+        expanded=original(ROOT,'diff','--binary','--abbrev=10',m.J3071_AUTO_TREE,m.J3071)
+        self.assertIn(b'index ffb31b64dc..64b197ec4e ',expanded)
+        def returned(repo,*args):
+            return expanded if args[:2]==('diff','--binary') else original(repo,*args)
+        with patch.object(m,'git',side_effect=returned),self.assertRaisesRegex(m.Rejected,'fixed3071_exact_whole_tree_manual_resolution_diff'):
+            m.manual_3071_composition(ROOT)
+
+
 class FiniteJHistoricalContract(unittest.TestCase):
     """Finite source and transition controls; actual full-prefix replay is separate."""
     def test_finite_permission_is_distinct_required_and_consumed_exactly(self):
