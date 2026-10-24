@@ -1,0 +1,8 @@
+fixture_commit=9aca38441d559156d2fbcdd637f2951a20397b2a
+actual_merge_parent=5c53b1ccd4cd3f6d00908a1757f11fa2a5fc3d86
+repo=/workspace/run-122-candidate
+git_version=git version 2.39.5
+helper_sha256=e1ed9f7f4c779f83fa1872a34a00dd7181c93c01cab3a9c043457a50b829b2c1
+working_tree=clean
+result=exit0; 8 merges, 38 occurrences, 243 artifact bindings; runtime_pass=false; no authority grant
+config_matrix=default, core.abbrev=7,10,40; all exit0; identical stdout SHA256 bab23f3fa418f2c1b6e0b12e0fb9db062eb24829c94663345299818d9447be5f

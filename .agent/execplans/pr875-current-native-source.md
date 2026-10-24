@@ -600,3 +600,31 @@ both original frozen hashes. An earlier dirty helper overlay was correctly
 rejected by the executed-carrier guard; it is not counted as validation. No ROOT
 override or authority bypass was used. This verifies the serialization repair,
 not completion of the fresh full producer or hosted CI.
+
+### Historical composition serialization source version 6 (2026-10-24)
+
+The next actual producer passed the repaired manual3071 test but rejected the
+existing historical-composition qualification at merge e963849. Both old and new
+Git environments produced the same merge tree and five conflicts. The original
+verifier's first failed artifact was the first-parent/result Space proto diff:
+expected1550 bytes/SHA c68990f4fcd07ed5b1f3be4b6746667015650781e49beeac57ee8d64321010b2,
+actual1552 bytes with ten-digit index IDs. Explicit --abbrev=9 reproduces every
+expected byte. The historical helper adds only this argument, preserving all243
+artifact hashes, all8/38 source tuples and current-target constraints.
+
+The exact helper/test repair is frozen in root H
+5a817a37e145c10d3b2b87b03454d777e36b10c4, directly above122bcedd7757139d441bc7b40220d98e21b117c4.
+The independently reviewed source record binds the complete1021-path D6 inventory,
+all existing tree entries outside these two paths unchanged, original failure
+bytes and component/real-object-database evidence. The helper remains outside the
+ten executable carrier paths. Version6 does not grant a generic script edit or
+expand historical/runtime authority. All predecessor records and evidence remain.
+
+Targeted tests were RED for core.abbrev7/10/40 before the repair. The full historical
+suite passed7/7 in46.553s plus compilation. In the actual failed Git object database,
+clean private K9aca38441d559156d2fbcdd637f2951a20397b2a qualified the original tuple
+and all8merges/38occurrences/243bindings under default and7/10/40 configurations,
+with byte-identical receipts and runtime/activation/current-path authority false.
+The packet preserves these precise fixture limits; no full producer PASS is claimed.
+Actual root R, version6 K pins, negative/source compatibility tests and fresh full
+collector/router completion remain subsequent gates.

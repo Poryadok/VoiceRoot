@@ -1,0 +1,11 @@
+{
+  "name": "historical-composition/e963849df092/first-result__protos__voice__space__v1__space.proto.diff",
+  "expected": {
+    "name": "historical-composition/e963849df092/first-result__protos__voice__space__v1__space.proto.diff",
+    "sha256": "c68990f4fcd07ed5b1f3be4b6746667015650781e49beeac57ee8d64321010b2",
+    "bytes": 1550
+  },
+  "actual_bytes": 1552,
+  "actual_sha256": "60b876b7e549fde158eacdcfe77295754f9ec80122169746efb504b18acbb6a8",
+  "helper_sha256": "f6e0701687770eab72d2ef5aee9372ee6374635f56f7147677c78f5e881c08f9"
+}
