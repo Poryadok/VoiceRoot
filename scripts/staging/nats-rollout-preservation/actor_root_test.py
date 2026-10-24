@@ -4,6 +4,15 @@ from pathlib import Path
 from unittest.mock import Mock,patch
 import actor_root as root
 
+def copy_historical_story_schema(source):
+    """The clean4 witness does not authorize later Story migrations."""
+    original=Path(__file__).resolve().parents[3]/'src/backend/migrations/story_db'
+    destination=source/'src/backend/migrations/story_db';destination.mkdir(parents=True,exist_ok=True)
+    for name,expected in root.STORY_UP.items():
+        raw=(original/name).read_bytes()
+        if root.hash_bytes(raw)!=expected:raise AssertionError('historical Story migration changed: '+name)
+        (destination/name).write_bytes(raw)
+
 class HistoricalVerifierTests(unittest.TestCase):
     def setUp(self):
         self.old=json.loads((Path(__file__).parent/'testdata/expired-recovery-v9-manifest.json').read_text())
@@ -63,8 +72,7 @@ class Tests(unittest.TestCase):
             source=Path(td);kube,fixture,decoder,service,operator,account=self.fixture(source,'story')
             original=Path(__file__).resolve().parents[3]
             (source/root.ACL).write_bytes((original/root.ACL).read_bytes())
-            for path in (original/'src/backend/migrations/story_db').glob('*.up.sql'):
-                destination=source/path.relative_to(original);destination.parent.mkdir(parents=True,exist_ok=True);destination.write_bytes(path.read_bytes())
+            copy_historical_story_schema(source)
             row=witness();raw=story_witness.encoded(row);sha=root.hash_bytes(raw)
             key=row['content']['child_sha256']+':'+row['content']['config_sha256']
             selected={'schema':'voice-story-witness-selector-v1','revision':1,'entries':{key:{'witness_sha256':sha,'enabled':True}}}
@@ -232,10 +240,7 @@ class Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             source=Path(td);kube,stage,decoder,service,operator,account=self.fixture(source,'story')
             (source/root.ACL).write_bytes(canonical)
-            migrations=Path(__file__).resolve().parents[3]/'src/backend/migrations/story_db'
-            for path in migrations.glob('*.up.sql'):
-                destination=source/path.relative_to(Path(__file__).resolve().parents[3])
-                destination.parent.mkdir(parents=True,exist_ok=True);destination.write_bytes(path.read_bytes())
+            copy_historical_story_schema(source)
             kube.run.return_value={'database':'story_db','version':4,'dirty':False,'username':'voice'}
             with patch.object(root,'ACCOUNT_SHA',root.hash_bytes(account.encode())),patch('space_authority.capture',return_value={'root-pg':'bound'}),patch.object(root.actor_verification,'verify',return_value={'server_authentication_verified':True}) as verify:
                 result=root.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder)
@@ -304,11 +309,11 @@ class Tests(unittest.TestCase):
         original=Path(__file__).resolve().parents[3]
         with tempfile.TemporaryDirectory() as td:
             source=Path(td);kube,stage,*_=self.fixture(source,'story')
-            for path in (original/'src/backend/migrations/story_db').glob('*.up.sql'):
-                destination=source/path.relative_to(original);destination.parent.mkdir(parents=True,exist_ok=True)
-                destination.write_bytes(path.read_bytes())
+            copy_historical_story_schema(source)
             clean={'database':'story_db','version':4,'dirty':False,'username':'voice'}
             with patch('space_authority.capture',return_value={'pod':'root-bound'}):
+                kube.run.return_value=clean
+                self.assertEqual(root.story_schema(kube,source,stage)['migration_hashes'],root.STORY_UP)
                 for observed in (dict(clean,version=5),dict(clean,version=True),dict(clean,dirty=True),
                                  dict(clean,database='bot_db'),dict(clean,extra=0)):
                     kube.run.return_value=observed
@@ -326,14 +331,24 @@ class Tests(unittest.TestCase):
         self.assertIsNone(root.preflight(kube,Path('/unused'),Path('/unused'),{},None,['user'],None))
         kube.get.assert_not_called()
 
+    def test_current_story_schema_cannot_reuse_historical_clean4_witness(self):
+        original=Path(__file__).resolve().parents[3]/'src/backend/migrations/story_db'
+        with tempfile.TemporaryDirectory() as td:
+            source=Path(td);kube,stage,*_=self.fixture(source,'story')
+            copy_historical_story_schema(source)
+            later=[path for path in original.glob('*.up.sql') if path.name not in root.STORY_UP]
+            self.assertTrue(later,'fixture must exercise actual unqualified later migrations')
+            for path in later:
+                (source/'src/backend/migrations/story_db'/path.name).write_bytes(path.read_bytes())
+            with self.assertRaises(root.Blocked):root.story_schema(kube,source,stage)
+            kube.run.assert_not_called()
+
     def test_story_database_reference_dsn_and_secret_reread_veto(self):
         original=Path(__file__).resolve().parents[3]
         for scenario in ('reference','namespace','container','missing','uid','dsn-host','dsn-database','dsn-password','username','secret-drift'):
             with self.subTest(scenario=scenario),tempfile.TemporaryDirectory() as td:
                 source=Path(td);kube,stage,*_=self.fixture(source,'story')
-                for path in (original/'src/backend/migrations/story_db').glob('*.up.sql'):
-                    destination=source/path.relative_to(original);destination.parent.mkdir(parents=True,exist_ok=True)
-                    destination.write_bytes(path.read_bytes())
+                copy_historical_story_schema(source)
                 kube.run.return_value={'database':'story_db','version':4,'dirty':False,'username':'voice'}
                 if scenario=='reference':stage.snapshots['voice-story']['spec']['template']['spec']['containers'][0]['env'][0]['valueFrom']['secretKeyRef']['key']='OTHER_DATABASE_URL'
                 if scenario=='namespace':stage.snapshots['voice-story']['metadata']['namespace']='another-namespace'

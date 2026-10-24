@@ -250,9 +250,37 @@ default postconditions gate restart. Already-applied16 does not repeat its
 backfill or erase later opt-ins. Bot004 duplicate non-NULL interaction tokens
 (including empty strings) are rechecked under the writer fence before any
 native contract mutation or database Job; conflicting data is not rewritten.
-The same read-only prerequisite accepts clean Bot schema versions1 through6,
-including the canonical `000006_bot_chat_create_requests` target after migration;
-newer versions, dirty state and duplicate token groups still refuse admission.
+The same read-only prerequisite accepts clean Bot schema versions1 through8.
+Bot007 excludes legacy empty message tokens from the unique interaction index;
+Bot008 adds the native membership journal without changing that index. The
+prerequisite still rejects duplicate nonempty token groups, dirty state and
+versions newer than8; before Bot007 it also rejects duplicate empty tokens.
+
+The root-owned private `policy.json` may explicitly carry `release_policy`.
+Installation validates its source-bound profile, immutable object, digest and
+owner paths; preparation validates the same input against the captured candidate
+SHA before image selection, and the compiler independently requires it for
+current release-policy templates. Missing or malformed input is not filled from
+environment variables or target source. Historical templates keep their existing
+admission checks. Upgrades preserve the existing private policy bytes; this
+transport change does not provision a policy object or authorize deployment.
+
+FULL/app-only may include the already-existing `voice-p3-principal-jwks`
+publisher when the approved source contains its exact Deployment/Service/config
+triple. Its sole `jwks` container retains the observed nginx digest bound through
+the existing Deployment/ReplicaSet/running-Pod capture; it never receives a Voice
+application image or an unpinned source tag. The reviewed GET-only nginx config
+is hash-bound, and only the named public document, TLS certificate/key and config
+mounts are admitted. The external `voice-p3-principal-public` ConfigMap must be
+immutable and contain exactly `realtime.json`; its bytes and identity remain
+bound by the ordinary non-NATS preflight and revalidation. Missing enrollment or
+public material fails closed; this path does not create a first installation.
+The publisher uses the same pause, target, rollback and guarded restart as the
+captured workloads, but becomes ready after the hub and before Chat. Completed
+recovery readiness is observed without repeating its scale action. Pod readiness
+and byte preservation do not prove issuer key correspondence or successful JWKS
+retrieval; external provisioning and actual protected application calls still
+must establish those facts.
 
 The hub renderer is a separately bound root-only init image transition; the
 runner cannot apply arbitrary hub changes. Exact captured inputs and private

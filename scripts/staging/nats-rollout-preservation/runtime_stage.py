@@ -15,6 +15,7 @@ import guard
 from stage_runtime import Staging, HUB, MARKER, LEAVES, pv_storage_path, selected_store_descriptor, verify_selected_store_leaf, fence_objects
 from controller import Blocked
 from apply import digest
+from source_plan import PRINCIPAL_PUBLISHER
 
 
 def terminated_hub(before,after):
@@ -106,7 +107,7 @@ class RolloutStage(Staging):
         if data.get('phase')!='active' or any(k in data for k in ('knownBaselineOperation','knownRolloutOperation')):
             raise Blocked('rollout_active_marker_required')
         extras=set(extra_deployments)-{HUB,'voice-gateway',*('voice-'+s for s in LEAVES)}
-        if not extras<={'voice-web','voice-admin','voice-developer-portal'}:raise Blocked('rollout_extra_workload_unsupported')
+        if not extras<={'voice-web','voice-admin','voice-developer-portal',PRINCIPAL_PUBLISHER}:raise Blocked('rollout_extra_workload_unsupported')
         rows={n:kube.get('deployment',n) for n in (HUB,'voice-gateway',*('voice-'+s for s in LEAVES),*sorted(extras))}
         volumes=rows[HUB]['spec']['template']['spec']['volumes']
         claims=[v.get('persistentVolumeClaim',{}).get('claimName') for v in volumes if v['name']=='jsdata']
@@ -479,11 +480,18 @@ class RolloutStage(Staging):
         if finish_guard is not None:finish_guard('ready',name,None)
         release=getattr(self,'closed_preservation_release',None)
         if release is not None:release(self,'ready',name)
+        # Record hub readiness first; Chat fetches this existing public issuer
+        # before its own readiness. Use the same guarded scale/ledger path.
+        if name==HUB and PRINCIPAL_PUBLISHER in self.snapshots:
+            ledger=getattr(self,'finish_ledger',None)
+            if ledger is None or PRINCIPAL_PUBLISHER in ledger.record['pending']:
+                self.scale(PRINCIPAL_PUBLISHER,1)
+            self.wait_ready(PRINCIPAL_PUBLISHER)
 
     def release_marker(self):
         row=self.owned_marker()
         if row['data']['phase']!='rollout-verified':raise Blocked('rollout_unverified_release_forbidden')
-        core={HUB,'voice-gateway',*('voice-'+s for s in LEAVES)}
+        core={HUB,'voice-gateway',PRINCIPAL_PUBLISHER,*('voice-'+s for s in LEAVES)}
         for name in sorted(set(self.snapshots)-core):
             ledger=getattr(self,'finish_ledger',None)
             if ledger is None or name in ledger.record['pending']:self.scale(name,1)

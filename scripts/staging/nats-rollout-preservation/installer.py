@@ -327,8 +327,13 @@ def install(code,policy_path):
     policy_path=Path(policy_path);fd,_=encrypted_cut.regular(policy_path,private=True)
     try:policy=json.loads(os.read(fd,65537))
     finally:os.close(fd)
-    allowed={'s3_signing_endpoint','gateway_host','storage_host','livekit_host','web_host','admin_host','developer_portal_host','gateway_tls_secret','storage_tls_secret','image_pull_secret','apply_observability','minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin'}
+    allowed={'s3_signing_endpoint','gateway_host','storage_host','livekit_host','web_host','admin_host','developer_portal_host','gateway_tls_secret','storage_tls_secret','image_pull_secret','apply_observability','minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin','release_policy'}
     if not isinstance(policy,dict) or not set(policy)<=allowed or not isinstance(policy.get('s3_signing_endpoint'),str):raise Blocked('bridge_install_policy_invalid')
+    if 'release_policy' in policy:
+        import release_policy_wiring
+        value=policy['release_policy']
+        try:release_policy_wiring.validate(value,value.get('source_sha') if isinstance(value,dict) else None,guard.NS)
+        except ValueError as exc:raise Blocked('bridge_install_release_policy_invalid') from exc
     with operation_lock():
         marker=Kube().get('configmap','voice-nats-generation')
         if marker['data'].get('phase')!='active':raise Blocked('bridge_install_live_operation_present')
