@@ -51,6 +51,9 @@ representative PR heads have completed**. Do not claim the ten-minute target
 from local test speed, one successful run or the aggregator's own duration.
 Known remaining broad-path costs include Compose startup+smoke and Space
 integration; cold builds and runner contention must remain visible.
+The [first observed wide after run](gate-after.md) passed in15m44s; it does
+not establish the ten-minute target. It includes every selected mandatory job
+and the historical-validator exception, together with prior cancelled heads.
 
 Reproduce future measurements without modifying runs:
 

@@ -48,6 +48,13 @@ class LatencyTests(unittest.TestCase):
                 self.assertEqual(row['gate_conclusion'], conclusion)
                 self.assertIsNone(row['gate_wall_seconds'])
 
+    def test_cancelled_workflow_with_failed_aggregator_is_censored(self):
+        run, attempts = self.fixture()
+        run['conclusion'] = 'cancelled'
+        row = latency.summarize(run, attempts, 'CI/global')
+        self.assertEqual(row['gate_conclusion'], 'failure')
+        self.assertIsNone(row['gate_wall_seconds'])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -26,6 +26,7 @@ def summarize(run, attempts, scope):
     gate = gates[0] if len(gates) == 1 else None
     end = stamp(gate.get('completed_at')) if gate else None
     terminal = (run['status'] == 'completed' and end is not None and
+                run.get('conclusion') not in ('cancelled', 'skipped') and
                 gate.get('conclusion') not in (None, 'cancelled', 'skipped'))
     return {'run_id': run['id'], 'url': run['html_url'], 'head_sha': run['head_sha'],
             'scope': scope, 'status': run['status'], 'conclusion': run.get('conclusion'),
