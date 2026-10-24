@@ -628,3 +628,16 @@ with byte-identical receipts and runtime/activation/current-path authority false
 The packet preserves these precise fixture limits; no full producer PASS is claimed.
 Actual root R, version6 K pins, negative/source compatibility tests and fresh full
 collector/router completion remain subsequent gates.
+
+Final K6 pins actual R28e929e65fa1a038662ea8620ac2bd8537c96291 and record
+SHA c7241b4a59d8b571f44004ae9e3c8537698f2f4eb7342275396608d1f35b4a05.
+Independent final source/pin CODE review is CLEAR. The isolated actual-R fixture
+verified22 artifact modes/raw bytes and passed production38/38 (294.350s),
+Native7/7 (5.874s), F5478/78 (182.179s) and compilation, exit0. An initial runner
+attempt lacked the prior d055 object; the private clone fetched the existing
+v5-R bundle before retry, without changing candidate sources or validators.
+The receipt retains that setup failure and the successful fixture scope:
+tmp/pr875-repair/bot-receivers/v6-actual/receipt.json, SHA256
+78246f184dca5dd7bacc4ab361f4159efb825a244fb3e0b42daafff65c12b23c.
+Full log SHA256 2c1264f97188b33929b3727a714e56784fc0fa45f846742f666b91b3eed53fab.
+These results do not replace the mandatory fresh actual producer/router terminal.
