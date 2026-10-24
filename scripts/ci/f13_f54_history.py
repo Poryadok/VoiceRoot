@@ -4846,7 +4846,7 @@ def manual_3071_composition(repo):
     changed=git(repo,'diff','--name-only',J3071_AUTO_TREE,J3071).decode().splitlines()
     require(changed==[J3071_DOC],'fixed3071_complete_other_tree_equality_no_path_exclusion')
     raw=git(repo,'diff','--raw','--no-abbrev','--no-renames','-z',J3071_AUTO_TREE,J3071)
-    patch=git(repo,'diff','--binary',J3071_AUTO_TREE,J3071)
+    patch=git(repo,'diff','--binary','--abbrev=9',J3071_AUTO_TREE,J3071)
     require(sha(raw)=='9f7f1689717879d2877428fae2834a6f69385c118a9d533bbc0b8ed2a8fa0920' and sha(patch)=='78ebeaf659af962865b25a662045825e2bf9c06549fca4d64e6fc762e42358ea','fixed3071_exact_whole_tree_manual_resolution_diff')
     refs=dict(O=J3071_O,bestA=J3071_BASES[0],bestB=J3071_BASES[1],P1=J3071_P1,P2=J3071_P2,J=J3071,AUTO=J3071_AUTO_TREE)
     entries={label:tree_entry(repo,ref,J3071_DOC) for label,ref in refs.items()}
