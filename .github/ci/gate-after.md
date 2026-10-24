@@ -1,7 +1,7 @@
-# CI-GATE-10M: first observed after run
+# CI-GATE-10M: preliminary after observations
 
 This is a preliminary implementation measurement, not acceptance of a
-ten-minute SLO. Only one completed wide PR head is available. The PR's earlier
+ten-minute SLO. The first implementation phase has one completed wide PR head. The PR's earlier
 development heads are shown below as cancelled observations, not quick passes.
 
 | Head / CI run | Outcome | Gate wall | Initial queue | Execution envelope |
@@ -48,3 +48,37 @@ groups with queue/execution/attempts. Ordinary-component after latency and the
 overall ten-minute average remain unverified. No PR #875 workflow was changed,
 cancelled or rerun. Integrate this separate PR after that existing work, as the
 task requests; an already-running old gate is not replaced by this policy.
+
+## First Compose cache observation
+
+Source 555ae546fc04f58ffe827709a990b39746958bac,
+[run40081841614](https://github.com/Poryadok/VoiceRoot/actions/runs/40081841614),
+attempt1, completed PASS. This is another CI/global head from the same PR, not a new
+representative PR. Keep this cache phase separate from the preceding implementation
+phase: n=1, mean/p95=1100s (18m20s), initial queue67s, execution envelope1033s (17m13s).
+It is above the target and slower than the first observation.
+
+Compose build/load296s plus startup66s compares with previous stack build/start378s;
+smoke491s compares with392s; Bake post-processing37s and builder cleanup18s also belong
+to gate wall-clock. Initial queue rose from30s to67s. The last Flutter shard waited252s
+after its job was created and completed at workflow+13m46s. These uncontrolled runs
+cannot attribute the overall difference solely to caching.
+
+The build log contains472 CACHED records and successful per-target exporters. The
+private Notification diagnostic rebuild/preflight consumed only about9.5s, so it is not
+the observed smoke bottleneck. Initial host Notification Go download/compilation
+consumed about100s; Gateway live tests themselves reported191s. Build layers and host
+compilation may be reused, but all live tests must run again with count=1. An explicit
+host dependency cache now hashes the actual Gateway, Notification and shared pkg module
+sums. Its first hosted run seeds a cold cache; no ten-minute acceptance is claimed.
+
+## Subsequent censored development heads
+
+These pushes superseded development runs through ordinary PR concurrency; no manual
+cancellation or rerun was requested. Neither workflow contributes a short terminal
+duration to the SLO mean.
+
+| Source head | Run | Outcome | Initial queue |
+| --- | --- | --- | --- |
+| 72745aa1e9e4771ecbf4cd6e40654f8c1b2499cd | [40080795912](https://github.com/Poryadok/VoiceRoot/actions/runs/40080795912) | cancelled; censored | 4.0s |
+| 96aed431f921d8529a5e0f7e1aab4cb734966143 | [40081751202](https://github.com/Poryadok/VoiceRoot/actions/runs/40081751202) | cancelled; censored | 33.0s |
