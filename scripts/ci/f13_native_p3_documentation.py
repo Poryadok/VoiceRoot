@@ -224,6 +224,9 @@ def load_context_record(repo):
 
 
 def qualify_context(repo,base,source,target,event,ref,event_sha,before,base_ref):
+    import f13_production_source as production
+    if production.fixture_applicable(repo) or production.fixture_applicable(repo,target):
+        return qualify_fixture_context(repo,base,source,target,event,ref,event_sha,before,base_ref)
     require=legacy.require
     repo=str(Path(repo).resolve());base,source,target=map(legacy.oid,(base,source,target))
     require(base==CONTEXT_EVENT_BASE and event_sha==target and event in ('push','pull_request'),'context_exact_event_base')
@@ -252,11 +255,70 @@ def qualify_context(repo,base,source,target,event,ref,event_sha,before,base_ref)
         retain_guarded_and_runtime_history=True)
 
 
+def fixture_bridge_binding(source,target):
+    import f13_production_source as production
+    return dict(type='NATIVE-P3-v4-FIXTURE-SOURCE-APPLICABILITY-v1',
+        source_snapshot=production.FIXTURE_SOURCE,record=production.FIXTURE_RECORD_COMMIT,
+        record_sha256=production.FIXTURE_RECORD_SHA256,base=CONTEXT_EVENT_BASE,source=source,target=target)
+
+
+def qualify_fixture_context(repo,base,source,target,event,ref,event_sha,before,base_ref):
+    # Source loading is deliberately acyclic: the production source constructor
+    # reconstructs immutable v8/v4 first and never calls current qualification.
+    import f13_production_source as production
+    require=legacy.require
+    require(Path(repo).resolve()==production.ROOT.resolve(),'production_actual_root')
+    require(target==legacy.git(repo,'rev-parse','HEAD').decode().strip(),'context_fixture_actual_head')
+    record=production.load_fixture_fix(repo)[0]
+    unit=load_context_record(repo)
+    base,source,target=map(legacy.oid,(base,source,target))
+    require(base==CONTEXT_EVENT_BASE and event_sha==target and event in ('push','pull_request'),'context_exact_event_base')
+    require((event=='push' and ref=='refs/heads/master' and before==base) or
+        (event=='pull_request' and base_ref=='master' and legacy.re.fullmatch(r'refs/pull/[0-9]+/merge',ref)),
+        'context_master_event')
+    require(legacy.git(repo,'rev-list','--parents','-n','1',target).decode().split()==[target,base,source],
+        'context_ordered_master_parents')
+    require(legacy.git(repo,'rev-parse',source+'^{tree}')==legacy.git(repo,'rev-parse',target+'^{tree}'),
+        'context_source_result_tree')
+    legacy.ancestor(repo,base,source);legacy.ancestor(repo,production.FIXTURE_RECORD_COMMIT,source)
+    require(source!=production.FIXTURE_RECORD_COMMIT,'context_missing_carrier')
+    expected=tree_entries(repo,production.FIXTURE_RECORD_COMMIT);root=Path(__file__).resolve().parents[2]
+    for revision in (source,target):
+        current=tree_entries(repo,revision)
+        require({p:v for p,v in current.items() if p not in CARRIER_PATHS}==
+            {p:v for p,v in expected.items() if p not in CARRIER_PATHS},'context_fixture_post_record_source_drift')
+        for name in CARRIER_PATHS:
+            meta=legacy.entry(repo,revision,name)
+            require(meta is not None and meta['mode']=='100644' and meta['type']=='blob','context_carrier_mode')
+            require(legacy.git(repo,'show',revision+':'+name)==(root/name).read_bytes(),'context_executed_carrier')
+    require(legacy.entry(repo,production.FIXTURE_RECORD_COMMIT,VERIFIER_PATH)!=legacy.entry(repo,source,VERIFIER_PATH),
+        'context_later_carrier')
+    require(record['native_record']==dict(version=CONTEXT_VERSION,source=CONTEXT_SOURCE,record=CONTEXT_RECORD_COMMIT,
+        path=CONTEXT_RECORD_PATH,sha256=CONTEXT_RECORD_SHA256),'context_fixture_exact_retained_tuple')
+    return dict(version=CONTEXT_VERSION,consumer='MASTER-SOURCE-v1',base=base,source=source,target=target,
+        content_base=unit['base'],snapshot=CONTEXT_SOURCE,record=CONTEXT_RECORD_COMMIT,
+        record_sha256=CONTEXT_RECORD_SHA256,paths=[r['path'] for r in unit['projection']],
+        retain_guarded_and_runtime_history=True,source_applicability=fixture_bridge_binding(source,target))
+
+
+def verify_context_binding(repo,binding):
+    import f13_production_source as production
+    if production.fixture_applicable(repo) or 'source_applicability' in binding:
+        event=production.os.environ
+        expected=qualify_fixture_context(repo,binding['base'],binding['source'],binding['target'],
+            event.get('GITHUB_EVENT_NAME',''),event.get('GITHUB_REF',''),event.get('GITHUB_SHA',''),
+            event.get('VOICE_CI_PUSH_BEFORE_SHA',''),event.get('GITHUB_BASE_REF',''))
+        legacy.require(binding==expected,'context_fixture_current_binding')
+    else:
+        legacy.require('source_applicability' not in binding,'context_unexpected_fixture_bridge')
+
+
 def audit_map(repo, binding, map_path, history_path):
     """Validate real collector rows; never synthesize or edit the map."""
     require, git, oid = legacy.require, legacy.git, legacy.oid
     ancestor, entry, digest = legacy.ancestor, legacy.entry, legacy.digest
     subprocess, re, runtime_changed = legacy.subprocess, legacy.re, legacy.runtime_changed
+    if binding['version']==CONTEXT_VERSION:verify_context_binding(repo,binding)
     r = load_context_record(repo) if binding['version']==CONTEXT_VERSION else load_record(repo)
     expected = {row["path"]: row["after"] for row in r["projection"]}
     historical = {}

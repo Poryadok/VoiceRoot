@@ -21,6 +21,30 @@ def git(*args,data=None,env=None):
     return subprocess.check_output(['git','--no-replace-objects','-C',str(ROOT),*args],input=data,env=env).decode().strip()
 
 
+class FixtureSourceUnitTest(unittest.TestCase):
+    def test_current_head_never_falls_back_to_legacy_success(self):
+        with patch.object(source,'fixture_applicable',return_value=True),\
+                patch.object(native.legacy,'qualify',return_value={'unqualified_historical_success':True}) as old,\
+                patch.object(documentation,'qualify_context',side_effect=ValueError('current-bridge-required')) as current:
+            with self.assertRaisesRegex(ValueError,'^current-bridge-required$'):
+                native.qualify(ROOT,'historical-base','historical-source','historical-target',
+                    'pull_request','refs/pull/875/merge','historical-target','','master')
+            old.assert_not_called();current.assert_called_once()
+
+    def test_exact_fixture_successor_retains_native_v4(self):
+        records=source.load_fixture_fix(ROOT);record=records[0]
+        self.assertEqual(record['source'],source.FIXTURE_SOURCE)
+        self.assertEqual([r['path'] for r in record['changes']],['scripts/ci/phase0-fixture_test.py'])
+        self.assertEqual(records[1]['version'],source.INTEGRATION_VERSION)
+        self.assertEqual(record['native_record']['record'],documentation.CONTEXT_RECORD_COMMIT)
+        self.assertEqual(record['native_record']['source'],documentation.CONTEXT_SOURCE)
+        self.assertEqual(record['native_record']['version'],documentation.CONTEXT_VERSION)
+
+    def test_unpinned_fixture_record_denied(self):
+        with patch.object(source,'FIXTURE_RECORD_COMMIT',None),self.assertRaisesRegex(ValueError,'production_fixture_not_pinned'):
+            source.load_fixture_fix(ROOT)
+
+
 class IntegratedSourceUnitTest(unittest.TestCase):
     def test_exact_integration_source_keeps_prior_units(self):
         records=source.load_integration(ROOT);record=records[0]
@@ -114,6 +138,95 @@ class ProductionSourceTest(unittest.TestCase):
         old_target=self.commit(git('rev-parse',self.original+'^{tree}'),[source.EVENT_BASE,self.original])
         git('update-ref','HEAD',old_target);os.environ['GITHUB_SHA']=old_target
         with self.assertRaisesRegex(ValueError,'production_actual_ordered_parents'):source.qualify(ROOT)
+
+    def fixture_record_fixture(self,record,changes=(),parent=None):
+        raw=(json.dumps(record)+'\n').encode()
+        with tempfile.TemporaryDirectory() as folder:
+            env=dict(os.environ,GIT_INDEX_FILE=str(Path(folder)/'index'))
+            git('read-tree',source.FIXTURE_RECORD_COMMIT,env=env)
+            for name,data in ((source.FIXTURE_RECORD_PATH,raw),*changes):
+                if data is None:git('update-index','--force-remove',name,env=env)
+                else:
+                    blob=git('hash-object','-w','--stdin',data=data)
+                    git('update-index','--add','--cacheinfo','100644,'+blob+','+name,env=env)
+            revision=self.commit(git('write-tree',env=env),[parent or source.FIXTURE_SOURCE])
+        return revision,hashlib.sha256(raw).hexdigest()
+
+    def test_fixture_bridge_keeps_exact_native_record_and_current_event(self):
+        binding=native.qualify(ROOT,self.event_base,self.original,self.target,'pull_request',
+            'refs/pull/875/merge',self.target,'','master')
+        self.assertEqual(source.qualify(ROOT)['type'],source.FIXTURE_VERSION)
+        self.assertEqual(binding['record'],source.INTEGRATION_RECORD_COMMIT)
+        self.assertEqual(binding['snapshot'],source.INTEGRATION_SOURCE)
+        self.assertEqual(binding['source_applicability'],documentation.fixture_bridge_binding(self.original,self.target))
+        native.verified_record(ROOT,binding)
+        for key,value in (('source_applicability',None),('retain_guarded_and_runtime_history',False)):
+            forged=dict(binding)
+            if value is None:forged.pop(key)
+            else:forged[key]=value
+            with self.subTest(field=key),self.assertRaisesRegex(ValueError,'context_fixture_current_binding'):
+                native.verified_record(ROOT,forged)
+        for field in ('source_snapshot','record','record_sha256','base','source','target'):
+            forged=json.loads(json.dumps(binding));forged['source_applicability'][field]='forged'
+            with self.subTest(field=field),self.assertRaisesRegex(ValueError,'context_fixture_current_binding'):
+                documentation.audit_map(ROOT,forged,'absent-map','absent-history')
+        historical=dict(binding,target=source.INTEGRATION_RECORD_COMMIT)
+        historical.pop('source_applicability')
+        with self.assertRaisesRegex(ValueError,'context_fixture_actual_head'):
+            native.verified_record(ROOT,historical)
+        with self.assertRaisesRegex(ValueError,'context_fixture_actual_head'):
+            native.qualify(ROOT,source.EVENT_BASE,source.INTEGRATION_PREDECESSOR,
+                source.INTEGRATION_RECORD_COMMIT,'pull_request','refs/pull/875/merge',
+                source.INTEGRATION_RECORD_COMMIT,'','master')
+
+    def test_fixture_unpinned_denies_production_and_native_without_fallback(self):
+        with patch.object(source,'FIXTURE_RECORD_COMMIT',None):
+            with self.assertRaisesRegex(ValueError,'production_fixture_not_pinned'):source.qualify(ROOT)
+            with self.assertRaisesRegex(ValueError,'production_fixture_not_pinned'):
+                native.qualify(ROOT,self.event_base,self.original,self.target,'pull_request',
+                    'refs/pull/875/merge',self.target,'','master')
+
+    def test_fixture_next_edit_and_other_paths_are_not_authorized(self):
+        for name in (source.FIXTURE_PATH,'scripts/ci/other-fixture_test.py','Makefile'):
+            target=self.changed(name)
+            candidate=git('rev-list','--parents','-n','1',target).split()[2]
+            with self.subTest(path=name),self.assertRaisesRegex(ValueError,'production_only_reviewed_carrier_delta'):
+                source.qualify(ROOT)
+            with self.subTest(native_path=name),self.assertRaisesRegex(ValueError,'context_fixture_post_record_source_drift'):
+                documentation.qualify_context(ROOT,self.event_base,candidate,target,'pull_request',
+                    'refs/pull/875/merge',target,'','master')
+
+    def test_fixture_reconstructs_inventory_closure_and_review_semantics(self):
+        original=json.loads(git('show',source.FIXTURE_RECORD_COMMIT+':'+source.FIXTURE_RECORD_PATH))
+        for case,code in (('inventory','production_fixture_complete_inventory'),
+                ('changes','production_fixture_complete_delta'),('native','production_fixture_retained_native_tuple'),
+                ('closure','production_fixture_native_closure'),('review','production_fixture_review')):
+            record=json.loads(json.dumps(original));changes=[]
+            if case=='inventory':
+                name=record['current_inputs']['path'];value=json.loads(git('show',source.FIXTURE_RECORD_COMMIT+':'+name))
+                value['entries'].pop();data=(json.dumps(value)+'\n').encode()
+                record['current_inputs']['sha256']=hashlib.sha256(data).hexdigest();changes=[(name,data)]
+            elif case=='changes':record['changes'].pop()
+            elif case=='native':record['native_record']['record']=source.SOCIAL_RECORD_COMMIT
+            elif case=='closure':record['native_closure']['directory_inventories'].pop()
+            else:record['review']=[True]
+            revision,digest=self.fixture_record_fixture(record,changes)
+            with patch.object(source,'FIXTURE_RECORD_COMMIT',revision),patch.object(source,'FIXTURE_RECORD_SHA256',digest),self.subTest(case=case),self.assertRaisesRegex(ValueError,code):
+                source.load_fixture_fix(ROOT)
+
+    def test_fixture_preserves_old_artifacts_and_exact_parents(self):
+        original=json.loads(git('show',source.FIXTURE_RECORD_COMMIT+':'+source.FIXTURE_RECORD_PATH))
+        for name in (source.INTEGRATION_RECORD_PATH,documentation.CONTEXT_RECORD_PATH,'docs/CONTRIBUTING.md'):
+            revision,digest=self.fixture_record_fixture(original,[(name,b'changed')])
+            with patch.object(source,'FIXTURE_RECORD_COMMIT',revision),patch.object(source,'FIXTURE_RECORD_SHA256',digest),self.subTest(path=name),self.assertRaisesRegex(ValueError,'production_fixture_immutable_source_and_named_metadata'):
+                source.load_fixture_fix(ROOT)
+        revision,digest=self.fixture_record_fixture(original,parent=source.FIXTURE_PREDECESSOR)
+        with patch.object(source,'FIXTURE_RECORD_COMMIT',revision),patch.object(source,'FIXTURE_RECORD_SHA256',digest),self.assertRaisesRegex(ValueError,'production_fixture_record_parent'):
+            source.load_fixture_fix(ROOT)
+        fake_h=self.commit(git('rev-parse',source.FIXTURE_SOURCE+'^{tree}'),[source.INTEGRATION_RECORD_COMMIT])
+        original['source']=fake_h;revision,digest=self.fixture_record_fixture(original,parent=fake_h)
+        with patch.object(source,'FIXTURE_SOURCE',fake_h),patch.object(source,'FIXTURE_RECORD_COMMIT',revision),patch.object(source,'FIXTURE_RECORD_SHA256',digest),self.assertRaisesRegex(ValueError,'production_fixture_source_parent'):
+            source.load_fixture_fix(ROOT)
 
     def test_integration_unpinned_has_no_fallback(self):
         with patch.object(source,'INTEGRATION_RECORD_COMMIT',None),self.assertRaisesRegex(ValueError,'production_integration_not_pinned'):
@@ -248,21 +361,32 @@ class ProductionSourceTest(unittest.TestCase):
         rendering=source.RENDER_SOURCE is not None
         current=source.TRANSPORT_SOURCE is not None
         fixes=source.TEST_SOURCE is not None
-        self.assertEqual(value['type'],source.INTEGRATION_VERSION)
-        self.assertEqual(value['reviewed_source'],source.INTEGRATION_SOURCE)
+        self.assertEqual(value['type'],source.FIXTURE_VERSION)
+        self.assertEqual(value['reviewed_source'],source.FIXTURE_SOURCE)
         self.assertEqual(value['historical_validation_source'],self.record['source'])
         self.assertNotEqual(value['historical_validation_source'],value['reviewed_source'])
-        self.assertEqual(value['predecessor_record'],source.SOCIAL_RECORD_COMMIT)
+        self.assertEqual(value['predecessor_record'],source.INTEGRATION_RECORD_COMMIT)
 
     def test_transport_retains_exact_native_authority(self):
         value=source.qualify(ROOT)
-        self.assertEqual(value['type'],source.INTEGRATION_VERSION)
+        self.assertEqual(value['type'],source.FIXTURE_VERSION)
         record,prior,old=source.load_transport(ROOT)
         binding=native.qualify(ROOT,self.event_base,self.original,self.target,'pull_request',
             'refs/pull/875/merge',self.target,'','master')
         self.assertEqual(binding['record'],documentation.CONTEXT_RECORD_COMMIT)
         self.assertEqual(binding['snapshot'],documentation.CONTEXT_SOURCE)
-        self.assertEqual(binding['record'],value['record'])
+        self.assertEqual(binding['version'],documentation.CONTEXT_VERSION)
+        self.assertEqual(binding['record_sha256'],documentation.CONTEXT_RECORD_SHA256)
+        self.assertEqual(value['record'],source.FIXTURE_RECORD_COMMIT)
+        self.assertEqual(value['record_sha256'],source.FIXTURE_RECORD_SHA256)
+        self.assertNotEqual(binding['record'],value['record'])
+        self.assertEqual(binding['source_applicability'],dict(
+            type='NATIVE-P3-v4-FIXTURE-SOURCE-APPLICABILITY-v1',
+            source_snapshot=source.FIXTURE_SOURCE,record=source.FIXTURE_RECORD_COMMIT,
+            record_sha256=source.FIXTURE_RECORD_SHA256,base=source.INTEGRATION_EVENT_BASE,
+            source=value['source'],target=value['target']))
+        self.assertEqual(binding['source_applicability']['record'],value['record'])
+        self.assertEqual(binding['source_applicability']['record_sha256'],value['record_sha256'])
         self.assertNotIn(source.TRANSPORT_ADDITION['path'],binding['paths'])
         self.assertEqual(record['addition'],source.TRANSPORT_ADDITION)
 
@@ -272,7 +396,7 @@ class ProductionSourceTest(unittest.TestCase):
 
     def test_test_fixes_are_exact_and_keep_native_tuple(self):
         value=source.qualify(ROOT);record,previous,_,_=source.load_test_fixes(ROOT)
-        self.assertEqual(value['type'],source.INTEGRATION_VERSION)
+        self.assertEqual(value['type'],source.FIXTURE_VERSION)
         self.assertEqual(record['source'],source.TEST_SOURCE)
         self.assertEqual(record['native_record'],previous['native_record'])
         self.assertEqual({x['path']:x['after']['sha256'] for x in record['changes']},source.TEST_FIXES)
@@ -363,7 +487,7 @@ class ProductionSourceTest(unittest.TestCase):
 
     def test_rendering_fix_are_exact_and_keep_native_tuple(self):
         value=source.qualify(ROOT);record,previous,_,_,_=source.load_rendering_fix(ROOT)
-        self.assertEqual(value['type'],source.INTEGRATION_VERSION)
+        self.assertEqual(value['type'],source.FIXTURE_VERSION)
         self.assertEqual(record['source'],source.RENDER_SOURCE)
         self.assertEqual(record['native_record'],previous['native_record'])
         self.assertEqual({x['path']:x['after']['sha256'] for x in record['changes']},source.RENDER_FIXES)
@@ -454,8 +578,8 @@ class ProductionSourceTest(unittest.TestCase):
 
     def test_social_fix_are_exact_and_keep_native_tuple(self):
         value=source.qualify(ROOT);record,previous,_,_,_,_=source.load_social_fix(ROOT)
-        self.assertEqual(value['type'],source.INTEGRATION_VERSION)
-        self.assertEqual(value['reviewed_source'],source.INTEGRATION_SOURCE)
+        self.assertEqual(value['type'],source.FIXTURE_VERSION)
+        self.assertEqual(value['reviewed_source'],source.FIXTURE_SOURCE)
         self.assertEqual(record['native_record'],previous['native_record'])
         self.assertEqual({x['path']:x['after']['sha256'] for x in record['changes']},source.SOCIAL_FIXES)
         binding=native.qualify(ROOT,self.event_base,self.original,self.target,'pull_request',

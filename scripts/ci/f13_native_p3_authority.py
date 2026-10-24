@@ -21,6 +21,10 @@ entry, rows, load_record = legacy.entry, legacy.rows, legacy.load_record
 
 
 def qualify(*args):
+    if documentation is not None:
+        import f13_production_source as production
+        if production.fixture_applicable(args[0]):
+            return documentation.qualify_context(*args)
     try:
         return legacy.qualify(*args)
     except Rejected as old_error:
@@ -53,6 +57,7 @@ def verified_record(repo, binding):
         return successor, record
     legacy.require(documentation is not None, 'native_unknown_authority_tuple')
     if key[0] == documentation.CONTEXT_VERSION:
+        documentation.verify_context_binding(repo,binding)
         current = documentation.load_context_record(repo)
         expected = (documentation.CONTEXT_VERSION, current['base'], current['source'],
             documentation.CONTEXT_RECORD_COMMIT, documentation.CONTEXT_RECORD_SHA256)

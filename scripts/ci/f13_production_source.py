@@ -184,8 +184,23 @@ def load_record(repo):
     return record
 
 
+FIXTURE_VERSION='F13-PRODUCTION-SOURCE-v9'
+FIXTURE_SOURCE='3a530edd97cbfe4beb9cea764eb0dd71acec2d2c'
+FIXTURE_PREDECESSOR='c1c340c809aa619a4ee18230b99356959fdb4a40'
+FIXTURE_PATH='scripts/ci/phase0-fixture_test.py'
+FIXTURE_RECORD_PATH='docs/testing/f13-production-source-v9.json'
+FIXTURE_RECORD_COMMIT='280d172b1ff9c9cd6b6ec02c9f924cac0148b354'
+FIXTURE_RECORD_SHA256='062fbe47a0bb10c0b626173961db814148cb22ac72a348ba9618958937f1c305'
+FIXTURE_AFTER_SHA256='4a358406e826b70832f774e69658d444690e708e0fef0bf82f669545b7cc91ab'
+FIXTURE_BEFORE_SHA256='c681dd23967350f10cdecf278dfd7b4f0b3cd55491e85dfc000845ab80a0dce3'
+
+def fixture_applicable(repo,target='HEAD'):
+    return git(repo,'merge-base',FIXTURE_SOURCE,target).decode().strip()==FIXTURE_SOURCE
+
+
 def qualify(repo):
     require(Path(repo).resolve()==ROOT.resolve(),'production_actual_root')
+    if fixture_applicable(repo):return qualify_fixture_fix(repo)
     if INTEGRATION_SOURCE is not None and git(repo,'merge-base',INTEGRATION_SOURCE,'HEAD').decode().strip()==INTEGRATION_SOURCE:
         return qualify_integration(repo)
     require(Path(repo).resolve()==ROOT.resolve(),'production_actual_root')
@@ -842,6 +857,110 @@ def qualify_integration(repo):
         admission=False,runtime_pass=False,current_or_future_path_authority=False)
 
 
+def load_fixture_fix(repo):
+    prior=load_integration(repo)
+    require(FIXTURE_RECORD_COMMIT is not None and FIXTURE_RECORD_SHA256 is not None,'production_fixture_not_pinned')
+    record=json.loads(fixed_artifact(repo,FIXTURE_RECORD_COMMIT,dict(path=FIXTURE_RECORD_PATH,
+        sha256=FIXTURE_RECORD_SHA256)),object_pairs_hook=gitutil.pairs)
+    require(set(record)=={'version','status','source','source_tree','predecessor','event_base','changes',
+        'delta_sha256','native_record','native_closure','current_inputs','evidence','review','runtime_pass',
+        'activation_authority','current_or_future_path_authority'},'production_fixture_shape')
+    require(record['version']==FIXTURE_VERSION and record['status']=='SOURCE_CONSUMPTION_CONTRACT_CLEAR'
+        and all(record[k] is False for k in ('runtime_pass','activation_authority','current_or_future_path_authority')),
+        'production_fixture_no_authority')
+    require(record['source']==FIXTURE_SOURCE and record['predecessor']==dict(record=INTEGRATION_RECORD_COMMIT,
+        path=INTEGRATION_RECORD_PATH,sha256=INTEGRATION_RECORD_SHA256,carrier=FIXTURE_PREDECESSOR),
+        'production_fixture_lineage')
+    require(record['event_base']==INTEGRATION_EVENT_BASE,'production_fixture_event_base')
+    require(git(repo,'rev-list','--parents','-n','1',FIXTURE_SOURCE).decode().split()==
+        [FIXTURE_SOURCE,FIXTURE_PREDECESSOR],'production_fixture_source_parent')
+    require(git(repo,'rev-list','--parents','-n','1',FIXTURE_RECORD_COMMIT).decode().split()==
+        [FIXTURE_RECORD_COMMIT,FIXTURE_SOURCE],'production_fixture_record_parent')
+    require(record['source_tree']==git(repo,'rev-parse',FIXTURE_SOURCE+'^{tree}').decode().strip(),
+        'production_fixture_source_tree')
+    git(repo,'merge-base','--is-ancestor',INTEGRATION_RECORD_COMMIT,FIXTURE_PREDECESSOR)
+    require(set(git(repo,'diff','--name-only',INTEGRATION_RECORD_COMMIT,FIXTURE_PREDECESSOR).decode().splitlines())
+        <=set(SUCCESSOR_CARRIERS),'production_fixture_predecessor_carriers')
+    before={p:v.rstrip('\0') for p,v in entries(repo,FIXTURE_PREDECESSOR).items()}
+    after={p:v.rstrip('\0') for p,v in entries(repo,FIXTURE_SOURCE).items()}
+    require({p:v for p,v in before.items() if p!=FIXTURE_PATH}=={p:v for p,v in after.items() if p!=FIXTURE_PATH},
+        'production_fixture_only_exact_test')
+    change=dict(path=FIXTURE_PATH,disposition='ORIGINAL_CONTRIBUTION_GATES_REQUIRED')
+    for label,tree,expected in (('before',before,FIXTURE_BEFORE_SHA256),('after',after,FIXTURE_AFTER_SHA256)):
+        entry=tree[FIXTURE_PATH];require(entry.startswith('100644 blob '),'production_fixture_file_mode')
+        raw=git(repo,'cat-file','blob',entry.split()[2]);require(sha(raw)==expected,'production_fixture_exact_bytes')
+        change[label]=dict(entry=entry,bytes=len(raw),sha256=sha(raw))
+    require(record['changes']==[change] and record['delta_sha256']==sha(git(repo,'diff','--raw','--no-abbrev',
+        '--no-renames',FIXTURE_PREDECESSOR,FIXTURE_SOURCE)),'production_fixture_complete_delta')
+    reference={p:v.rstrip('\0') for p,v in entries(repo,REFERENCE).items()}
+    inventory=json.loads(fixed_artifact(repo,FIXTURE_RECORD_COMMIT,record['current_inputs']),object_pairs_hook=gitutil.pairs)
+    require(inventory==dict(source=FIXTURE_SOURCE,reference=REFERENCE,
+        delta_sha256=sha(git(repo,'diff','--raw','--no-abbrev','--no-renames',REFERENCE,FIXTURE_SOURCE)),
+        entries=[dict(path=p,reference_entry=reference.get(p,''),current_entry=after.get(p,''),
+        disposition='ORIGINAL_CONTRIBUTION_GATES_REQUIRED') for p in git(repo,'diff','--name-only',REFERENCE,FIXTURE_SOURCE).decode().splitlines()]),
+        'production_fixture_complete_inventory')
+    import f13_native_p3_documentation as documentation
+    native=documentation.load_context_record(repo)
+    expected_native=dict(version=documentation.CONTEXT_VERSION,source=documentation.CONTEXT_SOURCE,
+        record=documentation.CONTEXT_RECORD_COMMIT,path=documentation.CONTEXT_RECORD_PATH,sha256=documentation.CONTEXT_RECORD_SHA256)
+    require(record['native_record']==expected_native,'production_fixture_retained_native_tuple')
+    raw_native=json.loads(fixed_artifact(repo,documentation.CONTEXT_RECORD_COMMIT,
+        dict(path=documentation.CONTEXT_RECORD_PATH,sha256=documentation.CONTEXT_RECORD_SHA256)),object_pairs_hook=gitutil.pairs)
+    closure=raw_native['closure'];require(record['native_closure']==closure,'production_fixture_native_closure')
+    native_tree=documentation.tree_entries(repo,documentation.CONTEXT_SOURCE)
+    for name in set(closure['projection_paths']+closure['context_paths']+closure['compiled_paths']):
+        require(name!=FIXTURE_PATH and native_tree.get(name)==after.get(name),'production_fixture_native_entry')
+    for row in closure['directory_inventories']:
+        require({p:v for p,v in after.items() if str(Path(p).parent).replace('\\','/')==row['directory']}==row['entries'],
+            'production_fixture_native_directory')
+    require({p:v for p,v in native_tree.items() if p.startswith('src/backend/voice/')}==
+        {p:v for p,v in after.items() if p.startswith('src/backend/voice/')},'production_fixture_voice_tree')
+    names=[]
+    for proof in record['evidence']:
+        fixed_artifact(repo,FIXTURE_RECORD_COMMIT,proof);names.append(proof['path'])
+    require(names and names==sorted(set(names)) and record['review'] and all(p in names for p in record['review']),
+        'production_fixture_review')
+    additions={FIXTURE_RECORD_PATH,record['current_inputs']['path'],*names}
+    recorded={p:v.rstrip('\0') for p,v in entries(repo,FIXTURE_RECORD_COMMIT).items()}
+    require(len(additions)==2+len(names) and not set(after)&additions and set(recorded)-set(after)==additions
+        and all(recorded.get(p)==v for p,v in after.items() if p!='.agent/execplans/pr875-current-native-source.md'),
+        'production_fixture_immutable_source_and_named_metadata')
+    return (record,*prior)
+
+
+def qualify_fixture_fix(repo):
+    records=load_fixture_fix(repo);record,old=records[0],records[-1]
+    target=git(repo,'rev-parse','HEAD').decode().strip()
+    event={k:os.environ.get(k,'') for k in ('GITHUB_EVENT_NAME','GITHUB_REF','GITHUB_SHA','GITHUB_BASE_REF','VOICE_CI_PUSH_BEFORE_SHA')}
+    pr=event['GITHUB_EVENT_NAME']=='pull_request' and re.fullmatch(r'refs/pull/[1-9][0-9]*/merge',event['GITHUB_REF']) and event['GITHUB_BASE_REF']=='master'
+    push=event['GITHUB_EVENT_NAME']=='push' and event['GITHUB_REF']=='refs/heads/master' and event['VOICE_CI_PUSH_BEFORE_SHA']==INTEGRATION_EVENT_BASE
+    require(event['GITHUB_SHA']==target and (pr or push),'production_actual_master_event')
+    parents=git(repo,'rev-list','--parents','-n','1',target).decode().split()
+    require(len(parents)==3 and parents[1]==INTEGRATION_EVENT_BASE,'production_actual_ordered_parents')
+    source=parents[2];git(repo,'merge-base','--is-ancestor',FIXTURE_RECORD_COMMIT,source)
+    require(source!=FIXTURE_RECORD_COMMIT,'production_later_carrier')
+    require(git(repo,'rev-parse',source+'^{tree}')==git(repo,'rev-parse',target+'^{tree}'),'production_source_result_tree')
+    require(set(git(repo,'diff','--name-only',FIXTURE_RECORD_COMMIT,source).decode().splitlines())<=set(SUCCESSOR_CARRIERS),
+        'production_only_reviewed_carrier_delta')
+    for name in SUCCESSOR_CARRIERS:
+        meta=gitutil.entry(repo,source,name)
+        require(meta['mode']=='100644' and meta['type']=='blob','production_carrier_mode')
+        require(git(repo,'cat-file','blob',meta['oid'])==(ROOT/name).read_bytes(),'production_executed_carrier')
+    import f13_native_p3_documentation as documentation
+    current=documentation.qualify_context(repo,INTEGRATION_EVENT_BASE,source,target,event['GITHUB_EVENT_NAME'],event['GITHUB_REF'],
+        event['GITHUB_SHA'],event['VOICE_CI_PUSH_BEFORE_SHA'],event['GITHUB_BASE_REF'])
+    require(record['native_record']==dict(version=current['version'],source=current['snapshot'],
+        record=current['record'],path=documentation.CONTEXT_RECORD_PATH,sha256=current['record_sha256']),
+        'production_fixture_actual_retained_native')
+    require(current['source_applicability']==documentation.fixture_bridge_binding(source,target),
+        'production_fixture_current_native_bridge')
+    return dict(type=FIXTURE_VERSION,record=FIXTURE_RECORD_COMMIT,record_sha256=FIXTURE_RECORD_SHA256,
+        predecessor_record=INTEGRATION_RECORD_COMMIT,historical_validation_source=old['source'],
+        reviewed_source=record['source'],reviewed_tree=record['source_tree'],base=INTEGRATION_EVENT_BASE,source=source,target=target,
+        historical_collector=HISTORICAL_SCOPE,native_content_baseline=NATIVE_CONTENT_BASE,
+        current_inputs_sha256=record['current_inputs']['sha256'],event=event,
+        admission=False,runtime_pass=False,current_or_future_path_authority=False)
+
 def validate_manual_supplement(repo,record):
     """Preserve the original facts predicate and verify its complete closure."""
     raw=fixed_artifact(repo,SUCCESSOR_RECORD_COMMIT,record['manual_supplement'])
@@ -884,7 +1003,7 @@ def materialize(repo,destination):
             data=archive.read('objects/'+item['sha256'])
             require(len(data)==item['bytes'] and sha(data)==item['sha256'],'production_materialized_historical_hash')
             path=folder/name.lstrip('/');path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
-    if binding['type'] in ('F13-PRODUCTION-SOURCE-v3',TRANSPORT_VERSION,TEST_VERSION,RENDER_VERSION,SOCIAL_VERSION,INTEGRATION_VERSION):
+    if binding['type'] in ('F13-PRODUCTION-SOURCE-v3',TRANSPORT_VERSION,TEST_VERSION,RENDER_VERSION,SOCIAL_VERSION,INTEGRATION_VERSION,FIXTURE_VERSION):
         current,_=load_successor(repo)
         supplemental=validate_manual_supplement(repo,current)
         destination=folder/'fixed3071-unit/manual'
