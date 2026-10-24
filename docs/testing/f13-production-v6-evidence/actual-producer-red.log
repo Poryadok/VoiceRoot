@@ -1,0 +1,86 @@
+== F05-F06: local provisioning and migration entrypoints ==
+== F07-F08: cluster database and migration wiring ==
+== F09-F10: secrets and shipped Voice readiness ==
+== F11: CI routing ==
+== F12: canonical documentation ==
+== F13/G7: source-disabled scope boundary ==
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 0.692s
+
+OK
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 3.289s
+
+OK
+...............
+----------------------------------------------------------------------
+Ran 15 tests in 0.143s
+
+OK
+...................
+----------------------------------------------------------------------
+Ran 19 tests in 9.447s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.481s
+
+OK
+......
+----------------------------------------------------------------------
+Ran 6 tests in 1.460s
+
+OK
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 44.130s
+
+OK
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 4.366s
+
+OK
+........................
+----------------------------------------------------------------------
+Ran 24 tests in 30.718s
+
+OK
+......
+----------------------------------------------------------------------
+Ran 6 tests in 8.155s
+
+OK
+HEAD is now at 5c53b1ccd4 Merge 122bcedd7757139d441bc7b40220d98e21b117c4 into 288e6a4fb963b3d5775f885e14ecfda1b603a4ff
+.................................
+----------------------------------------------------------------------
+Ran 33 tests in 223.973s
+
+OK
+HEAD is now at 5c53b1ccd4 Merge 122bcedd7757139d441bc7b40220d98e21b117c4 into 288e6a4fb963b3d5775f885e14ecfda1b603a4ff
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 5.004s
+
+OK
+CI_DIAG stage=f13-source-base repo=/tmp/pr875-f13-k7-122bcedd/tmp-parent/tmp.J2GD3FetSB/f13-nested-guarded-crisscross-fixture commit=f66433990d122679286d0fc7babda64d6dcf2100 first_parent=b6835c11c9ca89b9680406755141d90a6425bd62 source_head=d3b4b3d4f603a3639c1101797910db09572aae89 base=736009bf4ab2dcd1656a404019c2cb10227511f2 target=f66433990d122679286d0fc7babda64d6dcf2100 parent_index=2
+Fast-forwarding to: octopus-voice
+Trying simple merge with octopus-bot
+Trying simple merge with octopus-ui
+Fast-forwarding to: octopus-voice
+Trying simple merge with octopus-duplicate
+Trying simple merge with octopus-bot
+CI_DIAG stage=f13-collector category=duplicate_guarded_owner path=src/backend/voice/main.go commit=557fc340f4438d7427b8770127eeefaf889578ed aggregate_head=unknown owner=557fc340f4438d7427b8770127eeefaf889578ed source_head=71b4329c83953ba52b27775d9e212f66391a3ec9 stored=100644:blob:06ab7d0f9a35a7d1070711496d6ca1cb892a258f target=100644:blob:06ab7d0f9a35a7d1070711496d6ca1cb892a258f predicate=incremental_or_qualified_supersession_required:1
+CI_DIAG stage=f13-source-base repo=/tmp/pr875-f13-k7-122bcedd/tmp-parent/tmp.J2GD3FetSB/f13-octopus-fixture commit=bd7eb862e9215f775689ed9102711fe8c4793516 first_parent=d4ce8d5ac1637530c696e444a2b4a6d93221de15 source_head=eb8722334c0a387a2e6087a366ad5c42835b0016 base=d4ce8d5ac1637530c696e444a2b4a6d93221de15 target=bd7eb862e9215f775689ed9102711fe8c4793516 parent_index=2
+CI_DIAG stage=f13-source-base repo=/tmp/pr875-f13-k7-122bcedd/tmp-parent/tmp.J2GD3FetSB/f13-octopus-fixture commit=30d3f08695586b060f421ae0f23f03731d7fd6c2 first_parent=b22f322e33b669825bf2863929134203af602d37 source_head=a174e36b58a13c16061ea784c5c1bb4eb5feb7b3 base=b22f322e33b669825bf2863929134203af602d37 target=30d3f08695586b060f421ae0f23f03731d7fd6c2 parent_index=2
+F13 octopus distinct-source and rejection fixtures: PASS
+CI_DIAG stage=f13-collector category=duplicate_guarded_owner path=src/backend/voice/repeated.go commit=7c8ab3b2342579296d2a6d978617990978f856ea aggregate_head=unknown owner=5e0becd0b28a4282183af82e123e8792e4b48f72 source_head=57214f73466724e2c77899a5b9a0876ce9427fed stored=100644:blob:ef01e8d7bfdf3c9be6723ce6eb95904b6ce86770 target=100644:blob:ef01e8d7bfdf3c9be6723ce6eb95904b6ce86770 predicate=incremental_or_qualified_supersession_required:1
+CI_DIAG stage=f13-collector category=duplicate_guarded_owner path=src/backend/voice/repeated.go commit=7c8ab3b2342579296d2a6d978617990978f856ea aggregate_head=unknown owner=5e0becd0b28a4282183af82e123e8792e4b48f72 source_head=57214f73466724e2c77899a5b9a0876ce9427fed stored=100644:blob:ef01e8d7bfdf3c9be6723ce6eb95904b6ce86770 target=100644:blob:ef01e8d7bfdf3c9be6723ce6eb95904b6ce86770 predicate=incremental_or_qualified_supersession_required:1
+CI_DIAG stage=f13-source-base repo=/tmp/pr875-f13-k7-122bcedd/tmp-parent/tmp.J2GD3FetSB/f13-contribution-fixture commit=575c2eb569321eb9e9100bb32aa887448e1a8ab9 first_parent=84df9e64430503aba5da278fb0daf6d130f6c741 source_head=6c872c26ca9dcebbe9d534e6c2682f5387b5848b base=84df9e64430503aba5da278fb0daf6d130f6c741 target=HEAD parent_index=2
+CI_DIAG stage=f13-reviewed-test-merge qualification={"first": "2e8c29f26c4e95cead8c0634256c409af3db14a8", "historical_only": true, "merge": "31276e7cdd661ec93cb9c2e0369a0f102adf7efd", "path": "src/backend/role/permissions/permissions_test.go", "record": "aea603c70303759b6709b3e9eac13584cb80c789", "record_sha256": "92bdff9d8a0cac4b666eafbd33cff17131a1d1eab769f5f5fc3be11ab4e6320d", "retain_runtime_and_content_taint": true, "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c6", "source": "10b3b7ba032df521818ce9a90852352298b53b21", "source_base": "698d4f064f032ea74abf3ede2017100b26c8ee69", "version": "F13-REVIEWED-TEST-MERGE-v1"}
+F13 collector failure: category=merge_tree_mismatch base_origin=push-before
+F13: develop contribution provenance is missing or ambiguous
+CI_DIAG stage=unexpected-command source_line=1 exit_status=1

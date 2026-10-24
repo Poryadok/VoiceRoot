@@ -1,0 +1,54 @@
+[rtk] /!\ No hook installed — run `rtk init -g` for automatic token savings
+Cloning into '/tmp/historicalcompositionred'...
+done.
+Note: switching to 'ec19a5945ee5985dd2cc6a7d7af3bb293ee9bb98'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+Python 3.12.15
+git version 2.39.5
+FFF
+======================================================================
+FAIL: test_frozen_diff_rendering_ignores_default_abbreviation (f13_historical_composition_test.HistoricalCompositionTests.test_frozen_diff_rendering_ignores_default_abbreviation) (core_abbrev='7')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/historicalcompositionred/scripts/ci/f13_historical_composition_test.py", line 224, in test_frozen_diff_rendering_ignores_default_abbreviation
+    self.assertEqual(result.returncode, 0, result.stderr)
+AssertionError: 1 != 0 : Historical composition rejected: artifact_bytes
+
+
+======================================================================
+FAIL: test_frozen_diff_rendering_ignores_default_abbreviation (f13_historical_composition_test.HistoricalCompositionTests.test_frozen_diff_rendering_ignores_default_abbreviation) (core_abbrev='10')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/historicalcompositionred/scripts/ci/f13_historical_composition_test.py", line 224, in test_frozen_diff_rendering_ignores_default_abbreviation
+    self.assertEqual(result.returncode, 0, result.stderr)
+AssertionError: 1 != 0 : Historical composition rejected: artifact_bytes
+
+
+======================================================================
+FAIL: test_frozen_diff_rendering_ignores_default_abbreviation (f13_historical_composition_test.HistoricalCompositionTests.test_frozen_diff_rendering_ignores_default_abbreviation) (core_abbrev='40')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/historicalcompositionred/scripts/ci/f13_historical_composition_test.py", line 224, in test_frozen_diff_rendering_ignores_default_abbreviation
+    self.assertEqual(result.returncode, 0, result.stderr)
+AssertionError: 1 != 0 : Historical composition rejected: artifact_bytes
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.900s
+
+FAILED (failures=3)

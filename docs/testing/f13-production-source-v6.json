@@ -1,0 +1,143 @@
+{
+  "activation_authority": false,
+  "changes": [
+    {
+      "after": {
+        "bytes": 12305,
+        "entry": "100644 blob 7d4dc236a606f9a76857c06fd9589260024e0ea5\tscripts/ci/f13_historical_composition.py\u0000",
+        "sha256": "e1ed9f7f4c779f83fa1872a34a00dd7181c93c01cab3a9c043457a50b829b2c1"
+      },
+      "before": {
+        "bytes": 12291,
+        "entry": "100644 blob f7da0055dbbec80b0f85a778a4d84bcf2940ef18\tscripts/ci/f13_historical_composition.py\u0000",
+        "sha256": "f6e0701687770eab72d2ef5aee9372ee6374635f56f7147677c78f5e881c08f9"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/ci/f13_historical_composition.py"
+    },
+    {
+      "after": {
+        "bytes": 15876,
+        "entry": "100644 blob 5face5b866382fa8dd0509ff30c71315a12d5a63\tscripts/ci/f13_historical_composition_test.py\u0000",
+        "sha256": "2f4cdd12d2fc9a913a8f37fccdc5bf5d675544c0fd1fdadb178a2e4b9f79989b"
+      },
+      "before": {
+        "bytes": 14332,
+        "entry": "100644 blob 80751b3ba7bb0c476071f4e8049506431c2ac648\tscripts/ci/f13_historical_composition_test.py\u0000",
+        "sha256": "8cfb8d9662200df3bb53d944a2ed0dfab47d4e408a48e645bbd8433379611064"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/ci/f13_historical_composition_test.py"
+    }
+  ],
+  "current_inputs": {
+    "path": "docs/testing/f13-production-current-inputs-v6.json",
+    "sha256": "5e58275341fecf8c5ebb7b65f89f6919fdb744307f2e55a1704caff0e66e0c0c"
+  },
+  "current_or_future_path_authority": false,
+  "delta_sha256": "670e67199f24c1abe366192e58d749089a06f6d9d41cd0de1f42d85119dbebcf",
+  "evidence": [
+    {
+      "path": "docs/testing/f13-production-v6-evidence/actual-artifact-mismatch.json",
+      "sha256": "1a436ebc7c9b46691f9e2be3052dc1b7588ea0e0635b723de274fdbc62524b96"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/actual-producer-red.log",
+      "sha256": "49d095f9a5f2c97f31bed2cfc1ca8f097a946d98f35412c577671f139cf60f0e"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/actual-ten-digit.diff",
+      "sha256": "60b876b7e549fde158eacdcfe77295754f9ec80122169746efb504b18acbb6a8"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/component-green.log",
+      "sha256": "73d0b0f9e5fb24c574e98b11a0f29b61a87614bb2445b0be50dd142aada25a3b"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/component-receipt.json",
+      "sha256": "9962a8514831f4991f466c89eddcf6214d36b304220586d87f21049877c6c612"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/component-red.log",
+      "sha256": "6afb340179f24b03fd2f7c2c5be20254d5240828e8997186b48f0da85add6861"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/exact-nine-digit.diff",
+      "sha256": "c68990f4fcd07ed5b1f3be4b6746667015650781e49beeac57ee8d64321010b2"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/historical-abbrev9-core10.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/historical-abbrev9-core10.log",
+      "sha256": "bab23f3fa418f2c1b6e0b12e0fb9db062eb24829c94663345299818d9447be5f"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/historical-abbrev9-core40.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/historical-abbrev9-core40.log",
+      "sha256": "bab23f3fa418f2c1b6e0b12e0fb9db062eb24829c94663345299818d9447be5f"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/historical-abbrev9-core7.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/historical-abbrev9-core7.log",
+      "sha256": "bab23f3fa418f2c1b6e0b12e0fb9db062eb24829c94663345299818d9447be5f"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/historical-abbrev9-default.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/historical-abbrev9-default.log",
+      "sha256": "bab23f3fa418f2c1b6e0b12e0fb9db062eb24829c94663345299818d9447be5f"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/independent-source-review.md",
+      "sha256": "c672ccde90d6666fc694bcdd1b2db080631dc50406ff160d132a55c1827730cd"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/provenance.txt",
+      "sha256": "f261fb996f184b1c4365ec491fee0669f94cb25b2cc730b93f86a2a7b7635e99"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/qualification-receipt.json",
+      "sha256": "958011458d9b245f6380222540582ee1f609f55724e3aad618d04847722216ac"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/source-applicability-review.md",
+      "sha256": "5981262677eefd7358ed75bb6b442c0decfa09b6b2a2be17ca0b3c3c1f73e5ff"
+    },
+    {
+      "path": "docs/testing/f13-production-v6-evidence/transport-manifest.json",
+      "sha256": "c96820ea37c70393c6408ab5fe7418da7dd5a18d91409beac806375d0b9f1f25"
+    }
+  ],
+  "native_record": {
+    "commit": "f87ee933aa1f599284e1932e44bf32b4e2af48ba",
+    "path": "docs/testing/native-p3-source-v3.json",
+    "sha256": "4ed3acd7cecfef97d03724115e57bf418600bd8e3210d992fd7ed1a325de8a67",
+    "source": "e409cd05c40e857b61109513eb2154f968970c02",
+    "version": "NATIVE-P3-SOURCE-v3"
+  },
+  "predecessor": {
+    "carrier": "122bcedd7757139d441bc7b40220d98e21b117c4",
+    "path": "docs/testing/f13-production-source-v5.json",
+    "record": "d0554787d0363548106fb869dcfa8e9cc972b6af",
+    "sha256": "26d4f8235d2d192fcf1e2691bd92337e390dbe443c14b6e7afa35171227decdc"
+  },
+  "review": [
+    "docs/testing/f13-production-v6-evidence/independent-source-review.md",
+    "docs/testing/f13-production-v6-evidence/source-applicability-review.md"
+  ],
+  "runtime_pass": false,
+  "source": "5a817a37e145c10d3b2b87b03454d777e36b10c4",
+  "source_tree": "6b9eab0ac6b379bfe7932ea7251bc1b67b976c2f",
+  "status": "SOURCE_CONSUMPTION_CONTRACT_CLEAR",
+  "version": "F13-PRODUCTION-SOURCE-v6"
+}
