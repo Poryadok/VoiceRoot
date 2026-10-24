@@ -1,0 +1,62 @@
+{
+  "schema": "moderation-automod-budget-test-receipt-v1",
+  "purpose": "Local execution evidence for the bounded/skipped AutoMod test; no source edits by runner.",
+  "controlled_red": {
+    "test_overlay": "D:/Git/Voice/tmp/pr875-repair/moderation-budget/setup-expired-red_test.go",
+    "overlay_sha256": "bbc7df9c5314bad2e993efd035bf5de0c6d82b1e75a100974ecf65c13ceb336a",
+    "command": "go test ./internal/grpcsvc -run '^TestAutoModScanOutcomes_BoundedAndSkipped/budget$' -count=1",
+    "result": "EXPECTED CONTROLLED RED",
+    "assertion": "TestAutoModScanOutcomes_BoundedAndSkipped/budget: expected skipped count 1, actual int64(0), test line 74.",
+    "context": "This was a scheduler-controlled overlay with `<-parent.Done()` inserted before CheckMessage. It is not a RED against an unmodified test.",
+    "log": "D:/Git/Voice/tmp/pr875-repair/moderation-budget/controlled-red.log",
+    "log_sha256": "93e00d5bd7eb2bd5df5b94130da114a7d6d3affdc1adf6c662b29f93477391b1"
+  },
+  "green": {
+    "checkout": "D:/Git/Voice/.treehouse/Voice-451d38/47/Voice",
+    "test_file": "src/backend/moderation/internal/grpcsvc/automod_scan_outcomes_test.go",
+    "test_file_sha256": "5fbc9e9e92d193045605018056d799f3653543d7b9fa8d017efd5fc5042cb4bc",
+    "command": "go test -race ./internal/grpcsvc -run '^TestAutoModScanOutcomes_BoundedAndSkipped$' -count=500 -timeout=180s",
+    "result": "PASS",
+    "elapsed_seconds": 1.771,
+    "log": "D:/Git/Voice/tmp/pr875-repair/moderation-budget/green-race-count500-retry2.log",
+    "log_sha256": "910042877ea791610bf17e50466d1846ae8cf9f2c1a7f54bbb73b465e5c06d21",
+    "package_suite": {
+      "command": "go test -short -race ./... -count=1 -timeout=300s",
+      "result": "PASS",
+      "packages": [
+        "voice/backend/moderation",
+        "voice/backend/moderation/internal/grpcsvc",
+        "voice/backend/moderation/internal/moderationevents",
+        "voice/backend/moderation/internal/store"
+      ],
+      "packages_without_tests": [
+        "voice/backend/moderation/internal/authclient",
+        "voice/backend/moderation/internal/mmclient",
+        "voice/backend/moderation/internal/userclient"
+      ],
+      "log": "D:/Git/Voice/tmp/pr875-repair/moderation-budget/green-short-race.log",
+      "log_sha256": "efbdf5a490cd6ffeeeba2c5f9f7d83b1e2ce9d415216d0e0ce99848dd9fadc1f"
+    },
+    "vet": {
+      "command": "go vet ./internal/grpcsvc",
+      "result": "PASS",
+      "log": "D:/Git/Voice/tmp/pr875-repair/moderation-budget/green-vet.log",
+      "log_sha256": "a4ed4c2c830adf807283a578ea7ee8b2f659416a86da69815d6147237e7d7f36"
+    }
+  },
+  "environment": {
+    "image": "golang:1.26.9-bookworm",
+    "go": "go1.26.9 linux/amd64",
+    "cpu_limit": 2,
+    "memory_limit": "4 GiB",
+    "go_module_cache": "voice-go-modcache",
+    "go_build_cache": "voice-go-buildcache",
+    "green_source": "immutable private container copy made from WT47; source file SHA verified before tests"
+  },
+  "setup_notes": [
+    "Moderation module uses local backend module replacements. The private runner copied the backend source tree read-only from WT47 before tests. Initial compile attempts identified missing sibling replacement paths; the final run used the complete private backend snapshot."
+  ],
+  "limitations": [
+    "This is scoped moderation unit/race/vet evidence. No database, Compose, or service stack was started."
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "files": [
+    {
+      "bytes": 2487,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/38330-ci-failures/independent-test-review.md",
+      "path": "docs/testing/f13-production-v5-evidence/independent-test-review.md",
+      "sha256": "afdacf436990abe1c0996be89e3107edd20a870dc8e81cf71647bcc1c79cdf55"
+    },
+    {
+      "bytes": 139,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/messaging-role-nats/baseline-count100-retry2.log",
+      "path": "docs/testing/f13-production-v5-evidence/messaging-baseline-count100.log",
+      "sha256": "5e82597bef902129bf057824a6311b407538c1867563072e5a18d201a3ec0b22"
+    },
+    {
+      "bytes": 139,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/messaging-role-nats/candidate-count100.log",
+      "path": "docs/testing/f13-production-v5-evidence/messaging-candidate-count100.log",
+      "sha256": "92554e36e53928a77054f27cb04d09e9cee945537f237623f51e72a8df7da257"
+    },
+    {
+      "bytes": 27898,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/38330-ci-failures/120739621840.log",
+      "path": "docs/testing/f13-production-v5-evidence/messaging-hosted-red.log",
+      "sha256": "e7ec082bacd9e5080351a16050c47930bcc59d43bd807ef914a00c22b8803d6a"
+    },
+    {
+      "bytes": 139,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/messaging-role-nats/candidate-race-count10.log",
+      "path": "docs/testing/f13-production-v5-evidence/messaging-race-count10.log",
+      "sha256": "90e9ff497c9ccb5c8b03e55990f900e92c1e5e0e8b12320a66a298b419a58606"
+    },
+    {
+      "bytes": 3685,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/messaging-role-nats/receipt.json",
+      "path": "docs/testing/f13-production-v5-evidence/messaging-receipt.json",
+      "sha256": "2bec02c840afb2deedeab36b0e295c6d9c00768a182fc18715e7c40739715d8d"
+    },
+    {
+      "bytes": 140,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/messaging-role-nats/candidate-short-count20.log",
+      "path": "docs/testing/f13-production-v5-evidence/messaging-short-count20.log",
+      "sha256": "3023a5b73278e310902c0a0886a45cef68d59fa1dddc38e136b7866dbd229822"
+    },
+    {
+      "bytes": 4731,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/moderation-budget/setup-expired-red_test.go",
+      "path": "docs/testing/f13-production-v5-evidence/moderation-controlled-overlay.go.txt",
+      "sha256": "bbc7df9c5314bad2e993efd035bf5de0c6d82b1e75a100974ecf65c13ceb336a"
+    },
+    {
+      "bytes": 694,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/moderation-budget/controlled-red.log",
+      "path": "docs/testing/f13-production-v5-evidence/moderation-controlled-red.log",
+      "sha256": "93e00d5bd7eb2bd5df5b94130da114a7d6d3affdc1adf6c662b29f93477391b1"
+    },
+    {
+      "bytes": 3507,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/moderation-budget/evidence.md",
+      "path": "docs/testing/f13-production-v5-evidence/moderation-evidence.md",
+      "sha256": "93ef4bb8c37eda1d25e8d9df34ba0fdbe0fc6d9e7fe107c7edda995f3927f9c8"
+    },
+    {
+      "bytes": 27603,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/38330-ci-failures/120739621827.log",
+      "path": "docs/testing/f13-production-v5-evidence/moderation-hosted-red.log",
+      "sha256": "6c3b0c5deca7715888f417568876f1b83e4b3ebd5adb7dd6b8714b2ec3d1f9e2"
+    },
+    {
+      "bytes": 134,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/moderation-budget/green-race-count500-retry2.log",
+      "path": "docs/testing/f13-production-v5-evidence/moderation-race-count500.log",
+      "sha256": "910042877ea791610bf17e50466d1846ae8cf9f2c1a7f54bbb73b465e5c06d21"
+    },
+    {
+      "bytes": 3368,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/moderation-budget/receipt.json",
+      "path": "docs/testing/f13-production-v5-evidence/moderation-receipt.json",
+      "sha256": "6e03e895cba6ba9e4e713e84525747e4f7fc28da86cc9dc04e8eefd93d913517"
+    },
+    {
+      "bytes": 581,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/moderation-budget/green-short-race.log",
+      "path": "docs/testing/f13-production-v5-evidence/moderation-short-race.log",
+      "sha256": "efbdf5a490cd6ffeeeba2c5f9f7d83b1e2ce9d415216d0e0ce99848dd9fadc1f"
+    },
+    {
+      "bytes": 79,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/moderation-budget/green-vet.log",
+      "path": "docs/testing/f13-production-v5-evidence/moderation-vet.log",
+      "sha256": "a4ed4c2c830adf807283a578ea7ee8b2f659416a86da69815d6147237e7d7f36"
+    }
+  ],
+  "schema": "F13-v5-evidence-transport-v1",
+  "scope": "Exact raw local and hosted evidence; no new runtime or path authority."
+}

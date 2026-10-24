@@ -1,0 +1,70 @@
+{
+  "schema": "messaging-jetstream-readiness-stress-receipt-v1",
+  "scope": "Local Go tests only; no Auth/Compose/runtime services or source edits by runner.",
+  "baseline": {
+    "checkout": "D:/Git/Voice/.treehouse/Voice-451d38/49/Voice",
+    "git_head": "38330e20dfb23bb8be2298ba3e70182e01414481",
+    "git_status_at_snapshot": "clean",
+    "test_file": "src/backend/messaging/internal/messageevents/jetstream_test.go",
+    "test_file_sha256": "6d725e787c37010f82f1114c8d32a4ddb5b9fca795c635606512b475441977ac",
+    "command": "go test -short ./internal/messageevents -run '^TestJetStreamPublisher_MessageEditedAndDeleted$' -count=100 -cpu=1,2 -failfast",
+    "result": "PASS",
+    "elapsed_seconds": 6.076,
+    "log": "D:/Git/Voice/tmp/pr875-repair/messaging-role-nats/baseline-count100-retry2.log",
+    "log_sha256": "5e82597bef902129bf057824a6311b407538c1867563072e5a18d201a3ec0b22"
+  },
+  "candidate": {
+    "checkout": "D:/Git/Voice/.treehouse/Voice-451d38/49/Voice",
+    "source_file": "src/backend/messaging/internal/messageevents/jetstream_test.go",
+    "source_file_sha256": "827a06e8a46a1fe4e517b3b356c3293596ef28f874c55c96c44724c23e780fdc",
+    "author_git_blob": "fee6696610c4ca3f0e79e389914b8905c4f7274e",
+    "copied_to_owned_container_before_tests": true,
+    "runs": [
+      {
+        "command": "go test -short ./internal/messageevents -run '^TestJetStreamPublisher_MessageEditedAndDeleted$' -count=100 -cpu=1,2",
+        "result": "PASS",
+        "elapsed_seconds": 5.978,
+        "log": "D:/Git/Voice/tmp/pr875-repair/messaging-role-nats/candidate-count100.log",
+        "log_sha256": "92554e36e53928a77054f27cb04d09e9cee945537f237623f51e72a8df7da257"
+      },
+      {
+        "command": "go test -short ./internal/messageevents -count=20 -cpu=1,2",
+        "result": "PASS",
+        "elapsed_seconds": 13.023,
+        "log": "D:/Git/Voice/tmp/pr875-repair/messaging-role-nats/candidate-short-count20.log",
+        "log_sha256": "3023a5b73278e310902c0a0886a45cef68d59fa1dddc38e136b7866dbd229822"
+      },
+      {
+        "command": "go test -race -short ./internal/messageevents -run '^TestJetStreamPublisher_MessageEditedAndDeleted$' -count=10 -cpu=1,2",
+        "result": "PASS",
+        "elapsed_seconds": 1.721,
+        "log": "D:/Git/Voice/tmp/pr875-repair/messaging-role-nats/candidate-race-count10.log",
+        "log_sha256": "90e9ff497c9ccb5c8b03e55990f900e92c1e5e0e8b12320a66a298b419a58606"
+      }
+    ]
+  },
+  "environment": {
+    "image": "golang:1.26.9-bookworm",
+    "go": "go1.26.9 linux/amd64",
+    "cpu_limit": 1,
+    "memory_limit": "4 GiB",
+    "go_module_cache": "voice-go-modcache",
+    "go_build_cache": "voice-go-buildcache",
+    "runner_containers": [
+      "pr875-messaging-nats-baseline",
+      "pr875-messaging-nats-green"
+    ]
+  },
+  "setup_notes": [
+    "The pristine baseline source was copied to a private container before the author changed WT49.",
+    "The module's local replacement voice/backend/pkg => ../pkg was copied into each private runner snapshot as required for module compilation.",
+    "The first invocation used a login shell that omitted go from PATH; the next invocation exposed the missing ../pkg replacement. The final baseline command above passed after correcting the runner setup."
+  ],
+  "hosted_ci_red_context": {
+    "log": "D:/Git/Voice/tmp/pr875-repair/38330-ci-failures/120739621840.log",
+    "observation": "Hosted CI had a core NextMsg timeout before this change. The local frozen-baseline count=100 run did not reproduce that failure."
+  },
+  "limitations": [
+    "This verifies the targeted publisher behavior and short package suite; it is not full repository or service-stack verification."
+  ]
+}

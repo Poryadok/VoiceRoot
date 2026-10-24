@@ -1,0 +1,10 @@
+[rtk] /!\ No hook installed — run `rtk init -g` for automatic token savings
+go: downloading github.com/nats-io/nkeys v0.4.10
+go: downloading golang.org/x/time v0.11.0
+ok  	voice/backend/moderation	1.023s
+?   	voice/backend/moderation/internal/authclient	[no test files]
+ok  	voice/backend/moderation/internal/grpcsvc	1.036s
+?   	voice/backend/moderation/internal/mmclient	[no test files]
+ok  	voice/backend/moderation/internal/moderationevents	1.056s
+ok  	voice/backend/moderation/internal/store	1.011s
+?   	voice/backend/moderation/internal/userclient	[no test files]
