@@ -37,6 +37,27 @@ Go/Flutter/dependency and Docker content caches still execute validation and
 respect their toolchain/content identities. No `continue-on-error` or synthetic
 success is introduced.
 
+Compose E2E regenerates a build-only Bake plan from the current effective
+three-file Compose configuration. The helper checks the complete target
+inventory and exact context/Dockerfile/args/platform/tags, including Compose's
+implicit project-service names. Raw runtime configuration stays in memory;
+the transient build-only definition and plan use private permissions. The
+official Bake action uses `source: .` and loads every current image before
+`up --no-build`; all original smoke tests still execute. BuildKit content keys
+invalidate changed inputs, independently of cache scope names. Per-target
+`compose-e2e-*` writers cannot replace the existing `backend-*` cache objects;
+matching backend caches can be read. Export is optional and bounded to30s
+per target; build/load/test failures remain fatal.
+
+The network-free proof `python3 scripts/ci/compose_bake_cache_integration.py`
+checks the actual implicit tag, unchanged-input cache hit, and changed loaded
+image ID/content after mutating a `COPY` source. It needs Docker/Buildx and
+creates only disposable images/stopped containers. The seven offline plan
+tests are part of `make ci-script-tests-pr`. This local proof does not assert
+a GHA cache hit or transport performance; hosted measurements establish those.
+See [native Bake Compose support](https://docs.docker.com/build/bake/compose-file/)
+and [GHA cache scopes](https://docs.docker.com/build/cache/backends/gha/).
+
 ## Measurement
 
 [Observed baseline](gate-baseline.md) includes 18 heads across 17 branches:

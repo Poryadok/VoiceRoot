@@ -371,6 +371,15 @@ Auth/ACL, protobuf, migration/runtime tests и выбранные E2E остаю
 валидатора всегда проверяются заново. Toolchain/dependency caches не заменяют
 выполнение тестов.
 
+Compose E2E собирает текущие images через проверенный build-only Bake plan
+и слоевой BuildKit cache, загружает их локально и запускает прежние smoke tests
+через `up --no-build`. Переноса результатов тестов из кеша нет. Для отдельной
+проверки инвалидации на хосте с Docker/Buildx:
+`python3 scripts/ci/compose_bake_cache_integration.py` — настоящий `COPY`
+mutation должен менять загруженный image и содержимое. Политика cache scopes,
+таймаут экспорта и защита runtime-конфига описаны в
+[CI gate policy](../.github/ci/gate-policy.md).
+
 Локальный эквивалент быстрых CI-script checks (Linux/Git Bash, committed
 checkout; дополнительно запускаются component checks из этого документа):
 
