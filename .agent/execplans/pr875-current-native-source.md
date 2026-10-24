@@ -424,3 +424,29 @@ ac21482c24ecbf86ea425f42d8d14a50cd94ac82e9ebcf508e2826cd5edcc464
 binds this result. The unchanged performance carrier bytes retain their61-test
 proof. This closes bounded source/code verification, not the mandatory fresh
 actual collector/router or hosted CI completion.
+
+2026-10-24 optional performance follow-up: the actual cf6 run exposed repeated
+serialization of each complete inherited ready object inside every path iteration
+of build_3071_J_ready and include_typed_collection_required. The minimal candidate
+computes the same SHA once locally per ready per invocation, lazily after the
+existing first boolean check. Empty and invalid inputs retain the earlier check
+order. No validation decision, trace, Git object or authority is cached. Neither
+input object is mutated. Independent CODE review is CLEAR. The isolated 1-CPU
+Linux run passed all 63 F54 tests, including digest counts, byte-bound results,
+unchanged inputs, fresh invocation after mutation, and empty/invalid cases.
+
+Complete actual-ready function parity against unchanged cf6 is GREEN. J build
+produced identical 112,114,638-byte canonical output (SHA256
+e902cf82f67c4890c9fb4d85cf45cbeee4b01bf1625d73d868023389e63d7292),
+with unchanged input: baseline 212.116s versus candidate 0.718s. Typed collection
+with required={} and the complete actual I/J ready maps produced identical
+58,719,540-byte output (SHA256
+0ec9e36c2f87464648d8826e03ad1f113af92f041be1acbd37f31d297a90b624),
+with unchanged input: baseline 730.122s versus candidate 1.092s. These are pure
+function comparisons, not final collection authorization or whole-producer timing.
+Independent receipt SHA256
+784cf7ed2035ac772eff266140174eb57701ccbaa7300583d7476c5e64a4c8c0
+binds the exact source/test bytes, immutable trace, commands, logs and RSS metrics.
+The separate raw Git batch experiment remains ignored WIP and is excluded.
+Graphify rebuilt the source graph; its optional HTML view exceeded the size cap.
+The mandatory fresh full collector/router and hosted CI results remain unclaimed.
