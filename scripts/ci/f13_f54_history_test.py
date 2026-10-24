@@ -33,6 +33,388 @@ def module():
     return value
 
 
+class R23Owner132Contract(unittest.TestCase):
+    def test_exact_shell_wiring_uses_real_append_and_rejects_failed_authority(self):
+        # Only the authority CLI is mocked here. The literal shell selectors,
+        # CLI argument transport and actual append envelope are exercised.
+        # Independent permission/fold semantics are covered by owner_fixture.
+        functions=dict(re.findall(r'(?ms)^([A-Za-z_][A-Za-z0-9_]*)\(\) \{\n(.*?)^\}\n',SHELL.read_text(encoding='utf8')))
+        selected=''.join(name+'() {\n'+functions[name]+'}\n' for name in
+            ('f13_f54_trace_event','f13_f54_r23_132_owner_permission'))
+        with tempfile.TemporaryDirectory() as temporary:
+            folder=Path(temporary);wrapper=folder/'observer.py';trace=folder/'trace'
+            wrapper.write_text('import json,os,subprocess,sys\n'
+                'if sys.argv[1]=="132-owner-permission":\n'
+                ' if os.environ.get("DENY")=="1":sys.exit(37)\n'
+                ' print(json.dumps({"fixture_authority":False,"argv":sys.argv[2:]}))\n'
+                'else:sys.exit(subprocess.call([sys.executable,'+repr(str(HELPER))+']+sys.argv[1:]))\n')
+            script=folder/'run.sh'
+            script.write_text('set -eu\n'+selected+'\nf13_f54_r23_132_owner_permission "$REPO" "$TEST_PATH" "$MAP" "literal incoming"\n')
+            path='protos/voice/r23_contract_manifest.json';op='F2/132437c43f6f0625fae8954542f8d9c2f6aa3037/2'
+            env=dict(os.environ,TMP_DIR=str(folder),REPO=str(ROOT),TEST_PATH=path,MAP=str(folder/'map'),
+                f13_f54_observer=str(wrapper),f13_f54_trace_file=str(trace),f13_f54_frame='F2',f13_f54_operation=op)
+            result=subprocess.run(['bash',str(script)],env=env,capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            event=json.loads(trace.read_text());self.assertEqual(event['operation'],op)
+            self.assertEqual(event['kind'],'r23_132_owner_permission')
+            self.assertEqual(event['payload']['path'],path)
+            self.assertEqual(event['payload']['receipt']['argv'],[str(ROOT),str(trace),path,str(folder/'map'),'literal incoming'])
+            for change in ({'DENY':'1'},{'TEST_PATH':'protos/voice/other.json'},{'f13_f54_operation':'F2/other/2'}):
+                trace.unlink(missing_ok=True)
+                result=subprocess.run(['bash',str(script)],env=dict(env,**change),capture_output=True,text=True)
+                self.assertNotEqual(result.returncode,0)
+                self.assertFalse(trace.exists())
+
+    def test_exact_source_unit_reconstructs_all_history_and_rows(self):
+        m=module();u=m.r23_132_source_unit(ROOT)
+        self.assertEqual(len(u['rows']),2)
+        self.assertEqual(len(u['versions']),12)
+        for key in ('versions','rows','ancestry'):
+            forged=copy.deepcopy(u);forged[key]=forged[key][:-1]
+            raw=json.dumps(forged,sort_keys=True,indent=2).encode()
+            with self.subTest(key=key),patch.object(m,'R23_132_SOURCE_UNIT_RAW',raw),self.assertRaises(m.Rejected):
+                m.r23_132_source_unit(ROOT)
+
+
+    @contextmanager
+    def owner_fixture(self):
+        """Real append/fold/permission, synthetic graph and explicit authority seams.
+
+        The prior whole operation is runtime-tainted while both raw R23 rows
+        remain false. The exact historical source unit has separate Git tests.
+        """
+        m=module()
+        with tempfile.TemporaryDirectory() as temporary,ExitStack() as patches:
+            folder=Path(temporary);repo=folder/'repo';repo.mkdir()
+            git(repo,'init','-q');git(repo,'config','user.name','F13 fixture');git(repo,'config','user.email','f13@example.invalid')
+            def commit(values):
+                for name,text in values.items():
+                    p=repo/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text)
+                git(repo,'add','.');git(repo,'commit','-qm','fixture');return git(repo,'rev-parse','HEAD')
+            base=commit({'docs/base.md':'base\n'})
+            left=commit({'docs/left.md':'left\n'})
+            git(repo,'checkout','-q','--detach',base)
+            names=['protos/voice/r23_contract_manifest.json','protos/voice/r23_contract_test/r23_contract_test.go']
+            origin=commit({name:'fixture\n' for name in names})
+            right=commit({RUNTIME:'package main\n'})
+            tree=git(repo,'merge-tree','--write-tree',left,right).splitlines()[0]
+            prior=git(repo,'commit-tree',tree,'-p',left,'-p',right,'-m','prior')
+            source=git(repo,'commit-tree',tree,'-p',right,'-p',left,'-m','source')
+            merge=git(repo,'commit-tree',tree,'-p',prior,'-p',source,'-m','result')
+            bases=git(repo,'merge-base','--all',prior,source).splitlines()
+            unit=dict(type='F54_EXACT132_SOURCE_UNIT',source_unit_sha256='fixture',merge=merge,
+                parents=[prior,source],best_bases=bases,history_boundary=base,source_history=[],
+                automatic_tree=tree,admission=False,path_authority=False)
+            production=dict(base=base,source=merge,admission=False,runtime_pass=False,current_or_future_path_authority=False)
+            original_git=m.git
+            def fixture_git(repo,*args):
+                if args==('rev-list','--first-parent','--reverse',base+'..'+merge):return (prior+'\n'+merge+'\n').encode()
+                return original_git(repo,*args)
+            patches.enter_context(patch.object(m,'git',side_effect=fixture_git))
+            patches.enter_context(patch.object(m,'MERGE_132',merge))
+            patches.enter_context(patch.object(m,'source_132_unit',return_value=unit))
+            patches.enter_context(patch.object(m,'production_applicability',return_value=production))
+            authority={'fixture':'omitted-outer-authority-prefix'}
+            entry=dict(type='F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1',base=base,source=merge,
+                capability=m.raw_binding(m.canonical(authority)),native_binding=m.raw_binding('{"paths":[]}'),context={})
+            patches.enter_context(patch.object(m,'checked_capability_value',return_value=authority))
+            patches.enter_context(patch.object(m,'master_context',return_value=entry))
+            trace=folder/'trace';mapping=folder/'map';mapping.write_bytes(b'')
+            delta=folder/'delta';category=folder/'category';category.write_text('')
+            ep=folder/'entry';ep.write_text(json.dumps(entry));m.append(trace,'master_entry','','',repo,[str(ep)])
+            root=m.append(trace,'frame_enter','','',repo,['',base,merge,'true','true',str(mapping),''])
+            expected_rows=[];receipt_paths=[]
+            owner_unit=dict(rows=expected_rows,parents=[prior,source],prior_owner=prior)
+            patches.enter_context(patch.object(m,'r23_132_source_unit',return_value=owner_unit))
+            patches.enter_context(patch.object(m,'R23_132_SOURCE_UNIT_RAW',json.dumps({'rows':[{'path':n} for n in names]}).encode()))
+            for outer,first,head in ((prior,left,right),(merge,prior,source)):
+                op=m.append(trace,'operation_attempt',root,'',repo,[outer,'2',first,head,'merge'])
+                if outer==merge:
+                    cap=m.boundary_132_capability(repo,merge,prior,source,base,merge)
+                    m.append(trace,'history_132_capability',root,op,repo,[json.dumps(cap)])
+                paths=git(repo,'diff','--name-only',base,head).splitlines();delta.write_text('\n'.join(paths)+'\n')
+                candidate_bases=bases if outer==merge else [base]
+                m.append(trace,'operation_begin',root,op,repo,[outer,'2',first,base,head,','.join(candidate_bases),'false',str(delta)])
+                childmap=folder/('child-'+outer);childmap.write_bytes(b'')
+                child=m.append(trace,'frame_enter',root,'',repo,[root,base,head,'true','false',str(childmap),op])
+                for owner in git(repo,'rev-list','--first-parent','--reverse',base+'..'+head).splitlines():
+                    parents=git(repo,'rev-list','--parents','-n','1',owner).split()[1:]
+                    direct=len(parents)==1;parent=parents[0];nested=owner if direct else parents[1]
+                    boundary=parent if direct else base;index='1' if direct else '2'
+                    childop=m.append(trace,'operation_attempt',child,'',repo,[owner,index,parent,nested,'direct' if direct else 'merge'])
+                    changed=git(repo,'diff','--name-only',boundary,nested).splitlines();delta.write_text('\n'.join(changed)+'\n')
+                    m.append(trace,'operation_begin',child,childop,repo,[owner,index,parent,boundary,nested,boundary,'true' if direct else 'false',str(delta)])
+                    for name in changed:m.append(trace,'path_gate_before',child,childop,repo,[name,str(childmap)])
+                    trigger=m.classify(changed);m.append(trace,'classification',child,childop,repo,[trigger,str(delta)])
+                    for name in changed:
+                        row='\t'.join([name,trigger,owner,parent,boundary,nested,parent,boundary])
+                        m.append(trace,'row_before',child,childop,repo,[name,str(childmap),row])
+                        m.append(trace,'row_after',child,childop,repo,[name,row,'original_owner_and_row_assignment'])
+                        with childmap.open('a') as stream:stream.write(row+'\n')
+                        m.append(trace,'row_committed',child,childop,repo,[name,str(childmap)])
+                m.append(trace,'frame_exit',child,'',repo,['0',str(childmap),str(category)])
+                delta.write_text('\n'.join(paths)+'\n')
+                for name in paths:m.append(trace,'path_gate_before',root,op,repo,[name,str(mapping)])
+                m.append(trace,'classification',root,op,repo,[m.classify(paths),str(delta)])
+                nested_rows={r.split('\t')[0]:r for r in childmap.read_text().splitlines()}
+                for name in paths:
+                    previous=[r for r in mapping.read_text().splitlines() if r.split('\t')[0]==name]
+                    childrow=nested_rows[name];parts=childrow.split('\t');content=previous[-1].split('\t')[6] if previous else first
+                    row='\t'.join([name,parts[1],outer,first,parts[4],parts[5],content,','.join(candidate_bases)])
+                    m.append(trace,'row_before',root,op,repo,[name,str(mapping),row])
+                    if outer==merge and name in names:
+                        expected_rows.append(dict(path=name,prior=previous[-1],incoming=row,child_row=childrow))
+                        result=m.validate_trace(repo,trace,m.sha(trace.read_bytes()),r23_132_checkpoint=True)
+                        receipt=result['r23_132_permission'];rp=folder/('receipt-'+str(len(receipt_paths)));rp.write_text(json.dumps(receipt));receipt_paths.append(rp)
+                        m.append(trace,'r23_132_owner_permission',root,op,repo,[name,str(rp)])
+                    if previous:
+                        m.append(trace,'row_remove',root,op,repo,[name,row,'original_guarded_map_replacement'])
+                        mapping.write_text(''.join(r+'\n' for r in mapping.read_text().splitlines() if r.split('\t')[0]!=name))
+                    m.append(trace,'row_after',root,op,repo,[name,row,'original_owner_and_row_assignment'])
+                    with mapping.open('a') as stream:stream.write(row+'\n')
+                    m.append(trace,'row_committed',root,op,repo,[name,str(mapping)])
+            category.write_text('synthetic_fixture_stop')
+            m.append(trace,'failure',root,op,repo,['synthetic_fixture_stop',str(mapping)])
+            m.append(trace,'frame_exit',root,'',repo,['1',str(mapping),str(category)])
+            yield dict(m=m,repo=repo,trace=trace,map=mapping,root=root,paths=names,receipts=receipt_paths)
+
+    def test_actual_pending_permission_and_replacement_keep_raw_false_and_true_ledger(self):
+        with self.owner_fixture() as f:
+            m=f['m'];result=m.validate_trace(f['repo'],f['trace'],m.sha(f['trace'].read_bytes()))
+            for name in f['paths']:
+                self.assertTrue(result['ledger'][f['root']]['paths'][name]['aggregate'])
+                row=next(r for r in f['map'].read_text().splitlines() if r.split('\t')[0]==name)
+                self.assertEqual(row.split('\t')[1],'false')
+            for p in f['receipts']:
+                receipt=json.loads(p.read_text());self.assertTrue(receipt['aggregate']);self.assertFalse(receipt['runtime_pass'])
+
+    def test_permission_replay_phase_taint_and_evidence_mutations_reject(self):
+        with self.owner_fixture() as f:
+            m=f['m'];original=[json.loads(v) for v in f['trace'].read_text().splitlines()]
+            for case in ('missing','duplicate','late','aggregate','writer','child-map','raw-flag','path','frame'):
+                events=copy.deepcopy(original);index=next(i for i,e in enumerate(events) if e['kind']=='r23_132_owner_permission')
+                permission=events[index];receipt=permission['payload']['receipt']
+                if case=='missing':events.pop(index)
+                elif case=='duplicate':events.insert(index,copy.deepcopy(permission))
+                elif case=='late':events[index],events[index+1]=events[index+1],events[index]
+                elif case=='aggregate':receipt['aggregate']=False
+                elif case=='writer':receipt['obligations'].pop(0)
+                elif case=='child-map':receipt['child_map']['sha256']='0'*64
+                elif case=='raw-flag':receipt['incoming']=receipt['incoming'].replace('\tfalse\t','\ttrue\t',1)
+                elif case=='path':permission['payload']['path']=f['paths'][1]
+                else:permission['frame']='F999'
+                previous='0'*64
+                for n,e in enumerate(events,1):
+                    e.update(sequence=n,previous=previous);e.pop('digest',None);e['digest']=m.sha(m.canonical(e));previous=e['digest']
+                f['trace'].write_text(''.join(json.dumps(e,sort_keys=True)+'\n' for e in events))
+                with self.subTest(case=case),self.assertRaises(m.Rejected):m.validate_trace(f['repo'],f['trace'],m.sha(f['trace'].read_bytes()))
+
+
+class Exact132HistoryContract(unittest.TestCase):
+    def test_clean_composition_is_exact_and_not_owner_permission(self):
+        m=module();unit=m.source_132_unit(ROOT)
+        base='288e6a4fb963b3d5775f885e14ecfda1b603a4ff'
+        target='ecde2e7b29d93dd01b233cd3128b373137aa6715'
+        production=dict(base=base,source=target,admission=False,runtime_pass=False,current_or_future_path_authority=False)
+        path='src/backend/voice/internal/principaljwks/publisher.go'
+        entry=m.git(ROOT,'ls-tree',unit['merge'],'--',path).decode().strip()
+        args=[ROOT,unit['merge'],unit['history_boundary'],*unit['parents'],path,entry,base,target]
+        with patch.object(m,'production_applicability',return_value=production):
+            value=m.composition_132_capability(*args)
+            self.assertFalse(value['admission']);self.assertFalse(value['owner_permission'])
+            self.assertEqual(value['automatic_tree'],unit['automatic_tree'])
+            self.assertEqual(value['best_bases'],unit['best_bases'])
+            self.assertEqual(value['result_entry'],entry)
+            for index in (1,2,3,4,5,6,7,8):
+                changed=list(args);changed[index]='invalid'
+                with self.subTest(field=index),self.assertRaises(m.Rejected):m.composition_132_capability(*changed)
+
+    @contextmanager
+    def fold_fixture(self, composition=False):
+        """Private real Git criss-cross; source-unit/outer authority seams mocked.
+
+        The literal historical unit has separate real-Git tests. Here actual
+        append/fold validates two completed child operations and outer imports;
+        an omitted outer prefix is explicit fixture scope, not producer proof.
+        """
+        m=module()
+        with tempfile.TemporaryDirectory() as temporary,ExitStack() as patches:
+            folder=Path(temporary);repo=folder/'repo';repo.mkdir()
+            git(repo,'init','-q');git(repo,'config','user.name','F13 fixture')
+            git(repo,'config','user.email','f13@example.invalid')
+            def commit(path,text):
+                file=repo/path;file.parent.mkdir(parents=True,exist_ok=True);file.write_text(text)
+                git(repo,'add','.');git(repo,'commit','-qm','fixture');return git(repo,'rev-parse','HEAD')
+            base=commit('docs/base.md','base\n')
+            left=commit(RUNTIME,'package main\n')
+            git(repo,'checkout','-q','--detach',base)
+            right=commit('docs/right.md','right\n')
+            tree=git(repo,'merge-tree','--write-tree',left,right).splitlines()[0]
+            first=git(repo,'commit-tree',tree,'-p',left,'-p',right,'-m','first')
+            source=git(repo,'commit-tree',tree,'-p',right,'-p',left,'-m','source')
+            merge=git(repo,'commit-tree',tree,'-p',first,'-p',source,'-m','result')
+            bases=git(repo,'merge-base','--all',first,source).splitlines()
+            unit=dict(type='F54_EXACT132_SOURCE_UNIT',source_unit_sha256='fixture',merge=merge,
+                parents=[first,source],best_bases=bases,history_boundary=base,
+                source_history=git(repo,'rev-list','--reverse','--topo-order','--parents',base+'..'+source).splitlines(),
+                automatic_tree=tree,admission=False,path_authority=False)
+            production=dict(base=base,source=merge,admission=False,runtime_pass=False,current_or_future_path_authority=False)
+            original_git=m.git
+            def fixture_git(repo,*args):
+                if args==('rev-list','--first-parent','--reverse',base+'..'+merge):return (merge+'\n').encode()
+                return original_git(repo,*args)
+            patches.enter_context(patch.object(m,'git',side_effect=fixture_git))
+            patches.enter_context(patch.object(m,'MERGE_132',merge))
+            patches.enter_context(patch.object(m,'source_132_unit',return_value=unit))
+            patches.enter_context(patch.object(m,'production_applicability',return_value=production))
+            capability={'fixture':'outer-authority-only'}
+            entry=dict(type='F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1',base=base,source=merge,
+                capability=m.raw_binding(m.canonical(capability)),native_binding=m.raw_binding(json.dumps({'paths':[RUNTIME] if composition else []})),context={})
+            patches.enter_context(patch.object(m,'checked_capability_value',return_value=capability))
+            patches.enter_context(patch.object(m,'master_context',return_value=entry))
+            trace=folder/'trace';mapping=folder/'map';childmap=folder/'child-map'
+            mapping.write_bytes(b'');childmap.write_bytes(b'');delta=folder/'delta';category=folder/'category';category.write_text('')
+            entry_path=folder/'entry';entry_path.write_text(json.dumps(entry))
+            m.append(trace,'master_entry','','',repo,[str(entry_path)])
+            root=m.append(trace,'frame_enter','F2','',repo,['',base,merge,'true','true',str(mapping),''])
+            op=m.append(trace,'operation_attempt',root,'',repo,[merge,'2',first,source,'merge'])
+            receipt=m.boundary_132_capability(repo,merge,first,source,base,merge)
+            m.append(trace,'history_132_capability',root,op,repo,[json.dumps(receipt)])
+            paths=git(repo,'diff','--name-only',base,source).splitlines();delta.write_text('\n'.join(paths)+'\n')
+            m.append(trace,'operation_begin',root,op,repo,[merge,'2',first,base,source,','.join(bases),'false',str(delta)])
+            child=m.append(trace,'frame_enter','F5','',repo,[root,base,source,'true','false',str(childmap),op])
+            for owner,parent,head,boundary,index in ((right,base,right,base,'1'),(source,right,left,base,'2')):
+                childop=m.append(trace,'operation_attempt',child,'',repo,[owner,index,parent,head,'direct' if index=='1' else 'merge'])
+                names=git(repo,'diff','--name-only',boundary,head).splitlines();delta.write_text('\n'.join(names)+'\n')
+                m.append(trace,'operation_begin',child,childop,repo,[owner,index,parent,boundary,head,boundary,'true' if index=='1' else 'false',str(delta)])
+                for name in names:m.append(trace,'path_gate_before',child,childop,repo,[name,str(childmap)])
+                trigger=m.classify(names);m.append(trace,'classification',child,childop,repo,[trigger,str(delta)])
+                for name in names:
+                    row='\t'.join([name,trigger,owner,parent,boundary,head,parent,boundary])
+                    m.append(trace,'row_before',child,childop,repo,[name,str(childmap),row])
+                    m.append(trace,'row_after',child,childop,repo,[name,row,'original_owner_and_row_assignment'])
+                    with childmap.open('a') as stream:stream.write(row+'\n')
+                    m.append(trace,'row_committed',child,childop,repo,[name,str(childmap)])
+            m.append(trace,'frame_exit',child,'',repo,['0',str(childmap),str(category)])
+            delta.write_text('\n'.join(paths)+'\n')
+            for name in paths:
+                m.append(trace,'path_gate_before',root,op,repo,[name,str(mapping)])
+                if composition and name==RUNTIME:
+                    receipt=m.composition_132_capability(repo,merge,base,first,source,name,
+                        m.tree_entry(repo,merge,name).rstrip('\0'),base,merge)
+                    m.append(trace,'composition_132_capability',root,op,repo,[json.dumps(receipt)])
+            m.append(trace,'classification',root,op,repo,[m.classify(paths),str(delta)])
+            rows={line.split('\t')[0]:line.split('\t') for line in childmap.read_text().splitlines()}
+            for name in paths:
+                nested=rows[name];row='\t'.join([name,nested[1],merge,first,nested[4],nested[5],first,','.join(bases)])
+                m.append(trace,'row_before',root,op,repo,[name,str(mapping),row])
+                m.append(trace,'row_after',root,op,repo,[name,row,'original_owner_and_row_assignment'])
+                with mapping.open('a') as stream:stream.write(row+'\n')
+                m.append(trace,'row_committed',root,op,repo,[name,str(mapping)])
+            # Close only the synthetic outer scope as failed: this fixture tests
+            # successful child/import conservation, not a production wrapper.
+            category.write_text('synthetic_fixture_stop')
+            m.append(trace,'failure',root,op,repo,['synthetic_fixture_stop',str(mapping)])
+            m.append(trace,'frame_exit',root,'',repo,['1',str(mapping),str(category)])
+            yield dict(m=m,repo=repo,trace=trace,root=root,child=child,operation=op,paths=paths)
+
+    def test_composition_receipt_is_independently_folded_and_required(self):
+        with self.fold_fixture(composition=True) as f:
+            m=f['m'];original=[json.loads(line) for line in f['trace'].read_text().splitlines()]
+            m.validate_trace(f['repo'],f['trace'],m.sha(f['trace'].read_bytes()))
+            for case in ('missing','duplicate','changed-result'):
+                events=copy.deepcopy(original)
+                index=next(i for i,e in enumerate(events) if e['kind']=='composition_132_capability')
+                if case=='missing':events.pop(index)
+                elif case=='duplicate':events.insert(index,copy.deepcopy(events[index]))
+                else:events[index]['payload']['result_entry']='forged'
+                previous='0'*64
+                for number,event in enumerate(events,1):
+                    event['sequence']=number;event['previous']=previous;event.pop('digest',None)
+                    event['digest']=m.sha(m.canonical(event));previous=event['digest']
+                f['trace'].write_text(''.join(json.dumps(e,sort_keys=True)+'\n' for e in events))
+                with self.subTest(case=case),self.assertRaises(m.Rejected):
+                    m.validate_trace(f['repo'],f['trace'],m.sha(f['trace'].read_bytes()))
+
+    def test_actual_append_fold_requires_child_and_preserves_aggregate(self):
+        # The unchanged child_flags OR is isolated by the real-fold oracle
+        # Dc0ResidualContract.test_synthetic_original_taint_survives_false_residual_and_parent.
+        with self.fold_fixture() as f:
+            m=f['m'];result=m.validate_trace(f['repo'],f['trace'],m.sha(f['trace'].read_bytes()))
+            for name in f['paths']:
+                self.assertTrue(result['ledger'][f['root']]['paths'][name]['aggregate'])
+            self.assertFalse(result['ledger'][f['child']]['paths']['docs/right.md']['aggregate'])
+
+    def test_capability_child_completion_map_and_taint_mutations_reject(self):
+        with self.fold_fixture() as f:
+            m=f['m'];original=[json.loads(line) for line in f['trace'].read_text().splitlines()]
+            for case in ('missing-capability','duplicate-capability','wrong-scope','child-failure','child-map','classifier-tamper'):
+                events=copy.deepcopy(original)
+                if case=='missing-capability':events=[e for e in events if e['kind']!='history_132_capability']
+                elif case=='duplicate-capability':
+                    index=next(i for i,e in enumerate(events) if e['kind']=='history_132_capability');events.insert(index,copy.deepcopy(events[index]))
+                elif case=='wrong-scope':next(e for e in events if e['kind']=='history_132_capability')['payload']['collector_scope']['target']='0'*40
+                elif case=='child-failure':next(e for e in events if e['kind']=='frame_exit' and e['frame']==f['child'])['payload']['exit']=1
+                elif case=='child-map':next(e for e in events if e['kind']=='frame_exit' and e['frame']==f['child'])['payload']['final_map']['sha256']='0'*64
+                else:next(e for e in events if e['kind']=='classification' and e['frame']==f['root'])['payload']['trigger']='false'
+                previous='0'*64
+                for index,event in enumerate(events,1):
+                    event['sequence']=index;event['previous']=previous;event.pop('digest',None)
+                    event['digest']=m.sha(m.canonical(event));previous=event['digest']
+                f['trace'].write_text(''.join(json.dumps(e,sort_keys=True)+'\n' for e in events))
+                with self.subTest(case=case),self.assertRaises(m.Rejected):
+                    m.validate_trace(f['repo'],f['trace'],m.sha(f['trace'].read_bytes()))
+
+    def test_boundary_requires_exact_tuple_and_fresh_actual_production_scope(self):
+        # Source reconstruction is real; this test explicitly isolates the
+        # production qualifier seam. It is not an actual-event authority proof.
+        m=module();unit=m.source_132_unit(ROOT)
+        base='288e6a4fb963b3d5775f885e14ecfda1b603a4ff'
+        target='ecde2e7b29d93dd01b233cd3128b373137aa6715'
+        production=dict(base=base,source=target,admission=False,runtime_pass=False,
+            current_or_future_path_authority=False)
+        args=(ROOT,unit['merge'],*unit['parents'],base,target)
+        with patch.object(m,'production_applicability',return_value=production) as check:
+            value=m.boundary_132_capability(*args)
+            self.assertEqual(value['unit'],unit)
+            self.assertEqual(value['history_boundary'],unit['history_boundary'])
+            check.assert_called_once_with(ROOT)
+            for index in range(1,6):
+                changed=list(args);changed[index]='0'*40
+                with self.subTest(field=index),self.assertRaises(m.Rejected):
+                    m.boundary_132_capability(*changed)
+        with patch.object(m,'production_applicability',side_effect=m.Rejected('fresh-event-denied')):
+            with self.assertRaisesRegex(m.Rejected,'^fresh-event-denied$'):
+                m.boundary_132_capability(*args)
+
+    def test_complete_clean_source_unit_keeps_bases_distinct_from_boundary(self):
+        m=module();value=m.source_132_unit(ROOT)
+        self.assertEqual(value['merge'],'132437c43f6f0625fae8954542f8d9c2f6aa3037')
+        self.assertEqual(value['history_boundary'],'304b49dcf5b771efae5a7d4ddaa28a3d0b9ddb5d')
+        self.assertEqual(len(value['best_bases']),2)
+        self.assertNotIn(value['history_boundary'],value['best_bases'])
+        self.assertEqual(len(value['source_history']),14)
+        self.assertEqual(value['automatic_tree'],'182c39b2a05b637ae2a1d5b18016a658bfde2a81')
+        self.assertFalse(value['admission'])
+        self.assertFalse(value['path_authority'])
+
+    def test_source_unit_rejects_changed_bases_history_and_result(self):
+        m=module();real=m.git
+        for kind in ('bases','history','result'):
+            with self.subTest(kind=kind):
+                def changed(repo,*args):
+                    raw=real(repo,*args)
+                    if kind=='bases' and args[:2]==('merge-base','--all') and len(raw.splitlines())==2:
+                        return b'\n'.join(reversed(raw.splitlines()))+b'\n'
+                    if kind=='history' and args[:3]==('rev-list','--reverse','--topo-order'):
+                        return b'\n'.join(raw.splitlines()[:-1])+b'\n'
+                    if kind=='result' and args==('rev-parse','132437c43f6f0625fae8954542f8d9c2f6aa3037^{tree}'):
+                        return b'0'*40+b'\n'
+                    return raw
+                with patch.object(m,'git',side_effect=changed),self.assertRaises(m.Rejected):
+                    m.source_132_unit(ROOT)
+
+
 class Dc0ResidualContract(unittest.TestCase):
     @contextmanager
     def fold_fixture(self, import_residual=False, synthetic_parent_taint=False):
@@ -325,6 +707,9 @@ class Manual3071RenderingContract(unittest.TestCase):
 
     def test_expanded_git_prefix_is_rejected_not_truncated(self):
         m=module();original=m.git
+        # Fresh clones do not retain unreachable automatic merge trees. Build
+        # and verify the exact original composition before reading its patch.
+        m.manual_3071_composition(ROOT)
         # Model Git returning a longer unique prefix using actual ten-digit Git
         # output. This is a transport oracle, not a manufactured SHA collision.
         expanded=original(ROOT,'diff','--binary','--abbrev=10',m.J3071_AUTO_TREE,m.J3071)

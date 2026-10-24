@@ -14,6 +14,13 @@ PINNED_RECORD_COMMIT='f87ee933aa1f599284e1932e44bf32b4e2af48ba'
 PINNED_RECORD_SHA256='4ed3acd7cecfef97d03724115e57bf418600bd8e3210d992fd7ed1a325de8a67'
 PINNED_SOURCE='e409cd05c40e857b61109513eb2154f968970c02'
 DOCUMENT='docs/microservices/space-service.md'
+CONTEXT_VERSION='NATIVE-P3-SOURCE-v4'
+CONTEXT_RECORD_PATH='docs/testing/native-p3-source-v4.json'
+CONTEXT_RECORD_COMMIT='60c0a1fd66d090956113c395d8447edc47b95772'
+CONTEXT_RECORD_SHA256='3bec6a20906f6a96ba2e77d5f4b243e415b5f0ed7f724d88e6c4643446099e53'
+CONTEXT_SOURCE='ef3dd7f3888bbe2792a9dcec836b2773c4e77962'
+CONTEXT_EVENT_BASE='2c8bdf9e2f420b724575096beb4fcf5cb4ea00be'
+CONTEXT_MAKEFILE_SHA256='3a461f577654391b6957c6ec5470e5c706dcc4e721f29a7d80751ee117c8a7ec'
 CARRIER_PATHS=(VERIFIER_PATH,'scripts/ci/f13_native_p3_documentation_test.py',
     'scripts/ci/f13_native_p3_successor_integration_test.py',
     'scripts/ci/f13_native_p3_authority.py','scripts/ci/f13_f54_history.py',
@@ -148,12 +155,109 @@ def qualify(repo,base,source,target,event,ref,event_sha,before,base_ref):
         paths=[r['path'] for r in record['projection']],retain_guarded_and_runtime_history=True)
 
 
+def load_context_record(repo):
+    """Reconstruct v3 and rebind only the exact reviewed Makefile context."""
+    require=legacy.require
+    require(CONTEXT_RECORD_COMMIT is not None and CONTEXT_RECORD_SHA256 is not None
+        and CONTEXT_SOURCE is not None,'context_successor_not_pinned')
+    old=load_record(repo)
+    raw=legacy.git(repo,'show',CONTEXT_RECORD_COMMIT+':'+CONTEXT_RECORD_PATH)
+    require(legacy.digest(raw)==CONTEXT_RECORD_SHA256,'context_record_hash')
+    require(legacy.entry(repo,CONTEXT_RECORD_COMMIT,CONTEXT_RECORD_PATH)['mode']=='100644','context_record_mode')
+    record=json.loads(raw,object_pairs_hook=legacy.unique_pairs)
+    require(set(record)=={'version','status','source','source_tree','predecessor','context_change','closure','evidence',
+        'runtime_pass','activation_authority','current_or_future_path_authority'},'context_record_shape')
+    require(record['version']==CONTEXT_VERSION and record['status']=='SOURCE_APPLICABILITY_CLEAR'
+        and record['source']==CONTEXT_SOURCE,'context_record_source')
+    require(all(record[k] is False for k in ('runtime_pass','activation_authority','current_or_future_path_authority')),
+        'context_no_runtime_grant')
+    require(record['predecessor']==dict(version=VERSION,source=PINNED_SOURCE,record=PINNED_RECORD_COMMIT,
+        path=RECORD_PATH,sha256=PINNED_RECORD_SHA256),'context_exact_predecessor')
+    require(legacy.git(repo,'rev-list','--parents','-n','1',CONTEXT_RECORD_COMMIT).decode().split()==
+        [CONTEXT_RECORD_COMMIT,CONTEXT_SOURCE],'context_direct_record_parent')
+    require(legacy.git(repo,'rev-parse',CONTEXT_SOURCE+'^{tree}').decode().strip()==record['source_tree'],
+        'context_source_tree')
+    legacy.ancestor(repo,PINNED_RECORD_COMMIT,CONTEXT_SOURCE)
+    def bound(ref):
+        data=legacy.git(repo,'show',ref+':Makefile')
+        return dict(entry=legacy.entry(repo,ref,'Makefile'),bytes=len(data),sha256=legacy.digest(data))
+    before,after=bound(PINNED_SOURCE),bound(CONTEXT_SOURCE)
+    require(record['context_change']==dict(path='Makefile',before=before,after=after)
+        and after['sha256']==CONTEXT_MAKEFILE_SHA256 and after['entry']['mode']=='100644'
+        and after['entry']['type']=='blob' and before!=after,'context_exact_makefile')
+    old_tree,new_tree=tree_entries(repo,PINNED_SOURCE),tree_entries(repo,CONTEXT_SOURCE)
+    for row in old['projection']:
+        require(old_tree.get(row['path'])==new_tree.get(row['path']),'context_projection_drift')
+    for row in old['context']:
+        if row['path']!='Makefile':require(old_tree.get(row['path'])==new_tree.get(row['path']),'context_other_context_drift')
+    require({p:v for p,v in old_tree.items() if p.startswith('src/backend/voice/')}==
+        {p:v for p,v in new_tree.items() if p.startswith('src/backend/voice/')},'context_complete_voice_tree')
+    inventories=[]
+    for directory in sorted({str(Path(p).parent).replace('\\','/') for p in old['compiled_closure']}):
+        prefix=directory+'/'
+        select=lambda tree:{p:v for p,v in tree.items() if p.startswith(prefix) and '/' not in p[len(prefix):]}
+        require(select(old_tree)==select(new_tree),'context_dependency_directory_drift')
+        inventories.append(dict(directory=directory,entries=select(new_tree)))
+    require(record['closure']==dict(projection_paths=[r['path'] for r in old['projection']],
+        context_paths=[r['path'] for r in old['context']],compiled_paths=old['compiled_closure'],
+        directory_inventories=inventories),'context_complete_closure')
+    protected=[RECORD_PATH,previous.RECORD_PATH,legacy.RECORD_PATH,old['compiled_closure_manifest']['path'],
+        *[p['name'] for p in old['evidence']],*[p['path'] for p in old['documentation_record']['evidence']]]
+    for revision in (CONTEXT_SOURCE,CONTEXT_RECORD_COMMIT):
+        for name in protected:
+            require(legacy.entry(repo,revision,name)==legacy.entry(repo,PINNED_RECORD_COMMIT,name),'context_predecessor_artifact_drift')
+    names=[]
+    for proof in record['evidence']:
+        require(set(proof)=={'path','sha256'},'context_evidence_shape')
+        name=proof['path']
+        require(isinstance(name,str) and name.startswith('docs/testing/') and '..' not in name.split('/'),
+            'context_evidence_path')
+        require(legacy.entry(repo,CONTEXT_RECORD_COMMIT,name)['mode']=='100644'
+            and legacy.digest(legacy.git(repo,'show',CONTEXT_RECORD_COMMIT+':'+name))==proof['sha256'],'context_evidence_binding')
+        names.append(name)
+    require(names and names==sorted(set(names)),'context_evidence_order')
+    effective=json.loads(json.dumps(old))
+    effective.update(version=CONTEXT_VERSION,source=CONTEXT_SOURCE,predecessor=record['predecessor'],context_record=record)
+    for row in effective['context']:
+        if row['path']=='Makefile':row['entry']=after['entry']
+    return effective
+
+
+def qualify_context(repo,base,source,target,event,ref,event_sha,before,base_ref):
+    require=legacy.require
+    repo=str(Path(repo).resolve());base,source,target=map(legacy.oid,(base,source,target))
+    require(base==CONTEXT_EVENT_BASE and event_sha==target and event in ('push','pull_request'),'context_exact_event_base')
+    require((event=='push' and ref=='refs/heads/master' and before==base) or
+        (event=='pull_request' and base_ref=='master' and legacy.re.fullmatch(r'refs/pull/[0-9]+/merge',ref)),
+        'context_master_event')
+    require(legacy.git(repo,'rev-list','--parents','-n','1',target).decode().split()==[target,base,source],
+        'context_ordered_master_parents')
+    require(legacy.git(repo,'rev-parse',source+'^{tree}')==legacy.git(repo,'rev-parse',target+'^{tree}'),
+        'context_source_result_tree')
+    record=load_context_record(repo);legacy.ancestor(repo,base,source);legacy.ancestor(repo,CONTEXT_RECORD_COMMIT,source)
+    require(source!=CONTEXT_RECORD_COMMIT,'context_missing_carrier')
+    expected=tree_entries(repo,CONTEXT_RECORD_COMMIT);root=Path(__file__).resolve().parents[2]
+    for revision in (source,target):
+        current=tree_entries(repo,revision)
+        require({p:v for p,v in current.items() if p not in CARRIER_PATHS}==
+            {p:v for p,v in expected.items() if p not in CARRIER_PATHS},'context_post_record_source_drift')
+        for name in CARRIER_PATHS:
+            meta=legacy.entry(repo,revision,name)
+            require(meta is not None and meta['mode']=='100644' and meta['type']=='blob','context_carrier_mode')
+            require(legacy.git(repo,'show',revision+':'+name)==(root/name).read_bytes(),'context_executed_carrier')
+    require(legacy.entry(repo,CONTEXT_RECORD_COMMIT,VERIFIER_PATH)!=legacy.entry(repo,source,VERIFIER_PATH),'context_later_carrier')
+    return dict(version=CONTEXT_VERSION,consumer='MASTER-SOURCE-v1',base=base,source=source,target=target,
+        content_base=record['base'],snapshot=CONTEXT_SOURCE,record=CONTEXT_RECORD_COMMIT,
+        record_sha256=CONTEXT_RECORD_SHA256,paths=[r['path'] for r in record['projection']],
+        retain_guarded_and_runtime_history=True)
+
+
 def audit_map(repo, binding, map_path, history_path):
     """Validate real collector rows; never synthesize or edit the map."""
     require, git, oid = legacy.require, legacy.git, legacy.oid
     ancestor, entry, digest = legacy.ancestor, legacy.entry, legacy.digest
     subprocess, re, runtime_changed = legacy.subprocess, legacy.re, legacy.runtime_changed
-    r = load_record(repo)
+    r = load_context_record(repo) if binding['version']==CONTEXT_VERSION else load_record(repo)
     expected = {row["path"]: row["after"] for row in r["projection"]}
     historical = {}
     history = Path(history_path).read_text().splitlines()

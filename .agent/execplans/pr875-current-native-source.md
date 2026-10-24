@@ -762,3 +762,112 @@ Graphify completed after final pins with no topology changes from116038nodes/
 actual collector/router terminal completion remains mandatory and unclaimed.
 Receipt:tmp/pr875-repair/bot-receivers/v7-actual/receipt.json, SHA256
 88786c33eadfc28771445f41aee69e71e2a673f3f14a1d90b65dbe8ac2246078.
+
+## Exact 132 history boundary and new-master source applicability
+
+The actual K7 collector and hosted full-history job rejected merge
+132437c43f6f0625fae8954542f8d9c2f6aa3037. The printed
+`fixed_historical_tuple` comes from the existing M-only fallback; the unchanged
+ordinary source-base selector independently returns1 because its two best bases
+differ on eight guarded paths. The exact failed-repository reproduction is
+tmp/pr875-repair/bot-receivers/diagnose-132-k7/diagnose-132-selector-v1;
+result SHA256719ddfd714e7f2ae4e946c3ea667484cdc3ddf1687e56b9384d9690ee796fcb6.
+This is not a Git patch-rendering failure. Automatic merge-tree exits0 and
+matches the whole committed tree182c39b2a05b637ae2a1d5b18016a658bfde2a81.
+
+The proposed distinct finite contract binds ordered parents ac7e039e351e0fe6913893c867a127d5647f6115
+and382ae672c0366d0f171c1144b0b469c290fa4e5a, both best bases, their unique
+common ancestor304b49dcf5b771efae5a7d4ddaa28a3d0b9ddb5d, all source-history
+commits, complete changed-path/tree/content inputs and the automatic result.
+It must not select one best base or relax the existing M/J/ordinary predicates.
+Original child collection, path gates, duplicate ownership, inherited taint,
+full trace reconstruction and router completion remain required. The source
+packet is294812bytes/SHA256bfddab635adeb1f19429731301e4443013195ebc6c5c0fa034e04de87d2fb022,
+with six tree snapshots,107 context paths,eight complete edges and14 source
+commits. It is review input only, not accepted runtime or path authority.
+The full reachable K7 range has285 merges and four ambiguous pairs: existing
+M/J, previously traversed bc27bd12, and132. No additional unknown ambiguous
+pair was found in that frozen range.
+
+Root separately integrates master2c8bdf9e2f420b724575096beb4fcf5cb4ea00be.
+Its Makefile changes a pinned Native context entry; current production v7 also
+pins the old event base288. A combined reviewed source successor must bind the
+final integration tree, exact Makefile applicability and new actual event base,
+while preserving historical scope and the ten-carrier ceiling. Root owns the
+current-diff reconciliation source changes; they must enter the final exact
+source inventory before H/R freeze. Schedule/manual-event semantics are outside
+this PR slice. Independent contract/source review, focused RED/GREEN tests and
+fresh actual terminal producer evidence are pending; no completion is claimed.
+
+The final source successor is H ef3dd7f3888bbe2792a9dcec836b2773c4e77962,
+with actual record commit R60c0a1fd66d090956113c395d8447edc47b95772 directly
+above it. Independent SOURCE review verified the full46-path contribution
+delta, complete1093-entry D6 inventory, unchanged Native99 projection paths,
+471 unchanged context entries,481 compiled entries and89 directory inventories.
+Only the exact reviewed merged Makefile context entry changes. Native v4 and
+production v8 retain all predecessor reconstruction and ten post-record carriers.
+Actual PR/master-push qualification now binds event base2c8; historical288,
+698 and the finite132 traversal boundary remain distinct. Schedule/manual events
+are not added. Record SHA256s are Native3bec6a20906f6a96ba2e77d5f4b243e415b5f0ed7f724d88e6c4643446099e53
+and production90e6967cf14de9dbb349be06c51e10e06e8e280d8bd49c381a1ca6b2cfec1f5e.
+
+The complete original child replay in an owned writable no-alternates clone
+passed six operations,40 committed rows/39 distinct paths with empty stderr.
+Earlier read-only-object-store and incomplete extracted-initializer attempts
+are preserved as invalid harness runs, not collector evidence. Corrected child
+trace SHA2562875c5a6222381de0dd8bd8019003917980ee8355c9c3033b6917616aed4d2fc;
+map SHA2564e17f4b671314ee5a00f2d9c9b81fa6af11f21447a1303f0e7992119672c2f95.
+The bounded actual outer39-route replay identified five Native composition
+checks and two separate R23 owner denials. The exact clean-composition receipt
+made those five checkpoint/owner routes pass; voice/main.go retains its original
+Native status2, while the other four return0. This is route evidence only.
+
+R23 owner qualification is separate from clean composition. Its literal two
+historical transitions independently reconstruct the source unit, pending map,
+completed child, all prior writers and inherited obligations. The observed
+prior e675 classification is true although both raw R23 rows are false; the
+permission preserves that cumulative true state and all downstream gates.
+It grants neither current-source equivalence nor runtime acceptance. Missing,
+duplicate, late or altered receipts fail independently in the final fold.
+
+Final focused132/R23 checks passed11 tests in6.644s plus Python compilation
+and shell syntax. They include actual append/full-fold conservation, composition
+receipt negatives and literal shell-to-CLI-to-append wiring with an explicitly
+mocked authority response. The shared dc0 true-child/false-outer OR oracle also
+passed in the prior8-test focused run. Final11 log SHA256
+274604b0e917f063de0582ddd0c99903e07b8df5fcb3a75c508b22a776a51432.
+These synthetic and bounded checks do not establish a full producer terminal
+result; fresh actual collection, final fold and router completion remain required.
+
+Actual-R8 compatibility passed48/48 record/evidence mode/raw-byte checks and
+created clean private K609d3fc585fad6ee54a37f1ec8e094f65481886a. Production50/50
+(485.002s), Native documentation9/9 (7.551s), successor19/19 (10.169s), Python
+compilation and shell syntax passed. Receipt SHA256
+8fe7c7eff680476b5c7699c2d6fbf27a4bf56a841dc8ce03555920db00c1e009;
+log SHA256db807d11d6f9141eec5e01b9b1054acb922c5c983fb66870bb298c1b398ff102.
+The initial runner count47 omitted the separately referenced Native record;
+that setup failure is preserved separately and the corrected48-file preflight
+checks every actual declared record/artifact byte and mode.
+
+The first full F54 run completed99 tests with98 passes and one old test setup
+error: a fresh no-alternates clone lacks unreachable automatic tree73eb0ec,
+which the expanded-prefix negative read before materializing it. Exact Git
+stderr was `fatal: bad object`; the later original composition test created
+the tree. Diagnosis log SHA256cc2ac300ed743c102c11536774a9e1ce184ff29fade300b7f7f471cf5f9a2f62.
+The fixture now invokes the unchanged original manual composition first,
+thereby creating and checking the exact tree before testing expanded output.
+Fixed raw/patch hashes and rejection assertions remain unchanged. Independent
+review cleared this test-only initialization; fresh-clone execution follows.
+
+Final fresh-clone execution is GREEN: AUTO was absent before fixture setup;
+rendering2/2 passed (0.397s), full F5499/99 passed (257.389s), followed by
+Python compilation and shell syntax. Receipt SHA256
+240e8c10a1491550eefdcefd510d7b7b1aa94af54df63f393ee4706afa159ae7;
+full log SHA256c8a1b21f368617bd93c3081675cd51989bf024fc6220033aa112e2a15a8f357c.
+Final F54 helper SHA256d70e841335a540967fb7bdcb7049fad13982a5b415bcd7abb59785e08ef7798c,
+test SHA256f9b4ee6361300e667cbce224ff7842bbb7ff9deaba19d679165400ace0d9515d,
+shell SHA2566f081785fbb29da20331edcbaf5c48b5ff3876f0f26db0a660eb637abf0b8ecd.
+Independent CODE review cleared the frozen source and final fixture correction.
+Graphify update completed after the final code change:116122nodes/240173edges;
+the existing optional HTML visualization size limit remains. No fresh actual
+producer terminal result is claimed by these bounded verification receipts.

@@ -1,5 +1,7 @@
 """Real Git checks for the fixed documentation-only Native successor."""
 import os
+import tempfile
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -7,9 +9,41 @@ import f13_native_p3_documentation as documentation
 import f13_production_source_test as fixtures
 
 
+class ContextSourceUnitTest(unittest.TestCase):
+    def test_exact_makefile_context_reconstructs_old_unit(self):
+        current=documentation.load_context_record(fixtures.ROOT)
+        old=documentation.load_record(fixtures.ROOT)
+        self.assertEqual(current['projection'],old['projection'])
+        self.assertEqual(len(current['projection']),99)
+        self.assertEqual(current['compiled_closure'],old['compiled_closure'])
+        changed=[a['path'] for a,b in zip(current['context'],old['context']) if a!=b]
+        self.assertEqual(changed,['Makefile'])
+        self.assertEqual(current['source'],documentation.CONTEXT_SOURCE)
+
+    def test_unpinned_context_rejected(self):
+        with patch.object(documentation,'CONTEXT_RECORD_COMMIT',None),self.assertRaisesRegex(ValueError,'context_successor_not_pinned'):
+            documentation.load_context_record(fixtures.ROOT)
+
+
 class DocumentationSourceTest(unittest.TestCase):
     commit=fixtures.ProductionSourceTest.__dict__['commit']
-    setUpClass=fixtures.ProductionSourceTest.__dict__['setUpClass']
+    @classmethod
+    def setUpClass(cls):
+        fixtures.ProductionSourceTest.setUpClass.__func__(cls)
+        current=documentation.load_context_record(fixtures.ROOT)
+        old=documentation.load_record(fixtures.ROOT)
+        actual=next(r['entry'] for r in current['context'] if r['path']=='Makefile')
+        expected=next(r['entry'] for r in old['context'] if r['path']=='Makefile')
+        documentation.legacy.require(documentation.legacy.entry(fixtures.ROOT,cls.original,'Makefile')==actual,
+            'v3_fixture_exact_reviewed_context')
+        with tempfile.TemporaryDirectory() as folder:
+            env=dict(os.environ,GIT_INDEX_FILE=str(Path(folder)/'index'))
+            fixtures.git('read-tree',cls.original,env=env)
+            fixtures.git('update-index','--add','--cacheinfo',expected['mode']+','+expected['oid']+',Makefile',env=env)
+            cls.original=cls.commit(fixtures.git('write-tree',env=env),[cls.original])
+        cls.event_base=fixtures.source.EVENT_BASE
+        cls.target=cls.commit(fixtures.git('rev-parse',cls.original+'^{tree}'),[cls.event_base,cls.original])
+        cls.env['GITHUB_SHA']=cls.target
     tearDownClass=fixtures.ProductionSourceTest.__dict__['tearDownClass']
     setUp=fixtures.ProductionSourceTest.setUp
     tearDown=fixtures.ProductionSourceTest.tearDown
