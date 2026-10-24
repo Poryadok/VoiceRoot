@@ -31,6 +31,60 @@ def module():
     return value
 
 
+class ReadyDigestHoistContract(unittest.TestCase):
+    def fixtures(self,m):
+        def ready(kind):
+            return dict(type='F54_FIXED3071_ACTUAL_'+kind+'_COMPLETE_LEDGER' if kind=='J' else 'F54_FIXED3071_ACTUAL_I_RANGE_LEDGER',
+                        operation=kind,admission=False,required_qualification={
+                            'a':dict(aggregate=True,evidence=['a']),
+                            'b':dict(aggregate=False,evidence=['b'])})
+        inherited=ready('I');other=ready('J')
+        ledger=dict(rows=[],paths={},map_binding=dict(bytes=0,sha256=m.sha(b'')))
+        state=dict(operation_binding=dict(commit=m.J3071,paths=[]),operation='F5/'+m.J3071+'/2',
+                   classification=dict(trigger='false'),ledger={'F5':ledger},frame='F5',
+                   M_ready={'M':other},I_ready={'I':inherited},prior_span=dict(ledger=ledger,
+                   trace_sha256='trace',actual_operations=[]),capability_sha256='cap',frame_ancestry=[],coverage=[],composition={})
+        return state,inherited,other
+
+    def test_each_ready_digest_once_output_bound_and_inputs_unchanged(self):
+        m=module();state,inherited,other=self.fixtures(m);before=m.canonical(state)
+        original=m.canonical;counts={id(inherited):0,id(other):0}
+        def counted(value):
+            if id(value) in counts:counts[id(value)]+=1
+            return original(value)
+        expected={id(value):m.sha(original(value)) for value in (inherited,other)}
+        with patch.object(m,'canonical',side_effect=counted):
+            built=m.build_3071_J_ready(state,{})
+        self.assertEqual(list(counts.values()),[1,1]);self.assertEqual(original(state),before)
+        for obligation in built['required_qualification'].values():
+            self.assertEqual({x['ledger_sha256'] for x in obligation['inherited_qualification']},set(expected.values()))
+        counts=dict.fromkeys(counts,0);required={'kept':dict(aggregate=False)};saved=original(required)
+        with patch.object(m,'canonical',side_effect=counted):
+            collected=m.include_typed_collection_required(required,{'I':inherited},{'J':other})
+        self.assertEqual(list(counts.values()),[1,1]);self.assertEqual(original(state),before)
+        self.assertEqual(original(required),saved)
+        for name in ('a','b'):
+            self.assertEqual({x['ledger_sha256'] for x in collected[name]['retained_evidence']},set(expected.values()))
+        inherited['required_qualification']['a']['evidence'].append('changed')
+        changed=m.build_3071_J_ready(state,{})
+        self.assertNotEqual(original(built),original(changed))
+        self.assertEqual(changed['required_qualification']['a']['inherited_qualification'][1]['ledger_sha256'],m.sha(original(inherited)))
+        changed_collection=m.include_typed_collection_required(required,{'I':inherited},{'J':other})
+        self.assertEqual(changed_collection['a']['retained_evidence'][0]['ledger_sha256'],m.sha(original(inherited)))
+
+    def test_empty_and_invalid_ledgers_do_not_serialize_before_old_checks(self):
+        m=module();state,inherited,other=self.fixtures(m)
+        for ready in (inherited,other):ready['required_qualification']={}
+        with patch.object(m,'canonical',side_effect=AssertionError('unexpected ready serialization')):
+            m.build_3071_J_ready(state,{})
+            m.include_typed_collection_required({}, {'I':inherited},{'J':other})
+        inherited['required_qualification']={'a':dict(aggregate=1)}
+        with patch.object(m,'canonical',side_effect=AssertionError('unexpected ready serialization')):
+            with self.assertRaisesRegex(Exception,'fixed3071_J_inherited_boolean'):m.build_3071_J_ready(state,{})
+            with self.assertRaisesRegex(Exception,'fixed3071_collection_typed_boolean'):
+                m.include_typed_collection_required({}, {'I':inherited},{'J':other})
+
+
 class CollectionTraceIndexContract(unittest.TestCase):
     def test_ready_marker_is_invisible_until_complete_atomic_publication(self):
         m=module();entered=threading.Event();release=threading.Event();errors=[]

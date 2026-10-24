@@ -833,10 +833,12 @@ def build_3071_J_ready(state, prefix):
             target['retained_evidence'].append(dict(frame=frame,map_binding=ledger['map_binding'],evidence=value['evidence']))
     for kind,table in (('M',state['M_ready']),('I',state['I_ready'])):
         for operation,ready in table.items():
+            inherited_sha=None
             for name,value in ready['required_qualification'].items():
                 require(type(value['aggregate']) is bool,'fixed3071_J_inherited_boolean')
+                if inherited_sha is None:inherited_sha=sha(canonical(ready))
                 target=item(name);target['aggregate']|=value['aggregate']
-                target['inherited_qualification'].append(dict(kind=kind,operation=operation,ledger_sha256=sha(canonical(ready)),obligation=value))
+                target['inherited_qualification'].append(dict(kind=kind,operation=operation,ledger_sha256=inherited_sha,obligation=value))
     span=state['prior_span'];side=span['ledger']
     for name,value in side['paths'].items():
         require(type(value['aggregate']) is bool,'fixed3071_J_prior_span_boolean')
@@ -2521,11 +2523,13 @@ def include_typed_collection_required(required, I_ready, J_ready):
     for kind,table,expected in (('I',I_ready,'F54_FIXED3071_ACTUAL_I_RANGE_LEDGER'),('J',J_ready,'F54_FIXED3071_ACTUAL_J_COMPLETE_LEDGER')):
         for operation,ready in table.items():
             require(ready['type']==expected and ready['operation']==operation and ready['admission'] is False,'fixed3071_collection_exact_typed_ledger')
+            inherited_sha=None
             for name,value in ready['required_qualification'].items():
                 require(type(value['aggregate']) is bool,'fixed3071_collection_typed_boolean')
+                if inherited_sha is None:inherited_sha=sha(canonical(ready))
                 item=required.setdefault(name,dict(aggregate=False,retained_evidence=[],span_evidence=None,M_classification=None))
                 item['aggregate']|=value['aggregate']
-                item['retained_evidence'].append(dict(typed_ledger=kind,operation=operation,ledger_sha256=sha(canonical(ready)),aggregate=value['aggregate'],evidence=value))
+                item['retained_evidence'].append(dict(typed_ledger=kind,operation=operation,ledger_sha256=inherited_sha,aggregate=value['aggregate'],evidence=value))
     return required
 
 
