@@ -450,3 +450,31 @@ binds the exact source/test bytes, immutable trace, commands, logs and RSS metri
 The separate raw Git batch experiment remains ignored WIP and is excluded.
 Graphify rebuilt the source graph; its optional HTML view exceeded the size cap.
 The mandatory fresh full collector/router and hosted CI results remain unclaimed.
+
+Production v5 scaffold (2026-10-24): current38330 exposed two independently
+reviewed test-order/timing repairs, restricted to Messaging's messageevents
+jetstream_test.go and Moderation's grpcsvc automod_scan_outcomes_test.go.
+The proposed source extension binds their exact before/after blobs and the full
+predecessor-to-H tree; it grants no general test-path permission. Every other
+entry, old record/evidence/archive, Native f87/e409 input, Role input and corrected-F
+binding remains unchanged. Both contributions still require original router gates.
+The old v4 predicate remains intact. A distinct v5 reconstructs the full D6
+inventory, direct H/R ancestry, actual PR/master B/S/T, retained Native capability
+and the unchanged ten-carrier ceiling. The original eleven manual inputs remain
+mandatory. Current H/R pins are deliberately unset pending final component proof,
+actual root H publication and independent final source review. Draft negative
+fixtures cover a third path, another edit to the same path, mode/deletion changes,
+forged inventory/native/delta/review, artifact drift and applicable unpinned state.
+No final source, code or actual producer acceptance is claimed by the scaffold.
+
+Final v5 SOURCE review accepts actual H1038561dcff8413539da28355ee6a532d54fbcba,
+sole parent38330e20dfb23bb8be2298ba3e70182e01414481. The complete D6 inventory has
+1000 paths; only the two exact test entries change from the predecessor. All
+17 evidence artifacts are bound, including original hosted failures, truthful
+local baseline/controlled-overlay distinctions, successful scoped stress/race/vet
+results and independent semantic/source reviews. Final record SHA256
+26d4f8235d2d192fcf1e2691bd92337e390dbe443c14b6e7afa35171227decdc
+includes source-review SHA256
+65df8e2a145131b18d96c7e667bc9482238ef50d8e566596c543b60faf709d94.
+R publication on the actual H ancestry, final K pins/tests and a new full actual
+collector/router run remain separate gates. No old authority or evidence is replaced.
