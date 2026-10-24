@@ -14,7 +14,20 @@ p = pathlib.Path(os.environ['TEST_DB_STATE'])
 s = json.loads(p.read_text())
 args = sys.argv[1:]
 tool = pathlib.Path(sys.argv[0]).name
-if tool == 'psql':
+if tool == 'bot-source.py':
+    # Adjacent native owners are command seams, not custody simulations.
+    assert args == ['/native-bot-evidence/source.uuid', '--', 'migrate',
+                    '-path', os.environ['MIGRATIONS_DIR'] + '/bot_db',
+                    '-database', 'postgres://voice:voice@postgres:5432/bot_db?sslmode=disable', 'up']
+    s['bootstrap_calls'].append('bot')
+    if os.environ.get('TEST_BOT_SOURCE_FAILURE') == '1':
+        p.write_text(json.dumps(s))
+        sys.exit(2)
+elif tool == 'native-migrate':
+    assert args == ['--mode=provision', '--migrations-dir=' + os.environ['MIGRATIONS_DIR'] + '/space_db',
+                    '--migrate=/usr/local/bin/native-space-migrate-driver']
+    s['bootstrap_calls'].append('space')
+elif tool == 'psql':
     sql = ' '.join(args)
     if 'SELECT 1 FROM pg_database' in sql:
         name = sql.split("datname = '")[1].split("'")[0]
@@ -50,12 +63,12 @@ class RealtimeBootstrapTest(unittest.TestCase):
         self.base = Path(self.tmp.name)
         self.state = self.base / 'state.json'
         self.initial = dict(databases=[], tracked=False, dirty=False, tables=0,
-                            migration_calls=[])
+                            migration_calls=[], bootstrap_calls=[])
         self.state.write_text(json.dumps(self.initial))
         (self.base / 'migrations/realtime_db').mkdir(parents=True)
         (self.base / 'migrations/realtime_db/000001_admission.up.sql').write_text('-- boundary fixture')
         (self.base / 'schema').mkdir()
-        for tool in ('psql', 'migrate'):
+        for tool in ('psql', 'migrate', 'bot-source.py', 'native-migrate'):
             path = self.base / tool
             path.write_text(TOOLS)
             path.chmod(0o755)
@@ -63,10 +76,17 @@ class RealtimeBootstrapTest(unittest.TestCase):
                         PATH=str(self.base) + os.pathsep + os.environ['PATH'],
                         MIGRATIONS_DIR=str(self.base / 'migrations'),
                         SCHEMA_DIR=str(self.base / 'schema'),
+                        PGHOST='postgres', PGUSER='voice', PGPASSWORD='voice',
+                        SPACE_NATIVE_PRIOR_EVIDENCE='', SPACE_DB_PASSWORD='disposable-test',
                         GAME_INTEGRATION_DB_PASSWORD='disposable-test')
 
     def run_migration(self, bootstrap=False):
-        script = ROOT / 'docker/postgres/compose-migrate-dbs.sh'
+        # Relocate image-installed commands only; retain the real Realtime
+        # migration body and all of its dirty/untracked safety decisions.
+        text = (ROOT / 'docker/postgres/compose-migrate-dbs.sh').read_text()
+        script = self.base / 'migrate.sh'
+        script.write_text(text.replace('/usr/local/bin/provision-bot-membership-source.py',
+                                       str(self.base / 'bot-source.py')))
         if bootstrap:
             # Relocate only the image-installed executable path for this unit seam.
             text = (ROOT / 'docker/postgres/ensure-compose-schema.sh').read_text()
@@ -83,16 +103,27 @@ class RealtimeBootstrapTest(unittest.TestCase):
         self.assertTrue(state['tracked'], 'Realtime migration must run before startup')
         self.assertEqual(state['tables'], 6)
         self.assertEqual(len(state['migration_calls']), 1)
+        self.assertEqual(state['bootstrap_calls'], ['bot', 'space'])
         again, current = self.run_migration(bootstrap=True)
         self.assertEqual(again.returncode, 0, again.stderr)
         self.assertEqual(current['databases'].count('realtime_db'), 1)
         self.assertTrue(all(call[-1] == 'up' for call in current['migration_calls']))
+        self.assertEqual(current['bootstrap_calls'], ['bot', 'space', 'bot', 'space'])
 
     def test_fresh_realtime_is_migrated(self):
         result, state = self.run_migration()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(state['tracked'], 'Fresh realtime_db must receive its canonical migration')
         self.assertEqual(state['tables'], 6)
+        self.assertEqual(state['bootstrap_calls'], ['bot', 'space'])
+
+    def test_bot_source_failure_stops_before_realtime_migration(self):
+        self.env['TEST_BOT_SOURCE_FAILURE'] = '1'
+        result, state = self.run_migration()
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(state['bootstrap_calls'], ['bot'])
+        self.assertEqual(state['migration_calls'], [])
+        self.assertFalse(state['tracked'])
 
     def test_dirty_realtime_is_rejected_without_force(self):
         self.initial.update(tracked=True, dirty=True, tables=6)
