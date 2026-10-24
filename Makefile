@@ -309,7 +309,25 @@ verify-required-jobs-test:
 image-catalog-drift-check:
 	$(BASH) "$(ROOT)/scripts/ci/check-image-catalog-drift.sh"
 
-ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test voice-db-runtime-provisioning-contract-test a4-disposable-recovery-harness-test phase0-fixture-test staging-observability-test nats-leaf-topology-invariants-test staging-source-acquisition-workflow-test nats-rollout-preservation-test matchmaking-source-authority-test complete-match-pki-test
+CI_SCRIPT_SHARDS := policy runtime staging proofs
+.PHONY: ci-script-tests-pr $(CI_SCRIPT_SHARDS:%=ci-script-tests-%)
+# The full local suite retains historical audit by default. PR parity opts into
+# current-tree validation; CI executes the same four disjoint targets in parallel.
+ci-script-tests: ci-script-tests-policy ci-script-tests-runtime ci-script-tests-staging ci-script-tests-proofs voice-db-runtime-provisioning-contract-test
+ci-script-tests-pr: export VOICE_CONTRACT_PROFILE := current
+ci-script-tests-pr: ci-script-tests
+ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check
+	python3 "$(ROOT)/scripts/ci/current-diff-contract_test.py"
+	python3 "$(ROOT)/scripts/ci/fast-gate-routing_test.py"
+	python3 "$(ROOT)/scripts/ci/gate-latency_test.py"
+	$(BASH) "$(ROOT)/scripts/ci/ci-script-tests-reachability_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/check-auth-testcontainers-reports_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/check-auth-proto-sync_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/minio-mc-image-ci-contract_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/minio-compose-image-override-contract_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/staging-minio-bucket-job-lifecycle-contract_test.sh"
+
+ci-script-tests-runtime: voice-db-runtime-provisioning-contract-test a4-disposable-recovery-harness-test phase0-fixture-test matchmaking-source-authority-test complete-match-pki-test
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p capability_manifest_test.py
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p client_compatibility_test.py
 	python3 "$(ROOT)/src/frontend/docker/version_web_assets_test.py"
@@ -319,6 +337,9 @@ ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test bu
 	$(BASH) "$(ROOT)/scripts/ci/prod-clickhouse-init_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/prod-smoke_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/prod-user-space-rollout_test.sh"
+
+
+ci-script-tests-staging: rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test staging-observability-test nats-leaf-topology-invariants-test staging-source-acquisition-workflow-test nats-rollout-preservation-test
 	$(BASH) "$(ROOT)/scripts/staging/nats-bootstrap-policy_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/nats-generation-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/restore-nats-generation_test.sh"
@@ -326,7 +347,14 @@ ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test bu
 	$(BASH) "$(ROOT)/scripts/staging/nats-live-acl-proof-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/nats-root-diagnostics-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/nats-legacy-recovery-contract_test.sh"
-	$(BASH) "$(ROOT)/scripts/ci/ci-script-tests-reachability_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/nats-jwt-rollout-contract-test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/nats-jwt-leaf-hosted-proof.sh"
+	$(BASH) "$(ROOT)/scripts/ci/nats-canonical-acl-hosted-proof.sh"
+	python3 "$(ROOT)/scripts/staging/public-storage-ingress_test.py"
+	$(BASH) "$(ROOT)/scripts/staging/setup-github-runner_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/nats-search-jetstream-workflow-contract_test.sh"
+
+ci-script-tests-proofs: e2e-manifest-helper-test
 	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_test.sh"
 	python3 "$(ROOT)/scripts/ci/e2e_manifest_test.py"
 	$(BASH) "$(ROOT)/scripts/ci/compose-fcm-diagnostic-lib-test.sh"
@@ -336,26 +364,15 @@ ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test bu
 
 	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-live_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-nats-jetstream-check_test.sh"
-	$(BASH) "$(ROOT)/scripts/ci/nats-jwt-rollout-contract-test.sh"
-	$(BASH) "$(ROOT)/scripts/ci/nats-jwt-leaf-hosted-proof.sh"
-	$(BASH) "$(ROOT)/scripts/ci/nats-canonical-acl-hosted-proof.sh"
-	$(BASH) "$(ROOT)/scripts/ci/check-auth-testcontainers-reports_test.sh"
-	$(BASH) "$(ROOT)/scripts/ci/check-auth-proto-sync_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-a1-multi-account-proof_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-a1-flutter-profile-handoff_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-file-attachment-restart-proof_test.sh"
-	$(BASH) "$(ROOT)/scripts/ci/minio-mc-image-ci-contract_test.sh"
-	$(BASH) "$(ROOT)/scripts/ci/minio-compose-image-override-contract_test.sh"
-	$(BASH) "$(ROOT)/scripts/ci/staging-minio-bucket-job-lifecycle-contract_test.sh"
-	python3 "$(ROOT)/scripts/staging/public-storage-ingress_test.py"
 	python3 "$(ROOT)/scripts/staging/rollout-user-space-tier_test.py"
 	$(BASH) "$(ROOT)/scripts/ci/a1-attachment-restart-ci-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/a1-flutter-profile-handoff-ci-reachability_test.sh"
-	$(BASH) "$(ROOT)/scripts/staging/setup-github-runner_test.sh"
-	$(BASH) "$(ROOT)/scripts/ci/nats-search-jetstream-workflow-contract_test.sh"
 
-ci-script-tests: release-policy-wiring-test
 ci-script-tests: export PYTHONDONTWRITEBYTECODE := 1
+$(CI_SCRIPT_SHARDS:%=ci-script-tests-%): export PYTHONDONTWRITEBYTECODE := 1
 
 .PHONY: release-policy-wiring-test
 release-policy-wiring-test:

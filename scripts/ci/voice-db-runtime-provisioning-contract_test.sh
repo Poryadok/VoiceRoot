@@ -453,6 +453,19 @@ expect_fixed 'deploy/staging/README.md' 'voice-migrate-voice-db' F12
 expect_regex 'deploy/staging/README.md' '(migrat|миграц).*(before|до).*(voice-voice|Voice)' F12
 expect_regex 'deploy/staging/README.md' 'VOICE_DATABASE_URL.*voice-app-secrets|voice-app-secrets.*VOICE_DATABASE_URL' F12
 
+# F05-F12 remain part of both profiles. Only historical provenance replay moves
+# out of ordinary PR validation; current input validation also runs as its own
+# required job for every PR, even when this broad script suite is unselected.
+case "${VOICE_CONTRACT_PROFILE:-full}" in
+  current)
+    ((failures == 0)) || exit 1
+    echo 'Voice DB F05-F12 current provisioning/docs contract: PASS'
+    exit 0
+    ;;
+  full) ;;
+  *) echo 'Unknown VOICE_CONTRACT_PROFILE (expected current or full)' >&2; exit 2 ;;
+esac
+
 printf '%s\n' '== F13/G7: source-disabled scope boundary =='
 python3 "${ROOT}/scripts/ci/f13_native_p3_source_test.py"
 python3 "${ROOT}/scripts/ci/f13_native_p3_source_history_test.py"

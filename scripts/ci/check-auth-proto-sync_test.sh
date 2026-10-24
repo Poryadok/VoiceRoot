@@ -70,7 +70,7 @@ echo "== canonical CI wiring covers either auth proto path =="
 make_target="$(sed -n '/^check-auth-proto-sync:/,/^[[:alnum:]_-]*:/p' "${MAKEFILE}")"
 printf '%s\n' "${make_target}" | grep -Fq 'scripts/ci/check-auth-proto-sync.sh' \
   || fail "check-auth-proto-sync Make target must invoke the guard"
-ci_script_target="$(sed -n '/^ci-script-tests:/,/^[[:alnum:]_-]*:/p' "${MAKEFILE}")"
+ci_script_target="$(make --no-print-directory -n -C "${ROOT}" ci-script-tests)"
 printf '%s\n' "${ci_script_target}" | grep -Fq 'check-auth-proto-sync_test.sh' \
   || fail "ci-script-tests must run this regression test"
 protobuf_job="$(sed -n '/^  protobuf:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"

@@ -25,6 +25,13 @@ source-bound acceptance when integrating and never overwrite shipped migrations.
 1. Один PR — по возможности одна смысловая задача; крупные изменения разбиваются на обозримые части.
 2. Описание PR: **что** сделано и **зачем**; ссылка на issue/задачу, если есть.
 3. Перед запросом review: локальные проверки из [TESTING.md](TESTING.md) для затронутых пакетов; для новой нетривиальной логики ожидается цикл из раздела «Порядок разработки (TDD)» там же.
+   Быстрые CI-script checks: `make -j4 ci-script-tests-pr` и отдельный
+   `scripts/ci/current-diff-contract.py --base <comparison-commit>` на committed
+   checkout. `make ci-script-tests` сохраняет полный исторический replay.
+   Required `ci-gate` требует каждый выбранный shard; исторический аудит
+   обязателен на master перед release/staging и на PR исторического валидатора
+   или release-ветки. Методика замеров и исключения —
+   [CI gate policy](../.github/ci/gate-policy.md).
 4. **Изменения в `protos/`** — перед review: `make buf-ci` (lint + проверка формата); при правках публичного API относительно `master` — `make buf-breaking` (см. [TESTING.md](TESTING.md)). После регенерации Go stubs: `make buf-generate-all` (или `make buf-generate` + `make sync-pb-from-gen`) и `make buf-generate-dart` / `make buf-dart-check` — см. [REPOSITORIES.md](REPOSITORIES.md). Новые поля и RPC — по buf STANDARD и [DATA_MODEL.md](DATA_MODEL.md) (`account_id` / `profile_id`, время, пары `*Request` / `*Response`).
 5. Merge в `master` после approve (для соло-разработки допускается self-merge после зелёного CI; при команде из двух и более человек — **минимум один чужой approve** на PR в `master`).
 6. В `master` — **merge commit** (`gh pr merge --merge`): все коммиты ветки остаются в истории. **Squash merge не использовать** — схлопывание коммитов скрывает промежуточные шаги (TDD, ревью-итерации).

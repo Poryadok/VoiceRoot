@@ -16,7 +16,7 @@ run_gate() {
   local out
   out="$(mktemp)"
   set +e
-  env JOB_NATS_HUB_CONFIG_RENDERER_IMAGE=success "$@" bash "${SCRIPT}" pull_request true auto >"${out}" 2>&1
+  env JOB_CURRENT_DIFF_CONTRACT=success JOB_FLUTTER_UNIT_TESTS=success JOB_NATS_HUB_CONFIG_RENDERER_IMAGE=success "$@" bash "${SCRIPT}" pull_request true auto >"${out}" 2>&1
   local rc=$?
   set -e
   if [[ "${rc}" -ne "${expect_rc}" ]]; then

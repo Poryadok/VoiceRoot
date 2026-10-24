@@ -162,8 +162,8 @@ for compatibility_path in \
 done
 echo "${job_block}" | grep -Eq '^      - name: CI script regression tests$' \
   || fail "ci-script-tests must name its regression-test step"
-echo "${job_block}" | grep -Eq '^        run: make ci-script-tests$' \
-  || fail "ci-script-tests must invoke make ci-script-tests"
+echo "${job_block}" | grep -Fxq '        run: make ci-script-tests-${{ matrix.shard }}' \
+  || fail "ci-script-tests must invoke every explicit Make shard"
 grep -Fq 'scripts/staging/nats-live-acl-proof-contract_test.sh' "${ROOT}/Makefile" \
   || fail "ci-script-tests must include the live NATS ACL proof contract"
 echo "${job_block}" | grep -Eq '^          fetch-depth: 0$' \
@@ -232,7 +232,7 @@ grep -Fq 'require_job compose-e2e "${compose_result}"' "${REQUIRED_JOBS}" \
 
 run_compose_required_check() {
   local code="$1" scheduled="$2" result="$3"
-  if RUN_COMPOSE_E2E="${scheduled}" JOB_COMPOSE_E2E="${result}" \
+  if JOB_CURRENT_DIFF_CONTRACT=success RUN_COMPOSE_E2E="${scheduled}" JOB_COMPOSE_E2E="${result}" \
     bash "${REQUIRED_JOBS}" pull_request "${code}" auto >/dev/null 2>&1; then
     return 0
   fi

@@ -3,6 +3,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 
@@ -21,8 +22,9 @@ class WebAssetsTest(unittest.TestCase):
         self.assertIn('main\\.[0-9a-f]{64}\\.dart\\.js', nginx)
         self.assertIn('flutter_bootstrap\\.[0-9a-f]{64}\\.js', nginx)
         self.assertIn('add_header Cache-Control "public, max-age=31536000, immutable";', nginx)
-        makefile = (HERE.parents[2] / 'Makefile').read_text()
-        ci_target = makefile.split('\nci-script-tests:', 1)[1].split('\n\n', 1)[0]
+        ci_target = subprocess.check_output(
+            ['make', '--no-print-directory', '-n', 'ci-script-tests'],
+            cwd=HERE.parents[2], text=True)
         self.assertIn('src/frontend/docker/version_web_assets_test.py', ci_target)
 
     def generate(self, root, main=b'compiled app', config=None):

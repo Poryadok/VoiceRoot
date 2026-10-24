@@ -49,6 +49,7 @@ jobs:
     outputs:
       global: ${{ steps.filter.outputs.global }}
       ci_global: ${{ steps.filter.outputs.ci_global }}
+      history_audit: ${{ steps.history.outputs.required }}
       match_squad_overlay: ${{ steps.filter.outputs.match_squad_overlay }}
       dev_web_publish: ${{ steps.filter.outputs.dev_web_publish }}
       a1_e2e: ${{ steps.filter.outputs.a1_e2e }}
@@ -89,6 +90,17 @@ jobs:
         id: filter
         with:
           filters: .github/ci/path-filters.yml
+      - name: Select historical provenance audit
+        id: history
+        env:
+          FILTER_HISTORY: ${{ steps.filter.outputs.history_audit }}
+          PR_HEAD_REF: ${{ github.head_ref }}
+        run: |
+          required="${FILTER_HISTORY}"
+          case "$PR_HEAD_REF" in
+            codex/voice-master-release-*|codex/game-sdk-federation-docs) required=true ;;
+          esac
+          echo "required=${required}" >> "$GITHUB_OUTPUT"
       - name: Resolve Go service matrix
         id: gomatrix
         env:
@@ -230,13 +242,18 @@ jobs:
     if: >-
       !cancelled() &&
       needs.changes.result == 'success' &&
-      needs.changes.outputs.code == 'true' &&
       (
         needs.changes.outputs.global == 'true' ||
         needs.changes.outputs.ci_global == 'true' ||
         (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')
       )
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [policy, runtime, staging, proofs]
+    env:
+      VOICE_CONTRACT_PROFILE: current
     steps:
       - uses: actions/checkout@v5
         with:
@@ -255,13 +272,80 @@ jobs:
           echo "VOICE_R22_BASE_SHA=${base_sha}" >> "${GITHUB_ENV}"
           echo "VOICE_CI_PUSH_BEFORE_SHA=${VOICE_CI_PUSH_BEFORE_SHA}" >> "${GITHUB_ENV}"
       - name: CI script regression tests
-        run: make ci-script-tests
+        run: make ci-script-tests-${{ matrix.shard }}
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: NATS non-JetStream leaf routing regression
+        if: matrix.shard == 'staging'
         working-directory: scripts/staging/nats-leaf-routing-test
         run: go test -count=1 -timeout=90s ./...
+
+  current-diff-contract:
+    needs: changes
+    if: >-
+      !cancelled() &&
+      needs.changes.result == 'success' &&
+      github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Validate exact current PR merge and immutable migrations
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/current-diff"
+          python3 scripts/ci/current-diff-contract.py --base "$PR_BASE_SHA" \
+            --pr-head "$PR_HEAD_SHA" --target "$GITHUB_SHA" \
+            > "$RUNNER_TEMP/current-diff/result.json" \
+            2> "$RUNNER_TEMP/current-diff/diagnostics.log" || {
+              cat "$RUNNER_TEMP/current-diff/diagnostics.log" >&2
+              exit 1
+            }
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: current-diff-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/current-diff
+          retention-days: 14
+
+  voice-history-audit:
+    needs: changes
+    if: >-
+      !cancelled() &&
+      (github.event_name == 'schedule' ||
+       github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
+       (github.event_name == 'pull_request' && needs.changes.outputs.history_audit == 'true'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Full historical provenance and synthetic negative fixtures
+        env:
+          VOICE_CI_EVENT_NAME: ${{ github.event_name }}
+          VOICE_CI_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          VOICE_CI_PUSH_BEFORE_SHA: ${{ github.event.before }}
+          VOICE_CONTRACT_PROFILE: full
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/voice-history-audit"
+          printf '%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/voice-history-audit/source-sha.txt"
+          export VOICE_R22_BASE_SHA="$(bash scripts/ci/resolve-voice-r22-base.sh)"
+          bash scripts/ci/voice-db-runtime-provisioning-contract_test.sh \
+            2>&1 | tee "$RUNNER_TEMP/voice-history-audit/audit.log"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: voice-history-audit-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/voice-history-audit
+          if-no-files-found: error
+          retention-days: 14
 
   match-squad-overlay:
     needs: changes
@@ -281,6 +365,47 @@ jobs:
           python-version: '3.12'
       - name: MatchSquad DEV overlay contracts
         run: python3 -B -m unittest scripts.dev.match_squad_overlay_test scripts.dev.match_squad_runtime_overlay_test
+
+  # Flutter's built-in file sharding retains the original complete test
+  # discovery and concurrency=1 isolation within each independent checkout.
+  flutter-unit-tests:
+    needs: changes
+    if: >-
+      !cancelled() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.frontend == 'true' ||
+       needs.changes.outputs.protos == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Prefetch sqlite3mc native assets (host)
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - name: Flutter unit and widget tests
+        working-directory: src/frontend
+        run: |
+          flutter pub get
+          flutter test --reporter expanded --concurrency=1 --no-pub --total-shards=4 --shard-index=${{ matrix.shard }}
+      - name: Retain failing golden diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: flutter-golden-failures-${{ matrix.shard }}-${{ github.sha }}
+          path: src/frontend/test/failures
+          if-no-files-found: ignore
+          retention-days: 7
 
   flutter:
     needs: changes
@@ -318,20 +443,11 @@ jobs:
         run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
       - name: Axe web a11y landmark smoke
         run: make a11y-web-axe
-      - name: Flutter analyze and test
+      - name: Flutter analyze
         working-directory: src/frontend
         run: |
           flutter pub get
           flutter analyze --no-fatal-infos
-          flutter test --reporter expanded --concurrency=1
-      - name: Retain MatchHistory golden diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v6
-        with:
-          name: match-history-golden-failure-${{ github.run_id }}
-          path: src/frontend/test/failures/*match_history_*.png
-          if-no-files-found: warn
-          retention-days: 7
       - name: Set up Node for Music decoder browser check
         uses: actions/setup-node@v4
         with:
@@ -841,12 +957,10 @@ jobs:
         run: echo "Published ${{ steps.image.outputs.base }}/minio:${{ github.sha }} at digest \`${{ steps.build.outputs.digest }}\`." >> "$GITHUB_STEP_SUMMARY"
 
   backend-go:
-    needs: [changes, backend-go-pkg]
+    needs: changes
     if: >-
       !cancelled() &&
       needs.changes.result == 'success' &&
-      needs.backend-go-pkg.result != 'failure' &&
-      needs.backend-go-pkg.result != 'cancelled' &&
       (needs.changes.outputs.run_go == 'true' ||
        needs.changes.outputs.global == 'true' ||
        needs.changes.outputs.ci_global == 'true' ||
@@ -907,13 +1021,11 @@ jobs:
           cache-to: type=gha,scope=backend-${{ matrix.service }},mode=max,ignore-error=true
 
   backend-go-integration-pr:
-    needs: [changes, backend-go-pkg]
+    needs: changes
     if: >-
       !cancelled() &&
       github.event_name == 'pull_request' &&
       needs.changes.result == 'success' &&
-      needs.backend-go-pkg.result != 'failure' &&
-      needs.backend-go-pkg.result != 'cancelled' &&
       needs.changes.outputs.integration_go_services != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -1805,8 +1917,11 @@ jobs:
       - protobuf
       - compose-config
       - ci-script-tests
+      - current-diff-contract
+      - voice-history-audit
       - match-squad-overlay
       - flutter
+      - flutter-unit-tests
       - flutter-device-driver
       - flutter-windows
       - web
@@ -1889,8 +2004,12 @@ jobs:
           JOB_COMPOSE_E2E: ${{ needs.compose-e2e.result }}
           JOB_COMPOSE_CONFIG: ${{ needs.compose-config.result }}
           JOB_CI_SCRIPT_TESTS: ${{ needs.ci-script-tests.result }}
+          RUN_HISTORY_AUDIT: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/master') || (github.event_name == 'pull_request' && needs.changes.outputs.history_audit == 'true') }}
+          JOB_CURRENT_DIFF_CONTRACT: ${{ needs.current-diff-contract.result }}
+          JOB_VOICE_HISTORY_AUDIT: ${{ needs.voice-history-audit.result }}
           JOB_MATCH_SQUAD_OVERLAY: ${{ needs.match-squad-overlay.result }}
           JOB_FLUTTER: ${{ needs.flutter.result }}
+          JOB_FLUTTER_UNIT_TESTS: ${{ needs.flutter-unit-tests.result }}
           JOB_FLUTTER_WINDOWS: ${{ needs.flutter-windows.result }}
           JOB_FLUTTER_DEVICE_DRIVER: ${{ needs.flutter-device-driver.result }}
           JOB_WEB: ${{ needs.web.result }}
@@ -2011,6 +2130,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            src/backend/gateway/go.sum
+            src/backend/notification/go.sum
+            src/backend/pkg/go.sum
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}

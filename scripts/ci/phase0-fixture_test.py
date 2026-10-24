@@ -2351,6 +2351,28 @@ class A1InvocationTests(unittest.TestCase):
                                  "${ROOT}/docker-compose.phase0.yml"])
         self.assertIn("PHASE0_FIXTURE_DIR", script)
 
+class HostGoCacheTests(unittest.TestCase):
+    def test_compose_host_cache_preserves_fresh_builds_and_test_execution(self):
+        job = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))["jobs"]["compose-e2e"]
+        steps = job["steps"]
+        setup = next(step for step in steps if step.get("uses") == "actions/setup-go@v5")
+        self.assertTrue(setup["with"]["cache"])
+        paths = setup["with"]["cache-dependency-path"].splitlines()
+        self.assertEqual(set(paths), {
+            "src/backend/gateway/go.sum", "src/backend/notification/go.sum",
+            "src/backend/pkg/go.sum"})
+        self.assertTrue(all((ROOT / path).is_file() for path in paths))
+        self.assertFalse(any(step.get("uses", "").startswith("docker/bake-action")
+                             for step in steps))
+        startup = next(step for step in steps if step.get("name") == "Start app stack")
+        self.assertIn("--profile app up -d --build", startup["run"])
+        script = (ROOT / "scripts/ci/compose-e2e-smoke.sh").read_text(encoding="utf-8")
+        commands = [line for line in script.splitlines() if "go test " in line]
+        self.assertGreaterEqual(len(commands), 4)
+        self.assertTrue(all("-count=1" in line for line in commands))
+        smoke = next(step for step in steps if step.get("name") == "Compose E2E smoke (all features)")
+        self.assertIn("CGO_ENABLED=1 go test -tags=live -count=1", smoke["run"])
+
 
 class RestorerPathTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "posix" and os.geteuid() == 0,
