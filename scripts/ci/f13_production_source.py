@@ -62,6 +62,17 @@ require=gitutil.require
 git=gitutil.git
 
 
+RENDER_VERSION='F13-PRODUCTION-SOURCE-v6'
+RENDER_PREDECESSOR='122bcedd7757139d441bc7b40220d98e21b117c4'
+RENDER_SOURCE='5a817a37e145c10d3b2b87b03454d777e36b10c4'
+RENDER_RECORD_PATH='docs/testing/f13-production-source-v6.json'
+RENDER_RECORD_COMMIT='28e929e65fa1a038662ea8620ac2bd8537c96291'
+RENDER_RECORD_SHA256='c7241b4a59d8b571f44004ae9e3c8537698f2f4eb7342275396608d1f35b4a05'
+RENDER_FIXES={
+    'scripts/ci/f13_historical_composition.py':'e1ed9f7f4c779f83fa1872a34a00dd7181c93c01cab3a9c043457a50b829b2c1',
+    'scripts/ci/f13_historical_composition_test.py':'2f4cdd12d2fc9a913a8f37fccdc5bf5d675544c0fd1fdadb178a2e4b9f79989b'}
+
+
 def sha(raw):return hashlib.sha256(raw).hexdigest()
 
 
@@ -153,6 +164,8 @@ def load_record(repo):
 
 def qualify(repo):
     require(Path(repo).resolve()==ROOT.resolve(),'production_actual_root')
+    if RENDER_SOURCE is not None and git(repo,'merge-base',RENDER_SOURCE,'HEAD').decode().strip()==RENDER_SOURCE:
+        return qualify_rendering_fix(repo)
     if TEST_SOURCE is not None and git(repo,'merge-base',TEST_SOURCE,'HEAD').decode().strip()==TEST_SOURCE:
         return qualify_test_fixes(repo)
     if TRANSPORT_SOURCE is not None and git(repo,'merge-base',TRANSPORT_SOURCE,'HEAD').decode().strip()==TRANSPORT_SOURCE:
@@ -497,6 +510,107 @@ def qualify_test_fixes(repo):
         admission=False,runtime_pass=False,current_or_future_path_authority=False)
 
 
+def load_rendering_fix(repo):
+    """Exact historical rendering source repair; no helper-path permission."""
+    previous,transport,prior,old=load_test_fixes(repo)
+    require(RENDER_SOURCE is not None and RENDER_RECORD_COMMIT is not None and
+        RENDER_RECORD_SHA256 is not None,'production_rendering_fix_not_pinned')
+    raw=fixed_artifact(repo,RENDER_RECORD_COMMIT,dict(path=RENDER_RECORD_PATH,sha256=RENDER_RECORD_SHA256))
+    record=json.loads(raw,object_pairs_hook=gitutil.pairs)
+    require(set(record)=={'version','status','source','source_tree','predecessor','changes','delta_sha256',
+        'native_record','current_inputs','evidence','review','runtime_pass','activation_authority',
+        'current_or_future_path_authority'},'production_rendering_fix_shape')
+    require(record['version']==RENDER_VERSION and record['status']=='SOURCE_CONSUMPTION_CONTRACT_CLEAR' and
+        all(record[k] is False for k in ('runtime_pass','activation_authority','current_or_future_path_authority')),
+        'production_rendering_fix_no_authority')
+    require(record['source']==RENDER_SOURCE and record['predecessor']==dict(record=TEST_RECORD_COMMIT,
+        path=TEST_RECORD_PATH,sha256=TEST_RECORD_SHA256,carrier=RENDER_PREDECESSOR),
+        'production_rendering_fix_lineage')
+    require(git(repo,'rev-list','--parents','-n','1',RENDER_SOURCE).decode().split()==
+        [RENDER_SOURCE,RENDER_PREDECESSOR],'production_rendering_fix_source_parent')
+    require(git(repo,'rev-list','--parents','-n','1',RENDER_RECORD_COMMIT).decode().split()==
+        [RENDER_RECORD_COMMIT,RENDER_SOURCE],'production_rendering_fix_record_parent')
+    require(record['source_tree']==git(repo,'rev-parse',RENDER_SOURCE+'^{tree}').decode().strip(),
+        'production_rendering_fix_source_tree')
+    git(repo,'merge-base','--is-ancestor',TEST_RECORD_COMMIT,RENDER_PREDECESSOR)
+    require(set(git(repo,'diff','--name-only',TEST_RECORD_COMMIT,RENDER_PREDECESSOR).decode().splitlines())
+        <=set(SUCCESSOR_CARRIERS),'production_rendering_fix_predecessor_carrier')
+    before,after=entries(repo,RENDER_PREDECESSOR),entries(repo,RENDER_SOURCE)
+    require(set(before)==set(after) and {p for p in before if before[p]!=after[p]}==set(RENDER_FIXES),
+        'production_rendering_fix_exact_two_paths')
+    changes=[]
+    for name,expected_sha in sorted(RENDER_FIXES.items()):
+        item=dict(path=name,disposition='ORIGINAL_CONTRIBUTION_GATES_REQUIRED')
+        for label,revision in (('before',RENDER_PREDECESSOR),('after',RENDER_SOURCE)):
+            meta=gitutil.entry(repo,revision,name)
+            require(meta['mode']=='100644' and meta['type']=='blob','production_rendering_fix_file_mode')
+            data=git(repo,'cat-file','blob',meta['oid'])
+            item[label]=dict(entry=tree_entry(repo,revision,name),bytes=len(data),sha256=sha(data))
+        require(item['after']['sha256']==expected_sha,'production_rendering_fix_exact_bytes')
+        changes.append(item)
+    require(record['changes']==changes and record['delta_sha256']==
+        sha(git(repo,'diff','--raw','--no-abbrev','--no-renames',RENDER_PREDECESSOR,RENDER_SOURCE)),
+        'production_rendering_fix_exact_delta')
+    require(record['native_record']==previous['native_record'],'production_rendering_fix_retained_native_tuple')
+    inventory=json.loads(fixed_artifact(repo,RENDER_RECORD_COMMIT,record['current_inputs']),object_pairs_hook=gitutil.pairs)
+    reference=entries(repo,REFERENCE)
+    require(inventory==dict(source=RENDER_SOURCE,reference=REFERENCE,
+        delta_sha256=sha(git(repo,'diff','--raw','--no-abbrev','--no-renames',REFERENCE,RENDER_SOURCE)),
+        entries=[dict(path=p,reference_entry=reference.get(p,''),current_entry=after.get(p,''),
+            disposition='ORIGINAL_CONTRIBUTION_GATES_REQUIRED')
+            for p in git(repo,'diff','--name-only',REFERENCE,RENDER_SOURCE).decode().splitlines()]),
+        'production_rendering_fix_complete_inventory')
+    require(isinstance(record['evidence'],list) and record['evidence'],'production_rendering_fix_evidence')
+    names=[]
+    for proof in record['evidence']:
+        require(isinstance(proof,dict) and isinstance(proof.get('path'),str),'production_artifact_shape')
+        require(gitutil.entry(repo,RENDER_RECORD_COMMIT,proof['path']) is not None,'production_artifact_missing')
+        fixed_artifact(repo,RENDER_RECORD_COMMIT,proof);names.append(proof['path'])
+    require(names==sorted(set(names)) and isinstance(record['review'],list) and record['review'] and
+        all(isinstance(p,str) and p in names for p in record['review']),'production_rendering_fix_review')
+    additions={RENDER_RECORD_PATH,record['current_inputs']['path'],*names}
+    require(len(additions)==2+len(names) and all(p not in after for p in additions),'production_rendering_fix_new_evidence_only')
+    recorded=entries(repo,RENDER_RECORD_COMMIT)
+    require(set(recorded)-set(after)==additions and all(recorded.get(p)==v for p,v in after.items()
+        if p!='.agent/execplans/pr875-current-native-source.md'),'production_rendering_fix_immutable_predecessor')
+    return record,previous,transport,prior,old
+
+
+def qualify_rendering_fix(repo):
+    record,previous,transport,prior,old=load_rendering_fix(repo)
+    target=git(repo,'rev-parse','HEAD').decode().strip()
+    event={k:os.environ.get(k,'') for k in ('GITHUB_EVENT_NAME','GITHUB_REF','GITHUB_SHA','GITHUB_BASE_REF','VOICE_CI_PUSH_BEFORE_SHA')}
+    pr=event['GITHUB_EVENT_NAME']=='pull_request' and re.fullmatch(r'refs/pull/[1-9][0-9]*/merge',event['GITHUB_REF']) and event['GITHUB_BASE_REF']=='master'
+    push=event['GITHUB_EVENT_NAME']=='push' and event['GITHUB_REF']=='refs/heads/master' and event['VOICE_CI_PUSH_BEFORE_SHA']==EVENT_BASE
+    require(event['GITHUB_SHA']==target and (pr or push),'production_actual_master_event')
+    parents=git(repo,'rev-list','--parents','-n','1',target).decode().split()
+    require(len(parents)==3 and parents[1]==EVENT_BASE,'production_actual_ordered_parents')
+    source=parents[2];git(repo,'merge-base','--is-ancestor',RENDER_RECORD_COMMIT,source)
+    require(source!=RENDER_RECORD_COMMIT,'production_later_carrier')
+    require(git(repo,'rev-parse',source+'^{tree}')==git(repo,'rev-parse',target+'^{tree}'),'production_source_result_tree')
+    require(set(git(repo,'diff','--name-only',RENDER_RECORD_COMMIT,source).decode().splitlines())<=set(SUCCESSOR_CARRIERS),
+        'production_only_reviewed_carrier_delta')
+    for name in SUCCESSOR_CARRIERS:
+        meta=gitutil.entry(repo,source,name)
+        require(meta['mode']=='100644' and meta['type']=='blob','production_carrier_mode')
+        require(git(repo,'cat-file','blob',meta['oid'])==(ROOT/name).read_bytes(),'production_executed_carrier')
+    # R preserves every old entry; only named executable carriers may change after R.
+    # Requalify the original Native tuple against this actual event, never a new record alias.
+    import f13_native_p3_documentation as documentation
+    current=documentation.qualify(repo,EVENT_BASE,source,target,event['GITHUB_EVENT_NAME'],event['GITHUB_REF'],
+        event['GITHUB_SHA'],event['VOICE_CI_PUSH_BEFORE_SHA'],event['GITHUB_BASE_REF'])
+    retained=record['native_record']
+    require((current['version'],current['record'],current['snapshot'],current['record_sha256'])==
+        (retained['version'],retained['commit'],retained['source'],retained['sha256']),
+        'production_transport_actual_native_binding')
+    return dict(type=RENDER_VERSION,record=RENDER_RECORD_COMMIT,record_sha256=RENDER_RECORD_SHA256,
+        predecessor_record=TEST_RECORD_COMMIT,historical_validation_source=old['source'],
+        reviewed_source=record['source'],reviewed_tree=record['source_tree'],base=EVENT_BASE,source=source,target=target,
+        historical_collector=HISTORICAL_SCOPE,native_content_baseline=NATIVE_CONTENT_BASE,
+        current_inputs_sha256=record['current_inputs']['sha256'],event=event,
+        admission=False,runtime_pass=False,current_or_future_path_authority=False)
+
+
 def validate_manual_supplement(repo,record):
     """Preserve the original facts predicate and verify its complete closure."""
     raw=fixed_artifact(repo,SUCCESSOR_RECORD_COMMIT,record['manual_supplement'])
@@ -539,7 +653,7 @@ def materialize(repo,destination):
             data=archive.read('objects/'+item['sha256'])
             require(len(data)==item['bytes'] and sha(data)==item['sha256'],'production_materialized_historical_hash')
             path=folder/name.lstrip('/');path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
-    if binding['type'] in ('F13-PRODUCTION-SOURCE-v3',TRANSPORT_VERSION,TEST_VERSION):
+    if binding['type'] in ('F13-PRODUCTION-SOURCE-v3',TRANSPORT_VERSION,TEST_VERSION,RENDER_VERSION):
         current,_=load_successor(repo)
         supplemental=validate_manual_supplement(repo,current)
         destination=folder/'fixed3071-unit/manual'
