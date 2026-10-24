@@ -478,3 +478,19 @@ includes source-review SHA256
 65df8e2a145131b18d96c7e667bc9482238ef50d8e566596c543b60faf709d94.
 R publication on the actual H ancestry, final K pins/tests and a new full actual
 collector/router run remain separate gates. No old authority or evidence is replaced.
+
+Final v5 K validation (2026-10-24) pins actual root R
+d0554787d0363548106fb869dcfa8e9cc972b6af, directly above H103856.
+Independent final source and code reviews are CLEAR. The isolated Linux actual-R
+fixture verified all 19 artifact modes and raw bytes, then passed production
+33/33 (245.948s), Native documentation 7/7 (5.749s), F54 63/63 (159.980s)
+and Python compilation, exit 0. Earlier failures remain recorded separately:
+the provisional runner copied evidence with executable modes; the first actual-R
+run exposed one negative-test expectation mismatch. The final test distinguishes
+missing evidence (single_entry) from altered bytes (production_artifact_hash),
+without changing production validation or immutable-predecessor rejection.
+The corrected test received independent CODE CLEAR before the complete retry.
+Graphify rebuilt the source graph; its optional HTML view exceeded the size cap.
+A fresh full actual collector/router and hosted CI remain required and unclaimed.
+Local validation receipt: tmp/pr875-repair/bot-receivers/v5-actual-retry/receipt.json,
+SHA256 2e768278bfe5efee8df724832b4963868d43b8cc17f6738c1de621d286dbadad.
