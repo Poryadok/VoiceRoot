@@ -165,18 +165,19 @@ class ProductionSourceTest(unittest.TestCase):
 
     def test_successor_is_distinct_from_historical_source(self):
         value=source.qualify(ROOT)
+        social=source.SOCIAL_SOURCE is not None
         rendering=source.RENDER_SOURCE is not None
         current=source.TRANSPORT_SOURCE is not None
         fixes=source.TEST_SOURCE is not None
-        self.assertEqual(value['type'],source.RENDER_VERSION if rendering else source.TEST_VERSION if fixes else source.TRANSPORT_VERSION if current else 'F13-PRODUCTION-SOURCE-v3')
-        self.assertEqual(value['reviewed_source'],source.RENDER_SOURCE if rendering else source.TEST_SOURCE if fixes else source.TRANSPORT_SOURCE if current else source.SUCCESSOR_SOURCE)
+        self.assertEqual(value['type'],source.SOCIAL_VERSION if social else source.RENDER_VERSION if rendering else source.TEST_VERSION if fixes else source.TRANSPORT_VERSION if current else 'F13-PRODUCTION-SOURCE-v3')
+        self.assertEqual(value['reviewed_source'],source.SOCIAL_SOURCE if social else source.RENDER_SOURCE if rendering else source.TEST_SOURCE if fixes else source.TRANSPORT_SOURCE if current else source.SUCCESSOR_SOURCE)
         self.assertEqual(value['historical_validation_source'],self.record['source'])
         self.assertNotEqual(value['historical_validation_source'],value['reviewed_source'])
-        self.assertEqual(value['predecessor_record'],source.TEST_RECORD_COMMIT if rendering else source.TRANSPORT_RECORD_COMMIT if fixes else source.SUCCESSOR_RECORD_COMMIT if current else source.PINNED_RECORD_COMMIT)
+        self.assertEqual(value['predecessor_record'],source.RENDER_RECORD_COMMIT if social else source.TEST_RECORD_COMMIT if rendering else source.TRANSPORT_RECORD_COMMIT if fixes else source.SUCCESSOR_RECORD_COMMIT if current else source.PINNED_RECORD_COMMIT)
 
     def test_transport_retains_exact_native_authority(self):
         value=source.qualify(ROOT)
-        self.assertEqual(value['type'],source.RENDER_VERSION if source.RENDER_SOURCE is not None else source.TEST_VERSION if source.TEST_SOURCE is not None else source.TRANSPORT_VERSION)
+        self.assertEqual(value['type'],source.SOCIAL_VERSION if source.SOCIAL_SOURCE is not None else source.RENDER_VERSION if source.RENDER_SOURCE is not None else source.TEST_VERSION if source.TEST_SOURCE is not None else source.TRANSPORT_VERSION)
         record,prior,old=source.load_transport(ROOT)
         binding=native.qualify(ROOT,source.EVENT_BASE,self.original,self.target,'pull_request',
             'refs/pull/875/merge',self.target,'','master')
@@ -192,7 +193,7 @@ class ProductionSourceTest(unittest.TestCase):
 
     def test_test_fixes_are_exact_and_keep_native_tuple(self):
         value=source.qualify(ROOT);record,previous,_,_=source.load_test_fixes(ROOT)
-        self.assertEqual(value['type'],source.RENDER_VERSION if source.RENDER_SOURCE is not None else source.TEST_VERSION)
+        self.assertEqual(value['type'],source.SOCIAL_VERSION if source.SOCIAL_SOURCE is not None else source.RENDER_VERSION if source.RENDER_SOURCE is not None else source.TEST_VERSION)
         self.assertEqual(record['source'],source.TEST_SOURCE)
         self.assertEqual(record['native_record'],previous['native_record'])
         self.assertEqual({x['path']:x['after']['sha256'] for x in record['changes']},source.TEST_FIXES)
@@ -283,8 +284,8 @@ class ProductionSourceTest(unittest.TestCase):
 
     def test_rendering_fix_are_exact_and_keep_native_tuple(self):
         value=source.qualify(ROOT);record,previous,_,_,_=source.load_rendering_fix(ROOT)
-        self.assertEqual(value['type'],source.RENDER_VERSION)
-        self.assertEqual(value['reviewed_source'],source.RENDER_SOURCE)
+        self.assertEqual(value['type'],source.SOCIAL_VERSION if source.SOCIAL_SOURCE is not None else source.RENDER_VERSION)
+        self.assertEqual(record['source'],source.RENDER_SOURCE)
         self.assertEqual(record['native_record'],previous['native_record'])
         self.assertEqual({x['path']:x['after']['sha256'] for x in record['changes']},source.RENDER_FIXES)
         binding=native.qualify(ROOT,source.EVENT_BASE,self.original,self.target,'pull_request',
@@ -371,6 +372,97 @@ class ProductionSourceTest(unittest.TestCase):
         revision,digest=self.rendering_record_fixture(record,source_revision=changed)
         with patch.object(source,'RENDER_SOURCE',changed),patch.object(source,'RENDER_RECORD_COMMIT',revision),patch.object(source,'RENDER_RECORD_SHA256',digest),self.assertRaisesRegex(ValueError,'production_rendering_fix_source_parent'):
             source.load_rendering_fix(ROOT)
+
+    def test_social_fix_are_exact_and_keep_native_tuple(self):
+        value=source.qualify(ROOT);record,previous,_,_,_,_=source.load_social_fix(ROOT)
+        self.assertEqual(value['type'],source.SOCIAL_VERSION)
+        self.assertEqual(value['reviewed_source'],source.SOCIAL_SOURCE)
+        self.assertEqual(record['native_record'],previous['native_record'])
+        self.assertEqual({x['path']:x['after']['sha256'] for x in record['changes']},source.SOCIAL_FIXES)
+        binding=native.qualify(ROOT,source.EVENT_BASE,self.original,self.target,'pull_request',
+            'refs/pull/875/merge',self.target,'','master')
+        self.assertEqual(binding['record'],source.SUCCESSOR_RECORD_COMMIT)
+        self.assertEqual(binding['snapshot'],source.SUCCESSOR_SOURCE)
+        self.assertTrue(set(source.SOCIAL_FIXES).isdisjoint(binding['paths']))
+
+    def test_social_fix_unpinned_and_future_edits_fail_closed(self):
+        with patch.object(source,'SOCIAL_RECORD_COMMIT',None),self.assertRaisesRegex(ValueError,'production_social_fix_not_pinned'):
+            source.qualify(ROOT)
+        for name in (*source.SOCIAL_FIXES,'src/backend/social/internal/socialevents/another_test.go',source.SOCIAL_RECORD_PATH):
+            self.changed(name)
+            with self.subTest(name=name),self.assertRaisesRegex(ValueError,'production_only_reviewed_carrier_delta'):
+                source.qualify(ROOT)
+
+    def social_record_fixture(self,record,changes=(),source_revision=None):
+        # Helper name is deliberately not a unittest test case.
+        raw=(json.dumps(record)+'\n').encode()
+        with tempfile.TemporaryDirectory() as folder:
+            env=dict(os.environ,GIT_INDEX_FILE=str(Path(folder)/'index'))
+            git('read-tree',source.SOCIAL_RECORD_COMMIT,env=env)
+            for name,data in ((source.SOCIAL_RECORD_PATH,raw),*changes):
+                if data is None:git('update-index','--force-remove',name,env=env)
+                else:
+                    blob=git('hash-object','-w','--stdin',data=data)
+                    git('update-index','--add','--cacheinfo','100644,'+blob+','+name,env=env)
+            revision=self.commit(git('write-tree',env=env),[source_revision or source.SOCIAL_SOURCE])
+        return revision,hashlib.sha256(raw).hexdigest()
+
+    def test_social_fix_reconstruct_record_semantics(self):
+        original=json.loads(git('show',source.SOCIAL_RECORD_COMMIT+':'+source.SOCIAL_RECORD_PATH))
+        for alteration,code in (('inventory','production_social_fix_complete_inventory'),
+                ('native','production_social_fix_retained_native_tuple'),('changes','production_social_fix_exact_delta'),
+                ('review','production_social_fix_review')):
+            record=json.loads(json.dumps(original));changes=[]
+            if alteration=='inventory':
+                name=record['current_inputs']['path'];inventory=json.loads(git('show',source.SOCIAL_RECORD_COMMIT+':'+name))
+                inventory['entries'].pop();raw=(json.dumps(inventory)+'\n').encode()
+                record['current_inputs']['sha256']=hashlib.sha256(raw).hexdigest();changes=[(name,raw)]
+            elif alteration=='native':record['native_record']['commit']=source.SOCIAL_RECORD_COMMIT
+            elif alteration=='changes':record['changes'][0]['after']['bytes']-=1
+            else:record['review']=[True]
+            revision,digest=self.social_record_fixture(record,changes)
+            with patch.object(source,'SOCIAL_RECORD_COMMIT',revision),patch.object(source,'SOCIAL_RECORD_SHA256',digest),self.subTest(alteration=alteration),self.assertRaisesRegex(ValueError,code):
+                source.load_social_fix(ROOT)
+
+    def test_social_fix_exact_tree_not_test_allowlist(self):
+        original=json.loads(git('show',source.SOCIAL_RECORD_COMMIT+':'+source.SOCIAL_RECORD_PATH))
+        name=next(iter(source.SOCIAL_FIXES))
+        actual=subprocess.check_output(['git','-C',str(ROOT),'show',source.SOCIAL_SOURCE+':'+name])
+        for path,data,mode,code in (
+            ('src/backend/social/internal/socialevents/another_test.go',b'extra','100644','production_social_fix_exact_one_path'),
+            ('src/backend/voice/main.go',b'changed','100644','production_social_fix_exact_one_path'),
+            (name,None,'100644','production_social_fix_exact_one_path'),
+            (name,b'next edit','100644','production_social_fix_exact_bytes'),
+            (name,actual,'100755','production_social_fix_file_mode')):
+            with tempfile.TemporaryDirectory() as folder:
+                env=dict(os.environ,GIT_INDEX_FILE=str(Path(folder)/'index'));git('read-tree',source.SOCIAL_SOURCE,env=env)
+                if data is None:git('update-index','--force-remove',path,env=env)
+                else:
+                    blob=git('hash-object','-w','--stdin',data=data)
+                    git('update-index','--add','--cacheinfo',mode+','+blob+','+path,env=env)
+                tree=git('write-tree',env=env);changed=self.commit(tree,[source.SOCIAL_PREDECESSOR])
+            record=json.loads(json.dumps(original));record.update(source=changed,source_tree=tree)
+            revision,digest=self.social_record_fixture(record,source_revision=changed)
+            with patch.object(source,'SOCIAL_SOURCE',changed),patch.object(source,'SOCIAL_RECORD_COMMIT',revision),patch.object(source,'SOCIAL_RECORD_SHA256',digest),self.subTest(path=path,mode=mode),self.assertRaisesRegex(ValueError,code):
+                source.load_social_fix(ROOT)
+
+    def test_social_fix_preserve_old_artifacts_and_parent(self):
+        record=json.loads(git('show',source.SOCIAL_RECORD_COMMIT+':'+source.SOCIAL_RECORD_PATH))
+        for path in (source.RENDER_RECORD_PATH,record['evidence'][0]['path']):
+            for data in (None,b'changed'):
+                revision,digest=self.social_record_fixture(record,[(path,data)])
+                code=('production_social_fix_immutable_predecessor' if path==source.RENDER_RECORD_PATH
+                      else '^single_entry$' if data is None else '^production_artifact_hash$')
+                with patch.object(source,'SOCIAL_RECORD_COMMIT',revision),patch.object(source,'SOCIAL_RECORD_SHA256',digest),self.subTest(path=path),self.assertRaisesRegex(ValueError,code):
+                    source.load_social_fix(ROOT)
+        revision=self.commit(git('rev-parse',source.SOCIAL_RECORD_COMMIT+'^{tree}'),[source.SOCIAL_PREDECESSOR])
+        with patch.object(source,'SOCIAL_RECORD_COMMIT',revision),self.assertRaisesRegex(ValueError,'production_social_fix_record_parent'):
+            source.load_social_fix(ROOT)
+        changed=self.commit(git('rev-parse',source.SOCIAL_SOURCE+'^{tree}'),[source.RENDER_RECORD_COMMIT])
+        record['source']=changed
+        revision,digest=self.social_record_fixture(record,source_revision=changed)
+        with patch.object(source,'SOCIAL_SOURCE',changed),patch.object(source,'SOCIAL_RECORD_COMMIT',revision),patch.object(source,'SOCIAL_RECORD_SHA256',digest),self.assertRaisesRegex(ValueError,'production_social_fix_source_parent'):
+            source.load_social_fix(ROOT)
 
     def test_transport_added_evidence_cannot_change_or_expand(self):
         for name in (source.TRANSPORT_ADDITION['path'],source.TRANSPORT_RECORD_PATH,
