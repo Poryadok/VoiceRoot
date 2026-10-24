@@ -1,0 +1,53 @@
+{
+  "originals": [
+    {
+      "bytes": 2561,
+      "original": "D:\\Git\\Voice\\tmp\\pr875-repair\\phase0-permission\\receipt.json",
+      "path": "receipt.json",
+      "sha256": "977f23d6f911f1e5a923c11c7da465cb8a2c3dd02cf08e938869c8d99a4464fa"
+    },
+    {
+      "bytes": 2540,
+      "original": "D:\\Git\\Voice\\tmp\\pr875-repair\\phase0-permission\\author-evidence.md",
+      "path": "author-evidence.md",
+      "sha256": "3227d36a56f6d9a60eec6ee93063d1f4a74c9f74fd026eb757a54dbaef548428"
+    },
+    {
+      "bytes": 2105,
+      "original": "D:\\Git\\Voice\\tmp\\pr875-repair\\phase0-permission\\red.log",
+      "path": "red.log",
+      "sha256": "f22d09c52ff63b7e649577dc5b8051cbbfe99f76cba813ccc10827d9a9af0320"
+    },
+    {
+      "bytes": 217,
+      "original": "D:\\Git\\Voice\\tmp\\pr875-repair\\phase0-permission\\focused-green.log",
+      "path": "focused-green.log",
+      "sha256": "03552dfdcce379d7e84f0cd3abbcbae04ae330e317a61c013c5e80795fe1db82"
+    },
+    {
+      "bytes": 12085,
+      "original": "D:\\Git\\Voice\\tmp\\pr875-repair\\phase0-permission\\full-verified.log",
+      "path": "full-verified.log",
+      "sha256": "f45e5fbcab6fe216e6c24b14767d822aed04343404dbb7021b73d918feaca143"
+    },
+    {
+      "bytes": 145,
+      "original": "D:\\Git\\Voice\\tmp\\pr875-repair\\phase0-permission\\helper-negative.log",
+      "path": "helper-negative.log",
+      "sha256": "4b7e1e134c7517fc91ff3ed0e0189d67a88feec7e05467221694e00d9b485549"
+    },
+    {
+      "bytes": 19244,
+      "original": "D:\\Git\\Voice\\tmp\\pr875-repair\\phase0-permission\\full-invalid-copy-race.log",
+      "path": "full-invalid-copy-race.log",
+      "sha256": "8e67943ee3ed0ebd6a38c525d4c9ff292479b803fe5676ffe265a3907ab323a2"
+    },
+    {
+      "bytes": 2630,
+      "original": "D:\\Git\\Voice\\tmp\\pr875-repair\\phase0-fixture-independent-review.md",
+      "path": "independent-fixture-review.md",
+      "sha256": "14a6b7cd47d9a40bbfb89012565e7a1ee10c711ac37f012156f2419d9456e706"
+    }
+  ],
+  "scope": "OFFLINE_FIXTURE_EVIDENCE_NOT_PRODUCER_COMPLETION"
+}

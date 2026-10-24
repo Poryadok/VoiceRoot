@@ -1,0 +1,179 @@
+test_a1_consumes_the_complete_phase0_overlay_after_media (__main__.A1InvocationTests.test_a1_consumes_the_complete_phase0_overlay_after_media) ... ok
+test_all_live_space_jwks_consumers_keep_correct_ca (__main__.ComposeTests.test_all_live_space_jwks_consumers_keep_correct_ca) ... ok
+test_all_media_overlay_fixture_producers_enable_nonroot_material (__main__.ComposeTests.test_all_media_overlay_fixture_producers_enable_nonroot_material) ... ok
+test_base_environments_and_legacy_endpoints_are_preserved (__main__.ComposeTests.test_base_environments_and_legacy_endpoints_are_preserved) ... ok
+test_bot_jwks_uses_canonical_generated_rotation_pair (__main__.ComposeTests.test_bot_jwks_uses_canonical_generated_rotation_pair) ... ok
+test_bot_send_authority_uses_complete_protected_phase0_topology (__main__.ComposeTests.test_bot_send_authority_uses_complete_protected_phase0_topology) ... ok
+test_bounded_startup_diagnostics_only_name_declared_services (__main__.ComposeTests.test_bounded_startup_diagnostics_only_name_declared_services) ... ok
+test_chat_creation_uses_real_owner_transports_and_separate_audit (__main__.ComposeTests.test_chat_creation_uses_real_owner_transports_and_separate_audit) ... ok
+test_ci_creator_uses_the_existing_auth_session_floor_mtls_surface (__main__.ComposeTests.test_ci_creator_uses_the_existing_auth_session_floor_mtls_surface) ... ok
+test_ci_gateway_space_lifecycle_caller_matches_existing_protected_listener (__main__.ComposeTests.test_ci_gateway_space_lifecycle_caller_matches_existing_protected_listener) ... ok
+test_ci_space_voice_communication_keeps_its_required_issuer_and_trust (__main__.ComposeTests.test_ci_space_voice_communication_keeps_its_required_issuer_and_trust) ... ok
+test_combined_phase0_media_listeners_have_distinct_ports_and_matching_caller (__main__.ComposeTests.test_combined_phase0_media_listeners_have_distinct_ports_and_matching_caller) ... ok
+test_complete_match_ci_stack_keeps_matchmaking_nonroot_and_reads_owned_tls (__main__.ComposeTests.test_complete_match_ci_stack_keeps_matchmaking_nonroot_and_reads_owned_tls) ... ERROR
+test_compose_e2e_starts_with_generated_complete_match_fixture (__main__.ComposeTests.test_compose_e2e_starts_with_generated_complete_match_fixture) ... ok
+test_delivery_ack_has_authoritative_messaging_reader (__main__.ComposeTests.test_delivery_ack_has_authoritative_messaging_reader) ... ok
+test_every_fixture_bind_source_is_generated (__main__.ComposeTests.test_every_fixture_bind_source_is_generated) ... ok
+test_fixture_directory_is_required (__main__.ComposeTests.test_fixture_directory_is_required) ... ok
+test_frozen_environment_and_mounted_paths (__main__.ComposeTests.test_frozen_environment_and_mounted_paths) ... ok
+test_lifecycle_overlay_keeps_media_listener_and_gateway_target_distinct (__main__.ComposeTests.test_lifecycle_overlay_keeps_media_listener_and_gateway_target_distinct) ... ok
+test_livekit_uses_single_published_udp_mux_port (__main__.ComposeTests.test_livekit_uses_single_published_udp_mux_port) ... ok
+test_match_squad_provider_fixture_is_opt_in_to_media_compose (__main__.ComposeTests.test_match_squad_provider_fixture_is_opt_in_to_media_compose) ... ok
+test_matchmaking_complete_match_uses_gateway_principal_and_scoped_mtls (__main__.ComposeTests.test_matchmaking_complete_match_uses_gateway_principal_and_scoped_mtls) ... ok
+test_matchmaking_trusts_replaced_space_jwks_certificate (__main__.ComposeTests.test_matchmaking_trusts_replaced_space_jwks_certificate) ... ERROR
+test_media_canonical_admission_dependencies_are_wired (__main__.ComposeTests.test_media_canonical_admission_dependencies_are_wired) ... ok
+test_media_compose_preserves_social_and_protected_voice_space_authority (__main__.ComposeTests.test_media_compose_preserves_social_and_protected_voice_space_authority) ... ok
+test_media_compose_uses_protected_match_squad_provider_fixture (__main__.ComposeTests.test_media_compose_uses_protected_match_squad_provider_fixture) ... ERROR
+test_media_overlay_mounts_only_ephemeral_chain_credentials_readonly (__main__.ComposeTests.test_media_overlay_mounts_only_ephemeral_chain_credentials_readonly) ... ok
+test_media_voice_waits_for_verified_public_match_squad_jwks (__main__.ComposeTests.test_media_voice_waits_for_verified_public_match_squad_jwks) ... ok
+test_messaging_space_communication_is_enabled_in_all_profiles (__main__.ComposeTests.test_messaging_space_communication_is_enabled_in_all_profiles) ... ok
+test_private_mounts_are_readonly_and_service_isolated (__main__.ComposeTests.test_private_mounts_are_readonly_and_service_isolated) ... ok
+test_proxy_exact_public_routes_tls_and_docker_dns (__main__.ComposeTests.test_proxy_exact_public_routes_tls_and_docker_dns) ... ok
+test_proxy_trusts_the_ca_of_each_overlay_space_certificate (__main__.ComposeTests.test_proxy_trusts_the_ca_of_each_overlay_space_certificate) ... ok
+test_role_decision_jwks_and_messaging_trust_domains (__main__.ComposeTests.test_role_decision_jwks_and_messaging_trust_domains) ... ok
+test_role_member_authority_uses_protected_space_target (__main__.ComposeTests.test_role_member_authority_uses_protected_space_target) ... ok
+test_space_bot_decision_reuses_actual_protected_lifecycle_transport (__main__.ComposeTests.test_space_bot_decision_reuses_actual_protected_lifecycle_transport) ... ok
+test_space_jwks_bundle_preserves_social_trust_without_private_material (__main__.ComposeTests.test_space_jwks_bundle_preserves_social_trust_without_private_material) ... ok
+test_space_static_startup_markers_are_scoped_redacted_and_keep_unknowns (__main__.ComposeTests.test_space_static_startup_markers_are_scoped_redacted_and_keep_unknowns) ... ERROR
+test_startup_diagnostics_can_scope_status_and_logs_to_voice (__main__.ComposeTests.test_startup_diagnostics_can_scope_status_and_logs_to_voice) ... ok
+test_startup_failure_callers_capture_space_without_losing_services_or_status (__main__.ComposeTests.test_startup_failure_callers_capture_space_without_losing_services_or_status) ... ok
+test_t31_direct_compose_process_wait_and_output_are_bounded (__main__.ComposeTests.test_t31_direct_compose_process_wait_and_output_are_bounded) ... ok
+test_t31_final_composition_preserves_all_space_principal_issuers (__main__.ComposeTests.test_t31_final_composition_preserves_all_space_principal_issuers) ... ok
+test_t31_first_emitted_window_does_not_claim_later_tail_cause (__main__.ComposeTests.test_t31_first_emitted_window_does_not_claim_later_tail_cause) ... ok
+test_t31_log_summary_only_emits_allowlisted_diagnostic_fields (__main__.ComposeTests.test_t31_log_summary_only_emits_allowlisted_diagnostic_fields) ... ok
+test_t31_match_squad_runtime_detail_is_allowlisted_and_redacted (__main__.ComposeTests.test_t31_match_squad_runtime_detail_is_allowlisted_and_redacted) ... ok
+test_t31_matchmaking_startup_marker_is_service_scoped_and_redacted (__main__.ComposeTests.test_t31_matchmaking_startup_marker_is_service_scoped_and_redacted) ... ok
+test_t31_readiness_failure_is_allowlisted_and_redacted (__main__.ComposeTests.test_t31_readiness_failure_is_allowlisted_and_redacted) ... ok
+test_t31_startup_collection_requests_only_voice_and_matchmaking (__main__.ComposeTests.test_t31_startup_collection_requests_only_voice_and_matchmaking) ... ok
+test_t31_status_discards_unrecognized_services_and_identifiers (__main__.ComposeTests.test_t31_status_discards_unrecognized_services_and_identifiers) ... ok
+test_t31_truncated_logs_do_not_claim_an_error (__main__.ComposeTests.test_t31_truncated_logs_do_not_claim_an_error) ... ok
+test_t31_unrecognized_diagnostic_values_remain_unknown (__main__.ComposeTests.test_t31_unrecognized_diagnostic_values_remain_unknown) ... ok
+test_t31_voice_match_squad_member_startup_details_are_allowlisted_and_redacted (__main__.ComposeTests.test_t31_voice_match_squad_member_startup_details_are_allowlisted_and_redacted) ... ok
+test_t31_voice_startup_prefix_emits_only_allowlisted_category (__main__.ComposeTests.test_t31_voice_startup_prefix_emits_only_allowlisted_category) ... ok
+test_voice_p3_startup_categories_are_finite_and_redacted (__main__.ComposeTests.test_voice_p3_startup_categories_are_finite_and_redacted) ... ok
+test_voice_space_media_overlay_is_limited_to_existing_services_and_tls_helper (__main__.ComposeTests.test_voice_space_media_overlay_is_limited_to_existing_services_and_tls_helper) ... ok
+test_voice_startup_categories_cover_static_fatal_sites_without_dynamic_text (__main__.ComposeTests.test_voice_startup_categories_cover_static_fatal_sites_without_dynamic_text) ... ERROR
+test_bot_jwks_ca_accepts_native_and_existing_gis_consumers (__main__.FixtureTests.test_bot_jwks_ca_accepts_native_and_existing_gis_consumers) ... ok
+test_bot_session_floor_identity_is_bound_to_only_bot_client (__main__.FixtureTests.test_bot_session_floor_identity_is_bound_to_only_bot_client) ... ok
+test_ca_signed_leaf_keys_hostname_and_short_lifetime (__main__.FixtureTests.test_ca_signed_leaf_keys_hostname_and_short_lifetime) ... ok
+test_certificate_serials_are_distinct_within_each_issuer (__main__.FixtureTests.test_certificate_serials_are_distinct_within_each_issuer) ... ok
+test_chat_creation_has_distinct_signer_server_and_client_identities (__main__.FixtureTests.test_chat_creation_has_distinct_signer_server_and_client_identities) ... ok
+test_existing_destination_is_refused_without_mutation (__main__.FixtureTests.test_existing_destination_is_refused_without_mutation) ... ok
+test_gateway_voice_media_client_leaf_is_root_ca_client_only (__main__.FixtureTests.test_gateway_voice_media_client_leaf_is_root_ca_client_only) ... ok
+test_general_fixture_inputs_remain_readable_by_the_test_user (__main__.FixtureTests.test_general_fixture_inputs_remain_readable_by_the_test_user) ... ok
+test_gis_client_leaves_use_dedicated_ca_for_chat_and_voice (__main__.FixtureTests.test_gis_client_leaves_use_dedicated_ca_for_chat_and_voice) ... ok
+test_jvm_truststore_contains_fixture_ca_and_no_private_entry (__main__.FixtureTests.test_jvm_truststore_contains_fixture_ca_and_no_private_entry) ... ok
+test_match_squad_fixture_is_private_and_readable_by_service_uid (__main__.FixtureTests.test_match_squad_fixture_is_private_and_readable_by_service_uid) ... ok
+test_matchmaking_public_jwks_matches_both_private_rotation_keys (__main__.FixtureTests.test_matchmaking_public_jwks_matches_both_private_rotation_keys) ... ok
+test_messaging_bot_authority_client_has_dedicated_identity_and_ca (__main__.FixtureTests.test_messaging_bot_authority_client_has_dedicated_identity_and_ca) ... ok
+test_missing_tools_fail_without_partial_destination (__main__.FixtureTests.test_missing_tools_fail_without_partial_destination) ... ok
+test_private_material_never_appears_in_process_output (__main__.FixtureTests.test_private_material_never_appears_in_process_output) ... ok
+test_private_permissions (__main__.FixtureTests.test_private_permissions) ... ok
+test_separate_current_next_rsa_pkcs8_keys (__main__.FixtureTests.test_separate_current_next_rsa_pkcs8_keys) ... ok
+test_service_client_leaves_are_ca_signed_and_client_auth_only (__main__.FixtureTests.test_service_client_leaves_are_ca_signed_and_client_auth_only) ... ok
+test_space_lifecycle_client_uses_only_its_dedicated_ca (__main__.FixtureTests.test_space_lifecycle_client_uses_only_its_dedicated_ca) ... ok
+test_tool_failure_after_private_creation_removes_partial_fixture (__main__.FixtureTests.test_tool_failure_after_private_creation_removes_partial_fixture) ... ok
+test_compose_host_cache_preserves_fresh_builds_and_test_execution (__main__.HostGoCacheTests.test_compose_host_cache_preserves_fresh_builds_and_test_execution) ... ERROR
+test_cleanup_restores_service_owned_fixture_for_real_caller_uid (__main__.RestorerPathTests.test_cleanup_restores_service_owned_fixture_for_real_caller_uid) ... skipped 'requires Linux root to exercise real service and caller UIDs'
+test_owner_restorer_accepts_only_declared_generated_fixture_locations (__main__.RestorerPathTests.test_owner_restorer_accepts_only_declared_generated_fixture_locations) ... ok
+
+======================================================================
+ERROR: test_complete_match_ci_stack_keeps_matchmaking_nonroot_and_reads_owned_tls (__main__.ComposeTests.test_complete_match_ci_stack_keeps_matchmaking_nonroot_and_reads_owned_tls)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scripts/ci/phase0-fixture_test.py", line 939, in test_complete_match_ci_stack_keeps_matchmaking_nonroot_and_reads_owned_tls
+    self.assertIn("USER nonroot:nonroot", (ROOT / "src/backend/matchmaking/Dockerfile").read_text())
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1029, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1015, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/workspace/src/backend/matchmaking/Dockerfile'
+
+======================================================================
+ERROR: test_matchmaking_trusts_replaced_space_jwks_certificate (__main__.ComposeTests.test_matchmaking_trusts_replaced_space_jwks_certificate)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scripts/ci/phase0-fixture_test.py", line 892, in test_matchmaking_trusts_replaced_space_jwks_certificate
+    self.assertIn("USER nonroot:nonroot", (ROOT / "src/backend/matchmaking/Dockerfile").read_text())
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1029, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1015, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/workspace/src/backend/matchmaking/Dockerfile'
+
+======================================================================
+ERROR: test_media_compose_uses_protected_match_squad_provider_fixture (__main__.ComposeTests.test_media_compose_uses_protected_match_squad_provider_fixture)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scripts/ci/phase0-fixture_test.py", line 1018, in test_media_compose_uses_protected_match_squad_provider_fixture
+    self.assertIn("USER nonroot:nonroot", (ROOT / "src/backend/matchmaking/Dockerfile").read_text())
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1029, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1015, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/workspace/src/backend/matchmaking/Dockerfile'
+
+======================================================================
+ERROR: test_space_static_startup_markers_are_scoped_redacted_and_keep_unknowns (__main__.ComposeTests.test_space_static_startup_markers_are_scoped_redacted_and_keep_unknowns)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scripts/ci/phase0-fixture_test.py", line 1269, in test_space_static_startup_markers_are_scoped_redacted_and_keep_unknowns
+    source = (ROOT / "src/backend/space/main.go").read_text(encoding="utf-8")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1029, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1015, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/workspace/src/backend/space/main.go'
+
+======================================================================
+ERROR: test_voice_startup_categories_cover_static_fatal_sites_without_dynamic_text (__main__.ComposeTests.test_voice_startup_categories_cover_static_fatal_sites_without_dynamic_text)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scripts/ci/phase0-fixture_test.py", line 1411, in test_voice_startup_categories_cover_static_fatal_sites_without_dynamic_text
+    source = "\n".join((ROOT / path).read_text() for path in (
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scripts/ci/phase0-fixture_test.py", line 1411, in <genexpr>
+    source = "\n".join((ROOT / path).read_text() for path in (
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1029, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1015, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/workspace/src/backend/voice/main.go'
+
+======================================================================
+ERROR: test_compose_host_cache_preserves_fresh_builds_and_test_execution (__main__.HostGoCacheTests.test_compose_host_cache_preserves_fresh_builds_and_test_execution)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scripts/ci/phase0-fixture_test.py", line 2383, in test_compose_host_cache_preserves_fresh_builds_and_test_execution
+    self.assertTrue(all((ROOT / path).is_file() for path in paths))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scripts/ci/phase0-fixture_test.py", line 2383, in <genexpr>
+    self.assertTrue(all((ROOT / path).is_file() for path in paths))
+                        ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 894, in is_file
+    return S_ISREG(self.stat().st_mode)
+                   ^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 842, in stat
+    return os.stat(self, follow_symlinks=follow_symlinks)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/workspace/src/backend/gateway/go.sum'
+
+----------------------------------------------------------------------
+Ran 78 tests in 50.813s
+
+FAILED (errors=6, skipped=1)
