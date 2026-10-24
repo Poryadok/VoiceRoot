@@ -23,7 +23,7 @@ entry, rows, load_record = legacy.entry, legacy.rows, legacy.load_record
 def qualify(*args):
     if documentation is not None:
         import f13_production_source as production
-        if production.fixture_applicable(args[0]):
+        if production.bootstrap_applicable(args[0]) or production.fixture_applicable(args[0]):
             return documentation.qualify_context(*args)
     try:
         return legacy.qualify(*args)

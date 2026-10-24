@@ -79,7 +79,7 @@ class RealGitSuccessorTest(unittest.TestCase):
                                  'refs/pull/875/merge', target, '', 'master')
 
     def test_public_current_authority_rejects_historical_fixture(self):
-        with self.assertRaisesRegex(legacy.Rejected, '^context_fixture_actual_head$'):
+        with self.assertRaisesRegex(legacy.Rejected, '^context_bootstrap_actual_head$'):
             authority.qualify(ROOT, BASE, self.source, self.target, 'pull_request',
                               'refs/pull/875/merge', self.target, '', 'master')
 
