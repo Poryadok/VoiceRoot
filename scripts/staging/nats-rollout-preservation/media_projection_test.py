@@ -31,7 +31,9 @@ class MediaProjectionTest(unittest.TestCase):
                 pod = next(r for r in rows if r['kind'] == 'Deployment' and r['metadata']['name'] == 'voice-' + service)['spec']['template']['spec']
                 container = next(c for c in pod['containers'] if c['name'] == service)
                 env = {e['name']: e for e in container['env']}
-                required = {k for k in compose[service]['environment'] if k != 'LIVEKIT_URL' and not k.startswith('VOICE_SPACE_LIFECYCLE_')}
+                # This staging media profile does not activate Bot admission.
+                nonmedia = {'AUTH_BOT_SESSION_FLOOR_ALLOWED_CLIENT_URI_SAN', 'ROLE_BOT_LIFECYCLE_ENABLED'}
+                required = {k for k in compose[service]['environment'] if k != 'LIVEKIT_URL' and k not in nonmedia and not k.startswith('VOICE_SPACE_LIFECYCLE_')}
                 self.assertLessEqual(required, set(env), service)
                 volumes = {v['name']: v for v in pod['volumes']}
                 for key in required:
@@ -58,8 +60,8 @@ class MediaProjectionTest(unittest.TestCase):
                 if service == 'gateway':
                     signing = next(v['secret'] for v in pod['volumes'] if v['secret']['secretName'] == 'voice-gateway-principal-signing')
                     self.assertEqual({i['path'] for i in signing['items']}, {'current.pem', 'next.pem'})
-        for service, ports in {'auth': {9091, 9092}, 'chat': {9092}, 'voice': {8443, 9093, 9094, 9095},
-                               'role': {9091}, 'matchmaking': {8443}}.items():
+        for service, ports in {'auth': {9091, 9092}, 'chat': {8443, 9092}, 'voice': {8443, 9093, 9094, 9095},
+                               'role': {8443, 9091}, 'space': {8443, 9094, 9099}, 'matchmaking': {8443}}.items():
             row = next(r for r in rows if r['kind'] == 'Service' and r['metadata']['name'] == 'voice-' + service)
             self.assertLessEqual(ports, {p['port'] for p in row['spec']['ports']})
 
@@ -70,6 +72,40 @@ class MediaProjectionTest(unittest.TestCase):
         with self.assertRaisesRegex(source_plan.PlanError, 'voice-voice-media-client-tls'):
             source_plan.compile_plan(SOURCE, params, fixtures.decoder, kube)
         self.assertFalse(any(c[0] == 'run' and c[1][0] == 'apply' and '--dry-run=server' not in c[1] for c in kube.calls))
+
+    def test_native_media_private_credentials_are_explicit_prerequisites(self):
+        rows = self.rendered()
+        required = nonnats_plan.SECRET_CONTRACTS['principal-secrets']
+        for service in ('chat', 'role', 'space'):
+            pod = next(r for r in rows if r['kind'] == 'Deployment' and r['metadata']['name'] == 'voice-' + service)['spec']['template']['spec']
+            container = next(c for c in pod['containers'] if c['name'] == service)
+            volumes = {v['name']: v for v in pod['volumes']}
+            env = {e['name']: e for e in container['env']}
+            self.assertEqual(env[service.upper() + '_PRINCIPAL_ACTIVE_KID']['valueFrom'],
+                             {'secretKeyRef': {'name': 'voice-' + service + '-principal-signing', 'key': 'active-kid'}})
+            for entry in env.values():
+                value = entry.get('value', '')
+                if not value.startswith('/etc/voice/media/'):
+                    continue
+                mount = next(m for m in container['volumeMounts'] if value == m['mountPath'] or value.startswith(m['mountPath'] + '/'))
+                self.assertTrue(mount['readOnly'])
+                secret = volumes[mount['name']]['secret']
+                keys = {i['key'] for i in secret['items']}
+                self.assertLessEqual(keys, required[secret['secretName']])
+                self.assertEqual(secret['defaultMode'], 0o440)
+                if entry['name'].endswith('_FILE'):
+                    self.assertIn(value.rsplit('/', 1)[1], {i['path'] for i in secret['items']})
+                if entry['name'].endswith('SIGNING_KEYS_DIR'):
+                    self.assertEqual(keys, {'current.pem', 'next.pem'})
+        for name in ('voice-chat-principal-signing', 'voice-role-principal-signing', 'voice-space-principal-signing',
+                     'voice-chat-media-client-tls', 'voice-chat-media-jwks-tls', 'voice-role-media-client-tls',
+                     'voice-space-media-client-tls', 'voice-space-media-server-tls'):
+            with self.subTest(secret=name):
+                kube, params = fixtures.SourceTests().canonical_fixture('full')
+                kube.objects.pop(('Secret', name), None)
+                with self.assertRaisesRegex(source_plan.PlanError, name):
+                    source_plan.compile_plan(SOURCE, params, fixtures.decoder, kube)
+                self.assertFalse(any(c[0] == 'run' and c[1][0] == 'apply' and '--dry-run=server' not in c[1] for c in kube.calls))
 
     def test_binary_truststore_is_explicit_and_other_credentials_remain_text(self):
         raw = b'\x30\x82\xff\x00binary-pkcs12'
@@ -102,6 +138,10 @@ class MediaProjectionTest(unittest.TestCase):
             row = next(r for r in rows if r['kind'] == 'Deployment' and r['metadata']['name'] == 'voice-' + service)
             envs[service] = {e['name']: e for c in row['spec']['template']['spec']['containers'] if c['name'] == service for e in c['env']}
         for client, key, server, port in (
+            ('chat', 'CHAT_ROLE_DECISION_GRPC_ADDR', 'role', 9091),
+            ('role', 'ROLE_AUTH_SESSION_FLOOR_GRPC_ADDR', 'auth', 9092),
+            ('role', 'ROLE_SPACE_MEMBER_AUTHORITY_GRPC_ADDR', 'space', 9099),
+            ('voice', 'VOICE_SPACE_COMMUNICATION_GRPC_ADDR', 'space', 9094),
             ('voice', 'VOICE_AUTH_SESSION_FLOOR_GRPC_ADDR', 'auth', 9092),
             ('voice', 'VOICE_ROLE_GRPC_ADDR', 'role', 9091),
             ('gateway', 'GATEWAY_VOICE_USER_GRPC_ADDR', 'voice', 9093),
@@ -112,12 +152,22 @@ class MediaProjectionTest(unittest.TestCase):
             service = next(r for r in rows if r['kind'] == 'Service' and r['metadata']['name'] == 'voice-' + server)
             self.assertIn(port, {p['port'] for p in service['spec']['ports']})
         self.assertEqual(envs['space']['SPACE_VOICE_S2S_TOKEN']['valueFrom'], envs['voice']['SPACE_VOICE_S2S_TOKEN']['valueFrom'])
-        for service, issuers in (('auth', {'gateway', 'space', 'voice'}), ('role', {'space', 'gameintegration', 'voice'}),
+        for service, issuers in (('auth', {'gateway', 'space', 'voice', 'role'}), ('role', {'space', 'gameintegration', 'voice', 'chat'}),
+                                 ('space', {'social', 'role', 'voice'}),
                                  ('voice', {'gateway'}), ('matchmaking', {'gateway', 'space'})):
             urls = json.loads(envs[service]['S2S_JWKS_URLS_JSON']['value'])
             self.assertEqual(set(urls), issuers)
             if 'voice' in urls:
                 self.assertEqual(urls['voice'], 'https://voice-voice:8443/internal/v1/principal/jwks.json')
+            if 'space' in urls:
+                self.assertEqual(urls['space'], 'https://voice-space:8443/.well-known/jwks.json')
+        self.assertNotIn('AUTH_BOT_SESSION_FLOOR_ALLOWED_CLIENT_URI_SAN', envs['auth'])
+        self.assertEqual(envs['role']['ROLE_BOT_LIFECYCLE_ENABLED']['value'], 'false')
+        self.assertEqual(envs['role']['ROLE_DELEGATED_USER_ENABLED']['value'], 'false')
+        self.assertNotIn('VOICE_SPACE_LIFECYCLE_PRINCIPAL_GRPC_LISTEN', envs['voice'])
+        for prefix, port in (('SPACE_ROLE_OVERRIDE_PRINCIPAL_', 9099), ('SPACE_VOICE_COMMUNICATION_', 9094)):
+            self.assertEqual(envs['space'][prefix + 'GRPC_LISTEN']['value'], ':' + str(port))
+        self.assertEqual(envs['space']['SPACE_PRINCIPAL_JWKS_HTTPS_LISTEN']['value'], ':8443')
         # Public roots belong to issuer fetch trust, never the inbound mTLS CA.
         self.assertNotEqual(envs['voice']['S2S_JWKS_CA_FILE']['value'], envs['voice']['VOICE_USER_PRINCIPAL_CLIENT_CA_FILE']['value'])
         for service in ('chat', 'voice'):

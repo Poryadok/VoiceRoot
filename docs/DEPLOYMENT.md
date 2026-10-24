@@ -738,8 +738,10 @@ Role's private listener requires a verified client certificate before signed
 principal verification. Space, GIS, and Voice each present a distinct client
 certificate trusted by `ROLE_PRINCIPAL_CLIENT_CA_FILE`. Configure
 `S2S_JWKS_URLS_JSON` with HTTPS URLs for Space's `/.well-known/jwks.json` and
-GIS/Voice's `/internal/v1/principal/jwks.json`; the issuer keys must be exactly
-`space`, `gameintegration`, and `voice`. Keep each signing private key mounted
+GIS/Voice's `/internal/v1/principal/jwks.json`; the baseline issuer keys are
+`space`, `gameintegration`, and `voice`. The native media profile below also
+configures the exact `chat` decision branch; other optional issuers require
+their separately configured receiver contracts. Keep each signing private key mounted
 only into its issuer. Phase0's GIS and Voice signer settings are
 `GAME_INTEGRATION_PRINCIPAL_PRIVATE_KEY_FILE` / `GAME_INTEGRATION_PRINCIPAL_KID`
 and `VOICE_PRINCIPAL_PRIVATE_KEY_FILE` / `VOICE_PRINCIPAL_KID`. Staging provisions
@@ -823,6 +825,59 @@ These names define consumer references only; the PKI operation, exact SANs,
 secret custody and public CA readback must be reviewed and completed
 separately. Voice's 9095 inbound media client trust
 remains `voice-media-ca`; MatchSquad JWKS and mTLS roots are unchanged.
+
+## Native media authorization (staging source contract)
+
+The staging media configuration binds Chat to Role's protected listener
+(`voice-role:9091`), Role to Auth's session-floor listener (`voice-auth:9092`)
+and Space's native member observer (`voice-space:9099`), and Voice to Space's
+communication observer (`voice-space:9094`). These are signed, request-bound
+calls over mTLS; ordinary service addresses are not fallback authority.
+Space serves its issuer keys at `https://voice-space:8443/.well-known/jwks.json`.
+Role and Chat use the same canonical path on their own Service, port 8443.
+The Service ports and listener settings must remain paired.
+
+Provision the following additional private Secrets before applying the source:
+
+| Secret | Required keys | Purpose |
+|---|---|---|
+| `voice-chat-principal-signing`, `voice-role-principal-signing`, `voice-space-principal-signing` | `current.pem`, `next.pem`, `active-kid` | Separate issuer-owned PKCS8 keys; only the two PEM files enter the signing directory |
+| `voice-chat-media-client-tls`, `voice-role-media-client-tls`, `voice-space-media-client-tls` | `tls.crt`, `tls.key` | Distinct service client identities, including authenticated JWKS fetches |
+| `voice-chat-media-jwks-tls`, `voice-space-media-server-tls` | `tls.crt`, `tls.key` | HTTPS JWKS / Space private listener server identities |
+
+The existing `voice-role-media-server-tls` also serves Role HTTPS JWKS.
+Server certificates must cover the exact `voice-chat`, `voice-role`,
+`voice-space`, and `voice-auth` DNS names used by their respective clients;
+client certificates need clientAuth usage and the receiver's trusted issuer.
+All new file projections are read-only, mode 0440, with explicit keys and the
+existing non-root filesystem group. `voice-media-ca/ca.crt` remains private
+mTLS peer trust. Its separate `jwks-ca.crt` contains the approved HTTPS issuer
+roots, including Social's existing issuer root for Space; do not add public
+HTTPS roots to inbound client trust. Auth's existing JVM truststore must trust
+Role's HTTPS issuer as well. Provisioning, certificate/key correspondence,
+rotation overlap, and cluster readback remain operator prerequisites; these
+references do not generate credentials or prove deployment readiness.
+
+The existing independent Realtime JWKS helper uses only public
+`voice-p3-principal-public/realtime.json` and its own TLS Secret. Provision that
+ConfigMap with `immutable: true` and exactly the `realtime.json` key, matching
+the retained Realtime issuer generation. The preservation compiler enrolls an
+already installed helper and verifies its immutable public document; this is
+not a first-install procedure or permission to copy issuer private keys into
+the helper. Its TLS projection contains only `tls.crt` and `tls.key`.
+
+The exact issuer sets are Role `{space, gameintegration, voice, chat}`, Space
+`{social, role, voice}`, and Auth `{gateway, space, voice, role}`. The Chat
+entry enables only its implemented Role decision branch. There is no configured
+Gateway-to-Role delegated client in this profile, so
+`ROLE_DELEGATED_USER_ENABLED=false`; adding that feature requires its full
+separate transport and trust contract. Bot installation is not activated by
+the media profile: `ROLE_BOT_LIFECYCLE_ENABLED=false`, no `bot` issuer entry,
+and no `AUTH_BOT_SESSION_FLOOR_ALLOWED_CLIENT_URI_SAN`. Auth denies the Bot
+floor RPC without that dedicated peer binding. These two Bot-only Compose
+variables are explicitly outside media parity; the disabled state is tested.
+The dormant Voice Space lifecycle listener remains absent. Source validation
+does not authorize activation, deployment, or live acceptance.
 
 ## MatchSquad principals (staging source contract)
 
