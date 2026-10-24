@@ -397,7 +397,7 @@ jobs:
         working-directory: src/frontend
         run: |
           flutter pub get
-          flutter test --no-pub --reporter expanded --concurrency=1 --total-shards=4 --shard-index=${{ matrix.shard }}
+          flutter test --reporter expanded --concurrency=1 --no-pub --total-shards=4 --shard-index=${{ matrix.shard }}
       - name: Retain failing golden diagnostics
         if: failure()
         uses: actions/upload-artifact@v6
