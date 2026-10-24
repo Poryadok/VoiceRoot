@@ -4607,6 +4607,8 @@ f13_collect_develop_contributions() {
       if [[ -n "${nested_map}" ]]; then
         nested_row="$(awk -F '\t' -v candidate="${path}" '$1 == candidate { row = $0 } END { print row }' "${nested_map}")"
         [[ -n "${nested_row}" ]] || {
+          printf 'CI_DIAG stage=f13-nested-source category=nested_contribution_missing commit=%s path=%s source_head=%s\n' \
+            "${commit}" "${path}" "${source_head}" >&2
           f13_collect_failure "${diagnostic_file}" nested_contribution_missing
           return 1
         }
@@ -4727,6 +4729,46 @@ f13_collect_develop_contributions() {
       fi
     done <"${delta}"
     done
+    # One reviewed dc0 merge-authored test is absent from both source parents.
+    # Reconstruct its complete source unit and actual prefix before adding a
+    # distinct result-parent row. Arbitrary missing nested rows still reject.
+    if [[ "${commit}" == dc0acdefec7e5c413988adf71f86d12bff4017bc &&
+      "${capability_command:-}" == production-capabilities &&
+      -n "${f13_f54_trace_file:-}" && "${base}" == 698d4f064f032ea74abf3ede2017100b26c8ee69 &&
+      "${target}" == 53f75f74523735ac594e21582bea659f567a7288 ]]; then
+      local dc0_spec="${TMP_DIR}/dc0-residual-spec.json" dc0_receipt="${TMP_DIR}/dc0-residual-receipt.json"
+      local dc0_delta="${TMP_DIR}/dc0-residual-delta" dc0_status=0 dc0_trigger=false dc0_raw
+      local dc0_context="${TMP_DIR}/dc0-residual-context.json"
+      local dc0_first=6e0cd809884f9a2b80f33d00a85c55ff42077aab
+      local dc0_base=d4abb829622e9bd91b26842b61522e6840840867
+      path=src/backend/chat/internal/gisprincipal/method_union_test.go
+      [[ -z "${owners[${path}]+present}" ]] || { f13_collect_failure "${diagnostic_file}" duplicate_guarded_owner; return 1; }
+      f13_f54_manual_gate_context "${dc0_context}" || return 1
+      python3 "${f13_f54_observer}" dc0-residual-checkpoint "${repo}" "${f13_f54_trace_file}" "${output}" begin "${dc0_context}" >"${dc0_spec}" || return 1
+      f13_f54_operation="$(f13_f54_trace_event dc0_residual_begin "${repo}" "${dc0_spec}" "${output}")" || return 1
+      f13_f54_trace_event path_gate_before "${repo}" "${path}" "${output}" || return 1
+      # No checkpoint exemption is claimed: run the original classifier on the
+      # complete singleton residual, retaining its actual result and taint.
+      printf '%s\n' "${path}" >"${dc0_delta}" || return 1
+      voice_r22_runtime_changed <"${dc0_delta}" || dc0_status=$?
+      [[ "${dc0_status}" == 0 || "${dc0_status}" == 1 ]] || return 1
+      [[ "${dc0_status}" != 0 ]] || dc0_trigger=true
+      f13_f54_trace_event classification "${repo}" "${dc0_trigger}" "${dc0_delta}" "${dc0_status}" || return 1
+      dc0_raw="$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${dc0_trigger}" "${commit}" \
+        "${dc0_first}" "${dc0_first}" "${commit}" "${dc0_first}" "${dc0_base}")"
+      f13_f54_trace_event row_before "${repo}" "${path}" "${output}" "${dc0_raw}" || return 1
+      python3 "${f13_f54_observer}" dc0-residual-checkpoint "${repo}" "${f13_f54_trace_file}" "${output}" append >/dev/null || return 1
+      f13_f54_trace_event row_after "${repo}" "${path}" "${dc0_raw}" actual_dc0_result_parent_assignment || return 1
+      source_entry="$(git -C "${repo}" ls-tree "${commit}" -- ":(literal)${path}")" || return 1
+      owners["${path}"]="${commit}"; owner_triggers["${path}"]="${dc0_trigger}"
+      owner_content_bases["${path}"]="${dc0_first}"; owner_source_heads["${path}"]="${commit}"
+      owner_source_entries["${path}"]="${source_entry}"
+      if f13_path_is_guarded "${path}"; then guarded_entries["${path}"]="${source_entry}"; guarded_entry_commits["${path}"]="${commit}"; fi
+      printf '%s\n' "${dc0_raw}" >>"${output}" || return 1
+      f13_f54_trace_event row_committed "${repo}" "${path}" "${output}" || return 1
+      python3 "${f13_f54_observer}" dc0-residual-checkpoint "${repo}" "${f13_f54_trace_file}" "${output}" end >"${dc0_receipt}" || return 1
+      f13_f54_trace_event dc0_residual_end "${repo}" "${dc0_receipt}" "${output}" || return 1
+    fi
     # Exact F authored merge-result residual in this SAME engine state.
     # Original parent operations above remain unchanged; no nested-map fallback.
     if [[ "${commit}" == fa1528a7c232a644218edf49811e2bb2e373105f &&
@@ -6319,7 +6361,7 @@ if f13_f54_production_applicable || [[ "${f13_master_release_pr}" == true || "${
         push_before_mismatch|\
         sync_merge_resolution_inspection|sync_merge_guarded_resolution|\
         source_tree_entry|merge_tree_entry|merge_tree_mismatch|target_tree_entry|guarded_target_mismatch|checkpoint_post_h_owner|\
-        duplicate_guarded_owner|release_pr_missing_base|release_pr_shape|release_pr_base_parent|\
+        duplicate_guarded_owner|nested_contribution_missing|release_pr_missing_base|release_pr_shape|release_pr_base_parent|\
         release_pr_source_delta|release_pr_result_delta|release_pr_delta_mismatch|\
         release_pr_merge_tree_mismatch|release_pr_map_write)
           f13_failure_category="$(<"${TMP_DIR}/f13-failure-category")" ;;

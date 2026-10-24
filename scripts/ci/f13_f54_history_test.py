@@ -33,6 +33,285 @@ def module():
     return value
 
 
+class Dc0ResidualContract(unittest.TestCase):
+    @contextmanager
+    def fold_fixture(self, import_residual=False, synthetic_parent_taint=False):
+        """Real append/fold; outer production authority/range is explicitly mocked.
+
+        Historical dc0 source objects, parent operation and row conservation are
+        real. This compact transport fixture is not full producer evidence.
+        """
+        m=module();original_git=m.git
+        base='698d4f064f032ea74abf3ede2017100b26c8ee69'
+        target='53f75f74523735ac594e21582bea659f567a7288'
+        outer='e6757e8ac26032ac4bad7f4356e91fffbf0725ba'
+        eventbase='288e6a4fb963b3d5775f885e14ecfda1b603a4ff'
+        unit=m.dc0_residual_source(ROOT);first,source=unit['ordered_parents'];boundary=unit['bases'][0]
+        def fixture_git(repo,*args):
+            if args==('rev-list','--first-parent','--reverse',eventbase+'..'+outer):return (outer+'\n').encode()
+            if args==('rev-list','--first-parent','--reverse',base+'..'+target):return (m.DC0_MERGE+'\n').encode()
+            if args==('diff','--name-only',base,target):return (m.DC0_PATH+'\n').encode() if import_residual else b''
+            return original_git(repo,*args)
+        with tempfile.TemporaryDirectory() as temporary,ExitStack() as patches:
+            folder=Path(temporary);trace=folder/'trace';mapping=folder/'map';mapping.write_bytes(b'')
+            outermap=folder/'outer-map';outermap.write_bytes(b'');delta=folder/'delta'
+            capability={'fixture':'outer-authority-only'}
+            entry=dict(type='F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1',base=eventbase,source=outer,
+                capability=m.raw_binding(m.canonical(capability)),native_binding=m.raw_binding('{"paths":[]}'),context={})
+            context=dict(source_context={'fixture':True},event={},values={},snapshots={},files={})
+            patches.enter_context(patch.object(m,'git',side_effect=fixture_git))
+            patches.enter_context(patch.object(m,'checked_capability_value',return_value=capability))
+            patches.enter_context(patch.object(m,'master_context',return_value=entry))
+            patches.enter_context(patch.object(m,'router_source_context',return_value={'fixture':True}))
+            patches.enter_context(patch.object(m,'manual_authority_expected',return_value=dict(values={},files={})))
+            if synthetic_parent_taint:
+                # Explicit OR control, not a claim that historical dc0 triggers
+                # Voice runtime scope (its actual classifier result is false).
+                original_classify=m.classify
+                patches.enter_context(patch.object(m,'classify',side_effect=lambda names:
+                    'true' if len(names)>1 else original_classify(names)))
+            entry_path=folder/'entry';entry_path.write_text(json.dumps(entry))
+            m.append(trace,'master_entry','','',ROOT,[str(entry_path)])
+            root=m.append(trace,'frame_enter','F2','',ROOT,['',eventbase,outer,'true','true',str(outermap),''])
+            rootop=m.append(trace,'operation_attempt',root,'',ROOT,[outer,'2',base,target,'merge'])
+            delta.write_bytes((m.DC0_PATH+'\n').encode() if import_residual else b'')
+            m.append(trace,'operation_begin',root,rootop,ROOT,[outer,'2',base,base,target,base,'false',str(delta)])
+            frame=m.append(trace,'frame_enter','F5','',ROOT,[root,base,target,'true','false',str(mapping),rootop])
+            op=m.append(trace,'operation_attempt',frame,'',ROOT,[m.DC0_MERGE,'2',first,source,'merge'])
+            paths=original_git(ROOT,'diff','--name-only',boundary,source).decode().splitlines()
+            delta.write_text('\n'.join(paths)+'\n')
+            m.append(trace,'operation_begin',frame,op,ROOT,[m.DC0_MERGE,'2',first,boundary,source,boundary,'false',str(delta)])
+            for name in paths:m.append(trace,'path_gate_before',frame,op,ROOT,[name,str(mapping)])
+            trigger=m.classify(paths)
+            m.append(trace,'classification',frame,op,ROOT,[trigger,str(delta)])
+            for name in paths:
+                row='\t'.join([name,trigger,m.DC0_MERGE,first,boundary,source,first,boundary])
+                m.append(trace,'row_before',frame,op,ROOT,[name,str(mapping),row])
+                m.append(trace,'row_after',frame,op,ROOT,[name,row,'original_owner_and_row_assignment'])
+                with mapping.open('ab') as out:out.write((row+'\n').encode())
+                m.append(trace,'row_committed',frame,op,ROOT,[name,str(mapping)])
+            def check(phase,ctx=None):
+                return m.validate_trace(ROOT,trace,m.sha(trace.read_bytes()),dc0_checkpoint=phase,dc0_context=ctx)['dc0_checkpoint']
+            def begin():
+                spec=check('begin',context);specpath=folder/'spec';specpath.write_text(json.dumps(spec))
+                manual=m.append(trace,'dc0_residual_begin',frame,op,ROOT,[str(specpath),str(mapping)])
+                m.append(trace,'path_gate_before',frame,manual,ROOT,[m.DC0_PATH,str(mapping)])
+                delta.write_text(m.DC0_PATH+'\n');flag=m.classify([m.DC0_PATH])
+                m.append(trace,'classification',frame,manual,ROOT,[flag,str(delta),'0' if flag=='true' else '1'])
+                row='\t'.join([m.DC0_PATH,flag,m.DC0_MERGE,first,first,m.DC0_MERGE,first,boundary])
+                m.append(trace,'row_before',frame,manual,ROOT,[m.DC0_PATH,str(mapping),row])
+                return manual,row,spec
+            def close_prefix(manual):
+                # Explicit synthetic failure closure only makes a partial fold
+                # inspectable; it is never successful producer evidence.
+                category=folder/'category';category.write_text('synthetic_fixture_stop')
+                m.append(trace,'failure',frame,manual,ROOT,['synthetic_fixture_stop',str(mapping)])
+                m.append(trace,'frame_exit',frame,'',ROOT,['1',str(mapping),str(category)])
+                m.append(trace,'failure',root,rootop,ROOT,['synthetic_fixture_stop',str(outermap)])
+                m.append(trace,'frame_exit',root,'',ROOT,['1',str(outermap),str(category)])
+                return m.validate_trace(ROOT,trace,m.sha(trace.read_bytes()))
+            def finish(manual,row):
+                m.append(trace,'row_after',frame,manual,ROOT,[m.DC0_PATH,row,'actual_dc0_result_parent_assignment'])
+                with mapping.open('ab') as out:out.write((row+'\n').encode())
+                m.append(trace,'row_committed',frame,manual,ROOT,[m.DC0_PATH,str(mapping)])
+                receipt=check('end');receipt_path=folder/'receipt';receipt_path.write_text(json.dumps(receipt))
+                m.append(trace,'dc0_residual_end',frame,manual,ROOT,[str(receipt_path),str(mapping)])
+                return receipt
+            yield dict(m=m,trace=trace,mapping=mapping,frame=frame,original=op,context=context,
+                folder=folder,check=check,begin=begin,close=close_prefix,finish=finish,
+                root=root,rootop=rootop,outermap=outermap,delta=delta,entry=entry)
+
+    def test_successful_child_row_is_imported_into_exact_e675_parent(self):
+        self.check_successful_import(False)
+
+    def test_synthetic_original_taint_survives_false_residual_and_parent(self):
+        self.check_successful_import(True)
+
+    def check_successful_import(self, synthetic_parent_taint):
+        with self.fold_fixture(import_residual=True,synthetic_parent_taint=synthetic_parent_taint) as f:
+            m=f['m'];manual,row,spec=f['begin']();f['finish'](manual,row)
+            category=f['folder']/'category';category.write_text('')
+            m.append(f['trace'],'frame_exit',f['frame'],'',ROOT,['0',str(f['mapping']),str(category)])
+            m.append(f['trace'],'path_gate_before',f['root'],f['rootop'],ROOT,[m.DC0_PATH,str(f['outermap'])])
+            f['delta'].write_text(m.DC0_PATH+'\n')
+            m.append(f['trace'],'classification',f['root'],f['rootop'],ROOT,[m.classify([m.DC0_PATH]),str(f['delta'])])
+            parts=row.split('\t');parent=m.git(ROOT,'rev-list','--parents','-n','1','e6757e8ac26032ac4bad7f4356e91fffbf0725ba').decode().split()[1]
+            incoming='\t'.join([m.DC0_PATH,parts[1],'e6757e8ac26032ac4bad7f4356e91fffbf0725ba',parent,
+                parts[4],parts[5],parent,'698d4f064f032ea74abf3ede2017100b26c8ee69'])
+            for kind,args in (('row_before',[m.DC0_PATH,str(f['outermap']),incoming]),
+                              ('row_after',[m.DC0_PATH,incoming,'original_owner_and_row_assignment'])):
+                m.append(f['trace'],kind,f['root'],f['rootop'],ROOT,args)
+            f['outermap'].write_text(incoming+'\n')
+            m.append(f['trace'],'row_committed',f['root'],f['rootop'],ROOT,[m.DC0_PATH,str(f['outermap'])])
+            # Root failure is explicitly synthetic; child success/import is real.
+            category.write_text('synthetic_fixture_stop')
+            m.append(f['trace'],'failure',f['root'],f['rootop'],ROOT,['synthetic_fixture_stop',str(f['outermap'])])
+            m.append(f['trace'],'frame_exit',f['root'],'',ROOT,['1',str(f['outermap']),str(category)])
+            folded=m.validate_trace(ROOT,f['trace'],m.sha(f['trace'].read_bytes()))
+            expected=spec['original_classification']['trigger']=='true' or m.classify([m.DC0_PATH])=='true'
+            self.assertEqual(expected,synthetic_parent_taint)
+            self.assertEqual(folded['ledger'][f['frame']]['paths'][m.DC0_PATH]['aggregate'],expected)
+            self.assertEqual(folded['ledger'][f['root']]['paths'][m.DC0_PATH]['aggregate'],expected)
+            self.assertEqual(folded['ledger'][f['root']]['rows'],[incoming])
+
+    def test_context_membership_and_event_order_cannot_bypass_residual_guards(self):
+        for change in ('context','native','game','parent','frame','injection','missing_end','reordered_end','owner'):
+            with self.subTest(change=change),self.fold_fixture() as f:
+                m=f['m'];trace=f['trace'];events=[json.loads(x) for x in trace.read_bytes().splitlines()]
+                if change in ('context','native','game','parent','frame','owner'):
+                    context=copy.deepcopy(f['context'])
+                    if change=='context':context['source_context']={'changed':True}
+                    elif change=='native':
+                        events[0]['payload']['native_binding']=m.raw_binding(json.dumps({'paths':[m.DC0_PATH]}))
+                        f['entry']['native_binding']=events[0]['payload']['native_binding']
+                    elif change=='game':
+                        context['values']['game_checkpoint_aggregate_paths']='fixture-game'
+                        context['snapshots']['fixture-game']=m.raw_binding(m.DC0_PATH+'\n')
+                        context['files']['fixture-game']=m.file_digest((m.DC0_PATH+'\n').encode())
+                    elif change=='parent':
+                        next(e for e in events if e['kind']=='frame_enter' and e['frame']==f['frame'])['payload']['parent_operation']='foreign/operation'
+                    elif change=='frame':
+                        next(e for e in events if e['kind']=='frame_enter' and e['frame']==f['frame'])['payload']['allow_direct_followup']='false'
+                    else:
+                        # Existing owner's path cannot be relabeled into this residual.
+                        event=next(e for e in events if e['kind']=='row_committed')
+                        event['payload']['path']=m.DC0_PATH
+                    m.write_events(trace,events)
+                    if change=='game':
+                        with patch.object(m,'manual_authority_expected',return_value=dict(values=context['values'],files={})),self.assertRaisesRegex(m.Rejected,'dc0_no_game_aggregate_path_exemption'):
+                            f['check']('begin',context)
+                    elif change=='native':
+                        with self.assertRaisesRegex(m.Rejected,'dc0_no_native_path_exemption'):f['check']('begin',context)
+                    else:
+                        with self.assertRaises((m.Rejected,KeyError)):f['check']('begin',context)
+                else:
+                    manual,row,spec=f['begin']()
+                    if change=='injection':
+                        events=[json.loads(x) for x in trace.read_bytes().splitlines()]
+                        m.write_events(trace,[e for e in events if e['kind']!='dc0_residual_begin'])
+                        with self.assertRaises((m.Rejected,KeyError)):f['check']('append')
+                    else:
+                        f['finish'](manual,row)
+                        events=[json.loads(x) for x in trace.read_bytes().splitlines()]
+                        end=events.pop()
+                        if change=='reordered_end':events.insert(-1,end)
+                        m.write_events(trace,events)
+                        category=f['folder']/'category';category.write_text('')
+                        m.append(trace,'frame_exit',f['frame'],'',ROOT,['0',str(f['mapping']),str(category)])
+                        with self.assertRaises(m.Rejected):m.validate_trace(ROOT,trace,m.sha(trace.read_bytes()))
+
+    def test_actual_append_fold_conserves_residual_and_original_taint(self):
+        with self.fold_fixture() as f:
+            m=f['m'];manual,row,spec=f['begin']();f['check']('append')
+            m.append(f['trace'],'row_after',f['frame'],manual,ROOT,[m.DC0_PATH,row,'actual_dc0_result_parent_assignment'])
+            with f['mapping'].open('ab') as out:out.write((row+'\n').encode())
+            m.append(f['trace'],'row_committed',f['frame'],manual,ROOT,[m.DC0_PATH,str(f['mapping'])])
+            receipt=f['check']('end');receipt_path=f['folder']/'receipt';receipt_path.write_text(json.dumps(receipt))
+            m.append(f['trace'],'dc0_residual_end',f['frame'],manual,ROOT,[str(receipt_path),str(f['mapping'])])
+            self.assertEqual(receipt['row'],row)
+            self.assertEqual(receipt['spec']['original_classification'],spec['original_classification'])
+            # Replaying a second begin or finish cannot mint a second owner.
+            with self.assertRaises(m.Rejected):f['check']('begin',f['context'])
+            with self.assertRaises(m.Rejected):f['check']('end')
+            folded=f['close'](manual)
+            self.assertEqual(folded['dc0_residual_operations'][manual],receipt)
+            self.assertEqual(folded['ledger'][f['frame']]['paths'][m.DC0_PATH]['aggregate'],
+                spec['original_classification']['trigger']=='true' or receipt['classification']['trigger']=='true')
+
+    def test_real_shell_block_append_and_independent_fold(self):
+        with self.fold_fixture() as f:
+            m=f['m'];folder=f['folder'];spec=f['check']('begin',f['context'])
+            spec_path=folder/'fixture-spec';spec_path.write_text(json.dumps(spec))
+            context_path=folder/'fixture-context';context_path.write_text(json.dumps(f['context']))
+            # Only checkpoint CLI authority is a fixture seam. Actual shell,
+            # classifier, append CLI and independent final fold are unchanged.
+            checkpoint=folder/'checkpoint.py'
+            checkpoint.write_text('import json,sys,hashlib\nfrom pathlib import Path\n'
+                'phase,trace,mapping,specpath=sys.argv[1:]\n'
+                'spec=json.loads(Path(specpath).read_bytes())\n'
+                'if phase=="begin": print(json.dumps(spec))\n'
+                'elif phase=="end":\n'
+                ' events=[json.loads(x) for x in Path(trace).read_bytes().splitlines()]\n'
+                ' classification=next(e["payload"] for e in events if e["kind"]=="classification" and e["operation"]==spec["operation"])\n'
+                ' raw=Path(mapping).read_bytes();name=spec["source"]["paths"][0]\n'
+                ' row=next(x for x in raw.decode().splitlines() if x.split("\\t")[0]==name)\n'
+                ' print(json.dumps(dict(spec=spec,classification=classification,map_after=dict(bytes=len(raw),sha256=hashlib.sha256(raw).hexdigest()),row=row,admission=False)))\n')
+            source=SHELL.read_text();start=source.index('    if [[ "${commit}" == dc0acdef')
+            block=source[start:source.index('    # Exact F authored merge-result',start)]
+            variables=dict(ROOT=str(ROOT),TMP_DIR=str(folder),f13_f54_observer=str(HELPER),
+                f13_f54_trace_file=str(f['trace']),f13_f54_frame=f['frame'],f13_f54_operation=f['original'],
+                capability_command='production-capabilities',repo=str(ROOT),output=str(f['mapping']),
+                base='698d4f064f032ea74abf3ede2017100b26c8ee69',target='53f75f74523735ac594e21582bea659f567a7288',
+                commit=m.DC0_MERGE,FIXTURE_CHECKPOINT=str(checkpoint),FIXTURE_SPEC=str(spec_path),FIXTURE_CONTEXT=str(context_path))
+            program='set -euo pipefail\n'+definitions()+'\n'
+            program+=re.search(r'(?ms)^f13_f54_trace_event\(\) \{\n.*?^\}\n',source).group(0)+'\n'
+            program+='\n'.join(k+'='+shlex.quote(v) for k,v in variables.items())+'\n'
+            program+='source "$ROOT/scripts/ci/voice-r22-runtime-scope.sh"\n'
+            program+='''python3() {
+  if [[ "$2" == dc0-residual-checkpoint ]]; then
+    command python3 "$FIXTURE_CHECKPOINT" "$6" "$4" "$5" "$FIXTURE_SPEC"
+  else command python3 "$@"; fi
+}
+f13_f54_manual_gate_context() { cp "$FIXTURE_CONTEXT" "$1"; }
+fixture_run() {
+  local path source_entry
+  local -A owners=() owner_triggers=() owner_content_bases=() owner_source_heads=() owner_source_entries=() guarded_entries=() guarded_entry_commits=()
+'''+block+'\n}\nfixture_run\n'
+            executable=folder/'actual-dc0.sh';executable.write_text(program)
+            result=subprocess.run(['bash',str(executable)],capture_output=True)
+            self.assertEqual(result.returncode,0,result.stderr.decode())
+            folded=f['close'](spec['operation'])
+            self.assertIn(spec['operation'],folded['dc0_residual_operations'])
+
+    def test_fold_rejects_missing_parent_completion_and_forged_classifier(self):
+        with self.fold_fixture() as f:
+            m=f['m'];original=f['trace'].read_bytes();events=[json.loads(x) for x in original.splitlines()]
+            m.write_events(f['trace'],events[:-1])
+            with self.assertRaisesRegex(m.Rejected,'complete_ordered_path_commits'):f['check']('begin',f['context'])
+            f['trace'].write_bytes(original);manual,row,spec=f['begin']()
+            events=[json.loads(x) for x in f['trace'].read_bytes().splitlines()]
+            classified=next(e for e in events if e['kind']=='classification' and e['operation']==manual)
+            classified['payload']['trigger']='true' if classified['payload']['trigger']=='false' else 'false'
+            m.write_events(f['trace'],events)
+            with self.assertRaisesRegex(m.Rejected,'dc0_original_classifier_no_exemption'):f['check']('append')
+
+    def test_exact_historical_residual_is_independently_reconstructed(self):
+        m=module();value=m.dc0_residual_source(ROOT)
+        self.assertEqual(value['merge'],'dc0acdefec7e5c413988adf71f86d12bff4017bc')
+        self.assertEqual(value['paths'],['src/backend/chat/internal/gisprincipal/method_union_test.go'])
+        self.assertEqual(value['entry']['blob']['sha256'],'2a2c785a1faf086f14c4702fc062dbaf5698ccfe8c590a4217f07ad5ec64ab7d')
+        self.assertFalse(value['admission'])
+
+    def test_parent_tree_blob_and_residual_set_changes_are_rejected(self):
+        m=module();original=m.git
+        mutations=(('rev-list',),('rev-parse',),('diff','--name-only'),('ls-tree',))
+        for prefix in mutations:
+            def changed(repo,*args):
+                raw=original(repo,*args)
+                if args[:len(prefix)]==prefix:
+                    return raw+b'forged\n'
+                return raw
+            with self.subTest(prefix=prefix),patch.object(m,'git',side_effect=changed),self.assertRaises(m.Rejected):
+                m.dc0_residual_source(ROOT)
+
+    def test_raw_source_unit_cannot_be_rewritten(self):
+        m=module()
+        with patch.object(m,'DC0_SOURCE_UNIT_RAW',m.DC0_SOURCE_UNIT_RAW+b' '),self.assertRaisesRegex(m.Rejected,'dc0_source_unit_raw'):
+            m.dc0_residual_source(ROOT)
+
+    def test_actual_append_binds_manual_identity_not_original_parent_operation(self):
+        m=module()
+        with tempfile.TemporaryDirectory() as folder:
+            folder=Path(folder);trace=folder/'trace';spec=folder/'spec';mapping=folder/'map'
+            spec.write_text('{}');mapping.write_bytes(b'')
+            original='F5/'+m.DC0_MERGE+'/2'
+            identity=m.append(trace,'dc0_residual_begin','F5',original,ROOT,[str(spec),str(mapping)])
+            event=json.loads(trace.read_bytes())
+            self.assertEqual(identity,'F5/'+m.DC0_MERGE+'/manual-result')
+            self.assertEqual(event['operation'],identity)
+            self.assertEqual(event['payload']['id'],identity)
+
+
 class Manual3071RenderingContract(unittest.TestCase):
     def test_frozen_patch_is_independent_of_default_abbreviation(self):
         m=module()

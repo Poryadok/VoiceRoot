@@ -641,3 +641,66 @@ tmp/pr875-repair/bot-receivers/v6-actual/receipt.json, SHA256
 78246f184dca5dd7bacc4ab361f4159efb825a244fb3e0b42daafff65c12b23c.
 Full log SHA256 2c1264f97188b33929b3727a714e56784fc0fa45f846742f666b91b3eed53fab.
 These results do not replace the mandatory fresh actual producer/router terminal.
+
+## Exact dc0 merge-authored residual
+
+The actual e981 producer completed all ten finite J transitions, then rejected
+the outer e675 import because its child map omitted
+`src/backend/chat/internal/gisprincipal/method_union_test.go`. The unchanged row
+guard reproduces `nested_contribution_missing`; the diagnostic formatter hid
+that category as `unknown`. This is an exact merge-authored residual at dc0acdef,
+absent from both parents and the merge base, not permission to synthesize
+arbitrary missing rows.
+
+The independently reviewed source unit binds four complete trees, four edges,
+482 context paths and the singleton 869-byte test. Its SHA-256 is
+ef290952b4e7cd66321a8019485e7a8ed70233a82a33d82166e24da3ae8f950d.
+The finite correction must reconstruct this unit, preserve original parent
+completion, gates, taint and map history, and create an explicit manual-result
+operation whose final fold independently verifies all transitions. Current
+runtime and final producer completion remain unclaimed. Source reconstruction
+tests were observed RED before implementation; integration and final tests
+remain pending.
+
+The original row-guard RED is preserved in the nested-row diagnostic receipt,
+SHA256 f846ce5a7648fceff1bb30ee13f7158fbb178d03fe926f6632e0a8c42e62f8bd.
+Independent Chat semantics and complete source/contract reviews accepted only
+this historical residual. The implementation uses a distinct manual-result
+operation after the original dc0 parent operation, independently reconstructs
+the frozen source and current mandatory Native/Game context before mutation,
+and retains original classifier results and cumulative OR. The exact original
+112-path classification and singleton classification are both false; a separate
+explicitly synthetic true-parent classifier fixture tests OR preservation.
+No test suffix or blob equality grants a generic missing-row exemption.
+
+The actual append-envelope identity regression was observed RED, then fixed by
+including the new begin event in the existing identity assignment. Extracted
+shell wiring, actual append/fold, child-success import into e675, and negative
+context/order/membership cases have independent CODE clearance. These fixtures
+explicitly mock their outer authority/range or checkpoint seams and use a
+synthetic root failure closure; they are not full producer authority evidence.
+Compatibility results at this intermediate checkpoint were pending; final
+results follow below. Fresh full producer evidence remains required.
+
+Review artifacts remain outside the consumable carrier: Chat review SHA256
+ccb7dd6938f1ff01f7cd0a63cc133577595b2e1b864f9403cd5fd179bf26e072;
+independent source/contract review SHA256
+19ea8b70fd6cd4a8729f3186ee5414a00a69686f7df1d689c46c31d468e96b20.
+The frozen focused suite passed10/10 (57.415s), with compile and shell syntax
+checks passing. Its log SHA256 is
+5835876026fae212f7555a9c05f46ade6e965e75a1eb03c64c9f39d91f411ba3.
+
+Final actual-R compatibility passed against R28e929e65fa1a038662ea8620ac2bd8537c96291:
+22 artifact modes/raw bytes, production38/38 (294.333s), Native7/7 (5.588s),
+F5488/88 (225.000s), compilation and shell syntax, exit0. The private synthetic
+K is267a1fcbc; no live producer was changed. Log SHA256
+5cdbe561c6e898cf925c9e5c140867f5e1e9cfd4eb3052fb5478a841fe412893.
+Independent frozen CODE review is CLEAR for helper3d71129d55398903fbfe1d6059254eaf381028430be54d26c2e68115f6faa6a5,
+test30445bc53924867322873c6ed22c919e4af68445db3d92406c8245f3a1326bac,
+and shellfe7f172ccff142164fbdd80cae20a3395deb22e06cb09d923067f94d1eae3690.
+Graphify completed successfully:116024nodes/239979edges/22200communities;
+optional HTML visualization exceeded its existing size limit. Fresh actual
+collector/final-fold/router terminal evidence is still required after integration.
+The complete isolated-run receipt is
+tmp/pr875-repair/bot-receivers/dc0-actual-r/receipt.json, SHA256
+ebe127f917919eb7fbe8256d72894a19f49bd1730fa8c52434ae4d2c3c83b3c7.
