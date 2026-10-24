@@ -568,6 +568,7 @@ def current_author_J_native_applicability(repo, native, historical, current):
         predecessor=dict(current,version=previous['version'],content_base=previous['base'],
             snapshot=previous['source'],record=verifier.PINNED_RECORD_COMMIT,
             record_sha256=verifier.PINNED_RECORD_SHA256,paths=[r['path'] for r in previous['projection']])
+        predecessor.pop('source_applicability',None)  # Historical v3 reconstruction is not a current bridge.
         preserved=current_author_J_native_applicability(repo,native,historical,predecessor)
         require(current['content_base']==new['base'] and current['snapshot']==new['source']
             and current['paths']==predecessor['paths'],'current_J_context_complete_projection')
@@ -577,6 +578,7 @@ def current_author_J_native_applicability(repo, native, historical, current):
         require(sha(raw)==current['record_sha256'],'current_J_context_record_hash')
         return dict(type='F54_CURRENT_AUTHOR_J_NATIVE_SOURCE_APPLICABILITY',historical=preserved['historical'],
             current=dict(**{k:current[k] for k in ('base','content_base','snapshot','record','record_sha256','paths')},
+                **({'source_applicability':current['source_applicability']} if 'source_applicability' in current else {}),
                 classification=new['classification'],record_raw=raw_binding(raw)),
             predecessor=preserved['current'],predecessor_applicability=preserved,successor_lineage=new['predecessor'],
             added_paths=preserved['added_paths'],path_entries=[dict(path=name,
@@ -5110,7 +5112,13 @@ def prepare_corrected_F_production_capability(repo,unit_path):
     current=native.qualify(repo,binding['base'],binding['source'],binding['target'],event['GITHUB_EVENT_NAME'],
         event['GITHUB_REF'],event['GITHUB_SHA'],event['VOICE_CI_PUSH_BEFORE_SHA'],event['GITHUB_BASE_REF'])
     verifier,native_record=native.verified_record(repo,current)
-    if binding['type']=='F13-PRODUCTION-SOURCE-v8':
+    if binding['type']=='F13-PRODUCTION-SOURCE-v9':
+        fixture=module.load_fixture_fix(repo)[0]
+        require(fixture['native_record']==dict(version=current['version'],source=current['snapshot'],
+            record=current['record'],path=verifier.CONTEXT_RECORD_PATH,sha256=current['record_sha256'])
+            and current['source_applicability']==verifier.fixture_bridge_binding(binding['source'],binding['target']),
+            'production_F_exact_retained_context_applicability')
+    elif binding['type']=='F13-PRODUCTION-SOURCE-v8':
         integrated=module.load_integration(repo)[0]
         require(current['version']==verifier.CONTEXT_VERSION and current['record']==module.INTEGRATION_RECORD_COMMIT
             and integrated['native_record']==dict(version=current['version'],source=current['snapshot'],

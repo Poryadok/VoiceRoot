@@ -2,11 +2,14 @@
 
 Run against an isolated clone with the candidate carrier committed above R.
 Detached commit-tree objects are fixture events and never alter shared refs.
+These fixtures explicitly exercise historical v2 qualification; public current
+qualification must reject their restored historical context on an H9 checkout.
 """
 import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 import importlib.util
@@ -72,8 +75,13 @@ class RealGitSuccessorTest(unittest.TestCase):
 
     def qualify(self, source=None, target=None):
         source, target = source or self.source, target or self.target
-        return authority.qualify(ROOT, BASE, source, target, 'pull_request',
+        return successor.qualify(ROOT, BASE, source, target, 'pull_request',
                                  'refs/pull/875/merge', target, '', 'master')
+
+    def test_public_current_authority_rejects_historical_fixture(self):
+        with self.assertRaisesRegex(legacy.Rejected, '^context_fixture_actual_head$'):
+            authority.qualify(ROOT, BASE, self.source, self.target, 'pull_request',
+                              'refs/pull/875/merge', self.target, '', 'master')
 
     def changed(self, name, content=b'changed fixture input\n', mode='100644'):
         with tempfile.TemporaryDirectory() as directory:
@@ -109,9 +117,9 @@ class RealGitSuccessorTest(unittest.TestCase):
         code = '''import importlib.util,sys
 spec=importlib.util.spec_from_file_location('extracted_native',sys.argv[1])
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
-b=m.qualify(*sys.argv[2:]);assert b['version']=='NATIVE-P3-SOURCE-v2'
+b=m.successor.qualify(*sys.argv[2:]);assert b['version']=='NATIVE-P3-SOURCE-v2'
 '''
-        subprocess.run(['python','-c',code,str(ROOT/'scripts/ci/f13_native_p3_authority.py'),
+        subprocess.run([sys.executable,'-c',code,str(ROOT/'scripts/ci/f13_native_p3_authority.py'),
                         str(ROOT),BASE,self.source,self.target,'pull_request','refs/pull/875/merge',
                         self.target,'','master'],cwd='/tmp',check=True,capture_output=True)
 

@@ -872,4 +872,85 @@ Graphify update completed after the final code change:116122nodes/240173edges;
 the existing optional HTML visualization size limit remains. No fresh actual
 producer terminal result is claimed by these bounded verification receipts.
 
+## Phase0 private-directory fixture source successor
+
+Hosted c1 reported two PermissionErrors when its nonroot test user enumerated
+service-owned Chat/Space signer directories. H9
+3a530edd97cbfe4beb9cea764eb0dd71acec2d2c is the exact one-file test repair on
+c1c340c809aa619a4ee18230b99356959fdb4a40; no directory permission or production
+behavior is changed. Independent review verified the same nonempty assertion
+under the numeric service identity, preserved65532:65532/0700 ownership/mode,
+RED two baseline errors, focused GREEN and78-test offline suite with one
+existing root-only skip. An incomplete-copy run remains excluded evidence.
+
+Actual R9 is280d172b1ff9c9cd6b6ec02c9f924cac0148b354 directly above H9,
+record SHA256062fbe47a0bb10c0b626173961db814148cb22ac72a348ba9618958937f1c305.
+The independently accepted record binds the singleton full before/after delta,
+complete1141-entry D6 inventory,12 evidence references and unchanged Native
+99/472/481/89 inventories/full Voice tree. The retained Native v4 tuple remains
+R60c0/Hef3 with its immutable record; a typed current applicability binding
+names R9/H9 and actual B/S/T. No new projection or carrier path is authorized.
+
+The source-only R9 loader reconstructs unchanged v8/v4 first, without recursive
+current qualification. Actual Native qualification dispatches by actual HEAD
+before legacy fallback and independently checks the exact source bridge,
+current event/root/tree and ten executed carriers. Verified current records,
+map auditing, J current-source reconstruction and corrected-F consumption
+recheck that binding. Explicit historical predecessor reconstruction remains
+separate. Missing/unpinned R9 or a caller-substituted historical target cannot
+reuse an old qualifier as current authority.
+
+Independent Linux source-unit RED reproduced missing loader/pin symbols in two
+tests, log SHA256abc44b6c18a8ff27ad54a5cc83716dd71d7058bea5af6119f055f7f0dcc266db.
+A public-dispatch sentinel also reproduced legacy success before the correction
+and rejects it afterward; its authority response is explicitly mocked. Real
+current-event, complete semantic-record and old-consumer compatibility tests
+remain required. The integrated shell88b468 profile selector is retained
+unchanged from root c1; no new full producer completion is claimed here.
+
+R9 compatibility execution used an isolated clean synthetic K above actual
+R9, with the published source packet preserved. Source-unit tests passed 3/3
+(7.871s; log SHA256
+53befc262e2349208e55070d498dd4f0edcd6cdbb192b727440e71eeef805837).
+The production suite completed 58 tests in 1452.440s: 57 passed and one stale
+v8 test asserted that the retained Native record equaled the production record
+(log SHA2569900684cafc2bd3dba4b876580909bfce6ba8daea156b515a4bc8db4998eee2a).
+Independent review confirmed that Native v4 must retain R8/H8 while the exact
+typed applicability bridge names R9/H9. The corrected test additionally checks
+both pinned record hashes, distinct record identities and every bridge field;
+it passed alone in21.649s (log SHA256
+d36efae42f1bf7e8a14383486bfba75ff7b973f670ad896ec4656f737430197d).
+No production code changed after that full run, and the unchanged57 passes
+plus the focused correction are the evidence; a second complete58-test pass
+is not claimed.
+
+Native documentation tests passed9/9 in6.824s (log SHA256
+ecc309a6a4ec7831e5e2132f2b62138c5d39c1861333048273b52c4f69f88e68).
+The old successor fixture then exposed an expected compatibility boundary: its
+privately restored historical v2 trees cannot be qualified as current H9
+authority. Its failed19-test log remains preserved (SHA256
+633bd818cb8f848a70c9a4a1c3466350fd7a4e1e4cfeb2b56b8d6825b3fda038).
+The independently reviewed fixture now explicitly invokes the unchanged v2
+qualifier, keeps original semantic/audit/J assertions, and separately requires
+the public current dispatcher to reject the same historical tuple. Dynamic
+absolute-path import remains tested using sys.executable. Neither HEAD nor
+ROOT is spoofed and no actual-current guard is relaxed.
+
+The corrected historical successor suite passed20/20 in5.308s (log SHA256
+2d3cda8f4f4a8921587e6f84ab9b38496555df63561005497c619544a42a7e8c).
+F54 passed99/99 in266.669s (log SHA256
+69fcec91287684ff5b63ac922c4f67723dfb66a9aa72407adb06249275bd2163).
+All six changed Python files compiled and bash syntax passed for unchanged
+shell88b468. Read-only actual-R9 preflight verified all14 unique100644
+record/input/evidence blobs against declared hashes and checkout bytes.
+Consolidated receipt: tmp/pr875-repair/r9-sourceunit/receipt.md, SHA256
+9d0c014fa6e4b1a5a895dc44514c501a3d0170ada55cee58c209a8a28cccb4bc.
+Its statement that no production files were edited describes the test runner:
+the candidate includes the author's four reviewed production validator modules
+and two test modules; the runner applied only their exact frozen bytes.
+Independent final static review: same directory/final-independent-review.md,
+SHA256f6531868a4e926f092242c86441dd5b9ec89d99a477a853f5f52f844c652ff3f.
+The producer and hosted CI on the final integrated K remain separate required
+proof. No persisted authority cache or performance-policy change was added.
+
 Integration verification: root retained the 13-line VOICE_CONTRACT_PROFILE dispatch from merged master. Final shell SHA256 is 88b468b71112d1bae2853c4795025d38e1125931acc221ef83b2f007831f183a; the entire F13 suffix remains byte-identical to the tested author shell. Independent review CLEAR. On the actual-R8 private candidate, current passed F05-F12 (exit 0), full and unset default reached the first F13 invocation sentinel (exit 77 without executing F13), invalid profile exited 2, and a controlled F12 documentation mutation failed with exit 1 before F13. bash -n passed. This bounded integration check supplements the unchanged 50/9/19 compatibility and 99-test F54 results; final actual producer and hosted CI remain required.
