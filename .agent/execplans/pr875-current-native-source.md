@@ -736,3 +736,29 @@ Native tuple. The final record SHA256 is
 753a22d082aa11f7b6696ea7a08c7fea08897e553956b960b3a8c41cf5dc13ba.
 Source acceptance is not CODE or full-producer acceptance; actual root R7 must
 be supplied before activation pins and compatibility checks.
+
+Root published R7 at8e98ab843eaa72245126b02fadf52bb349c3a4c1 with sole
+parent Hbc8552fbec6432a36151ab9afe9f85fecb1ccd20. K7 pins that actual R and
+record753a22d082aa11f7b6696ea7a08c7fea08897e553956b960b3a8c41cf5dc13ba;
+independent source, old-predicate preservation and final pin CODE reviews are
+CLEAR. The five added real-Git tests exercise exact one-path eligibility,
+unpinned refusal, semantic inventory/evidence/Native tampering, subsequent edits,
+foreign paths, modes, missing artifacts and wrong source/record parents. The
+actual event and retained Native checks remain in every production qualification.
+At this intermediate checkpoint compatibility execution was pending; results
+follow below. No full producer PASS is claimed.
+
+Final actual-R7 compatibility is GREEN:15 artifact modes/raw bytes,
+production43/43 (343.515s), Native7/7 (5.544s), F5488/88 (235.051s),
+compilation and shell syntax, exit0. The clean private synthetic K is
+da0d6da99a505a3150477aa711c12fe590bcec2d; no live producer was used.
+Raw log SHA2560857f2fc8462f87356f236b4da4e9b48742e809983ae9789376fbbb9b44ce660.
+Frozen code matches independent final CODE review: production helper
+6ddf4218e632a21b6f8a70097868cb7e5a4c8289f46e62b0e7a6435053cfcc85,
+testa24bfe9b135e1c461ad172e144e6b9668ea84ca1b784f72853d3cfc8f2ec4316,
+F54helper81f0f394f4bf2be0b3a5d5e2c7bd61149108b25960045034501c43274db570d0.
+Graphify completed after final pins with no topology changes from116038nodes/
+240011edges; optional HTML retains the existing graph-size limitation. Fresh
+actual collector/router terminal completion remains mandatory and unclaimed.
+Receipt:tmp/pr875-repair/bot-receivers/v7-actual/receipt.json, SHA256
+88786c33eadfc28771445f41aee69e71e2a673f3f14a1d90b65dbe8ac2246078.
