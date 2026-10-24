@@ -1,0 +1,149 @@
+test_changed_authority_or_unbound_derived_proof_is_refused (actor_root_test.HistoricalVerifierTests.test_changed_authority_or_unbound_derived_proof_is_refused) ... ok
+test_fresh_current_verification_accepts_only_bound_helper_provenance_delta (actor_root_test.HistoricalVerifierTests.test_fresh_current_verification_accepts_only_bound_helper_provenance_delta) ... ok
+test_actual_capture_then_actor_preflight_binds_exact_leaf_mount (actor_root_test.Tests.test_actual_capture_then_actor_preflight_binds_exact_leaf_mount) ... ok
+test_current_story_schema_cannot_reuse_historical_clean4_witness (actor_root_test.Tests.test_current_story_schema_cannot_reuse_historical_clean4_witness) ... ok
+test_dynamic_root_witness_is_captured_before_real_fence_and_drift_vetoes_revalidation (actor_root_test.Tests.test_dynamic_root_witness_is_captured_before_real_fence_and_drift_vetoes_revalidation) ... ok
+test_messaging_preflight_attests_exact_music_consumer_grants_on_existing_mount (actor_root_test.Tests.test_messaging_preflight_attests_exact_music_consumer_grants_on_existing_mount) ... ok
+test_real_canonical_acl_subset_and_unsupported_yaml_refusal (actor_root_test.Tests.test_real_canonical_acl_subset_and_unsupported_yaml_refusal) ... ok
+test_secret_drift_or_different_role_identity_refuses_revalidation (actor_root_test.Tests.test_secret_drift_or_different_role_identity_refuses_revalidation) ... ok
+test_source_requirements_and_actual_mount_bound_before_fence (actor_root_test.Tests.test_source_requirements_and_actual_mount_bound_before_fence) ... ok
+test_story_candidate_requires_actual_mounted_actor_and_canonical_language (actor_root_test.Tests.test_story_candidate_requires_actual_mounted_actor_and_canonical_language) ... ok
+test_story_database_reference_dsn_and_secret_reread_veto (actor_root_test.Tests.test_story_database_reference_dsn_and_secret_reread_veto) ... ok
+test_story_promoted_alias_binds_reviewed_content_not_master_revision (actor_root_test.Tests.test_story_promoted_alias_binds_reviewed_content_not_master_revision) ... ok
+test_story_schema_source_version_and_root_identity_drift_veto (actor_root_test.Tests.test_story_schema_source_version_and_root_identity_drift_veto) ... ok
+test_unaffected_user_has_no_hidden_credential_or_actor_mutation (actor_root_test.Tests.test_unaffected_user_has_no_hidden_credential_or_actor_mutation) ... ok
+test_clean_bound_schema_retains_exact_observation (bot_migration_test.BotPrerequisiteTest.test_clean_bound_schema_retains_exact_observation) ... ok
+test_current_canonical_bot_target_is_accepted_after_migrations (bot_migration_test.BotPrerequisiteTest.test_current_canonical_bot_target_is_accepted_after_migrations) ... ok
+test_empty_token_collision_vetoes_forward_unique_index (bot_migration_test.BotPrerequisiteTest.test_empty_token_collision_vetoes_forward_unique_index) ... ok
+test_fixed_database_query_binds_authority_and_rejects_drift (bot_migration_test.BotPrerequisiteTest.test_fixed_database_query_binds_authority_and_rejects_drift) ... ok
+test_only_named_canonical_index_file_selects_preflight (bot_migration_test.BotPrerequisiteTest.test_only_named_canonical_index_file_selects_preflight) ... ok
+test_actual_bootstrap_prove_optional_get_census_and_cleanup_composition (expired_public_test.PublicRecoveryTests.test_actual_bootstrap_prove_optional_get_census_and_cleanup_composition) ... ok
+test_extracted_actual_workflow_routes_and_rejects_conflicting_or_changed_target (expired_public_test.PublicRecoveryTests.test_extracted_actual_workflow_routes_and_rejects_conflicting_or_changed_target) ... ok
+test_real_active_release_feeds_new_latest_rollback_and_ordinary_finish_cannot_bypass (expired_public_test.PublicRecoveryTests.test_real_active_release_feeds_new_latest_rollback_and_ordinary_finish_cannot_bypass) ... ok
+test_real_bundle_inventory_and_manifest_reader_new_bound_and_custody_veto (expired_public_test.PublicRecoveryTests.test_real_bundle_inventory_and_manifest_reader_new_bound_and_custody_veto) ... ok
+test_real_client_closed_schema_nonce_and_actual_actions_dispatch_replay (expired_public_test.PublicRecoveryTests.test_real_client_closed_schema_nonce_and_actual_actions_dispatch_replay) ... ok
+test_actual_cli_canonical_full_and_app_only_bind_pinned_plan_and_ingress (compiler_test.CompilerTest.test_actual_cli_canonical_full_and_app_only_bind_pinned_plan_and_ingress) ... ok
+test_actual_cli_produces_bound_images_only_target (compiler_test.CompilerTest.test_actual_cli_produces_bound_images_only_target) ... NATS_ROLLOUT_COMPILE=BLOCKED
+ERROR
+test_actual_main_mixed_images_rejects_unused_pins_and_duplicate_frontend (compiler_test.CompilerTest.test_actual_main_mixed_images_rejects_unused_pins_and_duplicate_frontend) ... ok
+test_actual_main_mixed_images_scope_keeps_selected_live_frontend_and_exact_pins (compiler_test.CompilerTest.test_actual_main_mixed_images_scope_keeps_selected_live_frontend_and_exact_pins) ... ok
+test_extra_image_mapping_is_rejected (compiler_test.CompilerTest.test_extra_image_mapping_is_rejected) ... ok
+test_images_only_frozen_immutable_target_and_explicit_empty_migrations (compiler_test.CompilerTest.test_images_only_frozen_immutable_target_and_explicit_empty_migrations) ... ok
+test_reserved_nats_resources_and_unenrolled_target_rejected (compiler_test.CompilerTest.test_reserved_nats_resources_and_unenrolled_target_rejected) ... ok
+test_actor_drift_after_offnode_readback_prevents_transaction_authorization (bridge_composition_test.CompositionTests.test_actor_drift_after_offnode_readback_prevents_transaction_authorization) ... ok
+test_actual_root_cipher_binding_twelve_hex_operation_reaches_remote_readback (bridge_composition_test.CompositionTests.test_actual_root_cipher_binding_twelve_hex_operation_reaches_remote_readback) ... ok
+test_real_prepare_source_failure_saves_boundary_before_build (bridge_composition_test.CompositionTests.test_real_prepare_source_failure_saves_boundary_before_build) ... ok
+test_real_rollback_prepare_accepts_verified_index_child_and_rejects_changed_content (bridge_composition_test.CompositionTests.test_real_rollback_prepare_accepts_verified_index_child_and_rejects_changed_content) ... ok
+test_root_prepare_full_and_app_only_actual_hub_catalog_reaches_canonical_compiler (bridge_composition_test.CompositionTests.test_root_prepare_full_and_app_only_actual_hub_catalog_reaches_canonical_compiler) ... ok
+test_actual_push_required_jobs_script_rejects_missing_and_accepts_success (bridge_integration_test.IntegrationTests.test_actual_push_required_jobs_script_rejects_missing_and_accepts_success) ... ok
+test_actual_reusable_parent_run_and_source_request_binding (bridge_integration_test.IntegrationTests.test_actual_reusable_parent_run_and_source_request_binding) ... ok
+test_actual_workflow_bridge_order_and_ci_dependency (bridge_integration_test.IntegrationTests.test_actual_workflow_bridge_order_and_ci_dependency) ... ok
+test_dispatcher_foreign_head_workflow_and_unapproved_source_reject (bridge_integration_test.IntegrationTests.test_dispatcher_foreign_head_workflow_and_unapproved_source_reject) ... ok
+test_idle_distinguishes_verified_launcher_capture_from_operation (bridge_integration_test.IntegrationTests.test_idle_distinguishes_verified_launcher_capture_from_operation) ... ok
+test_installed_first_install_receipt_is_revalidated_then_consumed_by_normal_release (bridge_integration_test.IntegrationTests.test_installed_first_install_receipt_is_revalidated_then_consumed_by_normal_release) ... ok
+test_installer_fixed_units_private_key_dirs_and_no_replacement (bridge_integration_test.IntegrationTests.test_installer_fixed_units_private_key_dirs_and_no_replacement) ... ok
+test_nonlatest_pass_rollback_never_prepares_or_fences (bridge_integration_test.IntegrationTests.test_nonlatest_pass_rollback_never_prepares_or_fences) ... ok
+test_standalone_rollback_separates_approved_ci_and_custody_dispatcher (bridge_integration_test.IntegrationTests.test_standalone_rollback_separates_approved_ci_and_custody_dispatcher) ... ok
+test_workflows_use_supported_yaml_aliases_without_merge_keys (bridge_integration_test.IntegrationTests.test_workflows_use_supported_yaml_aliases_without_merge_keys) ... ok
+test_canonical_app_and_full_bind_specific_source_resources (source_plan_test.SourceTests.test_canonical_app_and_full_bind_specific_source_resources) ... ok
+test_canonical_app_every_container_identity_pinned_before_action (source_plan_test.SourceTests.test_canonical_app_every_container_identity_pinned_before_action) ... ok
+test_explicit_authority_update_not_discarded (source_plan_test.SourceTests.test_explicit_authority_update_not_discarded) ... ok
+test_full_existing_database_url_password_sync_change_veto (source_plan_test.SourceTests.test_full_existing_database_url_password_sync_change_veto) ... ok
+test_full_init_incomplete_bucket_job_veto (source_plan_test.SourceTests.test_full_init_incomplete_bucket_job_veto) ... ok
+test_full_missing_canonical_auth_secret_key_veto (source_plan_test.SourceTests.test_full_missing_canonical_auth_secret_key_veto) ... ok
+test_full_unbound_existing_minio_pvc_veto (source_plan_test.SourceTests.test_full_unbound_existing_minio_pvc_veto) ... ok
+test_images_changed_cors_veto (source_plan_test.SourceTests.test_images_changed_cors_veto) ... ok
+test_images_has_required_mail_and_actual_signing_contract (source_plan_test.SourceTests.test_images_has_required_mail_and_actual_signing_contract) ... ok
+test_images_signing_change_veto_is_specific (source_plan_test.SourceTests.test_images_signing_change_veto_is_specific) ... ok
+test_invalid_mail_actual_veto (source_plan_test.SourceTests.test_invalid_mail_actual_veto) ... ok
+test_invalid_rendered_gateway_delegation_is_rejected (source_plan_test.SourceTests.test_invalid_rendered_gateway_delegation_is_rejected) ... ok
+test_invalid_rendered_leaf_monitoring_rejected (source_plan_test.SourceTests.test_invalid_rendered_leaf_monitoring_rejected) ... ok
+test_missing_present_frontend_veto_before_fence (source_plan_test.SourceTests.test_missing_present_frontend_veto_before_fence) ... ok
+test_notification_principal_signing_and_tls_keys_are_required (source_plan_test.SourceTests.test_notification_principal_signing_and_tls_keys_are_required) ... ok
+test_p3_principal_replay_secret_is_required (source_plan_test.SourceTests.test_p3_principal_replay_secret_is_required) ... ok
+test_present_frontend_change_is_planned_with_requested_image (source_plan_test.SourceTests.test_present_frontend_change_is_planned_with_requested_image) ... ok
+test_principal_publisher_requires_existing_immutable_public_document (source_plan_test.SourceTests.test_principal_publisher_requires_existing_immutable_public_document) ... ok
+test_principal_publisher_source_is_exact_and_image_is_observed_nginx (source_plan_test.SourceTests.test_principal_publisher_source_is_exact_and_image_is_observed_nginx) ... ok
+test_realtime_dual_leaf_monitor_ports (source_plan_test.SourceTests.test_realtime_dual_leaf_monitor_ports) ... ok
+test_rendered_gateway_requires_strict_delegated_identity (source_plan_test.SourceTests.test_rendered_gateway_requires_strict_delegated_identity) ... ok
+test_rendered_leaf_monitoring_contract (source_plan_test.SourceTests.test_rendered_leaf_monitoring_contract) ... ok
+test_wrong_clickhouse_ddl_veto_even_all_expected_engines_present (source_plan_test.SourceTests.test_wrong_clickhouse_ddl_veto_even_all_expected_engines_present) ... ok
+test_actual_owned_unready_attempt_is_identity_not_health (runtime_stage_test.ActualUnreadyImageIdentityTests.test_actual_owned_unready_attempt_is_identity_not_health) ... ok
+test_current_terminated_attempt_remains_an_exact_image_witness (runtime_stage_test.ActualUnreadyImageIdentityTests.test_current_terminated_attempt_remains_an_exact_image_witness) ... ok
+test_current_terminated_identity_requires_matching_valid_container_id (runtime_stage_test.ActualUnreadyImageIdentityTests.test_current_terminated_identity_requires_matching_valid_container_id) ... ok
+test_unready_capture_never_substitutes_missing_or_foreign_identity (runtime_stage_test.ActualUnreadyImageIdentityTests.test_unready_capture_never_substitutes_missing_or_foreign_identity) ... ok
+test_canonical_docker_hub_identity_reaches_orderly_shutdown (runtime_stage_test.CanonicalHubShutdownTests.test_canonical_docker_hub_identity_reaches_orderly_shutdown) ... ok
+test_complete_original_census_is_checkpointed_before_finalizer_or_scale (runtime_stage_test.CanonicalHubShutdownTests.test_complete_original_census_is_checkpointed_before_finalizer_or_scale) ... ok
+test_failed_census_checkpoint_prevents_finalizer_and_scale (runtime_stage_test.CanonicalHubShutdownTests.test_failed_census_checkpoint_prevents_finalizer_and_scale) ... ok
+test_same_digest_foreign_repository_or_changed_digest_cannot_shutdown (runtime_stage_test.CanonicalHubShutdownTests.test_same_digest_foreign_repository_or_changed_digest_cannot_shutdown) ... ok
+test_ambiguous_actual_old_digest_blocks_before_any_fence (runtime_stage_test.StageTest.test_ambiguous_actual_old_digest_blocks_before_any_fence) ... ok
+test_arbitrary_latest_marker_version_cannot_replace_claim_response (runtime_stage_test.StageTest.test_arbitrary_latest_marker_version_cannot_replace_claim_response) ... ok
+test_cold_release_intent_precedes_normal_hub_start_without_live_seal (runtime_stage_test.StageTest.test_cold_release_intent_precedes_normal_hub_start_without_live_seal) ... ok
+test_completed_principal_publisher_is_observed_without_repeat_scale (runtime_stage_test.StageTest.test_completed_principal_publisher_is_observed_without_repeat_scale) ... ok
+test_failed_cold_release_proof_never_starts_hub (runtime_stage_test.StageTest.test_failed_cold_release_proof_never_starts_hub) ... ok
+test_frontend_is_physically_fenced_with_core_before_paused_apply (runtime_stage_test.StageTest.test_frontend_is_physically_fenced_with_core_before_paused_apply) ... ok
+test_frontend_restarts_only_under_verified_ownership_before_marker_release (runtime_stage_test.StageTest.test_frontend_restarts_only_under_verified_ownership_before_marker_release) ... ok
+test_hub_renderer_actual_pin_requires_explicit_opt_in (runtime_stage_test.StageTest.test_hub_renderer_actual_pin_requires_explicit_opt_in) ... ok
+test_old_image_pin_is_actual_running_pod_digest_not_mutable_spec_tag (runtime_stage_test.StageTest.test_old_image_pin_is_actual_running_pod_digest_not_mutable_spec_tag) ... ok
+test_old_ready_replicaset_cannot_supply_images_for_new_desired_template (runtime_stage_test.StageTest.test_old_ready_replicaset_cannot_supply_images_for_new_desired_template) ... ok
+test_ordinary_restart_cannot_skip_the_same_closed_seal (runtime_stage_test.StageTest.test_ordinary_restart_cannot_skip_the_same_closed_seal) ... ok
+test_principal_publisher_is_ready_before_any_business_start (runtime_stage_test.StageTest.test_principal_publisher_is_ready_before_any_business_start) ... ok
+test_recovery_restart_cannot_resume_business_without_closed_seal (runtime_stage_test.StageTest.test_recovery_restart_cannot_resume_business_without_closed_seal) ... ok
+test_renderer_post_start_gate_runs_before_first_app_restart (runtime_stage_test.StageTest.test_renderer_post_start_gate_runs_before_first_app_restart) ... ok
+test_renderer_restart_without_bound_post_start_gate_is_forbidden (runtime_stage_test.StageTest.test_renderer_restart_without_bound_post_start_gate_is_forbidden) ... ok
+test_rollback_refuses_live_restart_or_changed_current_template (runtime_stage_test.StageTest.test_rollback_refuses_live_restart_or_changed_current_template) ... ok
+test_rollback_restores_original_template_with_actual_old_digest_while_paused (runtime_stage_test.StageTest.test_rollback_restores_original_template_with_actual_old_digest_while_paused) ... ok
+test_rollout_has_no_pvc_allocation_or_swap_seam (runtime_stage_test.StageTest.test_rollout_has_no_pvc_allocation_or_swap_seam) ... ok
+test_runner_restart_blocks_target_adoption (runtime_stage_test.StageTest.test_runner_restart_blocks_target_adoption) ... ok
+test_shutdown_requires_current_exact_container_termination_not_old_state (runtime_stage_test.StageTest.test_shutdown_requires_current_exact_container_termination_not_old_state) ... ok
+test_target_is_adopted_only_with_same_uid_paused_and_exact_claim_rv (runtime_stage_test.StageTest.test_target_is_adopted_only_with_same_uid_paused_and_exact_claim_rv) ... ok
+test_target_uid_reuse_blocks_before_adoption (runtime_stage_test.StageTest.test_target_uid_reuse_blocks_before_adoption) ... ok
+test_unverified_transaction_cannot_restart_any_workload (runtime_stage_test.StageTest.test_unverified_transaction_cannot_restart_any_workload) ... ok
+test_user_restore_cas_is_durable_before_readiness_wait_can_interrupt (runtime_stage_test.StageTest.test_user_restore_cas_is_durable_before_readiness_wait_can_interrupt) ... ok
+test_binary_truststore_is_explicit_and_other_credentials_remain_text (media_projection_test.MediaProjectionTest.test_binary_truststore_is_explicit_and_other_credentials_remain_text) ... ok
+test_canonical_media_tuples_are_projected_with_private_readonly_files (media_projection_test.MediaProjectionTest.test_canonical_media_tuples_are_projected_with_private_readonly_files) ... ok
+test_existing_shell_renderer_resolves_gateway_issuer_host (media_projection_test.MediaProjectionTest.test_existing_shell_renderer_resolves_gateway_issuer_host) ... ok
+test_missing_media_credential_is_rejected_before_any_mutating_apply (media_projection_test.MediaProjectionTest.test_missing_media_credential_is_rejected_before_any_mutating_apply) ... ok
+test_native_media_private_credentials_are_explicit_prerequisites (media_projection_test.MediaProjectionTest.test_native_media_private_credentials_are_explicit_prerequisites) ... ok
+test_private_listener_client_symmetry_and_shared_resolver_secret (media_projection_test.MediaProjectionTest.test_private_listener_client_symmetry_and_shared_resolver_secret) ... ok
+
+======================================================================
+ERROR: test_actual_cli_produces_bound_images_only_target (compiler_test.CompilerTest.test_actual_cli_produces_bound_images_only_target)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 321, in <module>
+    try:main(sys.argv[1:])
+        ^^^^^^^^^^^^^^^^^^
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 217, in main
+    pack=compile_target(source,rows,p['registry'],p['tag'],p['mode'],p['changed_services'],selected_images,p['contract'],set(p['enrolled']),
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 285, in compile_target
+    if name==source_plan.PRINCIPAL_PUBLISHER:source_plan.principal_publisher_shape(row)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'types.SimpleNamespace' object has no attribute 'PRINCIPAL_PUBLISHER'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/compiler_test.py", line 117, in test_actual_cli_produces_bound_images_only_target
+    runpy.run_path(compiler.__file__,run_name='__main__')
+  File "<frozen runpy>", line 287, in run_path
+  File "<frozen runpy>", line 98, in _run_module_code
+  File "<frozen runpy>", line 88, in _run_code
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 323, in <module>
+    print('NATS_ROLLOUT_COMPILE=BLOCKED',file=sys.stderr);sys.exit(1)
+                                                          ^^^^^^^^^^^
+SystemExit: 1
+
+----------------------------------------------------------------------
+Ran 107 tests in 39.687s
+
+FAILED (errors=1)
+NATS_ROLLOUT_TARGET_SHA256=990cc005f1df31e6d72880634c5c2a4809e35712c5630d3cbe6f5cbd576fea8f
+NATS_ROLLOUT_TARGET_SHA256=ca65bf91eb3999fb1e9fe0c3d02b239fda52872191bddb45124b15b9ab461567
+NATS_ROLLOUT_TARGET_SHA256=f7cb10bef17c2745d0a5aeda1ebca273382a03f12bd992b15143f3b45323aa21
+NATS_ROLLOUT_TARGET_SHA256=732eb79aa857151767df073e9acc3bff5366db8be8dbc208c585a812b5829cf1
+NATS_ROLLOUT_TARGET_SHA256=b555e51bb6b5773a087a24fe8719246d87ddfe1999b22070f99494e4016233b1
+NATS_ROLLOUT_TARGET_SHA256=47d52e6d60b3d8dca953d5d11148b1a5702e087a5c6f691e4c7e50ae940e2a36
+NATS_ROLLOUT_TARGET_SHA256=2bcc2d5a1998ee6ec7842c7110c76e397d55f713fa0a683b5fd6cec2e5fd6d82
+NATS_ROLLOUT_BRIDGE=INSTALLED

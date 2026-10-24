@@ -1,0 +1,4 @@
+Command: bash scripts/ci/a1-flutter-profile-handoff-ci-reachability_test.sh
+A1 Flutter profile-handoff CI reachability contract passed.
+
+exit_code=0

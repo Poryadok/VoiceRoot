@@ -1,0 +1,8 @@
+Command: python3 .github/ci/selected-acceptance-gate_test.py
+......
+----------------------------------------------------------------------
+Ran 6 tests in 25.242s
+
+OK
+
+exit_code=0

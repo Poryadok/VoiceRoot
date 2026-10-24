@@ -1,0 +1,906 @@
+{
+  "activation_authority": false,
+  "changes": [
+    {
+      "after": {
+        "bytes": 7037,
+        "entry": "100644 blob 334260845baa4cfed2808d56569249202d3ae808\t.github/ci/gate-after.md",
+        "sha256": "2b212d41a660fd26c98108ca666bcd7ffa92145afcb5925e22ea8f75f4d3a5d1"
+      },
+      "before": {
+        "bytes": 0,
+        "entry": "",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": ".github/ci/gate-after.md"
+    },
+    {
+      "after": {
+        "bytes": 25268,
+        "entry": "100644 blob b7f5cbf9fd3d472f8826a0e8272a08498c954874\t.github/ci/gate-baseline.json",
+        "sha256": "0150b44f2ca0c0e7a64778899040bb9f921fa2a34fd6a50bbd3e5d94c9296ad3"
+      },
+      "before": {
+        "bytes": 0,
+        "entry": "",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": ".github/ci/gate-baseline.json"
+    },
+    {
+      "after": {
+        "bytes": 14185,
+        "entry": "100644 blob ad890ddc661099385a685f49324c3d5c7c0e8537\t.github/ci/gate-baseline.md",
+        "sha256": "e4f1d9b6755b68942c80915ebc0dd30e8d0241545eaf7201366463c3131033d7"
+      },
+      "before": {
+        "bytes": 0,
+        "entry": "",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": ".github/ci/gate-baseline.md"
+    },
+    {
+      "after": {
+        "bytes": 7069,
+        "entry": "100644 blob c8ef94bd038f0f8c8d43e7cc201a3afeb3f1440a\t.github/ci/gate-policy.md",
+        "sha256": "2bc5a1157d7f6cc5f59d8889f5681375cb3d6f78fefeddcee6bcb0b8c1a6209d"
+      },
+      "before": {
+        "bytes": 0,
+        "entry": "",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": ".github/ci/gate-policy.md"
+    },
+    {
+      "after": {
+        "bytes": 4888,
+        "entry": "100644 blob 8b9742c0617d23fe3a3bfd5da67b047345d738df\t.github/ci/path-filters.yml",
+        "sha256": "c3a17da1434cc09b73857212f18955772709f2d72ebd3a2005721fabd1503abb"
+      },
+      "before": {
+        "bytes": 4575,
+        "entry": "100644 blob 1c4173353a6092aefb32c4b16c29ea348a2e7a32\t.github/ci/path-filters.yml",
+        "sha256": "99a4e89b70d73ad6bf0e918416da9aae042d79b398f2db39c282046eff7f3804"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": ".github/ci/path-filters.yml"
+    },
+    {
+      "after": {
+        "bytes": 8277,
+        "entry": "100644 blob 73ac2c58e1bb9d359e708db6b8d8ee37e61ba75e\t.github/ci/selected-acceptance-gate_test.py",
+        "sha256": "a0548e45f3ffb26a94262239e707bb5ecdd14c06405dd027df65f7dc526df67c"
+      },
+      "before": {
+        "bytes": 7863,
+        "entry": "100644 blob afb5d2f32a7a5a2b23044e55fc25ce52f84c7d80\t.github/ci/selected-acceptance-gate_test.py",
+        "sha256": "45470bdc92746b64390d3a8e6fc9b1c05c472bdb34cf9d9731a14aab00adbee0"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": ".github/ci/selected-acceptance-gate_test.py"
+    },
+    {
+      "after": {
+        "bytes": 4054,
+        "entry": "100644 blob e0287227e9faa1eb7fd954d9d91d9f06421efdd0\t.github/ci/verify-required-jobs.sh",
+        "sha256": "1884425a36f4716f008ee541360fa5a7b00c20fa22fbe819f91283dc69ac565f"
+      },
+      "before": {
+        "bytes": 3787,
+        "entry": "100644 blob 9274e7a95da80b75cb3d5ec062f799adcf9368c9\t.github/ci/verify-required-jobs.sh",
+        "sha256": "462d8ee06ac5da8f8d301c1679f9b5ac4de4c8cc6d867c8852736a68f6a7577c"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": ".github/ci/verify-required-jobs.sh"
+    },
+    {
+      "after": {
+        "bytes": 7387,
+        "entry": "100644 blob 068df216e14b3b8aa288a904c70b8388a21b198d\t.github/ci/verify-required-jobs_test.sh",
+        "sha256": "6e517821992d1fb9335622a7341560c848c3578702252b6ebb8e55995fc0a302"
+      },
+      "before": {
+        "bytes": 7322,
+        "entry": "100644 blob 5b4c812ed828dad4de9c13a9818569731079d0a6\t.github/ci/verify-required-jobs_test.sh",
+        "sha256": "623c5c1525e52d0ab40497896226461966d2db4372dbd4dd2c1a78b3918db379"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": ".github/ci/verify-required-jobs_test.sh"
+    },
+    {
+      "after": {
+        "bytes": 116644,
+        "entry": "100644 blob 03d92ca9cc4c92722eb17dc6c8aea0e61637d69a\t.github/workflows/ci.yml",
+        "sha256": "08b37b6f9077960951e3f4bb4ac6dbdc0d1215ec0121f0dad6d2828e6a721ec4"
+      },
+      "before": {
+        "bytes": 111844,
+        "entry": "100644 blob b1501d31b0874d1c0861acfa24c71b0b7a6089ac\t.github/workflows/ci.yml",
+        "sha256": "a1d7713cb3e93ad63b68ffd0b5b633228053e89da8aa97b76ca98a30c87d8a95"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": ".github/workflows/ci.yml"
+    },
+    {
+      "after": {
+        "bytes": 21930,
+        "entry": "100644 blob a611a91b479fc51b5600ec293bc1dce6bff58f1f\tMakefile",
+        "sha256": "3a461f577654391b6957c6ec5470e5c706dcc4e721f29a7d80751ee117c8a7ec"
+      },
+      "before": {
+        "bytes": 21086,
+        "entry": "100644 blob 686039d87ce15b835db99608c8921378bc271af8\tMakefile",
+        "sha256": "219afd734b2d767485b04709092b37ec99127f6c87d156e37fc31b50fc999a79"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "Makefile"
+    },
+    {
+      "after": {
+        "bytes": 94921,
+        "entry": "100644 blob 4ef4fcf58cc981e5a9f0fde9459e78ead6685f60\tdeploy/staging/services.yaml",
+        "sha256": "ad16980877bfc889e36d48edccd3b2b245f13dfd1384901a255964b579223efa"
+      },
+      "before": {
+        "bytes": 86606,
+        "entry": "100644 blob ebaad2d55005bac85cff4ff092d3445bf2b056ef\tdeploy/staging/services.yaml",
+        "sha256": "6985804509600166aba9de81364c37a3246a34efb6bc8defa780a99af70c6197"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "deploy/staging/services.yaml"
+    },
+    {
+      "after": {
+        "bytes": 10875,
+        "entry": "100644 blob 6cdab5b6a45c21de2c5acd72e421de259cb0941e\tdocs/CONTRIBUTING.md",
+        "sha256": "382b0c79868e9ba98590d3a2111c410a2ed4af78399bed80d8034e907de59145"
+      },
+      "before": {
+        "bytes": 10228,
+        "entry": "100644 blob dd6d47b921194dd8516e54e4f1f0dc81a64c977b\tdocs/CONTRIBUTING.md",
+        "sha256": "7fd1667f7b2358ed82f6a611cdbbc082407d52303537925444ccd97e3f7b7574"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "docs/CONTRIBUTING.md"
+    },
+    {
+      "after": {
+        "bytes": 133536,
+        "entry": "100644 blob c4e8b24bf8183aa46edd0206923ed207f20b6a95\tdocs/DEPLOYMENT.md",
+        "sha256": "8887f26e9f708185f3d43c9a3f4ce0ea73fbbdbe7209a1821e007e1a6d1d5dd7"
+      },
+      "before": {
+        "bytes": 129713,
+        "entry": "100644 blob 5121c715eafd84fcbde50dd5e5ce7a87c000cc55\tdocs/DEPLOYMENT.md",
+        "sha256": "70922503934b6a24f3685779a7f83e8b5882ab8cef6712e9436931946b775e86"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "docs/DEPLOYMENT.md"
+    },
+    {
+      "after": {
+        "bytes": 63661,
+        "entry": "100644 blob 13e8f7384fbc52d2abe334c4be1f311ea499961b\tdocs/TESTING.md",
+        "sha256": "b498479f80507deaa7332bc70568c00279906c4dbfd100db05f5b26e3ca82b18"
+      },
+      "before": {
+        "bytes": 58878,
+        "entry": "100644 blob c697ce8b88b54987d84c5530a6585eb79b958a9d\tdocs/TESTING.md",
+        "sha256": "86a993497f9c72644bc0a059c0def9610f6550d8262b38af9ea6d6c7d82c7b64"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "docs/TESTING.md"
+    },
+    {
+      "after": {
+        "bytes": 2475,
+        "entry": "100644 blob 9a38a990fa4519ed5d8e59f65bdd1b048ccfbd56\tscripts/ci/a1-attachment-restart-ci-reachability_test.sh",
+        "sha256": "c48595bd1282eaa82707ac62e7ff3762a54a8ccee98ce081a7355cd17a730c9b"
+      },
+      "before": {
+        "bytes": 2548,
+        "entry": "100644 blob 1c9ad1ed65134fe7232f6c95f405cef99f9f99fb\tscripts/ci/a1-attachment-restart-ci-reachability_test.sh",
+        "sha256": "5dae0b2420038c76a06dcaf42be1617518e43ce88c54c4821b1337fd0a3967f3"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/ci/a1-attachment-restart-ci-reachability_test.sh"
+    },
+    {
+      "after": {
+        "bytes": 6394,
+        "entry": "100644 blob 4b509b8932e19ea02f68767f9b8b4cfdc6569429\tscripts/ci/a1-flutter-profile-handoff-ci-reachability_test.sh",
+        "sha256": "3c3833ef2509ba84a1e03c0f4040b3b8658c0da1dd9611ef23699253a37e5cc3"
+      },
+      "before": {
+        "bytes": 6505,
+        "entry": "100644 blob be1c4a78cde2cc2a91a23c44a3e00ff6b57ae129\tscripts/ci/a1-flutter-profile-handoff-ci-reachability_test.sh",
+        "sha256": "b6ac7869fab11639fc2b8c879c0b1e44b42790e3157088d1ed08f55a00934a84"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/ci/a1-flutter-profile-handoff-ci-reachability_test.sh"
+    },
+    {
+      "after": {
+        "bytes": 3735,
+        "entry": "100644 blob 85cab0ea444904c08ce57ee4427cbbfbbec2fde5\tscripts/ci/check-auth-proto-sync_test.sh",
+        "sha256": "638a26c8df081491fed43e3a864e7d8da324c0a9bb0a2c901ec8817de40547c7"
+      },
+      "before": {
+        "bytes": 3740,
+        "entry": "100644 blob fd9c64fed3cccf2588ae1452e58bf7ab83df5706\tscripts/ci/check-auth-proto-sync_test.sh",
+        "sha256": "786e5998211031ca7ed3b759132cf2f3b795c1eb6253f8db78226253ef58ae07"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/ci/check-auth-proto-sync_test.sh"
+    },
+    {
+      "after": {
+        "bytes": 4238,
+        "entry": "100644 blob 2d8482b981660efcef82830a10936c9ad621888e\tscripts/ci/check-auth-testcontainers-reports_test.sh",
+        "sha256": "18f139665d8263a222f9b121b20dfe8d42a4917465d831e829e5dbfbb88c14ad"
+      },
+      "before": {
+        "bytes": 4254,
+        "entry": "100644 blob f695d553220d7b738538e5cedf4b23aa05ee6070\tscripts/ci/check-auth-testcontainers-reports_test.sh",
+        "sha256": "3de2a036a943c21562cee5a495cb0e275daddf0567661827913a39bf7272bc41"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/ci/check-auth-testcontainers-reports_test.sh"
+    },
+    {
+      "after": {
+        "bytes": 20786,
+        "entry": "100644 blob 151106f0a623a2f4b6ff9f28cf1ce1c1979b178b\tscripts/ci/ci-script-tests-reachability_test.sh",
+        "sha256": "5730955aa8d95d68e4cebbb0e26ea9a2be064ae01e9e54b2db177433860b7591"
+      },
+      "before": {
+        "bytes": 20728,
+        "entry": "100644 blob 6f17999855f40cbae16a756244086823b05fe5c9\tscripts/ci/ci-script-tests-reachability_test.sh",
+        "sha256": "b68a2e82b1c9699ca2780ea1f6bf8548b69b37f437f0ac426cfb50a118fc0aa0"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/ci/ci-script-tests-reachability_test.sh"
+    },
+    {
+      "after": {
+        "bytes": 1944,
+        "entry": "100644 blob b69e55be854379039cea8086faf4c0e93e7d1020\tscripts/ci/compose_go_cache_integration.py",
+        "sha256": "17a1b1bfe7dab926b873bbd966fd11346e9a543a4dbc63e9d07203ed952c98d0"
+      },
+      "before": {
+        "bytes": 0,
+        "entry": "",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/ci/compose_go_cache_integration.py"
+    },
+    {
+      "after": {
+        "bytes": 8759,
+        "entry": "100644 blob bee46ef21cc2cf9b752407000f5a7247396a1327\tscripts/ci/current-diff-contract.py",
+        "sha256": "63cebf13e7d1dda8f11ec7827e805bd3fdc3dd2595c391ac48368b5fa5c3bebb"
+      },
+      "before": {
+        "bytes": 0,
+        "entry": "",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/ci/current-diff-contract.py"
+    },
+    {
+      "after": {
+        "bytes": 11558,
+        "entry": "100644 blob ce8a147d538112071cea6b6e9c9b0bbbaea44a8d\tscripts/ci/current-diff-contract_test.py",
+        "sha256": "778b96490242959f30c2105c4768bdde68aae03cc7ad691437feb019c4b1c448"
+      },
+      "before": {
+        "bytes": 0,
+        "entry": "",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/ci/current-diff-contract_test.py"
+    },
+    {
+      "after": {
+        "bytes": 3955,
+        "entry": "100644 blob 741e89cf851ebb24769ae70ce0d14273e932ae5c\tscripts/ci/fast-gate-routing_test.py",
+        "sha256": "0186ee75876e98cf793dc4f3b8703edaa2924f476b5699b4cfe74f2d67546dfb"
+      },
+      "before": {
+        "bytes": 0,
+        "entry": "",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/ci/fast-gate-routing_test.py"
+    },
+    {
+      "after": {
+        "bytes": 5450,
+        "entry": "100644 blob b44d6802096ba1790ee9d4f07c76afab46b0dcfc\tscripts/ci/gate-latency.py",
+        "sha256": "04d5bab8c946a5971b783046dc00773c67b8ffeb7a1504c603bca311f8fe88e7"
+      },
+      "before": {
+        "bytes": 0,
+        "entry": "",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/ci/gate-latency.py"
+    },
+    {
+      "after": {
+        "bytes": 2917,
+        "entry": "100644 blob db658b84102ea896d3e47ac94efa833d59378020\tscripts/ci/gate-latency_test.py",
+        "sha256": "c9dbd2c7029b66eef1f1bbc37529b452f247ba8c78fbc6c5d7294651822e2aec"
+      },
+      "before": {
+        "bytes": 0,
+        "entry": "",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/ci/gate-latency_test.py"
+    },
+    {
+      "after": {
+        "bytes": 9493,
+        "entry": "100644 blob 4c9b95134332e89510e643ddf19ed5865a007c45\tscripts/ci/nats-search-jetstream-workflow-contract_test.sh",
+        "sha256": "e826b11676c8bbf01c8c03e17f10f8fe00bb90dc8df90275a5fc5ff3218c2d50"
+      },
+      "before": {
+        "bytes": 9498,
+        "entry": "100644 blob e0046041ce98413b5de499fcbb034c5f14bbbf0b\tscripts/ci/nats-search-jetstream-workflow-contract_test.sh",
+        "sha256": "25fc3d93b03a71b9b8e3b0d555bd5aa449a083af5b20c32676b5c9b35dafe58f"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/ci/nats-search-jetstream-workflow-contract_test.sh"
+    },
+    {
+      "after": {
+        "bytes": 159729,
+        "entry": "100644 blob 83744fede8beb4b837aeac070ecfe106f0bdaa78\tscripts/ci/phase0-fixture_test.py",
+        "sha256": "c681dd23967350f10cdecf278dfd7b4f0b3cd55491e85dfc000845ab80a0dce3"
+      },
+      "before": {
+        "bytes": 158288,
+        "entry": "100644 blob ec2e92c4d94f484d472b7e174b90eeb5b307b639\tscripts/ci/phase0-fixture_test.py",
+        "sha256": "4875050c29a257f78b9e201f6d6c97996dbb8a9fec01b780427ad5cae28791bb"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/ci/phase0-fixture_test.py"
+    },
+    {
+      "after": {
+        "bytes": 404472,
+        "entry": "100644 blob 6c230bdcfff295d30ff8d0814d70767b7dd7a29b\tscripts/ci/voice-db-runtime-provisioning-contract_test.sh",
+        "sha256": "3b7da5590da14e25daa577b58ce424870c01db3fd19eb3701d929f1cf7e0c9a7"
+      },
+      "before": {
+        "bytes": 403961,
+        "entry": "100644 blob a15b7d3370a6eb1dfebcbe6b3b011bb296937734\tscripts/ci/voice-db-runtime-provisioning-contract_test.sh",
+        "sha256": "fe7f172ccff142164fbdd80cae20a3395deb22e06cb09d923067f94d1eae3690"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/ci/voice-db-runtime-provisioning-contract_test.sh"
+    },
+    {
+      "after": {
+        "bytes": 87591,
+        "entry": "100644 blob 9b4edb5e7729533915f06aeec431ee83d6d76a58\tscripts/staging/nats-rollout-preservation/README.md",
+        "sha256": "74e9454e9bd229c29d61490079a580b26365115e8c40b785408947fda07cd78c"
+      },
+      "before": {
+        "bytes": 85600,
+        "entry": "100644 blob b3dfb01f659a50d46c4ad8391a3e716089c0e367\tscripts/staging/nats-rollout-preservation/README.md",
+        "sha256": "ee3aa6d0a84f0dbd965fffcff08eec2ec96d875649c6e562ff9454ec07ec3bc3"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/staging/nats-rollout-preservation/README.md"
+    },
+    {
+      "after": {
+        "bytes": 33553,
+        "entry": "100644 blob c13600304948c57002979f8febd4388323992575\tscripts/staging/nats-rollout-preservation/actor_root_test.py",
+        "sha256": "cb339d750bc4262d139a3804d266c79e33c471d4514f0a4efe7740f543281225"
+      },
+      "before": {
+        "bytes": 33000,
+        "entry": "100644 blob 828aabb1d4078a1c7f936f84381668c0ed2c2aba\tscripts/staging/nats-rollout-preservation/actor_root_test.py",
+        "sha256": "1e5b6f0f73c115875059872f79be424ff180eebd48b898245458f3fffad85c7b"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/staging/nats-rollout-preservation/actor_root_test.py"
+    },
+    {
+      "after": {
+        "bytes": 2272,
+        "entry": "100644 blob 603361367ce355eddf2dec980dcc0e2ea21a8184\tscripts/staging/nats-rollout-preservation/bot_migration.py",
+        "sha256": "d41d2c245ce2f1b5dce7c45b7f56a576b7fb7b1c38fc1713f162de522ce2770f"
+      },
+      "before": {
+        "bytes": 2196,
+        "entry": "100644 blob 48c127e0943ba4408759ef8b1146e99b002d5102\tscripts/staging/nats-rollout-preservation/bot_migration.py",
+        "sha256": "fae166884b9d31dba7d8d6aeb24e191aebe7e602ac11dc92001f1e8497340141"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/staging/nats-rollout-preservation/bot_migration.py"
+    },
+    {
+      "after": {
+        "bytes": 3259,
+        "entry": "100644 blob ab8c6bd6f76e8ad82afd55a74b6c48c3fbf5dbbe\tscripts/staging/nats-rollout-preservation/bot_migration_test.py",
+        "sha256": "7ee18efe742995b71342be73e2e8075cdd25f6e2601731f89c644951c977e375"
+      },
+      "before": {
+        "bytes": 3259,
+        "entry": "100644 blob bfc2bb30840e359d67b180ab0db5a802fbb9cb89\tscripts/staging/nats-rollout-preservation/bot_migration_test.py",
+        "sha256": "02e2f355a7e6323f581ab42dd87928c29f49adf70a357612d7f1010f6ec7ea9c"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/staging/nats-rollout-preservation/bot_migration_test.py"
+    },
+    {
+      "after": {
+        "bytes": 20564,
+        "entry": "100644 blob ebbb8a5a5d1967ff211048b50faa32314b8fa95c\tscripts/staging/nats-rollout-preservation/bridge_composition_test.py",
+        "sha256": "10de1bd9e3f998b9c3eaa417d424f42f8c2ae210bcba828dceb347a4c0525858"
+      },
+      "before": {
+        "bytes": 19025,
+        "entry": "100644 blob 423e1048f29a21975560f75eaed5a3a4a369c37d\tscripts/staging/nats-rollout-preservation/bridge_composition_test.py",
+        "sha256": "bd99154b0f09d0593bddc30a7658a52a081a836761bdab3c8c0931863c72a5d3"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/staging/nats-rollout-preservation/bridge_composition_test.py"
+    },
+    {
+      "after": {
+        "bytes": 15341,
+        "entry": "100644 blob 15f35a675b3886d5a8f634c0e84e2f6dddb768fa\tscripts/staging/nats-rollout-preservation/bridge_integration_test.py",
+        "sha256": "64f1fd77cd554480cf9f1d3b8e206e79b47bba94ed75abed789326d8378592e3"
+      },
+      "before": {
+        "bytes": 14584,
+        "entry": "100644 blob fa3acaf142b6e570baca51e7d444b9e1e9b88e38\tscripts/staging/nats-rollout-preservation/bridge_integration_test.py",
+        "sha256": "83c4d93a6a0131abde5acecf6e222c1d4e4aac63b83b11fce4eb45c88a8598d6"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/staging/nats-rollout-preservation/bridge_integration_test.py"
+    },
+    {
+      "after": {
+        "bytes": 58229,
+        "entry": "100644 blob 72d102ffffee1653c161c8c6f8774547e18adbbc\tscripts/staging/nats-rollout-preservation/bridge_root.py",
+        "sha256": "efa249bc5e1135e7267918a1daee0ec28d0bde25d0e17f23a37049d378224792"
+      },
+      "before": {
+        "bytes": 56816,
+        "entry": "100644 blob 6560b832b263698611eec9ab5232c30868d6f0c4\tscripts/staging/nats-rollout-preservation/bridge_root.py",
+        "sha256": "2f233b119083a1dc156a7ecc6018dc30552cecb260b8799434e257ef2c637ec4"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/staging/nats-rollout-preservation/bridge_root.py"
+    },
+    {
+      "after": {
+        "bytes": 21548,
+        "entry": "100644 blob 88528a79adcfabc57a65943fedb5e58b6690f603\tscripts/staging/nats-rollout-preservation/compiler.py",
+        "sha256": "ff8be2c0e93f685f356f85bc7b14213d6c9048f97f94b440e75d80c91a39ec1f"
+      },
+      "before": {
+        "bytes": 21273,
+        "entry": "100644 blob 9f7445ec10c8bbfe18ab2111e6ee05d7d5257b36\tscripts/staging/nats-rollout-preservation/compiler.py",
+        "sha256": "b03239c104cb3d93db3944385fd37c40bd9531c6aaab5fd22270d5423f083ff9"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/staging/nats-rollout-preservation/compiler.py"
+    },
+    {
+      "after": {
+        "bytes": 15491,
+        "entry": "100644 blob 1ad61ab3158d6e799bfcf3f491524d718bc0ebdd\tscripts/staging/nats-rollout-preservation/compiler_test.py",
+        "sha256": "bfeb61874b05b44ee87c2adf4e6e0a9178851333619ba0dfdf967de6677f1f82"
+      },
+      "before": {
+        "bytes": 15397,
+        "entry": "100644 blob de2bc0952f7bf498c1fd52d601698db4c5b97863\tscripts/staging/nats-rollout-preservation/compiler_test.py",
+        "sha256": "61943f3f04c7e6c4e8289beaab1b7195e18f460762979888564495106df7e651"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/staging/nats-rollout-preservation/compiler_test.py"
+    },
+    {
+      "after": {
+        "bytes": 14684,
+        "entry": "100644 blob 7bf1ad079dd124879f7b5dbb4d5f29bb5f363e26\tscripts/staging/nats-rollout-preservation/expired_public_test.py",
+        "sha256": "321cc00eadeca2fc1a9eeb438db0fc92f9b59665d6d268d6d31b91574c1ef8aa"
+      },
+      "before": {
+        "bytes": 14619,
+        "entry": "100644 blob 4dbc50a196252541ce57df9efd10bf1f596e4b59\tscripts/staging/nats-rollout-preservation/expired_public_test.py",
+        "sha256": "6e178b814759e199272ae640095f69f22b7e6c7ad910aa653cc1704ada78054e"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/staging/nats-rollout-preservation/expired_public_test.py"
+    },
+    {
+      "after": {
+        "bytes": 24726,
+        "entry": "100644 blob b1446b62613cb13751abde32d8754d51d1dff695\tscripts/staging/nats-rollout-preservation/installer.py",
+        "sha256": "4b7ee50c2a0a055f0eb2b8804077562ce390b559597bafcee71b1f7277f1abef"
+      },
+      "before": {
+        "bytes": 24382,
+        "entry": "100644 blob e8129e6a48580dab12492b04e08b317b1f81acb3\tscripts/staging/nats-rollout-preservation/installer.py",
+        "sha256": "b18f4d2aa71e3c0b75d5f2b40075ed42c9a1bc14c8cee01f8d1cf102d36203cf"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/staging/nats-rollout-preservation/installer.py"
+    },
+    {
+      "after": {
+        "bytes": 12983,
+        "entry": "100644 blob 23d2c7b2b2e9c395ec5043441ee67b7fef9eed41\tscripts/staging/nats-rollout-preservation/media_projection_test.py",
+        "sha256": "5275cc1234002b15396b1cdafaf2619446073ef9f5ef463288f8a2b102c138b4"
+      },
+      "before": {
+        "bytes": 9090,
+        "entry": "100644 blob 94456dd92136cc4ca1e5729968970c4ca058281f\tscripts/staging/nats-rollout-preservation/media_projection_test.py",
+        "sha256": "55bb244c8a6b927386f526fb0c6b79168c89660cb7579ed2c9039a919d6b3d45"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/staging/nats-rollout-preservation/media_projection_test.py"
+    },
+    {
+      "after": {
+        "bytes": 14814,
+        "entry": "100644 blob 0c3c0de2e749798c72debbbf5f55979615fe289a\tscripts/staging/nats-rollout-preservation/nonnats_plan.py",
+        "sha256": "8401079ced4444e2f236cff4217ea5a218979c6f73fedcd1a746f33ebd11e9a1"
+      },
+      "before": {
+        "bytes": 14660,
+        "entry": "100644 blob 5782964cf1bb363dca9db7082b1c99a42dc21ff5\tscripts/staging/nats-rollout-preservation/nonnats_plan.py",
+        "sha256": "4b4d672237fc027177944a3f46cb4163b84491bfbc56fd765a99cc1c32579d69"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/staging/nats-rollout-preservation/nonnats_plan.py"
+    },
+    {
+      "after": {
+        "bytes": 37335,
+        "entry": "100644 blob 32de25f29aa23ea761fea91574b08c16c6d40fbc\tscripts/staging/nats-rollout-preservation/runtime_stage.py",
+        "sha256": "83103adc1a21e6cd5dd6f8d85bbb3268770eb4c5f22e09903bcdac22d1cfda12"
+      },
+      "before": {
+        "bytes": 36797,
+        "entry": "100644 blob f23e361f86faae6ec0d461171738d76a144ca51b\tscripts/staging/nats-rollout-preservation/runtime_stage.py",
+        "sha256": "e1d37191997df510951cd31879b63e2f5c97b7f234e0f7c3ce74afc7f31b5df6"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/staging/nats-rollout-preservation/runtime_stage.py"
+    },
+    {
+      "after": {
+        "bytes": 30185,
+        "entry": "100644 blob 750fe4183eb44f9db2807771dfbd01599aa3e36c\tscripts/staging/nats-rollout-preservation/runtime_stage_test.py",
+        "sha256": "b75d77fbb41f106c74e393464c422b91da0c9777774ccf0e64b8b7d3cfab385e"
+      },
+      "before": {
+        "bytes": 28272,
+        "entry": "100644 blob da1627be9960a3658c1454c0ef432f547c7719de\tscripts/staging/nats-rollout-preservation/runtime_stage_test.py",
+        "sha256": "a372f1ff764b5b056ff4339d95469fd61467b93455eff221d34af6deb48cd8aa"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/staging/nats-rollout-preservation/runtime_stage_test.py"
+    },
+    {
+      "after": {
+        "bytes": 42953,
+        "entry": "100644 blob 344b85924bae079c94b827da42fa16f868daab5a\tscripts/staging/nats-rollout-preservation/source_plan.py",
+        "sha256": "c93bfad0aeba8ecfbc7957f7d20b641bd7b0a8ba79014fade267896c4987270c"
+      },
+      "before": {
+        "bytes": 37730,
+        "entry": "100644 blob f0ac3b757599ad92d555088e667afbf44a977e37\tscripts/staging/nats-rollout-preservation/source_plan.py",
+        "sha256": "17c522225f3b27c27d3786f9d7ca5d23f34406c603c8928f5ca2915c8eb8ba3a"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/staging/nats-rollout-preservation/source_plan.py"
+    },
+    {
+      "after": {
+        "bytes": 26762,
+        "entry": "100644 blob eed73e8e570e5564502eb128ccb9d5497ef7e9b8\tscripts/staging/nats-rollout-preservation/source_plan_test.py",
+        "sha256": "3f18f6cf2ad2790f010ea1a6b549e1213d386e32513c93cf2dad34eb4bb09a64"
+      },
+      "before": {
+        "bytes": 23294,
+        "entry": "100644 blob ccc78e0621a5f14af171d764c42e0810f2ef181e\tscripts/staging/nats-rollout-preservation/source_plan_test.py",
+        "sha256": "0b1991db9aacb1d63ef1bf8c39c1378c53715b1546a9375b4fff1eff4f2c5581"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "scripts/staging/nats-rollout-preservation/source_plan_test.py"
+    },
+    {
+      "after": {
+        "bytes": 6246,
+        "entry": "100644 blob 540e4530183f07042c44d64a2a8c21ea343965a0\tsrc/frontend/docker/version_web_assets_test.py",
+        "sha256": "8b067d09e5ce94c7d6d0ff9c0d56a8407b3fae889628d10420b1282732921e8b"
+      },
+      "before": {
+        "bytes": 6213,
+        "entry": "100644 blob 815018c1e5bca1429a196833128a53b5af9122cb\tsrc/frontend/docker/version_web_assets_test.py",
+        "sha256": "879789c228896cc7df78bc5c56cdbf443a31f6d9121f158bfcc5042aa456d267"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "src/frontend/docker/version_web_assets_test.py"
+    }
+  ],
+  "current_inputs": {
+    "path": "docs/testing/f13-production-v8-inputs.json",
+    "sha256": "98b00943ec908440053c916fc706e7127622e49b6d449e8bf2ca625f3384728e"
+  },
+  "current_or_future_path_authority": false,
+  "delta_sha256": "317d57833cad2fac0bb57380de2c68f9cca616b67877d9f12d6a05a68dfa3b4e",
+  "event_base": "2c8bdf9e2f420b724575096beb4fcf5cb4ea00be",
+  "evidence": [
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--a1-attachment-reachability.log",
+      "sha256": "d8a297f39ddf6e3dd7e05c45453a0813255e7c14605eb54408746bf0ada57d17"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--a1-flutter-reachability.log",
+      "sha256": "8fcb3807112e5ac1c8a779c7e7e7d81d2aa84c3eb6bb5c5357177ca9f688973e"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--acceptance-policy.log",
+      "sha256": "1804b78657b74094e3b14e0368451c038ef6df1c837c2223890a0a2a6b6285a5"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--auth-proto-reachability.log",
+      "sha256": "757f077fb5ab4ed00fbc65dfa9d4ad708b6bb7f3703ee29559035168164da756"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--auth-testcontainers-reachability.log",
+      "sha256": "4488a6474a8dbadc8f3305409c693e4095a71d1dfce0c5e6abed05f18abd1b3c"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--bot-membership-source.log",
+      "sha256": "b0b4f56000324a0435d839db31251b7a245545e267a7dd0dd7459da156a5acbb"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--current-diff-final.log",
+      "sha256": "26a343630c8f1391bfd62f84dcdbb18300c5144fd3dfce5e672fcce0d6030b0f"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--current-diff-hashes.txt",
+      "sha256": "895f113dadd1c7a336093ef5d7b418bc8107a0e55c0ba694194fe2e308f5a6ee"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--current-diff.log",
+      "sha256": "deeacba1266e381396b530548471b980cb2589f5dc7776ee7bfb8b92edc7c077"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--fast-gate-routing.log",
+      "sha256": "0e2517bfee86451538bf0e654a619407fc36f5d6691a8c7d8e0fcad9189c79e9"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--gate-latency.log",
+      "sha256": "e53b859c363dd3f04b01aea71d73cbec1037479a3c07f92ca5a8dc8b8805ee60"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--make-inventory.log",
+      "sha256": "02199f00f96dfe1674c157883cf0dac8523e0b664b93f66144d7ef9e1ddc402f"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--nats-workflow-reachability.log",
+      "sha256": "fac1cdb4fdd5604229c7714ad480699314075fb472ee880d19bc7d1728ccd142"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--phase0-final.log",
+      "sha256": "45d200a207bf5882efb45e679c0f8294bde77ed60f273aabc73e731d122cc5a0"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--phase0-fixture.log",
+      "sha256": "6e1e97073797900e3e355de1c7c34cb13349a0ef642340982e29b95486eb0789"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--phase0-retry.log",
+      "sha256": "9053c987f2b2b5d9017a33b43f75cebcaa7382fe2095e95cb1aafde8dbb19290"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--receipt-final.json",
+      "sha256": "913d473a4dcb3021fd9d82771b301cef2055ba538fcf69e84a9297563a7f8729"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--release-policy.log",
+      "sha256": "1d7fa5032f4a6b6931a9070e53bc1fad42b77382cab74e93c1e49b94291716c0"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--required-jobs.log",
+      "sha256": "7575cd80c442c9e5d02996769b8a8888401ad99d4fbc134ec8b50aed262e8998"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--run.log",
+      "sha256": "62afc11445151142a616c833d49081a8ba1cfd1bd8d90f8b9058d97e1e9b0556"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--shard-reachability.log",
+      "sha256": "b2f0a7af05f0dc3a901ed30e961ea21913ac486e69a92644155aaffa1bca5383"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/current-diff-nine-review.md",
+      "sha256": "bb668d8f58f0f97d08a710de5a19bbd455bd3db489e0a71345c372c9f2458fe4"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/independent-makefile-base-review.md",
+      "sha256": "3a11003c5f27d9013558df7ab9787bd033dd29cb4fe8b1ae26e7d7ca9eb40a9c"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/independent-r23-source-taint-review.md",
+      "sha256": "92871698f7bc3ba755672752d14ca72c63955bee47eba441759ba5ce566acea8"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/independent-source-review.md",
+      "sha256": "e2db7d91cd245d734b8d9a41841ec64c6929c6102388e68b6838a7956455c93d"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-final-source-manifest.txt",
+      "sha256": "57c2d2f164316ddbd50598c7881f029c89082f956afd3a2f0c614a8226a798ac"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--author-receipt.md",
+      "sha256": "f6475249d8c4aa97f17c60601cd20e464fb8b83dd4c6bdad4a94ec3b268aa2a6"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--baseline-h3a2b8e19-attempt2.log",
+      "sha256": "e354e394fded3a8357edaead44d25ba4db76d73dcc0ff34d1bea7dbac947dcef"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--baseline-h3a2b8e19-attempt3.log",
+      "sha256": "2baa003e35c419e5ad6d8dcff95900147618bbea64518d55034d0fdb2f60599b"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--baseline-h3a2b8e19.log",
+      "sha256": "a10f6cf4e49416903ee3e836dd5a3d39b4236633a93448f90cfaebad1436b5e2"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--candidate-manifest-h3a2b8e19.txt",
+      "sha256": "f80155f55897f79d700bcba85f74ab90d7f7881379e4b51d7b487232af4a9e5d"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--focused-candidate-h3a2b8e19.log",
+      "sha256": "a961df6c59b0f7a83188e0e52fae87e88f9fb3c4530d34c9cd16e23f01b0238a"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--focused-compiler-localcopy.log",
+      "sha256": "f7fb279b79dc76a076a2a16e1da8a956da552b7acc6cc521fda2c6d26d23e86b"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--focused-final.log",
+      "sha256": "a3abb11cd2f317dc21cfd8fcc5cd147b9bf101b9520047c166f176b27f97ca0f"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--full949-final.log",
+      "sha256": "fe6d706a132681c2212b98631e98c291f2f12b6b435f95bc4bd8225b018aac11"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--config-author-evidence.md",
+      "sha256": "83a65a2666b46063c6812cbc240ebca3b6f1f9c2b539d49b654d2949a603a0d2"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--independent-compiler-stub-addendum.md",
+      "sha256": "1b372a67a187b9a7117f088d6318dbd5c42b85dde7e13753f59f0ac2cb9b248f"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--independent-config-review.md",
+      "sha256": "73d10f10beba1f4be335df2002eebf794ce11367538c7fc201df5bddbedfa139"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--independent-helper-review-addendum.md",
+      "sha256": "bcd81b82bdea9f15166c76202100a679995989521ea6a753a7059002c780d051"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--independent-helper-review.md",
+      "sha256": "4e110561c4eb7d853649f5f20b25e839112ea589955a329b16cda3cda8330033"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--independent-nonhelper-review.md",
+      "sha256": "2beaee9ca6b0ec82def3b12213cf3a0b74372b9e0d8c7fb87f2aa86b5c78d6e2"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--media-green.log",
+      "sha256": "05733e1bc533248678f5e872f83e33291d069c20994eece50be617ac7cbc6627"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--media-red-snapshot.log",
+      "sha256": "b5f2f168179063544f8a5955c2e567b0ad8f3a7bd2d52c50d1865616fb5c0048"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--media-red.log",
+      "sha256": "b74dff5be0e05046b1eddc0cda199e6479753f2a2ad5bfc9e4bb9b9b85510fbe"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/transport-manifest.json",
+      "sha256": "be4daa700b7b949969e8b5c7e94d9745b239a3b1bab73ae4c7ec4238ffe1c100"
+    }
+  ],
+  "historical_event_base": "288e6a4fb963b3d5775f885e14ecfda1b603a4ff",
+  "integration": {
+    "master": "2c8bdf9e2f420b724575096beb4fcf5cb4ea00be",
+    "merge": "fb0df638da3a31258deea25c0653e05ae4d690cf",
+    "ordered_parents": [
+      "ecde2e7b29d93dd01b233cd3128b373137aa6715",
+      "2c8bdf9e2f420b724575096beb4fcf5cb4ea00be"
+    ],
+    "source_chain": [
+      {
+        "commit": "fb0df638da3a31258deea25c0653e05ae4d690cf",
+        "parents": [
+          "ecde2e7b29d93dd01b233cd3128b373137aa6715",
+          "2c8bdf9e2f420b724575096beb4fcf5cb4ea00be"
+        ],
+        "tree": "aec12d3bbc4b5f34769450eac5525a07ad220661"
+      },
+      {
+        "commit": "3a2b8e19b0f8fe7a6104b753340f62864e039326",
+        "parents": [
+          "fb0df638da3a31258deea25c0653e05ae4d690cf"
+        ],
+        "tree": "6081805cad4e555ab7d90c9e132b29e887fb8aa7"
+      },
+      {
+        "commit": "a8d5c2c04c4e8707d4cec6c3b06cce7ed68acb2b",
+        "parents": [
+          "3a2b8e19b0f8fe7a6104b753340f62864e039326"
+        ],
+        "tree": "0f012153a542b1f0b960b41c5b888ff99373516c"
+      },
+      {
+        "commit": "ef3dd7f3888bbe2792a9dcec836b2773c4e77962",
+        "parents": [
+          "a8d5c2c04c4e8707d4cec6c3b06cce7ed68acb2b"
+        ],
+        "tree": "8c2e625484e18d015e5ff3f353367cfda87bf975"
+      }
+    ]
+  },
+  "native_record": {
+    "path": "docs/testing/native-p3-source-v4.json",
+    "record_relation": "SAME_SOURCE_RECORD_COMMIT",
+    "sha256": "3bec6a20906f6a96ba2e77d5f4b243e415b5f0ed7f724d88e6c4643446099e53",
+    "source": "ef3dd7f3888bbe2792a9dcec836b2773c4e77962",
+    "version": "NATIVE-P3-SOURCE-v4"
+  },
+  "predecessor": {
+    "carrier": "ecde2e7b29d93dd01b233cd3128b373137aa6715",
+    "path": "docs/testing/f13-production-source-v7.json",
+    "record": "8e98ab843eaa72245126b02fadf52bb349c3a4c1",
+    "sha256": "753a22d082aa11f7b6696ea7a08c7fea08897e553956b960b3a8c41cf5dc13ba"
+  },
+  "review": [
+    "docs/testing/f13-production-v8-evidence/current-diff-nine-review.md",
+    "docs/testing/f13-production-v8-evidence/independent-makefile-base-review.md",
+    "docs/testing/f13-production-v8-evidence/independent-r23-source-taint-review.md",
+    "docs/testing/f13-production-v8-evidence/independent-source-review.md",
+    "docs/testing/f13-production-v8-evidence/staging-media--independent-config-review.md",
+    "docs/testing/f13-production-v8-evidence/staging-media--independent-helper-review-addendum.md",
+    "docs/testing/f13-production-v8-evidence/staging-media--independent-helper-review.md",
+    "docs/testing/f13-production-v8-evidence/staging-media--independent-nonhelper-review.md"
+  ],
+  "runtime_pass": false,
+  "source": "ef3dd7f3888bbe2792a9dcec836b2773c4e77962",
+  "source_tree": "8c2e625484e18d015e5ff3f353367cfda87bf975",
+  "status": "SOURCE_CONSUMPTION_CONTRACT_CLEAR",
+  "version": "F13-PRODUCTION-SOURCE-v8"
+}

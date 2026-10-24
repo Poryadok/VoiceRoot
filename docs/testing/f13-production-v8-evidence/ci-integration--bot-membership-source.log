@@ -1,0 +1,8 @@
+Command: python3 scripts/ci/bot-membership-source_test.py
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.024s
+
+OK
+
+exit_code=0

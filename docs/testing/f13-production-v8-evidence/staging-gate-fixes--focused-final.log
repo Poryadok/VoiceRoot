@@ -1,0 +1,90 @@
+........................NATS_ROLLOUT_COMPILE=BLOCKED
+ENATS_ROLLOUT_COMPILE=BLOCKED
+E..E................................................................................
+======================================================================
+ERROR: test_actual_cli_canonical_full_and_app_only_bind_pinned_plan_and_ingress (compiler_test.CompilerTest.test_actual_cli_canonical_full_and_app_only_bind_pinned_plan_and_ingress) (mode='full')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 322, in <module>
+    try:main(sys.argv[1:])
+        ^^^^^^^^^^^^^^^^^^
+  File "/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 217, in main
+    pack=compile_target(source,rows,p['registry'],p['tag'],p['mode'],p['changed_services'],selected_images,p['contract'],set(p['enrolled']),
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 275, in compile_target
+    for path in source_paths:read(path)
+                             ^^^^^^^^^^
+  File "/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 271, in read
+    if len(raw)!=s.st_size:raise Blocked('rollout_compile_source_changed')
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+controller.Blocked: rollout_compile_source_changed
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/repo/scripts/staging/nats-rollout-preservation/compiler_test.py", line 68, in test_actual_cli_canonical_full_and_app_only_bind_pinned_plan_and_ingress
+    runpy.run_path(compiler.__file__,run_name='__main__')
+  File "<frozen runpy>", line 286, in run_path
+  File "<frozen runpy>", line 98, in _run_module_code
+  File "<frozen runpy>", line 88, in _run_code
+  File "/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 324, in <module>
+    print('NATS_ROLLOUT_COMPILE=BLOCKED',file=sys.stderr);sys.exit(1)
+                                                          ^^^^^^^^^^^
+SystemExit: 1
+
+======================================================================
+ERROR: test_actual_cli_canonical_full_and_app_only_bind_pinned_plan_and_ingress (compiler_test.CompilerTest.test_actual_cli_canonical_full_and_app_only_bind_pinned_plan_and_ingress) (mode='app-only')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 322, in <module>
+    try:main(sys.argv[1:])
+        ^^^^^^^^^^^^^^^^^^
+  File "/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 217, in main
+    pack=compile_target(source,rows,p['registry'],p['tag'],p['mode'],p['changed_services'],selected_images,p['contract'],set(p['enrolled']),
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 275, in compile_target
+    for path in source_paths:read(path)
+                             ^^^^^^^^^^
+  File "/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 271, in read
+    if len(raw)!=s.st_size:raise Blocked('rollout_compile_source_changed')
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+controller.Blocked: rollout_compile_source_changed
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/repo/scripts/staging/nats-rollout-preservation/compiler_test.py", line 68, in test_actual_cli_canonical_full_and_app_only_bind_pinned_plan_and_ingress
+    runpy.run_path(compiler.__file__,run_name='__main__')
+  File "<frozen runpy>", line 286, in run_path
+  File "<frozen runpy>", line 98, in _run_module_code
+  File "<frozen runpy>", line 88, in _run_code
+  File "/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 324, in <module>
+    print('NATS_ROLLOUT_COMPILE=BLOCKED',file=sys.stderr);sys.exit(1)
+                                                          ^^^^^^^^^^^
+SystemExit: 1
+
+======================================================================
+ERROR: test_actual_main_mixed_images_scope_keeps_selected_live_frontend_and_exact_pins (compiler_test.CompilerTest.test_actual_main_mixed_images_scope_keeps_selected_live_frontend_and_exact_pins)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/repo/scripts/staging/nats-rollout-preservation/compiler_test.py", line 153, in test_actual_main_mixed_images_scope_keeps_selected_live_frontend_and_exact_pins
+    compiler.main([str(fixtures.SOURCE),str(params),str(output)],producer=kube)
+  File "/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 217, in main
+    pack=compile_target(source,rows,p['registry'],p['tag'],p['mode'],p['changed_services'],selected_images,p['contract'],set(p['enrolled']),
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 275, in compile_target
+    for path in source_paths:read(path)
+                             ^^^^^^^^^^
+  File "/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 271, in read
+    if len(raw)!=s.st_size:raise Blocked('rollout_compile_source_changed')
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+controller.Blocked: rollout_compile_source_changed
+
+----------------------------------------------------------------------
+Ran 108 tests in 243.032s
+
+FAILED (errors=3)
+NATS_ROLLOUT_TARGET_SHA256=db6f5c1ee0b756c97317eb04e6d37c6a0183f59cbc9abaff06e1ba666473ee1f
+NATS_ROLLOUT_TARGET_SHA256=47d52e6d60b3d8dca953d5d11148b1a5702e087a5c6f691e4c7e50ae940e2a36
+NATS_ROLLOUT_TARGET_SHA256=2bcc2d5a1998ee6ec7842c7110c76e397d55f713fa0a683b5fd6cec2e5fd6d82
+NATS_ROLLOUT_BRIDGE=INSTALLED

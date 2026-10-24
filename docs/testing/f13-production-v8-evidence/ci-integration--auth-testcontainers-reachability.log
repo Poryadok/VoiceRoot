@@ -1,0 +1,13 @@
+Command: bash scripts/ci/check-auth-testcontainers-reports_test.sh
+== valid reports pass ==
+Auth Testcontainers Surefire reports passed.
+== missing required suite fails ==
+== skipped Testcontainers suite fails ==
+== failing Testcontainers suite fails ==
+== erroring Testcontainers suite fails ==
+== zero-test Testcontainers suite fails ==
+== canonical Auth CI wiring runs the report gate ==
+== every disabledWithoutDocker suite has a required report and fixture ==
+All Auth Testcontainers report gate tests passed.
+
+exit_code=0

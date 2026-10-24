@@ -1,0 +1,8 @@
+Command: python3 scripts/ci/fast-gate-routing_test.py
+......
+----------------------------------------------------------------------
+Ran 6 tests in 0.068s
+
+OK
+
+exit_code=0
