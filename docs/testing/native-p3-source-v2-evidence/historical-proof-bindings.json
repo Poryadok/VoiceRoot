@@ -1,0 +1,2044 @@
+{
+  "candidate": "9df1fa83e2cb8741c7fdfc1003658131ccc267b7",
+  "proof_files": [
+    {
+      "name": "master-intake/h5-native-matrix-receipt.json",
+      "sha256": "5df6504646d4063577507d1e6470d020259ca7ba7a79d56db4d810c8318f2520",
+      "path": "D:\\Git\\Voice\\tmp\\swarm\\master-intake\\h5-native-matrix-receipt.json",
+      "actual_sha256": "5df6504646d4063577507d1e6470d020259ca7ba7a79d56db4d810c8318f2520",
+      "matches": true
+    },
+    {
+      "name": "master-intake/h5-native-matrix.log",
+      "sha256": "018370c98bd62e7d0581ab57cc8ba64307d4fcd484c7a10bdfefe3283529ed51",
+      "path": "D:\\Git\\Voice\\tmp\\swarm\\master-intake\\h5-native-matrix.log",
+      "actual_sha256": "018370c98bd62e7d0581ab57cc8ba64307d4fcd484c7a10bdfefe3283529ed51",
+      "matches": true
+    },
+    {
+      "name": "master-intake/native-b1-probe.jsonl",
+      "sha256": "5474245e56f1c5b3d64f1e51f2e0f3d0962bc0dbb13c2d79003f7d24605daff3",
+      "path": "D:\\Git\\Voice\\tmp\\swarm\\master-intake\\native-b1-probe.jsonl",
+      "actual_sha256": "5474245e56f1c5b3d64f1e51f2e0f3d0962bc0dbb13c2d79003f7d24605daff3",
+      "matches": true
+    },
+    {
+      "name": "master-intake/native-b1-probe.tar",
+      "sha256": "8b70984de6290d2a5c9a4d42f12a21998f1d0f70ced31d43cbc79c9178940d7b",
+      "path": "D:\\Git\\Voice\\tmp\\swarm\\master-intake\\native-b1-probe.tar",
+      "actual_sha256": "8b70984de6290d2a5c9a4d42f12a21998f1d0f70ced31d43cbc79c9178940d7b",
+      "matches": true
+    },
+    {
+      "name": "master-intake/native-b1-receipt.json",
+      "sha256": "80d9dfa81c04bb56624b14de25ecc8301980f6197dd730bd353fa082a51c6ca3",
+      "path": "D:\\Git\\Voice\\tmp\\swarm\\master-intake\\native-b1-receipt.json",
+      "actual_sha256": "80d9dfa81c04bb56624b14de25ecc8301980f6197dd730bd353fa082a51c6ca3",
+      "matches": true
+    },
+    {
+      "name": "master-intake/native-b1-supplement.json",
+      "sha256": "752f8a6456fecec12291f983b231652262ade78c05fece94cac12fff6e45a90d",
+      "path": "D:\\Git\\Voice\\tmp\\swarm\\master-intake\\native-b1-supplement.json",
+      "actual_sha256": "752f8a6456fecec12291f983b231652262ade78c05fece94cac12fff6e45a90d",
+      "matches": true
+    },
+    {
+      "name": "master-intake/native-b3-probe.jsonl",
+      "sha256": "876e945ba10c771884fbdaeefd549202b1e9c55d74800d38aa338ce1df5a361f",
+      "path": "D:\\Git\\Voice\\tmp\\swarm\\master-intake\\native-b3-probe.jsonl",
+      "actual_sha256": "876e945ba10c771884fbdaeefd549202b1e9c55d74800d38aa338ce1df5a361f",
+      "matches": true
+    },
+    {
+      "name": "master-intake/native-h3-matrix-packet.json",
+      "sha256": "3ac530b7373a51217016a40d5ac33657725fd9449d9d50f1bd2ac3bac5cdef39",
+      "path": "D:\\Git\\Voice\\tmp\\swarm\\master-intake\\native-h3-matrix-packet.json",
+      "actual_sha256": "3ac530b7373a51217016a40d5ac33657725fd9449d9d50f1bd2ac3bac5cdef39",
+      "matches": true
+    },
+    {
+      "name": "master-intake/native_b1_qualification_probe_test.go",
+      "sha256": "c0e9420989758bbc8ec453a5df4be5303d19e167247d5129fda965d7a35898d1",
+      "path": "D:\\Git\\Voice\\tmp\\swarm\\master-intake\\native_b1_qualification_probe_test.go",
+      "actual_sha256": "c0e9420989758bbc8ec453a5df4be5303d19e167247d5129fda965d7a35898d1",
+      "matches": true
+    },
+    {
+      "name": "master-intake/native_b3_qualification_probe_test.go",
+      "sha256": "9e70f9220e1b0caf57ab1f9184d3627a95a005024df386798f479325aaad88e2",
+      "path": "D:\\Git\\Voice\\tmp\\swarm\\master-intake\\native_b3_qualification_probe_test.go",
+      "actual_sha256": "9e70f9220e1b0caf57ab1f9184d3627a95a005024df386798f479325aaad88e2",
+      "matches": true
+    },
+    {
+      "name": "master-intake/run_h5_native_matrix.py",
+      "sha256": "f13f8feb6dc608d6d57d12f848826664777ac5c5f970d4cc69ee4cf25c1be230",
+      "path": "D:\\Git\\Voice\\tmp\\swarm\\master-intake\\run_h5_native_matrix.py",
+      "actual_sha256": "f13f8feb6dc608d6d57d12f848826664777ac5c5f970d4cc69ee4cf25c1be230",
+      "matches": true
+    },
+    {
+      "name": "rudeus121-develop/batch3/native-closure-matrix-receipt.json",
+      "sha256": "1b2498c90161428d2f1a6da438b790b5023dea583b9531867d6200347270d5f1",
+      "path": "D:\\Git\\Voice\\tmp\\swarm\\rudeus121-develop\\batch3\\native-closure-matrix-receipt.json",
+      "actual_sha256": "1b2498c90161428d2f1a6da438b790b5023dea583b9531867d6200347270d5f1",
+      "matches": true
+    },
+    {
+      "name": "rudeus121-develop/batch3/native-down-snapshot-matrix-receipt.json",
+      "sha256": "51a606a3693e128c2cc3021d8cc54b309fd45ef4c9d8ed107ec27ecf90e04654",
+      "path": "D:\\Git\\Voice\\tmp\\swarm\\rudeus121-develop\\batch3\\native-down-snapshot-matrix-receipt.json",
+      "actual_sha256": "51a606a3693e128c2cc3021d8cc54b309fd45ef4c9d8ed107ec27ecf90e04654",
+      "matches": true
+    },
+    {
+      "name": "rudeus121-develop/batch3/native-down-snapshot-matrix.jsonl",
+      "sha256": "cd885785fb4a76444a0b86583addeffdfacdecfccb68bc3f37894f6d25d141ef",
+      "path": "D:\\Git\\Voice\\tmp\\swarm\\rudeus121-develop\\batch3\\native-down-snapshot-matrix.jsonl",
+      "actual_sha256": "cd885785fb4a76444a0b86583addeffdfacdecfccb68bc3f37894f6d25d141ef",
+      "matches": true
+    },
+    {
+      "name": "rudeus121-develop/batch3/native-down-snapshot-proof.json",
+      "sha256": "a595d15486b4ea688865e5e3a3fe8e5165ad67934916e214f3915bec12fe050c",
+      "path": "D:\\Git\\Voice\\tmp\\swarm\\rudeus121-develop\\batch3\\native-down-snapshot-proof.json",
+      "actual_sha256": "a595d15486b4ea688865e5e3a3fe8e5165ad67934916e214f3915bec12fe050c",
+      "matches": true
+    }
+  ],
+  "clause_source_entries": {
+    "A1": [
+      {
+        "path": "src/backend/voice/main.go",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "eb2c4f2b13aa361b5f8d01238546afb8d925458e"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "eb2c4f2b13aa361b5f8d01238546afb8d925458e"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "540a91513cfd19d1499183302b3880a578951d56"
+        },
+        "old_h9_equal_current": false
+      },
+      {
+        "path": "src/backend/voice/party_outbox_runtime_test.go",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "e6c286935c56516ec861d12634fc74eb7122d1bd"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "e6c286935c56516ec861d12634fc74eb7122d1bd"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "e6c286935c56516ec861d12634fc74eb7122d1bd"
+        },
+        "old_h9_equal_current": true
+      },
+      {
+        "path": "src/backend/voice/space_media_runtime_test.go",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "0cbe83b8f584c384c9c783f8665077cdedd2901d"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "0cbe83b8f584c384c9c783f8665077cdedd2901d"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "c7400b16f82518fc81f156511577411c16a4fd20"
+        },
+        "old_h9_equal_current": false
+      }
+    ],
+    "A2": [
+      {
+        "path": "src/backend/voice/space_media_runtime_test.go",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "0cbe83b8f584c384c9c783f8665077cdedd2901d"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "0cbe83b8f584c384c9c783f8665077cdedd2901d"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "c7400b16f82518fc81f156511577411c16a4fd20"
+        },
+        "old_h9_equal_current": false
+      },
+      {
+        "path": "src/backend/voice/space_media_runtime.go",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "beff70aecd2d4dd42cbc21ba88691193caf4ac56"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "beff70aecd2d4dd42cbc21ba88691193caf4ac56"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "beff70aecd2d4dd42cbc21ba88691193caf4ac56"
+        },
+        "old_h9_equal_current": true
+      },
+      {
+        "path": "src/backend/voice/party_outbox_runtime.go",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "e7c5eab30a054008d7d16862f622f5d92f5351f6"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "e7c5eab30a054008d7d16862f622f5d92f5351f6"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "e7c5eab30a054008d7d16862f622f5d92f5351f6"
+        },
+        "old_h9_equal_current": true
+      }
+    ],
+    "A3": [
+      {
+        "path": "src/backend/voice/internal/ordinarycall/party_outbox_test.go",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "5109d229001491e6ba2b9ac1ba26acd07a6df69c"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "5109d229001491e6ba2b9ac1ba26acd07a6df69c"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "5109d229001491e6ba2b9ac1ba26acd07a6df69c"
+        },
+        "old_h9_equal_current": true
+      },
+      {
+        "path": "src/backend/voice/internal/spacemedia/party_roster_integration_test.go",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "32eb23ee68f97b585fc887af2e212b2d64fc726e"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "32eb23ee68f97b585fc887af2e212b2d64fc726e"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "32eb23ee68f97b585fc887af2e212b2d64fc726e"
+        },
+        "old_h9_equal_current": true
+      },
+      {
+        "path": "src/backend/voice/space_media_runtime_test.go",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "0cbe83b8f584c384c9c783f8665077cdedd2901d"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "0cbe83b8f584c384c9c783f8665077cdedd2901d"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "c7400b16f82518fc81f156511577411c16a4fd20"
+        },
+        "old_h9_equal_current": false
+      }
+    ],
+    "A4": [
+      {
+        "path": "src/backend/voice/internal/spacelifecycle/provider_retirement_test.go",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "7165433a062be36ac6dd53b4dd3c718975f42673"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "7165433a062be36ac6dd53b4dd3c718975f42673"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "7165433a062be36ac6dd53b4dd3c718975f42673"
+        },
+        "old_h9_equal_current": true
+      },
+      {
+        "path": "src/backend/voice/internal/spacemedia/p3_composition_test.go",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "794e9e9b32b6d3a07a78870a13fa4f5e5cf17497"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "794e9e9b32b6d3a07a78870a13fa4f5e5cf17497"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "794e9e9b32b6d3a07a78870a13fa4f5e5cf17497"
+        },
+        "old_h9_equal_current": true
+      },
+      {
+        "path": "src/backend/voice/internal/spacemedia/p3_gate_integration_test.go",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "b57b5133cf73949bdf769d268a6276b536ece7da"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "b57b5133cf73949bdf769d268a6276b536ece7da"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "b57b5133cf73949bdf769d268a6276b536ece7da"
+        },
+        "old_h9_equal_current": true
+      }
+    ],
+    "B1": [
+      {
+        "path": "src/backend/migrations/voice_db/000014_space_media_p3.down.sql",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "a6257305c8d718cf895883b4cb11e677775e3901"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "a6257305c8d718cf895883b4cb11e677775e3901"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "a6257305c8d718cf895883b4cb11e677775e3901"
+        },
+        "old_h9_equal_current": true
+      },
+      {
+        "path": "src/backend/voice/internal/spacemedia/p3_down_retention_integration_test.go",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "81c5110138346168ff14deca78c9010621cb0621"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "81c5110138346168ff14deca78c9010621cb0621"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "81c5110138346168ff14deca78c9010621cb0621"
+        },
+        "old_h9_equal_current": true
+      }
+    ],
+    "B2": [
+      {
+        "path": "src/backend/voice/internal/spacemedia/native_down_snapshot_integration_test.go",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "84533faa062705bb3293e90079e614e7b485ea2e"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "84533faa062705bb3293e90079e614e7b485ea2e"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "84533faa062705bb3293e90079e614e7b485ea2e"
+        },
+        "old_h9_equal_current": true
+      },
+      {
+        "path": "src/backend/migrations/voice_db/000014_space_media_p3.down.sql",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "a6257305c8d718cf895883b4cb11e677775e3901"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "a6257305c8d718cf895883b4cb11e677775e3901"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "a6257305c8d718cf895883b4cb11e677775e3901"
+        },
+        "old_h9_equal_current": true
+      },
+      {
+        "path": "src/backend/migrations/voice_db/000014_space_media_p3.up.sql",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "0244a7c65f31f45549acc8dd3cf49aa5f43b2fb4"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "0244a7c65f31f45549acc8dd3cf49aa5f43b2fb4"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "0244a7c65f31f45549acc8dd3cf49aa5f43b2fb4"
+        },
+        "old_h9_equal_current": true
+      }
+    ],
+    "B3": [
+      {
+        "path": "src/backend/migrations/voice_db/000014_space_media_p3.down.sql",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "a6257305c8d718cf895883b4cb11e677775e3901"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "a6257305c8d718cf895883b4cb11e677775e3901"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "a6257305c8d718cf895883b4cb11e677775e3901"
+        },
+        "old_h9_equal_current": true
+      },
+      {
+        "path": "src/backend/voice/internal/spacemedia/p3_down_retention_integration_test.go",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "81c5110138346168ff14deca78c9010621cb0621"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "81c5110138346168ff14deca78c9010621cb0621"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "81c5110138346168ff14deca78c9010621cb0621"
+        },
+        "old_h9_equal_current": true
+      }
+    ],
+    "B4": [
+      {
+        "path": "src/backend/migrations/voice_db/000013_a3_roster_outbox.down.sql",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "47f8f4249efb5051731086e24d5855130ac1cb19"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "47f8f4249efb5051731086e24d5855130ac1cb19"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "47f8f4249efb5051731086e24d5855130ac1cb19"
+        },
+        "old_h9_equal_current": true
+      },
+      {
+        "path": "src/backend/voice/internal/spacemedia/native_down_snapshot_integration_test.go",
+        "historical_entry": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "84533faa062705bb3293e90079e614e7b485ea2e"
+        },
+        "old_h9": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "84533faa062705bb3293e90079e614e7b485ea2e"
+        },
+        "current": {
+          "mode": "100644",
+          "type": "blob",
+          "oid": "84533faa062705bb3293e90079e614e7b485ea2e"
+        },
+        "old_h9_equal_current": true
+      }
+    ]
+  },
+  "native_semantic_tree_comparison": [
+    {
+      "path": "src/backend/voice/internal/livekit/room_lifecycle.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cce65c1a6a9563767d8f80b592212a284ab04990"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cce65c1a6a9563767d8f80b592212a284ab04990"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/livekit/room_lifecycle_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "80045c923976cdc9b782c94b787aced264466a30"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "80045c923976cdc9b782c94b787aced264466a30"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/livekit/space_token.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "34d07ec372c57650aa3db538f3540b630a37585f"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "34d07ec372c57650aa3db538f3540b630a37585f"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/livekit/space_token_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ef16dbd21e20ee55e120ecf282e806993fccf129"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ef16dbd21e20ee55e120ecf282e806993fccf129"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/livekit/token.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8e09a19fc5496f4ebbdaf0af45b3625d8a070b34"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "8e09a19fc5496f4ebbdaf0af45b3625d8a070b34"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/livekit/token_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c239e96d14e51bdfed8c3aea5e1bdbe4a187e9fa"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c239e96d14e51bdfed8c3aea5e1bdbe4a187e9fa"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/conversion.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9d720337a45739aa4b7e5ae69d21bdf7827a5d12"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9d720337a45739aa4b7e5ae69d21bdf7827a5d12"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/coordinator.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4b4a3edc19d9538b2e4043e81db900aa059a30c4"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4b4a3edc19d9538b2e4043e81db900aa059a30c4"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/coordinator_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "fd32eb293dde4325af4a82a11c30e36bc4144293"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "fd32eb293dde4325af4a82a11c30e36bc4144293"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/down_retention_test.go",
+      "old_h9": null,
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "037fea4bdf75aaae53734debdb56c136ca0eb527"
+      },
+      "equal": false
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/lookup.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f6142e171db5dee994ccddc652b1a24f77f3fbee"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f6142e171db5dee994ccddc652b1a24f77f3fbee"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/media_authorization.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "48dfcbd161cf00e496175eb37ce99eb681a399ad"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "48dfcbd161cf00e496175eb37ce99eb681a399ad"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/model.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b2c95844a52108e852bde053a215aec47aa59af7"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b2c95844a52108e852bde053a215aec47aa59af7"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/model_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f9fe0c339b17417b6558979b2a71a19e993203e1"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f9fe0c339b17417b6558979b2a71a19e993203e1"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/outbox.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b152bbec98041f3560314ef422e3c70ac50bddad"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b152bbec98041f3560314ef422e3c70ac50bddad"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/outbox_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "64cbd343d5775e243101c4800ae74bf23f7c79a6"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "64cbd343d5775e243101c4800ae74bf23f7c79a6"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/party_loss.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7962b93b71bc5b7497f042cb1b3c5f63ef8f5171"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7962b93b71bc5b7497f042cb1b3c5f63ef8f5171"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/party_outbox_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5109d229001491e6ba2b9ac1ba26acd07a6df69c"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5109d229001491e6ba2b9ac1ba26acd07a6df69c"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/postgres.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "86ad6d9ba5ef95a9dce45305a1bad29219a2b808"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "86ad6d9ba5ef95a9dce45305a1bad29219a2b808"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/postgres_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9647d38d47d90c01f3064742b02780236694c8ce"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9647d38d47d90c01f3064742b02780236694c8ce"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/recovery.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "dda20ec0505d19920b7e9ec232fd167ce147b665"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "dda20ec0505d19920b7e9ec232fd167ce147b665"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/ordinarycall/validation.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "60a70f01cf1f03ac7fe0c03091dee832a7f99227"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "60a70f01cf1f03ac7fe0c03091dee832a7f99227"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/rosteroutbox/delivery.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7e69b7b638cca71645706a94308c96a3372215aa"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7e69b7b638cca71645706a94308c96a3372215aa"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/rosteroutbox/event.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "3016be1c5ad3a8024d5670253337d3ddddbaca8f"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "3016be1c5ad3a8024d5670253337d3ddddbaca8f"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacegatetest/gates.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "575579c76f7e4f5bdc66b8192cae374cb77a9b74"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "575579c76f7e4f5bdc66b8192cae374cb77a9b74"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacegatetest/postgres.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "21995aa5584d90429ebf67d5bcd755b4694b982f"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "21995aa5584d90429ebf67d5bcd755b4694b982f"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/capture.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b3ab397e5c415068b2724d4093f6b5312e2d49c0"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b3ab397e5c415068b2724d4093f6b5312e2d49c0"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/effects.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "33761d6cb090755ebba7b85ec2a43cb229829deb"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "33761d6cb090755ebba7b85ec2a43cb229829deb"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/effects_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5e7eef76f3e4d665ad345f27d91c1be19d4a3e4e"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5e7eef76f3e4d665ad345f27d91c1be19d4a3e4e"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/postgres.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "0b46ecb0f84afe4a57e8da06b77beab62cf84bc4"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "0b46ecb0f84afe4a57e8da06b77beab62cf84bc4"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/postgres_store_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5b949947a9196de809b2c82dac969823149a2eb0"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "5b949947a9196de809b2c82dac969823149a2eb0"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/provider_retirement_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7165433a062be36ac6dd53b4dd3c718975f42673"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7165433a062be36ac6dd53b4dd3c718975f42673"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/recovery_publication_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d945e5e75de9dceda69eac8424cef4004b35655c"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d945e5e75de9dceda69eac8424cef4004b35655c"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/service.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "45afb942be29f3b02a80b01f9ee195ff141e16d4"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "45afb942be29f3b02a80b01f9ee195ff141e16d4"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/store.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "67e2a25efd8297aacc46ba5445aab1610c4d8911"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "67e2a25efd8297aacc46ba5445aab1610c4d8911"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/store_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cb587a858d0103dc5f869abb4272e5f34958e654"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cb587a858d0103dc5f869abb4272e5f34958e654"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/admission_dispatch.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "83045696d2c00af5b1aa3cd1423f7603f39757e5"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "83045696d2c00af5b1aa3cd1423f7603f39757e5"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/admission_ownership.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a04cef76fad665fe92ef274afc8e0e0c21e9c85a"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a04cef76fad665fe92ef274afc8e0e0c21e9c85a"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/admission_ownership_down_integration_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f3706ffb15349e7fbafabb617be5f0d492ecf390"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f3706ffb15349e7fbafabb617be5f0d492ecf390"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/admission_ownership_integration_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c6ce637203e814ad1afeceab206451f6e16ca579"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c6ce637203e814ad1afeceab206451f6e16ca579"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/admission_revocation.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "66fca14ec4984384b9b709ea7b4c5669cbf0ca07"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "66fca14ec4984384b9b709ea7b4c5669cbf0ca07"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/captured_drain.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "451b3a80e38758f95ae5df76da5818384134cc16"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "451b3a80e38758f95ae5df76da5818384134cc16"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/communication_timeout_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2cbaf4d23418d7ca936e6c1a4942f2e2001fedd0"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "2cbaf4d23418d7ca936e6c1a4942f2e2001fedd0"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/consumer.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c5eca4ff2eb85274c466f67820064804f90dae03"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c5eca4ff2eb85274c466f67820064804f90dae03"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/consumer_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4e8b112d504ab9bbc742c0c462eba6babe26616f"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4e8b112d504ab9bbc742c0c462eba6babe26616f"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/coordinator.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "93454778dbf31c5aaeca6c3923d8bdf5020cd14f"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "93454778dbf31c5aaeca6c3923d8bdf5020cd14f"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/coordinator_floor_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7cf293c162a3a5ff230d581024b4c93eda73c44b"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7cf293c162a3a5ff230d581024b4c93eda73c44b"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/coordinator_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1898ee9d93803247b3b139e8c78d795942d2f52a"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "1898ee9d93803247b3b139e8c78d795942d2f52a"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/grants.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "31f9a524aebb60a025355e4395d2f22c8ea6da6e"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "31f9a524aebb60a025355e4395d2f22c8ea6da6e"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/native_down_snapshot_integration_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "84533faa062705bb3293e90079e614e7b485ea2e"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "84533faa062705bb3293e90079e614e7b485ea2e"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/outbox.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4305db380e1af4086097cebc3864234ecf1eeb23"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4305db380e1af4086097cebc3864234ecf1eeb23"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/outbox_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "df033fc39274ac364df126f851aba940f3bbdbf4"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "df033fc39274ac364df126f851aba940f3bbdbf4"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/p3_barrier.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "15a20530b2e4787f7eda017a2a90a9614ee5f3d8"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "15a20530b2e4787f7eda017a2a90a9614ee5f3d8"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/p3_barrier_integration_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "04744b6833d4e523358b3528a71007c54c005329"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "04744b6833d4e523358b3528a71007c54c005329"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/p3_composition_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "794e9e9b32b6d3a07a78870a13fa4f5e5cf17497"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "794e9e9b32b6d3a07a78870a13fa4f5e5cf17497"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/p3_down_retention_integration_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "81c5110138346168ff14deca78c9010621cb0621"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "81c5110138346168ff14deca78c9010621cb0621"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/p3_gate_integration_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b57b5133cf73949bdf769d268a6276b536ece7da"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b57b5133cf73949bdf769d268a6276b536ece7da"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/party_loss.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d1a48f01f4715c805c3db930e073637f8dc8167d"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d1a48f01f4715c805c3db930e073637f8dc8167d"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/party_room_close.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c9d1fe78d9f68149745a75dce1f896a7b7e42bf7"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c9d1fe78d9f68149745a75dce1f896a7b7e42bf7"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/party_roster_integration_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "32eb23ee68f97b585fc887af2e212b2d64fc726e"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "32eb23ee68f97b585fc887af2e212b2d64fc726e"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/postgres_admission.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4ebac4b08044ee918b287040231e8b340f748185"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4ebac4b08044ee918b287040231e8b340f748185"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/postgres_admission_diagnostics_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "11e6e1dddca6a4e1c009526b26e2abe893ce9695"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "11e6e1dddca6a4e1c009526b26e2abe893ce9695"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/postgres_admission_integration_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "266ae736561c75b830c6e34071e3697223bcf2ec"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "266ae736561c75b830c6e34071e3697223bcf2ec"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/projection_authority.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d24d2d7fbd4137f887d4e2496396ffdb07e8548f"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d24d2d7fbd4137f887d4e2496396ffdb07e8548f"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/role_wire_compatibility_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "dd2051a98230a71f4e8a05bfabefb77f18e1b444"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "dd2051a98230a71f4e8a05bfabefb77f18e1b444"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/store/call_store.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "16d691b13e16861b5ab5bf7ad56785dab7fe9fd6"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "16d691b13e16861b5ab5bf7ad56785dab7fe9fd6"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/store/call_store_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d87f58c373e6d0fee7a87618522e7c73684ae3ab"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d87f58c373e6d0fee7a87618522e7c73684ae3ab"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/store/ordinary_cutover.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e417196ba0bc0fdcbd24ced8ba13062b64a47a3e"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e417196ba0bc0fdcbd24ced8ba13062b64a47a3e"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/store/ordinary_projection.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b22492a6c1cbb56935a96d7341365550144618a1"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b22492a6c1cbb56935a96d7341365550144618a1"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/store/ordinary_projection_integration_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "740fb73374ee295e02d2e2bbb8eb738205fd28d3"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "740fb73374ee295e02d2e2bbb8eb738205fd28d3"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/store/ordinary_projection_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cc610e53812811cc107c225e558b57b5fe1fe802"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "cc610e53812811cc107c225e558b57b5fe1fe802"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/store/redis_store.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "906b69408f7b08bdb227836ba99a87f25de0dc89"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "906b69408f7b08bdb227836ba99a87f25de0dc89"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/store/redis_store_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6ff65cefba8aedae7d348484f0b23b159d13e3d5"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6ff65cefba8aedae7d348484f0b23b159d13e3d5"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/store/screen_share_store_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "41d0763c4e564fdf9aae12d3703ede2a35f4c28b"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "41d0763c4e564fdf9aae12d3703ede2a35f4c28b"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/store/space_admission_dispatch_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "375199bcbf5c62a0a196ddef2c3226c7d796d6a4"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "375199bcbf5c62a0a196ddef2c3226c7d796d6a4"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/store/space_admission_ownership.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "3fdcc797284eb44ff69f1e554403da3fe4bf1cce"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "3fdcc797284eb44ff69f1e554403da3fe4bf1cce"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/store/space_gate_incarnation_test.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9f648a193f9ac2670b7feb49a71d4b2bec1e07d2"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9f648a193f9ac2670b7feb49a71d4b2bec1e07d2"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/voice/internal/store/space_lifecycle.go",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "06b10b13f105347cf894c23629036f01a9c0558c"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "06b10b13f105347cf894c23629036f01a9c0558c"
+      },
+      "equal": true
+    }
+  ],
+  "literal_migration_entries": [
+    {
+      "path": "src/backend/migrations/voice_db/000001_room_lifecycle.down.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4c3f4593c18e823fbee10451d63ac3261c515c17"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "4c3f4593c18e823fbee10451d63ac3261c515c17"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000001_room_lifecycle.up.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7488b750ad727802fc8af54eb074ce7df57d338b"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7488b750ad727802fc8af54eb074ce7df57d338b"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000002_redis_divergence.down.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "3f34e8eb65b61d28200149df0a1542237d7d707a"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "3f34e8eb65b61d28200149df0a1542237d7d707a"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000002_redis_divergence.up.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "634e220af6b56b1de78d12b36eefd63a89ec6c79"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "634e220af6b56b1de78d12b36eefd63a89ec6c79"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000003_matchmaking_membership.down.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "34566c4ab369754f5fe0fe8659634a2b8c5d4321"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "34566c4ab369754f5fe0fe8659634a2b8c5d4321"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000003_matchmaking_membership.up.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "fe61aef43722661e88cd1402ea151b40891296f2"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "fe61aef43722661e88cd1402ea151b40891296f2"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000004_game_session_rooms.down.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "77c6a6c5e247cb5dcb32ac39f22b186efb1ee32e"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "77c6a6c5e247cb5dcb32ac39f22b186efb1ee32e"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000004_game_session_rooms.up.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7d71408e9784851bb2f7a38f1875b76278b43a6b"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7d71408e9784851bb2f7a38f1875b76278b43a6b"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000005_game_session_close.down.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c68bbc289840589b7a0802d8d648b3b087d9edba"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "c68bbc289840589b7a0802d8d648b3b087d9edba"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000005_game_session_close.up.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "026445737df22e9537fd5ca5844922cf48a5a078"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "026445737df22e9537fd5ca5844922cf48a5a078"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000006_game_session_roster_lease.down.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6e4f2887f9e71cc6b8a4219a86fc06b9374d27b4"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "6e4f2887f9e71cc6b8a4219a86fc06b9374d27b4"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000006_game_session_roster_lease.up.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e3fe000190e20f17cfeda225d317d6eb072d8a93"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e3fe000190e20f17cfeda225d317d6eb072d8a93"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000007_t17_sdk_conversion_fence.down.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "df9026dde7dceb2d192be3c7909b386d13af3483"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "df9026dde7dceb2d192be3c7909b386d13af3483"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000007_t17_sdk_conversion_fence.up.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b863bd2d7bd9971e4a0c8d24adc0635de01b341f"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "b863bd2d7bd9971e4a0c8d24adc0635de01b341f"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000008_account_voice_fence.down.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d8e0c28c6fc76a77ceea216c9c7469e3ecef2412"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d8e0c28c6fc76a77ceea216c9c7469e3ecef2412"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000008_account_voice_fence.up.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "30650e3e27ff2234bf327beb0cacae1da4e707bc"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "30650e3e27ff2234bf327beb0cacae1da4e707bc"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000009_space_lifecycle.down.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7ad1a3e38936396f897c9df91fdfee3c72f1bd60"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7ad1a3e38936396f897c9df91fdfee3c72f1bd60"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000009_space_lifecycle.up.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e0fc5e76ac49ec6e81840832e0fc43aca2efdeb4"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "e0fc5e76ac49ec6e81840832e0fc43aca2efdeb4"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000010_space_media_admission.down.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "83953384c9caa2ae2aa8d9485a208bb5ead5e33f"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "83953384c9caa2ae2aa8d9485a208bb5ead5e33f"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000010_space_media_admission.up.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "171033aaf172370f76ede86349b042154bd2ff71"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "171033aaf172370f76ede86349b042154bd2ff71"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000011_match_squad_operations.down.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9c506399d95a0f460bbdff8972b14fff9bd645ca"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "9c506399d95a0f460bbdff8972b14fff9bd645ca"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000011_match_squad_operations.up.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "19bd5687fea0f556260d27fd1ecf5308de835395"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "19bd5687fea0f556260d27fd1ecf5308de835395"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000012_ordinary_calls.down.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "d9c893160d3f061be073641d10633a8f53c88043"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a84b330ed22cebe1936c0b153cf9667117b56284"
+      },
+      "equal": false
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000012_ordinary_calls.up.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "62c51fe56513abcafae3bc7ba5ce05bfa1f989e7"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "62c51fe56513abcafae3bc7ba5ce05bfa1f989e7"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000013_a3_roster_outbox.down.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "47f8f4249efb5051731086e24d5855130ac1cb19"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "47f8f4249efb5051731086e24d5855130ac1cb19"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000013_a3_roster_outbox.up.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "bf34f06f817b882bf977b218cc9758bccbc4ed81"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "bf34f06f817b882bf977b218cc9758bccbc4ed81"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000014_space_media_p3.down.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a6257305c8d718cf895883b4cb11e677775e3901"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a6257305c8d718cf895883b4cb11e677775e3901"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000014_space_media_p3.up.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "0244a7c65f31f45549acc8dd3cf49aa5f43b2fb4"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "0244a7c65f31f45549acc8dd3cf49aa5f43b2fb4"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000015_space_admission_ownership.down.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ba751aa8b4c6d2fbc08f41c37479e453111604d1"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "ba751aa8b4c6d2fbc08f41c37479e453111604d1"
+      },
+      "equal": true
+    },
+    {
+      "path": "src/backend/migrations/voice_db/000015_space_admission_ownership.up.sql",
+      "old_h9": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7697d22e4387eabf75da6f46c5578c20c9203f30"
+      },
+      "current": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "7697d22e4387eabf75da6f46c5578c20c9203f30"
+      },
+      "equal": true
+    }
+  ],
+  "original_b3_receipt_unpinned_supplement": {
+    "path": "D:\\Git\\Voice\\tmp\\swarm\\master-intake\\native-b3-receipt.json",
+    "sha256": "4a3313e231914cb488e02e8bf329f9080906dd4e283f48349f451324648119d6",
+    "note": "Receipt corroborates pinned successful JSONL; not independently listed in old record evidence"
+  }
+}

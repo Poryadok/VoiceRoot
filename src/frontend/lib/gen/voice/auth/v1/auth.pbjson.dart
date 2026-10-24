@@ -98,6 +98,62 @@ final $typed_data.Uint8List proofPurposeDescriptor = $convert.base64Decode(
     'CgxQcm9vZlB1cnBvc2USHQoZUFJPT0ZfUFVSUE9TRV9VTlNQRUNJRklFRBAAEh4KGlBST09GX1'
     'BVUlBPU0VfU1BBQ0VfREVMRVRFEAE=');
 
+@$core.Deprecated('Use spaceAdmissionPhaseDescriptor instead')
+const SpaceAdmissionPhase$json = {
+  '1': 'SpaceAdmissionPhase',
+  '2': [
+    {'1': 'SPACE_ADMISSION_PHASE_UNSPECIFIED', '2': 0},
+    {'1': 'SPACE_ADMISSION_PHASE_START', '2': 1},
+    {'1': 'SPACE_ADMISSION_PHASE_READ', '2': 2},
+    {'1': 'SPACE_ADMISSION_PHASE_SUBMIT', '2': 3},
+    {'1': 'SPACE_ADMISSION_PHASE_APPROVE', '2': 4},
+    {'1': 'SPACE_ADMISSION_PHASE_FIRST_PUBLISH', '2': 5},
+    {'1': 'SPACE_ADMISSION_PHASE_SET_ENTRY_POLICY', '2': 6},
+  ],
+};
+
+/// Descriptor for `SpaceAdmissionPhase`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List spaceAdmissionPhaseDescriptor = $convert.base64Decode(
+    'ChNTcGFjZUFkbWlzc2lvblBoYXNlEiUKIVNQQUNFX0FETUlTU0lPTl9QSEFTRV9VTlNQRUNJRk'
+    'lFRBAAEh8KG1NQQUNFX0FETUlTU0lPTl9QSEFTRV9TVEFSVBABEh4KGlNQQUNFX0FETUlTU0lP'
+    'Tl9QSEFTRV9SRUFEEAISIAocU1BBQ0VfQURNSVNTSU9OX1BIQVNFX1NVQk1JVBADEiEKHVNQQU'
+    'NFX0FETUlTU0lPTl9QSEFTRV9BUFBST1ZFEAQSJwojU1BBQ0VfQURNSVNTSU9OX1BIQVNFX0ZJ'
+    'UlNUX1BVQkxJU0gQBRIqCiZTUEFDRV9BRE1JU1NJT05fUEhBU0VfU0VUX0VOVFJZX1BPTElDWR'
+    'AG');
+
+@$core.Deprecated('Use spaceAdmissionSubjectRoleDescriptor instead')
+const SpaceAdmissionSubjectRole$json = {
+  '1': 'SpaceAdmissionSubjectRole',
+  '2': [
+    {'1': 'SPACE_ADMISSION_SUBJECT_ROLE_UNSPECIFIED', '2': 0},
+    {'1': 'SPACE_ADMISSION_SUBJECT_ROLE_APPLICANT', '2': 1},
+    {'1': 'SPACE_ADMISSION_SUBJECT_ROLE_REVIEWER', '2': 2},
+    {'1': 'SPACE_ADMISSION_SUBJECT_ROLE_SETTINGS_ACTOR', '2': 3},
+  ],
+};
+
+/// Descriptor for `SpaceAdmissionSubjectRole`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List spaceAdmissionSubjectRoleDescriptor = $convert.base64Decode(
+    'ChlTcGFjZUFkbWlzc2lvblN1YmplY3RSb2xlEiwKKFNQQUNFX0FETUlTU0lPTl9TVUJKRUNUX1'
+    'JPTEVfVU5TUEVDSUZJRUQQABIqCiZTUEFDRV9BRE1JU1NJT05fU1VCSkVDVF9ST0xFX0FQUExJ'
+    'Q0FOVBABEikKJVNQQUNFX0FETUlTU0lPTl9TVUJKRUNUX1JPTEVfUkVWSUVXRVIQAhIvCitTUE'
+    'FDRV9BRE1JU1NJT05fU1VCSkVDVF9ST0xFX1NFVFRJTkdTX0FDVE9SEAM=');
+
+@$core.Deprecated('Use spaceAdmissionDecisionDescriptor instead')
+const SpaceAdmissionDecision$json = {
+  '1': 'SpaceAdmissionDecision',
+  '2': [
+    {'1': 'SPACE_ADMISSION_DECISION_UNSPECIFIED', '2': 0},
+    {'1': 'SPACE_ADMISSION_DECISION_ELIGIBLE', '2': 1},
+  ],
+};
+
+/// Descriptor for `SpaceAdmissionDecision`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List spaceAdmissionDecisionDescriptor =
+    $convert.base64Decode(
+        'ChZTcGFjZUFkbWlzc2lvbkRlY2lzaW9uEigKJFNQQUNFX0FETUlTU0lPTl9ERUNJU0lPTl9VTl'
+        'NQRUNJRklFRBAAEiUKIVNQQUNFX0FETUlTU0lPTl9ERUNJU0lPTl9FTElHSUJMRRAB');
+
 @$core.Deprecated('Use registerRequestDescriptor instead')
 const RegisterRequest$json = {
   '1': 'RegisterRequest',
@@ -1263,6 +1319,40 @@ final $typed_data.Uint8List getVoiceSessionEpochFloorResponseDescriptor =
         'CiFHZXRWb2ljZVNlc3Npb25FcG9jaEZsb29yUmVzcG9uc2USLgoTc2Vzc2lvbl9lcG9jaF9mbG'
         '9vchgBIAEoA1IRc2Vzc2lvbkVwb2NoRmxvb3I=');
 
+@$core.Deprecated('Use getRoleSessionEpochFloorRequestDescriptor instead')
+const GetRoleSessionEpochFloorRequest$json = {
+  '1': 'GetRoleSessionEpochFloorRequest',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+  ],
+};
+
+/// Descriptor for `GetRoleSessionEpochFloorRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getRoleSessionEpochFloorRequestDescriptor =
+    $convert.base64Decode(
+        'Ch9HZXRSb2xlU2Vzc2lvbkVwb2NoRmxvb3JSZXF1ZXN0Eh0KCmFjY291bnRfaWQYASABKAlSCW'
+        'FjY291bnRJZA==');
+
+@$core.Deprecated('Use getRoleSessionEpochFloorResponseDescriptor instead')
+const GetRoleSessionEpochFloorResponse$json = {
+  '1': 'GetRoleSessionEpochFloorResponse',
+  '2': [
+    {
+      '1': 'session_epoch_floor',
+      '3': 1,
+      '4': 1,
+      '5': 3,
+      '10': 'sessionEpochFloor'
+    },
+  ],
+};
+
+/// Descriptor for `GetRoleSessionEpochFloorResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getRoleSessionEpochFloorResponseDescriptor =
+    $convert.base64Decode(
+        'CiBHZXRSb2xlU2Vzc2lvbkVwb2NoRmxvb3JSZXNwb25zZRIuChNzZXNzaW9uX2Vwb2NoX2Zsb2'
+        '9yGAEgASgDUhFzZXNzaW9uRXBvY2hGbG9vcg==');
+
 @$core.Deprecated('Use issueSpaceDeletionProofRequestDescriptor instead')
 const IssueSpaceDeletionProofRequest$json = {
   '1': 'IssueSpaceDeletionProofRequest',
@@ -1566,3 +1656,214 @@ final $typed_data.Uint8List
         'CixBY2tub3dsZWRnZVNwYWNlRGVsZXRpb25Qcm9vZlJlY2VpcHRSZXNwb25zZRJDCg9hY2tub3'
         'dsZWRnZWRfYXQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUg5hY2tub3dsZWRn'
         'ZWRBdA==');
+
+@$core.Deprecated('Use getSpaceSessionEpochFloorRequestDescriptor instead')
+const GetSpaceSessionEpochFloorRequest$json = {
+  '1': 'GetSpaceSessionEpochFloorRequest',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+  ],
+};
+
+/// Descriptor for `GetSpaceSessionEpochFloorRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSpaceSessionEpochFloorRequestDescriptor =
+    $convert.base64Decode(
+        'CiBHZXRTcGFjZVNlc3Npb25FcG9jaEZsb29yUmVxdWVzdBIdCgphY2NvdW50X2lkGAEgASgJUg'
+        'lhY2NvdW50SWQ=');
+
+@$core.Deprecated('Use getSpaceSessionEpochFloorResponseDescriptor instead')
+const GetSpaceSessionEpochFloorResponse$json = {
+  '1': 'GetSpaceSessionEpochFloorResponse',
+  '2': [
+    {
+      '1': 'session_epoch_floor',
+      '3': 1,
+      '4': 1,
+      '5': 3,
+      '10': 'sessionEpochFloor'
+    },
+  ],
+};
+
+/// Descriptor for `GetSpaceSessionEpochFloorResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSpaceSessionEpochFloorResponseDescriptor =
+    $convert.base64Decode(
+        'CiFHZXRTcGFjZVNlc3Npb25FcG9jaEZsb29yUmVzcG9uc2USLgoTc2Vzc2lvbl9lcG9jaF9mbG'
+        '9vchgBIAEoA1IRc2Vzc2lvbkVwb2NoRmxvb3I=');
+
+@$core.Deprecated('Use getBotSessionEpochFloorRequestDescriptor instead')
+const GetBotSessionEpochFloorRequest$json = {
+  '1': 'GetBotSessionEpochFloorRequest',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+  ],
+};
+
+/// Descriptor for `GetBotSessionEpochFloorRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getBotSessionEpochFloorRequestDescriptor =
+    $convert.base64Decode(
+        'Ch5HZXRCb3RTZXNzaW9uRXBvY2hGbG9vclJlcXVlc3QSHQoKYWNjb3VudF9pZBgBIAEoCVIJYW'
+        'Njb3VudElk');
+
+@$core.Deprecated('Use getBotSessionEpochFloorResponseDescriptor instead')
+const GetBotSessionEpochFloorResponse$json = {
+  '1': 'GetBotSessionEpochFloorResponse',
+  '2': [
+    {
+      '1': 'session_epoch_floor',
+      '3': 1,
+      '4': 1,
+      '5': 3,
+      '10': 'sessionEpochFloor'
+    },
+  ],
+};
+
+/// Descriptor for `GetBotSessionEpochFloorResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getBotSessionEpochFloorResponseDescriptor =
+    $convert.base64Decode(
+        'Ch9HZXRCb3RTZXNzaW9uRXBvY2hGbG9vclJlc3BvbnNlEi4KE3Nlc3Npb25fZXBvY2hfZmxvb3'
+        'IYASABKANSEXNlc3Npb25FcG9jaEZsb29y');
+
+@$core.Deprecated('Use observeSpaceAdmissionSubjectRequestDescriptor instead')
+const ObserveSpaceAdmissionSubjectRequest$json = {
+  '1': 'ObserveSpaceAdmissionSubjectRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {
+      '1': 'phase',
+      '3': 2,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.auth.v1.SpaceAdmissionPhase',
+      '10': 'phase'
+    },
+    {
+      '1': 'subject_role',
+      '3': 3,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.auth.v1.SpaceAdmissionSubjectRole',
+      '10': 'subjectRole'
+    },
+    {'1': 'account_id', '3': 4, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'profile_id', '3': 5, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'space_id', '3': 6, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'admission_binding_sha256',
+      '3': 7,
+      '4': 1,
+      '5': 12,
+      '10': 'admissionBindingSha256'
+    },
+    {
+      '1': 'interactive_session_epoch',
+      '3': 8,
+      '4': 1,
+      '5': 4,
+      '9': 0,
+      '10': 'interactiveSessionEpoch',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_interactive_session_epoch'},
+  ],
+};
+
+/// Descriptor for `ObserveSpaceAdmissionSubjectRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List observeSpaceAdmissionSubjectRequestDescriptor = $convert.base64Decode(
+    'CiNPYnNlcnZlU3BhY2VBZG1pc3Npb25TdWJqZWN0UmVxdWVzdBIpChBwcm90b2NvbF92ZXJzaW'
+    '9uGAEgASgNUg9wcm90b2NvbFZlcnNpb24SOAoFcGhhc2UYAiABKA4yIi52b2ljZS5hdXRoLnYx'
+    'LlNwYWNlQWRtaXNzaW9uUGhhc2VSBXBoYXNlEksKDHN1YmplY3Rfcm9sZRgDIAEoDjIoLnZvaW'
+    'NlLmF1dGgudjEuU3BhY2VBZG1pc3Npb25TdWJqZWN0Um9sZVILc3ViamVjdFJvbGUSHQoKYWNj'
+    'b3VudF9pZBgEIAEoCVIJYWNjb3VudElkEh0KCnByb2ZpbGVfaWQYBSABKAlSCXByb2ZpbGVJZB'
+    'IZCghzcGFjZV9pZBgGIAEoCVIHc3BhY2VJZBI4ChhhZG1pc3Npb25fYmluZGluZ19zaGEyNTYY'
+    'ByABKAxSFmFkbWlzc2lvbkJpbmRpbmdTaGEyNTYSPwoZaW50ZXJhY3RpdmVfc2Vzc2lvbl9lcG'
+    '9jaBgIIAEoBEgAUhdpbnRlcmFjdGl2ZVNlc3Npb25FcG9jaIgBAUIcChpfaW50ZXJhY3RpdmVf'
+    'c2Vzc2lvbl9lcG9jaA==');
+
+@$core.Deprecated('Use observeSpaceAdmissionSubjectResponseDescriptor instead')
+const ObserveSpaceAdmissionSubjectResponse$json = {
+  '1': 'ObserveSpaceAdmissionSubjectResponse',
+  '2': [
+    {
+      '1': 'request_binding_sha256',
+      '3': 1,
+      '4': 1,
+      '5': 12,
+      '10': 'requestBindingSha256'
+    },
+    {'1': 'account_id', '3': 2, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'profile_id', '3': 3, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'account_type', '3': 4, '4': 1, '5': 9, '10': 'accountType'},
+    {
+      '1': 'account_security_revision',
+      '3': 5,
+      '4': 1,
+      '5': 4,
+      '10': 'accountSecurityRevision'
+    },
+    {
+      '1': 'session_epoch_floor',
+      '3': 6,
+      '4': 1,
+      '5': 4,
+      '10': 'sessionEpochFloor'
+    },
+    {'1': 'profile_revision', '3': 7, '4': 1, '5': 4, '10': 'profileRevision'},
+    {
+      '1': 'decision',
+      '3': 8,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.auth.v1.SpaceAdmissionDecision',
+      '10': 'decision'
+    },
+  ],
+};
+
+/// Descriptor for `ObserveSpaceAdmissionSubjectResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List observeSpaceAdmissionSubjectResponseDescriptor = $convert.base64Decode(
+    'CiRPYnNlcnZlU3BhY2VBZG1pc3Npb25TdWJqZWN0UmVzcG9uc2USNAoWcmVxdWVzdF9iaW5kaW'
+    '5nX3NoYTI1NhgBIAEoDFIUcmVxdWVzdEJpbmRpbmdTaGEyNTYSHQoKYWNjb3VudF9pZBgCIAEo'
+    'CVIJYWNjb3VudElkEh0KCnByb2ZpbGVfaWQYAyABKAlSCXByb2ZpbGVJZBIhCgxhY2NvdW50X3'
+    'R5cGUYBCABKAlSC2FjY291bnRUeXBlEjoKGWFjY291bnRfc2VjdXJpdHlfcmV2aXNpb24YBSAB'
+    'KARSF2FjY291bnRTZWN1cml0eVJldmlzaW9uEi4KE3Nlc3Npb25fZXBvY2hfZmxvb3IYBiABKA'
+    'RSEXNlc3Npb25FcG9jaEZsb29yEikKEHByb2ZpbGVfcmV2aXNpb24YByABKARSD3Byb2ZpbGVS'
+    'ZXZpc2lvbhJBCghkZWNpc2lvbhgIIAEoDjIlLnZvaWNlLmF1dGgudjEuU3BhY2VBZG1pc3Npb2'
+    '5EZWNpc2lvblIIZGVjaXNpb24=');
+
+@$core.Deprecated('Use getChatSessionEpochFloorRequestDescriptor instead')
+const GetChatSessionEpochFloorRequest$json = {
+  '1': 'GetChatSessionEpochFloorRequest',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+  ],
+};
+
+/// Descriptor for `GetChatSessionEpochFloorRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getChatSessionEpochFloorRequestDescriptor =
+    $convert.base64Decode(
+        'Ch9HZXRDaGF0U2Vzc2lvbkVwb2NoRmxvb3JSZXF1ZXN0Eh0KCmFjY291bnRfaWQYASABKAlSCW'
+        'FjY291bnRJZA==');
+
+@$core.Deprecated('Use getChatSessionEpochFloorResponseDescriptor instead')
+const GetChatSessionEpochFloorResponse$json = {
+  '1': 'GetChatSessionEpochFloorResponse',
+  '2': [
+    {
+      '1': 'session_epoch_floor',
+      '3': 1,
+      '4': 1,
+      '5': 3,
+      '10': 'sessionEpochFloor'
+    },
+  ],
+};
+
+/// Descriptor for `GetChatSessionEpochFloorResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getChatSessionEpochFloorResponseDescriptor =
+    $convert.base64Decode(
+        'CiBHZXRDaGF0U2Vzc2lvbkVwb2NoRmxvb3JSZXNwb25zZRIuChNzZXNzaW9uX2Vwb2NoX2Zsb2'
+        '9yGAEgASgDUhFzZXNzaW9uRXBvY2hGbG9vcg==');

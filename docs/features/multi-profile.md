@@ -68,6 +68,54 @@
 - **Зайти в другой войс-чат** под текущим профилем нельзя, пока активна войс-сессия другого профиля — сначала нужно выйти из неё. При попытке перейти в другой войс-чат показывается диалог: *"Ты сейчас в войс-чате (Профиль A). Выйти из него и войти сюда?"*. При подтверждении — старая сессия завершается, новая открывается под активным профилем.
 - **Два войс-чата одновременно** — невозможно, даже если это разные профили одного аккаунта.
 
+### Bound control после переключения (accepted target)
+
+`BOUND-VOICE-v1` сохраняет A-owned voice при A → B → C без сохранения
+отозванного bearer A. Voice выдаёт только аутентифицированному A после
+committed admission отдельный opaque `voice_binding_token` (не менее 256 бит
+случайности); сервер хранит digest и точную привязку к account, A profile,
+room kind/id, admission/membership generation, media identity и положительному
+`session_epoch`. Владение аккаунтом само по себе не позволяет B получить binding A.
+
+Каждый bound request требует одновременно действующий **текущий** Auth bearer
+и binding. Gateway проверяет JTI, expiry, status и epoch; Voice проверяет
+trusted Gateway provenance, account, исходный epoch и fresh Auth floor,
+точное поколение и состояние membership. Epoch change отзывает старый binding
+даже с новым bearer. Binding не выдаёт Auth credentials и не меняет глобальный
+principal B/C. Отсутствующая authority или dependency outage дают fail-closed.
+
+Allowlist ограничен self mute/deafen/video/share в существующих правах,
+reissue/reconnect того же admission, status/cleanup-result этого binding и self
+leave. Он не разрешает Start/Accept/Join, move, moderation, End-all или доступ
+к текстовым данным A. Продолжение media повторно проверяет текущие права A;
+права B не заменяют их. Self leave после подтверждения binding остаётся доступен
+при потере A membership/Role rights, чтобы освободить ресурсы. Terminal receipt
+остаётся digest-bound к старому поколению, не даёт media/state grants и не
+адресует последующий rejoin.
+
+Диалог фиксирует destination, account/profile и локальное auth generation.
+Новый intent, logout/account change и B → C (включая возврат к B) отменяют
+старое подтверждение. Cancel сохраняет A. Confirm сериализует cleanup старого
+binding: немедленно останавливает локальное media/reconnect, но сохраняет
+binding и cleanup state до authoritative receipt. Local disconnect, 404,
+participant-left и истёкший LiveKit JWT не доказывают release account fence.
+Ошибка/неизвестный результат сохраняют retryable cleanup и запрещают destination.
+Только после teardown **и** exact-generation cleanup receipt клиент повторно
+проверяет frozen identity и получает её актуальный bearer для обычного admission.
+Смена профиля во время cleanup отменяет destination; новое подтверждение не
+перенаправляется молча. Неудачный destination не восстанавливает A автоматически.
+
+Ordinary DM/group используют единственный durable journal BE-106 и committed
+participant seam BE-102; self group leave удаляет только A, не End-all.
+Space использует существующий BE255 operation/generation и leave recovery.
+MatchSquad, managed GAME_SESSION и federation в этот binding не входят.
+Legacy membership без binding сохраняет media, но требует явного возврата к A
+для authenticated recovery; синтетический binding запрещён.
+
+Это принятый контракт, не заявление о shipped bound controls или live media.
+Исполнение и отрицательная/runtime матрица —
+[bound-voice-profile-switch-exec-plan.md](../testing/bound-voice-profile-switch-exec-plan.md).
+
 ## Монетизация
 
 - Подписка и платежи привязаны к аккаунту
@@ -101,5 +149,15 @@ renewal не может снова заморозить данные. При в�
 
 ## Защита от злоупотреблений
 
-- Ограничение на частоту создания/удаления профилей (антиспам)
+- `CreateProfile` и `DeleteProfile`: по **10 аутентифицированных попыток за
+  скользящий час на аккаунт для каждой операции отдельно**. Смена активного
+  профиля или экземпляра User Service не сбрасывает лимит. Это допускает два
+  полных цикла пяти профилей в час и ограничивает повторное создание/удаление.
+- Попытка учитывается до проверки параметров, владения и тарифного лимита;
+  последующий отказ не возвращает квоту. Неаутентифицированный запрос квоту
+  не расходует. Первичное создание через `EnsurePrimaryProfile` отдельно.
+- Общий Redis выполняет атомарный допуск по серверному времени. Исчерпание
+  возвращает `RESOURCE_EXHAUSTED` (HTTP 429 через Gateway), отсутствие/сбой Redis
+  — `UNAVAILABLE` (HTTP 503). Отказ происходит до обращения к профилям в БД
+  и публикации событий; локального неограниченного режима нет.
 - При удалении профиля данные архивируются на бэкенде; пользователь этого не видит

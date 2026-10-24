@@ -1,0 +1,19 @@
+[rtk] /!\ No hook installed — run `rtk init -g` for automatic token savings
+00:00 +0: loading D:/Git/Voice/.treehouse/Voice-451d38/35/Voice/src/frontend/test/spaces_client_invites_test.dart
+00:00 +0: D:/Git/Voice/.treehouse/Voice-451d38/35/Voice/src/frontend/test/spaces_client_invites_test.dart: createInvite posts to space invites route
+00:00 +1: D:/Git/Voice/.treehouse/Voice-451d38/35/Voice/src/frontend/test/spaces_client_invites_test.dart: listInvites parses invite list
+00:00 +2: D:/Git/Voice/.treehouse/Voice-451d38/35/Voice/src/frontend/test/spaces_client_invites_test.dart: revokeInvite deletes invite route
+00:00 +3: D:/Git/Voice/.treehouse/Voice-451d38/35/Voice/src/frontend/test/spaces_client_invites_test.dart: getInvite loads invite by code
+00:00 +4: D:/Git/Voice/.treehouse/Voice-451d38/35/Voice/src/frontend/test/spaces_client_invites_test.dart: joinByInvite posts empty body and decodes membership
+00:00 +5: D:/Git/Voice/.treehouse/Voice-451d38/35/Voice/src/frontend/test/spaces_client_tree_test.dart: listSpaceTree parses categories and mixed nodes
+00:00 +6: D:/Git/Voice/.treehouse/Voice-451d38/35/Voice/src/frontend/test/spaces_client_tree_test.dart: createCategory posts to space categories route
+00:00 +7: D:/Git/Voice/.treehouse/Voice-451d38/35/Voice/src/frontend/test/spaces_client_tree_test.dart: createVoiceRoom parses voice room response
+00:00 +8: D:/Git/Voice/.treehouse/Voice-451d38/35/Voice/src/frontend/test/spaces_client_tree_test.dart: createSpaceChat maps proto display_name onto tree node
+00:00 +9: D:/Git/Voice/.treehouse/Voice-451d38/35/Voice/src/frontend/test/spaces_client_tree_test.dart: createSpaceChat assigns the returned node to a selected category
+00:00 +10: D:/Git/Voice/.treehouse/Voice-451d38/35/Voice/src/frontend/test/spaces_client_tree_test.dart: category assignment failure marks a newly created chat as partial success
+00:00 +11: D:/Git/Voice/.treehouse/Voice-451d38/35/Voice/src/frontend/test/spaces_client_tree_test.dart: category assignment 5xx marks placement as uncertain
+00:00 +12: D:/Git/Voice/.treehouse/Voice-451d38/35/Voice/src/frontend/test/spaces_client_tree_test.dart: category assignment network failure marks placement as uncertain
+00:00 +13: D:/Git/Voice/.treehouse/Voice-451d38/35/Voice/src/frontend/test/spaces_client_tree_test.dart: createSpaceChat marks gateway 5xx as an uncertain outcome
+00:00 +14: D:/Git/Voice/.treehouse/Voice-451d38/35/Voice/src/frontend/test/spaces_client_tree_test.dart: createSpaceChat marks a network exception as an uncertain outcome
+00:00 +15: D:/Git/Voice/.treehouse/Voice-451d38/35/Voice/src/frontend/test/spaces_client_tree_test.dart: reorderSpaceTree posts ordered node ids to the tree reorder route
+00:00 +16: All tests passed!

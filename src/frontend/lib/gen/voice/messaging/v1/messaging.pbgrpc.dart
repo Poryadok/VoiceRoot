@@ -45,6 +45,14 @@ class MessagingServiceClient extends $grpc.Client {
     return $createUnaryCall(_$sendGameEventMessage, request, options: options);
   }
 
+  /// @voice.security=protected;callers=service:bot
+  $grpc.ResponseFuture<$0.SendBotMessageResponse> sendBotMessage(
+    $0.SendBotMessageRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$sendBotMessage, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.SendMessageResponse> sendMessage(
     $0.SendMessageRequest request, {
     $grpc.CallOptions? options,
@@ -189,6 +197,28 @@ class MessagingServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// Durable cleanup of pins in one frozen whitelisted chat. Messages remain.
+  /// @voice.security=protected;callers=service:bot
+  $grpc.ResponseFuture<$0.ApplyBotChatPinRemovalResponse>
+      applyBotChatPinRemoval(
+    $0.ApplyBotChatPinRemovalRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applyBotChatPinRemoval, request,
+        options: options);
+  }
+
+  /// Exact sealed-manifest membership only; never a purge completion receipt.
+  /// @voice.security=protected;callers=service:bot
+  $grpc.ResponseFuture<$0.GetBotPurgeChatCoverageResponse>
+      getBotPurgeChatCoverage(
+    $0.GetBotPurgeChatCoverageRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getBotPurgeChatCoverage, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.ForwardMessageResponse> forwardMessage(
     $0.ForwardMessageRequest request, {
     $grpc.CallOptions? options,
@@ -327,6 +357,11 @@ class MessagingServiceClient extends $grpc.Client {
       '/voice.messaging.v1.MessagingService/SendGameEventMessage',
       ($0.SendGameEventMessageRequest value) => value.writeToBuffer(),
       $0.SendGameEventMessageResponse.fromBuffer);
+  static final _$sendBotMessage =
+      $grpc.ClientMethod<$0.SendBotMessageRequest, $0.SendBotMessageResponse>(
+          '/voice.messaging.v1.MessagingService/SendBotMessage',
+          ($0.SendBotMessageRequest value) => value.writeToBuffer(),
+          $0.SendBotMessageResponse.fromBuffer);
   static final _$sendMessage =
       $grpc.ClientMethod<$0.SendMessageRequest, $0.SendMessageResponse>(
           '/voice.messaging.v1.MessagingService/SendMessage',
@@ -420,6 +455,17 @@ class MessagingServiceClient extends $grpc.Client {
       '/voice.messaging.v1.MessagingService/UnpinMessagesBySenderInChats',
       ($0.UnpinMessagesBySenderInChatsRequest value) => value.writeToBuffer(),
       $0.UnpinMessagesBySenderInChatsResponse.fromBuffer);
+  static final _$applyBotChatPinRemoval = $grpc.ClientMethod<
+          $0.ApplyBotChatPinRemovalRequest, $0.ApplyBotChatPinRemovalResponse>(
+      '/voice.messaging.v1.MessagingService/ApplyBotChatPinRemoval',
+      ($0.ApplyBotChatPinRemovalRequest value) => value.writeToBuffer(),
+      $0.ApplyBotChatPinRemovalResponse.fromBuffer);
+  static final _$getBotPurgeChatCoverage = $grpc.ClientMethod<
+          $0.GetBotPurgeChatCoverageRequest,
+          $0.GetBotPurgeChatCoverageResponse>(
+      '/voice.messaging.v1.MessagingService/GetBotPurgeChatCoverage',
+      ($0.GetBotPurgeChatCoverageRequest value) => value.writeToBuffer(),
+      $0.GetBotPurgeChatCoverageResponse.fromBuffer);
   static final _$forwardMessage =
       $grpc.ClientMethod<$0.ForwardMessageRequest, $0.ForwardMessageResponse>(
           '/voice.messaging.v1.MessagingService/ForwardMessage',
@@ -519,6 +565,15 @@ abstract class MessagingServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.SendGameEventMessageRequest.fromBuffer(value),
         ($0.SendGameEventMessageResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.SendBotMessageRequest,
+            $0.SendBotMessageResponse>(
+        'SendBotMessage',
+        sendBotMessage_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.SendBotMessageRequest.fromBuffer(value),
+        ($0.SendBotMessageResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.SendMessageRequest, $0.SendMessageResponse>(
             'SendMessage',
@@ -678,6 +733,24 @@ abstract class MessagingServiceBase extends $grpc.Service {
             $0.UnpinMessagesBySenderInChatsRequest.fromBuffer(value),
         ($0.UnpinMessagesBySenderInChatsResponse value) =>
             value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApplyBotChatPinRemovalRequest,
+            $0.ApplyBotChatPinRemovalResponse>(
+        'ApplyBotChatPinRemoval',
+        applyBotChatPinRemoval_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApplyBotChatPinRemovalRequest.fromBuffer(value),
+        ($0.ApplyBotChatPinRemovalResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetBotPurgeChatCoverageRequest,
+            $0.GetBotPurgeChatCoverageResponse>(
+        'GetBotPurgeChatCoverage',
+        getBotPurgeChatCoverage_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetBotPurgeChatCoverageRequest.fromBuffer(value),
+        ($0.GetBotPurgeChatCoverageResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ForwardMessageRequest,
             $0.ForwardMessageResponse>(
         'ForwardMessage',
@@ -829,6 +902,15 @@ abstract class MessagingServiceBase extends $grpc.Service {
 
   $async.Future<$0.SendGameEventMessageResponse> sendGameEventMessage(
       $grpc.ServiceCall call, $0.SendGameEventMessageRequest request);
+
+  $async.Future<$0.SendBotMessageResponse> sendBotMessage_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.SendBotMessageRequest> $request) async {
+    return sendBotMessage($call, await $request);
+  }
+
+  $async.Future<$0.SendBotMessageResponse> sendBotMessage(
+      $grpc.ServiceCall call, $0.SendBotMessageRequest request);
 
   $async.Future<$0.SendMessageResponse> sendMessage_Pre($grpc.ServiceCall $call,
       $async.Future<$0.SendMessageRequest> $request) async {
@@ -987,6 +1069,24 @@ abstract class MessagingServiceBase extends $grpc.Service {
   $async.Future<$0.UnpinMessagesBySenderInChatsResponse>
       unpinMessagesBySenderInChats($grpc.ServiceCall call,
           $0.UnpinMessagesBySenderInChatsRequest request);
+
+  $async.Future<$0.ApplyBotChatPinRemovalResponse> applyBotChatPinRemoval_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ApplyBotChatPinRemovalRequest> $request) async {
+    return applyBotChatPinRemoval($call, await $request);
+  }
+
+  $async.Future<$0.ApplyBotChatPinRemovalResponse> applyBotChatPinRemoval(
+      $grpc.ServiceCall call, $0.ApplyBotChatPinRemovalRequest request);
+
+  $async.Future<$0.GetBotPurgeChatCoverageResponse> getBotPurgeChatCoverage_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.GetBotPurgeChatCoverageRequest> $request) async {
+    return getBotPurgeChatCoverage($call, await $request);
+  }
+
+  $async.Future<$0.GetBotPurgeChatCoverageResponse> getBotPurgeChatCoverage(
+      $grpc.ServiceCall call, $0.GetBotPurgeChatCoverageRequest request);
 
   $async.Future<$0.ForwardMessageResponse> forwardMessage_Pre(
       $grpc.ServiceCall $call,

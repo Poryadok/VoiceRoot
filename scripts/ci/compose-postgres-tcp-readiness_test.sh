@@ -50,8 +50,8 @@ docker_exec() {
 }
 
 [[ -f "$FIXTURE" ]] || fail "missing held-init fixture"
-docker image inspect postgres:16-alpine >/dev/null \
-  || fail "postgres:16-alpine is required locally"
+docker image inspect postgres:18-alpine >/dev/null \
+  || fail "postgres:18-alpine is required locally"
 docker image inspect ghcr.io/jqlang/jq:1.7 >/dev/null \
   || fail "ghcr.io/jqlang/jq:1.7 is required locally"
 
@@ -84,9 +84,10 @@ created_volume=true
 docker run -d --name "$container" --network "$network" \
   --label "${label_key}=${run_id}" \
   -e POSTGRES_USER=voice -e POSTGRES_PASSWORD=voice-t104-test-only -e POSTGRES_DB=voice \
+  -e PGDATA=/var/lib/postgresql/data \
   -v "${volume}:/var/lib/postgresql/data" \
   -v "${fixture_mount}:/docker-entrypoint-initdb.d/01-hold-init.sh:ro" \
-  postgres:16-alpine >/dev/null
+  postgres:18-alpine >/dev/null
 created_container=true
 
 deadline=$((SECONDS + 60))

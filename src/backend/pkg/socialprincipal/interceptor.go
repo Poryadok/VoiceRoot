@@ -19,6 +19,8 @@ import (
 
 func Method(target string) string {
 	switch target {
+	case "auth-admission":
+		return "/voice.user.v1.UserService/GetSpaceAdmissionProfileEligibility"
 	case "user":
 		return "/voice.user.v1.UserService/GetPrivacySettings"
 	case "space":
@@ -33,6 +35,10 @@ func Method(target string) string {
 		return "/voice.user.v1.UserService/GetNotificationRoutingPresence"
 	case "messaging":
 		return "/voice.user.v1.UserService/GetScheduledMessageDispatchPresence"
+	case "space-voice-communication":
+		return "/voice.space.v1.SpaceService/ResolveVoiceRoomAccess"
+	case "space-messaging-communication":
+		return "/voice.space.v1.SpaceService/ResolveMemberCommunicationState"
 	}
 	return ""
 }
@@ -42,6 +48,10 @@ func Method(target string) string {
 // whole service merely because it has a verified Social principal.
 func AllowsMethod(target, method string) bool {
 	switch target {
+	case "auth-admission":
+		return method == Method(target)
+	case "space-voice-communication", "space-messaging-communication":
+		return method == Method(target)
 	case "user":
 		switch method {
 		case "/voice.user.v1.UserService/GetPrivacySettings",
@@ -283,6 +293,15 @@ func RequireSocialForMethod(ctx context.Context, target, method string, req prot
 }
 
 func expectedIssuer(target string) string {
+	if target == "auth-admission" {
+		return "auth"
+	}
+	if target == "space-voice-communication" {
+		return "voice"
+	}
+	if target == "space-messaging-communication" {
+		return "messaging"
+	}
 	if target == "file" {
 		return "file"
 	}
@@ -299,6 +318,12 @@ func expectedIssuer(target string) string {
 		return "messaging"
 	}
 	return "social"
+}
+
+// RequiresMutualTLS preserves legacy listener settings while requiring both
+// transport identities for newly migrated protected authority capabilities.
+func RequiresMutualTLS(capability string) bool {
+	return capability == "auth-admission" || capability == "messaging" || capability == "space-voice-communication" || capability == "space-messaging-communication"
 }
 
 // CheckDomain preserves separately migrated ordinary callers while enforcing

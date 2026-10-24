@@ -1,5 +1,48 @@
 # Voice Service
 
+## Legacy public principal startup
+
+The pre-cut executable validates and binds its own public HTTPS JWKS publisher
+before initial Space admission reconciliation. It publishes the same configured
+current and next public signing keys; it exposes no readiness or mutation route.
+TLS/bind errors fail startup synchronously, and unexpected serving failure is
+fatal even during recovery. Cold Space verifiers can therefore authenticate
+recovery requests for persisted ACTIVE/COMMITTED admissions. This ordering does
+not move any listener ahead of the additive native executable's protected
+installation/cohort gates and does not activate the native roster relay.
+
+## Space communication timeout (BE-044-TIMEOUT-v1)
+
+Accepted target: the [Space timeout matrix](../features/spaces.md#communication-timeout-be-044-timeout-v1-accepted-target)
+denies fresh Space join/token/reissue and self/moderator move into a room for
+the timed-out target. Room access must include fresh versioned communication
+evidence from the same Space snapshot as membership/active/access_epoch. Missing,
+legacy/default/malformed capability is Unavailable, never an implicit CLEAR.
+Covered access uses signed protected service authority without a static-bearer
+fallback. Role/Admin cannot override a timeout; no consumer-local expiry/cache
+may grant admission. Leave/disconnect/cleanup remain allowed under their ACLs.
+
+Extend the enabled access invalidation consumer: reread current whole-Space
+membership, timeout and Role authority, treating event hints only as hints.
+TIMED_OUT ejects the exact current media incarnation, including listen-only;
+unknown authority retains the event unacked and denies new grants. Duplicate or
+reordered events cannot restore an older state. Set/replace/remove use Space's
+existing epoch/outbox trigger, not a second increment. Removal/expiry allows a
+fresh authorized join, never automatic rejoin. Preserve the existing ejection
+target (2s p95/5s max) and honest <=60s stale bearer replay limitation, with
+reconcile/re-eject on stale reconnect. Do not activate R22.3/D2/D3 foundations.
+Mock ejection alone does not prove the required actual two-client media stop.
+
+Voice uses the full `VOICE_SPACE_COMMUNICATION_` client tuple (`GRPC_ADDR`,
+`TLS_CA_FILE`, `CLIENT_CERT_FILE`, `CLIENT_KEY_FILE`) and its existing Voice
+service signer/protected JWKS publisher. The ordinary `SPACE_GRPC_ADDR` remains
+for separately authorized membership/privacy contracts; it never supplies a
+communication grant. Legacy static bearer configuration is not a fallback.
+Absent capability denies covered admission; partial or explicitly empty client
+configuration fails startup. Fresh decision deadlines cover subsequent Role,
+admission transaction and token response work. Existing source-disabled Space
+move paths remain disabled; timeout enforcement does not enable transfers.
+
 ## Обзор
 
 Оркестрация голосовых/видео-звонков и screen share через LiveKit SFU. Сам сервис не обрабатывает медиа-потоки.
@@ -13,6 +56,135 @@ workers ещё не зарегистрированы. Отсутствующий
 этот режим; заданный DSN обязан успешно подключиться, а `/ready` проверяет
 базовую схему R22.2 (`000001`). D1 paths явно проверяют наличие `000002`, не
 делая source-disabled readiness зависимой от новой таблицы.
+
+## Ordinary DM/group SDK lifecycle (opt-in runtime; rollout unverified)
+
+BE106-ORDINARY-SDK-v1 ([decision part 1](http://192.168.0.109:30990/?project=voice&task=BE-106#comment-c3),
+[part 2](http://192.168.0.109:30990/?project=voice&task=BE-106#comment-c4))
+activates only the ordinary DM/group lifecycle. The native journal/coordinator,
+handler/read/token routing, exact conversion-source cleanup and persisted recovery
+and event relay are wired by `VOICE_ORDINARY_SDK_ENABLED=true`. This runtime does
+not register R22, Space watcher/roster, GAME_SESSION, MatchSquad
+or federation paths. Their existing dispatch/ownership guards remain authoritative.
+The resumable implementation plan is
+[BE-106 ExecPlan](../../.agent/execplans/be106-ordinary-lifecycle.md).
+
+### Startup and controlled cutover
+
+Before enabling, operators must stop every legacy ordinary writer, close its
+previous SDK rooms and finish/reconcile legacy call/account ownership. This is an
+explicit controlled drain, not automatic adoption. Set
+`VOICE_ORDINARY_LEGACY_DRAINED=true` only with that drain evidence. Startup requires
+the attestation, migration `000012_ordinary_calls`, PostgreSQL, durable Redis,
+LiveKit credentials, NATS, User and Chat configuration. It scans active ordinary
+Redis records and rejects any without matching native operation provenance;
+foreign resource owners retain their existing dispatch. The scan is not a fence
+against concurrently serving legacy processes. Rollout must quiesce them first.
+
+With the flag absent/false, a nonempty native journal refuses startup rather than
+routing native projections through legacy tuple-only mutation. `/ready` checks
+the native schema while enabled. Recovery/outbox workers use persisted leases;
+unfinished creation is scheduled after its bounded preparation window, and old
+terminal room names continue reconciliation indefinitely. This source delivery
+does not establish drain completion, enabled deployment or actual SFU acceptance.
+
+### Admission and authority
+
+One ordinary PostgreSQL journal owns immutable operation/room IDs, committed
+membership generations, exact shared account-fence ownership, effects and event
+outbox. Redis is a rebuildable compatibility projection. DM room
+`voice-dm-<room UUID>` is ensured before RINGING; group room
+`voice-group-<room UUID>` before ACTIVE. UUIDs/names are never reused. Ring expiry
+is committed RINGING time plus 30 seconds; Accept requires `now < expires_at`.
+Internal PREPARING is not a new public CallStatus.
+
+Trusted caller/Chat/privacy/account and SDK-conversion prechecks precede mutation.
+Pending admission reserves capacity/account/profile slots durably before external
+effects; those fences cannot expire/reassign while an SDK effect may have run.
+Pending admission is visible as busy to conversion quiescence, but is not logical
+membership and cannot authorize tokens or participant facts. Preserve the existing
+post-reservation SDK-conversion recheck. No database transaction spans network IO.
+Finalization CAS revalidates the same operation/generation, room status/version,
+deadline and exact fence ownership, then commits membership and stable event
+intents together. Ordinary read/token paths consult this authority before Redis;
+pending, closing or unavailable authority fails closed.
+
+The shared serialization protocol is
+[BE106-SDK-CONVERSION-SERIALIZATION-v1](http://192.168.0.109:30990/?project=voice&task=BE-106#comment-c10).
+Ordinary transactions lock their room first, then the complete account/profile
+identity union using sorted, deduplicated actual signed PostgreSQL hash keys in
+two-int advisory namespace `0x564F4943`, before mapping/fence writes. Conversion
+locks its operation then the same identity barrier and performs only nonlocking
+native-source reads, never ordinary room row locks. Both use READ COMMITTED;
+ownership reads are separate statements after acquiring the barrier. Pending or
+fenced conversion denies the source profile and every profile of the target
+account. Activated conversion retains only retired source-profile denial. Cleanup
+is always allowed. Immutable receipt provenance binds ordinary cleanup to exact
+room, operation and membership generation. Missing authority is not empty source.
+Space/Game writers need their own participation before global conversion safety
+can be asserted.
+
+The native A3 consumer seam is
+[BE011-SOURCE-SEAM-v1](http://192.168.0.109:30990/?project=voice&task=BE-011#comment-c2).
+Keep a separate roster counter from the all-mutation journal CAS. Each committed
+profile join/leave gets a distinct consecutive roster version and frozen event
+in the same transaction, ordered by UUID bytes within a batch; DM Accept advances
+twice atomically. Ringing, pending/no-op admission, SDK cleanup and retries do not
+advance this counter. Store each admitted actor's own verified session epoch,
+never an epoch reconstructed from Auth floors. A common private reader accepts
+one read-only REPEATABLE READ transaction across native sources and takes no
+locks. Source coverage, Space writer integration and the trusted ordinary
+reconnect producer remain separate activation requirements.
+
+SDK create retry uses the stored intent/name. Before READY wins, uncertainty,
+cancellation, failure or restart chooses ABORTING and compensates that exact name;
+a late create cannot ring, issue tokens or revive it. If READY already won before
+response loss, preserve the accepted call. Public Start has no new idempotency
+field/promise: pending/live repeats retain conflict semantics; GetActiveCall
+recovers an accepted call after response loss. Unjournalled legacy Redis rooms
+need validated explicit adoption or controlled drain, never synthetic identity.
+
+### Termination, recovery and media identities
+
+One room/membership transaction elects termination, denies new admission/token
+issuance, invalidates pending admissions and records committed-member snapshots,
+terminal event intents and exact cleanup ownership. Decline applies only to
+RINGING. Either DM participant may End/Leave; preserve existing group End authority.
+Non-last group Leave removes only self; last Leave versus Join is serialized at
+this same transaction boundary. Failed tentative admissions produce no member
+facts, while committed transitions retain their facts after later projection,
+cleanup, response or NATS failure. The shared fact contract is
+[BE102-COMMITTED-ADMISSION-v1](http://192.168.0.109:30990/?project=voice&task=BE-102#comment-c5).
+
+CloseRoom is required for decline, expiry, DM End/Leave, group End and final Leave;
+NotFound proves absence, timeout/unavailable does not. Keep CLOSING/fences and
+retry on uncertainty, returning UNAVAILABLE/deadline rather than cleanup success.
+Confirmed cleanup precedes exact-generation fence release and required Redis
+projection convergence. Non-final Leave journals LEAVING and removes the stored
+media identity. Public terminal decisions/authorized replay remain recoverable
+after membership projection removal. Stale operations cannot overwrite a winner.
+
+Each real ordinary admission freezes opaque media identity
+`ov:<profile UUID>:<membership UUID>`; refresh retains it, leave/rejoin changes it.
+Public roster/events keep profile IDs and client mapping resolves media identity
+back to the profile. Late old removal cannot eject the newer admission. Space,
+MatchSquad and Game identity formats stay unchanged. Shared account fences use
+ordinary operation/generation CAS without commandeering Space operation IDs.
+
+Persist retry scheduling/worker ownership and use bounded fresh contexts. Restart
+aborts unfinished preparation, resumes cleanup, repairs committed projection and
+outbox, expires ringing by CAS and preserves valid ACTIVE calls. Unknown commit
+results resolve by durable readback, never guessed rollback or TTL takeover.
+Outbox replay retains original event IDs/payload/recipients/order; success means
+the accepted journal/SDK/projection boundary and durable intent, not NATS delivery.
+
+DeleteRoom/RemoveParticipant prove current disconnect, not permanent bearer-token
+revocation. The accepted guarantee is durable application admission denial plus
+confirmed current cleanup, with ongoing reconciliation of retired names/identities
+against stale reconnect/late effects. Compact terminal tombstones are not collected
+solely at JWT expiry; an old bearer may briefly reconnect before ejection. Strict
+deny-before-connect is a separate SFU admission-verifier decision. Source tests,
+handshake and signaling are not two-client real-media acceptance.
 
 ## Ответственность
 
@@ -28,6 +200,14 @@ workers ещё не зарегистрированы. Отсутствующий
 - PTT / VAD mode
 - Ограничение: один активный voice на профиль
 - Множественные screen share потоки (до 3 одновременно)
+
+DM and standalone group-call LiveKit JWTs carry room-scoped `roomJoin=true`,
+`canPublish=true`, and `canSubscribe=true` grants explicitly. An explicit
+`canPublish=false` supplied by the admission path remains a publish denial;
+it does not prevent listening. This preserves the ordinary call media defaults
+without relying on omitted LiveKit claims. No room administration grants are
+issued, and existing membership checks, participant identity and expiry remain
+authoritative. Space-room grants follow the separate Role-owned policy below.
 
 ### Subscription enforcement projection (A7 accepted target; not implemented)
 
@@ -74,6 +254,35 @@ with a successful audio attempt between them. Those historical logs do not
 distinguish JWKS, replay Redis and Auth-floor failures. Preserve all outcomes;
 use the dependency event from a subsequent controlled acceptance attempt to
 identify the failing stage before changing trust or transport configuration.
+
+### Ordinary participant NATS facts (BE-102 accepted contract)
+
+For ordinary DM and standalone group calls, a participant is a committed member
+of an ACTIVE logical call. Invitations, token issuance, pending reservations and
+SFU connectivity are not membership. Group Start commits one joined fact for its
+initiator; absent-to-present Join commits one. Existing-member Join, failed or
+compensated admission and state changes commit none. Leave commits one left;
+the last leave does not emit a second terminal left. Whole-call termination
+commits one left per remaining membership in its winning snapshot. DM ringing,
+rejection and expiry emit none; the winning accept joins both profiles atomically,
+and active End/Leave leaves both once. Terminal/no-op attempts emit none. A real
+leave/rejoin creates a new membership generation.
+
+BE106-ORDINARY-SDK-v1 PostgreSQL transition/outbox is the single authority:
+effects are encoded in the same transaction as final committed membership.
+Never derive them from tentative Redis state or a handler read/write pair.
+Ambiguous/post-commit failures preserve saved operations and event IDs; fresh
+delivery retries do not rebuild facts or compensate committed membership.
+
+`VoiceParticipantJoined`/`VoiceParticipantLeft` carry only UUID `room_id` and
+`profile_id`; `VoiceStreamEvent` carries persisted UUID `event_id` and original
+`occurred_at`. Subjects are exactly `voice.participant_joined` and
+`voice.participant_left` on `voice_events`. There is no recipient list, roster
+version, new WS operation or push. Realtime, Notification and Analytics ACK these
+unsupported facts without fanout or synthetic analytics records. Existing
+`call_started` and `voice.member_joined` behavior stays unchanged. This does not
+activate Phase0/Space roster, managed rooms, MatchSquad or federation, and source
+presence alone is not deployment or media delivery proof.
 
 ## API (gRPC)
 
@@ -434,6 +643,14 @@ is retained with the media grant. `VOICE_ROLE_GRPC_ADDR` and its complete
 provisioning. Incomplete settings fail startup; there is no ordinary-listener
 fallback.
 
+The same private Role client carries `CheckPermission` for `VOICE_JOIN`,
+`VOICE_SPEAK`, `VOICE_SCREEN_SHARE`, `VOICE_MUTE_OTHERS`, and
+`VOICE_MOVE_OTHERS`. Each call signs the canonical Space, profile, room and exact
+permission with a fresh request ID, replacing incoming authority metadata.
+The two-second client budget remains bounded by the original caller deadline;
+an expired call or missing decision cannot grant permission. The ordinary
+`ROLE_GRPC_ADDR` client is not used for these decisions.
+
 The user-principal listener validates local TLS configuration and replay Redis
 before startup, but starts with an empty Gateway JWKS cache. Gateway waits for
 this listener before serving its own key endpoint, so requiring an initial key
@@ -478,11 +695,145 @@ every issue/reissue. On membership, `VOICE_JOIN` or `VOICE_SPEAK` loss, self-hos
 LiveKit actively ejects the current participant/media within **2 s p95** and
 **5 s max**. Voice denies a fresh grant/reissue after the authorization change and
 the client retries reconnect for at most 30 s only while its authenticated session
-and epoch are unchanged. A previously issued bearer JWT can still reconnect until
-its ≤60-second expiry: without a LiveKit-side token verifier this is not a
-cryptographic deny-before-connect guarantee. Such stale reconnect is best-effort
-reconciliation followed by the same eject SLA. No cloud media movement is a target:
+and epoch are unchanged. Removing a participant on self-hosted LiveKit does not
+cryptographically revoke issued bearers. LiveKit can refresh a connected client's
+token beyond the original Voice-issued ≤60-second expiry; that expiry is not a
+bound on every refreshed bearer. Without a LiveKit-side verifier there is no
+deny-before-connect or zero-transient-media guarantee. Reconciliation must retain
+exact retired identities beyond the original expiry and re-eject observed stale
+reconnects within the same SLA; a five-second periodic scan alone does not prove
+2 s p95 / 5 s max. Strict SFU admission verification remains separate scope.
+No cloud media movement is a target:
 user grants remain self-hosted by default.
+
+### Moderator mute (accepted target; BE-273)
+
+The accepted `BE273-MODERATOR-MUTE-v1` decision defines the following additions;
+the RPC, schema, source grants and live proof are not implemented by this
+documentation change. Scope is self-hosted canonical Space voice rooms. DM,
+standalone group, MatchSquad, GameSession and federation policies are unchanged.
+Do not activate full-roster/watchers/moves or source-disabled R22.3/D2/D3 here.
+
+**State and authority.** Voice persists `moderator_muted` keyed by
+`(space_id, voice_room_id, target_profile_id)`, independent of transport/admission
+generation. It survives disconnect, leave/rejoin, room empty/reopen, restart,
+Role changes and account-session refresh; another room/profile is unaffected.
+Only authorized clear or permanent logical room/profile/Space deletion removes
+the restriction. Keep `self_is_muted` distinct: either changed moderation flag
+sets/leaves it true. Clearing never opens a microphone, activates a device,
+grants a floor or grants `VOICE_SPEAK`. While restricted all audio-enabling paths,
+including self-unmute and broadcast/floor-related enabling, deny. Self-mute,
+deafen, leave and independently authorized non-audio actions remain available.
+
+The actor is only the verified Gateway delegated principal with fresh Auth
+epoch/profile ownership, current Space membership/discovery,
+`VOICE_MUTE_OTHERS` in the exact canonical room and `SPACE_VIEW_MEMBER_LIST`
+before selecting/disclosing the target. Actor media presence is unnecessary.
+Owner bypass remains Role-owned; Voice adds no hierarchy/immunity rule.
+`actor_profile_id == target_profile_id` denies, including self-clear by a
+moderator. The target must be a current Space member. A new mute requires a
+committed `ACTIVE` participant in this room; tentative admission does not count.
+Clear may address an offline current member with an existing restriction.
+Repeating the current desired state is a no-op, with no new media effect/event.
+BE-044 timeout remains an additional admission/media deny, including listeners;
+it does not itself remove moderator administration rights.
+
+**Protected surface.** Add `SetVoiceRoomParticipantMute` on the existing signed
+Voice user listener and
+`POST /api/v1/spaces/{space_id}/voice-rooms/{voice_room_id}/participants/{target_profile_id}/mute`.
+Path IDs are canonical and body contains required presence-aware boolean
+`moderator_muted`, UUID `operation_id`, and `expected_moderation_version` (zero
+only for never-created state). No body actor/account/media identity is trusted.
+Authorized state reads disclose additive `moderator_muted`, `self_is_muted` and
+`moderation_version`; occupancy-only output never exposes them or a target ID.
+Compatibility `is_muted` means effective audio mute; old client patches cannot
+clear the durable restriction. A receipt contains `operation_id`,
+`target_profile_id`, `moderator_muted`, `self_is_muted` (true when changed),
+`moderation_version` and `enforcement_completed_at`. It is not a token or proof
+of permanent bearer revocation.
+
+Use the existing 24-hour `(actor_profile_id, operation_id, method, canonical
+request)` ledger. Exact retry resumes/replays the same operation; changed input
+conflicts. Monotonic moderation-version CAS orders opposing moderator commands;
+one pending transition per target/key gives competing transitions `409` until
+convergence. A desired-state no-op returns the current version without effect.
+Completed replay still requires current authenticated actor/discovery, never
+restores superseded state and creates no new effect. After ledger expiry the
+version CAS still rejects historical updates against a later state.
+
+Errors follow the existing surface: `400 invalid_argument` for missing/invalid
+fields, `401 unauthenticated`, generic `404 not_found` for undiscoverable,
+nonmember or absent resources without target disclosure, `403 permission_denied`
+for explicit policy deny/self-target/self-unmute, `409 failed_precondition` for
+stale version, non-active target on first mute, inactive room or conflicting
+pending transition, and `503 unavailable` for unknown dependency/capability/media
+outcome. Pre-decision denial has no restriction/roster/grant/event side effect.
+Post-commit failure preserves the durable decision and resumes by the same ID.
+
+**Audio sources.** Extend the same protected Role room-grant projection with
+versioned explicit video/share-source capability, store the issued effective
+source vector in the Space admission, and resolve fresh on join/reissue and
+Role invalidation. Unknown/legacy capabilities cannot authorize unproven sources.
+
+| Source | Required current permission and local condition |
+|---|---|
+| microphone | `VOICE_SPEAK` and not moderator-muted |
+| screen-share audio | `VOICE_SPEAK`, `VOICE_SCREEN_SHARE` and not moderator-muted |
+| camera | `VOICE_VIDEO` |
+| screen-share video | `VOICE_SCREEN_SHARE` |
+
+Membership/Auth/timeout/`VOICE_JOIN` and existing screen-share admission/limits
+still intersect the vector. Set `canPublishSources` to the explicit nonempty
+allowed vector; empty vector means `canPublish=false`, never true with omitted
+allowlist. Microphone mute must not become permanent all-track denial. Track
+source/kind validation must reject audio labelled as an allowed video source on
+the pinned SFU; this is not content inspection of audio encoded into video.
+Neither `MutePublishedTrack` nor modifying Role permissions prevents republish.
+
+**Transaction, enforcement and recovery.** Serialize moderation with the existing
+durable Space room-head/admission authority. One transaction stores desired
+flag/version, actor/target, operation receipt/pending effect, stable state-change
+intent and captured current admission tuple: trusted account/profile/Auth epoch,
+Space/logical room, call room/generation, admission operation/generation and
+exact LiveKit room/identity. No database transaction spans a network call.
+
+Any changed flag retires that exact current media incarnation using existing
+`BeginRoomLeave` / revoker / `CompleteRoomLeave` and generation-bound fence
+release. This temporarily interrupts all current target media, including video
+and listening, before fresh authorized admission with the new source vector;
+it is not a persistent video/listen ban. Other targets/rooms stay independent.
+No unordered in-place `UpdateParticipant` relaxation is introduced. Late
+operations may touch only retired identities, never a replacement generation.
+
+Join/reissue finalization checks the moderation version in that same serialized
+authority: a grant begun before mute cannot later commit unrestricted media.
+Unresolved old cleanup blocks new target admission; no unconditional rollback or
+second fence. Confirmed removal/NotFound and exact release permit fresh
+self-muted admission. Clearing also requires fresh admission/grant when media
+existed, never automatic mic activation. The existing ≤30-second same-session
+client retry policy is not a new auto-rejoin feature.
+
+Immediately trigger durable cleanup; measure active ejection from decision
+commit at 2 s p95 / 5 s max and use the same bound for observed stale reconnect.
+Success means desired state committed plus confirmed cleanup/projection receipt;
+confirmed target absence suffices. SDK timeout/cancellation/transport failure is
+unknown, never proof of absence. Post-commit SDK/DB/Redis failure leaves the
+pending decision/effect intact, blocks target grants and returns `503` or the
+transport deadline/cancellation. Same-operation retries and independently bounded
+recovery contexts with backoff converge after crash/response loss. Recovery must
+not recreate permanently deleted resources or eject a newer admission.
+
+Extend the existing Space reconciler with exact retired identities even after
+active roster/admission changes. Never reuse those identities or drop tombstones
+merely at original JWT expiry; connected-client refreshed bearers remain a
+reconciliation risk. There is no second lifecycle coordinator or ordinary-call
+membership outbox. Stable Voice state-change intent deduplicates one moderation
+version and uses only existing authorized state delivery, with no occupancy-only
+identity/state disclosure; NATS failure never rolls back the restriction.
+Auth/Space/Role epochs, moderation version, roster epoch and media generation
+remain separate values. Source/grant, deterministic concurrency/failure tests and
+pinned actual-media proof are specified in the
+[ExecPlan](../testing/space-moderator-mute-exec-plan.md).
 
 **Roster.** `SPACE_VIEW_MEMBER_LIST` permits full room roster fields
 `profile_id`, display snapshot, muted/deafened/video/speaking state; a Space member
@@ -552,6 +903,94 @@ Voice process instances stateless — масштабируются горизо�
 
 ## P3 Space lifecycle participant (target)
 
+### Native admission workflow ownership
+
+Migration `000015_space_admission_ownership` adds
+`voice_space_media_admission_owners`. A fresh admission creates a random private
+owner token and owner epoch `1` in the transaction before its first durable room
+head claim. Ownership is separate from immutable admission operation/media,
+room and P3 lifecycle generations. Takeover never regenerates event IDs,
+payloads, account-fence tuples or room identities.
+
+Authority expires on PostgreSQL time after 30 seconds. The executing foreground
+or recovery workflow renews every five seconds using a two-second DB budget;
+renewal cannot revive an expired/replaced owner. This detection window covers
+multiple bounded recovery effects and six renewal opportunities. It never
+extends the foreground's existing two-second Space communication decision
+deadline, cached grants, bearer expiry or provider admission authority. Failed
+or uncertain renewal cancels forward work. Workflow completion/cancellation
+relinquishes only the exact token/epoch; failed acknowledgement leaves the
+durable journal and bounded lease for later readback/recovery.
+
+Every forward journal mutation and owner-driven abort/fence-release/cleanup
+completion verifies the current unexpired token/epoch under the existing Space
+barrier, room and sorted identity lock order. It first acquires the owner row's
+exclusive lock, then checks token, epoch and fresh PostgreSQL time in a separate
+statement. A valid transaction retains that lock through commit and may finish
+after its lease deadline while waiting for downstream rows; takeover serializes
+after it. A new transaction or renewal must acquire the lock and check freshness
+again, so a lock wait cannot preserve a pre-lock lease observation or revive an
+expired owner. SQL authority does not carry into a separate Redis effect or ACK
+transaction. Recovery enumeration is only a
+candidate list: healthy owners are filtered before the page limit. An atomic
+claim rechecks current eligibility and state under the Space barrier and room
+head, then rotates the token and increments its epoch. Expired/relinquished
+PREPARED/FENCED work becomes ABORTING; COMMITTED-unapplied work uses its freshly
+read state and authority to roll forward or deny. A stale PREPARED snapshot
+cannot select an abort after a later commit. A committed creator can restore
+its own missing shell from its immutable journal; other joiners still require
+the finalized creator/survivor witness. Orphan heads without an admission use
+the same locked owner-expiry arbitration, never a fixed head age.
+
+Redis has a separate `space_admission_dispatch:<operation UUID>` gate containing
+a fresh incarnation, RESTORING/READY phase, owner epoch and allow/deny state.
+Dispatch tickets bind both the Space lifecycle gate and this admission gate.
+After observing a missing/replaced gate, maintenance installs RESTORING and
+reads fresh PostgreSQL authority before publishing READY. Redis projection
+transactions WATCH and verify the original admission incarnation/epoch at the
+sink, including retries; delayed callbacks cannot adopt a newer gate. Recovery
+first durably takes ownership, then establishes admission DENY before exact
+projection drain, account-fence release and cleanup completion. PostgreSQL
+records the matching `dispatch_fenced_epoch`; an unknown Redis result cannot
+produce that acknowledgement. A lost gate remains fail-closed and terminal
+abort cannot restore forward dispatch.
+
+Owned revocation uses explicit `BeginOwnedRoomLeave`/`CompleteOwnedRoomLeave`
+arguments and an owner-bound sink loader. Missing or replaced ownership fails
+before Redis mutation and before an idempotent terminal return. Verified public
+leave, authority-loss cleanup and P3 captured drain use separate restrictive
+APIs: they persist REVOKING and obtain an exact admission tuple with the current
+owner epoch, without acquiring or borrowing a writer token. The full expected
+account/profile/Space/room/incarnation/identity tuple is compared under canonical
+locks before any restrictive SQL mutation. Both fencers validate their explicit
+owner or restrictive target before allocating even a missing Redis gate, then
+reload authority after gate observation. Owned DENY APIs reject forward LIVE
+state. Their loader can
+only publish DENY for that persisted restrictive target. A takeover invalidates
+the old target and acknowledgement; cleanup must explicitly obtain a fresh
+target and re-fence. Redis revocation transactions check the captured DENY nonce
+and epoch as well as the immutable tuple in the same WATCH/EXEC. Removing owner
+context never selects the restrictive path, and old owned calls cannot fall
+back to it. P3 retains its existing captured-target and provider retirement
+proof requirements.
+
+Native startup requires the ownership schema and rejects any unfinished/live
+admission or nonterminal head without matching ownership metadata. Before
+cutover, fence every pre-ownership writer and explicitly reconcile historical
+rows; no invented backfill, age-based adoption or mixed-writer serving is
+supported. The existing Redis snapshot rollback/old-writable-endpoint recovery
+boundary applies to both Space and admission gates: fence infrastructure writes
+and rotate/rebuild from PostgreSQL before exposure. This source contract does
+not establish rollout, activation, provider retirement or acceptance.
+
+The native A3 roster outbox relay is dormant in production composition. Native
+transactions still save their frozen facts and counters, but ordinary Voice,
+Space media and `NATS_URL` configuration do not lease, publish or mark these facts
+delivered. Existing participant/admission compatibility delivery is unchanged.
+A3 relay activation requires a separately qualified canonical broker authority,
+scoped publisher rights and durable consumer/inbox/source-coverage package; a v5
+readiness result or PubAck alone does not authorize that composition change.
+
 Voice adds a durable PostgreSQL lifecycle fence/operation receipt even though
 its media projection is primarily Redis. `FROZEN` atomically fences admission,
 actively ejects every Space session and revokes outstanding grants; ordinary
@@ -561,6 +1000,52 @@ terminally fences Space room/session/grant rows and Redis keys. It binds the
 root manifest without inventing chat-owned work. Full request/receipt bytes
 retain 30 days from this participant's completion; the compact max-generation
 `PURGED` fence is permanent.
+
+BE-265 current-provider correction: a local restrictive fence or successful
+participant removal is not a completed `FROZEN` receipt. Completion requires
+complete native/legacy grant coverage, settled exact cleanup and durable provider
+rejection of all old original/refreshed credentials, including pending handshakes,
+or a proved empty credential history. Current self-hosted removal supplies no
+such retirement capability. Voice applies the restrictive barrier and immediate
+exact drain, but keeps the operation pending without a receipt. Full deletion
+activation requires a qualified provider retirement path; `LIVE` and `PURGED`
+cannot bypass this barrier. Original Voice60s expiry, empty Redis/roster and
+DeleteRoom/NotFound are not future-admission proof.
+
+The current native journal participates in the shared two-int PostgreSQL Space
+barrier (`0x53504345`, `hashtext(canonical Space UUID)`), before room resources and
+sorted account/profile identity locks. Forward admission/commit/projection/grant
+authorization checks its saved lifecycle generation; cleanup remains permitted
+for exact captured owners. The restrictive transaction seals typed native/head
+and legacy targets before changing native states. Retries drain saved identities
+even without Redis. Redis projection writers require one per-Space gate containing
+a random incarnation, RESTORING/READY phase, lifecycle generation and LIVE/DENY.
+Missing gates install RESTORING with a fresh incarnation before a fresh PostgreSQL
+barrier read; publication compares that exact incarnation. Dispatch reads READY
+before fresh native authorization, then atomically checks the same incarnation,
+generation and exact native tuple. A delayed callback cannot acquire a replacement
+incarnation or initialize LIVE. Metadata and cleanup cannot recreate active indexes;
+exact cleanup preserves another incarnation's owned pointers. Existing
+COMMITTED journal intent covers projection dispatch before its applied marker.
+Grant authorization saves exact claims/provider binding and absolute Voice expiry
+before signing; retry never extends that expiry. No expiry bounds SFU refresh.
+
+This gate covers deletion, eviction, partial loss, flush and process retry on one
+authoritative Redis history. Restoring an old snapshot with the same READY
+incarnation, asynchronous failover losing an acknowledged DENY, or a writable old
+endpoint requires infrastructure recovery to fence writes and rotate/rebuild gates
+from PostgreSQL before exposure. The nonce does not itself prove that operational
+prerequisite; current qualification must retain this boundary.
+
+`Service.RetirementCapability` and the self-hosted adapter declare `EJECT_ONLY`
+(missing adapter/config is `UNKNOWN`). There is no production retirement proof
+provider or environment switch that can claim full support. Historical issuers
+and old unguarded receipts remain unproven: migration does not rewrite their
+bytes or invent credential coverage. Before any future full activation, inventory
+them and reconcile all issuer/writer versions; reject mixed deployments. Retain
+unresolved targets/grants and deny state beyond receipt retention. Provider
+qualification, protected DEV/STG checks and independent acceptance remain open.
+
 # MatchSquad room provider
 
 Voice exposes the typed `MatchSquadVoiceService` only on its dedicated protected

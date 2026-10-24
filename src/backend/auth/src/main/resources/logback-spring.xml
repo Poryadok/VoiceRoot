@@ -9,6 +9,11 @@
     </encoder>
   </appender>
 
+  <!-- HTTP converters and gRPC HTTP/2 diagnostics include credential bodies/headers.
+       Keep operational INFO/WARN/ERROR and application DEBUG without payload tracing. -->
+  <logger name="org.springframework.web" level="INFO"/>
+  <logger name="io.grpc.netty.shaded.io.grpc.netty" level="INFO"/>
+
   <root level="${LOG_LEVEL}">
     <appender-ref ref="CONSOLE"/>
   </root>

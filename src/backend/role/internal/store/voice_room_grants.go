@@ -28,7 +28,13 @@ type VoiceRoomGrantDecision struct {
 // ResolveVoiceRoomGrants reads the effective Voice permission mask and its
 // authority epoch in the same fenced, per-Space transaction.
 func (s *RoleStore) ResolveVoiceRoomGrants(ctx context.Context, spaceID, voiceRoomID, profileID uuid.UUID) (VoiceRoomGrantDecision, error) {
-	return spaceValue(ctx, s, spaceID, func(scoped *RoleStore) (VoiceRoomGrantDecision, error) {
+	var native bool
+	decision, err := spaceValue(ctx, s, spaceID, func(scoped *RoleStore) (VoiceRoomGrantDecision, error) {
+		var err error
+		native, err = scoped.NativeMembershipRequired(ctx)
+		if err != nil {
+			return VoiceRoomGrantDecision{}, err
+		}
 		mask, err := scoped.unscopedGetEffectiveMask(ctx, spaceID, profileID, nil, &voiceRoomID)
 		if err != nil {
 			return VoiceRoomGrantDecision{}, err
@@ -43,6 +49,11 @@ WHERE space_id = $1
 		}
 		if epoch <= 0 {
 			return VoiceRoomGrantDecision{}, fmt.Errorf("resolve Voice policy epoch: non-positive epoch %d", epoch)
+		}
+		if native {
+			if err := currentQualifiedObservation(ctx, spaceID, profileID, nil); err != nil {
+				return VoiceRoomGrantDecision{}, err
+			}
 		}
 
 		join := hasVoicePermission(mask, permissions.VoiceJoin)
@@ -60,6 +71,15 @@ WHERE space_id = $1
 			PolicyEpoch:           uint64(epoch),
 		}, nil
 	})
+	if err != nil {
+		return VoiceRoomGrantDecision{}, err
+	}
+	if native {
+		if err := currentQualifiedObservation(ctx, spaceID, profileID, nil); err != nil {
+			return VoiceRoomGrantDecision{}, err
+		}
+	}
+	return decision, nil
 }
 
 func hasVoicePermission(mask uint64, permission string) bool {

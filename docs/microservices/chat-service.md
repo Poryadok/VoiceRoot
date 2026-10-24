@@ -1,11 +1,43 @@
 # Chat Service
 
+## Standalone channel publication authority
+
+For a stored `channel` with `space_id IS NULL`, Chat owns the current
+`chat_members` role, membership-scoped official grant and `allow_user_main_feed`
+setting. Current `owner`/`admin` and ordinary members with an explicit current
+`post_as_chat` grant may publish as the channel (`posted_as_chat=true`). User-identity
+thread replies retain the existing thread policy; adding `thread_parent_id`
+never grants an ordinary member the channel's official identity. User-identity
+main-feed publication requires both a known current role (`owner`, `admin` or
+`member`) and explicit `allow_user_main_feed=true`; the disabled setting also
+denies owner/admin user-identity posts. Standalone owner/admin `UpdateChat`
+controls that setting. No channel promotion API is implied by this contract.
+
+Messaging uses the existing Chat boundary (fresh `GetChatPermissions` via the
+production `GRPCChatGuard`) for official Send, Forward and copy-as-new. MemberRole
+alone never proves an ordinary member's official capability.
+Forward chooses official mode when user main-feed posts are disabled and user
+mode when enabled; commentary uses the same identity. Stored type/scope wins
+over caller `ChatRef.type`. Missing membership, unknown role, missing policy or
+unavailable authority never grants publication. Denials precede commentary,
+message and event/outbox writes. Space-attached destinations continue to require
+the exact-chat Role `TEXT_CHAT_SEND_MESSAGES` decision; local roles cannot
+replace it. See [forward contract](../features/forward-messages.md#права-основного-потока-канала).
+
 ## Обзор
 
 Управление сущностями чатов: DM (1:1), текстовые **группы** и **каналы** (`type = group` \| `channel`, в т.ч. вне спейса; одинаковая модель, разные дефолты), пользовательские папки.
 
 **Язык**: Go
 **БД**: PostgreSQL `chat_db`
+
+Accepted Space-attached Chat audit facts use the frozen
+[external codec](space-service.md#external-audit-details-codec-v1) and
+[replay identity](space-service.md#durable-external-replay-codec-v1), shared through
+`src/backend/pkg/spaceaudit`. Build actual normalized changes once inside the
+mutation/outbox transaction; retries preserve those bytes. Composite creation
+emits its fact only after the complete Chat/tree result. Producer runtime remains
+BE-131 work; this codec contract does not activate its transport.
 
 ## Ответственность
 
@@ -19,6 +51,160 @@
 - Slow mode (таймер между сообщениями)
 
 ## API (gRPC)
+
+### Native Space-chat scope authority
+
+`ChatScopeAuthorityService.GetSpaceChatScopeAuthority` is a narrow own-`chat_db`
+read for signed `service:role` and `service:space`. Its request binds protocol
+version 1, canonical `chat_id`, `expected_space_id` and `operation_id`. A known
+matching group/channel returns only echoed scope, existence/liveness, stored
+type/Space, UUID attachment incarnation, positive monotonic Chat authority
+revision, independent lifecycle generation/state and managed kind. It returns
+no content, title, membership or Role decision and calls no other service.
+Missing and cross-Space requests use the same NotFound outcome; unavailable or
+inconsistent source state never becomes a permissive default. Consumers accept
+only an ordinary LIVE scope and retain their own fresh authorization checks.
+
+Migration `chat_db/000025` maintains `chats.scope_incarnation` and permanent
+`chat_scope_authority_heads` in the source transaction. Reparenting, type or
+ownership/managed binding reassignment replaces the incarnation. Cosmetic
+title/topic/category ordering does not. Delete preserves the head and advances
+its revision; same-ID recreation receives a new incarnation and higher revision.
+Lifecycle state/generation transitions advance the same observation revision
+without replacing the independent lifecycle generation. Revision overflow aborts
+the mutation; the head and fences cannot be truncated or reset. This migration
+has no provenance-safe DOWN. Existing native creation and P3 mutation barriers
+remain in force; no new attachment/reparent API is introduced.
+
+All returned facts come from one PostgreSQL statement snapshot of the native
+row, its head and lifecycle fence. Source triggers cover consumed fields;
+the MatchSquad operation insert covers managed-kind ownership. No read lock is
+held across network I/O. Space owns its tree relation separately: this Chat
+snapshot does not replace the exact Space-tree authority observation.
+
+Role and Space each use a dedicated listener configured by
+`CHAT_SCOPE_ROLE_*` or `CHAT_SCOPE_SPACE_*`: `GRPC_LISTEN`, `TLS_CERT_FILE`,
+`TLS_KEY_FILE`, `CLIENT_CA_FILE`, `JWKS_URL`, `JWKS_CA_FILE`,
+`REPLAY_REDIS_ADDR` and optional `REPLAY_REDIS_PASSWORD` plus paired
+`JWKS_CLIENT_CERT_FILE`/`JWKS_CLIENT_KEY_FILE`. Partial configuration fails
+startup. The listener verifies mTLS and exact issuer, subject, Chat audience,
+full RPC, request ID, complete protobuf hash and fresh JTI through the existing
+principal verifier/replay store. Ordinary and other protected Chat listeners
+do not register this service. Federation-only authority remains unchanged.
+Serving this producer is not activation of the downstream permission/admission
+vertical or permission to deploy.
+
+`GetBotChatScopeAuthority` is a separate Bot-only read under BE170. Its dedicated
+request has the same four scope fields/tags and returns `scope` plus the raw32 SHA256 of the deterministic
+complete request. Only `service:bot` may call this exact method through its own
+`CHAT_SCOPE_BOT_*` configuration, using the same mTLS/JWKS/replay configuration
+keys above. Bot cannot call the Role/Space read; their listeners cannot call the
+Bot read. No user, bot-actor or mixed identity supplies this authority.
+
+The Bot read may also return a retained head whose chat row is absent,
+`present=false`, last Space matches and incarnation/revision remain valid.
+Such a response has `exists=false`, `live=false` and unspecified type/managed
+kind; the head does not retain those historical facts. Missing/foreign/DM or
+standalone resources yield indistinguishable NotFound. Contradictory head or
+lifecycle state yields Unavailable. Current resource liveness reports the
+independent lifecycle state; managed kind remains an explicit separate fact.
+No new schema, source mutation, public reparent or identity reuse API is added.
+
+This is a point-in-time observation, not a reservation or cleanup receipt. Bot
+must persist exact request/response bytes and source tuple before newly adding
+or enabling whitelist targets, retaining existing owner/manageBots decisions.
+New targets require a present matching group/channel and LIVE lifecycle. A
+retired observation can qualify historical cleanup scope, never prove effects
+completed. Messaging independently validates current native scope through its
+existing authorized Chat data source before first cleanup; exact completed
+replays preserve their original result and later human repins. Source revision
+changes require fresh qualification while preserving original evidence. A read
+does not serialize unsupported concurrent cross-database parent/identity rewrites.
+
+**Effective-membership revision/export target.**
+
+The [ListThreads effective-membership contract v1](../testing/listthreads-versioned-readmodel-exec-plan.md#effective-membership-contract-v1)
+defines Chat's additive internal target, not a shipped API. Chat composes complete
+Space membership, Role-owned `TEXT_CHAT_VIEW` decisions and User eligibility at a
+validated common source cut. Local membership, actual DM self-delete/reopen,
+Space binding and lifecycle changes participate in the transactional source
+revision/outbox. Chat persists effective generations, monotonic pair revisions,
+revocation lineages and committed journal `Q`; it exports pinned complete
+snapshots plus replay to signed caller `messaging` and supplies exact-pair fresh
+admission. First-N enumeration, unsigned caller metadata and a Chat-local table
+trigger alone cannot establish authority. DM self-delete retires only its viewer
+lineage, actual reopen creates a new one, and chat archive remains navigation
+state. The linked contract owns the full source/caller/recovery and race matrix.
+
+### Chat management permissions
+
+This target extends the existing standalone owner/admin official-publication
+baseline; it does not invalidate the BE-187 official-thread authorization fix.
+The standalone persistence, handlers, HTTP routes and member-management controls
+implement this contract. The Space authority/admission/navigation vertical below
+remains an accepted target; standalone support does not complete that scope.
+For ordinary human-owned standalone groups and channels Chat owns
+`member_additions_enabled` (default true) and a membership-scoped
+`post_as_chat` grant (default false). Current owner/admin implicitly have both
+capabilities and may manage these settings. An ordinary member can add only
+while the toggle is enabled and use the chat identity only with an explicit
+grant. Send/settings permissions never imply either capability.
+
+`GetChatPermissions(chat_id)` returns caller-relative
+`can_post_as_chat`, `can_add_members`, `can_manage_permissions`,
+`member_additions_enabled`, and `explicit_post_as_chat`.
+`UpdateChat.member_additions_enabled` is optional; omission preserves the
+setting. `SetChatMemberPostAsChat(chat_id, target_profile_id, allowed)` is an
+idempotent owner/admin operation on a current ordinary member. No actor is
+selected by an untrusted request body. Member-management projections expose
+the explicit grant only to authorized roster readers.
+
+HTTP: `GET /api/v1/chats/{chat_id}/permissions`,
+`PUT /api/v1/chats/{chat_id}/members/{profile_id}/post-as-chat` with
+`{"allowed": boolean}`, and `PATCH /api/v1/chats/{chat_id}` with optional
+`member_additions_enabled`. Route identifiers override body identifiers.
+The roster editor exposes the addition policy and per-member official grant
+separately. Unknown/unavailable capability state disables those controls.
+
+All mutations recheck current actor/target membership and role in the same
+Chat transaction as the write. AddMembers rechecks its caller and toggle in
+the roster transaction. Leave/kick/profile cleanup removes the explicit grant
+with membership; rejoin starts without it. Promotion never creates a grant.
+Demotion/ownership transfer removes implicit authority but preserves a
+separately explicit grant throughout that same membership. Toggle false does
+not remove existing people. Chat-row then membership locks serialize changes.
+No historical send/settings/user-feed value is migrated into an explicit grant.
+
+Messaging obtains a fresh Chat decision for the authenticated sender and actual
+stored destination before official main-feed/thread/send/forward/commentary
+writes. Missing/unavailable authority fails closed; no cached UI grant, forged
+ChatRef, or local owner field is proof. Cross-service authorization linearizes
+at the completed fresh decision, not at a fictional shared transaction.
+Other privacy, guest/account, media, moderation, E2E, thread and feed-mode gates
+still apply. False policy is PermissionDenied; malformed IDs InvalidArgument;
+unsupported scope/configuration FailedPrecondition; dependency failure
+Unavailable, with existing missing-resource visibility semantics preserved.
+
+DM, GIS-managed and MatchSquad chats reject ordinary grant/toggle operations.
+Guest policy retains its existing gates; this target adds no blanket ban or
+guest initiation permission. Space chats never use standalone setters or local
+AddMembers. Their membership belongs to Space and authority to Role.
+
+For a chat in a Space, adding a person means inviting them into its parent Space
+through the existing admission rules, then opening the specific invited chat
+after successful authorized entry. Preserve the target binding across pending
+admission and retry. Current members are not inserted twice and still require
+current target-chat visibility/access. Never disclose or open unauthorized
+content, bypass bans/caps/entry policy/hierarchy/channel ACL, or create chat-only
+Space membership. Distinct Role authority, durable invitation binding and
+Gateway/client continuation are part of the full target; standalone support
+alone is not completion of this requirement.
+
+Rollout must establish a compatible serving set of Chat and Messaging writers
+before exposing these policy mutations: an older Chat writer cannot enforce
+the new addition toggle. Migration defaults preserve the previous enabled-add
+behavior and create no explicit grants. This is an operator qualification gate,
+not evidence of deployment or a permission to deploy.
 
 `CreateChatRequest.request_id` необязателен для совместимости существующих
 клиентов. Канонический UUID связывается с аутентифицированным
@@ -49,6 +235,8 @@ service ChatService {
   rpc SetGroupMemberRole(...) returns (...);                              // ✓ standalone groups: admin promotion; owner demotion
   rpc TransferGroupOwnership(...) returns (...);                       // ✓
   rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);     // ✓
+  rpc GetChatPermissions(...) returns (...);                              // ✓ standalone caller-relative
+  rpc SetChatMemberPostAsChat(...) returns (...);                         // ✓ standalone owner/admin grant
 
   // Список чатов
   rpc ListChats(ListChatsRequest) returns (ListChatsResponse); // ✓ dm+group; space merge; inbox filter
@@ -100,6 +288,121 @@ the empty acknowledgement it marks the item delivered. Retry keeps the same
 `audit_event_id` and exact payload. Standalone DM/group/channel mutations do not
 enter the Space ledger. Chat never writes `space_db` and cannot emit Space- or
 Role-owned actions.
+
+### Public composite replay authority (BE-131)
+
+Every public Space-attached `CreateChat` result, including completed keyed
+replay, uses a fresh signed `service:chat` outcome lookup with a typed
+`public_actor` copied from the current verified initiator. Space checks current
+membership, lifecycle and guest admission before private receipt/expiry lookup,
+then binds disclosure to the original profile/account or bot installation.
+Current actor facts never replace immutable creation intent. Guest disclosure
+also checks the current Chat-owned `allow_guests`; a saved response is not current
+authority. Dependency failure denies disclosure. Private recovery omits
+`public_actor` and does not acquire this later ACL gate.
+
+Chat main composes the protected listener and durable recovery/effect worker
+together with complete `CHAT_CREATE_*` configuration: `GRPC_LISTEN`,
+`TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, `PRINCIPAL_JWKS_URL` (Gateway),
+`BOT_PRINCIPAL_JWKS_URL`, `PRINCIPAL_JWKS_CA_FILE`,
+`PRINCIPAL_JWKS_CLIENT_CERT_FILE`, `PRINCIPAL_JWKS_CLIENT_KEY_FILE`,
+`PRINCIPAL_REDIS_ADDR` and optional `PRINCIPAL_REDIS_PASSWORD`. Both HTTPS JWKS
+endpoints require distinct current/next RSA keys. `CHAT_CREATE_AUTH_*` and
+`CHAT_CREATE_SPACE_*` and `CHAT_CREATE_AUDIT_*` each require `GRPC_ADDR`, `TLS_CA_FILE`, `TLS_SERVER_NAME`,
+`CLIENT_CERT_FILE` and `CLIENT_KEY_FILE`. The runtime additionally requires Chat
+signing keys, composite schema and JetStream publisher. Partial configuration
+stops startup; the ordinary listener always denies CreateChat. This source
+composition does not prove deployment secret configuration or activation.
+`CHAT_CREATE_SPACE_*` targets Space's commit/outcome listener;
+`CHAT_CREATE_AUDIT_*` targets its distinct protected audit-ingestion listener.
+The composite method allowlist is never widened to deliver audit facts.
+Legacy snapshots without a Space composite receipt fail closed on this public
+path pending separate legacy reconciliation; replay cannot invent a receipt or
+historical audit.
+
+### Space chat creation: durable composite target (BE131-COMPOSITE-v1)
+
+This is the accepted target; the current two-call Gateway create/tree path is
+not proof of this behavior. Chat owns the durable create operation and audit
+payload in `chat_db`; Space owns the authoritative tree outcome in `space_db`.
+Gateway is a stateless transport and never authors an audit fact or receipt.
+
+Every new Space-attached `CreateChat`, including the protected direct RPC and
+generic HTTP entrypoint, follows the same composite. Standalone creation is
+unchanged. The existing `(creator_profile_id, request_id)` key and normalized
+create digest bind one execution kind and one operation, Chat, node and audit
+UUID allocated once. Changed bindings conflict. Requests without a client key
+receive a durable server operation, but independent unkeyed retries do not gain
+a deduplication guarantee. Existing successful keyed creates are explicitly
+legacy: replay preserves their original Chat without inventing a past audit.
+
+Chat first atomically writes a prepared Chat, its operation/reservation and the
+immutable `chat_created` producer payload with eligibility `HELD`. The original
+verified initiating actor, Space, target Chat, audit UUID, `{}` details and
+original creation Timestamp are frozen here. The prepared Chat is unavailable
+to ordinary reads, lists, use, mutations and tree links, and emits no ordinary
+`chat.created` notification.
+
+A dedicated protected Chat-to-Space commit/outcome protocol binds every stored
+operation/creator/Space/Chat/type/node/audit/digest field. Space rechecks current
+membership, `TEXT_CHAT_CREATE_IN_SPACE`, guest/bot scope, limits and lifecycle
+before the first tree commit. Service authentication alone is not user
+authorization. Space serializes its node insertion with an immutable
+`COMMITTED` receipt, or a deterministic refusal with an `ABORTED` receipt. These
+outcomes are mutually exclusive and terminal. This private tree insertion does
+not create a duplicate `tree_node_upserted` audit; ordinary tree APIs keep their
+audits and accept no generic audit-suppression flag.
+
+Chat authenticates the outcome, compares all bindings, then atomically marks
+the operation complete, activates its prepared Chat, changes the same outbox
+payload to `READY`, and schedules the ordinary `chat.created` event with stable
+deduplication identity. Success waits for that local finalization. The Gateway
+returns the original Space node outcome and does not issue a second unbound
+`UpsertTreeNode`. Delivery is at least once with stable identities; a transport
+exactly-once guarantee is not implied. Tree visibility after Space commit and
+before Chat activation may briefly precede Chat usability; the two databases do
+not provide atomic global read visibility.
+
+A Chat recovery worker resumes incomplete durable operations without Gateway
+or the original client. Each attempt uses fresh bound service credentials and
+holds no database transaction across network I/O. Timeout, response loss,
+missing receipt, expired lease and process crash mean unknown outcome, never
+permission to delete a prepared Chat. Only an authenticated exact `ABORTED`
+receipt permits guarded local compensation and cancellation of the held fact.
+After `COMMITTED`, recovery rolls forward even if permissions later change; a
+later node move/removal cannot be undone by replay. Public result disclosure
+still checks current caller access independently of historical completion.
+
+Full operation/outcome evidence and creator/request replay indexes have no
+ordinary TTL before terminal purge. BE131-COMPOSITE-PURGE-v1 bounds Chat's full
+copy to its own successful local P3 completion plus 30 days; Space's copy uses
+aggregate PURGED plus 30 days. Each owner fixes its deadline once, checks expiry
+using database time even before physical cleanup, and erases all duplicated
+personal fields, replay indexes and identity/content digests at expiry. Protected
+reads then return `FAILED_PRECONDITION / COMPOSITE_RESULT_EXPIRED` without a
+fabricated outcome; an expired fence never authorizes finalize or compensation.
+Permanent compact fences retain only the original server resource IDs, protocol
+and execution kind, terminal state/safe failure code, deletion operation and
+generation, completion timestamp and fixed expiry. They retain no creator,
+account/session, bot/installation, client key, content or derivative hash/HMAC.
+Permanent Space/resource nonreuse remains after owner tombstone expiry; public
+purged-resource admission remains undiscoverable.
+
+Freeze first commits the local admission fence under the preparation lock, then
+durably enters `DRAINING_COMPOSITES`. Recovery settles every PREPARED/HELD
+operation using exact authenticated Space outcomes. COMMITTED finalizes while
+publicly hidden by FROZEN; ABORTED compensates; UNKNOWN blocks progress. Only
+after a locked zero-incomplete recheck may Chat seal its immutable manifest and
+acknowledge freeze. No transaction spans RPC. Purge additionally requires actual
+delivery evidence for pre-purge audit and ordinary chat.created obligations,
+alongside existing participant prerequisites; send attempts or expired leases
+are insufficient. Unexpected incomplete work after terminal purge is a
+quarantined invariant failure and cannot extend retention or recreate resources.
+This contract does not activate deletion or purge. BE-131 owns producer
+eligibility/recovery; BE-008 consumes the complete Gateway routing/node-result
+and negative transport vertical. Required evidence includes crash recovery
+after Chat prepare and after Space tree commit, with no Gateway, one logical
+audit and no duplicate internal tree event.
 
 Composite `POST /api/v1/spaces/{space_id}/chats` exposes one `chat_created` only
 after the complete Chat+tree outcome. The internal Space tree upsert in that flow
@@ -196,6 +499,7 @@ chats
 ├── threads_enabled (bool, default false; channels default true)
 ├── allow_user_main_feed (bool, default true; channels default false)
 ├── allow_guests (bool, default false — explicit chat-level guest admission)
+├── member_additions_enabled (bool, default true — standalone ordinary-member additions)
 ├── e2e_enabled (bool, default false — DM opt-in E2E)
 ├── created_at
 └── updated_at
@@ -204,6 +508,7 @@ chat_members
 ├── chat_id (UUID, logical ref → chats.id)
 ├── profile_id (UUID, logical ref → user_db.profiles.id; без меж-БД REFERENCES)
 ├── role (owner | admin | member)
+├── post_as_chat (bool, default false — explicit grant for this membership)
 ├── joined_at
 ├── muted_until (nullable)
 ├── is_archived (bool)
@@ -565,6 +870,45 @@ Gateway REST (sketch): `GET /api/v1/sticker-packs`, `POST /api/v1/sticker-packs/
 
 `chat.member_changed` is the single membership-change subject; producers do not emit parallel `chat.member_added`, `chat.member_removed`, or `chat.member_left` subjects. Consumers must tolerate unknown `change` values. Caller-relative DM `DeleteChat` is a `left` membership change and is never a permanent `chat.deleted` event. P3 `chat.deleted` envelopes retain a stable event ID, occurrence time, exact Space/operation/generation/manifest binding, and immutable bytes in `chat_db` until JetStream confirms publication; retries publish those same bytes and deduplication ID.
 
+## BE-065 Role override target validation (accepted target)
+
+Add `/voice.chat.v1.ChatService/ValidateRoleOverrideTarget` with package-local
+`ValidateRoleOverrideTargetRequest { string space_id = 1; string chat_id = 2; }`
+and empty `ValidateRoleOverrideTargetResponse`. The source implementation uses
+a dedicated protected listener; runtime acceptance is separate. Configuration
+is documented with the complete caller/error/consistency contract in
+[Role's BE-065 contract](role-service.md#be-065-protected-override-target-validation-accepted-target);
+the [execution plan](../testing/role-override-target-validation-exec-plan.md)
+defines required verification.
+
+Only a verified Role workload (`principal_type=service`, `iss=role`,
+`sub=service:role`, `aud=chat`, exact full RPC and deterministic whole-body hash)
+may call this method. It requires protected TLS/mTLS, Role JWKS and replay
+verification, fresh JTI, canonical signed request ID matching the sole
+`x-request-id`, and Phase-0 <=30 s lifetime. Reject raw identity metadata,
+duplicate credentials and all delegated-user/end-user/bot/other-service callers.
+The handler itself requires the verified Role principal even on direct calls.
+Do not broaden existing GIS/Search/MatchSquad listeners; ordinary/public
+listeners refuse with `UNAVAILABLE` before domain access. No Gateway route exists.
+
+Under one consistent local store/lifecycle serialization boundary, validate
+canonical non-nil IDs and an active `chats` row whose type is `group|channel`,
+whose `space_id` is non-null and exactly matches, and whose local Space fence
+permits ordinary admission. DM, standalone, absent, foreign-Space and deleted
+rows all return indistinguishable `NOT_FOUND`; malformed IDs return
+`INVALID_ARGUMENT`. Tree placement is not an additional predicate. Known
+non-LIVE/ownership/terminal fences and unavailable/corrupt fence reads return
+`UNAVAILABLE`; absent legacy fence follows existing ordinary-admission semantics.
+No members, owner, name or permission data are returned, and this path never
+calls Role or another ACL-enriched provider API.
+
+Each attempt reads current state; success is a point-in-time existence result,
+not a reservation or capability. Deletion after this snapshot may leave an inert
+Role reference; actual Chat operations must still reject missing/deleted rows.
+No UUID reuse/reparenting is permitted; group/channel conversion preserves
+eligibility. Restoration requires a fresh read. Existing overrides cannot grant
+access across Chat lifecycle fences.
+
 ## Зависимости
 
 - **Social Service** — проверка блокировок при создании DM
@@ -633,6 +977,12 @@ waits for Messaging completion and File acceptance of Chat-owned reference
 releases, then removes chats/navigation and returns an immutable completion
 receipt. Full request/receipt bytes retain 30 days from this participant's
 completion; compact terminal fence is permanent.
+
+An exact authenticated `PurgeSpace` retry first reads Chat's committed response
+within that original retention window, before requiring Messaging/File clients.
+It returns the saved wrapper including unknown protobuf fields, without repeating
+owner calls. Changed request bytes/hash, corrupt response bindings and expired
+evidence fail closed; they cannot restart cleanup or extend receipt retention.
 
 The same successful local PURGE transaction writes one immutable
 `chat.deleted` envelope to `chat_deleted_event_outbox` for each manifest chat.

@@ -2343,6 +2343,7 @@ class UpdateChatRequest extends $pb.GeneratedMessage {
     $core.bool? threadsEnabled,
     $core.bool? allowUserMainFeed,
     $core.bool? allowGuests,
+    $core.bool? memberAdditionsEnabled,
   }) {
     final result = create();
     if (chatId != null) result.chatId = chatId;
@@ -2353,6 +2354,8 @@ class UpdateChatRequest extends $pb.GeneratedMessage {
     if (threadsEnabled != null) result.threadsEnabled = threadsEnabled;
     if (allowUserMainFeed != null) result.allowUserMainFeed = allowUserMainFeed;
     if (allowGuests != null) result.allowGuests = allowGuests;
+    if (memberAdditionsEnabled != null)
+      result.memberAdditionsEnabled = memberAdditionsEnabled;
     return result;
   }
 
@@ -2377,6 +2380,7 @@ class UpdateChatRequest extends $pb.GeneratedMessage {
     ..aOB(6, _omitFieldNames ? '' : 'threadsEnabled')
     ..aOB(7, _omitFieldNames ? '' : 'allowUserMainFeed')
     ..aOB(8, _omitFieldNames ? '' : 'allowGuests')
+    ..aOB(9, _omitFieldNames ? '' : 'memberAdditionsEnabled')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2469,6 +2473,15 @@ class UpdateChatRequest extends $pb.GeneratedMessage {
   $core.bool hasAllowGuests() => $_has(7);
   @$pb.TagNumber(8)
   void clearAllowGuests() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.bool get memberAdditionsEnabled => $_getBF(8);
+  @$pb.TagNumber(9)
+  set memberAdditionsEnabled($core.bool value) => $_setBool(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasMemberAdditionsEnabled() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearMemberAdditionsEnabled() => $_clearField(9);
 }
 
 class DeleteChatRequest extends $pb.GeneratedMessage {
@@ -3031,6 +3044,7 @@ class ChatMember extends $pb.GeneratedMessage {
     $1.Timestamp? mutedUntil,
     $core.bool? isArchived,
     $core.String? inboxBucket,
+    $core.bool? explicitPostAsChat,
   }) {
     final result = create();
     if (profileId != null) result.profileId = profileId;
@@ -3039,6 +3053,8 @@ class ChatMember extends $pb.GeneratedMessage {
     if (mutedUntil != null) result.mutedUntil = mutedUntil;
     if (isArchived != null) result.isArchived = isArchived;
     if (inboxBucket != null) result.inboxBucket = inboxBucket;
+    if (explicitPostAsChat != null)
+      result.explicitPostAsChat = explicitPostAsChat;
     return result;
   }
 
@@ -3063,6 +3079,7 @@ class ChatMember extends $pb.GeneratedMessage {
         subBuilder: $1.Timestamp.create)
     ..aOB(5, _omitFieldNames ? '' : 'isArchived')
     ..aOS(6, _omitFieldNames ? '' : 'inboxBucket')
+    ..aOB(7, _omitFieldNames ? '' : 'explicitPostAsChat')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3140,6 +3157,15 @@ class ChatMember extends $pb.GeneratedMessage {
   $core.bool hasInboxBucket() => $_has(5);
   @$pb.TagNumber(6)
   void clearInboxBucket() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.bool get explicitPostAsChat => $_getBF(6);
+  @$pb.TagNumber(7)
+  set explicitPostAsChat($core.bool value) => $_setBool(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasExplicitPostAsChat() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearExplicitPostAsChat() => $_clearField(7);
 }
 
 class ListChatsRequest extends $pb.GeneratedMessage {
@@ -6157,9 +6183,14 @@ class GetDMResponse extends $pb.GeneratedMessage {
 class CreateChatResponse extends $pb.GeneratedMessage {
   factory CreateChatResponse({
     Chat? chat,
+    $core.String? compositeOperationId,
+    $core.String? compositeNodeId,
   }) {
     final result = create();
     if (chat != null) result.chat = chat;
+    if (compositeOperationId != null)
+      result.compositeOperationId = compositeOperationId;
+    if (compositeNodeId != null) result.compositeNodeId = compositeNodeId;
     return result;
   }
 
@@ -6177,6 +6208,8 @@ class CreateChatResponse extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
       createEmptyInstance: create)
     ..aOM<Chat>(1, _omitFieldNames ? '' : 'chat', subBuilder: Chat.create)
+    ..aOS(2, _omitFieldNames ? '' : 'compositeOperationId')
+    ..aOS(3, _omitFieldNames ? '' : 'compositeNodeId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -6208,6 +6241,26 @@ class CreateChatResponse extends $pb.GeneratedMessage {
   void clearChat() => $_clearField(1);
   @$pb.TagNumber(1)
   Chat ensureChat() => $_ensure(0);
+
+  /// Set only after a new Space-attached composite is COMPLETE. Empty for
+  /// standalone and successful legacy keyed creates; never a node upsert hint.
+  @$pb.TagNumber(2)
+  $core.String get compositeOperationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set compositeOperationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasCompositeOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearCompositeOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get compositeNodeId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set compositeNodeId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasCompositeNodeId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearCompositeNodeId() => $_clearField(3);
 }
 
 class UpdateChatResponse extends $pb.GeneratedMessage {
@@ -8380,6 +8433,406 @@ class CanCreateDMResponse extends $pb.GeneratedMessage {
   $core.bool hasAllowed() => $_has(0);
   @$pb.TagNumber(1)
   void clearAllowed() => $_clearField(1);
+}
+
+/// @voice.unknown_fields=reject
+class ValidateRoleOverrideTargetRequest extends $pb.GeneratedMessage {
+  factory ValidateRoleOverrideTargetRequest({
+    $core.String? spaceId,
+    $core.String? chatId,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (chatId != null) result.chatId = chatId;
+    return result;
+  }
+
+  ValidateRoleOverrideTargetRequest._();
+
+  factory ValidateRoleOverrideTargetRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ValidateRoleOverrideTargetRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ValidateRoleOverrideTargetRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'chatId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ValidateRoleOverrideTargetRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ValidateRoleOverrideTargetRequest copyWith(
+          void Function(ValidateRoleOverrideTargetRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as ValidateRoleOverrideTargetRequest))
+          as ValidateRoleOverrideTargetRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ValidateRoleOverrideTargetRequest create() =>
+      ValidateRoleOverrideTargetRequest._();
+  @$core.override
+  ValidateRoleOverrideTargetRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ValidateRoleOverrideTargetRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ValidateRoleOverrideTargetRequest>(
+          create);
+  static ValidateRoleOverrideTargetRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get chatId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set chatId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasChatId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearChatId() => $_clearField(2);
+}
+
+class ValidateRoleOverrideTargetResponse extends $pb.GeneratedMessage {
+  factory ValidateRoleOverrideTargetResponse() => create();
+
+  ValidateRoleOverrideTargetResponse._();
+
+  factory ValidateRoleOverrideTargetResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ValidateRoleOverrideTargetResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ValidateRoleOverrideTargetResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ValidateRoleOverrideTargetResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ValidateRoleOverrideTargetResponse copyWith(
+          void Function(ValidateRoleOverrideTargetResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ValidateRoleOverrideTargetResponse))
+          as ValidateRoleOverrideTargetResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ValidateRoleOverrideTargetResponse create() =>
+      ValidateRoleOverrideTargetResponse._();
+  @$core.override
+  ValidateRoleOverrideTargetResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ValidateRoleOverrideTargetResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ValidateRoleOverrideTargetResponse>(
+          create);
+  static ValidateRoleOverrideTargetResponse? _defaultInstance;
+}
+
+class GetChatPermissionsRequest extends $pb.GeneratedMessage {
+  factory GetChatPermissionsRequest({
+    $core.String? chatId,
+  }) {
+    final result = create();
+    if (chatId != null) result.chatId = chatId;
+    return result;
+  }
+
+  GetChatPermissionsRequest._();
+
+  factory GetChatPermissionsRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetChatPermissionsRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetChatPermissionsRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'chatId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetChatPermissionsRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetChatPermissionsRequest copyWith(
+          void Function(GetChatPermissionsRequest) updates) =>
+      super.copyWith((message) => updates(message as GetChatPermissionsRequest))
+          as GetChatPermissionsRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetChatPermissionsRequest create() => GetChatPermissionsRequest._();
+  @$core.override
+  GetChatPermissionsRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetChatPermissionsRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetChatPermissionsRequest>(create);
+  static GetChatPermissionsRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get chatId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set chatId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasChatId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChatId() => $_clearField(1);
+}
+
+class GetChatPermissionsResponse extends $pb.GeneratedMessage {
+  factory GetChatPermissionsResponse({
+    $core.bool? canPostAsChat,
+    $core.bool? canAddMembers,
+    $core.bool? canManagePermissions,
+    $core.bool? memberAdditionsEnabled,
+    $core.bool? explicitPostAsChat,
+  }) {
+    final result = create();
+    if (canPostAsChat != null) result.canPostAsChat = canPostAsChat;
+    if (canAddMembers != null) result.canAddMembers = canAddMembers;
+    if (canManagePermissions != null)
+      result.canManagePermissions = canManagePermissions;
+    if (memberAdditionsEnabled != null)
+      result.memberAdditionsEnabled = memberAdditionsEnabled;
+    if (explicitPostAsChat != null)
+      result.explicitPostAsChat = explicitPostAsChat;
+    return result;
+  }
+
+  GetChatPermissionsResponse._();
+
+  factory GetChatPermissionsResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetChatPermissionsResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetChatPermissionsResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'canPostAsChat')
+    ..aOB(2, _omitFieldNames ? '' : 'canAddMembers')
+    ..aOB(3, _omitFieldNames ? '' : 'canManagePermissions')
+    ..aOB(4, _omitFieldNames ? '' : 'memberAdditionsEnabled')
+    ..aOB(5, _omitFieldNames ? '' : 'explicitPostAsChat')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetChatPermissionsResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetChatPermissionsResponse copyWith(
+          void Function(GetChatPermissionsResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as GetChatPermissionsResponse))
+          as GetChatPermissionsResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetChatPermissionsResponse create() => GetChatPermissionsResponse._();
+  @$core.override
+  GetChatPermissionsResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetChatPermissionsResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetChatPermissionsResponse>(create);
+  static GetChatPermissionsResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get canPostAsChat => $_getBF(0);
+  @$pb.TagNumber(1)
+  set canPostAsChat($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasCanPostAsChat() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearCanPostAsChat() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.bool get canAddMembers => $_getBF(1);
+  @$pb.TagNumber(2)
+  set canAddMembers($core.bool value) => $_setBool(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasCanAddMembers() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearCanAddMembers() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.bool get canManagePermissions => $_getBF(2);
+  @$pb.TagNumber(3)
+  set canManagePermissions($core.bool value) => $_setBool(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasCanManagePermissions() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearCanManagePermissions() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.bool get memberAdditionsEnabled => $_getBF(3);
+  @$pb.TagNumber(4)
+  set memberAdditionsEnabled($core.bool value) => $_setBool(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasMemberAdditionsEnabled() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearMemberAdditionsEnabled() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.bool get explicitPostAsChat => $_getBF(4);
+  @$pb.TagNumber(5)
+  set explicitPostAsChat($core.bool value) => $_setBool(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasExplicitPostAsChat() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearExplicitPostAsChat() => $_clearField(5);
+}
+
+class SetChatMemberPostAsChatRequest extends $pb.GeneratedMessage {
+  factory SetChatMemberPostAsChatRequest({
+    $core.String? chatId,
+    $core.String? targetProfileId,
+    $core.bool? allowed,
+  }) {
+    final result = create();
+    if (chatId != null) result.chatId = chatId;
+    if (targetProfileId != null) result.targetProfileId = targetProfileId;
+    if (allowed != null) result.allowed = allowed;
+    return result;
+  }
+
+  SetChatMemberPostAsChatRequest._();
+
+  factory SetChatMemberPostAsChatRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SetChatMemberPostAsChatRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SetChatMemberPostAsChatRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'chatId')
+    ..aOS(2, _omitFieldNames ? '' : 'targetProfileId')
+    ..aOB(3, _omitFieldNames ? '' : 'allowed')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetChatMemberPostAsChatRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetChatMemberPostAsChatRequest copyWith(
+          void Function(SetChatMemberPostAsChatRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as SetChatMemberPostAsChatRequest))
+          as SetChatMemberPostAsChatRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SetChatMemberPostAsChatRequest create() =>
+      SetChatMemberPostAsChatRequest._();
+  @$core.override
+  SetChatMemberPostAsChatRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SetChatMemberPostAsChatRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SetChatMemberPostAsChatRequest>(create);
+  static SetChatMemberPostAsChatRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get chatId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set chatId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasChatId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChatId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get targetProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set targetProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasTargetProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearTargetProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.bool get allowed => $_getBF(2);
+  @$pb.TagNumber(3)
+  set allowed($core.bool value) => $_setBool(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasAllowed() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearAllowed() => $_clearField(3);
+}
+
+class SetChatMemberPostAsChatResponse extends $pb.GeneratedMessage {
+  factory SetChatMemberPostAsChatResponse() => create();
+
+  SetChatMemberPostAsChatResponse._();
+
+  factory SetChatMemberPostAsChatResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SetChatMemberPostAsChatResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SetChatMemberPostAsChatResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetChatMemberPostAsChatResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetChatMemberPostAsChatResponse copyWith(
+          void Function(SetChatMemberPostAsChatResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as SetChatMemberPostAsChatResponse))
+          as SetChatMemberPostAsChatResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SetChatMemberPostAsChatResponse create() =>
+      SetChatMemberPostAsChatResponse._();
+  @$core.override
+  SetChatMemberPostAsChatResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SetChatMemberPostAsChatResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SetChatMemberPostAsChatResponse>(
+          create);
+  static SetChatMemberPostAsChatResponse? _defaultInstance;
 }
 
 const $core.bool _omitFieldNames =

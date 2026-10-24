@@ -13,6 +13,22 @@ import source_plan
 SOURCE = Path(__file__).resolve().parents[3]
 TAG = 'a' * 40
 
+def release_fixture():
+    # Synthetic offline data only; never an operator/candidate artifact.
+    import release_policy_wiring as wiring
+    policy = {'schema_version': 2, 'profile': 'free-invite-alpha', 'source_sha': TAG,
+        'capabilities': {name: 'disabled' for name in wiring.CAPABILITIES},
+        'rich_intents': {**{name: 'qualified' for name in wiring.BASELINE},
+                         **{name: 'disabled' for name in wiring.RESTRICTED}}}
+    raw = json.dumps(policy, sort_keys=True, separators=(',', ':')) + '\n'
+    return {'profile': 'free-invite-alpha', 'source_sha': TAG,
+        'policy_sha256': hashlib.sha256(raw.encode()).hexdigest(),
+        'policy_object': {'apiVersion': 'v1', 'kind': 'ConfigMap',
+            'metadata': {'name': 'voice-fixture-policy', 'namespace': 'voice-staging'},
+            'immutable': True, 'data': {'policy.json': raw}},
+        'owners': {name: {'policy_directory': '/etc/fixture-' + name, 'snapshot_file': '/tmp/fixture-' + name + '.json'}
+                   for name in ('auth', 'user', 'notification', 'realtime')}}
+
 def decoder(raw):
     return yaml.safe_load(raw)
 
@@ -67,10 +83,37 @@ def fixture():
     kube.objects[('StatefulSet', 'voice-minio')] = {'apiVersion': 'apps/v1', 'kind': 'StatefulSet',
         'metadata': {'name': 'voice-minio', 'namespace': 'voice-staging', 'uid': 'minio', 'resourceVersion': '1'},
         'spec': {'template': {'spec': {'containers': [{'name': 'minio', 'env': [{'name': 'MINIO_API_CORS_ALLOW_ORIGIN', 'value': 'https://app.example.invalid'}]}]}}}}
-    return kube, {'registry': 'registry', 'tag': TAG, 'mode': 'images-only', 'images': {}, 'generation': 'legacy', 'dataPVC': 'voice-nats-jsdata',
+    return kube, {'registry': 'registry', 'tag': TAG, 'release_policy': release_fixture(), 'mode': 'images-only', 'images': {}, 'generation': 'legacy', 'dataPVC': 'voice-nats-jsdata',
         's3_signing_endpoint': endpoint, 'gateway_host': '', 'livekit_host': '', 'storage_host': '', 'web_host': 'app.example.invalid'}
 
 class SourceTests(unittest.TestCase):
+    def test_p3_principal_replay_secret_is_required(self):
+        name = 'voice-p3-principal-replay'
+        self.assertEqual(nonnats_plan.SECRET_CONTRACTS['principal-secrets'][name], {'password'})
+        for change in ('missing-secret', 'missing-password'):
+            with self.subTest(change=change):
+                kube, params = self.canonical_fixture()
+                if change == 'missing-secret':
+                    del kube.objects[('Secret', name)]
+                else:
+                    del kube.objects[('Secret', name)]['data']['password']
+                with self.assertRaises(nonnats_plan.PlanError):
+                    source_plan.compile_plan(SOURCE, params, decoder, kube)
+
+    def test_notification_principal_signing_and_tls_keys_are_required(self):
+        expected = {
+            'voice-notification-principal-signing': {'current.pem', 'next.pem', 'active-kid'},
+            'voice-notification-principal-tls': {'tls.crt', 'tls.key'},
+        }
+        for name, keys in expected.items():
+            self.assertEqual(nonnats_plan.SECRET_CONTRACTS['principal-secrets'][name], keys)
+            for key in keys:
+                with self.subTest(secret=name, key=key):
+                    kube, params = self.canonical_fixture()
+                    del kube.objects[('Secret', name)]['data'][key]
+                    with self.assertRaises(nonnats_plan.PlanError):
+                        source_plan.compile_plan(SOURCE, params, decoder, kube)
+
     def test_realtime_dual_leaf_monitor_ports(self):
         obj = decoder((SOURCE / 'deploy/templates/nats-realtime-acl-proof.yaml').read_bytes())
         regular, proof = obj['spec']['template']['spec']['initContainers']
@@ -163,6 +206,8 @@ class SourceTests(unittest.TestCase):
             '__FILE_BUCKET__': 'voice-staging-files', '__AVATAR_BUCKET__': 'voice-staging-avatars', '__VOICE_MINIO_IMAGE__': params['minio_image'],
             '__VOICE_MINIO_MC_IMAGE__': params['minio_mc_image'], '__VOICE_MINIO_STORAGE_CLASS__': 'local-path', '__VOICE_MINIO_STORAGE_SIZE__': '20Gi',
             '__WEB_ORIGIN__': 'https://' + params['web_host'], '__LIVEKIT_API_KEY__': 'private-authority', '__LIVEKIT_API_SECRET__': 'private-authority'}
+        import release_policy_wiring
+        replacements.update(release_policy_wiring.replacements(params['release_policy'], TAG, 'voice-staging'))
         paths = list(source_plan.APP_SOURCES) + ['deploy/staging/developer-portal.yaml', 'deploy/staging/flutter-web.yaml', 'deploy/staging/admin.yaml',
             'deploy/staging/configmap-app.yaml', 'deploy/staging/minio.yaml', 'deploy/gateway/ingress.yaml', 'deploy/livekit/ingress.yaml', 'deploy/staging/infra.yaml']
         for path in paths:

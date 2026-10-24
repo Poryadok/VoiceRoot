@@ -278,7 +278,7 @@ func (s *SpaceStore) DeleteCategory(ctx context.Context, categoryID uuid.UUID) e
 }
 
 // CreateVoiceRoom creates a voice room and its tree node in one transaction.
-func (s *SpaceStore) CreateVoiceRoom(ctx context.Context, spaceID uuid.UUID, name string, categoryID *uuid.UUID) (*VoiceRoomRow, *TreeNodeRow, error) {
+func (s *SpaceStore) CreateVoiceRoom(ctx context.Context, spaceID uuid.UUID, name string, categoryID *uuid.UUID, beforeWrite ...func(context.Context) error) (*VoiceRoomRow, *TreeNodeRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, nil, errors.New("space store: pool not configured")
 	}
@@ -288,7 +288,7 @@ func (s *SpaceStore) CreateVoiceRoom(ctx context.Context, spaceID uuid.UUID, nam
 			node *TreeNodeRow
 		}
 		value, err := withOwnershipScopeValue(s, ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) (result, error) {
-			room, node, callErr := scoped.CreateVoiceRoom(ctx, spaceID, name, categoryID)
+			room, node, callErr := scoped.CreateVoiceRoom(ctx, spaceID, name, categoryID, beforeWrite...)
 			return result{room: room, node: node}, callErr
 		})
 		return value.room, value.node, err
@@ -316,6 +316,13 @@ func (s *SpaceStore) CreateVoiceRoom(ctx context.Context, spaceID uuid.UUID, nam
 		return nil, nil, ErrTreeNodeLimit
 	}
 
+	for _, validate := range beforeWrite {
+		if validate != nil {
+			if err := validate(ctx); err != nil {
+				return nil, nil, err
+			}
+		}
+	}
 	room, err := scanVoiceRoomRow(tx.QueryRow(ctx, `
 INSERT INTO voice_rooms (space_id, name)
 VALUES ($1, $2)
@@ -339,6 +346,13 @@ RETURNING `+treeNodeSelectColumns+`
 		return nil, nil, err
 	}
 
+	for _, validate := range beforeWrite {
+		if validate != nil {
+			if err := validate(ctx); err != nil {
+				return nil, nil, err
+			}
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, nil, err
 	}

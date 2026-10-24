@@ -37,10 +37,12 @@ func startBotStore(t *testing.T) *store.BotStore {
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(migration))
 	require.NoError(t, err)
-	migration, err = os.ReadFile(filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db", "000005_space_lifecycle.up.sql"))
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(migration))
-	require.NoError(t, err)
+	for _, name := range []string{"000004_slash_interaction_outbox.up.sql", "000005_space_lifecycle.up.sql", "000007_message_token_uniqueness.up.sql"} {
+		migration, err = os.ReadFile(filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db", name))
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(migration))
+		require.NoError(t, err)
+	}
 	return &store.BotStore{Pool: pool}
 }
 

@@ -10,6 +10,7 @@ require (
 	github.com/prometheus/client_golang v1.20.5
 	github.com/redis/go-redis/v9 v9.7.3
 	github.com/stretchr/testify v1.10.0
+	github.com/testcontainers/testcontainers-go v0.35.0
 	google.golang.org/grpc v1.70.0
 	google.golang.org/protobuf v1.36.5
 	voice.app/voice/calls v0.0.0
@@ -18,6 +19,7 @@ require (
 	voice.app/voice/events v0.0.0
 	voice.app/voice/matchmaking v0.0.0
 	voice.app/voice/social v0.0.0
+	voice.app/voice/role v0.0.0 // indirect
 	voice.app/voice/space v0.0.0
 	voice.app/voice/user v0.0.0
 	voice/backend/pkg v0.0.0
@@ -72,7 +74,6 @@ require (
 	github.com/shirou/gopsutil/v3 v3.23.12 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
-	github.com/testcontainers/testcontainers-go v0.35.0 // indirect
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.35.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
@@ -114,3 +115,5 @@ replace voice.app/voice/events => ../messaging/pb/voice/events
 replace voice.app/voice/file => ../file/pb/voice/file
 
 replace voice.app/voice/story => ../voice/pb/voice/story
+
+replace voice.app/voice/role => ../role/pb/voice/role

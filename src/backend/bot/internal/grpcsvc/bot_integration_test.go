@@ -35,7 +35,7 @@ func migrationSQL(t *testing.T) string {
 	_, file, _, _ := runtime.Caller(0)
 	dir := filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db")
 	var b strings.Builder
-	for _, name := range []string{"000001_init.up.sql", "000002_bot_presence.up.sql", "000003_message_delivery_outbox.up.sql", "000004_slash_interaction_outbox.up.sql", "000005_space_lifecycle.up.sql", "000006_bot_chat_create_requests.up.sql"} {
+	for _, name := range []string{"000001_init.up.sql", "000002_bot_presence.up.sql", "000003_message_delivery_outbox.up.sql", "000004_slash_interaction_outbox.up.sql", "000005_space_lifecycle.up.sql", "000006_bot_chat_create_requests.up.sql", "000007_message_token_uniqueness.up.sql"} {
 		raw, err := os.ReadFile(filepath.Join(dir, name))
 		require.NoError(t, err)
 		b.Write(raw)
@@ -168,7 +168,7 @@ commands:
 	chatID := uuid.New()
 	botUUID, _ := uuid.Parse(botID)
 	profile, _ := authProfile(ctx)
-	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
@@ -253,7 +253,7 @@ commands:
 	chatID := uuid.New()
 	botUUID, _ := uuid.Parse(botID)
 	profile, _ := authProfile(ctx)
-	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
 
 	botCtx := withBotToken(context.Background(), botToken)
@@ -356,7 +356,7 @@ func installBotInSpaceWithPresence(
 	chats []uuid.UUID,
 ) {
 	t.Helper()
-	_, err := st.InstallInSpace(ctx, botID, spaceID, profile, chats)
+	_, err := installSendFixture(t, st, ctx, botID, spaceID, profile, chats)
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botID))
 }

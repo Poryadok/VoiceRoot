@@ -22,6 +22,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"voice/backend/user/internal/authctx"
+	"voice/backend/user/internal/profilemutation"
 	"voice/backend/user/internal/store"
 
 	userv1 "voice.app/voice/user/v1"
@@ -53,6 +54,7 @@ func startUserGRPCForPhase13WithDNS(
 	}
 	userv1.RegisterUserServiceServer(srv, &UserGRPC{
 		Profiles:            profiles,
+		ProfileMutations:    profilemutation.New(rdb),
 		Presence:            store.NewPresenceStore(rdb),
 		Blocks:              &testBlockChecker{},
 		DeletedAccounts:     &deletedAccountCheckerStub{},

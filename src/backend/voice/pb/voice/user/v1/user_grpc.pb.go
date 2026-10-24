@@ -19,6 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	UserService_CaptureSpaceMemberAccountBindings_FullMethodName   = "/voice.user.v1.UserService/CaptureSpaceMemberAccountBindings"
 	UserService_EnsurePrimaryProfile_FullMethodName                = "/voice.user.v1.UserService/EnsurePrimaryProfile"
 	UserService_ListProfileIDsForAccount_FullMethodName            = "/voice.user.v1.UserService/ListProfileIDsForAccount"
 	UserService_ResolveAccountIDForProfile_FullMethodName          = "/voice.user.v1.UserService/ResolveAccountIDForProfile"
@@ -26,6 +27,7 @@ const (
 	UserService_ResolvePrimaryProfileIDs_FullMethodName            = "/voice.user.v1.UserService/ResolvePrimaryProfileIDs"
 	UserService_MarkAccountRegular_FullMethodName                  = "/voice.user.v1.UserService/MarkAccountRegular"
 	UserService_GetSdkProfileEligibility_FullMethodName            = "/voice.user.v1.UserService/GetSdkProfileEligibility"
+	UserService_GetSpaceAdmissionProfileEligibility_FullMethodName = "/voice.user.v1.UserService/GetSpaceAdmissionProfileEligibility"
 	UserService_RecordSdkAuthorTombstone_FullMethodName            = "/voice.user.v1.UserService/RecordSdkAuthorTombstone"
 	UserService_GetProfile_FullMethodName                          = "/voice.user.v1.UserService/GetProfile"
 	UserService_GetProfiles_FullMethodName                         = "/voice.user.v1.UserService/GetProfiles"
@@ -66,6 +68,8 @@ const (
 //
 // User Service — profiles, privacy, presence. HTTP: /api/v1/users/**.
 type UserServiceClient interface {
+	// Space-only protected capture. Not registered on the ordinary User listener.
+	CaptureSpaceMemberAccountBindings(ctx context.Context, in *CaptureSpaceMemberAccountBindingsRequest, opts ...grpc.CallOption) (*CaptureSpaceMemberAccountBindingsResponse, error)
 	// S2S bootstrap from Auth: ensure one primary profile per account before JWT is issued.
 	// Target: called only from trusted Auth; not exposed via public Gateway REST in v1 DM scope.
 	EnsurePrimaryProfile(ctx context.Context, in *EnsurePrimaryProfileRequest, opts ...grpc.CallOption) (*EnsurePrimaryProfileResponse, error)
@@ -84,6 +88,9 @@ type UserServiceClient interface {
 	MarkAccountRegular(ctx context.Context, in *MarkAccountRegularRequest, opts ...grpc.CallOption) (*MarkAccountRegularResponse, error)
 	// Auth-only protected listener: exact read-only SDK target profile snapshot.
 	GetSdkProfileEligibility(ctx context.Context, in *GetSdkProfileEligibilityRequest, opts ...grpc.CallOption) (*GetSdkProfileEligibilityResponse, error)
+	// @voice.security=protected;callers=service:auth
+	// Dedicated admission listener only; no SDK consent or target conversion authority.
+	GetSpaceAdmissionProfileEligibility(ctx context.Context, in *GetSpaceAdmissionProfileEligibilityRequest, opts ...grpc.CallOption) (*GetSpaceAdmissionProfileEligibilityResponse, error)
 	// Auth-only protected listener: immutable historical SDK actor tombstone receipt.
 	RecordSdkAuthorTombstone(ctx context.Context, in *RecordSdkAuthorTombstoneRequest, opts ...grpc.CallOption) (*RecordSdkAuthorTombstoneResponse, error)
 	GetProfile(ctx context.Context, in *GetProfileRequest, opts ...grpc.CallOption) (*GetProfileResponse, error)
@@ -137,6 +144,16 @@ type userServiceClient struct {
 
 func NewUserServiceClient(cc grpc.ClientConnInterface) UserServiceClient {
 	return &userServiceClient{cc}
+}
+
+func (c *userServiceClient) CaptureSpaceMemberAccountBindings(ctx context.Context, in *CaptureSpaceMemberAccountBindingsRequest, opts ...grpc.CallOption) (*CaptureSpaceMemberAccountBindingsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CaptureSpaceMemberAccountBindingsResponse)
+	err := c.cc.Invoke(ctx, UserService_CaptureSpaceMemberAccountBindings_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *userServiceClient) EnsurePrimaryProfile(ctx context.Context, in *EnsurePrimaryProfileRequest, opts ...grpc.CallOption) (*EnsurePrimaryProfileResponse, error) {
@@ -203,6 +220,16 @@ func (c *userServiceClient) GetSdkProfileEligibility(ctx context.Context, in *Ge
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetSdkProfileEligibilityResponse)
 	err := c.cc.Invoke(ctx, UserService_GetSdkProfileEligibility_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) GetSpaceAdmissionProfileEligibility(ctx context.Context, in *GetSpaceAdmissionProfileEligibilityRequest, opts ...grpc.CallOption) (*GetSpaceAdmissionProfileEligibilityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSpaceAdmissionProfileEligibilityResponse)
+	err := c.cc.Invoke(ctx, UserService_GetSpaceAdmissionProfileEligibility_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -535,6 +562,8 @@ func (c *userServiceClient) GetSearchProfileCheckpoint(ctx context.Context, in *
 //
 // User Service — profiles, privacy, presence. HTTP: /api/v1/users/**.
 type UserServiceServer interface {
+	// Space-only protected capture. Not registered on the ordinary User listener.
+	CaptureSpaceMemberAccountBindings(context.Context, *CaptureSpaceMemberAccountBindingsRequest) (*CaptureSpaceMemberAccountBindingsResponse, error)
 	// S2S bootstrap from Auth: ensure one primary profile per account before JWT is issued.
 	// Target: called only from trusted Auth; not exposed via public Gateway REST in v1 DM scope.
 	EnsurePrimaryProfile(context.Context, *EnsurePrimaryProfileRequest) (*EnsurePrimaryProfileResponse, error)
@@ -553,6 +582,9 @@ type UserServiceServer interface {
 	MarkAccountRegular(context.Context, *MarkAccountRegularRequest) (*MarkAccountRegularResponse, error)
 	// Auth-only protected listener: exact read-only SDK target profile snapshot.
 	GetSdkProfileEligibility(context.Context, *GetSdkProfileEligibilityRequest) (*GetSdkProfileEligibilityResponse, error)
+	// @voice.security=protected;callers=service:auth
+	// Dedicated admission listener only; no SDK consent or target conversion authority.
+	GetSpaceAdmissionProfileEligibility(context.Context, *GetSpaceAdmissionProfileEligibilityRequest) (*GetSpaceAdmissionProfileEligibilityResponse, error)
 	// Auth-only protected listener: immutable historical SDK actor tombstone receipt.
 	RecordSdkAuthorTombstone(context.Context, *RecordSdkAuthorTombstoneRequest) (*RecordSdkAuthorTombstoneResponse, error)
 	GetProfile(context.Context, *GetProfileRequest) (*GetProfileResponse, error)
@@ -608,6 +640,9 @@ type UserServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedUserServiceServer struct{}
 
+func (UnimplementedUserServiceServer) CaptureSpaceMemberAccountBindings(context.Context, *CaptureSpaceMemberAccountBindingsRequest) (*CaptureSpaceMemberAccountBindingsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CaptureSpaceMemberAccountBindings not implemented")
+}
 func (UnimplementedUserServiceServer) EnsurePrimaryProfile(context.Context, *EnsurePrimaryProfileRequest) (*EnsurePrimaryProfileResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method EnsurePrimaryProfile not implemented")
 }
@@ -628,6 +663,9 @@ func (UnimplementedUserServiceServer) MarkAccountRegular(context.Context, *MarkA
 }
 func (UnimplementedUserServiceServer) GetSdkProfileEligibility(context.Context, *GetSdkProfileEligibilityRequest) (*GetSdkProfileEligibilityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetSdkProfileEligibility not implemented")
+}
+func (UnimplementedUserServiceServer) GetSpaceAdmissionProfileEligibility(context.Context, *GetSpaceAdmissionProfileEligibilityRequest) (*GetSpaceAdmissionProfileEligibilityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSpaceAdmissionProfileEligibility not implemented")
 }
 func (UnimplementedUserServiceServer) RecordSdkAuthorTombstone(context.Context, *RecordSdkAuthorTombstoneRequest) (*RecordSdkAuthorTombstoneResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RecordSdkAuthorTombstone not implemented")
@@ -744,6 +782,24 @@ func RegisterUserServiceServer(s grpc.ServiceRegistrar, srv UserServiceServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&UserService_ServiceDesc, srv)
+}
+
+func _UserService_CaptureSpaceMemberAccountBindings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CaptureSpaceMemberAccountBindingsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).CaptureSpaceMemberAccountBindings(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_CaptureSpaceMemberAccountBindings_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).CaptureSpaceMemberAccountBindings(ctx, req.(*CaptureSpaceMemberAccountBindingsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _UserService_EnsurePrimaryProfile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -868,6 +924,24 @@ func _UserService_GetSdkProfileEligibility_Handler(srv interface{}, ctx context.
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(UserServiceServer).GetSdkProfileEligibility(ctx, req.(*GetSdkProfileEligibilityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_GetSpaceAdmissionProfileEligibility_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSpaceAdmissionProfileEligibilityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).GetSpaceAdmissionProfileEligibility(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_GetSpaceAdmissionProfileEligibility_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).GetSpaceAdmissionProfileEligibility(ctx, req.(*GetSpaceAdmissionProfileEligibilityRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1456,6 +1530,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*UserServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
+			MethodName: "CaptureSpaceMemberAccountBindings",
+			Handler:    _UserService_CaptureSpaceMemberAccountBindings_Handler,
+		},
+		{
 			MethodName: "EnsurePrimaryProfile",
 			Handler:    _UserService_EnsurePrimaryProfile_Handler,
 		},
@@ -1482,6 +1560,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSdkProfileEligibility",
 			Handler:    _UserService_GetSdkProfileEligibility_Handler,
+		},
+		{
+			MethodName: "GetSpaceAdmissionProfileEligibility",
+			Handler:    _UserService_GetSpaceAdmissionProfileEligibility_Handler,
 		},
 		{
 			MethodName: "RecordSdkAuthorTombstone",

@@ -33,6 +33,7 @@ var lifecycleTestParticipants = []commonv1.ParticipantId{
 	commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION,
 	commonv1.ParticipantId_PARTICIPANT_ID_BOT,
 	commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION,
+	commonv1.ParticipantId_PARTICIPANT_ID_REALTIME,
 }
 
 var lifecycleTestRequestPackages = map[commonv1.ParticipantId]string{
@@ -46,6 +47,7 @@ var lifecycleTestRequestPackages = map[commonv1.ParticipantId]string{
 	commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION: "voice.subscription.v1",
 	commonv1.ParticipantId_PARTICIPANT_ID_BOT:          "voice.bot.v1",
 	commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION: "voice.notification.v1",
+	commonv1.ParticipantId_PARTICIPANT_ID_REALTIME:     "voice.realtime.v1",
 }
 
 type durableLifecycleStore interface {
@@ -87,6 +89,21 @@ func lifecycleMigrationPath(t *testing.T, direction string) string {
 }
 
 func lifecycleStoreFixture(t *testing.T) *SpaceStore {
+	t.Helper()
+	st := lifecycleBaseStoreFixture(t)
+	ctx := context.Background()
+	// Keep this focused fixture's historical layout, extending only the durable
+	// completion ledger and canonical Realtime11 constraints it now exercises.
+	// Complete runtime fixtures separately install audit/hard-delete guards.
+	for _, name := range []string{"000023_lifecycle_evidence_retention.up.sql", "000034_realtime_lifecycle_participant.up.sql"} {
+		_, err := st.Pool.Exec(ctx, r22SpaceMigrationSQL(t, name))
+		require.NoError(t, err)
+	}
+	return st
+}
+
+// Runtime fixtures must install22 before34 creates the terminal predicate.
+func lifecycleBaseStoreFixture(t *testing.T) *SpaceStore {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("requires PostgreSQL lifecycle migration")

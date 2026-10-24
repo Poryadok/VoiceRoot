@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSpaceModeration_BanMember_RecordsBanAndRemovesMember(t *testing.T) {
+func TestSpaceModeration_RawBanMemberCannotBypassQualifiedIntent(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -27,15 +27,26 @@ func TestSpaceModeration_BanMember_RecordsBanAndRemovesMember(t *testing.T) {
 
 	accountID := uuid.New()
 	mod := uuid.New()
-	require.NoError(t, st.BanMember(ctx, space.ID, accountID, mod, strPtrStore("spam"), &target))
+	require.ErrorIs(t, st.BanMember(ctx, space.ID, accountID, mod, strPtrStore("spam"), &target), ErrAccountBanUnavailable)
 
 	ok, err := st.IsAccountBanned(ctx, space.ID, accountID)
 	require.NoError(t, err)
-	require.True(t, ok)
+	require.False(t, ok)
 
 	member, err := st.IsSpaceMember(ctx, space.ID, target)
 	require.NoError(t, err)
-	require.False(t, member)
+	require.True(t, member)
+	var audits int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE space_id=$1 AND action='member_banned'`, space.ID).Scan(&audits))
+	require.Zero(t, audits, "raw UUIDs cannot supply the authenticated intent and complete owner capture")
+}
+
+func TestSpaceModeration_RawBanAndUnbanRejectBeforeUsingStore(t *testing.T) {
+	ctx := context.Background()
+	for _, st := range []*SpaceStore{nil, {}} {
+		require.ErrorIs(t, st.BanMember(ctx, uuid.New(), uuid.New(), uuid.New(), nil, nil), ErrAccountBanUnavailable)
+		require.ErrorIs(t, st.UnbanMember(ctx, uuid.New(), uuid.New(), uuid.New()), ErrAccountBanUnavailable)
+	}
 }
 
 func TestSpaceModeration_SetMemberTimeout_ActiveUntil(t *testing.T) {

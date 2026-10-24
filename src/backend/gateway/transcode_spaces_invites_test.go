@@ -91,7 +91,7 @@ func newInvitesContractGateway(t *testing.T, rec *recordingSpaceInvites) http.Ha
 	})
 }
 
-func TestTranscodeSpacesCreateInvite(t *testing.T) {
+func TestTranscodeSpacesCreateInviteRejectsLegacyUnsignedActor(t *testing.T) {
 	t.Parallel()
 	rec := &recordingSpaceInvites{}
 	h := newInvitesContractGateway(t, rec)
@@ -99,10 +99,8 @@ func TestTranscodeSpacesCreateInvite(t *testing.T) {
 	resp := performRequest(h, http.MethodPost, "/api/v1/spaces/space-1/invites", `{"maxUses":5}`, map[string]string{
 		"Authorization": "Bearer valid-user-token",
 	})
-	require.Equal(t, http.StatusOK, resp.Code)
-	require.NotNil(t, rec.lastCreate)
-	require.Equal(t, "space-1", rec.lastCreate.GetSpaceId())
-	require.Equal(t, int32(5), rec.lastCreate.GetMaxUses())
+	require.Equal(t, http.StatusUnauthorized, resp.Code)
+	require.Nil(t, rec.lastCreate)
 }
 
 func TestTranscodeSpacesListInvites(t *testing.T) {
@@ -147,11 +145,11 @@ func TestTranscodeInvitesGetByCode(t *testing.T) {
 func TestTranscodeInvitesJoin(t *testing.T) {
 	t.Parallel()
 	rec := &recordingSpaceInvites{}
-	h := newInvitesContractGateway(t, rec)
-
-	resp := performRequest(h, http.MethodPost, "/api/v1/invites/secret-code/join", "", map[string]string{
-		"Authorization": "Bearer valid-user-token",
-	})
+	client, cleanup := startBufconnSpaceInvitesClient(t, rec)
+	t.Cleanup(cleanup)
+	f := newCreatorFixture(t)
+	h := newGateway(f.config(client))
+	resp := joinRequest(t, h, f, "/api/v1/invites/secret-code/join", "")
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NotNil(t, rec.lastJoin)
 	require.Equal(t, "secret-code", rec.lastJoin.GetCode())

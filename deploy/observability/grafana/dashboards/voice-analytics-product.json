@@ -41,14 +41,14 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Registrations (profile_created / day)",
+      "title": "Registrations (user_registered / day)",
       "gridPos": { "h": 4, "w": 8, "x": 0, "y": 8 },
       "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
       "targets": [
         {
           "refId": "A",
           "queryType": "sql",
-          "rawSql": "SELECT count() FROM voice.events_logical WHERE event_type = 'profile_created' AND toDate(timestamp) = today()",
+          "rawSql": "SELECT count() FROM voice.events_logical WHERE event_type = 'user_registered' AND toDate(timestamp) = today()",
           "format": 1
         }
       ]

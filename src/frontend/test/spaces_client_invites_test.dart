@@ -141,12 +141,14 @@ void main() {
     );
   });
 
-  test('joinByInvite posts join route', () async {
+  test('joinByInvite posts empty body and decodes membership', () async {
     String? path;
+    http.Request? sent;
     final client = VoiceSpacesClient(
       gateway: GatewayHttpClient(
         httpClient: MockClient((request) async {
           path = request.url.path;
+          sent = request;
           return http.Response(
             jsonEncode({
               'space_membership': {
@@ -167,10 +169,15 @@ void main() {
     );
 
     expect(path, '/api/v1/invites/secret/join');
+    expect(sent!.method, 'POST');
+    expect(sent!.headers['authorization'], 'Bearer t');
+    expect(sent!.bodyBytes, isEmpty,
+        reason: 'Gateway derives the invite code from the route');
     expect(result, isA<SpacesApiOk<SpaceMembershipData>>());
     expect(
       (result as SpacesApiOk<SpaceMembershipData>).data.spaceId,
       'space-1',
     );
+    expect(result.data.profileId, 'profile-2');
   });
 }

@@ -116,6 +116,9 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 	}
 	requestID := correlation.FromGRPC(ctx)
 	msg := &nats.Msg{Subject: subject, Data: b, Header: nats.Header{}}
+	if subject == subjectFileExpired {
+		msg.Header.Set(nats.MsgIdHdr, env.GetEventId())
+	}
 	natslog.SetRequestIDHeader(msg.Header, requestID)
 	var options []nats.PubOpt
 	if _, bounded := ctx.Deadline(); bounded {

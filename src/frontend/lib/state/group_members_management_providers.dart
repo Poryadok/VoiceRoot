@@ -26,12 +26,14 @@ class GroupMembersManagementState {
     this.isLoading = false,
     this.error,
     this.isMutating = false,
+    this.permissions,
   });
 
   final List<ChatMember> members;
   final bool isLoading;
   final Object? error;
   final bool isMutating;
+  final ChatPermissions? permissions;
 
   GroupMembersManagementState copyWith({
     List<ChatMember>? members,
@@ -39,11 +41,14 @@ class GroupMembersManagementState {
     Object? error,
     bool clearError = false,
     bool? isMutating,
+    ChatPermissions? permissions,
+    bool clearPermissions = false,
   }) => GroupMembersManagementState(
     members: members ?? this.members,
     isLoading: isLoading ?? this.isLoading,
     error: clearError ? null : (error ?? this.error),
     isMutating: isMutating ?? this.isMutating,
+    permissions: clearPermissions ? null : (permissions ?? this.permissions),
   );
 }
 
@@ -74,6 +79,7 @@ class GroupMembersManagementController
 
   final Ref _ref;
   final String chatId;
+  int _loadGeneration = 0;
 
   GroupMembersAuthContext? captureContext() {
     final session = _ref.read(authControllerProvider).session;
@@ -94,6 +100,7 @@ class GroupMembersManagementController
   }
 
   Future<void> load({GroupMembersAuthContext? expectedContext}) async {
+    final generation = ++_loadGeneration;
     final expected = expectedContext ?? captureContext();
     if (expected == null) {
       state = state.copyWith(isLoading: false, error: 'not_authenticated');
@@ -104,11 +111,32 @@ class GroupMembersManagementController
       isLoading: true,
       clearError: true,
       isMutating: false,
+      clearPermissions: true,
     );
     final members = <ChatMember>[];
     final seenCursors = <String>{};
     String? cursor;
     try {
+      ChatPermissions? permissions;
+      Object? permissionError;
+      final decision = await _ref
+          .read(voiceChatsClientProvider)
+          .getChatPermissions(
+            authorization: expected.authorization,
+            chatId: chatId,
+          );
+      if (!mounted ||
+          !isCurrentContext(expected) ||
+          generation != _loadGeneration) {
+        return;
+      }
+      if (decision case ChatsApiOk<ChatPermissions>(:final data)) {
+        permissions = data;
+      } else if (decision case ChatsApiFailure(:final statusCode)) {
+        permissionError = isBackendUnavailable(statusCode)
+            ? const BackendUnavailableException()
+            : StateError('chat_permissions_unavailable');
+      }
       while (true) {
         final result = await _ref
             .read(voiceChatsClientProvider)
@@ -118,7 +146,11 @@ class GroupMembersManagementController
               cursor: cursor,
               pageSize: kGroupMembersPageSize,
             );
-        if (!mounted || !isCurrentContext(expected)) return;
+        if (!mounted ||
+            !isCurrentContext(expected) ||
+            generation != _loadGeneration) {
+          return;
+        }
         switch (result) {
           case ChatsApiFailure(:final statusCode):
             state = state.copyWith(
@@ -135,7 +167,9 @@ class GroupMembersManagementController
               state = state.copyWith(
                 members: List<ChatMember>.unmodifiable(members),
                 isLoading: false,
-                clearError: true,
+                clearError: permissionError == null,
+                error: permissionError,
+                permissions: permissions,
               );
               return;
             }
@@ -150,7 +184,9 @@ class GroupMembersManagementController
         }
       }
     } catch (error) {
-      if (mounted && isCurrentContext(expected)) {
+      if (mounted &&
+          isCurrentContext(expected) &&
+          generation == _loadGeneration) {
         state = state.copyWith(
           isLoading: false,
           error: error is BackendUnavailableException
@@ -189,6 +225,36 @@ class GroupMembersManagementController
         ),
   );
 
+  Future<String?> setMemberPostAsChat(
+    String profileId,
+    bool allowed, {
+    required GroupMembersAuthContext expectedContext,
+  }) => _mutate(
+    expectedContext,
+    (authorization) => _ref
+        .read(voiceChatsClientProvider)
+        .setMemberPostAsChat(
+          authorization: authorization,
+          chatId: chatId,
+          profileId: profileId,
+          allowed: allowed,
+        ),
+  );
+
+  Future<String?> setMemberAdditionsEnabled(
+    bool enabled, {
+    required GroupMembersAuthContext expectedContext,
+  }) => _mutate(
+    expectedContext,
+    (authorization) => _ref
+        .read(voiceChatsClientProvider)
+        .setMemberAdditionsEnabled(
+          authorization: authorization,
+          chatId: chatId,
+          enabled: enabled,
+        ),
+  );
+
   Future<String?> transferOwnership(
     String profileId, {
     required GroupMembersAuthContext expectedContext,
@@ -218,6 +284,7 @@ class GroupMembersManagementController
   ) async {
     if (!isCurrentContext(expected)) return kGroupMembersStaleContext;
     if (state.isMutating) return 'mutation_in_progress';
+    _loadGeneration++;
     state = state.copyWith(isMutating: true, clearError: true);
     try {
       final result = await request(expected.authorization);

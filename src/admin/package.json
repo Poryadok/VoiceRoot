@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:browser": "node --test browser/text-readiness.node.mjs browser/staff-flows.node.mjs && node browser/staff-flows.mjs"
   },
   "dependencies": {
     "react": "^19.1.0",

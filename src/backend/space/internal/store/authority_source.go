@@ -19,7 +19,7 @@ func (s *SpaceStore) CheckAuthoritySourceSchema(ctx context.Context) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
-	tx, err := authoritysource.BeginRead(ctx, s.Pool, spaceAuthorityCatalog)
+	tx, err := s.beginQualifiedAuthoritySourceRead(ctx)
 	if err != nil {
 		return err
 	}
@@ -34,7 +34,31 @@ func (s *SpaceStore) beginAuthorityRead(ctx context.Context, scope *authorityv1.
 	if s == nil || s.tx != nil {
 		return nil, errors.New("source read requires owning pool")
 	}
-	return authoritysource.BeginRead(ctx, s.Pool, spaceAuthorityCatalog)
+	return s.beginQualifiedAuthoritySourceRead(ctx)
+}
+
+// SPACE-SOURCE-CATALOG-34-v1 qualifies only the original25 and the complete34
+// migration cut. Additive audit, composite-operation and policy journals do not
+// alter this projection or its revision coverage. Realtime11 retains the same
+// lifecycle phase/generation fold. Unknown cuts, including native32/33, fail
+// closed. BeginRead repeats exact marker, relation, trigger and body checks
+// under the schema locks in the SAME snapshot used to read the source.
+func (s *SpaceStore) beginQualifiedAuthoritySourceRead(ctx context.Context) (pgx.Tx, error) {
+	if s == nil || s.Pool == nil || s.tx != nil {
+		return nil, errors.New("source read requires owning pool")
+	}
+	var version int64
+	if err := s.Pool.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil {
+		return nil, err
+	}
+	switch version {
+	case 25, 34:
+	default:
+		return nil, errors.New("owner source migration cut unqualified")
+	}
+	catalog := spaceAuthorityCatalog
+	catalog.Version = version
+	return authoritysource.BeginRead(ctx, s.Pool, catalog)
 }
 
 func spaceSourceRevision(ctx context.Context, tx pgx.Tx, space string) (uint64, error) {

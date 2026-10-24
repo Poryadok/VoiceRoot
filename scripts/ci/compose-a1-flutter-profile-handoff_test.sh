@@ -39,6 +39,17 @@ assert_full_port_env() {
   done
 }
 
+assert_overlay_order() {
+  local line="$1" file
+  local -a files
+  mapfile -t files < <(grep -oE '<-f> <[^>]+>' <<<"$line" | sed 's/^<-f> <//;s/>$//')
+  assert_eq "${#files[@]}" 3
+  assert_eq "${files[0]}" "${ROOT}/docker-compose.yml"
+  assert_eq "${files[1]}" "${ROOT}/docker-compose.voice-space-media.yml"
+  assert_eq "${files[2]}" "${ROOT}/docker-compose.phase0.yml"
+  for file in "${files[@]}"; do assert_abs "$file"; done
+}
+
 assert_isolated_make_target() {
   local output_file="${TEST_TMP}/make-profile-handoff.out" rc count
   set +e
@@ -128,9 +139,24 @@ if [[ "${1:-}" == compose ]]; then
     previous="$arg"
   done
   [[ "$line" == *' config '* ]] && exit 0
-  [[ "$line" == *' up '* ]] && exit 0
+  [[ "$line" == *' up '* ]] && exit "${FAKE_UP_RC:-0}"
   [[ "$line" == *' ps -q '* ]] && { echo fake-container; exit 0; }
-  [[ "$line" == *' logs '* ]] && { echo fake diagnostics; exit 0; }
+  [[ "$line" == *' logs '* ]] && {
+    if [[ "$line" == *'compose-db-init'* ]]; then
+      if [[ "${FAKE_STARTUP_LOG_MODE:-}" == hang ]]; then
+        trap '' TERM
+        command -p sleep 30
+        printf 'startup_collector_survived_deadline\n' >>"$log"
+      elif [[ "${FAKE_STARTUP_LOG_MODE:-}" == cap ]]; then
+        head -c 70000 /dev/zero | tr '\0' x
+      fi
+      printf '%s\n' "${FAKE_STARTUP_LOG:-unrecognized startup detail}"
+      printf 'startup_collector_finished\n' >>"$log"
+    else
+      echo fake diagnostics
+    fi
+    exit "${FAKE_LOGS_RC:-0}"
+  }
   [[ "$line" == *' ps '* ]] && { echo fake compose ps; exit 0; }
   [[ "$line" == *' down '* ]] && exit "${FAKE_DOWN_RC:-0}"
   exit 0
@@ -236,6 +262,8 @@ run_runner() {
     cd "${work}/tmp with spaces"
     env PATH="${work}/bin:${PATH}" FAKE_LOG="${work}/commands.log" \
       FAKE_DOCKER_MODE="${FAKE_DOCKER_MODE:-}" FAKE_FLUTTER_RC="${FAKE_FLUTTER_RC:-0}" \
+      FAKE_UP_RC="${FAKE_UP_RC:-0}" FAKE_LOGS_RC="${FAKE_LOGS_RC:-0}" \
+      FAKE_STARTUP_LOG="${FAKE_STARTUP_LOG:-}" FAKE_STARTUP_LOG_MODE="${FAKE_STARTUP_LOG_MODE:-}" \
       FAKE_REAL_SLEEP="${FAKE_REAL_SLEEP:-}" \
       FAKE_HEALTH_MODE="${FAKE_HEALTH_MODE:-}" FAKE_HEALTH_COUNT_FILE="${work}/health-count" \
       FAKE_VISIBILITY_MODE="${FAKE_VISIBILITY_MODE:-}" FAKE_VISIBILITY_COUNT_FILE="${work}/visibility-count" \
@@ -256,6 +284,56 @@ assert_file "$SCRIPT"
 assert_contains "$SCRIPT" 'e2e-manifest\.sh.*a1_flutter_profile_handoff'
 assert_contains "$SCRIPT" 'GATEWAY_RATE_LIMIT_RULES_JSON='
 assert_contains "$SCRIPT" '"OTP":\{"limit":0'
+
+echo '== Compose startup failure emits only safe bounded categories before cleanup =='
+case_dir="$(new_case startup-failure)"
+startup_secret='FLUTTER_STARTUP_SECRET_SENTINEL'
+FAKE_UP_RC=23 FAKE_LOGS_RC=47 \
+  FAKE_STARTUP_LOG="password authentication failed SQLSTATE 55000; DSN=postgresql://sensitive:${startup_secret}@private-host/voice" \
+  VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP=true run_runner "$case_dir"
+assert_eq "$(cat "${case_dir}/rc")" 23
+assert_contains "${case_dir}/stderr" '^A1 Flutter startup diagnostic category=authentication_failed$'
+assert_not_contains "${case_dir}/stdout" "$startup_secret|postgresql://|SQLSTATE|password authentication failed"
+assert_not_contains "${case_dir}/stderr" "$startup_secret|postgresql://|SQLSTATE|password authentication failed"
+assert_not_contains "${case_dir}/commands.log" '^flutter |^curl '
+assert_contains "${case_dir}/commands.log" 'compose.*<logs> <--tail> <80> <--no-color> <--timestamps> <compose-db-init>'
+assert_contains "${case_dir}/commands.log" 'compose.*<down> <--remove-orphans>'
+startup_up_line="$(grep -n 'compose.*<up> <-d> <--build>' "${case_dir}/commands.log" | head -1 | cut -d: -f1)"
+startup_logs_line="$(grep -n 'compose.*<logs> <--tail> <80>' "${case_dir}/commands.log" | head -1 | cut -d: -f1)"
+startup_down_line="$(grep -n 'compose.*<down> <--remove-orphans>' "${case_dir}/commands.log" | head -1 | cut -d: -f1)"
+[[ "$startup_up_line" =~ ^[0-9]+$ && "$startup_logs_line" =~ ^[0-9]+$ && "$startup_down_line" =~ ^[0-9]+$ ]] || fail 'startup order entries missing'
+(( startup_up_line < startup_logs_line && startup_logs_line < startup_down_line )) || fail 'startup diagnostics must precede cleanup'
+[[ -z "$(find "${case_dir}/tmp with spaces" -type d -name phase0-fixture -print -quit)" ]] || fail 'opted-in startup cleanup must remove fixture'
+
+echo '== startup diagnostics retain default cleanup opt-in and unknown classification =='
+case_dir="$(new_case startup-retained)"
+FAKE_UP_RC=29 FAKE_STARTUP_LOG="$startup_secret" run_runner "$case_dir"
+assert_eq "$(cat "${case_dir}/rc")" 29
+assert_contains "${case_dir}/stderr" '^A1 Flutter startup diagnostic category=unclassified$'
+assert_not_contains "${case_dir}/stderr" "$startup_secret"
+assert_not_contains "${case_dir}/commands.log" 'compose.*<down>'
+[[ -d "$(find "${case_dir}/tmp with spaces" -type d -name phase0-fixture -print -quit)" ]] || fail 'default cleanup must retain fixture'
+
+echo '== startup classifier never reads beyond its output cap =='
+case_dir="$(new_case startup-output-cap)"
+FAKE_UP_RC=31 FAKE_STARTUP_LOG_MODE=cap FAKE_STARTUP_LOG="password authentication failed $startup_secret" \
+  VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP=true run_runner "$case_dir"
+assert_eq "$(cat "${case_dir}/rc")" 31
+assert_contains "${case_dir}/stderr" '^A1 Flutter startup diagnostic category=unclassified$'
+assert_not_contains "${case_dir}/stderr" "$startup_secret|password authentication failed|xxxx"
+assert_contains "${case_dir}/commands.log" '^startup_collector_finished$'
+
+echo '== TERM-ignoring startup collector is killed without replacing startup status =='
+case_dir="$(new_case startup-hard-timeout)"
+FAKE_UP_RC=37 FAKE_STARTUP_LOG_MODE=hang VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP=true run_runner "$case_dir"
+assert_eq "$(cat "${case_dir}/rc")" 37
+assert_contains "${case_dir}/stderr" '^A1 Flutter startup diagnostic category=unclassified$'
+assert_not_contains "${case_dir}/commands.log" 'startup_collector_survived_deadline|startup_collector_finished'
+assert_contains "${case_dir}/commands.log" 'compose.*<down> <--remove-orphans>'
+if [[ "${1:-}" == --startup-diagnostics-only ]]; then
+  echo 'Focused Flutter startup diagnostics regressions passed.'
+  exit 0
+fi
 
 echo '== caller Compose selectors are rejected before Docker =='
 case_dir="$(new_case ambient-project)"
@@ -365,6 +443,7 @@ assert_eq "$flutter_count" 0
 
 echo '== every Compose path is absolute and disposable media fixture is wired =='
 compose_line="$(grep -m1 '^docker <compose> ' "${case_dir}/commands.log")"
+assert_overlay_order "$compose_line"
 env_file="$(sed -n 's/.* <--env-file> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
 compose_dir="$(sed -n 's/.* <--project-directory> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
 compose_file="$(sed -n 's/.* <-f> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
@@ -405,6 +484,7 @@ assert_abs "$cleanup_env_file"; assert_abs "$cleanup_directory"; assert_abs "$cl
 [[ "$cleanup_project" != voice ]] || fail 'cleanup must never target the shared voice project'
 assert_eq "$cleanup_profile" app
 while IFS= read -r compose_identity_line; do
+  assert_overlay_order "$compose_identity_line"
   identity_env_file="$(sed -n 's/.* <--env-file> <\([^>]*\)> .*/\1/p' <<<"$compose_identity_line")"
   identity_project="$(sed -n 's/.* <--project-name> <\([^>]*\)> .*/\1/p' <<<"$compose_identity_line")"
   identity_directory="$(sed -n 's/.* <--project-directory> <\([^>]*\)> .*/\1/p' <<<"$compose_identity_line")"

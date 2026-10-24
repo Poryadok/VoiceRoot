@@ -2,6 +2,7 @@
 
 FROM golang:1.26-alpine AS build
 ARG NOTIFICATION_COMPOSE_FCM_DIAGNOSTIC=false
+ARG VOICE_SOURCE_SHA
 WORKDIR /src
 ENV GOPROXY=https://proxy.golang.org,direct
 COPY scripts/docker-go-mod-download.sh /usr/local/bin/docker-go-mod-download.sh
@@ -29,9 +30,9 @@ COPY notification ./notification
 WORKDIR /src/notification
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked --mount=type=cache,target=/root/.cache/go-build,id=voice-gobuild,sharing=locked \
     if [ "$NOTIFICATION_COMPOSE_FCM_DIAGNOSTIC" = "true" ]; then \
-      CGO_ENABLED=0 go build -tags voice_compose_fcm_diagnostic -trimpath -ldflags="-s -w" -o /out/service .; \
+      CGO_ENABLED=0 go build -tags voice_compose_fcm_diagnostic -trimpath -ldflags="-s -w -X main.buildSourceSHA=$VOICE_SOURCE_SHA" -o /out/service .; \
     else \
-      CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .; \
+      CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildSourceSHA=$VOICE_SOURCE_SHA" -o /out/service .; \
     fi
 
 FROM alpine:3.20

@@ -11,7 +11,7 @@ import (
 )
 
 func TestBuildVoIPNotification_TopicAndPushType(t *testing.T) {
-	n, err := apns.BuildVoIPNotification("com.voice.app", "device-tok", push.Payload{
+	n, err := apns.BuildVoIPNotification("com.voice.app.voip", "device-tok", push.Payload{
 		Data: map[string]string{
 			"type":                 "incoming_call",
 			"room_id":              "room-1",
@@ -36,7 +36,7 @@ func TestBuildVoIPNotification_TopicAndPushType(t *testing.T) {
 }
 
 func TestBuildVoIPNotification_RequiresToken(t *testing.T) {
-	_, err := apns.BuildVoIPNotification("com.voice.app", "", push.Payload{})
+	_, err := apns.BuildVoIPNotification("com.voice.app.voip", "", push.Payload{})
 	require.Error(t, err)
 }
 

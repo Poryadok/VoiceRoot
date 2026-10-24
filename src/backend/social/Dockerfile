@@ -11,6 +11,7 @@ COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
 COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
+COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
 COPY file/pb/voice/file/go.mod ./file/pb/voice/file/
 COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
 COPY voice/pb/voice/auth/go.mod ./voice/pb/voice/auth/
@@ -21,6 +22,7 @@ COPY messaging/pb/voice/events ./messaging/pb/voice/events
 COPY user/pb ./user/pb
 COPY chat/pb/voice/chat ./chat/pb/voice/chat
 COPY voice/pb/voice/space ./voice/pb/voice/space
+COPY role/pb/voice/role ./role/pb/voice/role
 COPY file/pb/voice/file ./file/pb/voice/file
 COPY voice/pb/voice/story ./voice/pb/voice/story
 COPY voice/pb/voice/auth ./voice/pb/voice/auth

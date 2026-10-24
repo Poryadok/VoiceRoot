@@ -36,40 +36,47 @@ import (
 )
 
 type grpcClients struct {
-	connections             []*grpc.ClientConn
-	userConn                *grpc.ClientConn
-	userRequired            bool
-	userConnectErr          error
-	user                    userv1.UserServiceClient
-	social                  socialv1.SocialServiceClient
-	chat                    chatv1.ChatServiceClient
-	messaging               messagingv1.MessagingServiceClient
-	voice                   callsv1.VoiceServiceClient
-	file                    filev1.FileServiceClient
-	space                   spacev1.SpaceServiceClient
-	spaceLifecycle          spacev1.SpaceServiceClient
-	spaceLifecycleConn      *grpc.ClientConn
-	spaceLifecycleErr       error
-	matchSquadMember        callsv1.MatchSquadMemberServiceClient
-	matchSquadMemberConn    *grpc.ClientConn
-	matchSquadMemberErr     error
-	role                    rolev1.RoleServiceClient
-	notification            notificationv1.NotificationServiceClient
-	matchmaking             matchmakingv1.MatchmakingServiceClient
-	matchmakingComplete     matchmakingv1.MatchmakingServiceClient
-	matchmakingCompleteConn *grpc.ClientConn
-	matchmakingCompleteErr  error
-	moderation              moderationv1.ModerationServiceClient
-	subscription            subscriptionv1.SubscriptionServiceClient
-	bot                     botv1.BotServiceClient
-	story                   storyv1.StoryServiceClient
-	search                  searchv1.SearchServiceClient
-	auth                    authv1.AuthServiceClient
-	analytics               analyticsv1.AnalyticsQueryServiceClient
-	voiceUser          callsv1.VoiceServiceClient
-	voiceUserConn      *grpc.ClientConn
-	voiceUserRequired  bool
-	voiceUserErr       error
+	auditInitiatingTransports []auditInitiatingTransport
+	connections               []*grpc.ClientConn
+	userConn                  *grpc.ClientConn
+	userRequired              bool
+	userConnectErr            error
+	user                      userv1.UserServiceClient
+	social                    socialv1.SocialServiceClient
+	chat                      chatv1.ChatServiceClient
+	chatAudit                 chatv1.ChatServiceClient
+	roleAudit                 rolev1.RoleServiceClient
+	botAuditAdmin             botv1.BotServiceClient
+	messaging                 messagingv1.MessagingServiceClient
+	voice                     callsv1.VoiceServiceClient
+	file                      filev1.FileServiceClient
+	space                     spacev1.SpaceServiceClient
+	spaceLifecycle            spacev1.SpaceServiceClient
+	spaceLifecycleConn        *grpc.ClientConn
+	spaceLifecycleErr         error
+	matchSquadMember          callsv1.MatchSquadMemberServiceClient
+	matchSquadMemberConn      *grpc.ClientConn
+	matchSquadMemberErr       error
+	role                      rolev1.RoleServiceClient
+	notification              notificationv1.NotificationServiceClient
+	matchmaking               matchmakingv1.MatchmakingServiceClient
+	matchmakingComplete       matchmakingv1.MatchmakingServiceClient
+	matchmakingCompleteConn   *grpc.ClientConn
+	matchmakingCompleteErr    error
+	moderation                moderationv1.ModerationServiceClient
+	subscription              subscriptionv1.SubscriptionServiceClient
+	bot                       botv1.BotServiceClient
+	story                     storyv1.StoryServiceClient
+	storyConsent              storyv1.LfpConsentActionServiceClient
+	storyConsentConn          *grpc.ClientConn
+	storyConsentErr           error
+	search                    searchv1.SearchServiceClient
+	auth                      authv1.AuthServiceClient
+	analytics                 analyticsv1.AnalyticsQueryServiceClient
+	voiceUser                 callsv1.VoiceServiceClient
+	voiceUserConn             *grpc.ClientConn
+	voiceUserRequired         bool
+	voiceUserErr              error
 }
 
 type transcoder struct {
@@ -91,6 +98,18 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 	}
 
 	clients := &grpcClients{}
+	if cfg, enabled, err := storyConsentClientConfigFromEnv(); err != nil {
+		clients.storyConsentErr = err
+	} else if enabled {
+		conn, err := cfg.dial()
+		clients.storyConsentErr = err
+		if err == nil {
+			clients.connections = append(clients.connections, conn)
+			clients.storyConsentConn = conn
+			clients.storyConsent = storyv1.NewLfpConsentActionServiceClient(conn)
+		}
+	}
+	clients.configureAuditInitiatingTransports()
 	if cfg, enabled, err := spaceLifecycleClientConfigFromEnv(); err != nil {
 		clients.spaceLifecycleErr = err
 	} else if enabled {
@@ -142,7 +161,19 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 		if addr == "" {
 			return nil, nil
 		}
-		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		policy := grpcclient.DefaultBreakerConfig()
+		policy.Observe = func(event grpcclient.BreakerEvent) {
+			if logger != nil {
+				logger.Debug("gateway grpc circuit breaker", slog.String("method", event.Method),
+					slog.String("state", event.State), slog.String("reason", event.Reason))
+			}
+		}
+		breaker, err := grpcclient.NewUnaryBreaker(policy)
+		if err != nil {
+			return nil, err
+		}
+		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithDisableRetry(), grpc.WithChainUnaryInterceptor(breaker.UnaryClientInterceptor()))
 		if err != nil {
 			return nil, err
 		}
@@ -239,7 +270,7 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 	} else if conn != nil {
 		clients.analytics = analyticsv1.NewAnalyticsQueryServiceClient(conn)
 	}
-	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.voiceUser == nil && clients.file == nil && clients.space == nil && clients.spaceLifecycle == nil && clients.matchSquadMember == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil && clients.matchmakingComplete == nil && clients.search == nil && clients.moderation == nil && clients.subscription == nil && clients.bot == nil && clients.story == nil && clients.analytics == nil {
+	if len(clients.auditInitiatingTransports) == 0 && clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.voiceUser == nil && clients.file == nil && clients.space == nil && clients.spaceLifecycle == nil && clients.matchSquadMember == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil && clients.matchmakingComplete == nil && clients.search == nil && clients.moderation == nil && clients.subscription == nil && clients.bot == nil && clients.story == nil && clients.storyConsent == nil && clients.storyConsentErr == nil && clients.analytics == nil {
 		return nil
 	}
 	return clients
@@ -251,6 +282,18 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 // first profile request.
 func (c *grpcClients) waitForRequiredUserReady(ctx context.Context) error {
 	if c != nil {
+		if c.storyConsentErr != nil {
+			return c.storyConsentErr
+		}
+		if c.storyConsentConn != nil {
+			c.storyConsentConn.Connect()
+			if err := grpcclient.WaitForReady(ctx, c.storyConsentConn); err != nil {
+				return fmt.Errorf("story consent readiness: %w", err)
+			}
+		}
+		if err := c.waitAuditInitiatingReady(ctx); err != nil {
+			return err
+		}
 		if c.matchSquadMemberErr != nil {
 			return c.matchSquadMemberErr
 		}
@@ -355,7 +398,7 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		}
 		return t.serveFriends(w, r, rest)
 	case "chats":
-		if t.clients.chat == nil {
+		if t.clients.chat == nil && !isChatCreationRequest(r) {
 			return false
 		}
 		return t.serveChats(w, r, rest)
@@ -380,6 +423,32 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		}
 		return t.serveFiles(w, r, rest)
 	case "spaces":
+		if isSpaceVoiceCreateRequest(r) {
+			t.serveSpaceVoiceCreate(w, r)
+			return true
+		}
+		if isSpaceUpdateRequest(r) {
+			t.serveSpaceUpdate(w, r)
+			return true
+		}
+		if isSpaceInviteCreateRequest(r) {
+			t.serveSpaceInviteCreate(w, r)
+			return true
+		}
+		if isSpaceBanMutationRequest(r) {
+			return t.serveSpacesBans(w, r, rest)
+		}
+		if isSpaceJoinRequest(r) {
+			t.serveSpaceJoin(w, r)
+			return true
+		}
+		if isSpaceCreateRequest(r) {
+			t.serveSpaceCreate(w, r)
+			return true
+		}
+		if t.serveSpaceAudit(w, r, rest) {
+			return true
+		}
 		if t.serveSpaceLifecycle(w, r, rest) {
 			return true
 		}
@@ -392,14 +461,15 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		}
 		return t.serveSpaces(w, r, rest)
 	case "invites":
+		if isSpaceJoinRequest(r) {
+			t.serveSpaceJoin(w, r)
+			return true
+		}
 		if t.clients.space == nil {
 			return false
 		}
 		return t.serveInvites(w, r, rest)
 	case "roles":
-		if t.clients.role == nil {
-			return false
-		}
 		return t.serveRoles(w, r, rest)
 	case "notifications":
 		if t.clients.notification == nil {
@@ -427,14 +497,8 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 	case "subscription":
 		return t.serveSubscription(w, r, rest)
 	case "bots":
-		if t.clients.bot == nil {
-			return false
-		}
 		return t.serveBots(w, r, rest)
 	case "stories":
-		if t.clients.story == nil {
-			return false
-		}
 		return t.serveStories(w, r, rest)
 	case "links":
 		return t.serveLinks(w, r, rest)

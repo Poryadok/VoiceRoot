@@ -10,7 +10,12 @@ public final class AuthPrincipalServices {
 
   public static ServerServiceDefinition legacyService(ServerServiceDefinition all) {
     Set<String> protectedDeletion = Set.of(
+        AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC.substring(1),
         AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC.substring(1),
+        AuthPrincipalServerInterceptor.ROLE_SESSION_FLOOR_RPC.substring(1),
+        AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC.substring(1),
+        AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC.substring(1),
+        AuthPrincipalServerInterceptor.CHAT_SESSION_FLOOR_RPC.substring(1),
         AuthPrincipalServerInterceptor.SPACE_DELETE_CONSUME_RPC.substring(1),
         AuthPrincipalServerInterceptor.SPACE_DELETE_LOOKUP_RPC.substring(1),
         AuthPrincipalServerInterceptor.SPACE_DELETE_ACK_RPC.substring(1));
@@ -60,12 +65,22 @@ public final class AuthPrincipalServices {
 
   public static ServerServiceDefinition sessionFloorService(
       ServerServiceDefinition all, AuthPrincipalServerInterceptor verifier) {
-    String methodName = AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC.substring(1);
-    var method = all.getMethods().stream()
-        .filter(candidate -> candidate.getMethodDescriptor().getFullMethodName().equals(methodName))
-        .findFirst()
-        .orElseThrow(() -> new IllegalArgumentException("Auth session-floor RPC implementation is incomplete"));
-    var floor = ServerServiceDefinition.builder(all.getServiceDescriptor().getName()).addMethod(method).build();
-    return ServerInterceptors.intercept(floor, verifier);
+    Set<String> methods = Set.of(
+        AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC.substring(1),
+        AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC.substring(1),
+        AuthPrincipalServerInterceptor.ROLE_SESSION_FLOOR_RPC.substring(1),
+        AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC.substring(1),
+        AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC.substring(1),
+        AuthPrincipalServerInterceptor.CHAT_SESSION_FLOOR_RPC.substring(1));
+    var floor = ServerServiceDefinition.builder(all.getServiceDescriptor().getName());
+    int count = 0;
+    for (var method : all.getMethods()) {
+      if (methods.contains(method.getMethodDescriptor().getFullMethodName())) {
+        floor.addMethod(method);
+        count++;
+      }
+    }
+    if (count != methods.size()) throw new IllegalArgumentException("Auth session-floor RPC implementation is incomplete");
+    return ServerInterceptors.intercept(floor.build(), verifier);
   }
 }

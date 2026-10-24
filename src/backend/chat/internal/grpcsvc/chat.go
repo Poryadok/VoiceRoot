@@ -35,6 +35,8 @@ type ChatGRPC struct {
 	E2EPreKeyGate          E2EPreKeyGate         // required for EnableChatE2E; Messaging S2S pre-key check (fail-closed)
 	// ChatEvents is optional; when set, new DM creation publishes to NATS JetStream (stream chat_events, subjects chat.*).
 	ChatEvents chatevents.Publisher
+	// Composite owns Space-bound creation and its restart-safe recovery.
+	Composite SpaceChatCreator
 	// Roles is optional; space channel slow mode checks TEXT_CHAT_SET_SLOW_MODE when set.
 	Roles rolev1.RoleServiceClient
 	// SpaceMembers resolves space_db.space_members for chats with space_id (optional).

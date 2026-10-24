@@ -39,44 +39,19 @@ func (t *transcoder) serveSpaces(w http.ResponseWriter, r *http.Request, rest st
 		return true
 
 	case r.Method == http.MethodPost && rest == "":
-		req := &spacev1.CreateSpaceRequest{}
-		if err := readProtoJSON(r, req); err != nil {
-			writeGRPCError(w, err)
-			return true
-		}
-		resp, err := t.clients.space.CreateSpace(ctx, req)
-		if err != nil {
-			writeGRPCError(w, err)
-			return true
-		}
-		writeProtoJSON(w, http.StatusOK, resp)
+		t.serveSpaceCreate(w, r)
 		return true
 
 	case r.Method == http.MethodPatch && rest != "" && !strings.Contains(rest, "/"):
-		req := &spacev1.UpdateSpaceRequest{}
-		if err := readProtoJSON(r, req); err != nil {
-			writeGRPCError(w, err)
-			return true
-		}
-		req.SpaceId = rest
-		resp, err := t.clients.space.UpdateSpace(ctx, req)
-		if err != nil {
-			writeGRPCError(w, err)
-			return true
-		}
-		writeProtoJSON(w, http.StatusOK, resp)
+		t.serveSpaceUpdate(w, r)
 		return true
 
 	default:
 		if strings.Contains(rest, "/") {
 			if strings.HasSuffix(rest, "/join") && r.Method == http.MethodPost {
-				spaceID := strings.TrimSuffix(rest, "/join")
-				resp, err := t.clients.space.JoinSpace(ctx, &spacev1.JoinSpaceRequest{SpaceId: spaceID})
-				if err != nil {
-					writeGRPCError(w, err)
-					return true
-				}
-				writeProtoJSON(w, http.StatusOK, resp)
+				// Valid joins are handled before the ordinary Space client gate.
+				// A malformed nested path must not reach its legacy join handler.
+				http.NotFound(w, r)
 				return true
 			}
 			if strings.HasSuffix(rest, "/leave") && r.Method == http.MethodPost {

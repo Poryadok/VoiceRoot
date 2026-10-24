@@ -31,8 +31,11 @@ const (
 	ChatService_SetGroupMemberRole_FullMethodName             = "/voice.chat.v1.ChatService/SetGroupMemberRole"
 	ChatService_TransferGroupOwnership_FullMethodName         = "/voice.chat.v1.ChatService/TransferGroupOwnership"
 	ChatService_ListMembers_FullMethodName                    = "/voice.chat.v1.ChatService/ListMembers"
+	ChatService_GetChatPermissions_FullMethodName             = "/voice.chat.v1.ChatService/GetChatPermissions"
+	ChatService_SetChatMemberPostAsChat_FullMethodName        = "/voice.chat.v1.ChatService/SetChatMemberPostAsChat"
 	ChatService_ListChats_FullMethodName                      = "/voice.chat.v1.ChatService/ListChats"
 	ChatService_GetChat_FullMethodName                        = "/voice.chat.v1.ChatService/GetChat"
+	ChatService_ValidateRoleOverrideTarget_FullMethodName     = "/voice.chat.v1.ChatService/ValidateRoleOverrideTarget"
 	ChatService_ListQuickAccess_FullMethodName                = "/voice.chat.v1.ChatService/ListQuickAccess"
 	ChatService_AddQuickAccess_FullMethodName                 = "/voice.chat.v1.ChatService/AddQuickAccess"
 	ChatService_RemoveQuickAccess_FullMethodName              = "/voice.chat.v1.ChatService/RemoveQuickAccess"
@@ -85,8 +88,15 @@ type ChatServiceClient interface {
 	SetGroupMemberRole(ctx context.Context, in *SetGroupMemberRoleRequest, opts ...grpc.CallOption) (*SetGroupMemberRoleResponse, error)
 	TransferGroupOwnership(ctx context.Context, in *TransferGroupOwnershipRequest, opts ...grpc.CallOption) (*TransferGroupOwnershipResponse, error)
 	ListMembers(ctx context.Context, in *ListMembersRequest, opts ...grpc.CallOption) (*ListMembersResponse, error)
+	// Caller-relative standalone human-chat capabilities. No body-selected actor.
+	GetChatPermissions(ctx context.Context, in *GetChatPermissionsRequest, opts ...grpc.CallOption) (*GetChatPermissionsResponse, error)
+	// Current owner/admin manages an ordinary member's membership-scoped grant.
+	SetChatMemberPostAsChat(ctx context.Context, in *SetChatMemberPostAsChatRequest, opts ...grpc.CallOption) (*SetChatMemberPostAsChatResponse, error)
 	ListChats(ctx context.Context, in *ListChatsRequest, opts ...grpc.CallOption) (*ListChatsResponse, error)
 	GetChat(ctx context.Context, in *GetChatRequest, opts ...grpc.CallOption) (*GetChatResponse, error)
+	// Narrow existence/lifecycle read. No ACL lookup or public Gateway route.
+	// @voice.security=protected;callers=service:role
+	ValidateRoleOverrideTarget(ctx context.Context, in *ValidateRoleOverrideTargetRequest, opts ...grpc.CallOption) (*ValidateRoleOverrideTargetResponse, error)
 	ListQuickAccess(ctx context.Context, in *ListQuickAccessRequest, opts ...grpc.CallOption) (*ListQuickAccessResponse, error)
 	AddQuickAccess(ctx context.Context, in *AddQuickAccessRequest, opts ...grpc.CallOption) (*AddQuickAccessResponse, error)
 	RemoveQuickAccess(ctx context.Context, in *RemoveQuickAccessRequest, opts ...grpc.CallOption) (*RemoveQuickAccessResponse, error)
@@ -257,6 +267,26 @@ func (c *chatServiceClient) ListMembers(ctx context.Context, in *ListMembersRequ
 	return out, nil
 }
 
+func (c *chatServiceClient) GetChatPermissions(ctx context.Context, in *GetChatPermissionsRequest, opts ...grpc.CallOption) (*GetChatPermissionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetChatPermissionsResponse)
+	err := c.cc.Invoke(ctx, ChatService_GetChatPermissions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) SetChatMemberPostAsChat(ctx context.Context, in *SetChatMemberPostAsChatRequest, opts ...grpc.CallOption) (*SetChatMemberPostAsChatResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetChatMemberPostAsChatResponse)
+	err := c.cc.Invoke(ctx, ChatService_SetChatMemberPostAsChat_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *chatServiceClient) ListChats(ctx context.Context, in *ListChatsRequest, opts ...grpc.CallOption) (*ListChatsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListChatsResponse)
@@ -271,6 +301,16 @@ func (c *chatServiceClient) GetChat(ctx context.Context, in *GetChatRequest, opt
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetChatResponse)
 	err := c.cc.Invoke(ctx, ChatService_GetChat_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) ValidateRoleOverrideTarget(ctx context.Context, in *ValidateRoleOverrideTargetRequest, opts ...grpc.CallOption) (*ValidateRoleOverrideTargetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ValidateRoleOverrideTargetResponse)
+	err := c.cc.Invoke(ctx, ChatService_ValidateRoleOverrideTarget_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -588,8 +628,15 @@ type ChatServiceServer interface {
 	SetGroupMemberRole(context.Context, *SetGroupMemberRoleRequest) (*SetGroupMemberRoleResponse, error)
 	TransferGroupOwnership(context.Context, *TransferGroupOwnershipRequest) (*TransferGroupOwnershipResponse, error)
 	ListMembers(context.Context, *ListMembersRequest) (*ListMembersResponse, error)
+	// Caller-relative standalone human-chat capabilities. No body-selected actor.
+	GetChatPermissions(context.Context, *GetChatPermissionsRequest) (*GetChatPermissionsResponse, error)
+	// Current owner/admin manages an ordinary member's membership-scoped grant.
+	SetChatMemberPostAsChat(context.Context, *SetChatMemberPostAsChatRequest) (*SetChatMemberPostAsChatResponse, error)
 	ListChats(context.Context, *ListChatsRequest) (*ListChatsResponse, error)
 	GetChat(context.Context, *GetChatRequest) (*GetChatResponse, error)
+	// Narrow existence/lifecycle read. No ACL lookup or public Gateway route.
+	// @voice.security=protected;callers=service:role
+	ValidateRoleOverrideTarget(context.Context, *ValidateRoleOverrideTargetRequest) (*ValidateRoleOverrideTargetResponse, error)
 	ListQuickAccess(context.Context, *ListQuickAccessRequest) (*ListQuickAccessResponse, error)
 	AddQuickAccess(context.Context, *AddQuickAccessRequest) (*AddQuickAccessResponse, error)
 	RemoveQuickAccess(context.Context, *RemoveQuickAccessRequest) (*RemoveQuickAccessResponse, error)
@@ -676,11 +723,20 @@ func (UnimplementedChatServiceServer) TransferGroupOwnership(context.Context, *T
 func (UnimplementedChatServiceServer) ListMembers(context.Context, *ListMembersRequest) (*ListMembersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListMembers not implemented")
 }
+func (UnimplementedChatServiceServer) GetChatPermissions(context.Context, *GetChatPermissionsRequest) (*GetChatPermissionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetChatPermissions not implemented")
+}
+func (UnimplementedChatServiceServer) SetChatMemberPostAsChat(context.Context, *SetChatMemberPostAsChatRequest) (*SetChatMemberPostAsChatResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetChatMemberPostAsChat not implemented")
+}
 func (UnimplementedChatServiceServer) ListChats(context.Context, *ListChatsRequest) (*ListChatsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListChats not implemented")
 }
 func (UnimplementedChatServiceServer) GetChat(context.Context, *GetChatRequest) (*GetChatResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetChat not implemented")
+}
+func (UnimplementedChatServiceServer) ValidateRoleOverrideTarget(context.Context, *ValidateRoleOverrideTargetRequest) (*ValidateRoleOverrideTargetResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ValidateRoleOverrideTarget not implemented")
 }
 func (UnimplementedChatServiceServer) ListQuickAccess(context.Context, *ListQuickAccessRequest) (*ListQuickAccessResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListQuickAccess not implemented")
@@ -1006,6 +1062,42 @@ func _ChatService_ListMembers_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_GetChatPermissions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetChatPermissionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).GetChatPermissions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_GetChatPermissions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).GetChatPermissions(ctx, req.(*GetChatPermissionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_SetChatMemberPostAsChat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetChatMemberPostAsChatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).SetChatMemberPostAsChat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_SetChatMemberPostAsChat_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).SetChatMemberPostAsChat(ctx, req.(*SetChatMemberPostAsChatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ChatService_ListChats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListChatsRequest)
 	if err := dec(in); err != nil {
@@ -1038,6 +1130,24 @@ func _ChatService_GetChat_Handler(srv interface{}, ctx context.Context, dec func
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ChatServiceServer).GetChat(ctx, req.(*GetChatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_ValidateRoleOverrideTarget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ValidateRoleOverrideTargetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).ValidateRoleOverrideTarget(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_ValidateRoleOverrideTarget_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).ValidateRoleOverrideTarget(ctx, req.(*ValidateRoleOverrideTargetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1620,12 +1730,24 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ChatService_ListMembers_Handler,
 		},
 		{
+			MethodName: "GetChatPermissions",
+			Handler:    _ChatService_GetChatPermissions_Handler,
+		},
+		{
+			MethodName: "SetChatMemberPostAsChat",
+			Handler:    _ChatService_SetChatMemberPostAsChat_Handler,
+		},
+		{
 			MethodName: "ListChats",
 			Handler:    _ChatService_ListChats_Handler,
 		},
 		{
 			MethodName: "GetChat",
 			Handler:    _ChatService_GetChat_Handler,
+		},
+		{
+			MethodName: "ValidateRoleOverrideTarget",
+			Handler:    _ChatService_ValidateRoleOverrideTarget_Handler,
 		},
 		{
 			MethodName: "ListQuickAccess",

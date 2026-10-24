@@ -87,6 +87,9 @@ func TestJetStreamPublisher_MessageSentRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
 
+	// Core subscriptions must reach the server before the separate publisher sends.
+	require.NoError(t, nc.FlushTimeout(3*time.Second))
+
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() })
@@ -121,6 +124,9 @@ func TestJetStreamPublisher_GameEventMessageSentRetainsVerifiedAppScope(t *testi
 	sub, err := nc.SubscribeSync(subjectMessageSent)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	// Core subscriptions must reach the server before the separate publisher sends.
+	require.NoError(t, nc.FlushTimeout(3*time.Second))
+
 	pub, err := NewJetStreamPublisher(s.ClientURL())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() })
@@ -148,6 +154,9 @@ func TestJetStreamPublisher_RequestIDHeader(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
 
+	// Core subscriptions must reach the server before the separate publisher sends.
+	require.NoError(t, nc.FlushTimeout(3*time.Second))
+
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() })
@@ -171,6 +180,9 @@ func TestJetStreamPublisher_MentionAddedPreservesSendSilent(t *testing.T) {
 	sub, err := nc.SubscribeSync(subjectMentionAdded)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	// Core subscriptions must reach the server before the separate publisher sends.
+	require.NoError(t, nc.FlushTimeout(3*time.Second))
+
 	pub, err := NewJetStreamPublisher(s.ClientURL())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() })
@@ -202,6 +214,9 @@ func TestJetStreamPublisher_MessageEditedAndDeleted(t *testing.T) {
 	subDel, err := nc.SubscribeSync(subjectMessageDeleted)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = subDel.Unsubscribe() })
+
+	// Core subscriptions must reach the server before the separate publisher sends.
+	require.NoError(t, nc.FlushTimeout(3*time.Second))
 
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
@@ -254,6 +269,9 @@ func TestJetStreamPublisher_ReactionAddedAndRemoved(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = subRem.Unsubscribe() })
 
+	// Core subscriptions must reach the server before the separate publisher sends.
+	require.NoError(t, nc.FlushTimeout(3*time.Second))
+
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() })
@@ -303,6 +321,8 @@ func TestJetStreamPublisher_PublishPinEvents(t *testing.T) {
 	subUnpin, err := nc.SubscribeSync(subjectMessageUnpinned)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = subUnpin.Unsubscribe() })
+	// Core subscriptions must reach the server before the separate publisher sends.
+	require.NoError(t, nc.FlushTimeout(3*time.Second))
 
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)

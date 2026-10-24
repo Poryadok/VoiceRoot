@@ -1,5 +1,66 @@
 # Messaging Service
 
+## Space communication timeout (BE-044-TIMEOUT-v1)
+
+Accepted target: apply the [Space-owned communication state](space-service.md#communication-timeout-authority-be-044-timeout-v1)
+to enabled SendMessage (including reply/attachment), forward destination,
+EditMessage, AddReaction, PinMessage and UnpinMessage. Derive destination Space
+from authoritative Chat resource data and actor from verified effective identity;
+unknown Chat scope is unavailable, never a standalone shortcut. Enabled service
+ingress acting as a profile follows the same check. Existing membership, Role,
+privacy, author and lifecycle ACLs remain mandatory.
+
+Obtain a fresh signed protected Space decision for each new effect. Explicit
+TIMED_OUT returns PermissionDenied/403; unknown/dependency/malformed capability
+returns Unavailable/503 before message/reaction/pin/File-reference/outbox or
+notification side effects. Carry one two-second monotonic budget from before the
+decision request through the committing transaction; cancel/expiry rolls back.
+A concurrent timeout may follow an admitted snapshot; only that bounded attempt
+may finish. A new attempt must resolve again. Exact persisted no-effect receipt
+replay remains allowed with no repeated side effects; changed payload conflicts.
+
+A single ForwardMessage with commentary is one admitted mutation: commentary,
+forward, all outbox records and attachment intent COMMITTED share the final local
+transaction. The existing durable pre-acquire File intent stays outside it;
+abandoned invisible references retain exact release reconciliation. No database
+transaction spans File RPC. Expired admission cannot complete in a background
+context. Forward has no public idempotency key or new cross-RPC replay guarantee.
+An uncertain COMMIT/response may mean the entire pair committed; a returned error
+does not prove rollback and must not trigger deletion of a committed pair.
+Persistence preserves DeadlineExceeded/Canceled for expired/canceled attempts,
+including wrapped errors after File acquisition or while waiting on a DB lock.
+Attachment intents for keyed sends bind the normalized original request digest
+and RPC before File enrichment; committed-intent replay rechecks the exact receipt
+under its held connection. File-owned metadata refresh cannot erase a changed
+original request or grant a new timeout exemption.
+
+Reads/history/read state, own delete/hide and own reaction removal keep their
+existing ACLs. Forward source is an ordinary read. DM/standalone/other Space or
+profile are outside this timeout. Disabled scheduled handlers stay disabled;
+future scheduling/dispatch must check again, while post-commit retries only
+replay the receipt/outbox. This section is a target, not runtime completion.
+
+SDK `ApplyGameMessage` follows the same resource policy for **create/edit**,
+using the verified Auth execution permit `ProfileID` after resource mapping and
+Chat membership checks. Own SDK delete retains its existing ACL and exemption;
+moderation tombstones are cleanup. Exact SDK receipts remain first, before new
+permits or dependencies. A timeout/unknown decision aborts any newly issued permit
+through bounded control-plane cleanup and preserves PermissionDenied/Unavailable.
+The effective commit deadline is the earliest of the two-second Space attempt,
+Auth permit expiry/margin and the existing 250ms transaction deadline. Currently
+provisioned managed SDK chats remain standalone groups; this contract enables no
+Space-owned provisioning. Bot event publication checks the Bot-owned sender
+profile supplied under its verified service contract, not a player/account owner.
+
+The Messaging consumer uses the complete `MESSAGING_SPACE_COMMUNICATION_` tuple:
+`GRPC_ADDR`, `TLS_CA_FILE`, `CLIENT_CERT_FILE`, `CLIENT_KEY_FILE`. Absent settings
+leave covered Space effects unavailable; any partial or explicitly empty tuple
+fails startup. The shared Messaging service signer/JWKS publisher keeps its
+existing `MESSAGING_PURGE_PRINCIPAL_` key and protected JWKS settings. It may run
+without File/Search purge-owner clients; configuring any purge-owner setting
+still requires the complete owner tuple. No signing key, JWKS publisher or
+protected Space client means no Space communication grant.
+
 ## Обзор
 
 CRUD сообщений для всех типов чатов (DM, текстовые группы и каналы — как в спейсе, так и standalone). Треды, реакции, пины, пересылка, read receipts.
@@ -48,15 +109,27 @@ durable generation fence/participant and Space coordinator integration.
 
 `SendMessage` принимает опциональный **`client_message_id`** (UUID), уникальный в разрезе **`(chat_id, sender_profile_id)`** (в proto — пара `chat` + идентичность отправителя из контекста запроса). Это одна namespace и для immediate `Message`, и для pending `ScheduledMessage`: повтор запроса с тем же ключом не создаёт ни вторую строку в `messages`, ни вторую scheduled row. Повтор **того же нормализованного тела** возвращает gRPC `OK` и тот же вариант `SendMessageResponse` с тем же ID; pending replay возвращает current `ScheduledMessage`, включая связанный `sent_message_id` после dispatch. Тот же ключ с другим payload, `send_silent`, schedule mode/time или immediate-vs-scheduled режимом — `ALREADY_EXISTS`; сервер не меняет уже созданный объект и не публикует новый event. Нормализация игнорирует порядок ключей JSON object, но сохраняет порядок array и включает defaults/derived type в fingerprint. Проверка immediate и scheduled путей атомарна (общий idempotency ledger либо transaction advisory lock), а не две независимые unique indexes. Поэтому запрет `ALREADY_EXISTS` относится только к корректному retry. Без ключа при сетевых ретраях возможны дубликаты.
 
-T51 adds a planned Bot-only S2S publication surface,
-`MessagingService.SendGameEventMessage`; it is not in the current proto or
-runtime. Its canonical request and retry contract live in
+T51 provides the Bot-only S2S publication RPC
+`MessagingService.SendGameEventMessage` in the proto and handler. Its canonical
+request and retry contract live in
 [Game Event v1](../architecture/game-integration-api.md#t51-game-event-v1-ingress-and-publication-contract).
 Messaging owns the committed message and deduplicates by the same
 `(chat_id, sender_profile_id, client_message_id)` rule. Only a verified Bot
 service principal may supply the Bot-owned sender identity; public game
 credentials and GIS are not message senders. The RPC must retain normal
 membership, Space permission, moderation, block, content and expiry checks.
+
+Migration `messaging_db/000030` adds private `message_send_receipts` for enabled
+immediate SendMessage and Bot event sends. The key is the existing
+`(chat_id, sender_profile_id, client_message_id)` namespace; each receipt binds
+the exact RPC, request SHA-256 and persisted message ID. Ordinary request
+fingerprints include effective defaults/derived content type and canonical JSON
+object order while retaining array order. Receipt insertion commits with the
+message and outbox; the transaction repeats conflict detection for concurrent
+first attempts, including attachment sends. A changed retained request is
+AlreadyExists. Historical dedupe keys are not backfilled with inferred request
+authority and cannot bypass a fresh timeout decision. Receipts expose no new
+public API and are removed by the message's physical-purge cascade.
 
 ## Game SDK message ingress (T15/T16)
 
@@ -165,16 +238,19 @@ Every local root/reply/edit/delete/hide/ghost mutation appends a change and proj
 
 A builder enumerates authoritative memberships, takes a repeatable-read baseline, bulk-builds both trees, replays post-baseline journal changes and CASes to READY only at zero lag. Cursor states expire after 15 minutes without renewal. GC preserves nodes reachable from READY heads/unexpired cursors and retains the journal through the oldest BUILDING baseline. Activation requires readiness, zero lag, root invariants and sampled dual reads. The full execution/RED contract is [listthreads-versioned-readmodel-exec-plan.md](../testing/listthreads-versioned-readmodel-exec-plan.md).
 
-The full durable membership contract is still incomplete. Space chats derive
-membership from Space and Role `TEXT_CHAT_VIEW`, not `chat_members`; a Chat-only
-table outbox cannot prove their effective viewer set. The successor needs durable
-Space/Role source revisions and reconciliation, Chat-owned effective membership
-revisions and a consistent enumeration watermark. DM delete/reopen and archived
-profile eligibility must also be specified. These are activation prerequisites,
-tracked in [backend.md](../todo/backend.md), not implemented by the unavailable
-guard. The current Messaging Chat adapter inspects only the first 100 members;
-its replacement must provide complete authoritative membership admission before
-the successor can be enabled.
+The [effective-membership contract v1](../testing/listthreads-versioned-readmodel-exec-plan.md#effective-membership-contract-v1)
+defines owner-scoped Chat/Space/Role/User revisions, complete validated snapshots,
+Chat generation/journal `Q`, a separate Messaging baseline/journal `J`, and
+revocation lineages. READY requires both replay barriers and a generation CAS;
+every page requires exact-pair Chat admission before cursor parsing, a final fresh
+proof and a local visibility-version CAS. Async events alone never authorize a
+read. DM self-delete/reopen invalidates only that viewer's lineage; chat archive
+preserves history, while an ineligible profile cannot be the viewer. Peer deletion
+does not erase surviving history. The durable implementation and complete
+admission replacement remain activation prerequisites in
+[backend.md](../todo/backend.md); the unavailable guard does not implement them.
+The existing first-100-members adapter cannot satisfy this contract. Social-block
+and managed message-time visibility gates must also be covered before activation.
 ### `SendMessageRequest` (spec)
 
 `send_silent` and `delivery_schedule` are in the current proto. `content_payload` remains a future typed-content extension:
@@ -227,6 +303,65 @@ enum MessageContentType {
 | `gif` | `{ "file_id", "provider?", "provider_id?", "preview_url?", "width?", "height?", "duration_seconds?" }` | `file_id` required (File Service `intent=gif`); provider fields for dedup/attribution when from Giphy/Tenor |
 
 `attachments_json` в текущем коде — opaque; spec требует typed enum + validated payload (**not yet in proto/code**). **`sticker` / `gif` payloads do not require generic `attachments_json`** — `content_type` + `content_payload` is canonical; legacy clients may mirror `file_id` in `attachments` for transition.
+
+### Space text admission (accepted target; BE-067)
+
+This operation matrix is the accepted implementation contract; it does not claim
+that every listed gate is implemented. Use Chat's authoritative Space/chat scope
+and the authenticated actor. Effective Role decisions own owner/admin semantics;
+Messaging must not add role-name bypasses. Missing Role authority or lookup
+failure fails closed before message, reaction, delete, pin or outbox writes.
+Existing membership, visibility, moderation, File and lifecycle fences still apply.
+DM and standalone chats retain their separate policies.
+
+Every Space send also needs `TEXT_CHAT_SEND_MESSAGES` and the applicable thread
+permissions. Additional permissions follow the actual validated payload:
+
+| Payload | Additional permission |
+|---|---|
+| Text, including a bare URL without embedding metadata | None |
+| Photo, video, voice, video note, GIF, sticker | `TEXT_CHAT_SEND_MEDIA` |
+| Document, music | `TEXT_CHAT_ATTACH_FILES` |
+| Article or an explicitly supported link-preview embedding | `TEXT_CHAT_EMBED_LINKS` |
+| Location coordinates/label and derivative map thumbnail | None |
+
+Mixed payloads require the union of their semantic permissions. A derivative
+thumbnail belongs to its parent payload; a file ID alone does not turn media
+into a document. Validate every attachment and its File metadata rather than
+trusting only top-level `content_type`: text/unspecified plus an image cannot
+bypass media permission. Reject invalid or unsupported payloads through existing
+validation. This contract does not introduce a link-preview wire, contact/poll
+type, Article worker or scheduled feature. Deny unauthorized explicit embedding
+rather than silently stripping it; bare text URLs remain allowed.
+
+Send, forward and copy-as-new share the classifier. Forward checks the forwarding
+actor's destination rights before inserting optional commentary or any event;
+source read/File authority remains required. Any enabled delayed-send dispatcher
+must recheck current rights at dispatch. Text-only author edits retain their
+existing policy; future rich-content edits must use the same matrix.
+
+For `FOR_EVERYONE`, an author retains the existing own-message path; deleting
+another author's Space group/channel message requires
+`TEXT_CHAT_MANAGE_MESSAGES`, including thread replies. Preserve the real actor
+separately from the author through storage authorization and mutation fences.
+`FOR_ME` remains a self-hide. Foreign edits remain forbidden. Pin and unpin require
+`TEXT_CHAT_PIN_MESSAGES` for own and foreign messages; `MANAGE_MESSAGES` and
+`MANAGE_THREADS` neither replace that gate nor add an extra required permission.
+
+`TEXT_CHAT_MANAGE_THREADS` has no defined lifecycle RPC yet and cannot substitute
+for send/create-thread/send-in-thread/delete/pin permissions. Space thread
+admission must fail closed when Role authority is missing. A thread lifecycle
+contract remains open; this matrix does not invent archive, close or cascade delete.
+
+Unicode reactions need `TEXT_CHAT_ADD_REACTIONS` only. Future custom reactions
+need an authoritative catalog-backed identity resolving their origin Space:
+same-Space assets require add permission; external assets also require
+`TEXT_CHAT_USE_EXTERNAL_EMOJIS`. Unknown/deleted assets or unavailable provenance
+must deny custom admission, while members may still remove their own existing
+reaction after revocation. The current opaque emoji string cannot establish
+origin: do not infer it from prefixes, names, URLs, UUID shape or client-supplied
+origin. Catalog/wire ownership and compatibility remain an explicit prerequisite;
+no external-custom-emoji enforcement is claimed here.
 
 ### Scheduled messages (lifecycle)
 
@@ -656,9 +791,21 @@ When File Service finishes async processing (`file.processed` on JetStream), Mes
 
 | Step | Owner |
 |------|-------|
-| File publishes `file.processed` | `file.events` — `file_id`, `status`, `converted_url`, `thumb_url`, `width`, `height`, `duration_seconds`, `intent` (aligned with [file-service.md](file-service.md) § NATS table) |
-| Messaging consumer | Updates attachment JSON on `messages` / `message_attachments`; invalidates or recomputes `GetChatListMetadata` for affected `chat_id`s |
+| File publishes `file.processed` | `file_events` / `file.processed`: independent complete revisioned `preview` snapshot for plaintext non-Music files; no URL or storage key |
+| Messaging consumer | Refreshes only private exact MESSAGE-reference/slot bindings, persists monotonic snapshots before discovery, and writes ordinary `message.edited` atomically; list/history reads use persisted attachments |
 | Client | On `message_update` WS (or poll) refresh bubble + list row label |
+
+BE-080 v1 uses protected Messaging-only `ResolveMessageAttachmentPreview` after
+reference acquisition, then reconciles under local insertion fences. The resolver
+checks the exact existing destination reference and existing LIVE Space fence;
+it never invents viewer authority. Ready-only admission remains unchanged. The
+snapshot includes status, category, persisted intent, size/scan, optional dimensions
+and variant availability. Missing fields clear stale metadata; terminal snapshots
+cannot be revived. Multiple slots and forwards retain private per-slot bindings.
+E2E and URL-only attachments are excluded. Public URL reads still require the real
+viewer and exact reference. Frozen work is retained durably and legacy rows need
+bounded restartable reconciliation. See [BE-080 plan](../testing/be080-file-preview-exec-plan.md)
+for implementation progress and the all-consumers-before-publication rollout gate.
 
 **Music implementation:** explicit File Music uploads carry a persisted intent
 and monotonic metadata revision. At send/forward admission, Messaging obtains
@@ -705,6 +852,13 @@ Messaging does **not** own `chats.last_message_at`. Cross-ref — [chat-service.
 
 ## Зависимости
 
+`AddReaction` in a Space chat requires `TEXT_CHAT_ADD_REACTIONS` for the
+authenticated profile and the message's authoritative Space/chat scope before
+writing either the reaction or its event outbox row. Missing or unavailable Role
+authority returns `UNAVAILABLE`; an explicit deny returns `PERMISSION_DENIED`.
+DM and standalone chats do not use Space permissions. `RemoveReaction` still
+allows a member to remove their own reaction after losing add permission.
+
 - **Chat Service** — валидация членства / доступа для **DM**, **группы**, **канала** (в т.ч. standalone)
 - **Space Service** — если у `chats.space_id` задан спейс: членство в спейсе (для канала и группы в спейсе)
 - **Role Service** — проверка прав в спейсе для текстового чата (`chat_id` = `chats.id`, `group` \| `channel`)
@@ -712,6 +866,29 @@ Messaging does **not** own `chats.last_message_at`. Cross-ref — [chat-service.
 - **User Service** — internal `ResolveAccountIDForProfile` для DM lifecycle: fresh S2S metadata с единственным caller `messaging`, без viewer identity; lookup возвращает owner soft-deleted peer только для следующей Auth account-status проверки
 - **File Service** — привязка вложений
 - **Realtime Service** — (через NATS) уведомление о новых сообщениях для WebSocket fan-out
+
+Messaging sends these decisions to Role's protected mTLS listener using its
+existing service signer and protected JWKS publisher. `ROLE_GRPC_ADDR` requires
+`MESSAGING_ROLE_TLS_CA_FILE`, `MESSAGING_ROLE_TLS_SERVER_NAME`,
+`MESSAGING_ROLE_CLIENT_CERT_FILE` and `MESSAGING_ROLE_CLIENT_KEY_FILE` together;
+partial transport configuration or an unavailable signer stops startup. Each
+`CheckPermission` call replaces incoming/outgoing identity metadata with a fresh
+`service:messaging` credential for audience `role`, the exact RPC and full
+deterministic request hash, plus a fresh request UUID. The caller budget is at
+most five seconds and preserves any shorter parent deadline. The explicit
+profile and chat remain decision data; no actor mutation authority is conferred.
+There is no plaintext or forwarded-user credential fallback. Messaging's global
+permission helper is unavailable: this caller is limited to chat-scoped decisions.
+
+When Role uses a separate TLS trust domain, the optional
+`MESSAGING_ROLE_JWKS_LISTEN`, `MESSAGING_ROLE_JWKS_TLS_CERT_FILE`,
+`MESSAGING_ROLE_JWKS_TLS_KEY_FILE` and `MESSAGING_ROLE_JWKS_CLIENT_CA_FILE`
+configuration publishes the same existing Messaging current/next public keys at
+`/.well-known/principal-jwks.json` on a second HTTPS listener. All four variables
+must be supplied together with the existing signing runtime; partial or empty
+configuration fails startup. This listener requires verified client certificates
+from its configured CA. It does not replace the lifecycle JWKS listener, its CA,
+or any signing keys. Both listeners close with the Messaging runtime.
 
 ## Масштабирование
 
@@ -797,6 +974,10 @@ partial schema refuses startup with a fixed migration diagnostic. Migration
 metadata is trusted; this runtime check does not replace migration execution.
 Disabled lifecycle keeps the baseline startup path. Rollback of 000026 refuses
 while any saved intent exists; drain and export its evidence before rollback.
+Its DOWN requires READ COMMITTED and holds a write-excluding table lock before
+the current-snapshot guard through DROP in one atomic statement. A concurrent
+first intent must survive rollback refusal; an older repeatable-read snapshot
+is rejected rather than treated as evidence that the table is empty.
 
 Messaging stores its generation fence, imported immutable Chat manifest pages,
 and exact request/receipt evidence. `FROZEN` imports and seals the exact Chat
@@ -814,6 +995,14 @@ receipts. Space-level Messaging completion follows only after every manifest
 chat returns both owner receipts. Full request/receipt bytes retain 30 days from
 this participant's completion and the compact `PURGED` fence is permanent.
 
+After validating the exact Space service principal and complete request binding,
+`PurgeSpace` reads its committed response before requiring File or managed-chat
+purge dependencies. A response-loss retry returns the original receipt and
+preserves unknown response fields without repeating child effects. Changed
+request hashes fail closed; unavailable or corrupt receipt lookup cannot restart
+destructive work. The read uses the original database completion timestamp and
+the same 30-day window as Chat's committed receipt lookup.
+
 Public read-receipt opt-out is serialized against the same per-chat purge lock.
 If any receipt the operation would revoke points to a message already included
 in a `PENDING` purge manifest, `ClearPublicReadReceiptsWithOutbox` rejects the
@@ -830,3 +1019,86 @@ The child uses the existing T33 `PurgeManagedChatContent` protocol:
 its service-principal request binding. The P3 adapter verifies that digest;
 it does not replace the saved child evidence with the parent's message-name
 domain. The Space participant request/receipt remains domain-separated P3.
+
+### Protected Bot Space sends
+
+`Messaging.SendBotMessage` is an immediate, send-only internal route on the
+dedicated `MESSAGING_BOT_SEND_GRPC_LISTEN` mTLS listener (Phase0 port 9095).
+Its service descriptor exposes no ordinary message/history methods. The ordinary
+`SendMessage` route retains its existing membership and Role checks.
+
+The pure `service:bot` JWT binds audience `messaging`, the exact RPC, a fresh
+canonical request UUID, and the complete wrapper body. Mixed user metadata,
+unknown nested protobuf fields, deferred delivery and `posted_as_chat` are denied.
+The wrapper binds Bot, actor, Space, installation UUID, install operation,
+installation generation and chat. Messaging obtains a fresh signed
+`Bot.CheckBotMessageSendAuthority` decision for current SEND scope, whitelist and
+LIVE installation, then independently calls Space's protected
+`GetMemberAdmissionAuthority` with the same binding. Space must echo the exact
+currently published native Bot tuple and current chat-tree relation. Installation
+and ordinary membership generations are distinct counters.
+Space may report `LIVE` lifecycle generation zero only after its owner validates
+a fresh Space with no lifecycle history or terminal fences. Messaging accepts
+that canonical observation; ownership and native membership generations must
+still be positive, and all exact installation/publication checks still apply.
+
+Only after both observations does a private request-bound admission replace the
+generic membership/VIEW and `TEXT_CHAT_SEND_MESSAGES` gates for this exact send.
+It grants no history, forward, edit, impersonation, mention or thread privileges.
+Existing content/File validation, Space communication timeout, moderation,
+slowmode and transactional message/outbox behavior remain in the shared send
+pipeline. Exact send retries use the Bot wrapper hash and distinct RPC receipt;
+they return the actor's own receipt without granting history access. Changing the
+installation tuple or message at an existing client key is a conflict.
+
+The original maximum five-second attempt is also bounded by the inbound JWT
+expiry and Space's remaining observation validity. After local mutation locks,
+both the text insert and attachment-finalization transactions repeat owner/native
+checks and revalidate the original proof before writing, without renewing the
+deadline. Bot holds its existing shared Space, Bot and whitelist guards through
+the synchronous RPC; disabling/uninstalling takes the corresponding exclusive
+guards. Unknown commit outcomes retain the existing idempotency semantics; this
+does not claim a cross-database atomic commit.
+
+Listener TLS uses `MESSAGING_BOT_SEND_TLS_CERT_FILE`, `_TLS_KEY_FILE` and
+`_CLIENT_CA_FILE`. Owner clients use prefixes `MESSAGING_BOT_SEND_AUTHORITY_`
+(Bot) and `MESSAGING_BOT_SEND_SPACE_` (Space), each with `GRPC_ADDR`,
+`TLS_CA_FILE`, `TLS_SERVER_NAME`, `CLIENT_CERT_FILE`, `CLIENT_KEY_FILE`.
+Activation requires all listener/client fields, the existing Bot principal
+verifier and Messaging signer. Bot's lifecycle callback client leaf may use a
+different CA from the Space observer leaf. Messaging's existing protected JWKS
+publisher at port 8445 publishes the same signing keys for both observers.
+
+### Private Bot pin cleanup
+
+The legacy `UnpinMessagesBySenderInChats` method is denied because its body
+cannot bind an installation or durable operation. The protected replacement
+preserves messages and unrelated senders' pins. Cleanup persists immutable
+request/response receipts and attachment coverage in the same transaction as
+pin deletion. Exact retries and already-covered attachment batches do not
+repeat deletion. Pin admission captures the sender's cleanup revision before
+external checks and rechecks it under the mutation lock: stale requests retry,
+while freshly authorized human repins remain allowed.
+
+`ApplyBotChatPinRemoval` is exposed only by the dedicated Bot cleanup listener.
+It requires mTLS and an exact pure `service:bot` JWT bound to Messaging, method,
+full deterministic request hash and `operation_id`, with fresh replay-protected
+JTI. Ordinary Messaging and generic identity context cannot mint its private
+capability. The capability retains owned request bytes and is rechecked after
+database/source waits and before commit; an expired request can retry the same
+immutable operation with a fresh credential.
+
+The listener is enabled only with all nine `MESSAGING_BOT_PIN_CLEANUP_` settings:
+`GRPC_LISTEN`, `TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, `JWKS_URL`,
+`JWKS_CA_FILE`, `JWKS_CLIENT_CERT_FILE`, `JWKS_CLIENT_KEY_FILE`, and
+`REPLAY_REDIS_URL`. An incomplete set or missing current Chat datasource fails
+startup. No address or ordinary caller fallback is inferred. Current source
+qualification uses the existing authorized `CHAT_DATABASE_URL` read datasource,
+including Chat's permanent scope head/incarnation and lifecycle fence. A deleted
+chat requires an actual retained matching head; missing rows alone cannot prove
+completion. Exact completed replay and qualified historical coverage preserve
+later human repins without requiring a fresh live read.
+
+This receiver implements the c49/c50 one-effect per-chat attachment batch and
+c64 incarnation check. It does not supply Bot owner decisions, producer delivery,
+recovery orchestration, P3 covering receipts or a post-30-day proof provider.

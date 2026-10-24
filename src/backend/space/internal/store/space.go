@@ -166,63 +166,7 @@ func (s *SpaceStore) CreateCommunityBootstrapSpace(ctx context.Context, in Commu
 		return nil, false, err
 	}
 	hash := sha256.Sum256(requestBytes)
-	tx, err := s.Pool.Begin(ctx)
-	if err != nil {
-		return nil, false, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	_, err = tx.Exec(ctx, `INSERT INTO community_bootstrap_operations
-(operation_id,application_id,environment_id,owner_account_id,owner_profile_id,corporation_key,template_id,request_hash,status)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,'pending') ON CONFLICT(operation_id) DO NOTHING`,
-		in.OperationID, in.ApplicationID, in.EnvironmentID, in.OwnerAccountID, in.OwnerProfileID, in.CorporationKey, in.TemplateID, hash[:])
-	if err != nil {
-		if isPGUniqueViolation(err) {
-			return nil, false, ErrCommunityBootstrapConflict
-		}
-		return nil, false, err
-	}
-	var savedHash []byte
-	var opStatus string
-	var spaceID sql.NullString
-	if err := tx.QueryRow(ctx, `SELECT request_hash,status,space_id::text FROM community_bootstrap_operations WHERE operation_id=$1 FOR UPDATE`, in.OperationID).Scan(&savedHash, &opStatus, &spaceID); err != nil {
-		return nil, false, err
-	}
-	if string(savedHash) != string(hash[:]) {
-		return nil, false, ErrCommunityBootstrapConflict
-	}
-	if opStatus == "succeeded" && spaceID.Valid {
-		id, parseErr := uuid.Parse(spaceID.String)
-		if parseErr != nil {
-			return nil, false, parseErr
-		}
-		row, getErr := scanSpaceRow(tx.QueryRow(ctx, `SELECT `+spaceSelectColumns+` FROM spaces WHERE id=$1`, id))
-		if getErr != nil {
-			return nil, false, getErr
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return nil, false, err
-		}
-		return row, false, nil
-	}
-	row, err := scanSpaceRow(tx.QueryRow(ctx, `INSERT INTO spaces (name,description,visibility,owner_profile_id,member_count)
-VALUES('Game community','Created through an approved Voice game integration','private',$1,1) RETURNING `+spaceSelectColumns, in.OwnerProfileID))
-	if err != nil {
-		return nil, false, err
-	}
-	if _, err := tx.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, row.ID, in.OwnerProfileID); err != nil {
-		return nil, false, err
-	}
-	if _, err := tx.Exec(ctx, `UPDATE community_bootstrap_operations SET status='succeeded',space_id=$2,updated_at=clock_timestamp() WHERE operation_id=$1`, in.OperationID, row.ID); err != nil {
-		return nil, false, err
-	}
-	if _, err := tx.Exec(ctx, `INSERT INTO community_owner_authority(space_id,application_id,environment_id,corporation_key,owner_account_id,owner_profile_id,owner_generation,status)
-		VALUES($1,$2,$3,$4,$5,$6,1,'active')`, row.ID, in.ApplicationID, in.EnvironmentID, in.CorporationKey, in.OwnerAccountID, in.OwnerProfileID); err != nil {
-		return nil, false, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, false, err
-	}
-	return row, true, nil
+	return s.createNativeCommunityBootstrapSpace(ctx, in, hash)
 }
 
 func isPGUniqueViolation(err error) bool {
@@ -521,6 +465,15 @@ func (s *SpaceStore) UpdateSpace(ctx context.Context, spaceID uuid.UUID, in Upda
 		return withOwnershipScopeValue(s, ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) (*SpaceRow, error) {
 			return scoped.UpdateSpace(ctx, spaceID, in)
 		})
+	}
+	if in.EntryRequirement != nil || in.EntryQuestionsJSON != nil {
+		exists, err := entryPolicyTable(ctx, s.db())
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			return nil, ErrLegacyEntryPolicyWrite
+		}
 	}
 	if in.Name == nil && in.Description == nil && in.IconURL == nil && in.BannerURL == nil &&
 		in.Visibility == nil && in.EntryRequirement == nil && in.EntryQuestionsJSON == nil && in.MMConfigJSON == nil && in.AllowGuests == nil {

@@ -1,5 +1,32 @@
 # Spaces — спейсы
 
+## Communication timeout (BE-044-TIMEOUT-v1, accepted target)
+
+Таймаут относится к одному профилю в одном Space и активен, пока время
+Space DB меньше `timed_out_until`; равенство означает истечение. Это
+дополнительный запрет, который не меняет членство и не обходится Role/Admin.
+Он запрещает отправку и пересылку **в** Space, редактирование сообщений,
+добавление реакций, pin/unpin и новые voice join/token/reissue/move-in для
+затронутого профиля. Активное Space media, включая listen-only, отключается.
+
+Чтение/history/roster/read state, удаление и скрытие своего сообщения, снятие
+своей реакции, отмена schedule, leave/disconnect и moderation cleanup сохраняют
+обычные ACL. Источник пересылки проверяется как чтение; таймаут проверяется у
+назначения. Другие Space, профили, DM, standalone и MatchSquad не затронуты.
+Presence/typing не меняются. Точный сохранённый retry receipt без нового эффекта
+можно повторить; новый эффект требует нового решения Space.
+
+Space выдаёт свежую защищённую версионную snapshot-проверку для каждого действия;
+ошибка или неизвестный ответ запрещают действие. После snapshot уже допущенная
+конкурентная операция может завершиться в пределах общего двухсекундного
+check-to-commit budget. Это не распределённый zero-in-flight fence. Снятие или
+истечение таймаута требует нового CLEAR и обычного join; автоматического rejoin
+нет. Будущая активация scheduled sends должна применять проверку при создании,
+изменении и реальной отправке. Эта задача не активирует disabled producers.
+
+Контракт реализации — [Space Service](../microservices/space-service.md#communication-timeout-authority-be-044-timeout-v1).
+Это accepted target, а не утверждение о завершённом runtime enforcement.
+
 ## Создание
 
 - Создать спейс может любой зарегистрированный пользователь
@@ -45,7 +72,7 @@ Guest admission работает fail-closed: `allow_guests=false` по умол
 
 - Подтверждённый телефон
 - Капча
-- Ответы на вопросы (скрининг, как в Telegram)
+- Правильные ответы на автоматически проверяемые вопросы с настроенными ответами
 - Одобрение модератором вручную
 
 Порядок проверки: ban/member-limit/guest admission → phone → captcha → questions →
@@ -53,6 +80,53 @@ manual approval. Invite не обходит требования. Если вк�
 успешное выполнение остальных шагов создаёт pending join request; membership
 появляется только после approve. Гость не может пройти policy с обязательным phone.
 Ошибка или недоступность verifier закрывает вход, но не расходует одноразовый invite.
+
+Вопросы — автоматически проверяемый тест: например, для вопроса `2x2` с
+настроенным правильным ответом `4` другой ответ не проходит. Произвольный
+непустой текст, оценка модератором или семантическая оценка LLM не заменяют
+проверку правильности. Вопросы и ручное одобрение — независимые требования AND:
+`questions=true` не включает `manual=true`, а approve не заменяет правильные
+ответы. Схема и версия конфигурации, правила сравнения и привязка submission
+должны быть заданы в контракте Space до включения соответствующего runtime.
+
+Чтение заявок и ответов, approve и reject используют отдельное делегируемое
+право `SPACE_APPROVE_JOIN_REQUESTS`. По умолчанию оно доступно Owner, Admin и
+Moderator; его можно выдавать кастомным ролям по обычным правилам Role.
+`SPACE_MANAGE_INVITES`, `SPACE_MANAGE_SETTINGS` и `MEMBER_BAN` сами по себе
+не дают право рассматривать заявки. Space проверяет актуальное effective
+permission для точного `space_id`; имя роли или переданный клиентом флаг
+не являются разрешением. Заявитель имеет доступ только к собственной заявке
+через отдельный applicant API, а не к очереди модерации или другим ответам.
+
+Это принятый target-контракт. Текущие legacy поля `entry_requirement` и
+`entry_questions_json` не реализуют versioned AND policy, автоматическую
+проверку ответов или approval pipeline. Готовность API и runtime определяется
+полным admission vertical из [Space Service](../microservices/space-service.md#versioned-entry-policy-target).
+
+## Ник участника в спейсе
+
+Принятый контракт BE-234-nickname-v2-transport: `UpdateMemberNickname` меняет только
+локальный `space_members.nickname`, не имя глобального профиля. Actor берётся
+только из verified principal; `profile_id` всегда явно задаёт target. Для себя
+и другого участника нужны текущее membership и effective global
+`MEMBER_MANAGE_NICKNAMES`; self-service обхода нет. Не-owner не меняет ник Owner
+(`FAILED_PRECONDITION`); для остальных targets дополнительного rank gate нет.
+Roster-only community target не материализуется как локальный member.
+
+Отсутствующее поле nickname — `INVALID_ARGUMENT`; явно пустое или состоящее из
+Unicode White_Space очищает SQL NULL. Перед trim запрещены invalid UTF-8, Cc,
+U+2028/U+2029 и Unicode Bidi_Control. Непустой результат содержит 1..64 Unicode
+scalar values и хотя бы одну Letter/Number/Punctuation/Symbol. Case, combining
+marks, внутренние пробелы и emoji/ZWJ сохраняются без Unicode normalization.
+Уникальность не требуется.
+
+Обычные ownership/deletion freeze блокируют также clear и no-op. Изменение
+сериализуется с leave/kick и не создаёт отсутствующее membership. Реальное
+изменение атомарно добавляет `member_nickname_updated` audit/outbox с details
+только `changed_fields=["nickname"]`; значения ника не журналируются. Повтор
+того же значения успешен без нового audit, но повторно проверяет ACL/freeze.
+Ответ и следующий ListMembers показывают сохранённое значение; отдельного
+NATS/Realtime nickname event и нового HTTP/UI surface этот RPC не вводит.
 
 ## Лимиты участников
 
@@ -130,6 +204,15 @@ and durable same-operation receipt; Space same-body replay and changed-body
 member RPCs reject `Owner` mutation while the trusted protocol-2
 Prepare/decision/Finalize-or-Abort path reaches one matching terminal outcome.
 - **Бан участника**: забаненный не может зайти в спейс; его сообщения остаются (не удаляются); публичный контент спейса — не видит (как Discord)
+  Ban и Unban используют обязательный клиентский UUID `operation_id` в JSON,
+  включая DELETE разбана. Клиент сохраняет ID и точное тело для повторов после
+  потери ответа/перезапуска; новое действие получает новый ID. Повтор завершённого
+  действия возвращает сохранённый результат без новых эффектов; изменение тела в
+  том же ключе действующего профиля конфликтует. После 30 дней клиент не повторно
+  использует ключ, а сверяет неизвестный результат чтением. Точный signed transport,
+  path/header binding, `409` выполняющегося и `412` истёкшего сохранённого действия
+  определены в [Gateway](../microservices/api-gateway.md#ban-and-unban-stable-intent-contract).
+  Это не меняет права модерации и не подтверждает готовность native replay/UI.
 - **Slow mode для текстовых чатов** (`group` \| `channel`): настраиваемый интервал 5 сек – 6 ч (настраивается из rate limiting)
 - **Шаблоны при создании**: выбор темы — "Игровое" / "Рабочее" / "Общение"; влияет на дефолтные каналы и структуру, не на функциональность
 

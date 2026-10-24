@@ -14,14 +14,17 @@ import (
 )
 
 func TestStrictUnaryInterceptor_OnlyAcceptsStrictMetadataAndBindsDeterministicRequestHash(t *testing.T) {
+	const account = "00000000-0000-0000-0000-000000000001"
+	const profile = "00000000-0000-0000-0000-000000000002"
+	const request = "00000000-0000-0000-0000-000000000003"
 	var got tokenVerification
 	interceptor := StrictUnaryInterceptor(verifierFunc(func(_ context.Context, token, method, requestID, requestHash string) (principal.Principal, error) {
 		got = tokenVerification{token, method, requestID, requestHash}
-		return principal.Principal{Issuer: "gateway", ProfileID: "profile-1"}, nil
+		return principal.Principal{Kind: "delegated_user", Issuer: "gateway", Subject: account, AccountID: account, ProfileID: profile, SessionEpoch: 1, Audience: "role", RPC: method, RequestID: requestID, RequestHash: requestHash}, nil
 	}))
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer signed-token", "x-request-id", "request-1"))
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer signed-token", "x-request-id", request))
 	_, err := interceptor(ctx, &emptypb.Empty{}, &grpc.UnaryServerInfo{FullMethod: "/voice.role.v1.RoleService/ListRoles"}, func(ctx context.Context, _ any) (any, error) {
-		if p, ok := principal.FromContext(ctx); !ok || p.ProfileID != "profile-1" {
+		if p, ok := principal.FromContext(ctx); !ok || p.ProfileID != profile {
 			t.Fatal("verified principal missing from handler context")
 		}
 		return &emptypb.Empty{}, nil
@@ -29,7 +32,7 @@ func TestStrictUnaryInterceptor_OnlyAcceptsStrictMetadataAndBindsDeterministicRe
 	if err != nil {
 		t.Fatalf("interceptor error = %v", err)
 	}
-	if got.token != "signed-token" || got.method != "/voice.role.v1.RoleService/ListRoles" || got.requestID != "request-1" || got.requestHash == "" {
+	if got.token != "signed-token" || got.method != "/voice.role.v1.RoleService/ListRoles" || got.requestID != request || got.requestHash == "" {
 		t.Fatalf("verification binding = %#v", got)
 	}
 }

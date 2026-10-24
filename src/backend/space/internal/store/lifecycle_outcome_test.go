@@ -43,6 +43,11 @@ type lifecycleOutcomeFixture struct {
 func newLifecycleOutcomeFixture(t *testing.T, fenceCount int) lifecycleOutcomeFixture {
 	t.Helper()
 	st := lifecycleStoreFixture(t)
+	return newLifecycleOutcomeFixtureWithStore(t, st, fenceCount)
+}
+
+func newLifecycleOutcomeFixtureWithStore(t *testing.T, st *SpaceStore, fenceCount int) lifecycleOutcomeFixture {
+	t.Helper()
 	store, aggregate, account, actor, spaceID, request, proofBytes, proofHash := reserveLifecycleOperationFixture(t, st)
 	operationID := uuid.MustParse(request.OperationId)
 	_, err := store.RecordLifecycleDeletionProofReceipt(context.Background(), actor, operationID, proofBytes, proofHash)

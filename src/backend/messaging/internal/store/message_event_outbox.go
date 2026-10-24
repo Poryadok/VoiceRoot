@@ -115,6 +115,9 @@ ON CONFLICT(chat_id,profile_id) DO UPDATE SET last_delivered_message_id=CASE WHE
 }
 
 func (s *MessagesStore) InsertMessageWithOutbox(ctx context.Context, row MessageRow, spaceID *uuid.UUID, events []messageevents.OutboxEvent) (*MessageRow, bool, error) {
+	if err := validateForwardCommentary(row); err != nil {
+		return nil, false, err
+	}
 	if s == nil || s.Pool == nil {
 		return nil, false, errors.New("messages store: pool not configured")
 	}
@@ -126,6 +129,20 @@ func (s *MessagesStore) InsertMessageWithOutbox(ctx context.Context, row Message
 	if err := lockMessageMutation(ctx, tx, row.ChatID, spaceID, &row.ID); err != nil {
 		return nil, false, err
 	}
+	if row.BotSendAdmission != nil {
+		var cancel context.CancelFunc
+		ctx, cancel, err = row.BotSendAdmission(ctx)
+		if err != nil {
+			return nil, false, err
+		}
+		defer cancel()
+	}
+	if err := insertForwardCommentaryDB(ctx, tx, row); err != nil {
+		return nil, false, err
+	}
+	if err := s.reconcileFilePreviewInsert(ctx, tx, &row, spaceID); err != nil {
+		return nil, false, err
+	}
 	saved, err := insertMessageDB(ctx, tx, row)
 	if err != nil {
 		return nil, false, err
@@ -133,7 +150,7 @@ func (s *MessagesStore) InsertMessageWithOutbox(ctx context.Context, row Message
 	inserted := saved.ID == row.ID
 	if inserted {
 		for _, event := range events {
-			if event.MessageID != saved.ID || event.ChatID != saved.ChatID {
+			if !compoundEventMatches(row, event) {
 				return nil, false, errors.New("message outbox event does not match inserted message")
 			}
 			if err := enqueueMessageEvent(ctx, tx, event); err != nil {

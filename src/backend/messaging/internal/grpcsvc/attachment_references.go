@@ -68,7 +68,7 @@ func (c *AttachmentReferenceCoordinator) Release(ctx context.Context, request *f
 func attachmentAcquisitionRequest(raw string) (*filev1.AcquireFileReferencesRequest, error) {
 	var attachments []messageAttachment
 	if err := json.Unmarshal([]byte(raw), &attachments); err != nil {
-		return nil, err
+		return nil, status.Error(codes.InvalidArgument, "attachments_json must be a JSON array")
 	}
 	unique := map[uuid.UUID]bool{}
 	for _, attachment := range attachments {
@@ -107,11 +107,14 @@ func (s *MessagingGRPC) insertMessageWithAttachments(ctx context.Context, row st
 			return nil, status.Error(codes.Unavailable, "attachment reference acquisition unavailable")
 		}
 		saved, _, err := s.Messages.InsertMessageWithOutbox(ctx, row, policy.SpaceID, events)
-		return saved, err
+		return saved, messageContextStatus(err)
 	}
-	saved, err := s.Messages.InsertMessageWithReferencesAndOutbox(ctx, row, policy.SpaceID, request, s.AttachmentReferences.Acquire, events)
+	saved, err := s.Messages.InsertMessageWithPreparedReferencesAndOutbox(ctx, row, policy.SpaceID, request, s.AttachmentReferences.Acquire, s.AttachmentReferences.PreparePreview, events)
 	if err != nil {
+		err = messageContextStatus(err)
 		switch {
+		case errors.Is(err, store.ErrSendReceiptConflict):
+			return nil, status.Error(codes.AlreadyExists, "client message key has a different request")
 		case errors.Is(err, store.ErrAttachmentIntentConflict):
 			return nil, status.Error(codes.AlreadyExists, "attachment send request conflicts")
 		case errors.Is(err, store.ErrAttachmentIntentExpired):
@@ -125,4 +128,13 @@ func (s *MessagingGRPC) insertMessageWithAttachments(ctx context.Context, row st
 		return nil, status.Error(codes.Internal, "attachment send persistence failed")
 	}
 	return saved, nil
+}
+
+// A deadline/cancellation reports the attempt outcome, not proof that an
+// uncertain database COMMIT rolled back. Preserve typed errors for handlers.
+func messageContextStatus(err error) error {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return status.FromContextError(err).Err()
+	}
+	return err
 }

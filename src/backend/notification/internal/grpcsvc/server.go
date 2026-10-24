@@ -17,6 +17,7 @@ import (
 	"voice/backend/notification/internal/fcm"
 	"voice/backend/notification/internal/push"
 	"voice/backend/notification/internal/store"
+	"voice/backend/pkg/releasepolicy"
 
 	notificationv1 "voice.app/voice/notification/v1"
 )
@@ -24,6 +25,7 @@ import (
 // NotificationGRPC implements voice.notification.v1.NotificationService.
 type NotificationGRPC struct {
 	notificationv1.UnimplementedNotificationServiceServer
+	ReleasePolicy  *releasepolicy.Policy
 	Tokens         *store.DeviceTokenStore
 	Settings       *store.SettingsStore
 	SpaceLifecycle interface {
@@ -62,6 +64,21 @@ func (s *NotificationGRPC) RegisterDevice(ctx context.Context, req *notification
 	pushService := req.GetPushService()
 	if pushService == "" {
 		pushService = "fcm"
+	}
+	if s.ReleasePolicy != nil && s.ReleasePolicy.Profile() == releasepolicy.Alpha {
+		if req.PlatformEnum != nil {
+			value := req.GetPlatformEnum()
+			if value < notificationv1.DevicePlatform_DEVICE_PLATFORM_UNSPECIFIED || value > notificationv1.DevicePlatform_DEVICE_PLATFORM_DESKTOP || (req.GetPlatform() != "" && req.GetPlatform() != platform) {
+				return nil, status.Error(codes.InvalidArgument, "conflicting device platform")
+			}
+		}
+		mobile, err := push.MobileTarget(platform, pushService)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid device platform/provider")
+		}
+		if mobile && !s.ReleasePolicy.Allows(releasepolicy.MobilePush) {
+			return nil, status.Error(codes.FailedPrecondition, "capability_unavailable")
+		}
 	}
 	if s.Tokens == nil {
 		return nil, status.Error(codes.Unavailable, "token store unavailable")

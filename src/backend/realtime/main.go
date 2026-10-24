@@ -21,12 +21,22 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/httpserver"
 	voiceprom "voice/backend/pkg/promhttp"
+	"voice/backend/pkg/releasepolicy"
 	"voice/backend/pkg/runtimeconfig"
 )
 
 const serviceName = "realtime"
 
+var buildSourceSHA string
+
 func main() {
+	releaseRuntime, releaseErr := releasepolicy.LoadOwnerRuntime(os.LookupEnv, buildSourceSHA, os.ReadFile)
+	if releaseErr != nil {
+		log.Fatalf("realtime release policy: %v", releaseErr)
+	}
+	if releaseRuntime.Policy().Profile() == releasepolicy.Alpha && (os.Getenv("REALTIME_NATS_LIVE_ACL_PROOF") == "true" || os.Getenv("REALTIME_NATS_FRIEND_REQUEST_PREFLIGHT") == "true") {
+		log.Fatal("realtime alpha rejects diagnostic execution mode")
+	}
 	if os.Getenv("REALTIME_NATS_LIVE_ACL_PROOF") == "true" {
 		os.Exit(runNATSLiveACLProofMain())
 	}
@@ -72,6 +82,13 @@ func main() {
 	friendLister := dialFriendLister()
 
 	hub := newWSHub()
+	hub.releasePolicy = releaseRuntime.Policy()
+	if hub.releasePolicy.Profile() == releasepolicy.Alpha && presenceUpdater == nil {
+		log.Fatal("realtime alpha requires authoritative User presence updater")
+	}
+	if err := writeRealtimeReleaseSnapshot(releaseRuntime, hub, presenceUpdater, config); err != nil {
+		log.Fatalf("realtime release snapshot: %v", err)
+	}
 	hub.setPresenceViewer(presenceViewer)
 	hub.deliveryAckReader = dialDeliveryAckMessageReader()
 	subscriptionChecker := dialChatSubscriptionChecker(hub)
@@ -85,9 +102,22 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	startup, startupCancel := context.WithTimeout(ctx, 20*time.Second)
+	lifecycleRuntime, lifecycleErr := newRealtimeLifecycleRuntime(startup, hub)
+	startupCancel()
+	if lifecycleErr != nil {
+		logger.Error("Realtime durable lifecycle startup failed", slog.Any("error", lifecycleErr))
+		os.Exit(1)
+	}
+	defer func() {
+		closing, stop := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
+		defer stop()
+		lifecycleRuntime.Close(closing)
+	}()
 
 	var rf *redisFanout
 	var ready readinessDeps
+	ready.Lifecycle = lifecycleRuntime
 	natsURL := strings.TrimSpace(os.Getenv("NATS_URL"))
 	ready.NatsURL = natsURL
 	if redisAddr := strings.TrimSpace(os.Getenv("REALTIME_REDIS_ADDR")); redisAddr != "" {
@@ -113,7 +143,15 @@ func main() {
 	metricsReg := prometheus.NewRegistry()
 	initRealtimeMetrics(metricsReg)
 
-	if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+	var sharedNATS *nats.Conn
+	if natsURL != "" {
+		sharedNATS, err = nats.Connect(natsURL, natsConnectOptions("voice-realtime")...)
+		if err != nil {
+			logger.Error("NATS connection failed", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+		defer func() { _ = sharedNATS.Drain() }()
+		ready.NATS = sharedNATS
 		consumerReady := newRealtimeConsumerReadiness("message", "voice", "chat", "social", "matchmaking", "role", "user")
 		ready.Consumers = consumerReady
 		startConsumer := func(name string, run func(context.Context) error) {
@@ -135,13 +173,7 @@ func main() {
 			}()
 		}
 		go func() {
-			nc, err := nats.Connect(natsURL, natsConnectOptions("voice-realtime-nats-lag")...)
-			if err != nil {
-				logger.Warn("nats lag poller connect failed", slog.String("error", err.Error()))
-				return
-			}
-			defer func() { _ = nc.Drain() }()
-			js, err := nc.JetStream()
+			js, err := sharedNATS.JetStream()
 			if err != nil {
 				logger.Warn("nats lag poller jetstream failed", slog.String("error", err.Error()))
 				return
@@ -149,50 +181,37 @@ func main() {
 			runNatsConsumeLagPoller(ctx, js, instanceID)
 		}()
 		startConsumer("message", func(runCtx context.Context) error {
-			return runMessageEventsConsumer(runCtx, hub, natsURL, instanceID, logger)
+			return runMessageEventsConsumer(runCtx, hub, natsURL, instanceID, logger, sharedNATS)
 		})
 		startConsumer("voice", func(runCtx context.Context) error {
-			return runVoiceEventsConsumer(runCtx, hub, natsURL, instanceID, logger)
+			return runVoiceEventsConsumer(runCtx, hub, natsURL, instanceID, logger, sharedNATS)
 		})
 		startConsumer("chat", func(runCtx context.Context) error {
-			return runChatEventsConsumer(runCtx, hub, natsURL, instanceID, logger)
+			return runChatEventsConsumer(runCtx, hub, natsURL, instanceID, logger, sharedNATS)
 		})
 		startConsumer("social", func(runCtx context.Context) error {
-			return runSocialEventsConsumer(runCtx, hub, natsURL, instanceID, logger)
+			return runSocialEventsConsumer(runCtx, hub, natsURL, instanceID, logger, sharedNATS)
 		})
 		startConsumer("matchmaking", func(runCtx context.Context) error {
-			return runMatchmakingEventsConsumer(runCtx, hub, natsURL, instanceID, logger)
+			return runMatchmakingEventsConsumer(runCtx, hub, natsURL, instanceID, logger, sharedNATS)
 		})
 		startConsumer("role", func(runCtx context.Context) error {
-			return runRoleEventsConsumer(runCtx, hub, natsURL, instanceID, logger)
+			return runRoleEventsConsumer(runCtx, hub, natsURL, instanceID, logger, sharedNATS)
 		})
 		startConsumer("user", func(runCtx context.Context) error {
-			return runUserEventsConsumer(runCtx, hub, friendLister, presenceViewer, natsURL, instanceID, logger)
+			return runUserEventsConsumer(runCtx, hub, friendLister, presenceViewer, natsURL, instanceID, logger, sharedNATS)
 		})
 	}
 
 	var dap deliveryAckPublisher
-	var dapNC *nats.Conn
-	if natsURL != "" {
-		nc, err := nats.Connect(natsURL, natsConnectOptions("voice-realtime-delivery-ack")...)
+	if sharedNATS != nil {
+		pub, err := newJetstreamDeliveryAckPublisher(sharedNATS)
 		if err != nil {
-			logger.Warn("delivery ack publisher connect failed", slog.String("error", err.Error()))
+			logger.Warn("delivery ack publisher init failed", slog.String("error", err.Error()))
 		} else {
-			pub, err := newJetstreamDeliveryAckPublisher(nc)
-			if err != nil {
-				logger.Warn("delivery ack publisher init failed", slog.String("error", err.Error()))
-				_ = nc.Drain()
-			} else {
-				dap = pub
-				dapNC = nc
-			}
+			dap = pub
 		}
 	}
-	defer func() {
-		if dapNC != nil {
-			_ = dapNC.Drain()
-		}
-	}()
 
 	startupHandler.set(httpserver.Wrap(
 		voiceprom.MountMetricsOnHealth(

@@ -1,0 +1,37 @@
+{
+  "schema": "f13-historical-composition-abbrev-receipt-v1",
+  "environment": {
+    "image": "python:3.12-bookworm",
+    "python": "3.12.15",
+    "git": "2.39.5"
+  },
+  "red": {
+    "command": "python -m unittest f13_historical_composition_test.HistoricalCompositionTests.test_frozen_diff_rendering_ignores_default_abbreviation",
+    "result": "EXPECTED_RED",
+    "cases": [
+      "core.abbrev=7",
+      "core.abbrev=10",
+      "core.abbrev=40"
+    ],
+    "failure": "Historical composition rejected: artifact_bytes",
+    "helper_sha256": "f6e0701687770eab72d2ef5aee9372ee6374635f56f7147677c78f5e881c08f9",
+    "test_sha256": "f2d21e9be3e4ad7675935387395bd9c7314062132e9bbbd952d47f92d7448963",
+    "log": {
+      "path": "D:/Git/Voice/tmp/pr875-repair/bot-receivers/j-remaining/historical-composition-red.log",
+      "sha256": "6afb340179f24b03fd2f7c2c5be20254d5240828e8997186b48f0da85add6861"
+    }
+  },
+  "green": {
+    "command": "python -m unittest f13_historical_composition_test; python -m py_compile f13_historical_composition.py f13_historical_composition_test.py",
+    "result": "PASS",
+    "tests": 7,
+    "seconds": 46.553,
+    "helper_sha256": "e1ed9f7f4c779f83fa1872a34a00dd7181c93c01cab3a9c043457a50b829b2c1",
+    "test_sha256": "2f4cdd12d2fc9a913a8f37fccdc5bf5d675544c0fd1fdadb178a2e4b9f79989b",
+    "log": {
+      "path": "D:/Git/Voice/tmp/pr875-repair/bot-receivers/j-remaining/historical-composition-green.log",
+      "sha256": "73d0b0f9e5fb24c574e98b11a0f29b61a87614bb2445b0be50dd142aada25a3b"
+    }
+  },
+  "scope": "Isolated read-only full-Git clone. No full producer execution or live producer access."
+}

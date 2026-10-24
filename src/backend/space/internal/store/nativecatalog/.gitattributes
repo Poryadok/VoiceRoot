@@ -1,0 +1,4 @@
+# The trusted45 function definition contains the immutable M44 body's CRLF.
+source_after45.sql -text whitespace=cr-at-eol
+catalog45.sql -text whitespace=cr-at-eol
+catalog50.sql -text whitespace=cr-at-eol

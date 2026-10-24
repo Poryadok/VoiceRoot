@@ -1,0 +1,626 @@
+# Develop source assembly manifest
+
+Task: SWARM-DEVELOP-20261018; sole integration writer: Rudeus-121.
+Baseline: `698d4f064f032ea74abf3ede2017100b26c8ee69`. This manifest records source custody and ancestry, not product completion, release readiness, hosted CI, or acceptance.
+All original TT task scopes and unresolved runtime gates remain authoritative and open where not independently satisfied. No source merge marks a task done.
+
+## Source merge order
+
+### Resumed wave 2: latest qualification
+
+Checkpoint addendum at source5dbd0534c9225e7b3edbc3da480e994375f77435:
+BE1442625a0bb958f94267f714e5ed02a42cd146e1c4e is supported179e6 transferred,
+independently193c6CLEAR and normally merged. User migration21 is unique in the
+current registry; source adds its exact fixture entry and preserves earlier
+BE220 mutation budget wiring. Changed-input User image runs after this merge.
+BE2081aba7fc4c90d5b3cfadc23fa2efc9e00e1d993b9 is supported186e5 transferred,
+independently195c5CLEAR and merged prose-only. BE006 actualowner121 handoff
+was read back; exact149c4 reviewed patch74ad8a00d7bb9d2529c2a6f874538b34edeab46838056bfeec42ded3f4191dd2
+applied with whitespace/error check, actual one-file1+/1- inspected and normally
+committed5dbd0534c. Accepted contract/BE007 gates remain exact; no runtime
+completion implied. An early Story README merge attempt hit owned concurrent
+index lock; waited for first merge terminal0 and retried normally, no lock
+deleted or foreign process touched.
+
+Actual new Portal Node24 build PASS, image
+c05f9b04d850f18a6c486297f0fdf248b4733426626bc80312f29e3fe5623007.
+Exact3assets full-byte/hash and callback/unknown-route SPA fallback PASS at
+100m/64Mi, peak25997312/failcnt0, no hostports; owned container removed.
+Initial packaging lookup used the wrong archive path after successful Node
+build; resumed packaging with actual tracked docker/nginx-default.conf, without
+repeating unchanged Node build. Both outcomes remain in external receipts.
+
+Actual normal SSH publication5dbd0534c is confirmed by one due GraphQL read
+22:02:26UTC. Check suites106144745489/106144745761 QUEUED and106144749284 PENDING,
+no checkRuns yet, no hosted PASS. Shared next transport observation22:32:26UTC.
+CI-NATS-V5-AUTHORITY was created as an available coherent A1 supporting source
+task with activeconsumer121, exact187c15 contract/proof boundaries, Linux-only
+resource constraints and mandatory independent preservation/security review.
+Decision attachmentcfd0d3e33f9b9bf9850312e5f4a5be5e is portable; raw failure
+upload500 is not attachment success, exact external log and original hosted run
+remain available.121 keeps integration/CI, source producer self-selects with
+actual own lease; queen is never CI owner.
+
+New Moderation runtime evidence is an OPEN gate:144 combined fullgrpcsvc at
+f453a544d has BE238 counter expected37/actual11 under1CPU and held-lock
+expected0/actual1;142 verified the four metric files match integrated6a1d3b8.
+Do not erase this FAIL with earlier source CLEAR/image PASS.142c12-c16 retains
+exact evidence and asks bounded Astra clarification of best-effort deadline
+undercount/autocommit cancellation ambiguity and strong test partition. No
+contract/assertion/timeout change or repeated runtime has occurred in121's tree.
+This does not infer a cause or product PASS. Original full feature scopes stay
+open. Pending newly accepted source tasks include BE0078a8c9d7 and any later
+immutable offers; only independently reviewed actual transfers are merged.
+
+Latest addendum after the initial wave2 carrier: BE163 supported152e5 actual
+handoff then source33a8dfd775eee3d942121f93f4b8819038d251c8/146c4CLEAR merged;
+BE097 supported150e7 then8e1b677cf247b168103d5eee2120408ac2d0b30d/147c6CLEAR
+merged; BE040 supported153e7 then34640fde433c13073246003b1d009d2c7dba530c/
+165c8CLEAR merged.159 independently rechecked exact5d0d9eee conflict union
+CLEAR in CI021c11; no source-review gap remains for that bounded merge delta.
+Changed-input Story and Gateway canonical images at exacte3dc9ba83 both PASS,
+IDs fa652a5b5aef4f7a93d4bb22f4f1623443ca8cb59e3d176b677f66571bce967c and
+47b2c8a96dd5c5f803e35237ed916958adec25eede0cea53015c42ada41a58a4. Analytics
+image0ffd2cb2d PASS ID2cc3c6167ef91fbc73540c5194f10db733f917aa9d9e89cbefb4ea57f4806649.
+
+AD008 original149 correction7b022225911bfd4a90181b96a20406a236fe853a
+resolves174c7 P2, independently174c13CLEAR; source merged atae3f2b0b.
+Original stale-preview RED retained; guarded detail reload uses existing
+selection/session generation invalidation, four regressions and complete74
+Linux Node24 tests/lint/tsc/build authorPASS. Changed-input packaged Portal
+build and exact assets/resource budget are current owned executable checks,
+not inferred from the earlier image. Broader acceptance remains open.
+
+Astra187 decision SWARMc15 resolves the source-contract question: implement
+fixed v5 subject expansion with exact whole three-source tuple, unchanged
+auth-v4/enrollment/historical deployed-contract, voice/user UPDATE-only
+allowlists and version-aware actor/census/recovery/active receipts. Repinning
+v4 alone is explicitly unsafe because its compiler ignores those two streams.
+Versioned implementation and populated native preservation/crash/noop proof
+plus independent review remain to do. No source/pin mutation has occurred.
+
+Final Graph60495 yielded no output during the bounded current group and was
+cancelled only by its owned handle, terminal1, no final graph PASS. Fresh
+Treehouse census confirms ownWT36 processes[] and exactlease/holder unchanged;
+no unknown process was killed. Previous94631 successful graph proof remains
+historical. Complete-history checkpoint bundle/actual bare restore and exact
+new source ancestry are generated after this documentation carrier.
+
+User resumed the full autonomous colony;121 remains sole develop writer and
+integration/CI owner. Older no-new-agent/transport-blocked statements below are
+historical. At source0ffd2cb2de9a1893a80b1def396f26676011a89a, the following
+new frozen sources are preserved by ordinary merge history. TT supported
+handoffs to121 are actual, not inferred from reviewing. Exact review references
+qualify narrow source only; full original task scopes remain open.
+
+| Task | Frozen source | Independent source evidence |
+| --- | --- | --- |
+| AD007 |b06c8c691c27741c126e08b12453452363769a1a|156c4 |
+| AD006 |ffe04fdeee598a0048b5a9a668cc073a7ca61664|143c7 |
+| BE161 |e7806aab72c73a58d7ff5d112ccdfeea947a5962|159c4 |
+| BE050 fixture |84e70c17517a106cc5c98b4e2bf9f515123b7ba5|143c5 |
+| BE197 |98a05bf0bed7ff7aa467ed49a88a9a30dbcf1043|160c7 |
+| CI024 |e16abbd2d38845b08e3aac95b1291e948aa51706|153c4 |
+| CI025 |0c990e5226a28091001b237028be90286b75ed55|145c5 |
+| BE175 |3673f04a18d171d0db30d0857cbdc8ce23dd57ae|152c5 |
+| BE218 |5ce86bdf836f2d8bf08fd1821cb737b0981771b0|154c6; union151c10 |
+| BE112 |1744fd0332f72dda4d6750be70529cfa90f2ac5d|148c8 |
+| CI026 |69bfab63f722f106038e1559cbf3105bbb30931a|159c3 |
+| CI016 |f1556b8080d001b1290a4eb64acbcead403c09cf|153c5 |
+| BE244 |3622cd162ef48e7ce2b31d0ca1e3863f08e2d603|146c5 |
+| BE162 |3336f8f4cfde8ce4ea4e3a2670837c3283ff229f|150c6 |
+| CI019 |0895010931d24eed11120055407cc12262d15a22|121 bounded review receipt |
+| PL-A4-07 |7b12b8602fa7ef1a0f172f49aec7da4800af1e2d|121 bounded ops-doc review |
+| CI020 |d11cba6772c471928a8c08ec470a84731cdb8005|159c7 |
+| CI021 |ab086484bd116d7bc074bb7f92e34fa7eca66830|121 source review |
+| CI021 fixture |cdd7b4f5e768aa9d0cf903cd814d396d7c542edb|121c9 |
+| BE008 fixture |eef427a1cdab267e96bbeb7b219cb6ce2c8e75bc|143c3 |
+| BE238 |6a1d3b8ff7c12ba4c5b0038f5194a0f3ccf6c715|147c9 resolves metric-lock P2 |
+| BE269 setup |0fb2970adf3409b21906524f030027dfebb20729|149c5 |
+| BE169 |9b8b69c9d2b7d67404969ccb7cfacde2ef7675a5|149c6 |
+| BE175 assertions |7255634fd0e87e0bf1f4ba3c0ee4dab66564a40a|175c5 |
+| BE220 |4919af52427cbef13aa669182c77cdc62b615aff|149c6 |
+| CI030 |86359ec0c86d6feaf3562142e0bc53e801fcdf08|177c5 |
+| BE241 |9fbd30748e46f675ceaf6df02c7676eb6d37a531|173c4 |
+
+Exact source26f2d8fe491c9255cb3c3cbbba3e3642b04c2e84 was normally SSH
+published after real remote8493 readback; no force/rebase/master merge.
+Earlier HTTPS push refusal was OAuth workflow scope, preserved without changing
+credentials. Actual hosted8493 run39166868229 completedFAIL: sole failed job
+ci-script-tests117791642107, four canonical root source-hash errors at
+nats_root_plan.py84. Other jobs passed, skipped jobs are not PASS. Historical
+c08 run39165804964 was cancelled. Exact source/deployed-contract transition
+question is durably requested to Astra in SWARM-DEVELOP-20261018c14, not solved
+by rewriting pins or historical deployed-contract.json. Actual API observation
+21:31:35UTC confirms transport; next shared observation22:01:35UTC.
+
+Actual assembled Linux ops at61e1477:11 strict image gate,7 dispatch,9 smoke,
+7 ClickHouse,3 subset cases PASS plus Auth order and GIS contract PASS, no
+registry/cluster mutation. CI020/21 merge5d0d9eee only conflicts Makefile/TODO:
+both test entries plus verifier retained; one smoke and one subset runtime gap
+retained; obsolete absence/duplicate claims removed.159 independent union
+recheck requested, separate from already CLEAR source deltas. Bare git diff
+initially reported existing CRLF as trailing whitespace; explicit process-local
+cr-at-eol diffcheck PASS with normal other checks retained, no source/global
+setting change. The first conflict-resolution shell attempt expanded Makefile
+variables accidentally; immediately corrected before commit, verified exact
+union, no production execution from that attempt.
+
+Actual combined BE218+BE112 Linux full Realtime428PASS/0skip, focused race12PASS,
+vet0 at backendab6aa8e2. Actual Portal Node24 build and full asset/SPA byte
+verification under100m/64Mi PASS peak17874944/failcnt0.15 changed canonical
+backend images PASS atab6aa8e2; unchanged old22 image proofs reused. Later BE234
+Space image rebuilt alone, then26f2d8fe changed Bot/Moderation/User images each
+PASS. Their exact immutable IDs and context hashes are in external wave2 image
+receipts. Local images are usable artifacts, not published images/deployment.
+
+BE234 actual nil membership panic correction8493fa547529d789a88f0a991810ddf87e8922c4
+recognizes the shared scanner(nil,nil) contract without altering scanner/SQL/
+locks/auth/original tests.146c13 independent CLEAR; original3 panic REDs
+retained. Fixed-source private Linux DinD unchanged tests13PASS=8top+5sub,
+seven PG scenarios and one rawactor unit,0skip/fail, vet0. All owned nested
+fixtures/runner/daemon/volume/network removed; no Windows host port/listener.
+TTc15 corrects c14 provisional tally and attaches raw46a8f2d2,
+DinD receiptbfba23d1, Space image receipt1eca17d9. Space image immutable ID
+1fe4bd722fdf86885e854fb16cfc1a29cf8daeeeeb81512ca8be68831b0fb4af.
+
+CI030 assembled parser first archive omitted workflow files: one FileNotFound
+ERROR, not a product regression. Failure/receipt preserved; same source with
+complete workflows archive then seven tests PASS in network-none Python3.12
+with pinnedPyYAML6.0.3. Analytics changed-input image runs after that result.
+No repeat of unchanged broad suites is inferred or required by this ledger.
+
+Actual pending handoff, despite explicit acceptance messages: BE16333a8dfd7
+(146c4CLEAR, owner152), BE0978e1b677c (147c6CLEAR, owner150), BE04034640fde
+(165c8CLEAR, owner153). They are not silently transferred or merged. Accepted
+AD008d2bae69 remains UNMERGED:174c7 P2 stale saved preview after Apply manifest,
+original149 sole correction writer with guarded reload/stale/logout tests.
+Author task custody remains121 while correction context stays149.
+
+Only publisher requests, not ready integration: BE045 branch31d8d23586efa0012552d0aede6115af20510965
+and BE137 branchaca25d5ffe9cef3d0ac3edcf5ddb3f535eaccdf9 were normally SSH
+published at their authors' explicit requests. Full author/task/runtime/review
+custody remains156/144, no develop merge inferred.
+
+Shared DEV/STAGING protocol was fully reread. No shared stand action occurred;
+task custody does not reserve environment, atomic resource claim/observation/
+protected window and external locks remain required. No Windows test.exe,
+host listeners or firewall changes. Golden/NATS/R22 and broader feature/provider/
+acceptance gates remain open. BE265 current adapter EJECT_ONLY cannot yield
+full deletion receipt without operation-bound durable refreshed-credential
+rejection and settled predeny-handshake/cleanup proof. Source collection is
+not release-ready. Exact continuation/proofs live under
+D:/Git/Voice/tmp/swarm/rudeus121-develop/wave2/continuation.md; final complete
+bundle/fresh bare restore and safe own lease closeout follow the frozen carrier.
+
+Each second parent below is preserved by an ordinary merge commit. Earlier source checkpoints covered by descendants are not duplicated.
+
+| Merge | Source head | Subject | TT association |
+| --- | --- | --- | --- |
+| `0bd6750ffbbbb4a4d748d6b2fd9996eff27b9a34` | `698d4f064f032ea74abf3ede2017100b26c8ee69` | Merge cached master into develop before colony integration | Author final intake / source ancestry |
+| `9e2a4b280c1ca35c01a7cbfdebab754577e2ad57` | `4725568073e4ace7bcba1155ac000e855cb142ec` | Merge BE-120 colony result into develop | BE-120 c2, BE-120 c3, BE-120 c4, BE-120 c5 |
+| `9b3bad3038a79edf75513a9e5ddb2a5e0398237f` | `eadbf70dfd56fe1f3068fe036665b3985c66eba5` | Merge BE-122 colony result into develop | BE-122 c4, BE-122 c6, BE-122 c7 |
+| `c0fc1e35ff73611ae2c41b37be544d9318bf4e74` | `b5fef7ab995f5b5cedc0b2800b5793186dbc8764` | Merge BE-070 colony result into develop | BE-070 c2, BE-070 c4, BE-070 c5, BE-070 c6 |
+| `bcb2f5c384c8cc89d4c7719b12430e76d3ef3ba9` | `21f5959baf31edd7ffffe3de24db32c795f3eb86` | Merge BE-051 colony result into develop | BE-051 c5, BE-051 c7 |
+| `76ae951a6526eedcf7ba262e299732538d42bd39` | `f8c713b06b51454c9aef895b9bb5ebd935ac0893` | Merge BE-050 colony result into develop | BE-050 c2, BE-050 c3, BE-050 c4 |
+| `f99f747d85bff763872871c8ee0d39c7616cc927` | `e78be9ddfb199589e389085f1a839cb75524a514` | Merge BE-141 colony result into develop | BE-141 c2, BE-141 c3, BE-141 c4 |
+| `aff91a88a62d630f4253d3e986e60a609ab573d9` | `fb24b4a98a421bf4df7aba8f0c7614d12f807125` | Merge BE-256 colony result into develop | BE-256 c6, BE-256 c7, BE-256 c8 |
+| `51524981196fc5eb564a1b1c3bb0d0d040f83a8e` | `30dffd52fb47aebb561b93541762bd2e80709478` | Merge ordinary media identity with voice intent guards | FE-BE106-ORDINARY-MEDIA-IDENTITY c4 |
+| `7dac4c381a2c0e6d29c4d3dd1f7faf7234251056` | `edf62cf14369e689f0ba5668b36d61efc7653d24` | Merge BE-055 colony result into develop | BE-055 c2 |
+| `98b37e19bcfb5a79bf31ce62a9e53de1b75ed9d7` | `afb2b85d3e24b3c5128f09edfdc22180983b3a36` | Merge BE-090-PRESENCE-WIRING colony result into develop | BE-090-PRESENCE-WIRING c2, BE-090-PRESENCE-WIRING c4, BE-090-PRESENCE-WIRING c5 |
+| `797fc2027fb5da808b9600f059e5c5bc2e969744` | `fbca20f34d11c77dbf9b0ea0c708ea6fae675e99` | Merge CI-018 colony result into develop | CI-018 c10, CI-018 c2, CI-018 c3, CI-018 c5, CI-018 c6 |
+| `5db1eb7886687a7db22f4a10c4565136ccd6b3ca` | `4ae2900b3f84fd30400a4658b2d0e50e6f3da56c` | Merge BE-107 colony result into develop | BE-107 c5, BE-107 c6 |
+| `09feb87272b38802a636d62692607cc25f3a1bd9` | `ee13069f60e15559b269515df0a66e4eb802e159` | Merge DOC-TIPS-CANON colony result into develop | DOC-TIPS-CANON c3, DOC-TIPS-CANON c4 |
+| `70c4ce6b226a225d455a6b52a001b2f472232773` | `b47c08e6fdeed490a3953aa012ab8f6afff6afbd` | Merge BE-239 colony result into develop | BE-239 c3, BE-239 c4, BE-239 c5 |
+| `76f135fc37b820264ab2062c5b6bbe96da4e3e3c` | `7470e716ee1faa3a01c2a9a47bde1a7a5a9b599d` | Merge BE-225 colony result into develop | BE-225 c2, BE-225 c3, BE-225 c4 |
+| `07a55e01f18a1566aa8012b1c49555e3fdb1db81` | `c228c5823b2e3becd5692a3c7fe82011465fbbf4` | Merge BE-183 colony result into develop | BE-183 c4, BE-183 c5 |
+| `4acfc1068ef5b7061078c192b82eccb78bd980d8` | `384ff1cb632787c040a0cd4b717188a2b15abe83` | Merge BE-104 colony result into develop | BE-104 c5, BE-104 c6 |
+| `6cad97340e3ac9a1face5372cc20c3936f555477` | `54be418ac0acb58792b70280fb192f79d85d1810` | Merge BE-247 colony result into develop | Author final intake / source ancestry |
+| `4da3a4d7a05fe51451599188b7f65efd67f555b5` | `3301b4d9eda2bb04f9334eb6db380456514fd713` | Merge BE-057 colony result into develop | Author final intake / source ancestry |
+| `e841eace7e9ec7f964ffb1901744bac6691526ad` | `cb3efbca4bd32a0c76c7bfa236d6781f76056204` | Merge BE-245 colony result into develop | BE-245 c6 |
+| `6d0547ffd55ee501f884411c8f9d234f0b7eb641` | `23e92e77af92e81c51100279303a7dc8c0e1139b` | Merge BE-254-BE-270 colony result into develop | BE-254 c2, BE-254 c3, BE-254 c4, BE-254 c5, BE-254 c6, BE-254 c7, BE-270 c3, BE-270 c4, BE-270 c5, BE-270 c7 |
+| `584a00ae6905f7f4bc71564436a69ebeac49bc7c` | `04f7d6b59b3a1287d7943003e0713b35beab01c8` | Merge BE-262 colony result into develop | BE-262 c5 |
+| `5e202885a1650722c11bf8ba898aa8f21f159b7e` | `739cd5af5e51bbb2d4a3eee4dfa743347c7c314f` | Merge BE-273 colony result into develop | BE-273 c6, BE-273 c8 |
+| `2a5c957dba531e07511452ec4ae33ffd1c95c29b` | `d551d82f0a9f226117d634e2405e22de0430ee10` | Merge BE-249 colony result into develop | Author final intake / source ancestry |
+| `a3be609ce3c9216fd34b13f3a280e5429ea21b8f` | `6bdffb2d060e05e065df3b3b90327db2bfd50df6` | Merge BE-250 colony result into develop | BE-250 c4, BE-250 c5 |
+| `7cb6273f3e260b76167a6abb9dbedb5f1f6c96b5` | `e4273144ea3e1df1853a617419b208c0e4eeb851` | Merge Space client retirement with ordinary identity mapping | BE-133 c10, BE-133 c9 |
+| `c4e5c57de38ad700efb6ba11070a1ce7d3baf2c7` | `0239c3653c9b3522bf04a89200921da6220c8cb2` | Merge BE-164 colony result into develop | BE-164 c8, BE-164 c9 |
+| `94c342a5cda24899df50bf3f8425b6a4eaac41ef` | `31f31f3728086367c8d853fcf38ebef34c3f6d5e` | Merge BE-059 colony result into develop | BE-059 c2, BE-059 c4 |
+| `702246839737aaaf1bfaa19254ce2df01899d5f4` | `24d494441593e4e5420b9c675b91aa75dd77dc23` | Merge PL-A3-POSTMATCH colony result into develop | PL-A3-POSTMATCH c2, PL-A3-POSTMATCH c4 |
+| `765abcaa5d190e29dd9ede88db3ece926b739657` | `fac8455cca56303e4633a07c0ea40aa1f56a5573` | Merge BE-263 colony result into develop | BE-263 c4, BE-263 c5 |
+| `2e8c29f26c4e95cead8c0634256c409af3db14a8` | `60c1798032726efadfb0fd26037a269efd44c12c` | Merge BE-038 colony result into develop | Author final intake / source ancestry |
+| `31276e7cdd661ec93cb9c2e0369a0f102adf7efd` | `10b3b7ba032df521818ce9a90852352298b53b21` | Merge Admin authority with Guest permission regressions | BE-068 c4, BE-068 c5, BE-068 c8, BE-068 c9 |
+| `a635c0ad19a233f9bd934dca57943bc6363a6da3` | `fdf42784969cbf76bbec7eb1cc6ac878c31acd6e` | Merge BE-065 colony result into develop | BE-065 c10, BE-065 c11 |
+| `e963849df092f28ca0d4a79de04ba5abe609cf38` | `0c94544318f0057feee3e180d93d7cab103edf7b` | Merge member nickname preserving additive Space contracts | BE-234 c7 |
+| `85b036f7a44d199cfc4f5d99e569bfc2140b0494` | `23d56b393b698e7db0ac79102a02b6f5c4f230de` | Merge BE-A1-VOICE-TRUST-DIAGNOSTICS colony result into develop | BE-A1-VOICE-TRUST-DIAGNOSTICS c11 |
+| `c6225ae5b968345b04a2c7d410875fe7d370b300` | `6b568d3cc5469a8a597e11f8e4acbcc6ad1d9df0` | Merge BE-209 colony result into develop | BE-209 c4 |
+| `9b1c565dc08326deb2c2f6ab51914e53b58e761f` | `6b825925117e3001d0e7936d1050e940fb83850f` | Merge BE-008 colony result into develop | BE-008 c3 |
+| `f246a908ba60d445b9ad6a5731e54de61be8a5be` | `52b3aafd572b20a9ba8467f95bb647c7c3266f03` | Merge BE-009 colony result into develop | BE-009 c3, BE-009 c5, BE-009 c7, BE-009 c9 |
+| `9dc0d50b65a2d1026059f978464612bd9d1350c9` | `47784a68f3ae2276ab34b9b23f3f1974b1b1ee3d` | Merge composite creation preserving audit and nickname contracts | Author final intake / source ancestry |
+| `c98b95a3f6417b4cf8779bfff062783ef13ca878` | `566ec5041050d71a7feeeecbf0bd0e0811238f14` | Merge final audit ingestion PostgreSQL fixtures | Author final intake / source ancestry |
+| `3bda9054eff2f1f7d2dd9d5bff46e097e06f683e` | `f75d28905adec759dcc208c6ae43c1161007a423` | Merge Chat management preserving protected override validation | Author final intake / source ancestry |
+| `5930dfe925c32381c157eceaf791c0730d5bdcaa` | `1e0cd5c85445096197e99223895c28bf2bca3a7f` | Merge reviewed BE131 final contract and JWKS successors | Author final intake / source ancestry |
+| `2f6f284f63200518bbedff902ecab1f4253ec14e` | `deff1b0c7e3dbb4fb8e79aba401dee1a1483ffa0` | Merge entry policy retaining Admin and nickname contracts | Author final intake / source ancestry |
+| `5d44b8d45dde4567f915e948f819a72de73b7c58` | `5fd1f49730192a4e57eed69ffc04e588fd7374cd` | Merge CI-022 colony result into develop | CI-022 c2 |
+| `fa6f9612f42446ed33c4c393d3c7fd25c916f111` | `d4faf75581f185a822f934bd2373af3ecd5b7490` | Merge AD-003 colony result into develop | AD-003 c2, AD-003 c3 |
+| `8ff0a7f4a0d38d024d4a6f8ed00daa5c05ee589c` | `e1795bd58c3efa2c47b9110e4fbaaf16c1d24353` | Merge AD-RICH-CATALOG colony result into develop | AD-RICH-CATALOG c2, AD-RICH-CATALOG c3 |
+| `8fe105782378fee3ce135b0727a81fa8a6451253` | `f16a89b87331464d4bdd92a8ed2e46141d6833af` | Merge BE-264 colony result into develop | BE-264 c7 |
+| `c31187667f720867a00b943ee1267806f827c8f2` | `71cdb2593b157cd9cca033defabd41638b42f009` | Merge BE-067 colony result into develop | BE-067 c14 |
+| `10c6be2791bc45753e007803953887c69386aca3` | `db8b188781675bba52999ffe03b0470721286b8b` | Merge BE-269 colony result into develop | BE-269 c15, BE-269 c17 |
+| `f5864982a3408ecd6d5aac422ea6eed91303aca2` | `0361d8597f776fd02dd312cc6498d26d00bcd890` | Merge participant events preserving existing Space events | BE-102 c7, BE-102 c8, BE-102 c9 |
+| `147b957bb467c352689bef31822bb36871e4add1` | `4f23e0881b861a6d910d156457a7f9fe1d259bf4` | Merge reviewed Auth observational event contract | BE-211 c13, BE-211 c15, BE-211 c16, BE-211 c17 |
+| `97c4bf523fab0d96a4d2d17b882996fb5d515a72` | `a1dbb6532dcb00cca83981b387bd5dac35e73bee` | Merge reserved fields and regenerate assembled protobuf mirrors | BE-232 c3, BE-232 c7 |
+| `6f6715c50f431c584ac046a843de4b464d52b7a6` | `6efea530e777e3e1883e30b83032682964e53a63` | Merge communication timeout guards with assembled Chat authority | BE-044 c21, BE-044 c23, BE-044 c24 |
+| `8c7488168bd52cd510df872d3a84d4d115b7a054` | `1b4222f2e3dfe664df1d7c373298a0088279e569` | Merge durable ordinary call lifecycle and recovery | Author final intake / source ancestry |
+
+## Immutable checkpoint coverage
+
+| Checkpoint | TT source | Accounting |
+| --- | --- | --- |
+| `d4faf75581f185a822f934bd2373af3ecd5b7490` | AD-003 | ancestor of assembled HEAD |
+| `e1795bd58c3efa2c47b9110e4fbaaf16c1d24353` | AD-RICH-CATALOG | ancestor of assembled HEAD |
+| `6b825925117e3001d0e7936d1050e940fb83850f` | BE-008 | ancestor of assembled HEAD |
+| `52b3aafd572b20a9ba8467f95bb647c7c3266f03` | BE-009 | ancestor of assembled HEAD |
+| `3aa9012b968d0ea745d756be02be6682516f0198` | BE-010 | ancestor of assembled HEAD |
+| `c1f8179c2d2dd1a26bf90db18e8e2a8e43abc418` | BE-044 | ancestor of assembled HEAD |
+| `6efea530e777e3e1883e30b83032682964e53a63` | BE-044 | ancestor of assembled HEAD |
+| `f8c713b06b51454c9aef895b9bb5ebd935ac0893` | BE-050 | ancestor of assembled HEAD |
+| `21f5959baf31edd7ffffe3de24db32c795f3eb86` | BE-051 | ancestor of assembled HEAD |
+| `edf62cf14369e689f0ba5668b36d61efc7653d24` | BE-055 | ancestor of assembled HEAD |
+| `0156763d9dceae47651c379abe897572626cf624` | BE-057 | ancestor of assembled HEAD |
+| `31f31f3728086367c8d853fcf38ebef34c3f6d5e` | BE-059 | ancestor of assembled HEAD |
+| `e1b41d956237b0fb4459c4cc1b4722c4d09f8833` | BE-065 | ancestor of assembled HEAD |
+| `371c1e276081063751717c8743032be14f7effe0` | BE-065 | ancestor of assembled HEAD |
+| `fdf42784969cbf76bbec7eb1cc6ac878c31acd6e` | BE-065 | ancestor of assembled HEAD |
+| `5acdf6904947de8fc6ae3047ff128000a7356124` | BE-067 | ancestor of assembled HEAD |
+| `71cdb2593b157cd9cca033defabd41638b42f009` | BE-067 | ancestor of assembled HEAD |
+| `10b3b7ba032df521818ce9a90852352298b53b21` | BE-068 | ancestor of assembled HEAD |
+| `b5fef7ab995f5b5cedc0b2800b5793186dbc8764` | BE-070 | ancestor of assembled HEAD |
+| `afb2b85d3e24b3c5128f09edfdc22180983b3a36` | BE-090-PRESENCE-WIRING | ancestor of assembled HEAD |
+| `0361d8597f776fd02dd312cc6498d26d00bcd890` | BE-102 | ancestor of assembled HEAD |
+| `f82af7d4c134c867b35bca9956b7d01e07a0e1e8` | BE-104 | ancestor of assembled HEAD |
+| `384ff1cb632787c040a0cd4b717188a2b15abe83` | BE-104 | ancestor of assembled HEAD |
+| `4ae2900b3f84fd30400a4658b2d0e50e6f3da56c` | BE-107 | ancestor of assembled HEAD |
+| `4725568073e4ace7bcba1155ac000e855cb142ec` | BE-120 | ancestor of assembled HEAD |
+| `eadbf70dfd56fe1f3068fe036665b3985c66eba5` | BE-122 | ancestor of assembled HEAD |
+| `448095e7923748d35a2e3a6a19a580b40f949d8a` | BE-130 | ancestor of assembled HEAD |
+| `9c2623177d1a829fffab6c0e6c4b575b60c1f57a` | BE-130 | ancestor of assembled HEAD |
+| `f1cd00188a6535180b479c20d3aa937d1faaac97` | BE-131 | ancestor of assembled HEAD |
+| `c80200aa625bf6069409dcefbfb229ea4595e8b6` | BE-131 | ancestor of assembled HEAD |
+| `f6f4ed05b4226e67627211e6fb8b1074641258cd` | BE-131 | ancestor of assembled HEAD |
+| `6684fd3ce9276b79d6a01e59d465be1bfbc583da` | BE-131 | ancestor of assembled HEAD |
+| `3c90ba14ddf5408a604e1bd3974f825e0814786b` | BE-131 | ancestor of assembled HEAD |
+| `4213d861b4d89a1019c07d74072576f96c448471` | BE-132 | ancestor of assembled HEAD |
+| `f80640a6479639cac91a622942b3e8a7aa01faf8` | BE-132 | ancestor of assembled HEAD |
+| `e5a50be4d4e823a91706a6c68b6040ca6bd8855f` | BE-133 | ancestor of assembled HEAD |
+| `e4273144ea3e1df1853a617419b208c0e4eeb851` | BE-133 | ancestor of assembled HEAD |
+| `e78be9ddfb199589e389085f1a839cb75524a514` | BE-141 | ancestor of assembled HEAD |
+| `0239c3653c9b3522bf04a89200921da6220c8cb2` | BE-164 | ancestor of assembled HEAD |
+| `c228c5823b2e3becd5692a3c7fe82011465fbbf4` | BE-183 | ancestor of assembled HEAD |
+| `d8680b0aec52094da6288e1b76888acdb67a29f3` | BE-187 | ancestor of assembled HEAD |
+| `e13a8a9d29a8d4d821a9618b7dd15488cebdae54` | BE-187, BE-A2-CHAT-MANAGEMENT-PERMISSIONS | ancestor of assembled HEAD |
+| `6b568d3cc5469a8a597e11f8e4acbcc6ad1d9df0` | BE-209 | ancestor of assembled HEAD |
+| `91101968496a746a40a2cfdf9efbb1222a44af0a` | BE-211 | EXCLUDED obsolete contract-gap proposal; superseded by accepted BE211-OBS-v1 author37 4f23e088 |
+| `22b9dd40fbb94f88aa0c808aee170a440ebf1dc6` | BE-211 | ancestor of assembled HEAD |
+| `4f23e0881b861a6d910d156457a7f9fe1d259bf4` | BE-211 | ancestor of assembled HEAD |
+| `7470e716ee1faa3a01c2a9a47bde1a7a5a9b599d` | BE-225 | ancestor of assembled HEAD |
+| `a1dbb6532dcb00cca83981b387bd5dac35e73bee` | BE-232 | ancestor of assembled HEAD |
+| `0c94544318f0057feee3e180d93d7cab103edf7b` | BE-234 | ancestor of assembled HEAD |
+| `b47c08e6fdeed490a3953aa012ab8f6afff6afbd` | BE-239 | ancestor of assembled HEAD |
+| `2ca4d687560cea5227c5e59e0db992dbce57c47e` | BE-245 | ancestor of assembled HEAD |
+| `cb3efbca4bd32a0c76c7bfa236d6781f76056204` | BE-245 | ancestor of assembled HEAD |
+| `6bdffb2d060e05e065df3b3b90327db2bfd50df6` | BE-250 | ancestor of assembled HEAD |
+| `23e92e77af92e81c51100279303a7dc8c0e1139b` | BE-254, BE-270 | ancestor of assembled HEAD |
+| `fb24b4a98a421bf4df7aba8f0c7614d12f807125` | BE-256 | ancestor of assembled HEAD |
+| `04f7d6b59b3a1287d7943003e0713b35beab01c8` | BE-262 | ancestor of assembled HEAD |
+| `fac8455cca56303e4633a07c0ea40aa1f56a5573` | BE-263 | ancestor of assembled HEAD |
+| `f16a89b87331464d4bdd92a8ed2e46141d6833af` | BE-264 | ancestor of assembled HEAD |
+| `5f025d76454b3c5027baa7fc8d657b1eaa02f51b` | BE-269 | ancestor of assembled HEAD |
+| `db8b188781675bba52999ffe03b0470721286b8b` | BE-269 | ancestor of assembled HEAD |
+| `739cd5af5e51bbb2d4a3eee4dfa743347c7c314f` | BE-273 | ancestor of assembled HEAD |
+| `23d56b393b698e7db0ac79102a02b6f5c4f230de` | BE-A1-VOICE-TRUST-DIAGNOSTICS | ancestor of assembled HEAD |
+| `fbca20f34d11c77dbf9b0ea0c708ea6fae675e99` | CI-018 | ancestor of assembled HEAD |
+| `5fd1f49730192a4e57eed69ffc04e588fd7374cd` | CI-022 | ancestor of assembled HEAD |
+| `ee13069f60e15559b269515df0a66e4eb802e159` | DOC-TIPS-CANON | ancestor of assembled HEAD |
+| `30dffd52fb47aebb561b93541762bd2e80709478` | FE-BE106-ORDINARY-MEDIA-IDENTITY | ancestor of assembled HEAD |
+| `24d494441593e4e5420b9c675b91aa75dd77dc23` | PL-A3-POSTMATCH | ancestor of assembled HEAD |
+
+## Final author overrides and absent implementation
+
+Final current heads include BE106 `1b4222f2e3dfe664df1d7c373298a0088279e569`, BE010 `deff1b0c7e3dbb4fb8e79aba401dee1a1483ffa0`, BE131 `1e0cd5c85445096197e99223895c28bf2bca3a7f`, composite `47784a68f3ae2276ab34b9b23f3f1974b1b1ee3d`, BE130 fixtures `566ec5041050d71a7feeeecbf0bd0e0811238f14`, and Chat permissions `f75d28905adec759dcc208c6ae43c1161007a423`. All are ancestors.
+BE249 `d551d82f0a9f226117d634e2405e22de0430ee10` and BE247 `54be418ac0acb58792b70280fb192f79d85d1810` are included. BE109 / PL-A1-AUTH-USER shipped evidence heads are already ancestral to baseline; no additional author1 implementation head exists. BE064 implementation was not started; there is no source to invent. Released Role20 has no migration/receiver/rights activation.
+
+## Independent source reviews and conflict decisions
+
+Rudeus-121 performed bounded non-author source reviews of BE1020361 (TTc9), ordinary identity30d (TTc6), final Chat permissionsf75, entry policydeff, composite477 plus fixture566, BE1318cde/1e0, Filef16, CI0225fd and AD003d4f, and BE1061b4222f. These verdicts cover only inspected source, with author test reports reused explicitly; they are separate from assembled verification and full feature scope. Detailed local receipts are preserved in portable tmp/develop-integration/review-*.md.
+Additive source protobuf fields/RPCs were unioned before local Go/Dart regeneration and syncing every existing Go consumer mirror. No generated side was selected over another addition. Flutter merges retain both pending-intent guards and ordinary identity context. Space startup retains composite/audit and communication listeners; Messaging commentary is prepared without writes, carries authoritative PostedAsChat/DisplayChatID, and persists atomically through ForwardCompound. Pure fixture import correctiondfde01af was independently confirmed by author13.
+Bot correction32fb67a6 uses shared lifecycle guard for per-chat enablement, row UPDATE vs sender FOR SHARE for recipient revocation, exclusive lifecycle Fence/Purge unchanged. Existing regression reproduced RED twice then GREEN unchanged. Independent author1 found first-enable contention, then gave narrow CLEAR to b47d81417 guarded upsert and deterministic two-INSERT wait regression. This does not cover later Bot7c140f416f, Rolea6eaed371, or the BE0446f6715c50 merge corrections: those independent review gates remain OPEN. The portable review-packet.md records exact deltas, assertions and evidence, including mechanical ecceaaecb and CI fixes b4d199aed/caa8f2632. No new reviewer is authorized under the user's stop rule.
+
+## Migration qualification and recovery limits
+
+Space sequence: baseline1..25; nickname26, audit27, composite28, minimizer29, entry policy30, reservation31. Role17/18 precede19; Role20 is not implemented. Voice12 belongs to BE106. Migration numbers were not silently renumbered.
+Actual PostgreSQL16-bookworm (`sha256:345c8087a592c68bc6b1c347bb865b43e14cdefec77d741f85195588028f57a4`) clean-activation proof applied exact baseline698 migrations1..25, inserted a Space/member/local audit+outbox, then applied assembled26..31. All four rows survived; the local receipt was backfilled; no composite fence/receipt overlap existed; a fresh local audit insert reserved a second receipt. PASS, owned container removed. Exact SQL inputs/output: portable `tmp/develop-integration/clean_upgrade.py` and `clean-upgrade-log.json`.
+This qualifies first activation from shipped baseline only. Migration31 rejects all existing receipt/fence overlaps, including potentially matching unpublished partial history, because receipt fingerprints cannot prove full original creator evidence after payload retention. A verified reconciler/corrective upgrade for such history is NOT delivered. Recovery: preserve both records and rollback the failed migration transaction; do not delete records or bypass the guard; do not activate on overlapping history until separately verified reconciliation exists. A real supported baseline containing overlap would be an upgrade BLOCKER.
+
+## Remaining feature and runtime gates
+
+BE010 full attempts/APIs/approval/Role-readiness consumption remains open. BE131 Ensure/Remove admission DTO/codec is contract-only; full Chat recovery/mutator cutover remains open. Composite generic Chat prepare/recovery gap remains open. Chat management full Space producer/admission/navigation scope remains open. BE256 full binding/receipt/live proof remains open. BE106 requires operator-controlled legacy drain/enable, real media acceptance; separate A3 reader/reconnect and Space/Game conversion-barrier coverage remain open. BE102 Linux broker/JWT-TLS/Realtime execution and actual assembled end-to-end emission gates are distinct from source review. Existing feature tests with opt-in environment skips do not prove their live paths.
+No deployment, acceptance appointment, master merge, old PR closure, or release-ready assertion is authorized by this assembly.
+
+## Verification and publication checkpoint
+
+Assembly source checkpoint6739dcb50ac37583cf1e8f90605af39767cccc20 includes all frozen heads; all67 candidate dispositions were verified there. Authorized review successor1a6acf259b571a80340d99d11ae8adb5a34c15e1 corrects the channel commentary P1 described below, preserving that history. No full global PASS or release readiness is claimed. Historical failures remain separate from later scoped results.
+
+| Layer | Actual result and qualification |
+|---|---|
+| Contracts/config | Toolchain, Compose/NATS jq, Buf lint/format/breaking versus local master, generated Go/Auth sync and Dart parity PASS. |
+| Go lint | All21 modules plus pkg PASS after ecceaaecb; affected Role and Matchmaking vet/lint PASS after later edits. |
+| Backend short | All non-Realtime modules executed; initial Role nickname dispatch RED corrected at a6eaed371, Role full short and principalgrpc full PASS. Initial Space audit runtime failure passed unchanged in isolated test and whole auditprincipal package; no proven load-cause assertion. Matchmaking startup fixture RED diagnosed Winsock SYSTEMROOT removal, caa8f2632 preserves only Windows SYSTEMROOT; tracked main short assertions PASS. |
+| Backend full | Original full route FAIL/interrupted is retained, not replaced by short PASS. Chat original default10m aggregate package timeout showed TestMuteChat_SetsAndClearsMutedUntil only4s old in Testcontainers Stop cleanup. Isolated full store PASS81 tests/zero skips in168.917s; all remaining Chat packages PASS, grpcsvc514.277s within its unchanged10m cap. The original failing test and cleanup completed in3.11s. No timeout/assertion was weakened and resource-load causality remains unproven. |
+| Bot actual PG/full | Existing webhook regression RED→GREEN; deterministic concurrent first-enable RED23505→GREEN. Bot7 lifecycle8PASS plus populated upgrade/legacy blank writes/nonempty-token uniqueness/unsafeDOWN rollback PASS. Original full Bot run had3 context deadlines and was interrupted; unchanged serial3PG PASS. Final whole Bot with package concurrency -p1 PASS325 tests/12 packages/zero skips or failures. Original canonical parallel failure remains historical; load causality remains unproven. Operational preflight6739dcb50 unit5PASS and six exact-query realPG checks PASS: old6 blank conflicts refused,7 blanks independent/nonempty conflicts refused, future8/dirty7 refused; owned fixture removed. |
+| Auth | Maven BUILD SUCCESS999PASS/0fail/0error/0skip. Real report gate PASS, then inventory self-test RED because new observation suite was missing. b4d199aed adds26th required suite and fixture; actual reports and all gate self-tests PASS without repeating unchanged999 tests. Surefire logged forced fork termination after30s exit window; retained in raw log. |
+| Realtime | Supported Docker Linux short PASS48.140s; no native Windows execution. Full no-skip Linux runtime remains OPEN. |
+| Gateway race | Canonical make gateway-test-race-ci PASS. |
+| Flutter | Token/contrast/color/a11y/prekey/codegen and full analyze PASS. Full test2205PASS100SKIP3FAIL. Same3 MatchSquad golden cases have exactly matching pixel counts and byte-identical testImage SHA256 on baseline698. Baseline/environment mismatch is not an integration regression, but Flutter gate remains FAIL; no golden updated. |
+| Admin |87Vitest/lint/build PASS. Actual Chrome fixture9checks PASS, sourceSha cbdf978bf; later changes affect backend/CI only. |
+| CI script fixtures | Original native/Linux environment failures retained. Portable Node24/Go1.26/JRE/DockerCLI full-history develop checkout ran make -k ci-script-tests: four targets failed. Notification Secret catalog omission fixed c652cea3a, source_plan20 and resend preflight PASS; five missing static Voice fatal categories fixed4cd763a8c, supported host phase0 fixture49PASS/4explicit opt-in skips. Actual NATS pinned-image wrapper-equivalent900 tests returned895PASS/1Bot7FAIL/4root-authorityERROR; Bot7 prerequisite fixed6739dcb50 and affected5unit plus exact-queryPG PASS. Four root errors remain the deliberate fixed-source authority refusal described below. R22 cached-base route is an actual scope FAIL, not PASS. Complete CI-script gate remains FAIL. |
+| Images | All21 Go service images plus Auth PASS across source4a24b8398 and unchanged earlier inputs. First13 passed; Role failed missing local generated module files,4a24b8398 adds6COPY statements and actual corrected Role image PASS; remaining7 and Auth PASS. Passed unchanged images were not rebuilt. |
+| Docs | Local workflow-equivalent markdown-link-check3.12.2 against every docs Markdown file and repository config PASS; npm package reused offline, external HTTPS links excluded exactly as workflow config. |
+
+Portable raw logs live under tmp/develop-integration and external D:/Git/Voice/tmp/swarm/rudeus121-develop. Baseline golden comparison is baseline-goldens.jsonl plus exact image hashes; clean Space upgrade is clean-upgrade-log.json. Full logs may exceed TT512KiB; portable checksummed files preserve them.
+GitHub publication remains blocked by externally diagnosed proxy TLS resets (OPS transport135); no repeated network probes or blind push. Source4a24b8398 is preserved as full-history develop-4a24b8398.bundle (61216029 bytes, SHA256 ee0a8f78f7031a30f8bba4c3cfe00489b727a9bf96af01549e633edaf94252ec), git bundle verify PASS and actual fresh bare restore exact refs/heads/develop PASS. Final documentation carrier and evidence hashes must be preserved before lease return.
+Final source6739 complete-history bundle is develop-6739dcb50.bundle (61145161bytes, SHA2560d03927720cf2de0a99fd1d5543445a84fa0741b9e83e9268ac7afb7ab8365be), verified and actually restored into fresh bare restore-6739dcb50.git exactdevelop. Final graph97485 PASS102398nodes/213485edges, AST158/158; existing frontend header parse warning remains. All test/graph handles are terminal. External artifact-hashes-final.json verifies copied evidence. External RESTORE.md records the later documentation carrier, its complete bundle/restore and final guarded lease outcome without a self-hashing tracked manifest.
+
+TT reconciliation: authoritative readback established author66/69 timed-out final writes absent. Later queen recovery is new evidence, not impersonation or author source clearance: BE010c17/c18 with7attachments, downloaded bundle/manifest SHA and actual bare restore exactdeff PASS; Chat permissions66c10/c11 and downloaded historical receipt PASS, bundle upload500 with no attachment and no retry. Original authors retain custody. Guarded author resource returns are documented separately as BE044c28 and BE131c29; they transfer no source/CI ownership.
+
+## Qualified CI and activation exclusions
+
+NATS root preflight pins exact baseline698 templates: realtime1122d97d..., analytics-chat7f37cdee..., search997b35cc.... Those pins equal immutable baseline Git blob hashes. Current Git blobs and disk bytes agree with each other but differ from those pins after accepted BE102 participant events and BE211 observations. This is not a CRLF artifact. Four canonical root tests refuse at nats_root_plan.py:84 before authority issuance. The pins were not rewritten and no current source was laundered into historical authority. A separately verified versioned bootstrap/migration authority for the new contracts remains required before such rollout; local source assembly grants no activation authority.
+
+R22/F13 route was rerun in an owned Linux full-history checkout with refs/remotes/origin/master set only to exact cached698d4f064f032ea74abf3ede2017100b26c8ee69, without fetch. It returned180 scope failures because its source-disabled R22.2 oracle excludes the later accepted colony proto/runtime changes. No allowlist or assertion was weakened. This specialized source-boundary predicate is incompatible with the broader authorized assembly; it is retained as FAIL and needs explicit versioned scope/CI-selection reconciliation before global CI can be GREEN. It does not create permission to deploy, bypass NATS authority or mark original feature tasks complete.
+
+Full repository sign-off is NOT achieved: Flutter baseline golden failures, these specialized CI predicates, full no-skip Realtime/product runtime gates and independent review gaps remain explicit. All author full feature scopes stay open as recorded above. Next permitted external actions require the existing independent review exception and transport recovery decisions; no new ordinary tasks or agents may be created.
+
+## Authorized reviewer141 and corrected channel commentary
+
+The user authorized exactly one independent reviewer141. Frozen318bc1bf6/source6739 review (TTc8/c9, external rudeus141-review/review.md) gives bounded source CLEAR to B-G and identifies A P1. On unchanged frozen source, existing channel Forward with commentary fails actual PostgreSQL in2.97s: producer has authorized PostedAsChat/DisplayChatID but exact expected store companion omitted both. This is a genuine integration regression, not an environment failure.
+
+Normal successor1a6acf259b571a80340d99d11ae8adb5a34c15e1 adds those exact parent fields to the expected companion; reflect.DeepEqual, profile/chat/content/metadata integrity and all other validation remain. Three-file delta includes strict matching/profile/channel mismatch tests and API stored sender/display assertions. New unit channel case RED→GREEN; own actual API18PASS/zero skips plus strengthened commentary-denial1PASS/zero skips and store compound6PASS/zero skips preserve zero writes/outbox on denial, rollback and expired-reference reconciliation. Final affected short250PASS/243explicit PG skips, vet/lint0; changed-input Messaging image PASS. Other unchanged image/component proofs are reused.
+
+Same reviewer141 independently rechecked exact1a6acf259 CLEAR, with seven top-level actual PostgreSQL tests PASS/zero skips including communication deadline/cancel. His run is independent evidence, not integration CI. The original A-G review gate is now resolved within this bounded source scope; historical OPEN statements above describe the earlier freeze. Full feature/runtime/acceptance scope and golden/NATS/R22/GitHub gates are unchanged. No pins, source allowlists or CI assertions were weakened. Current review-resume lease20 is ed1d2b69cc7426699a493f97cbe37548, holder rudeus-121-review-fix; source/evidence/final resource receipts are preserved separately under external review-fix-1a6acf259, without overwriting the previous immutable bundle.
+
+
+## Chat composition checkpoint 2026-10-18 22:28 UTC
+
+Current published source is 2a8178da00d005ac7a4bce8ccde1db9d6851018d.
+Normal merges preserve BE007 8a8c9d7db9aa5b5acda94882575cb5c20e7d479d
+(supported190 handoff, independent200c7) and Chat native scope producer
+2e41e0719e5496ad1ac29c740d5bec7269208dd7 (supported176 handoff,
+independent197c6). Native Chat migration25 is unique in this assembled catalog.
+The only authored integration delta2a is13 test insertions: install native25
+in the P3 fixture, read previous permanent head, assert retained absent head
+and advancing revision after purge plus native lookup ErrNoRows. All original
+authorization, owner evidence, zero-effects, exact persisted receipt/replay and
+expiry assertions remain. Independent190 BE007c9 gives bounded test-only CLEAR;
+the earlier200/197 source reviews retain their original scope.
+
+Exact2a Linux private DinD -race selected tests:12 top-level plus11 subtests
+PASS, zero FAIL/SKIP/race, store65.295s/grpcsvc1.684s/gisprincipal7.091s;
+scoped vet exit0. This combines real PostgreSQL P3/native25 with protected TLS
+and negative/unit cases; it does not claim23 independent PG scenarios.
+Nested inventory empty and all own runner/engine/network/volume cleanup exit0.
+Canonical Chat image actual PASS34.5s,
+sha256:3bf28861deb411fd667393c13a5f69bd0feb705daaebab5517106fe8faaddb47.
+Raw source/hash/result/resource receipt lives in external wave2
+chat-composition-summary.json, chat-composition-tests.jsonl,
+chat-composition-dind-receipt.json and target-images-2a8178da0.json.
+
+Actual GitHub API22:28:07.976299UTC confirms remote develop exact2a.
+Hosted run39171746827 has all21 backend-go matrix jobs, pkg/golangci/protobuf,
+Compose/admin/web/Portal and both key-backup goldens SUCCESS; ci-script-tests
+FAIL(job117806333679); Flutter/Auth IN_PROGRESS at this observation.
+Explicit skipped jobs remain skipped. Failed-job log download refused because
+the whole run is still active; no new exact failure cause was invented.
+The prior NATS fixed-authority refusal remains real. Reobserve this actual run
+at a terminal event; do not continuously poll. Transport next observation due
+22:58:07UTC unless a real lifecycle read supplies a newer observation.
+
+NATS decision correction187 CI-NATS-V5-AUTHORITY c4 / SWARM c17 supersedes the
+incorrect three-file tuple premise in187c15: accepted BE102 already changed
+notification too. V5 authority/custody/receipt MUST bind FOUR exact sources;
+notification SHA c0e2bedc509e11117b05c07193257bd53f24e95f7f485325f240cb2f813498bf.
+Restoring the historical template is invalid, since exact equality rejects the
+expanded voice_events contract. Root-derived compiler pins and historical v4,
+auth-v4/enrollment/deployed-contract remain unchanged. Producer197 owns the
+source supporting function;121 retains integration/CI. No pin bypass performed.
+
+ChatScope owner updated all four existing contract gates to155 coherent
+SPACE-CHAT-AUTHORITY-v3 and classified i3 unaffected after source comparison:
+Chat DTO/callers/schema25/ownDB barrier unchanged; native membership provenance
+and initialLIVE0 adaptation belongs to Role/Space consumers, not Chat snapshot.
+Full qualification/activation remains open. Exact CAS/impact receipts are
+chat-v3-edge.json and chat-v3-impact.json; no prerequisite deletion or weakening.
+
+Queued real accepted functions: BE041 c14f59c supported178e8, mandatory ACL
+review still pending;155 immutable foundation8682a79 narrow publication/
+integration/affectedCI function explicitly accepted121, while full Space-chat
+feature task and ongoing qualification source remain155. Foundation194c16 and
+196c11 review bounds exclude full remote authority/activation. Source branch8682
+normally published but not yet merged at this checkpoint. This supersedes old
+historical statements that no Role20 source exists; readiness is not inferred.
+BE238 original144 combined1CPU FAIL remains open;199c17 resolves contract,
+author142 clean successor and separate combined proof remain required.
+
+Complete immutable898 bundle SHA53c0e39887af2b0f6a539e384621f3de67a73ab13ff1284d17c809a330a8cb5a
+was verified and actually restored exact898 with90 accepted heads ancestryPASS.
+This successor needs its own incremental bundle+fresh base/delta restore;
+older bundles/receipts are immutable. No shared stand claims/deployment/tester
+appointment occurred. Current own36 lease d98699dc810d3f2707902abd371fb6c3,
+holder rudeus-121-wave2-integration; no live Chat proof/build handles remain.
+Existing Flutter baseline golden/R22/fullfeature/provider/acceptance gates stay
+open. Historical transport outage records do not negate current SSH/API success.
+
+
+## Reviewed Role foundation integration 2026-10-18 22:44 UTC
+
+Normal conflict-free merge b2cdc3ad251fdc64d1d052c52a8bea2d5d28dabe accepts155
+immutable foundation8682a79f7456439607ae1105df5e82b7a7b20ce5 as the explicitly
+transferred narrow source publication/integration/affectedCI function only.
+Full Space-chat feature task/ongoing handler and qualified authority source
+remain with155. Local persistence/lifecycle review194c16 and codec196c11 bounds
+are retained; remote authority/native membership qualification/target journals,
+workers/client navigation/full feature review and activation remain OPEN.
+Native Role migration20 is unique in this assembled catalog, follows19, and
+has not been deployed. Existing older 'Role20 unimplemented' entries above are
+historical; this is source foundation, not completion of the qualified receiver.
+
+Exact b2 isolated Linux source checks: shared memberadmission plus selected
+Role permissions/memberbinding/store42 top-level +44 subtests PASS,0 FAIL,
+117 explicit integration skips. This is scoped short proof, not full PG PASS.
+Author unchanged foundation6top+4sub realPG0skip64.621s is reused within its
+exact source/review bounds. Selected vet PASS; actual native Role/User/Voice
+go build ./... each PASS, no Windows test executables/listeners. Canonical Role
+Dockerfile actual image PASS26.844s,
+sha256:f4ae555ba1c17d66b16aebfbe254184bad836408612da01a7618331b6db884ee.
+Both additive proto paths buf lint PASS; all9 generated Go files agree across
+three mirrors. Full generated Dart/build/consumer activation remains qualified
+by actual future checks, not inferred from identical Go blobs. Owned runner
+cleanup exit0. Raw hashes/results are foundation-summary.json and
+foundation-check-receipt.json under external wave2.
+
+155c24 coherent SPACE-CHAT-AUTHORITY-v4 preserves v3 and refines Q/A/R/P target
+attempt/publication identity. Owner121 compared the actual refinement to frozen
+Chat2e41 ownDB snapshot: same DTO/callers/native25/lifecycle output, no invitation
+or membership provenance interpretation. Existing SAME four dependency gates
+now pin v4; i4 classified unaffected with evidence. No dependency was deleted
+or weakened; Role/Space consumers must perform their own real adaptation.
+
+Latest user-requested actual GH API22:33:15.519410UTC exit0, remoteef9fc3c3:
+run39172476770 then9SUCCESS/19SKIPPED/20IN_PROGRESS/7QUEUED, not wholeCI PASS.
+Subsequent normalSSH publish b2 succeeded. Next transport observation23:03:15UTC
+unless an actual CI/publication lifecycle read is newer. Previous2a failed-job
+log is now downloaded: same4 CanonicalBootstrapTests at nats_root_plan.py:84,
+72330bytes, no new category. NATSv5 producer197 source is not yet accepted
+ready delivery; full preservation tests/review remain prerequisites.
+
+BE238 corrected clean02571b7/147c23 review received; final exact combined1CPU
+proof/packet pending142, foreignBE137 WIP proof ancestry must not enter source.
+BE265 fa1528a integration/CI continuation explicitly accepted after reading
+task criteria and166c13-c14; actual supported handoff/portable packet plus
+mandatory independent source review still needed before merge. EJECT_ONLY
+still cannot issue full FROZEN/PURGED receipts; provider/stand/full feature
+gates unchanged. BE041178e8 actualhandoff received, mandatory ACLreview pending.
+Auth203 floor offer f04 contains156 publication-only WIP base; not accepted for
+wholesale merge.203 will provide only own clean two-commit delta on actual
+develop and requalify tests/security review; no WIP source laundering.
+
+Normal publisher-only branch checkpoints do not transfer task/CI or authorize
+develop integration:15686e2be0d,14459f70b9c,1586fb3b78b,1451fc23b7a,
+1913536f8fb and1721554ff34. Existing fullfeature work remains with its actual
+authors. No shared stand/deployment/tester appointment, no golden/pin/allowlist
+bypass. Full repository sign-off remains OPEN. Own graph60115 current update
+is pending; do not promote earlier graph successes onto this source.
+
+
+## Reviewed batch 3 checkpoint: source 3a0e00136 (2026-10-18 23:26 UTC)
+
+This addendum supersedes earlier pending statements for these exact inputs.
+Sole writer/integration/CI actor remains Rudeus-121. Main master698/user dirties
+are untouched; all integration uses normal commits/merges and SSH publication.
+No master release, stand deployment, tester appointment or acceptance occurred.
+
+| Accepted source | Independent source gate and qualification |
+| --- | --- |
+| BE238 02571b7a389379b5ccb0ba7fdd75dd48727b904d | 147c23 CLEAR; clean correction only, excludes foreign BE137 proof ancestry |
+| Auth Role floor 226a6b70a09ed7887faf547313761d41eeb982e6 | 209c8 security CLEAR; actual203 handoff; excludes former f04/156 WIP |
+| NATS v5 9368d0efa3e5ba8bce88faaefcd35dca4b1c0c06 | 158c14 CLEAR over197 e4be0888; three CRLF-only corrections, full audit c13 retained |
+| BE265 909090a34743902799306974d6f3ebabe3c02f10 | 208c19 CLEAR overfa1528a7; final Effects snapshot before worker launch |
+| BE041 c14f59c1a43b486d48322d62e7c5baa2816e1253 | 216c11 mandatory ACL CLEAR; actual178e8 handoff, first typed audit chain only |
+
+Order was BE238, clean Auth, NATSv5, BE265, exact Voice013 DOWN composition,
+then BE041. Source2445e81de07681cfd5f1491e4c793aaac747f571 was published.
+Own mechanical successor3a0e00136b74f12b5e9ba6f61dda450877f82b0d regenerates
+only three Dart jetstream_events outputs from unchanged canonical event proto.
+Hosted Flutter failed buf-dart-check before tests because the imported native
+VoiceRosterMembershipChanged tag22 lacked Dart mirrors. Path generation twice
+and then full canonical generation succeeded; full-tree generated parity is
+checked separately. This is not a golden test result or a new wire contract.
+
+Voice013 DOWN commit5cc425b35bc71738d86261c1cf4772c7babd4519 composes exactly
+reviewed Git blob1eea4c0c91847be8bf679041f974dee9d58e4c7a from147 a2e336585.
+Voice013 UP is byte-identical. Under transactional exclusive table locks the
+guard refuses ANY retained outbox row or positive roster version before drop.
+205's independent review and147 actualPG RED-to-GREEN23.592s qualify this
+exact DOWN subscope. No MM020 or full BE012 source was imported. Provenance is
+external batch3/voice013-guard-provenance.json; copying unrelated MM migrations
+or reusing whole-task acceptance is prohibited.
+
+Actual immutable-source canonical Docker builds at2445 all PASS:
+Moderation f685c2138ff54dcbff5dc5b17c7b3b1f96e96066d9e09b0ba540a89cea50c974;
+Voice 331ba3cbf6ee909352d2b1aa832a1f4293eb118186a7a15d1ccafd37abca02b8;
+Space 66628fc64e152fcc48833b3026d343f968c205c15fc707be2717d32900cb8a24;
+Gateway c532e7fb5f556cca0447513dc94b2d380c4860923eb8958e9bc747cdda8a1a8b;
+Auth 6abebf137839b20c08db511e41aa828084a31e7b3db20804d9ad9ed80cb254da.
+IDs are local sha256 images, not registry publication/deployment. Backend tar
+SHA9470a6d87836b939649b92ce054eab2c59a978a2267c2cddb94844e27659c0bb
+and Auth tar SHAe607fb7cda0ef2067b847c001831a7668489c8d61e28d40763fddf60335eb972
+bind actual canonical stdin contexts. Unchanged older images are reused.
+
+Faithful Linux Go1.26.5 targeted race composition at2445: principal33top+53sub,
+Moderation7top+4sub with3 explicitPG skips, Voice startup1top, Space typed
+identity1top PASS; total42top+57sub,0FAIL/race,3SKIP. No PG proof is inferred
+from short. First runner attempts lacked real root deployment fixtures; these
+invalid harness failures and attributed cancellation remain in attempt logs.
+Final complete root/backend layout is tested, runner exit0/cleanup0.
+Native original no-skip source proofs are separately reused within bounds:
+BE238 final1CPU fullgrpcsvc67top PASS63.680s; Auth77Java/9RolemTLS realPGRedis;
+BE26573test/subtest realPG plus Redis; BE04114top20sub realPG/TLS. Foreign BE238
+proof5f0aeee21c41e5af351d7500c417ac945f9f29cc remains NOT merged. E37=A8+U29
+reconciliation and quiescence proof retain uncertain commit/no-retry semantics.
+
+Four formerly failing canonical NATS root tests now actually PASS at2445 in
+network-none Linux Python3.12/PyYAML6.0.3. Fixed v5 binds FOUR accepted source
+files, preserving old v3/v4/auth-v4/enrollment/historical deployed contracts.
+197's pinned NATS2.12.12 native45consumer preservation/crash/noop proof is reused
+only for unchanged modules/plan AST; new validators have separate RED/GREEN80
+tests. Initial root runner import error is preserved as harness failure, not
+product failure. No immutable pin or authority bypass was performed.
+
+Actual API23:20:30.932773UTC confirms remote2445, hosted39175364546:
+33SUCCESS/20SKIPPED/2FAIL/1IN_PROGRESS at that observation. ci-script job
+117816913002 fails F13 duplicate_guarded_owner on the legitimate reviewed
+Voice013 DOWN followup. Develop collector defaults allow_direct_followup=false;
+release collector permits qualified incremental followups. SWARMc21 requests
+bounded Astra applicability/provenance decision with exact source/logs and
+positive/negative requirements. No flag/allowlist was relaxed. Original R22
+excluded-scope180FAIL stays explicit. Flutter117816913099 fails generated Dart
+drift (mechanically repaired above), not executed goldens; baseline golden
+failures remain independent historical gates. Hosted wholeCI is NOT PASS.
+
+Full P3 provider qualification remains OPEN: selfhosted EJECT_ONLY cannot issue
+full FROZEN/PURGED receipts. Native a80 close algorithm is qualified separately
+from A3 publication. Supporting BE012-A3-NATS-AUTHORITY is available: new
+deliver-all matchmaking_voice_roster_v1 must retain backlog/crash windows;
+current fixedv5 deliver-new census is not its authority. Do not repin v5 or
+reuse its native PASS for new A3 canonical subjects/ACL. Role floor is exact
+service:role only, existing Voice method unchanged.167 creator contract requires
+a SEPARATE Auth.GetSpaceSessionEpochFloor service:space and explicit signed
+regular AccountType on Gateway POST/spaces;186/155 coordinate new producers.
+Never widen delivered203 methods or infer creator safety from Redis mirror.
+
+Current owner lease is WT35 bbda42ed7a394d98950d1eec2e743d59,
+holder rudeus-121-be238-integration. Old36 guarded return exit0 is complete;
+future36 contents are not ours. Shared resource protocol was fully reread:
+task ownership is not environment claim, acquire/observe/current fencing and
+protected rollout-to-check window are mandatory for future DEV/STAGING use;
+none occurred here. All native/image commands now terminal, cleanup0. Graphify
+freshness and final bundle/restore/resource closeout are recorded externally
+after this documentation carrier. Existing complete898 bundle and wave2 deltas
+remain immutable; this source requires its own incremental actual bare restore.
+
+Next executable stage: consume exact hosted generated-parity result, resolve
+F13 via actual decision (not a bypass), then scoped source/check continuation.
+Ready accepted BE195e020/219c14 and BE126a475 docs remain queued with exact
+ownership. New WIP publisher branches remain publication-only and retain their
+authors' task/CI custody. All full original TT scopes/activation/acceptance gates
+remain open where not satisfied; no foundation slice silently completes them.

@@ -28,6 +28,30 @@ import (
 
 const runtimeHash = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
+func TestRuntimeScopedWorkloadDecisionsBindIssuerAndRejectReplay(t *testing.T) {
+	f := newRuntimeFixture(t, 2)
+	f.config.JWKSURLs["messaging"] = f.config.JWKSURLs["space"]
+	runtime, err := New(context.Background(), f.config)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, runtime.Close()) })
+	method := rolev1.RoleService_CheckPermission_FullMethodName
+	for _, issuer := range []string{"messaging", "voice"} {
+		t.Run(issuer, func(t *testing.T) {
+			token := issueRuntimeToken(t, f.key, issuer, "current", "role", method, "decision-"+issuer, runtimeHash)
+			_, err := runtime.VerifyWorkloadDecision(context.Background(), token, method, "decision-"+issuer, runtimeHash, "space")
+			require.Error(t, err, "unknown receiver selector cannot choose a verifier")
+			p, err := runtime.VerifyWorkloadDecision(context.Background(), token, method, "decision-"+issuer, runtimeHash, issuer)
+			require.NoError(t, err)
+			require.Equal(t, "service:"+issuer, p.Subject)
+			_, err = runtime.VerifyWorkloadDecision(context.Background(), token, method, "decision-"+issuer, runtimeHash, issuer)
+			require.Error(t, err, "same transport credential is rejected")
+			wrong := issueRuntimeToken(t, f.key, "space", "current", "role", method, "wrong-"+issuer, runtimeHash)
+			_, err = runtime.VerifyWorkloadDecision(context.Background(), wrong, method, "wrong-"+issuer, runtimeHash, issuer)
+			require.Error(t, err, "shared key material cannot substitute issuer")
+		})
+	}
+}
+
 // Real HTTPS, RSA signatures, and the Redis wire protocol exercise the runtime's
 // dependency wiring without replacing verifier or replay behavior with mocks.
 type runtimeFixture struct {
@@ -118,6 +142,8 @@ func TestRuntimeVerifiesBothRotationKeysAndRejectsReplay(t *testing.T) {
 	}{
 		{"current", rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName, f.key},
 		{"next", rolev1.RoleService_AbortOwnershipTransfer_FullMethodName, f.next},
+		{"current", rolev1.RoleService_CheckPermission_FullMethodName, f.key},
+		{"next", rolev1.RoleService_CheckPermission_FullMethodName, f.next},
 	} {
 		t.Run(tc.kid, func(t *testing.T) {
 			token := issueRuntimeToken(t, tc.key, "space", tc.kid, "role", tc.method, "request-"+tc.kid, runtimeHash)

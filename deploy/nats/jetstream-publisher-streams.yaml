@@ -42,7 +42,7 @@ streams:
     max_age: 168h
     storage: file
   - name: user_events
-    subjects: [user.account_deleted, user.account_restored, user.guest_converted, user.profile_created, user.profile_updated, user.profile_switched, user.verified, user.presence_changed, user.game_detected, user.settings_changed]
+    subjects: [user.account_deleted, user.account_restored, user.guest_converted, user.registered, user.logged_in, user.logged_out, user.2fa_enabled, user.profile_created, user.profile_updated, user.profile_switched, user.verified, user.presence_changed, user.game_detected, user.settings_changed]
     retention: limits
     max_age: 168h
     storage: file
@@ -58,7 +58,7 @@ streams:
     max_age: 168h
     storage: file
   - name: voice_events
-    subjects: [voice.call_incoming, voice.call_accepted, voice.call_declined, voice.call_missed, voice.call_ended, voice.state_changed, voice.screen_share_started, voice.screen_share_stopped, voice.call_started, voice.member_joined]
+    subjects: [voice.call_incoming, voice.call_accepted, voice.call_declined, voice.call_missed, voice.call_ended, voice.state_changed, voice.screen_share_started, voice.screen_share_stopped, voice.call_started, voice.member_joined, voice.participant_joined, voice.participant_left]
     retention: limits
     max_age: 168h
     storage: file

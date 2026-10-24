@@ -10,6 +10,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +23,9 @@ public final class AuthAuthorityReader implements AutoCloseable {
   public record Snapshot(long revision, byte[] canonicalState, long validUntilUnixMillis) {}
   public static final int MAX_SUBJECTS=10000, MAX_STATE_BYTES=4*1024*1024;
   private static final ObjectMapper JSON=new ObjectMapper();
+  private record Migration(String script,int checksum) {}
+  private final Map<String,Migration> currentFlyway;
+  private final Map<String,Migration> historicalFlyway;
   private final DataSource dataSource;
   private final java.util.concurrent.ExecutorService reads=new java.util.concurrent.ThreadPoolExecutor(
       0,16,30,java.util.concurrent.TimeUnit.SECONDS,new java.util.concurrent.SynchronousQueue<>(),
@@ -28,6 +33,36 @@ public final class AuthAuthorityReader implements AutoCloseable {
   public AuthAuthorityReader(DataSource dataSource) {
     if(dataSource==null) throw new IllegalArgumentException("Auth source requires owning database");
     this.dataSource=dataSource;
+    // Load immutable release metadata before entering any database transaction.
+    // This reader remains the authorization-only REPEATABLE_READ projection;
+    // it does not invoke or qualify the separate RC-only identity-owner gate.
+    currentFlyway=sourceHistory();
+    var historical=new HashMap<String,Migration>();
+    for(int version=1;version<=26;version++) historical.put(Integer.toString(version),currentFlyway.get(Integer.toString(version)));
+    historicalFlyway=Map.copyOf(historical);
+  }
+
+  private static Map<String,Migration> sourceHistory() {
+    try(var input=AuthAuthorityReader.class.getResourceAsStream("/roleidentityauthority/migration-history-v1.json")) {
+      if(input==null) throw unavailable();
+      var profile=JSON.readTree(input);
+      if(!"current444-auth-identity-v1".equals(profile.path("profile").asText())
+          || profile.path("canonicalVersion").asLong()!=32 || !profile.path("flyway").isArray()) throw unavailable();
+      var versions=new HashSet<String>();
+      for(int version=1;version<=26;version++) versions.add(Integer.toString(version));
+      versions.add("28");versions.add("31");
+      var result=new HashMap<String,Migration>();
+      for(var migration:profile.path("flyway")) {
+        String version=migration.path("version").asText();
+        String script=migration.path("script").asText();
+        if(!versions.remove(version) || !script.startsWith("V"+version+"__")
+            || !script.endsWith(".sql") || !migration.path("checksum").isIntegralNumber()
+            || !migration.path("checksum").canConvertToInt()) throw unavailable();
+        result.put(version,new Migration(script,migration.path("checksum").asInt()));
+      }
+      if(!versions.isEmpty()) throw unavailable();
+      return Map.copyOf(result);
+    } catch(Exception failure) {throw unavailable();}
   }
 
   public void checkSchema() { read(List.of(),false); }
@@ -100,7 +135,7 @@ public final class AuthAuthorityReader implements AutoCloseable {
     } catch(Exception ex) {throw unavailable();}
   }
 
-  private static void preflight(Connection connection,long deadline)throws Exception {
+  private void preflight(Connection connection,long deadline)throws Exception {
     execute(connection,"SET LOCAL row_security=off; SET LOCAL search_path=public,pg_catalog",deadline);
     boolean flyway=number(connection,"SELECT CASE WHEN to_regclass('public.flyway_schema_history') IS NULL THEN 0 ELSE 1 END",deadline)>0;
     boolean golang=number(connection,"SELECT CASE WHEN to_regclass('public.schema_migrations') IS NULL THEN 0 ELSE 1 END",deadline)>0;
@@ -110,9 +145,7 @@ public final class AuthAuthorityReader implements AutoCloseable {
     String lock="LOCK TABLE public."+history;
     for(String table:AuthSourceCatalog.TABLES) lock+=",public."+table;
     execute(connection,lock+" IN ACCESS SHARE MODE",deadline);
-    String historyCheck=flyway?"SELECT CASE WHEN count(*)=26 AND bool_and(success) AND count(DISTINCT version)=26 AND min(version::int)=1 AND max(version::int)=26 THEN 1 ELSE 0 END FROM public.flyway_schema_history WHERE version IS NOT NULL"
-        :"SELECT CASE WHEN count(*)=1 AND bool_and(version=27 AND NOT dirty) THEN 1 ELSE 0 END FROM public.schema_migrations";
-    if(number(connection,historyCheck,deadline)!=1) throw unavailable();
+    validateHistory(connection,flyway,deadline);
     var tables=new ArrayList<>(AuthSourceCatalog.TABLES);tables.add(history);
     try(var query=statement(connection,"SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY(?) AND c.relkind='r' AND c.relpersistence='p' AND NOT c.relrowsecurity AND NOT c.relforcerowsecurity AND NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid=c.oid) AND NOT EXISTS(SELECT 1 FROM pg_rewrite WHERE ev_class=c.oid) AND NOT EXISTS(SELECT 1 FROM pg_inherits WHERE inhrelid=c.oid OR inhparent=c.oid)",deadline)) {
       query.setArray(1,connection.createArrayOf("text",tables.toArray()));
@@ -132,6 +165,32 @@ public final class AuthAuthorityReader implements AutoCloseable {
           String digest=HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(result.getString(1).getBytes(StandardCharsets.UTF_8)));
           if(!digest.equals(function.getValue()) || result.next()) throw unavailable();
         }
+      }
+    }
+  }
+
+  private void validateHistory(Connection connection,boolean flyway,long deadline)throws SQLException {
+    if(flyway) {
+      var actual=new HashMap<String,Migration>();
+      try(var query=statement(connection,"SELECT version,script,checksum,success,type FROM public.flyway_schema_history ORDER BY installed_rank",deadline)) {
+        query.setMaxRows(currentFlyway.size()+1);
+        try(var result=query.executeQuery()) {
+          while(result.next()) {
+            budget(deadline);
+            String version=result.getString("version"),script=result.getString("script");
+            if(version==null || script==null || !(result.getObject("checksum") instanceof Integer checksum)
+                || !Boolean.TRUE.equals(result.getObject("success")) || !"SQL".equals(result.getString("type"))
+                || actual.put(version,new Migration(script,checksum))!=null) throw unavailable();
+          }
+        }
+      }
+      if(!actual.equals(historicalFlyway) && !actual.equals(currentFlyway)) throw unavailable();
+    } else {
+      // Canonical markers are not fabricated Flyway checksums. The exact source
+      // catalog checks below still apply to both explicitly supported cuts.
+      try(var query=statement(connection,"SELECT version,dirty FROM public.schema_migrations",deadline);var result=query.executeQuery()) {
+        if(!result.next() || !(result.getObject("version") instanceof Long version)
+            || (version!=27 && version!=32) || !Boolean.FALSE.equals(result.getObject("dirty")) || result.next()) throw unavailable();
       }
     }
   }

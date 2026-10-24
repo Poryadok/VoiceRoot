@@ -1,0 +1,32 @@
+diff --git a/protos/voice/space/v1/space.proto b/protos/voice/space/v1/space.proto
+index 8573e97a4..a2332d23b 100644
+--- a/protos/voice/space/v1/space.proto
++++ b/protos/voice/space/v1/space.proto
+@@ -50,6 +50,10 @@ service SpaceService {
+   rpc BanMember(BanMemberRequest) returns (BanMemberResponse);
+   rpc UnbanMember(UnbanMemberRequest) returns (UnbanMemberResponse);
+   rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
++  // BE-234-nickname-v1: verified actor, global MEMBER_MANAGE_NICKNAMES;
++  // local members only, Owner protected, serialized redacted audit/outbox.
++  // @voice.security=public_gateway;callers=service:gateway
++  rpc UpdateMemberNickname(UpdateMemberNicknameRequest) returns (UpdateMemberNicknameResponse);
+   rpc ListBans(ListBansRequest) returns (ListBansResponse);
+   rpc TimeoutMember(TimeoutMemberRequest) returns (TimeoutMemberResponse);
+   rpc RemoveMemberTimeout(RemoveMemberTimeoutRequest) returns (RemoveMemberTimeoutResponse);
+@@ -729,3 +733,16 @@ message ValidateRoleOverrideTargetRequest {
+ }
+ 
+ message ValidateRoleOverrideTargetResponse {}
++
++message UpdateMemberNicknameRequest {
++  string space_id = 1;
++  // Explicit target; actor is derived only from the verified principal.
++  string profile_id = 2;
++  // Required presence. Empty (after Unicode White_Space trim) clears SQL NULL.
++  // Otherwise 1..64 Unicode scalars; Cc, separators and Bidi_Control forbidden.
++  optional string nickname = 3;
++}
++
++message UpdateMemberNicknameResponse {
++  SpaceMembership space_membership = 1;
++}

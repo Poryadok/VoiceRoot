@@ -25,7 +25,7 @@ func TestUserAuthoritySourceActualMigratorProtectedFactory(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	database := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join("..", "migrations", "user_db"))
-	database.Run(true, "up")
+	database.Run(true, "goto", "21")
 	reader := store.NewProfileStore(database.Pool)
 	account, profile := uuid.NewString(), uuid.NewString()
 	_, err := database.Pool.Exec(ctx, `INSERT INTO profiles(id,account_id,username,discriminator,display_name) VALUES($1,$2,'factory','0001','private')`, profile, account)
@@ -70,6 +70,9 @@ func TestUserAuthoritySourceActualMigratorProtectedFactory(t *testing.T) {
 	state, err = authoritysource.DecodeUserState(revoked.CanonicalState)
 	require.NoError(t, err)
 	require.False(t, state.EligibleProfile(profile, account))
+	// Remove unrelated additive migrations, then exercise the actual permanent
+	// authority-fence refusal rather than merely rolling back migration21's index.
+	database.Run(true, "goto", "19")
 	database.Run(false, "down", "1")
 	_, err = client.ReadSnapshot(f.SignedContext(t, request, method, "user-source-maintenance"), request)
 	require.Equal(t, codes.Unavailable, status.Code(err))

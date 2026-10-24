@@ -6,6 +6,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/space/internal/authctx"
 	"voice/backend/space/internal/store"
@@ -47,11 +48,20 @@ func (s *SpaceGRPC) ResolveVoiceRoomAccess(ctx context.Context, req *spacev1.Res
 	if err != nil {
 		return nil, status.Error(codes.Unavailable, "voice room access resolver unavailable")
 	}
-	return &spacev1.ResolveVoiceRoomAccessResponse{
-		SpaceId:      access.SpaceID.String(),
-		Member:       access.Member,
-		Active:       access.Active,
-		Discoverable: access.Discoverable,
-		AccessEpoch:  access.AccessEpoch,
-	}, nil
+	response := &spacev1.ResolveVoiceRoomAccessResponse{
+		SpaceId:            access.SpaceID.String(),
+		Member:             access.Member,
+		Active:             access.Active,
+		Discoverable:       access.Discoverable,
+		AccessEpoch:        access.AccessEpoch,
+		ProtocolVersion:    1,
+		ProfileId:          access.ProfileID.String(),
+		EvaluatedAt:        timestamppb.New(access.EvaluatedAt),
+		CommunicationState: spacev1.MemberCommunicationState_MEMBER_COMMUNICATION_STATE_CLEAR,
+	}
+	if access.TimedOutUntil != nil {
+		response.CommunicationState = spacev1.MemberCommunicationState_MEMBER_COMMUNICATION_STATE_TIMED_OUT
+		response.TimedOutUntil = timestamppb.New(*access.TimedOutUntil)
+	}
+	return response, nil
 }

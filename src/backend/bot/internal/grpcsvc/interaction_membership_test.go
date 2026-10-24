@@ -60,12 +60,12 @@ func (p *threadProbe) SendMessage(_ context.Context, req *messagingv1.SendMessag
 	return &messagingv1.SendMessageResponse{Message: &messagingv1.Message{Id: uuid.NewString()}}, nil
 }
 
-func TestPostMessageForwardsThreadParent(t *testing.T) {
+func TestDMPostMessageForwardsThreadParent(t *testing.T) {
 	probe := &threadProbe{}
 	svc := &BotGRPC{Messaging: probe}
 	bot := &store.BotRow{ActorProfileID: uuid.New(), OwnerAccountID: uuid.New()}
 	parent := uuid.NewString()
-	_, err := svc.postMessage(context.Background(), bot, &chatv1.ChatRef{Id: uuid.NewString()}, "reply", parent)
+	_, err := svc.postMessage(context.Background(), bot, &chatv1.ChatRef{Id: uuid.NewString(), Type: chatTypePtr(chatv1.ChatType_CHAT_TYPE_DM)}, "reply", parent)
 	require.NoError(t, err)
 	require.Equal(t, parent, probe.parent)
 }

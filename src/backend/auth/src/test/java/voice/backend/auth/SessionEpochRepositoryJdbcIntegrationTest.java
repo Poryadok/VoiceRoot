@@ -12,7 +12,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -29,14 +29,16 @@ import voice.backend.auth.repository.JdbcAccountRepository;
 @Testcontainers(disabledWithoutDocker = true)
 class SessionEpochRepositoryJdbcIntegrationTest {
   @Container
-  static final PostgreSQLContainer<?> postgres =
+  final PostgreSQLContainer<?> postgres =
       new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
           .withDatabaseName("auth_db")
           .withUsername("voice")
           .withPassword("voice");
 
-  @BeforeAll
-  static void migrateAuthSchema() {
+  // A method-local database keeps unrelated accounts out of the exact keyset
+  // oracle without bypassing the account erasure guard during cleanup.
+  @BeforeEach
+  void migrateAuthSchema() {
     Flyway.configure()
         .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
         .locations(
@@ -155,7 +157,6 @@ class SessionEpochRepositoryJdbcIntegrationTest {
     } finally {
       workers.shutdownNow();
       assertThat(workers.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
-      jdbc().update("DELETE FROM accounts WHERE id = :id", new MapSqlParameterSource("id", accountId));
     }
   }
 

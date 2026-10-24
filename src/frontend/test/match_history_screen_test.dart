@@ -1,17 +1,105 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:voice_frontend/ui/matchmaking/game_catalog_screen.dart';
 import 'package:voice_frontend/ui/matchmaking/match_history_screen.dart';
+import 'package:voice_frontend/ui/matchmaking/match_rating_overlay.dart';
+import 'package:voice_frontend/ui/report/report_sheet.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  for (final stars in [1, 2]) {
+    for (final confirm in [true, false]) {
+      testWidgets(
+        'history $stars-star ban confirmation $confirm prompts once',
+        (tester) async {
+          final requests = <http.Request>[];
+          final observer = _BanDialogObserver();
+          await _pumpBanHistory(tester, requests, observer);
+          await tester.tap(find.byKey(MatchHistoryScreen.rateKey('teammate')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(MatchRatingOverlay.starButtonKey(stars)));
+          await tester.tap(find.byKey(MatchRatingOverlay.submitButtonKey));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(observer.dialogs, 1);
+          final l10n = AppLocalizations.of(
+            tester.element(find.byType(AlertDialog)),
+          )!;
+          await tester.tap(
+            find.text(
+              confirm ? l10n.matchRatingBanConfirm : l10n.matchRatingBanCancel,
+            ),
+          );
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(
+            observer.dialogs,
+            1,
+            reason: 'the overlay already obtained the decision',
+          );
+          expect(find.byType(AlertDialog), findsNothing);
+          final bans = requests
+              .where((r) => r.url.path == '/api/v1/matchmaking/bans')
+              .toList();
+          expect(bans, hasLength(confirm ? 1 : 0));
+          final votes = requests
+              .where((r) => r.url.path.endsWith('/rate'))
+              .toList();
+          expect(votes, hasLength(1));
+          expect(jsonDecode(votes.single.body), containsPair('stars', stars));
+          if (confirm) {
+            expect(bans.single.method, 'POST');
+            expect(bans.single.headers['Authorization'], 'Bearer test-access');
+            expect(
+              jsonDecode(bans.single.body),
+              containsPair('targetProfileId', 'teammate'),
+            );
+          }
+        },
+      );
+    }
+  }
+
+  for (final confirm in [true, false]) {
+    testWidgets('history direct ban confirmation $confirm prompts once', (
+      tester,
+    ) async {
+      final requests = <http.Request>[];
+      final observer = _BanDialogObserver();
+      await _pumpBanHistory(tester, requests, observer);
+      await tester.tap(find.byKey(MatchHistoryScreen.banKey('teammate')));
+      await tester.pumpAndSettle();
+      expect(observer.dialogs, 1);
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(AlertDialog)),
+      )!;
+      await tester.tap(
+        find.text(
+          confirm ? l10n.matchRatingBanConfirm : l10n.matchRatingBanCancel,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(observer.dialogs, 1);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(
+        requests.where((r) => r.url.path == '/api/v1/matchmaking/bans'),
+        hasLength(confirm ? 1 : 0),
+      );
+    });
+  }
+
   for (final language in ['en', 'ru']) {
     for (final statusCode in [500, 503]) {
       testWidgets(
@@ -423,4 +511,622 @@ void main() {
     expect(find.text(l10n.matchHistoryLoadError), findsOneWidget);
     expect(find.text('Try again'), findsOneWidget);
   });
+
+  testWidgets(
+    'MatchHistory empty state keeps Find players available and opens the catalog',
+    (tester) async {
+      final client = MockClient((request) async {
+        if (request.url.path == '/api/v1/matchmaking/profile/me/matches') {
+          return http.Response(
+            jsonEncode({
+              'matchList': {'matches': [], 'nextCursor': ''},
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/api/v1/matchmaking/games') {
+          return http.Response(
+            jsonEncode({
+              'gameList': {'games': [], 'nextCursor': ''},
+            }),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: voiceAppTestOverrides(client: client),
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const MatchHistoryScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final findPlayers = find.text('Find players');
+      expect(findPlayers, findsOneWidget);
+      await tester.tap(findPlayers);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(GameCatalogScreen.screenKey), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'MatchHistory exposes per-player rate and report only for completed matches',
+    (tester) async {
+      final rateRequests = <http.Request>[];
+      final client = MockClient((request) async {
+        if (request.url.path == '/api/v1/matchmaking/profile/me/matches') {
+          return http.Response(
+            jsonEncode({
+              'matchList': {
+                'matches': [
+                  {
+                    'id': 'completed-match',
+                    'gameId': 'game-1',
+                    'mode': 'Duo',
+                    'region': 'eu',
+                    'status': 'completed',
+                    'profileIds': ['prof-test', 'completed-player'],
+                  },
+                  {
+                    'id': 'active-match',
+                    'gameId': 'game-1',
+                    'mode': 'Duo',
+                    'region': 'eu',
+                    'status': 'active',
+                    'profileIds': ['prof-test', 'active-player'],
+                  },
+                ],
+                'nextCursor': '',
+              },
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/api/v1/matchmaking/games') {
+          return http.Response(
+            jsonEncode({
+              'gameList': {'games': [], 'nextCursor': ''},
+            }),
+            200,
+          );
+        }
+        if (request.url.path.startsWith('/api/v1/users/profiles/')) {
+          final profileId = request.url.path.split('/').last;
+          return http.Response(
+            jsonEncode({
+              'profile': {'id': profileId, 'displayName': profileId},
+            }),
+            200,
+          );
+        }
+        if (request.url.path ==
+                '/api/v1/matchmaking/matches/completed-match/rate' &&
+            request.method == 'POST') {
+          rateRequests.add(request);
+          return http.Response('{}', 200);
+        }
+        return http.Response('{}', 404);
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: voiceAppTestOverrides(client: client),
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const MatchHistoryScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final completedHeader = find.text('Duo · eu · Completed');
+      await tester.tap(completedHeader);
+      await tester.pumpAndSettle();
+      expect(find.text('Rate'), findsOneWidget);
+      expect(find.text('Report'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(MatchHistoryScreen.rateKey('completed-player')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(MatchRatingOverlay), findsOneWidget);
+      await tester.tap(find.byKey(MatchRatingOverlay.starButtonKey(4)));
+      await tester.tap(find.byKey(MatchRatingOverlay.submitButtonKey));
+      await tester.pumpAndSettle();
+      expect(rateRequests, hasLength(1));
+      expect(
+        rateRequests.single.url.path,
+        '/api/v1/matchmaking/matches/completed-match/rate',
+      );
+      expect(
+        jsonDecode(rateRequests.single.body),
+        containsPair('ratedProfileId', 'completed-player'),
+      );
+      expect(jsonDecode(rateRequests.single.body), containsPair('stars', 4));
+
+      await tester.tap(
+        find.byKey(MatchHistoryScreen.reportKey('completed-player')),
+      );
+      await tester.pumpAndSettle();
+      final report = tester.widget<ReportSheet>(find.byType(ReportSheet));
+      expect(report.target, isA<ReportUserTarget>());
+      expect((report.target as ReportUserTarget).profileId, 'completed-player');
+
+      Navigator.of(tester.element(find.byType(ReportSheet))).pop();
+      await tester.pumpAndSettle();
+      await tester.tap(completedHeader);
+      await tester.pumpAndSettle();
+      expect(find.text('Rate'), findsNothing);
+      expect(find.text('Report'), findsNothing);
+      final activeHeader = find.text('Duo · eu · Active');
+      await tester.ensureVisible(activeHeader);
+      await tester.tap(activeHeader);
+      await tester.pumpAndSettle();
+      expect(find.text('Rate'), findsNothing);
+      expect(find.text('Report'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'MatchHistory keeps Find players available while loading and after failure',
+    (tester) async {
+      final pending = Completer<http.Response>();
+      final client = MockClient((request) async {
+        if (request.url.path == '/api/v1/matchmaking/profile/me/matches') {
+          return pending.future;
+        }
+        if (request.url.path == '/api/v1/matchmaking/games') {
+          return http.Response(
+            jsonEncode({
+              'gameList': {'games': [], 'nextCursor': ''},
+            }),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: voiceAppTestOverrides(client: client),
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const MatchHistoryScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('Find players'), findsOneWidget);
+
+      pending.complete(http.Response('{}', 503));
+      await tester.pumpAndSettle();
+      expect(find.byKey(MatchHistoryScreen.errorKey), findsOneWidget);
+      expect(find.text('Find players'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'MatchHistory hides pagination when the server returns an empty cursor',
+    (tester) async {
+      final client = MockClient((request) async {
+        if (request.url.path == '/api/v1/matchmaking/profile/me/matches') {
+          return http.Response(
+            jsonEncode({
+              'matchList': {
+                'matches': [
+                  {
+                    'id': 'final-match',
+                    'gameId': 'game-1',
+                    'mode': 'Duo',
+                    'region': 'eu',
+                    'status': 'completed',
+                    'profileIds': ['prof-test', 'player-2'],
+                  },
+                ],
+                'nextCursor': '',
+              },
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/api/v1/matchmaking/games') {
+          return http.Response(
+            jsonEncode({
+              'gameList': {'games': [], 'nextCursor': ''},
+            }),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: voiceAppTestOverrides(client: client),
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const MatchHistoryScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(MatchHistoryScreen.loadMoreKey), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'MatchHistory shows a retry action when loading another page fails',
+    (tester) async {
+      final pageRequests = <http.Request>[];
+      var continuationAttempts = 0;
+      final client = MockClient((request) async {
+        if (request.url.path == '/api/v1/matchmaking/profile/me/matches') {
+          pageRequests.add(request);
+          if (request.url.queryParameters['cursor'] == 'cursor-2') {
+            continuationAttempts++;
+            if (continuationAttempts == 1) return http.Response('{}', 503);
+            return http.Response(
+              jsonEncode({
+                'matchList': {
+                  'matches': [
+                    {
+                      'id': 'match-2',
+                      'gameId': 'game-1',
+                      'mode': 'Duo',
+                      'region': 'eu',
+                      'status': 'completed',
+                      'profileIds': ['prof-test', 'player-2'],
+                    },
+                  ],
+                  'nextCursor': '',
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response(
+            jsonEncode({
+              'matchList': {
+                'matches': [
+                  {
+                    'id': 'match-1',
+                    'gameId': 'game-1',
+                    'mode': 'Duo',
+                    'region': 'eu',
+                    'status': 'completed',
+                    'profileIds': ['prof-test', 'player-1'],
+                  },
+                ],
+                'nextCursor': 'cursor-2',
+              },
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/api/v1/matchmaking/games') {
+          return http.Response(
+            jsonEncode({
+              'gameList': {'games': [], 'nextCursor': ''},
+            }),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: voiceAppTestOverrides(client: client),
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const MatchHistoryScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(MatchHistoryScreen.loadMoreKey));
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byKey(MatchHistoryScreen.screenKey)),
+      )!;
+      expect(find.text(l10n.backendUnavailable), findsOneWidget);
+      final retry = find.byKey(MatchHistoryScreen.loadMoreKey);
+      expect(find.text(l10n.commonRetry), findsOneWidget);
+      await tester.tap(retry);
+      await tester.pumpAndSettle();
+
+      expect(continuationAttempts, 2);
+      expect(pageRequests, hasLength(3));
+      expect(
+        pageRequests[1].url.queryParameters['cursor'],
+        pageRequests[2].url.queryParameters['cursor'],
+      );
+      expect(
+        find.byKey(MatchHistoryScreen.matchTileKey('match-1')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(MatchHistoryScreen.matchTileKey('match-2')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'MatchHistory actions remain usable and labeled in portrait and landscape',
+    (tester) async {
+      await _loadMatchHistoryCaptureFonts();
+      final client = MockClient((request) async {
+        if (request.url.path == '/api/v1/matchmaking/profile/me/matches') {
+          return http.Response(
+            jsonEncode({
+              'matchList': {
+                'matches': [
+                  {
+                    'id': 'completed-match',
+                    'gameId': 'game-1',
+                    'mode': 'Duo',
+                    'region': 'eu',
+                    'status': 'completed',
+                    'profileIds': ['prof-test', 'teammate'],
+                  },
+                ],
+                'nextCursor': '',
+              },
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/api/v1/matchmaking/games') {
+          return http.Response(
+            jsonEncode({
+              'gameList': {'games': [], 'nextCursor': ''},
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/api/v1/users/profiles/teammate') {
+          return http.Response(
+            jsonEncode({
+              'profile': {
+                'id': 'teammate',
+                'displayName':
+                    'Alexandria Example Teammate With a Long Display Name',
+                'username': 'alexandria_example',
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      });
+      final semantics = tester.ensureSemantics();
+
+      for (final size in [const Size(1280, 800), const Size(390, 844)]) {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: voiceAppTestOverrides(client: client),
+            child: MaterialApp(
+              theme: voiceTestTheme().copyWith(
+                textTheme: voiceTestTheme().textTheme.apply(
+                  fontFamily: 'Noto Sans',
+                ),
+                primaryTextTheme: voiceTestTheme().primaryTextTheme.apply(
+                  fontFamily: 'Noto Sans',
+                ),
+              ),
+              locale: const Locale('en'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: const MatchHistoryScreen(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final findPlayers = find.bySemanticsLabel('Find players');
+        await tester.ensureVisible(findPlayers);
+        expect(findPlayers, findsOneWidget);
+        expect(
+          tester
+              .getSemantics(findPlayers)
+              .getSemanticsData()
+              .hasAction(SemanticsAction.tap),
+          isTrue,
+        );
+
+        final orientation = size.width > size.height
+            ? 'horizontal'
+            : 'vertical';
+        final hostDirectory = Platform.isLinux ? 'linux/' : '';
+        if (size.width > size.height) {
+          await expectLater(
+            find.byKey(MatchHistoryScreen.screenKey),
+            matchesGoldenFile(
+              'goldens/${hostDirectory}match_history_$orientation.png',
+            ),
+          );
+          continue;
+        }
+
+        final matchHeader = find.text('Duo · eu · Completed');
+        await tester.ensureVisible(matchHeader);
+        await tester.tap(matchHeader);
+        await tester.pumpAndSettle();
+        final rate = find.byKey(MatchHistoryScreen.rateKey('teammate'));
+        final report = find.byKey(MatchHistoryScreen.reportKey('teammate'));
+        await tester.ensureVisible(rate);
+        for (final action in [rate, report]) {
+          expect(action, findsOneWidget);
+          final data = tester.getSemantics(action).getSemanticsData();
+          expect(data.label, isNotEmpty);
+          expect(data.hasAction(SemanticsAction.tap), isTrue);
+        }
+
+        var rateFocused = false;
+        for (var index = 0; index < 80; index++) {
+          if (_primaryFocusWithin(tester, rate)) {
+            rateFocused = true;
+            break;
+          }
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          await tester.pump();
+        }
+        expect(rateFocused || _primaryFocusWithin(tester, rate), isTrue);
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        expect(_primaryFocusWithin(tester, report), isTrue);
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.pump();
+        expect(_primaryFocusWithin(tester, rate), isTrue);
+
+        await expectLater(
+          find.byKey(MatchHistoryScreen.screenKey),
+          matchesGoldenFile(
+            'goldens/${hostDirectory}match_history_$orientation.png',
+          ),
+        );
+      }
+      semantics.dispose();
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    },
+  );
+}
+
+bool _primaryFocusWithin(WidgetTester tester, Finder ancestor) {
+  final primaryFocus = tester.binding.focusManager.primaryFocus?.context;
+  if (primaryFocus is! Element) return false;
+  final target = tester.element(ancestor);
+  if (identical(primaryFocus, target)) return true;
+  var found = false;
+  primaryFocus.visitAncestorElements((element) {
+    if (identical(element, target)) {
+      found = true;
+      return false;
+    }
+    return true;
+  });
+  return found;
+}
+
+class _BanDialogObserver extends NavigatorObserver {
+  int dialogs = 0;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (route is DialogRoute) dialogs++;
+    super.didPush(route, previousRoute);
+  }
+}
+
+Future<void> _pumpBanHistory(
+  WidgetTester tester,
+  List<http.Request> requests,
+  NavigatorObserver observer,
+) async {
+  final client = MockClient((request) async {
+    if (request.url.path == '/api/v1/matchmaking/profile/me/matches') {
+      return http.Response(
+        jsonEncode({
+          'matchList': {
+            'matches': [
+              {
+                'id': 'completed-match',
+                'gameId': 'game-1',
+                'mode': 'Duo',
+                'region': 'eu',
+                'status': 'completed',
+                'profileIds': ['prof-test', 'teammate'],
+              },
+            ],
+            'nextCursor': '',
+          },
+        }),
+        200,
+      );
+    }
+    if (request.url.path == '/api/v1/matchmaking/games') {
+      return http.Response(
+        jsonEncode({
+          'gameList': {'games': [], 'nextCursor': ''},
+        }),
+        200,
+      );
+    }
+    if (request.url.path.startsWith('/api/v1/users/profiles/')) {
+      return http.Response(
+        jsonEncode({
+          'profile': {
+            'id': request.url.path.split('/').last,
+            'displayName': 'Teammate',
+          },
+        }),
+        200,
+      );
+    }
+    if (request.url.path.endsWith('/rate') ||
+        request.url.path == '/api/v1/matchmaking/bans') {
+      requests.add(request);
+      return http.Response('{}', 200);
+    }
+    return http.Response('{}', 404);
+  });
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: voiceAppTestOverrides(client: client),
+      child: MaterialApp(
+        theme: voiceTestTheme(),
+        locale: const Locale('en'),
+        navigatorObservers: [observer],
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const MatchHistoryScreen(),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.byKey(MatchHistoryScreen.matchTileKey('completed-match')),
+  );
+  await tester.pumpAndSettle();
+}
+
+Future<void> _loadMatchHistoryCaptureFonts() async {
+  final materialIcons = FontLoader('MaterialIcons')
+    ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
+  await materialIcons.load();
+  final notoSans = FontLoader('Noto Sans')
+    ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'))
+    ..addFont(rootBundle.load('assets/fonts/NotoSans-Medium.ttf'))
+    ..addFont(rootBundle.load('assets/fonts/NotoSans-SemiBold.ttf'))
+    ..addFont(rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
+  await notoSans.load();
 }

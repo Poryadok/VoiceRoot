@@ -864,6 +864,7 @@ const GetStoryFeedResponse$json = {
   '8': [
     {'1': '_page'},
   ],
+  '10': ['story_feed_response'],
 };
 
 /// Descriptor for `GetStoryFeedResponse`. Decode as a `google.protobuf.DescriptorProto`.
@@ -872,7 +873,7 @@ final $typed_data.Uint8List getStoryFeedResponseDescriptor = $convert.base64Deco
     'EuU3RvcnlSB3N0b3JpZXMSHwoLbmV4dF9jdXJzb3IYAiABKAlSCm5leHRDdXJzb3ISPAoEcGFn'
     'ZRgDIAEoCzIjLnZvaWNlLmNvbW1vbi52MS5DdXJzb3JQYWdlUmVzcG9uc2VIAFIEcGFnZYgBAR'
     'I/CgtmZWVkX2dyb3VwcxgEIAMoCzIeLnZvaWNlLnN0b3J5LnYxLlN0b3J5RmVlZEdyb3VwUgpm'
-    'ZWVkR3JvdXBzQgcKBV9wYWdl');
+    'ZWVkR3JvdXBzQgcKBV9wYWdlUhNzdG9yeV9mZWVkX3Jlc3BvbnNl');
 
 @$core.Deprecated('Use getProfileStoriesResponseDescriptor instead')
 const GetProfileStoriesResponse$json = {

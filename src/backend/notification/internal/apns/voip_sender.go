@@ -20,13 +20,13 @@ type VoIPSender interface {
 
 // HTTPVoIPSender delivers VoIP pushes via Apple's HTTP/2 API.
 type HTTPVoIPSender struct {
-	client   pushClient
-	bundleID string
+	client pushClient
+	topic  string
 }
 
 // NewHTTPVoIPSenderForTest constructs an HTTPVoIPSender with a custom client (tests only).
-func NewHTTPVoIPSenderForTest(client pushClient, bundleID string) *HTTPVoIPSender {
-	return &HTTPVoIPSender{client: client, bundleID: bundleID}
+func NewHTTPVoIPSenderForTest(client pushClient, topic string) *HTTPVoIPSender {
+	return &HTTPVoIPSender{client: client, topic: topic}
 }
 
 // NewHTTPVoIPSender builds a VoIP APNs HTTP/2 sender from config.
@@ -44,14 +44,17 @@ func NewHTTPVoIPSender(cfg Config) (*HTTPVoIPSender, error) {
 	if !cfg.Production {
 		client = client.Development()
 	}
-	return &HTTPVoIPSender{client: client, bundleID: voipBundleID(cfg)}, nil
+	return &HTTPVoIPSender{client: client, topic: voipTopic(cfg)}, nil
 }
 
-func voipBundleID(cfg Config) string {
+func voipTopic(cfg Config) string {
 	if topic := strings.TrimSpace(cfg.VoIPTopic); topic != "" {
 		return topic
 	}
-	return cfg.BundleID
+	if cfg.BundleID == "" {
+		return ""
+	}
+	return cfg.BundleID + ".voip"
 }
 
 func (s *HTTPVoIPSender) Send(ctx context.Context, profileID uuid.UUID, device store.DeviceToken, p push.Payload) error {
@@ -59,7 +62,7 @@ func (s *HTTPVoIPSender) Send(ctx context.Context, profileID uuid.UUID, device s
 	if s == nil || s.client == nil {
 		return fmt.Errorf("apns voip: sender unavailable")
 	}
-	n, err := BuildVoIPNotification(s.bundleID, device.Token, p)
+	n, err := BuildVoIPNotification(s.topic, device.Token, p)
 	if err != nil {
 		return err
 	}

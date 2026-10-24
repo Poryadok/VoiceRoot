@@ -44,7 +44,7 @@ wait_postgres_tcp() {
   local i
   for i in $(seq 1 30); do
     if docker run --rm "${MIGRATE_DOCKER_HOST_ARGS[@]}" \
-      postgres:16-alpine pg_isready -h "${MIGRATE_PG_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" >/dev/null 2>&1; then
+      postgres:18-alpine pg_isready -h "${MIGRATE_PG_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" >/dev/null 2>&1; then
       return 0
     fi
     sleep 2
@@ -57,9 +57,65 @@ wait_postgres_tcp() {
 
 migrate_db() {
   local db="$1"
+  if [[ "$db" == space_db ]]; then
+    # Build from this checkout, never guess a published installer tag. The
+    # resulting image includes exact compiled SQL and native source identities.
+    local source_revision installer_image
+    source_revision="$(git rev-parse HEAD)"
+    installer_image="voice-native-space-installer:local-${source_revision}"
+    docker build --build-arg "SOURCE_REVISION=${SOURCE_REVISION:-}" \
+      -f src/backend/space/Dockerfile.native-migrate -t "$installer_image" .
+    local evidence_dir prior_file run_log image_id
+    evidence_dir="${SPACE_NATIVE_EVIDENCE_DIR:-${ROOT}/tmp/native-space-installer}"
+    mkdir -p "$evidence_dir"
+    chmod 700 "$evidence_dir"
+    prior_file="${SPACE_NATIVE_PRIOR_EVIDENCE:-${evidence_dir}/prior.jsonl}"
+    local prior_args=() prior_mount=()
+    if [[ -f "$prior_file" ]]; then
+      prior_args=(--mode=verify --prior-evidence=/evidence/prior.jsonl)
+      prior_mount=(--mount "type=bind,source=${prior_file},target=/evidence/prior.jsonl,readonly")
+    fi
+    run_log="$(umask 077; mktemp "${evidence_dir}/run.XXXXXX.jsonl")"
+    if PGHOST="$MIGRATE_PG_HOST" PGPORT="$POSTGRES_PORT" PGUSER="$POSTGRES_USER" PGPASSWORD="$POSTGRES_PASSWORD" PGSSLMODE=disable \
+      docker run --rm "${MIGRATE_DOCKER_HOST_ARGS[@]}" "${prior_mount[@]}" \
+      -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGSSLMODE "$installer_image" "${prior_args[@]}" >"$run_log"; then
+      cat "$run_log"
+      if [[ ! -f "$prior_file" ]]; then
+        # Only the successful fresh command can produce this original artifact.
+        # Verify output never overwrites creation/transition evidence.
+        cp "$run_log" "${prior_file}.next"
+        chmod 600 "${prior_file}.next"
+        mv "${prior_file}.next" "$prior_file"
+        image_id="$(docker image inspect "$installer_image" --format '{{.Id}}')"
+        printf '{"image_id":"%s","source_revision":"%s"}\n' "$image_id" "${SOURCE_REVISION:-}" >"${evidence_dir}/image.json"
+        chmod 600 "${evidence_dir}/image.json"
+      fi
+    else
+      local failure=$?
+      cat "$run_log"
+      return "$failure"
+    fi
+    return
+  fi
   echo "==> golang-migrate up: ${db}"
   local dsn
   dsn="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${MIGRATE_PG_HOST}:${POSTGRES_PORT}/${db}?sslmode=disable"
+  if [[ "$db" == bot_db ]]; then
+    # The same project-scoped volume and helper serve CLI and app bootstrap.
+    # Never recapture an already-migrated source into a newly missing artifact.
+    # Compose also mounts Space evidence for this one-off initializer. Create
+    # its host directory as the caller before Docker can create it as root.
+    local evidence_dir
+    evidence_dir="${SPACE_NATIVE_EVIDENCE_DIR:-${ROOT}/tmp/native-space-installer}"
+    mkdir -p "$evidence_dir"
+    chmod 700 "$evidence_dir"
+    docker compose --profile app run --rm --no-deps --build \
+      --entrypoint python3 compose-db-init \
+      /usr/local/bin/provision-bot-membership-source.py /native-bot-evidence/source.uuid -- \
+      migrate -path /migrations/bot_db \
+      -database "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/bot_db?sslmode=disable" up
+    return
+  fi
   docker run --rm "${MIGRATE_DOCKER_HOST_ARGS[@]}" \
     -v "${ROOT}/src/backend/migrations/${db}:/migrations" migrate/migrate \
     -path /migrations \
@@ -71,7 +127,7 @@ provision_gameintegration_runtime_role() {
   PGPASSWORD="${POSTGRES_PASSWORD}" docker run --rm -i "${MIGRATE_DOCKER_HOST_ARGS[@]}" \
     -e PGPASSWORD -e GAME_INTEGRATION_DB_PASSWORD \
     -v "${ROOT}/docker/postgres/provision-gameintegration-runtime-role.sql:/provision.sql:ro" \
-    postgres:16-alpine psql -v ON_ERROR_STOP=1 \
+    postgres:18-alpine psql -v ON_ERROR_STOP=1 \
       -h "${MIGRATE_PG_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" \
       -d postgres -f /provision.sql
 }
@@ -96,7 +152,7 @@ run_voice() {
 run_other_go_owned() {
   provision_gameintegration_runtime_role
   local dbs=(
-    user_db social_db file_db space_db role_db notification_db
+    user_db social_db file_db space_db role_db notification_db realtime_db
     matchmaking_db search_db moderation_db gateway_db subscription_db game_integration_db
   )
   local db

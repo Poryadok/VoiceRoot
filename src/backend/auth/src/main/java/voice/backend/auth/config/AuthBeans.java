@@ -118,6 +118,7 @@ public class AuthBeans {
       E2EKeyBackupRepository e2eKeyBackupRepository,
       AuthEventPublisher authEventPublisher,
       MeterRegistry meterRegistry,
+      voice.backend.auth.events.AuthObservations observations,
       AccountRestoreTokenStore restoreTokenStore,
       MailSender mailSender,
       SessionEpochFloorStore sessionEpochFloors,
@@ -128,6 +129,7 @@ public class AuthBeans {
       voice.backend.auth.service.AccountDeletionPendingFloorWorker deletionFloorWorker,
       voice.backend.auth.service.AccountDeletionPendingEventWorker deletionEventWorker,
       ObjectProvider<RegistrationSessionEpochPreparer> registrationSessionEpochPreparer,
+      voice.backend.auth.releasepolicy.ReleasePolicy releasePolicy,
       @Qualifier("authSecurityTransactionTemplate") ObjectProvider<TransactionTemplate> authSecurityTransactions) {
     AuthService service = new AuthService(
         accounts,
@@ -153,6 +155,8 @@ public class AuthBeans {
     service.configureAccountDeletion(
         deletionOperations, deletionTokenCodec, deletionEventPublisher, deletionStarter,
         deletionFloorWorker, deletionEventWorker);
+    service.configureObservations(observations);
+    service.configureReleasePolicy(releasePolicy);
     RegistrationSessionEpochPreparer registrationPreparer = registrationSessionEpochPreparer.getIfAvailable();
     if (registrationPreparer != null) {
       service.configureRegistrationSessionEpochPreparer(registrationPreparer);

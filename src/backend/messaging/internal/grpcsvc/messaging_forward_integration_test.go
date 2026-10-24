@@ -78,7 +78,7 @@ func TestMessagingForwardAndCopyStripGameCardActionsAndMedia(t *testing.T) {
 	seedDMChat(t, ctx, pool, sourceChat, profA, profB)
 	seedDMChat(t, ctx, pool, targetChat, profA, profC)
 	seedDMChat(t, ctx, pool, copyChat, profA, profD)
-	client, _ := startMessagingServerWired(t, pool, messagingWire{
+	client, _ := startMessagingServerWired(t, pool, messagingWire{CommunicationStates: &communicationStateStub{state: 1},
 		ChatGuard: entitledSQLChatGuard{SQLChatGuard: &store.SQLChatGuard{Pool: pool}}, DeletedAccounts: allowDeletedAccounts{},
 	})
 
@@ -120,7 +120,7 @@ func TestMessagingForwardAndCopyStripGameCardActionsAndMedia(t *testing.T) {
 }
 
 // TestMessagingForwardMessage_chainPointsToOriginal documents forward-messages.md:
-// re-forwarding does not accumulate attribution — only the original source is kept.
+// re-forwarding does not accumulate attribution â€” only the original source is kept.
 func TestMessagingForwardMessage_chainPointsToOriginal(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)
@@ -315,7 +315,7 @@ func TestMessagingForwardMessage_toChannelSetsPostedAsChat(t *testing.T) {
 	_, err := pool.Exec(ctx, `UPDATE chats SET space_id = $2 WHERE id = $1`, targetChannel, spaceID)
 	require.NoError(t, err)
 
-	client, _ := startMessagingServerWired(t, pool, messagingWire{
+	client, _ := startMessagingServerWired(t, pool, messagingWire{CommunicationStates: &communicationStateStub{state: 1},
 		ProfilePairBlocks: allowProfilePairBlocks{},
 		RolePermissions: selectiveRolePerms{allow: map[string]bool{
 			permissions.TextChatSendMessages: true,
@@ -348,6 +348,15 @@ func TestMessagingForwardMessage_toChannelSetsPostedAsChat(t *testing.T) {
 	require.Len(t, msgs, 2)
 	require.Equal(t, commentary, msgs[1].GetContent())
 	require.True(t, msgs[0].GetPostedAsChat())
+	require.True(t, msgs[1].GetPostedAsChat(), "commentary keeps the authorized channel identity")
+	for _, message := range msgs {
+		var postedAsChat bool
+		var displayChatID, senderProfileID uuid.UUID
+		require.NoError(t, pool.QueryRow(ctx, `SELECT posted_as_chat, display_chat_id, sender_profile_id FROM messages WHERE id=$1`, message.GetId()).Scan(&postedAsChat, &displayChatID, &senderProfileID))
+		require.True(t, postedAsChat)
+		require.Equal(t, targetChannel, displayChatID)
+		require.Equal(t, profA, senderProfileID, "stored sender remains the forwarding profile")
+	}
 }
 
 // TestMessagingForwardMessage_channelSendPermissionDenied documents Forward send-perm hole fix (P1.5).
@@ -368,7 +377,7 @@ func TestMessagingForwardMessage_channelSendPermissionDenied(t *testing.T) {
 	_, err := pool.Exec(ctx, `UPDATE chats SET space_id = $2 WHERE id = $1`, targetChannel, spaceID)
 	require.NoError(t, err)
 
-	client, _ := startMessagingServerWired(t, pool, messagingWire{
+	client, _ := startMessagingServerWired(t, pool, messagingWire{CommunicationStates: &communicationStateStub{state: 1},
 		RolePermissions: selectiveRolePerms{deny: map[string]bool{
 			permissions.TextChatSendMessages: true,
 		}},
@@ -379,11 +388,16 @@ func TestMessagingForwardMessage_channelSendPermissionDenied(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	commentary := "must remain invisible"
 	_, err = client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
 		SourceMessageId: original.GetMessage().GetId(),
 		TargetChat:      chatChannelRef(targetChannel),
+		Commentary:      &commentary,
 	})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	var messages, events int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM messages WHERE chat_id=$1), (SELECT count(*) FROM message_event_outbox WHERE chat_id=$1)`, targetChannel).Scan(&messages, &events))
+	require.Equal(t, []int{0, 0}, []int{messages, events}, "denied compound forward creates no commentary, forward or outbox")
 }
 
 // TestMessagingForwardMessage_e2eToPlainDenied documents FW-06: E2E ciphertext must not land in plain DM.
@@ -419,7 +433,7 @@ func TestMessagingForwardMessage_e2eToPlainDenied(t *testing.T) {
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
-// TestMessagingForwardMessage_e2eToE2EDMPreservesFlag documents FW-06: E2E→E2E DM keeps is_e2e.
+// TestMessagingForwardMessage_e2eToE2EDMPreservesFlag documents FW-06: E2Eâ†’E2E DM keeps is_e2e.
 func TestMessagingForwardMessage_e2eToE2EDMPreservesFlag(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)
@@ -581,7 +595,7 @@ func TestMessagingForwardMessage_authorAllowForwardFalseDenied(t *testing.T) {
 	seedDMChat(t, ctx, pool, sourceChat, profA, profB)
 	seedDMChat(t, ctx, pool, targetChat, profA, profC)
 
-	client, _ := startMessagingServerWired(t, pool, messagingWire{
+	client, _ := startMessagingServerWired(t, pool, messagingWire{CommunicationStates: &communicationStateStub{state: 1},
 		Privacy: allowForwardStub{deny: map[uuid.UUID]bool{profB: true}},
 	})
 
@@ -613,7 +627,7 @@ func TestMessagingForwardMessage_authorAllowForwardTrueAllowed(t *testing.T) {
 	seedDMChat(t, ctx, pool, sourceChat, profA, profB)
 	seedDMChat(t, ctx, pool, targetChat, profA, profC)
 
-	client, _ := startMessagingServerWired(t, pool, messagingWire{
+	client, _ := startMessagingServerWired(t, pool, messagingWire{CommunicationStates: &communicationStateStub{state: 1},
 		Privacy: allowForwardStub{},
 	})
 
@@ -651,7 +665,7 @@ func TestMessagingForwardMessage_reforwardRespectsOriginalAuthorPrivacy(t *testi
 	seedDMChat(t, ctx, pool, chatC, profA, profD)
 
 	// First hop allowed (no deny yet); then author privacy flips via stub that always denies profB.
-	client, _ := startMessagingServerWired(t, pool, messagingWire{
+	client, _ := startMessagingServerWired(t, pool, messagingWire{CommunicationStates: &communicationStateStub{state: 1},
 		Privacy: allowForwardStub{},
 	})
 
@@ -666,7 +680,7 @@ func TestMessagingForwardMessage_reforwardRespectsOriginalAuthorPrivacy(t *testi
 	})
 	require.NoError(t, err)
 
-	clientDeny, _ := startMessagingServerWired(t, pool, messagingWire{
+	clientDeny, _ := startMessagingServerWired(t, pool, messagingWire{CommunicationStates: &communicationStateStub{state: 1},
 		Privacy: allowForwardStub{deny: map[uuid.UUID]bool{profB: true}},
 	})
 
@@ -695,7 +709,7 @@ func TestMessagingForwardMessage_authorCanForwardOwnWhenDisallowed(t *testing.T)
 	seedDMChat(t, ctx, pool, sourceChat, profA, profB)
 	seedDMChat(t, ctx, pool, targetChat, profB, profC)
 
-	client, _ := startMessagingServerWired(t, pool, messagingWire{
+	client, _ := startMessagingServerWired(t, pool, messagingWire{CommunicationStates: &communicationStateStub{state: 1},
 		Privacy: allowForwardStub{deny: map[uuid.UUID]bool{profB: true}},
 	})
 
@@ -774,7 +788,7 @@ func TestMessagingForwardMessage_withoutAttributionIgnoresAllowForward(t *testin
 	seedDMChat(t, ctx, pool, sourceChat, profA, profB)
 	seedDMChat(t, ctx, pool, targetChat, profA, profC)
 
-	client, _ := startMessagingServerWired(t, pool, messagingWire{
+	client, _ := startMessagingServerWired(t, pool, messagingWire{CommunicationStates: &communicationStateStub{state: 1},
 		Privacy: allowForwardStub{deny: map[uuid.UUID]bool{profB: true}},
 	})
 

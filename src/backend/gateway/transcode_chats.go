@@ -16,6 +16,38 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 	ctx := withGRPCMetadata(r.Context(), r)
 
 	switch {
+	case r.Method == http.MethodGet && strings.HasSuffix(rest, "/permissions"):
+		chatID := strings.TrimSuffix(rest, "/permissions")
+		if chatID == "" || strings.Contains(chatID, "/") {
+			return false
+		}
+		resp, err := t.clients.chat.GetChatPermissions(ctx, &chatv1.GetChatPermissionsRequest{ChatId: chatID})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPut && strings.Contains(rest, "/members/") && strings.HasSuffix(rest, "/post-as-chat"):
+		parts := strings.SplitN(strings.TrimSuffix(rest, "/post-as-chat"), "/members/", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" || strings.Contains(parts[0], "/") || strings.Contains(parts[1], "/") {
+			return false
+		}
+		req := &chatv1.SetChatMemberPostAsChatRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		req.ChatId = parts[0]
+		req.TargetProfileId = parts[1]
+		if _, err := t.clients.chat.SetChatMemberPostAsChat(ctx, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
 	case r.Method == http.MethodGet && rest == "":
 		page := &commonv1.CursorPageRequest{}
 		_ = decodeQueryJSON(page, queryFirst(r, "page"))
@@ -128,7 +160,12 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 			writeGRPCError(w, err)
 			return true
 		}
-		resp, err := t.clients.chat.CreateChat(ctx, req)
+		createCtx, err := t.chatCreationContext(r, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.chatAudit.CreateChat(createCtx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true

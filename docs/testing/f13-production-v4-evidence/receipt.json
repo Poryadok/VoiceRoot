@@ -1,0 +1,43 @@
+{
+  "schema": "voice.docs-links-scan-receipt.v1",
+  "scope": "Local Docker validation on an immutable source archive with one explicitly recorded companion-file overlay. This receipt makes no claim about the actual checkout HEAD after the snapshot or any hosted CI terminal result.",
+  "source_snapshot": {
+    "head": "d4d4c62d6f3c5e16113943e6f7b8e327c985c66f",
+    "archive": "D:/Git/Voice/tmp/pr875-repair/docs-links/d4d4c62-snapshot.tar",
+    "archive_sha256": "6a472d616ffecbbb6340ac2b85d39a8b47703988eac49b20755d069aa5b5323f",
+    "description": "git archive of the exact base commit; GREEN used this same archive."
+  },
+  "tool": {
+    "runner": "Docker, node:24-bookworm",
+    "node": "v24.19.0",
+    "checker": "markdown-link-check@3.12.2",
+    "per_file_command": "markdown-link-check -q -c .markdown-link-check.json \"$f\"",
+    "scan_scope": "All 199 Markdown files in docs; collector continued through all files."
+  },
+  "red": {
+    "result": "RED",
+    "scanned_markdown_files": 199,
+    "failures": 1,
+    "failure": {
+      "file": "docs/testing/native-p3-source-v2-evidence/role-space-review.md",
+      "relative_link": "f13-9df-role-space-inventory.json",
+      "finding": "Companion file absent from tracked d4 source archive; checker reported Status 400."
+    },
+    "raw_log": "D:/Git/Voice/tmp/pr875-repair/docs-links/markdown-link-check.log",
+    "raw_log_sha256": "b6ea44d8fecdc75c477d2d9c1119a4f999db442c16e5848e96a15dfd5d38e1c9"
+  },
+  "green": {
+    "result": "GREEN",
+    "scanned_markdown_files": 199,
+    "failures": 0,
+    "raw_log": "D:/Git/Voice/tmp/pr875-repair/docs-links/markdown-link-check-overlay.log",
+    "raw_log_sha256": "f02982453378a8b94b75e680042d21c5bb8e3f39e26c06dc1852613a2a0ebd60",
+    "overlay": {
+      "path": "docs/testing/native-p3-source-v2-evidence/f13-9df-role-space-inventory.json",
+      "git_blob": "9ab3e85d3ecfcd562eb1603126a5e73518e67e59",
+      "bytes": 184585,
+      "sha256": "fee1fdda19f8245b1e97c39d771025764a912bff47a6186664a57aea9d4ffbc1",
+      "description": "The single companion file was overlaid for the local GREEN scan; source archive and all other inputs remained unchanged."
+    }
+  }
+}

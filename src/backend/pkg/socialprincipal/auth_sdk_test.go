@@ -36,6 +36,26 @@ func TestAuthSDKCapability_OnlyTwoUserMethods(t *testing.T) {
 	}
 }
 
+func TestAuthAdmissionCapability_IsSeparateAndRequiresMutualTLS(t *testing.T) {
+	const admission = "/voice.user.v1.UserService/GetSpaceAdmissionProfileEligibility"
+	require.Equal(t, "auth", expectedIssuer("auth-admission"))
+	require.Equal(t, admission, Method("auth-admission"))
+	require.True(t, RequiresMutualTLS("auth-admission"))
+	require.True(t, AllowsMethod("auth-admission", admission))
+	require.False(t, AllowsMethod("auth", admission))
+	for _, method := range []string{Method("auth"), "/voice.user.v1.UserService/RecordSdkAuthorTombstone", "/voice.user.v1.UserService/GetProfile"} {
+		require.False(t, AllowsMethod("auth-admission", method))
+	}
+	t.Setenv("S2S_JWKS_URLS_JSON", `{"auth":"https://auth.example/jwks"}`)
+	_, enabled, err := LoadFromEnvWithAudience("user", "auth-admission", "USER_ADMISSION_PRINCIPAL_", ":9097")
+	require.NoError(t, err)
+	require.False(t, enabled)
+	t.Setenv("USER_ADMISSION_PRINCIPAL_TLS_CERT_FILE", "cert.pem")
+	_, enabled, err = LoadFromEnvWithAudience("user", "auth-admission", "USER_ADMISSION_PRINCIPAL_", ":9097")
+	require.Error(t, err)
+	require.True(t, enabled)
+}
+
 func TestAuthSDKCapability_ConfigFailsClosedUntilComplete(t *testing.T) {
 	t.Setenv("S2S_JWKS_URLS_JSON", `{"auth":"https://auth.example/jwks"}`)
 	_, enabled, err := LoadFromEnvWithAudience("user", "auth", "USER_AUTH_PRINCIPAL_", ":9094")

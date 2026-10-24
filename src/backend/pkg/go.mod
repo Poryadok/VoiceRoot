@@ -22,6 +22,7 @@ require (
 	google.golang.org/protobuf v1.36.5
 	gopkg.in/yaml.v3 v3.0.1
 	voice.app/voice/analytics v0.0.0
+	voice.app/voice/events v0.0.0
 	voice.app/voice/chat v0.0.0
 	voice.app/voice/user v0.0.0
 )

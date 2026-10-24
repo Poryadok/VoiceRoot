@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 from urllib.parse import quote
 import nonnats_plan as guard
+import release_policy_wiring
 
 PlanError = guard.PlanError
 NS = 'voice-staging'
@@ -92,6 +93,11 @@ class _Source:
 
     def documents(self, path, row, extra=None, skip_nats=False):
         text = self.read(path, row)
+        release = None
+        if path == 'deploy/staging/services.yaml':
+            release = release_policy_wiring.source_input(self.root, self.p)
+            if release is not None:
+                text = release_policy_wiring.render(text, release, self.p['tag'], NS)
         replacements = dict(self.replacements)
         replacements.update(extra or {})
         result = []
@@ -109,6 +115,8 @@ class _Source:
                 _fail('canonical_document_invalid_' + row)
             obj['metadata'].setdefault('namespace', NS)
             result.append(obj)
+        if release is not None:
+            release_policy_wiring.check_documents(result, release, self.p['tag'], NS)
         return result
 
     def add(self, row, obj, action=False, private=False):
@@ -348,6 +356,8 @@ def compile_plan(source, parameters, decoder, kube):
             _fail('unsupported_authority_update')
         if (Path(source) / 'deploy/staging/secret.yaml').exists():
             _fail('unsupported_source_authority_update')
+        # Validate before the first _configuration or live resource observation.
+        release_policy_wiring.source_input(source, p)
         b = _Source(source, p, decoder, kube)
         _configuration(b)
         b.read('scripts/staging/preflight-resend-key.sh', 'auth-mail')

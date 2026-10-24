@@ -18,18 +18,7 @@ func (t *transcoder) serveSpacesInvites(w http.ResponseWriter, r *http.Request, 
 
 	switch {
 	case r.Method == http.MethodPost && inviteSub == "":
-		req := &spacev1.CreateInviteRequest{}
-		if err := readProtoJSON(r, req); err != nil {
-			writeGRPCError(w, err)
-			return true
-		}
-		req.SpaceId = spaceID
-		resp, err := t.clients.space.CreateInvite(ctx, req)
-		if err != nil {
-			writeGRPCError(w, err)
-			return true
-		}
-		writeProtoJSON(w, http.StatusOK, resp)
+		t.serveSpaceInviteCreate(w,r)
 		return true
 
 	case r.Method == http.MethodGet && inviteSub == "":
@@ -79,12 +68,8 @@ func (t *transcoder) serveInvites(w http.ResponseWriter, r *http.Request, rest s
 		return true
 
 	case r.Method == http.MethodPost && sub == "join":
-		resp, err := t.clients.space.JoinByInvite(ctx, &spacev1.JoinByInviteRequest{Code: code})
-		if err != nil {
-			writeGRPCError(w, err)
-			return true
-		}
-		writeProtoJSON(w, http.StatusOK, resp)
+		// Admission is exclusively dispatched by the protected route.
+		http.NotFound(w, r)
 		return true
 
 	default:

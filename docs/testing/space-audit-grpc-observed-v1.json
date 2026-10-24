@@ -1,0 +1,178 @@
+{
+  "version": "MASTER-SPACE-AUDIT-GRPC-OBSERVED-v1",
+  "status": "SOURCE_CONSUMPTION_CONTRACT_CLEAR",
+  "source": "8fc9e542acd8039a356c4149ccd0fd4a16f79564",
+  "base": "698d4f064f032ea74abf3ede2017100b26c8ee69",
+  "cases": [
+    {
+      "path": "src/backend/space/internal/grpcsvc/audit_ingestion_test.go",
+      "merge": "c98b95a3f6417b4cf8779bfff062783ef13ca878",
+      "parents": [
+        "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+        "566ec5041050d71a7feeeecbf0bd0e0811238f14"
+      ],
+      "best_bases": [
+        "2f0d5eaafb9ac046e6adda643809a569901f49d7"
+      ],
+      "actual_prior_row": [
+        "src/backend/space/internal/grpcsvc/audit_ingestion_test.go",
+        "false",
+        "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+        "eaf51ba199af1bedf976291303bcc9c611331d16",
+        "698d4f064f032ea74abf3ede2017100b26c8ee69",
+        "47784a68f3ae2276ab34b9b23f3f1974b1b1ee3d",
+        "eaf51ba199af1bedf976291303bcc9c611331d16",
+        "698d4f064f032ea74abf3ede2017100b26c8ee69"
+      ],
+      "actual_incoming_row": [
+        "src/backend/space/internal/grpcsvc/audit_ingestion_test.go",
+        "false",
+        "c98b95a3f6417b4cf8779bfff062783ef13ca878",
+        "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+        "2f0d5eaafb9ac046e6adda643809a569901f49d7",
+        "566ec5041050d71a7feeeecbf0bd0e0811238f14",
+        "eaf51ba199af1bedf976291303bcc9c611331d16",
+        "2f0d5eaafb9ac046e6adda643809a569901f49d7"
+      ],
+      "entries": {
+        "base": {
+          "revision": "2f0d5eaafb9ac046e6adda643809a569901f49d7",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "8ba66b7654e1f76fbe126720d63cf5741677ed36"
+          },
+          "sha256": "f30e74cbf0e0635fc9b181761bbcf59b4214bbb17bc0365087bf3a794b10514c",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__base",
+          "bytes": 8043
+        },
+        "first": {
+          "revision": "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "8ba66b7654e1f76fbe126720d63cf5741677ed36"
+          },
+          "sha256": "f30e74cbf0e0635fc9b181761bbcf59b4214bbb17bc0365087bf3a794b10514c",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__first",
+          "bytes": 8043
+        },
+        "incoming": {
+          "revision": "566ec5041050d71a7feeeecbf0bd0e0811238f14",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "3e431846918af270c3a5eae2e56aef170c14dfcb"
+          },
+          "sha256": "0e77141229b01ed6bb6075285a18d60553289309595b52165f40cf58273b60b0",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__incoming",
+          "bytes": 8132
+        },
+        "result": {
+          "revision": "c98b95a3f6417b4cf8779bfff062783ef13ca878",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "3e431846918af270c3a5eae2e56aef170c14dfcb"
+          },
+          "sha256": "0e77141229b01ed6bb6075285a18d60553289309595b52165f40cf58273b60b0",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__result",
+          "bytes": 8132
+        },
+        "prior_owner": {
+          "revision": "9dc0d50b65a2d1026059f978464612bd9d1350c9",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "8ba66b7654e1f76fbe126720d63cf5741677ed36"
+          },
+          "sha256": "f30e74cbf0e0635fc9b181761bbcf59b4214bbb17bc0365087bf3a794b10514c",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__prior_owner",
+          "bytes": 8043
+        },
+        "prior_source": {
+          "revision": "47784a68f3ae2276ab34b9b23f3f1974b1b1ee3d",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "8ba66b7654e1f76fbe126720d63cf5741677ed36"
+          },
+          "sha256": "f30e74cbf0e0635fc9b181761bbcf59b4214bbb17bc0365087bf3a794b10514c",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__prior_source",
+          "bytes": 8043
+        },
+        "current": {
+          "revision": "8fc9e542acd8039a356c4149ccd0fd4a16f79564",
+          "entry": {
+            "mode": "100644",
+            "type": "blob",
+            "oid": "3e431846918af270c3a5eae2e56aef170c14dfcb"
+          },
+          "sha256": "0e77141229b01ed6bb6075285a18d60553289309595b52165f40cf58273b60b0",
+          "artifact": "src__backend__space__internal__grpcsvc__audit_ingestion_test.go__current",
+          "bytes": 8132
+        }
+      }
+    }
+  ],
+  "criterion": "Only the one independently source-reviewed historical grpcsvc test tuple with both exact ORIGINAL collector rows observed in unchanged932 execution. Preserve actual false/false flags and both full rows before normal map replacement; ORfalse is not runtime PASS. No unobserved store path grant, no generic identical-blob grant, no current/future path or activation authority. All seven source bindings and fixed record/rawhash remain required.",
+  "runtime_pass": false,
+  "generic_path_authority": false,
+  "activation_authority": false,
+  "inventory_limitation": "Actual diagnostic traversal recorded3duplicates including known Role doc-rebind; stopped later source_base. Not exhaustive totalremaining inventory. Original fixed shell/helper files unchanged; separate diagnostic copy only; conservative runtime taint forced and no PASS. OriginalRb04 two-case contract row assertion INVALIDATED by144c77; source/test review retained only. This staged record grants grpc case only; store remains UNKNOWN/HOLD. Private capture target Git object was transient inside proof container; only exact raw argv/driver/log receipts are claimed preserved.",
+  "artifacts": {
+    "remaining-duplicate-tuples.tsv": {
+      "sha256": "06758b8f7e3c661469e31922416aceda45bdba7f79ed7172215fc4064a707173",
+      "bytes": 1471
+    },
+    "remaining-duplicate-prior-rows.tsv": {
+      "sha256": "c8c0571e53d83e15743bcfef07d5d22e2c4fa9c93235c20a0a08944432839ccd",
+      "bytes": 924
+    },
+    "remaining-duplicate-diagnostic.log": {
+      "sha256": "bbcc8f2a1d842e01a7bb17eeb8af85ccc4fb1134ecb5df84272df7971485e4df",
+      "bytes": 42203
+    },
+    "remaining-duplicate-instrumentation.json": {
+      "sha256": "956b13a9a893649fd72cc2410f273de485cc9dd6c6c669e84a4a5ab2e7d4c54d",
+      "bytes": 584
+    },
+    "remaining-duplicate-receipt.json": {
+      "sha256": "10db3bf363fc562b98f64dc134add4e0cfd3849104303c289c6808b56914ee2e",
+      "bytes": 774
+    },
+    "space-audit-proof/actual-call-receipt.json": {
+      "sha256": "9b2f0d5740a5d67d61103fbb000af34cb990242d10e31a2b3c6435cf84894709",
+      "bytes": 2212
+    },
+    "space-audit-proof/actual-call.stderr": {
+      "sha256": "24c344148a971b06ee8c9e343eb65908e85e2c55af8057e209c1cf45bb38c070",
+      "bytes": 61
+    },
+    "space-audit-proof/call-capture-full-pr.log": {
+      "sha256": "24f9d44b032093ce7c9415a35af2d36fdd36f8f8fbcdd5d64263005ef7ec1cc2",
+      "bytes": 16793
+    },
+    "space-audit-proof/call-capture-runner.json": {
+      "sha256": "161d15e392a760caf7a8379f26ba944ccadd0fef8d2def521e27f8e063038928",
+      "bytes": 315
+    },
+    "416-space-audit-call-capture.sh": {
+      "sha256": "7b991145b72db0e8826f628dba7400449ef3828b9eca3a6af680bb52eaa10e8e",
+      "bytes": 2885
+    }
+  },
+  "unobserved_store_status": "HOLD_NO_ORIGINAL_ARGUMENTS: src/backend/space/internal/store/audit_ingestion_test.go must reject. Actual original store caller is unreachable until legitimate grpc qualification; diagnostic forced-taint rows are not authority.",
+  "observation": {
+    "source": "932d09e351f6823e297be4ff489faf9d88c3c16a",
+    "private_target": "93f4765a2b3d1ac231bcd52c5cb6fd16990ce0b2",
+    "receipt": "space-audit-proof/actual-call-receipt.json",
+    "receipt_sha256": "9b2f0d5740a5d67d61103fbb000af34cb990242d10e31a2b3c6435cf84894709",
+    "input_kind": "Actual unchanged production collector CLI arguments, forwarded unchanged; no row reconstructed from R",
+    "actual_exit": 1,
+    "runtime_obligation": "Fixture PG/integration obligations remain OPEN independently. Actual false flags do not certify runtime. No normalization or invented previous=true; previous conservative diagnostic row assertion invalidated by actual unchanged producer evidence."
+  },
+  "review": "http://192.168.0.109:30990/?project=voice&task=SWARM-DEVELOP-20261018#comment-c78",
+  "proposal_sha256": "ef7efb7879827c9e993e203d1d62df63cbebec43ab0021c69bc0223ed64d41bb",
+  "carrier_status": "Metadata only; later exact grpc-only consumer/pin review and actual original producer required. Store HOLD rejects and no runtime/master/CI PASS."
+}

@@ -173,6 +173,21 @@ func lifecycleRequestDigest(message proto.Message, wire []byte) []byte {
 // GetSpacePurgeReceipt reads a committed completion receipt only. It never
 // initiates purge and refuses receipts outside their exact request binding.
 func (s *MessagesStore) GetSpacePurgeReceipt(ctx context.Context, key SpacePurgeReceiptKey) (*commonv1.SpacePurgeReceipt, error) {
+	receiptBytes, err := s.GetSpacePurgeResponse(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	response := &messagingv1.PurgeSpaceResponse{}
+	if err := proto.Unmarshal(receiptBytes, response); err != nil || response.GetReceipt() == nil {
+		return nil, errors.New("stored Messaging purge receipt is corrupt")
+	}
+	return proto.Clone(response.GetReceipt()).(*commonv1.SpacePurgeReceipt), nil
+}
+
+// GetSpacePurgeResponse returns the immutable completed parent response, including
+// unknown wrapper fields, without consulting mutable manifests or external owners.
+// Its request hash and database retention window match the Chat receipt lookup.
+func (s *MessagesStore) GetSpacePurgeResponse(ctx context.Context, key SpacePurgeReceiptKey) ([]byte, error) {
 	if s == nil || s.Pool == nil || key.SpaceID == uuid.Nil || key.DeletionOperationID == uuid.Nil ||
 		key.PurgeGeneration == 0 || key.SourceScheduleGeneration+1 != key.PurgeGeneration || len(key.MessagingRequestSHA256) != 32 {
 		return nil, errors.New("invalid Messaging purge receipt key")
@@ -194,9 +209,5 @@ WHERE space_id=$1 AND deletion_operation_id=$2 AND purge_generation=$3
 	if !bytes.Equal(storedHash, key.MessagingRequestSHA256) {
 		return nil, ErrSpacePurgeReceiptBinding
 	}
-	response := &messagingv1.PurgeSpaceResponse{}
-	if err := proto.Unmarshal(receiptBytes, response); err != nil || response.GetReceipt() == nil {
-		return nil, errors.New("stored Messaging purge receipt is corrupt")
-	}
-	return proto.Clone(response.GetReceipt()).(*commonv1.SpacePurgeReceipt), nil
+	return bytes.Clone(receiptBytes), nil
 }

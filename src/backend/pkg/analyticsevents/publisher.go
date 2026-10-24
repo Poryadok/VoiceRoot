@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
-	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	analyticsv1 "voice.app/voice/analytics/v1"
@@ -163,7 +163,7 @@ func (p *JetStreamPublisher) publishEvent(ctx context.Context, subject, sourceSe
 	if h := analyticshash.ID(p.HashKey, profileID); h != "" {
 		ev.ProfileIdHashed = &h
 	}
-	data, err := protojson.Marshal(ev)
+	data, err := proto.Marshal(ev)
 	if err != nil {
 		return err
 	}

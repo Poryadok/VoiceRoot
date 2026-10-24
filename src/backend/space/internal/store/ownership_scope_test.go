@@ -62,7 +62,16 @@ func newR20ScopeFixture(t *testing.T, st *SpaceStore, state string) r20ScopeFixt
 	require.NoError(t, err)
 	require.NoError(t, st.UpsertSpaceSubscription(context.Background(), f.binding.SpaceID, f.account, "active"))
 	existingBot := uuid.New()
-	require.NoError(t, st.AddBotMember(context.Background(), f.binding.SpaceID, existingBot))
+	// These scope tests inspect pre-existing legacy membership, not a current
+	// Bot installation. The raw Bot API intentionally cannot create that state.
+	seedTx, err := st.Pool.Begin(context.Background())
+	require.NoError(t, err)
+	defer func() { _ = seedTx.Rollback(context.Background()) }()
+	_, err = seedTx.Exec(context.Background(), `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, f.binding.SpaceID, existingBot)
+	require.NoError(t, err)
+	_, err = seedTx.Exec(context.Background(), `UPDATE spaces SET member_count=member_count+1,updated_at=now() WHERE id=$1`, f.binding.SpaceID)
+	require.NoError(t, err)
+	require.NoError(t, seedTx.Commit(context.Background()))
 	f.joiner = existingBot
 
 	if state == "" {
@@ -335,11 +344,26 @@ func TestOwnershipScope_EveryCanonicalOrdinaryMethodFailsClosedForEveryNontermin
 	}
 }
 
-func TestOwnershipScope_OrdinaryFixtureCallsAreValidWithoutPendingJournal(t *testing.T) {
+func TestOwnershipScope_OrdinaryFixtureCallsWithoutPendingJournal(t *testing.T) {
 	st := ownershipScopeStoreFixture(t)
 	for _, tc := range r20OrdinaryScopeCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newR20ScopeFixture(t, st, "")
+			// Raw UUID APIs no longer provide the qualified authority required
+			// by these mutations, even when no ownership journal is pending.
+			var unavailable error
+			switch tc.name {
+			case "BanMember", "UnbanMember":
+				unavailable = ErrAccountBanUnavailable
+			case "AddBotMember", "RemoveBotMember":
+				unavailable = ErrMemberAuthorityUnavailable
+			}
+			if unavailable != nil {
+				before := r20ScopeSnapshot(t, st, f.binding.SpaceID)
+				require.ErrorIs(t, tc.call(st, f), unavailable)
+				require.Equal(t, before, r20ScopeSnapshot(t, st, f.binding.SpaceID), "unqualified call cannot mutate state")
+				return
+			}
 			require.NoError(t, tc.call(st, f), "fixture must exercise a normally valid path")
 		})
 	}

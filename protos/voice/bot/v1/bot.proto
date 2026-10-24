@@ -4,6 +4,7 @@ package voice.bot.v1;
 
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
+import "voice/common/v1/bot_message.proto";
 import "voice/common/v1/space_lifecycle.proto";
 import "voice/gameintegration/v1/game_event.proto";
 import "voice/messaging/v1/messaging.proto";
@@ -60,6 +61,14 @@ service BotService {
   rpc ListBotsInChat(ListBotsInChatRequest) returns (ListBotsInChatResponse);
   rpc SetBotChatEnabled(SetBotChatEnabledRequest) returns (SetBotChatEnabledResponse);
 
+  // Current exact installation/scope decision for composite Space creation.
+  // @voice.security=protected;callers=service:space
+  rpc CheckBotInstallationScope(CheckBotInstallationScopeRequest) returns (CheckBotInstallationScopeResponse);
+
+  // Current exact send-only authority; no ordinary visibility grant.
+  // @voice.security=protected;callers=service:messaging
+  rpc CheckBotMessageSendAuthority(CheckBotMessageSendAuthorityRequest) returns (CheckBotMessageSendAuthorityResponse);
+
   // Client slash interactions.
   rpc ExecuteSlashInteraction(ExecuteSlashInteractionRequest) returns (ExecuteSlashInteractionResponse);
   rpc ListSlashCommandsForChat(ListSlashCommandsForChatRequest) returns (ListSlashCommandsForChatResponse);
@@ -81,6 +90,35 @@ service BotService {
 
   // @voice.security=protected;callers=service:space
   rpc PurgeSpace(voice.bot.v1.PurgeSpaceRequest) returns (voice.bot.v1.PurgeSpaceResponse);
+}
+
+// No caller-supplied identity is authority: only a verified Space principal may
+// ask this current-state decision for its immutable composite intent.
+message CheckBotInstallationScopeRequest {
+  string bot_id = 1;
+  string space_id = 2;
+  string actor_profile_id = 3;
+  string installation_id = 4;
+  string bot_scope = 5;
+}
+
+message CheckBotInstallationScopeResponse {
+  bool allowed = 1;
+  string bot_id = 2;
+  string space_id = 3;
+  string actor_profile_id = 4;
+  string installation_id = 5;
+  string bot_scope = 6;
+}
+
+// @voice.unknown_fields=reject
+message CheckBotMessageSendAuthorityRequest {
+  voice.common.v1.BotMessageSendBinding binding = 1;
+}
+
+message CheckBotMessageSendAuthorityResponse {
+  voice.common.v1.BotMessageSendBinding binding = 1;
+  bool allowed = 2;
 }
 
 message PublishGameEventRequest {
@@ -259,10 +297,12 @@ message GetCommandsResponse {
 }
 message SetWebhookURLResponse {}
 message GetWebhookURLResponse {
+  reserved "webhook_url_response";
   optional string url = 1;
 }
 message SetChatWhitelistResponse {}
 message GetChatWhitelistResponse {
+  reserved "whitelist_response";
   repeated voice.chat.v1.ChatRef allowed_chats = 1;
 }
 message SendBotMessageResponse {

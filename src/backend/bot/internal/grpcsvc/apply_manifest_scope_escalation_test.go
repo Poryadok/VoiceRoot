@@ -51,7 +51,7 @@ commands:
 			spaceID := uuid.New()
 			chatID := uuid.New()
 			profileID := uuid.New()
-			_, err = st.InstallInSpace(ctx, botUUID, spaceID, profileID, []uuid.UUID{chatID})
+			_, err = installSendFixture(t, st, ctx, botUUID, spaceID, profileID, []uuid.UUID{chatID})
 			require.NoError(t, err)
 			before, err := st.GetBotByID(ctx, botUUID)
 			require.NoError(t, err)
@@ -124,7 +124,7 @@ commands:
 	botUUID := uuid.MustParse(botID)
 	spaceID := uuid.New()
 	chatID := uuid.New()
-	_, err = st.InstallInSpace(ctx, botUUID, spaceID, uuid.New(), []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, spaceID, uuid.New(), []uuid.UUID{chatID})
 	require.NoError(t, err)
 
 	_, err = client.ApplyManifest(ctx, &botv1.ApplyManifestRequest{
@@ -194,7 +194,7 @@ commands:
 `,
 	})
 	require.NoError(t, err)
-	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), uuid.New(), []uuid.UUID{uuid.New()})
+	_, err = installSendFixture(t, st, ctx, botUUID, uuid.New(), uuid.New(), []uuid.UUID{uuid.New()})
 	require.NoError(t, err)
 
 	tx, err := st.Pool.Begin(ctx)

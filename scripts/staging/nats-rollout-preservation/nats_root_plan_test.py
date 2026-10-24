@@ -97,6 +97,12 @@ class CanonicalBootstrapTests(unittest.TestCase):
         for part in ('realtime','analytics-chat','notification','search'):
             relative='deploy/templates/nats-'+part+'-bootstrap.yaml'
             shutil.copyfile(repo/relative,self.source/relative)
+        from nats_contract_plan import VOICE_SUBJECTS_10,USER_SUBJECTS_10
+        for name,subjects in [('voice_events',VOICE_SUBJECTS_10),('user_events',USER_SUBJECTS_10)]:
+            info=copy.deepcopy(self.streams['chat_events'])
+            info['config'].update(name=name,subjects=sorted(subjects));self.streams[name]=info
+            self.tree['account_details'][0]['stream_detail'].append({'name':name,'created':CREATED,
+                'config':info['config'],'state':dict(info['state'],consumer_count=0,bytes=100),'consumer_detail':[]})
     def run_plan(self):
         import yaml
         with patch.object(module,'monitor',return_value=self.tree),patch.object(module,'census',return_value={'fixture_census':True}),\
@@ -114,7 +120,7 @@ class CanonicalBootstrapTests(unittest.TestCase):
         authority=self.run_plan()
         paths=self.compatible(authority)
         self.assertIn('deploy/templates/nats-search-bootstrap.yaml',paths)
-        self.assertEqual(set(authority['scripts']),{'realtime','analytics-chat','search'})
+        self.assertEqual(set(authority['scripts']),{'realtime','analytics-chat','search','notification'})
         script=authority['scripts']['search']
         self.assertIn('require_stream_subjects chat_events chat.created chat.updated chat.deleted',script['script'])
         legacy=next(row['sha256'] for row in self.contract['scripts'] if row['part']=='search')
@@ -146,14 +152,14 @@ class CanonicalBootstrapTests(unittest.TestCase):
             'nats_contract':copy.deepcopy(authority['plan']),
             'nats_target_scripts':copy.deepcopy(authority['scripts']),
             'nats_migration':{'verified':True,'old_record_files_verified':True,'proof':{
-                'schema':'voice-nats-additive-census-proof-v3','migration_id':authority['plan']['migration_id'],
+                'schema':'voice-nats-additive-census-proof-v4','migration_id':authority['plan']['migration_id'],
                 'before_sha256':'a'*64,'after_sha256':'b'*64,'messages':14,
                 'old_consumers_preserved':len(baseline_pairs),'created_consumers':4}}}
         # These proof flags stand for the isolated native proof, not staging evidence.
         events=[];guard=Mock()
         active=nats_contract_custody.advance(kube,state,stage,events.append,mutation_guard=guard)
         self.assertEqual(set(kube.calls),{'voice-nats-'+part+'-bootstrap' for part in authority['scripts']})
-        self.assertEqual(guard.call_count,3)
+        self.assertEqual(guard.call_count,4)
         self.assertEqual([row['part'] for row in events if row['kind']=='nats_contract_cm_applied'],list(authority['scripts']))
         # Round-trip the same persisted receipt consumed by the next prepare.
         active=json.loads(json.dumps(active));nats_active_contract.validate_identity(active,stage.expected,baseline_pairs)
@@ -164,14 +170,30 @@ class CanonicalBootstrapTests(unittest.TestCase):
             self.assertEqual(expected['configMapResourceVersion'],row['metadata']['resourceVersion'])
             self.assertEqual(expected['sha256'],hashlib.sha256(row['data']['bootstrap.sh'].encode()).hexdigest())
         self.contract=active['contract']
+        # Next prepare observes the committed migration, not the old broker
+        # fixture. Only external Kubernetes/monitor IO remains mocked.
+        detail=self.tree['account_details'][0]['stream_detail']
+        for action in authority['plan']['actions']:
+            if action['api'].startswith('$JS.API.STREAM.UPDATE.'):
+                next(row for row in detail if row['name']==action['object'])['config']=copy.deepcopy(action['after'])
+            else:
+                stream,durable=action['object'].split('/')
+                normalized=next(row['config'] for row in self.fresh_auth['normalized_consumers'] if row['stream']==stream and row['durable']==durable)
+                next(row for row in detail if row['name']==stream)['consumer_detail'].append({'name':durable,'durable':durable,'config':copy.deepcopy(normalized)})
         next_authority=self.run_plan();self.compatible(next_authority)
         self.assertEqual(next_authority['scripts'],authority['scripts'])
-    def test_unrelated_notification_change_still_refused_by_compiler(self):
+        self.assertEqual(next_authority['plan']['actions'],[])
+    def test_unreviewed_notification_change_is_refused_by_root(self):
         self.mutate('notification')
+        with self.assertRaisesRegex(Blocked,'nats_migration_root_preflight_refused'):
+            self.run_plan()
+    def test_notification_requires_fourth_root_hash_and_remains_toctou_bound(self):
         authority=self.run_plan()
-        self.assertNotIn('notification',authority['scripts'])
-        with self.assertRaisesRegex(Blocked,'rollout_bootstrap_contract_unsupported'):
-            self.compatible(authority)
+        self.assertIn('notification',authority['scripts'])
+        three=copy.deepcopy(authority);three['scripts'].pop('notification')
+        with self.assertRaisesRegex(Blocked,'rollout_bootstrap_contract_unsupported'):self.compatible(three)
+        self.mutate('notification')
+        with self.assertRaisesRegex(Blocked,'rollout_bootstrap_contract_unsupported'):self.compatible(authority)
     def test_search_change_after_root_authority_refused_by_compiler(self):
         authority=self.run_plan()
         self.mutate('search')

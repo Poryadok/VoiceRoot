@@ -131,6 +131,7 @@ jobs:
               --startup-status "$startup_status" \
               --service voice \
               --include-matchmaking-startup \
+              --include-space-startup \
               --compose "${compose[@]}" || true
             exit "$startup_status"
           fi

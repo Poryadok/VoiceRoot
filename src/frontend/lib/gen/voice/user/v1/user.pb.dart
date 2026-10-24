@@ -15,10 +15,10 @@ import 'dart:core' as $core;
 import 'package:fixnum/fixnum.dart' as $fixnum;
 import 'package:protobuf/protobuf.dart' as $pb;
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart'
-    as $1;
+    as $2;
 
-import '../../chat/v1/chat.pbenum.dart' as $3;
-import '../../common/v1/common.pb.dart' as $2;
+import '../../chat/v1/chat.pbenum.dart' as $4;
+import '../../common/v1/common.pb.dart' as $3;
 import 'user.pbenum.dart';
 
 export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
@@ -800,9 +800,9 @@ class Profile extends $pb.GeneratedMessage {
     $core.bool? isPrimary,
     $core.String? verificationType,
     $core.String? verificationBadge,
-    $1.Timestamp? createdAt,
-    $1.Timestamp? updatedAt,
-    $1.Timestamp? frozenAt,
+    $2.Timestamp? createdAt,
+    $2.Timestamp? updatedAt,
+    $2.Timestamp? frozenAt,
     $core.String? accentColor,
     $core.bool? isGuestAccount,
   }) {
@@ -856,12 +856,12 @@ class Profile extends $pb.GeneratedMessage {
     ..aOB(12, _omitFieldNames ? '' : 'isPrimary')
     ..aOS(13, _omitFieldNames ? '' : 'verificationType')
     ..aOS(14, _omitFieldNames ? '' : 'verificationBadge')
-    ..aOM<$1.Timestamp>(15, _omitFieldNames ? '' : 'createdAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(16, _omitFieldNames ? '' : 'updatedAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(17, _omitFieldNames ? '' : 'frozenAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(15, _omitFieldNames ? '' : 'createdAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(16, _omitFieldNames ? '' : 'updatedAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(17, _omitFieldNames ? '' : 'frozenAt',
+        subBuilder: $2.Timestamp.create)
     ..aOS(18, _omitFieldNames ? '' : 'accentColor')
     ..aOB(19, _omitFieldNames ? '' : 'isGuestAccount')
     ..hasRequiredFields = false;
@@ -1011,37 +1011,37 @@ class Profile extends $pb.GeneratedMessage {
   void clearVerificationBadge() => $_clearField(14);
 
   @$pb.TagNumber(15)
-  $1.Timestamp get createdAt => $_getN(14);
+  $2.Timestamp get createdAt => $_getN(14);
   @$pb.TagNumber(15)
-  set createdAt($1.Timestamp value) => $_setField(15, value);
+  set createdAt($2.Timestamp value) => $_setField(15, value);
   @$pb.TagNumber(15)
   $core.bool hasCreatedAt() => $_has(14);
   @$pb.TagNumber(15)
   void clearCreatedAt() => $_clearField(15);
   @$pb.TagNumber(15)
-  $1.Timestamp ensureCreatedAt() => $_ensure(14);
+  $2.Timestamp ensureCreatedAt() => $_ensure(14);
 
   @$pb.TagNumber(16)
-  $1.Timestamp get updatedAt => $_getN(15);
+  $2.Timestamp get updatedAt => $_getN(15);
   @$pb.TagNumber(16)
-  set updatedAt($1.Timestamp value) => $_setField(16, value);
+  set updatedAt($2.Timestamp value) => $_setField(16, value);
   @$pb.TagNumber(16)
   $core.bool hasUpdatedAt() => $_has(15);
   @$pb.TagNumber(16)
   void clearUpdatedAt() => $_clearField(16);
   @$pb.TagNumber(16)
-  $1.Timestamp ensureUpdatedAt() => $_ensure(15);
+  $2.Timestamp ensureUpdatedAt() => $_ensure(15);
 
   @$pb.TagNumber(17)
-  $1.Timestamp get frozenAt => $_getN(16);
+  $2.Timestamp get frozenAt => $_getN(16);
   @$pb.TagNumber(17)
-  set frozenAt($1.Timestamp value) => $_setField(17, value);
+  set frozenAt($2.Timestamp value) => $_setField(17, value);
   @$pb.TagNumber(17)
   $core.bool hasFrozenAt() => $_has(16);
   @$pb.TagNumber(17)
   void clearFrozenAt() => $_clearField(17);
   @$pb.TagNumber(17)
-  $1.Timestamp ensureFrozenAt() => $_ensure(16);
+  $2.Timestamp ensureFrozenAt() => $_ensure(16);
 
   @$pb.TagNumber(18)
   $core.String get accentColor => $_getSZ(17);
@@ -1453,7 +1453,7 @@ class ListMyProfilesRequest extends $pb.GeneratedMessage {
 class SearchProfilesRequest extends $pb.GeneratedMessage {
   factory SearchProfilesRequest({
     $core.String? query,
-    $2.CursorPageRequest? page,
+    $3.CursorPageRequest? page,
   }) {
     final result = create();
     if (query != null) result.query = query;
@@ -1475,8 +1475,8 @@ class SearchProfilesRequest extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'query')
-    ..aOM<$2.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
-        subBuilder: $2.CursorPageRequest.create)
+    ..aOM<$3.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
+        subBuilder: $3.CursorPageRequest.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1509,21 +1509,21 @@ class SearchProfilesRequest extends $pb.GeneratedMessage {
   void clearQuery() => $_clearField(1);
 
   @$pb.TagNumber(2)
-  $2.CursorPageRequest get page => $_getN(1);
+  $3.CursorPageRequest get page => $_getN(1);
   @$pb.TagNumber(2)
-  set page($2.CursorPageRequest value) => $_setField(2, value);
+  set page($3.CursorPageRequest value) => $_setField(2, value);
   @$pb.TagNumber(2)
   $core.bool hasPage() => $_has(1);
   @$pb.TagNumber(2)
   void clearPage() => $_clearField(2);
   @$pb.TagNumber(2)
-  $2.CursorPageRequest ensurePage() => $_ensure(1);
+  $3.CursorPageRequest ensurePage() => $_ensure(1);
 }
 
 class SearchProfilesResponse extends $pb.GeneratedMessage {
   factory SearchProfilesResponse({
     ProfileList? profileList,
-    $2.CursorPageResponse? page,
+    $3.CursorPageResponse? page,
   }) {
     final result = create();
     if (profileList != null) result.profileList = profileList;
@@ -1546,8 +1546,8 @@ class SearchProfilesResponse extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOM<ProfileList>(1, _omitFieldNames ? '' : 'profileList',
         subBuilder: ProfileList.create)
-    ..aOM<$2.CursorPageResponse>(2, _omitFieldNames ? '' : 'page',
-        subBuilder: $2.CursorPageResponse.create)
+    ..aOM<$3.CursorPageResponse>(2, _omitFieldNames ? '' : 'page',
+        subBuilder: $3.CursorPageResponse.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1582,15 +1582,15 @@ class SearchProfilesResponse extends $pb.GeneratedMessage {
   ProfileList ensureProfileList() => $_ensure(0);
 
   @$pb.TagNumber(2)
-  $2.CursorPageResponse get page => $_getN(1);
+  $3.CursorPageResponse get page => $_getN(1);
   @$pb.TagNumber(2)
-  set page($2.CursorPageResponse value) => $_setField(2, value);
+  set page($3.CursorPageResponse value) => $_setField(2, value);
   @$pb.TagNumber(2)
   $core.bool hasPage() => $_has(1);
   @$pb.TagNumber(2)
   void clearPage() => $_clearField(2);
   @$pb.TagNumber(2)
-  $2.CursorPageResponse ensurePage() => $_ensure(1);
+  $3.CursorPageResponse ensurePage() => $_ensure(1);
 }
 
 class GetPrivacySettingsRequest extends $pb.GeneratedMessage {
@@ -1829,7 +1829,7 @@ class PrivacySettings extends $pb.GeneratedMessage {
     PrivacyAudience? allowDm,
     PrivacyAudience? allowFriendRequests,
     $core.bool? allowGuestDm,
-    $1.Timestamp? updatedAt,
+    $2.Timestamp? updatedAt,
     PrivacyPreset? presetEnum,
     PrivacyAudience? allowPhoneSearch,
     PrivacyAudience? allowCalls,
@@ -1897,8 +1897,8 @@ class PrivacySettings extends $pb.GeneratedMessage {
     ..aOM<PrivacyAudience>(9, _omitFieldNames ? '' : 'allowFriendRequests',
         subBuilder: PrivacyAudience.create)
     ..aOB(10, _omitFieldNames ? '' : 'allowGuestDm')
-    ..aOM<$1.Timestamp>(11, _omitFieldNames ? '' : 'updatedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(11, _omitFieldNames ? '' : 'updatedAt',
+        subBuilder: $2.Timestamp.create)
     ..aE<PrivacyPreset>(12, _omitFieldNames ? '' : 'presetEnum',
         enumValues: PrivacyPreset.values)
     ..aOM<PrivacyAudience>(14, _omitFieldNames ? '' : 'allowPhoneSearch',
@@ -2041,15 +2041,15 @@ class PrivacySettings extends $pb.GeneratedMessage {
   void clearAllowGuestDm() => $_clearField(10);
 
   @$pb.TagNumber(11)
-  $1.Timestamp get updatedAt => $_getN(10);
+  $2.Timestamp get updatedAt => $_getN(10);
   @$pb.TagNumber(11)
-  set updatedAt($1.Timestamp value) => $_setField(11, value);
+  set updatedAt($2.Timestamp value) => $_setField(11, value);
   @$pb.TagNumber(11)
   $core.bool hasUpdatedAt() => $_has(10);
   @$pb.TagNumber(11)
   void clearUpdatedAt() => $_clearField(11);
   @$pb.TagNumber(11)
-  $1.Timestamp ensureUpdatedAt() => $_ensure(10);
+  $2.Timestamp ensureUpdatedAt() => $_ensure(10);
 
   @$pb.TagNumber(12)
   PrivacyPreset get presetEnum => $_getN(11);
@@ -2314,7 +2314,7 @@ class PresenceStatus extends $pb.GeneratedMessage {
     $core.String? status,
     $core.String? gameTitle,
     $core.String? customStatus,
-    $1.Timestamp? lastSeen,
+    $2.Timestamp? lastSeen,
     $core.String? callInfoJson,
     PresenceOnlineStatus? statusEnum,
   }) {
@@ -2346,8 +2346,8 @@ class PresenceStatus extends $pb.GeneratedMessage {
     ..aOS(2, _omitFieldNames ? '' : 'status')
     ..aOS(3, _omitFieldNames ? '' : 'gameTitle')
     ..aOS(4, _omitFieldNames ? '' : 'customStatus')
-    ..aOM<$1.Timestamp>(5, _omitFieldNames ? '' : 'lastSeen',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(5, _omitFieldNames ? '' : 'lastSeen',
+        subBuilder: $2.Timestamp.create)
     ..aOS(6, _omitFieldNames ? '' : 'callInfoJson')
     ..aE<PresenceOnlineStatus>(7, _omitFieldNames ? '' : 'statusEnum',
         enumValues: PresenceOnlineStatus.values)
@@ -2409,15 +2409,15 @@ class PresenceStatus extends $pb.GeneratedMessage {
   void clearCustomStatus() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $1.Timestamp get lastSeen => $_getN(4);
+  $2.Timestamp get lastSeen => $_getN(4);
   @$pb.TagNumber(5)
-  set lastSeen($1.Timestamp value) => $_setField(5, value);
+  set lastSeen($2.Timestamp value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasLastSeen() => $_has(4);
   @$pb.TagNumber(5)
   void clearLastSeen() => $_clearField(5);
   @$pb.TagNumber(5)
-  $1.Timestamp ensureLastSeen() => $_ensure(4);
+  $2.Timestamp ensureLastSeen() => $_ensure(4);
 
   @$pb.TagNumber(6)
   $core.String get callInfoJson => $_getSZ(5);
@@ -2803,7 +2803,7 @@ class OnboardingState extends $pb.GeneratedMessage {
     $core.String? profileId,
     $core.Iterable<$core.String>? completedSteps,
     $core.bool? completed,
-    $1.Timestamp? completedAt,
+    $2.Timestamp? completedAt,
   }) {
     final result = create();
     if (profileId != null) result.profileId = profileId;
@@ -2829,8 +2829,8 @@ class OnboardingState extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'profileId')
     ..pPS(2, _omitFieldNames ? '' : 'completedSteps')
     ..aOB(3, _omitFieldNames ? '' : 'completed')
-    ..aOM<$1.Timestamp>(4, _omitFieldNames ? '' : 'completedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(4, _omitFieldNames ? '' : 'completedAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2874,15 +2874,15 @@ class OnboardingState extends $pb.GeneratedMessage {
   void clearCompleted() => $_clearField(3);
 
   @$pb.TagNumber(4)
-  $1.Timestamp get completedAt => $_getN(3);
+  $2.Timestamp get completedAt => $_getN(3);
   @$pb.TagNumber(4)
-  set completedAt($1.Timestamp value) => $_setField(4, value);
+  set completedAt($2.Timestamp value) => $_setField(4, value);
   @$pb.TagNumber(4)
   $core.bool hasCompletedAt() => $_has(3);
   @$pb.TagNumber(4)
   void clearCompletedAt() => $_clearField(4);
   @$pb.TagNumber(4)
-  $1.Timestamp ensureCompletedAt() => $_ensure(3);
+  $2.Timestamp ensureCompletedAt() => $_ensure(3);
 }
 
 class CreateAvatarPresignedUploadRequest extends $pb.GeneratedMessage {
@@ -2974,7 +2974,7 @@ class CreateAvatarPresignedUploadResponse extends $pb.GeneratedMessage {
     $core.String? uploadUrl,
     $core.Iterable<$core.MapEntry<$core.String, $core.String>>? requiredHeaders,
     $fixnum.Int64? maxBytes,
-    $1.Timestamp? expiresAt,
+    $2.Timestamp? expiresAt,
     $core.String? publicUrl,
     $core.String? objectKey,
   }) {
@@ -3013,8 +3013,8 @@ class CreateAvatarPresignedUploadResponse extends $pb.GeneratedMessage {
         valueFieldType: $pb.PbFieldType.OS,
         packageName: const $pb.PackageName('voice.user.v1'))
     ..aInt64(4, _omitFieldNames ? '' : 'maxBytes')
-    ..aOM<$1.Timestamp>(5, _omitFieldNames ? '' : 'expiresAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(5, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $2.Timestamp.create)
     ..aOS(6, _omitFieldNames ? '' : 'publicUrl')
     ..aOS(7, _omitFieldNames ? '' : 'objectKey')
     ..hasRequiredFields = false;
@@ -3073,15 +3073,15 @@ class CreateAvatarPresignedUploadResponse extends $pb.GeneratedMessage {
   void clearMaxBytes() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $1.Timestamp get expiresAt => $_getN(4);
+  $2.Timestamp get expiresAt => $_getN(4);
   @$pb.TagNumber(5)
-  set expiresAt($1.Timestamp value) => $_setField(5, value);
+  set expiresAt($2.Timestamp value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasExpiresAt() => $_has(4);
   @$pb.TagNumber(5)
   void clearExpiresAt() => $_clearField(5);
   @$pb.TagNumber(5)
-  $1.Timestamp ensureExpiresAt() => $_ensure(4);
+  $2.Timestamp ensureExpiresAt() => $_ensure(4);
 
   /// Value to persist via UpdateProfile.avatar_url after a successful PUT to upload_url.
   @$pb.TagNumber(6)
@@ -4021,7 +4021,7 @@ class GetScheduledMessageDispatchPresenceRequest extends $pb.GeneratedMessage {
     $core.String? recipientProfileId,
     $fixnum.Int64? scheduleGeneration,
     ScheduledMessageDispatchMode? mode,
-    $3.ChatType? chatType,
+    $4.ChatType? chatType,
   }) {
     final result = create();
     if (scheduledMessageId != null)
@@ -4062,8 +4062,8 @@ class GetScheduledMessageDispatchPresenceRequest extends $pb.GeneratedMessage {
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..aE<ScheduledMessageDispatchMode>(7, _omitFieldNames ? '' : 'mode',
         enumValues: ScheduledMessageDispatchMode.values)
-    ..aE<$3.ChatType>(8, _omitFieldNames ? '' : 'chatType',
-        enumValues: $3.ChatType.values)
+    ..aE<$4.ChatType>(8, _omitFieldNames ? '' : 'chatType',
+        enumValues: $4.ChatType.values)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4155,9 +4155,9 @@ class GetScheduledMessageDispatchPresenceRequest extends $pb.GeneratedMessage {
   void clearMode() => $_clearField(7);
 
   @$pb.TagNumber(8)
-  $3.ChatType get chatType => $_getN(7);
+  $4.ChatType get chatType => $_getN(7);
   @$pb.TagNumber(8)
-  set chatType($3.ChatType value) => $_setField(8, value);
+  set chatType($4.ChatType value) => $_setField(8, value);
   @$pb.TagNumber(8)
   $core.bool hasChatType() => $_has(7);
   @$pb.TagNumber(8)
@@ -5945,7 +5945,7 @@ class RecordSdkAuthorTombstoneResponse extends $pb.GeneratedMessage {
     $fixnum.Int64? frozenAuthorityEpoch,
     $core.String? freezeReceiptId,
     $core.String? requestHash,
-    $1.Timestamp? committedAt,
+    $2.Timestamp? committedAt,
   }) {
     final result = create();
     if (version != null) result.version = version;
@@ -5999,8 +5999,8 @@ class RecordSdkAuthorTombstoneResponse extends $pb.GeneratedMessage {
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..aOS(12, _omitFieldNames ? '' : 'freezeReceiptId')
     ..aOS(13, _omitFieldNames ? '' : 'requestHash')
-    ..aOM<$1.Timestamp>(14, _omitFieldNames ? '' : 'committedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(14, _omitFieldNames ? '' : 'committedAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -6144,15 +6144,15 @@ class RecordSdkAuthorTombstoneResponse extends $pb.GeneratedMessage {
   void clearRequestHash() => $_clearField(13);
 
   @$pb.TagNumber(14)
-  $1.Timestamp get committedAt => $_getN(13);
+  $2.Timestamp get committedAt => $_getN(13);
   @$pb.TagNumber(14)
-  set committedAt($1.Timestamp value) => $_setField(14, value);
+  set committedAt($2.Timestamp value) => $_setField(14, value);
   @$pb.TagNumber(14)
   $core.bool hasCommittedAt() => $_has(13);
   @$pb.TagNumber(14)
   void clearCommittedAt() => $_clearField(14);
   @$pb.TagNumber(14)
-  $1.Timestamp ensureCommittedAt() => $_ensure(13);
+  $2.Timestamp ensureCommittedAt() => $_ensure(13);
 }
 
 enum SearchProfileProjectionEvent_Payload { upsert, delete, notSet }
@@ -6161,7 +6161,7 @@ class SearchProfileProjectionEvent extends $pb.GeneratedMessage {
   factory SearchProfileProjectionEvent({
     $core.int? protocolVersion,
     $core.String? eventId,
-    $1.Timestamp? occurredAt,
+    $2.Timestamp? occurredAt,
     $fixnum.Int64? journalOffset,
     $core.String? profileId,
     $fixnum.Int64? sourceRevision,
@@ -6203,8 +6203,8 @@ class SearchProfileProjectionEvent extends $pb.GeneratedMessage {
     ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
         fieldType: $pb.PbFieldType.OU3)
     ..aOS(2, _omitFieldNames ? '' : 'eventId')
-    ..aOM<$1.Timestamp>(3, _omitFieldNames ? '' : 'occurredAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(3, _omitFieldNames ? '' : 'occurredAt',
+        subBuilder: $2.Timestamp.create)
     ..a<$fixnum.Int64>(
         4, _omitFieldNames ? '' : 'journalOffset', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
@@ -6267,15 +6267,15 @@ class SearchProfileProjectionEvent extends $pb.GeneratedMessage {
   void clearEventId() => $_clearField(2);
 
   @$pb.TagNumber(3)
-  $1.Timestamp get occurredAt => $_getN(2);
+  $2.Timestamp get occurredAt => $_getN(2);
   @$pb.TagNumber(3)
-  set occurredAt($1.Timestamp value) => $_setField(3, value);
+  set occurredAt($2.Timestamp value) => $_setField(3, value);
   @$pb.TagNumber(3)
   $core.bool hasOccurredAt() => $_has(2);
   @$pb.TagNumber(3)
   void clearOccurredAt() => $_clearField(3);
   @$pb.TagNumber(3)
-  $1.Timestamp ensureOccurredAt() => $_ensure(2);
+  $2.Timestamp ensureOccurredAt() => $_ensure(2);
 
   @$pb.TagNumber(4)
   $fixnum.Int64 get journalOffset => $_getI64(3);
@@ -7003,6 +7003,217 @@ class GetSearchProfileCheckpointResponse extends $pb.GeneratedMessage {
   $core.bool hasHighWatermark() => $_has(0);
   @$pb.TagNumber(1)
   void clearHighWatermark() => $_clearField(1);
+}
+
+class GetSpaceAdmissionProfileEligibilityRequest extends $pb.GeneratedMessage {
+  factory GetSpaceAdmissionProfileEligibilityRequest({
+    $core.String? accountId,
+    $core.String? profileId,
+    $core.List<$core.int>? observationBindingSha256,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    if (profileId != null) result.profileId = profileId;
+    if (observationBindingSha256 != null)
+      result.observationBindingSha256 = observationBindingSha256;
+    return result;
+  }
+
+  GetSpaceAdmissionProfileEligibilityRequest._();
+
+  factory GetSpaceAdmissionProfileEligibilityRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetSpaceAdmissionProfileEligibilityRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetSpaceAdmissionProfileEligibilityRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..a<$core.List<$core.int>>(3,
+        _omitFieldNames ? '' : 'observationBindingSha256', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceAdmissionProfileEligibilityRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceAdmissionProfileEligibilityRequest copyWith(
+          void Function(GetSpaceAdmissionProfileEligibilityRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetSpaceAdmissionProfileEligibilityRequest))
+          as GetSpaceAdmissionProfileEligibilityRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceAdmissionProfileEligibilityRequest create() =>
+      GetSpaceAdmissionProfileEligibilityRequest._();
+  @$core.override
+  GetSpaceAdmissionProfileEligibilityRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceAdmissionProfileEligibilityRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          GetSpaceAdmissionProfileEligibilityRequest>(create);
+  static GetSpaceAdmissionProfileEligibilityRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.List<$core.int> get observationBindingSha256 => $_getN(2);
+  @$pb.TagNumber(3)
+  set observationBindingSha256($core.List<$core.int> value) =>
+      $_setBytes(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasObservationBindingSha256() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearObservationBindingSha256() => $_clearField(3);
+}
+
+class GetSpaceAdmissionProfileEligibilityResponse extends $pb.GeneratedMessage {
+  factory GetSpaceAdmissionProfileEligibilityResponse({
+    $core.String? accountId,
+    $core.String? profileId,
+    $core.List<$core.int>? observationBindingSha256,
+    $fixnum.Int64? profileRevision,
+    $core.bool? deleted,
+    $core.bool? frozen,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    if (profileId != null) result.profileId = profileId;
+    if (observationBindingSha256 != null)
+      result.observationBindingSha256 = observationBindingSha256;
+    if (profileRevision != null) result.profileRevision = profileRevision;
+    if (deleted != null) result.deleted = deleted;
+    if (frozen != null) result.frozen = frozen;
+    return result;
+  }
+
+  GetSpaceAdmissionProfileEligibilityResponse._();
+
+  factory GetSpaceAdmissionProfileEligibilityResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetSpaceAdmissionProfileEligibilityResponse.fromJson(
+          $core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetSpaceAdmissionProfileEligibilityResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..a<$core.List<$core.int>>(3,
+        _omitFieldNames ? '' : 'observationBindingSha256', $pb.PbFieldType.OY)
+    ..a<$fixnum.Int64>(
+        4, _omitFieldNames ? '' : 'profileRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOB(5, _omitFieldNames ? '' : 'deleted')
+    ..aOB(6, _omitFieldNames ? '' : 'frozen')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceAdmissionProfileEligibilityResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceAdmissionProfileEligibilityResponse copyWith(
+          void Function(GetSpaceAdmissionProfileEligibilityResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetSpaceAdmissionProfileEligibilityResponse))
+          as GetSpaceAdmissionProfileEligibilityResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceAdmissionProfileEligibilityResponse create() =>
+      GetSpaceAdmissionProfileEligibilityResponse._();
+  @$core.override
+  GetSpaceAdmissionProfileEligibilityResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceAdmissionProfileEligibilityResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          GetSpaceAdmissionProfileEligibilityResponse>(create);
+  static GetSpaceAdmissionProfileEligibilityResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.List<$core.int> get observationBindingSha256 => $_getN(2);
+  @$pb.TagNumber(3)
+  set observationBindingSha256($core.List<$core.int> value) =>
+      $_setBytes(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasObservationBindingSha256() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearObservationBindingSha256() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get profileRevision => $_getI64(3);
+  @$pb.TagNumber(4)
+  set profileRevision($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasProfileRevision() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearProfileRevision() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.bool get deleted => $_getBF(4);
+  @$pb.TagNumber(5)
+  set deleted($core.bool value) => $_setBool(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasDeleted() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearDeleted() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.bool get frozen => $_getBF(5);
+  @$pb.TagNumber(6)
+  set frozen($core.bool value) => $_setBool(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasFrozen() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearFrozen() => $_clearField(6);
 }
 
 const $core.bool _omitFieldNames =

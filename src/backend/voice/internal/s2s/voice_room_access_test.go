@@ -2,149 +2,101 @@ package s2s_test
 
 import (
 	"context"
-	"net"
+	"crypto/rand"
+	"crypto/rsa"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/test/bufconn"
-	"google.golang.org/protobuf/proto"
-
-	"voice/backend/voice/internal/grpcsvc"
-	"voice/backend/voice/internal/s2s"
-
+	"google.golang.org/protobuf/types/known/timestamppb"
 	spacev1 "voice.app/voice/space/v1"
+	"voice/backend/pkg/principal"
+	"voice/backend/voice/internal/s2s"
 )
 
-const voiceRoomAccessBufSize = 1024 * 1024
-
-type recordingSpaceResolverServer struct {
-	spacev1.UnimplementedSpaceServiceServer
-	expectedSpaceID string
-	request         *spacev1.ResolveVoiceRoomAccessRequest
-	metadata        metadata.MD
-	result          *spacev1.ResolveVoiceRoomAccessResponse
-	resolverError   error
-	calls           int
+type communicationClient struct {
+	spacev1.SpaceServiceClient
+	response *spacev1.ResolveVoiceRoomAccessResponse
+	err      error
+	contexts []context.Context
+	requests []*spacev1.ResolveVoiceRoomAccessRequest
 }
 
-func (s *recordingSpaceResolverServer) ResolveVoiceRoomAccess(ctx context.Context, req *spacev1.ResolveVoiceRoomAccessRequest) (*spacev1.ResolveVoiceRoomAccessResponse, error) {
-	s.calls++
-	s.request = req
-	s.metadata, _ = metadata.FromIncomingContext(ctx)
-	if s.expectedSpaceID != "" && req.GetSpace().GetId() != s.expectedSpaceID {
-		return nil, status.Error(codes.NotFound, "voice room is not bound to expected Space")
-	}
-	if s.resolverError != nil {
-		return nil, s.resolverError
-	}
-	return s.result, nil
+func (c *communicationClient) ResolveVoiceRoomAccess(ctx context.Context, req *spacev1.ResolveVoiceRoomAccessRequest, _ ...grpc.CallOption) (*spacev1.ResolveVoiceRoomAccessResponse, error) {
+	c.contexts = append(c.contexts, ctx)
+	c.requests = append(c.requests, req)
+	return c.response, c.err
 }
-
-// spaceResolverAuthInterceptor mirrors Space authctx's resolver-only boundary:
-// exactly one dedicated bearer credential creates the trusted service identity.
-// It intentionally does not accept profile or other forwarded user metadata.
-func spaceResolverAuthInterceptor(expectedToken string) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if info.FullMethod != spacev1.SpaceService_ResolveVoiceRoomAccess_FullMethodName {
-			return handler(ctx, req)
-		}
-		md, _ := metadata.FromIncomingContext(ctx)
-		if strings.TrimSpace(expectedToken) == "" || len(md.Get("authorization")) != 1 || md.Get("authorization")[0] != "Bearer "+strings.TrimSpace(expectedToken) {
-			return nil, status.Error(codes.Unauthenticated, "verified Voice service identity required")
-		}
-		return handler(ctx, req)
-	}
-}
-
-func startVoiceResolverServer(t *testing.T, expectedToken string, spaceServer *recordingSpaceResolverServer) spacev1.SpaceServiceClient {
+func communicationIssuer(t *testing.T) (*principal.Issuer, *rsa.PublicKey) {
 	t.Helper()
-	listener := bufconn.Listen(voiceRoomAccessBufSize)
-	server := grpc.NewServer(grpc.UnaryInterceptor(spaceResolverAuthInterceptor(expectedToken)))
-	spacev1.RegisterSpaceServiceServer(server, spaceServer)
-	go func() { _ = server.Serve(listener) }()
-	t.Cleanup(server.Stop)
-
-	conn, err := grpc.NewClient("passthrough:///space-resolver", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-		return listener.Dial()
-	}), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	return spacev1.NewSpaceServiceClient(conn)
-}
-
-// TestGRPCVoiceRoomAccessResolver_UsesDedicatedBearerForGeneratedCanonicalRPC
-// specifies the Voice-owned adapter factory. The adapter must send its own
-// configured bearer through the generated RPC; it must not forward or reuse a
-// caller's incoming authorization/profile metadata, and it cannot fall back to
-// ListMembers.
-func TestGRPCVoiceRoomAccessResolver_UsesDedicatedBearerForGeneratedCanonicalRPC(t *testing.T) {
-	trustedToken := "trusted-voice-service-token"
-	spaceID := uuid.NewString()
-	voiceRoomID := uuid.NewString()
-	profileID := uuid.NewString()
-	spaceServer := &recordingSpaceResolverServer{expectedSpaceID: spaceID, result: &spacev1.ResolveVoiceRoomAccessResponse{
-		SpaceId: spaceID,
-		Member:  true,
-		Active:  true,
-	}}
-	resolver := s2s.NewGRPCVoiceRoomAccessResolver(startVoiceResolverServer(t, trustedToken, spaceServer), trustedToken)
-	var _ grpcsvc.AuthoritativeVoiceRoomAccessResolver = resolver
-
-	forgedCtx := metadata.NewIncomingContext(t.Context(), metadata.Pairs(
-		"authorization", "Bearer attacker-controlled-token",
-		"x-voice-profile-id", uuid.NewString(),
-	))
-	access, err := resolver.ResolveVoiceRoomAccess(forgedCtx, spaceID, voiceRoomID, profileID)
-
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "voice", KeyID: "current", PrivateKey: key})
 	require.NoError(t, err)
-	require.True(t, proto.Equal(&spacev1.ResolveVoiceRoomAccessRequest{Space: &spacev1.SpaceRef{Id: spaceID}, VoiceRoomId: voiceRoomID, ProfileId: profileID}, spaceServer.request))
-	require.Equal(t, []string{"Bearer " + trustedToken}, spaceServer.metadata.Get("authorization"))
-	require.Empty(t, spaceServer.metadata.Get("x-voice-profile-id"), "caller metadata cannot cross the S2S authentication boundary")
-	require.Equal(t, grpcsvc.CanonicalVoiceRoomAccess{SpaceID: spaceID, Member: true, Active: true}, access)
+	return issuer, &key.PublicKey
+}
+func validVoiceAccess(space, profile string) *spacev1.ResolveVoiceRoomAccessResponse {
+	return &spacev1.ResolveVoiceRoomAccessResponse{SpaceId: space, ProfileId: profile, Member: true, Active: true, AccessEpoch: 1, ProtocolVersion: 1, EvaluatedAt: timestamppb.Now(), CommunicationState: spacev1.MemberCommunicationState_MEMBER_COMMUNICATION_STATE_CLEAR}
 }
 
-func TestGRPCVoiceRoomAccessResolver_MismatchedExpectedSpaceIsDenied(t *testing.T) {
-	expectedSpaceID := uuid.NewString()
-	resolver := s2s.NewGRPCVoiceRoomAccessResolver(startVoiceResolverServer(t, "trusted-voice-service-token", &recordingSpaceResolverServer{
-		expectedSpaceID: expectedSpaceID,
-		result:          &spacev1.ResolveVoiceRoomAccessResponse{SpaceId: expectedSpaceID, Member: true, Active: true},
-	}), "trusted-voice-service-token")
-
-	access, err := resolver.ResolveVoiceRoomAccess(t.Context(), uuid.NewString(), uuid.NewString(), uuid.NewString())
-
-	require.Equal(t, codes.NotFound, status.Code(err))
-	require.Equal(t, grpcsvc.CanonicalVoiceRoomAccess{}, access)
+func TestGRPCVoiceRoomAccessResolverSignsFreshExactRequests(t *testing.T) {
+	space, room, profile := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	issuer, key := communicationIssuer(t)
+	client := &communicationClient{response: validVoiceAccess(space, profile)}
+	resolver := s2s.NewGRPCVoiceRoomAccessResolver(client, issuer)
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer attacker", "x-voice-profile-id", uuid.NewString(), "x-voice-internal-caller", "voice"))
+	var previous string
+	for i := 0; i < 2; i++ {
+		access, err := resolver.ResolveVoiceRoomAccess(ctx, space, room, profile)
+		require.NoError(t, err)
+		require.True(t, access.CommunicationStateResolved)
+		md, _ := metadata.FromOutgoingContext(client.contexts[i])
+		require.Empty(t, md.Get("x-voice-profile-id"))
+		require.Empty(t, md.Get("x-voice-internal-caller"))
+		require.Len(t, md.Get("authorization"), 1)
+		hash, err := principal.RequestHash(client.requests[i])
+		require.NoError(t, err)
+		verified, err := principal.VerifyService(t.Context(), strings.TrimPrefix(md.Get("authorization")[0], "Bearer "), principal.VerifyConfig{ExpectedIssuer: "voice", ExpectedAudience: "space", ExpectedRPC: spacev1.SpaceService_ResolveVoiceRoomAccess_FullMethodName, ExpectedRequestID: md.Get("x-request-id")[0], ExpectedRequestHash: hash, KeyResolver: func(context.Context, string, string) (*rsa.PublicKey, error) { return key, nil }, ReplayGuard: func(context.Context, string, string, time.Time) error { return nil }})
+		require.NoError(t, err)
+		require.NotEqual(t, previous, verified.JWTID)
+		previous = verified.JWTID
+		require.Equal(t, space, client.requests[i].GetSpace().GetId())
+		require.Equal(t, room, client.requests[i].VoiceRoomId)
+		require.Equal(t, profile, client.requests[i].ProfileId)
+	}
 }
 
-func TestGRPCVoiceRoomAccessResolver_BlankTokenFailsBeforeGeneratedRPC(t *testing.T) {
-	for _, token := range []string{"", " \t "} {
-		t.Run("blank configured token", func(t *testing.T) {
-			spaceServer := &recordingSpaceResolverServer{result: &spacev1.ResolveVoiceRoomAccessResponse{SpaceId: uuid.NewString(), Member: true, Active: true}}
-			resolver := s2s.NewGRPCVoiceRoomAccessResolver(startVoiceResolverServer(t, "trusted-voice-service-token", spaceServer), token)
-
-			access, err := resolver.ResolveVoiceRoomAccess(t.Context(), uuid.NewString(), uuid.NewString(), uuid.NewString())
-
-			require.Equal(t, codes.FailedPrecondition, status.Code(err))
-			require.Equal(t, grpcsvc.CanonicalVoiceRoomAccess{}, access)
-			require.Zero(t, spaceServer.calls, "blank configuration must fail locally before an S2S request")
+func TestGRPCVoiceRoomAccessResolverRejectsLegacyAndMismatchedSnapshots(t *testing.T) {
+	space, profile := uuid.NewString(), uuid.NewString()
+	issuer, _ := communicationIssuer(t)
+	for name, mutate := range map[string]func(*spacev1.ResolveVoiceRoomAccessResponse){"legacy": func(r *spacev1.ResolveVoiceRoomAccessResponse) { r.ProtocolVersion = 0 }, "space": func(r *spacev1.ResolveVoiceRoomAccessResponse) { r.SpaceId = uuid.NewString() }, "profile": func(r *spacev1.ResolveVoiceRoomAccessResponse) { r.ProfileId = uuid.NewString() }, "epoch": func(r *spacev1.ResolveVoiceRoomAccessResponse) { r.AccessEpoch = 0 }, "enum": func(r *spacev1.ResolveVoiceRoomAccessResponse) { r.CommunicationState = 0 }} {
+		t.Run(name, func(t *testing.T) {
+			response := validVoiceAccess(space, profile)
+			mutate(response)
+			_, err := s2s.NewGRPCVoiceRoomAccessResolver(&communicationClient{response: response}, issuer).ResolveVoiceRoomAccess(t.Context(), space, uuid.NewString(), profile)
+			require.Equal(t, codes.Unavailable, status.Code(err))
 		})
 	}
+	response := validVoiceAccess(space, profile)
+	response.CommunicationState = spacev1.MemberCommunicationState_MEMBER_COMMUNICATION_STATE_TIMED_OUT
+	response.TimedOutUntil = timestamppb.New(response.EvaluatedAt.AsTime().Add(time.Hour))
+	access, err := s2s.NewGRPCVoiceRoomAccessResolver(&communicationClient{response: response}, issuer).ResolveVoiceRoomAccess(t.Context(), space, uuid.NewString(), profile)
+	require.NoError(t, err)
+	require.True(t, access.TimedOut)
 }
 
-func TestGRPCVoiceRoomAccessResolver_PropagatesSpaceUnavailable(t *testing.T) {
-	spaceServer := &recordingSpaceResolverServer{resolverError: status.Error(codes.Unavailable, "space database unavailable")}
-	resolver := s2s.NewGRPCVoiceRoomAccessResolver(startVoiceResolverServer(t, "trusted-voice-service-token", spaceServer), "trusted-voice-service-token")
-
-	access, err := resolver.ResolveVoiceRoomAccess(t.Context(), uuid.NewString(), uuid.NewString(), uuid.NewString())
-
-	require.Equal(t, codes.Unavailable, status.Code(err))
-	require.Equal(t, grpcsvc.CanonicalVoiceRoomAccess{}, access)
-	require.Equal(t, 1, spaceServer.calls)
+func TestGRPCVoiceRoomAccessResolverMissingSignerAndDependencyFailClosed(t *testing.T) {
+	issuer, _ := communicationIssuer(t)
+	client := &communicationClient{err: status.Error(codes.Unavailable, "Space unavailable")}
+	for _, signer := range []*principal.Issuer{nil, issuer} {
+		_, err := s2s.NewGRPCVoiceRoomAccessResolver(client, signer).ResolveVoiceRoomAccess(t.Context(), uuid.NewString(), uuid.NewString(), uuid.NewString())
+		require.Equal(t, codes.Unavailable, status.Code(err))
+	}
+	require.Len(t, client.contexts, 1, "missing signer fails before RPC")
 }

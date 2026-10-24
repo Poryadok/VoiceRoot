@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package voice.chat.v1;
+
+option go_package = "voice.app/voice/chat/v1;chatv1";
+
+// Structural lifecycle enrollment only; it never grants recipient authority.
+// Register only on Chat's dedicated Realtime mTLS listener.
+service ChatRealtimeLifecycleService {
+  // @voice.security=protected;callers=service:realtime
+  rpc ResolveChatLifecycle(ResolveChatLifecycleRequest) returns (ResolveChatLifecycleResponse);
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message ResolveChatLifecycleRequest {
+  uint32 protocol_version = 1;
+  string operation_id = 2;
+  string chat_id = 3;
+}
+
+// Chat native terminal state is distinct from the coordinator's fence commands.
+enum ChatLifecycleState {
+  CHAT_LIFECYCLE_STATE_UNSPECIFIED = 0;
+  CHAT_LIFECYCLE_STATE_LIVE = 1;
+  CHAT_LIFECYCLE_STATE_FROZEN = 2;
+  CHAT_LIFECYCLE_STATE_PURGE_DECIDED = 3;
+  CHAT_LIFECYCLE_STATE_PURGED = 4;
+}
+
+message ResolveChatLifecycleResponse {
+  uint32 protocol_version = 1;
+  string chat_id = 2;
+  // Empty only for an authoritative non-Space chat.
+  string space_id = 3;
+  uint64 generation = 4;
+  ChatLifecycleState state = 5;
+  string deletion_operation_id = 6;
+  uint32 schema_version = 7;
+}

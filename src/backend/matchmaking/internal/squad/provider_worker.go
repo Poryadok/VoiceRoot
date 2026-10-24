@@ -228,9 +228,9 @@ func (w *MatchSquadProviderWorker) provisionOperation(ctx context.Context, opera
 		}
 		response, err := w.Voice.CreateMatchSquadRoom(callCtx, voiceRequest)
 		if err != nil {
-			if status.Code(err) == codes.FailedPrecondition {
-				// The protected Voice provider uses FailedPrecondition only for a
-				// terminal binding/ownership rejection before resource creation.
+			if isTerminalProviderCreateError(err) {
+				// The protected Voice provider rejects invalid creation requests
+				// before mutation, including terminal binding/ownership conflicts.
 				// Seal exact Chat-only compensation; never delete an unknown Voice
 				// resource or turn this into a completed match.
 				if _, compensationErr := w.Store.BeginMatchSquadProvisionCompensation(ctx, operation.MatchID); compensationErr != nil {
@@ -267,6 +267,15 @@ func (w *MatchSquadProviderWorker) provisionOperation(ctx context.Context, opera
 		return operation, err
 	}
 	return w.Store.GetMatchSquadProvisioningOperation(ctx, operation.MatchID)
+}
+
+func isTerminalProviderCreateError(err error) bool {
+	switch status.Code(err) {
+	case codes.InvalidArgument, codes.FailedPrecondition:
+		return true
+	default:
+		return false
+	}
 }
 
 func newVoiceCreateRequest(operation store.MatchSquadProvisioningOperation, chatReceipt *chatv1.MatchSquadChatReceipt) (*callsv1.CreateMatchSquadRoomRequest, error) {

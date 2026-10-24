@@ -1,17 +1,64 @@
 # User Service
 
+## Space admission profile eligibility (SPACE-ADMISSION-IDENTITY-v1)
+
+`GetSpaceAdmissionProfileEligibility` is a separate Auth-only current-pair
+read. Its dedicated mutual-TLS listener defaults to `:9097` and uses
+`USER_ADMISSION_PRINCIPAL_*` settings, including replay Redis, TLS certificate/key,
+client CA and JWKS client identity, plus Auth's HTTPS JWKS entry. Partial config
+fails startup. The ordinary, Social and SDK listeners do not register this RPC;
+the SDK caller allowlist remains unchanged.
+
+The signed request binds exact account/profile IDs and a 32-byte observation
+digest of Auth's full request. User echoes all three and reads its owned current
+row's positive `sdk_eligibility_revision`, deleted and frozen flags. This reuses
+the existing read-only store query, never the SDK wire method or SDK consent.
+Guests and regular profiles work equally; no provisioning, switching, membership
+grant, history/lifetime or terminal-erasure authority is added. Unknown/foreign
+pairs deny; invalid revisions and storage failure are unavailable. Auth rejects
+deleted/frozen profiles and validates the exact response binding before its
+final account reread. Existing eligibility revision triggers remain authoritative
+for relevant owner/deleted/frozen changes. Deployment/assembled admission and
+acceptance require their separate version-bound proof.
+
+## Owning authority source catalog
+
+The authority source serves only exact clean `user_db` version **21**. Migrations
+20 (`profile_last_seen`) and 21 (pending organization-challenge cleanup and its
+unique index) preserve the source's four relations, columns, constraints,
+indexes, eleven triggers and five function bodies. The real pinned migrator
+qualification compares their DDL before/after 19→21 and verifies the unchanged
+authority revision and profile tuple. Runtime source queries and function hashes
+remain unchanged; dirty, older and unknown versions still fail closed.
+
+Migration19's permanent authority floors and inactive fences remain forward-only.
+The maintenance oracle returns through the unrelated additive migrations to19,
+then proves that its DOWN is refused and retained fences survive. This exact21
+qualification grants no future schema version, identity-association activation or
+cross-service/runtime acceptance.
+
 ## Обзор
 
 Управление профилями пользователей, настройками, приватностью и онлайн-статусом.
 
 **Язык**: Go
-**БД**: PostgreSQL `user_db`, Redis (presence cache)
+**БД**: PostgreSQL `user_db`, Redis (presence cache, shared profile-mutation quotas)
 
 ## Ответственность
 
+The additive [ListThreads profile-eligibility source contract](../testing/listthreads-versioned-readmodel-exec-plan.md#effective-membership-contract-v1)
+requires per-profile transactional eligibility revisions/revocation counters,
+durable negative/tombstone lookup and authoritative state/head validation for
+signed caller `chat`. All deleted/disabled/frozen causes participate; presence
+or switching profiles alone does not revoke another profile. Deleted/archived
+profiles are ineligible viewers while domain data and other viewers' history
+remain intact. This unimplemented target requires a separate protected API; it
+does not widen Auth-only `GetSdkProfileEligibility` or reuse public `GetProfile`.
+Account/session state remains Auth-owned.
+
 - Профили пользователей (аватар, имя, био, баннер, статус)
 - Мульти-профили (2 бесплатно / 5 Premium, независимые контакты и настройки)
-- Переключение активного профиля
+- Проверка принадлежности и доступности профиля для переключения сессии в Auth
 - Username система (`@username#1234`, Premium `@username`, верифицированные ✅, компании ®)
 - Настройки приватности (3 пресета + гранулярный контроль по полям)
 - Presence (online / idle / DND / invisible)
@@ -48,7 +95,7 @@ service UserService {
   rpc UpdateProfile(UpdateProfileRequest) returns (Profile);
   rpc CreateProfile(CreateProfileRequest) returns (Profile); // мульти-профиль
   rpc DeleteProfile(DeleteProfileRequest) returns (Empty);
-  rpc SwitchProfile(SwitchProfileRequest) returns (Profile);
+  rpc SwitchProfile(SwitchProfileRequest) returns (SwitchProfileResponse); // проверка профиля; сессию заменяет Auth
   rpc ListMyProfiles(Empty) returns (ProfileList);
   rpc SearchProfiles(SearchProfilesRequest) returns (SearchProfilesResponse);
 
@@ -77,6 +124,30 @@ service UserService {
 ```
 
 Канон RPC и сообщений — репозиторий `protos/voice/user/v1/user.proto`.
+
+### Переключение профиля и сессия Auth
+
+Несмотря на историческое имя, `UserService.SwitchProfile` проверяет целевой
+профиль аккаунта и возвращает `SwitchProfileResponse.profile`. Чужой,
+удалённый или замороженный профиль не допускается. RPC не выдаёт access/refresh
+tokens, не отзывает прежний JWT и сам не меняет активную identity сессии.
+В текущем runtime проверка также применяет действующий free-tier freeze;
+её нельзя считать общей read-only операцией.
+
+Заменой сессии владеет Auth: `SwitchActiveProfile` использует User-проверку,
+затем в своей security transaction повторно проверяет прежний bearer,
+отзывает его JTI и выдаёт новый `AuthSession` с выбранным `profile_id`.
+Публичный `POST /api/v1/auth/switch-profile` проходит через Auth REST;
+Gateway не подменяет его User RPC или Auth gRPC transcoding, сохраняя
+нормализацию `device_info` на REST-пути. Детали session-контракта —
+[Auth Service](auth-service.md#api-grpc).
+
+`user.profile_switched` — необязательное событие User-проверки при разных
+исходном и целевом профилях. Оно может быть опубликовано до завершения
+Auth-транзакции, поэтому не подтверждает выдачу новой сессии или отзыв старой.
+Клиент меняет session identity по успешному ответу Auth с новым `AuthSession`.
+Имена существующих RPC и событий сохраняются; их разные границы не означают
+два независимых способа переключить Auth-сессию.
 
 ### Internal Auth profile seam
 
@@ -244,9 +315,9 @@ presence (Redis Hash — ephemeral)
 last_seen (Redis string — interim durable)
 ├── key: voice:user:last_seen:{profile_id}
 ├── value: unix timestamp (UTC)
-└── TTL 30 days; refreshed on every heartbeat (until PG lands)
+└── TTL 30 days; compatibility cache refreshed on every heartbeat
 
-last_seen_at (PostgreSQL — target durable)
+profile_last_seen (PostgreSQL — durable)
 ├── profile_id (UUID PK, logical ref → profiles.id)
 ├── last_seen_at (TIMESTAMPTZ, UTC)
 └── updated on session end, heartbeat boundary, explicit offline transition
@@ -258,9 +329,9 @@ last_seen_at (PostgreSQL — target durable)
 |-------|------------|--------|
 | **Redis session hash** | Live `status`, game, custom status, call | **Implemented** — TTL 5 min |
 | **Redis `last_seen` string** | Interim «был(а) N назад» when session expired | **Implemented** — TTL 30 d; refreshed every heartbeat |
-| **PostgreSQL `last_seen_at`** | Durable last seen for header / profile | **Not yet** — no PG column |
+| **PostgreSQL `last_seen_at`** | Durable last seen for header / profile | **Implemented in source** — `user_db/000020`, monotonic heartbeat observations |
 
-Redis-only interim **недостаточен** для long-tail «был 2 недели назад» (30 d cap) и privacy enforcement at scale — target is PG + read-time filter ([presence.md](../features/presence.md) § Interim storage).
+Redis-only interim **недостаточен** для long-tail «был 2 недели назад» (30 d cap) и privacy enforcement at scale — target is PG + read-time filter ([presence.md](../features/presence.md) § Redis cache and durable storage).
 
 При реализации PG: запись `last_seen_at` при transition to offline / idle boundary / graceful disconnect; `GetBulkPresence` / `GetPresence` **merge** Redis live status + PG `last_seen_at` when offline; apply **`show_last_seen`** filter per viewer.
 
@@ -273,7 +344,7 @@ Redis-only interim **недостаточен** для long-tail «был 2 не
 | 3 | If the status enum or game title changed → publish `user.presence_changed` with `old_status`, `new_status`; for the first live observation `old_status` is empty and `new_status` is the canonical current status. A game-only change uses the same current status in both fields, including when the title is cleared. Other same-enum heartbeats still complete steps 1–2 but publish nothing. |
 | 4 | Realtime fan-out `presence_update` to friends/subscribers **after** privacy filter (spec) |
 
-**`show_last_seen` enforcement:** when `show_last_seen = nobody` (or viewer is outside its allowed audience), `GetPresence` / `GetBulkPresence` **omit** `last_seen` timestamp (live online independently respects `show_online`). Self may read it; viewerless calls, missing privacy rows and audience dependency errors fail closed. Invisible is shown as offline to others and never leaks a hidden timestamp. Header «был(а)…» in DM — [presence.md](../features/presence.md). Durable PostgreSQL `last_seen_at` remains separate — [todo/backend.md](../todo/backend.md).
+**`show_last_seen` enforcement:** when `show_last_seen = nobody` (or viewer is outside its allowed audience), `GetPresence` / `GetBulkPresence` **omit** `last_seen` timestamp (live online independently respects `show_online`). Self may read it; viewerless calls, missing privacy rows and audience dependency errors fail closed. Invisible is shown as offline to others and never leaks a hidden timestamp. Header «был(а)…» in DM — [presence.md](../features/presence.md). Durable PostgreSQL `last_seen_at` uses the same filtering path; delivery evidence is tracked in BE-050.
 
 ### Current code vs full spec
 
@@ -327,7 +398,7 @@ sequence, поэтому первый новый provider update не проиг
 - `INDEX profiles_account_id_idx (account_id)`
 - `INDEX profiles_created_at_idx (created_at DESC)`
 
-**`last_seen_at`:** spec — таблица в PostgreSQL (см. схема выше). **Code gap:** только Redis hash, без durable persistence — [todo/backend.md](../todo/backend.md).
+**`last_seen_at`:** User-owned `profile_last_seen` (`user_db/000020`) stores only profile ID and UTC timestamp. Every heartbeat persists before Redis acknowledgement; `GREATEST` prevents concurrent/older observations from regressing time. Single/batch reads merge the newer PG/cache timestamp before existing viewer filtering. Durable-store errors fail the read/write; live routing still depends on Redis sessions. Expand first, then deploy the writer; rollback the binary before dropping the table. No historical timestamps are synthesized. Runtime/CI and independent review remain separate delivery evidence.
 
 ## Публикуемые события (→ NATS)
 
@@ -350,7 +421,11 @@ sequence, поэтому первый новый provider update не проиг
 - **Auth Service** — account_id валидация
 - **Subscription Service** — проверка лимитов (мульти-профили, кастомный статус)
 - **Space Service** — `AreCoMembers` для проверки privacy-аудитории `space_members` (User подключает S2S-клиент через `SPACE_GRPC_ADDR`)
-- **Redis** — presence кэш (TTL 5 мин, heartbeat)
+- **Redis** — presence кэш (TTL 5 мин, heartbeat) и обязательный общий допуск
+  `CreateProfile`/`DeleteProfile` через существующий `USER_REDIS_ADDR`: независимо
+  по 10 попыток/скользящий час/аккаунт. Нет локального fallback; отсутствие
+  конфигурации или сбой Redis закрывает только эти операции с `UNAVAILABLE`.
+  Квота и порядок отказа описаны в [Multi-Profile](../features/multi-profile.md#защита-от-злоупотреблений).
 - **File Service** — загрузка аватара/баннера; **not yet deployed** as standalone service — минимальный R2/presigned для статичного аватара может жить в User ([user-profile.md](../features/user-profile.md), [PLAN.md](../PLAN.md))
 
 ## Subscription downgrade projection (A7 accepted target; not implemented)

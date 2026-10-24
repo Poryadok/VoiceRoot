@@ -9,12 +9,12 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"voice/backend/voice/internal/spacegatetest"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	callsv1 "voice.app/voice/calls/v1"
-	"voice/backend/pkg/integrationtest"
 	"voice/backend/voice/internal/gameprovision"
 	"voice/backend/voice/internal/grpcsvc"
 	"voice/backend/voice/internal/store"
@@ -26,6 +26,7 @@ func TestPostgresAdmissionOutboxWaitsForProjectionAndReplaysTheSameEvent(t *test
 	store := NewPostgresAdmissionStore(pool)
 	require.NoError(t, store.CheckSchema(ctx))
 	a := admissionFixture()
+	ctx = ownAdmission(ctx, &a)
 	require.NoError(t, prepareAdmission(ctx, store, &a))
 
 	item, err := store.ClaimOutbox(ctx, time.Second)
@@ -72,6 +73,7 @@ func TestPostgresAdmissionRejectsChangedRetryAndPersistsRecoveryState(t *testing
 	pool := startSpaceMediaAdmissionPostgres(t, ctx)
 	store := NewPostgresAdmissionStore(pool)
 	a := admissionFixture()
+	ctx = ownAdmission(ctx, &a)
 	require.NoError(t, prepareAdmission(ctx, store, &a))
 	changed := a
 	changed.Events = append([]AdmissionEvent(nil), a.Events...)
@@ -79,6 +81,7 @@ func TestPostgresAdmissionRejectsChangedRetryAndPersistsRecoveryState(t *testing
 	require.ErrorIs(t, store.Prepare(ctx, changed), ErrAdmissionConflict)
 	require.NoError(t, store.Fence(ctx, a))
 	require.NoError(t, store.MarkCommitted(ctx, a.OperationID, a.Generation))
+	require.NoError(t, store.RelinquishAdmissionOwnership(ctx, a.OperationID)) // explicit interrupted foreground
 	rows, err := store.RecoveryRows(ctx, 20)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -86,6 +89,10 @@ func TestPostgresAdmissionRejectsChangedRetryAndPersistsRecoveryState(t *testing
 	require.False(t, rows[0].ProjectionApplied)
 	require.True(t, rows[0].CanJoin)
 	require.True(t, rows[0].CanSubscribe)
+	current, claimed, err := store.ClaimAdmissionRecovery(ctx, a)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	ctx = withRecoveredAdmissionOwner(ctx, current)
 	require.NoError(t, store.MarkProjectionApplied(ctx, a.OperationID, a.Generation))
 	require.NoError(t, store.ConfirmProjection(ctx, a.OperationID, a.Generation))
 	activeRows, err := store.ProjectionRows(ctx, uuid.Nil, 20, true)
@@ -95,9 +102,10 @@ func TestPostgresAdmissionRejectsChangedRetryAndPersistsRecoveryState(t *testing
 	rows, err = store.RecoveryRows(ctx, 20)
 	require.NoError(t, err)
 	require.Empty(t, rows, "confirmed active projections are not pending recovery rows")
-	require.NoError(t, store.BeginRoomLeave(ctx, a.OperationID, a.Generation))
+	require.NoError(t, fixtureBeginOwnedLeave(ctx, store, a.OperationID, a.Generation))
 	require.ErrorIs(t, store.ConfirmProjection(ctx, a.OperationID, a.Generation), ErrAdmissionConflict,
 		"a stale Redis participant cannot retain token/roster authority after PostgreSQL starts revocation")
+	require.NoError(t, store.RelinquishAdmissionOwnership(ctx, a.OperationID))
 	rows, err = store.RecoveryRows(ctx, 20)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -110,14 +118,17 @@ func TestPostgresAdmissionFenceRequiresExactOperationRelease(t *testing.T) {
 	pool := startSpaceMediaAdmissionPostgres(t, ctx)
 	store := NewPostgresAdmissionStore(pool)
 	first := admissionFixture()
+	ctx = ownAdmission(ctx, &first)
 	require.NoError(t, prepareAdmission(ctx, store, &first))
 	require.NoError(t, store.Fence(ctx, first))
 	second := admissionFixture()
+	ctx = ownAdmission(ctx, &second)
 	second.AccountID = first.AccountID
 	require.NoError(t, prepareAdmission(ctx, store, &second))
 	require.ErrorIs(t, store.Fence(ctx, second), ErrAdmissionConflict)
 
 	require.NoError(t, store.MarkAborting(ctx, first.OperationID, first.Generation))
+	require.NoError(t, store.FenceAbortedAdmission(ctx, first.OperationID, spacegatetest.New()))
 	require.NoError(t, store.ReleaseFence(ctx, first))
 	require.NoError(t, store.MarkCleanupCompleted(ctx, first.OperationID, first.Generation))
 	require.NoError(t, store.Fence(ctx, second))
@@ -132,6 +143,7 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 	admissions := NewPostgresAdmissionStore(pool)
 
 	creator := admissionFixture()
+	ctx = ownAdmission(ctx, &creator)
 	require.NoError(t, prepareAdmission(ctx, admissions, &creator))
 	require.NoError(t, admissions.Fence(ctx, creator))
 	require.NoError(t, admissions.MarkCommitted(ctx, creator.OperationID, creator.Generation))
@@ -167,6 +179,7 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 	require.NoError(t, admissions.MarkProjectionApplied(ctx, creator.OperationID, creator.Generation))
 
 	failed := admissionFixture()
+	ctx = ownAdmission(ctx, &failed)
 	failed.RoomID, failed.SpaceID, failed.VoiceRoomID = creator.RoomID, creator.SpaceID, creator.VoiceRoomID
 	failed.CreatedRoom = false
 	failed.Events = failed.Events[1:] // Existing-room joins emit member_joined, not call_started.
@@ -198,11 +211,11 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 	require.Nil(t, item, "the cap-rejected operation remains unprojected and unclaimable")
 
 	faultingAdmissions := &lostCleanupAckAdmissionStore{PostgresAdmissionStore: admissions, loseNextCleanupAck: true}
-	coordinator := &Coordinator{
+	coordinator := &Coordinator{ProjectionGates: spacegatetest.New(),
 		Store: calls, Calls: calls, Admissions: faultingAdmissions,
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
-			creator.ProfileID.String(): {SpaceID: creator.SpaceID.String(), Active: true, Member: true, AccessEpoch: creator.AccessEpoch},
-			failed.ProfileID.String():  {SpaceID: failed.SpaceID.String(), Active: true, Member: true, AccessEpoch: failed.AccessEpoch},
+			creator.ProfileID.String(): {SpaceID: creator.SpaceID.String(), Active: true, Member: true, AccessEpoch: creator.AccessEpoch, CommunicationStateResolved: true},
+			failed.ProfileID.String():  {SpaceID: failed.SpaceID.String(), Active: true, Member: true, AccessEpoch: failed.AccessEpoch, CommunicationStateResolved: true},
 		}},
 		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
 			creator.ProfileID.String(): {PolicyEpoch: creator.PolicyEpoch, CanJoin: true, CanSubscribe: true},
@@ -212,6 +225,7 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 	}
 	// The durable cleanup commits, then its acknowledgement is lost. The caller
 	// must report the ambiguity; a normal recovery retry then observes completion.
+	require.NoError(t, admissions.RelinquishAdmissionOwnership(ctx, failed.OperationID)) // writer crash before recovery
 	err = coordinator.reconcileAdmissions(ctx)
 	require.ErrorContains(t, err, "injected cleanup acknowledgement lost after commit")
 	rows, err := admissions.RecoveryRows(ctx, 20)
@@ -271,11 +285,13 @@ func TestPostgresAdmissionCapAbortReleasesExactFenceAndKeepsOutboxUnclaimable(t 
 	pool := startSpaceMediaAdmissionPostgres(t, ctx)
 	store := NewPostgresAdmissionStore(pool)
 	failed := admissionFixture()
+	ctx = ownAdmission(ctx, &failed)
 	require.NoError(t, prepareAdmission(ctx, store, &failed))
 	require.NoError(t, store.Fence(ctx, failed))
 	require.NoError(t, store.MarkCommitted(ctx, failed.OperationID, failed.Generation))
 
 	other := admissionFixture()
+	ctx = ownAdmission(ctx, &other)
 	require.NoError(t, prepareAdmission(ctx, store, &other))
 	require.NoError(t, store.Fence(ctx, other))
 
@@ -284,9 +300,12 @@ func TestPostgresAdmissionCapAbortReleasesExactFenceAndKeepsOutboxUnclaimable(t 
 	require.Nil(t, item, "a committed admission without a confirmed projection cannot publish")
 	require.NoError(t, store.MarkAborting(ctx, failed.OperationID, failed.Generation))
 
+	require.NoError(t, store.FenceAbortedAdmission(ctx, failed.OperationID, spacegatetest.New()))
 	wrongTuple := failed
 	wrongTuple.ProfileID = uuid.New()
 	require.ErrorIs(t, store.ReleaseFence(ctx, wrongTuple), ErrAdmissionConflict)
+	require.NoError(t, store.RelinquishAdmissionOwnership(ctx, failed.OperationID))
+	require.NoError(t, store.RelinquishAdmissionOwnership(ctx, other.OperationID))
 	recovery, err := store.RecoveryRows(ctx, 20)
 	require.NoError(t, err)
 	require.Len(t, recovery, 2)
@@ -308,6 +327,11 @@ func TestPostgresAdmissionCapAbortReleasesExactFenceAndKeepsOutboxUnclaimable(t 
 	require.Nil(t, item, "ABORTING cap rejection must never become publishable")
 
 	// Recovery retries with the exact operation tuple after the first cleanup attempt failed.
+	current, claimed, err := store.ClaimAdmissionRecovery(ctx, failed)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	ctx = withRecoveredAdmissionOwner(ctx, current)
+	require.NoError(t, store.FenceAbortedAdmission(ctx, failed.OperationID, spacegatetest.New()))
 	require.NoError(t, store.ReleaseFence(ctx, failed))
 	require.NoError(t, store.MarkCleanupCompleted(ctx, failed.OperationID, failed.Generation))
 	recovery, err = store.RecoveryRows(ctx, 20)
@@ -331,9 +355,11 @@ func TestPostgresRoomHeadSerializesJoinersAndReopensOnlyAfterFinalLeave(t *testi
 	pool := startSpaceMediaAdmissionPostgres(t, ctx)
 	admissions := NewPostgresAdmissionStore(pool)
 	creator := admissionFixture()
+	ctx = ownAdmission(ctx, &creator)
 	require.NoError(t, prepareAdmission(ctx, admissions, &creator))
 
 	joiner := admissionFixture()
+	ctx = ownAdmission(ctx, &joiner)
 	joiner.VoiceRoomID = creator.VoiceRoomID
 	joiner.SpaceID = creator.SpaceID
 	joiner.RoomID = creator.RoomID
@@ -357,21 +383,22 @@ func TestPostgresRoomHeadSerializesJoinersAndReopensOnlyAfterFinalLeave(t *testi
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_space_media_admission_outbox WHERE voice_room_id=$1 AND room_generation=$2 AND subject='voice.call_started'`, creator.VoiceRoomID, creator.RoomGeneration).Scan(&started))
 	require.Equal(t, 1, started, "only the creator owns call_started for an incarnation")
 
-	require.NoError(t, admissions.BeginRoomLeave(ctx, creator.OperationID, creator.Generation))
-	require.NoError(t, admissions.CompleteRoomLeave(ctx, creator))
+	require.NoError(t, fixtureBeginOwnedLeave(ctx, admissions, creator.OperationID, creator.Generation))
+	require.NoError(t, fixtureCompleteOwnedLeave(ctx, admissions, creator))
 	var state string
 	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2`, creator.VoiceRoomID, creator.RoomGeneration).Scan(&state))
 	require.Equal(t, "OPEN", state, "one participant leaving cannot release the room claim while another remains")
 
-	require.NoError(t, admissions.BeginRoomLeave(ctx, joiner.OperationID, joiner.Generation))
+	require.NoError(t, fixtureBeginOwnedLeave(ctx, admissions, joiner.OperationID, joiner.Generation))
 	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2`, creator.VoiceRoomID, creator.RoomGeneration).Scan(&state))
 	require.Equal(t, "CLOSING", state)
 	next := admissionFixture()
+	ctx = ownAdmission(ctx, &next)
 	next.VoiceRoomID = creator.VoiceRoomID
 	next.SpaceID = creator.SpaceID
 	_, err = admissions.ClaimRoomHead(ctx, next.VoiceRoomID, next.SpaceID.String(), next.RoomID, next.OperationID, true)
 	require.ErrorIs(t, err, ErrRoomHeadPending, "a new incarnation waits for exact old-generation cleanup")
-	require.NoError(t, admissions.CompleteRoomLeave(ctx, joiner))
+	require.NoError(t, fixtureCompleteOwnedLeave(ctx, admissions, joiner))
 	newHead, err := admissions.ClaimRoomHead(ctx, next.VoiceRoomID, next.SpaceID.String(), next.RoomID, next.OperationID, true)
 	require.NoError(t, err)
 	require.Equal(t, creator.RoomGeneration+1, newHead.RoomGeneration)
@@ -383,6 +410,8 @@ func TestPostgresRoomHeadConcurrentCreatorsAndStaleLeaveCannotLeak(t *testing.T)
 	pool := startSpaceMediaAdmissionPostgres(t, ctx)
 	admissions := NewPostgresAdmissionStore(pool)
 	first, second := admissionFixture(), admissionFixture()
+	ctx = ownAdmission(ctx, &first)
+	ctx = ownAdmission(ctx, &second)
 	second.VoiceRoomID, second.SpaceID = first.VoiceRoomID, first.SpaceID
 	candidates := []Admission{first, second}
 	type claimResult struct {
@@ -424,6 +453,7 @@ func TestPostgresRoomHeadConcurrentCreatorsAndStaleLeaveCannotLeak(t *testing.T)
 	require.NoError(t, admissions.MarkCommitted(ctx, creator.OperationID, creator.Generation))
 	require.NoError(t, admissions.MarkProjectionApplied(ctx, creator.OperationID, creator.Generation))
 	joiner := admissionFixture()
+	ctx = ownAdmission(ctx, &joiner)
 	joiner.VoiceRoomID, joiner.SpaceID, joiner.RoomID = creator.VoiceRoomID, creator.SpaceID, creator.RoomID
 	joiner.RoomGeneration, joiner.CreatedRoom = creator.RoomGeneration, false
 	joiner.Events = []AdmissionEvent{{ID: uuid.New(), Subject: "voice.member_joined", Payload: []byte("joiner")}}
@@ -435,9 +465,10 @@ func TestPostgresRoomHeadConcurrentCreatorsAndStaleLeaveCannotLeak(t *testing.T)
 
 	// Closing the final participant ends only its exact generation; delayed
 	// creator cleanup cannot affect a later incarnation.
-	require.NoError(t, admissions.BeginRoomLeave(ctx, creator.OperationID, creator.Generation))
-	require.NoError(t, admissions.CompleteRoomLeave(ctx, creator))
+	require.NoError(t, fixtureBeginOwnedLeave(ctx, admissions, creator.OperationID, creator.Generation))
+	require.NoError(t, fixtureCompleteOwnedLeave(ctx, admissions, creator))
 	newCandidate := admissionFixture()
+	ctx = ownAdmission(ctx, &newCandidate)
 	newCandidate.VoiceRoomID, newCandidate.SpaceID = creator.VoiceRoomID, creator.SpaceID
 	newHead, err := admissions.ClaimRoomHead(ctx, newCandidate.VoiceRoomID, newCandidate.SpaceID.String(), newCandidate.RoomID, newCandidate.OperationID, true)
 	require.NoError(t, err)
@@ -454,15 +485,18 @@ func TestPostgresRoomHeadRecoversCrashBetweenClaimAndPrepare(t *testing.T) {
 	pool := startSpaceMediaAdmissionPostgres(t, ctx)
 	admissions := NewPostgresAdmissionStore(pool)
 	claim := admissionFixture()
+	ctx = ownAdmission(ctx, &claim)
 	head, err := admissions.ClaimRoomHead(ctx, claim.VoiceRoomID, claim.SpaceID.String(), claim.RoomID, claim.OperationID, true)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `UPDATE voice_space_media_room_heads SET created_at=clock_timestamp()-interval '1 minute' WHERE voice_room_id=$1 AND room_generation=$2`, claim.VoiceRoomID, head.RoomGeneration)
 	require.NoError(t, err)
+	require.NoError(t, admissions.RelinquishAdmissionOwnership(ctx, claim.OperationID))
 	require.NoError(t, admissions.RecoverOrphanRoomHeads(ctx))
 	var state string
 	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2`, claim.VoiceRoomID, head.RoomGeneration).Scan(&state))
 	require.Equal(t, "ENDED", state)
 	next := admissionFixture()
+	ctx = ownAdmission(ctx, &next)
 	next.VoiceRoomID, next.SpaceID = claim.VoiceRoomID, claim.SpaceID
 	reopened, err := admissions.ClaimRoomHead(ctx, next.VoiceRoomID, next.SpaceID.String(), next.RoomID, next.OperationID, true)
 	require.NoError(t, err)
@@ -470,26 +504,31 @@ func TestPostgresRoomHeadRecoversCrashBetweenClaimAndPrepare(t *testing.T) {
 }
 
 func TestPostgresLastLeaveSerializesAfterPreparedAdmissionAndDrainsExactFence(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	pool := startSpaceMediaAdmissionPostgres(t, context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	pool := startSpaceMediaAdmissionPostgres(t, ctx)
 	admissions := NewPostgresAdmissionStore(pool)
 	creator := admissionFixture()
+	ctx = ownAdmission(ctx, &creator)
 	require.NoError(t, prepareAdmission(ctx, admissions, &creator))
 	require.NoError(t, admissions.Fence(ctx, creator))
 	require.NoError(t, admissions.MarkCommitted(ctx, creator.OperationID, creator.Generation))
 	require.NoError(t, admissions.MarkProjectionApplied(ctx, creator.OperationID, creator.Generation))
 
 	joiner := admissionFixture()
+	ctx = ownAdmission(ctx, &joiner)
 	joiner.VoiceRoomID, joiner.SpaceID, joiner.RoomID = creator.VoiceRoomID, creator.SpaceID, creator.RoomID
 	joiner.RoomGeneration, joiner.CreatedRoom = creator.RoomGeneration, false
+	_, err := admissions.ClaimRoomHead(ctx, joiner.VoiceRoomID, joiner.SpaceID.String(), joiner.RoomID, joiner.OperationID, false)
+	require.NoError(t, err)
 	joiner.Events = []AdmissionEvent{{ID: uuid.New(), Subject: "voice.member_joined", Payload: []byte("pending join")}}
 	// Prepare the second participant, then hold the canonical room head while
-	// both Fence and the final leave queue on PostgreSQL's actual row lock. The
+	// Fence queues on the room lock while the final leave queues on the outer Space barrier. The
 	// observed wait state makes the chosen Fence-first serialization explicit.
 	require.NoError(t, admissions.Prepare(ctx, joiner))
 	headLock, err := pool.Begin(ctx)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = headLock.Rollback(context.Background()) })
 	var state string
 	require.NoError(t, headLock.QueryRow(ctx, `SELECT state FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, creator.VoiceRoomID, creator.RoomGeneration).Scan(&state))
 	require.Equal(t, "OPEN", state)
@@ -500,15 +539,15 @@ func TestPostgresLastLeaveSerializesAfterPreparedAdmissionAndDrainsExactFence(t 
 		fenceResult <- admissions.Fence(ctx, joiner)
 	}()
 	<-fenceStarted
-	waitForPostgresLockWait(t, ctx, pool, "SELECT room_generation,space_id,call_room_id,creator_operation_id,state FROM voice_space_media_room_heads")
+	waitForPostgresLockWait(t, ctx, pool, "SELECT room_generation,space_id,call_room_id,creator_operation_id,state,lifecycle_generation FROM voice_space_media_room_heads")
 	leaveStarted := make(chan struct{})
 	leaveResult := make(chan error, 1)
 	go func() {
 		close(leaveStarted)
-		leaveResult <- admissions.BeginRoomLeave(ctx, creator.OperationID, creator.Generation)
+		leaveResult <- fixtureBeginOwnedLeave(ctx, admissions, creator.OperationID, creator.Generation)
 	}()
 	<-leaveStarted
-	waitForPostgresLockWait(t, ctx, pool, "SELECT state,room_generation FROM voice_space_media_room_heads")
+	waitForPostgresLockWait(t, ctx, pool, "pg_advisory_xact_lock")
 	require.NoError(t, headLock.Commit(ctx))
 	require.NoError(t, <-fenceResult)
 	require.NoError(t, <-leaveResult)
@@ -525,10 +564,10 @@ func TestPostgresLastLeaveSerializesAfterPreparedAdmissionAndDrainsExactFence(t 
 
 	// Exact operation cleanup removes only its own fence; neither stale creator
 	// cleanup nor the pending join may release another participant's fence.
-	require.NoError(t, admissions.BeginRoomLeave(ctx, creator.OperationID, creator.Generation))
-	require.NoError(t, admissions.CompleteRoomLeave(ctx, creator))
-	require.NoError(t, admissions.BeginRoomLeave(ctx, joiner.OperationID, joiner.Generation))
-	require.NoError(t, admissions.CompleteRoomLeave(ctx, joiner))
+	require.NoError(t, fixtureBeginOwnedLeave(ctx, admissions, creator.OperationID, creator.Generation))
+	require.NoError(t, fixtureCompleteOwnedLeave(ctx, admissions, creator))
+	require.NoError(t, fixtureBeginOwnedLeave(ctx, admissions, joiner.OperationID, joiner.Generation))
+	require.NoError(t, fixtureCompleteOwnedLeave(ctx, admissions, joiner))
 	require.NoError(t, admissions.MarkCleanupCompleted(ctx, joiner.OperationID, joiner.Generation))
 	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2`, creator.VoiceRoomID, creator.RoomGeneration).Scan(&headState))
 	require.Equal(t, "ENDED", headState)
@@ -536,6 +575,7 @@ func TestPostgresLastLeaveSerializesAfterPreparedAdmissionAndDrainsExactFence(t 
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_account_voice_fences WHERE account_id IN ($1,$2)`, creator.AccountID, joiner.AccountID).Scan(&fences))
 	require.Zero(t, fences)
 	next := admissionFixture()
+	ctx = ownAdmission(ctx, &next)
 	next.VoiceRoomID, next.SpaceID = creator.VoiceRoomID, creator.SpaceID
 	nextHead, err := admissions.ClaimRoomHead(ctx, next.VoiceRoomID, next.SpaceID.String(), next.RoomID, next.OperationID, true)
 	require.NoError(t, err)
@@ -545,41 +585,46 @@ func TestPostgresLastLeaveSerializesAfterPreparedAdmissionAndDrainsExactFence(t 
 	next.RoomGeneration = nextHead.RoomGeneration
 	require.NoError(t, admissions.Prepare(ctx, next))
 	require.NoError(t, admissions.Fence(ctx, next))
-	require.NoError(t, admissions.CompleteRoomLeave(ctx, joiner), "stale cleanup is idempotent and cannot release a newer exact-operation fence")
+	require.NoError(t, fixtureCompleteOwnedLeave(ctx, admissions, joiner), "stale cleanup is idempotent and cannot release a newer exact-operation fence")
 	var currentFence uuid.UUID
 	require.NoError(t, pool.QueryRow(ctx, `SELECT admission_operation_id FROM voice_account_voice_fences WHERE account_id=$1`, next.AccountID).Scan(&currentFence))
 	require.Equal(t, next.OperationID, currentFence)
 }
 
 func TestPostgresLastLeaveWinsBeforePendingPrepareAndFence(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	pool := startSpaceMediaAdmissionPostgres(t, context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	pool := startSpaceMediaAdmissionPostgres(t, ctx)
 	admissions := NewPostgresAdmissionStore(pool)
 	creator := admissionFixture()
+	ctx = ownAdmission(ctx, &creator)
 	require.NoError(t, prepareAdmission(ctx, admissions, &creator))
 	require.NoError(t, admissions.Fence(ctx, creator))
 	require.NoError(t, admissions.MarkCommitted(ctx, creator.OperationID, creator.Generation))
 	require.NoError(t, admissions.MarkProjectionApplied(ctx, creator.OperationID, creator.Generation))
 	joiner := admissionFixture()
+	ctx = ownAdmission(ctx, &joiner)
 	joiner.VoiceRoomID, joiner.SpaceID, joiner.RoomID = creator.VoiceRoomID, creator.SpaceID, creator.RoomID
 	joiner.RoomGeneration, joiner.CreatedRoom = creator.RoomGeneration, false
+	_, err := admissions.ClaimRoomHead(ctx, joiner.VoiceRoomID, joiner.SpaceID.String(), joiner.RoomID, joiner.OperationID, false)
+	require.NoError(t, err)
 	joiner.Events = []AdmissionEvent{{ID: uuid.New(), Subject: "voice.member_joined", Payload: []byte("denied join")}}
 
 	// The leave is the first waiter on the real room-head row lock. Once it
 	// commits CLOSING, a delayed Prepare and Fence must have no durable effects.
 	headLock, err := pool.Begin(ctx)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = headLock.Rollback(context.Background()) })
 	var state string
 	require.NoError(t, headLock.QueryRow(ctx, `SELECT state FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, creator.VoiceRoomID, creator.RoomGeneration).Scan(&state))
 	leaveStarted := make(chan struct{})
 	leaveResult := make(chan error, 1)
 	go func() {
 		close(leaveStarted)
-		leaveResult <- admissions.BeginRoomLeave(ctx, creator.OperationID, creator.Generation)
+		leaveResult <- fixtureBeginOwnedLeave(ctx, admissions, creator.OperationID, creator.Generation)
 	}()
 	<-leaveStarted
-	waitForPostgresLockWait(t, ctx, pool, "SELECT state,room_generation FROM voice_space_media_room_heads")
+	waitForPostgresLockWait(t, ctx, pool, "SELECT state,room_generation,creator_operation_id,call_room_id FROM voice_space_media_room_heads")
 	prepareStarted := make(chan struct{})
 	prepareResult := make(chan error, 1)
 	go func() {
@@ -587,7 +632,7 @@ func TestPostgresLastLeaveWinsBeforePendingPrepareAndFence(t *testing.T) {
 		prepareResult <- admissions.Prepare(ctx, joiner)
 	}()
 	<-prepareStarted
-	waitForPostgresLockWait(t, ctx, pool, "SELECT room_generation,space_id,call_room_id,creator_operation_id,state")
+	waitForPostgresLockWait(t, ctx, pool, "pg_advisory_xact_lock")
 	require.NoError(t, headLock.Commit(ctx))
 	require.NoError(t, <-leaveResult)
 	require.ErrorIs(t, <-prepareResult, ErrRoomHeadPending)
@@ -599,10 +644,11 @@ func TestPostgresLastLeaveWinsBeforePendingPrepareAndFence(t *testing.T) {
 	require.Zero(t, admissionRows)
 	require.Zero(t, outboxRows)
 	require.Zero(t, joinerFences)
-	require.NoError(t, admissions.CompleteRoomLeave(ctx, creator))
+	require.NoError(t, fixtureCompleteOwnedLeave(ctx, admissions, creator))
 	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2`, creator.VoiceRoomID, creator.RoomGeneration).Scan(&state))
 	require.Equal(t, "ENDED", state)
 	next := admissionFixture()
+	ctx = ownAdmission(ctx, &next)
 	next.VoiceRoomID, next.SpaceID = creator.VoiceRoomID, creator.SpaceID
 	nextHead, err := admissions.ClaimRoomHead(ctx, next.VoiceRoomID, next.SpaceID.String(), next.RoomID, next.OperationID, true)
 	require.NoError(t, err)
@@ -634,6 +680,17 @@ func admissionFixture() Admission {
 	}
 }
 
+func withRecoveredAdmissionOwner(ctx context.Context, a Admission) context.Context {
+	return store.WithSpaceAdmissionOwnership(ctx, a.Ownership)
+}
+
+func ownAdmission(ctx context.Context, a *Admission) context.Context {
+	if a.Ownership.Token == uuid.Nil {
+		a.Ownership = store.NewSpaceAdmissionOwnership(a.OperationID)
+	}
+	return store.WithSpaceAdmissionOwnership(ctx, a.Ownership)
+}
+
 func prepareAdmission(ctx context.Context, admissions *PostgresAdmissionStore, a *Admission) error {
 	head, err := admissions.ClaimRoomHead(ctx, a.VoiceRoomID, a.SpaceID.String(), a.RoomID, a.OperationID, a.CreatedRoom)
 	if err != nil {
@@ -643,6 +700,7 @@ func prepareAdmission(ctx context.Context, admissions *PostgresAdmissionStore, a
 		return ErrAdmissionConflict
 	}
 	a.RoomGeneration = head.RoomGeneration
+	a.LifecycleGeneration = head.LifecycleGeneration
 	return admissions.Prepare(ctx, *a)
 }
 
@@ -652,12 +710,57 @@ func startSpaceMediaAdmissionPostgres(t *testing.T, ctx context.Context) *pgxpoo
 	require.True(t, ok)
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
 	migrations := filepath.Join(root, "src", "backend", "migrations", "voice_db")
-	pool := integrationtest.StartPostgres(t, ctx, "voice_space_media_admission", filepath.Join(migrations, "000001_room_lifecycle.up.sql"))
-	for _, name := range []string{"000002_redis_divergence", "000003_matchmaking_membership", "000004_game_session_rooms", "000005_game_session_close", "000006_game_session_roster_lease", "000007_t17_sdk_conversion_fence", "000008_account_voice_fence", "000009_space_lifecycle", "000010_space_media_admission"} {
+	pool := spacegatetest.StartPostgres(t, ctx, "voice_space_media_admission", filepath.Join(migrations, "000001_room_lifecycle.up.sql"))
+	for _, name := range []string{"000002_redis_divergence", "000003_matchmaking_membership", "000004_game_session_rooms", "000005_game_session_close", "000006_game_session_roster_lease", "000007_t17_sdk_conversion_fence", "000008_account_voice_fence", "000009_space_lifecycle", "000010_space_media_admission", "000013_a3_roster_outbox", "000014_space_media_p3", "000015_space_admission_ownership"} {
 		body, err := os.ReadFile(filepath.Join(migrations, name+".up.sql"))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(body))
 		require.NoError(t, err)
 	}
 	return pool
+}
+
+func fixtureBeginOwnedLeave(ctx context.Context, s *PostgresAdmissionStore, op uuid.UUID, generation string) error {
+	owner, ok := store.SpaceAdmissionOwnershipFromContext(ctx, op)
+	if !ok {
+		return ErrAdmissionConflict
+	}
+	return s.BeginOwnedRoomLeave(ctx, owner, op, generation)
+}
+
+func TestSpaceAdmissionOwnershipCutoverRejectsUnknownLiveAuthority(t *testing.T) {
+	ctx := context.Background()
+	pool := startSpaceMediaAdmissionPostgres(t, ctx)
+	s := NewPostgresAdmissionStore(pool)
+	require.NoError(t, s.CheckSchema(ctx))
+	a := admissionFixture()
+	ctx = ownAdmission(ctx, &a)
+	require.NoError(t, prepareAdmission(ctx, s, &a))
+	require.NoError(t, s.CheckSchema(ctx))
+	down, err := os.ReadFile(filepath.Join("..", "..", "..", "migrations", "voice_db", "000015_space_admission_ownership.down.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(down))
+	require.ErrorContains(t, err, "cannot remove admission ownership")
+	require.NoError(t, s.CheckSchema(ctx), "refused DOWN retains the authority schema and row")
+	_, err = pool.Exec(ctx, `DELETE FROM voice_space_media_admission_owners WHERE operation_id=$1`, a.OperationID)
+	require.NoError(t, err)
+	require.ErrorIs(t, s.CheckSchema(ctx), ErrAdmissionUnavailable, "old live writers cannot acquire fabricated ownership at startup")
+	// Model fenced, fully terminal pre-ownership history without fabricating a
+	// current token. A completed immutable fact is not a live workflow lease.
+	_, err = pool.Exec(ctx, `UPDATE voice_space_media_admissions SET state='COMMITTED',participant_state='ENDED',projection_applied_at=clock_timestamp() WHERE operation_id=$1`, a.OperationID)
+	require.NoError(t, err)
+	require.ErrorIs(t, s.CheckSchema(ctx), ErrAdmissionUnavailable, "a nonterminal ownerless head remains blocked independently of the journal row")
+	_, err = pool.Exec(ctx, `UPDATE voice_space_media_room_heads SET state='ENDED' WHERE creator_operation_id=$1`, a.OperationID)
+	require.NoError(t, err)
+	require.NoError(t, s.CheckSchema(ctx), "fully terminal applied history does not need invented workflow authority")
+}
+func fixtureCompleteOwnedLeave(ctx context.Context, s *PostgresAdmissionStore, a Admission) error {
+	owner, ok := store.SpaceAdmissionOwnershipFromContext(ctx, a.OperationID)
+	if !ok {
+		return ErrAdmissionConflict
+	}
+	if _, err := s.FenceOwnedRoomLeave(ctx, owner, a.OperationID, spacegatetest.New()); err != nil {
+		return err
+	}
+	return s.CompleteOwnedRoomLeave(ctx, owner, a)
 }

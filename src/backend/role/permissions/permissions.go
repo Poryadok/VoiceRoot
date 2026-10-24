@@ -7,36 +7,39 @@ import (
 
 // Canonical permission names — docs/microservices/role-service.md.
 const (
-	SpaceView               = "SPACE_VIEW"
-	SpaceManageSettings     = "SPACE_MANAGE_SETTINGS"
-	SpaceManageRoles        = "SPACE_MANAGE_ROLES"
-	SpaceManageInvites      = "SPACE_MANAGE_INVITES"
-	SpaceViewAuditLog       = "SPACE_VIEW_AUDIT_LOG"
-	SpaceManageCustomEmojis = "SPACE_MANAGE_CUSTOM_EMOJIS"
-	SpaceManageBots         = "SPACE_MANAGE_BOTS"
-	SpaceManageMatchmaking  = "SPACE_MANAGE_MATCHMAKING"
-	SpaceViewMemberList     = "SPACE_VIEW_MEMBER_LIST"
+	SpaceView                = "SPACE_VIEW"
+	SpaceManageSettings      = "SPACE_MANAGE_SETTINGS"
+	SpaceManageRoles         = "SPACE_MANAGE_ROLES"
+	SpaceManageInvites       = "SPACE_MANAGE_INVITES"
+	SpaceViewAuditLog        = "SPACE_VIEW_AUDIT_LOG"
+	SpaceManageCustomEmojis  = "SPACE_MANAGE_CUSTOM_EMOJIS"
+	SpaceManageBots          = "SPACE_MANAGE_BOTS"
+	SpaceManageMatchmaking   = "SPACE_MANAGE_MATCHMAKING"
+	SpaceViewMemberList      = "SPACE_VIEW_MEMBER_LIST"
+	SpaceApproveJoinRequests = "SPACE_APPROVE_JOIN_REQUESTS"
 
 	MemberKick            = "MEMBER_KICK"
 	MemberBan             = "MEMBER_BAN"
 	MemberManageNicknames = "MEMBER_MANAGE_NICKNAMES"
 	MemberAssignRoles     = "MEMBER_ASSIGN_ROLES"
 
-	TextChatCreateInSpace   = "TEXT_CHAT_CREATE_IN_SPACE"
-	TextChatView            = "TEXT_CHAT_VIEW"
-	TextChatManageSettings  = "TEXT_CHAT_MANAGE_SETTINGS"
-	TextChatSendMessages       = "TEXT_CHAT_SEND_MESSAGES"
-	TextChatSendMedia          = "TEXT_CHAT_SEND_MEDIA"
-	TextChatEmbedLinks         = "TEXT_CHAT_EMBED_LINKS"
-	TextChatAttachFiles        = "TEXT_CHAT_ATTACH_FILES"
-	TextChatAddReactions       = "TEXT_CHAT_ADD_REACTIONS"
-	TextChatUseExternalEmojis  = "TEXT_CHAT_USE_EXTERNAL_EMOJIS"
-	TextChatManageMessages     = "TEXT_CHAT_MANAGE_MESSAGES"
-	TextChatReadHistory        = "TEXT_CHAT_READ_HISTORY"
-	TextChatCreateThreads      = "TEXT_CHAT_CREATE_THREADS"
-	TextChatSendInThreads      = "TEXT_CHAT_SEND_IN_THREADS"
-	TextChatManageThreads      = "TEXT_CHAT_MANAGE_THREADS"
-	TextChatSetSlowMode        = "TEXT_CHAT_SET_SLOW_MODE"
+	TextChatCreateInSpace     = "TEXT_CHAT_CREATE_IN_SPACE"
+	TextChatView              = "TEXT_CHAT_VIEW"
+	TextChatManageSettings    = "TEXT_CHAT_MANAGE_SETTINGS"
+	TextChatSendMessages      = "TEXT_CHAT_SEND_MESSAGES"
+	TextChatSendMedia         = "TEXT_CHAT_SEND_MEDIA"
+	TextChatEmbedLinks        = "TEXT_CHAT_EMBED_LINKS"
+	TextChatAttachFiles       = "TEXT_CHAT_ATTACH_FILES"
+	TextChatAddReactions      = "TEXT_CHAT_ADD_REACTIONS"
+	TextChatUseExternalEmojis = "TEXT_CHAT_USE_EXTERNAL_EMOJIS"
+	TextChatManageMessages    = "TEXT_CHAT_MANAGE_MESSAGES"
+	TextChatReadHistory       = "TEXT_CHAT_READ_HISTORY"
+	TextChatCreateThreads     = "TEXT_CHAT_CREATE_THREADS"
+	TextChatSendInThreads     = "TEXT_CHAT_SEND_IN_THREADS"
+	TextChatManageThreads     = "TEXT_CHAT_MANAGE_THREADS"
+	TextChatSetSlowMode       = "TEXT_CHAT_SET_SLOW_MODE"
+	TextChatPostAsChat        = "TEXT_CHAT_POST_AS_CHAT"
+	TextChatAddMembers        = "TEXT_CHAT_ADD_MEMBERS"
 
 	ModerationTimeoutMembers = "MODERATION_TIMEOUT_MEMBERS"
 	ModerationManageReports  = "MODERATION_MANAGE_REPORTS"
@@ -67,48 +70,51 @@ const (
 
 // Bit positions are frozen in role_db v1 migrations.
 var permissionBits = map[string]uint64{
-	SpaceView:               1 << 0,
-	SpaceManageSettings:     1 << 1,
-	SpaceManageRoles:        1 << 2,
-	SpaceManageInvites:      1 << 3,
-	SpaceViewAuditLog:       1 << 4,
-	SpaceManageCustomEmojis: 1 << 5,
-	SpaceManageBots:         1 << 6,
-	SpaceManageMatchmaking:  1 << 7,
-	SpaceViewMemberList:     1 << 8,
-	MemberKick:              1 << 9,
-	MemberBan:               1 << 10,
-	MemberManageNicknames:   1 << 11,
-	MemberAssignRoles:       1 << 12,
-	TextChatCreateInSpace:    1 << 13,
-	TextChatView:             1 << 14,
-	TextChatSendMessages:     1 << 15,
-	TextChatManageMessages:   1 << 16,
-	VoiceJoin:                1 << 17,
-	VoiceSpeak:               1 << 18,
-	VoiceMuteOthers:          1 << 19,
-	TextChatManageSettings:   1 << 20,
-	TextChatSetSlowMode:      1 << 21,
-	ModerationTimeoutMembers: 1 << 22,
+	SpaceView:                 1 << 0,
+	SpaceManageSettings:       1 << 1,
+	SpaceManageRoles:          1 << 2,
+	SpaceManageInvites:        1 << 3,
+	SpaceViewAuditLog:         1 << 4,
+	SpaceManageCustomEmojis:   1 << 5,
+	SpaceManageBots:           1 << 6,
+	SpaceManageMatchmaking:    1 << 7,
+	SpaceViewMemberList:       1 << 8,
+	MemberKick:                1 << 9,
+	MemberBan:                 1 << 10,
+	MemberManageNicknames:     1 << 11,
+	MemberAssignRoles:         1 << 12,
+	TextChatCreateInSpace:     1 << 13,
+	TextChatView:              1 << 14,
+	TextChatSendMessages:      1 << 15,
+	TextChatManageMessages:    1 << 16,
+	VoiceJoin:                 1 << 17,
+	VoiceSpeak:                1 << 18,
+	VoiceMuteOthers:           1 << 19,
+	TextChatManageSettings:    1 << 20,
+	TextChatSetSlowMode:       1 << 21,
+	ModerationTimeoutMembers:  1 << 22,
 	TextChatMentionAllOnline:  1 << 23,
 	TextChatMentionAllInChat:  1 << 24,
 	TextChatPinMessages:       1 << 25,
-	TextChatSendMedia:          1 << 26,
-	TextChatEmbedLinks:         1 << 27,
-	TextChatAttachFiles:        1 << 28,
-	TextChatAddReactions:       1 << 29,
-	TextChatUseExternalEmojis:  1 << 30,
-	TextChatReadHistory:        1 << 31,
-	TextChatCreateThreads:      1 << 32,
-	TextChatSendInThreads:      1 << 33,
-	TextChatManageThreads:      1 << 34,
-	VoiceVideo:                 1 << 35,
-	VoiceScreenShare:           1 << 36,
-	VoiceDeafenOthers:          1 << 37,
-	VoiceMoveOthers:            1 << 38,
-	VoiceUsePTT:                1 << 39,
-	VoicePrioritySpeaker:       1 << 40,
-	ModerationManageReports:    1 << 41,
+	TextChatSendMedia:         1 << 26,
+	TextChatEmbedLinks:        1 << 27,
+	TextChatAttachFiles:       1 << 28,
+	TextChatAddReactions:      1 << 29,
+	TextChatUseExternalEmojis: 1 << 30,
+	TextChatReadHistory:       1 << 31,
+	TextChatCreateThreads:     1 << 32,
+	TextChatSendInThreads:     1 << 33,
+	TextChatManageThreads:     1 << 34,
+	VoiceVideo:                1 << 35,
+	VoiceScreenShare:          1 << 36,
+	VoiceDeafenOthers:         1 << 37,
+	VoiceMoveOthers:           1 << 38,
+	VoiceUsePTT:               1 << 39,
+	VoicePrioritySpeaker:      1 << 40,
+	ModerationManageReports:   1 << 41,
+	SpaceApproveJoinRequests:  1 << 42,
+	TextChatPostAsChat:        1 << 43,
+	TextChatAddMembers:        1 << 44,
 }
 
 // MaskFor returns the bitmask bit for a permission name.
@@ -174,13 +180,9 @@ func SystemRoles() ([]SystemRoleSpec, error) {
 	if err != nil {
 		return nil, err
 	}
-	adminMask, err := adminDefaultMask()
-	if err != nil {
-		return nil, err
-	}
 	return []SystemRoleSpec{
 		{Name: RoleOwner, Position: 4, Mask: all},
-		{Name: RoleAdmin, Position: 3, Mask: adminMask},
+		{Name: RoleAdmin, Position: 3, Mask: all},
 		{Name: RoleModerator, Position: 2, Mask: modMask},
 		{Name: RoleMember, Position: 1, Mask: memberMask},
 		{Name: RoleGuest, Position: 0, Mask: guestMask},
@@ -193,7 +195,7 @@ func memberDefaultMask() (uint64, error) {
 		TextChatSendMedia, TextChatEmbedLinks, TextChatAttachFiles, TextChatAddReactions,
 		TextChatUseExternalEmojis, TextChatReadHistory,
 		TextChatCreateInSpace, VoiceJoin, VoiceSpeak, VoiceVideo, VoiceScreenShare, VoiceUsePTT,
-		TextChatCreateThreads, TextChatSendInThreads,
+		TextChatCreateThreads, TextChatSendInThreads, TextChatAddMembers,
 	}
 	var mask uint64
 	for _, p := range parts {
@@ -212,7 +214,7 @@ func moderatorDefaultMask() (uint64, error) {
 		return 0, err
 	}
 	for _, p := range []string{
-		MemberKick, MemberBan, MemberAssignRoles, TextChatManageMessages, VoiceMuteOthers,
+		MemberKick, MemberBan, MemberAssignRoles, TextChatManageMessages, VoiceMuteOthers, SpaceApproveJoinRequests,
 		ModerationTimeoutMembers, TextChatSetSlowMode,
 		TextChatMentionAllOnline, TextChatMentionAllInChat, TextChatPinMessages,
 		TextChatManageThreads,
@@ -228,27 +230,6 @@ func moderatorDefaultMask() (uint64, error) {
 
 func guestDefaultMask() (uint64, error) {
 	return MaskFor(SpaceView)
-}
-
-// OwnerExclusiveMask returns permission bits reserved for Owner (withheld from Admin seed).
-func OwnerExclusiveMask() (uint64, error) {
-	bit, err := MaskFor(SpaceManageRoles)
-	if err != nil {
-		return 0, err
-	}
-	return bit, nil
-}
-
-func adminDefaultMask() (uint64, error) {
-	all, err := AllMask()
-	if err != nil {
-		return 0, err
-	}
-	exclusive, err := OwnerExclusiveMask()
-	if err != nil {
-		return 0, err
-	}
-	return all & ^exclusive, nil
 }
 
 // HasPermission reports whether mask includes permission name.

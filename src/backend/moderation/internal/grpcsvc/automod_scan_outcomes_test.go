@@ -1,0 +1,138 @@
+package grpcsvc
+
+import (
+	"context"
+	"testing"
+	"testing/synctest"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	moderationv1 "voice.app/voice/moderation/v1"
+	"voice/backend/moderation/internal/store"
+)
+
+func scanOutcomeCounts(t *testing.T, m *ScanMetrics) map[string]int64 {
+	t.Helper()
+	counts := map[string]int64{}
+	for _, outcome := range []string{"acknowledged", "unconfirmed", "skipped_canceled", "skipped_budget"} {
+		var metric dto.Metric
+		require.NoError(t, m.outcomes.WithLabelValues(outcome).Write(&metric))
+		counts[outcome] = int64(metric.GetCounter().GetValue())
+	}
+	return counts
+}
+
+func scanOutcomeTotal(counts map[string]int64) int64 {
+	var total int64
+	for _, value := range counts {
+		total += value
+	}
+	return total
+}
+
+func privateScanMetrics() *ScanMetrics { return NewScanMetrics(prometheus.NewRegistry()) }
+
+func TestAutoModScanOutcomes_BoundedAndSkipped(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		remaining time.Duration
+		outcome   string
+	}{
+		{"cap", time.Second, "unconfirmed"},
+		{"quarter", 80 * time.Millisecond, "unconfirmed"},
+		{"budget", 2 * time.Millisecond, "skipped_budget"},
+		{"canceled", time.Second, "skipped_canceled"},
+		{"expired", 2 * time.Millisecond, "skipped_canceled"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Virtual time isolates deadline arithmetic from scheduler delays during
+			// registry/setup work, without enlarging the production metric budget.
+			synctest.Test(t, func(t *testing.T) {
+				parent, cancel := context.WithTimeout(context.Background(), tc.remaining)
+				defer cancel()
+				if tc.name == "canceled" {
+					cancel()
+				}
+				calls := 0
+				m := privateScanMetrics()
+				s := &ModerationGRPC{AutoMod: &store.AutoModStore{}, ScanMetrics: m, scanRecorder: func(child context.Context) error {
+					calls++
+					deadline, ok := child.Deadline()
+					require.True(t, ok)
+					remaining := time.Until(deadline)
+					require.LessOrEqual(t, remaining, 50*time.Millisecond)
+					require.LessOrEqual(t, remaining, tc.remaining/4)
+					<-child.Done()
+					require.ErrorIs(t, child.Err(), context.DeadlineExceeded)
+					require.NoError(t, parent.Err(), "metric timeout must not cancel its parent")
+					return child.Err()
+				}}
+				if tc.name == "expired" {
+					<-parent.Done()
+					require.ErrorIs(t, parent.Err(), context.DeadlineExceeded)
+				}
+				response, err := s.CheckMessage(parent, &moderationv1.CheckMessageRequest{Content: "hello"})
+				require.NoError(t, err)
+				require.True(t, response.GetCheckResult().GetAllowed())
+				counts := scanOutcomeCounts(t, m)
+				require.EqualValues(t, 1, counts[tc.outcome])
+				require.EqualValues(t, 1, scanOutcomeTotal(counts))
+				if tc.outcome == "unconfirmed" {
+					require.Equal(t, 1, calls)
+				} else {
+					require.Zero(t, calls)
+				}
+			})
+		})
+	}
+}
+
+func TestAutoModScanOutcomes_ErrorPreservesValidationAndBypass(t *testing.T) {
+	calls := 0
+	m := privateScanMetrics()
+	s := &ModerationGRPC{AutoMod: &store.AutoModStore{}, ScanMetrics: m, scanRecorder: func(context.Context) error { calls++; return context.DeadlineExceeded }}
+	_, err := s.CheckMessage(context.Background(), &moderationv1.CheckMessageRequest{Content: "http://a http://b http://c", SenderProfileId: "invalid"})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Equal(t, 1, calls)
+	require.EqualValues(t, 1, scanOutcomeCounts(t, m)["unconfirmed"])
+	s.AutoMod = nil
+	response, err := s.CheckMessage(context.Background(), &moderationv1.CheckMessageRequest{Content: "http://a http://b http://c"})
+	require.NoError(t, err)
+	require.True(t, response.GetCheckResult().GetAllowed())
+	require.Equal(t, 1, calls)
+	require.EqualValues(t, 1, scanOutcomeTotal(scanOutcomeCounts(t, m)))
+}
+
+func TestAutoModScanMetrics_PrivateRegistryAndReuse(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	a, b := NewScanMetrics(reg), NewScanMetrics(reg)
+	a.outcomes.WithLabelValues("acknowledged").Inc()
+	require.EqualValues(t, 1, scanOutcomeCounts(t, b)["acknowledged"])
+	families, err := reg.Gather()
+	require.NoError(t, err)
+	require.Len(t, families, 1)
+	require.Len(t, families[0].Metric, 4)
+	for _, metric := range families[0].Metric {
+		require.Len(t, metric.Label, 1)
+		require.Equal(t, "outcome", metric.Label[0].GetName())
+	}
+}
+
+func TestAutoModScanOutcomesRegistered(t *testing.T) {
+	s := &ModerationGRPC{AutoMod: &store.AutoModStore{}}
+	response, err := s.CheckMessage(context.Background(), &moderationv1.CheckMessageRequest{Content: "hello"})
+	require.NoError(t, err)
+	require.True(t, response.GetCheckResult().GetAllowed())
+	families, err := prometheus.DefaultGatherer.Gather()
+	require.NoError(t, err)
+	for _, family := range families {
+		if family.GetName() == "moderation_automod_scan_samples_total" {
+			return
+		}
+	}
+	t.Fatal("eligible evaluation must expose terminal sample outcome")
+}

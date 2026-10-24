@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	MessagingService_SendGameEventMessage_FullMethodName         = "/voice.messaging.v1.MessagingService/SendGameEventMessage"
+	MessagingService_SendBotMessage_FullMethodName               = "/voice.messaging.v1.MessagingService/SendBotMessage"
 	MessagingService_SendMessage_FullMethodName                  = "/voice.messaging.v1.MessagingService/SendMessage"
 	MessagingService_ApplyGameMessage_FullMethodName             = "/voice.messaging.v1.MessagingService/ApplyGameMessage"
 	MessagingService_TombstoneGameMessage_FullMethodName         = "/voice.messaging.v1.MessagingService/TombstoneGameMessage"
@@ -38,6 +39,8 @@ const (
 	MessagingService_UnpinMessage_FullMethodName                 = "/voice.messaging.v1.MessagingService/UnpinMessage"
 	MessagingService_GetPinnedMessages_FullMethodName            = "/voice.messaging.v1.MessagingService/GetPinnedMessages"
 	MessagingService_UnpinMessagesBySenderInChats_FullMethodName = "/voice.messaging.v1.MessagingService/UnpinMessagesBySenderInChats"
+	MessagingService_ApplyBotChatPinRemoval_FullMethodName       = "/voice.messaging.v1.MessagingService/ApplyBotChatPinRemoval"
+	MessagingService_GetBotPurgeChatCoverage_FullMethodName      = "/voice.messaging.v1.MessagingService/GetBotPurgeChatCoverage"
 	MessagingService_ForwardMessage_FullMethodName               = "/voice.messaging.v1.MessagingService/ForwardMessage"
 	MessagingService_MarkRead_FullMethodName                     = "/voice.messaging.v1.MessagingService/MarkRead"
 	MessagingService_GetReadState_FullMethodName                 = "/voice.messaging.v1.MessagingService/GetReadState"
@@ -68,6 +71,8 @@ const (
 type MessagingServiceClient interface {
 	// @voice.security=protected;callers=service:bot
 	SendGameEventMessage(ctx context.Context, in *SendGameEventMessageRequest, opts ...grpc.CallOption) (*SendGameEventMessageResponse, error)
+	// @voice.security=protected;callers=service:bot
+	SendBotMessage(ctx context.Context, in *SendBotMessageRequest, opts ...grpc.CallOption) (*SendBotMessageResponse, error)
 	SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
 	// @voice.security=protected;callers=service:gateway
 	// T15 internal ingress: the exact device-signed compact JWS and Auth
@@ -98,6 +103,12 @@ type MessagingServiceClient interface {
 	GetPinnedMessages(ctx context.Context, in *GetPinnedMessagesRequest, opts ...grpc.CallOption) (*GetPinnedMessagesResponse, error)
 	// BOT-B: bulk unpin for bot uninstall cleanup (sender_profile_id + chat_ids).
 	UnpinMessagesBySenderInChats(ctx context.Context, in *UnpinMessagesBySenderInChatsRequest, opts ...grpc.CallOption) (*UnpinMessagesBySenderInChatsResponse, error)
+	// Durable cleanup of pins in one frozen whitelisted chat. Messages remain.
+	// @voice.security=protected;callers=service:bot
+	ApplyBotChatPinRemoval(ctx context.Context, in *ApplyBotChatPinRemovalRequest, opts ...grpc.CallOption) (*ApplyBotChatPinRemovalResponse, error)
+	// Exact sealed-manifest membership only; never a purge completion receipt.
+	// @voice.security=protected;callers=service:bot
+	GetBotPurgeChatCoverage(ctx context.Context, in *GetBotPurgeChatCoverageRequest, opts ...grpc.CallOption) (*GetBotPurgeChatCoverageResponse, error)
 	ForwardMessage(ctx context.Context, in *ForwardMessageRequest, opts ...grpc.CallOption) (*ForwardMessageResponse, error)
 	MarkRead(ctx context.Context, in *MarkReadRequest, opts ...grpc.CallOption) (*MarkReadResponse, error)
 	GetReadState(ctx context.Context, in *GetReadStateRequest, opts ...grpc.CallOption) (*GetReadStateResponse, error)
@@ -137,6 +148,16 @@ func (c *messagingServiceClient) SendGameEventMessage(ctx context.Context, in *S
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SendGameEventMessageResponse)
 	err := c.cc.Invoke(ctx, MessagingService_SendGameEventMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingServiceClient) SendBotMessage(ctx context.Context, in *SendBotMessageRequest, opts ...grpc.CallOption) (*SendBotMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendBotMessageResponse)
+	err := c.cc.Invoke(ctx, MessagingService_SendBotMessage_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -323,6 +344,26 @@ func (c *messagingServiceClient) UnpinMessagesBySenderInChats(ctx context.Contex
 	return out, nil
 }
 
+func (c *messagingServiceClient) ApplyBotChatPinRemoval(ctx context.Context, in *ApplyBotChatPinRemovalRequest, opts ...grpc.CallOption) (*ApplyBotChatPinRemovalResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyBotChatPinRemovalResponse)
+	err := c.cc.Invoke(ctx, MessagingService_ApplyBotChatPinRemoval_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingServiceClient) GetBotPurgeChatCoverage(ctx context.Context, in *GetBotPurgeChatCoverageRequest, opts ...grpc.CallOption) (*GetBotPurgeChatCoverageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetBotPurgeChatCoverageResponse)
+	err := c.cc.Invoke(ctx, MessagingService_GetBotPurgeChatCoverage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *messagingServiceClient) ForwardMessage(ctx context.Context, in *ForwardMessageRequest, opts ...grpc.CallOption) (*ForwardMessageResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ForwardMessageResponse)
@@ -495,6 +536,8 @@ func (c *messagingServiceClient) ImportSpacePurgeManifestPage(ctx context.Contex
 type MessagingServiceServer interface {
 	// @voice.security=protected;callers=service:bot
 	SendGameEventMessage(context.Context, *SendGameEventMessageRequest) (*SendGameEventMessageResponse, error)
+	// @voice.security=protected;callers=service:bot
+	SendBotMessage(context.Context, *SendBotMessageRequest) (*SendBotMessageResponse, error)
 	SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error)
 	// @voice.security=protected;callers=service:gateway
 	// T15 internal ingress: the exact device-signed compact JWS and Auth
@@ -525,6 +568,12 @@ type MessagingServiceServer interface {
 	GetPinnedMessages(context.Context, *GetPinnedMessagesRequest) (*GetPinnedMessagesResponse, error)
 	// BOT-B: bulk unpin for bot uninstall cleanup (sender_profile_id + chat_ids).
 	UnpinMessagesBySenderInChats(context.Context, *UnpinMessagesBySenderInChatsRequest) (*UnpinMessagesBySenderInChatsResponse, error)
+	// Durable cleanup of pins in one frozen whitelisted chat. Messages remain.
+	// @voice.security=protected;callers=service:bot
+	ApplyBotChatPinRemoval(context.Context, *ApplyBotChatPinRemovalRequest) (*ApplyBotChatPinRemovalResponse, error)
+	// Exact sealed-manifest membership only; never a purge completion receipt.
+	// @voice.security=protected;callers=service:bot
+	GetBotPurgeChatCoverage(context.Context, *GetBotPurgeChatCoverageRequest) (*GetBotPurgeChatCoverageResponse, error)
 	ForwardMessage(context.Context, *ForwardMessageRequest) (*ForwardMessageResponse, error)
 	MarkRead(context.Context, *MarkReadRequest) (*MarkReadResponse, error)
 	GetReadState(context.Context, *GetReadStateRequest) (*GetReadStateResponse, error)
@@ -562,6 +611,9 @@ type UnimplementedMessagingServiceServer struct{}
 
 func (UnimplementedMessagingServiceServer) SendGameEventMessage(context.Context, *SendGameEventMessageRequest) (*SendGameEventMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendGameEventMessage not implemented")
+}
+func (UnimplementedMessagingServiceServer) SendBotMessage(context.Context, *SendBotMessageRequest) (*SendBotMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendBotMessage not implemented")
 }
 func (UnimplementedMessagingServiceServer) SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendMessage not implemented")
@@ -616,6 +668,12 @@ func (UnimplementedMessagingServiceServer) GetPinnedMessages(context.Context, *G
 }
 func (UnimplementedMessagingServiceServer) UnpinMessagesBySenderInChats(context.Context, *UnpinMessagesBySenderInChatsRequest) (*UnpinMessagesBySenderInChatsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnpinMessagesBySenderInChats not implemented")
+}
+func (UnimplementedMessagingServiceServer) ApplyBotChatPinRemoval(context.Context, *ApplyBotChatPinRemovalRequest) (*ApplyBotChatPinRemovalResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyBotChatPinRemoval not implemented")
+}
+func (UnimplementedMessagingServiceServer) GetBotPurgeChatCoverage(context.Context, *GetBotPurgeChatCoverageRequest) (*GetBotPurgeChatCoverageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetBotPurgeChatCoverage not implemented")
 }
 func (UnimplementedMessagingServiceServer) ForwardMessage(context.Context, *ForwardMessageRequest) (*ForwardMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ForwardMessage not implemented")
@@ -700,6 +758,24 @@ func _MessagingService_SendGameEventMessage_Handler(srv interface{}, ctx context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServiceServer).SendGameEventMessage(ctx, req.(*SendGameEventMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessagingService_SendBotMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendBotMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).SendBotMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_SendBotMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).SendBotMessage(ctx, req.(*SendBotMessageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1028,6 +1104,42 @@ func _MessagingService_UnpinMessagesBySenderInChats_Handler(srv interface{}, ctx
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MessagingService_ApplyBotChatPinRemoval_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyBotChatPinRemovalRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).ApplyBotChatPinRemoval(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_ApplyBotChatPinRemoval_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).ApplyBotChatPinRemoval(ctx, req.(*ApplyBotChatPinRemovalRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessagingService_GetBotPurgeChatCoverage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBotPurgeChatCoverageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).GetBotPurgeChatCoverage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_GetBotPurgeChatCoverage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).GetBotPurgeChatCoverage(ctx, req.(*GetBotPurgeChatCoverageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MessagingService_ForwardMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ForwardMessageRequest)
 	if err := dec(in); err != nil {
@@ -1328,6 +1440,10 @@ var MessagingService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MessagingService_SendGameEventMessage_Handler,
 		},
 		{
+			MethodName: "SendBotMessage",
+			Handler:    _MessagingService_SendBotMessage_Handler,
+		},
+		{
 			MethodName: "SendMessage",
 			Handler:    _MessagingService_SendMessage_Handler,
 		},
@@ -1398,6 +1514,14 @@ var MessagingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UnpinMessagesBySenderInChats",
 			Handler:    _MessagingService_UnpinMessagesBySenderInChats_Handler,
+		},
+		{
+			MethodName: "ApplyBotChatPinRemoval",
+			Handler:    _MessagingService_ApplyBotChatPinRemoval_Handler,
+		},
+		{
+			MethodName: "GetBotPurgeChatCoverage",
+			Handler:    _MessagingService_GetBotPurgeChatCoverage_Handler,
 		},
 		{
 			MethodName: "ForwardMessage",

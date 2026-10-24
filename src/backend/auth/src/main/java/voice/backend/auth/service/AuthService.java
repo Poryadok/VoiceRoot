@@ -37,6 +37,26 @@ import voice.backend.auth.sessionepoch.PreparedSessionEpoch;
 import voice.backend.auth.sessionepoch.SessionEpochIssuanceGate;
 
 public class AuthService {
+  private voice.backend.auth.releasepolicy.ReleasePolicy releasePolicy =
+      voice.backend.auth.releasepolicy.ReleasePolicy.development();
+  private boolean releasePolicyConfigured;
+
+  public synchronized void configureReleasePolicy(voice.backend.auth.releasepolicy.ReleasePolicy policy) {
+    if (releasePolicyConfigured) throw new IllegalStateException("release policy already configured");
+    this.releasePolicy = java.util.Objects.requireNonNull(policy);
+    releasePolicyConfigured = true;
+  }
+
+  public voice.backend.auth.releasepolicy.ReleasePolicy releasePolicy() { return releasePolicy; }
+
+  private void requirePhoneCapability(String phone) {
+    if (phone != null && !phone.isBlank() && !releasePolicy.allowsPhoneAuth())
+      throw new AuthException("capability_unavailable");
+  }
+
+  private void requireIssuanceCapability(Account account) {
+    if (account.email() == null || account.email().isBlank()) requirePhoneCapability(account.phone());
+  }
   /** Max opaque encrypted blob size for E2E key backup (512 KiB). */
   public static final int E2E_KEY_BACKUP_MAX_BLOB_BYTES = 512 * 1024;
   static final Duration ACCOUNT_RESTORE_GRACE = Duration.ofDays(30);
@@ -140,6 +160,8 @@ public class AuthService {
         mailSender,
         sessionEpochFloors);
     copy.securityTransactions = securityTransactions;
+    copy.configureReleasePolicy(releasePolicy);
+    copy.observations = observations;
     if (deletionOperations != null && deletionTokenCodec != null && deletionEventPublisher != null
         && deletionStarter != null && deletionFloorWorker != null && deletionEventWorker != null) {
       copy.configureAccountDeletion(
@@ -179,6 +201,32 @@ public class AuthService {
     this.securityTransactions = java.util.Objects.requireNonNull(transactions, "transactions");
   }
 
+  private voice.backend.auth.events.AuthObservations observations = new voice.backend.auth.events.AuthObservations() {};
+
+  public void configureObservations(voice.backend.auth.events.AuthObservations observations) {
+    this.observations = java.util.Objects.requireNonNull(observations, "observations");
+  }
+
+  private void observeAfterCommit(Runnable observation) {
+    Runnable safe = () -> {
+      try { observation.run(); } catch (RuntimeException ignored) {
+        // An observation cannot change an already successful Auth result.
+      }
+    };
+    try {
+      if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+            new org.springframework.transaction.support.TransactionSynchronization() {
+              @Override public void afterCommit() { safe.run(); }
+            });
+      } else {
+        safe.run();
+      }
+    } catch (RuntimeException ignored) {
+      // An unavailable transaction callback drops the non-authoritative observation.
+    }
+  }
+
   private <T> T securityTransaction(Supplier<T> operation) {
     TransactionTemplate transactions = securityTransactions;
     if (transactions != null) {
@@ -190,6 +238,7 @@ public class AuthService {
   }
 
   public AuthSession register(RegisterCommand command) {
+    requirePhoneCapability(command.phone());
     if (command.registrationIntentId() != null) {
       if (command.guest()) throw new AuthException("validation_failed");
       if (registrationSessionEpochPreparer == null) throw new AuthException("auth_unavailable");
@@ -232,10 +281,14 @@ public class AuthService {
       throw new AuthException("registration_conflict");
     }
     touchLastOnline(account);
-    return issueSession(account, prepared, command.deviceInfoJson());
+    AuthSession session = issueSession(account, prepared, command.deviceInfoJson());
+    String method = command.guest() ? "guest" : email != null ? "email" : "phone";
+    observeAfterCommit(() -> observations.registered(account.id(), account.type(), method));
+    return session;
   }
 
   public synchronized AuthSession login(LoginCommand command) {
+    requirePhoneCapability(command.phone());
     try {
       Account observed = findLoginAccount(command.email(), command.phone());
       LoginPreparation preparation = securityTransaction(() -> {
@@ -278,6 +331,7 @@ public class AuthService {
         return issueSessionForProfile(current, preparation.epoch(), profileId, command.deviceInfoJson());
       });
       recordAuthLoginMetric(true);
+      observeAfterCommit(() -> observations.loggedIn(observed.id(), command.deviceInfoJson()));
       return session;
     } catch (RuntimeException ex) {
       recordAuthLoginMetric(false);
@@ -348,6 +402,7 @@ public class AuthService {
     Account account = accounts.findById(current.accountId().toString())
         .orElseThrow(() -> new AuthException("invalid_token"));
     ensureActive(account);
+    requireIssuanceCapability(account);
     return account;
   }
 
@@ -385,6 +440,7 @@ public class AuthService {
       TokenClaims claims = jwtService.validate(stripBearer(command.accessToken()));
       tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
     }
+    observeAfterCommit(() -> observations.loggedOut(current.accountId(), current.deviceInfoJson()));
   }
 
   public TokenClaims validate(String accessToken) {
@@ -609,13 +665,16 @@ public class AuthService {
       if (account.totpSecret() == null || account.totpSecret().length == 0) {
         throw new AuthException("totp_not_enrolled");
       }
+      requireIssuanceCapability(account);
       if (!totpService.verifyEncrypted(account.totpSecret(), totpCode)) {
         throw new AuthException("invalid_totp");
       }
       PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
       accounts.setTotpEnabled(account.id(), true);
       Account fresh = accounts.findById(account.id().toString()).orElse(account);
-      return issueSession(fresh, prepared, "{}");
+      AuthSession session = issueSession(fresh, prepared, "{}");
+      if (!account.totpEnabled()) observeAfterCommit(() -> observations.twoFaEnabled(account.id()));
+      return session;
     });
   }
 
@@ -781,6 +840,7 @@ public class AuthService {
       if (currentClaims.sessionEpoch() < account.sessionEpoch()) {
         throw new AuthException("token_revoked");
       }
+      requireIssuanceCapability(account);
       PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
       tokenBlacklist.revoke(currentClaims.jti(), jwtService.ttl(currentClaims));
       return issueSessionForProfile(account, prepared, profileId,
@@ -801,6 +861,7 @@ public class AuthService {
         throw new AuthException("token_revoked");
       }
       ensureAnonymousGuest(account);
+      requirePhoneCapability(command.phone());
       if (command.password() == null || command.password().length() < 8) {
         throw new AuthException("validation_failed");
       }
@@ -893,6 +954,8 @@ public class AuthService {
     if (operation.state() == AccountDeletionState.PENDING_FLOOR) {
       deletionFloorWorker.recoverOperation(operation.operationId(), Duration.ofSeconds(30));
       operation = operationForDeletedAccount(account);
+      operation = AccountDeletionCompletion.awaitConcurrentWorker(
+          operation, () -> operationForDeletedAccount(account), Duration.ofSeconds(2), clock);
       if (operation.state() == AccountDeletionState.PENDING_FLOOR) {
         throw new SessionEpochFloorUnavailableException("account deletion epoch floor is not durably sealed");
       }
@@ -910,6 +973,8 @@ public class AuthService {
     if (operation.state() == AccountDeletionState.PENDING_EVENT) {
       deletionEventWorker.recoverOperation(operation.operationId(), Duration.ofSeconds(30));
       operation = operationForDeletedAccount(account);
+      operation = AccountDeletionCompletion.awaitConcurrentWorker(
+          operation, () -> operationForDeletedAccount(account), Duration.ofSeconds(2), clock);
       if (operation.state() != AccountDeletionState.COMPLETED) {
         throw new IllegalStateException("account deletion event has not been durably acknowledged");
       }
@@ -955,6 +1020,7 @@ public class AuthService {
             .findById(peekedAccountId.toString())
             .orElseThrow(() -> new AuthException("invalid_token"));
     ensureRestorable(account);
+    requireIssuanceCapability(account);
     PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
     UUID consumedAccountId =
         restoreTokenStore
@@ -981,7 +1047,7 @@ public class AuthService {
       throw new AuthException("validation_failed");
     }
     Instant precheckNow = Instant.now(clock);
-    if (account.deletedAt().plus(ACCOUNT_RESTORE_GRACE).isBefore(precheckNow)) {
+    if (!account.deletedAt().plus(ACCOUNT_RESTORE_GRACE).isAfter(precheckNow)) {
       throw new AuthException("account_inactive");
     }
   }
@@ -1066,6 +1132,7 @@ public class AuthService {
   }
 
   private AuthSession issueSession(Account account, PreparedSessionEpoch prepared, String deviceInfoJson) {
+    requireIssuanceCapability(account);
     String profileId = primaryProfileProvisioner.ensurePrimaryProfile(
         account.id(), displayHint(account), "guest".equals(account.type()));
     return issueSessionForProfile(account, prepared, profileId, deviceInfoJson);
@@ -1073,6 +1140,7 @@ public class AuthService {
 
   private AuthSession issueSessionForProfile(
       Account account, PreparedSessionEpoch prepared, String profileId, String deviceInfoJson) {
+    requireIssuanceCapability(account);
     if (!account.id().equals(prepared.accountId())) {
       throw new IllegalStateException("prepared session epoch account mismatch");
     }

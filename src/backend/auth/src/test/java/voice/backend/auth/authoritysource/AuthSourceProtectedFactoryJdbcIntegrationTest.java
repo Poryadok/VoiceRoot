@@ -49,6 +49,7 @@ class AuthSourceProtectedFactoryJdbcIntegrationTest {
       var jdbcSource=new DriverManagerDataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword());
       Flyway.configure().dataSource(jdbcSource).locations("classpath:db/migration").load().migrate();
       var jdbc=new JdbcTemplate(jdbcSource);var account=UUID.randomUUID();
+      assertThat(jdbc.queryForObject("SELECT revision FROM auth_authority_revision WHERE singleton",Long.class)).isEqualTo(2);
       jdbc.update("INSERT INTO accounts(id,password_hash,type,status) VALUES(?,'private fixture','regular','active')",account);
       var databaseCalls=new AtomicInteger();
       DataSource counting=new DelegatingDataSource(jdbcSource){@Override public java.sql.Connection getConnection()throws java.sql.SQLException{databaseCalls.incrementAndGet();return super.getConnection();}};
@@ -60,10 +61,12 @@ class AuthSourceProtectedFactoryJdbcIntegrationTest {
           .withProperty("S2S_JWKS_URLS_JSON","{\"federation\":\"https://localhost:"+https.getAddress().getPort()+"/jwks\"}");
       var beans=new StaticListableBeanFactory(Map.of("owningDataSource",counting));
       server=new AuthAuthorityGrpcServer(env,beans.getBeanProvider(DataSource.class));
-      jdbc.execute("UPDATE flyway_schema_history SET success=false WHERE version='26'");
+      jdbc.execute("UPDATE flyway_schema_history SET success=false WHERE version='31'");
       assertThatThrownBy(server::start).isInstanceOf(IllegalStateException.class);assertThat(server.port()).isEqualTo(-1);
-      jdbc.execute("UPDATE flyway_schema_history SET success=true WHERE version='26'");
+      jdbc.execute("UPDATE flyway_schema_history SET success=true WHERE version='31'");
       server.start();assertThat(server.isRunning()).isTrue();int before=databaseCalls.get();
+      assertThat(jdbc.queryForObject("SELECT revision FROM auth_authority_revision WHERE singleton",Long.class))
+          .as("startup is read-only; the current migration plus account INSERT advanced the clock to 3").isEqualTo(3);
       var clientTls=GrpcSslContexts.forClient().trustManager(certificate.toFile()).keyManager(certificate.toFile(),key.toFile()).build();
       var channel=NettyChannelBuilder.forAddress("localhost",server.port()).sslContext(clientTls).build();channels.add(channel);
       var request=Authority.ReadSnapshotRequest.newBuilder().setScope(Authority.SourceScope.newBuilder().setSchemaVersion(1).setSpaceId(UUID.randomUUID().toString()).addAccountIds(account.toString())).build();
@@ -89,9 +92,9 @@ class AuthSourceProtectedFactoryJdbcIntegrationTest {
       jdbc.update("UPDATE accounts SET status='deleted',deleted_at=clock_timestamp() WHERE id=?",account);
       var deleted=call(channel,signed(signing,request),request);
       assertThat(new ObjectMapper().readTree(deleted.getCanonicalState().toByteArray()).get("accounts").get(0).get("deleted").booleanValue()).isTrue();
-      jdbc.execute("UPDATE flyway_schema_history SET success=false WHERE version='26'");
+      jdbc.execute("UPDATE flyway_schema_history SET success=false WHERE version='31'");
       assertThatThrownBy(()->call(channel,signed(signing,request),request)).isInstanceOf(StatusRuntimeException.class).satisfies(ex->assertThat(((StatusRuntimeException)ex).getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE));
-      jdbc.execute("UPDATE flyway_schema_history SET success=true WHERE version='26'");
+      jdbc.execute("UPDATE flyway_schema_history SET success=true WHERE version='31'");
       int maintenance=databaseCalls.get();redis.stop();
       assertThatThrownBy(()->call(channel,signed(signing,request),request)).isInstanceOf(StatusRuntimeException.class).satisfies(ex->assertThat(((StatusRuntimeException)ex).getStatus().getCode()).isEqualTo(Status.Code.UNAUTHENTICATED));
       assertThat(databaseCalls).as("unavailable replay must prevent database entry").hasValue(maintenance);

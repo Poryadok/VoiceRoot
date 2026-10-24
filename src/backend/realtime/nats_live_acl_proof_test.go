@@ -10,7 +10,7 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-func startLiveACLProofServer(t *testing.T, allowAdjacent, allowCreate, allowAck bool) (*nats.Conn, *nats.Conn, *nats.Conn, *nats.Conn) {
+func startLiveACLProofServer(t *testing.T, allowAdjacent, allowCreate, allowAck bool) (*nats.Conn, *nats.Conn, *nats.Conn, *nats.Conn, <-chan error) {
 	t.Helper()
 	rtPub := []string{"$JS.API.CONSUMER.INFO.social_events.rt_realtime1_friend_request"}
 	if allowAck {
@@ -61,7 +61,8 @@ func startLiveACLProofServer(t *testing.T, allowAdjacent, allowCreate, allowAck 
 	}
 	admin := connect("admin", "admin")
 	rt := connect("realtime-leaf", "realtime-leaf", nats.CustomInboxPrefix("_INBOX.voice.realtime"), nats.PermissionErrOnSubscribe(true))
-	hubRT := connect("realtime", "realtime", nats.CustomInboxPrefix("_INBOX.voice.realtime"), nats.PermissionErrOnSubscribe(true))
+	hubErrors := make(chan error, 4)
+	hubRT := connect("realtime", "realtime", nats.CustomInboxPrefix("_INBOX.voice.realtime"), nats.PermissionErrOnSubscribe(true), liveACLProofErrorHandler(hubErrors))
 	proof := connect("proof", "proof", nats.CustomInboxPrefix("_INBOX.voice.nats-proof"))
 	js, err := admin.JetStream()
 	if err != nil {
@@ -77,12 +78,12 @@ func startLiveACLProofServer(t *testing.T, allowAdjacent, allowCreate, allowAck 
 	}); err != nil {
 		t.Fatal(err)
 	}
-	return admin, rt, hubRT, proof
+	return admin, rt, hubRT, proof, hubErrors
 }
 
 func TestLiveACLProofSucceedsAndRemovesOnlyMarker(t *testing.T) {
-	admin, rt, hubRT, proof := startLiveACLProofServer(t, false, false, true)
-	if err := runNATSLiveACLProof(rt, hubRT, proof, "realtime-1"); err != nil {
+	admin, rt, hubRT, proof, hubErrors := startLiveACLProofServer(t, false, false, true)
+	if err := runNATSLiveACLProof(rt, hubRT, proof, "realtime-1", hubErrors); err != nil {
 		t.Fatalf("proof: %v", err)
 	}
 	js, _ := admin.JetStream()
@@ -96,8 +97,8 @@ func TestLiveACLProofSucceedsAndRemovesOnlyMarker(t *testing.T) {
 }
 
 func TestLiveACLProofRejectsAdjacentSubscriptionGrant(t *testing.T) {
-	_, rt, hubRT, proof := startLiveACLProofServer(t, true, false, true)
-	err := runNATSLiveACLProof(rt, hubRT, proof, "realtime-1")
+	_, rt, hubRT, proof, hubErrors := startLiveACLProofServer(t, true, false, true)
+	err := runNATSLiveACLProof(rt, hubRT, proof, "realtime-1", hubErrors)
 	var failure *liveACLProofFailure
 	if !errors.As(err, &failure) || failure.code != "adjacent_sub_unproven" {
 		t.Fatalf("failure = %v, want adjacent_sub_unproven", err)
@@ -105,8 +106,8 @@ func TestLiveACLProofRejectsAdjacentSubscriptionGrant(t *testing.T) {
 }
 
 func TestLiveACLProofRejectsConsumerCreateGrant(t *testing.T) {
-	_, rt, hubRT, proof := startLiveACLProofServer(t, false, true, true)
-	err := runNATSLiveACLProof(rt, hubRT, proof, "realtime-1")
+	_, rt, hubRT, proof, hubErrors := startLiveACLProofServer(t, false, true, true)
+	err := runNATSLiveACLProof(rt, hubRT, proof, "realtime-1", hubErrors)
 	var failure *liveACLProofFailure
 	if !errors.As(err, &failure) || failure.code != "consumer_create_allowed" {
 		t.Fatalf("failure = %v, want consumer_create_allowed", err)
@@ -114,12 +115,12 @@ func TestLiveACLProofRejectsConsumerCreateGrant(t *testing.T) {
 }
 
 func TestLiveACLProofRequiresEmptyStreamBeforePublishing(t *testing.T) {
-	admin, rt, hubRT, proof := startLiveACLProofServer(t, false, false, true)
+	admin, rt, hubRT, proof, hubErrors := startLiveACLProofServer(t, false, false, true)
 	js, _ := admin.JetStream()
 	if _, err := js.Publish("social.friend_request", []byte("historical")); err != nil {
 		t.Fatal(err)
 	}
-	err := runNATSLiveACLProof(rt, hubRT, proof, "realtime-1")
+	err := runNATSLiveACLProof(rt, hubRT, proof, "realtime-1", hubErrors)
 	var failure *liveACLProofFailure
 	if !errors.As(err, &failure) || failure.code != "stream_not_empty" {
 		t.Fatalf("failure = %v, want stream_not_empty", err)
@@ -134,7 +135,7 @@ func TestLiveACLProofRequiresEmptyStreamBeforePublishing(t *testing.T) {
 }
 
 func TestLiveACLProofRejectsDeletedHistoricalSequence(t *testing.T) {
-	admin, rt, hubRT, proof := startLiveACLProofServer(t, false, false, true)
+	admin, rt, hubRT, proof, hubErrors := startLiveACLProofServer(t, false, false, true)
 	js, _ := admin.JetStream()
 	ack, err := js.Publish("social.friend_request", []byte("historical"))
 	if err != nil {
@@ -150,7 +151,7 @@ func TestLiveACLProofRejectsDeletedHistoricalSequence(t *testing.T) {
 	if info.State.Msgs != 0 || info.State.LastSeq == 0 {
 		t.Fatalf("fixture not empty with history: msgs=%d last=%d", info.State.Msgs, info.State.LastSeq)
 	}
-	err = runNATSLiveACLProof(rt, hubRT, proof, "realtime-1")
+	err = runNATSLiveACLProof(rt, hubRT, proof, "realtime-1", hubErrors)
 	var failure *liveACLProofFailure
 	if !errors.As(err, &failure) || failure.code != "stream_not_empty" {
 		t.Fatalf("failure = %v, want stream_not_empty", err)
@@ -158,8 +159,8 @@ func TestLiveACLProofRejectsDeletedHistoricalSequence(t *testing.T) {
 }
 
 func TestLiveACLProofCleansMarkerAfterRejectedHubAck(t *testing.T) {
-	admin, rt, hubRT, proof := startLiveACLProofServer(t, false, false, false)
-	err := runNATSLiveACLProof(rt, hubRT, proof, "realtime-1")
+	admin, rt, hubRT, proof, hubErrors := startLiveACLProofServer(t, false, false, false)
+	err := runNATSLiveACLProof(rt, hubRT, proof, "realtime-1", hubErrors)
 	var failure *liveACLProofFailure
 	if !errors.As(err, &failure) || failure.code != "hub_ack_failed" {
 		t.Fatalf("failure = %v, want hub_ack_failed", err)

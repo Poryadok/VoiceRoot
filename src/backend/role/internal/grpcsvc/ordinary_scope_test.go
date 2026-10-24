@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
 	"testing"
 	"time"
@@ -10,13 +11,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	chatv1 "voice.app/voice/chat/v1"
 	rolev1 "voice.app/voice/role/v1"
 	"voice/backend/role/internal/authctx"
+	"voice/backend/role/internal/principalgrpc"
 	"voice/backend/role/internal/roleevents"
 	"voice/backend/role/internal/store"
 	"voice/backend/role/permissions"
@@ -199,6 +203,41 @@ func ordinaryHandlerCases() []ordinaryHandlerCase {
 	}
 }
 
+type ordinaryUnimplementedCase struct {
+	name        string
+	directCode  codes.Code
+	direct      func(ordinaryHandlerFixture) (any, error)
+	networkCode codes.Code
+	network     func(context.Context, rolev1.RoleServiceClient, ordinaryHandlerFixture) (any, error)
+}
+
+// Protected receivers reject direct and ordinary-network calls without their
+// verified authority. Global terminal registration remains an unimplemented stub.
+func ordinaryUnimplementedCases() []ordinaryUnimplementedCase {
+	return []ordinaryUnimplementedCase{
+		{"EnsureDefaultMemberRole", codes.Unauthenticated, func(f ordinaryHandlerFixture) (any, error) {
+			return f.svc.EnsureDefaultMemberRole(f.ctx, &rolev1.EnsureDefaultMemberRoleRequest{})
+		}, codes.Unavailable, func(ctx context.Context, client rolev1.RoleServiceClient, _ ordinaryHandlerFixture) (any, error) {
+			return client.EnsureDefaultMemberRole(ctx, &rolev1.EnsureDefaultMemberRoleRequest{})
+		}},
+		{"RemoveMemberRoles", codes.Unauthenticated, func(f ordinaryHandlerFixture) (any, error) {
+			return f.svc.RemoveMemberRoles(f.ctx, &rolev1.RemoveMemberRolesRequest{})
+		}, codes.Unavailable, func(ctx context.Context, client rolev1.RoleServiceClient, _ ordinaryHandlerFixture) (any, error) {
+			return client.RemoveMemberRoles(ctx, &rolev1.RemoveMemberRolesRequest{})
+		}},
+		{"ApplyBotInstallationRemoval", codes.PermissionDenied, func(f ordinaryHandlerFixture) (any, error) {
+			return f.svc.ApplyBotInstallationRemoval(f.ctx, &rolev1.ApplyBotInstallationRemovalRequest{ProtocolVersion: 1, BotId: uuid.NewString(), SpaceId: f.space.String(), ActorProfileId: f.owner.String()})
+		}, codes.Unavailable, func(ctx context.Context, client rolev1.RoleServiceClient, f ordinaryHandlerFixture) (any, error) {
+			return client.ApplyBotInstallationRemoval(ctx, &rolev1.ApplyBotInstallationRemovalRequest{ProtocolVersion: 1, BotId: uuid.NewString(), SpaceId: f.space.String(), ActorProfileId: f.owner.String()})
+		}},
+		{"RegisterBotGlobalTerminal", codes.Unimplemented, func(f ordinaryHandlerFixture) (any, error) {
+			return f.svc.RegisterBotGlobalTerminal(f.ctx, &rolev1.RegisterBotGlobalTerminalRequest{ProtocolVersion: 1, BotId: uuid.NewString(), DecisionId: uuid.NewString()})
+		}, codes.Unimplemented, func(ctx context.Context, client rolev1.RoleServiceClient, _ ordinaryHandlerFixture) (any, error) {
+			return client.RegisterBotGlobalTerminal(ctx, &rolev1.RegisterBotGlobalTerminalRequest{ProtocolVersion: 1, BotId: uuid.NewString(), DecisionId: uuid.NewString()})
+		}},
+	}
+}
+
 func TestOrdinaryHandlerFences(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires PostgreSQL")
@@ -225,12 +264,51 @@ func TestOrdinaryHandlerFences(t *testing.T) {
 		"CheckGameSessionGrant":   true,
 		"ResolveVoiceRoomGrants":  true,
 	}
-	trustedUnregistered := map[string]bool{}
+	// Classification comes from executable direct/network cases rather than an
+	// unchecked exclusion list. A new descriptor method still fails completeness.
+	unimplemented := ordinaryUnimplementedCases()
+	trustedUnregistered := make(map[string]bool)
+	for _, tc := range unimplemented {
+		require.False(t, trustedUnregistered[tc.name], tc.name)
+		require.False(t, covered[tc.name], tc.name)
+		trustedUnregistered[tc.name] = true
+	}
 	for _, method := range rolev1.RoleService_ServiceDesc.Methods {
 		require.True(t, covered[method.MethodName] || excluded[method.MethodName] || trustedServiceMethods[method.MethodName] || trustedUnregistered[method.MethodName], method.MethodName)
 	}
 	f := newOrdinaryHandlerFixture(t, ctx, pool)
 	prepareOrdinaryHandlerFixture(t, ctx, pool, f)
+	t.Run("unimplemented methods cannot mutate through direct or ordinary network calls", func(t *testing.T) {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		server := grpc.NewServer(grpc.UnaryInterceptor(principalgrpc.OwnershipUnaryInterceptor(nil)))
+		rolev1.RegisterRoleServiceServer(server, f.svc)
+		done := make(chan error, 1)
+		go func() { done <- server.Serve(listener) }()
+		defer func() { server.Stop(); <-done }()
+		conn, err := grpc.NewClient(listener.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		require.NoError(t, err)
+		defer func() { require.NoError(t, conn.Close()) }()
+		client := rolev1.NewRoleServiceClient(conn)
+		call := metadata.NewOutgoingContext(ctx, metadata.Pairs(authctx.HeaderProfileID, f.owner.String(), "authorization", "Bearer forged", "x-request-id", uuid.NewString()))
+		for _, tc := range unimplemented {
+			t.Run(tc.name, func(t *testing.T) {
+				before := ordinaryHandlerSnapshot(t, ctx, pool)
+				response, err := tc.network(call, client, f)
+				require.Equal(t, tc.networkCode, status.Code(err))
+				require.Nil(t, response)
+				forged := f
+				forged.ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(authctx.HeaderProfileID, f.owner.String(), "authorization", "Bearer forged", "x-request-id", uuid.NewString()))
+				response, err = tc.direct(forged)
+				require.Equal(t, tc.directCode, status.Code(err), "unverified direct call cannot exercise authority")
+				require.Nil(t, response)
+				require.Equal(t, before, ordinaryHandlerSnapshot(t, ctx, pool))
+				count, visibilityErrors := f.events.snapshot()
+				require.Zero(t, count)
+				require.Empty(t, visibilityErrors)
+			})
+		}
+	})
 	for _, tc := range cases {
 		t.Run("prepared/"+tc.name, func(t *testing.T) {
 			before := ordinaryHandlerSnapshot(t, ctx, pool)

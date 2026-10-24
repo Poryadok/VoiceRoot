@@ -1,8 +1,23 @@
-FROM postgres:16-alpine
+ARG GO_BUILD_IMAGE=golang:1.26.5-bookworm
+FROM migrate/migrate@sha256:f21c436af23c282f4516b00ba3e93bccf5c5fe5cd52530fd5c319a936998f539 AS native-driver
+FROM ${GO_BUILD_IMAGE} AS native-build
+ARG SOURCE_REVISION
+WORKDIR /src
+COPY src/backend /src
+COPY --from=native-driver /usr/local/bin/migrate /usr/local/bin/migrate
+ENV GOMAXPROCS=2 GOMEMLIMIT=2GiB
+WORKDIR /src/space
+RUN SOURCE_SHA="$(cd /src && find . -type f -name '*.go' ! -name '*_test.go' -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)" \
+ && MIGRATE_SHA="$(sha256sum /usr/local/bin/migrate | cut -d' ' -f1)" \
+ && CGO_ENABLED=0 go build -p 2 -trimpath -ldflags="-s -w -X voice/backend/space/internal/nativeinstaller.SourceRevision=${SOURCE_REVISION} -X voice/backend/space/internal/nativeinstaller.BuildSourceSHA256=${SOURCE_SHA} -X voice/backend/space/internal/nativeinstaller.MigrateSHA256=${MIGRATE_SHA}" -o /native-migrate ./cmd/native-migrate
+
+FROM postgres:18-alpine
+COPY --from=native-build /native-migrate /usr/local/bin/native-migrate
+COPY --from=native-driver /usr/local/bin/migrate /usr/local/bin/native-space-migrate-driver
 
 ARG MIGRATE_VERSION=4.18.1
 
-RUN apk add --no-cache curl bash \
+RUN apk add --no-cache curl bash python3 \
   && ARCH="$(uname -m)" \
   && case "$ARCH" in \
        x86_64) MARCH=amd64 ;; \
@@ -13,7 +28,8 @@ RUN apk add --no-cache curl bash \
      | tar xz -C /usr/local/bin migrate \
   && chmod +x /usr/local/bin/migrate
 
-COPY ensure-compose-schema.sh compose-migrate-dbs.sh /usr/local/bin/
+COPY docker/postgres/ensure-compose-schema.sh docker/postgres/compose-migrate-dbs.sh /usr/local/bin/
+COPY scripts/dev/provision-bot-membership-source.py /usr/local/bin/provision-bot-membership-source.py
 RUN sed -i 's/\r$//' /usr/local/bin/ensure-compose-schema.sh /usr/local/bin/compose-migrate-dbs.sh \
   && chmod +x /usr/local/bin/ensure-compose-schema.sh /usr/local/bin/compose-migrate-dbs.sh
 

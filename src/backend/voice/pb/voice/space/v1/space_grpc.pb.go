@@ -19,11 +19,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	SpaceService_GetMemberAdmissionAuthority_FullMethodName       = "/voice.space.v1.SpaceService/GetMemberAdmissionAuthority"
 	SpaceService_CreateSpace_FullMethodName                       = "/voice.space.v1.SpaceService/CreateSpace"
 	SpaceService_UpdateSpace_FullMethodName                       = "/voice.space.v1.SpaceService/UpdateSpace"
 	SpaceService_UpdateSpaceMmConfig_FullMethodName               = "/voice.space.v1.SpaceService/UpdateSpaceMmConfig"
 	SpaceService_DeleteSpace_FullMethodName                       = "/voice.space.v1.SpaceService/DeleteSpace"
 	SpaceService_GetSpace_FullMethodName                          = "/voice.space.v1.SpaceService/GetSpace"
+	SpaceService_ValidateRoleOverrideTarget_FullMethodName        = "/voice.space.v1.SpaceService/ValidateRoleOverrideTarget"
 	SpaceService_ListMySpaces_FullMethodName                      = "/voice.space.v1.SpaceService/ListMySpaces"
 	SpaceService_SearchPublicSpaces_FullMethodName                = "/voice.space.v1.SpaceService/SearchPublicSpaces"
 	SpaceService_CreateVoiceRoom_FullMethodName                   = "/voice.space.v1.SpaceService/CreateVoiceRoom"
@@ -44,11 +46,19 @@ const (
 	SpaceService_ListInvites_FullMethodName                       = "/voice.space.v1.SpaceService/ListInvites"
 	SpaceService_JoinByInvite_FullMethodName                      = "/voice.space.v1.SpaceService/JoinByInvite"
 	SpaceService_JoinSpace_FullMethodName                         = "/voice.space.v1.SpaceService/JoinSpace"
+	SpaceService_StartJoinAttempt_FullMethodName                  = "/voice.space.v1.SpaceService/StartJoinAttempt"
+	SpaceService_GetJoinAttempt_FullMethodName                    = "/voice.space.v1.SpaceService/GetJoinAttempt"
+	SpaceService_SubmitJoinAttempt_FullMethodName                 = "/voice.space.v1.SpaceService/SubmitJoinAttempt"
+	SpaceService_ListJoinRequests_FullMethodName                  = "/voice.space.v1.SpaceService/ListJoinRequests"
+	SpaceService_GetJoinRequest_FullMethodName                    = "/voice.space.v1.SpaceService/GetJoinRequest"
+	SpaceService_ApproveJoinRequest_FullMethodName                = "/voice.space.v1.SpaceService/ApproveJoinRequest"
+	SpaceService_SetEntryPolicy_FullMethodName                    = "/voice.space.v1.SpaceService/SetEntryPolicy"
 	SpaceService_LeaveSpace_FullMethodName                        = "/voice.space.v1.SpaceService/LeaveSpace"
 	SpaceService_KickMember_FullMethodName                        = "/voice.space.v1.SpaceService/KickMember"
 	SpaceService_BanMember_FullMethodName                         = "/voice.space.v1.SpaceService/BanMember"
 	SpaceService_UnbanMember_FullMethodName                       = "/voice.space.v1.SpaceService/UnbanMember"
 	SpaceService_ListMembers_FullMethodName                       = "/voice.space.v1.SpaceService/ListMembers"
+	SpaceService_UpdateMemberNickname_FullMethodName              = "/voice.space.v1.SpaceService/UpdateMemberNickname"
 	SpaceService_ListBans_FullMethodName                          = "/voice.space.v1.SpaceService/ListBans"
 	SpaceService_TimeoutMember_FullMethodName                     = "/voice.space.v1.SpaceService/TimeoutMember"
 	SpaceService_RemoveMemberTimeout_FullMethodName               = "/voice.space.v1.SpaceService/RemoveMemberTimeout"
@@ -62,8 +72,11 @@ const (
 	SpaceService_RecoverCommunityOwner_FullMethodName             = "/voice.space.v1.SpaceService/RecoverCommunityOwner"
 	SpaceService_GetAuditLog_FullMethodName                       = "/voice.space.v1.SpaceService/GetAuditLog"
 	SpaceService_AppendAuditEvent_FullMethodName                  = "/voice.space.v1.SpaceService/AppendAuditEvent"
+	SpaceService_CommitSpaceChatCreation_FullMethodName           = "/voice.space.v1.SpaceService/CommitSpaceChatCreation"
+	SpaceService_GetSpaceChatCreationOutcome_FullMethodName       = "/voice.space.v1.SpaceService/GetSpaceChatCreationOutcome"
 	SpaceService_AreCoMembers_FullMethodName                      = "/voice.space.v1.SpaceService/AreCoMembers"
 	SpaceService_ResolveVoiceRoomAccess_FullMethodName            = "/voice.space.v1.SpaceService/ResolveVoiceRoomAccess"
+	SpaceService_ResolveMemberCommunicationState_FullMethodName   = "/voice.space.v1.SpaceService/ResolveMemberCommunicationState"
 	SpaceService_SyncSpaceProSubscription_FullMethodName          = "/voice.space.v1.SpaceService/SyncSpaceProSubscription"
 	SpaceService_RestoreSpace_FullMethodName                      = "/voice.space.v1.SpaceService/RestoreSpace"
 	SpaceService_GetSpaceDeletionCoordinatorStatus_FullMethodName = "/voice.space.v1.SpaceService/GetSpaceDeletionCoordinatorStatus"
@@ -75,6 +88,9 @@ const (
 //
 // Spaces, tree, invites. HTTP: /api/v1/spaces/**.
 type SpaceServiceClient interface {
+	// Narrow native membership authority; own DB only, no Role callback.
+	// @voice.security=protected;callers=service:role
+	GetMemberAdmissionAuthority(ctx context.Context, in *GetMemberAdmissionAuthorityRequest, opts ...grpc.CallOption) (*GetMemberAdmissionAuthorityResponse, error)
 	CreateSpace(ctx context.Context, in *CreateSpaceRequest, opts ...grpc.CallOption) (*CreateSpaceResponse, error)
 	UpdateSpace(ctx context.Context, in *UpdateSpaceRequest, opts ...grpc.CallOption) (*UpdateSpaceResponse, error)
 	// Space-level matchmaking settings (mm_config jsonb; roadmap П.1).
@@ -82,6 +98,9 @@ type SpaceServiceClient interface {
 	// @voice.security=public_gateway;callers=service:gateway
 	DeleteSpace(ctx context.Context, in *DeleteSpaceRequest, opts ...grpc.CallOption) (*DeleteSpaceResponse, error)
 	GetSpace(ctx context.Context, in *GetSpaceRequest, opts ...grpc.CallOption) (*GetSpaceResponse, error)
+	// Narrow existence/lifecycle read. No ACL lookup or public Gateway route.
+	// @voice.security=protected;callers=service:role
+	ValidateRoleOverrideTarget(ctx context.Context, in *ValidateRoleOverrideTargetRequest, opts ...grpc.CallOption) (*ValidateRoleOverrideTargetResponse, error)
 	ListMySpaces(ctx context.Context, in *ListMySpacesRequest, opts ...grpc.CallOption) (*ListMySpacesResponse, error)
 	SearchPublicSpaces(ctx context.Context, in *SearchPublicSpacesRequest, opts ...grpc.CallOption) (*SearchPublicSpacesResponse, error)
 	CreateVoiceRoom(ctx context.Context, in *CreateVoiceRoomRequest, opts ...grpc.CallOption) (*CreateVoiceRoomResponse, error)
@@ -102,11 +121,31 @@ type SpaceServiceClient interface {
 	ListInvites(ctx context.Context, in *ListInvitesRequest, opts ...grpc.CallOption) (*ListInvitesResponse, error)
 	JoinByInvite(ctx context.Context, in *JoinByInviteRequest, opts ...grpc.CallOption) (*JoinByInviteResponse, error)
 	JoinSpace(ctx context.Context, in *JoinSpaceRequest, opts ...grpc.CallOption) (*JoinSpaceResponse, error)
+	// Exact authenticated applicant; no ambient proof or latest-attempt lookup.
+	// @voice.security=public_gateway;callers=service:gateway
+	StartJoinAttempt(ctx context.Context, in *StartJoinAttemptRequest, opts ...grpc.CallOption) (*StartJoinAttemptResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	GetJoinAttempt(ctx context.Context, in *GetJoinAttemptRequest, opts ...grpc.CallOption) (*GetJoinAttemptResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	SubmitJoinAttempt(ctx context.Context, in *SubmitJoinAttemptRequest, opts ...grpc.CallOption) (*SubmitJoinAttemptResponse, error)
+	// Current member plus SPACE_APPROVE_JOIN_REQUESTS; not invite/settings ACL.
+	// @voice.security=public_gateway;callers=service:gateway
+	ListJoinRequests(ctx context.Context, in *ListJoinRequestsRequest, opts ...grpc.CallOption) (*ListJoinRequestsResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	GetJoinRequest(ctx context.Context, in *GetJoinRequestRequest, opts ...grpc.CallOption) (*GetJoinRequestResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	ApproveJoinRequest(ctx context.Context, in *ApproveJoinRequestRequest, opts ...grpc.CallOption) (*ApproveJoinRequestResponse, error)
+	// Exact protected settings operation. The response is a saved safe acknowledgement.
+	SetEntryPolicy(ctx context.Context, in *SetEntryPolicyRequest, opts ...grpc.CallOption) (*SetEntryPolicyResponse, error)
 	LeaveSpace(ctx context.Context, in *LeaveSpaceRequest, opts ...grpc.CallOption) (*LeaveSpaceResponse, error)
 	KickMember(ctx context.Context, in *KickMemberRequest, opts ...grpc.CallOption) (*KickMemberResponse, error)
 	BanMember(ctx context.Context, in *BanMemberRequest, opts ...grpc.CallOption) (*BanMemberResponse, error)
 	UnbanMember(ctx context.Context, in *UnbanMemberRequest, opts ...grpc.CallOption) (*UnbanMemberResponse, error)
 	ListMembers(ctx context.Context, in *ListMembersRequest, opts ...grpc.CallOption) (*ListMembersResponse, error)
+	// BE-234-nickname-v1: verified actor, global MEMBER_MANAGE_NICKNAMES;
+	// local members only, Owner protected, serialized redacted audit/outbox.
+	// @voice.security=public_gateway;callers=service:gateway
+	UpdateMemberNickname(ctx context.Context, in *UpdateMemberNicknameRequest, opts ...grpc.CallOption) (*UpdateMemberNicknameResponse, error)
 	ListBans(ctx context.Context, in *ListBansRequest, opts ...grpc.CallOption) (*ListBansResponse, error)
 	TimeoutMember(ctx context.Context, in *TimeoutMemberRequest, opts ...grpc.CallOption) (*TimeoutMemberResponse, error)
 	RemoveMemberTimeout(ctx context.Context, in *RemoveMemberTimeoutRequest, opts ...grpc.CallOption) (*RemoveMemberTimeoutResponse, error)
@@ -128,11 +167,22 @@ type SpaceServiceClient interface {
 	GetAuditLog(ctx context.Context, in *GetAuditLogRequest, opts ...grpc.CallOption) (*GetAuditLogResponse, error)
 	// @voice.security=protected;callers=service:role,service:chat
 	AppendAuditEvent(ctx context.Context, in *AppendAuditEventRequest, opts ...grpc.CallOption) (*AppendAuditEventResponse, error)
+	// Chat-owned durable create intent; not an ordinary user tree mutation.
+	// @voice.security=protected;callers=service:chat
+	CommitSpaceChatCreation(ctx context.Context, in *CommitSpaceChatCreationRequest, opts ...grpc.CallOption) (*CommitSpaceChatCreationResponse, error)
+	// Exact immutable create outcome; caller authentication does not replace disclosure ACLs.
+	// Gateway uses a verified delegated-user principal and current disclosure ACL.
+	// @voice.security=protected;callers=service:chat,service:gateway
+	GetSpaceChatCreationOutcome(ctx context.Context, in *GetSpaceChatCreationOutcomeRequest, opts ...grpc.CallOption) (*GetSpaceChatCreationOutcomeResponse, error)
 	// S2S: privacy audience "space members" — shared membership between two profiles.
 	AreCoMembers(ctx context.Context, in *AreCoMembersRequest, opts ...grpc.CallOption) (*AreCoMembersResponse, error)
 	// S2S: canonical owner and exact membership evidence for Voice authorization.
 	// This endpoint is restricted to the verified Voice service identity.
+	// @voice.security=protected;callers=service:voice
 	ResolveVoiceRoomAccess(ctx context.Context, in *ResolveVoiceRoomAccessRequest, opts ...grpc.CallOption) (*ResolveVoiceRoomAccessResponse, error)
+	// Fresh profile/Space timeout authority; no public or legacy transport.
+	// @voice.security=protected;callers=service:messaging
+	ResolveMemberCommunicationState(ctx context.Context, in *ResolveMemberCommunicationStateRequest, opts ...grpc.CallOption) (*ResolveMemberCommunicationStateResponse, error)
 	// S2S: Subscription Service syncs Space Pro entitlement cache after webhook.
 	SyncSpaceProSubscription(ctx context.Context, in *SyncSpaceProSubscriptionRequest, opts ...grpc.CallOption) (*SyncSpaceProSubscriptionResponse, error)
 	// @voice.security=public_gateway;callers=service:gateway
@@ -149,6 +199,16 @@ type spaceServiceClient struct {
 
 func NewSpaceServiceClient(cc grpc.ClientConnInterface) SpaceServiceClient {
 	return &spaceServiceClient{cc}
+}
+
+func (c *spaceServiceClient) GetMemberAdmissionAuthority(ctx context.Context, in *GetMemberAdmissionAuthorityRequest, opts ...grpc.CallOption) (*GetMemberAdmissionAuthorityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetMemberAdmissionAuthorityResponse)
+	err := c.cc.Invoke(ctx, SpaceService_GetMemberAdmissionAuthority_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *spaceServiceClient) CreateSpace(ctx context.Context, in *CreateSpaceRequest, opts ...grpc.CallOption) (*CreateSpaceResponse, error) {
@@ -195,6 +255,16 @@ func (c *spaceServiceClient) GetSpace(ctx context.Context, in *GetSpaceRequest, 
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetSpaceResponse)
 	err := c.cc.Invoke(ctx, SpaceService_GetSpace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) ValidateRoleOverrideTarget(ctx context.Context, in *ValidateRoleOverrideTargetRequest, opts ...grpc.CallOption) (*ValidateRoleOverrideTargetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ValidateRoleOverrideTargetResponse)
+	err := c.cc.Invoke(ctx, SpaceService_ValidateRoleOverrideTarget_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -401,6 +471,76 @@ func (c *spaceServiceClient) JoinSpace(ctx context.Context, in *JoinSpaceRequest
 	return out, nil
 }
 
+func (c *spaceServiceClient) StartJoinAttempt(ctx context.Context, in *StartJoinAttemptRequest, opts ...grpc.CallOption) (*StartJoinAttemptResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StartJoinAttemptResponse)
+	err := c.cc.Invoke(ctx, SpaceService_StartJoinAttempt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) GetJoinAttempt(ctx context.Context, in *GetJoinAttemptRequest, opts ...grpc.CallOption) (*GetJoinAttemptResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetJoinAttemptResponse)
+	err := c.cc.Invoke(ctx, SpaceService_GetJoinAttempt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) SubmitJoinAttempt(ctx context.Context, in *SubmitJoinAttemptRequest, opts ...grpc.CallOption) (*SubmitJoinAttemptResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SubmitJoinAttemptResponse)
+	err := c.cc.Invoke(ctx, SpaceService_SubmitJoinAttempt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) ListJoinRequests(ctx context.Context, in *ListJoinRequestsRequest, opts ...grpc.CallOption) (*ListJoinRequestsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListJoinRequestsResponse)
+	err := c.cc.Invoke(ctx, SpaceService_ListJoinRequests_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) GetJoinRequest(ctx context.Context, in *GetJoinRequestRequest, opts ...grpc.CallOption) (*GetJoinRequestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetJoinRequestResponse)
+	err := c.cc.Invoke(ctx, SpaceService_GetJoinRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) ApproveJoinRequest(ctx context.Context, in *ApproveJoinRequestRequest, opts ...grpc.CallOption) (*ApproveJoinRequestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApproveJoinRequestResponse)
+	err := c.cc.Invoke(ctx, SpaceService_ApproveJoinRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) SetEntryPolicy(ctx context.Context, in *SetEntryPolicyRequest, opts ...grpc.CallOption) (*SetEntryPolicyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetEntryPolicyResponse)
+	err := c.cc.Invoke(ctx, SpaceService_SetEntryPolicy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *spaceServiceClient) LeaveSpace(ctx context.Context, in *LeaveSpaceRequest, opts ...grpc.CallOption) (*LeaveSpaceResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(LeaveSpaceResponse)
@@ -445,6 +585,16 @@ func (c *spaceServiceClient) ListMembers(ctx context.Context, in *ListMembersReq
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListMembersResponse)
 	err := c.cc.Invoke(ctx, SpaceService_ListMembers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) UpdateMemberNickname(ctx context.Context, in *UpdateMemberNicknameRequest, opts ...grpc.CallOption) (*UpdateMemberNicknameResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateMemberNicknameResponse)
+	err := c.cc.Invoke(ctx, SpaceService_UpdateMemberNickname_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -581,6 +731,26 @@ func (c *spaceServiceClient) AppendAuditEvent(ctx context.Context, in *AppendAud
 	return out, nil
 }
 
+func (c *spaceServiceClient) CommitSpaceChatCreation(ctx context.Context, in *CommitSpaceChatCreationRequest, opts ...grpc.CallOption) (*CommitSpaceChatCreationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CommitSpaceChatCreationResponse)
+	err := c.cc.Invoke(ctx, SpaceService_CommitSpaceChatCreation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) GetSpaceChatCreationOutcome(ctx context.Context, in *GetSpaceChatCreationOutcomeRequest, opts ...grpc.CallOption) (*GetSpaceChatCreationOutcomeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSpaceChatCreationOutcomeResponse)
+	err := c.cc.Invoke(ctx, SpaceService_GetSpaceChatCreationOutcome_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *spaceServiceClient) AreCoMembers(ctx context.Context, in *AreCoMembersRequest, opts ...grpc.CallOption) (*AreCoMembersResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AreCoMembersResponse)
@@ -595,6 +765,16 @@ func (c *spaceServiceClient) ResolveVoiceRoomAccess(ctx context.Context, in *Res
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ResolveVoiceRoomAccessResponse)
 	err := c.cc.Invoke(ctx, SpaceService_ResolveVoiceRoomAccess_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) ResolveMemberCommunicationState(ctx context.Context, in *ResolveMemberCommunicationStateRequest, opts ...grpc.CallOption) (*ResolveMemberCommunicationStateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveMemberCommunicationStateResponse)
+	err := c.cc.Invoke(ctx, SpaceService_ResolveMemberCommunicationState_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -637,6 +817,9 @@ func (c *spaceServiceClient) GetSpaceDeletionCoordinatorStatus(ctx context.Conte
 //
 // Spaces, tree, invites. HTTP: /api/v1/spaces/**.
 type SpaceServiceServer interface {
+	// Narrow native membership authority; own DB only, no Role callback.
+	// @voice.security=protected;callers=service:role
+	GetMemberAdmissionAuthority(context.Context, *GetMemberAdmissionAuthorityRequest) (*GetMemberAdmissionAuthorityResponse, error)
 	CreateSpace(context.Context, *CreateSpaceRequest) (*CreateSpaceResponse, error)
 	UpdateSpace(context.Context, *UpdateSpaceRequest) (*UpdateSpaceResponse, error)
 	// Space-level matchmaking settings (mm_config jsonb; roadmap П.1).
@@ -644,6 +827,9 @@ type SpaceServiceServer interface {
 	// @voice.security=public_gateway;callers=service:gateway
 	DeleteSpace(context.Context, *DeleteSpaceRequest) (*DeleteSpaceResponse, error)
 	GetSpace(context.Context, *GetSpaceRequest) (*GetSpaceResponse, error)
+	// Narrow existence/lifecycle read. No ACL lookup or public Gateway route.
+	// @voice.security=protected;callers=service:role
+	ValidateRoleOverrideTarget(context.Context, *ValidateRoleOverrideTargetRequest) (*ValidateRoleOverrideTargetResponse, error)
 	ListMySpaces(context.Context, *ListMySpacesRequest) (*ListMySpacesResponse, error)
 	SearchPublicSpaces(context.Context, *SearchPublicSpacesRequest) (*SearchPublicSpacesResponse, error)
 	CreateVoiceRoom(context.Context, *CreateVoiceRoomRequest) (*CreateVoiceRoomResponse, error)
@@ -664,11 +850,31 @@ type SpaceServiceServer interface {
 	ListInvites(context.Context, *ListInvitesRequest) (*ListInvitesResponse, error)
 	JoinByInvite(context.Context, *JoinByInviteRequest) (*JoinByInviteResponse, error)
 	JoinSpace(context.Context, *JoinSpaceRequest) (*JoinSpaceResponse, error)
+	// Exact authenticated applicant; no ambient proof or latest-attempt lookup.
+	// @voice.security=public_gateway;callers=service:gateway
+	StartJoinAttempt(context.Context, *StartJoinAttemptRequest) (*StartJoinAttemptResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	GetJoinAttempt(context.Context, *GetJoinAttemptRequest) (*GetJoinAttemptResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	SubmitJoinAttempt(context.Context, *SubmitJoinAttemptRequest) (*SubmitJoinAttemptResponse, error)
+	// Current member plus SPACE_APPROVE_JOIN_REQUESTS; not invite/settings ACL.
+	// @voice.security=public_gateway;callers=service:gateway
+	ListJoinRequests(context.Context, *ListJoinRequestsRequest) (*ListJoinRequestsResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	GetJoinRequest(context.Context, *GetJoinRequestRequest) (*GetJoinRequestResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	ApproveJoinRequest(context.Context, *ApproveJoinRequestRequest) (*ApproveJoinRequestResponse, error)
+	// Exact protected settings operation. The response is a saved safe acknowledgement.
+	SetEntryPolicy(context.Context, *SetEntryPolicyRequest) (*SetEntryPolicyResponse, error)
 	LeaveSpace(context.Context, *LeaveSpaceRequest) (*LeaveSpaceResponse, error)
 	KickMember(context.Context, *KickMemberRequest) (*KickMemberResponse, error)
 	BanMember(context.Context, *BanMemberRequest) (*BanMemberResponse, error)
 	UnbanMember(context.Context, *UnbanMemberRequest) (*UnbanMemberResponse, error)
 	ListMembers(context.Context, *ListMembersRequest) (*ListMembersResponse, error)
+	// BE-234-nickname-v1: verified actor, global MEMBER_MANAGE_NICKNAMES;
+	// local members only, Owner protected, serialized redacted audit/outbox.
+	// @voice.security=public_gateway;callers=service:gateway
+	UpdateMemberNickname(context.Context, *UpdateMemberNicknameRequest) (*UpdateMemberNicknameResponse, error)
 	ListBans(context.Context, *ListBansRequest) (*ListBansResponse, error)
 	TimeoutMember(context.Context, *TimeoutMemberRequest) (*TimeoutMemberResponse, error)
 	RemoveMemberTimeout(context.Context, *RemoveMemberTimeoutRequest) (*RemoveMemberTimeoutResponse, error)
@@ -690,11 +896,22 @@ type SpaceServiceServer interface {
 	GetAuditLog(context.Context, *GetAuditLogRequest) (*GetAuditLogResponse, error)
 	// @voice.security=protected;callers=service:role,service:chat
 	AppendAuditEvent(context.Context, *AppendAuditEventRequest) (*AppendAuditEventResponse, error)
+	// Chat-owned durable create intent; not an ordinary user tree mutation.
+	// @voice.security=protected;callers=service:chat
+	CommitSpaceChatCreation(context.Context, *CommitSpaceChatCreationRequest) (*CommitSpaceChatCreationResponse, error)
+	// Exact immutable create outcome; caller authentication does not replace disclosure ACLs.
+	// Gateway uses a verified delegated-user principal and current disclosure ACL.
+	// @voice.security=protected;callers=service:chat,service:gateway
+	GetSpaceChatCreationOutcome(context.Context, *GetSpaceChatCreationOutcomeRequest) (*GetSpaceChatCreationOutcomeResponse, error)
 	// S2S: privacy audience "space members" — shared membership between two profiles.
 	AreCoMembers(context.Context, *AreCoMembersRequest) (*AreCoMembersResponse, error)
 	// S2S: canonical owner and exact membership evidence for Voice authorization.
 	// This endpoint is restricted to the verified Voice service identity.
+	// @voice.security=protected;callers=service:voice
 	ResolveVoiceRoomAccess(context.Context, *ResolveVoiceRoomAccessRequest) (*ResolveVoiceRoomAccessResponse, error)
+	// Fresh profile/Space timeout authority; no public or legacy transport.
+	// @voice.security=protected;callers=service:messaging
+	ResolveMemberCommunicationState(context.Context, *ResolveMemberCommunicationStateRequest) (*ResolveMemberCommunicationStateResponse, error)
 	// S2S: Subscription Service syncs Space Pro entitlement cache after webhook.
 	SyncSpaceProSubscription(context.Context, *SyncSpaceProSubscriptionRequest) (*SyncSpaceProSubscriptionResponse, error)
 	// @voice.security=public_gateway;callers=service:gateway
@@ -713,6 +930,9 @@ type SpaceServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedSpaceServiceServer struct{}
 
+func (UnimplementedSpaceServiceServer) GetMemberAdmissionAuthority(context.Context, *GetMemberAdmissionAuthorityRequest) (*GetMemberAdmissionAuthorityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetMemberAdmissionAuthority not implemented")
+}
 func (UnimplementedSpaceServiceServer) CreateSpace(context.Context, *CreateSpaceRequest) (*CreateSpaceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateSpace not implemented")
 }
@@ -727,6 +947,9 @@ func (UnimplementedSpaceServiceServer) DeleteSpace(context.Context, *DeleteSpace
 }
 func (UnimplementedSpaceServiceServer) GetSpace(context.Context, *GetSpaceRequest) (*GetSpaceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetSpace not implemented")
+}
+func (UnimplementedSpaceServiceServer) ValidateRoleOverrideTarget(context.Context, *ValidateRoleOverrideTargetRequest) (*ValidateRoleOverrideTargetResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ValidateRoleOverrideTarget not implemented")
 }
 func (UnimplementedSpaceServiceServer) ListMySpaces(context.Context, *ListMySpacesRequest) (*ListMySpacesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListMySpaces not implemented")
@@ -788,6 +1011,27 @@ func (UnimplementedSpaceServiceServer) JoinByInvite(context.Context, *JoinByInvi
 func (UnimplementedSpaceServiceServer) JoinSpace(context.Context, *JoinSpaceRequest) (*JoinSpaceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method JoinSpace not implemented")
 }
+func (UnimplementedSpaceServiceServer) StartJoinAttempt(context.Context, *StartJoinAttemptRequest) (*StartJoinAttemptResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StartJoinAttempt not implemented")
+}
+func (UnimplementedSpaceServiceServer) GetJoinAttempt(context.Context, *GetJoinAttemptRequest) (*GetJoinAttemptResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetJoinAttempt not implemented")
+}
+func (UnimplementedSpaceServiceServer) SubmitJoinAttempt(context.Context, *SubmitJoinAttemptRequest) (*SubmitJoinAttemptResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SubmitJoinAttempt not implemented")
+}
+func (UnimplementedSpaceServiceServer) ListJoinRequests(context.Context, *ListJoinRequestsRequest) (*ListJoinRequestsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListJoinRequests not implemented")
+}
+func (UnimplementedSpaceServiceServer) GetJoinRequest(context.Context, *GetJoinRequestRequest) (*GetJoinRequestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetJoinRequest not implemented")
+}
+func (UnimplementedSpaceServiceServer) ApproveJoinRequest(context.Context, *ApproveJoinRequestRequest) (*ApproveJoinRequestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApproveJoinRequest not implemented")
+}
+func (UnimplementedSpaceServiceServer) SetEntryPolicy(context.Context, *SetEntryPolicyRequest) (*SetEntryPolicyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetEntryPolicy not implemented")
+}
 func (UnimplementedSpaceServiceServer) LeaveSpace(context.Context, *LeaveSpaceRequest) (*LeaveSpaceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LeaveSpace not implemented")
 }
@@ -802,6 +1046,9 @@ func (UnimplementedSpaceServiceServer) UnbanMember(context.Context, *UnbanMember
 }
 func (UnimplementedSpaceServiceServer) ListMembers(context.Context, *ListMembersRequest) (*ListMembersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListMembers not implemented")
+}
+func (UnimplementedSpaceServiceServer) UpdateMemberNickname(context.Context, *UpdateMemberNicknameRequest) (*UpdateMemberNicknameResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateMemberNickname not implemented")
 }
 func (UnimplementedSpaceServiceServer) ListBans(context.Context, *ListBansRequest) (*ListBansResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListBans not implemented")
@@ -842,11 +1089,20 @@ func (UnimplementedSpaceServiceServer) GetAuditLog(context.Context, *GetAuditLog
 func (UnimplementedSpaceServiceServer) AppendAuditEvent(context.Context, *AppendAuditEventRequest) (*AppendAuditEventResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AppendAuditEvent not implemented")
 }
+func (UnimplementedSpaceServiceServer) CommitSpaceChatCreation(context.Context, *CommitSpaceChatCreationRequest) (*CommitSpaceChatCreationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CommitSpaceChatCreation not implemented")
+}
+func (UnimplementedSpaceServiceServer) GetSpaceChatCreationOutcome(context.Context, *GetSpaceChatCreationOutcomeRequest) (*GetSpaceChatCreationOutcomeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSpaceChatCreationOutcome not implemented")
+}
 func (UnimplementedSpaceServiceServer) AreCoMembers(context.Context, *AreCoMembersRequest) (*AreCoMembersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AreCoMembers not implemented")
 }
 func (UnimplementedSpaceServiceServer) ResolveVoiceRoomAccess(context.Context, *ResolveVoiceRoomAccessRequest) (*ResolveVoiceRoomAccessResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResolveVoiceRoomAccess not implemented")
+}
+func (UnimplementedSpaceServiceServer) ResolveMemberCommunicationState(context.Context, *ResolveMemberCommunicationStateRequest) (*ResolveMemberCommunicationStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveMemberCommunicationState not implemented")
 }
 func (UnimplementedSpaceServiceServer) SyncSpaceProSubscription(context.Context, *SyncSpaceProSubscriptionRequest) (*SyncSpaceProSubscriptionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SyncSpaceProSubscription not implemented")
@@ -876,6 +1132,24 @@ func RegisterSpaceServiceServer(s grpc.ServiceRegistrar, srv SpaceServiceServer)
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&SpaceService_ServiceDesc, srv)
+}
+
+func _SpaceService_GetMemberAdmissionAuthority_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetMemberAdmissionAuthorityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).GetMemberAdmissionAuthority(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_GetMemberAdmissionAuthority_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).GetMemberAdmissionAuthority(ctx, req.(*GetMemberAdmissionAuthorityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _SpaceService_CreateSpace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -964,6 +1238,24 @@ func _SpaceService_GetSpace_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SpaceServiceServer).GetSpace(ctx, req.(*GetSpaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_ValidateRoleOverrideTarget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ValidateRoleOverrideTargetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).ValidateRoleOverrideTarget(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_ValidateRoleOverrideTarget_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).ValidateRoleOverrideTarget(ctx, req.(*ValidateRoleOverrideTargetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1328,6 +1620,132 @@ func _SpaceService_JoinSpace_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SpaceService_StartJoinAttempt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartJoinAttemptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).StartJoinAttempt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_StartJoinAttempt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).StartJoinAttempt(ctx, req.(*StartJoinAttemptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_GetJoinAttempt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetJoinAttemptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).GetJoinAttempt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_GetJoinAttempt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).GetJoinAttempt(ctx, req.(*GetJoinAttemptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_SubmitJoinAttempt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubmitJoinAttemptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).SubmitJoinAttempt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_SubmitJoinAttempt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).SubmitJoinAttempt(ctx, req.(*SubmitJoinAttemptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_ListJoinRequests_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListJoinRequestsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).ListJoinRequests(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_ListJoinRequests_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).ListJoinRequests(ctx, req.(*ListJoinRequestsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_GetJoinRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetJoinRequestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).GetJoinRequest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_GetJoinRequest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).GetJoinRequest(ctx, req.(*GetJoinRequestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_ApproveJoinRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApproveJoinRequestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).ApproveJoinRequest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_ApproveJoinRequest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).ApproveJoinRequest(ctx, req.(*ApproveJoinRequestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_SetEntryPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetEntryPolicyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).SetEntryPolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_SetEntryPolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).SetEntryPolicy(ctx, req.(*SetEntryPolicyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SpaceService_LeaveSpace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(LeaveSpaceRequest)
 	if err := dec(in); err != nil {
@@ -1414,6 +1832,24 @@ func _SpaceService_ListMembers_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SpaceServiceServer).ListMembers(ctx, req.(*ListMembersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_UpdateMemberNickname_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateMemberNicknameRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).UpdateMemberNickname(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_UpdateMemberNickname_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).UpdateMemberNickname(ctx, req.(*UpdateMemberNicknameRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1652,6 +2088,42 @@ func _SpaceService_AppendAuditEvent_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SpaceService_CommitSpaceChatCreation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CommitSpaceChatCreationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).CommitSpaceChatCreation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_CommitSpaceChatCreation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).CommitSpaceChatCreation(ctx, req.(*CommitSpaceChatCreationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_GetSpaceChatCreationOutcome_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSpaceChatCreationOutcomeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).GetSpaceChatCreationOutcome(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_GetSpaceChatCreationOutcome_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).GetSpaceChatCreationOutcome(ctx, req.(*GetSpaceChatCreationOutcomeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SpaceService_AreCoMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AreCoMembersRequest)
 	if err := dec(in); err != nil {
@@ -1684,6 +2156,24 @@ func _SpaceService_ResolveVoiceRoomAccess_Handler(srv interface{}, ctx context.C
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SpaceServiceServer).ResolveVoiceRoomAccess(ctx, req.(*ResolveVoiceRoomAccessRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_ResolveMemberCommunicationState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveMemberCommunicationStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).ResolveMemberCommunicationState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_ResolveMemberCommunicationState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).ResolveMemberCommunicationState(ctx, req.(*ResolveMemberCommunicationStateRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1750,6 +2240,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*SpaceServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
+			MethodName: "GetMemberAdmissionAuthority",
+			Handler:    _SpaceService_GetMemberAdmissionAuthority_Handler,
+		},
+		{
 			MethodName: "CreateSpace",
 			Handler:    _SpaceService_CreateSpace_Handler,
 		},
@@ -1768,6 +2262,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSpace",
 			Handler:    _SpaceService_GetSpace_Handler,
+		},
+		{
+			MethodName: "ValidateRoleOverrideTarget",
+			Handler:    _SpaceService_ValidateRoleOverrideTarget_Handler,
 		},
 		{
 			MethodName: "ListMySpaces",
@@ -1850,6 +2348,34 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _SpaceService_JoinSpace_Handler,
 		},
 		{
+			MethodName: "StartJoinAttempt",
+			Handler:    _SpaceService_StartJoinAttempt_Handler,
+		},
+		{
+			MethodName: "GetJoinAttempt",
+			Handler:    _SpaceService_GetJoinAttempt_Handler,
+		},
+		{
+			MethodName: "SubmitJoinAttempt",
+			Handler:    _SpaceService_SubmitJoinAttempt_Handler,
+		},
+		{
+			MethodName: "ListJoinRequests",
+			Handler:    _SpaceService_ListJoinRequests_Handler,
+		},
+		{
+			MethodName: "GetJoinRequest",
+			Handler:    _SpaceService_GetJoinRequest_Handler,
+		},
+		{
+			MethodName: "ApproveJoinRequest",
+			Handler:    _SpaceService_ApproveJoinRequest_Handler,
+		},
+		{
+			MethodName: "SetEntryPolicy",
+			Handler:    _SpaceService_SetEntryPolicy_Handler,
+		},
+		{
 			MethodName: "LeaveSpace",
 			Handler:    _SpaceService_LeaveSpace_Handler,
 		},
@@ -1868,6 +2394,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListMembers",
 			Handler:    _SpaceService_ListMembers_Handler,
+		},
+		{
+			MethodName: "UpdateMemberNickname",
+			Handler:    _SpaceService_UpdateMemberNickname_Handler,
 		},
 		{
 			MethodName: "ListBans",
@@ -1922,12 +2452,24 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _SpaceService_AppendAuditEvent_Handler,
 		},
 		{
+			MethodName: "CommitSpaceChatCreation",
+			Handler:    _SpaceService_CommitSpaceChatCreation_Handler,
+		},
+		{
+			MethodName: "GetSpaceChatCreationOutcome",
+			Handler:    _SpaceService_GetSpaceChatCreationOutcome_Handler,
+		},
+		{
 			MethodName: "AreCoMembers",
 			Handler:    _SpaceService_AreCoMembers_Handler,
 		},
 		{
 			MethodName: "ResolveVoiceRoomAccess",
 			Handler:    _SpaceService_ResolveVoiceRoomAccess_Handler,
+		},
+		{
+			MethodName: "ResolveMemberCommunicationState",
+			Handler:    _SpaceService_ResolveMemberCommunicationState_Handler,
 		},
 		{
 			MethodName: "SyncSpaceProSubscription",

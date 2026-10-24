@@ -116,9 +116,37 @@ class FixtureTests(unittest.TestCase):
     def openssl(self, *args, input=None):
         return require_success(run("openssl", *args, input=input))
 
+    def test_chat_creation_has_distinct_signer_server_and_client_identities(self):
+        document = json.loads((self.dest / "jwks/chat/jwks.json").read_text(encoding="ascii"))
+        self.assertEqual({key["kid"] for key in document["keys"]}, {"current", "next"})
+        public_keys = set()
+        for kid in ("current", "next"):
+            key = self.dest / f"chat/{kid}.pem"
+            public_keys.add(self.openssl("pkey", "-in", key, "-pubout"))
+            modulus = self.openssl("rsa", "-in", key, "-noout", "-modulus").strip().split("=", 1)[1]
+            jwk = next(k for k in document["keys"] if k["kid"] == kid)
+            self.assertEqual(base64.urlsafe_b64decode(jwk["n"] + "=" * (-len(jwk["n"]) % 4)), bytes.fromhex(modulus))
+        for leaf, hostname in (("chat-create-grpc", "chat"), ("chat-jwks", "chat"),
+                               ("space-chat-composite-grpc", "space"), ("space-audit-grpc", "space")):
+            cert = self.dest / f"tls/{leaf}.crt"
+            self.openssl("verify", "-CAfile", self.dest / "ca/ca.crt", "-purpose", "sslserver",
+                         "-verify_hostname", hostname, cert)
+            public_keys.add(self.openssl("x509", "-in", cert, "-pubkey", "-noout"))
+        for leaf, ca in (("chat-client", "ca.crt"), ("auth-jwks-client", "ca.crt"),
+                         ("chat-jwks-client", "gameintegration-client-ca.crt")):
+            cert = self.dest / f"tls/{leaf}.crt"
+            self.openssl("verify", "-CAfile", self.dest / "ca" / ca, "-purpose", "sslclient", cert)
+            self.assertNotEqual(run("openssl", "verify", "-CAfile", self.dest / "ca" / ca,
+                                    "-purpose", "sslserver", cert).returncode, 0)
+            public_keys.add(self.openssl("x509", "-in", cert, "-pubkey", "-noout"))
+        self.assertEqual(len(public_keys), 9, "signers and dedicated trust identities must use distinct keys")
+        listing = require_success(run("keytool", "-list", "-keystore", self.dest / "auth-jwks-client.p12",
+                                      "-storepass", "phase0-fixture", "-J-Duser.language=en"))
+        self.assertIn("PrivateKeyEntry", listing)
+
     def test_separate_current_next_rsa_pkcs8_keys(self):
         public_keys = set()
-        for issuer in ("gateway", "space", "matchmaking"):
+        for issuer in ("gateway", "space", "chat", "role", "matchmaking"):
             self.assertEqual({p.name for p in (self.dest / issuer).iterdir()},
                              {"current.pem", "next.pem"})
             for kid in ("current", "next"):
@@ -142,10 +170,10 @@ class FixtureTests(unittest.TestCase):
                 self.assertIsNotNone(bits)
                 self.assertGreaterEqual(int(bits.group(1)), 2048)
                 public_keys.add(public)
-        self.assertEqual(len(public_keys), 12, "issuer and service signing keys must be independent")
+        self.assertEqual(len(public_keys), 16, "issuer and service signing keys must be independent")
 
     def test_matchmaking_public_jwks_matches_both_private_rotation_keys(self):
-        for issuer in ("gateway", "matchmaking"):
+        for issuer in ("gateway", "chat", "matchmaking"):
             with self.subTest(issuer=issuer):
                 document = json.loads((self.dest / f"jwks/{issuer}/jwks.json").read_text(encoding="ascii"))
                 self.assertEqual({key["kid"] for key in document["keys"]}, {"current", "next"})
@@ -163,7 +191,7 @@ class FixtureTests(unittest.TestCase):
     def test_ca_signed_leaf_keys_hostname_and_short_lifetime(self):
         ca = self.dest / "ca/ca.crt"
         self.assertEqual({p.name for p in ca.parent.iterdir()},
-                         {"ca.crt", "gameintegration-client-ca.crt", "space-lifecycle-client-ca.crt"},
+                         {"ca.crt", "gameintegration-client-ca.crt", "space-lifecycle-client-ca.crt", "bot-jwks-client-ca.crt"},
                          "CA signing key must not survive issuance")
         for leaf, hostname in (("role", "role"), ("auth", "auth"), ("proxy", PROXY),
                                ("matchmaking-complete-grpc", "matchmaking"),
@@ -195,7 +223,7 @@ class FixtureTests(unittest.TestCase):
                 self.assertLessEqual(lifetime, 2 * 86400 + 60)
 
     def test_service_client_leaves_are_ca_signed_and_client_auth_only(self):
-        for service in ("space", "gameintegration", "voice", "matchmaking"):
+        for service in ("space", "gameintegration", "voice", "matchmaking", "chat", "auth-jwks", "role", "bot", "messaging"):
             with self.subTest(service=service):
                 cert = self.dest / f"tls/{service}-client.crt"
                 self.openssl("verify", "-CAfile", self.dest / "ca/ca.crt", "-purpose", "sslclient", cert)
@@ -210,6 +238,24 @@ class FixtureTests(unittest.TestCase):
                     normalized_subject,
                     rf"(?:^|[,/])CN={re.escape(service)}(?:$|[,/])",
                 )
+
+    def test_bot_jwks_ca_accepts_native_and_existing_gis_consumers(self):
+        bundle = self.dest / "ca/bot-jwks-client-ca.crt"
+        self.assertEqual(bundle.read_bytes(), (self.dest / "ca/ca.crt").read_bytes()
+                         + (self.dest / "ca/gameintegration-client-ca.crt").read_bytes())
+        for leaf in ("space-client", "role-client", "auth-jwks-client", "chat-jwks-client", "gameintegration-messaging-client"):
+            self.openssl("verify", "-CAfile", bundle, "-purpose", "sslclient", self.dest / f"tls/{leaf}.crt")
+        self.assertNotEqual(run("openssl", "verify", "-CAfile", bundle, "-purpose", "sslclient",
+                                self.dest / "tls/space-lifecycle-client.crt").returncode, 0)
+
+    def test_bot_session_floor_identity_is_bound_to_only_bot_client(self):
+        for service in ("bot", "role", "space", "chat", "auth-jwks"):
+            san = self.openssl("x509", "-in", self.dest / f"tls/{service}-client.crt",
+                               "-noout", "-ext", "subjectAltName")
+            if service == "bot":
+                self.assertIn("URI:spiffe://voice.local/phase0/bot", san)
+            else:
+                self.assertNotIn("spiffe://voice.local/phase0/bot", san)
 
     def test_gateway_voice_media_client_leaf_is_root_ca_client_only(self):
         cert = self.dest / "tls/gateway-client.crt"
@@ -245,6 +291,19 @@ class FixtureTests(unittest.TestCase):
         eku = self.openssl("x509", "-in", cert, "-noout", "-ext", "extendedKeyUsage")
         self.assertIn("TLS Web Client Authentication", eku)
         self.assertNotIn("TLS Web Server Authentication", eku)
+
+    def test_messaging_bot_authority_client_has_dedicated_identity_and_ca(self):
+        cert = self.dest / "tls/messaging-bot-authority-client.crt"
+        self.openssl("verify", "-CAfile", self.dest / "ca/space-lifecycle-client-ca.crt",
+                     "-purpose", "sslclient", cert)
+        for foreign_ca in ("ca.crt", "gameintegration-client-ca.crt"):
+            self.assertNotEqual(run("openssl", "verify", "-CAfile", self.dest / "ca" / foreign_ca,
+                                    "-purpose", "sslclient", cert).returncode, 0)
+        self.assertIn("URI:spiffe://voice.local/phase0/messaging",
+                      self.openssl("x509", "-in", cert, "-noout", "-ext", "subjectAltName"))
+        self.assertNotEqual(run("openssl", "verify", "-CAfile",
+                                self.dest / "ca/space-lifecycle-client-ca.crt", "-purpose", "sslclient",
+                                self.dest / "tls/messaging-client.crt").returncode, 0)
 
     def test_certificate_serials_are_distinct_within_each_issuer(self):
         issued = set()
@@ -395,6 +454,10 @@ sys.exit(code)
         self.assertEqual((owned_directory.stat().st_uid, owned_directory.stat().st_gid), (65532, 65532))
         self.assertEqual(stat.S_IMODE(owned_directory.stat().st_mode), 0o700)
         owned = [owned_directory,
+                 service_dest / "chat", service_dest / "chat/current.pem", service_dest / "chat/next.pem",
+                 service_dest / "space", service_dest / "space/current.pem", service_dest / "space/next.pem",
+                 service_dest / "tls/chat-client.crt", service_dest / "tls/chat-client.key",
+                 service_dest / "tls/chat-jwks.crt", service_dest / "tls/chat-jwks.key",
                  service_dest / "matchmaking/current.pem", service_dest / "matchmaking/next.pem",
                  service_dest / "tls/chat-match-squad-grpc.crt",
                  service_dest / "tls/chat-match-squad-grpc.key",
@@ -406,6 +469,10 @@ sys.exit(code)
                  service_dest / "tls/matchmaking-client.key",
                  service_dest / "tls/matchmaking-complete-grpc.crt",
                  service_dest / "tls/matchmaking-complete-grpc.key",
+                 service_dest / "tls/space-lifecycle.crt",
+                 service_dest / "tls/space-lifecycle.key",
+                 service_dest / "tls/space-client.crt",
+                 service_dest / "tls/space-client.key",
                  service_dest / "ca/ca.crt"]
         read_check = (
             "import pathlib,stat,sys\n"
@@ -446,6 +513,131 @@ sys.exit(code)
 
 
 class ComposeTests(unittest.TestCase):
+
+    def test_bot_send_authority_uses_complete_protected_phase0_topology(self):
+        for services in (self.merged, self.ci_merged):
+            bot = services["bot"]["environment"]
+            messaging = services["messaging"]["environment"]
+            self.assertEqual(bot["BOT_MESSAGE_SEND_GRPC_ADDR"],
+                             "messaging" + messaging["MESSAGING_BOT_SEND_GRPC_LISTEN"])
+            self.assertEqual(messaging["MESSAGING_BOT_SEND_AUTHORITY_GRPC_ADDR"],
+                             "bot" + bot["BOT_SPACE_LIFECYCLE_GRPC_LISTEN"])
+            self.assertEqual(messaging["MESSAGING_BOT_SEND_SPACE_GRPC_ADDR"],
+                             "space" + services["space"]["environment"]["SPACE_ROLE_OVERRIDE_PRINCIPAL_GRPC_LISTEN"])
+            self.assertEqual(bot["BOT_MESSAGE_AUTHORITY_MESSAGING_URI_SAN"],
+                             "spiffe://voice.local/phase0/messaging")
+            self.assertEqual(bot["BOT_MESSAGE_AUTHORITY_MESSAGING_JWKS_URL"],
+                             "https://messaging:8445/.well-known/principal-jwks.json")
+            for service, prefix, expected in (
+                ("bot", "BOT_MESSAGE_SEND_", {
+                    "TLS_CA_FILE": "ca/ca.crt", "CLIENT_CERT_FILE": "tls/bot-client.crt",
+                    "CLIENT_KEY_FILE": "tls/bot-client.key",
+                }),
+                ("bot", "BOT_MESSAGE_AUTHORITY_MESSAGING_", {
+                    "JWKS_CA_FILE": "ca/ca.crt", "JWKS_CLIENT_CERT_FILE": "tls/bot-client.crt",
+                    "JWKS_CLIENT_KEY_FILE": "tls/bot-client.key",
+                }),
+                ("messaging", "MESSAGING_BOT_SEND_", {
+                    "TLS_CERT_FILE": "tls/messaging-gameintegration-grpc.crt",
+                    "TLS_KEY_FILE": "tls/messaging-gameintegration-grpc.key",
+                    "CLIENT_CA_FILE": "ca/ca.crt",
+                }),
+                ("messaging", "MESSAGING_BOT_SEND_AUTHORITY_", {
+                    "TLS_CA_FILE": "ca/ca.crt",
+                    "CLIENT_CERT_FILE": "tls/messaging-bot-authority-client.crt",
+                    "CLIENT_KEY_FILE": "tls/messaging-bot-authority-client.key",
+                }),
+                ("messaging", "MESSAGING_BOT_SEND_SPACE_", {
+                    "TLS_CA_FILE": "ca/ca.crt", "CLIENT_CERT_FILE": "tls/messaging-client.crt",
+                    "CLIENT_KEY_FILE": "tls/messaging-client.key",
+                }),
+            ):
+                for suffix, source in expected.items():
+                    self.assertEqual(self.media_source_at(
+                        service, services[service]["environment"][prefix + suffix], services), source)
+
+    def test_messaging_space_communication_is_enabled_in_all_profiles(self):
+        for services in (self.merged, self.media_merged, self.ci_merged):
+            messaging = services["messaging"]["environment"]
+            space = services["space"]["environment"]
+            client = "MESSAGING_SPACE_COMMUNICATION_"
+            server = "SPACE_MESSAGING_COMMUNICATION_"
+            self.assertEqual(messaging[client + "GRPC_ADDR"], "space:9101")
+            self.assertEqual(space[server + "GRPC_LISTEN"], ":9101")
+            self.assertEqual(space[server + "REPLAY_REDIS_ADDR"], "redis:6379")
+            self.assertEqual(json.loads(space["S2S_JWKS_URLS_JSON"])["messaging"],
+                             "https://messaging:8445/.well-known/principal-jwks.json")
+            for service, prefix, expected in (
+                ("messaging", client, {
+                    "TLS_CA_FILE": "ca/ca.crt",
+                    "CLIENT_CERT_FILE": "tls/messaging-client.crt",
+                    "CLIENT_KEY_FILE": "tls/messaging-client.key",
+                }),
+                ("space", server, {
+                    "TLS_CERT_FILE": "tls/space-lifecycle.crt",
+                    "TLS_KEY_FILE": "tls/space-lifecycle.key",
+                    "CLIENT_CA_FILE": "ca/ca.crt",
+                    "JWKS_CA_FILE": "ca/ca.crt",
+                    "JWKS_CLIENT_CERT_FILE": "tls/space-client.crt",
+                    "JWKS_CLIENT_KEY_FILE": "tls/space-client.key",
+                }),
+            ):
+                for suffix, source in expected.items():
+                    self.assertEqual(self.media_source_at(
+                        service, services[service]["environment"][prefix + suffix], services), source)
+
+    def test_role_decision_jwks_and_messaging_trust_domains(self):
+        for services in (self.merged, self.media_merged, self.ci_merged):
+            role = services["role"]["environment"]
+            messaging = services["messaging"]["environment"]
+            self.assertEqual(json.loads(role["S2S_JWKS_URLS_JSON"])["messaging"],
+                             "https://messaging:8445/.well-known/principal-jwks.json")
+            self.assertEqual(messaging["ROLE_GRPC_ADDR"], "role:9091")
+            self.assertEqual(messaging["MESSAGING_ROLE_JWKS_LISTEN"], ":8445")
+            for key, source in {
+                "MESSAGING_ROLE_TLS_CA_FILE": "ca/ca.crt",
+                "MESSAGING_ROLE_CLIENT_CERT_FILE": "tls/messaging-client.crt",
+                "MESSAGING_ROLE_CLIENT_KEY_FILE": "tls/messaging-client.key",
+                "MESSAGING_ROLE_JWKS_TLS_CERT_FILE": "tls/messaging-gameintegration-grpc.crt",
+                "MESSAGING_ROLE_JWKS_TLS_KEY_FILE": "tls/messaging-gameintegration-grpc.key",
+                "MESSAGING_ROLE_JWKS_CLIENT_CA_FILE": "ca/ca.crt",
+                "SPACE_PRINCIPAL_JWKS_CA_FILE": "ca/ca.crt",
+            }.items():
+                self.assertEqual(self.media_source_at("messaging", messaging[key], services), source)
+            for key, value in self.base["messaging"]["environment"].items():
+                if key.startswith("MESSAGING_PURGE_PRINCIPAL_"):
+                    self.assertEqual(messaging[key], value, "base lifecycle publisher must retain its key and CA")
+
+    def test_all_live_space_jwks_consumers_keep_correct_ca(self):
+        for services in (self.merged, self.media_merged, self.ci_merged):
+            self.assertEqual(self.media_source_at("matchmaking", services["matchmaking"]["environment"]["S2S_JWKS_CA_FILE"], services), "ca/ca.crt")
+            for service in ("space", "search"):
+                environment = services[service]["environment"]
+                self.assertEqual(environment["S2S_JWKS_CA_FILE"], "/run/phase0/jwks-ca/ca.crt")
+                mount = next(v for v in services[service]["volumes"] if v["target"] == "/run/phase0/jwks-ca")
+                self.assertTrue(mount["read_only"])
+                self.assertEqual(services[service]["depends_on"]["phase0-space-jwks-ca"]["condition"], "service_completed_successfully")
+            search = services["search"]["environment"]
+            self.assertEqual(json.loads(search["S2S_JWKS_URLS_JSON"])["messaging"],
+                             "https://messaging:8444/.well-known/principal-jwks.json")
+            for key in ("S2S_JWKS_CLIENT_CERT_FILE", "S2S_JWKS_CLIENT_KEY_FILE"):
+                self.assertEqual(search[key], self.base["search"]["environment"][key])
+            helper = services["phase0-space-jwks-ca"]
+            self.assertEqual(helper["network_mode"], "none")
+            self.assertIn("/fixture/ca.crt /social/ca.crt", " ".join(helper["command"]))
+
+    def test_role_member_authority_uses_protected_space_target(self):
+        role = self.ci_merged["role"]["environment"]
+        space = self.ci_merged["space"]["environment"]
+        self.assertEqual(role.get("ROLE_SPACE_MEMBER_AUTHORITY_GRPC_ADDR"), "space:9099")
+        self.assertEqual(space.get("SPACE_ROLE_OVERRIDE_PRINCIPAL_GRPC_LISTEN"), ":9099")
+        self.assertEqual(role.get("ROLE_SPACE_MEMBER_AUTHORITY_TLS_SERVER_NAME"), "space")
+        for suffix, source in (("CLIENT_CERT_FILE", "tls/role-client.crt"),
+                               ("CLIENT_KEY_FILE", "tls/role-client.key"),
+                               ("TLS_CA_FILE", "ca/ca.crt")):
+            self.assertEqual(self.source_at("role", role["ROLE_SPACE_MEMBER_AUTHORITY_" + suffix]), source)
+        self.assertEqual(self.source_at("space", space["SPACE_ROLE_OVERRIDE_PRINCIPAL_CLIENT_CA_FILE"]), "ca/ca.crt")
+
     @classmethod
     def setUpClass(cls):
         if not OVERLAY.is_file():
@@ -511,6 +703,177 @@ class ComposeTests(unittest.TestCase):
                 if source.is_relative_to(self.fixture):
                     mounts.append((source.relative_to(self.fixture).as_posix(), volume))
         return mounts
+
+    def test_ci_creator_uses_the_existing_auth_session_floor_mtls_surface(self):
+        space = self.ci_merged["space"]["environment"]
+        auth = self.ci_merged["auth"]["environment"]
+        prefix = "SPACE_CREATOR_AUTH_"
+        expected = {
+            "GRPC_ADDR": "auth:9092",
+            "TLS_CA_FILE": "/run/phase0/ca.crt",
+            "TLS_SERVER_NAME": "auth",
+            "CLIENT_CERT_FILE": "/run/phase0/space-role-client.crt",
+            "CLIENT_KEY_FILE": "/run/phase0/space-role-client.key",
+        }
+        self.assertEqual({key: space.get(prefix + key) for key in expected}, expected)
+        self.assertEqual(space[prefix + "GRPC_ADDR"],
+                         "auth:" + auth["AUTH_SESSION_FLOOR_GRPC_PORT"])
+        self.assertNotEqual(auth["AUTH_SESSION_FLOOR_GRPC_PORT"], auth["AUTH_PRINCIPAL_GRPC_PORT"])
+        self.assertEqual(self.source_at("space", space[prefix + "TLS_CA_FILE"]), "ca/ca.crt")
+        self.assertEqual(self.source_at("space", space[prefix + "CLIENT_CERT_FILE"]), "tls/space-client.crt")
+        self.assertEqual(self.source_at("space", space[prefix + "CLIENT_KEY_FILE"]), "tls/space-client.key")
+        self.assertEqual(self.source_at("auth", auth["AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE"]), "ca/ca.crt")
+        self.assertEqual(space["SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN"], ":9096")
+
+    def test_chat_creation_uses_real_owner_transports_and_separate_audit(self):
+        for service, prefix, address, peer in (
+                ("gateway", "GATEWAY_CHAT_AUDIT_", "chat:9094", "chat"),
+                ("chat", "CHAT_CREATE_AUTH_", "auth:9092", "auth"),
+                ("chat", "CHAT_CREATE_SPACE_", "space:9097", "space"),
+                ("chat", "CHAT_CREATE_AUDIT_", "space:9098", "space")):
+            env = self.merged[service]["environment"]
+            self.assertEqual(env[prefix + "GRPC_ADDR"], address)
+            self.assertEqual(env[prefix + "TLS_SERVER_NAME"], peer)
+            for suffix in ("TLS_CA_FILE", "CLIENT_CERT_FILE", "CLIENT_KEY_FILE"):
+                self.assertTrue(self.source_at(service, env[prefix + suffix]))
+        chat = self.merged["chat"]["environment"]
+        self.assertEqual(chat["CHAT_CREATE_GRPC_LISTEN"], ":9094")
+        self.assertEqual(chat["CHAT_CREATE_PRINCIPAL_JWKS_URL"], URLS["gateway"])
+        self.assertEqual(chat["CHAT_CREATE_BOT_PRINCIPAL_JWKS_URL"], "https://bot:8444/.well-known/principal-jwks.json")
+        self.assertEqual(self.source_at("chat", chat["CHAT_CREATE_PRINCIPAL_JWKS_CLIENT_CERT_FILE"]), "tls/chat-jwks-client.crt")
+        self.assertEqual(self.source_at("chat", chat["CHAT_CREATE_AUTH_CLIENT_CERT_FILE"]), "tls/chat-client.crt")
+        self.assertEqual(chat["CHAT_CREATE_PRINCIPAL_REDIS_ADDR"], "redis:6379")
+        space = self.merged["space"]["environment"]
+        self.assertEqual(space["SPACE_CHAT_COMPOSITE_GRPC_LISTEN"], ":9097")
+        self.assertEqual(space["SPACE_AUDIT_PRINCIPAL_GRPC_LISTEN"], ":9098")
+        self.assertEqual(space["SPACE_CHAT_COMPOSITE_PRINCIPAL_JWKS_URL"], "https://chat:8443/.well-known/jwks.json")
+        self.assertEqual(self.source_at("space", space["SPACE_CHAT_COMPOSITE_TLS_CERT_FILE"]), "tls/space-chat-composite-grpc.crt")
+        self.assertEqual(self.source_at("space", space["SPACE_AUDIT_PRINCIPAL_TLS_CERT_FILE"]), "tls/space-audit-grpc.crt")
+        auth = self.merged["auth"]["environment"]
+        self.assertEqual(auth["AUTH_SESSION_FLOOR_GRPC_PORT"], "9092")
+        self.assertIn("-Djavax.net.ssl.keyStore=/run/phase0/auth-jwks-client.p12", auth["JAVA_TOOL_OPTIONS"])
+
+    def test_space_jwks_bundle_preserves_social_trust_without_private_material(self):
+        space = self.merged["space"]
+        self.assertEqual(json.loads(space["environment"]["S2S_JWKS_URLS_JSON"]), {
+            "messaging": "https://messaging:8445/.well-known/principal-jwks.json",
+            "bot": "https://bot:8444/.well-known/principal-jwks.json",
+            "social": "https://social:8443/.well-known/jwks.json",
+            "role": "https://role:8443/.well-known/jwks.json",
+            "chat": "https://chat:8443/.well-known/jwks.json",
+            "voice": "https://voice:8443/internal/v1/principal/jwks.json",
+        })
+        self.assertEqual(space["environment"]["S2S_JWKS_CA_FILE"], "/run/phase0/jwks-ca/ca.crt")
+        helper = self.merged["phase0-space-jwks-ca"]
+        self.assertEqual(helper["image"], "alpine:3.22")
+        self.assertEqual(helper["network_mode"], "none")
+        self.assertFalse(helper.get("ports"))
+        self.assertEqual(helper["command"], ["sh", "-ec", "cat /fixture/ca.crt /social/ca.crt > /bundle/ca.crt; chmod 644 /bundle/ca.crt"])
+        inputs = {v["target"]: v for v in helper["volumes"]}
+        self.assertEqual(set(inputs), {"/fixture/ca.crt", "/social", "/bundle"})
+        self.assertTrue(inputs["/fixture/ca.crt"]["read_only"])
+        self.assertTrue(inputs["/social"]["read_only"])
+        self.assertEqual(Path(inputs["/fixture/ca.crt"]["source"]), self.fixture / "ca/ca.crt")
+        social_ca = next(v for v in self.base["space"]["volumes"] if v["target"] == "/etc/voice/principal/ca")
+        self.assertEqual(inputs["/social"]["source"], social_ca["source"])
+        output = next(v for v in space["volumes"] if v["target"] == "/run/phase0/jwks-ca")
+        self.assertTrue(output["read_only"])
+        self.assertEqual(output["source"], inputs["/bundle"]["source"])
+        self.assertEqual(space["depends_on"]["phase0-space-jwks-ca"]["condition"], "service_completed_successfully")
+        bootstrap = (ROOT / "docker/social-principal/bootstrap.sh").read_text(encoding="utf-8")
+        self.assertIn("-keyout /tmp/ca.key -out /ca/ca.crt", bootstrap)
+        self.assertIn("rm -f /tmp/ca.key", bootstrap)
+
+    def test_space_bot_decision_reuses_actual_protected_lifecycle_transport(self):
+        space = self.merged["space"]["environment"]
+        bot = self.merged["bot"]["environment"]
+        prefix = "SPACE_BOT_COMPOSITE_"
+        self.assertEqual(space[prefix + "GRPC_ADDR"], "bot" + bot["BOT_SPACE_LIFECYCLE_GRPC_LISTEN"])
+        self.assertEqual(space[prefix + "TLS_SERVER_NAME"], "bot")
+        self.assertEqual(self.source_at("space", space[prefix + "CLIENT_CERT_FILE"]), "tls/space-lifecycle-client.crt")
+        self.assertEqual(self.source_at("bot", bot["BOT_SPACE_LIFECYCLE_CLIENT_CA_FILE"]), "ca/space-lifecycle-client-ca.crt")
+
+    def test_bot_jwks_uses_canonical_generated_rotation_pair(self):
+        bot = self.merged["bot"]["environment"]
+        self.assertEqual(bot["BOT_PRINCIPAL_ACTIVE_KID"], "current")
+        self.assertNotIn("BOT_PRINCIPAL_PRIVATE_KEY_FILE", bot)
+        self.assertNotIn("BOT_PRINCIPAL_KEY_ID", bot)
+        self.assertEqual(self.source_at("bot", bot["BOT_PRINCIPAL_SIGNING_KEYS_DIR"]), "bot")
+        keys = self.fixture / "bot"
+        self.assertEqual({p.name for p in keys.iterdir()}, {"current.pem", "next.pem"})
+        public = set()
+        for kid in ("current", "next"):
+            key = keys / f"{kid}.pem"
+            self.assertTrue(key.is_file() and not key.is_symlink())
+            self.assertTrue(key.read_text().startswith("-----BEGIN PRIVATE KEY-----"))
+            public.add(require_success(run("openssl", "pkey", "-in", key, "-pubout")))
+        self.assertEqual(len(public), 2, "Bot current and next signer keys must be distinct")
+
+    def test_ci_gateway_space_lifecycle_caller_matches_existing_protected_listener(self):
+        gateway = self.ci_merged["gateway"]["environment"]
+        space = self.ci_merged["space"]["environment"]
+        prefix = "GATEWAY_SPACE_LIFECYCLE_"
+        expected = {
+            "GRPC_ADDR": "space:9096",
+            "TLS_CA_FILE": "/run/phase0/ca.crt",
+            "TLS_SERVER_NAME": "space",
+            "CLIENT_CERT_FILE": "/run/phase0/gateway-client.crt",
+            "CLIENT_KEY_FILE": "/run/phase0/gateway-client.key",
+        }
+        self.assertEqual({key: gateway.get(prefix + key) for key in expected}, expected)
+        self.assertEqual(space["SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN"], ":9096")
+        self.assertEqual(gateway[prefix + "GRPC_ADDR"],
+                         "space" + space["SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN"])
+        for suffix, source in (("TLS_CA_FILE", "ca/ca.crt"),
+                               ("CLIENT_CERT_FILE", "tls/gateway-client.crt"),
+                               ("CLIENT_KEY_FILE", "tls/gateway-client.key")):
+            self.assertEqual(self.media_source_at("gateway", gateway[prefix + suffix],
+                                                  self.ci_merged), source)
+        listener = "SPACE_GATEWAY_LIFECYCLE_"
+        for suffix, source in (("CLIENT_CA_FILE", "ca/ca.crt"),
+                               ("TLS_CERT_FILE", "tls/space-lifecycle.crt"),
+                               ("TLS_KEY_FILE", "tls/space-lifecycle.key")):
+            self.assertEqual(self.media_source_at("space", space[listener + suffix],
+                                                  self.ci_merged), source)
+        self.assertEqual(gateway["GATEWAY_SESSION_EPOCH_STRICT"], "true")
+        self.assertEqual(gateway["GATEWAY_PRINCIPAL_ACTIVE_KID"], "current")
+        self.assertEqual(self.media_source_at("gateway", gateway["GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR"],
+                                              self.ci_merged), "gateway")
+        self.assertNotIn("SPACE_LIFECYCLE_ENABLED", space)
+        self.assertNotEqual(space[listener + "GRPC_LISTEN"],
+                            space["SPACE_VOICE_COMMUNICATION_GRPC_LISTEN"])
+
+    def test_lifecycle_overlay_keeps_media_listener_and_gateway_target_distinct(self):
+        command = ["docker", "compose", "--env-file", self.empty_env,
+                   "--profile", "*", "-f", ROOT / "docker-compose.yml",
+                   "-f", MEDIA_OVERLAY, "-f", ROOT / "docker-compose.space-lifecycle.yml",
+                   "config", "--format", "json"]
+        services = json.loads(require_success(run(*command, env=self.env)))["services"]
+        space = services["space"]
+        environment = space["environment"]
+        communication = environment["SPACE_VOICE_COMMUNICATION_GRPC_LISTEN"]
+        lifecycle = environment["SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN"]
+        self.assertNotEqual(lifecycle, environment["SPACE_MESSAGING_COMMUNICATION_GRPC_LISTEN"])
+        self.assertNotEqual(lifecycle, communication,
+                            "both protected servers run in the same Space process")
+        self.assertEqual(communication, ":9094")
+        self.assertEqual(lifecycle, ":9095")
+        self.assertTrue({"9094", "9095"}.issubset(set(space["expose"])))
+        gateway = services["gateway"]
+        self.assertEqual(gateway["environment"]["GATEWAY_SPACE_LIFECYCLE_GRPC_ADDR"],
+                         "space" + lifecycle)
+        for key in ("GATEWAY_SPACE_LIFECYCLE_TLS_CA_FILE",
+                    "GATEWAY_SPACE_LIFECYCLE_CLIENT_CERT_FILE",
+                    "GATEWAY_SPACE_LIFECYCLE_CLIENT_KEY_FILE"):
+            target = gateway["environment"][key]
+            mounts = [m for m in gateway["volumes"] if m["target"] == target]
+            self.assertEqual(len(mounts), 1)
+            self.assertTrue(mounts[0]["read_only"])
+        # This opt-in overlay still owns its existing activation choices.
+        self.assertEqual(environment["SPACE_LIFECYCLE_ENABLED"], "true")
+        self.assertEqual(environment["SPACE_LIFECYCLE_MODE"], "development")
+        self.assertNotIn("SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN",
+                         self.media_merged["space"]["environment"])
 
     def source_at(self, service, target):
         for source, volume in self.fixture_mounts(service):
@@ -591,6 +954,42 @@ class ComposeTests(unittest.TestCase):
                 info = path.stat()
                 self.assertEqual((info.st_uid, info.st_gid), (65532, 65532))
                 self.assertEqual(stat.S_IMODE(info.st_mode), 0o600)
+
+    def test_media_compose_preserves_social_and_protected_voice_space_authority(self):
+        space = self.media_merged["space"]
+        provider = space["environment"]
+        voice = self.media_merged["voice"]["environment"]
+        self.assertEqual(json.loads(provider["S2S_JWKS_URLS_JSON"]), {
+            "messaging": "https://messaging:8445/.well-known/principal-jwks.json",
+            "bot": "https://bot:8444/.well-known/principal-jwks.json",
+            "role": "https://role:8443/.well-known/jwks.json",
+            "chat": "https://chat:8443/.well-known/jwks.json",
+            "social": "https://social:8443/.well-known/jwks.json",
+            "voice": "https://voice:8443/internal/v1/principal/jwks.json",
+        })
+        self.assertEqual(provider["S2S_JWKS_CA_FILE"], "/run/phase0/jwks-ca/ca.crt")
+        prefix = "SPACE_VOICE_COMMUNICATION_"
+        self.assertEqual(provider[prefix + "GRPC_LISTEN"], ":9094")
+        self.assertEqual(provider[prefix + "REPLAY_REDIS_ADDR"], "redis:6379")
+        for suffix, leaf in (("TLS_CERT_FILE", "tls/space-lifecycle.crt"),
+                             ("TLS_KEY_FILE", "tls/space-lifecycle.key"),
+                             ("CLIENT_CA_FILE", "ca/ca.crt"),
+                             ("JWKS_CA_FILE", "ca/ca.crt"),
+                             ("JWKS_CLIENT_CERT_FILE", "tls/space-client.crt"),
+                             ("JWKS_CLIENT_KEY_FILE", "tls/space-client.key")):
+            self.assertEqual(self.media_source_at("space", provider[prefix + suffix]), leaf)
+        self.assertIn("9094", space["expose"])
+        self.assertNotIn("user", space, "Space keeps its existing nonroot image identity")
+        self.assertNotIn("voice", space.get("depends_on", {}), "startup graph must stay acyclic")
+        self.assertEqual(provider["SPACE_MESSAGING_COMMUNICATION_GRPC_LISTEN"], ":9101")
+        self.assertEqual(voice["VOICE_SPACE_COMMUNICATION_GRPC_ADDR"], "space:9094")
+        for suffix, leaf in (("TLS_CA_FILE", "ca/ca.crt"),
+                             ("CLIENT_CERT_FILE", "tls/voice-client.crt"),
+                             ("CLIENT_KEY_FILE", "tls/voice-client.key")):
+            self.assertEqual(self.media_source_at("voice", voice["VOICE_SPACE_COMMUNICATION_" + suffix]), leaf)
+        space_sources = {Path(v["source"]).name for v in space.get("volumes", []) if v.get("type") == "bind"}
+        self.assertNotIn("voice-client.key", space_sources)
+        self.assertNotIn("current.pem", space_sources)
 
     def test_media_compose_uses_protected_match_squad_provider_fixture(self):
         matchmaking = self.media_merged["matchmaking"]
@@ -708,6 +1107,19 @@ class ComposeTests(unittest.TestCase):
             self.assertIn("export PHASE0_MATCHSQUAD_FIXTURE_UID=65532", source, relative)
             self.assertIn("restore-phase0-fixture-owner.py", source, relative)
             self.assertIn("generate-phase0-fixture.py", source, relative)
+
+        profile = (ROOT / "scripts/ci/compose-a1-flutter-profile-handoff.sh").read_text(encoding="utf-8")
+        compose = profile.split("compose() {", 1)[1].split("\n}", 1)[0]
+        self.assertEqual(re.findall(r'-f "([^"\n]+)"', compose), [
+            "$COMPOSE_FILE_PATH",
+            "${ROOT}/docker-compose.voice-space-media.yml",
+            "${ROOT}/docker-compose.phase0.yml",
+        ], "profile proof must consume the full Phase0 transport fixture after media")
+        gateway = self.ci_merged["gateway"]["environment"]
+        self.assertEqual(gateway["GATEWAY_CHAT_AUDIT_GRPC_ADDR"], "chat:9094")
+        self.assertEqual(gateway["GATEWAY_CHAT_AUDIT_TLS_SERVER_NAME"], "chat")
+        for suffix in ("TLS_CA_FILE", "CLIENT_CERT_FILE", "CLIENT_KEY_FILE"):
+            self.media_source_at("gateway", gateway["GATEWAY_CHAT_AUDIT_" + suffix], self.ci_merged)
 
         workflows = (
             (".github/workflows/ci.yml", "compose-e2e", "Generate disposable media principal and TLS fixture"),
@@ -853,6 +1265,49 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(summary["services_seen"], [])
         self.assertEqual(first["result"], "no_error_marker")
 
+    def test_space_static_startup_markers_are_scoped_redacted_and_keep_unknowns(self):
+        source = (ROOT / "src/backend/space/main.go").read_text(encoding="utf-8")
+        prefixes = {literal.split("%", 1)[0].rstrip()
+                    for literal in re.findall(r'log\.Fatalf?\("([^"\n]+)"', source)}
+        expected = {
+            "Space authority source activation:": "space_authority_source_activation",
+            "Space Chat composite runtime:": "space_chat_composite_runtime",
+            "postgres:": "space_postgres",
+        }
+        self.assertTrue(set(expected).issubset(prefixes))
+        secret = "private-space-endpoint-password-sentinel"
+        stamp = "2026-10-22T19:00:00.123Z 2026/10/22 19:00:00 "
+        for prefix in sorted(prefixes):
+            with self.subTest(prefix=prefix):
+                raw = ("private-project-space-1 | " + stamp + prefix + " " + secret + "\n").encode()
+                summary, first = startup_diagnostics.sanitize_logs(raw, "complete", ("space",))
+                self.assertEqual(first["result"], "observed_in_bounded_window")
+                self.assertEqual(first["service"], "space")
+                self.assertTrue(first["startup_category"].startswith("space_"))
+                if prefix in expected:
+                    self.assertEqual(first["startup_category"], expected[prefix])
+                self.assertEqual(first["startup_detail"], "unknown")
+                self.assertEqual(first["error_code"], "unknown")
+                self.assertEqual(first["causal_order"], "not_established")
+                self.assertEqual(summary["services_seen"], ["space"])
+                serialized = json.dumps({"summary": summary, "first": first})
+                self.assertNotIn(secret, serialized)
+                self.assertNotIn("private-project", serialized)
+        unknown = (
+            ("voice", "Space authority source activation: " + secret, "complete", "\n"),
+            ("space", "unrecognized " + secret, "complete", "\n"),
+            ("space", "credential=Space authority source activation: " + secret, "complete", "\n"),
+            ("space", "Space authority source activat", "complete", "\n"),
+            ("space", "Space authority source activation: " + secret, "byte_limit", ""),
+        )
+        for service, message, result, ending in unknown:
+            with self.subTest(service=service, result=result, message=message[:24]):
+                raw = (service + "-1 | " + stamp + message + ending).encode()
+                _, first = startup_diagnostics.sanitize_logs(raw, result, (service,))
+                self.assertEqual(first["startup_category"], "unknown")
+                self.assertEqual(first["service"], "unknown")
+                self.assertNotIn(secret, json.dumps(first))
+
     def test_t31_matchmaking_startup_marker_is_service_scoped_and_redacted(self):
         secret = "private-jwks-url-and-password-sentinel"
         raw = ("matchmaking-1 | level=error error_code=UNAVAILABLE "
@@ -892,8 +1347,69 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(record["first_error"]["startup_category"],
                          "matchmaking_space_principal_runtime")
 
+    def test_startup_failure_callers_capture_space_without_losing_services_or_status(self):
+        workflows = (
+            ROOT / ".github/workflows/t31-session-events-e2e.yml",
+            CI_WORKFLOW,
+        )
+        callers = []
+        for workflow in workflows:
+            jobs = yaml.safe_load(workflow.read_text(encoding="utf-8"))["jobs"]
+            for job in jobs.values():
+                for step in job.get("steps", []):
+                    block = step.get("run", "")
+                    if "scripts/ci/t31-startup-diagnostics.py" in block:
+                        callers.append((workflow.name, block))
+        self.assertEqual(len(callers), 3)
+        secret = "private-space-dsn-password-sentinel"
+        for workflow, block in callers:
+            with self.subTest(workflow=workflow, startup=block.splitlines()[0]):
+                original = ["voice"]
+                options = ["--service", re.search(r"--service\s+([a-z-]+)", block).group(1)]
+                if "--include-matchmaking-startup" in block:
+                    original.append("matchmaking")
+                    options.append("--include-matchmaking-startup")
+                if "--include-space-startup" in block:
+                    options.append("--include-space-startup")
+                startup_status = 37 if 'startup_status=$?' in block else 1
+                self.assertIn('exit "$startup_status"' if startup_status == 37 else "exit 1", block)
+                commands = []
+
+                def bounded(command, timeout, limit):
+                    commands.append(command)
+                    marker = "json" if "ps" in command else "--timestamps"
+                    requested = command[command.index(marker) + 1:]
+                    if "ps" in command:
+                        rows = [{"Service": name, "State": "exited" if name == "space" else "created",
+                                 "Health": "none", "ExitCode": 23 if name == "space" else 0,
+                                 "Name": secret} for name in requested]
+                        return json.dumps(rows).encode("ascii"), "complete", 0
+                    stderr = ("space-1 | FATAL SQLSTATE=08006 /app/main.go:42 password="
+                              + secret + "\n").encode("ascii") if "space" in requested else b""
+                    return stderr, "complete", 0
+
+                with tempfile.TemporaryDirectory() as tmp:
+                    output = Path(tmp) / "diagnostics.json"
+                    with patch.object(startup_diagnostics, "_bounded_command", side_effect=bounded):
+                        result = startup_diagnostics.main([
+                            "--output", str(output), "--startup-status", str(startup_status),
+                            *options, "--compose", "docker", "compose",
+                        ])
+                    self.assertEqual(result, 0)
+                    record = json.loads(output.read_text(encoding="ascii"))
+                self.assertEqual(record["startup_command_exit_status"], startup_status)
+                self.assertIn({"service": "space", "state": "exited", "health": "none", "exit_code": 23},
+                              record["status_collection"]["services"])
+                self.assertEqual(commands[0][commands[0].index("json") + 1:], [*original, "space"])
+                self.assertEqual(commands[1][commands[1].index("--timestamps") + 1:], [*original, "space"])
+                self.assertEqual(record["log_collection"]["services_requested"], [*original, "space"])
+                self.assertEqual(record["first_error"]["service"], "space")
+                self.assertEqual(record["first_error"]["sqlstate"], "08006")
+                self.assertNotIn(secret, json.dumps(record))
+
     def test_voice_startup_categories_cover_static_fatal_sites_without_dynamic_text(self):
-        source = (ROOT / "src/backend/voice/main.go").read_text()
+        source = "\n".join((ROOT / path).read_text() for path in (
+            "src/backend/voice/main.go", "src/backend/voice/space_media_runtime.go"))
         prefixes = dict(startup_diagnostics.VOICE_STARTUP_PREFIXES)
         for literal in re.findall(r'log\.Fatalf?\("([^"\n]+)"', source):
             prefix = literal.split("%", 1)[0].rstrip()
@@ -902,6 +1418,23 @@ class ComposeTests(unittest.TestCase):
             summary, first = startup_diagnostics.sanitize_logs(raw, "complete", ("voice",))
             self.assertEqual(first["startup_category"], prefixes[prefix])
             self.assertNotIn("private-sentinel", json.dumps({"summary": summary, "first": first}))
+
+    def test_voice_p3_startup_categories_are_finite_and_redacted(self):
+        cases = {
+            "P3 requires durable lifecycle-fenced Redis": "voice_p3_durable_redis_required",
+            "Space requires an incarnation-fenced projection store": "voice_space_incarnation_projection_required",
+            "P3 requires lifecycle-fenced Redis projection": "voice_p3_projection_fence_required",
+        }
+        for message, expected in cases.items():
+            with self.subTest(category=expected):
+                raw = ("voice | " + message + " private-sentinel\n").encode()
+                summary, first = startup_diagnostics.sanitize_logs(raw, "complete", ("voice",))
+                self.assertEqual(first["startup_category"], expected)
+                self.assertNotIn("private-sentinel", json.dumps({"summary": summary, "first": first}))
+        summary, first = startup_diagnostics.sanitize_logs(
+            b"voice | P3 requires unknown-private-sentinel\n", "complete", ("voice",))
+        self.assertEqual(first["startup_category"], "unknown")
+        self.assertNotIn("private-sentinel", json.dumps({"summary": summary, "first": first}))
 
     def test_t31_match_squad_runtime_detail_is_allowlisted_and_redacted(self):
         secret = "private-certificate-or-endpoint-detail"
@@ -1208,6 +1741,10 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(role["ROLE_PRINCIPAL_GRPC_LISTEN"], ":9091")
         self.assertEqual(role["ROLE_PRINCIPAL_REPLAY_REDIS_ADDR"], "redis:6379")
         self.assertEqual(json.loads(role["S2S_JWKS_URLS_JSON"]), {
+            "messaging": "https://messaging:8445/.well-known/principal-jwks.json",
+            "bot": "https://bot:8444/.well-known/principal-jwks.json",
+            "chat": "https://chat:8443/.well-known/jwks.json",
+            "gateway": "https://phase0-jwks:8443/gateway-bootstrap/jwks.json",
             "space": URLS["space"],
             "gameintegration": "https://gameintegration:8443/internal/v1/principal/jwks.json",
             "voice": "https://voice:8443/internal/v1/principal/jwks.json",
@@ -1234,6 +1771,9 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(auth["AUTH_PRINCIPAL_GRPC_PORT"], "9091")
         self.assertEqual(json.loads(auth["S2S_JWKS_URLS_JSON"]), {
             **URLS, "voice": "https://voice:8443/internal/v1/principal/jwks.json",
+            "bot": "https://bot:8444/.well-known/principal-jwks.json",
+            "role": "https://role:8443/.well-known/jwks.json",
+            "chat": "https://chat:8443/.well-known/jwks.json",
         })
         self.assertNotIn("S2S_JWKS_CA_FILE", auth)
         options = auth.get("JAVA_TOOL_OPTIONS", "")
@@ -1289,10 +1829,22 @@ class ComposeTests(unittest.TestCase):
                    PROXY: {"tls/proxy.crt", "tls/proxy.key", "ca/ca.crt"}}
         allowed["space"].update({"tls/space-lifecycle.crt", "tls/space-lifecycle.key",
                                  "tls/space-lifecycle-client.crt", "tls/space-lifecycle-client.key"})
+        allowed["space"].update({"tls/space-chat-composite-grpc.crt", "tls/space-chat-composite-grpc.key",
+                                 "tls/space-audit-grpc.crt", "tls/space-audit-grpc.key"})
+        allowed["chat"].update({"chat", "tls/chat-jwks.crt", "tls/chat-jwks.key",
+                                "tls/chat-create-grpc.crt", "tls/chat-create-grpc.key",
+                                "tls/chat-client.crt", "tls/chat-client.key",
+                                "tls/chat-jwks-client.crt", "tls/chat-jwks-client.key"})
+        allowed["role"].add("role")
+        allowed["role"].update({"tls/role-client.crt", "tls/role-client.key"})
+        allowed["auth"].add("auth-jwks-client.p12")
+        allowed["phase0-space-jwks-ca"] = {"ca/ca.crt"}
         allowed["gameintegration"].update({"tls/gameintegration-messaging-client.crt",
                                            "tls/gameintegration-messaging-client.key"})
         allowed["voice"].add("ca/space-lifecycle-client-ca.crt")
+        allowed["realtime"] = {"ca/ca.crt"}
         allowed["bot"] = {"bot", "tls/bot-game-event.crt", "tls/bot-game-event.key",
+                          "tls/bot-client.crt", "tls/bot-client.key", "ca/bot-jwks-client-ca.crt",
                           "tls/gameintegration-messaging-client.crt", "tls/gameintegration-messaging-client.key",
                           "ca/ca.crt", "ca/gameintegration-client-ca.crt", "ca/space-lifecycle-client-ca.crt"}
         allowed["notification"] = {"tls/notification-lifecycle.crt", "tls/notification-lifecycle.key",
@@ -1303,6 +1855,8 @@ class ComposeTests(unittest.TestCase):
         allowed["phase0-jwks"] = {"jwks/matchmaking/jwks.json", "jwks/gateway/jwks.json",
                                    "tls/proxy.crt", "tls/proxy.key", "ca/ca.crt"}
         allowed["messaging"] = {"tls/gameintegration-messaging-client.crt", "tls/gameintegration-messaging-client.key",
+                                "tls/messaging-bot-authority-client.crt", "tls/messaging-bot-authority-client.key",
+                                "tls/messaging-client.crt", "tls/messaging-client.key",
                                 "tls/messaging-gameintegration-grpc.crt", "tls/messaging-gameintegration-grpc.key",
                                 "tls/gameintegration-client.crt", "tls/gameintegration-client.key",
                                 "ca/ca.crt", "ca/gameintegration-client-ca.crt"}
@@ -1377,7 +1931,7 @@ class ComposeTests(unittest.TestCase):
 
     def test_voice_space_media_overlay_is_limited_to_existing_services_and_tls_helper(self):
         added = set(self.media_merged) - set(self.base)
-        self.assertEqual(added, {PROXY, "phase0-matchmaking-jwks-readiness"})
+        self.assertEqual(added, {PROXY, "phase0-matchmaking-jwks-readiness", "phase0-space-jwks-ca"})
         def common_proxy(services):
             proxy = dict(services[PROXY])
             proxy.pop("depends_on", None)
@@ -1389,11 +1943,28 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(common_proxy(self.media_merged), common_proxy(self.merged),
                          "proxy differs only in fixture JWKS inputs, Space CA and initialization dependency")
         expected_environment = {
-            "space": {"SPACE_VOICE_S2S_TOKEN"},
+            "space": {"SPACE_VOICE_S2S_TOKEN", "SPACE_VOICE_COMMUNICATION_GRPC_LISTEN",
+                      "S2S_JWKS_CLIENT_CERT_FILE", "S2S_JWKS_CLIENT_KEY_FILE",
+                      "SPACE_MESSAGING_COMMUNICATION_GRPC_LISTEN",
+                      "SPACE_MESSAGING_COMMUNICATION_REPLAY_REDIS_ADDR",
+                      "SPACE_MESSAGING_COMMUNICATION_TLS_CERT_FILE",
+                      "SPACE_MESSAGING_COMMUNICATION_TLS_KEY_FILE",
+                      "SPACE_MESSAGING_COMMUNICATION_CLIENT_CA_FILE",
+                      "SPACE_MESSAGING_COMMUNICATION_JWKS_CA_FILE",
+                      "SPACE_MESSAGING_COMMUNICATION_JWKS_CLIENT_CERT_FILE",
+                      "SPACE_MESSAGING_COMMUNICATION_JWKS_CLIENT_KEY_FILE",
+                      "SPACE_ROLE_OVERRIDE_PRINCIPAL_GRPC_LISTEN", "SPACE_ROLE_OVERRIDE_PRINCIPAL_TLS_CERT_FILE",
+                      "SPACE_ROLE_OVERRIDE_PRINCIPAL_TLS_KEY_FILE", "SPACE_ROLE_OVERRIDE_PRINCIPAL_CLIENT_CA_FILE",
+                      "SPACE_ROLE_OVERRIDE_PRINCIPAL_REPLAY_REDIS_ADDR",
+                      "SPACE_VOICE_COMMUNICATION_REPLAY_REDIS_ADDR", "SPACE_VOICE_COMMUNICATION_TLS_CERT_FILE",
+                      "SPACE_VOICE_COMMUNICATION_TLS_KEY_FILE", "SPACE_VOICE_COMMUNICATION_CLIENT_CA_FILE",
+                      "SPACE_VOICE_COMMUNICATION_JWKS_CA_FILE", "SPACE_VOICE_COMMUNICATION_JWKS_CLIENT_CERT_FILE",
+                      "SPACE_VOICE_COMMUNICATION_JWKS_CLIENT_KEY_FILE"},
             "auth": {
                 "AUTH_PRINCIPAL_GRPC_PORT", "AUTH_SESSION_FLOOR_GRPC_PORT",
                 "AUTH_GRPC_TLS_CERT_FILE", "AUTH_GRPC_TLS_KEY_FILE",
                 "AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE",
+                "AUTH_BOT_SESSION_FLOOR_ALLOWED_CLIENT_URI_SAN",
                 "S2S_JWKS_URLS_JSON", "JAVA_TOOL_OPTIONS",
             },
             "gateway": {
@@ -1426,6 +1997,8 @@ class ComposeTests(unittest.TestCase):
                 "VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_REDIS_PASSWORD",
                 "VOICE_ROLE_GRPC_ADDR", "VOICE_ROLE_TLS_CA_FILE",
                 "VOICE_ROLE_CLIENT_CERT_FILE", "VOICE_ROLE_CLIENT_KEY_FILE",
+                "VOICE_SPACE_COMMUNICATION_GRPC_ADDR", "VOICE_SPACE_COMMUNICATION_TLS_CA_FILE",
+                "VOICE_SPACE_COMMUNICATION_CLIENT_CERT_FILE", "VOICE_SPACE_COMMUNICATION_CLIENT_KEY_FILE",
                 "VOICE_SPACE_LIFECYCLE_PRINCIPAL_GRPC_LISTEN",
                 "VOICE_SPACE_LIFECYCLE_PRINCIPAL_TLS_CERT_FILE",
                 "VOICE_SPACE_LIFECYCLE_PRINCIPAL_TLS_KEY_FILE",
@@ -1444,6 +2017,15 @@ class ComposeTests(unittest.TestCase):
                 "S2S_JWKS_CLIENT_CERT_FILE", "S2S_JWKS_CLIENT_KEY_FILE",
             },
             "role": {
+                "ROLE_AUTH_SESSION_FLOOR_CLIENT_KEY_FILE", "ROLE_AUTH_SESSION_FLOOR_CLIENT_CERT_FILE",
+                "ROLE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME", "ROLE_AUTH_SESSION_FLOOR_TLS_CA_FILE",
+                "ROLE_AUTH_SESSION_FLOOR_GRPC_ADDR", "S2S_JWKS_CLIENT_KEY_FILE", "S2S_JWKS_CLIENT_CERT_FILE",
+                "ROLE_BOT_LIFECYCLE_ENABLED", "ROLE_DELEGATED_USER_ENABLED",
+                "ROLE_SPACE_MEMBER_AUTHORITY_GRPC_ADDR", "ROLE_SPACE_MEMBER_AUTHORITY_TLS_CA_FILE",
+                "ROLE_SPACE_MEMBER_AUTHORITY_TLS_SERVER_NAME", "ROLE_SPACE_MEMBER_AUTHORITY_CLIENT_CERT_FILE",
+                "ROLE_SPACE_MEMBER_AUTHORITY_CLIENT_KEY_FILE", "ROLE_PRINCIPAL_SIGNING_KEYS_DIR",
+                "ROLE_PRINCIPAL_ACTIVE_KID", "ROLE_PRINCIPAL_JWKS_TLS_CERT_FILE",
+                "ROLE_PRINCIPAL_JWKS_TLS_KEY_FILE", "ROLE_PRINCIPAL_JWKS_HTTPS_LISTEN",
                 "ROLE_PRINCIPAL_GRPC_LISTEN", "ROLE_PRINCIPAL_TLS_CERT_FILE",
                 "ROLE_PRINCIPAL_TLS_KEY_FILE", "ROLE_PRINCIPAL_CLIENT_CA_FILE",
                 "ROLE_PRINCIPAL_REPLAY_REDIS_ADDR", "S2S_JWKS_URLS_JSON",
@@ -1456,8 +2038,14 @@ class ComposeTests(unittest.TestCase):
             self.assertEqual(actual - baseline, expected,
                              f"unexpected {service} media-overlay environment additions")
         auth_env = self.media_merged["auth"]["environment"]
-        self.assertEqual(auth_env["S2S_JWKS_URLS_JSON"],
-                         '{"gateway":"https://phase0-jwks:8443/gateway/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json"}')
+        self.assertEqual(json.loads(auth_env["S2S_JWKS_URLS_JSON"]), {
+            "gateway": "https://phase0-jwks:8443/gateway/jwks.json",
+            "space": "https://phase0-jwks:8443/space/jwks.json",
+            "voice": "https://voice:8443/internal/v1/principal/jwks.json",
+            "chat": "https://chat:8443/.well-known/jwks.json",
+            "role": "https://role:8443/.well-known/jwks.json",
+            "bot": "https://bot:8444/.well-known/principal-jwks.json",
+        })
         self.assertEqual(auth_env["AUTH_SESSION_FLOOR_GRPC_PORT"], "9092")
         self.assertEqual(auth_env["AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE"], "/run/phase0/ca.crt")
         gateway_env = self.media_merged["gateway"]["environment"]
@@ -1481,8 +2069,22 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(self.media_merged["gateway"]["depends_on"]["voice"]["condition"], "service_started",
                          "Gateway must serve its JWKS while Voice bootstraps the TLS JWKS proxy")
         self.assertIn("phase0-jwks", self.media_merged["voice"].get("depends_on", {}))
+        scoped_overrides = {
+            "space": {"SPACE_PRINCIPAL_SIGNING_KEYS_DIR", "SPACE_PRINCIPAL_ACTIVE_KID",
+                      "SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE", "SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE", "S2S_JWKS_CA_FILE"},
+            "messaging": {"ROLE_GRPC_ADDR", "SPACE_PRINCIPAL_JWKS_CA_FILE"},
+            "matchmaking": {"S2S_JWKS_CA_FILE"},
+            "search": {"S2S_JWKS_CA_FILE"},
+            "realtime": {"REALTIME_SPACE_PRINCIPAL_JWKS_URL", "REALTIME_SPACE_PRINCIPAL_JWKS_CA_FILE"},
+        }
         for service in self.base:
             for name, value in self.base[service].get("environment", {}).items():
+                if name in scoped_overrides.get(service, set()):
+                    continue
+                if service == "space" and name == "S2S_JWKS_URLS_JSON":
+                    self.assertEqual(json.loads(self.media_merged[service]["environment"][name])["social"],
+                                     json.loads(value)["social"])
+                    continue
                 if service in {"auth", "gateway", "voice"} and name in {
                     "AUTH_PRINCIPAL_GRPC_PORT", "AUTH_GRPC_TLS_CERT_FILE", "AUTH_GRPC_TLS_KEY_FILE",
                     "GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR", "GATEWAY_PRINCIPAL_ACTIVE_KID",
@@ -1512,6 +2114,10 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(role_env["ROLE_PRINCIPAL_CLIENT_CA_FILE"], "/run/phase0/ca.crt")
         self.assertEqual(role_env["ROLE_PRINCIPAL_REPLAY_REDIS_ADDR"], "redis:6379")
         self.assertEqual(json.loads(role_env["S2S_JWKS_URLS_JSON"]), {
+            "messaging": "https://messaging:8445/.well-known/principal-jwks.json",
+            "bot": "https://bot:8444/.well-known/principal-jwks.json",
+            "chat": "https://chat:8443/.well-known/jwks.json",
+            "gateway": "https://phase0-jwks:8443/gateway-bootstrap/jwks.json",
             "space": "https://phase0-jwks:8443/space/jwks.json",
             "gameintegration": "https://gameintegration:8443/internal/v1/principal/jwks.json",
             "voice": "https://voice:8443/internal/v1/principal/jwks.json",
@@ -1558,27 +2164,101 @@ class ComposeTests(unittest.TestCase):
         self.assertIn(f"proxy_ssl_trusted_certificate {ca_file};", config)
         self.assertIn("proxy_ssl_verify on;", config)
         self.assertIn("proxy_ssl_name space;", config)
-        media_ca = next(v for v in self.media_merged[PROXY]["volumes"] if v["target"] == ca_directory)
-        space_ca = next(v for v in self.base["space"]["volumes"]
-                        if v["target"] == "/etc/voice/principal/ca")
-        self.assertEqual(media_ca["type"], "volume")
-        self.assertEqual(media_ca["source"], space_ca["source"])
+        media_ca = next(v for v in self.media_merged[PROXY]["volumes"] if v["target"] == ca_file)
+        self.assertEqual(media_ca["type"], "bind")
+        self.assertEqual(Path(media_ca["source"]), self.fixture / "ca/ca.crt")
         self.assertTrue(media_ca["read_only"])
-        for name in ("SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE", "SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE"):
-            self.assertEqual(self.media_merged["space"]["environment"][name], self.base["space"]["environment"][name])
+        for name, source in (("SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE", "tls/space-lifecycle.crt"),
+                             ("SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE", "tls/space-lifecycle.key")):
+            self.assertEqual(self.media_source_at("space", self.media_merged["space"]["environment"][name]), source)
         self.assertEqual(self.source_at(PROXY, ca_file), "ca/ca.crt")
         command = self.command(True)
         command[-3:-3] = ["-f", MEDIA_OVERLAY]
         combined = json.loads(require_success(run(*command, env=self.env)))["services"]
-        # The full Phase0 overlay replaces Space's leaf. Its more specific file
-        # mount retains the fixture CA over the media-only directory mount.
+        # Both overlay orders retain the same Space issuer and transport CA.
         combined_ca = next(v for v in combined[PROXY]["volumes"] if v["target"] == ca_file)
         self.assertEqual(Path(combined_ca["source"]), self.fixture / "ca/ca.crt")
         self.assertTrue(combined_ca["read_only"])
         self.assertEqual(combined["space"]["environment"]["SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE"],
                          self.merged["space"]["environment"]["SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE"])
 
+    def test_t31_final_composition_preserves_all_space_principal_issuers(self):
+        # Match T31's actual order, including its final acceptance-only overlay.
+        # Values below satisfy config interpolation only; no service is started.
+        env = dict(self.env)
+        env.update({name: "compose-contract-placeholder" for name in (
+            "T31_APPLICATION_ID", "T31_ENVIRONMENT_ID", "T31_GAME_SERVER_CREDENTIAL",
+            "T31_OTHER_APPLICATION_ID", "T31_OTHER_ENVIRONMENT_ID",
+            "T31_OTHER_GAME_SERVER_CREDENTIAL", "T31_EXPECTED_EVENT_ID",
+            "T31_ACCEPTANCE_PHASE",
+        )})
+        env["T31_E2E_TLS_DIR"] = str(self.fixture.resolve())
+        env["T31_E2E_STATE_DIR"] = str(self.fixture.resolve())
+        command = ["docker", "compose", "--env-file", self.empty_env,
+                   "--profile", "*", "-f", ROOT / "docker-compose.yml",
+                   "-f", OVERLAY, "-f", MEDIA_OVERLAY,
+                   "-f", ROOT / "docker-compose.t31-session-events-e2e.yml",
+                   "config", "--format", "json"]
+        space = json.loads(require_success(run(*command, env=env)))["services"]["space"]["environment"]
+        self.assertEqual(json.loads(space["S2S_JWKS_URLS_JSON"]), {
+            "messaging": "https://messaging:8445/.well-known/principal-jwks.json",
+            "bot": "https://bot:8444/.well-known/principal-jwks.json",
+            "social": "https://social:8443/.well-known/jwks.json",
+            "role": "https://role:8443/.well-known/jwks.json",
+            "chat": "https://chat:8443/.well-known/jwks.json",
+            "voice": "https://voice:8443/internal/v1/principal/jwks.json",
+        })
+        self.assertEqual(space["SPACE_AUDIT_PRINCIPAL_GRPC_LISTEN"], ":9098")
+
+
+    def test_ci_space_voice_communication_keeps_its_required_issuer_and_trust(self):
+        # Use the actual CI order: root, media, then complete Phase0.
+        space = self.ci_merged["space"]
+        env = space["environment"]
+        self.assertEqual(json.loads(env["S2S_JWKS_URLS_JSON"]), {
+            "messaging": "https://messaging:8445/.well-known/principal-jwks.json",
+            "bot": "https://bot:8444/.well-known/principal-jwks.json",
+            "social": "https://social:8443/.well-known/jwks.json",
+            "role": "https://role:8443/.well-known/jwks.json",
+            "chat": "https://chat:8443/.well-known/jwks.json",
+            "voice": "https://voice:8443/internal/v1/principal/jwks.json",
+        })
+        prefix = "SPACE_VOICE_COMMUNICATION_"
+        expected = {
+            "GRPC_LISTEN": ":9094",
+            "REPLAY_REDIS_ADDR": "redis:6379",
+            "TLS_CERT_FILE": "/run/phase0/space-lifecycle.crt",
+            "TLS_KEY_FILE": "/run/phase0/space-lifecycle.key",
+            "CLIENT_CA_FILE": "/run/phase0/ca.crt",
+            "JWKS_CA_FILE": "/run/phase0/ca.crt",
+            "JWKS_CLIENT_CERT_FILE": "/run/phase0/space-client.crt",
+            "JWKS_CLIENT_KEY_FILE": "/run/phase0/space-client.key",
+        }
+        for suffix, value in expected.items():
+            self.assertEqual(env[prefix + suffix], value)
+            if suffix.endswith("_FILE"):
+                mount = next(v for v in space["volumes"] if v["target"] == value)
+                self.assertEqual(mount["type"], "bind")
+                self.assertTrue(mount["read_only"])
+                self.assertTrue(Path(mount["source"]).is_relative_to(self.fixture))
+        self.assertEqual(env["S2S_JWKS_CA_FILE"], "/run/phase0/jwks-ca/ca.crt")
+        self.assertEqual(env["SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN"], ":9096")
+        self.assertEqual(env["SPACE_CHAT_COMPOSITE_GRPC_LISTEN"], ":9097")
+        self.assertEqual(env["SPACE_AUDIT_PRINCIPAL_GRPC_LISTEN"], ":9098")
+        self.assertFalse(space.get("ports"))
+
     def test_combined_phase0_media_listeners_have_distinct_ports_and_matching_caller(self):
+        for services in (self.merged, self.media_merged, self.ci_merged):
+            self.assertEqual(services["auth"]["environment"]["AUTH_BOT_SESSION_FLOOR_ALLOWED_CLIENT_URI_SAN"],
+                             "spiffe://voice.local/phase0/bot")
+            options = services["auth"]["environment"]["JAVA_TOOL_OPTIONS"]
+            self.assertIn("-Djavax.net.ssl.keyStore=/run/phase0/auth-jwks-client.p12", options)
+            self.assertIn("-Djavax.net.ssl.keyStorePassword=phase0-fixture", options)
+            self.assertIn("-Djavax.net.ssl.keyStoreType=PKCS12", options)
+            mounts = [v for v in services["auth"]["volumes"]
+                      if v["target"] == "/run/phase0/auth-jwks-client.p12"]
+            self.assertEqual(len(mounts), 1)
+            self.assertTrue(mounts[0]["read_only"])
         # Match the CI stack's effective order: the complete Phase0 overlay
         # must override the media-only Gateway JWKS bootstrap URL.
         combined = self.ci_merged
@@ -1595,8 +2275,11 @@ class ComposeTests(unittest.TestCase):
         auth = combined["auth"]["environment"]
         self.assertEqual(json.loads(auth["S2S_JWKS_URLS_JSON"]), {
             "gateway": "https://phase0-jwks:8443/gateway/jwks.json",
+            "bot": "https://bot:8444/.well-known/principal-jwks.json",
+            "role": "https://role:8443/.well-known/jwks.json",
             "space": "https://phase0-jwks:8443/space/jwks.json",
             "voice": "https://voice:8443/internal/v1/principal/jwks.json",
+            "chat": "https://chat:8443/.well-known/jwks.json",
         })
         self.assertEqual(auth["AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE"], "/run/phase0/ca.crt")
         listeners = [voice[name] for name in (
@@ -1609,7 +2292,19 @@ class ComposeTests(unittest.TestCase):
 
     def test_media_overlay_mounts_only_ephemeral_chain_credentials_readonly(self):
         allowed = {
-            "auth": {"tls/auth.crt", "tls/auth.key", "truststore.p12", "ca/ca.crt"},
+            "messaging": {"tls/messaging-client.crt", "tls/messaging-client.key",
+                          "tls/messaging-gameintegration-grpc.crt", "tls/messaging-gameintegration-grpc.key", "ca/ca.crt"},
+            "chat": {"chat", "tls/chat-client.crt", "tls/chat-client.key", "tls/chat-jwks.crt", "tls/chat-jwks.key",
+                     "tls/chat-match-squad-grpc.crt", "tls/chat-match-squad-grpc.key", "ca/ca.crt"},
+            "role": {"role", "tls/role.crt", "tls/role.key", "tls/role-client.crt", "tls/role-client.key", "ca/ca.crt"},
+            "realtime": {"ca/ca.crt"},
+            "matchmaking": {"matchmaking", "tls/matchmaking-client.crt", "tls/matchmaking-client.key",
+                            "tls/matchmaking-jwks.crt", "tls/matchmaking-jwks.key", "ca/ca.crt"},
+            "phase0-space-jwks-ca": {"ca/ca.crt"},
+            "phase0-matchmaking-jwks-readiness": {"ca/ca.crt"},
+            "space": {"space", "tls/space-lifecycle.crt", "tls/space-lifecycle.key", "tls/space-client.crt",
+                      "tls/space-client.key", "ca/ca.crt"},
+            "auth": {"tls/auth.crt", "tls/auth.key", "truststore.p12", "auth-jwks-client.p12", "ca/ca.crt"},
             "gateway": {"gateway/current.pem", "gateway/next.pem", "tls/gateway-client.crt", "tls/gateway-client.key", "ca/ca.crt"},
             "voice": {"voice/current.pem", "voice/next.pem", "tls/voice-jwks.crt", "tls/voice-jwks.key",
                       "tls/voice-game-grpc.crt", "tls/voice-game-grpc.key", "tls/voice-client.crt",
@@ -1618,10 +2313,11 @@ class ComposeTests(unittest.TestCase):
                       "tls/voice-match-squad-member-grpc.key", "ca/ca.crt",
                       "ca/space-lifecycle-client-ca.crt"},
             PROXY: {"tls/proxy.crt", "tls/proxy.key", "ca/ca.crt"},
-            "phase0-jwks": {"jwks/matchmaking/jwks.json", "tls/proxy.crt",
+            "phase0-jwks": {"jwks/matchmaking/jwks.json", "jwks/gateway/jwks.json", "tls/proxy.crt",
                             "tls/proxy.key", "ca/ca.crt"},
         }
-        for service, sources in allowed.items():
+        for service in self.media_merged:
+            sources = allowed.get(service, set())
             for volume in self.media_merged[service].get("volumes", []):
                 if volume.get("type") != "bind":
                     continue
@@ -1645,7 +2341,63 @@ class ComposeTests(unittest.TestCase):
             self.assertEqual(self.source_at(PROXY, match.group(1)), source)
 
 
+class A1InvocationTests(unittest.TestCase):
+    def test_a1_consumes_the_complete_phase0_overlay_after_media(self):
+        script = (ROOT / "scripts/ci/compose-a1-multi-account-proof.sh").read_text(encoding="utf-8")
+        compose = script.split("compose() {", 1)[1].split("\n}", 1)[0]
+        files = re.findall(r'-f\s+"([^"\n]+)"', compose)
+        self.assertEqual(files, ["$COMPOSE_FILE_PATH",
+                                 "${ROOT}/docker-compose.voice-space-media.yml",
+                                 "${ROOT}/docker-compose.phase0.yml"])
+        self.assertIn("PHASE0_FIXTURE_DIR", script)
+
+
 class RestorerPathTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "posix" and os.geteuid() == 0,
+                         "requires Linux root to exercise real service and caller UIDs")
+    def test_cleanup_restores_service_owned_fixture_for_real_caller_uid(self):
+        with tempfile.TemporaryDirectory(prefix="phase0-owner-cleanup-") as tmp:
+            base = Path(tmp)
+            base.chmod(0o755)
+            for prefix in ("voice-a1-flutter-profile-handoff.", "voice-a1-multi-account-proof.",
+                           "voice-file-restart-proof."):
+                with self.subTest(prefix=prefix):
+                    parent = base / (prefix + "abcdefgh")
+                    parent.mkdir()
+                    os.chown(parent, 1000, 1000)
+                    dest = parent / "phase0-fixture"
+                    env = {**os.environ, "PHASE0_MATCHSQUAD_FIXTURE_UID": "65532"}
+                    require_success(run(sys.executable, GENERATOR, dest, env=env))
+                    service_paths = [p for p in dest.rglob("*") if p.stat().st_uid == 65532]
+                    for path in (dest, *dest.rglob("*")):
+                        if path.stat().st_uid != 65532:
+                            os.chown(path, 1000, 1000)
+                    # An unrelated file must not be swept into ownership repair.
+                    foreign = dest / "unrelated.pem"
+                    foreign.write_text("fixture-only")
+                    foreign.chmod(0o600)
+                    os.chown(foreign, 65532, 65532)
+                    program = (
+                        "import importlib.util,os,pathlib,shutil,stat,sys\n"
+                        "spec=importlib.util.spec_from_file_location('restorer',sys.argv[1])\n"
+                        "mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)\n"
+                        "root=pathlib.Path(sys.argv[2]);os.environ['PHASE0_FIXTURE_DIR']=str(root)\n"
+                        "paths=[root / p for p in sys.argv[3:]]\n"
+                        "modes={p:stat.S_IMODE(p.stat().st_mode) for p in paths}\n"
+                        "os.setregid(1000,0);os.setreuid(1000,0)\n"
+                        "mod.restore(root)\n"
+                        "for p in paths:\n"
+                        " assert (p.stat().st_uid,p.stat().st_gid)==(1000,1000),p.name\n"
+                        " assert stat.S_IMODE(p.stat().st_mode)==modes[p],p.name\n"
+                        "foreign=root/'unrelated.pem';assert foreign.stat().st_uid==65532\n"
+                        "foreign.unlink()\n"
+                        "os.setgroups([]);os.setgid(1000);os.setuid(1000)\n"
+                        "shutil.rmtree(root);assert not root.exists()\n"
+                    )
+                    result = run(sys.executable, "-c", program, FIXTURE_RESTORER, dest,
+                                 *(p.relative_to(dest) for p in service_paths))
+                    self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_owner_restorer_accepts_only_declared_generated_fixture_locations(self):
         with tempfile.TemporaryDirectory(prefix="phase0-restorer-paths-") as tmp:
             base = Path(tmp)

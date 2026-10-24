@@ -69,7 +69,8 @@ func validIDs(ids []string) bool {
 }
 
 func ValidateScope(owner authorityv1.AuthorityOwner, scope *authorityv1.SourceScope) error {
-	if scope == nil || len(scope.ProtoReflect().GetUnknown()) != 0 || scope.SchemaVersion != SchemaVersion || !canonicalID(scope.SpaceId) || !validIDs(scope.ProfileIds) || !validIDs(scope.AccountIds) || !validIDs(scope.VoiceRoomIds) {
+	qualifiedOwner := owner == authorityv1.AuthorityOwner_AUTHORITY_OWNER_ROLE || owner == authorityv1.AuthorityOwner_AUTHORITY_OWNER_SPACE
+	if scope == nil || len(scope.ProtoReflect().GetUnknown()) != 0 || (scope.SchemaVersion != SchemaVersion && (!qualifiedOwner || scope.SchemaVersion != QualifiedSchemaVersion)) || !canonicalID(scope.SpaceId) || !validIDs(scope.ProfileIds) || !validIDs(scope.AccountIds) || !validIDs(scope.VoiceRoomIds) {
 		return status.Error(codes.InvalidArgument, "invalid authority source scope")
 	}
 	switch owner {

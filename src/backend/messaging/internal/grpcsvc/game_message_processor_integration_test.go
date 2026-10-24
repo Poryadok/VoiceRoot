@@ -12,6 +12,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"testing"
 	"time"
 
@@ -203,6 +205,7 @@ func TestGameMessageProcessorFailsClosedForMissingT16BindingAndFileProof(t *test
 	processor.AuthKeys = testGameAuthKeys{keys: map[string]*rsa.PublicKey{"auth-current": authPublic}, at: now}
 	processor.Permits = &testGamePermitIssuer{key: attachmentPrivate, keyID: "auth-current", profileID: profile, now: now}
 	processor.Bindings = allowGameBinding{profile: profile}
+	processor.CommunicationAdmission = standaloneGameCommunicationAdmission
 	_, err = processor.ProcessGameMessage(ctx, attachmentJWS, attachmentAuthority)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "file attachment provenance")
@@ -227,9 +230,10 @@ func TestGameMessageProcessorStoresExactVerifiedFileManifest(t *testing.T) {
 	files := &allowGameFiles{}
 	permits := &testGamePermitIssuer{key: authPrivate, keyID: "auth-current", profileID: profile, now: now, completeFailures: 1}
 	processor := &VerifiedGameMessageProcessor{
-		Store:    storeMessages,
-		AuthKeys: testGameAuthKeys{keys: map[string]*rsa.PublicKey{"auth-current": authPublic}, at: now},
-		Permits:  permits, Bindings: allowGameBinding{profile: profile}, Files: files, Clock: func() time.Time { return now },
+		CommunicationAdmission: standaloneGameCommunicationAdmission,
+		Store:                  storeMessages,
+		AuthKeys:               testGameAuthKeys{keys: map[string]*rsa.PublicKey{"auth-current": authPublic}, at: now},
+		Permits:                permits, Bindings: allowGameBinding{profile: profile}, Files: files, Clock: func() time.Time { return now },
 	}
 	row, err := processor.ProcessGameMessage(ctx, compact, assertion)
 	require.NoError(t, err)
@@ -268,9 +272,10 @@ func TestGameMessageProcessorPersistsAbortedPermitAndRejectsRetry(t *testing.T) 
 	authPublic := &authPrivate.PublicKey
 	permits := &testGamePermitIssuer{key: authPrivate, keyID: "auth-current", profileID: profile, now: now}
 	processor := &VerifiedGameMessageProcessor{
-		Store:    &store.MessagesStore{Pool: pool},
-		AuthKeys: testGameAuthKeys{keys: map[string]*rsa.PublicKey{"auth-current": authPublic}, at: now},
-		Permits:  permits, Bindings: denyGameChatBinding{}, Clock: func() time.Time { return now },
+		CommunicationAdmission: standaloneGameCommunicationAdmission,
+		Store:                  &store.MessagesStore{Pool: pool},
+		AuthKeys:               testGameAuthKeys{keys: map[string]*rsa.PublicKey{"auth-current": authPublic}, at: now},
+		Permits:                permits, Bindings: denyGameChatBinding{}, Clock: func() time.Time { return now },
 	}
 	_, err := processor.ProcessGameMessage(ctx, compact, assertion)
 	require.ErrorContains(t, err, "chat authorization denied")
@@ -298,14 +303,52 @@ func TestGameMessageProcessorVerifiesPermitUsingPostNetworkClock(t *testing.T) {
 	authPublic := &authPrivate.PublicKey
 	permits := &testGamePermitIssuer{key: authPrivate, keyID: "auth-current", profileID: profile, now: now, issueDelay: 350 * time.Millisecond}
 	processor := &VerifiedGameMessageProcessor{
-		Store:    &store.MessagesStore{Pool: pool},
-		AuthKeys: testGameAuthKeys{keys: map[string]*rsa.PublicKey{"auth-current": authPublic}, at: now},
-		Permits:  permits, Bindings: allowGameBinding{profile: profile},
+		CommunicationAdmission: standaloneGameCommunicationAdmission,
+		Store:                  &store.MessagesStore{Pool: pool},
+		AuthKeys:               testGameAuthKeys{keys: map[string]*rsa.PublicKey{"auth-current": authPublic}, at: now},
+		Permits:                permits, Bindings: allowGameBinding{profile: profile},
 	}
 	_, err := processor.ProcessGameMessage(ctx, compact, assertion)
 	require.NoError(t, err, "a valid permit issued after a bounded Auth call must be checked against the post-call clock")
 	require.Equal(t, 1, permits.issued)
 	require.Equal(t, []string{"committed"}, permits.outcomes)
+}
+
+func TestGameMessageCommunicationDenialAbortsPermitBeforeFileOrContent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires PostgreSQL execution-permit outcomes")
+	}
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyBaseMessagingMigrations(t, ctx, pool)
+	for _, tc := range []struct {
+		name      string
+		state     int32
+		malformed bool
+		want      codes.Code
+	}{{"timed out", 2, false, codes.PermissionDenied}, {"malformed capability", 1, true, codes.Unavailable}} {
+		t.Run(tc.name, func(t *testing.T) {
+			now := time.Now().UTC().Truncate(time.Millisecond)
+			profile, space := uuid.New(), uuid.New()
+			compact, message, assertion, key := freshSignedCreate(t, now, true)
+			permits := &testGamePermitIssuer{key: key, keyID: "auth-current", profileID: profile, now: now}
+			files := &allowGameFiles{}
+			policy := &MessagingGRPC{CommunicationScope: communicationScopeStub{policy: &store.ChatThreadPolicy{ChatType: "group", SpaceID: &space}}, CommunicationStates: &communicationStateStub{state: tc.state, malformed: tc.malformed}}
+			processor := &VerifiedGameMessageProcessor{Store: &store.MessagesStore{Pool: pool}, AuthKeys: testGameAuthKeys{keys: map[string]*rsa.PublicKey{"auth-current": &key.PublicKey}, at: now}, Permits: permits, Bindings: allowGameBinding{profile: profile}, Files: files, CommunicationAdmission: policy.BeginCommunicationAction}
+			row, err := processor.ProcessGameMessage(ctx, compact, assertion)
+			require.Nil(t, row)
+			require.Equal(t, tc.want, status.Code(err))
+			require.Zero(t, files.calls)
+			require.Equal(t, []string{"aborted"}, permits.outcomes)
+			var revisions, messages int
+			require.NoError(t, pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM game_message_revisions WHERE message_id=$1),(SELECT count(*) FROM messages WHERE id=$1)`, message.MessageID).Scan(&revisions, &messages))
+			require.Zero(t, revisions)
+			require.Zero(t, messages)
+			var outcome string
+			require.NoError(t, pool.QueryRow(ctx, `SELECT outcome FROM game_message_execution_permit_completions WHERE operation_id=$1`, message.OperationID).Scan(&outcome))
+			require.Equal(t, "aborted", outcome)
+		})
+	}
 }
 
 func expiredSignedCreate(t *testing.T) (string, gameprotocol.Message) {

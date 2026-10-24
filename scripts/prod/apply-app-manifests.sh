@@ -11,6 +11,14 @@ TAG="${VOICE_IMAGE_TAG:?VOICE_IMAGE_TAG required}"
 NS="${VOICE_K8S_NAMESPACE:-voice-prod}"
 S3_SIGNING_ENDPOINT="${VOICE_S3_SIGNING_ENDPOINT:-https://${VOICE_STORAGE_INGRESS_HOST:-${VOICE_GATEWAY_INGRESS_HOST}}}"
 
+# Pure required-input validation precedes scale, get, wait, apply or any child
+# helper with cluster effects. This does not qualify an existing live object.
+release_services="$(mktemp)"
+trap 'rm -f "$release_services"' EXIT
+python3 "${ROOT}/scripts/staging/nats-rollout-preservation/release_policy_wiring.py" \
+  "${VOICE_RELEASE_POLICY_INPUT:-}" "${TAG}" "${NS}" \
+  "${MANIFEST_DIR}/services.yaml" > "${release_services}"
+
 render() {
   sed -e "s|__IMAGE_REGISTRY__|${REGISTRY}|g" \
       -e "s|__IMAGE_TAG__|${TAG}|g" \
@@ -66,13 +74,15 @@ scale_auth_down_if_needed
 
 bash "${ROOT}/scripts/staging/check-social-principal-secrets.sh"
 require_nats_bootstrap
-render "${MANIFEST_DIR}/services.yaml" | kubectl apply -f -
+render "${release_services}" | kubectl apply -f -
 sed "s|__K_NAMESPACE__|${NS}|g" \
   "${ROOT}/deploy/templates/network-policy-social-privacy-principal.yaml" | kubectl apply -f -
 sed "s|__K_NAMESPACE__|${NS}|g" \
   "${ROOT}/deploy/templates/network-policy-file-user-principal.yaml" | kubectl apply -f -
 sed "s|__K_NAMESPACE__|${NS}|g" \
   "${ROOT}/deploy/templates/network-policy-search-user-projection.yaml" | kubectl apply -f -
+sed "s|__K_NAMESPACE__|${NS}|g" \
+  "${ROOT}/deploy/templates/network-policy-notification-user-presence.yaml" | kubectl apply -f -
 render "${MANIFEST_DIR}/gateway-deployment.yaml" | kubectl apply -f -
 
 if auth_pre_scale_needed; then

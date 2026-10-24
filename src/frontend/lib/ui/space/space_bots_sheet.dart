@@ -333,8 +333,13 @@ class _InstalledBotTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
-    final offline = !entry.online;
-    final statusTooltip = offline ? l10n.botUnavailableTooltip : l10n.botOnlineStatus;
+    final offline = entry.online == false;
+    final online = entry.online == true;
+    final statusTooltip = offline
+        ? l10n.botUnavailableTooltip
+        : online
+        ? l10n.botOnlineStatus
+        : '';
 
     return Tooltip(
       message: statusTooltip,
@@ -348,12 +353,14 @@ class _InstalledBotTile extends StatelessWidget {
                 size: 10,
                 color: voice.textDisabled,
               )
-            : Icon(
+            : online
+            ? Icon(
                 Icons.circle,
                 key: Key('space_bots_online_indicator_${entry.bot.id}'),
                 size: 10,
                 color: voice.profileAccent,
-              ),
+              )
+            : null,
         title: Text(
           entry.bot.name,
           style: offline ? TextStyle(color: voice.textDisabled) : null,

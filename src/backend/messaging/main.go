@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -31,16 +32,19 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	"voice/backend/pkg/postgres"
+	"voice/backend/pkg/principal"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
+	"voice/backend/pkg/spacecommunication"
 
 	authv1 "voice.app/voice/auth/v1"
 	chatv1 "voice.app/voice/chat/v1"
 	filev1 "voice.app/voice/file/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	moderationv1 "voice.app/voice/moderation/v1"
-	rolev1 "voice.app/voice/role/v1"
 	socialv1 "voice.app/voice/social/v1"
+	spacev1 "voice.app/voice/space/v1"
 	userv1 "voice.app/voice/user/v1"
 )
 
@@ -227,6 +231,10 @@ func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	communicationConfig, communicationEnabled, err := spacecommunication.LoadClientConfig(os.LookupEnv, "MESSAGING_SPACE_COMMUNICATION_")
+	if err != nil {
+		log.Fatalf("Messaging Space communication client config: %v", err)
+	}
 	runCtx, runCancel := context.WithCancel(context.Background())
 	defer runCancel()
 	metricsReg := prometheus.NewRegistry()
@@ -240,6 +248,9 @@ func main() {
 	}
 
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	if communicationEnabled && dbURL == "" {
+		log.Fatal("Messaging Space communication requires DATABASE_URL")
+	}
 	var grpcSrv *grpc.Server
 	var gameIntegrationGRPCSrv *grpc.Server
 	var chatLifecycleGRPCSrv *grpc.Server
@@ -326,7 +337,7 @@ func main() {
 			defer gameResourceMappings.Close()
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
-		pool, err := pgxpool.New(ctx, dbURL)
+		pool, err := postgres.NewPool(ctx, dbURL)
 		cancel()
 		if err != nil {
 			log.Fatalf("postgres: %v", err)
@@ -347,6 +358,18 @@ func main() {
 		if managedChatPurge != nil {
 			defer managedChatPurge.Close()
 		}
+		var communicationStates grpcsvc.CommunicationStateResolver
+		if communicationEnabled {
+			if managedChatPurge == nil || managedChatPurge.Issuer == nil {
+				log.Fatal("Messaging Space communication requires the service signing keys and protected JWKS publisher")
+			}
+			conn, err := communicationConfig.Dial()
+			if err != nil {
+				log.Fatalf("Messaging Space communication mTLS: %v", err)
+			}
+			defer func() { _ = conn.Close() }()
+			communicationStates = &s2s.CommunicationStates{Client: spacev1.NewSpaceServiceClient(conn), Issuer: managedChatPurge.Issuer}
+		}
 		var tombstoneProcessor grpcsvc.GameTombstoneProcessor
 		if tombstoneKeys != nil && moderationPrincipal != nil {
 			tombstoneProcessor = &grpcsvc.VerifiedGameTombstoneProcessor{Store: &store.MessagesStore{Pool: pool}, Keys: tombstoneKeys}
@@ -357,7 +380,7 @@ func main() {
 		var chatMetaPool *pgxpool.Pool
 		if chatDB := strings.TrimSpace(os.Getenv("CHAT_DATABASE_URL")); chatDB != "" {
 			cctx, ccancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
-			cp, err := pgxpool.New(cctx, chatDB)
+			cp, err := postgres.NewPool(cctx, chatDB)
 			ccancel()
 			if err != nil {
 				log.Fatalf("chat postgres: %v", err)
@@ -369,7 +392,7 @@ func main() {
 		var spaceMetaPool *pgxpool.Pool
 		if spaceDB := strings.TrimSpace(os.Getenv("SPACE_DATABASE_URL")); spaceDB != "" {
 			sctx, scancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
-			sp, err := pgxpool.New(sctx, spaceDB)
+			sp, err := postgres.NewPool(sctx, spaceDB)
 			scancel()
 			if err != nil {
 				log.Fatalf("space postgres: %v", err)
@@ -478,12 +501,15 @@ func main() {
 			spaceCoMembership = s2s.NewGRPCSpaceCoMembership(spconn)
 		}
 
-		var rolePerms *s2s.GRPCRolePermissions
-		if roleAddr := strings.TrimSpace(os.Getenv("ROLE_GRPC_ADDR")); roleAddr != "" {
-			rconn, err := grpc.NewClient(grpcclient.DialTarget(roleAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
-			if err != nil {
-				log.Fatalf("role grpc: %v", err)
-			}
+		var roleIssuer *principal.Issuer
+		if managedChatPurge != nil {
+			roleIssuer = managedChatPurge.Issuer
+		}
+		rolePerms, rconn, err := newRolePermissionsClient(os.Getenv, roleIssuer)
+		if err != nil {
+			log.Fatalf("role grpc: %v", err)
+		}
+		if rconn != nil {
 			defer func() { _ = rconn.Close() }()
 			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
 			if err := waitForGRPCReady(waitCtx, rconn); err != nil {
@@ -491,7 +517,6 @@ func main() {
 				log.Fatalf("role grpc dial: %v", err)
 			}
 			waitCancel()
-			rolePerms = &s2s.GRPCRolePermissions{Client: rolev1.NewRoleServiceClient(rconn)}
 		}
 
 		var files grpcsvc.FileMetadataLookup
@@ -544,6 +569,7 @@ func main() {
 					logger.Error("music metadata consumer exited")
 				}
 			}()
+			go runFilePreviewPending(runCtx, &store.MessagesStore{Pool: pool}, &store.SQLChatThreadPolicy{Pool: chatMetaPool}, logger)
 			if !ok {
 				log.Fatalf("chat receipt visibility targets not configured")
 			}
@@ -584,8 +610,10 @@ func main() {
 			principalgrpc.GameIntegrationOrdinaryUnaryInterceptor(),
 		))...)
 		var chatThreadPolicy *store.SQLChatThreadPolicy
+		var botPinChatScope store.BotPinChatScopeLoader
 		if chatMetaPool != nil {
 			chatThreadPolicy = &store.SQLChatThreadPolicy{Pool: chatMetaPool}
+			botPinChatScope = chatThreadPolicy
 		} else {
 			logger.Warn("CHAT_DATABASE_URL not set; thread policy checks disabled")
 		}
@@ -610,10 +638,11 @@ func main() {
 			GameMessages:          gameMessages,
 			GameTombstones:        tombstoneProcessor,
 			Reactions:             &store.ReactionsStore{Pool: pool},
-			Pins:                  &store.PinsStore{Pool: pool},
+			Pins:                  &store.PinsStore{Pool: pool, BotPinChatScope: botPinChatScope},
 			SharedMedia:           &store.SharedMediaStore{Pool: pool},
 			ChatGuard:             chatGuard,
 			ChatTypeResolver:      chatTypeResolver,
+			CommunicationStates:   communicationStates,
 			Blocks:                blocks,
 			AccountBlocks:         accountBlocks,
 			ProfilePairBlocks:     profilePairBlocks,
@@ -625,10 +654,9 @@ func main() {
 			Files:                 files,
 			MessageEvents:         msgEvents,
 			Moderation: &store.SQLModerationGuard{
-				Pool:      pool,
-				ChatPool:  chatMetaPool,
-				MsgPool:   pool,
-				SpacePool: spaceMetaPool,
+				Pool:     pool,
+				ChatPool: chatMetaPool,
+				MsgPool:  pool,
 			},
 			ChatMentionsMeta: func() *store.SQLChatMentionsMeta {
 				metaPool := pool
@@ -651,8 +679,39 @@ func main() {
 				return managedChatPurge.Coordinator
 			}(),
 		}
+		if gameMessagePermitProcessor != nil {
+			gameMessagePermitProcessor.CommunicationAdmission = messagingService.BeginCommunicationAction
+		}
 		messagingv1.RegisterMessagingServiceServer(grpcSrv, messagingService)
+		var botSendIssuer *principal.Issuer
 		if managedChatPurge != nil {
+			botSendIssuer = managedChatPurge.Issuer
+		}
+		botSend, err := newBotSendRuntime(os.Getenv, messagingService, botPrincipal, botSendIssuer)
+		if err != nil {
+			log.Fatalf("Messaging protected Bot send: %v", err)
+		}
+		if botSend != nil {
+			defer botSend.Close()
+			go func() {
+				if serveErr := <-botSend.errors; serveErr != nil && !errors.Is(serveErr, grpc.ErrServerStopped) {
+					log.Fatalf("Messaging Bot send listener stopped: %v", serveErr)
+				}
+			}()
+		}
+		botPinCleanup, err := grpcsvc.StartBotPinCleanupServer(context.Background(), grpcsvc.BotPinCleanupConfigFromEnv(os.Getenv), messagingService.Pins)
+		if err != nil {
+			log.Fatalf("Messaging private Bot pin cleanup: %v", err)
+		}
+		if botPinCleanup != nil {
+			defer func() { _ = botPinCleanup.Close() }()
+			go func() {
+				if serveErr := <-botPinCleanup.Errors(); serveErr != nil && !errors.Is(serveErr, grpc.ErrServerStopped) {
+					log.Fatalf("Messaging Bot pin cleanup listener stopped: %v", serveErr)
+				}
+			}()
+		}
+		if managedChatPurge != nil && managedChatPurge.Coordinator != nil {
 			messagingService.SpaceFileProducer = &grpcsvc.SpaceFileProducerCoordinator{Store: &store.MessagesStore{Pool: pool}, Files: filev1.NewFileServiceClient(managedChatPurge.Connections[0]), Issuer: managedChatPurge.Coordinator.Issuer}
 			messagingService.AttachmentReferences = &grpcsvc.AttachmentReferenceCoordinator{Files: filev1.NewFileServiceClient(managedChatPurge.Connections[0]), Issuer: managedChatPurge.Coordinator.Issuer}
 			retentionCtx, retentionCancel := context.WithCancel(context.Background())
@@ -663,6 +722,9 @@ func main() {
 				ticker := time.NewTicker(time.Minute)
 				defer ticker.Stop()
 				for {
+					if err := messagingService.ReconcileLegacyFilePreviews(retentionCtx); err != nil && retentionCtx.Err() == nil {
+						logger.Error("Messaging file preview reconciliation pass failed")
+					}
 					if err := (&store.MessagesStore{Pool: pool}).ReconcileAttachmentIntents(retentionCtx, messagingService.AttachmentReferences.Release); err != nil && retentionCtx.Err() == nil {
 						logger.Error("Messaging abandoned attachment recovery pass failed")
 					}

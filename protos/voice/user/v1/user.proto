@@ -5,6 +5,7 @@ package voice.user.v1;
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
+import "voice/user/v1/space_account_capture.proto";
 
 option go_package = "voice.app/voice/user/v1;userv1";
 option java_multiple_files = true;
@@ -29,6 +30,8 @@ enum PrivacyPreset {
 
 // User Service — profiles, privacy, presence. HTTP: /api/v1/users/**.
 service UserService {
+  // Space-only protected capture. Not registered on the ordinary User listener.
+  rpc CaptureSpaceMemberAccountBindings(CaptureSpaceMemberAccountBindingsRequest) returns (CaptureSpaceMemberAccountBindingsResponse);
   // S2S bootstrap from Auth: ensure one primary profile per account before JWT is issued.
   // Target: called only from trusted Auth; not exposed via public Gateway REST in v1 DM scope.
   rpc EnsurePrimaryProfile(EnsurePrimaryProfileRequest) returns (EnsurePrimaryProfileResponse);
@@ -47,6 +50,9 @@ service UserService {
   rpc MarkAccountRegular(MarkAccountRegularRequest) returns (MarkAccountRegularResponse);
   // Auth-only protected listener: exact read-only SDK target profile snapshot.
   rpc GetSdkProfileEligibility(GetSdkProfileEligibilityRequest) returns (GetSdkProfileEligibilityResponse);
+  // @voice.security=protected;callers=service:auth
+  // Dedicated admission listener only; no SDK consent or target conversion authority.
+  rpc GetSpaceAdmissionProfileEligibility(GetSpaceAdmissionProfileEligibilityRequest) returns (GetSpaceAdmissionProfileEligibilityResponse);
   // Auth-only protected listener: immutable historical SDK actor tombstone receipt.
   rpc RecordSdkAuthorTombstone(RecordSdkAuthorTombstoneRequest) returns (RecordSdkAuthorTombstoneResponse);
 
@@ -244,6 +250,8 @@ message PrivacyAudience {
 }
 
 message PrivacySettings {
+  reserved 13;
+  reserved "show_online_include_guests";
   string profile_id = 1;
   string preset = 2; // personal | gaming | work; prefer preset_enum when set
   PrivacyAudience show_online = 3;
@@ -383,6 +391,7 @@ message GetPresenceResponse {
   PresenceStatus presence_status = 1;
 }
 message GetBulkPresenceResponse {
+  reserved "bulk_presence_response";
   map<string, PresenceStatus> by_profile_id = 1;
 }
 
@@ -601,4 +610,19 @@ message ListSearchProfileJournalResponse {
 message GetSearchProfileCheckpointRequest {}
 message GetSearchProfileCheckpointResponse {
   uint64 high_watermark = 1;
+}
+
+message GetSpaceAdmissionProfileEligibilityRequest {
+  string account_id = 1;
+  string profile_id = 2;
+  bytes observation_binding_sha256 = 3;
+}
+
+message GetSpaceAdmissionProfileEligibilityResponse {
+  string account_id = 1;
+  string profile_id = 2;
+  bytes observation_binding_sha256 = 3;
+  uint64 profile_revision = 4;
+  bool deleted = 5;
+  bool frozen = 6;
 }

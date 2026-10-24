@@ -1,0 +1,95 @@
+name: Space audit and composite proof
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/space-audit-ingestion-proof.yml"
+      - "src/backend/space/**"
+      - "src/backend/pkg/principal/**"
+      - "src/backend/pkg/spaceaudit/**"
+      - "src/backend/migrations/space_db/**"
+      - "protos/voice/space/**"
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact commit SHA to prove
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: space-audit-ingestion-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ingestion-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || inputs.source_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || inputs.source_sha || github.sha }}
+      - name: Verify exact source SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: src/backend/space/go.sum
+      - name: Shared wire codec and fingerprint
+        working-directory: src/backend/pkg
+        run: go test ./spaceaudit -count=1
+      - name: Transport and real PostgreSQL proof without skips
+        working-directory: src/backend/space
+        shell: bash
+        env:
+          TEST_LOG: ${{ runner.temp }}/space-audit-ingestion.log
+        run: |
+          set -euo pipefail
+          go test -race ./internal/auditprincipal ./internal/grpcsvc ./internal/store \
+            -run '^(TestAuditRuntimeTLSJWKSThenReplayAndDependencyFailure|TestAuditIngestion.*|TestCompositeStore.*|TestLifecycleFinalizeDeletesLocalDataAtomicallyAndKeepsUnrelatedSpace|TestLifecycleOutcomeRetention_RestoredSpaceDropsExpiredPrivateOutcomes)$' \
+            -count=1 -v 2>&1 | tee "$TEST_LOG"
+          for test_name in \
+            TestAuditRuntimeTLSJWKSThenReplayAndDependencyFailure \
+            TestAuditIngestionSignedRPCValidationAndErrorMapping \
+            TestAuditIngestionSignedRPCPersistsOneEffect \
+            TestAuditIngestionReplayRetentionAndLocalFence \
+            TestAuditIngestionConcurrentExactAndConflict \
+            TestAuditIngestionInvalidAndFailedEffectsReserveNothing \
+            TestAuditIngestionCompensationPreservesReservation \
+            TestAuditIngestionFrozenCompositeAndPermanentTerminalFence \
+            TestAuditIngestionTerminalMinimizationKeepsNonpayloadFence \
+            TestAuditIngestionMigrationRoundTripAndUint64 \
+            TestCompositeStoreReplayOriginalWithoutReinsertingDeletedNode \
+            TestCompositeStoreCommitAndAbortHaveOneImmutableWinner \
+            TestCompositeStoreFailedEvidenceInsertRollsBackNodeAndFence \
+            TestCompositeStoreExpiryIsEnforcedBeforePhysicalCleanup \
+            TestCompositeStoreGlobalAuditReservation \
+            TestCompositeStoreMigrationRejectsAmbiguousExistingChatReceipt \
+            TestCompositeStoreCrossSpaceAuditReservationRace \
+            TestCompositeStoreWaitsForUncommittedLocalAuditReservation \
+            TestLifecycleFinalizeDeletesLocalDataAtomicallyAndKeepsUnrelatedSpace \
+            TestLifecycleOutcomeRetention_RestoredSpaceDropsExpiredPrivateOutcomes \
+            TestAuditIngestionLocalExternalCollisionRaceAndRetainedLocalFence; do
+            grep -Eq -- "^--- PASS: ${test_name}([[:space:]]|$)" "$TEST_LOG"
+          done
+          if grep -Eq -- '^--- SKIP:' "$TEST_LOG"; then
+            echo "Ingestion proof cannot contain skipped tests" >&2
+            exit 1
+          fi
+      - name: Retain proof
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: space-audit-ingestion-${{ github.run_id }}
+          path: ${{ runner.temp }}/space-audit-ingestion.log
+          if-no-files-found: warn
+          retention-days: 14

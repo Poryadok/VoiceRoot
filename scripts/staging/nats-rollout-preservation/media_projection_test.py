@@ -19,6 +19,7 @@ class MediaProjectionTest(unittest.TestCase):
         return compiler.rendered_source(SOURCE, {
             'generation': 'r20260930a4', 'dataPVC': 'voice-nats-jsdata-d20261014a',
             'registry': 'example.invalid', 'tag': 'a' * 40,
+            'release_policy': fixtures.release_fixture(),
             'gateway_host': 'gateway.example.invalid', 's3_signing_endpoint': 'https://storage.example.invalid',
         }, yaml.safe_load)
 

@@ -282,7 +282,7 @@ func TestRuntimeListener_DeniesLegacyAndUnrelatedMethodsBeforeHandler(t *testing
 	_, err = client.CompensateOwnershipTransfer(ctx, &rolev1.CompensateOwnershipTransferRequest{})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	_, err = client.ListRoles(ctx, &rolev1.ListRolesRequest{})
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Equal(t, codes.Unauthenticated, status.Code(err), "the admitted exact Space read still rejects an unsigned caller before handler")
 	require.Zero(t, recorder.calls.Load())
 	require.Empty(t, recorder.principals)
 }

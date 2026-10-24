@@ -5,11 +5,13 @@ import (
 	"context"
 	"image"
 	_ "image/gif"
+	_ "image/jpeg"
 	_ "image/png"
 	"math"
 
 	"github.com/mayahiro/go-webp"
 	"golang.org/x/image/draw"
+	_ "golang.org/x/image/webp"
 
 	grpcsvc "voice/backend/file/internal/grpcsvc"
 	"voice/backend/file/internal/store"

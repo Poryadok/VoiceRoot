@@ -1,0 +1,18 @@
+# Independent production v6 source review
+
+Reviewer: /root/f13_review. Date: 2026-10-24. Result: SOURCE ACCEPT for the exact historical-rendering successor below. K implementation/pins and fresh complete producer proof remain separate.
+
+Independently verified H `5a817a37e145c10d3b2b87b03454d777e36b10c4`, tree `6b9eab0ac6b379bfe7932ea7251bc1b67b976c2f`, has sole parent `122bcedd7757139d441bc7b40220d98e21b117c4`. Complete Git path sets are equal, with changes only to two existing mode-100644 files:
+
+- `scripts/ci/f13_historical_composition.py`: blob `7d4dc236a606f9a76857c06fd9589260024e0ea5`, 12305 bytes, SHA256 `e1ed9f7f4c779f83fa1872a34a00dd7181c93c01cab3a9c043457a50b829b2c1`.
+- `scripts/ci/f13_historical_composition_test.py`: blob `5face5b866382fa8dd0509ff30c71315a12d5a63`, 15876 bytes, SHA256 `2f4cdd12d2fc9a913a8f37fccdc5bf5d675544c0fd1fdadb178a2e4b9f79989b`.
+
+Both before/after entries, full lengths/hashes and raw delta SHA256 `670e67199f24c1abe366192e58d749089a06f6d9d41cd0de1f42d85119dbebcf` match the packet. Independently reconstructed all 1021 D6-to-H inventory entries. All 20 draft artifact references match their SHA256 values; all 17 transported original files match their original local bytes and lengths. Reviewed draft record SHA256 `dfea18389dd4864cd38d0263c1a310e966e75d5cb3d1479d73cb20254a2d5697`; adding this review and final status requires rebinding the final record hash.
+
+The production helper delta is precisely one `--abbrev=9` argument on the existing historical patch rendering command. It does not change the 243 artifact hash predicates, eight fixed merge tuples, 38 occurrences, full object bindings, source/current-target checks or retained runtime/content obligations. Git still may expand a prefix to avoid a collision; the original artifact digest then rejects the expanded bytes. No output truncation or digest relaxation is introduced. The helper and its test remain outside the ten executable carrier paths; this source qualification permits no future helper edit.
+
+Reviewed evidence binds the actual failed artifact to 1552 bytes/SHA256 `60b876b7e549fde158eacdcfe77295754f9ec80122169746efb504b18acbb6a8`, with ten-digit index IDs. Explicit nine-digit rendering yields the immutable expected 1550 bytes/SHA256 `c68990f4fcd07ed5b1f3be4b6746667015650781e49beeac57ee8d64321010b2`. The component receipt binds the reviewed helper/test hashes, RED under default widths 7/10/40 and the complete seven-test GREEN. The separate qualification receipt expressly uses a clean private synthetic candidate in the failed object database; original CLI succeeds under default and widths 7/10/40, reconstructing all 8 merges/38 occurrences/243 artifacts with runtime_pass=false and no activation/path authority. Its diagnostic index-only normalization is evidence comparison, not production normalization. This reviewer ran no runtime tests.
+
+Accept direct H-to-R6 intake with exact metadata/evidence binding, complete inventory, preserved v5 record `d0554787d0363548106fb869dcfa8e9cc972b6af` and all earlier artifacts. Retain independently qualified Native v3 record `f87ee933aa1f599284e1932e44bf32b4e2af48ba` / source `e409cd05c40e857b61109513eb2154f968970c02`; no Native source or projection authority is added. All pre-existing source entries outside the two named files remain equal. K must preserve the ten-carrier ceiling and qualify actual B/S/T, with original contribution/router requirements intact.
+
+The failed full producer remains a failure. Component and synthetic qualification receipts do not establish full producer, hosted acceptance, final trace conservation or router completion. Fresh successful terminal evidence is still required; no historical HOLD or runtime gate is waived by this SOURCE acceptance.

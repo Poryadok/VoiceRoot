@@ -54,7 +54,7 @@ func (s *FilesStore) RunReferenceGCOnce(ctx context.Context, deleter r2file.Obje
 	return completed, nil
 }
 
-func (s *FilesStore) claimReferenceGC(ctx context.Context) (referenceGCCandidate, bool, error) {
+func (s *FilesStore) claimReferenceGC(ctx context.Context, onlyBlob ...uuid.UUID) (referenceGCCandidate, bool, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return referenceGCCandidate{}, false, err
@@ -62,10 +62,15 @@ func (s *FilesStore) claimReferenceGC(ctx context.Context) (referenceGCCandidate
 	defer func() { _ = tx.Rollback(ctx) }()
 	var candidate referenceGCCandidate
 	var operation *uuid.UUID
+	var target *uuid.UUID
+	if len(onlyBlob) > 0 {
+		target = &onlyBlob[0]
+	}
 	err = tx.QueryRow(ctx, `
 SELECT b.blob_id,b.original_r2_key,b.converted_r2_key,b.thumbnail_r2_key,b.gc_operation_id,b.gc_attempt
 FROM file_blobs b
 WHERE b.state='GC_PENDING'
+  AND ($1::uuid IS NULL OR b.blob_id=$1)
   AND (b.next_attempt_at IS NULL OR b.next_attempt_at <= clock_timestamp())
   AND NOT EXISTS (
       SELECT 1 FROM files f JOIN file_references r ON r.file_id=f.id
@@ -73,7 +78,7 @@ WHERE b.state='GC_PENDING'
   )
 ORDER BY b.blob_id
 FOR UPDATE OF b SKIP LOCKED
-LIMIT 1`).Scan(&candidate.id, &candidate.original, &candidate.converted, &candidate.thumb, &operation, &candidate.attempt)
+LIMIT 1`, target).Scan(&candidate.id, &candidate.original, &candidate.converted, &candidate.thumb, &operation, &candidate.attempt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return referenceGCCandidate{}, false, nil
 	}

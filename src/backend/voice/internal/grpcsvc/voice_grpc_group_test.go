@@ -120,8 +120,9 @@ func TestVoiceGRPCGroupVoice_joinTokenAfterJoin(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, token.GetJwt())
 	require.Equal(t, "ws://livekit:7880", token.GetLivekitUrl())
-	_, present := liveKitCanPublish(t, token.GetJwt())
-	require.False(t, present, "group token must preserve its existing generic publish grant")
+	allowed, present := liveKitCanPublish(t, token.GetJwt())
+	require.True(t, present, "group token must carry an explicit publish grant")
+	require.True(t, allowed)
 }
 
 // TestVoiceGRPCGroupVoice_leaveCallRemovesParticipantOnly documents group voice: one leaver must not end the call for everyone.

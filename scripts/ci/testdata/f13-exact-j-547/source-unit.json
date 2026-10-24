@@ -1,0 +1,175 @@
+{
+  "schema": "F54-EXACT-J-AUDIT-SOURCE-UNIT-PROPOSED-v1",
+  "permission": "PROPOSED_NOT_GRANTED",
+  "path": "src/backend/space/internal/grpcsvc/audit.go",
+  "versions": {
+    "prior_owner": {
+      "ref": "2445e81de07681cfd5f1491e4c793aaac747f571",
+      "tree_record": "100644 blob d24e08d221c42661e8b1431defe61d742b23e8d9\tsrc/backend/space/internal/grpcsvc/audit.go\u0000",
+      "bytes": 3560,
+      "sha256": "b358710da05deb7b9aabaed5d44b12104c3415da182d222251f7504285c031ba",
+      "present": true,
+      "ordered_parents": [
+        "5cc425b35bc71738d86261c1cf4772c7babd4519",
+        "c14f59c1a43b486d48322d62e7c5baa2816e1253"
+      ]
+    },
+    "prior_first": {
+      "ref": "5cc425b35bc71738d86261c1cf4772c7babd4519",
+      "tree_record": "100644 blob 4a3d066e9642e7eaca6e58761f79726e838d599d\tsrc/backend/space/internal/grpcsvc/audit.go\u0000",
+      "bytes": 3420,
+      "sha256": "a2f43085a036752c31e6cf4a298dc3a2a3fb63e5247cc1c14094d53d5eacb6a8",
+      "present": true,
+      "ordered_parents": [
+        "2cc9482255ba18cd948aacb567f4c4bdf8976b14"
+      ]
+    },
+    "prior_base": {
+      "ref": "e3dc9ba836100707a9c4313d83bea1872f1f9016",
+      "tree_record": "100644 blob 4a3d066e9642e7eaca6e58761f79726e838d599d\tsrc/backend/space/internal/grpcsvc/audit.go\u0000",
+      "bytes": 3420,
+      "sha256": "a2f43085a036752c31e6cf4a298dc3a2a3fb63e5247cc1c14094d53d5eacb6a8",
+      "present": true,
+      "ordered_parents": [
+        "420c4c7be8c64583ab3e26f0560e5970f705a46e",
+        "34640fde433c13073246003b1d009d2c7dba530c"
+      ]
+    },
+    "prior_source": {
+      "ref": "c14f59c1a43b486d48322d62e7c5baa2816e1253",
+      "tree_record": "100644 blob d24e08d221c42661e8b1431defe61d742b23e8d9\tsrc/backend/space/internal/grpcsvc/audit.go\u0000",
+      "bytes": 3560,
+      "sha256": "b358710da05deb7b9aabaed5d44b12104c3415da182d222251f7504285c031ba",
+      "present": true,
+      "ordered_parents": [
+        "18206e47ff06f1071f69319e9a6eeddf29f079b1"
+      ]
+    },
+    "content": {
+      "ref": "c6225ae5b968345b04a2c7d410875fe7d370b300",
+      "tree_record": "100644 blob 5cbf6687439bee5cba8182ac052483741d9ffcd8\tsrc/backend/space/internal/grpcsvc/audit.go\u0000",
+      "bytes": 2546,
+      "sha256": "361532fd6bceb1b74896e6ef8a2999b49146ac8a7c58b2a188945b34635baa85",
+      "present": true,
+      "ordered_parents": [
+        "85b036f7a44d199cfc4f5d99e569bfc2140b0494",
+        "6b568d3cc5469a8a597e11f8e4acbcc6ad1d9df0"
+      ]
+    },
+    "O": {
+      "ref": "7bd7dfba7e8f85bc0572617c6ef3af4a15e59172",
+      "tree_record": "100644 blob 4a3d066e9642e7eaca6e58761f79726e838d599d\tsrc/backend/space/internal/grpcsvc/audit.go\u0000",
+      "bytes": 3420,
+      "sha256": "a2f43085a036752c31e6cf4a298dc3a2a3fb63e5247cc1c14094d53d5eacb6a8",
+      "present": true,
+      "ordered_parents": [
+        "b2cdc3ad251fdc64d1d052c52a8bea2d5d28dabe"
+      ]
+    },
+    "bestA": {
+      "ref": "68927e5912ebc218050fcc9daf4b76cf4a9e3c86",
+      "tree_record": "100644 blob d24e08d221c42661e8b1431defe61d742b23e8d9\tsrc/backend/space/internal/grpcsvc/audit.go\u0000",
+      "bytes": 3560,
+      "sha256": "b358710da05deb7b9aabaed5d44b12104c3415da182d222251f7504285c031ba",
+      "present": true,
+      "ordered_parents": [
+        "6c35de6ae45e0c53b2cf40fbf5bef235bb3445ea",
+        "f954480f69878a5b3890bf6fcb5af978d68dadf9"
+      ]
+    },
+    "bestB": {
+      "ref": "e020da4b4edcded41bde9785615262beb1946ad2",
+      "tree_record": "100644 blob 4a3d066e9642e7eaca6e58761f79726e838d599d\tsrc/backend/space/internal/grpcsvc/audit.go\u0000",
+      "bytes": 3420,
+      "sha256": "a2f43085a036752c31e6cf4a298dc3a2a3fb63e5247cc1c14094d53d5eacb6a8",
+      "present": true,
+      "ordered_parents": [
+        "7bd7dfba7e8f85bc0572617c6ef3af4a15e59172"
+      ]
+    },
+    "P1": {
+      "ref": "a45862ca7e2e885ae4e36afc758c9e9fe39ca86c",
+      "tree_record": "100644 blob d24e08d221c42661e8b1431defe61d742b23e8d9\tsrc/backend/space/internal/grpcsvc/audit.go\u0000",
+      "bytes": 3560,
+      "sha256": "b358710da05deb7b9aabaed5d44b12104c3415da182d222251f7504285c031ba",
+      "present": true,
+      "ordered_parents": [
+        "dc0acdefec7e5c413988adf71f86d12bff4017bc",
+        "6780407299a3beb77e92b32c551ca7cfe3e63e94"
+      ]
+    },
+    "P2": {
+      "ref": "140f6612e2f9df22aa9ac0c60744d5d41fe7fbcd",
+      "tree_record": "100644 blob d24e08d221c42661e8b1431defe61d742b23e8d9\tsrc/backend/space/internal/grpcsvc/audit.go\u0000",
+      "bytes": 3560,
+      "sha256": "b358710da05deb7b9aabaed5d44b12104c3415da182d222251f7504285c031ba",
+      "present": true,
+      "ordered_parents": [
+        "48068711871938ee3a5b1ba04b9efaaf8dc56a74"
+      ]
+    },
+    "J": {
+      "ref": "3071ddad390443de4119c796cdad9899ff08f7fd",
+      "tree_record": "100644 blob d24e08d221c42661e8b1431defe61d742b23e8d9\tsrc/backend/space/internal/grpcsvc/audit.go\u0000",
+      "bytes": 3560,
+      "sha256": "b358710da05deb7b9aabaed5d44b12104c3415da182d222251f7504285c031ba",
+      "present": true,
+      "ordered_parents": [
+        "a45862ca7e2e885ae4e36afc758c9e9fe39ca86c",
+        "140f6612e2f9df22aa9ac0c60744d5d41fe7fbcd"
+      ]
+    },
+    "H53": {
+      "ref": "53f75f74523735ac594e21582bea659f567a7288",
+      "tree_record": "100644 blob d24e08d221c42661e8b1431defe61d742b23e8d9\tsrc/backend/space/internal/grpcsvc/audit.go\u0000",
+      "bytes": 3560,
+      "sha256": "b358710da05deb7b9aabaed5d44b12104c3415da182d222251f7504285c031ba",
+      "present": true,
+      "ordered_parents": [
+        "d06ace9e7d355bffe421a6418e9a4951dd096b8f"
+      ]
+    }
+  },
+  "edges": {
+    "prior_integration": {
+      "from": "5cc425b35bc71738d86261c1cf4772c7babd4519",
+      "to": "2445e81de07681cfd5f1491e4c793aaac747f571",
+      "raw_sha256": "047e26da4dd41806604d13e3c116e2c226e3e0c39205f8f997c4096df5eecfbc",
+      "patch_sha256": "17b60cb9c92af8781226d29d8525e8ac043153e9d1a510ae0b09cba54bcea8c2"
+    },
+    "prior_source_change": {
+      "from": "e3dc9ba836100707a9c4313d83bea1872f1f9016",
+      "to": "c14f59c1a43b486d48322d62e7c5baa2816e1253",
+      "raw_sha256": "047e26da4dd41806604d13e3c116e2c226e3e0c39205f8f997c4096df5eecfbc",
+      "patch_sha256": "17b60cb9c92af8781226d29d8525e8ac043153e9d1a510ae0b09cba54bcea8c2"
+    },
+    "P1_to_J": {
+      "from": "a45862ca7e2e885ae4e36afc758c9e9fe39ca86c",
+      "to": "3071ddad390443de4119c796cdad9899ff08f7fd",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "P2_to_J": {
+      "from": "140f6612e2f9df22aa9ac0c60744d5d41fe7fbcd",
+      "to": "3071ddad390443de4119c796cdad9899ff08f7fd",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "O_to_P2": {
+      "from": "7bd7dfba7e8f85bc0572617c6ef3af4a15e59172",
+      "to": "140f6612e2f9df22aa9ac0c60744d5d41fe7fbcd",
+      "raw_sha256": "047e26da4dd41806604d13e3c116e2c226e3e0c39205f8f997c4096df5eecfbc",
+      "patch_sha256": "17b60cb9c92af8781226d29d8525e8ac043153e9d1a510ae0b09cba54bcea8c2"
+    },
+    "earliest_to_prior": {
+      "from": "c6225ae5b968345b04a2c7d410875fe7d370b300",
+      "to": "2445e81de07681cfd5f1491e4c793aaac747f571",
+      "raw_sha256": "e873557ade01bd23336898df8f92b5accc01c89a7ee24f383b9ee09cc15f9420",
+      "patch_sha256": "c8a6d3d96ab0af4a2e0216e337e27ebc772a089957192e0a1495dca8a058fb9b"
+    }
+  },
+  "source_semantic_review": "PENDING independent CONTRACT review; immutable Git bytes are facts, not a self-qualified grant",
+  "historical_caller": "698/H53 true/false",
+  "source547_target": "c6a7876239ddbf70ac1d084c64a1e3f95eeda846",
+  "product_changed": false
+}

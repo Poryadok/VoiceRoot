@@ -29,12 +29,16 @@ func startChatDBForStoreTest(t *testing.T, ctx context.Context) *pgxpool.Pool {
 func applyChatMigrationsForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
 	root := chatRepoRoot(t)
-	for _, name := range []string{"000001_init.up.sql", "000002_dm_requests.up.sql", "000003_groups.up.sql", "000005_thread_settings.up.sql", "000006_e2e_enabled.up.sql", "000007_allow_guests.up.sql", "000011_deleted_for_self.up.sql", "000012_allow_guests_fail_closed.up.sql", "000014_managed_chats.up.sql", "000015_managed_chat_member_intervals.up.sql", "000016_managed_chat_retention.up.sql", "000017_managed_chat_add_members.up.sql", "000018_space_lifecycle.up.sql", "000019_space_lifecycle_source_manifest.up.sql", "000020_space_purge_owner_receipts.up.sql", "000022_chat_create_requests.up.sql"} {
+	for _, name := range []string{"000001_init.up.sql", "000002_dm_requests.up.sql", "000003_groups.up.sql", "000004_slow_mode.up.sql", "000005_thread_settings.up.sql", "000006_e2e_enabled.up.sql", "000007_allow_guests.up.sql", "000011_deleted_for_self.up.sql", "000012_allow_guests_fail_closed.up.sql", "000014_managed_chats.up.sql", "000015_managed_chat_member_intervals.up.sql", "000016_managed_chat_retention.up.sql", "000017_managed_chat_add_members.up.sql", "000018_space_lifecycle.up.sql", "000019_space_lifecycle_source_manifest.up.sql", "000020_space_purge_owner_receipts.up.sql", "000022_chat_create_requests.up.sql", "000023_match_squad_operations.up.sql", "000024_chat_management_permissions.up.sql"} {
 		sqlBytes, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "chat_db", name))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(sqlBytes))
 		require.NoError(t, err)
 	}
+	// Lifecycle integration now includes the composite drain subphase. This
+	// historical focused fixture is not a source-migration catalog proof;
+	// composite tests use the official 0 -> 27 migration runner instead.
+	applyChatMigrationFile(t, ctx, pool, "000027_space_composite_creations.up.sql")
 }
 
 // TestCreateGroupChat_OwnerMembership documents creator is persisted as owner in main inbox.

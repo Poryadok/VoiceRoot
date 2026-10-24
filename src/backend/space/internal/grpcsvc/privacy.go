@@ -55,6 +55,10 @@ type InviteSpaceCoMembershipChecker interface {
 }
 
 func (s *SpaceGRPC) ensureJoinInvitePrivacy(ctx context.Context, joiner, inviter uuid.UUID) error {
+	return s.ensureJoinInvitePrivacyForActor(ctx, joiner, inviter, guestguard.IsGuest(ctx))
+}
+
+func (s *SpaceGRPC) ensureJoinInvitePrivacyForActor(ctx context.Context, joiner, inviter uuid.UUID, guest bool) error {
 	if s == nil || s.Privacy == nil {
 		return nil
 	}
@@ -63,7 +67,7 @@ func (s *SpaceGRPC) ensureJoinInvitePrivacy(ctx context.Context, joiner, inviter
 		return mapSpaceStoreError(err)
 	}
 	matcher := privacy.Matcher{Social: s.Friends, Space: s.SpaceCoMembership}
-	if err := privacy.CheckAllowed(matcher, ctx, joiner, inviter, audience, guestguard.IsGuest(ctx)); err != nil {
+	if err := privacy.CheckAllowed(matcher, ctx, joiner, inviter, audience, guest); err != nil {
 		if errors.Is(err, privacy.ErrDenied) {
 			return status.Error(codes.PermissionDenied, "invite blocked by recipient privacy settings")
 		}

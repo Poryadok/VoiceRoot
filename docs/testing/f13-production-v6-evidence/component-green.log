@@ -1,0 +1,27 @@
+[rtk] /!\ No hook installed — run `rtk init -g` for automatic token savings
+Cloning into '/tmp/historicalcompositiongreen'...
+done.
+Note: switching to 'ec19a5945ee5985dd2cc6a7d7af3bb293ee9bb98'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+Python 3.12.15
+git version 2.39.5
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 46.553s
+
+OK

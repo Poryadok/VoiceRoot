@@ -19,19 +19,30 @@ import (
 )
 
 type Verifier struct {
-	Keys   principal.KeyResolver
-	Replay principal.ReplayGuard
-	Epoch  principal.SessionEpochChecker
-	Clock  func() time.Time
+	Keys          principal.KeyResolver
+	Replay        principal.ReplayGuard
+	Epoch         principal.SessionEpochChecker
+	Clock         func() time.Time
+	CreatorEpoch  principal.SessionEpochChecker
+	CreatorReplay principal.ReplayGuard
 }
 
 func protectedMutation(method string) bool {
-	return method == spacev1.SpaceService_DeleteSpace_FullMethodName || method == spacev1.SpaceService_RestoreSpace_FullMethodName || method == spacev1.SpaceService_GetSpaceDeletionCoordinatorStatus_FullMethodName
+	if method == spacev1.SpaceService_CreateVoiceRoom_FullMethodName || method == spacev1.SpaceService_CreateInvite_FullMethodName || method == spacev1.SpaceService_UpdateSpace_FullMethodName || method == spacev1.SpaceService_UpdateSpaceMmConfig_FullMethodName {
+		return true
+	}
+	if moderationMethod(method) || nonInteractiveJoinMethod(method) {
+		return true
+	}
+	if method == spacev1.SpaceService_CreateSpace_FullMethodName {
+		return true
+	}
+	return method == spacev1.SpaceService_DeleteSpace_FullMethodName || method == spacev1.SpaceService_RestoreSpace_FullMethodName || method == spacev1.SpaceService_GetSpaceDeletionCoordinatorStatus_FullMethodName || method == spacev1.SpaceService_UpdateMemberNickname_FullMethodName || method == spacev1.SpaceService_GetSpaceChatCreationOutcome_FullMethodName
 }
 
 func OrdinaryUnary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if protectedMutation(info.FullMethod) {
+		if protectedMutation(info.FullMethod) || info.FullMethod == spacev1.SpaceService_GetAuditLog_FullMethodName {
 			return nil, status.Error(codes.PermissionDenied, "protected lifecycle listener required")
 		}
 		return handler(ctx, req)
@@ -45,7 +56,21 @@ func canonicalID(value string) bool {
 
 func (v Verifier) Unary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if !protectedMutation(info.FullMethod) && info.FullMethod != spacev1.SpaceService_GetSpace_FullMethodName {
+		if info.FullMethod == spacev1.SpaceService_CreateVoiceRoom_FullMethodName {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+		}
+		if info.FullMethod == spacev1.SpaceService_CreateVoiceRoom_FullMethodName || info.FullMethod == spacev1.SpaceService_CreateInvite_FullMethodName || info.FullMethod == spacev1.SpaceService_UpdateSpace_FullMethodName || info.FullMethod == spacev1.SpaceService_UpdateSpaceMmConfig_FullMethodName {
+			return v.verifyModerationCall(ctx, req, info, handler)
+		}
+		if moderationMethod(info.FullMethod) || nonInteractiveJoinMethod(info.FullMethod) {
+			return v.verifyModerationCall(ctx, req, info, handler)
+		}
+		if info.FullMethod == spacev1.SpaceService_CreateSpace_FullMethodName {
+			return v.verifyCreatorCall(ctx, req, info, handler)
+		}
+		if !protectedMutation(info.FullMethod) && info.FullMethod != spacev1.SpaceService_GetSpace_FullMethodName && info.FullMethod != spacev1.SpaceService_GetAuditLog_FullMethodName {
 			return nil, status.Error(codes.PermissionDenied, "method is not available on lifecycle listener")
 		}
 		deny := status.Error(codes.Unauthenticated, "invalid lifecycle principal")
@@ -74,10 +99,23 @@ func (v Verifier) Unary() grpc.UnaryServerInterceptor {
 		if err != nil || !canonicalID(verified.AccountID) || !canonicalID(verified.ProfileID) {
 			return nil, deny
 		}
+		ctx = principal.WithVerified(ctx, verified)
+		if info.FullMethod == spacev1.SpaceService_GetAuditLog_FullMethodName {
+			// This migrated chain consumes typed verified identity exclusively.
+			// Preserve transport/tracing metadata; never project raw actor headers.
+			return handler(ctx, req)
+		}
+		accountType := "regular" // Existing lifecycle transport compatibility.
+		if info.FullMethod == spacev1.SpaceService_GetSpaceChatCreationOutcome_FullMethodName {
+			if verified.AccountType != "regular" && verified.AccountType != "guest" {
+				return nil, deny
+			}
+			accountType = verified.AccountType
+		}
 		// Legacy handlers consume this projection only after cryptographic verification.
 		// Caller-supplied identity metadata was rejected above; the projection is server-owned.
-		identity := metadata.Pairs(authctx.HeaderUserID, verified.AccountID, authctx.HeaderProfileID, verified.ProfileID, authctx.HeaderSessionEpoch, strconv.FormatInt(verified.SessionEpoch, 10), "x-voice-account-type", "regular")
-		ctx = metadata.NewIncomingContext(principal.WithVerified(ctx, verified), identity)
+		identity := metadata.Pairs(authctx.HeaderUserID, verified.AccountID, authctx.HeaderProfileID, verified.ProfileID, authctx.HeaderSessionEpoch, strconv.FormatInt(verified.SessionEpoch, 10), "x-voice-account-type", accountType)
+		ctx = metadata.NewIncomingContext(ctx, identity)
 		return handler(ctx, req)
 	}
 }

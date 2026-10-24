@@ -25,10 +25,15 @@ import (
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
 	authorityv1 "voice/backend/pkg/pb/voice/authority/v1"
+	"voice/backend/pkg/postgres"
 	voiceprom "voice/backend/pkg/promhttp"
+	"voice/backend/pkg/roleoverrideprincipal"
 	"voice/backend/pkg/runtimeconfig"
 	"voice/backend/pkg/socialprincipal"
+	"voice/backend/space/internal/auditprincipal"
 	"voice/backend/space/internal/authctx"
+	"voice/backend/space/internal/botmembershipprincipal"
+	"voice/backend/space/internal/chatcreation"
 	grpcsvc "voice/backend/space/internal/grpcsvc"
 	"voice/backend/space/internal/lifecycleprincipal"
 	"voice/backend/space/internal/outboxdelivery"
@@ -50,6 +55,27 @@ const (
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	botConfig, botEnabled, botErr := botmembershipprincipal.LoadFromEnv()
+	if botErr != nil {
+		log.Fatalf("Bot membership principal config: %v", botErr)
+	}
+	if botEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+		log.Fatal("Bot membership listener requires DATABASE_URL")
+	}
+	targetConfig, targetEnabled, targetErr := roleoverrideprincipal.LoadFromEnv("space")
+	if targetErr != nil {
+		log.Fatalf("Role target principal config: %v", targetErr)
+	}
+	if targetEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+		log.Fatal("Role target listener requires DATABASE_URL")
+	}
+	communicationConfigs, err := loadCommunicationConfigs()
+	if err != nil {
+		log.Fatalf("Space communication authority config: %v", err)
+	}
+	if len(communicationConfigs) != 0 && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+		log.Fatal("Space communication authority requires DATABASE_URL")
+	}
 	sourceConfig, sourceEnabled, err := authoritysource.LoadRuntimeConfig(authorityv1.AuthorityOwner_AUTHORITY_OWNER_SPACE, ":9097")
 	if err != nil {
 		log.Fatalf("Space authority source config: %v", err)
@@ -74,6 +100,20 @@ func main() {
 	if publicEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
 		log.Fatal("Space Gateway lifecycle listener requires DATABASE_URL")
 	}
+	compositeConfig, compositeEnabled, err := chatcreation.FromEnv()
+	if err != nil {
+		log.Fatalf("Space Chat composite config: %v", err)
+	}
+	if compositeEnabled && (strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" || !publicEnabled) {
+		log.Fatal("Space Chat composite requires DATABASE_URL and protected Gateway listener")
+	}
+	auditConfig, auditEnabled, err := auditprincipal.LoadFromEnv()
+	if err != nil {
+		log.Fatalf("Space audit principal config: %v", err)
+	}
+	if auditEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+		log.Fatal("Space audit listener requires DATABASE_URL")
+	}
 	principalConfig, principalEnabled, err := socialprincipal.LoadFromEnv("space")
 	if err != nil {
 		log.Fatalf("space privacy principal config: %v", err)
@@ -93,6 +133,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("space principal issuer: %v", err)
 	}
+	captureConfig, captureEnabled, err := loadUserCaptureRuntimeConfig(os.Getenv, publicEnabled)
+	if err != nil {
+		log.Fatalf("Space User capture config: %v", err)
+	}
+	if captureEnabled && principalIssuer == nil {
+		log.Fatal("Space User capture requires Space principal issuer")
+	}
+	creatorConfig, creatorEnabled, err := loadCreatorRuntimeConfig(os.Getenv, publicEnabled)
+	if err != nil {
+		log.Fatalf("Space Gateway lifecycle config: Creator Auth transport: %v", err)
+	}
+	if creatorEnabled && principalIssuer == nil {
+		log.Fatal("space principal issuer: Creator requires a configured Space issuer")
+	}
 	metricsReg := prometheus.NewRegistry()
 	ownershipOutboxAlertGauge := newOwnershipOutboxDeliveryAlertGauge(metricsReg)
 	runCtx, runCancel := context.WithCancel(context.Background())
@@ -109,13 +163,17 @@ func main() {
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	var grpcSrv *grpc.Server
 	var publicServer *grpc.Server
+	var auditServer *grpc.Server
 	var sourceServer *grpc.Server
 	var outboxRuntime *ownershipOutboxRuntime
 	var recoveryRuntime *ownershipRecoveryRuntime
 	var deletionRuntime *lifecycleRuntime
+	creatorAuthority := &creatorRuntimeOwner{}
+	var banRetentionRuntime *accountBanRetentionRuntime
+	var spaceStore *store.SpaceStore
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
-		pool, err := pgxpool.New(ctx, dbURL)
+		pool, err := postgres.NewPool(ctx, dbURL)
 		if err != nil {
 			cancel()
 			log.Fatalf("postgres: %v", err)
@@ -139,7 +197,36 @@ func main() {
 		}
 		defer mutationLockPool.Close()
 
-		spaceStore := &store.SpaceStore{Pool: pool}
+		spaceStore = &store.SpaceStore{Pool: pool}
+		if captureEnabled {
+			captureRuntime, err := newUserCaptureRuntime(runCtx, captureConfig, principalIssuer)
+			if err != nil {
+				log.Fatalf("Space User capture runtime: %v", err)
+			}
+			defer func() { _ = captureRuntime.Close() }()
+			spaceStore.AccountCaptures = captureRuntime.client
+		}
+		banRetentionRuntime = startAccountBanRetentionRuntime(runCtx, spaceStore, logger)
+		defer banRetentionRuntime.Stop()
+		if targetEnabled {
+			runtime, err := roleoverrideprincipal.New(runCtx, targetConfig)
+			if err != nil {
+				log.Fatalf("Role target principal runtime: %v", err)
+			}
+			defer func() { _ = runtime.Close() }()
+			listener, err := net.Listen("tcp", targetConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("Role target listen: %v", err)
+			}
+			targetServer := grpc.NewServer(runtime.ServerOptions()...)
+			defer targetServer.Stop()
+			spacev1.RegisterSpaceServiceServer(targetServer, &grpcsvc.SpaceGRPC{Store: spaceStore})
+			go func() {
+				if err := targetServer.Serve(listener); err != nil {
+					log.Fatalf("Role target serve: %v", err)
+				}
+			}()
+		}
 		go store.RunCommunityRosterExpiryWorker(runCtx, spaceStore, time.Second)
 		natsURL := strings.TrimSpace(os.Getenv("NATS_URL"))
 		var spaceEvents spaceevents.Publisher
@@ -224,15 +311,18 @@ func main() {
 			defer sourceServer.Stop()
 			go func() {
 				if err := sourceServer.Serve(sourceListener); err != nil {
-					log.Fatalf("Space authority source serve: %v", err)
+					failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("Space authority source serve: %v", cause) })
 				}
 			}()
 		}
 		grpcOptions := append([]grpc.ServerOption{}, sharedOptions...)
+		grpcOptions = append(grpcOptions, grpc.ChainUnaryInterceptor(roleoverrideprincipal.OrdinaryUnaryInterceptor("space")))
 		grpcOptions = append(grpcOptions, grpc.ChainUnaryInterceptor(
+			chatcreation.OrdinaryUnary(),
+			auditprincipal.OrdinaryUnary(),
 			lifecycleprincipal.OrdinaryUnary(),
 			socialprincipal.OrdinaryUnaryInterceptor("space"),
-			authctx.VerifiedServiceIdentityUnaryInterceptor(os.Getenv("SPACE_VOICE_S2S_TOKEN")),
+			ordinaryCommunicationUnary(),
 			authctx.VerifiedGameIntegrationUnaryInterceptor(os.Getenv("SPACE_GAME_INTEGRATION_S2S_TOKEN")),
 		))
 		grpcSrv = grpc.NewServer(grpcOptions...)
@@ -302,7 +392,7 @@ func main() {
 			defer entitlementConsumer.Close()
 			go func() {
 				if err := entitlementConsumer.Run(runCtx); err != nil && runCtx.Err() == nil {
-					log.Fatalf("space subscription consumer stopped: %v", err)
+					failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("space subscription consumer stopped: %v", cause) })
 				}
 			}()
 			logger.Info("space subscription entitlement consumer enabled")
@@ -334,6 +424,72 @@ func main() {
 			defer deletionRuntime.Stop()
 		}
 		spacev1.RegisterSpaceServiceServer(grpcSrv, spaceSvc)
+		botComposite, botCompositeConnection, err := newBotCompositeTransport(principalIssuer)
+		if err != nil {
+			log.Fatalf("Space Bot composite transport: %v", err)
+		}
+		if botCompositeConnection != nil {
+			defer func() { _ = botCompositeConnection.Close() }()
+		}
+		compositeService := grpcsvc.NewChatCreationServer(spaceSvc, botComposite)
+		if compositeEnabled {
+			var compositeSchemaReady bool
+			if err := spaceStore.Pool.QueryRow(runCtx, `SELECT to_regclass('space_chat_creation_fences') IS NOT NULL AND to_regclass('space_chat_creation_evidence') IS NOT NULL AND to_regclass('space_permanent_purge_fences') IS NOT NULL AND to_regprocedure('lock_space_audit_id_v1(uuid)') IS NOT NULL`).Scan(&compositeSchemaReady); err != nil || !compositeSchemaReady {
+				log.Fatal("Space Chat composite requires migrations 000028 and 000031")
+			}
+			if spaceSvc.OwnershipRoles == nil {
+				log.Fatal("Space Chat composite requires protected Role decision transport")
+			}
+			if botComposite == nil {
+				log.Fatal("Space Chat composite requires protected Bot installation transport")
+			}
+			compositeRuntime, err := chatcreation.New(runCtx, compositeConfig)
+			if err != nil {
+				log.Fatalf("Space Chat composite runtime: %v", err)
+			}
+			defer func() { _ = compositeRuntime.Close() }()
+			compositeListener, err := net.Listen("tcp", compositeConfig.Listen)
+			if err != nil {
+				log.Fatalf("Space Chat composite listen: %v", err)
+			}
+			options := append([]grpc.ServerOption{}, sharedOptions...)
+			options = append(options, compositeRuntime.ServerOptions()...)
+			compositeServer := grpc.NewServer(options...)
+			spacev1.RegisterSpaceServiceServer(compositeServer, compositeService)
+			defer compositeServer.Stop()
+			go func() {
+				if err := compositeServer.Serve(compositeListener); err != nil {
+					logger.Error("Chat composite principal listener stopped", slog.String("error", err.Error()))
+				}
+			}()
+		}
+		if auditEnabled {
+			auditRuntime, err := auditprincipal.New(runCtx, auditConfig)
+			if err != nil {
+				log.Fatalf("Space audit principal runtime: %v", err)
+			}
+			defer func() { _ = auditRuntime.Close() }()
+			listener, err := net.Listen("tcp", auditConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("Space audit principal listen: %v", err)
+			}
+			options := append([]grpc.ServerOption{}, sharedOptions...)
+			options = append(options, auditRuntime.ServerOptions()...)
+			auditServer = grpc.NewServer(options...)
+			grpcsvc.RegisterAuditIngestionServer(auditServer, &grpcsvc.AuditIngestionGRPC{Store: spaceStore})
+			defer auditServer.Stop()
+			go func() {
+				logger.Info("audit principal listener started", slog.String("addr", auditConfig.ListenAddr))
+				if err := auditServer.Serve(listener); err != nil {
+					failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("Space audit principal serve: %v", cause) })
+				}
+			}()
+		}
+		stopCommunication, err := startCommunicationServers(runCtx, communicationConfigs, spaceSvc, sharedOptions)
+		if err != nil {
+			log.Fatalf("Space communication authority startup: %v", err)
+		}
+		defer stopCommunication()
 		if publicEnabled {
 			publicRuntime, err := lifecycleprincipal.New(runCtx, publicConfig)
 			if err != nil {
@@ -344,21 +500,40 @@ func main() {
 			if err != nil {
 				log.Fatalf("Space Gateway lifecycle listen: %v", err)
 			}
-			options := append([]grpc.ServerOption{}, sharedOptions...)
-			options = append(options, publicRuntime.ServerOptions()...)
-			publicServer = grpc.NewServer(options...)
-			spacev1.RegisterSpaceServiceServer(publicServer, &grpcsvc.PublicLifecycleSpace{SpaceGRPC: spaceSvc})
-			go func() {
-				logger.Info("Gateway lifecycle principal listener started", slog.String("addr", publicConfig.Listen))
-				if err := publicServer.Serve(publicListener); err != nil {
-					logger.Error("Gateway lifecycle principal listener stopped", slog.String("error", err.Error()))
+			var creatorServiceRuntime *creatorRuntime
+			if creatorEnabled {
+				creatorServiceRuntime, err = creatorAuthority.construct(runCtx, func(startup context.Context) (*creatorRuntime, error) {
+					return newCreatorRuntime(runCtx, startup, creatorConfig, principalIssuer, spaceStore)
+				})
+				if err != nil {
+					failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("Space Gateway lifecycle runtime: Creator Auth transport: %v", cause) })
 				}
-			}()
+				defer func() { _ = creatorAuthority.Close() }()
+			}
+			if err := creatorAuthority.publish(func() {
+				dependencies := lifecycleprincipal.CreatorDependencies{}
+				if creatorServiceRuntime != nil {
+					dependencies = creatorServiceRuntime.dependencies
+				}
+				options := append([]grpc.ServerOption{}, sharedOptions...)
+				options = append(options, publicRuntime.ServerOptionsWithCreator(dependencies)...)
+				publicServer = grpc.NewServer(options...)
+				spacev1.RegisterSpaceServiceServer(publicServer, &grpcsvc.PublicLifecycleSpace{SpaceGRPC: spaceSvc, Composite: compositeService})
+				go func() {
+					logger.Info("Gateway lifecycle principal listener started", slog.String("addr", publicConfig.Listen))
+					if err := publicServer.Serve(publicListener); err != nil {
+						logger.Error("Gateway lifecycle principal listener stopped", slog.String("error", err.Error()))
+					}
+				}()
+			}); err != nil {
+				_ = publicListener.Close()
+				failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("Space Gateway lifecycle runtime: Creator publication: %v", cause) })
+			}
 		}
 		if privacyRuntime != nil {
 			privacyListener, err := net.Listen("tcp", principalConfig.ListenAddr)
 			if err != nil {
-				log.Fatalf("space privacy principal listen: %v", err)
+				failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("space privacy principal listen: %v", cause) })
 			}
 			privacyOptions := append([]grpc.ServerOption{}, sharedOptions...)
 			privacyOptions = append(privacyOptions, privacyRuntime.ServerOptions()...)
@@ -367,14 +542,14 @@ func main() {
 			defer privacyServer.Stop()
 			go func() {
 				if err := privacyServer.Serve(privacyListener); err != nil {
-					log.Fatalf("space privacy principal serve: %v", err)
+					failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("space privacy principal serve: %v", cause) })
 				}
 			}()
 		}
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))
 			if err := grpcSrv.Serve(lis); err != nil {
-				log.Fatalf("grpc serve: %v", err)
+				failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("grpc serve: %v", cause) })
 			}
 		}()
 	} else {
@@ -391,7 +566,7 @@ func main() {
 	if len(publicJWKS.Keys) > 0 {
 		certificate, err := tls.LoadX509KeyPair(strings.TrimSpace(os.Getenv("SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE")), strings.TrimSpace(os.Getenv("SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE")))
 		if err != nil {
-			log.Fatalf("space principal JWKS TLS: %v", err)
+			failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("space principal JWKS TLS: %v", cause) })
 		}
 		jwksAddr := strings.TrimSpace(os.Getenv("SPACE_PRINCIPAL_JWKS_HTTPS_LISTEN"))
 		if jwksAddr == "" {
@@ -406,20 +581,39 @@ func main() {
 	go func() {
 		errCh <- server.ListenAndServe()
 	}()
+	// Start only after local JWKS server startup and all earlier startup checks.
+	// Its cancellation/Stop path owns the listener, replay client and resolver.
+	var botRuntime *botMembershipRuntime
+	if botEnabled {
+		botRuntime, err = newBotMembershipRuntime(runCtx, botConfig, spaceStore)
+		if err != nil {
+			failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatalf("Bot membership runtime: %v", cause) })
+		}
+		defer botRuntime.Stop()
+		go func() {
+			if cause, ok := <-botRuntime.Errors(); ok && cause != nil {
+				errCh <- cause
+			}
+		}()
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	select {
 	case err := <-errCh:
 		runCancel()
+		botRuntime.Stop()
+		banRetentionRuntime.Stop()
 		outboxRuntime.Stop()
 		recoveryRuntime.Stop()
 		deletionRuntime.Stop()
 		if err != nil && err != http.ErrServerClosed {
-			log.Fatal(err)
+			failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatal(cause) })
 		}
 	case <-stop:
 		runCancel()
+		botRuntime.Stop()
+		banRetentionRuntime.Stop()
 		outboxRuntime.Stop()
 		recoveryRuntime.Stop()
 		deletionRuntime.Stop()
@@ -431,15 +625,18 @@ func main() {
 		if publicServer != nil {
 			publicServer.GracefulStop()
 		}
+		if auditServer != nil {
+			auditServer.GracefulStop()
+		}
 		if sourceServer != nil {
 			sourceServer.Stop()
 		}
 		if err := server.Shutdown(ctx); err != nil {
-			log.Fatal(err)
+			failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatal(cause) })
 		}
 		if jwksServer != nil {
 			if err := jwksServer.Shutdown(ctx); err != nil {
-				log.Fatal(err)
+				failCreatorRuntime(creatorAuthority, err, func(cause error) { log.Fatal(cause) })
 			}
 		}
 	}

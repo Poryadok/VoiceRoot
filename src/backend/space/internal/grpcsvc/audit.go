@@ -3,13 +3,16 @@ package grpcsvc
 import (
 	"context"
 	"errors"
+	"strings"
+
+	"github.com/google/uuid"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"voice/backend/pkg/principal"
 	"voice/backend/role/permissions"
-	"voice/backend/space/internal/authctx"
 	"voice/backend/space/internal/store"
 
 	spacev1 "voice.app/voice/space/v1"
@@ -18,6 +21,10 @@ import (
 // GetAuditLog returns administrative actions visible to roles with the exact
 // SPACE_VIEW_AUDIT_LOG permission. Without Role Service, only the owner may read.
 func (s *SpaceGRPC) GetAuditLog(ctx context.Context, req *spacev1.GetAuditLogRequest) (*spacev1.GetAuditLogResponse, error) {
+	identity, err := principal.RequireDelegatedUser(ctx, "space", spacev1.SpaceService_GetAuditLog_FullMethodName, req)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "verified audit reader required")
+	}
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
 	}
@@ -25,10 +32,7 @@ func (s *SpaceGRPC) GetAuditLog(ctx context.Context, req *spacev1.GetAuditLogReq
 	if err != nil {
 		return nil, err
 	}
-	caller, ok := authctx.ProfileID(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing profile")
-	}
+	caller := identity.ProfileID
 	release, err := s.lockSpaceMutation(ctx, spaceID)
 	if err != nil {
 		return nil, err
@@ -42,7 +46,7 @@ func (s *SpaceGRPC) GetAuditLog(ctx context.Context, req *spacev1.GetAuditLogReq
 	if !member {
 		return nil, status.Error(codes.PermissionDenied, "not a space member")
 	}
-	if err := s.requireSpacePermission(ctx, spaceID, permissions.SpaceViewAuditLog); err != nil {
+	if err := s.requireSpacePermissionForProfile(ctx, spaceID, caller, permissions.SpaceViewAuditLog); err != nil {
 		return nil, err
 	}
 
@@ -57,8 +61,36 @@ func (s *SpaceGRPC) GetAuditLog(ctx context.Context, req *spacev1.GetAuditLogReq
 	if limit > 100 {
 		limit = 100
 	}
-	accessScope := caller.String() + "|" + permissions.SpaceViewAuditLog
-	page, err := s.Store.ListAuditLogSignedPage(ctx, spaceID, cursor, limit, accessScope, s.AuditCursorKey)
+	query := store.AuditLogQuery{SpaceID: spaceID, ViewerProfileID: caller,
+		PageSize: limit, Cursor: cursor, AccessScope: "space.audit.read.v1"}
+	if req.ActorProfileId != nil {
+		actor, err := parseUUIDField("actor_profile_id", *req.ActorProfileId)
+		if err != nil || actor == uuid.Nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid actor_profile_id")
+		}
+		query.ActorProfileID = &actor
+	}
+	if req.Action != nil {
+		if strings.TrimSpace(*req.Action) == "" {
+			return nil, status.Error(codes.InvalidArgument, "invalid action")
+		}
+		query.Action = req.Action
+	}
+	if req.From != nil {
+		if req.From.CheckValid() != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid from")
+		}
+		from := req.From.AsTime().UTC()
+		query.From = &from
+	}
+	if req.To != nil {
+		if req.To.CheckValid() != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid to")
+		}
+		to := req.To.AsTime().UTC()
+		query.To = &to
+	}
+	page, err := s.Store.ListAuditLogQueryPage(ctx, query, s.AuditCursorKey)
 	if errors.Is(err, store.ErrInvalidAuditCursor) {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}

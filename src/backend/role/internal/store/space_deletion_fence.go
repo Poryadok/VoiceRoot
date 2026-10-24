@@ -163,5 +163,15 @@ func (s *RoleStore) CleanupSpaceDeletionFenceEvidence(ctx context.Context) error
 		return ErrScopeUnavailable
 	}
 	_, err := s.Pool.Exec(ctx, `UPDATE role_space_deletion_fence_receipts r SET request_bytes=NULL,receipt_bytes=NULL FROM role_space_lifecycle l WHERE l.space_id=r.space_id AND l.retired_at IS NOT NULL AND clock_timestamp()>=l.retired_at+interval '30 days' AND r.request_bytes IS NOT NULL`)
-	return err
+	if err != nil {
+		return err
+	}
+	var native bool
+	if err := s.Pool.QueryRow(ctx, `SELECT to_regclass('public.role_member_admission_receipts') IS NOT NULL`).Scan(&native); err != nil {
+		return err
+	}
+	if native {
+		return s.CleanupMemberAdmissionEvidence(ctx)
+	}
+	return nil
 }

@@ -104,6 +104,36 @@ abstract class AppLocalizations {
   /// **'Voice'**
   String get appTitle;
 
+  /// No description provided for @spaceLeaveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave Space?'**
+  String get spaceLeaveTitle;
+
+  /// No description provided for @spaceLeaveAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave Space'**
+  String get spaceLeaveAction;
+
+  /// No description provided for @spaceLeaveMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'You will lose access to this Space and its chats. Your active voice connection in this Space will end.'**
+  String get spaceLeaveMessage;
+
+  /// No description provided for @spaceLeaveOwnerHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer ownership to another member before leaving.'**
+  String get spaceLeaveOwnerHint;
+
+  /// No description provided for @spaceLeaveUncertain.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not confirm whether you left. Refresh your Spaces before trying again.'**
+  String get spaceLeaveUncertain;
+
   /// No description provided for @sdkAuthorizationTitle.
   ///
   /// In en, this message translates to:
@@ -3500,6 +3530,18 @@ abstract class AppLocalizations {
   /// **'Add members'**
   String get chatGroupAddMembers;
 
+  /// No description provided for @chatGroupMemberAdditionsPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow members to add people'**
+  String get chatGroupMemberAdditionsPermission;
+
+  /// No description provided for @chatGroupPostAsChatPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow publishing as this chat'**
+  String get chatGroupPostAsChatPermission;
+
   /// No description provided for @chatGroupMembersLimitReached.
   ///
   /// In en, this message translates to:
@@ -5869,6 +5911,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add friend'**
   String get matchHistoryAddFriend;
+
+  /// No description provided for @matchHistoryFindPlayers.
+  ///
+  /// In en, this message translates to:
+  /// **'Find players'**
+  String get matchHistoryFindPlayers;
+
+  /// No description provided for @matchHistoryRatePlayer.
+  ///
+  /// In en, this message translates to:
+  /// **'Rate'**
+  String get matchHistoryRatePlayer;
 
   /// No description provided for @e2eEnableTitle.
   ///

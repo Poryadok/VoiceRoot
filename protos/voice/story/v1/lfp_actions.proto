@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package voice.story.v1;
+
+import "voice/story/v1/lfp_consent.proto";
+
+option go_package = "voice.app/voice/story/v1;storyv1";
+
+// PRIVATE Gateway -> Story delegated-user methods. Exact signature, audience,
+// method/body/request ID, replay admission and current session authority are
+// mandatory. Ordinary Story metadata cannot invoke these qualified actions.
+service LfpConsentActionService {
+  rpc PublishLfpConsentOffer(PublishLfpConsentOfferRequest) returns (PublishLfpConsentOfferResponse);
+  rpc ObserveLfpConsentOffer(ObserveLfpConsentOfferRequest) returns (ObserveLfpConsentOfferResponse);
+  rpc RespondWithLfpConsent(RespondWithLfpConsentRequest) returns (RespondWithLfpConsentResponse);
+}
+
+// Profile-scoped view of the exact immutable offer. IDs/digests are selectors,
+// never identity or restore-cohort authority. No account, epoch or origin here.
+message LfpConsentOfferView {
+  uint64 protocol_version = 1;
+  bytes story_id = 2;
+  bytes story_incarnation = 3;
+  uint64 offer_revision = 4;
+  bytes author_profile_id = 5;
+  bytes criteria_sha256 = 6;
+  bytes offer_payload_sha256 = 7;
+  int64 offer_expires_at_unix_millis = 8;
+}
+
+message PublishLfpConsentOfferRequest {
+  uint64 protocol_version = 1;
+  bytes publication_operation_id = 2;
+  bytes story_id = 3;
+}
+
+message PublishLfpConsentOfferResponse {
+  LfpConsentOfferView offer = 1;
+}
+
+message ObserveLfpConsentOfferRequest {
+  uint64 protocol_version = 1;
+  bytes story_id = 2;
+}
+
+message ObserveLfpConsentOfferResponse {
+  LfpConsentOfferView offer = 1;
+}
+
+message RespondWithLfpConsentRequest {
+  uint64 protocol_version = 1;
+  // Stable domain operation; every network attempt has a fresh signed JTI.
+  bytes response_operation_id = 2;
+  LfpConsentOfferView offer = 3;
+  LfpConsentResponseType response_type = 4;
+}
+
+// Success only after Story's immutable consent and original MM registration
+// acknowledgement are durable. Private receipt/account/epoch is not returned.
+message RespondWithLfpConsentResponse {}

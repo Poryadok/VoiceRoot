@@ -1,0 +1,3 @@
+Command: go test -short ./internal/socialevents -run ^TestJetStreamPublisher_FriendRequestRetryUsesStableMessageID$ -count=100 -cpu=1,2 -failfast
+ok  	voice/backend/social/internal/socialevents	5.681s
+exit_code=0

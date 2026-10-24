@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 	"voice/backend/pkg/principal"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
+	"voice/backend/pkg/spacecommunication"
 	"voice/backend/voice/internal/federationmedia"
 	"voice/backend/voice/internal/gameprincipal"
 	"voice/backend/voice/internal/gameprovision"
@@ -33,6 +33,7 @@ import (
 	"voice/backend/voice/internal/matchsquad"
 	"voice/backend/voice/internal/matchsquadmemberprincipal"
 	"voice/backend/voice/internal/matchsquadprincipal"
+	"voice/backend/voice/internal/ordinarycall"
 	"voice/backend/voice/internal/principalgrpc"
 	"voice/backend/voice/internal/principaljwks"
 	"voice/backend/voice/internal/rolegrant"
@@ -47,7 +48,6 @@ import (
 
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
-	rolev1 "voice.app/voice/role/v1"
 	spacev1 "voice.app/voice/space/v1"
 	subscriptionv1 "voice.app/voice/subscription/v1"
 	userv1 "voice.app/voice/user/v1"
@@ -56,7 +56,7 @@ import (
 const serviceName = "voice"
 
 func main() {
-	logger := httpserver.NewLogger(serviceName)
+	logger := newServiceLogger()
 	metricsReg := prometheus.NewRegistry()
 	addr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
@@ -93,6 +93,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("voice Role grant checker configuration: %v", err)
 	}
+	communicationConfig, communicationEnabled, err := spacecommunication.LoadClientConfig(os.LookupEnv, "VOICE_SPACE_COMMUNICATION_")
+	if err != nil {
+		log.Fatalf("Voice Space communication client configuration: %v", err)
+	}
 	spacePrincipalConfig, spacePrincipalEnabled, err := spaceprincipalruntime.LoadFromEnv()
 	if err != nil {
 		log.Fatalf("voice Space lifecycle principal configuration: %v", err)
@@ -115,7 +119,7 @@ func main() {
 		if !lifecycleEnabled || lifecyclePool == nil {
 			log.Fatal("Voice Space lifecycle principal requires VOICE_DATABASE_URL")
 		}
-		spaceLifecycleStore = spacelifecycle.NewPostgresStore(lifecyclePool)
+		spaceLifecycleStore = spacelifecycle.NewPostgresStore(lifecyclePool, spacemedia.BeginPartyRoomClose)
 		if err := spaceLifecycleStore.CheckSchema(runCtx); err != nil {
 			log.Fatalf("voice Space lifecycle database schema: %v", err)
 		}
@@ -143,11 +147,11 @@ func main() {
 	if gamePrincipalEnabled && !roleGrantEnabled {
 		log.Fatal("Voice managed game-session admission requires both GIS provisioning and Role grant checker configuration")
 	}
-	if (roleGrantEnabled || userPrincipalEnabled) && !principalJWKSEnabled {
+	if (roleGrantEnabled || userPrincipalEnabled || communicationEnabled) && !principalJWKSEnabled {
 		log.Fatal("Voice Role grants and user-principal listener require the Voice service principal signer")
 	}
 	var voiceIssuer *principal.Issuer
-	if roleGrantEnabled || userPrincipalEnabled {
+	if roleGrantEnabled || userPrincipalEnabled || communicationEnabled {
 		voiceIssuer, err = principal.NewIssuer(principal.IssuerConfig{
 			Issuer: "voice", KeyID: principalJWKSConfig.KeyID, PrivateKey: principalJWKSConfig.SigningKey,
 		})
@@ -185,6 +189,24 @@ func main() {
 	} else {
 		callStore = voicestore.NewMemoryCallStore()
 		logger.Warn("VOICE_REDIS_ADDR not set; using in-memory call store")
+	}
+	ordinaryCalls, err := openOrdinaryRuntime(runCtx, callStore)
+	if err != nil {
+		log.Fatalf("ordinary Voice startup: %v", err)
+	}
+	if ordinaryCalls != nil {
+		defer ordinaryCalls.pool.Close()
+	}
+	if ordinaryCalls != nil {
+		priorReadiness := lifecycleReadiness
+		lifecycleReadiness = func(ctx context.Context) error {
+			if priorReadiness != nil {
+				if err := priorReadiness(ctx); err != nil {
+					return err
+				}
+			}
+			return ordinaryCalls.Store.CheckSchema(ctx)
+		}
 	}
 	matchSquadConfig, matchSquadEnabled, err := matchsquadprincipal.LoadFromEnv(os.LookupEnv)
 	if err != nil {
@@ -240,6 +262,7 @@ func main() {
 	var managedGameSessionRooms grpcsvc.ManagedGameSessionRoomLookup
 	var managedGameSessionGrants grpcsvc.ManagedGameSessionGrantChecker
 	var voiceRoomGrantResolver s2s.VoiceRoomGrantResolver
+	var rolePerms grpcsvc.RolePermissionChecker
 	var conversionAdmission grpcsvc.SdkConversionAdmissionGuard
 	var accountVoiceFences gameprovision.AccountVoiceFenceStore = gameprovision.UnavailableAccountVoiceFenceStore{}
 	var accountVoiceProfiles grpcsvc.AccountVoiceProfileResolver
@@ -250,6 +273,7 @@ func main() {
 		}
 		defer func() { _ = roleConn.Close() }()
 		voiceRoomGrantResolver = checker
+		rolePerms = checker
 		if gamePrincipalEnabled {
 			managedGameSessionGrants = checker
 		}
@@ -270,6 +294,9 @@ func main() {
 		}
 		defer pool.Close()
 		gameStore := gameprovision.NewPostgresStore(pool)
+		if ordinaryCalls != nil {
+			gameStore.EnableOrdinaryConversions()
+		}
 		if err := gameStore.CheckSchema(runCtx); err != nil {
 			log.Fatalf("voice GIS database schema: %v", err)
 		}
@@ -287,10 +314,14 @@ func main() {
 			log.Fatalf("voice GIS listener: %v", err)
 		}
 		gameProvisionServer = grpc.NewServer(gamePrincipalRuntime.ServerOptions()...)
-		callsv1.RegisterGameSessionProvisioningServiceServer(gameProvisionServer, &grpcsvc.GameSessionProvisioningGRPC{
+		provisionService := &grpcsvc.GameSessionProvisioningGRPC{
 			Store: gameStore, Roster: gameStore, Closer: gameStore, Fencer: mediaFencer,
 			Conversion: gameStore, Calls: callStore, CallCloser: roomCloser, Now: time.Now,
-		})
+		}
+		if ordinaryCalls != nil {
+			provisionService.OrdinaryCalls = ordinaryCalls.Coordinator
+		}
+		callsv1.RegisterGameSessionProvisioningServiceServer(gameProvisionServer, provisionService)
 		go func() {
 			logger.Info("GIS room provisioning listener started", slog.String("addr", gamePrincipalConfig.ListenAddr))
 			if serveErr := gameProvisionServer.Serve(gameProvisionListener); serveErr != nil {
@@ -319,6 +350,9 @@ func main() {
 			logger.Warn("managed game session lookup unavailable", slog.String("error", poolErr.Error()))
 		} else {
 			gameStore := gameprovision.NewPostgresStore(pool)
+			if ordinaryCalls != nil {
+				gameStore.EnableOrdinaryConversions()
+			}
 			if schemaErr := gameStore.CheckSchema(runCtx); schemaErr != nil {
 				pool.Close()
 				logger.Warn("managed game session lookup schema unavailable", slog.String("error", schemaErr.Error()))
@@ -362,7 +396,6 @@ func main() {
 	var spaceMembers grpcsvc.SpaceMembership
 	var voiceRoomAccessResolver grpcsvc.AuthoritativeVoiceRoomAccessResolver
 	var spacePro grpcsvc.SpaceProLookup
-	var rolePerms grpcsvc.RolePermissionChecker
 	if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
 		uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
@@ -390,7 +423,14 @@ func main() {
 		spaceCli := spacev1.NewSpaceServiceClient(spconn)
 		callSpaceCoMembership = s2s.NewGRPCSpaceCoMembership(spconn)
 		spaceMembers = s2s.NewGRPCSpaceMembership(spaceCli)
-		voiceRoomAccessResolver = s2s.NewGRPCVoiceRoomAccessResolver(spaceCli, os.Getenv("SPACE_VOICE_S2S_TOKEN"))
+	}
+	if communicationEnabled {
+		conn, err := communicationConfig.Dial()
+		if err != nil {
+			log.Fatalf("Voice Space communication mTLS: %v", err)
+		}
+		defer func() { _ = conn.Close() }()
+		voiceRoomAccessResolver = s2s.NewGRPCVoiceRoomAccessResolver(spacev1.NewSpaceServiceClient(conn), voiceIssuer)
 	}
 	if subAddr := strings.TrimSpace(os.Getenv("SUBSCRIPTION_GRPC_ADDR")); subAddr != "" {
 		subconn, err := grpc.NewClient(grpcclient.DialTarget(subAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -399,15 +439,6 @@ func main() {
 		}
 		defer func() { _ = subconn.Close() }()
 		spacePro = s2s.NewGRPCSpacePro(subscriptionv1.NewSubscriptionServiceClient(subconn))
-	}
-	if roleAddr := strings.TrimSpace(os.Getenv("ROLE_GRPC_ADDR")); roleAddr != "" {
-		rconn, err := grpc.NewClient(grpcclient.DialTarget(roleAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			log.Fatalf("role grpc: %v", err)
-		}
-		defer func() { _ = rconn.Close() }()
-		roleClient := rolev1.NewRoleServiceClient(rconn)
-		rolePerms = s2s.NewGRPCRolePermissions(roleClient)
 	}
 	if matchSquadMemberEnabled {
 		if matchSquadController == nil || lifecyclePool == nil || accountVoiceProfiles == nil {
@@ -509,66 +540,78 @@ func main() {
 		Logger:              logger,
 		SessionEpochChecker: sessionEpochChecker,
 	}
-	if federatedMedia != nil {
-		voiceSvc.FederatedMedia = federatedMedia
-	}
-	if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
-		if sessionEpochChecker == nil {
-			log.Fatal("Space media admission requires the current Auth session-floor checker")
+	if ordinaryCalls != nil {
+		if conversionAdmission == nil || accountVoiceProfiles == nil || chatMembers == nil {
+			log.Fatal("ordinary Voice authority dependencies unavailable")
 		}
-		if !callStoreDurable {
-			log.Fatal("Space media invalidation requires the durable Voice Redis call store")
-		}
-		if err := voiceSvc.SpaceMediaAdmissions.CheckSchema(runCtx); err != nil {
-			log.Fatalf("Space media PostgreSQL admission schema: %v", err)
-		}
-		if voiceRoomAccessResolver == nil || voiceRoomGrantResolver == nil {
-			log.Fatal("Space media invalidation requires Space and Role authority resolvers")
-		}
-		mediaLifecycle := livekit.NewSDKRoomLifecycle(
-			strings.TrimSpace(os.Getenv("LIVEKIT_URL")),
-			strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")),
-			strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET")),
-		)
-		spaceMediaServing := &atomic.Bool{}
-		voiceSvc.SpaceMediaServing = spaceMediaServing
-		spaceMediaCoordinator := &spacemedia.Coordinator{
-			Store: callStore, Calls: callStore, Admissions: spaceMediaAdmissions,
-			SessionEpochChecker: sessionEpochChecker,
-			Access:              voiceRoomAccessResolver, Grants: voiceRoomGrantResolver, Media: mediaLifecycle,
-			Every: spacemedia.ReconcileInterval,
-			OnError: func(err error) {
-				logger.Warn("Space media authority reconciliation failed", slog.String("error", err.Error()))
-			},
-			OnReadiness: spaceMediaServing.Store,
-		}
-		voiceSvc.SpaceMediaRevoker = spaceMediaCoordinator
-		invalidationConsumer, err := spacemedia.StartInvalidationConsumer(runCtx, natsURL, spaceMediaCoordinator, logger)
-		if err != nil {
-			log.Fatalf("Space media invalidation consumer startup: %v", err)
-		}
-		defer func() { _ = invalidationConsumer.Close() }()
-		if err := spaceMediaCoordinator.ReconcileAll(runCtx); err != nil {
-			log.Fatalf("Space media initial reconciliation: %v", err)
-		}
-		admissionPublisher, ok := events.(spacemedia.AdmissionOutboxPublisher)
+		voiceSvc.OrdinaryCalls = ordinaryCalls.Coordinator
+		publisher, ok := events.(ordinarycall.OutboxPublisher)
 		if !ok {
-			log.Fatal("Space media durable event publisher is not configured")
+			log.Fatal("ordinary Voice durable publisher unavailable")
 		}
-		admissionRelay := &spacemedia.AdmissionOutboxRelay{
-			Store: spaceMediaAdmissions, Publisher: admissionPublisher,
-			OnError: func(err error) {
-				logger.Warn("Space media admission outbox delivery failed", slog.String("error", err.Error()))
-			},
-		}
+		relay := &ordinarycall.OutboxRelay{Store: ordinaryCalls.Store, Publisher: publisher, OnError: func(err error) {
+			logger.Warn("ordinary Voice outbox delivery failed", slog.String("error", err.Error()))
+		}}
 		go func() {
-			if err := admissionRelay.Run(runCtx); err != nil && runCtx.Err() == nil {
-				logger.Error("Space media admission outbox relay stopped", slog.String("error", err.Error()))
+			if err := relay.Run(runCtx); err != nil && runCtx.Err() == nil {
+				logger.Error("ordinary Voice outbox stopped", slog.String("error", err.Error()))
 			}
 		}()
 		go func() {
-			if err := spaceMediaCoordinator.Run(runCtx); err != nil && runCtx.Err() == nil {
-				logger.Error("Space media authority reconciler stopped", slog.String("error", err.Error()))
+			if err := ordinaryCalls.Coordinator.RunRecovery(runCtx, ordinaryCalls.Store, func(err error) { logger.Warn("ordinary Voice recovery failed", slog.String("error", err.Error())) }); err != nil && runCtx.Err() == nil {
+				logger.Error("ordinary Voice recovery stopped", slog.String("error", err.Error()))
+			}
+		}()
+	}
+	if federatedMedia != nil {
+		voiceSvc.FederatedMedia = federatedMedia
+	}
+	var mediaSessionEpochChecker spacemedia.SessionEpochChecker
+	if sessionEpochChecker != nil {
+		mediaSessionEpochChecker = sessionEpochChecker
+	}
+	// This legacy/pre-cut root serves its real public signing keys before
+	// recovery calls Space with a signed principal and a cold verifier cache.
+	// The additive native executable retains its separate protected startup gate.
+	var principalJWKSPublisher *principaljwks.Publisher
+	if principalJWKSEnabled {
+		principalJWKSPublisher, err = principaljwks.Start(principalJWKSConfig, func(handler http.Handler) http.Handler {
+			return httpserver.Wrap(handler, logger)
+		})
+		if err != nil {
+			log.Fatalf("voice principal JWKS startup: %v", err)
+		}
+		defer func() { _ = principalJWKSPublisher.Close() }()
+		logger.Info("principal JWKS TLS listener started", slog.String("addr", principalJWKSPublisher.Addr().String()))
+		go func() {
+			if serveErr := <-principalJWKSPublisher.Errors(); serveErr != nil && serveErr != http.ErrServerClosed {
+				runCancel()
+				log.Fatalf("voice principal JWKS serve: %v", serveErr)
+			}
+		}()
+	}
+	closeSpaceMediaRuntime := startSpaceMediaRuntime(runCtx, voiceSvc, lifecyclePool,
+		mediaSessionEpochChecker, callStoreDurable, strings.TrimSpace(os.Getenv("NATS_URL")),
+		livekit.NewSDKRoomLifecycle(strings.TrimSpace(os.Getenv("LIVEKIT_URL")),
+			strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")), strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET"))), logger)
+	defer func() { _ = closeSpaceMediaRuntime() }()
+	// Publish P3 recovery only after every optional consumer has final bindings.
+	if configured, ok := spaceLifecycleController.(*spacelifecycle.Service); ok {
+		service := configured.RecoverySnapshot()
+		go func() {
+			ticker := time.NewTicker(spacemedia.ReconcileInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-runCtx.Done():
+					return
+				case <-ticker.C:
+					ctx, cancel := context.WithTimeout(runCtx, 4*time.Second)
+					if err := service.ResumePending(ctx); err != nil {
+						logger.Warn("P3 exact drain pending", slog.String("error", err.Error()))
+					}
+					cancel()
+				}
 			}
 		}()
 	}
@@ -628,26 +671,11 @@ func main() {
 		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName, lifecycleReadiness), metricsReg), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
-	var principalJWKSServer *http.Server
-	if principalJWKSEnabled {
-		mux := http.NewServeMux()
-		mux.Handle("/internal/v1/principal/jwks.json", principal.JWKSHandlerKeys([]principal.JWKSKey{
-			{KeyID: principalJWKSConfig.KeyID, PublicKey: &principalJWKSConfig.SigningKey.PublicKey},
-			{KeyID: principalJWKSConfig.NextKeyID, PublicKey: &principalJWKSConfig.NextSigningKey.PublicKey},
-		}))
-		principalJWKSServer = &http.Server{Addr: principalJWKSConfig.ListenAddr, Handler: httpserver.Wrap(mux, logger), ReadHeaderTimeout: 5 * time.Second}
-	}
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 1)
 	logger.Info("listening", slog.String("addr", addr))
 	go func() {
 		errCh <- server.ListenAndServe()
 	}()
-	if principalJWKSServer != nil {
-		go func() {
-			logger.Info("principal JWKS TLS listener started", slog.String("addr", principalJWKSServer.Addr))
-			errCh <- principalJWKSServer.ListenAndServeTLS(principalJWKSConfig.TLSCert, principalJWKSConfig.TLSKey)
-		}()
-	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -664,8 +692,8 @@ func main() {
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)
 		}
-		if principalJWKSServer != nil {
-			if err := principalJWKSServer.Shutdown(ctx); err != nil {
+		if principalJWKSPublisher != nil {
+			if err := principalJWKSPublisher.Shutdown(ctx); err != nil {
 				log.Fatal(err)
 			}
 		}

@@ -26,7 +26,7 @@ func TestAuthorityRevisionActualMigratorUpgradesBothOwnerCatalogs(t *testing.T) 
 		t.Skip("requires PostgreSQL and pinned migration driver")
 	}
 	integrationtest.ConfigureDockerTesting()
-	for _, owner := range []string{"space", "role", "role_sdk"} {
+	for _, owner := range []string{"space", "role", "role_sdk", "role_admin"} {
 		t.Run(owner, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
@@ -46,7 +46,7 @@ func TestAuthorityRevisionActualMigratorUpgradesBothOwnerCatalogs(t *testing.T) 
 			t.Cleanup(pool.Close)
 			privateURL := &url.URL{Scheme: "postgres", User: url.UserPassword("migration_fixture", "fixture_only"), Host: "127.0.0.1:5432", Path: "/authority_driver", RawQuery: "sslmode=disable"}
 			directoryOwner := owner
-			if owner == "role_sdk" {
+			if owner == "role_sdk" || owner == "role_admin" {
 				directoryOwner = "role"
 			}
 			directory := filepath.Join(repoRoot(t), "src/backend/migrations", directoryOwner+"_db")
@@ -87,6 +87,9 @@ func TestAuthorityRevisionActualMigratorUpgradesBothOwnerCatalogs(t *testing.T) 
 				previous, current, table, epoch = "15", 16, "role_voice_policy_epochs", "policy_epoch"
 				activationBump = 0
 			}
+			if owner == "role_admin" {
+				previous, current, table, epoch = "16", 17, "role_voice_policy_epochs", "policy_epoch"
+			}
 			migrate(true, "goto", previous)
 			space := uuid.New()
 			if owner == "space" {
@@ -95,6 +98,10 @@ func TestAuthorityRevisionActualMigratorUpgradesBothOwnerCatalogs(t *testing.T) 
 				_, err = pool.Exec(ctx, `INSERT INTO roles(space_id,name) VALUES($1,'driver scope')`, space)
 			}
 			require.NoError(t, err)
+			if owner == "role_admin" {
+				_, err = pool.Exec(ctx, `INSERT INTO roles(space_id,name,is_system,permissions) VALUES($1,'Admin',true,2)`, space)
+				require.NoError(t, err)
+			}
 			var before, after int64
 			require.NoError(t, pool.QueryRow(ctx, "SELECT "+epoch+" FROM "+table+" WHERE space_id=$1", space).Scan(&before))
 			migrate(true, "up", "1")
@@ -105,14 +112,19 @@ func TestAuthorityRevisionActualMigratorUpgradesBothOwnerCatalogs(t *testing.T) 
 			require.False(t, dirty)
 			require.NoError(t, pool.QueryRow(ctx, "SELECT "+epoch+" FROM "+table+" WHERE space_id=$1", space).Scan(&after))
 			require.Equal(t, before+activationBump, after)
-			if owner == "role_sdk" {
+			if owner == "role_sdk" || owner == "role_admin" {
 				var sdk int64
 				require.NoError(t, pool.QueryRow(ctx, `SELECT revision FROM role_sdk_authority_revision WHERE singleton`).Scan(&sdk))
 				require.Equal(t, int64(1), sdk)
 				reader := &RoleStore{Pool: pool}
 				revision, err := reader.ReadAuthorityRevision(ctx, &authorityv1.SourceScope{SchemaVersion: 1, SpaceId: space.String()})
 				require.NoError(t, err)
-				require.Equal(t, uint64(before+sdk), revision)
+				require.Equal(t, uint64(after+sdk), revision)
+			}
+			if owner == "role_admin" {
+				var mask int64
+				require.NoError(t, pool.QueryRow(ctx, `SELECT permissions FROM roles WHERE space_id=$1 AND name='Admin' AND is_system`, space).Scan(&mask))
+				require.EqualValues(t, 6, mask)
 			}
 			migrate(false, "down", "1")
 			require.NoError(t, pool.QueryRow(ctx, `SELECT version,dirty FROM schema_migrations`).Scan(&version, &dirty))

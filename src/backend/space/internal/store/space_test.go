@@ -39,6 +39,7 @@ func applySpaceMigrationForStoreTest(t *testing.T, ctx context.Context, pool *pg
 		"000019_t37_community_bootstrap.up.sql",
 		"000020_t37_owner_recovery.up.sql",
 		"000021_t38_community_roster.up.sql",
+		"000028_chat_creation_outcomes.up.sql",
 	} {
 		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name)
 		sqlBytes, readErr := os.ReadFile(migrationPath)

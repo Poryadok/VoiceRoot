@@ -34,7 +34,8 @@ class GroupMembersContent extends ConsumerWidget {
     final management = ref.watch(groupMembersManagementProvider(chatId));
     final activeId = ref.watch(authControllerProvider).activeProfileId;
     final role = _myRole(management.members, activeId);
-    final canAdd = management.members.length < kGroupMembersPageSize;
+    final hasCapacity = management.members.length < kGroupMembersPageSize;
+    final canAdd = hasCapacity && management.permissions?.canAddMembers == true;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -48,6 +49,16 @@ class GroupMembersContent extends ConsumerWidget {
           Text(l10n.chatGroupMembersSubtitle, style: theme.textTheme.bodySmall),
           const SizedBox(height: 12),
         ],
+        if (management.permissions?.canManagePermissions == true)
+          SwitchListTile(
+            key: GroupMembersSheet.additionsPolicyKey,
+            title: Text(l10n.chatGroupMemberAdditionsPermission),
+            value: management.permissions!.memberAdditionsEnabled,
+            onChanged: management.isMutating
+                ? null
+                : (value) =>
+                      _setChatPermission(context, ref, chatId, value: value),
+          ),
         Expanded(
           child: management.isLoading && management.members.isEmpty
               ? const VoiceListSkeleton()
@@ -105,6 +116,19 @@ class GroupMembersContent extends ConsumerWidget {
                             member: member,
                             isSelf: isSelf,
                             canKick: canKick,
+                            canManageGrant:
+                                management.permissions?.canManagePermissions ==
+                                    true &&
+                                member.role == kChatRoleMember,
+                            onGrantChanged: management.isMutating
+                                ? null
+                                : (value) => _setChatPermission(
+                                    context,
+                                    ref,
+                                    chatId,
+                                    profileId: member.profileId,
+                                    value: value,
+                                  ),
                             transferButton: canTransferOwnership
                                 ? _TransferOwnershipButton(
                                     key: GroupMembersSheet.transferOwnerKey(
@@ -134,7 +158,7 @@ class GroupMembersContent extends ConsumerWidget {
                         if (management.members.isNotEmpty)
                           IconButton(
                             key: GroupMembersSheet.addMembersKey,
-                            tooltip: canAdd
+                            tooltip: hasCapacity
                                 ? l10n.chatGroupAddMembers
                                 : l10n.chatGroupMembersLimitReached,
                             onPressed: canAdd && !management.isMutating
@@ -161,6 +185,40 @@ class GroupMembersContent extends ConsumerWidget {
                 ),
         ),
       ],
+    );
+  }
+}
+
+Future<void> _setChatPermission(
+  BuildContext context,
+  WidgetRef ref,
+  String chatId, {
+  String? profileId,
+  required bool value,
+}) async {
+  final controller = ref.read(groupMembersManagementProvider(chatId).notifier);
+  final expected = controller.captureContext();
+  if (expected == null) return;
+  final error = profileId == null
+      ? await controller.setMemberAdditionsEnabled(
+          value,
+          expectedContext: expected,
+        )
+      : await controller.setMemberPostAsChat(
+          profileId,
+          value,
+          expectedContext: expected,
+        );
+  if (!context.mounted ||
+      !controller.isCurrentContext(expected) ||
+      error == kGroupMembersStaleContext) {
+    return;
+  }
+  if (error != null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(commonActionErrorMessage(AppLocalizations.of(context)!)),
+      ),
     );
   }
 }
@@ -204,6 +262,9 @@ class GroupMembersSheet extends ConsumerWidget {
   static const Key sheetKey = Key('group_members_sheet');
   static const Key leaveKey = Key('group_members_leave');
   static const Key addMembersKey = Key('group_members_add');
+  static const Key additionsPolicyKey = Key('group_members_additions_policy');
+  static Key officialGrantKey(String profileId) =>
+      Key('group_members_official_grant_$profileId');
 
   static Key transferOwnerKey(String profileId) =>
       Key('group_members_transfer_owner_$profileId');
@@ -432,6 +493,8 @@ class _MemberTile extends ConsumerWidget {
     required this.member,
     required this.isSelf,
     required this.canKick,
+    required this.canManageGrant,
+    required this.onGrantChanged,
     required this.transferButton,
     required this.kickKey,
     required this.onTap,
@@ -441,6 +504,8 @@ class _MemberTile extends ConsumerWidget {
   final ChatMember member;
   final bool isSelf;
   final bool canKick;
+  final bool canManageGrant;
+  final ValueChanged<bool>? onGrantChanged;
   final Widget? transferButton;
   final Key kickKey;
   final VoidCallback onTap;
@@ -479,6 +544,16 @@ class _MemberTile extends ConsumerWidget {
                 )
               : null,
         ),
+        if (canManageGrant)
+          SwitchListTile(
+            key: GroupMembersSheet.officialGrantKey(member.profileId),
+            title: Text(
+              l10n.chatGroupPostAsChatPermission,
+              semanticsLabel: '$label, ${l10n.chatGroupPostAsChatPermission}',
+            ),
+            value: member.explicitPostAsChat,
+            onChanged: onGrantChanged,
+          ),
         if (transferButton != null)
           Padding(
             padding: const EdgeInsets.only(left: 72, right: 16, bottom: 8),

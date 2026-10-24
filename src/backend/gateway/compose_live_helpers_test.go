@@ -741,7 +741,7 @@ func listComposeSpaceInvites(t *testing.T, client *http.Client, base, accessToke
 	return out
 }
 
-func joinComposeSpaceByInvite(t *testing.T, client *http.Client, base, accessToken, code string) {
+func joinComposeSpaceByInvite(t *testing.T, client *http.Client, base, accessToken, code string) *spacev1.SpaceMembership {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/invites/"+code+"/join", nil)
 	require.NoError(t, err)
@@ -751,6 +751,11 @@ func joinComposeSpaceByInvite(t *testing.T, client *http.Client, base, accessTok
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	require.Equal(t, http.StatusOK, resp.StatusCode, "POST join body=%s", string(body))
+	joined := &spacev1.JoinByInviteResponse{}
+	require.NoError(t, protojson.Unmarshal(body, joined))
+	require.NotNil(t, joined.GetSpaceMembership(), "successful join must return its persisted membership")
+	require.NotEmpty(t, joined.GetSpaceMembership().GetProfileId())
+	return joined.GetSpaceMembership()
 }
 
 func revokeComposeSpaceInvite(t *testing.T, client *http.Client, base, accessToken, spaceID, inviteID string) {
@@ -2149,8 +2154,13 @@ func createComposeSpaceChatStatus(t *testing.T, client *http.Client, base, acces
 // createComposeSpaceChannel creates a CHAT_TYPE_CHANNEL and returns its linked chat id (FW-02 / RL / mentions).
 func createComposeSpaceChannel(t *testing.T, client *http.Client, base, accessToken, spaceID, name string) string {
 	t.Helper()
+	return createComposeSpaceTextChat(t, client, base, accessToken, spaceID, name, "CHAT_TYPE_CHANNEL")
+}
+
+func createComposeSpaceTextChat(t *testing.T, client *http.Client, base, accessToken, spaceID, name, chatType string) string {
+	t.Helper()
 	payload, err := json.Marshal(map[string]string{
-		"type": "CHAT_TYPE_CHANNEL",
+		"type": chatType,
 		"name": name,
 	})
 	require.NoError(t, err)

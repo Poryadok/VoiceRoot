@@ -50,6 +50,9 @@ func TestJetStreamPublisher_FriendRequestRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
 
+	// Core subscriptions must reach the server before the separate publisher sends.
+	require.NoError(t, nc.FlushTimeout(3*time.Second))
+
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() })
@@ -88,6 +91,9 @@ func TestJetStreamPublisher_FriendRequestRetryUsesStableMessageID(t *testing.T) 
 	sub, err := nc.SubscribeSync(subjectFriendRequest)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
+
+	// Core subscriptions must reach the server before the separate publisher sends.
+	require.NoError(t, nc.FlushTimeout(3*time.Second))
 
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)

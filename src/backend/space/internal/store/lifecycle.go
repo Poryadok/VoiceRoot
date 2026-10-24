@@ -19,18 +19,7 @@ import (
 	"voice/backend/space/internal/spacecore"
 )
 
-var lifecycleParticipants = [...]commonv1.ParticipantId{
-	commonv1.ParticipantId_PARTICIPANT_ID_ROLE,
-	commonv1.ParticipantId_PARTICIPANT_ID_CHAT,
-	commonv1.ParticipantId_PARTICIPANT_ID_MESSAGING,
-	commonv1.ParticipantId_PARTICIPANT_ID_FILE,
-	commonv1.ParticipantId_PARTICIPANT_ID_VOICE,
-	commonv1.ParticipantId_PARTICIPANT_ID_MATCHMAKING,
-	commonv1.ParticipantId_PARTICIPANT_ID_SEARCH,
-	commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION,
-	commonv1.ParticipantId_PARTICIPANT_ID_BOT,
-	commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION,
-}
+var lifecycleParticipants = spacecore.CanonicalLifecycleParticipants()
 
 var lifecycleParticipantPackages = map[commonv1.ParticipantId]string{
 	commonv1.ParticipantId_PARTICIPANT_ID_ROLE:         "voice.role.v1",
@@ -43,6 +32,7 @@ var lifecycleParticipantPackages = map[commonv1.ParticipantId]string{
 	commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION: "voice.subscription.v1",
 	commonv1.ParticipantId_PARTICIPANT_ID_BOT:          "voice.bot.v1",
 	commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION: "voice.notification.v1",
+	commonv1.ParticipantId_PARTICIPANT_ID_REALTIME:     "voice.realtime.v1",
 }
 
 var (
@@ -117,6 +107,12 @@ func (s *SpaceStore) ReserveLifecycleSchedule(ctx context.Context, accountID, ac
 	} else if !errors.Is(loadErr, pgx.ErrNoRows) {
 		return nil, loadErr
 	}
+	scoped := *s
+	scoped.tx = tx
+	membershipCapture, err := scoped.captureLifecycleScheduleMutation(ctx, spaceID, actorProfileID, operationID)
+	if err != nil {
+		return nil, err
+	}
 
 	command, err := tx.Exec(ctx, `INSERT INTO space_lifecycle_operations(
 		operation_id,account_id,actor_profile_id,space_id,session_epoch,method,
@@ -142,6 +138,11 @@ func (s *SpaceStore) ReserveLifecycleSchedule(ctx context.Context, accountID, ac
 	if err := persistLifecycleSnapshot(ctx, tx, aggregate.Snapshot()); err != nil {
 		return nil, err
 	}
+	if membershipCapture != nil {
+		if err := scoped.finishEffectiveMemberMutations(ctx, membershipCapture); err != nil {
+			return nil, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
@@ -155,7 +156,7 @@ func (s *SpaceStore) RecordLifecycleDeletionProofReceipt(ctx context.Context, ac
 	if lifecycleHash("voice.auth.v1.ConsumeSpaceDeletionProofResponse", receiptBytes) != receiptHash {
 		return nil, ErrLifecycleEvidenceInvalid
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}
@@ -170,6 +171,14 @@ func (s *SpaceStore) RecordLifecycleDeletionProofReceipt(ctx context.Context, ac
 	if err := lockLifecycleSpace(ctx, tx, operation.spaceID); err != nil {
 		return nil, err
 	}
+	lockedSpace := operation.spaceID
+	operation, err = loadLifecycleOperation(ctx, tx, operationID)
+	if err != nil {
+		return nil, err
+	}
+	if operation.spaceID != lockedSpace || operation.method != "DELETE" || operation.actorProfileID != actorProfileID {
+		return nil, ErrLifecycleConflict
+	}
 	if err := operation.validate(); err != nil {
 		return nil, err
 	}
@@ -181,6 +190,12 @@ func (s *SpaceStore) RecordLifecycleDeletionProofReceipt(ctx context.Context, ac
 			return nil, ErrLifecycleConflict
 		}
 	} else {
+		scoped := *s
+		scoped.tx = tx
+		capture, err := scoped.captureLifecycleProofReceiptMutation(ctx, operation)
+		if err != nil {
+			return nil, err
+		}
 		command, updateErr := tx.Exec(ctx, `UPDATE space_lifecycle_operations
 			SET auth_receipt_bytes=$2,auth_receipt_sha256=$3
 			WHERE operation_id=$1 AND auth_receipt_bytes IS NULL`, operationID, receiptBytes, receiptHash[:])
@@ -189,6 +204,11 @@ func (s *SpaceStore) RecordLifecycleDeletionProofReceipt(ctx context.Context, ac
 		}
 		if command.RowsAffected() != 1 {
 			return nil, ErrLifecycleConflict
+		}
+		if capture != nil {
+			if err := scoped.finishEffectiveMemberMutations(ctx, capture); err != nil {
+				return nil, err
+			}
 		}
 	}
 	aggregate, err := loadLifecycle(ctx, tx, operation.spaceID, false)
@@ -932,9 +952,9 @@ func loadLifecycle(ctx context.Context, db spaceStoreDB, spaceID uuid.UUID, forU
 	if err := loadLifecycleParticipants(ctx, db, &snapshot, spaceID, operationID); err != nil {
 		return nil, err
 	}
-	if phase == spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_PURGED && (snapshot.RoleReceipt == nil || len(snapshot.PurgeReceipts) != 9) {
+	if phase == spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_PURGED && (snapshot.RoleReceipt == nil || len(snapshot.PurgeReceipts) != len(lifecycleParticipants)-1) {
 		var compactValid bool
-		if err := db.QueryRow(ctx, `SELECT a.evidence_compacted AND a.local_purge_completed AND EXISTS(SELECT 1 FROM space_deletion_tombstones t WHERE t.space_id=a.space_id) AND (SELECT count(*) FROM space_lifecycle_completions c WHERE c.space_id=a.space_id AND c.deletion_operation_id=a.deletion_operation_id AND c.generation=a.generation)=10 FROM space_lifecycle_aggregates a WHERE a.space_id=$1`, spaceID).Scan(&compactValid); err != nil {
+		if err := db.QueryRow(ctx, `SELECT a.evidence_compacted AND a.local_purge_completed AND EXISTS(SELECT 1 FROM space_deletion_tombstones t WHERE t.space_id=a.space_id) AND (SELECT count(*) FROM space_lifecycle_completions c WHERE c.space_id=a.space_id AND c.deletion_operation_id=a.deletion_operation_id AND c.generation=a.generation)=11 FROM space_lifecycle_aggregates a WHERE a.space_id=$1`, spaceID).Scan(&compactValid); err != nil {
 			return nil, err
 		}
 		if !compactValid {
@@ -1307,7 +1327,7 @@ func toLifecycleHash(value []byte) [sha256.Size]byte {
 	return result
 }
 func lifecycleParticipantValid(value commonv1.ParticipantId) bool {
-	return value >= commonv1.ParticipantId_PARTICIPANT_ID_ROLE && value <= commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION
+	return value >= commonv1.ParticipantId_PARTICIPANT_ID_ROLE && value <= commonv1.ParticipantId_PARTICIPANT_ID_REALTIME
 }
 func lifecycleManifestID(value *commonv1.ManifestBinding) any {
 	if value == nil {

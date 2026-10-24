@@ -261,7 +261,7 @@ func TestWSNoMessageCreateFromNATSWhenNotSubscribedToChat(t *testing.T) {
 
 // TestWSMessageCreateTwoClientsNATSWithRedis exercises Messaging-compatible JetStream publish
 // (events.v1.MessageStreamEvent on message.sent per CONTRACT_MATRIX) → Realtime consumer → hub,
-// with REALTIME_REDIS_ADDR-style fanout (registry + subscriber) active like production.
+// with REALTIME_REDIS_ADDR-style fanout (Pub/Sub subscriber) active like production.
 // Two DM participants both receive message_create on their sockets after subscribing to the chat.
 func TestWSMessageCreateTwoClientsNATSWithRedis(t *testing.T) {
 	s := startRealtimeJSTestServer(t)
@@ -272,7 +272,6 @@ func TestWSMessageCreateTwoClientsNATSWithRedis(t *testing.T) {
 	t.Cleanup(func() { _ = rdb.Close() })
 
 	chName := "voice:rt:test:nats2redis:" + uuid.NewString()
-	pfx := "voice:rt:test:nats2redis-prof:" + uuid.NewString() + ":"
 
 	hub := permitAllTestSubscriptions(newWSHub())
 	inst := "rt-nats-redis-" + uuid.NewString()[:8]
@@ -281,7 +280,6 @@ func TestWSMessageCreateTwoClientsNATSWithRedis(t *testing.T) {
 		Hub:           hub,
 		InstanceID:    inst,
 		FanoutChannel: chName,
-		KeyPrefix:     pfx,
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())

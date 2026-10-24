@@ -28,7 +28,18 @@ const (
 
 // PresenceStore persists ephemeral presence in Redis (session hash + last_seen string).
 type PresenceStore struct {
-	rdb *redis.Client
+	rdb      *redis.Client
+	lastSeen LastSeenPersistence
+}
+
+// LastSeenPersistence stores observed activity independently of ephemeral Redis sessions.
+type LastSeenPersistence interface {
+	Observe(context.Context, uuid.UUID, time.Time) error
+	GetMany(context.Context, []uuid.UUID) (map[uuid.UUID]int64, error)
+}
+
+func NewDurablePresenceStore(rdb *redis.Client, lastSeen LastSeenPersistence) *PresenceStore {
+	return &PresenceStore{rdb: rdb, lastSeen: lastSeen}
 }
 
 func NewPresenceStore(rdb *redis.Client) *PresenceStore {
@@ -98,6 +109,11 @@ func (s *PresenceStore) UpsertAndGetPrevious(ctx context.Context, profileID uuid
 	now := in.Now
 	if now.IsZero() {
 		now = time.Now().UTC()
+	}
+	if s.lastSeen != nil {
+		if err := s.lastSeen.Observe(ctx, profileID, now); err != nil {
+			return nil, err
+		}
 	}
 	ts := strconv.FormatInt(now.Unix(), 10)
 	hk := presenceHashKey(profileID)
@@ -194,52 +210,11 @@ func (s *PresenceStore) Get(ctx context.Context, profileID uuid.UUID) (*Presence
 	if s == nil || s.rdb == nil {
 		return nil, fmt.Errorf("presence store not configured")
 	}
-	hk := presenceHashKey(profileID)
-	lsk := lastSeenRedisKey(profileID)
-
-	pipe := s.rdb.Pipeline()
-	cmdH := pipe.HGetAll(ctx, hk)
-	cmdLS := pipe.Get(ctx, lsk)
-	if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
-		return nil, err
-	}
-
-	h, err := cmdH.Result()
+	result, err := s.GetMany(ctx, []uuid.UUID{profileID})
 	if err != nil {
 		return nil, err
 	}
-	lsStr, lsErr := cmdLS.Result()
-	if lsErr != nil && lsErr != redis.Nil {
-		return nil, lsErr
-	}
-
-	out := &PresenceSnapshot{}
-	if len(h) > 0 {
-		out.Live = true
-		out.Status = h[hashFieldStatus]
-		if v := h[hashFieldStatusEnum]; v != "" {
-			if n, err := strconv.ParseInt(v, 10, 32); err == nil {
-				out.StatusEnum = int32(n)
-			}
-		}
-		out.GameTitle = h[hashFieldGameTitle]
-		out.CustomStatus = h[hashFieldCustomStatus]
-		out.CallInfoJSON = h[hashFieldCallInfo]
-		if v := h[hashFieldTS]; v != "" {
-			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
-				out.LastActiveUnix = n
-				out.LastSeenUnix = n
-			}
-		}
-		return out, nil
-	}
-
-	if lsStr != "" {
-		if n, err := strconv.ParseInt(strings.TrimSpace(lsStr), 10, 64); err == nil {
-			out.LastSeenUnix = n
-		}
-	}
-	return out, nil
+	return result[profileID], nil
 }
 
 const maxBulkPresence = 256
@@ -284,11 +259,22 @@ func (s *PresenceStore) GetMany(ctx context.Context, profileIDs []uuid.UUID) (ma
 		return nil, err
 	}
 
+	durable := map[uuid.UUID]int64{}
+	if s.lastSeen != nil {
+		var err error
+		durable, err = s.lastSeen.GetMany(ctx, dedup)
+		if err != nil {
+			return nil, err
+		}
+	}
 	out := make(map[uuid.UUID]*PresenceSnapshot, len(orders))
 	for _, o := range orders {
 		snap, err := snapshotFromHGetAndGet(o.h, o.ls)
 		if err != nil {
 			return nil, err
+		}
+		if durable[o.id] > snap.LastSeenUnix {
+			snap.LastSeenUnix = durable[o.id]
 		}
 		out[o.id] = snap
 	}

@@ -225,6 +225,7 @@ message StoryFeedGroup {
 }
 
 message GetStoryFeedResponse {
+  reserved "story_feed_response";
   repeated Story stories = 1;
   string next_cursor = 2;
   optional voice.common.v1.CursorPageResponse page = 3;

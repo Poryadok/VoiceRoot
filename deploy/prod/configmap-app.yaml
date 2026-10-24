@@ -15,6 +15,8 @@ data:
   # HTTP_IDLE_TIMEOUT: "120s"
   # HTTP_SHUTDOWN_TIMEOUT: "10s"
   # POSTGRES_CONNECT_TIMEOUT: "15s"
+  # Per-process default; explicit Deployment env overrides this per service.
+  POSTGRES_MAX_CONNS: "10"
   POSTGRES_USER: "voice"
   POSTGRES_HOST: "voice-postgres"
   FEDERATION_KEY_ID: "primary"
@@ -55,6 +57,8 @@ data:
   MESSAGING_GRPC_ADDR: "voice-messaging:9090"
   MODERATION_GRPC_ADDR: "voice-moderation:9090"
   FILE_GRPC_ADDR: "voice-file:9090"
+  # Enable only after every Messaging replica understands FileProcessed.preview.
+  FILE_PREVIEW_PUBLICATION_ENABLED: "false"
   ROLE_GRPC_ADDR: "voice-role:9090"
   SPACE_GRPC_ADDR: "voice-space:9090"
   VOICE_GRPC_ADDR: "voice-voice:9090"

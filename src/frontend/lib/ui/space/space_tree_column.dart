@@ -12,6 +12,7 @@ import 'space_bots_sheet.dart';
 import 'space_members_sheet.dart';
 import 'space_roles_sheet.dart';
 import 'space_tree_panel.dart';
+import 'leave_space_sheet.dart';
 import '../../routing/deep_link_urls.dart';
 import '../core/voice_share_link.dart';
 import '../matchmaking/game_catalog_screen.dart';
@@ -37,7 +38,8 @@ class SpaceTreeColumn extends ConsumerWidget {
     final spaceAsync = ref.watch(spaceProvider(spaceId));
     final shellNav = ref.read(shellNavigationProvider);
     final narrow = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
-    final canManageBots = ref
+    final canManageBots =
+        ref
             .watch(
               spacePermissionProvider((
                 spaceId: spaceId,
@@ -48,7 +50,8 @@ class SpaceTreeColumn extends ConsumerWidget {
             )
             .valueOrNull ??
         false;
-    final canManageInvites = ref
+    final canManageInvites =
+        ref
             .watch(
               spacePermissionProvider((
                 spaceId: spaceId,
@@ -67,82 +70,108 @@ class SpaceTreeColumn extends ConsumerWidget {
           color: voice.surface,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: spaceAsync.when(
-                    data: (space) => Text(
-                      space.name,
-                      style: Theme.of(context).textTheme.titleMedium,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    loading: () => Text(
-                      l10n.spaceTreeTitle,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    error: (_, _) => Text(
-                      l10n.spaceTreeTitle,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  key: const Key('space_matchmaking_action'),
-                  icon: const Icon(Icons.sports_esports_outlined),
-                  tooltip: l10n.spaceMatchmakingTooltip,
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => GameCatalogScreen(spaceId: spaceId),
+                Row(
+                  children: [
+                    Expanded(
+                      child: spaceAsync.when(
+                        data: (space) => Text(
+                          space.name,
+                          style: Theme.of(context).textTheme.titleMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        loading: () => Text(
+                          l10n.spaceTreeTitle,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        error: (_, _) => Text(
+                          l10n.spaceTreeTitle,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
                       ),
-                    );
-                  },
+                    ),
+                    PopupMenuButton<String>(
+                      key: const Key('space_lifecycle_menu'),
+                      onSelected: (_) =>
+                          LeaveSpaceSheet.show(context, spaceId: spaceId),
+                      itemBuilder: (_) => [
+                        PopupMenuItem(
+                          value: 'leave',
+                          child: Text(l10n.spaceLeaveAction),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                IconButton(
-                  key: const Key('space_members_action'),
-                  icon: const Icon(Icons.groups_outlined),
-                  tooltip: l10n.spaceMembersTooltip,
-                  onPressed: () {
-                    if (narrow) {
-                      SpaceMembersSheet.show(context, spaceId: spaceId);
-                    } else {
-                      shellNav.toggleSidePanel(ShellSidePanel.members);
-                    }
-                  },
-                ),
-                IconButton(
-                  key: const Key('space_roles_action'),
-                  icon: const Icon(Icons.badge_outlined),
-                  tooltip: l10n.spaceRolesTooltip,
-                  onPressed: () => SpaceRolesSheet.show(context, spaceId: spaceId),
-                ),
-                IconButton(
-                  key: const Key('space_bots_action'),
-                  icon: const Icon(Icons.smart_toy_outlined),
-                  tooltip: l10n.spaceBotsTitle,
-                  onPressed: canManageBots
-                      ? () => SpaceBotsSheet.show(context, spaceId: spaceId)
-                      : null,
-                ),
-                if (canManageInvites)
-                  IconButton(
-                    key: const Key('space_invites_action'),
-                    icon: const Icon(Icons.person_add_outlined),
-                    tooltip: l10n.spaceInvitesTooltip,
-                    onPressed: () =>
-                        SpaceInvitesSheet.show(context, spaceId: spaceId),
-                  ),
-                VoiceShareLinkButton(
-                  link: spaceShareUrl(spaceId),
-                  tooltip: l10n.shareLinkAction,
-                ),
-                IconButton(
-                  key: const Key('space_report_action'),
-                  icon: const Icon(Icons.flag_outlined),
-                  tooltip: l10n.reportAction,
-                  onPressed: () => ReportSheet.show(
-                    context,
-                    target: ReportSpaceTarget(spaceId: spaceId),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      IconButton(
+                        key: const Key('space_matchmaking_action'),
+                        icon: const Icon(Icons.sports_esports_outlined),
+                        tooltip: l10n.spaceMatchmakingTooltip,
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  GameCatalogScreen(spaceId: spaceId),
+                            ),
+                          );
+                        },
+                      ),
+                      IconButton(
+                        key: const Key('space_members_action'),
+                        icon: const Icon(Icons.groups_outlined),
+                        tooltip: l10n.spaceMembersTooltip,
+                        onPressed: () {
+                          if (narrow) {
+                            SpaceMembersSheet.show(context, spaceId: spaceId);
+                          } else {
+                            shellNav.toggleSidePanel(ShellSidePanel.members);
+                          }
+                        },
+                      ),
+                      IconButton(
+                        key: const Key('space_roles_action'),
+                        icon: const Icon(Icons.badge_outlined),
+                        tooltip: l10n.spaceRolesTooltip,
+                        onPressed: () =>
+                            SpaceRolesSheet.show(context, spaceId: spaceId),
+                      ),
+                      IconButton(
+                        key: const Key('space_bots_action'),
+                        icon: const Icon(Icons.smart_toy_outlined),
+                        tooltip: l10n.spaceBotsTitle,
+                        onPressed: canManageBots
+                            ? () =>
+                                  SpaceBotsSheet.show(context, spaceId: spaceId)
+                            : null,
+                      ),
+                      if (canManageInvites)
+                        IconButton(
+                          key: const Key('space_invites_action'),
+                          icon: const Icon(Icons.person_add_outlined),
+                          tooltip: l10n.spaceInvitesTooltip,
+                          onPressed: () =>
+                              SpaceInvitesSheet.show(context, spaceId: spaceId),
+                        ),
+                      VoiceShareLinkButton(
+                        link: spaceShareUrl(spaceId),
+                        tooltip: l10n.shareLinkAction,
+                      ),
+                      IconButton(
+                        key: const Key('space_report_action'),
+                        icon: const Icon(Icons.flag_outlined),
+                        tooltip: l10n.reportAction,
+                        onPressed: () => ReportSheet.show(
+                          context,
+                          target: ReportSpaceTarget(spaceId: spaceId),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],

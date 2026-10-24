@@ -27,14 +27,14 @@ func (s *recordingSpacesCreate) CreateSpace(_ context.Context, req *spacev1.Crea
 	now := timestamppb.Now()
 	return &spacev1.CreateSpaceResponse{
 		Space: &spacev1.Space{
-			Id:               "space-1",
-			Name:             req.GetName(),
-			Description:      req.GetDescription(),
-			Visibility:       "private",
-			OwnerProfileId:   "profile-1",
-			MemberCount:      1,
-			CreatedAt:        now,
-			UpdatedAt:        now,
+			Id:             "space-1",
+			Name:           req.GetName(),
+			Description:    req.GetDescription(),
+			Visibility:     "private",
+			OwnerProfileId: "profile-1",
+			MemberCount:    1,
+			CreatedAt:      now,
+			UpdatedAt:      now,
 		},
 	}, nil
 }
@@ -90,23 +90,18 @@ func TestTranscodeSpacesCreate(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	proxyCalled := false
-	h := newGatewayForContract(t, gatewayTestOptions{
-		tokenClaims: map[string]tokenClaims{
-			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
-		},
-		transcoder: &transcoder{clients: grpcClients{space: spacev1.NewSpaceServiceClient(conn)}},
-		restUpstreams: map[string]http.Handler{
-			"spaces": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				proxyCalled = true
-				w.WriteHeader(http.StatusAccepted)
-			}),
-		},
-	})
+	f := newCreatorFixture(t)
+	cfg := f.config(spacev1.NewSpaceServiceClient(conn))
+	cfg.restUpstreams = map[string]http.Handler{
+		"spaces": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			proxyCalled = true
+			w.WriteHeader(http.StatusAccepted)
+		}),
+	}
+	h := newGateway(cfg)
 
 	body := `{"name":"Friday squad","description":"We raid on Fridays"}`
-	resp := performRequest(h, http.MethodPost, "/api/v1/spaces", body, map[string]string{
-		"Authorization": "Bearer valid-user-token",
-	})
+	resp := creatorRequest(t, h, f, f.payload, body)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%q", resp.Code, http.StatusOK, resp.Body.String())
 	}
@@ -132,21 +127,17 @@ func TestTranscodeSpacesUpdateIcon(t *testing.T) {
 	conn, cleanup := startBufconnSpaceConn(t, grpcRec)
 	t.Cleanup(cleanup)
 
-	h := newGatewayForContract(t, gatewayTestOptions{
-		tokenClaims: map[string]tokenClaims{
-			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
-		},
-		transcoder: &transcoder{clients: grpcClients{space: spacev1.NewSpaceServiceClient(conn)}},
-	})
+	f := newCreatorFixture(t)
+	h := newGateway(f.config(spacev1.NewSpaceServiceClient(conn)))
 
 	body := `{"icon_url":"https://cdn.voice.gg/spaces/party.webp"}`
-	resp := performRequest(h, http.MethodPatch, "/api/v1/spaces/space-1", body, map[string]string{
-		"Authorization": "Bearer valid-user-token",
+	resp := performRequest(h, http.MethodPatch, "/api/v1/spaces/11111111-1111-4111-8111-111111111111", body, map[string]string{
+		"Authorization": "Bearer " + signConfigJWT(t, "creator-key", f.key, f.payload),
 	})
 	if resp.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%q", resp.Code, http.StatusOK, resp.Body.String())
 	}
-	if grpcRec.last == nil || grpcRec.last.GetSpaceId() != "space-1" {
+	if grpcRec.last == nil || grpcRec.last.GetSpaceId() != "11111111-1111-4111-8111-111111111111" {
 		t.Fatalf("UpdateSpace space_id = %+v", grpcRec.last)
 	}
 	if grpcRec.last.GetIconUrl() != "https://cdn.voice.gg/spaces/party.webp" {
@@ -324,15 +315,11 @@ func TestTranscodeSpacesUpdatePermissionDenied(t *testing.T) {
 	conn, cleanup := startBufconnSpaceConn(t, denySpacesUpdateGRPC{})
 	t.Cleanup(cleanup)
 
-	h := newGatewayForContract(t, gatewayTestOptions{
-		tokenClaims: map[string]tokenClaims{
-			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
-		},
-		transcoder: &transcoder{clients: grpcClients{space: spacev1.NewSpaceServiceClient(conn)}},
-	})
+	f := newCreatorFixture(t)
+	h := newGateway(f.config(spacev1.NewSpaceServiceClient(conn)))
 
-	resp := performRequest(h, http.MethodPatch, "/api/v1/spaces/space-1", `{"description":"nope"}`, map[string]string{
-		"Authorization": "Bearer valid-user-token",
+	resp := performRequest(h, http.MethodPatch, "/api/v1/spaces/11111111-1111-4111-8111-111111111111", `{"description":"nope"}`, map[string]string{
+		"Authorization": "Bearer " + signConfigJWT(t, "creator-key", f.key, f.payload),
 	})
 	if resp.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d; body=%q", resp.Code, http.StatusForbidden, resp.Body.String())
@@ -388,16 +375,12 @@ func TestTranscodeSpacesUpdateDescription(t *testing.T) {
 	conn, cleanup := startBufconnSpaceConn(t, grpcRec)
 	t.Cleanup(cleanup)
 
-	h := newGatewayForContract(t, gatewayTestOptions{
-		tokenClaims: map[string]tokenClaims{
-			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
-		},
-		transcoder: &transcoder{clients: grpcClients{space: spacev1.NewSpaceServiceClient(conn)}},
-	})
+	f := newCreatorFixture(t)
+	h := newGateway(f.config(spacev1.NewSpaceServiceClient(conn)))
 
 	body := `{"description":"Updated about"}`
-	resp := performRequest(h, http.MethodPatch, "/api/v1/spaces/space-1", body, map[string]string{
-		"Authorization": "Bearer valid-user-token",
+	resp := performRequest(h, http.MethodPatch, "/api/v1/spaces/11111111-1111-4111-8111-111111111111", body, map[string]string{
+		"Authorization": "Bearer " + signConfigJWT(t, "creator-key", f.key, f.payload),
 	})
 	if resp.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%q", resp.Code, http.StatusOK, resp.Body.String())
@@ -406,4 +389,3 @@ func TestTranscodeSpacesUpdateDescription(t *testing.T) {
 		t.Fatalf("UpdateSpace description = %+v", grpcRec.last)
 	}
 }
-
