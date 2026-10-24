@@ -109,6 +109,9 @@ class CurrentDiffTests(unittest.TestCase):
                     self.git('mv', path, path.replace('base', 'renamed'))
                 else:
                     self.git('update-index', '--chmod=+x', path)
+                    # Match the index entry on POSIX too, so this tests a
+                    # committed mode change rather than a dirty worktree.
+                    (self.repo / path).chmod(0o755)
                 # Preserve index-only mode change.
                 if mutation != 'mode':
                     self.git('add', '.')
