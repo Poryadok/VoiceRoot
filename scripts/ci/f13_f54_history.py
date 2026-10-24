@@ -1469,7 +1469,12 @@ def prepare_corrected_F_production_capability(repo,unit_path):
     current=native.qualify(repo,binding['base'],binding['source'],binding['target'],event['GITHUB_EVENT_NAME'],
         event['GITHUB_REF'],event['GITHUB_SHA'],event['VOICE_CI_PUSH_BEFORE_SHA'],event['GITHUB_BASE_REF'])
     verifier,native_record=native.verified_record(repo,current)
-    if binding['type']=='F13-PRODUCTION-SOURCE-v4':
+    if binding['type']=='F13-PRODUCTION-SOURCE-v5':
+        fixes,_,_,_=module.load_test_fixes(repo)
+        require(fixes['native_record']==dict(version=current['version'],commit=current['record'],
+            source=current['snapshot'],path=verifier.RECORD_PATH,sha256=current['record_sha256']),
+            'production_F_exact_retained_dependency_closure')
+    elif binding['type']=='F13-PRODUCTION-SOURCE-v4':
         transport,_,_=module.load_transport(repo)
         require(transport['native_record']==dict(version=current['version'],commit=current['record'],
             source=current['snapshot'],path=verifier.RECORD_PATH,sha256=current['record_sha256']),

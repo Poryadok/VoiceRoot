@@ -166,15 +166,16 @@ class ProductionSourceTest(unittest.TestCase):
     def test_successor_is_distinct_from_historical_source(self):
         value=source.qualify(ROOT)
         current=source.TRANSPORT_SOURCE is not None
-        self.assertEqual(value['type'],source.TRANSPORT_VERSION if current else 'F13-PRODUCTION-SOURCE-v3')
-        self.assertEqual(value['reviewed_source'],source.TRANSPORT_SOURCE if current else source.SUCCESSOR_SOURCE)
+        fixes=source.TEST_SOURCE is not None
+        self.assertEqual(value['type'],source.TEST_VERSION if fixes else source.TRANSPORT_VERSION if current else 'F13-PRODUCTION-SOURCE-v3')
+        self.assertEqual(value['reviewed_source'],source.TEST_SOURCE if fixes else source.TRANSPORT_SOURCE if current else source.SUCCESSOR_SOURCE)
         self.assertEqual(value['historical_validation_source'],self.record['source'])
         self.assertNotEqual(value['historical_validation_source'],value['reviewed_source'])
-        self.assertEqual(value['predecessor_record'],source.SUCCESSOR_RECORD_COMMIT if current else source.PINNED_RECORD_COMMIT)
+        self.assertEqual(value['predecessor_record'],source.TRANSPORT_RECORD_COMMIT if fixes else source.SUCCESSOR_RECORD_COMMIT if current else source.PINNED_RECORD_COMMIT)
 
     def test_transport_retains_exact_native_authority(self):
         value=source.qualify(ROOT)
-        self.assertEqual(value['type'],source.TRANSPORT_VERSION)
+        self.assertEqual(value['type'],source.TEST_VERSION if source.TEST_SOURCE is not None else source.TRANSPORT_VERSION)
         record,prior,old=source.load_transport(ROOT)
         binding=native.qualify(ROOT,source.EVENT_BASE,self.original,self.target,'pull_request',
             'refs/pull/875/merge',self.target,'','master')
@@ -187,6 +188,97 @@ class ProductionSourceTest(unittest.TestCase):
     def test_transport_unpinned_never_falls_back(self):
         with patch.object(source,'TRANSPORT_RECORD_COMMIT',None),self.assertRaisesRegex(ValueError,'production_transport_not_pinned'):
             source.qualify(ROOT)
+
+    def test_test_fixes_are_exact_and_keep_native_tuple(self):
+        value=source.qualify(ROOT);record,previous,_,_=source.load_test_fixes(ROOT)
+        self.assertEqual(value['type'],source.TEST_VERSION)
+        self.assertEqual(value['reviewed_source'],source.TEST_SOURCE)
+        self.assertEqual(record['native_record'],previous['native_record'])
+        self.assertEqual({x['path']:x['after']['sha256'] for x in record['changes']},source.TEST_FIXES)
+        binding=native.qualify(ROOT,source.EVENT_BASE,self.original,self.target,'pull_request',
+            'refs/pull/875/merge',self.target,'','master')
+        self.assertEqual(binding['record'],source.SUCCESSOR_RECORD_COMMIT)
+        self.assertEqual(binding['snapshot'],source.SUCCESSOR_SOURCE)
+        self.assertTrue(set(source.TEST_FIXES).isdisjoint(binding['paths']))
+
+    def test_test_fixes_unpinned_and_future_edits_fail_closed(self):
+        with patch.object(source,'TEST_RECORD_COMMIT',None),self.assertRaisesRegex(ValueError,'production_test_fixes_not_pinned'):
+            source.qualify(ROOT)
+        for name in (*source.TEST_FIXES,'src/backend/messaging/internal/messageevents/third_test.go',source.TEST_RECORD_PATH):
+            self.changed(name)
+            with self.subTest(name=name),self.assertRaisesRegex(ValueError,'production_only_reviewed_carrier_delta'):
+                source.qualify(ROOT)
+
+    def fixes_record_fixture(self,record,changes=(),source_revision=None):
+        # Helper name is deliberately not a unittest test case.
+        raw=(json.dumps(record)+'\n').encode()
+        with tempfile.TemporaryDirectory() as folder:
+            env=dict(os.environ,GIT_INDEX_FILE=str(Path(folder)/'index'))
+            git('read-tree',source.TEST_RECORD_COMMIT,env=env)
+            for name,data in ((source.TEST_RECORD_PATH,raw),*changes):
+                if data is None:git('update-index','--force-remove',name,env=env)
+                else:
+                    blob=git('hash-object','-w','--stdin',data=data)
+                    git('update-index','--add','--cacheinfo','100644,'+blob+','+name,env=env)
+            revision=self.commit(git('write-tree',env=env),[source_revision or source.TEST_SOURCE])
+        return revision,hashlib.sha256(raw).hexdigest()
+
+    def test_test_fixes_reconstruct_record_semantics(self):
+        original=json.loads(git('show',source.TEST_RECORD_COMMIT+':'+source.TEST_RECORD_PATH))
+        for alteration,code in (('inventory','production_test_fixes_complete_inventory'),
+                ('native','production_test_fixes_retained_native_tuple'),('changes','production_test_fixes_exact_delta'),
+                ('review','production_test_fixes_review')):
+            record=json.loads(json.dumps(original));changes=[]
+            if alteration=='inventory':
+                name=record['current_inputs']['path'];inventory=json.loads(git('show',source.TEST_RECORD_COMMIT+':'+name))
+                inventory['entries'].pop();raw=(json.dumps(inventory)+'\n').encode()
+                record['current_inputs']['sha256']=hashlib.sha256(raw).hexdigest();changes=[(name,raw)]
+            elif alteration=='native':record['native_record']['commit']=source.TEST_RECORD_COMMIT
+            elif alteration=='changes':record['changes'][0]['after']['bytes']-=1
+            else:record['review']=[True]
+            revision,digest=self.fixes_record_fixture(record,changes)
+            with patch.object(source,'TEST_RECORD_COMMIT',revision),patch.object(source,'TEST_RECORD_SHA256',digest),self.subTest(alteration=alteration),self.assertRaisesRegex(ValueError,code):
+                source.load_test_fixes(ROOT)
+
+    def test_test_fixes_exact_tree_not_test_allowlist(self):
+        original=json.loads(git('show',source.TEST_RECORD_COMMIT+':'+source.TEST_RECORD_PATH))
+        name=next(iter(source.TEST_FIXES))
+        actual=subprocess.check_output(['git','-C',str(ROOT),'show',source.TEST_SOURCE+':'+name])
+        for path,data,mode,code in (
+            ('src/backend/messaging/internal/messageevents/third_test.go',b'extra','100644','production_test_fixes_exact_two_paths'),
+            ('src/backend/voice/main.go',b'changed','100644','production_test_fixes_exact_two_paths'),
+            (name,None,'100644','production_test_fixes_exact_two_paths'),
+            (name,b'next edit','100644','production_test_fixes_exact_bytes'),
+            (name,actual,'100755','production_test_fixes_file_mode')):
+            with tempfile.TemporaryDirectory() as folder:
+                env=dict(os.environ,GIT_INDEX_FILE=str(Path(folder)/'index'));git('read-tree',source.TEST_SOURCE,env=env)
+                if data is None:git('update-index','--force-remove',path,env=env)
+                else:
+                    blob=git('hash-object','-w','--stdin',data=data)
+                    git('update-index','--add','--cacheinfo',mode+','+blob+','+path,env=env)
+                tree=git('write-tree',env=env);changed=self.commit(tree,[source.TEST_PREDECESSOR])
+            record=json.loads(json.dumps(original));record.update(source=changed,source_tree=tree)
+            revision,digest=self.fixes_record_fixture(record,source_revision=changed)
+            with patch.object(source,'TEST_SOURCE',changed),patch.object(source,'TEST_RECORD_COMMIT',revision),patch.object(source,'TEST_RECORD_SHA256',digest),self.subTest(path=path,mode=mode),self.assertRaisesRegex(ValueError,code):
+                source.load_test_fixes(ROOT)
+
+    def test_test_fixes_preserve_old_artifacts_and_parent(self):
+        record=json.loads(git('show',source.TEST_RECORD_COMMIT+':'+source.TEST_RECORD_PATH))
+        for path in (source.TRANSPORT_RECORD_PATH,record['evidence'][0]['path']):
+            for data in (None,b'changed'):
+                revision,digest=self.fixes_record_fixture(record,[(path,data)])
+                code=('production_test_fixes_immutable_predecessor' if path==source.TRANSPORT_RECORD_PATH
+                      else '^single_entry$' if data is None else '^production_artifact_hash$')
+                with patch.object(source,'TEST_RECORD_COMMIT',revision),patch.object(source,'TEST_RECORD_SHA256',digest),self.subTest(path=path),self.assertRaisesRegex(ValueError,code):
+                    source.load_test_fixes(ROOT)
+        revision=self.commit(git('rev-parse',source.TEST_RECORD_COMMIT+'^{tree}'),[source.TEST_PREDECESSOR])
+        with patch.object(source,'TEST_RECORD_COMMIT',revision),self.assertRaisesRegex(ValueError,'production_test_fixes_record_parent'):
+            source.load_test_fixes(ROOT)
+        changed=self.commit(git('rev-parse',source.TEST_SOURCE+'^{tree}'),[source.TRANSPORT_RECORD_COMMIT])
+        record['source']=changed
+        revision,digest=self.fixes_record_fixture(record,source_revision=changed)
+        with patch.object(source,'TEST_SOURCE',changed),patch.object(source,'TEST_RECORD_COMMIT',revision),patch.object(source,'TEST_RECORD_SHA256',digest),self.assertRaisesRegex(ValueError,'production_test_fixes_source_parent'):
+            source.load_test_fixes(ROOT)
 
     def test_transport_added_evidence_cannot_change_or_expand(self):
         for name in (source.TRANSPORT_ADDITION['path'],source.TRANSPORT_RECORD_PATH,
