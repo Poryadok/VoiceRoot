@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -45,38 +46,47 @@ func TestAutoModScanOutcomes_BoundedAndSkipped(t *testing.T) {
 		{"quarter", 80 * time.Millisecond, "unconfirmed"},
 		{"budget", 2 * time.Millisecond, "skipped_budget"},
 		{"canceled", time.Second, "skipped_canceled"},
+		{"expired", 2 * time.Millisecond, "skipped_canceled"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			parent, cancel := context.WithTimeout(context.Background(), tc.remaining)
-			defer cancel()
-			if tc.name == "canceled" {
-				cancel()
-			}
-			calls := 0
-			m := privateScanMetrics()
-			s := &ModerationGRPC{AutoMod: &store.AutoModStore{}, ScanMetrics: m, scanRecorder: func(child context.Context) error {
-				calls++
-				deadline, ok := child.Deadline()
-				require.True(t, ok)
-				remaining := time.Until(deadline)
-				require.LessOrEqual(t, remaining, 50*time.Millisecond)
-				require.LessOrEqual(t, remaining, tc.remaining/4)
-				<-child.Done()
-				require.ErrorIs(t, child.Err(), context.DeadlineExceeded)
-				require.NoError(t, parent.Err(), "metric timeout must not cancel its parent")
-				return child.Err()
-			}}
-			response, err := s.CheckMessage(parent, &moderationv1.CheckMessageRequest{Content: "hello"})
-			require.NoError(t, err)
-			require.True(t, response.GetCheckResult().GetAllowed())
-			counts := scanOutcomeCounts(t, m)
-			require.EqualValues(t, 1, counts[tc.outcome])
-			require.EqualValues(t, 1, scanOutcomeTotal(counts))
-			if tc.outcome == "unconfirmed" {
-				require.Equal(t, 1, calls)
-			} else {
-				require.Zero(t, calls)
-			}
+			// Virtual time isolates deadline arithmetic from scheduler delays during
+			// registry/setup work, without enlarging the production metric budget.
+			synctest.Test(t, func(t *testing.T) {
+				parent, cancel := context.WithTimeout(context.Background(), tc.remaining)
+				defer cancel()
+				if tc.name == "canceled" {
+					cancel()
+				}
+				calls := 0
+				m := privateScanMetrics()
+				s := &ModerationGRPC{AutoMod: &store.AutoModStore{}, ScanMetrics: m, scanRecorder: func(child context.Context) error {
+					calls++
+					deadline, ok := child.Deadline()
+					require.True(t, ok)
+					remaining := time.Until(deadline)
+					require.LessOrEqual(t, remaining, 50*time.Millisecond)
+					require.LessOrEqual(t, remaining, tc.remaining/4)
+					<-child.Done()
+					require.ErrorIs(t, child.Err(), context.DeadlineExceeded)
+					require.NoError(t, parent.Err(), "metric timeout must not cancel its parent")
+					return child.Err()
+				}}
+				if tc.name == "expired" {
+					<-parent.Done()
+					require.ErrorIs(t, parent.Err(), context.DeadlineExceeded)
+				}
+				response, err := s.CheckMessage(parent, &moderationv1.CheckMessageRequest{Content: "hello"})
+				require.NoError(t, err)
+				require.True(t, response.GetCheckResult().GetAllowed())
+				counts := scanOutcomeCounts(t, m)
+				require.EqualValues(t, 1, counts[tc.outcome])
+				require.EqualValues(t, 1, scanOutcomeTotal(counts))
+				if tc.outcome == "unconfirmed" {
+					require.Equal(t, 1, calls)
+				} else {
+					require.Zero(t, calls)
+				}
+			})
 		})
 	}
 }
