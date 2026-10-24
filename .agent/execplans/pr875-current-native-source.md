@@ -31,7 +31,7 @@ carrier K pins R and its raw hash. R does not self-authorize by containing PASS.
 Author owns tests and qualification implementation in WT48. Root owns integration
 and current Voice evidence. Role/Space and generated-wire owners supply scoped
 source-bound reviews. Independent f13 reviewer assesses contract, complete unit,
-literal A1–A4/B1–B4 applicability and final code. Ordinary foreign contributions
+literal A1â€“A4/B1â€“B4 applicability and final code. Ordinary foreign contributions
 retain their original policy route; they are not promoted into native projection.
 
 ## Work and evidence
@@ -63,7 +63,7 @@ process-restart branch need exact input binding. The fresh factory child must us
 an explicit database DSN because the default testcontainer branch omits it.
 
 A4: unchanged P3 EJECT_ONLY/UNKNOWN behavior and exact retained targets remain
-bounded historical facts subject to dependency review. B1–B3 original probe uses
+bounded historical facts subject to dependency review. B1â€“B3 original probe uses
 literal014 SQL; its fixture excludes012. Preserve unchanged014 proof and add fresh
 012 READ COMMITTED/lock/retention evidence for that actual delta. B4 requires exact
 013 retention/no-MM020 inputs. No fresh whole-matrix claim follows from unrelated
@@ -953,4 +953,59 @@ SHA256f6531868a4e926f092242c86441dd5b9ec89d99a477a853f5f52f844c652ff3f.
 The producer and hosted CI on the final integrated K remain separate required
 proof. No persisted authority cache or performance-policy change was added.
 
+### Realtime bootstrap fixture source successor
+
+Hosted K9 reached a separate runtime shard failure: four Realtime bootstrap
+tests could not execute the image-installed Bot helper in their shell-only
+fixture. H10 af6729e443d25007664238190263142dc8a182b7 is the exact singleton
+test repair on K9 9ef1a2b147b00e26a3d98b09ac01e75df1409702. The production
+Dockerfile already copies the helper. The fixture preserves its real Realtime
+body and prior assertions, adds explicit neighboring Bot/Space command adapters
+with ordered-call checks, and proves a Bot failure stops before Realtime.
+Its five Linux tests passed; this is command-boundary evidence, not native
+custody or live Compose acceptance. The unrelated historical cleanup failure
+did not reproduce under Git2.55 baseline or forced maintenance, and no source
+change or claimed root cause is included for that observation.
+
+R10 d783ab03c35ad8a638ff052b90d330da3ffdda6c directly follows H10. Record SHA256
+e2e4cc84465a8bc7ab1dc4a7f37fca24fe1803dbe497b5547180fa4460f61756 binds the
+exact before/after fixture, complete1156-entry D6 inventory, eight evidence
+references, unchanged Native99/472/481/89 inventories/full Voice tree, and
+immutable R9 lineage. Independent source review08625069 accepted those exact
+facts. Intermediate H/R publication is on the integration branch; the PR stays
+on K9 until the final verified K10 is integrated.
+
+The v10 constructor reconstructs unchanged v9 first. Current production and
+Native dispatch use actual H10 ancestry before H9 and require the exact R10
+typed applicability binding, current B/S/T, actual root and ten-carrier closure.
+The retained Native v4 R8/H8 record remains unchanged. An old R9 binding,
+historical target, stripped bridge, missing pin, future same-path edit or
+undeclared metadata cannot qualify current H10. Current map/record auditing,
+J applicability and corrected-F consumption reconstruct this bridge; historical
+predecessor reconstruction remains explicitly separate.
+
+Source-unit RED reproduced missing load_bootstrap_fix and BOOTSTRAP_RECORD_COMMIT
+in two tests; log SHA25627cd507c8f172c710740090c83c84a816671575bad312d81da0b5c80a0b1b31d.
+Frozen six-module static CODE review is CLEAR; actual-R10 validation is complete below.
+
 Integration verification: root retained the 13-line VOICE_CONTRACT_PROFILE dispatch from merged master. Final shell SHA256 is 88b468b71112d1bae2853c4795025d38e1125931acc221ef83b2f007831f183a; the entire F13 suffix remains byte-identical to the tested author shell. Independent review CLEAR. On the actual-R8 private candidate, current passed F05-F12 (exit 0), full and unset default reached the first F13 invocation sentinel (exit 77 without executing F13), invalid profile exited 2, and a controlled F12 documentation mutation failed with exit 1 before F13. bash -n passed. This bounded integration check supplements the unchanged 50/9/19 compatibility and 99-test F54 results; final actual producer and hosted CI remain required.
+
+
+K10 actual-R10 verification completed on 2026-10-25. Ten source-record/input/evidence
+files matched exact Git mode 100644 and raw bytes. The six reviewed carrier hashes
+were committed in clean private candidates based directly on actual R10. Source
+unit 2/2 and focused production 7/7 passed; full production 64/64 passed in
+2428.699 seconds, Native documentation 9/9, historical successor 20/20, and F54
+99/99 passed. All six Python files compiled and the unchanged shell88b468 passed
+bash syntax validation. No tests were skipped. The preliminary non-test F54
+helper invocation was excluded; the correct full99 test driver passed.
+
+Verification receipt: main tmp/pr875-repair/r10-sourceunit/receipt.md, SHA256
+f3a399e1d80d67dba71e4b19034eef989be22669b59574b0ffb25b4cbaac71cb. Full production log SHA256
+5a7f76e2e699b5bcc61e1ed0a48e62437dfdfe4ae2e18b9768628a3213a13b27.
+Independent static review final-independent-review.md SHA256
+6136ff77cd6bbfbd8db5a38a4ddc9a8ec66bc424129736f1b9196541522a8575
+binds the same six source hashes and unchanged shell. Graphify update completed
+with 117535 nodes and 245796 edges. These are isolated source/fixture compatibility
+results; fresh final-head full producer and hosted CI acceptance remain required.
+No performance changes were introduced.

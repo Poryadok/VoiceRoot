@@ -5112,7 +5112,13 @@ def prepare_corrected_F_production_capability(repo,unit_path):
     current=native.qualify(repo,binding['base'],binding['source'],binding['target'],event['GITHUB_EVENT_NAME'],
         event['GITHUB_REF'],event['GITHUB_SHA'],event['VOICE_CI_PUSH_BEFORE_SHA'],event['GITHUB_BASE_REF'])
     verifier,native_record=native.verified_record(repo,current)
-    if binding['type']=='F13-PRODUCTION-SOURCE-v9':
+    if binding['type']=='F13-PRODUCTION-SOURCE-v10':
+        fixture=module.load_bootstrap_fix(repo)[0]
+        require(fixture['native_record']==dict(version=current['version'],source=current['snapshot'],
+            record=current['record'],path=verifier.CONTEXT_RECORD_PATH,sha256=current['record_sha256'])
+            and current['source_applicability']==verifier.bootstrap_bridge_binding(binding['source'],binding['target']),
+            'production_F_exact_retained_bootstrap_context_applicability')
+    elif binding['type']=='F13-PRODUCTION-SOURCE-v9':
         fixture=module.load_fixture_fix(repo)[0]
         require(fixture['native_record']==dict(version=current['version'],source=current['snapshot'],
             record=current['record'],path=verifier.CONTEXT_RECORD_PATH,sha256=current['record_sha256'])
