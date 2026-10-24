@@ -422,7 +422,6 @@ a4-disposable-recovery-harness-test:
 
 .PHONY: phase0-fixture-test
 phase0-fixture-test:
-	python3 "$(ROOT)/scripts/ci/compose_bake_plan_test.py"
 	python3 "$(ROOT)/scripts/ci/phase0-fixture_test.py"
 
 .PHONY: staging-observability-test

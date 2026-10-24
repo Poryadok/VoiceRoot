@@ -2041,23 +2041,9 @@ jobs:
         run: |
           echo "PHASE0_FIXTURE_DIR=$RUNNER_TEMP/voice-space-media-phase0" >> "$GITHUB_ENV"
           python scripts/dev/generate-phase0-fixture.py "$RUNNER_TEMP/voice-space-media-phase0"
-      - name: Set up bounded Compose builder
-        uses: docker/setup-buildx-action@v4
-        with:
-          buildkitd-config-inline: |
-            [worker.oci]
-              max-parallelism = 4
-      - name: Prepare current Compose build plan
-        run: python scripts/ci/compose_bake_plan.py --output "$RUNNER_TEMP/voice-compose-bake.json"
-      - name: Build and load current Compose images
-        uses: docker/bake-action@v7
-        with:
-          source: .
-          files: ${{ runner.temp }}/voice-compose-bake.json
-          load: true
       - name: Start app stack
         run: |
-          if COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app up -d --no-build; then
+          if COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app up -d --build; then
             :
           else
             startup_status=$?

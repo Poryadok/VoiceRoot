@@ -37,19 +37,8 @@ Go/Flutter/dependency and Docker content caches still execute validation and
 respect their toolchain/content identities. No `continue-on-error` or synthetic
 success is introduced.
 
-Compose E2E regenerates a build-only Bake plan from the current effective
-three-file Compose configuration. The helper checks the complete target
-inventory and exact context/Dockerfile/args/platform/tags, including Compose's
-implicit project-service names. Raw runtime configuration stays in memory;
-the transient build-only definition and plan use private permissions. The
-official Bake action uses `source: .` and loads every current image before
-`up --no-build`; all original smoke tests still execute. BuildKit content keys
-invalidate changed inputs, independently of cache scope names. Per-target
-`compose-e2e-*` writers cannot replace the existing `backend-*` cache objects;
-matching backend caches can be read. Exact matching local frontend recipes
-may also read the existing `web` and `developer-portal` scopes; those scopes
-are never written by Compose. Export is optional with a 30s transfer timeout
-per target, plus preparation time; build/load/test failures remain fatal.
+Compose E2E builds current images through its original Compose up build path
+and executes the complete smoke suite.
 
 Compose E2E's host Go commands restore module downloads and compiled objects
 using the explicit Gateway, Notification and shared pkg `go.sum` paths.
@@ -61,15 +50,6 @@ The first run with this explicit dependency key can be cold and seeds later
 restores; it does not establish warm host-cache performance. The isolated proof
 `python3 scripts/ci/compose_go_cache_integration.py` checks repeated execution
 with a warm compilation cache and failure after a source mutation.
-
-The network-free proof `python3 scripts/ci/compose_bake_cache_integration.py`
-checks the actual implicit tag, unchanged-input cache hit, and changed loaded
-image ID/content after mutating a `COPY` source. It needs Docker/Buildx and
-creates only disposable images/stopped containers. The nine offline plan
-tests are part of `make ci-script-tests-pr`. This local proof does not assert
-a GHA cache hit or transport performance; hosted measurements establish those.
-See [native Bake Compose support](https://docs.docker.com/build/bake/compose-file/)
-and [GHA cache scopes](https://docs.docker.com/build/cache/backends/gha/).
 
 ## Measurement
 
