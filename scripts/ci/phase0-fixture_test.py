@@ -1683,10 +1683,29 @@ class ComposeTests(unittest.TestCase):
                     path = self.fixture / source
                     self.assertTrue(path.exists(), "Compose bind source is absent from generated fixture")
                     if path.is_dir():
-                        self.assertTrue(any(path.iterdir()), "signer directory is empty")
+                        self.assert_fixture_directory_nonempty(path)
                     else:
                         self.assertGreater(path.stat().st_size, 0)
                     self.assertTrue(volume.get("read_only"), "fixture credentials must be mounted read-only")
+
+    def assert_fixture_directory_nonempty(self, path):
+        info = path.stat()
+        if os.name != "posix" or info.st_uid != 65532 or os.geteuid() == 65532:
+            self.assertTrue(any(path.iterdir()), "signer directory is empty")
+            return
+        # Compose uses the service's private signer directories. Enumerate as
+        # that owner, never relax permissions for the host test runner.
+        self.assertEqual(info.st_gid, 65532)
+        self.assertEqual(stat.S_IMODE(info.st_mode), 0o700)
+        check = (
+            "import os,pathlib,sys\n"
+            "os.setgroups([]); os.setgid(65532); os.setuid(65532)\n"
+            "assert any(pathlib.Path(sys.argv[1]).iterdir()), 'signer directory is empty'\n"
+        )
+        command = [sys.executable, "-c", check, str(path)]
+        if os.geteuid() != 0:
+            command = ["sudo", "-n", "-u", "root", *command]
+        require_success(run(*command))
 
     def test_frozen_environment_and_mounted_paths(self):
         for issuer in ("gateway", "space"):
