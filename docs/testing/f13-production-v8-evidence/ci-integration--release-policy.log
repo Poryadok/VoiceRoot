@@ -1,0 +1,8 @@
+Command: python3 scripts/release-policy-wiring_test.py
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 1.702s
+
+OK
+
+exit_code=0

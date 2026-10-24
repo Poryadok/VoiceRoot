@@ -1,0 +1,255 @@
+..........EE........................F.....................................EE.....E............................................................NATS_ROLLOUT_COMPILE=BLOCKED
+ENATS_ROLLOUT_COMPILE=BLOCKED
+E..................NATS_DEPLOYMENT_REPORT=UNAVAILABLE
+NATS_DEPLOYMENT_REPORT=UNAVAILABLE
+NATS_DEPLOYMENT_REPORT=UNAVAILABLE
+NATS_DEPLOYMENT_REPORT=UNAVAILABLE
+....................................................................F.................................................................E.................................................................FFFF...........................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+======================================================================
+ERROR: actor_root_test (unittest.loader._FailedTest.actor_root_test)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: actor_root_test
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/actor_root_test.py", line 5, in <module>
+    import actor_root as root
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/actor_root.py", line 5, in <module>
+    import actor_auth,actor_verification
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/actor_auth.py", line 4, in <module>
+    from bootstrap_root import secret_bytes,hash_bytes
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/bootstrap_root.py", line 13, in <module>
+    from controller import Blocked
+ModuleNotFoundError: No module named 'controller'
+
+
+======================================================================
+ERROR: actor_verification_test (unittest.loader._FailedTest.actor_verification_test)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: actor_verification_test
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/actor_verification_test.py", line 5, in <module>
+    import actor_verification as actor
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/actor_verification.py", line 6, in <module>
+    from controller import Blocked
+ModuleNotFoundError: No module named 'controller'
+
+
+======================================================================
+ERROR: test_root_prepare_full_and_app_only_actual_hub_catalog_reaches_canonical_compiler (bridge_composition_test.CompositionTests.test_root_prepare_full_and_app_only_actual_hub_catalog_reaches_canonical_compiler) (mode='full')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/bridge_composition_test.py", line 168, in test_root_prepare_full_and_app_only_actual_hub_catalog_reaches_canonical_compiler
+    result=actions._prepare({'nonce':'a'*64,'token':'private','mode':mode,'changed_services':[]})
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/bridge_root.py", line 277, in _prepare
+    compiler.main([str(workspace),str(parameter_path),str(output)])
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 174, in main
+    release_policy_wiring.source_input(source,p)
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/release_policy_wiring.py", line 109, in source_input
+    return validate(parameters.get('release_policy'), parameters['tag'], 'voice-staging')
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/release_policy_wiring.py", line 33, in validate
+    keys(value, ('profile', 'source_sha', 'policy_sha256', 'policy_object', 'owners'))
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/release_policy_wiring.py", line 29, in keys
+    raise ValueError('release_policy_input_shape')
+ValueError: release_policy_input_shape
+
+======================================================================
+ERROR: test_root_prepare_full_and_app_only_actual_hub_catalog_reaches_canonical_compiler (bridge_composition_test.CompositionTests.test_root_prepare_full_and_app_only_actual_hub_catalog_reaches_canonical_compiler) (mode='app-only')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/bridge_composition_test.py", line 168, in test_root_prepare_full_and_app_only_actual_hub_catalog_reaches_canonical_compiler
+    result=actions._prepare({'nonce':'a'*64,'token':'private','mode':mode,'changed_services':[]})
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/bridge_root.py", line 277, in _prepare
+    compiler.main([str(workspace),str(parameter_path),str(output)])
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 174, in main
+    release_policy_wiring.source_input(source,p)
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/release_policy_wiring.py", line 109, in source_input
+    return validate(parameters.get('release_policy'), parameters['tag'], 'voice-staging')
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/release_policy_wiring.py", line 33, in validate
+    keys(value, ('profile', 'source_sha', 'policy_sha256', 'policy_object', 'owners'))
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/release_policy_wiring.py", line 29, in keys
+    raise ValueError('release_policy_input_shape')
+ValueError: release_policy_input_shape
+
+======================================================================
+ERROR: test_installed_first_install_receipt_is_revalidated_then_consumed_by_normal_release (bridge_integration_test.IntegrationTests.test_installed_first_install_receipt_is_revalidated_then_consumed_by_normal_release)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/bridge_integration_test.py", line 19, in test_installed_first_install_receipt_is_revalidated_then_consumed_by_normal_release
+    from gis_prerequisite_test import ReadyKube
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/gis_prerequisite_test.py", line 14, in <module>
+    import gis_dev_first_install as dev_gis
+ModuleNotFoundError: No module named 'gis_dev_first_install'
+
+======================================================================
+ERROR: test_actual_cli_canonical_full_and_app_only_bind_pinned_plan_and_ingress (compiler_test.CompilerTest.test_actual_cli_canonical_full_and_app_only_bind_pinned_plan_and_ingress) (mode='full')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 318, in <module>
+    try:main(sys.argv[1:])
+        ^^^^^^^^^^^^^^^^^^
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 217, in main
+    pack=compile_target(source,rows,p['registry'],p['tag'],p['mode'],p['changed_services'],selected_images,p['contract'],set(p['enrolled']),
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 283, in compile_target
+    if name not in enrolled:raise Blocked('rollout_compile_unenrolled_deployment')
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+controller.Blocked: rollout_compile_unenrolled_deployment
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/compiler_test.py", line 67, in test_actual_cli_canonical_full_and_app_only_bind_pinned_plan_and_ingress
+    runpy.run_path(compiler.__file__,run_name='__main__')
+  File "<frozen runpy>", line 287, in run_path
+  File "<frozen runpy>", line 98, in _run_module_code
+  File "<frozen runpy>", line 88, in _run_code
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 320, in <module>
+    print('NATS_ROLLOUT_COMPILE=BLOCKED',file=sys.stderr);sys.exit(1)
+                                                          ^^^^^^^^^^^
+SystemExit: 1
+
+======================================================================
+ERROR: test_actual_cli_canonical_full_and_app_only_bind_pinned_plan_and_ingress (compiler_test.CompilerTest.test_actual_cli_canonical_full_and_app_only_bind_pinned_plan_and_ingress) (mode='app-only')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 318, in <module>
+    try:main(sys.argv[1:])
+        ^^^^^^^^^^^^^^^^^^
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 217, in main
+    pack=compile_target(source,rows,p['registry'],p['tag'],p['mode'],p['changed_services'],selected_images,p['contract'],set(p['enrolled']),
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 283, in compile_target
+    if name not in enrolled:raise Blocked('rollout_compile_unenrolled_deployment')
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+controller.Blocked: rollout_compile_unenrolled_deployment
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/compiler_test.py", line 67, in test_actual_cli_canonical_full_and_app_only_bind_pinned_plan_and_ingress
+    runpy.run_path(compiler.__file__,run_name='__main__')
+  File "<frozen runpy>", line 287, in run_path
+  File "<frozen runpy>", line 98, in _run_module_code
+  File "<frozen runpy>", line 88, in _run_code
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/compiler.py", line 320, in <module>
+    print('NATS_ROLLOUT_COMPILE=BLOCKED',file=sys.stderr);sys.exit(1)
+                                                          ^^^^^^^^^^^
+SystemExit: 1
+
+======================================================================
+ERROR: gis_prerequisite_test (unittest.loader._FailedTest.gis_prerequisite_test)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: gis_prerequisite_test
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/gis_prerequisite_test.py", line 14, in <module>
+    import gis_dev_first_install as dev_gis
+ModuleNotFoundError: No module named 'gis_dev_first_install'
+
+
+======================================================================
+FAIL: test_current_canonical_bot_target_is_accepted_after_migrations (bot_migration_test.BotPrerequisiteTest.test_current_canonical_bot_target_is_accepted_after_migrations)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/bot_migration_test.py", line 10, in test_current_canonical_bot_target_is_accepted_after_migrations
+    self.assertEqual(version,7)
+AssertionError: 8 != 7
+
+======================================================================
+FAIL: test_real_bundle_inventory_and_manifest_reader_new_bound_and_custody_veto (expired_public_test.PublicRecoveryTests.test_real_bundle_inventory_and_manifest_reader_new_bound_and_custody_veto)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/expired_public_test.py", line 101, in test_real_bundle_inventory_and_manifest_reader_new_bound_and_custody_veto
+    self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,84)
+AssertionError: 85 != 84
+
+======================================================================
+FAIL: test_canonical_media_tuples_are_projected_with_private_readonly_files (media_projection_test.MediaProjectionTest.test_canonical_media_tuples_are_projected_with_private_readonly_files) (service='auth')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/media_projection_test.py", line 35, in test_canonical_media_tuples_are_projected_with_private_readonly_files
+    self.assertLessEqual(required, set(env), service)
+AssertionError: {'JAVA_TOOL_OPTIONS', 'AUTH_GRPC_TLS_KEY_FILE', 'AUTH_PRINCIPAL_GRPC_PORT', 'AUTH_GRPC_TLS_CERT_FILE', 'S2S_JWKS_URLS_JSON', 'AUTH_SESSION_FLOOR_GRPC_PORT', 'AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE', 'AUTH_BOT_SESSION_FLOOR_ALLOWED_CLIENT_URI_SAN'} not less than or equal to {'AUTH_OAUTH_ADMIN_CLIENT_ID', 'AUTH_RESEND_FROM', 'VOICE_RELEASE_POLICY_FILE', 'SPRING_DATA_REDIS_PORT', 'AUTH_OAUTH_DEVELOPER_PORTAL_ENABLED', 'VOICE_RELEASE_SNAPSHOT_FILE', 'AUTH_PRINCIPAL_GRPC_PORT', 'AUTH_OAUTH_DEVELOPER_PORTAL_REDIRECT_URIS', 'USER_GRPC_ADDR', 'AUTH_TOTP_ENCRYPTION_KEY', 'AUTH_RESEND_API_KEY', 'AUTH_SESSION_FLOOR_GRPC_PORT', 'SPRING_DATASOURCE_URL', 'SPRING_DATA_REDIS_HOST', 'AUTH_OAUTH_PUBLIC_API_BASE_URL', 'JAVA_TOOL_OPTIONS', 'AUTH_GRPC_TLS_KEY_FILE', 'VOICE_RELEASE_POLICY_SHA256', 'SPRING_DATASOURCE_USERNAME', 'AUTH_NATS_URL', 'AUTH_OAUTH_ADMIN_ENABLED', 'SPRING_DATASOURCE_PASSWORD', 'AUTH_GRPC_TLS_CERT_FILE', 'AUTH_FLYWAY_ENABLED', 'S2S_JWKS_URLS_JSON', 'AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_ID', 'AUTH_OAUTH_ADMIN_REDIRECT_URIS', 'AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE', 'VOICE_RELEASE_PROFILE', 'ACCOUNT_DELETE_TOKEN_SECRET', 'AUTH_JWT_PRIVATE_KEY_LOCATION'} : auth
+
+======================================================================
+FAIL: test_canonical_media_tuples_are_projected_with_private_readonly_files (media_projection_test.MediaProjectionTest.test_canonical_media_tuples_are_projected_with_private_readonly_files) (service='chat')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/media_projection_test.py", line 35, in test_canonical_media_tuples_are_projected_with_private_readonly_files
+    self.assertLessEqual(required, set(env), service)
+AssertionError: {'CHAT_PRINCIPAL_JWKS_TLS_CERT_FILE', 'CHAT_ROLE_DECISION_TLS_SERVER_NAME', 'CHAT_ROLE_DECISION_CLIENT_KEY_FILE', 'CHAT_MATCH_SQUAD_PRINCIPAL_JWKS_CA_FILE', 'CHAT_MATCH_SQUAD_PRINCIPAL_TLS_CERT_FILE', 'CHAT_MATCH_SQUAD_PRINCIPAL_CLIENT_CA_FILE', 'CHAT_PRINCIPAL_ACTIVE_KID', 'CHAT_PRINCIPAL_JWKS_CLIENT_CA_FILE', 'CHAT_PRINCIPAL_SIGNING_KEYS_DIR', 'CHAT_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_ADDR', 'CHAT_PRINCIPAL_JWKS_HTTPS_LISTEN', 'CHAT_ROLE_DECISION_TLS_CA_FILE', 'CHAT_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_PASSWORD', 'CHAT_MATCH_SQUAD_PRINCIPAL_TLS_KEY_FILE', 'CHAT_ROLE_DECISION_CLIENT_CERT_FILE', 'CHAT_ROLE_DECISION_GRPC_ADDR', 'CHAT_MATCH_SQUAD_PRINCIPAL_JWKS_URL', 'CHAT_PRINCIPAL_JWKS_TLS_KEY_FILE', 'CHAT_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN'} not less than or equal to {'CHAT_GRPC_LISTEN', 'NATS_URL', 'SPACE_DATABASE_URL', 'CHAT_REALTIME_PRINCIPAL_REPLAY_REDIS_ADDR', 'CHAT_REALTIME_LIFECYCLE_TLS_KEY_FILE', 'CHAT_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_ADDR', 'CHAT_MATCH_SQUAD_PRINCIPAL_JWKS_CA_FILE', 'CHAT_MATCH_SQUAD_PRINCIPAL_TLS_KEY_FILE', 'CHAT_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_PASSWORD', 'CHAT_REALTIME_LIFECYCLE_TLS_CERT_FILE', 'CHAT_MATCH_SQUAD_PRINCIPAL_TLS_CERT_FILE', 'CHAT_REALTIME_PRINCIPAL_REPLAY_REDIS_PASSWORD', 'CHAT_REALTIME_PRINCIPAL_JWKS_CA_FILE', 'CHAT_REALTIME_PRINCIPAL_JWKS_URL', 'CHAT_MATCH_SQUAD_PRINCIPAL_JWKS_URL', 'CHAT_REALTIME_LIFECYCLE_GRPC_LISTEN', 'DATABASE_URL', 'CHAT_MATCH_SQUAD_PRINCIPAL_CLIENT_CA_FILE', 'CHAT_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN', 'CHAT_REALTIME_LIFECYCLE_CLIENT_CA_FILE'} : chat
+
+======================================================================
+FAIL: test_canonical_media_tuples_are_projected_with_private_readonly_files (media_projection_test.MediaProjectionTest.test_canonical_media_tuples_are_projected_with_private_readonly_files) (service='voice')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/media_projection_test.py", line 35, in test_canonical_media_tuples_are_projected_with_private_readonly_files
+    self.assertLessEqual(required, set(env), service)
+AssertionError: {'VOICE_USER_PRINCIPAL_REPLAY_REDIS_ADDR', 'VOICE_ROLE_TLS_CA_FILE', 'VOICE_USER_PRINCIPAL_TLS_KEY_FILE', 'VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_JWKS_CA_FILE', 'VOICE_ROLE_CLIENT_KEY_FILE', 'VOICE_USER_PRINCIPAL_TLS_CERT_FILE', 'VOICE_MATCH_SQUAD_PRINCIPAL_CLIENT_CA_FILE', 'VOICE_SPACE_COMMUNICATION_CLIENT_CERT_FILE', 'VOICE_ROLE_GRPC_ADDR', 'VOICE_SPACE_COMMUNICATION_CLIENT_KEY_FILE', 'VOICE_SPACE_COMMUNICATION_TLS_CA_FILE', 'VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_REDIS_PASSWORD', 'VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_TLS_KEY_FILE', 'VOICE_PRINCIPAL_JWKS_TLS_CERT_FILE', 'VOICE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME', 'VOICE_AUTH_SESSION_FLOOR_GRPC_ADDR', 'S2S_JWKS_CLIENT_CERT_FILE', 'VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_CLIENT_CA_FILE', 'VOICE_USER_PRINCIPAL_CLIENT_CA_FILE', 'VOICE_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN', 'VOICE_AUTH_SESSION_FLOOR_TLS_CA_FILE', 'VOICE_MATCH_SQUAD_PRINCIPAL_TLS_KEY_FILE', 'VOICE_MATCH_SQUAD_PRINCIPAL_TLS_CERT_FILE', 'VOICE_PRINCIPAL_JWKS_TLS_KEY_FILE', 'VOICE_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_ADDR', 'SPACE_VOICE_S2S_TOKEN', 'VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_JWKS_URL', 'VOICE_MATCH_SQUAD_PRINCIPAL_JWKS_CA_FILE', 'VOICE_PRINCIPAL_KID', 'S2S_JWKS_CLIENT_KEY_FILE', 'VOICE_PRINCIPAL_JWKS_LISTEN_ADDR', 'VOICE_ROLE_CLIENT_CERT_FILE', 'S2S_JWKS_CA_FILE', 'VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_REDIS_ADDR', 'VOICE_PRINCIPAL_NEXT_PRIVATE_KEY_FILE', 'VOICE_SPACE_COMMUNICATION_GRPC_ADDR', 'VOICE_PRINCIPAL_PRIVATE_KEY_FILE', 'VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_GRPC_LISTEN', 'VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_TLS_CERT_FILE', 'VOICE_AUTH_SESSION_FLOOR_CLIENT_CERT_FILE', 'VOICE_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_PASSWORD', 'VOICE_AUTH_SESSION_FLOOR_CLIENT_KEY_FILE', 'S2S_JWKS_URLS_JSON', 'VOICE_MATCH_SQUAD_PRINCIPAL_JWKS_URL', 'VOICE_PRINCIPAL_NEXT_KID', 'VOICE_USER_PRINCIPAL_GRPC_LISTEN'} not less than or equal to {'LIVEKIT_API_SECRET', 'VOICE_USER_PRINCIPAL_REPLAY_REDIS_ADDR', 'VOICE_ROLE_TLS_CA_FILE', 'VOICE_USER_PRINCIPAL_TLS_KEY_FILE', 'VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_JWKS_CA_FILE', 'NATS_URL', 'VOICE_ROLE_CLIENT_KEY_FILE', 'VOICE_MATCH_SQUAD_PRINCIPAL_CLIENT_CA_FILE', 'VOICE_USER_PRINCIPAL_TLS_CERT_FILE', 'VOICE_ROLE_GRPC_ADDR', 'VOICE_GRPC_LISTEN', 'VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_REDIS_PASSWORD', 'VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_TLS_KEY_FILE', 'VOICE_PRINCIPAL_JWKS_TLS_CERT_FILE', 'VOICE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME', 'VOICE_AUTH_SESSION_FLOOR_GRPC_ADDR', 'S2S_JWKS_CLIENT_CERT_FILE', 'VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_CLIENT_CA_FILE', 'VOICE_USER_PRINCIPAL_CLIENT_CA_FILE', 'VOICE_MATCH_SQUAD_PRINCIPAL_GRPC_LISTEN', 'VOICE_AUTH_SESSION_FLOOR_TLS_CA_FILE', 'VOICE_MATCH_SQUAD_PRINCIPAL_TLS_KEY_FILE', 'VOICE_MATCH_SQUAD_PRINCIPAL_TLS_CERT_FILE', 'VOICE_REDIS_ADDR', 'VOICE_PRINCIPAL_JWKS_TLS_KEY_FILE', 'VOICE_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_ADDR', 'VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_JWKS_URL', 'SPACE_VOICE_S2S_TOKEN', 'VOICE_MATCH_SQUAD_PRINCIPAL_JWKS_CA_FILE', 'VOICE_PRINCIPAL_KID', 'S2S_JWKS_CLIENT_KEY_FILE', 'VOICE_PRINCIPAL_JWKS_LISTEN_ADDR', 'VOICE_ROLE_CLIENT_CERT_FILE', 'S2S_JWKS_CA_FILE', 'VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_REDIS_ADDR', 'VOICE_PRINCIPAL_NEXT_PRIVATE_KEY_FILE', 'VOICE_DATABASE_URL', 'VOICE_PRINCIPAL_PRIVATE_KEY_FILE', 'VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_GRPC_LISTEN', 'LIVEKIT_URL', 'VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_TLS_CERT_FILE', 'VOICE_AUTH_SESSION_FLOOR_CLIENT_CERT_FILE', 'VOICE_MATCH_SQUAD_PRINCIPAL_REPLAY_REDIS_PASSWORD', 'VOICE_AUTH_SESSION_FLOOR_CLIENT_KEY_FILE', 'S2S_JWKS_URLS_JSON', 'LIVEKIT_API_KEY', 'VOICE_MATCH_SQUAD_PRINCIPAL_JWKS_URL', 'VOICE_PRINCIPAL_NEXT_KID', 'VOICE_USER_PRINCIPAL_GRPC_LISTEN'} : voice
+
+======================================================================
+FAIL: test_canonical_media_tuples_are_projected_with_private_readonly_files (media_projection_test.MediaProjectionTest.test_canonical_media_tuples_are_projected_with_private_readonly_files) (service='role')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/repo/scripts/staging/nats-rollout-preservation/media_projection_test.py", line 35, in test_canonical_media_tuples_are_projected_with_private_readonly_files
+    self.assertLessEqual(required, set(env), service)
+AssertionError: {'ROLE_AUTH_SESSION_FLOOR_TLS_CA_FILE', 'ROLE_SPACE_MEMBER_AUTHORITY_TLS_CA_FILE', 'ROLE_AUTH_SESSION_FLOOR_CLIENT_KEY_FILE', 'ROLE_PRINCIPAL_TLS_KEY_FILE', 'S2S_JWKS_CLIENT_CERT_FILE', 'ROLE_PRINCIPAL_JWKS_TLS_KEY_FILE', 'ROLE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME', 'ROLE_PRINCIPAL_JWKS_TLS_CERT_FILE', 'ROLE_SPACE_MEMBER_AUTHORITY_GRPC_ADDR', 'ROLE_PRINCIPAL_TLS_CERT_FILE', 'ROLE_AUTH_SESSION_FLOOR_GRPC_ADDR', 'S2S_JWKS_CLIENT_KEY_FILE', 'ROLE_PRINCIPAL_JWKS_HTTPS_LISTEN', 'ROLE_PRINCIPAL_SIGNING_KEYS_DIR', 'ROLE_PRINCIPAL_GRPC_LISTEN', 'ROLE_PRINCIPAL_CLIENT_CA_FILE', 'S2S_JWKS_CA_FILE', 'ROLE_DELEGATED_USER_ENABLED', 'ROLE_PRINCIPAL_REPLAY_REDIS_ADDR', 'ROLE_BOT_LIFECYCLE_ENABLED', 'ROLE_SPACE_MEMBER_AUTHORITY_TLS_SERVER_NAME', 'ROLE_SPACE_MEMBER_AUTHORITY_CLIENT_KEY_FILE', 'ROLE_PRINCIPAL_ACTIVE_KID', 'S2S_JWKS_URLS_JSON', 'ROLE_SPACE_MEMBER_AUTHORITY_CLIENT_CERT_FILE', 'ROLE_AUTH_SESSION_FLOOR_CLIENT_CERT_FILE'} not less than or equal to {'ROLE_PRINCIPAL_TLS_CERT_FILE', 'ROLE_PRINCIPAL_TLS_KEY_FILE', 'ROLE_GRPC_LISTEN', 'ROLE_PRINCIPAL_REPLAY_REDIS_ADDR', 'NATS_URL', 'S2S_JWKS_URLS_JSON', 'DATABASE_URL', 'ROLE_PRINCIPAL_GRPC_LISTEN', 'ROLE_PRINCIPAL_CLIENT_CA_FILE', 'S2S_JWKS_CA_FILE'} : role
+
+----------------------------------------------------------------------
+Ran 916 tests in 75.648s
+
+FAILED (failures=6, errors=8)
+NATS_ROLLOUT_BRIDGE=INSTALLED
+NATS_ROLLOUT_BUNDLE_SHA256=7b83b1bb9396627d5c944e4f0816a2c396f43fa5d5b16181b22da4bd8c4c7598
+NATS_ROLLOUT_BUNDLE_SHA256=e919801f073335d35a7cc20456b41f8e42d7767e1417ab9bd06397b07873483c
+NATS_ROLLOUT_BUNDLE_SHA256=1553701bd7f9c191b9e5f365e21e5defecd9a3b013dafa315c82119b2a4c7652
+NATS_ROLLOUT_BUNDLE_SHA256=1553701bd7f9c191b9e5f365e21e5defecd9a3b013dafa315c82119b2a4c7652
+NATS_ROLLOUT_BUNDLE_SHA256=2b596fda93c0201cbcd9fd8bf108aedebe54b2841ed03162d29528807c9a3f90
+NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_SEARCH_BOOTSTRAP_V1_KEYS_POLICY_HISTORY_PRESERVED
+NATS_ROLLOUT_TARGET_SHA256=db6f5c1ee0b756c97317eb04e6d37c6a0183f59cbc9abaff06e1ba666473ee1f
+NATS_ROLLOUT_TARGET_SHA256=86c55e629f28d52b4ae35f5d993c4ac347ea4244b39a9dc30da67146737ffc8a
+NATS_DEPLOYMENT_REPORT request=COMPLETE stage=UNKNOWN error=none operation=None state=UNKNOWN fence=UNKNOWN updated_at=1792865147
+NATS_ROLLOUT_APPLY=PAUSED_COMPLETE
+NATS_ROLLOUT_APPLY=PAUSED_COMPLETE
+NATS_ROLLOUT_BRIDGE=UPGRADED_V13_KEYS_POLICY_PRESERVED
+NATS_ROLLOUT_BRIDGE=UPGRADED_V14_KEYS_POLICY_PRESERVED
+NATS_ROLLOUT_BRIDGE=UPGRADED_V15_KEYS_POLICY_PRESERVED
+NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_CECCB_V1_KEYS_POLICY_HISTORY_PRESERVED
+NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_KEYS_POLICY_HISTORY_PRESERVED
+NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_SOURCE_CAPTURE_V1_KEYS_POLICY_HISTORY_PRESERVED
+NATS_ROLLOUT_TARGET_SHA256=8152a252380cfb1de2b80a8bb7a3961c710f50290d71a32ef486a3b70be8d4f5
+NATS_ROLLOUT_TARGET_SHA256=054e9a6ab86570066989f28e4a72b9d6ec116fd2a125f26dff537b1d82fe7e7d
+NATS_ROLLOUT_TARGET_SHA256=8152a252380cfb1de2b80a8bb7a3961c710f50290d71a32ef486a3b70be8d4f5
+NATS_ROLLOUT_TARGET_SHA256=8152a252380cfb1de2b80a8bb7a3961c710f50290d71a32ef486a3b70be8d4f5
+NATS_ROLLOUT_TARGET_SHA256=8152a252380cfb1de2b80a8bb7a3961c710f50290d71a32ef486a3b70be8d4f5
+NATS_ROLLOUT_TARGET_SHA256=8152a252380cfb1de2b80a8bb7a3961c710f50290d71a32ef486a3b70be8d4f5
+NATS_ROLLOUT_TARGET_SHA256=8152a252380cfb1de2b80a8bb7a3961c710f50290d71a32ef486a3b70be8d4f5
+NATS_ROLLOUT_TARGET_SHA256=8152a252380cfb1de2b80a8bb7a3961c710f50290d71a32ef486a3b70be8d4f5
+NATS_ROLLOUT_TARGET_SHA256=8152a252380cfb1de2b80a8bb7a3961c710f50290d71a32ef486a3b70be8d4f5
+NATS_ROLLOUT_TARGET_SHA256=8152a252380cfb1de2b80a8bb7a3961c710f50290d71a32ef486a3b70be8d4f5
+NATS_ROLLOUT_TARGET_SHA256=8152a252380cfb1de2b80a8bb7a3961c710f50290d71a32ef486a3b70be8d4f5
+NATS_ROLLOUT_TARGET_SHA256=8152a252380cfb1de2b80a8bb7a3961c710f50290d71a32ef486a3b70be8d4f5
+NATS_ROLLOUT_TARGET_SHA256=2e4e6d2e2b8da6eb092b82813b493709790a80db376528f6e35eb93445ecc767
+NATS_ROLLOUT_TARGET_SHA256=2e4e6d2e2b8da6eb092b82813b493709790a80db376528f6e35eb93445ecc767
+NATS_ROLLOUT_TARGET_SHA256=ac76bca7fdddf87778cb6833ab083fb9c638013563a1bfed38aae4243377960b
+NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_SEARCH_BOOTSTRAP_V1_KEYS_POLICY_HISTORY_PRESERVED
+NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_STORY_FIXTURE_V1_KEYS_POLICY_HISTORY_PRESERVED
+STORY_WITNESS=PROMOTED
+upgraded

@@ -1,0 +1,87 @@
+{
+  "schema": "voice-ci-merge-verification-v1",
+  "workspace": "D:/Git/Voice/.treehouse/Voice-451d38/43/Voice",
+  "merge_snapshot": {
+    "base_commit": "ecde2e7b29d93dd01b233cd3128b373137aa6715",
+    "base_archive": {
+      "path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/base-ecde.tar",
+      "sha256": "c8e60d044aba2925d03c21a9b5a18ab200c3beb38bf09355d49219d247c82719"
+    },
+    "staged_patch": {
+      "path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/staged.patch",
+      "sha256": "6c9499bc697f2cc4aaddc707d0beacdbf0d19d387de263122a8d6cd64857c083"
+    },
+    "runner_image": "golang:1.26.9-bookworm",
+    "runner_image_id": "sha256:6880d90c0623e6e55560894ff82266f5a06c0f7b1c9ee7f6e2def900d9bc2956",
+    "resources": {"cpus": 2, "memory": "3g"},
+    "checks": [
+      {"name": "release-policy-wiring", "result": "PASS", "tests": 9, "log": "release-policy.log", "log_sha256": "1d7fa5032f4a6b6931a9070e53bc1fad42b77382cab74e93c1e49b94291716c0"},
+      {"name": "selected-acceptance-policy", "result": "PASS", "tests": 6, "log": "acceptance-policy.log", "log_sha256": "1804b78657b74094e3b14e0368451c038ef6df1c837c2223890a0a2a6b6285a5"},
+      {"name": "required-jobs", "result": "PASS", "log": "required-jobs.log", "log_sha256": "7575cd80c442c9e5d02996769b8a8888401ad99d4fbc134ec8b50aed262e8998"},
+      {"name": "current-diff-original", "result": "PASS", "tests": 8, "log": "current-diff.log", "log_sha256": "deeacba1266e381396b530548471b980cb2589f5dc7776ee7bfb8b92edc7c077"},
+      {"name": "fast-gate-routing", "result": "PASS", "tests": 6, "log": "fast-gate-routing.log", "log_sha256": "0e2517bfee86451538bf0e654a619407fc36f5d6691a8c7d8e0fcad9189c79e9"},
+      {"name": "gate-latency", "result": "PASS", "tests": 5, "log": "gate-latency.log", "log_sha256": "e53b859c363dd3f04b01aea71d73cbec1037479a3c07f92ca5a8dc8b8805ee60"},
+      {"name": "ci-script-tests-reachability", "result": "PASS", "log": "shard-reachability.log", "log_sha256": "b2f0a7af05f0dc3a901ed30e961ea21913ac486e69a92644155aaffa1bca5383"},
+      {"name": "auth-proto-sync-reachability", "result": "PASS", "log": "auth-proto-reachability.log", "log_sha256": "757f077fb5ab4ed00fbc65dfa9d4ad708b6bb7f3703ee29559035168164da756"},
+      {"name": "auth-testcontainers-reports-reachability", "result": "PASS", "log": "auth-testcontainers-reachability.log", "log_sha256": "4488a6474a8dbadc8f3305409c693e4095a71d1dfce0c5e6abed05f18abd1b3c"},
+      {"name": "nats-workflow-reachability", "result": "PASS", "log": "nats-workflow-reachability.log", "log_sha256": "fac1cdb4fdd5604229c7714ad480699314075fb472ee880d19bc7d1728ccd142"},
+      {"name": "a1-attachment-reachability", "result": "PASS", "log": "a1-attachment-reachability.log", "log_sha256": "d8a297f39ddf6e3dd7e05c45453a0813255e7c14605eb54408746bf0ada57d17"},
+      {"name": "a1-flutter-reachability", "result": "PASS", "log": "a1-flutter-reachability.log", "log_sha256": "8fcb3807112e5ac1c8a779c7e7e7d81d2aa84c3eb6bb5c5357177ca9f688973e"},
+      {"name": "bot-membership-source", "result": "PASS", "tests": 7, "log": "bot-membership-source.log", "log_sha256": "b0b4f56000324a0435d839db31251b7a245545e267a7dd0dd7459da156a5acbb"}
+    ],
+    "ci_script_command_inventory": {
+      "result": "PASS",
+      "command": "make -n ci-script-tests",
+      "old_head": "ecde2e7b29d93dd01b233cd3128b373137aa6715",
+      "old_command_lines": 83,
+      "old_unique_command_lines": 83,
+      "new_command_lines": 86,
+      "missing_or_underrepresented": 0,
+      "overrepresented": 0,
+      "new_extra_lines": 3,
+      "log": "make-inventory.log",
+      "log_sha256": "02199f00f96dfe1674c157883cf0dac8523e0b664b93f66144d7ef9e1ddc402f"
+    },
+    "phase0": {
+      "full_suite_result": "PASS",
+      "tests": 78,
+      "skipped": 1,
+      "skip_reason": "test covers non-root CI runners that can provision the service UID; runner executed as root",
+      "duration_seconds": 76.252,
+      "command": "python3 scripts/ci/phase0-fixture_test.py",
+      "runner_image": "golang:1.26.9-bookworm with Docker CLI/Compose v2.33.0, OpenJDK 17 keytool, OpenSSL, Python 3 and PyYAML",
+      "resources": {"cpus": 2, "memory": "4g"},
+      "docker_socket_mounted": false,
+      "log": "phase0-final.log",
+      "log_sha256": "45d200a207bf5882efb45e679c0f8294bde77ed60f273aabc73e731d122cc5a0"
+    },
+    "actionlint": {
+      "image": "rhysd/actionlint:1.7.7",
+      "image_id": "sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9",
+      "version": "1.7.7 (Go 1.23.5)",
+      "unfiltered_result": "exit 1; no workflow/YAML schema diagnostics, only embedded ShellCheck findings SC2155, SC2086, SC2034",
+      "syntax_schema_command": "actionlint -ignore SC2155 -ignore SC2086 -ignore SC2034 .github/workflows/ci.yml",
+      "syntax_schema_result": "PASS",
+      "scope_note": "ShellCheck findings were not fixed or claimed clean; ignore flags isolate actionlint workflow syntax/schema validation"
+    }
+  },
+  "current_diff_final": {
+    "result": "PASS",
+    "tests": 11,
+    "duration_seconds": 3.671,
+    "command": "python3 scripts/ci/current-diff-contract_test.py",
+    "source_files": [
+      {"path": "scripts/ci/current-diff-contract.py", "sha256": "63cebf13e7d1dda8f11ec7827e805bd3fdc3dd2595c391ac48368b5fa5c3bebb"},
+      {"path": "scripts/ci/current-diff-contract_test.py", "sha256": "778b96490242959f30c2105c4768bdde68aae03cc7ad691437feb019c4b1c448"},
+      {"path": ".github/ci/gate-policy.md", "sha256": "2bc5a1157d7f6cc5f59d8889f5681375cb3d6f78fefeddcee6bcb0b8c1a6209d"}
+    ],
+    "runner_image": "golang:1.26.9-bookworm",
+    "resources": {"cpus": 2, "memory": "3g"},
+    "git_objects": "read-only alternate object store from Docker volume pr875-f13-producer-repo",
+    "log": "current-diff-final.log",
+    "log_sha256": "26a343630c8f1391bfd62f84dcdbb18300c5144fd3dfce5e672fcce0d6030b0f",
+    "source_hashes_log": "current-diff-hashes.txt",
+    "source_hashes_log_sha256": "895f113dadd1c7a336093ef5d7b418bc8107a0e55c0ba694194fe2e308f5a6ee"
+  },
+  "limitation": "No full CI, F13, Compose service startup, or actual Docker daemon execution was performed."
+}

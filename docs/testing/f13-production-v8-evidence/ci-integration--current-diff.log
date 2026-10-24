@@ -1,0 +1,8 @@
+Command: python3 scripts/ci/current-diff-contract_test.py
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.903s
+
+OK
+
+exit_code=0

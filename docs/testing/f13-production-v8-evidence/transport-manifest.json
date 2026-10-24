@@ -1,0 +1,270 @@
+{
+  "files": [
+    {
+      "bytes": 139,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/a1-attachment-reachability.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--a1-attachment-reachability.log",
+      "sha256": "d8a297f39ddf6e3dd7e05c45453a0813255e7c14605eb54408746bf0ada57d17"
+    },
+    {
+      "bytes": 149,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/a1-flutter-reachability.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--a1-flutter-reachability.log",
+      "sha256": "8fcb3807112e5ac1c8a779c7e7e7d81d2aa84c3eb6bb5c5357177ca9f688973e"
+    },
+    {
+      "bytes": 179,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/acceptance-policy.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--acceptance-policy.log",
+      "sha256": "1804b78657b74094e3b14e0368451c038ef6df1c837c2223890a0a2a6b6285a5"
+    },
+    {
+      "bytes": 463,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/auth-proto-reachability.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--auth-proto-reachability.log",
+      "sha256": "757f077fb5ab4ed00fbc65dfa9d4ad708b6bb7f3703ee29559035168164da756"
+    },
+    {
+      "bytes": 528,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/auth-testcontainers-reachability.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--auth-testcontainers-reachability.log",
+      "sha256": "4488a6474a8dbadc8f3305409c693e4095a71d1dfce0c5e6abed05f18abd1b3c"
+    },
+    {
+      "bytes": 176,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/bot-membership-source.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--bot-membership-source.log",
+      "sha256": "b0b4f56000324a0435d839db31251b7a245545e267a7dd0dd7459da156a5acbb"
+    },
+    {
+      "bytes": 110,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/current-diff-final.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--current-diff-final.log",
+      "sha256": "26a343630c8f1391bfd62f84dcdbb18300c5144fd3dfce5e672fcce0d6030b0f"
+    },
+    {
+      "bytes": 301,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/current-diff-hashes.txt",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--current-diff-hashes.txt",
+      "sha256": "895f113dadd1c7a336093ef5d7b418bc8107a0e55c0ba694194fe2e308f5a6ee"
+    },
+    {
+      "bytes": 177,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/current-diff.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--current-diff.log",
+      "sha256": "deeacba1266e381396b530548471b980cb2589f5dc7776ee7bfb8b92edc7c077"
+    },
+    {
+      "bytes": 171,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/fast-gate-routing.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--fast-gate-routing.log",
+      "sha256": "0e2517bfee86451538bf0e654a619407fc36f5d6691a8c7d8e0fcad9189c79e9"
+    },
+    {
+      "bytes": 165,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/gate-latency.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--gate-latency.log",
+      "sha256": "e53b859c363dd3f04b01aea71d73cbec1037479a3c07f92ca5a8dc8b8805ee60"
+    },
+    {
+      "bytes": 277,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/make-inventory.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--make-inventory.log",
+      "sha256": "02199f00f96dfe1674c157883cf0dac8523e0b664b93f66144d7ef9e1ddc402f"
+    },
+    {
+      "bytes": 135,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/nats-workflow-reachability.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--nats-workflow-reachability.log",
+      "sha256": "fac1cdb4fdd5604229c7714ad480699314075fb472ee880d19bc7d1728ccd142"
+    },
+    {
+      "bytes": 12086,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/phase0-final.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--phase0-final.log",
+      "sha256": "45d200a207bf5882efb45e679c0f8294bde77ed60f273aabc73e731d122cc5a0"
+    },
+    {
+      "bytes": 5120,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/phase0-fixture.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--phase0-fixture.log",
+      "sha256": "6e1e97073797900e3e355de1c7c34cb13349a0ef642340982e29b95486eb0789"
+    },
+    {
+      "bytes": 150,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/phase0-retry.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--phase0-retry.log",
+      "sha256": "9053c987f2b2b5d9017a33b43f75cebcaa7382fe2095e95cb1aafde8dbb19290"
+    },
+    {
+      "bytes": 6098,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/receipt-final.json",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--receipt-final.json",
+      "sha256": "913d473a4dcb3021fd9d82771b301cef2055ba538fcf69e84a9297563a7f8729"
+    },
+    {
+      "bytes": 175,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/release-policy.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--release-policy.log",
+      "sha256": "1d7fa5032f4a6b6931a9070e53bc1fad42b77382cab74e93c1e49b94291716c0"
+    },
+    {
+      "bytes": 1057,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/required-jobs.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--required-jobs.log",
+      "sha256": "7575cd80c442c9e5d02996769b8a8888401ad99d4fbc134ec8b50aed262e8998"
+    },
+    {
+      "bytes": 88906,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/run.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--run.log",
+      "sha256": "62afc11445151142a616c833d49081a8ba1cfd1bd8d90f8b9058d97e1e9b0556"
+    },
+    {
+      "bytes": 284,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/ci-integration/shard-reachability.log",
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--shard-reachability.log",
+      "sha256": "b2f0a7af05f0dc3a901ed30e961ea21913ac486e69a92644155aaffa1bca5383"
+    },
+    {
+      "bytes": 2834,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/current-diff-nine-review.md",
+      "path": "docs/testing/f13-production-v8-evidence/current-diff-nine-review.md",
+      "sha256": "bb668d8f58f0f97d08a710de5a19bbd455bd3db489e0a71345c372c9f2458fe4"
+    },
+    {
+      "bytes": 3807,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/f13-production-v8/independent-makefile-base-review.md",
+      "path": "docs/testing/f13-production-v8-evidence/independent-makefile-base-review.md",
+      "sha256": "3a11003c5f27d9013558df7ab9787bd033dd29cb4fe8b1ae26e7d7ca9eb40a9c"
+    },
+    {
+      "bytes": 4102,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/f13-production-v8/independent-r23-source-taint-review.md",
+      "path": "docs/testing/f13-production-v8-evidence/independent-r23-source-taint-review.md",
+      "sha256": "92871698f7bc3ba755672752d14ca72c63955bee47eba441759ba5ce566acea8"
+    },
+    {
+      "bytes": 6205,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/f13-production-v8/independent-source-review.md",
+      "path": "docs/testing/f13-production-v8-evidence/independent-source-review.md",
+      "sha256": "e2db7d91cd245d734b8d9a41841ec64c6929c6102388e68b6838a7956455c93d"
+    },
+    {
+      "bytes": 2352,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-final-h3a2b8e19/source-manifest.txt",
+      "path": "docs/testing/f13-production-v8-evidence/staging-final-source-manifest.txt",
+      "sha256": "57c2d2f164316ddbd50598c7881f029c89082f956afd3a2f0c614a8226a798ac"
+    },
+    {
+      "bytes": 2426,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-gate-fixes/author-receipt.md",
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--author-receipt.md",
+      "sha256": "f6475249d8c4aa97f17c60601cd20e464fb8b83dd4c6bdad4a94ec3b268aa2a6"
+    },
+    {
+      "bytes": 26705,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-gate-fixes/baseline-h3a2b8e19-attempt2.log",
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--baseline-h3a2b8e19-attempt2.log",
+      "sha256": "e354e394fded3a8357edaead44d25ba4db76d73dcc0ff34d1bea7dbac947dcef"
+    },
+    {
+      "bytes": 25861,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-gate-fixes/baseline-h3a2b8e19-attempt3.log",
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--baseline-h3a2b8e19-attempt3.log",
+      "sha256": "2baa003e35c419e5ad6d8dcff95900147618bbea64518d55034d0fdb2f60599b"
+    },
+    {
+      "bytes": 107,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-gate-fixes/baseline-h3a2b8e19.log",
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--baseline-h3a2b8e19.log",
+      "sha256": "a10f6cf4e49416903ee3e836dd5a3d39b4236633a93448f90cfaebad1436b5e2"
+    },
+    {
+      "bytes": 3941,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-gate-fixes/candidate-manifest-h3a2b8e19.txt",
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--candidate-manifest-h3a2b8e19.txt",
+      "sha256": "f80155f55897f79d700bcba85f74ab90d7f7881379e4b51d7b487232af4a9e5d"
+    },
+    {
+      "bytes": 20503,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-gate-fixes/focused-candidate-h3a2b8e19.log",
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--focused-candidate-h3a2b8e19.log",
+      "sha256": "a961df6c59b0f7a83188e0e52fae87e88f9fb3c4530d34c9cd16e23f01b0238a"
+    },
+    {
+      "bytes": 560,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-gate-fixes/focused-compiler-localcopy.log",
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--focused-compiler-localcopy.log",
+      "sha256": "f7fb279b79dc76a076a2a16e1da8a956da552b7acc6cc521fda2c6d26d23e86b"
+    },
+    {
+      "bytes": 6201,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-gate-fixes/focused-final.log",
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--focused-final.log",
+      "sha256": "a3abb11cd2f317dc21cfd8fcc5cd147b9bf101b9520047c166f176b27f97ca0f"
+    },
+    {
+      "bytes": 4971,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-gate-fixes/full949-final.log",
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--full949-final.log",
+      "sha256": "fe6d706a132681c2212b98631e98c291f2f12b6b435f95bc4bd8225b018aac11"
+    },
+    {
+      "bytes": 2279,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-media/config-author-evidence.md",
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--config-author-evidence.md",
+      "sha256": "83a65a2666b46063c6812cbc240ebca3b6f1f9c2b539d49b654d2949a603a0d2"
+    },
+    {
+      "bytes": 1295,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-media/independent-compiler-stub-addendum.md",
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--independent-compiler-stub-addendum.md",
+      "sha256": "1b372a67a187b9a7117f088d6318dbd5c42b85dde7e13753f59f0ac2cb9b248f"
+    },
+    {
+      "bytes": 4760,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-media/independent-config-review.md",
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--independent-config-review.md",
+      "sha256": "73d10f10beba1f4be335df2002eebf794ce11367538c7fc201df5bddbedfa139"
+    },
+    {
+      "bytes": 1144,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-media/independent-helper-review-addendum.md",
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--independent-helper-review-addendum.md",
+      "sha256": "bcd81b82bdea9f15166c76202100a679995989521ea6a753a7059002c780d051"
+    },
+    {
+      "bytes": 4113,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-media/independent-helper-review.md",
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--independent-helper-review.md",
+      "sha256": "4e110561c4eb7d853649f5f20b25e839112ea589955a329b16cda3cda8330033"
+    },
+    {
+      "bytes": 3366,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-media/independent-nonhelper-review.md",
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--independent-nonhelper-review.md",
+      "sha256": "2beaee9ca6b0ec82def3b12213cf3a0b74372b9e0d8c7fb87f2aa86b5c78d6e2"
+    },
+    {
+      "bytes": 104,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-media/media-green.log",
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--media-green.log",
+      "sha256": "05733e1bc533248678f5e872f83e33291d069c20994eece50be617ac7cbc6627"
+    },
+    {
+      "bytes": 9747,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-media/media-red-snapshot.log",
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--media-red-snapshot.log",
+      "sha256": "b5f2f168179063544f8a5955c2e567b0ad8f3a7bd2d52c50d1865616fb5c0048"
+    },
+    {
+      "bytes": 9747,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/staging-media/media-red.log",
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--media-red.log",
+      "sha256": "b74dff5be0e05046b1eddc0cda199e6479753f2a2ad5bfc9e4bb9b9b85510fbe"
+    }
+  ],
+  "schema": "F13-v8-evidence-transport-v1",
+  "scope": "Exact master integration/current-diff/staging source review and bounded checks. Preserve documented failed/setup runs; no full history producer or runtime acceptance claim."
+}

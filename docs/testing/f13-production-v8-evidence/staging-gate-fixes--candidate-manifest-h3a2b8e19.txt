@@ -1,0 +1,21 @@
+head=3a2b8e19b0f8fe7a6104b753340f62864e039326
+archive_sha256=50345c783c3742e95612aa3556da4e9eacc46ec3f9260617cb821f13a6b62887
+ad16980877bfc889e36d48edccd3b2b245f13dfd1384901a255964b579223efa */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/deploy/staging/services.yaml
+8887f26e9f708185f3d43c9a3f4ce0ea73fbbdbe7209a1821e007e1a6d1d5dd7 */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/docs/DEPLOYMENT.md
+1b65d28d17c675e05a5fe2a35abe515783bf822cd48ee40b7f99897226853570 */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/scripts/staging/nats-rollout-preservation/README.md
+cb339d750bc4262d139a3804d266c79e33c471d4514f0a4efe7740f543281225 */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/scripts/staging/nats-rollout-preservation/actor_root_test.py
+d41d2c245ce2f1b5dce7c45b7f56a576b7fb7b1c38fc1713f162de522ce2770f */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/scripts/staging/nats-rollout-preservation/bot_migration.py
+7ee18efe742995b71342be73e2e8075cdd25f6e2601731f89c644951c977e375 */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/scripts/staging/nats-rollout-preservation/bot_migration_test.py
+10de1bd9e3f998b9c3eaa417d424f42f8c2ae210bcba828dceb347a4c0525858 */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/scripts/staging/nats-rollout-preservation/bridge_composition_test.py
+64f1fd77cd554480cf9f1d3b8e206e79b47bba94ed75abed789326d8378592e3 */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/scripts/staging/nats-rollout-preservation/bridge_integration_test.py
+efa249bc5e1135e7267918a1daee0ec28d0bde25d0e17f23a37049d378224792 */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/scripts/staging/nats-rollout-preservation/bridge_root.py
+d884a2f535ec374cfe14c083e98f3aebd36b5b42c7bb6289cae2fc8772c7cc6b */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/scripts/staging/nats-rollout-preservation/compiler.py
+e7b40c8bf34e70a40f4dbea9ca06583992f4e5ab454feae58c37d3b1b2f640cc */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/scripts/staging/nats-rollout-preservation/compiler_test.py
+321cc00eadeca2fc1a9eeb438db0fc92f9b59665d6d268d6d31b91574c1ef8aa */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/scripts/staging/nats-rollout-preservation/expired_public_test.py
+4b7ee50c2a0a055f0eb2b8804077562ce390b559597bafcee71b1f7277f1abef */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/scripts/staging/nats-rollout-preservation/installer.py
+5275cc1234002b15396b1cdafaf2619446073ef9f5ef463288f8a2b102c138b4 */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/scripts/staging/nats-rollout-preservation/media_projection_test.py
+8401079ced4444e2f236cff4217ea5a218979c6f73fedcd1a746f33ebd11e9a1 */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/scripts/staging/nats-rollout-preservation/nonnats_plan.py
+83103adc1a21e6cd5dd6f8d85bbb3268770eb4c5f22e09903bcdac22d1cfda12 */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/scripts/staging/nats-rollout-preservation/runtime_stage.py
+b75d77fbb41f106c74e393464c422b91da0c9777774ccf0e64b8b7d3cfab385e */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/scripts/staging/nats-rollout-preservation/runtime_stage_test.py
+c93bfad0aeba8ecfbc7957f7d20b641bd7b0a8ba79014fade267896c4987270c */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/scripts/staging/nats-rollout-preservation/source_plan.py
+7384ddaba4bc824b514dceecc844d9bfff60d385aa5217d833381c2b52eb7734 */d/Git/Voice/tmp/pr875-repair/staging-gate-fixes/snapshot-candidate-h3a2b8e19/scripts/staging/nats-rollout-preservation/source_plan_test.py
