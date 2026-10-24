@@ -4,6 +4,7 @@ import importlib.util
 import json
 import hashlib
 import re
+import tempfile
 from pathlib import Path
 import unittest
 import yaml
@@ -87,6 +88,48 @@ def fixture():
         's3_signing_endpoint': endpoint, 'gateway_host': '', 'livekit_host': '', 'storage_host': '', 'web_host': 'app.example.invalid'}
 
 class SourceTests(unittest.TestCase):
+    def test_principal_publisher_requires_existing_immutable_public_document(self):
+        for fault in ('missing','mutable','extra-key','empty','binary'):
+            with self.subTest(fault=fault):
+                kube,params=self.canonical_fixture('full')
+                key=('ConfigMap',source_plan.PRINCIPAL_PUBLIC)
+                public=kube.objects[key]
+                if fault=='missing':del kube.objects[key]
+                elif fault=='mutable':public['immutable']=False
+                elif fault=='extra-key':public['data']['foreign.json']='{}'
+                elif fault=='empty':public['data']['realtime.json']=''
+                else:public['binaryData']={'unexpected':'YQ=='}
+                with self.assertRaises(source_plan.PlanError):source_plan.compile_plan(SOURCE,params,decoder,kube)
+
+    def test_principal_publisher_source_is_exact_and_image_is_observed_nginx(self):
+        self.assertTrue(source_plan.principal_publisher_source(SOURCE,decoder))
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);folder=root/'deploy/staging';folder.mkdir(parents=True)
+            raw=(SOURCE/'deploy/staging/services.yaml').read_text()
+            for before,after in (('mountPath: /srv/jwks, readOnly: true','mountPath: /srv/jwks, readOnly: false'),
+                                 ('name: jwks\n','name: other\n'),
+                                 ('port: 8443}]\n','port: 8444}]\n'),
+                                 ('root /srv/jwks;','root /etc/voice/tls;'),
+                                 ('location = /realtime.json','location /')):
+                with self.subTest(change=after):
+                    (folder/'services.yaml').write_text(raw.replace(before,after))
+                    with self.assertRaises(source_plan.PlanError):source_plan.principal_publisher_source(root,decoder)
+        wanted='docker.io/library/nginx@sha256:'+'e'*64
+        self.assertEqual(source_plan.principal_publisher_image(wanted),wanted)
+        for image in ('nginx:stable-alpine','example.invalid/nginx@sha256:'+'e'*64,wanted+'x'):
+            with self.assertRaises(source_plan.PlanError):source_plan.principal_publisher_image(image)
+
+    def test_compiler_rejects_helper_config_private_path_even_with_enrollment(self):
+        import compiler
+        rows=list(yaml.safe_load_all((SOURCE/'deploy/staging/services.yaml').read_text()))
+        selected=[row for row in rows if row['metadata']['name'] in (source_plan.PRINCIPAL_PUBLISHER,source_plan.PRINCIPAL_CONFIG)]
+        config=next(row for row in selected if row['kind']=='ConfigMap')
+        config['data']['default.conf']=config['data']['default.conf'].replace('root /srv/jwks;','root /etc/voice/tls;')
+        with self.assertRaisesRegex(source_plan.PlanError,'canonical_principal_publisher_config'):
+            compiler.compile_target(SOURCE,selected,'example.invalid',TAG,'full',[],
+                {source_plan.PRINCIPAL_PUBLISHER+'/jwks':'docker.io/library/nginx@sha256:'+'e'*64},
+                {},{source_plan.PRINCIPAL_PUBLISHER},['deploy/staging/services.yaml'])
+
     def test_p3_principal_replay_secret_is_required(self):
         name = 'voice-p3-principal-replay'
         self.assertEqual(nonnats_plan.SECRET_CONTRACTS['principal-secrets'][name], {'password'})
@@ -224,6 +267,11 @@ class SourceTests(unittest.TestCase):
                 kube.objects[('Secret', name)] = {'apiVersion': 'v1', 'kind': 'Secret',
                     'metadata': {'name': name, 'namespace': 'voice-staging', 'uid': name, 'resourceVersion': '1'},
                     'data': {key: base64.b64encode(b'private-authority').decode() for key in keys}}
+        kube.objects[('ConfigMap', source_plan.PRINCIPAL_PUBLIC)] = {
+            'apiVersion': 'v1', 'kind': 'ConfigMap', 'immutable': True,
+            'metadata': {'name': source_plan.PRINCIPAL_PUBLIC, 'namespace': 'voice-staging',
+                         'uid': 'public-issuer-fixture', 'resourceVersion': '1'},
+            'data': {'realtime.json': '{"keys":[]}'}}
         for name in ('voice-postgres', 'voice-clickhouse'):
             kube.objects[('Pod', name + '-0')] = {'apiVersion': 'v1', 'kind': 'Pod', 'metadata': {'name': name + '-0', 'namespace': 'voice-staging', 'uid': name + '-0', 'resourceVersion': '1'}, 'spec': {}}
         for (kind, name), obj in list(kube.objects.items()):

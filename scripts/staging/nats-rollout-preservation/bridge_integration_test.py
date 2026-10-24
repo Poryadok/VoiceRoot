@@ -171,14 +171,23 @@ class IntegrationTests(unittest.TestCase):
     @unittest.skipUnless(os.name=='posix' and os.geteuid()==0,'disposable root Linux fixture')
     def test_installer_fixed_units_private_key_dirs_and_no_replacement(self):
         import guard
+        import source_plan_test as fixtures
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);code=root/'captured';code.mkdir();(code/'sentinel.py').write_text('SAFE=True')
-            policy=root/'policy.json';policy.write_text(json.dumps({'s3_signing_endpoint':'https://example.invalid'}));policy.chmod(0o600)
+            value={'s3_signing_endpoint':'https://example.invalid','release_policy':fixtures.release_fixture()}
+            policy=root/'policy.json';policy.write_text(json.dumps(value));policy.chmod(0o600)
             class FakeKube:
                 def get(self,kind,name):return {'data':{'phase':'active'}}
             calls=[]
             with patch.object(guard,'ROOT',root),patch.object(root_cli,'code_binding',return_value={'sentinel.py':'a'*64}),patch.object(installer,'Kube',FakeKube),patch.object(installer,'operation_lock',contextlib.nullcontext),patch.object(installer.encrypted_cut,'directory',side_effect=lambda path:Path(path)),patch.object(installer.encrypted_cut,'initialize_recovery_key') as key,patch('grp.getgrnam',return_value=type('G',(),{'gr_gid':65532})()),patch.object(installer.subprocess,'run',side_effect=lambda args,**kwargs:calls.append(args)):
+                for invalid in (None,{},dict(value['release_policy'],policy_sha256='0'*64)):
+                    policy.write_text(json.dumps(dict(value,release_policy=invalid)))
+                    with self.subTest(release_policy=invalid),self.assertRaisesRegex(installer.Blocked,'bridge_install_release_policy_invalid'):
+                        installer.install(code,policy)
+                    key.assert_not_called();self.assertFalse((root/'installed').exists());self.assertEqual(calls,[])
+                policy.write_text(json.dumps(value))
                 installer.install(code,policy)
+                self.assertEqual(json.loads((root/'installed/policy.json').read_bytes()),value)
                 key.assert_called_once_with(root/'installed'/'recovery')
                 self.assertEqual((root/'installed/recovery').stat().st_mode&0o777,0o700)
                 self.assertEqual((root/'installed/inbox').stat().st_mode&0o7777,0o1730)

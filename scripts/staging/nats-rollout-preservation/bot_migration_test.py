@@ -7,7 +7,7 @@ class BotPrerequisiteTest(unittest.TestCase):
         from pathlib import Path
         files=(Path(__file__).resolve().parents[3]/'src/backend/migrations/bot_db').glob('*.up.sql')
         version=max(int(path.name.split('_',1)[0]) for path in files)
-        self.assertEqual(version,7)
+        self.assertEqual(version,8)
         for current in range(1,version+1):
             row=dict(self.row(),version=current)
             with self.subTest(version=current):self.assertEqual(bot_migration.verify(row),row)

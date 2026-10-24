@@ -48,12 +48,13 @@ class CompilerTest(unittest.TestCase):
                 p.update(generation='r20260930a4',dataPVC='voice-nats-jsdata-d202610040049430b',changed_services=[])
                 p['images']={}
                 import runtime_stage
-                targets={'voice-gateway',*('voice-'+n for n in runtime_stage.LEAVES),'voice-web','voice-admin','voice-developer-portal','voice-gameintegration'}
+                targets={'voice-gateway',*('voice-'+n for n in runtime_stage.LEAVES),'voice-web','voice-admin','voice-developer-portal','voice-gameintegration','voice-p3-principal-jwks'}
                 for (kind,name),obj in kube.objects.items():
                     if kind!='Deployment' or name not in targets:continue
                     for c in obj['spec']['template']['spec'].get('initContainers',[])+obj['spec']['template']['spec']['containers']:
                         p['images'][name+'/'+c['name']]='example.invalid/'+c['name']+'@sha256:'+'a'*64
                 p['enrolled']=sorted({key.split('/')[0] for key in p['images']})
+                p['images']['voice-p3-principal-jwks/jwks']='docker.io/library/nginx@sha256:'+'e'*64
                 p['contract']={'scripts':[]}
                 for part in ('realtime','notification','search','analytics-chat'):
                     path=fixtures.SOURCE/('deploy/templates/nats-'+part+'-bootstrap.yaml')
@@ -111,7 +112,7 @@ class CompilerTest(unittest.TestCase):
         params=self.source/'parameters.json';params.write_text(json.dumps(parameters))
         output=self.source/('target-'+'b'*40+'.json')
         with patch('commands.capture',side_effect=lambda args,body,**kwargs:body),\
-             patch.dict(sys.modules,{'source_plan':SimpleNamespace(compile_plan=lambda *a:{'checks':[],'actions':[]})}),\
+             patch('source_plan.compile_plan',return_value={'checks':[],'actions':[]}),\
              patch.object(sys,'argv',[compiler.__file__,str(self.source),str(params),str(output)]):
             runpy.run_path(compiler.__file__,run_name='__main__')
         pack=json.loads(output.read_bytes())

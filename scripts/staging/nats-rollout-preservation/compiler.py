@@ -253,6 +253,8 @@ def compile_target(source,documents,registry,tag,mode,changed,images,contract,en
     if mode not in ('full','app-only','images-only') or not re.fullmatch(r'[a-f0-9]{40}',tag) or not isinstance(documents,list) or not 1<=len(documents)<=128:
         raise Blocked('rollout_compile_input_invalid')
     result=copy.deepcopy(documents);templates={};used_images={};inventory=set();hashes={}
+    import source_plan
+    source_plan.principal_publisher_documents(result)
     def read(relative):
         p=Path(relative)
         if p.is_absolute() or '..' in p.parts or not str(p).startswith(('deploy/','scripts/','src/backend/migrations/','src/backend/auth/src/main/resources/db/migration/','docker/clickhouse/init/')):
@@ -281,11 +283,13 @@ def compile_target(source,documents,registry,tag,mode,changed,images,contract,en
         if mode=='images-only' and kind!='Deployment':raise Blocked('rollout_images_only_resource_invalid')
         if kind=='Deployment':
             if name not in enrolled:raise Blocked('rollout_compile_unenrolled_deployment')
+            if name==source_plan.PRINCIPAL_PUBLISHER:source_plan.principal_publisher_shape(row)
             template=row['spec']['template']
             for container in template['spec'].get('initContainers',[])+template['spec']['containers']:
                 key=name+'/'+container['name'];image=images.get(key,'')
                 if not re.fullmatch(r'[a-z0-9][a-zA-Z0-9._/:~-]{1,255}@sha256:[a-f0-9]{64}',image):
                     raise Blocked('rollout_compile_image_unpinned')
+                if name==source_plan.PRINCIPAL_PUBLISHER:source_plan.principal_publisher_image(image)
                 container['image']=image;used_images[key]=image
             templates[name]=digest(template)
     if not templates or used_images!=images:raise Blocked('rollout_compile_image_inventory_changed')

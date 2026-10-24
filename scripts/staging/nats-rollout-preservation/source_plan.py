@@ -19,6 +19,86 @@ HOSTS = {'gateway_host': 'VOICE_GATEWAY_INGRESS_HOST', 'livekit_host': 'VOICE_LI
          'web_host': 'VOICE_WEB_INGRESS_HOST', 'admin_host': 'VOICE_ADMIN_INGRESS_HOST',
          'developer_portal_host': 'VOICE_DEVELOPER_PORTAL_INGRESS_HOST'}
 FRONTENDS = ('developer-portal', 'web', 'admin')
+PRINCIPAL_PUBLISHER = 'voice-p3-principal-jwks'
+PRINCIPAL_PUBLIC = 'voice-p3-principal-public'
+PRINCIPAL_CONFIG = 'voice-p3-principal-publisher-config'
+# Exact reviewed HTTPS GET-only /realtime.json configuration, not a general
+# nginx workload that could expose its mounted TLS private key.
+PRINCIPAL_CONFIG_SHA256 = '6afc7058fb4fbef8ca8458bd642db1f83c4e79ef9bd9de63ff0d57408468fd08'
+
+
+def principal_publisher_shape(row):
+    """One existing public-document publisher, never an arbitrary workload."""
+    try:
+        spec = row['spec']['template']['spec']
+        if (row['kind'] != 'Deployment' or row['metadata']['name'] != PRINCIPAL_PUBLISHER
+                or row['metadata']['namespace'] != NS or spec.get('initContainers')
+                or len(spec['containers']) != 1):
+            raise ValueError()
+        container = spec['containers'][0]
+        if (container['name'] != 'jwks' or container.get('env') or container.get('envFrom')
+                or container.get('command') or container.get('args')
+                or container['volumeMounts'] != [
+                    {'name': 'public', 'mountPath': '/srv/jwks', 'readOnly': True},
+                    {'name': 'tls', 'mountPath': '/etc/voice/tls', 'readOnly': True},
+                    {'name': 'config', 'mountPath': '/etc/nginx/conf.d', 'readOnly': True}]
+                or row['spec']['selector']['matchLabels'] != {'app': PRINCIPAL_PUBLISHER}
+                or row['spec']['template']['metadata']['labels'] != {'app': PRINCIPAL_PUBLISHER}):
+            raise ValueError()
+        volumes = spec['volumes']
+        if (len(volumes) != 3 or volumes[0] != {'name': 'public', 'configMap': {
+                'name': PRINCIPAL_PUBLIC, 'items': [{'key': 'realtime.json', 'path': 'realtime.json'}]}}
+                or volumes[1] != {'name': 'tls', 'secret': {'secretName': 'voice-p3-principal-jwks-tls',
+                    'defaultMode': 288, 'items': [{'key': 'tls.crt', 'path': 'tls.crt'}, {'key': 'tls.key', 'path': 'tls.key'}]}}
+                or volumes[2] != {'name': 'config', 'configMap': {'name': PRINCIPAL_CONFIG}}):
+            raise ValueError()
+    except (KeyError, TypeError, ValueError):
+        _fail('canonical_principal_publisher_shape')
+
+
+def principal_publisher_source(source, decoder):
+    """Read only the exact source helper triple; historical sources may omit it."""
+    path = Path(source) / 'deploy/staging/services.yaml'
+    if not path.exists():
+        return False
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 2 << 20:
+        _fail('canonical_principal_publisher_source')
+    selected = []
+    for piece in re.split(r'^---\s*$', path.read_text(encoding='utf-8'), flags=re.M):
+        if re.search(r'^  name: (?:voice-p3-principal-jwks|voice-p3-principal-publisher-config)\s*$', piece, re.M):
+            selected.append(decoder(piece.encode()))
+    return principal_publisher_documents(selected)
+
+
+def principal_publisher_documents(rows):
+    selected = [row for row in rows if row.get('metadata', {}).get('name') in (PRINCIPAL_PUBLISHER, PRINCIPAL_CONFIG)]
+    if not selected:
+        return False
+    expected = {('Deployment', PRINCIPAL_PUBLISHER), ('Service', PRINCIPAL_PUBLISHER), ('ConfigMap', PRINCIPAL_CONFIG)}
+    if len(selected) != 3 or {(r.get('kind'), r.get('metadata', {}).get('name')) for r in selected} != expected:
+        _fail('canonical_principal_publisher_inventory')
+    for row in selected:
+        if row['metadata'].get('namespace') != NS:
+            _fail('canonical_principal_publisher_namespace')
+        if row['kind'] == 'Deployment':
+            principal_publisher_shape(row)
+        if row['kind'] == 'Service' and row['spec'] != {
+                'selector': {'app': PRINCIPAL_PUBLISHER}, 'ports': [{'name': 'https', 'port': 8443}]}:
+            _fail('canonical_principal_publisher_service')
+        if row['kind'] == 'ConfigMap':
+            data = row.get('data', {})
+            if (set(data) != {'default.conf'} or row.get('binaryData')
+                    or not isinstance(data['default.conf'], str)
+                    or hashlib.sha256(data['default.conf'].encode()).hexdigest() != PRINCIPAL_CONFIG_SHA256):
+                _fail('canonical_principal_publisher_config')
+    return True
+
+
+def principal_publisher_image(image):
+    if not isinstance(image, str) or not re.fullmatch(r'(?:docker\.io/library/)?nginx@sha256:[a-f0-9]{64}', image):
+        _fail('canonical_principal_publisher_image')
+    return image
+
 APP_SOURCES = ('deploy/staging/services.yaml', 'deploy/staging/gateway-deployment.yaml',
                'deploy/templates/network-policy-social-privacy-principal.yaml',
                'deploy/templates/network-policy-file-user-principal.yaml',
@@ -278,7 +358,9 @@ def _application(builder):
     apps = []
     gis_objects = []
     for path in APP_SOURCES:
-        for obj in builder.documents(path, 'app-restart'):
+        documents = builder.documents(path, 'app-restart')
+        principal_publisher_documents(documents)
+        for obj in documents:
             if p.get('gis_first_install') is True and (obj.get('kind'), obj.get('metadata', {}).get('name')) in {
                 ('Service', 'voice-gameintegration'), ('Deployment', 'voice-gameintegration')
             }:
@@ -292,6 +374,14 @@ def _application(builder):
                 gis_objects.append(obj)
                 continue
             if obj['kind'] == 'Deployment':
+                if obj['metadata']['name'] == PRINCIPAL_PUBLISHER:
+                    principal_publisher_shape(obj)
+                    public = builder.get('ConfigMap', PRINCIPAL_PUBLIC)
+                    if (public.get('immutable') is not True or set(public.get('data', {})) != {'realtime.json'}
+                            or public.get('binaryData') or not isinstance(public['data']['realtime.json'], str)
+                            or not 1 <= len(public['data']['realtime.json'].encode()) <= 65536):
+                        _fail('canonical_principal_public_immutable')
+                    builder.add('principal-secrets', public, private=True)
                 _gateway_delegated_config(obj)
                 _leaf_monitor_config(obj)
                 spec = obj['spec']['template']['spec']
